@@ -120,14 +120,25 @@ export async function discoverWorkspace(
       return parseRdf(doc.text, doc.contentType, { baseIRI: url });
     };
   };
-  const profileScope = publicIo
-    ? new URL("/", profileUrl).href
-    : (selectedStorage ?? new URL("/", profileUrl).href);
-  const profile = await getFrom(profileScope, publicIo ?? io)(profileUrl.href);
+  // A public read needs a storage chosen elsewhere (the extension grant), never one the profile names.
+  if (publicIo && !selectedStorage) throw new Error("Choose a storage for your agent");
+  const inScope = (scope: string) => {
+    try {
+      assertWithinPodScope(scope, profileUrl.href);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  // An in-storage profile keeps the credentialed read (owner-only triples, no CORS needs).
+  const offStorage = Boolean(publicIo && selectedStorage && !inScope(selectedStorage));
+  const profile = offStorage
+    ? await getFrom(new URL("/", profileUrl).href, publicIo as PodSession["fetch"])(profileUrl.href)
+    : await getFrom(selectedStorage ?? new URL("/", profileUrl).href, io)(profileUrl.href);
   const storages = [...new Agent(webId, profile, DataFactory).storageUrls];
   const storage = selectedStorage ?? (storages.length === 1 ? storages[0] : undefined);
   if (!storage || !storages.includes(storage)) throw new Error("Choose a storage for your agent");
-  if (!publicIo) assertWithinPodScope(storage, profileUrl.href);
+  if (!offStorage) assertWithinPodScope(storage, profileUrl.href);
   const get = getFrom(storage, io);
   const owner = metadataNode(profile, webId);
   let index = owner.iri(`${SOLID}privateTypeIndex`);

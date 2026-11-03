@@ -55,13 +55,16 @@ export function noticeAffects(url: string, key: string): boolean {
   return url.endsWith("/") && key.startsWith(url);
 }
 const READ_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
+/** Heartbeats land without a change notice on some sessions, so status re-reads on a timer. */
+export const STATUS_REFRESH_MS = 30_000;
 /** The URL a successful write changed, or undefined for reads and failed requests. */
 export function writtenUrl(
   input: RequestInfo | URL,
   init: RequestInit | undefined,
   response: Response,
 ): string | undefined {
-  if (!response.ok || READ_METHODS.has((init?.method ?? "GET").toUpperCase())) return undefined;
+  const method = init?.method ?? (input instanceof Request ? input.method : "GET");
+  if (!response.ok || READ_METHODS.has(method.toUpperCase())) return undefined;
   return typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
 }
 const ClockContext = createContext(0);
@@ -133,6 +136,15 @@ export function AgentWorkspaceProvider({
       active = false;
     };
   }, [session, reload, attempt, bus]);
+  const pollClient = state.status === "ready" ? state.data.client : undefined;
+  useEffect(() => {
+    if (!pollClient) return;
+    // One poller per workspace; it targets the status key only and skips hidden tabs.
+    const timer = setInterval(() => {
+      if (document.visibilityState !== "hidden") bus.invalidate(pollClient.paths.control, true);
+    }, STATUS_REFRESH_MS);
+    return () => clearInterval(timer);
+  }, [pollClient, bus]);
   if (state.status !== "ready") return fallback(state);
   if (state.data.session !== session) return fallback({ status: "loading", reload });
   return createElement(
@@ -176,15 +188,24 @@ export function useAgentQuery<T>(
             setState({ key, client, query: { status: "ready", data, reload } });
         },
         (error) => {
-          if (active && request === generation)
-            setState({ key, client, query: { status: "error", error, reload } });
+          if (!active || request !== generation) return;
+          // A failed background poll keeps what is on screen; the next poll or notice retries.
+          setState((current) =>
+            refresh &&
+            current.key === key &&
+            current.client === client &&
+            current.query.status === "ready"
+              ? current
+              : { key, client, query: { status: "error", error, reload } },
+          );
         },
       );
     };
     run();
     const notice = (url: string, quiet = false) => {
       // URL keys are scope-checked by the client before loading; subscription keys are local.
-      if (noticeAffects(url, key)) {
+      // A quiet poll names the exact key it refreshes; it never fans out to ancestors.
+      if (quiet ? url === key : noticeAffects(url, key)) {
         ++generation;
         clearTimeout(timer);
         timer = setTimeout(() => run(quiet), 150);

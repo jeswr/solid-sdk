@@ -13,6 +13,13 @@ function SessionGate({ children }: { children: ReactNode }) {
   if (state.status === "loading") return <LoadingSkeleton label="Opening your agent" />;
   if (state.status === "error")
     return <ErrorState error="unreachable" actions={{ retry: () => location.reload() }} />;
+  // Native builds start signed out until native sign-in lands.
+  if (state.status === "signed-out")
+    return (
+      <main id="main-content">
+        <p role="status">Sign in to open your agent</p>
+      </main>
+    );
   return (
     <AgentWorkspaceProvider
       session={state.session}

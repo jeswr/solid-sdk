@@ -3,11 +3,12 @@
 
 import { renderToString } from "react-dom/server";
 import { afterEach, expect, it, vi } from "vitest";
-import { STATUS_REFRESH_MS, useDaemonStatus } from "../src/apps/agent/components/status-pill";
+import { useDaemonStatus } from "../src/apps/agent/components/status-pill";
 import {
   AgentWorkspaceProvider,
   noticeAffects,
   type Query,
+  STATUS_REFRESH_MS,
   useAgentInvalidate,
   useAgentQuery,
   useAgentWorkspace,
@@ -241,11 +242,18 @@ it("refreshes on the storage-root focus notice, on its own writes, and quietly o
   let current: Query<number> | undefined;
   let invalidate: ((url: string, quiet?: boolean) => void) | undefined;
   let reads = 0;
+  let failNext = false;
   const seen: string[] = [];
   function Probe() {
     const { client } = useAgentWorkspace();
     invalidate = useAgentInvalidate();
-    current = useAgentQuery(`${BASE}control/`, async () => ++reads);
+    current = useAgentQuery(`${BASE}control/`, async () => {
+      if (failNext) {
+        failNext = false;
+        throw new Error("transient");
+      }
+      return ++reads;
+    });
     seen.push(current.status);
     return h("button", {
       type: "button",
@@ -268,11 +276,21 @@ it("refreshes on the storage-root focus notice, on its own writes, and quietly o
   fixture.listeners.clear();
   await act(async () => view.host.querySelector("button")?.click());
   await eventually(() => current?.status === "ready" && current.data === 3);
-  // A quiet poll re-reads without dropping the ready data.
+  // A quiet poll re-reads its exact key without dropping the ready data.
   seen.length = 0;
-  await act(() => invalidate?.(`${BASE}control/heartbeat.ttl`, true));
+  await act(() => invalidate?.(`${BASE}control/`, true));
   await eventually(() => current?.status === "ready" && current.data === 4);
   expect(seen).not.toContain("loading");
+  // A failed quiet poll keeps the data on screen.
+  failNext = true;
+  await act(() => invalidate?.(`${BASE}control/`, true));
+  await eventually(() => !failNext);
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  });
+  expect(current).toMatchObject({ status: "ready", data: 4 });
+  // A quiet poll never fans out: a notice for something inside the key is ignored.
+  await act(() => invalidate?.(`${BASE}control/heartbeat.ttl`, true));
   // A sibling container's notice leaves the query alone.
   await act(() => invalidate?.(`${BASE}approvals/`));
   await act(async () => {
@@ -284,9 +302,11 @@ it("refreshes on the storage-root focus notice, on its own writes, and quietly o
 it("polls daemon status on an interval without a pod notice", async () => {
   const fixture = await session();
   let status: ReturnType<typeof useDaemonStatus> | undefined;
+  const statuses: string[] = [];
   const io = vi.fn(fixture.session.fetch);
   function Probe() {
     status = useDaemonStatus();
+    statuses.push(status.query.status);
     return null;
   }
   // Only the poll interval is faked; the 150 ms notice debounce runs in real time.
@@ -302,8 +322,18 @@ it("polls daemon status on an interval without a pod notice", async () => {
   const heartbeatReads = () =>
     io.mock.calls.filter(([url]) => String(url) === `${BASE}control/heartbeat.ttl`).length;
   const before = heartbeatReads();
+  statuses.length = 0;
+  // Hidden tabs skip the poll.
+  const visibility = vi.spyOn(document, "visibilityState", "get").mockReturnValue("hidden");
+  await act(() => vi.advanceTimersByTime(STATUS_REFRESH_MS));
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 200));
+  });
+  expect(heartbeatReads()).toBe(before);
+  visibility.mockReturnValue("visible");
   await act(() => vi.advanceTimersByTime(STATUS_REFRESH_MS));
   await eventually(() => heartbeatReads() > before && status?.query.status === "ready");
+  expect(statuses).not.toContain("loading");
   await view.unmount();
 });
 it("announces only successful writes, whatever form the request takes", () => {
@@ -312,11 +342,12 @@ it("announces only successful writes, whatever form the request takes", () => {
   expect(writtenUrl(url, { method: "PUT" }, ok)).toBe(url);
   expect(writtenUrl(new URL(url), { method: "delete" }, ok)).toBe(url);
   expect(writtenUrl(new Request(url, { method: "POST" }), { method: "POST" }, ok)).toBe(url);
+  expect(writtenUrl(new Request(url, { method: "PUT" }), undefined, ok)).toBe(url);
   expect(writtenUrl(url, undefined, ok)).toBeUndefined();
   expect(writtenUrl(url, { method: "HEAD" }, ok)).toBeUndefined();
   expect(writtenUrl(url, { method: "PUT" }, new Response(null, { status: 412 }))).toBeUndefined();
 });
-it("discovers an extension workspace with the public profile fetch", async () => {
+it("keeps the credentialed read for an extension profile inside the storage", async () => {
   const fixture = await session();
   const publicFetch = vi.fn(fixture.session.fetch);
   let workspace: Workspace | undefined;
@@ -335,6 +366,7 @@ it("discovers an extension workspace with the public profile fetch", async () =>
   );
   await until(() => Boolean(workspace));
   expect(workspace?.client.workspace).toBe(BASE);
-  expect(publicFetch.mock.calls.map(([url]) => String(url))).toEqual([`${DEMO_ROOT}profile/card`]);
+  // The profile is inside the granted storage, so the public fetch is not needed.
+  expect(publicFetch).not.toHaveBeenCalled();
   await view.unmount();
 });
