@@ -38,7 +38,11 @@ vi.mock("../src/shell/lib/connectivity", async (original) => ({
 }));
 
 import { createLocalOutbox } from "../src/shell/lib/outbox";
-import { OfflineProvider, OutboxFactoryContext } from "../src/shell/sync/offline-provider";
+import {
+  OfflineProvider,
+  OutboxFactoryContext,
+  useRecentTitle,
+} from "../src/shell/sync/offline-provider";
 import { useSyncSnapshot } from "../src/shell/sync/online";
 import { useNeedsConnection } from "../src/shell/sync/requires-online";
 
@@ -147,6 +151,30 @@ it("never copies the open page into the next account's history after a switch or
     { href: "/drive/my", title: "Drive · Solid Suite" },
   ]);
   expect(fixture.remember).toHaveBeenCalledWith("/drive/my");
+});
+
+function Named({ title }: { title: string }) {
+  useRecentTitle(title);
+  return null;
+}
+
+it("records the title a shell page names over a document title Next resets", async () => {
+  document.title = "Solid Suite";
+  fixture.pathname = "/notifications";
+  const tree = (title: string) => h(OfflineProvider, { children: h(Named, { title }) });
+  const view = render(tree("Notifications · Home · Solid Suite"));
+  await tick();
+  expect(JSON.parse(localStorage.getItem("suite.recent.v1.one") ?? "[]")).toMatchObject([
+    { href: "/notifications", title: "Notifications · Home · Solid Suite" },
+  ]);
+  // A name given for one path never labels the next: it falls back to the document title.
+  fixture.pathname = "/search";
+  view.rerender(h(OfflineProvider, { children: null }));
+  await tick();
+  expect(JSON.parse(localStorage.getItem("suite.recent.v1.one") ?? "[]")).toMatchObject([
+    { href: "/search", title: "Solid Suite" },
+    { href: "/notifications", title: "Notifications · Home · Solid Suite" },
+  ]);
 });
 
 it("does not save excluded pages such as onboarding for offline use", async () => {

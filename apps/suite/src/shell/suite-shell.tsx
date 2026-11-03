@@ -31,6 +31,7 @@ import { useAccounts } from "./session/accounts-provider";
 import { SessionGuard } from "./session/session-guard";
 import { GlobalShortcuts } from "./shortcuts/global-shortcuts";
 import { ShortcutsProvider, useShortcutSettings } from "./shortcuts/provider";
+import { useRecentTitle } from "./sync/offline-provider";
 import { useSyncSnapshot } from "./sync/online";
 import { ShellSyncSheet } from "./sync/shell-sync-sheet";
 
@@ -66,9 +67,11 @@ function Frame({
   const { characterKeys } = useShortcutSettings();
   const env = useSuiteEnvironment();
   const app = appRegistry.find((item) => item.slug === slug);
+  const title = app ? `${pageTitle} · ${app.name} · Solid Suite` : undefined;
   useEffect(() => {
-    if (app) document.title = `${pageTitle} · ${app.name} · Solid Suite`;
-  }, [app, pageTitle]);
+    if (title) document.title = title;
+  }, [title]);
+  useRecentTitle(title);
   const [preferences, setPreferences] = useState<ShellPreferences>(defaultShellPreferences);
   const [rail, setRail] = useState<RailPreferences>(() => parseRailPreferences(null));
   useEffect(() => {

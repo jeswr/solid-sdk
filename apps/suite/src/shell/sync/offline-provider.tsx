@@ -111,6 +111,28 @@ interface OfflineContextValue {
 }
 const OfflineContext = createContext<OfflineContextValue | null>(null);
 
+interface NamedPage {
+  pathname: string;
+  title: string;
+}
+type NamePage = (update: (current: NamedPage | null) => NamedPage | null) => void;
+const PageTitleContext = createContext<NamePage>(() => {});
+
+/**
+ * Names the current page in the recent-items index. Next applies the root metadata title after
+ * a client page sets `document.title`, so shell pages pass their title here instead.
+ */
+export function useRecentTitle(title: string | undefined) {
+  const name = useContext(PageTitleContext);
+  const pathname = usePathname();
+  useEffect(() => {
+    if (!title) return;
+    const page = { pathname, title };
+    name(() => page);
+    return () => name((current) => (current === page ? null : current));
+  }, [name, pathname, title]);
+}
+
 const noSubscribe = () => () => {};
 const emptySnapshot = () => EMPTY_OUTBOX;
 
@@ -274,11 +296,17 @@ export function OfflineProvider({
   const accountId = active?.id;
   const outbox = useMemo(() => (accountId ? factory(accountId) : null), [factory, accountId]);
   const value = useMemo(() => ({ outbox }), [outbox]);
+  const pathname = usePathname();
+  const [named, setNamed] = useState<NamedPage | null>(null);
+  // A title named for an earlier path never labels the page now open.
+  const title = pageTitle ?? (named?.pathname === pathname ? named.title : undefined);
   return (
     <OfflineContext.Provider value={value}>
-      <OfflineEffects {...(pageTitle !== undefined ? { pageTitle } : {})} outbox={outbox} />
-      <ConnectionAnnouncement />
-      {children}
+      <PageTitleContext.Provider value={setNamed}>
+        <OfflineEffects {...(title !== undefined ? { pageTitle: title } : {})} outbox={outbox} />
+        <ConnectionAnnouncement />
+        {children}
+      </PageTitleContext.Provider>
     </OfflineContext.Provider>
   );
 }
