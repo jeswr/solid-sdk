@@ -1,17 +1,16 @@
 // AUTHORED-BY Claude Opus 5.5
-import { notFound } from "next/navigation";
-import { HomePage } from "@/apps/home/components/home-page";
-import { DOMAINS, UNCATEGORISED } from "@/apps/home/lib/model/domains";
+import { Suspense } from "react";
+import { HomeDomainRoute } from "@/apps/home/components/native-routes";
 
-/** The domains are fixed; anything else is a real 404 rather than a soft one. */
-export const dynamicParams = false;
+// Staging sets this literal to false; the web target retains on-demand routes.
+export const dynamicParams = true;
 export function generateStaticParams() {
-  return [...DOMAINS, UNCATEGORISED].map((entry) => ({ domain: entry.id }));
+  return process.env.NEXT_PUBLIC_SUITE_TARGET === "native" ? [{ domain: "__" }] : [];
 }
-
-export default async function Page({ params }: { params: Promise<{ domain: string }> }) {
-  const { domain } = await params;
-  const id = decodeURIComponent(domain);
-  if (id !== UNCATEGORISED.id && !DOMAINS.some((entry) => entry.id === id)) notFound();
-  return <HomePage domain={id} />;
+export default function Page() {
+  return (
+    <Suspense>
+      <HomeDomainRoute />
+    </Suspense>
+  );
 }

@@ -1,6 +1,9 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 
-import { readFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, test } from "vitest";
 import { scanColours, scanDirectory } from "../scripts/check-tokens.mjs";
@@ -61,4 +64,19 @@ test("CSS URLs cannot hide subsequent literals behind false line comments", () =
   expect(scanColours('<!-- #abc -->\n<svg fill="#fff"/>', ".svg")).toEqual([
     { literal: "#fff", line: 2 },
   ]);
+});
+
+test("native staging and export output are excluded while suite source remains checked", () => {
+  const root = mkdtempSync(join(tmpdir(), "native-token-scan-"));
+  try {
+    for (const directory of [".native-stage", "www", "src"]) {
+      mkdirSync(join(root, directory));
+      writeFileSync(join(root, directory, "index.html"), '<div style="color:#fff"/>');
+    }
+    expect(scanDirectory(root)).toEqual([
+      { path: join(root, "src/index.html"), literal: "#fff", line: 1 },
+    ]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });

@@ -1,17 +1,17 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { SheetEditor, SheetNotFound } from "@/apps/sheets/components/sheet-editor";
-import { decodeRef } from "@/lib/refs";
+// AUTHORED-BY Claude Opus 5.5
+import { Suspense } from "react";
+import { SheetRoute } from "@/apps/sheets/components/native-routes";
 
-export default async function EditorPage({ params }: { params: Promise<{ ref: string }> }) {
-  const { ref } = await params;
-  let container: string;
-  try {
-    container = decodeRef(ref);
-    const url = new URL(container);
-    if (!url.pathname.endsWith("/") || url.search || url.hash || url.username || url.password)
-      return <SheetNotFound />;
-  } catch {
-    return <SheetNotFound />;
-  }
-  return <SheetEditor key={container} container={container} />;
+// Staging sets this literal to false; the web target retains on-demand routes.
+export const dynamicParams = true;
+export function generateStaticParams() {
+  return process.env.NEXT_PUBLIC_SUITE_TARGET === "native" ? [{ ref: "__" }] : [];
+}
+export default function Page() {
+  return (
+    <Suspense>
+      <SheetRoute />
+    </Suspense>
+  );
 }
