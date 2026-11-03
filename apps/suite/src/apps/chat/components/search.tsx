@@ -75,7 +75,7 @@ export function ChatSearchPage({ query }: { query: string }) {
             {data.results.length} {data.results.length === 1 ? "message" : "messages"} in{" "}
             {roomCount} {roomCount === 1 ? "room" : "rooms"}
             {data.truncationReasons.includes("rooms") &&
-              `. Searched ${data.searchedRooms} rooms; other rooms were outside the room limit`}
+              `. Searched ${data.searchedRooms + data.skipped.length} rooms; other rooms were outside the room limit`}
             {data.truncationReasons.includes("days") &&
               `. Searched the last ${data.searchedDays} days; older history remains`}
             {data.truncationReasons.includes("results") && ". Showing the first 200 results"}
@@ -90,7 +90,10 @@ export function ChatSearchPage({ query }: { query: string }) {
       {!term ? (
         <p>Search messages across your joined rooms.</p>
       ) : search.status === "loading" ? (
-        <LoadingSkeleton preset="list" label="Searching messages" />
+        // The persistent status line above already announces the search.
+        <div aria-hidden="true">
+          <LoadingSkeleton preset="list" label="Searching messages" />
+        </div>
       ) : search.status === "error" ? (
         queryError ? (
           <div role="alert">

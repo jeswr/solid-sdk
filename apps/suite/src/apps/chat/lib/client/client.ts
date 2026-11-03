@@ -135,6 +135,7 @@ function abortableFetch(
   if (!signal) return fetch;
   return (input, init) => {
     signal.throwIfAborted();
+    // The RDF model never passes its own signal, so this one is the only one.
     return fetch(input, { ...init, signal });
   };
 }
@@ -291,7 +292,8 @@ export class ChatClient {
             const since =
               Number.isFinite(created.getTime()) &&
               created.getUTCFullYear() >= 1 &&
-              created.getUTCFullYear() <= 9999
+              created.getUTCFullYear() <= 9999 &&
+              created.getTime() <= before.getTime()
                 ? created
                 : undefined;
             const page = await this.messages(room.url, { before, days: budget, since, signal });

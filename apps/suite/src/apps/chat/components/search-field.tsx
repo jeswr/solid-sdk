@@ -14,7 +14,7 @@ export function ChatSearchField({ query = "", page = false }: { query?: string; 
     if (page) input.current?.focus();
   }, [page]);
   return (
-    <search aria-label={page ? "Message search results" : "Search messages"}>
+    <search aria-label={page ? "Message search" : "Search messages"}>
       <form
         className="chat-search-form"
         onSubmit={(event) => {

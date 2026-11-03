@@ -155,7 +155,7 @@ it("bounds day requests by creation and reports only real omitted history", asyn
   expect(
     (await client.search("hello", { maxRooms: 1, timeZone: "UTC" })).truncationReasons,
   ).toEqual(["rooms", "days"]);
-  for (const created of [undefined, "garbage", "0000-01-01", "+010000-01-01"]) {
+  for (const created of [undefined, "garbage", "0000-01-01", "+010000-01-01", "2027-01-01"]) {
     vi.mocked(client.joinedRooms).mockResolvedValue([{ ...room(), created }]);
     await client.search("hello", { timeZone: "UTC" });
     expect(loads).toHaveBeenLastCalledWith(
