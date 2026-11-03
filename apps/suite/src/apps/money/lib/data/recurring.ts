@@ -19,8 +19,10 @@ export interface RecurringPayment {
   readonly late: boolean;
 }
 
-/** Bills vary (energy, phone): amounts within a fifth of the latest one still count. */
+/** Bills vary (energy, phone): one-offs within a fifth of a schedule's amount look like it. */
 export const AMOUNT_TOLERANCE = 0.2;
+/** A schedule's amounts span at most this share of their median (a bill ±15%). */
+export const AMOUNT_SPREAD = 0.3;
 /** Weekly and fortnightly amounts may vary only by this share, or one whole unit. */
 export const WEEKLY_TOLERANCE = 0.05;
 /** A payee with this many times more other payments than a schedule's is shopping. */
@@ -32,7 +34,7 @@ export const SHIFT_DAYS = 3;
 /** A weekly or fortnightly one only a day, or everyday shopping would fit. */
 export const WEEKLY_SHIFT_DAYS = 1;
 /** At least this share of a schedule's payments land exactly on their dates. */
-export const EXACT_SHARE = 0.5;
+export const EXACT_SHARE = 0.75;
 /** A payment on the next date within this share of the amount continues a schedule (a price rise). */
 export const PRICE_CHANGE = 0.5;
 /** A payment more than this many days past its expected date has probably stopped. */
@@ -132,14 +134,34 @@ function nearest(
   return found;
 }
 
+/**
+ * On the date, or for a monthly or yearly date that falls at a weekend, on the
+ * nearest working day when the amount is steady. (A weekly date stays on its weekday.)
+ */
+function onTime(day: number, expected: number, rule: Recurrence, steady: boolean): boolean {
+  if (day === expected) return true;
+  // Only a steady amount earns the weekend allowance: shopping varies.
+  if (!steady || windowFor(rule) === WEEKLY_SHIFT_DAYS) return false;
+  const weekday = new Date(expected * DAY).getUTCDay();
+  if (weekday === 6) return day === expected - 1 || day === expected + 2;
+  if (weekday === 0) return day === expected - 2 || day === expected + 1;
+  return false;
+}
+
 const toleranceFor = (minor: number, floor: number) =>
   Math.max(Math.round(Math.abs(minor) * AMOUNT_TOLERANCE), floor);
 
+const fixedTolerance = (minor: number, floor: number) =>
+  Math.max(Math.round(Math.abs(minor) * WEEKLY_TOLERANCE), floor / AMOUNT_TOLERANCE_FLOOR);
+
 /**
  * Walks back from one payment through the dates a schedule expects, taking the
- * unused payment nearest each date (a few days early or late) whose amount
- * is close to the latest one. Payments between those dates are skipped as
- * one-offs; the run ends at the first expected date with no payment.
+ * unused payment nearest each date (a few days early or late) with a plausible
+ * amount. Payments between those dates are skipped as one-offs; the run ends at
+ * the first expected date with no payment. Weekly payments out must keep a fixed
+ * amount; other runs are then cut to the longest recent stretch whose amounts
+ * span at most AMOUNT_SPREAD of their median, so a varying bill is judged by its
+ * usual amount, not by whichever payment came last.
  */
 function walk(
   payments: readonly Payment[],
@@ -150,15 +172,17 @@ function walk(
   floor: number,
 ): Run {
   const amount = (payments[start] as Payment).minor;
-  const weekly = rule.frequency === "weekly" || rule.frequency === "biweekly";
-  // Weekly bills are fixed amounts; a varying weekly amount is shopping.
-  const tolerance = weekly
-    ? Math.max(Math.round(Math.abs(amount) * WEEKLY_TOLERANCE), floor / AMOUNT_TOLERANCE_FLOOR)
-    : toleranceFor(amount, floor);
-  const fits = (payment: Payment) => Math.abs(payment.minor - amount) <= tolerance;
-  const window = windowFor(rule);
+  // A varying weekly payment out is shopping; weekly pay may vary.
+  const fixed = windowFor(rule) === WEEKLY_SHIFT_DAYS && amount < 0;
   const indexes = [start];
-  let exact = (payments[start] as Payment).day === anchor ? 1 : 0;
+  const onTimes = [onTime((payments[start] as Payment).day, anchor, rule, true)];
+  let sum = amount;
+  const fits = (payment: Payment) => {
+    if (fixed) return Math.abs(payment.minor - amount) <= fixedTolerance(amount, floor);
+    const mean = sum / indexes.length;
+    return Math.abs(payment.minor - mean) <= Math.max(Math.abs(mean) * PRICE_CHANGE, floor);
+  };
+  const window = windowFor(rule);
   let expected = anchor;
   let cursor = start - 1;
   for (;;) {
@@ -168,11 +192,39 @@ function walk(
     const found = nearest(payments, used, cursor, previous, window, fits);
     if (found === undefined) break;
     indexes.push(found);
-    if ((payments[found] as Payment).day === previous) exact++;
+    onTimes.push(
+      onTime(
+        (payments[found] as Payment).day,
+        previous,
+        rule,
+        Math.abs((payments[found] as Payment).minor - amount) <= fixedTolerance(amount, floor),
+      ),
+    );
+    sum += (payments[found] as Payment).minor;
     cursor = found - 1;
     expected = previous;
   }
-  return { rule, anchor, indexes, exact, amount };
+  let length = indexes.length;
+  if (!fixed) {
+    const sorted: number[] = [];
+    length = 0;
+    indexes.forEach((index, position) => {
+      const minor = (payments[index] as Payment).minor;
+      sorted.splice(sorted.findIndex((value) => value > minor) >>> 0, 0, minor);
+      const median = sorted[Math.floor(sorted.length / 2)] as number;
+      const spread = (sorted.at(-1) as number) - (sorted[0] as number);
+      if (spread <= Math.max(Math.round(Math.abs(median) * AMOUNT_SPREAD), floor)) {
+        length = position + 1;
+      }
+    });
+  }
+  return {
+    rule,
+    anchor,
+    indexes: indexes.slice(0, length),
+    exact: onTimes.slice(0, length).filter(Boolean).length,
+    amount,
+  };
 }
 
 /** A payment off its date counts for a quarter, so moved dates don't invent a schedule. */
@@ -190,6 +242,32 @@ const better = (run: Run, best: Run | undefined) => !best || score(run) > score(
 function schedules(payments: readonly Payment[], floor: number): Run[] {
   const used = new Set<number>();
   const runs: Run[] = [];
+  /** Whether a run reads as a schedule rather than everyday spending that happens to fit. */
+  const plausible = (run: Run) => {
+    const window = windowFor(run.rule);
+    // Three similar payments a week apart happen by chance; a fourth rarely does.
+    if (run.indexes.length < (window === WEEKLY_SHIFT_DAYS ? 4 : 3)) return false;
+    // Mostly off its dates is everyday spending.
+    if (run.exact < 3 || run.exact < run.indexes.length * EXACT_SHARE) return false;
+    const first = (payments[run.indexes.at(-1) as number] as Payment).day;
+    const inRun = new Set(run.indexes);
+    const tolerance = toleranceFor(run.amount, floor);
+    let strays = 0;
+    let others = 0;
+    payments.forEach((payment, index) => {
+      if (used.has(index) || inRun.has(index) || payment.day < first) return;
+      if (payment.day > run.anchor + window) return;
+      others++;
+      if (Math.abs(payment.minor - run.amount) <= tolerance) strays++;
+    });
+    if (strays > run.indexes.length) return false;
+    // Among frequent shopping at one payee, only a fixed amount marks a schedule.
+    const fixed = fixedTolerance(run.amount, floor);
+    return !(
+      others > run.indexes.length * BUSY_PAYEE &&
+      run.indexes.some((index) => Math.abs((payments[index] as Payment).minor - run.amount) > fixed)
+    );
+  };
   for (;;) {
     let best: Run | undefined;
     let anchors = 0;
@@ -205,35 +283,10 @@ function schedules(payments: readonly Payment[], floor: number): Run[] {
         }
       }
     }
-    if (!best || best.indexes.length < 3) return runs;
+    // Trying every implausible run in turn would find chance patterns in shopping.
+    if (!best || !plausible(best)) return runs;
     const run: Run = best;
-    // Mostly off its dates is everyday spending that happens to fit.
-    if (run.exact < 3 || run.exact < run.indexes.length * EXACT_SHARE) return runs;
-    // Three similar payments a week apart happen by chance; a fourth rarely does.
-    if (windowFor(run.rule) === WEEKLY_SHIFT_DAYS && run.indexes.length < 4) return runs;
     const window = windowFor(run.rule);
-    const first = (payments[run.indexes.at(-1) as number] as Payment).day;
-    const inRun = new Set(run.indexes);
-    const tolerance = toleranceFor(run.amount, floor);
-    let strays = 0;
-    let others = 0;
-    payments.forEach((payment, index) => {
-      if (used.has(index) || inRun.has(index) || payment.day < first) return;
-      if (payment.day > run.anchor + window) return;
-      others++;
-      if (Math.abs(payment.minor - run.amount) <= tolerance) strays++;
-    });
-    if (strays > run.indexes.length) return runs;
-    // Among frequent shopping at one payee, only a fixed amount marks a schedule.
-    const fixed = Math.max(
-      Math.round(Math.abs(run.amount) * WEEKLY_TOLERANCE),
-      floor / AMOUNT_TOLERANCE_FLOOR,
-    );
-    if (
-      others > run.indexes.length * BUSY_PAYEE &&
-      run.indexes.some((index) => Math.abs((payments[index] as Payment).minor - run.amount) > fixed)
-    )
-      return runs;
     for (const index of run.indexes) used.add(index);
     // A payment on the next date at a new price keeps the schedule going; once two
     // agree, the new price is the schedule's amount.

@@ -399,6 +399,40 @@ describe("recurring payments", () => {
     ]);
   });
 
+  it("judges a varying bill by its usual amount and counts weekend moves as on time", () => {
+    const phone = [
+      ["06", "-40"],
+      ["07", "-46"],
+      ["08", "-35"],
+      ["09", "-44"],
+      ["10", "-34"],
+    ].map(([month, amount]) => row("Phone", `2026-${month}-20`, amount as string));
+    // 1 August 2026 is a Saturday; 14 March 2026 too.
+    const rent = [
+      row("Rent", "2026-08-03", "-1100"),
+      ...monthly("Rent", "01", "-1100", ["09", "10"]),
+    ];
+    const insurance = ["2023-03-14", "2024-03-14", "2025-03-17", "2026-03-16"].map((date) =>
+      row("Insurance", date, "-310"),
+    );
+    // Weekly pay may vary; weekly payments out may not.
+    const pay = ["380", "470", "415", "440", "395"].map((amount, index) =>
+      row("Hours", `2026-10-${String(2 + index * 7).padStart(2, "0")}`, amount),
+    );
+    expect(
+      recurringPayments([...phone, ...rent, ...insurance, ...pay], "2026-10-28").map((value) => [
+        value.payee,
+        describeRecurrence(value.recurrence),
+        value.count,
+      ]),
+    ).toEqual([
+      ["Rent", "Monthly on the 1st", 3],
+      ["Hours", "Weekly", 5],
+      ["Phone", "Monthly on the 20th", 5],
+      ["Insurance", "Yearly", 4],
+    ]);
+  });
+
   it("describes schedules in words", () => {
     expect(describeRecurrence({ frequency: "weekly" })).toBe("Weekly");
     expect(describeRecurrence({ frequency: "biweekly" })).toBe("Every 2 weeks");
