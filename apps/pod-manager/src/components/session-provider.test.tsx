@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PodAuth } from "@jeswr/pod-auth";
 import { resolveLoginTarget } from "@jeswr/pod-auth/directory";
 import { publicFetch } from "@/lib/source-fetch";
+import { IssuerChoiceRequiredError } from "@/lib/sign-in";
 import {
   deferred,
   fakePodAuth,
@@ -283,6 +284,45 @@ describe("shared Pod auth session", () => {
     expect(popup.closed).toBe(true);
     expect(auth.logout).not.toHaveBeenCalled();
     expect(session.recentAccounts.map((account) => account.webId)).toEqual([WEB_ID]);
+  });
+  it("offers a WebID's several providers and keeps the WebID when one is chosen", async () => {
+    const other = "https://other.example/";
+    auth.login.mockRejectedValueOnce(new IssuerChoiceRequiredError([ISSUER, other]));
+    await mount();
+    await act(async () => session.loginWithAddress("alice.example"));
+    expect(session.issuerChoice).toEqual({ webId: WEB_ID, issuers: [ISSUER, other] });
+    expect(session.error).toBe("Your WebID lists more than one provider. Choose yours below.");
+    // A cancelled choice keeps the list for another try.
+    auth.login.mockRejectedValueOnce(new DOMException("closed", "AbortError"));
+    await act(async () => session.loginWithIssuer(other));
+    expect(auth.login).toHaveBeenLastCalledWith({ webId: WEB_ID, issuer: other });
+    expect(session.issuerChoice?.webId).toBe(WEB_ID);
+    await act(async () => session.loginWithIssuer(ISSUER));
+    expect(auth.login).toHaveBeenLastCalledWith({ webId: WEB_ID, issuer: ISSUER });
+    expect(session.status).toBe("logged-in");
+    expect(session.issuerChoice).toBeUndefined();
+    // An issuer outside the list is an ordinary provider login without the WebID.
+    await act(async () => session.logout());
+    await act(async () => session.loginWithIssuer(other));
+    expect(auth.login).toHaveBeenLastCalledWith({ issuer: other });
+  });
+  it("cancel during profile loading drops the session the provider already granted", async () => {
+    const profile = deferred<Response>();
+    vi.mocked(publicFetch).mockReturnValue(profile.promise);
+    await mount();
+    let result!: Promise<void>;
+    await act(async () => {
+      result = session.loginWithIssuer(ISSUER);
+    });
+    expect(auth.login).toHaveBeenCalledOnce();
+    await act(async () => session.cancelLogin());
+    await act(async () => {
+      profile.resolve(new Response(null, { status: 500 }));
+      await result;
+    });
+    expect(session.status).toBe("logged-out");
+    expect(session.webId).toBeUndefined();
+    expect(auth.logout).toHaveBeenCalledOnce();
   });
   it("ignores duplicate clicks while a login is pending", async () => {
     const pending = deferred<typeof identity>();

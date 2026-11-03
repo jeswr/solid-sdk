@@ -9,6 +9,13 @@ import { CodeRequestCancelledError } from "@jeswr/reactive-authentication";
 import { allowInsecureLoopback } from "./auth-environment";
 import { PopupBlockedError, PopupTimeoutError } from "./popup-login";
 
+/** A WebID lists several providers: the session provider offers them, keeping the WebID. */
+export class IssuerChoiceRequiredError extends AmbiguousIssuerError {
+  constructor(readonly issuers: readonly string[]) {
+    super();
+  }
+}
+
 /** Never display protocol error text, callback codes or credentials. */
 export function signInError(error: unknown): string {
   if (error instanceof InvalidLoginAddressError || error instanceof NotALoginAddressError)
@@ -24,8 +31,7 @@ export function signInError(error: unknown): string {
     (error instanceof Error && error.name === "AbortError")
   )
     return "Sign-in was cancelled.";
-  if (error instanceof PopupTimeoutError)
-    return "The sign-in window was open too long. Try again.";
+  if (error instanceof PopupTimeoutError) return "The sign-in window was open too long. Try again.";
   if (error instanceof Error && error.name === "TimeoutError")
     return "That address didn't respond. Check it, or choose your provider.";
   return "We couldn't sign you in. Try again.";

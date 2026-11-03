@@ -35,8 +35,18 @@ export function signInProviders(): SignInProvider[] {
   ];
 }
 
+/** The providers a WebID lists, named from the directory where it knows them. */
+export function issuerChoiceProviders(issuers: readonly string[]): SignInProvider[] {
+  const known = signInProviders();
+  return issuers.map((issuer, index) => {
+    const match = known.find((provider) => sameIssuer(provider.issuer, issuer));
+    return match ?? { id: `listed-${index}`, issuer, name: new URL(issuer).host };
+  });
+}
+
 export function LoginScreen() {
   const session = useSession();
+  const choice = session.issuerChoice;
   return (
     <main className="grid min-h-dvh place-items-center bg-gradient-to-b from-accent/30 to-background px-4 py-10">
       <div className="absolute right-4 top-4">
@@ -49,10 +59,16 @@ export function LoginScreen() {
         <fieldset disabled={!session.ready} className="min-w-0">
           <legend className="sr-only">Pod Manager sign-in</legend>
           <SignInCard
+            key={choice ? `choice:${choice.webId}` : "sign-in"}
             title="Sign in"
             accountsTitle="Choose an account"
-            subtitle="to continue to Pod Manager"
-            providers={signInProviders()}
+            subtitle={
+              choice
+                ? `Choose the provider for ${new URL(choice.webId).host}`
+                : "to continue to Pod Manager"
+            }
+            defaultView={choice ? "sign-in" : undefined}
+            providers={choice ? issuerChoiceProviders(choice.issuers) : signInProviders()}
             recentAccounts={session.recentAccounts}
             recentProviders={session.recentProviders}
             pending={session.pending}

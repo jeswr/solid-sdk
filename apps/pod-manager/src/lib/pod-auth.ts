@@ -1,15 +1,18 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 "use client";
 
-import { AmbiguousIssuerError, createPodAuth, type PodAuth } from "@jeswr/pod-auth";
+import { createPodAuth, type PodAuth } from "@jeswr/pod-auth";
 import { CodeRequestCancelledError } from "@jeswr/reactive-authentication";
 import { allowInsecureLoopback } from "./auth-environment";
+import { IssuerChoiceRequiredError } from "./sign-in";
 import type { PopupLoginController } from "./popup-login";
 export { publicFetch } from "./source-fetch";
 
 /** The mounted provider owns the gesture-opened popup, including StrictMode replay. */
 export const popupHolder: { current: PopupLoginController | null } = { current: null };
 let singleton: PodAuth | undefined;
+/** Uploads are replayed after a 401 challenge, so their buffer must hold a whole file. */
+export const MAX_UPLOAD_BYTES = 1024 * 1024 * 1024;
 export const STORAGE_ENDPOINTS = ["/account/domains", "/account/domains/", "/.notifications/"];
 
 /** Imported dynamically by the session provider, never evaluated during SSR. */
@@ -22,6 +25,7 @@ export function getPodAuth(): PodAuth {
       : new URL("/clientid.jsonld", location.origin).href,
     redirectUri: new URL("/callback.html", location.origin).href,
     allowInsecureLoopback: loopback,
+    maxReplayBodyBytes: MAX_UPLOAD_BYTES,
     // Pod-server APIs outside the pod folder: custom domains and the notifications service.
     boundary: { storageEndpoints: STORAGE_ENDPOINTS },
     ui: {
@@ -33,8 +37,8 @@ export function getPodAuth(): PodAuth {
       getWebId: async () => {
         throw new Error("Choose an account or address first");
       },
-      chooseIssuer: async () => {
-        throw new AmbiguousIssuerError();
+      chooseIssuer: async (issuers) => {
+        throw new IssuerChoiceRequiredError(issuers);
       },
     },
   });

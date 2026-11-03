@@ -113,3 +113,21 @@ it("ignores unsafe home configuration and uses the shared directory fallback", (
     "teamid",
   ]);
 });
+it("shows only the WebID's own providers, on the provider step, when it lists several", async () => {
+  vi.stubEnv("NEXT_PUBLIC_HOME_IDP", "https://idp.solid-test.jeswr.org");
+  vi.stubEnv("NEXT_PUBLIC_HOME_IDP_NAME", "Jeswr");
+  vi.mocked(useSession).mockReturnValue({
+    ...session,
+    issuerChoice: {
+      webId: "https://alice.example/profile/card#me",
+      issuers: ["https://idp.solid-test.jeswr.org/", "https://unknown.example/"],
+    },
+  });
+  await act(async () => root.render(<LoginScreen />));
+  expect(props.defaultView).toBe("sign-in");
+  expect(props.subtitle).toBe("Choose the provider for alice.example");
+  expect(props.providers.map(({ name, issuer }) => ({ name, issuer }))).toEqual([
+    { name: "Jeswr", issuer: "https://idp.solid-test.jeswr.org/" },
+    { name: "unknown.example", issuer: "https://unknown.example/" },
+  ]);
+});

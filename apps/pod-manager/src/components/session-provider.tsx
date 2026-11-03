@@ -3,6 +3,7 @@
 
 import type { Identity, LoginHint, PodAuth } from "@jeswr/pod-auth";
 import { createRecentProvidersStore, resolveLoginTarget } from "@jeswr/pod-auth/directory";
+import { sameIssuer } from "@jeswr/reactive-authentication";
 import type { SignInCardProps, SignInRecentAccount } from "@jeswr/suite-ui/sign-in";
 import {
   createContext,
@@ -17,7 +18,7 @@ import { toast } from "sonner";
 import { allowInsecureLoopback } from "@/lib/auth-environment";
 import { PopupLoginController } from "@/lib/popup-login";
 import { fetchProfile, type PodProfile } from "@/lib/profile";
-import { consumeSuggestedAccount, signInError } from "@/lib/sign-in";
+import { consumeSuggestedAccount, IssuerChoiceRequiredError, signInError } from "@/lib/sign-in";
 import { publicFetch, sourceFetch } from "@/lib/source-fetch";
 import { readCache } from "@/lib/swr-cache";
 import { IssueAssignmentAnnouncer } from "@/lib/issues";
@@ -40,6 +41,8 @@ export interface Session {
   startupFailed: boolean;
   retry(): void;
   loginWithAddress(input: string, kind?: "webid" | "custom"): Promise<void>;
+  /** Set when the WebID lists several providers; loginWithIssuer then keeps that WebID. */
+  issuerChoice?: { webId: string; issuers: readonly string[] };
   loginWithIssuer(issuer: string): Promise<void>;
   loginWithAccount(webId: string): Promise<void>;
   cancelLogin(): void;
@@ -99,6 +102,7 @@ export function SessionProvider({
   const [recentProviders, setRecentProviders] = useState<string[]>([]);
   const [pending, setPending] = useState<Pending>(null);
   const [error, setError] = useState<string | null>(null);
+  const [issuerChoice, setIssuerChoice] = useState<Session["issuerChoice"]>();
   const [ready, setReady] = useState(false);
   const store = useMemo(recentProvidersStore, []);
 
@@ -215,7 +219,11 @@ export function SessionProvider({
   }, [suppliedAuth, attempt, accounts, publish, reset, store]);
 
   const runLogin = useCallback(
-    async (action: NonNullable<Pending>, target: () => Promise<LoginHint>) => {
+    async (
+      action: NonNullable<Pending>,
+      target: () => Promise<LoginHint>,
+      choice?: Session["issuerChoice"],
+    ) => {
       const auth = coreRef.current;
       if (!auth || !ready || activeLogin.current) return;
       const token = Symbol();
@@ -226,17 +234,17 @@ export function SessionProvider({
       setPending(action);
       setStatus("authenticating");
       setError(null);
+      setIssuerChoice(undefined);
+      let hint: LoginHint | undefined;
+      let established = false;
       try {
         // Before the first await: the click's activation is still live.
         controller.current!.open();
-        const hint = await target();
+        hint = await target();
         if (!current()) return;
         const identity = await auth.login(hint);
-        if (!current()) {
-          // Cancelled after the provider already answered: drop that new session, nothing else.
-          if (mounted.current && cancelled.current === token) await auth.logout().catch(() => {});
-          return;
-        }
+        established = true;
+        if (!current()) return;
         controller.current!.closeIfOpen();
         await publish(identity, current);
         if (!current()) return;
@@ -247,8 +255,15 @@ export function SessionProvider({
         if (current()) {
           reset();
           setError(signInError(failure));
+          // Offer the WebID's own providers and keep the WebID; a failed choice keeps the list.
+          if (failure instanceof IssuerChoiceRequiredError && hint?.webId)
+            setIssuerChoice({ webId: hint.webId, issuers: failure.issuers });
+          else if (choice) setIssuerChoice(choice);
         }
       } finally {
+        // Cancelled after the provider answered (login or profile phase): drop that new session.
+        if (established && cancelled.current === token && mounted.current)
+          await auth.logout().catch(() => {});
         if (activeLogin.current === token) {
           activeLogin.current = null;
           controller.current?.closeIfOpen();
@@ -271,8 +286,17 @@ export function SessionProvider({
     [runLogin],
   );
   const loginWithIssuer = useCallback(
-    (issuer: string) => runLogin({ kind: "provider", key: issuer }, async () => ({ issuer })),
-    [runLogin],
+    (issuer: string) => {
+      const choice = issuerChoice?.issuers.some((listed) => sameIssuer(listed, issuer))
+        ? issuerChoice
+        : undefined;
+      return runLogin(
+        { kind: "provider", key: issuer },
+        async () => (choice ? { webId: choice.webId, issuer } : { issuer }),
+        choice,
+      );
+    },
+    [runLogin, issuerChoice],
   );
   const loginWithAccount = useCallback(
     (webId: string) =>
@@ -288,6 +312,7 @@ export function SessionProvider({
     controller.current?.cancel();
     reset();
     setError(null);
+    setIssuerChoice(undefined);
     setReady(false);
     try {
       await coreRef.current?.logout();
@@ -341,6 +366,7 @@ export function SessionProvider({
     recentProviders,
     pending,
     error,
+    issuerChoice,
     ready,
     startupFailed,
     retry,

@@ -50,7 +50,14 @@ describe("browser auth singleton", () => {
     await expect(config.ui.getWebId()).rejects.toThrow();
     await expect(
       config.ui.chooseIssuer!(["https://a.example/", "https://b.example/"]),
-    ).rejects.toBeInstanceOf(AmbiguousIssuerError);
+    ).rejects.toMatchObject({
+      name: "AmbiguousIssuerError",
+      issuers: ["https://a.example/", "https://b.example/"],
+    });
+    await expect(config.ui.chooseIssuer!(["https://a.example/"])).rejects.toBeInstanceOf(
+      AmbiguousIssuerError,
+    );
+    expect(config.maxReplayBodyBytes).toBe(1024 * 1024 * 1024);
     await expect(
       config.ui.getCode(
         new URL("https://provider.example/authorize"),
