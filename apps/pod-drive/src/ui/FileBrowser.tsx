@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 //
 // The Pod Drive file-browser VIEW — one cloud-drive-style listing of a Solid
@@ -15,7 +16,6 @@
 // AUTH SEAM: the `fetch` prop is the injected authenticated fetch, threaded to
 // `useDriveListing` → the data layer. See useDriveListing.ts for the full note.
 
-import { breadcrumbFor } from "./breadcrumb.js";
 import { displayName, formatKind, formatModified, formatSize } from "./format.js";
 import { useDriveListing } from "./useDriveListing.js";
 
@@ -38,12 +38,15 @@ export interface FileBrowserProps {
  * to descend); files are plain rows linking to their resource URL.
  */
 export function FileBrowser({ rootUrl, fetch, title }: FileBrowserProps) {
-  const { listing, loading, error, isAccessError, currentUrl, navigate, refresh } = useDriveListing(
-    rootUrl,
-    fetch ? { fetch } : {},
-  );
-
-  const crumbs = breadcrumbFor(currentUrl, rootUrl);
+  const {
+    listing,
+    loading,
+    error,
+    isAccessError,
+    breadcrumbs: crumbs,
+    navigate,
+    refresh,
+  } = useDriveListing(rootUrl, fetch ? { fetch } : {});
   const entries = listing?.container.entries ?? [];
 
   return (

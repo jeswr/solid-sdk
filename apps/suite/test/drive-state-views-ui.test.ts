@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 
 import { afterEach, expect, it, vi } from "vitest";
 import type { DriveItem } from "../src/apps/drive/lib/client/client";
@@ -27,6 +28,7 @@ vi.mock("@/lib/refs", async () => import("../src/lib/refs"));
 vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams({ q: mocks.query }),
   useParams: () => ({ ref: mocks.ref }),
+  usePathname: () => `/drive/p/${mocks.ref}`,
   notFound: mocks.notFound,
 }));
 vi.mock("../src/apps/drive/state/ui", () => ({

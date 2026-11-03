@@ -545,6 +545,19 @@ export async function addGrant(
   validateMetadata(grant);
   return applyBatch(urls, options, (url) => prepareAgent(url, grant.agent, options, grant));
 }
+/**
+ * Plan `addGrant` for each URL without writing: throws the first refusal (`owner-lockout`,
+ * `unsupported`, an unknown construct, …) that `addGrant` would report. Internal; used to refuse
+ * a decision before anything is committed.
+ */
+export async function planAddGrant(
+  urls: string[],
+  grant: RoleGrant,
+  options: GrantMutationOptions,
+): Promise<void> {
+  validateMetadata(grant);
+  for (const url of new Set(urls)) await prepareAgent(url, grant.agent, options, grant);
+}
 /** Remove one principal's direct role; inherited access must be edited at its source. */
 export async function removeGrant(
   urls: string[],

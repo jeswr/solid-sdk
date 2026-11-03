@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 import assert from "node:assert/strict";
 import { test, vi } from "vitest";
 import "fake-indexeddb/auto";
@@ -36,5 +37,39 @@ test("browser preset validates namespace and metadata lifetime", () => {
   assert.throws(() => createBrowserCaches(""), TypeError);
   for (const age of [0, -1, NaN, Infinity]) {
     assert.throws(() => createBrowserCaches("invalid-ttl", age), RangeError);
+  }
+});
+
+test("browser fence wrappers classify failures while preserving IndexedDB generations", async () => {
+  const namespace = `wrapped-fence-${crypto.randomUUID()}`;
+  const failure = new Error("IndexedDB unavailable");
+  const classified = new Error("Classified storage failure", { cause: failure });
+  let unavailable = false;
+  const wrapFenceStore = vi.fn((store) => ({
+    ...store,
+    getItem: async (key) => {
+      try {
+        if (unavailable) throw failure;
+        return await store.getItem(key);
+      } catch (cause) {
+        assert.equal(cause, failure);
+        throw classified;
+      }
+    },
+  }));
+  const caches = createBrowserCaches(namespace, { wrapFenceStore });
+  const reloaded = createBrowserCaches(namespace);
+  try {
+    assert.equal(wrapFenceStore.mock.calls.length, 1);
+    assert.equal(await caches.fence.generation(), 0);
+    await caches.fence.supersede();
+    assert.equal(await reloaded.fence.generation(), 1);
+    unavailable = true;
+    await assert.rejects(caches.fence.generation(), (error) => error === classified);
+    unavailable = false;
+    assert.equal(await caches.fence.generation(), 1);
+  } finally {
+    caches.fence.close();
+    reloaded.fence.close();
   }
 });

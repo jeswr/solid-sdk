@@ -1,20 +1,18 @@
 // AUTHORED-BY Codex GPT-6
-import { ErrorState } from "@jeswr/suite-ui";
-import { ProjectView } from "@/apps/tasks/components/views/project-view";
-import { decodeRef } from "@/lib/refs";
+// AUTHORED-BY Claude Opus 5.5
+import { Suspense } from "react";
+import { ProjectRoute } from "@/apps/tasks/components/native-routes";
+
 export const metadata = { title: "Project · Tasks · Solid Suite" };
-export default async function ProjectPage({ params }: { params: Promise<{ ref: string }> }) {
-  const { ref } = await params;
-  let url: string;
-  try {
-    url = decodeRef(ref);
-  } catch {
-    return (
-      <div className="tsk-content">
-        <h1>Project</h1>
-        <ErrorState error="not-found" />
-      </div>
-    );
-  }
-  return <ProjectView projectUrl={url} />;
+// Staging sets this literal to false; the web target retains on-demand routes.
+export const dynamicParams = true;
+export function generateStaticParams() {
+  return process.env.NEXT_PUBLIC_SUITE_TARGET === "native" ? [{ ref: "__" }] : [];
+}
+export default function ProjectPage() {
+  return (
+    <Suspense>
+      <ProjectRoute />
+    </Suspense>
+  );
 }

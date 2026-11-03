@@ -102,7 +102,7 @@ export function isNeverCacheEndpoint(url: string): boolean {
     // Unparseable URL → be conservative, do not cache.
     return true;
   }
-  // WebSocket upgrade URLs.
+  // notification transport upgrade URLs.
   if (url.toLowerCase().startsWith('ws://') || url.toLowerCase().startsWith('wss://')) {
     return true;
   }

@@ -36,3 +36,26 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm run gate
+
+  # AUTHORED-BY Codex GPT-6
+  suite-native:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Build Suite workspace dependencies
+        run: pnpm exec turbo run build --filter='@jeswr/app-suite^...'
+      - name: Export native Suite (manifest and per-page CSP)
+        run: pnpm --filter @jeswr/app-suite build:native
+      - name: Scan fixtures, verify CSP, report bundle size (40 MB maximum)
+        run: pnpm --filter @jeswr/app-suite check:native
+      - name: Install Chromium for native export browser tests
+        working-directory: apps/suite
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Exercise native export routing under the final CSP
+        run: pnpm --filter @jeswr/app-suite test:native-browser
