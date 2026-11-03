@@ -70,6 +70,20 @@ export function validateOptions(options: PodAuthOptions): void {
   )
     throw new TypeError("boundary.roots must be an array of URLs");
   for (const root of options.boundary?.roots ?? []) secureUrl(root, insecure, "boundary root");
+  const endpoints = options.boundary?.storageEndpoints;
+  if (
+    endpoints !== undefined &&
+    (!Array.isArray(endpoints) ||
+      endpoints.some(
+        (path) =>
+          typeof path !== "string" ||
+          !path.startsWith("/") ||
+          path.startsWith("//") ||
+          /[?#\\]|(?:^|\/)\.\.?(?:\/|$)/u.test(path) ||
+          new URL(path, "https://origin.invalid").pathname !== path,
+      ))
+  )
+    throw new TypeError("boundary.storageEndpoints must be absolute, normalised paths");
   if (options.lws !== undefined && options.lws.subject !== "oidc-id-token")
     validateCid(options.lws.subject?.cid);
   if (options.storage !== undefined) {

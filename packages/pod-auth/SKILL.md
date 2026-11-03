@@ -88,6 +88,9 @@ first; storage failures are harmless. Providers use monograms by default; host-s
   profile once; WebID hints retain discovery and claim-equality checks. Do not duplicate the engine check.
 - Credentials attach only within configured static roots or authenticated WebID-profile storage roots.
   `boundary.automatic: false` selects static-only behavior. `boundary.eligible` restricts both kinds.
+  `boundary.storageEndpoints` names exact (or trailing-`/` prefix) paths on each verified storage's
+  origin, for server APIs outside the pod folder; they share that storage's grant and stay out of
+  `Identity.storages`. Use it only for endpoints of the server that hosts the storage.
   Do not trust an origin merely because it hosts the issuer/WebID or returned a 401. Excluded or
   public resources must not prompt; unverified 401s remain 401s.
 - Automatic roots load on login/restore from `pim:storage` assertions naming the exact authenticated
