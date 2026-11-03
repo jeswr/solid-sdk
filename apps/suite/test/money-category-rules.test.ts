@@ -226,6 +226,16 @@ describe("categorisation rules", () => {
     );
     await write("{");
     await expect(resetRules(tagless)).rejects.toThrow("didn't say which version");
+    const weak: MoneyClient = {
+      storageUrl: c.storageUrl,
+      fetch: async (input, init) => {
+        const response = await c.fetch(input, init);
+        const headers = new Headers(response.headers);
+        headers.set("etag", 'W/"weak"');
+        return new Response(await response.text(), { status: response.status, headers });
+      },
+    };
+    await expect(resetRules(weak)).rejects.toThrow("didn't say which version");
     const failing: MoneyClient = {
       storageUrl: c.storageUrl,
       fetch: async () => new Response(null, { status: 503 }),

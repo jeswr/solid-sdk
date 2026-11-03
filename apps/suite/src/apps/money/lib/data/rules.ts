@@ -75,9 +75,11 @@ export async function loadRules(client: MoneyClient): Promise<RuleFile> {
   });
   if (response.status === 404) return { rules: [], etag: null, exists: false };
   if (!response.ok) throw new MoneyIoError(response.status);
+  // A body cut off mid-read is a failed read, not an unusable file.
+  const text = await response.text();
   let rules: SavedRule[];
   try {
-    rules = parseRules(JSON.parse(await response.text()));
+    rules = parseRules(JSON.parse(text));
   } catch {
     throw new RulesFileError();
   }
@@ -87,7 +89,9 @@ export async function loadRules(client: MoneyClient): Promise<RuleFile> {
 /** Without a version tag a write can't be made safely against other devices' edits. */
 function condition(file: { etag: string | null; exists: boolean }) {
   if (!file.exists) return { create: true } as const;
-  if (!file.etag) throw new Error("Your pod didn't say which version of your rules it has.");
+  // A weak tag can't guard a write either.
+  if (!file.etag || file.etag.startsWith("W/"))
+    throw new Error("Your pod didn't say which version of your rules it has.");
   return { etag: file.etag };
 }
 
