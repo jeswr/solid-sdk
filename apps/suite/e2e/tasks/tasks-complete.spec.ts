@@ -444,12 +444,14 @@ test.describe("touch targets and selection", () => {
       const y = bounds.top + bounds.height / 2;
       const hits = (dx: number, dy: number) =>
         button.contains(document.elementFromPoint(x + dx, y + dy));
+      const edge = [-21.9, 21.9];
       return {
-        width: [-21.5, 21.5].every((dx) => hits(dx, 0)),
-        height: [-21.5, 21.5].every((dy) => hits(0, dy)),
+        width: edge.every((dx) => hits(dx, 0)),
+        height: edge.every((dy) => hits(0, dy)),
+        corners: edge.every((dx) => edge.every((dy) => hits(dx, dy))),
       };
     });
-    expect(target).toEqual({ width: true, height: true });
+    expect(target).toEqual({ width: true, height: true, corners: true });
     await row.focus();
     await row.press("Space");
     await expect(row).toHaveAttribute("aria-selected", "true");

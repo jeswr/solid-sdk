@@ -101,6 +101,8 @@ function TasksChrome({ children }: { children: ReactNode }) {
     [],
   );
   useEffect(() => {
+    // A new pane must not fall back to a row from an earlier, already closed pane.
+    if (taskRef !== null) returnTo.current = undefined;
     if (taskRef !== null && origin.current === undefined) {
       const row = document.activeElement?.closest<HTMLElement>("[data-task-url]");
       origin.current = row?.dataset.taskUrl ?? taskUrl;
@@ -125,7 +127,7 @@ function TasksChrome({ children }: { children: ReactNode }) {
     query.delete("task");
     // Native replaceState syncs with useSearchParams. router.replace ignores a same-pathname
     // replace after a hard load of a `?task=` URL, so a shared link's pane could not close.
-    history.replaceState(null, "", `${pathname}${query.size ? `?${query}` : ""}`);
+    window.history.replaceState(null, "", `${pathname}${query.size ? `?${query}` : ""}`);
   }, [params, pathname]);
   useEffect(() => {
     if (taskRef === null) return;
