@@ -73,7 +73,7 @@ export type Fact =
     };
 
 /** Card networks a payment-card fact may name. */
-export const PAYMENT_CARD_BRANDS = [
+export const PAYMENT_CARD_BRANDS = Object.freeze([
   "visa",
   "mastercard",
   "amex",
@@ -83,37 +83,44 @@ export const PAYMENT_CARD_BRANDS = [
   "unionpay",
   "maestro",
   "other",
-] as const;
+] as const);
 /** A card network name from {@link PAYMENT_CARD_BRANDS}. */
 export type PaymentCardBrand = (typeof PAYMENT_CARD_BRANDS)[number];
+/** Private copy, so validation never depends on the exported array. */
+const CARD_BRANDS: ReadonlySet<string> = new Set(PAYMENT_CARD_BRANDS);
 const CARD_KEYS = new Set(["brand", "last4", "expires", "billingAddress"]);
 
 interface PaymentCardSnapshot {
   brand: PaymentCardBrand;
   last4: string;
   expires: { value: string; datatype: "gYearMonth" };
-  billingAddress?: string;
+  billingAddress: string | undefined;
 }
 
 /**
  * Read each field exactly once into a plain snapshot and check that, so a getter or proxy
  * cannot pass validation and then return a card number when the RDF is written.
  */
+/** An own property's value; inherited (possibly polluted) properties read as absent. */
+function own(record: Record<string, unknown>, key: string): unknown {
+  return Object.hasOwn(record, key) ? record[key] : undefined;
+}
+
 function paymentCardSnapshot(value: unknown): PaymentCardSnapshot | undefined {
   if (typeof value !== "object" || value === null) return undefined;
   const card = value as Record<string, unknown>;
   if (Object.keys(card).some((key) => !CARD_KEYS.has(key))) return undefined;
-  const brand = card.brand;
-  const last4 = card.last4;
-  const expires = card.expires;
-  const billingAddress = card.billingAddress;
-  if (!(PAYMENT_CARD_BRANDS as readonly unknown[]).includes(brand)) return undefined;
+  const brand = own(card, "brand");
+  const last4 = own(card, "last4");
+  const expires = own(card, "expires");
+  const billingAddress = own(card, "billingAddress");
+  if (typeof brand !== "string" || !CARD_BRANDS.has(brand)) return undefined;
   if (typeof last4 !== "string" || !/^[0-9]{4}$/.test(last4)) return undefined;
   if (typeof expires !== "object" || expires === null) return undefined;
   const bound = expires as Record<string, unknown>;
   if (Object.keys(bound).some((key) => key !== "value" && key !== "datatype")) return undefined;
-  const month = bound.value;
-  const datatype = bound.datatype;
+  const month = own(bound, "value");
+  const datatype = own(bound, "datatype");
   if (datatype !== "gYearMonth" || typeof month !== "string" || !/^\d{4}-\d\d$/.test(month))
     return undefined;
   if (billingAddress !== undefined && !safeBillingAddress(billingAddress)) return undefined;
@@ -121,7 +128,8 @@ function paymentCardSnapshot(value: unknown): PaymentCardSnapshot | undefined {
     brand: brand as PaymentCardBrand,
     last4,
     expires: { value: month, datatype },
-    ...(billingAddress === undefined ? {} : { billingAddress: billingAddress as string }),
+    // Always an own property, so an absent address can never come from a polluted prototype.
+    billingAddress: billingAddress as string | undefined,
   };
 }
 

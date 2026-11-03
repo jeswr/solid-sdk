@@ -103,6 +103,39 @@ describe("payment-card fact template", () => {
       ).not.toThrow();
   });
 
+  it("ignores inherited fields, so a polluted prototype cannot supply one", () => {
+    const { billingAddress: _omitted, ...withoutAddress } = valid;
+    const polluted = Object.assign(
+      Object.create({
+        billingAddress: "https://example.org/polluted",
+        last4: "4111111111111111",
+        brand: "visa",
+      }),
+      withoutAddress,
+    );
+    const store = createFactAssertion(owner, card(polluted));
+    expect(store.getQuads(null, df.namedNode(`${NS.schema}address`), null, null)).toEqual([]);
+    const { brand: _brand, ...withoutBrand } = valid;
+    expect(() =>
+      createFactAssertion(
+        owner,
+        card(Object.assign(Object.create({ brand: "visa" }), withoutBrand)),
+      ),
+    ).toThrow("Invalid payment card");
+    const expires = Object.assign(Object.create({ datatype: "gYearMonth" }), { value: "2027-09" });
+    expect(() => createFactAssertion(owner, card({ ...valid, expires }))).toThrow(
+      "Invalid payment card",
+    );
+  });
+
+  it("validates brands against a frozen list", () => {
+    expect(Object.isFrozen(PAYMENT_CARD_BRANDS)).toBe(true);
+    expect(() => (PAYMENT_CARD_BRANDS as unknown as string[]).push("4111111111111111")).toThrow();
+    expect(() => createFactAssertion(owner, card({ ...valid, brand: "4111111111111111" }))).toThrow(
+      "Invalid payment card",
+    );
+  });
+
   it("reads each field once, so a getter or proxy cannot swap in a card number", () => {
     const pan = "4111111111111111";
     const swapping = (safe: string) => {
@@ -267,6 +300,7 @@ describe("card number detection", () => {
       "(4111)1111-1111-1111",
       '"4111","1111","1111","1111"',
       "4111'1111'1111'1111",
+      "4111\u09031111\u09031111\u09031111",
       "4111\\1111\\1111\\1111",
       `${"0".repeat(70)}4111111111111111`,
     ])
