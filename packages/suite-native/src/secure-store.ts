@@ -205,6 +205,13 @@ export async function refreshTokenKey({
   webId,
   clientId,
 }: RefreshTokenIdentity): Promise<string> {
+  // JSON.stringify writes undefined, null and functions all as null, so an
+  // unresolved field would share one key across accounts.
+  for (const [field, value] of Object.entries({ issuer, webId, clientId })) {
+    if (typeof value !== "string" || value === "") {
+      throw new TypeError(`refreshTokenKey: ${field} must be a non-empty string`);
+    }
+  }
   const bytes = new TextEncoder().encode(JSON.stringify([issuer, webId, clientId]));
   const hash = await crypto.subtle.digest("SHA-256", bytes);
   const hex = Array.from(new Uint8Array(hash), (byte) => byte.toString(16).padStart(2, "0")).join(
