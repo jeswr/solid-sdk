@@ -373,10 +373,10 @@ describe("demo pod HTTP contract", () => {
     const options = await pod.fetch(pod.root, { method: "OPTIONS" });
     expect(options.status).toBe(204);
     expect(await options.text()).toBe("");
-    const unsupported = await pod.fetch(pod.root, { method: "PATCH" });
+    const unsupported = await pod.fetch(pod.root, { method: "TRACE" });
     expect(unsupported.status).toBe(405);
     expect(unsupported.headers.get("allow")).toBe(options.headers.get("allow"));
-    expect(options.headers.get("allow")).toBe("GET, HEAD, PUT, POST, DELETE, OPTIONS");
+    expect(options.headers.get("allow")).toBe("GET, HEAD, PUT, POST, PATCH, DELETE, OPTIONS");
     const url = new URL("file?download=1#fragment", pod.root);
     expect((await pod.fetch(url, { method: "put", body: "clean URL" })).status).toBe(201);
     expect(pod.has(`${pod.root}file`)).toBe(true);
@@ -523,5 +523,177 @@ describe("demo pod HTTP contract", () => {
     const error = new Error("listing serialization failed");
     vi.spyOn(Writer.prototype, "end").mockImplementationOnce((callback) => callback?.(error, ""));
     await expect(pod.fetch(DEMO_ROOT)).rejects.toBe(error);
+  });
+});
+
+describe("demo INSERT DATA PATCH", () => {
+  const url = `${DEMO_ROOT}chat/day.ttl`;
+  const body = 'INSERT DATA { <#one> <https://example.org/text> "braces { } and DELETE WHERE". }';
+  const headers = { "content-type": "application/sparql-update" };
+  it("creates only with If-None-Match, appends idempotently and emits a new strong validator", async () => {
+    const pod = createDemoPod({ root: DEMO_ROOT });
+    const changed = vi.fn();
+    pod.subscribe(changed);
+    expect((await pod.fetch(url, { method: "PATCH", headers, body })).status).toBe(404);
+    const created = await pod.fetch(url, {
+      method: "PATCH",
+      headers: { ...headers, "if-none-match": "*" },
+      body,
+    });
+    expect(created.status).toBe(201);
+    const first = created.headers.get("etag") as string;
+    expect(
+      (
+        await pod.fetch(url, {
+          method: "PATCH",
+          headers: { ...headers, "if-match": `W/${first}` },
+          body,
+        })
+      ).status,
+    ).toBe(412);
+    expect(first).toMatch(/^"demo-/);
+    const second = await pod.fetch(url, {
+      method: "PATCH",
+      headers: { ...headers, "if-match": first },
+      body,
+    });
+    expect(second.status).toBe(205);
+    expect(second.headers.get("etag")).not.toBe(first);
+    expect((await graph(await pod.fetch(url), url)).size).toBe(1);
+    expect(changed.mock.calls).toEqual([[url], [url]]);
+    for (const precondition of [
+      { "if-match": first },
+      { "if-none-match": "*" },
+      { "if-none-match": second.headers.get("etag") as string },
+    ]) {
+      expect(
+        (await pod.fetch(url, { method: "PATCH", headers: { ...headers, ...precondition }, body }))
+          .status,
+      ).toBe(412);
+    }
+    expect(
+      (
+        await pod.fetch(url, {
+          method: "PATCH",
+          headers,
+          body: 'insert data { <#two> <https://example.org/text> "two". }',
+        })
+      ).status,
+    ).toBe(205);
+    expect((await graph(await pod.fetch(url), url)).size).toBe(2);
+  });
+  it("rejects other operations, malformed RDF, containers and non-RDF representations without mutation", async () => {
+    const pod = createDemoPod({ root: DEMO_ROOT });
+    for (const source of [
+      "DELETE DATA {}",
+      "INSERT {} WHERE {}",
+      "INSERT DATA {} ; DELETE WHERE {}",
+      "INSERT DATA { broken }",
+      "INSERT DATA { GRAPH <https://example.org/> {} }",
+      'INSERT DATA { <#s> <https://example/p> "x" . # }',
+      "INSERT DATA { # a brace is not a delimiter }\r",
+      'INSERT DATA { <#s> <https://example/p> "unterminated }',
+      "INSERT DATA { <#s> <https://example/p> 'unterminated }",
+      'INSERT DATA { <#s> <https://example/p> """unterminated }',
+      "INSERT DATA { <#s> <https://example/p> '''unterminated }",
+      "INSERT DATA { <unterminated }",
+    ]) {
+      expect(
+        (
+          await pod.fetch(url, {
+            method: "PATCH",
+            headers: { ...headers, "if-none-match": "*" },
+            body: source,
+          })
+        ).status,
+      ).toBe(422);
+      expect(pod.has(url)).toBe(false);
+    }
+    expect((await pod.fetch(url, { method: "PATCH", body })).status).toBe(415);
+    expect(
+      (
+        await pod.fetch(url, {
+          method: "PATCH",
+          headers: { ...headers, "if-match": '"missing"' },
+          body,
+        })
+      ).status,
+    ).toBe(412);
+    expect((await pod.fetch(DEMO_ROOT, { method: "PATCH", headers, body })).status).toBe(404);
+    expect(
+      (
+        await pod.fetch(DEMO_ROOT, {
+          method: "PATCH",
+          headers: { ...headers, "if-none-match": "*" },
+          body,
+        })
+      ).status,
+    ).toBe(412);
+    expect(
+      (
+        await pod.fetch(`${DEMO_ROOT}new/`, {
+          method: "PATCH",
+          headers: { ...headers, "if-none-match": "*" },
+          body,
+        })
+      ).status,
+    ).toBe(422);
+    await pod.fetch(url, {
+      method: "PUT",
+      body: "not RDF",
+      headers: { "content-type": "text/plain" },
+    });
+    expect((await pod.fetch(url, { method: "PATCH", headers, body })).status).toBe(415);
+    await pod.fetch(url, {
+      method: "PUT",
+      body: "invalid turtle",
+      headers: { "content-type": "text/turtle" },
+    });
+    expect((await pod.fetch(url, { method: "PATCH", headers, body })).status).toBe(422);
+  });
+  it("scans IRIs, comments, escapes and all four Turtle string forms before closing the envelope", async () => {
+    const pod = createDemoPod({ root: DEMO_ROOT });
+    const source = [
+      "INSERT DATA {",
+      '# } this is a comment, with " and <',
+      String.raw`<#one> <https://example.org/text> "braces { } # and \"quoted\"" .`,
+      String.raw`<#two> <https://example.org/text> 'single { } # and \'quoted\'' .`,
+      '<#three> <https://example.org/text> """long " { } #\nline""" .',
+      "<#four> <https://example.org/text> '''long ' { } #\nline''' .",
+      '<https://example.org/#subject> <https://example.org/#predicate> "IRI hash" .',
+      "# a second ignored brace }\r",
+      "}",
+    ].join("\n");
+    const result = await pod.fetch(url, {
+      method: "PATCH",
+      headers: { ...headers, "if-none-match": "*" },
+      body: source,
+    });
+    expect(result.status).toBe(201);
+    expect((await graph(await pod.fetch(url), url)).size).toBe(5);
+  });
+  it("never overwrites a concurrent mutation made during serialization", async () => {
+    const pod = createDemoPod({ root: DEMO_ROOT });
+    await pod.fetch(url, { method: "PATCH", headers: { ...headers, "if-none-match": "*" }, body });
+    const etag = (await pod.fetch(url)).headers.get("etag") as string;
+    const end = Writer.prototype.end;
+    vi.spyOn(Writer.prototype, "end").mockImplementationOnce(function (this: Writer, callback) {
+      void pod.fetch(url, { method: "DELETE" }).then(() => end.call(this, callback));
+      return this;
+    });
+    expect(
+      (await pod.fetch(url, { method: "PATCH", headers: { ...headers, "if-match": etag }, body }))
+        .status,
+    ).toBe(412);
+    expect(pod.has(url)).toBe(false);
+  });
+  it("propagates serializer failures", async () => {
+    const pod = createDemoPod({ root: DEMO_ROOT });
+    vi.spyOn(Writer.prototype, "end").mockImplementationOnce((cb) =>
+      cb?.(new Error("serialize"), ""),
+    );
+    await expect(
+      pod.fetch(url, { method: "PATCH", headers: { ...headers, "if-none-match": "*" }, body }),
+    ).rejects.toThrow("serialize");
   });
 });
