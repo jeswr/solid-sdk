@@ -446,6 +446,31 @@ describe("Tasks named sharing", () => {
     await f.adapter.setPerson(f.project.url, bob, null);
     expect(f.syncMembers).toHaveBeenLastCalledWith(bob, false);
   });
+  it("does not widen on a no-op change while an earlier lost tracker write may still land", async () => {
+    const f = await fixture();
+    await f.adapter.setPerson(f.project.url, bob, "editor");
+    let held: (() => Promise<Response>) | undefined;
+    f.intercept(async (url, init) => {
+      if (init.method === "PUT" && url === `${f.project.url}.acl` && !held) {
+        held = () => f.pod.fetch(url, init);
+        throw new Error("Lost response");
+      }
+      return undefined;
+    });
+    await expect(f.adapter.setPerson(f.project.url, bob, null)).rejects.toBeDefined();
+    f.intercept(undefined);
+    // The dialog still lists bob as an editor; re-submitting that role writes nothing.
+    await f.adapter.setPerson(f.project.url, bob, "editor");
+    expect((await f.grants(f.folder)).some((grant) => grant.agents.includes(bob))).toBe(false);
+    await f.load();
+    expect((await f.grants(f.folder)).some((grant) => grant.agents.includes(bob))).toBe(false);
+    // The delayed revoke lands: the folder must still be no wider than the tracker.
+    expect((await held?.())?.ok).toBe(true);
+    expect((await f.grants(f.folder)).some((grant) => grant.agents.includes(bob))).toBe(false);
+    // A real tracker write confirms the state, so later changes widen again.
+    await f.adapter.setPerson(f.project.url, bob, "viewer");
+    expect((await f.grants(f.folder)).some((grant) => grant.agents.includes(bob))).toBe(true);
+  });
   it.each([403, 404, 500])("does not bootstrap on tracker HEAD %s", async (status) => {
     const f = await fixture();
     f.intercept((url, init) =>

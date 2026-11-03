@@ -318,6 +318,7 @@ export class TasksSharingAdapter implements SharingAdapter {
       this.requireFolderControl(existing, before);
       // Intersect *all* principals so a pre-existing mismatch cannot survive a failed tracker write.
       const lower = this.intersect(before.people, existing.people, next);
+      const pending = this.unconfirmedChange;
       this.unconfirmedChange = true;
       try {
         await this.io.write(
@@ -325,10 +326,14 @@ export class TasksSharingAdapter implements SharingAdapter {
           policy(folderUrl, lower),
           folder ? { etag: folder.etag } : { create: true },
         );
+        const trackerAcl = (await this.acl(url, signal))?.etag;
         await this.tracker.setPerson(url, webId, role, opts);
-        const confirmed = await this.readState(url, signal, "all", true);
+        // Only a committed tracker write proves an earlier lost write can no longer land (its
+        // If-Match is now stale). After a no-op, keep narrowing until a real write confirms.
+        const settled = !pending || (await this.acl(url, signal))?.etag !== trackerAcl;
+        const confirmed = await this.readState(url, signal, settled ? "all" : "narrow", settled);
         if (!confirmed.canManage || confirmed.readOnly) throw new ShareError("forbidden");
-        this.unconfirmedChange = false;
+        if (settled) this.unconfirmedChange = false;
       } catch (error) {
         // A lost tracker response may still have committed. Re-read before syncing members;
         // leave any failed recovery for the next load, while preserving the original error.
