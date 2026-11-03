@@ -1,6 +1,8 @@
 <!-- AUTHORED-BY Codex GPT-5 -->
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 
-# solid-offline
+# @jeswr/solid-offline
 
 An offline-first service-worker layer for Solid apps with stale-while-revalidate caching, bounded
 warming, notification invalidation, and optional React hooks.
@@ -14,16 +16,22 @@ npm install github:jeswr/solid-offline#main
 ```
 
 Requires Node.js 22 or newer for package tooling. Install `react` separately only when using the
-`solid-offline/react` entry.
+`@jeswr/solid-offline/react` entry.
 
 ## Minimal usage
 
 ```ts
-import { createOfflineClient } from 'solid-offline';
+import { createOfflineClient } from '@jeswr/solid-offline';
+import { createPodClient } from '@jeswr/storage-client';
 
 declare const authenticatedFetch: typeof fetch; // Supplied by your Solid session.
 
+const { storage } = await createPodClient({
+  storage: 'https://alice.example/',
+  fetch: authenticatedFetch,
+});
 const offline = createOfflineClient({
+  storage,
   webId: 'https://alice.example/profile/card#me',
   fetch: authenticatedFetch,
   warm: { seeds: 'auto' },
@@ -41,19 +49,38 @@ Put the following in a separate worker source file and configure your build to e
 `/solid-offline-worker.js` on the same origin and scope as the app:
 
 ```js
-import 'solid-offline/worker';
+import '@jeswr/solid-offline/worker';
 ```
 
 ## Key API
 
 - Page client: `createOfflineClient`, `createStatusSurface`, `createWarmController`, `warm`.
-- Cache policy and invalidation: `classifyResponse`, `handleNotification`, `resyncSweep`.
+- Invalidation and reconciliation: `handleNotification`, `resyncSweep`.
 - Identity cleanup: `purgeForWebId`; `offline.logout()` purges both Cache API and IndexedDB data.
-- Worker entry: `solid-offline/worker`.
-- React entry: `useOfflineStatus` and `useOfflineResource` from `solid-offline/react`.
+- Worker entry: `@jeswr/solid-offline/worker`.
+- React entry: `useOfflineStatus` and `useOfflineResource` from `@jeswr/solid-offline/react`.
 
 The service worker stores no credentials. Authenticated warming happens in the page through the
-caller-supplied fetch, and cache state is scoped by WebID.
+transport already injected into `storage`, and cache state is scoped by WebID.
+
+Warming uses `storage.head`, `read`, and paginated `listAll`; explicit `warm.seeds` are
+combined with profile/type-index seeds inside the storage boundary. For a WebID outside
+that boundary, supply explicit seeds (or a pre-fetched profile to the low-level warmer).
+Large binary members remain lazy. Existing SW cache names and metadata schemas are retained.
+
+Notifications use `@jeswr/pod-notifications` for transport selection, polling, scope checks,
+and reconnect. Pass an existing `notificationsClient` to share the app's client; otherwise
+one is created from `storage` and the authenticated `fetch`. Changes invalidate resources
+and membership listings; `resync` performs fresh HEAD observations and conditionally reads
+changed entries. Backoff is owned by pod-notifications; the old socket/discovery helpers and
+backoff config fields are removed. The worker receives `storageRoot` and cloneable backend
+identity, never either client or the authenticated fetch. It uses page-side backend evidence
+or discovers its own credential-free StorageClient when that evidence is absent.
+
+HTTP cache policy remains authoritative: invalidation retains original response headers at
+the worker transport boundary. A low-level injected storage without that HTTP evidence
+conservatively evicts changed bytes instead of inventing cacheable responses.
+React/status surfaces, BroadcastChannel updates, and `purgeForWebId` retain their contracts.
 
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 
@@ -67,7 +94,7 @@ by exactly one terminal message:
 | Event | Meaning | Status for a tracked URL |
 | --- | --- | --- |
 | `revalidating` | Revalidation started | `pending` |
-| `revalidated` | A conditional 304 confirmed the existing bytes | `fresh`, preserving an unread `updated` |
+| `revalidated` | A conditional 304 or matching sweep HEAD confirmed the existing bytes | `fresh`, preserving an unread `updated` |
 | `updated` | Replacement, deletion, revocation, or a purge completed | `updated`; re-read |
 | `revalidate-failed` | Network/offline, storage, or non-authoritative HTTP failure | Retain settled freshness, including manual marks |
 
@@ -91,7 +118,7 @@ An unread `updated` survives later 304 confirmations until the consumer marks it
 Manual `markPending` calls still count toward pending work.
 
 ```ts
-import { useOfflineStatus } from 'solid-offline/react';
+import { useOfflineStatus } from '@jeswr/solid-offline/react';
 
 const { syncing, pending, online } = useOfflineStatus(offline.status);
 // syncing === (pending > 0); use it to render a “Syncing…” indicator.

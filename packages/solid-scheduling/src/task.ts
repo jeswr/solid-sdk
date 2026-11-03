@@ -1,42 +1,29 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
+// AUTHORED-BY Claude Opus 5.5 (Phase S generated flip: build/parse over ./generated/)
 /**
- * The scheduling **Task** model — typed read/write accessors over a single
- * owner-private task document (the data model a [Vikunja](https://vikunja.io)→Solid
- * fork writes one-per-task to a pod).
+ * The scheduling **Task** model — the FACADE over the model GENERATED from this
+ * package's scheduling profile (`./generated/`, via `@jeswr/federation-codegen` →
+ * the audited `@jeswr/model-runtime`). The generated composite owns the `sched:Task`
+ * core and its `sched:RecurrenceRule` node: datatype, cardinality, http(s) and
+ * enum guards, and the fail-closed required `sched:summary` / `sched:frequency`.
+ * This file keeps the package's public surface and adds what SHACL cannot express:
  *
- * **Cross-sector by construction (the federation demo).** A task written here is
- * BOTH a `sched:Task` (from the `@jeswr/solid-federation-vocab` scheduling sector)
- * AND a `wf:Task` (from the published `@jeswr/solid-task-model`), on the SAME `#it`
- * subject. The `wf:Task` copy is what makes a Vikunja task surface "assigned to me"
- * in the Pod Manager / solid-issues — the first external app on the shared task
- * model. This module MINTS NOTHING: it reuses `sched:` verbatim and delegates the
- * `wf:`/`dct:`/`schema:`/`prov:` triples to `@jeswr/solid-task-model`'s `buildTask`
- * / `parseTask`.
- *
- * ```turtle
- * <#it>  a sched:Task, wf:Task, wf:Open ;      # dual-vocab, same subject
- *   sched:summary "Ship v1" ; dct:title "Ship v1" ;          # sched + wf
- *   sched:dueTime "2026-07-10T…"^^xsd:dateTime ; wf:dateDue "2026-07-10T…"^^xsd:dateTime ;
- *   wf:assignee <…/card#me> ;                                # the federation edge
- *   dct:subject "backlog", "urgent" ;                        # labels (reuse dct:subject)
- *   sched:recurrence <#recurrence> ; sched:hasReminder <#reminder0> .
- * <#recurrence> a sched:RecurrenceRule ; sched:frequency "WEEKLY" ; sched:interval 1 .
- * <#reminder0>  a sched:Reminder ; sched:triggerOffset "-PT15M"^^xsd:duration .
- * ```
- *
- * **Typed accessors, never hand-built triples (house rule).** Reads/writes go
- * through `@rdfjs/wrapper`'s `OptionalFrom`/`OptionalAs`/`SetFrom` mappers on an
- * n3 `Store`. Serialisation is `n3.Writer`; parsing of a fetched body is
- * `@jeswr/fetch-rdf`'s `parseRdf`.
- *
- * **Untrusted-input hardening.** Pod data is untrusted: every optional read is
- * `tryRead`-guarded so a malformed foreign literal DROPS the field rather than
- * aborting the parse; every IRI-valued field (organizer, calendar, and the
- * federation WebID/relation IRIs handled by task-model) is http(s)-filtered so a
- * hostile `javascript:`/`data:` value is never surfaced; malformed date/number
- * literals and out-of-range durations are dropped.
+ *  1. **Cross-sector by construction (D2).** Every task is ALSO a `wf:Task` from
+ *     `@jeswr/solid-task-model` on the same `#it` subject, built by its `buildTask`
+ *     (federation edge: "assigned to me" in the Pod Manager) and read back through
+ *     `parseTask`, whose IRIs are http(s)-filtered here.
+ *  2. **Unified completion.** `completed` / `completedAt` / `wf:Open|Closed` /
+ *     `prov:endedAtTime` are one notion: a timestamp implies completion, an explicit
+ *     `completed: false` wins, and a closed task without a timestamp stamps now.
+ *  3. **Labels and reminders.** `dct:subject` labels and any number of
+ *     `sched:hasReminder` nodes (`#reminder0`, …) go through the typed views in
+ *     `./nodes.ts`; a composite link projects exactly one child, so reminders are not
+ *     generated.
+ *  4. **Frequency normalisation.** A frequency is trimmed and uppercased before the
+ *     generated enum sees it; a recurrence with no known frequency is dropped whole.
  */
 
+import { sanitizeText } from "@jeswr/model-runtime";
 import {
   buildTask,
   parseTask,
@@ -44,49 +31,19 @@ import {
   type TaskPriority,
 } from "@jeswr/solid-task-model/task";
 import type { DatasetCore } from "@rdfjs/types";
-import {
-  LiteralAs,
-  LiteralFrom,
-  NamedNodeAs,
-  NamedNodeFrom,
-  OptionalAs,
-  OptionalFrom,
-  SetFrom,
-  TermWrapper,
-} from "@rdfjs/wrapper";
 import { DataFactory, Store, Writer } from "n3";
+import { entities, type TaskData as GeneratedTaskData } from "./generated/model.js";
 import { httpIriOrUndefined } from "./iri.js";
-import {
-  DCT_SUBJECT,
-  PREFIXES,
-  RDF_TYPE,
-  RECURRENCE_RULE_CLASS,
-  REMINDER_CLASS,
-  SCHED_COMPLETED,
-  SCHED_COMPLETED_AT,
-  SCHED_COUNT,
-  SCHED_DESCRIPTION,
-  SCHED_DUE_TIME,
-  SCHED_FREQUENCY,
-  SCHED_HAS_REMINDER,
-  SCHED_IN_CALENDAR,
-  SCHED_INTERVAL,
-  SCHED_ORGANIZER,
-  SCHED_RECURRENCE,
-  SCHED_START_TIME,
-  SCHED_SUMMARY,
-  SCHED_TRIGGER_OFFSET,
-  SCHED_TRIGGER_TIME,
-  SCHED_UNTIL,
-  TASK_CLASS,
-  XSD_DURATION,
-  XSD_POSITIVE_INTEGER,
-} from "./vocab.js";
+import { Reminder, SchedulingTask } from "./nodes.js";
+import { PREFIXES } from "./vocab.js";
 
 // Re-export the shared priority type so a consumer needn't import task-model too.
 export type { TaskPriority } from "@jeswr/solid-task-model/task";
 // Re-exported so the `.` entry point keeps exposing the untrusted-input filter.
 export { isHttpIri } from "./iri.js";
+export { RecurrenceRule, Reminder, SchedulingTask } from "./nodes.js";
+
+const generatedTask = entities.Task;
 
 /** A recurrence rule (a repeating task — Vikunja's real repeating tasks). */
 export interface RecurrenceData {
@@ -202,11 +159,7 @@ function setIfDefined<T, K extends keyof T>(target: T, key: K, value: T[K] | und
   if (value !== undefined) target[key] = value;
 }
 
-/**
- * Run an untrusted read, returning `undefined` on ANY throw (a malformed foreign
- * literal drops the field, never aborts the parse). A returned `Invalid Date` is
- * treated as absent too.
- */
+/** Run an untrusted read, returning `undefined` on ANY throw or an `Invalid Date`. */
 function tryRead<T>(fn: () => T | undefined): T | undefined {
   try {
     const value = fn();
@@ -217,6 +170,11 @@ function tryRead<T>(fn: () => T | undefined): T | undefined {
   }
 }
 
+/** A VALID `Date`, else `undefined` (the runtime keeps a malformed literal as `Invalid Date`). */
+function validDateOrUndefined(value: Date | undefined): Date | undefined {
+  return value instanceof Date && !Number.isNaN(value.getTime()) ? value : undefined;
+}
+
 /** A finite number, else `undefined` (`NaN`/`Infinity` have no valid `xsd:double` form here). */
 function finiteOrUndefined(value: number | undefined): number | undefined {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
@@ -225,11 +183,6 @@ function finiteOrUndefined(value: number | undefined): number | undefined {
 /** The absolute http(s) members of an untrusted IRI list. */
 function httpIris(values: readonly string[] | undefined): string[] {
   return (values ?? []).filter((v) => httpIriOrUndefined(v) !== undefined);
-}
-
-/** A positive integer, else `undefined` — the `sched:interval`/`sched:count` filter. */
-function positiveIntOrUndefined(value: number | undefined): number | undefined {
-  return typeof value === "number" && Number.isInteger(value) && value >= 1 ? value : undefined;
 }
 
 // A conservative XSD-1.1 `xsd:duration` matcher: an optional leading `-`, `P`,
@@ -246,223 +199,12 @@ function durationOrUndefined(value: string | undefined): string | undefined {
   return typeof value === "string" && ISO_DURATION.test(value) ? value : undefined;
 }
 
-/**
- * A VALID `Date`, else `undefined` — so an `Invalid Date` (e.g. `new Date("x")`)
- * never reaches `LiteralFrom.dateTime`, whose `toISOString()` would otherwise
- * throw and abort the whole build on hostile/sloppy input.
- */
-function validDateOrUndefined(value: Date | undefined): Date | undefined {
-  return value instanceof Date && !Number.isNaN(value.getTime()) ? value : undefined;
-}
-
-/** The four known recurrence frequencies (uppercased). */
 const FREQUENCIES = new Set(["DAILY", "WEEKLY", "MONTHLY", "YEARLY"]);
 
-/** A known frequency (uppercased), else `undefined`. */
-function normalizeFrequency(value: string | undefined): string | undefined {
-  const v = (value ?? "").trim().toUpperCase();
-  return FREQUENCIES.has(v) ? v : undefined;
-}
-
-/**
- * Typed `@rdfjs/wrapper` view of the scheduling task (`sched:Task`) subject. Each
- * accessor reads/writes through the vetted mappers — no quad is ever hand-built.
- */
-export class SchedulingTask extends TermWrapper {
-  /** The task subject IRI. */
-  get id(): string {
-    return this.value;
-  }
-
-  /** The `rdf:type` set as a live set of IRI strings. */
-  get types(): Set<string> {
-    return SetFrom.subjectPredicate(this, RDF_TYPE, NamedNodeAs.string, NamedNodeFrom.string);
-  }
-
-  /** Stamp this subject as a `sched:Task`. Idempotent; returns `this`. */
-  mark(): this {
-    this.types.add(TASK_CLASS);
-    return this;
-  }
-
-  /** Whether this subject is a `sched:Task`. */
-  get isSchedulingTask(): boolean {
-    return this.types.has(TASK_CLASS);
-  }
-
-  /** `sched:summary` — the title. */
-  get summary(): string | undefined {
-    return OptionalFrom.subjectPredicate(this, SCHED_SUMMARY, LiteralAs.string);
-  }
-  set summary(value: string | undefined) {
-    OptionalAs.object(this, SCHED_SUMMARY, value, LiteralFrom.string);
-  }
-
-  /** `sched:description` — the body. */
-  get description(): string | undefined {
-    return OptionalFrom.subjectPredicate(this, SCHED_DESCRIPTION, LiteralAs.string);
-  }
-  set description(value: string | undefined) {
-    OptionalAs.object(this, SCHED_DESCRIPTION, value, LiteralFrom.string);
-  }
-
-  /** `sched:startTime` — clock start (xsd:dateTime). */
-  get startTime(): Date | undefined {
-    return OptionalFrom.subjectPredicate(this, SCHED_START_TIME, LiteralAs.date);
-  }
-  set startTime(value: Date | undefined) {
-    OptionalAs.object(this, SCHED_START_TIME, value, LiteralFrom.dateTime);
-  }
-
-  /** `sched:dueTime` — the due date (xsd:dateTime). */
-  get dueTime(): Date | undefined {
-    return OptionalFrom.subjectPredicate(this, SCHED_DUE_TIME, LiteralAs.date);
-  }
-  set dueTime(value: Date | undefined) {
-    OptionalAs.object(this, SCHED_DUE_TIME, value, LiteralFrom.dateTime);
-  }
-
-  /** `sched:completed` — completion flag (xsd:boolean). */
-  get completed(): boolean | undefined {
-    return OptionalFrom.subjectPredicate(this, SCHED_COMPLETED, LiteralAs.boolean);
-  }
-  set completed(value: boolean | undefined) {
-    OptionalAs.object(this, SCHED_COMPLETED, value, LiteralFrom.boolean);
-  }
-
-  /** `sched:completedAt` — completion time (xsd:dateTime). */
-  get completedAt(): Date | undefined {
-    return OptionalFrom.subjectPredicate(this, SCHED_COMPLETED_AT, LiteralAs.date);
-  }
-  set completedAt(value: Date | undefined) {
-    OptionalAs.object(this, SCHED_COMPLETED_AT, value, LiteralFrom.dateTime);
-  }
-
-  /** `sched:organizer` — the owner/organiser WebID (an IRI). */
-  get organizer(): string | undefined {
-    return OptionalFrom.subjectPredicate(this, SCHED_ORGANIZER, NamedNodeAs.string);
-  }
-  set organizer(value: string | undefined) {
-    OptionalAs.object(this, SCHED_ORGANIZER, value, NamedNodeFrom.string);
-  }
-
-  /** `sched:inCalendar` — the calendar/project IRI (→ a `sched:Calendar`). */
-  get calendar(): string | undefined {
-    return OptionalFrom.subjectPredicate(this, SCHED_IN_CALENDAR, NamedNodeAs.string);
-  }
-  set calendar(value: string | undefined) {
-    OptionalAs.object(this, SCHED_IN_CALENDAR, value, NamedNodeFrom.string);
-  }
-
-  /** `dct:subject` — the label set (free-text strings). */
-  get labels(): Set<string> {
-    return SetFrom.subjectPredicate(this, DCT_SUBJECT, LiteralAs.string, LiteralFrom.string);
-  }
-
-  /** `sched:recurrence` — the recurrence-rule node IRI (→ a `sched:RecurrenceRule`). */
-  get recurrence(): string | undefined {
-    return OptionalFrom.subjectPredicate(this, SCHED_RECURRENCE, NamedNodeAs.string);
-  }
-  set recurrence(value: string | undefined) {
-    OptionalAs.object(this, SCHED_RECURRENCE, value, NamedNodeFrom.string);
-  }
-
-  /** `sched:hasReminder` — the reminder node IRIs (→ `sched:Reminder`s). */
-  get reminders(): Set<string> {
-    return SetFrom.subjectPredicate(
-      this,
-      SCHED_HAS_REMINDER,
-      NamedNodeAs.string,
-      NamedNodeFrom.string,
-    );
-  }
-}
-
-/** Typed view of a `sched:RecurrenceRule` node. */
-export class RecurrenceRule extends TermWrapper {
-  /** Stamp this subject as a `sched:RecurrenceRule`. Idempotent; returns `this`. */
-  mark(): this {
-    SetFrom.subjectPredicate(this, RDF_TYPE, NamedNodeAs.string, NamedNodeFrom.string).add(
-      RECURRENCE_RULE_CLASS,
-    );
-    return this;
-  }
-
-  /** `sched:frequency` — DAILY / WEEKLY / MONTHLY / YEARLY. */
-  get frequency(): string | undefined {
-    return OptionalFrom.subjectPredicate(this, SCHED_FREQUENCY, LiteralAs.string);
-  }
-  set frequency(value: string | undefined) {
-    OptionalAs.object(this, SCHED_FREQUENCY, value, LiteralFrom.string);
-  }
-
-  /** `sched:interval` — every N units (xsd:positiveInteger). */
-  get interval(): number | undefined {
-    return OptionalFrom.subjectPredicate(this, SCHED_INTERVAL, LiteralAs.number);
-  }
-  set interval(value: number | undefined) {
-    // xsd:positiveInteger via a datatype tuple (LiteralFrom.integer would type it
-    // xsd:integer, which the sector's xsd:positiveInteger range would reject).
-    OptionalAs.object(
-      this,
-      SCHED_INTERVAL,
-      value === undefined ? undefined : [XSD_POSITIVE_INTEGER, String(value)],
-      LiteralFrom.datatypeTuple,
-    );
-  }
-
-  /** `sched:count` — total occurrences (xsd:positiveInteger). */
-  get count(): number | undefined {
-    return OptionalFrom.subjectPredicate(this, SCHED_COUNT, LiteralAs.number);
-  }
-  set count(value: number | undefined) {
-    OptionalAs.object(
-      this,
-      SCHED_COUNT,
-      value === undefined ? undefined : [XSD_POSITIVE_INTEGER, String(value)],
-      LiteralFrom.datatypeTuple,
-    );
-  }
-
-  /** `sched:until` — the last occurrence date/time (xsd:dateTime). */
-  get until(): Date | undefined {
-    return OptionalFrom.subjectPredicate(this, SCHED_UNTIL, LiteralAs.date);
-  }
-  set until(value: Date | undefined) {
-    OptionalAs.object(this, SCHED_UNTIL, value, LiteralFrom.dateTime);
-  }
-}
-
-/** Typed view of a `sched:Reminder` node. */
-export class Reminder extends TermWrapper {
-  /** Stamp this subject as a `sched:Reminder`. Idempotent; returns `this`. */
-  mark(): this {
-    SetFrom.subjectPredicate(this, RDF_TYPE, NamedNodeAs.string, NamedNodeFrom.string).add(
-      REMINDER_CLASS,
-    );
-    return this;
-  }
-
-  /** `sched:triggerTime` — absolute fire time (xsd:dateTime). */
-  get triggerTime(): Date | undefined {
-    return OptionalFrom.subjectPredicate(this, SCHED_TRIGGER_TIME, LiteralAs.date);
-  }
-  set triggerTime(value: Date | undefined) {
-    OptionalAs.object(this, SCHED_TRIGGER_TIME, value, LiteralFrom.dateTime);
-  }
-
-  /** `sched:triggerOffset` — relative offset (xsd:duration string, e.g. `-PT15M`). */
-  get triggerOffset(): string | undefined {
-    return OptionalFrom.subjectPredicate(this, SCHED_TRIGGER_OFFSET, LiteralAs.string);
-  }
-  set triggerOffset(value: string | undefined) {
-    OptionalAs.object(
-      this,
-      SCHED_TRIGGER_OFFSET,
-      value === undefined ? undefined : [XSD_DURATION, value],
-      LiteralFrom.datatypeTuple,
-    );
-  }
+/** A known frequency (trimmed, uppercased), else `undefined`. */
+function normalizeFrequency(value: string | undefined): RecurrenceData["frequency"] | undefined {
+  const v = (typeof value === "string" ? value : "").trim().toUpperCase();
+  return FREQUENCIES.has(v) ? (v as RecurrenceData["frequency"]) : undefined;
 }
 
 /**
@@ -501,73 +243,53 @@ function toWfTaskData(
 }
 
 /**
- * Build the RDF `Store` for a task from a plain {@link SchedulingTaskData}, via
- * the typed accessors (no hand-built quads). The store carries BOTH the
- * `sched:Task` triples AND the shared `wf:Task` triples on `${resourceUrl}#it`.
- *
- * - `summary` is written only when non-empty (the shape requires a title).
- * - On close, `sched:completedAt` (and, via `buildTask`, `prov:endedAtTime`)
- *   default to now.
- * - `organizer` / `calendar` are dropped unless absolute http(s) IRIs.
- * - `interval` / `count` are dropped unless positive integers; a `triggerOffset`
- *   is dropped unless a well-formed `xsd:duration`; a frequency is dropped unless
- *   a known DAILY/WEEKLY/MONTHLY/YEARLY value.
+ * Build the RDF `Store` for a task: the shared `wf:Task` triples from `buildTask`,
+ * then the generated `sched:Task` core (+ recurrence node) on the same `#it`
+ * subject, then labels and reminders through the typed views. Invalid dates, non-
+ * http(s) organizer/calendar IRIs and non-positive-integer interval/count are dropped
+ * by the generated guards; a reminder with neither a valid trigger time nor a
+ * well-formed `xsd:duration` offset is skipped.
  */
 export function buildSchedulingTask(resourceUrl: string, data: SchedulingTaskData): Store {
-  // Completion is a single, unified notion so the native sched: graph and the
-  // wf:Task overlay never diverge. A task is CLOSED when `completed === true`, OR
-  // when a valid `completedAt` is supplied and `completed` is not an explicit
-  // `false` (a completion timestamp implies completion). An explicit
-  // `completed: false` always wins — a contradictory `completedAt` is dropped.
   const explicitCompletedAt = validDateOrUndefined(data.completedAt);
   const closed =
     data.completed === true || (data.completed !== false && explicitCompletedAt !== undefined);
-  // The ONE completion timestamp, written to BOTH graphs: an explicit value is
-  // preserved; otherwise a closed task auto-stamps now (once), an open task none.
+  // The ONE completion timestamp, written to BOTH graphs.
   const completedAt = closed ? (explicitCompletedAt ?? new Date()) : undefined;
+  // The generated build strips control characters from text; apply the same runtime
+  // sanitiser before buildTask so dct:title / wf:description match the sched: values.
+  const text: SchedulingTaskData = {
+    ...data,
+    summary: typeof data.summary === "string" ? sanitizeText(data.summary) : data.summary,
+    description:
+      typeof data.description === "string" ? sanitizeText(data.description) : data.description,
+  };
+  const store = new Store([...buildTask(resourceUrl, toWfTaskData(text, closed, completedAt))]);
 
-  // Start from the shared wf:Task store (federation edge), then layer sched: on
-  // the same #it subject. buildTask owns the untrusted IRI filtering + state.
-  const store = new Store([...buildTask(resourceUrl, toWfTaskData(data, closed, completedAt))]);
-  const iris = schedulingNodeIris(resourceUrl);
+  let core: GeneratedTaskData = {
+    summary: text.summary,
+    description: text.description || undefined,
+    startTime: data.startTime,
+    dueTime: data.dueTime,
+    completed: closed ? true : data.completed === false ? false : undefined,
+    completedAt,
+    organizer: data.organizer,
+    calendar: data.calendar,
+  };
+  // Recurrence fields go in only with a known frequency, so no frequency-less rule
+  // node is ever built.
+  const frequency = normalizeFrequency(data.recurrence?.frequency);
+  if (data.recurrence && frequency !== undefined) {
+    const { interval, count, until } = data.recurrence;
+    core = { ...core, frequency, interval, count, until };
+  }
+  for (const quad of generatedTask.build(resourceUrl, core)) store.add(quad);
 
-  const task = new SchedulingTask(iris.task, store, DataFactory).mark();
-  task.summary = data.summary || undefined;
-  task.description = data.description || undefined;
-  task.startTime = validDateOrUndefined(data.startTime);
-  task.dueTime = validDateOrUndefined(data.dueTime);
-  // Mirror wf:Open/wf:Closed: write sched:completed=true when closed, =false only
-  // when the caller was explicit, and nothing for a bare open task (keeps a
-  // minimal task minimal, and round-trips the boolean exactly).
-  if (closed) task.completed = true;
-  else if (data.completed === false) task.completed = false;
-  task.completedAt = completedAt;
-
-  // organizer/calendar are untrusted IRIs: drop anything not absolute http(s).
-  task.organizer = httpIriOrUndefined(data.organizer);
-  task.calendar = httpIriOrUndefined(data.calendar);
-
+  const task = new SchedulingTask(schedulingTaskSubject(resourceUrl), store, DataFactory);
   for (const label of data.labels ?? []) {
-    if (typeof label !== "string") continue;
-    const l = label.trim();
+    const l = typeof label === "string" ? label.trim() : "";
     if (l) task.labels.add(l);
   }
-
-  // A recurrence with no KNOWN frequency is not a usable rule (the shape makes
-  // sched:frequency a MUST). Drop the WHOLE recurrence — no orphan node, no
-  // sched:recurrence link — rather than leave a SHACL-invalid frequency-less node.
-  const frequency = data.recurrence ? normalizeFrequency(data.recurrence.frequency) : undefined;
-  if (data.recurrence && frequency !== undefined) {
-    const rule = new RecurrenceRule(iris.recurrence, store, DataFactory).mark();
-    rule.frequency = frequency;
-    rule.interval = positiveIntOrUndefined(data.recurrence.interval);
-    rule.count = positiveIntOrUndefined(data.recurrence.count);
-    rule.until = validDateOrUndefined(data.recurrence.until);
-    task.recurrence = iris.recurrence;
-  }
-
-  // A reminder that carries neither a valid trigger time nor a well-formed offset
-  // is empty: skip it entirely (no orphan node) rather than link a contentless one.
   (data.reminders ?? []).forEach((r, i) => {
     const triggerTime = validDateOrUndefined(r.triggerTime);
     const triggerOffset = durationOrUndefined(r.triggerOffset);
@@ -578,7 +300,6 @@ export function buildSchedulingTask(resourceUrl: string, data: SchedulingTaskDat
     rem.triggerOffset = triggerOffset;
     task.reminders.add(iri);
   });
-
   return store;
 }
 
@@ -599,22 +320,6 @@ export function serializeSchedulingTask(
   return storeToTurtle(buildSchedulingTask(resourceUrl, data));
 }
 
-/** Read a {@link RecurrenceData} from a recurrence-rule node, or `undefined`. */
-function parseRecurrence(recIri: string, dataset: DatasetCore): RecurrenceData | undefined {
-  const rule = new RecurrenceRule(recIri, dataset, DataFactory);
-  const frequency = normalizeFrequency(tryRead(() => rule.frequency));
-  if (frequency === undefined) return undefined;
-  const rec: RecurrenceData = { frequency: frequency as RecurrenceData["frequency"] };
-  setIfDefined(rec, "interval", positiveIntOrUndefined(tryRead(() => rule.interval)));
-  setIfDefined(rec, "count", positiveIntOrUndefined(tryRead(() => rule.count)));
-  setIfDefined(
-    rec,
-    "until",
-    tryRead(() => rule.until),
-  );
-  return rec;
-}
-
 /** Read a {@link ReminderData} from a reminder node, or `undefined` if it carries nothing. */
 function parseReminder(iri: string, dataset: DatasetCore): ReminderData | undefined {
   const rem = new Reminder(iri, dataset, DataFactory);
@@ -632,69 +337,42 @@ function parseReminder(iri: string, dataset: DatasetCore): ReminderData | undefi
 
 /**
  * Read a {@link SchedulingTaskData} back from an RDF dataset (the inverse of
- * {@link buildSchedulingTask}). Returns `undefined` unless the subject is a
- * `sched:Task` carrying a `sched:summary`. Every optional field is `tryRead`-
- * guarded and IRI fields are http(s)-filtered; the federation fields (assignee,
- * priority, position, parent, relations) are read back through the shared
- * `wf:Task` model so they agree byte-for-byte with what the Pod Manager sees.
+ * {@link buildSchedulingTask}). Returns `undefined` unless the generated model
+ * recognises a `sched:Task` with one `sched:summary`. Malformed optional fields drop;
+ * the federation fields are read through `parseTask` and http(s)-filtered.
  */
 export function parseSchedulingTask(
   resourceUrl: string,
   dataset: DatasetCore,
 ): SchedulingTaskData | undefined {
+  const core = generatedTask.parse(resourceUrl, dataset);
+  if (core === undefined) return undefined;
+  const data: SchedulingTaskData = { summary: core.summary };
+  setIfDefined(data, "description", core.description);
+  setIfDefined(data, "startTime", validDateOrUndefined(core.startTime));
+  setIfDefined(data, "dueTime", validDateOrUndefined(core.dueTime));
+  setIfDefined(data, "completed", core.completed);
+  setIfDefined(data, "completedAt", validDateOrUndefined(core.completedAt));
+  setIfDefined(data, "organizer", core.organizer);
+  setIfDefined(data, "calendar", core.calendar);
+  if (core.frequency !== undefined) {
+    const rec: RecurrenceData = { frequency: core.frequency };
+    setIfDefined(rec, "interval", core.interval);
+    setIfDefined(rec, "count", core.count);
+    setIfDefined(rec, "until", validDateOrUndefined(core.until));
+    data.recurrence = rec;
+  }
+
   const task = new SchedulingTask(schedulingTaskSubject(resourceUrl), dataset, DataFactory);
-  if (!task.isSchedulingTask) return undefined;
-
-  const summary = tryRead(() => task.summary);
-  if (summary === undefined) return undefined;
-
-  const data: SchedulingTaskData = { summary };
-  setIfDefined(
-    data,
-    "description",
-    tryRead(() => task.description),
-  );
-  setIfDefined(
-    data,
-    "startTime",
-    tryRead(() => task.startTime),
-  );
-  setIfDefined(
-    data,
-    "dueTime",
-    tryRead(() => task.dueTime),
-  );
-  const completed = tryRead(() => task.completed);
-  if (completed !== undefined) data.completed = completed;
-  setIfDefined(
-    data,
-    "completedAt",
-    tryRead(() => task.completedAt),
-  );
-  setIfDefined(data, "organizer", httpIriOrUndefined(tryRead(() => task.organizer)));
-  setIfDefined(data, "calendar", httpIriOrUndefined(tryRead(() => task.calendar)));
-
   const labels = (tryRead(() => [...task.labels]) ?? []).filter(
     (l): l is string => typeof l === "string" && l.trim().length > 0,
   );
   if (labels.length > 0) data.labels = labels;
-
-  const recIri = httpIriOrUndefined(tryRead(() => task.recurrence));
-  if (recIri !== undefined) {
-    const rec = parseRecurrence(recIri, dataset);
-    if (rec !== undefined) data.recurrence = rec;
-  }
-
-  const reminderIris = (tryRead(() => [...task.reminders]) ?? []).filter(
-    (i): i is string => httpIriOrUndefined(i) !== undefined,
-  );
-  const reminders = reminderIris
+  const reminders = httpIris(tryRead(() => [...task.reminders]))
     .map((iri) => parseReminder(iri, dataset))
     .filter((r): r is ReminderData => r !== undefined);
   if (reminders.length > 0) data.reminders = reminders;
 
-  // Federation fields (wf-only): read through the shared wf:Task model so a
-  // Vikunja task's assignee/priority/order/relations agree with the Pod Manager.
   // parseTask filters IRIs only on build and throws on a wrong term kind, so the read
   // is tryRead-guarded and every IRI it returns is http(s)-filtered here.
   const wf = tryRead(() => parseTask(resourceUrl, dataset));
@@ -709,23 +387,20 @@ export function parseSchedulingTask(
     if (relatesTo.length > 0) data.relatesTo = relatesTo;
     setIfDefined(data, "duplicateOf", httpIriOrUndefined(wf.duplicateOf));
   }
-
   return data;
 }
 
 /**
  * Parse a fetched RDF document into {@link SchedulingTaskData}, via
- * `@jeswr/fetch-rdf`'s `parseRdf` (the suite RDF parse seam — never a bespoke
- * parser). `contentType` is the response `Content-Type`; a missing/`null` header
- * is coalesced to `text/turtle`. The resource URL doubles as the base IRI.
+ * `@jeswr/fetch-rdf`'s `parseRdf` (the suite RDF parse seam). A missing/`null`
+ * `contentType` is coalesced to `text/turtle`; the resource URL is the base IRI.
  */
 export async function parseSchedulingTaskTtl(
   resourceUrl: string,
   body: string,
   contentType: string | null = "text/turtle",
 ): Promise<SchedulingTaskData | undefined> {
-  const resolvedContentType = contentType ?? "text/turtle";
   const { parseRdf } = await import("@jeswr/fetch-rdf");
-  const dataset = await parseRdf(body, resolvedContentType, { baseIRI: resourceUrl });
+  const dataset = await parseRdf(body, contentType ?? "text/turtle", { baseIRI: resourceUrl });
   return parseSchedulingTask(resourceUrl, dataset);
 }

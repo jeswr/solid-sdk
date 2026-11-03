@@ -1,39 +1,59 @@
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 # solid-agent-notify
 
 > ⚠️ **Experimental — AI-agent-generated.** This package was created by an AI coding agent (Claude Opus 4.8, @jeswr's PSS agent) and is under active development. It is not yet production-hardened — review before relying on it.
 
 SSRF-hardened cross-pod **Linked Data Notifications (LDN)** for Solid: discover an
 agent's `ldp:inbox`, POST an [ActivityStreams 2.0](https://www.w3.org/TR/activitystreams-core/)
-notification to it, and read an inbox — with **every outbound dereference forced
-through a single DNS-pinned, redirect-revalidating egress chokepoint**.
+notification to it, and read an inbox. The root Node API forces outbound dereferences
+through a DNS-pinned, redirect-revalidating egress chokepoint.
 
 This is the cross-pod notify path for the Solid federation MVP. It is
 **security-critical**: every `send`/`read`/`discover` fetches an
 attacker-influenced URL (a recipient WebID, an advertised inbox, an inbox member),
-so all egress goes through `guardedFetch`, the only permitted way to fetch an
-external URL in this package.
+so root-API egress goes through `guardedFetch`. The separate `./client` API uses the
+guarded caller transport described below.
 
 ## Install
 
 ```bash
 npm install solid-agent-notify
-# or directly from a GitHub branch (no build step needed — see note below):
+# or directly from the published GitHub mirror (built dist included):
 npm install github:jeswr/solid-agent-notify#main
 ```
 
 Node ≥ 22.19.0, ESM-only. (The SSRF egress uses `@jeswr/guarded-fetch`'s undici
 DNS-pinning path, which requires Node ≥ 22.19.0.)
 
-> **`dist/` is committed** so the package installs directly from a GitHub branch
-> (`npm install github:jeswr/solid-agent-notify#main`) **without a build step** —
-> consumers under `ignore-scripts=true` never run this package's `prepare`/`build`,
-> so the built `dist/` ships in the repo. npm publish is a deferred migration.
-> **Maintainers:** rebuild `dist/` whenever source changes — `npm run build`,
-> then commit `dist/` in the same change — so the committed artifact never drifts
-> from `src/`.
+> This workspace builds `dist/` fresh and never commits it. The original
+> `jeswr/solid-agent-notify` mirror carries built artifacts so GitHub pins work under
+> `ignore-scripts=true`. Maintainers change source here and use the workspace's
+> mirror-publishing workflow; mirrors are never hand-edited. npm publishing remains deferred.
 
-## API
+## Caller-fetch JSON-LD client
+
+`solid-agent-notify/client` exposes `createNotifyClient({ fetch, clock?, recipientProtocol?,
+pinningFetch? })`. Its returned `notify(agentWebId, activity)` discovers exactly one `ldp:inbox`
+on the recipient's exact WebID subject using fetch-rdf, caches positive/negative discovery for
+ten minutes per instance, and POSTs ActivityStreams JSON-LD through the caller's fetch.
+Activities carry `type: 'Announce'|'Offer'|'Accept'|'Reject'|'Create'`, `actor`, `object`, optional
+`target` and `summary`. Results are `{delivered, inbox, reason?}`; delivery failures never throw.
+Reasons are `no-inbox`, `forbidden` (401/403), `lws-no-ldn`, and `network` (other failures).
+
+The client entry avoids the root API's Node transport/config imports. Its egress boundary is
+`src/security/clientFetch.ts`: public HTTPS, no credentials in URLs, no redirects, 256 KiB body
+caps, and eight-second deadlines. Node hostname destinations require an authenticated
+`pinningFetch` explicitly asserted to pin DNS; supplying only an ordinary caller fetch fails
+closed. Browsers use the shared guard's syntactic policy because sockets cannot be pinned there.
+The fetch implementation must honor manual redirects. Activity IRIs require HTTPS.
+
+Known LWS recipients can be short-circuited with `recipientProtocol(webId) => 'lws'`; LWS profile
+media types also return `lws-no-ldn`. The sender's protocol never determines the recipient's.
+Recreate the notifier on account/session changes. The SDK wrapper and builders live in
+`@jeswr/pod-access/notify`; the React hook lives in `@jeswr/suite-sdk`.
+
+## Node API
 
 ```ts
 import {
@@ -210,7 +230,7 @@ typed accessors** — never hand-concatenated triples.
 ## Scripts
 
 ```bash
-npm run build       # tsc → dist/  (also runs on `prepare`, so git-dep installs work)
+npm run build       # tsc → dist/ (workspace output is gitignored)
 npm test            # vitest run
 npm run test:coverage
 npm run lint        # biome check

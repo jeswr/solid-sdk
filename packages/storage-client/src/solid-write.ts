@@ -8,6 +8,7 @@ import { StorageError, type StorageErrorCode, storageErrorFrom } from "./errors.
 import { discard, scoped, send } from "./http.js";
 import { pathParent, throwIfAborted } from "./internal.js";
 import { serializeQuads, WRITABLE_RDF } from "./rdf.js";
+import { isTrashEndpoint, postTrash } from "./services.js";
 import type { SolidBackendOptions } from "./solid-backend.js";
 import { buildN3Patch, n3Envelope, patchFormulas } from "./solid-patch.js";
 import type {
@@ -376,6 +377,9 @@ export function solidWrites(
       });
     },
     async create(url, body, opts = {}) {
+      if (isTrashEndpoint(client(), url)) {
+        return postTrash(client(), fetch, url, body, opts.signal);
+      }
       const parent = container("POST", url);
       const kind = opts.kind ?? "resource";
       if (kind !== "resource" && kind !== "container") throw new TypeError("Invalid kind");
