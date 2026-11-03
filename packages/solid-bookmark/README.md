@@ -61,6 +61,66 @@ const bookmark: BookmarkData | undefined = await parseBookmarkTtl(
 The root entry is browser-safe. Import the `shape` entry only in Node.js because it reads the
 shipped Turtle files with `node:fs`.
 
+## Generated model core
+
+[`bookmark.ttl`](./bookmark.ttl) and [`bookmark.shacl.ttl`](./bookmark.shacl.ttl) are the
+hand-written source of truth. [`codegen.config.json`](./codegen.config.json) supplies the
+subject convention and compatible defaults/tag handling. `@jeswr/federation-codegen`
+generates the committed `src/generated/` manifest, typed runtime shim, normalized SHACL,
+and input/output hashes. The public `src/bookmark.ts` facade delegates to
+`@jeswr/model-runtime`; `vocab.ts` and the public Turtle artifacts remain hand-written.
+
+From the workspace root (Node 24, installed workspace dependencies):
+
+```sh
+pnpm --filter @jeswr/federation-codegen... run build
+pnpm --filter @jeswr/solid-bookmark run codegen
+# After an intentional ontology, shape, or config change, review the diff and use:
+pnpm --filter @jeswr/solid-bookmark run codegen --update-lock
+pnpm exec turbo run lint build typecheck test --filter=...@jeswr/solid-bookmark
+```
+
+Do not edit `src/generated/` by hand. A test runs the package's codegen command into a
+temporary directory and compares every artifact, including `codegen.lock.json`, byte for
+byte. The original 78 tests remain the compatibility oracle. Builds copy the generated
+shim and declarations into `dist/generated/`; `dist/` is never committed here.
+
+The facade preserves the original Store/property order and generic Store serialization
+through `@jeswr/rdf-serialize`, including arbitrary legacy triples. Supplemental tests
+pin the original Turtle/JSON bytes and compile a strict consumer of the built declarations,
+including clearing setters under `exactOptionalPropertyTypes`. The shared runtime applies stricter guards outside
+the oracle: ambiguous required URLs reject the record, malformed optional values drop,
+and text writes strip control characters. These shared SHACL/IRI and text guards cannot
+be bypassed by the facade, so those formerly permissive edge behaviors are not retained.
+
+Exact divergences from the hand-written package, pinned in `test/compatibility.test.ts`:
+
+- The `Bookmark` wrapper getters follow the SHACL profile exactly, so they return
+  `undefined` for literals outside the profile's datatypes: a language-tagged `dct:title`,
+  `dct:description` or `schema:keywords`, a typed title such as `"5"^^xsd:integer`, or an
+  `xsd:date` `dct:created`. `parseBookmark` and `parseBookmarkTtl` still return those
+  values exactly as the old package did (first literal's text, dates parsed, every
+  keyword), so a plain-data parse → edit → serialize round-trip does not delete them or
+  re-stamp `created`. As before, `serializeBookmark` writes them back as plain strings and
+  `xsd:dateTime`; to keep the original language tags and datatypes, edit the Store through
+  the `Bookmark` wrapper, which leaves unrelated triples in place. Whether the profile
+  should widen is an open normative decision.
+- `bookmarkSubject` and `buildBookmark` throw `TypeError` for a relative or unsafe
+  resource URL rather than minting a relative subject.
+- An uppercase-scheme `schema:url` (`HTTPS://…`) rejects the record (the SHACL pattern is
+  case-sensitive). The wrapper drops a field with several values (for example two
+  `dct:title`s); the plain-data parsers return the first, as before.
+- Data-graph subclasses count as bookmarks: a subject typed with a class that the same
+  dataset declares `rdfs:subClassOf book:Bookmark` is recognised (SHACL target semantics,
+  bounded at 10,000 reads). Field values are still read only from `${resourceUrl}#it`.
+
+Mirror publishing keeps `@jeswr/model-runtime` as a runtime dependency: this package uses
+`tsc` and its declarations reference the generated wrapper/runtime types. Publish the
+`jeswr/model-runtime` mirror first, then supply
+`--dep-sha @jeswr/model-runtime=<mirror-sha>` to `scripts/mirror-publish.mjs solid-bookmark`
+alongside pins for the package's other workspace runtime dependencies. No runtime is
+declared inlined; the generator is a devDependency and is stripped from mirrors.
+
 ## Links
 
 - [Source](https://github.com/jeswr/solid-bookmark)

@@ -1,15 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { EmptyState } from "@jeswr/suite-ui";
-import Link from "next/link";
-export default function ComingNext() {
-  return (
-    <>
-      <h1>Edit contact</h1>
-      <EmptyState
-        title="Coming next"
-        body="The contact form and import wizard arrive in the next lane."
-        primaryAction={<Link href="/contacts">Back to contacts</Link>}
-      />
-    </>
-  );
+import { ContactEditor } from "@/apps/contacts/components/contact-form";
+export default async function EditContactPage({ params }: { params: Promise<{ ref: string }> }) {
+  const { ref } = await params;
+  return <ContactEditor contactRef={ref} />;
 }

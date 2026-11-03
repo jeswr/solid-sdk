@@ -1,0 +1,21 @@
+BEGIN:VCARD
+VERSION:3.0
+FN:Mira Quill copy
+N:Quill;Mira;;;
+EMAIL:mira.quill@example.org
+END:VCARD
+BEGIN:VCARD
+VERSION:4.0
+FN:Import Cedar
+EMAIL:cedar.import@example.org
+TEL;VALUE=uri:tel:+12025550191
+ORG:Cedar Studio
+NOTE:First imported contact
+END:VCARD
+BEGIN:VCARD
+VERSION:4.0
+FN:Import Willow
+EMAIL:willow.import@example.org
+TEL;VALUE=uri:tel:+12025550192
+NOTE:Second imported contact
+END:VCARD
