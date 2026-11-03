@@ -1014,7 +1014,7 @@ it("keeps string literals and adds Excel's prefixes to newer functions on export
             cellData: {
               0: {
                 0: {
-                  f: '=xlookup(1,FILTER(B:B,B:B>0),sort(C:C))&"IFS(x)"&SUM(1)&_xlfn.IFS(1,2)&my.IFS(1)',
+                  f: '=xlookup(1,FILTER(B:B,B:B>0),sort(C:C))&"IFS(x)"&SUM(1)&_xlfn.IFS(1,2)&my.IFS(1)&\'IFS(x"\'!A1&REGEXTEST("a","a")',
                 },
                 1: { f: "=STDEV.S(A:A)", si: "g" },
                 2: { si: "g" },
@@ -1026,7 +1026,7 @@ it("keeps string literals and adds Excel's prefixes to newer functions on export
     )["xl/worksheets/sheet1.xml"] as Uint8Array,
   );
   expect(xmlText).toContain(
-    "<f>_xlfn.xlookup(1,_xlfn._xlws.FILTER(B:B,B:B&gt;0),_xlfn._xlws.sort(C:C))&amp;&quot;IFS(x)&quot;&amp;SUM(1)&amp;_xlfn.IFS(1,2)&amp;my.IFS(1)</f>",
+    "<f>_xlfn.xlookup(1,_xlfn._xlws.FILTER(B:B,B:B&gt;0),_xlfn._xlws.sort(C:C))&amp;&quot;IFS(x)&quot;&amp;SUM(1)&amp;_xlfn.IFS(1,2)&amp;my.IFS(1)&amp;&apos;IFS(x&quot;&apos;!A1&amp;_xlfn.REGEXTEST(&quot;a&quot;,&quot;a&quot;)</f>",
   );
   expect(xmlText).toContain('<f t="shared" ref="B1:C1" si="0">_xlfn.STDEV.S(A:A)</f>');
 });

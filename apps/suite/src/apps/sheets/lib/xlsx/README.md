@@ -22,7 +22,8 @@ formula keeps its formula in its first cell, and the cached results in the rest 
 its range are dropped so Univer can spill into them. On export, array formulas are
 written as ordinary formulas, so Excel shows only their first value. The
 `_xlfn.`/`_xlws.` prefixes of newer Excel functions are removed on import and added
-back on export (outside string literals), and defined names are not carried over.
+back on export (outside string literals and quoted sheet names). LET/LAMBDA
+parameter names (`_xlpm.`) and defined names are not carried over.
 Formula text is preserved
 even when Excel cannot evaluate it, and formulas that refer to a renamed sheet are
 not rewritten. Excel recalculates formulas when opening exports. Frozen rows and
