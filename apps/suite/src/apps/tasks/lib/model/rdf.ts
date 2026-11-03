@@ -212,14 +212,15 @@ export function requireProjectFolder(
     throw new ModelError(400, trackerUrl, null, { cause });
   }
 }
-/** Shared links must use TLS, except local development loopback endpoints. */
+/** Shared links require TLS; HTTP loopback is confined to explicit development fixtures. */
 export function isSharedTrackerUrl(value: string): boolean {
   try {
     requireProjectFolder(value, value.replace(/\.ttl$/, "/"));
     const url = new URL(value);
     return (
       url.protocol === "https:" ||
-      (url.protocol === "http:" &&
+      (process.env.NEXT_PUBLIC_DEV_FIXTURES === "1" &&
+        url.protocol === "http:" &&
         (url.hostname === "localhost" ||
           url.hostname === "[::1]" ||
           /^127\.\d+\.\d+\.\d+$/.test(url.hostname)))

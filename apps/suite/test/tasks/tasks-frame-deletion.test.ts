@@ -1,10 +1,77 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { describe, expect, it } from "vitest";
-import { NS, node, serialize } from "../../src/apps/tasks/lib/model/rdf";
+import { ModelError } from "../../src/apps/tasks/lib/model/errors";
+import { NS, node, Store, serialize } from "../../src/apps/tasks/lib/model/rdf";
 import { Pod } from "./pod";
 import { frameStore } from "./tasks-frame-fixtures";
 
 describe("project deletion boundaries and recovery", () => {
+  it("removes ACLs before a tracker DELETE whose response is lost, then retries safely", async () => {
+    const pod = new Pod();
+    const store = frameStore(pod);
+    const home = await store.createProject("Home");
+    const folder = home.tracker.stateStore as string;
+    pod.seed(`${home.url}.acl`, await serialize(new Store()));
+    pod.seed(`${folder}.acl`, await serialize(new Store()));
+    pod.intercept = (request) => {
+      if (request.method === "DELETE" && request.url === home.url) {
+        expect(pod.files.has(`${home.url}.acl`)).toBe(false);
+        expect(pod.files.has(`${folder}.acl`)).toBe(false);
+        pod.files.delete(home.url);
+        throw new Error("Lost tracker DELETE response");
+      }
+    };
+    await expect(store.deleteProject(home)).rejects.toMatchObject({ status: 0 });
+    const deletes = pod.requests.filter((request) => request.method === "DELETE");
+    expect(deletes.map((request) => request.url)).toEqual([
+      `${folder}.acl`,
+      folder,
+      `${home.url}.acl`,
+      home.url,
+    ]);
+    pod.intercept = undefined;
+    await frameStore(pod).deleteProject(home);
+    expect(pod.files.has(`${home.url}.acl`)).toBe(false);
+    expect((await store.createProject("Home")).url).toBe(home.url);
+  });
+
+  it("cleans up an orphaned tracker ACL on Retry, including a failed cleanup read", async () => {
+    const pod = new Pod();
+    const store = frameStore(pod);
+    const home = await store.createProject("Home");
+    await store.deleteProject(home);
+    pod.seed(`${home.url}.acl`, await serialize(new Store()));
+    pod.intercept = (request) =>
+      request.url === `${home.url}.acl` && request.method === "GET"
+        ? new Response(null, { status: 503 })
+        : undefined;
+    await expect(store.deleteProject(home)).rejects.toMatchObject({ status: 503 });
+    pod.intercept = undefined;
+    await frameStore(pod).deleteProject(home);
+    await frameStore(pod).deleteProject(home);
+    expect(pod.files.has(`${home.url}.acl`)).toBe(false);
+  });
+
+  it.each([
+    "tracker",
+    "folder",
+  ])("refuses to create a project over a stale %s ACL", async (kind) => {
+    const pod = new Pod();
+    const store = frameStore(pod);
+    await store.bootstrapInbox();
+    const url = `${store.projects}home.ttl`;
+    const folder = `${store.projects}home/`;
+    const acl = `${kind === "tracker" ? url : folder}.acl`;
+    pod.seed(acl, await serialize(new Store()));
+    pod.requests.length = 0;
+    const error = await store.createProject("Home").catch((error: unknown) => error);
+    expect(error).toBeInstanceOf(ModelError);
+    expect(error).toMatchObject({ status: 409, url: acl });
+    expect(pod.files.has(url)).toBe(false);
+    expect(pod.files.has(folder)).toBe(false);
+    expect(pod.files.has(acl)).toBe(true);
+  });
+
   it("rejects a Home member redirected to a Work task before deleting anything", async () => {
     const pod = new Pod();
     const store = frameStore(pod);

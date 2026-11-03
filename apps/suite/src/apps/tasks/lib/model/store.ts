@@ -198,6 +198,11 @@ export class TaskStore {
       const name = reservation?.name ?? (inbox ? "inbox" : uniqueSlug(title, used));
       const url = `${this.projects}${name}.ttl`;
       const stateStore = `${this.projects}${name}/`;
+      // Auxiliary documents can outlive a deleted project. Never adopt their old grants.
+      for (const resource of [url, stateStore]) {
+        const acl = await this.io.optional(`${resource}.acl`);
+        if (acl) throw new ModelError(409, acl.url, acl.etag);
+      }
       await this.protectTasks(url);
       await this.protectTasks(stateStore);
       let intended = reservation;
@@ -462,7 +467,10 @@ export class TaskStore {
   async deleteProject(project: StoredProject): Promise<void> {
     const container = requireProjectFolder(project.url, project.tracker.stateStore, this.projects);
     const current = await this.io.optional(project.url);
-    if (!current) return;
+    if (!current) {
+      await this.removeAcl(project.url);
+      return;
+    }
     const pending = node(project.tracker.id, current.dataset).text(deletionState) === "pending";
     if (!pending && current.etag !== project.etag)
       throw new ModelError(412, project.url, current.etag);
@@ -477,14 +485,16 @@ export class TaskStore {
     for (const item of await this.listTasks(container))
       await this.removeIfPresent(item.url, item.etag);
     // Auxiliary ACLs are listed by some pods; remove them before the folder DELETE.
-    const acl = await this.io.optional(`${container}.acl`);
-    if (acl) await this.removeIfPresent(acl.url, acl.etag);
+    await this.removeAcl(container);
     const resource = await this.io.optional(container);
     if (resource) await this.removeIfPresent(container, resource.etag);
+    // Removing an own ACL first falls back to the private projects container.
+    await this.removeAcl(project.url);
     await this.removeIfPresent(project.url, reserved.etag);
-    // Tracker access stays in place until its document has been removed.
-    const trackerAcl = await this.io.optional(`${project.url}.acl`);
-    if (trackerAcl) await this.removeIfPresent(trackerAcl.url, trackerAcl.etag);
+  }
+  private async removeAcl(resource: string): Promise<void> {
+    const acl = await this.io.optional(`${resource}.acl`);
+    if (acl) await this.removeIfPresent(acl.url, acl.etag);
   }
   private async removeIfPresent(url: string, etag: string | null): Promise<void> {
     try {

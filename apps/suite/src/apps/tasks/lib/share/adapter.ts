@@ -58,7 +58,9 @@ interface Options {
   ensurePrivate: (url: string, owner: string) => Promise<boolean>;
   syncMembers: (webId: string, granted: boolean) => Promise<void>;
 }
-/** Named grants only: narrow folder → tracker → folder. Ambiguous writes stop the plan. */
+type Reconcile = "none" | "narrow" | "all";
+type People = SharingState["people"];
+/** Named grants only: narrow folder → tracker → folder; re-read to recover partial writes. */
 export class TasksSharingAdapter implements SharingAdapter {
   readonly caps = tasksShareCapabilities;
   readonly supportsCommenter = false;
@@ -121,7 +123,22 @@ export class TasksSharingAdapter implements SharingAdapter {
       ),
     };
   }
-  async load(url: string, signal: AbortSignal): Promise<SharingState> {
+  private enqueue<T>(operation: () => Promise<T>): Promise<T> {
+    const pending = this.tail.then(operation).catch((error: unknown) => {
+      throw this.error(error);
+    });
+    this.tail = pending.catch(() => undefined);
+    return pending;
+  }
+  load(url: string, signal: AbortSignal): Promise<SharingState> {
+    return this.enqueue(() => this.readState(url, signal, "all"));
+  }
+  private async readState(
+    url: string,
+    signal: AbortSignal,
+    reconcile: Reconcile,
+    forceFolderWrite = false,
+  ): Promise<SharingState> {
     this.validate(url);
     try {
       const document = await this.io.read(url);
@@ -150,9 +167,111 @@ export class TasksSharingAdapter implements SharingAdapter {
         );
       } else this.state(url, acl);
       const state = await this.tracker.load(url, signal);
+      if (reconcile !== "none" && state.canManage && !state.readOnly) {
+        await this.reconcile(
+          state,
+          folder,
+          tracker.groupMembers,
+          signal,
+          reconcile,
+          forceFolderWrite,
+        );
+      }
       return state;
     } catch (error) {
       throw this.error(error);
+    }
+  }
+  private folderState(folder: Resource | undefined): SharingState {
+    return folder
+      ? this.state(this.options.folderUrl, folder)
+      : {
+          people: [{ webId: this.options.webId, role: "owner" }],
+          general: { mode: "restricted" },
+          canManage: true,
+        };
+  }
+  private requireFolderControl(existing: SharingState, tracker: SharingState) {
+    if (!existing.canManage) throw new ShareError("forbidden");
+    // A folder-only Control holder cannot be reconstructed from tracker grants.
+    if (
+      existing.people.some(
+        (person) =>
+          person.role === "owner" &&
+          !tracker.people.some((entry) => entry.webId === person.webId && entry.role === "owner"),
+      )
+    )
+      throw new ShareError("conflict");
+  }
+  /** Intersection never introduces another owner's Control before the tracker commits. */
+  private intersect(people: People, existing: People, next: People = people): People {
+    return people.flatMap((person) => {
+      const after = next.find((entry) => entry.webId === person.webId);
+      const old = existing.find((entry) => entry.webId === person.webId);
+      if (person.role === "owner")
+        return person.webId === this.options.webId || old?.role === "owner" ? [person] : [];
+      if (!after || !old) return [];
+      return [
+        {
+          ...person,
+          role:
+            person.role === "editor" && after.role === "editor" && old.role === "editor"
+              ? ("editor" as const)
+              : ("viewer" as const),
+        },
+      ];
+    });
+  }
+  private samePeople(left: People, right: People): boolean {
+    return (
+      left.length === right.length &&
+      left.every((person) =>
+        right.some((entry) => entry.webId === person.webId && entry.role === person.role),
+      )
+    );
+  }
+  private async reconcile(
+    state: SharingState,
+    folder: Resource | undefined,
+    members: string[],
+    signal: AbortSignal,
+    mode: Exclude<Reconcile, "none">,
+    forceFolderWrite: boolean,
+  ) {
+    if (state.general.mode !== "restricted") throw new ShareError("forbidden");
+    const folderUrl = this.options.folderUrl;
+    const existing = this.folderState(folder);
+    this.requireFolderControl(existing, state);
+    const lower = this.intersect(state.people, existing.people);
+    signal.throwIfAborted();
+    if (folder && !this.samePeople(lower, existing.people)) {
+      folder = await this.io.write(`${folderUrl}.acl`, policy(folderUrl, lower), {
+        etag: folder.etag,
+      });
+    }
+    try {
+      // Only an owner reaches this path. A failed change repairs revocations without widening.
+      if (mode === "all" && (forceFolderWrite || !this.samePeople(lower, state.people))) {
+        await this.io.write(
+          `${folderUrl}.acl`,
+          policy(folderUrl, state.people),
+          folder ? { etag: folder.etag } : { create: true },
+        );
+      }
+    } finally {
+      // Once narrowed, membership must converge even if widening conflicts or loses its response.
+      await this.syncMembers(state.people, members);
+    }
+  }
+  private async syncMembers(people: People, members: string[]) {
+    try {
+      const desired = new Set(people.map((person) => person.webId));
+      for (const member of members)
+        if (!desired.has(member)) await this.options.syncMembers(member, false);
+      for (const member of desired)
+        if (!members.includes(member)) await this.options.syncMembers(member, true);
+    } catch {
+      throw new ShareError("members-sync");
     }
   }
   setPerson(
@@ -161,79 +280,47 @@ export class TasksSharingAdapter implements SharingAdapter {
     role: ShareRole | null,
     opts?: { expires?: Date; purpose?: string },
   ): Promise<void> {
-    const pending = this.tail
-      .then(async () => {
-        this.validate(url);
-        if (
-          safeHttpIri(webId) !== webId ||
-          (role !== null && role !== "viewer" && role !== "editor") ||
-          opts?.expires ||
-          opts?.purpose
-        )
-          throw new ShareError("unsupported");
-        const signal = new AbortController().signal;
-        const before = await this.load(url, signal);
-        if (!before.canManage || before.readOnly) throw new ShareError("forbidden");
-        if (before.people.some((person) => person.webId === webId && person.role === "owner"))
-          throw new ShareError("forbidden");
-        const next = before.people.filter((person) => person.webId !== webId);
-        if (role) next.push({ webId, role });
-        const folderUrl = this.options.folderUrl;
-        const folder = await this.acl(folderUrl, signal);
-        if (!folder && !(await this.options.ensurePrivate(folderUrl, this.options.webId)))
-          throw new ShareError("unsupported");
-        const existing = folder ? this.state(folderUrl, folder) : before;
-        if (!existing.canManage) throw new ShareError("forbidden");
-        // A folder-only Control holder cannot be reconstructed from tracker grants.
-        if (
-          existing.people.some(
-            (person) =>
-              person.role === "owner" &&
-              !before.people.some(
-                (entry) => entry.webId === person.webId && entry.role === "owner",
-              ),
-          )
-        )
-          throw new ShareError("conflict");
-        // Intersect *all* principals so a pre-existing mismatch cannot survive a failed tracker write.
-        const lower = before.people.flatMap((person) => {
-          const after = next.find((entry) => entry.webId === person.webId);
-          const old = existing.people.find((entry) => entry.webId === person.webId);
-          if (person.role === "owner") return [person];
-          if (!after || !old) return [];
-          return [
-            {
-              ...person,
-              role:
-                person.role === "editor" && after.role === "editor" && old.role === "editor"
-                  ? ("editor" as const)
-                  : ("viewer" as const),
-            },
-          ];
-        });
-        const narrowed = await this.io.write(
+    return this.enqueue(async () => {
+      this.validate(url);
+      if (
+        safeHttpIri(webId) !== webId ||
+        (role !== null && role !== "viewer" && role !== "editor") ||
+        opts?.expires ||
+        opts?.purpose
+      )
+        throw new ShareError("unsupported");
+      const signal = new AbortController().signal;
+      // Reading for a change must not widen the folder before its narrowing step.
+      const before = await this.readState(url, signal, "none");
+      if (!before.canManage || before.readOnly) throw new ShareError("forbidden");
+      if (before.people.some((person) => person.webId === webId && person.role === "owner"))
+        throw new ShareError("forbidden");
+      const next = before.people.filter((person) => person.webId !== webId);
+      if (role) next.push({ webId, role });
+      const folderUrl = this.options.folderUrl;
+      const folder = await this.acl(folderUrl, signal);
+      if (!folder && !(await this.options.ensurePrivate(folderUrl, this.options.webId)))
+        throw new ShareError("unsupported");
+      const existing = this.folderState(folder);
+      this.requireFolderControl(existing, before);
+      // Intersect *all* principals so a pre-existing mismatch cannot survive a failed tracker write.
+      const lower = this.intersect(before.people, existing.people, next);
+      try {
+        await this.io.write(
           `${folderUrl}.acl`,
           policy(folderUrl, lower),
           folder ? { etag: folder.etag } : { create: true },
         );
         await this.tracker.setPerson(url, webId, role, opts);
-        const confirmed = await this.tracker.load(url, signal);
-        if (!confirmed.canManage || confirmed.readOnly || confirmed.general.mode !== "restricted")
-          throw new ShareError("forbidden");
-        await this.io.write(`${folderUrl}.acl`, policy(folderUrl, confirmed.people), {
-          etag: narrowed.etag,
-        });
-        try {
-          await this.options.syncMembers(webId, role !== null);
-        } catch {
-          throw new ShareError("members-sync");
-        }
-      })
-      .catch((error: unknown) => {
-        throw this.error(error);
-      });
-    this.tail = pending.catch(() => undefined);
-    return pending;
+        const confirmed = await this.readState(url, signal, "all", true);
+        if (!confirmed.canManage || confirmed.readOnly) throw new ShareError("forbidden");
+      } catch (error) {
+        // A lost tracker response may still have committed. Re-read before syncing members;
+        // leave any failed recovery for the next load, while preserving the original error.
+        await this.readState(url, signal, "narrow").catch(() => undefined);
+        throw error;
+      }
+    });
   }
   async setGeneral(): Promise<void> {
     throw new ShareError("unsupported");

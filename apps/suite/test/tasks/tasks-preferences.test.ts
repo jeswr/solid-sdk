@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { isSharedTrackerUrl } from "../../src/apps/tasks/lib/model/rdf";
 import {
   defaultPreferences,
   parsePreferences,
@@ -97,13 +98,11 @@ it("validates and deduplicates opened shared projects in storage and reducer act
   expect(preferencesReducer(state, { type: "sharedProject", ...valid, url: "bad" })).toBe(state);
 });
 
-it("requires HTTPS except loopback and removes remembered shared projects", () => {
-  for (const url of [
-    "https://bob.example/home.ttl",
-    "http://localhost:3000/home.ttl",
-    "http://127.0.0.2/home.ttl",
-    "http://[::1]/home.ttl",
-  ]) {
+afterEach(() => vi.unstubAllEnvs());
+
+it("requires HTTPS and removes remembered shared projects", () => {
+  vi.stubEnv("NEXT_PUBLIC_DEV_FIXTURES", undefined);
+  for (const url of ["https://bob.example/home.ttl", "https://localhost:3000/home.ttl"]) {
     const state = preferencesReducer(defaultPreferences, {
       type: "sharedProject",
       url,
@@ -118,6 +117,9 @@ it("requires HTTPS except loopback and removes remembered shared projects", () =
     "http://bob.example/home.ttl",
     "http://localhost.example/home.ttl",
     "http://192.168.0.1/home.ttl",
+    "http://localhost:3000/home.ttl",
+    "http://127.0.0.2/home.ttl",
+    "http://[::1]/home.ttl",
     "https://bob.example/home",
   ]) {
     expect(
@@ -126,5 +128,25 @@ it("requires HTTPS except loopback and removes remembered shared projects", () =
     expect(
       parsePreferences(JSON.stringify({ sharedProjects: [{ url, title: "Home" }] })).sharedProjects,
     ).toEqual([]);
+  }
+});
+
+it("allows HTTP loopback shared projects only with the explicit fixture flag", () => {
+  for (const flag of [undefined, "0", "true", "1"]) {
+    vi.stubEnv("NEXT_PUBLIC_DEV_FIXTURES", flag);
+    for (const url of [
+      "http://localhost:3000/home.ttl",
+      "http://127.0.0.2/home.ttl",
+      "http://[::1]/home.ttl",
+    ]) {
+      expect(isSharedTrackerUrl(url)).toBe(flag === "1");
+      expect(
+        parsePreferences(JSON.stringify({ sharedProjects: [{ url, title: "Home" }] }))
+          .sharedProjects,
+      ).toEqual(flag === "1" ? [{ url, title: "Home" }] : []);
+    }
+    expect(isSharedTrackerUrl("http://bob.example/home.ttl")).toBe(false);
+    expect(isSharedTrackerUrl("http://localhost.example/home.ttl")).toBe(false);
+    expect(isSharedTrackerUrl("http://192.168.0.1/home.ttl")).toBe(false);
   }
 });

@@ -1,7 +1,13 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { describe, expect, it, vi } from "vitest";
 import { ModelError } from "../../src/apps/tasks/lib/model/errors";
-import { NS, node, requireProjectFolder, serialize } from "../../src/apps/tasks/lib/model/rdf";
+import {
+  NS,
+  node,
+  requireProjectFolder,
+  Store,
+  serialize,
+} from "../../src/apps/tasks/lib/model/rdf";
 import { createTracker } from "../../src/apps/tasks/lib/model/tracker";
 import { TasksCache } from "../../src/apps/tasks/state/tasks-cache";
 import { now, webId } from "./pod";
@@ -66,6 +72,23 @@ describe("sharing membership mutation queue", () => {
       expect(cache.getSnapshot().projects[0]?.tracker.groupMembers).not.toContain(bob),
     );
   });
+  it("keeps a member removable after a fresh listing contains an invalid task document", async () => {
+    const { cache, inbox, store, pod, failures } = await frameCache();
+    await cache.syncProjectMember(inbox, bob, true);
+    const stray = `${inbox.tracker.stateStore}stray.ttl`;
+    pod.seed(stray, await serialize(new Store()));
+    const task = await cache.createTask(inbox, { title: "Assigned", assignee: bob });
+    if (!task) throw new Error("Missing task");
+    expect(await cache.syncProjectMember(inbox, bob, false)).toBeUndefined();
+    expect(failures.mock.calls.at(-1)?.[0].cause).toMatchObject({
+      message: "Expected a wf:Task.",
+    });
+    expect((await store.readProject(inbox.url)).tracker.groupMembers).toContain(bob);
+    pod.files.delete(stray);
+    expect(await cache.syncProjectMember(inbox, bob, false)).toBeDefined();
+    expect((await store.readTask(task.url)).task.assignee).toBeUndefined();
+    expect((await store.readProject(inbox.url)).tracker.groupMembers).not.toContain(bob);
+  });
   it("waits for queued assignments before the strict fresh removal listing", async () => {
     const { cache, inbox, store, pod } = await frameCache();
     await cache.syncProjectMember(inbox, bob, true);
@@ -106,8 +129,8 @@ describe("sharing membership mutation queue", () => {
     expect(deletes.map((request) => request.url)).toEqual([
       `${folder}.acl`,
       folder,
-      home.url,
       `${home.url}.acl`,
+      home.url,
     ]);
     expect(deletes.every((request) => request.headers.has("If-Match"))).toBe(true);
   });
