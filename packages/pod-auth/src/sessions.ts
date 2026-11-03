@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { type RefreshSessionRecord, withLock } from "@jeswr/reactive-authentication";
 import { protectStore, scopedStore } from "./kv.js";
 import { secureUrl } from "./options.js";
@@ -34,7 +35,7 @@ export function memoryStore<T extends {} = {}>(): KvStore<T> {
   };
 }
 
-/** Translate engine context keys to the canonical (issuer, WebID, actual client_id) credential key. */
+/** Scope grants by issuer/WebID/client and DPoP key; contexts alias only the same grant. */
 export function sessionStorage(raw: KvStore, namespace: string, options: PodAuthOptions) {
   const store = protectStore(scopedStore(raw, namespace + ":sessions"));
   const transient = new Map<string, RefreshSessionRecord>();
@@ -59,7 +60,10 @@ export function sessionStorage(raw: KvStore, namespace: string, options: PodAuth
       return null;
     }
   };
-  const valid = async (record: RefreshSessionRecord, account: Account) => {
+  const valid = async (
+    record: RefreshSessionRecord,
+    account: Pick<Account, "webId" | "issuer" | "clientId">,
+  ) => {
     try {
       const { privateKey, publicKey } = record.dpopKey ?? {};
       const es256 = (key: CryptoKey | undefined, type: KeyType, usage: KeyUsage) =>
@@ -126,10 +130,13 @@ export function sessionStorage(raw: KvStore, namespace: string, options: PodAuth
         secureUrl(webId, options.allowInsecureLoopback === true, "WebID");
         secureUrl(issuer, options.allowInsecureLoopback === true, "issuer");
         const clientId = record.client.client_id;
-        const credential = JSON.stringify([issuer, webId, clientId]);
-        const account = { key, credential, webId, issuer, clientId };
+        const account = { key, webId, issuer, clientId };
         if (!(await valid(record, account)))
           throw new Error("Invalid persisted session credential");
+        // Authorization creates a fresh DPoP key; rotation retains it. Never replace another
+        // outstanding grant for the same account, including one issued in another context.
+        const { x, y } = await crypto.subtle.exportKey("jwk", record.dpopKey.publicKey);
+        const credential = JSON.stringify([issuer, webId, clientId, x, y]);
         const accounts = new Map((await catalog()).map((a) => [a.key, a]));
         const previous = accounts.get(key);
         if (previous !== undefined && previous.credential !== credential) {
@@ -138,7 +145,7 @@ export function sessionStorage(raw: KvStore, namespace: string, options: PodAuth
           accounts.set(cleanupKey, { ...previous, key: cleanupKey, superseded: true });
         }
         accounts.delete("superseded:" + credential);
-        accounts.set(key, account);
+        accounts.set(key, { ...account, credential });
         // Catalog first: a failed credential write is discoverable for later cleanup, never usable.
         await store.setItem("accounts", [...accounts.values()]);
         await store.setItem(credential, record);

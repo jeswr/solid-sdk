@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 "use client";
 import { Button, Toaster, toast } from "@jeswr/suite-ui";
 import { Download, Plus, Star, Tag, Users, X } from "lucide-react";
@@ -25,7 +26,7 @@ function Sidebar() {
   const groups = useGroups();
   const mutations = useContactMutations();
   const { stars } = useStarred();
-  const pathname = usePathname();
+  const pathname = usePathname().replace(/\/+$/, "");
   const [menu, setMenu] = useState<string>();
   const [editing, setEditing] = useState<string>();
   const [name, setName] = useState("");
@@ -195,7 +196,7 @@ function MigrationBanner() {
   );
 }
 function ContactsChrome({ children }: { children: ReactNode }) {
-  const pathname = usePathname();
+  const pathname = usePathname().replace(/\/+$/, "");
   const router = useRouter();
   const params = useSearchParams();
   const state = useAddressBook();

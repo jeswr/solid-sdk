@@ -6,6 +6,7 @@ import { CheckIcon, ChevronDownIcon, ChevronUpIcon } from "lucide-react";
 import { Select as SelectPrimitive } from "radix-ui";
 import type * as React from "react";
 import { DensityProvider, useDensity } from "../../lib/density.js";
+import { InertOutside } from "../../lib/inert-outside.js";
 import { cn } from "../../lib/utils.js";
 
 function Select({ ...props }: React.ComponentProps<typeof SelectPrimitive.Root>) {
@@ -83,6 +84,7 @@ function SelectContent({
           {children}
         </SelectPrimitive.Viewport>
         <SelectScrollDownButton />
+        <InertOutside />
       </SelectPrimitive.Content>
     </SelectPrimitive.Portal>
   );

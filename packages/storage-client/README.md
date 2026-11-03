@@ -46,6 +46,21 @@ See [SKILL.md](SKILL.md) for app usage and fixture workflows.
 responses before using them (`cache: 'no-cache'`). `listAll` applies it to every page.
 Omitting the option preserves the transport's default cache behavior.
 
+`list` and `listAll` also accept `{ maxBytes }`: a non-negative safe integer limiting
+the actual response bytes **per page**, before RDF/JSON parsing. Exact limits are accepted;
+invalid limits throw `TypeError`. An oversized or endless body is cancelled as soon as it
+crosses the cap and rejects with a non-retryable `StorageError` whose `code` is
+`payload-too-large` and whose message names the byte cap. No entries from the rejected page
+are returned. `listAll` can already have yielded earlier, complete pages; consumers must
+propagate failures instead of treating an incomplete listing as authoritative. LWS retains
+its independent 16 MiB JSON hard limit (`invalid-response`), even if `maxBytes` is higher.
+Omitting `maxBytes` preserves existing backend limits. Memory checks the UTF-8 bytes of its
+container representation (the same body as `read`), including empty-container overhead.
+
+`read`, `head`, `list`, and `listAll` accept additional `headers` for request-local
+transport markers. Listings forward them on every page. Accept, Range and
+If-None-Match remain controlled by the operation's dedicated options.
+
 LWS writes require `ifMatch`; `'*'` on `write`/`writeRdf` sends `If-Match: *` and never
 creates a missing resource. Use `create` for POST creation: `name` is a Slug hint, and the
 returned URL comes from the server's Location, independently of the parent path.
@@ -75,3 +90,52 @@ pnpm --filter @jeswr/storage-client run test
 Coverage is enabled with 100% thresholds for branches, functions, lines, and statements. The tests
 include the RFC 6902 Appendix A examples, a table over every `StorageErrorCode`, and fast-check
 properties for the memory backend (ADR-003 §10).
+
+## Optional service clients (SDK-APP-12)
+
+```ts
+import { createTrashClient } from '@jeswr/storage-client/trash';
+import { createVersionsClient } from '@jeswr/storage-client/versions';
+
+const trash = createTrashClient(storage);
+const versions = createVersionsClient(storage);
+const [version] = await versions.versions(url); // url, at, etag
+if (version) await versions.restoreVersion(url, version.url);
+const copy = await trash.trash(url);
+const entries = await trash.listTrash(); // url, original, trashedAt, size, contentType
+const restored = await trash.restore(copy.url); // use returned url, especially on LWS
+```
+
+`./trash` exports `createTrashClient(storage)` with `trash(url)`, `listTrash()`,
+`restore(trashedUrl)` and `purge(trashedUrl)`. Mutation results are `WriteResult`;
+list rows contain `url`, `original`, `trashedAt: Date`, `size`, `contentType`.
+Trashing is a server move via a JSON command POST, not client copy/delete. Restore
+uses the server Location (the original URL on Solid, a new identifier on LWS).
+Purge verifies trash membership, HEADs the copy and sends conditional DELETE to permanently remove it.
+
+`./versions` exports `createVersionsClient(storage)` with `versions(url)` returning
+`{ url, at: Date, etag }[]`, and `restoreVersion(url, versionUrl)` returning
+`WriteResult`. Histories use a scoped version-history Link when advertised, otherwise
+the one-variable `{resource}` endpoint template with a percent-encoded absolute URL.
+Query-based template listings are accepted only for that advertised template and a
+scoped resource. Encoded slashes in paths remain refused; use a query template or a
+safe version-history Link. Each version must expose `ReadResult.mementoDatetime`,
+which contains the server's Memento-Datetime header as a Date.
+Restore verifies membership, reads a usable strong live ETag, and writes version bytes
+with that If-Match; it never substitutes the version ETag or retries a 412.
+
+Both clients require their respective feature state to be available and an endpoint;
+unknown/unavailable/missing endpoint fails unsupported before any I/O. All service
+URLs and returned Locations retain the ordinary scope rules. The public create
+operation at the advertised TrashService endpoint accepts JSON resource/restore
+commands, bypassing ordinary child creation rules only there. Restore allows 200/201,
+and Location may identify a live resource outside the trash container. Ordinary create
+behavior is unchanged. Retention is server policy, advertised as ssd:retention xsd:duration;
+clients do not expire entries locally.
+
+Memory flags `trash` and `versioning` default false and enable the services independently.
+Enabled services use ordinary list/read/metadata/create/delete operations. Content creates,
+writes and patches record immutable snapshots; reads and failed writes do not. Version nodes
+and history containers reject mutations. Tests must cover disabled features as well as both
+protocols. See the [appendix contribution](../../docs/specs/service-description/trash-and-versions-appendix.md)
+for the full protocol and three examples.

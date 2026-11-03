@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 /** Node test helpers ported from reactive-authentication/test/helpers/openid.js.
  * No listening sockets: inject `fetch` as the pristine global transport before creating PodAuth.
  */
@@ -151,6 +152,7 @@ export function createMockOp(
     subject?: string;
     webId?: string | null;
     issuers?: string[];
+    storages?: string[];
     requireInteraction?: boolean;
     omitAzp?: boolean;
     refreshTokens?: boolean;
@@ -268,6 +270,13 @@ export function createMockOp(
           TermFrom.itself,
         );
         for (const value of options.issuers ?? [issuer]) issuers.add(DataFactory.namedNode(value));
+        const storages = SetFrom.subjectPredicate(
+          term,
+          "http://www.w3.org/ns/pim/space#storage",
+          TermAs.term,
+          TermFrom.itself,
+        );
+        for (const value of options.storages ?? [root]) storages.add(DataFactory.namedNode(value));
       }
       const turtle = new Writer().quadsToString([...dataset]);
       return new Response(turtle, { headers: { "content-type": "text/turtle" } });

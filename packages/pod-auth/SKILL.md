@@ -65,10 +65,21 @@ returns credentials. Public profile reads are not proof of authentication.
 - Use the unbound `auth.fetch` throughout the SDK. Preserve global fetch; never call `registerGlobally`.
   Construct auth after installing the intended pristine transport in tests. Protocol discovery,
   registration, token and refresh HTTP must never recurse through a credential-attaching wrapper.
-- Credentials attach only within configured static roots or automatically verified storage roots.
+- Credentials attach only within configured static roots or authenticated WebID-profile storage roots.
   `boundary.automatic: false` selects static-only behavior. `boundary.eligible` restricts both kinds.
   Do not trust an origin merely because it hosts the issuer/WebID or returned a 401. Excluded or
   public resources must not prompt; unverified 401s remain 401s.
+- Automatic roots load on login/restore from `pim:storage` assertions naming the exact authenticated
+  WebID, optionally through its linked LWS/Solid description. Call login/restore first when there are
+  no static roots. Identities without WebIDs, including CID agents, need configured storage roots.
+  Never use `AutomaticCredentialBoundary` to authorize response-asserted roots: a target's type Link,
+  storage Link/description, ancestor HEADs, challenge realm/AS or redirect destination is not a grant.
+- Apply the boundary's explicit AS-origin policy to UMA and both LWS discovery forms, including CID
+  composition. Exchange endpoints must also use granted origins and reject redirects. LWS audiences
+  must stay inside an existing grant, directly or through a description rooted within it; metadata
+  can only narrow authority. Refuse before sending claim/subject tokens to untrusted endpoints.
+- Keep authenticated fetch's manual redirects and per-hop credential checks. Clear automatic roots
+  on logout/session supersession, fence pending identity discovery, and reload profile roots on restore.
 - Keep provider composition in `src/providers.ts`, ordered Solid-OIDC, UMA, then LWS. Share the Solid
   session and its fence with UMA and the LWS OIDC source. Keep protocol logic in the engine, including
   PKCE S256, state/nonce, DPoP binding, nonce retry limits and verified RFC 9728 / legacy LWS discovery.
@@ -86,8 +97,11 @@ fail closed. Restore permits one `prompt=none` attempt through `ui.getCode` only
 `invalid_grant`, never interactive fallback or an iframe. Initial interactive login requests consent.
 
 Persist only refresh records beside the matching non-extractable ES256 private key and exportable
-public key, scoped by issuer/WebID/actual client ID inside an application namespace. Discard unloadable,
-extractable, mismatched or non-ES256 keys before redemption. Access/ID tokens and registrations remain
+public key, scoped by issuer/WebID/actual client ID and DPoP public key inside an application namespace.
+Independent grants retain separate credentials and refresh locks even for the same account; refresh
+rotation updates only its matching grant. Superseded grants stay discoverable for logout across reloads.
+Discard unloadable, extractable, mismatched or non-ES256 keys before redemption.
+Access/ID tokens and registrations remain
 in memory. Preserve credentials/pointers on transient network/discovery/refresh failures; propagate
 storage errors. Retain the verbatim ported `decideSilentRestore` decision and tests with attribution.
 

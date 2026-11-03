@@ -25,6 +25,13 @@ export {
 export { createChatPodPort } from "./chat-tools.js";
 export { type CliConfig, loadCliConfig } from "./cli-config.js";
 export { createCliFetch } from "./client-credentials.js";
+export {
+  createContextToolRegistry,
+  readSharedContext,
+  SHARED_CONTEXT_PATH,
+  type SharedContextResult,
+  sharedContextUrl,
+} from "./context-tools.js";
 export { type FetchResult, fetchDocument } from "./fetch.js";
 export type { MemoryClientInfo } from "./memory-tools.js";
 export {

@@ -1,0 +1,201 @@
+{
+  "manifestVersion": 1,
+  "runtime": {
+    "name": "@jeswr/model-runtime",
+    "major": 0
+  },
+  "prefixes": {
+    "sched": "https://w3id.org/jeswr/sectors/scheduling#",
+    "core": "https://w3id.org/jeswr/core#",
+    "rdf": "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
+    "xsd": "http://www.w3.org/2001/XMLSchema#"
+  },
+  "entities": [
+    {
+      "name": "Calendar",
+      "typeIris": [
+        "https://w3id.org/jeswr/sectors/scheduling#Calendar"
+      ],
+      "subject": {
+        "convention": "hash-it"
+      },
+      "fields": [
+        {
+          "name": "description",
+          "predicate": "https://w3id.org/jeswr/sectors/scheduling#description",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "maxCount": 1,
+          "guards": {
+            "emptyStringDrop": true
+          }
+        },
+        {
+          "name": "organizer",
+          "predicate": "https://w3id.org/jeswr/sectors/scheduling#organizer",
+          "kind": "iri",
+          "maxCount": 1,
+          "guards": {
+            "iriScheme": "http-https"
+          }
+        },
+        {
+          "name": "summary",
+          "predicate": "https://w3id.org/jeswr/sectors/scheduling#summary",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "minCount": 1,
+          "maxCount": 1,
+          "guards": {
+            "requiredFailClosed": true
+          }
+        }
+      ]
+    },
+    {
+      "name": "Task",
+      "kind": "composite",
+      "root": "task",
+      "nodes": [
+        {
+          "name": "task",
+          "typeIris": [
+            "https://w3id.org/jeswr/sectors/scheduling#Task"
+          ],
+          "fragment": "it",
+          "fields": [
+            {
+              "name": "completed",
+              "predicate": "https://w3id.org/jeswr/sectors/scheduling#completed",
+              "kind": "literal",
+              "datatype": "http://www.w3.org/2001/XMLSchema#boolean",
+              "maxCount": 1,
+              "guards": {}
+            },
+            {
+              "name": "completedAt",
+              "predicate": "https://w3id.org/jeswr/sectors/scheduling#completedAt",
+              "kind": "literal",
+              "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+              "maxCount": 1,
+              "guards": {}
+            },
+            {
+              "name": "description",
+              "predicate": "https://w3id.org/jeswr/sectors/scheduling#description",
+              "kind": "literal",
+              "datatype": "http://www.w3.org/2001/XMLSchema#string",
+              "maxCount": 1,
+              "guards": {
+                "emptyStringDrop": true
+              }
+            },
+            {
+              "name": "dueTime",
+              "predicate": "https://w3id.org/jeswr/sectors/scheduling#dueTime",
+              "kind": "literal",
+              "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+              "maxCount": 1,
+              "guards": {}
+            },
+            {
+              "name": "calendar",
+              "predicate": "https://w3id.org/jeswr/sectors/scheduling#inCalendar",
+              "kind": "iri",
+              "maxCount": 1,
+              "guards": {
+                "iriScheme": "http-https"
+              }
+            },
+            {
+              "name": "organizer",
+              "predicate": "https://w3id.org/jeswr/sectors/scheduling#organizer",
+              "kind": "iri",
+              "maxCount": 1,
+              "guards": {
+                "iriScheme": "http-https"
+              }
+            },
+            {
+              "name": "recurrence",
+              "predicate": "https://w3id.org/jeswr/sectors/scheduling#recurrence",
+              "kind": "nested",
+              "node": "recurrence",
+              "hasClass": "https://w3id.org/jeswr/sectors/scheduling#RecurrenceRule",
+              "classOnly": true
+            },
+            {
+              "name": "startTime",
+              "predicate": "https://w3id.org/jeswr/sectors/scheduling#startTime",
+              "kind": "literal",
+              "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+              "maxCount": 1,
+              "guards": {}
+            },
+            {
+              "name": "summary",
+              "predicate": "https://w3id.org/jeswr/sectors/scheduling#summary",
+              "kind": "literal",
+              "datatype": "http://www.w3.org/2001/XMLSchema#string",
+              "minCount": 1,
+              "maxCount": 1,
+              "guards": {
+                "requiredFailClosed": true
+              }
+            }
+          ]
+        },
+        {
+          "name": "recurrence",
+          "typeIris": [
+            "https://w3id.org/jeswr/sectors/scheduling#RecurrenceRule"
+          ],
+          "fragment": "recurrence",
+          "fields": [
+            {
+              "name": "count",
+              "predicate": "https://w3id.org/jeswr/sectors/scheduling#count",
+              "kind": "literal",
+              "datatype": "http://www.w3.org/2001/XMLSchema#positiveInteger",
+              "maxCount": 1,
+              "guards": {}
+            },
+            {
+              "name": "frequency",
+              "predicate": "https://w3id.org/jeswr/sectors/scheduling#frequency",
+              "kind": "literal",
+              "datatype": "http://www.w3.org/2001/XMLSchema#string",
+              "minCount": 1,
+              "maxCount": 1,
+              "in": [
+                "DAILY",
+                "WEEKLY",
+                "MONTHLY",
+                "YEARLY"
+              ],
+              "guards": {
+                "requiredFailClosed": true
+              }
+            },
+            {
+              "name": "interval",
+              "predicate": "https://w3id.org/jeswr/sectors/scheduling#interval",
+              "kind": "literal",
+              "datatype": "http://www.w3.org/2001/XMLSchema#positiveInteger",
+              "maxCount": 1,
+              "guards": {}
+            },
+            {
+              "name": "until",
+              "predicate": "https://w3id.org/jeswr/sectors/scheduling#until",
+              "kind": "literal",
+              "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+              "maxCount": 1,
+              "guards": {}
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

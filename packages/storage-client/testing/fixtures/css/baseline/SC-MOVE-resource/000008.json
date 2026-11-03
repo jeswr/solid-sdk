@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "request": {
+    "method": "GET",
+    "url": "http://localhost:46617/conformance-5b1905a4-4edd-484a-83f5-39e9bf5a71f7/move-destination/",
+    "headers": [["accept", "text/turtle"]],
+    "body": null
+  },
+  "response": {
+    "url": "http://localhost:46617/conformance-5b1905a4-4edd-484a-83f5-39e9bf5a71f7/move-destination/",
+    "status": 200,
+    "statusText": "OK",
+    "headers": [
+      ["accept-post", "*/*"],
+      ["accept-ranges", "bytes"],
+      ["access-control-allow-credentials", "true"],
+      ["access-control-allow-origin", "*"],
+      [
+        "access-control-expose-headers",
+        "Accept-Patch,Accept-Post,Accept-Put,Allow,Content-Range,ETag,Last-Modified,Link,Location,Updates-Via,WAC-Allow,Www-Authenticate"
+      ],
+      ["allow", "OPTIONS, HEAD, GET, POST, DELETE"],
+      ["connection", "keep-alive"],
+      ["content-type", "text/turtle"],
+      ["date", "Sun, 01 Nov 2026 00:00:05 GMT"],
+      ["etag", "\"1793491204841-text/turtle\""],
+      ["keep-alive", "timeout=5"],
+      ["last-modified", "Sun, 01 Nov 2026 00:00:04 GMT"],
+      [
+        "link",
+        "<http://www.w3.org/ns/ldp#Container>; rel=\"type\", <http://www.w3.org/ns/ldp#BasicContainer>; rel=\"type\", <http://www.w3.org/ns/ldp#Resource>; rel=\"type\", <http://localhost:46617/conformance-5b1905a4-4edd-484a-83f5-39e9bf5a71f7/move-destination/.meta>; rel=\"describedby\", <http://localhost:46617/.notifications/StreamingHTTPChannel2023/http%3A%2F%2Flocalhost%3A46617%2Fconformance-5b1905a4-4edd-484a-83f5-39e9bf5a71f7%2Fmove-destination%2F>; rel=\"http://www.w3.org/ns/solid/terms#updatesViaStreamingHttp2023\", <http://localhost:46617/conformance-5b1905a4-4edd-484a-83f5-39e9bf5a71f7/move-destination/.acl>; rel=\"acl\", <http://localhost:46617/conformance-5b1905a4-4edd-484a-83f5-39e9bf5a71f7/.well-known/solid>; rel=\"http://www.w3.org/ns/solid/terms#storageDescription\""
+      ],
+      ["transfer-encoding", "chunked"],
+      ["vary", "Accept,Authorization,Origin"],
+      ["wac-allow", "user=\"append control read write\""],
+      ["x-powered-by", "Community Solid Server"]
+    ],
+    "body": "QHByZWZpeCBkYzogPGh0dHA6Ly9wdXJsLm9yZy9kYy90ZXJtcy8+LgpAcHJlZml4IGxkcDogPGh0dHA6Ly93d3cudzMub3JnL25zL2xkcCM+LgpAcHJlZml4IHBvc2l4OiA8aHR0cDovL3d3dy53My5vcmcvbnMvcG9zaXgvc3RhdCM+LgpAcHJlZml4IHhzZDogPGh0dHA6Ly93d3cudzMub3JnLzIwMDEvWE1MU2NoZW1hIz4uCgo8PiBhIGxkcDpDb250YWluZXIsIGxkcDpCYXNpY0NvbnRhaW5lciwgbGRwOlJlc291cmNlOwogICAgZGM6bW9kaWZpZWQgIjIwMjYtMTEtMDFUMDA6MDA6MDQuODQxWiJeXnhzZDpkYXRlVGltZTsKICAgIHBvc2l4Om10aW1lIDE3OTM0OTEyMDQuCg==",
+    "redirected": false
+  }
+}

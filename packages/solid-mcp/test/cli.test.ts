@@ -158,6 +158,14 @@ describe("stdio executable", () => {
         arguments: { provider: conversation.provider, conversationId: conversation.conversationId },
       });
       expect(JSON.parse(text(chat))).toEqual({ ...conversation, url });
+      const context = await callTool({ name: "context_read", arguments: {} });
+      expect(JSON.parse(text(context))).toEqual({
+        status: "ok",
+        url: `${POD}agent/context/shared-context.md`,
+        contentType: "text/plain",
+        text: "hello fixture",
+        redactedCardNumbers: 0,
+      });
       // The CLI has no trusted MCP client identity, so personal tools must refuse access.
       for (const request of [
         { name: "memory_remember", arguments: { text: "private fixture" } },

@@ -20,6 +20,7 @@ import { McpServer, ResourceTemplate } from "@modelcontextprotocol/sdk/server/mc
 import { normalizePodRoot, requirePodScopedUrl, type SolidMcpConfig } from "./auth.js";
 import { registerChatTools } from "./chat-tools.js";
 import type { MemoryClientInfo } from "./memory-tools.js";
+import { createContextToolRegistry } from "./context-tools.js";
 import { podOutputError } from "./output.js";
 import { listContainer, RDF_MEDIA_TYPES, readRdf, readResource } from "./pod.js";
 import { createFetchPodPort, type PodPort } from "./pod-port.js";
@@ -136,6 +137,7 @@ export function createSolidMcpServer(config: SolidMcpServerConfig): McpServer {
     server,
     createPodToolRegistry(pod, config.readOnly !== false, config.clientInfo),
   );
+  registerPodTools(server, createContextToolRegistry(pod));
   // Chat ACL discovery requires the original authenticated fetch capability.
   if ("fetch" in config) registerChatTools(server, { ...config, podRoot }, pod);
   return server;
