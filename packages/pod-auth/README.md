@@ -49,6 +49,10 @@ source share the Solid session and its fence. LWS-specific Bearer challenges byp
 matcher. Credentials only attach within static roots or automatically verified storage roots.
 Set `boundary.automatic: false` for a static-only boundary. `boundary.eligible` restricts both static
 and discovered roots. Public and excluded resources never prompt; unverified 401s remain 401s.
+`boundary.storageEndpoints` (absolute paths such as `"/account/domains"` or `"/.notifications/"`)
+extends each verified profile storage to those server APIs on the same origin; they reuse the
+storage's grant and are not reported in `Identity.storages`. A path ending in `/` covers its
+descendants; any other path matches exactly.
 
 Credential roots come exclusively from `boundary.roots` (including explicit application/user grants)
 or the authenticated WebID profile's `pim:storage` statements about that exact WebID. Automatic roots

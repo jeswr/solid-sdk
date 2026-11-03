@@ -32,7 +32,7 @@ export function createAgentAuth(policy: AgentPolicy, config: AgentConfiguration)
       signal.throwIfAborted();
       if (loggingOut) throw new Error("Logout is in progress");
       const first = current === null;
-      current = { ...providers.identity, storages: [...providers.boundary.roots()] };
+      current = { ...providers.identity, storages: providers.boundary.storages() };
       if (first) emit("login");
     },
   });

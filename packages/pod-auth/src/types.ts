@@ -11,7 +11,18 @@ export interface PodAuthOptions {
   clientId: string | { dynamicRegistration: true };
   redirectUri: string;
   /** Explicit grants plus WebID-profile roots loaded on login/restore; server hints never grant access. */
-  boundary?: { roots?: string[]; automatic?: boolean; eligible?: (url: URL) => boolean };
+  boundary?: {
+    roots?: string[];
+    automatic?: boolean;
+    eligible?: (url: URL) => boolean;
+    /**
+     * Absolute paths (e.g. "/account/domains") on the origin of each storage discovered from the
+     * WebID profile that receive that storage's credentials and share its credential context, for
+     * server APIs outside the pod folder. A path ending in "/" covers its descendants; any other
+     * path matches exactly. Applies only to automatic (profile) roots.
+     */
+    storageEndpoints?: string[];
+  };
   storage?: { sessions: KvStore; caches: KvStore };
   ui: {
     getWebId(): Promise<string>;
