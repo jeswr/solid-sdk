@@ -194,4 +194,20 @@ public class PdfPreviewStoreTest {
         assertTrue(longName.endsWith(".pdf"));
         assertTrue(longName.getBytes(StandardCharsets.UTF_8).length <= 255);
     }
+
+    @Test public void clearUnlinksSymlinksWithoutFollowingThem() throws Exception {
+        File outside = temp.newFolder("outside");
+        File kept = new File(outside, "kept.pdf");
+        Files.write(kept.toPath(), PDF);
+        File outsideFile = temp.newFile("outside.pdf");
+        Files.createSymbolicLink(new File(root, "dir-link").toPath(), outside.toPath());
+        Files.createSymbolicLink(new File(root, "file-link").toPath(), outsideFile.toPath());
+        File nested = new File(root, "abc");
+        assertTrue(nested.mkdir());
+        Files.createSymbolicLink(new File(nested, "nested-link").toPath(), outside.toPath());
+        store.clear();
+        assertEquals(0, root.listFiles().length);
+        assertTrue(kept.exists());
+        assertTrue(outsideFile.exists());
+    }
 }
