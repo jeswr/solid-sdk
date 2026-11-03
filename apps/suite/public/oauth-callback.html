@@ -1,0 +1,29 @@
+<!doctype html>
+<!-- AUTHORED-BY Codex GPT-6 -->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="referrer" content="no-referrer" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Connecting services · Solid Suite</title>
+  </head>
+  <body>
+    <h1>Finishing the connection…</h1>
+    <p>You can close this window after the connection completes.</p>
+    <script>
+      const message = { type: "pod-manager-oauth", url: location.href };
+      if (window.opener) window.opener.postMessage(message, location.origin);
+      const channel = new BroadcastChannel("suite-connector-oauth");
+      channel.postMessage(message);
+      channel.close();
+      history.replaceState(null, "", location.pathname);
+      // The opener also closes this popup, but a provider's Cross-Origin-Opener-Policy can
+      // sever that handle; a script-opened window may still close itself.
+      try {
+        window.close();
+      } catch {
+        // The browser keeps the page open; the copy above tells the user to close it.
+      }
+    </script>
+  </body>
+</html>

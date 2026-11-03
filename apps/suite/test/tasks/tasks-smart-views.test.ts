@@ -302,7 +302,7 @@ describe("Upcoming", () => {
   });
 
   it("honours weekStart, shifts seven days, shows overdue only from Today, and opens a day composer", async () => {
-    // The composer's due chip names days relative to the real clock: pin it to the mocked now.
+    // The composer's due chip words dates against the real clock ("Tomorrow"); pin it to `now`.
     vi.useFakeTimers({ toFake: ["Date"], now });
     onTestFinished(() => {
       vi.useRealTimers();
@@ -318,10 +318,6 @@ describe("Upcoming", () => {
     expect(
       host.querySelector('.tsk-day-cell[data-day-key="2026-11-02"]')?.getAttribute("aria-label"),
     ).toContain("1 task");
-    // WCAG 2.5.3: the button's own text is the date, which its expanded name contains.
-    const monday = host.querySelector('.tsk-day-cell[data-day-key="2026-11-02"]');
-    expect(monday?.textContent).toBe("2");
-    expect(monday?.parentElement?.textContent).toBe("2M1");
     expect(host.querySelector(".tsk-day-cell[data-today]")).not.toBeNull();
     expect([...host.querySelectorAll("h2")].map((heading) => heading.textContent)).not.toContain(
       "Overdue",

@@ -58,6 +58,7 @@
   "dependencies": {
     "@jeswr/fetch-rdf": "workspace:*",
     "@jeswr/guarded-fetch": "workspace:*",
+    "@jeswr/storage-client": "workspace:*",
     "@solid/object": "^0.6.0",
     "n3": "^2.0.3"
   },
@@ -75,6 +76,6 @@
     "vitest": "^4.1.8"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=24"
   }
 }

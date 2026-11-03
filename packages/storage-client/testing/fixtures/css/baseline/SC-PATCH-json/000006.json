@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "request": {
+    "method": "PATCH",
+    "url": "http://localhost:46617/conformance-5b1905a4-4edd-484a-83f5-39e9bf5a71f7/patch-json/data.json",
+    "headers": [
+      ["content-type", "application/json-patch+json"],
+      ["if-match", "\"1793491203333-application/json\""]
+    ],
+    "body": "W3sib3AiOiJyZXBsYWNlIiwicGF0aCI6Ii9sYWJlbCIsInZhbHVlIjoiYWZ0ZXIifV0="
+  },
+  "response": {
+    "url": "http://localhost:46617/conformance-5b1905a4-4edd-484a-83f5-39e9bf5a71f7/patch-json/data.json",
+    "status": 415,
+    "statusText": "Unsupported Media Type",
+    "headers": [
+      ["accept-patch", "text/n3, application/sparql-update"],
+      ["accept-put", "*/*"],
+      ["accept-ranges", "bytes"],
+      ["access-control-allow-credentials", "true"],
+      ["access-control-allow-origin", "*"],
+      [
+        "access-control-expose-headers",
+        "Accept-Patch,Accept-Post,Accept-Put,Allow,Content-Range,ETag,Last-Modified,Link,Location,Updates-Via,WAC-Allow,Www-Authenticate"
+      ],
+      ["connection", "keep-alive"],
+      ["content-type", "application/json"],
+      ["date", "Sun, 01 Nov 2026 00:00:03 GMT"],
+      ["keep-alive", "timeout=5"],
+      [
+        "link",
+        "<http://localhost:46617/conformance-5b1905a4-4edd-484a-83f5-39e9bf5a71f7/patch-json/data.json.meta>; rel=\"describedby\", <http://localhost:46617/.notifications/StreamingHTTPChannel2023/b0>; rel=\"http://www.w3.org/ns/solid/terms#updatesViaStreamingHttp2023\", <http://localhost:46617/conformance-5b1905a4-4edd-484a-83f5-39e9bf5a71f7/patch-json/data.json.acl>; rel=\"acl\""
+      ],
+      ["transfer-encoding", "chunked"],
+      ["vary", "Accept,Authorization,Origin"],
+      ["x-powered-by", "Community Solid Server"]
+    ],
+    "body": "eyJuYW1lIjoiVW5zdXBwb3J0ZWRNZWRpYVR5cGVIdHRwRXJyb3IiLCJtZXNzYWdlIjoiIiwic3RhdHVzQ29kZSI6NDE1LCJlcnJvckNvZGUiOiJINDE1IiwiZGV0YWlscyI6e319",
+    "redirected": false
+  }
+}
