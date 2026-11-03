@@ -10,7 +10,7 @@ import {
 } from "@jeswr/reactive-authentication";
 import { NamedNodeAs, NamedNodeFrom, SetFrom, TermWrapper } from "@rdfjs/wrapper";
 import { DataFactory, Parser, Store } from "n3";
-import { isLoopback, secureUrl } from "./options.js";
+import { isLoopback, secureUrl, storageEndpointPaths } from "./options.js";
 import type { PodAuthOptions } from "./types.js";
 
 const PIM = "http://www.w3.org/ns/pim/space#";
@@ -30,6 +30,9 @@ export function createBoundary(
     );
   };
   const fixed = new CredentialBoundary(options.boundary?.roots, { allowInsecureHttp: insecure });
+  // Read and validated once here, so later mutation (or a getter) cannot add or swap grants.
+  const storageEndpoints = storageEndpointPaths(options.boundary?.storageEndpoints);
+  const automaticRoots = options.boundary?.automatic !== false;
   let automatic = new CredentialBoundary([], { allowInsecureHttp: insecure });
   // Configured server endpoints on a verified storage's origin, mapped to that storage root.
   let endpoints = new Map<string, string>();
@@ -135,7 +138,7 @@ export function createBoundary(
       },
     } satisfies HttpOptions,
     learn: async (webId: string | undefined, signal: AbortSignal, lifetime = signal) => {
-      if (options.boundary?.automatic === false) return;
+      if (!automaticRoots) return;
       if (webId === undefined) {
         clear();
         return;
@@ -165,12 +168,25 @@ export function createBoundary(
           for (const root of await descriptionRoots(storage, signal)) add(next, root);
       }
       const nextEndpoints = new Map<string, string>();
-      for (const root of [...next.entries])
-        for (const path of options.boundary?.storageEndpoints ?? []) {
+      const verified = [...next.entries];
+      for (const root of verified)
+        for (const path of storageEndpoints) {
+          // Built on the storage's own origin; validation rejected "//", "@", "..", "?" and "#".
           const endpoint = new URL(path, root).href;
-          if (nextEndpoints.has(endpoint)) continue;
+          // A verified storage or fixed root keeps its own identity and grant; it is never an alias.
+          if (
+            nextEndpoints.has(endpoint) ||
+            verified.includes(endpoint) ||
+            fixed.entries.includes(endpoint)
+          )
+            continue;
           add(next, endpoint);
-          if (next.entries.includes(endpoint)) nextEndpoints.set(endpoint, root);
+          // Use the grant of the storage that contains the endpoint, else the first on its origin.
+          const owner =
+            verified
+              .filter((storage) => storage.endsWith("/") && isWithin(new URL(endpoint), storage))
+              .sort((a, b) => b.length - a.length)[0] ?? root;
+          if (next.entries.includes(endpoint)) nextEndpoints.set(endpoint, owner);
         }
       signal.throwIfAborted();
       lifetime.throwIfAborted();
