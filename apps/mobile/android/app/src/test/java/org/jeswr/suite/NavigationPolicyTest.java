@@ -68,4 +68,19 @@ public class NavigationPolicyTest {
     public void rejectsANonHttpServerUrl() {
         new NavigationPolicy("capacitor://localhost");
     }
+
+    @Test
+    public void usesTheServerUrlInRemoteModeAndTheLocalOriginInBundledMode() {
+        assertEquals("https://suite.example", NavigationPolicy.appUrl("https://suite.example", "https://localhost"));
+        assertEquals("https://localhost", NavigationPolicy.appUrl(null, "https://localhost"));
+        assertNull(NavigationPolicy.appUrl(null, null));
+        assertNull(NavigationPolicy.appUrl(null, "capacitor://localhost"));
+        assertNull(NavigationPolicy.appUrl("file:///android_asset", "https://localhost"));
+        NavigationPolicy bundled = new NavigationPolicy(NavigationPolicy.appUrl(null, "https://localhost"), null);
+        assertTrue(bundled.staysInApp("https://localhost/drive/f/YQ/"));
+        assertTrue(bundled.allowsMainFrameLoad("https://localhost/", "GET"));
+        assertFalse(bundled.staysInApp("http://localhost/"));
+        assertFalse(bundled.staysInApp("https://solid-suite.vercel.app/"));
+        assertFalse(bundled.isErrorPage("https://localhost/offline.html"));
+    }
 }

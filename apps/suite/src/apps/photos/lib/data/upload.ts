@@ -1,12 +1,20 @@
 // AUTHORED-BY Codex GPT-6
 import { isomorphic } from "rdf-isomorphic";
-import { buildPhoto, type ImageEncoder, type PreparedPhoto, preparePhoto } from "../model";
+import {
+  buildPhoto,
+  type CaptureMetadata,
+  type ImageEncoder,
+  type PreparedPhoto,
+  preparePhoto,
+} from "../model";
 import { statusOf } from "./shared";
 import type { PhotoDataStorage } from "./storage";
 
 export interface UploadFile {
   name: string;
   original: Blob;
+  /** Outside details (e.g. a Takeout sidecar) that fill gaps in the file's EXIF. */
+  metadata?: CaptureMetadata | undefined;
 }
 export interface UploadOptions {
   encoder: ImageEncoder;
@@ -36,6 +44,7 @@ export async function uploadFiles(
         retry &&
         (retry.input.original !== file.original ||
           retry.input.name !== file.name ||
+          retry.input.metadata !== file.metadata ||
           retry.input.stripLocation !== options.stripLocation)
       )
         throw new TypeError("Retry must use the same upload input");

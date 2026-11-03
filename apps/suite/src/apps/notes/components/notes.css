@@ -437,6 +437,17 @@
   justify-content: flex-end;
   gap: 8px;
 }
+.notes-send-tasks {
+  width: min(480px, calc(100vw - 24px));
+  max-width: 480px;
+}
+.notes-send-tasks-list {
+  max-height: 40vh;
+  overflow-y: auto;
+  margin: 0;
+  padding-left: 20px;
+  overflow-wrap: anywhere;
+}
 .notes-confirm-actions {
   display: flex;
   justify-content: flex-end;

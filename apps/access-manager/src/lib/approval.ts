@@ -1,3 +1,5 @@
+// AUTHORED-BY Codex GPT-6
+// Deprecated app compatibility API: new consumers use @jeswr/pod-access/requests-solid.
 // AUTHORED-BY Claude Fable 5
 //
 // The §3.5 approval pipeline, CLIENT-SIDE (Phase 1 — no new server surface).
