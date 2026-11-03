@@ -1,6 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import type { ICellData, IWorkbookData, IWorksheetData } from "@univerjs/core";
-import { strFromU8, unzipSync } from "fflate";
+import { strFromU8, Unzip, UnzipInflate } from "fflate";
 import type { Snapshot } from "../model/snapshot";
 import {
   coordinate,
@@ -104,6 +104,7 @@ function readSheet(
   strings: string[],
   formats: (string | undefined)[],
   countCell: () => void,
+  countText: (length: number) => void,
 ): Partial<IWorksheetData> {
   const sheet: Partial<IWorksheetData> = {
     id,
@@ -182,8 +183,10 @@ function readSheet(
         cell.t = 2;
       }
     }
-    const formula = formulaElement?.textContent;
+    // Newer Excel functions are stored with a _xlfn./_xlws. prefix that Univer doesn't know.
+    const formula = formulaElement?.textContent?.replace(/\b_xl(?:fn|ws)\./gi, "");
     if (formula) cell.f = `=${formula}`;
+    countText((typeof cell.v === "string" ? cell.v.length : 0) + (formula?.length ?? 0));
     const style = numberAttribute(element, "s", 0);
     const pattern = formats[style];
     if (pattern && pattern !== "General") cell.s = { n: { pattern } };
@@ -191,7 +194,9 @@ function readSheet(
     requireXlsx(!Object.hasOwn(cells[row], column), "Duplicate Excel cell reference");
     cells[row][column] = cell;
   }
-  for (const merge of elements(doc, "mergeCell")) {
+  const merges = elements(doc, "mergeCell");
+  requireXlsx(merges.length <= LIMITS.merges, "Too many merged Excel cells");
+  for (const merge of merges) {
     const refs = (merge.getAttribute("ref") ?? "").split(":");
     requireXlsx(refs.length === 2, "Invalid Excel merge range");
     const start = coordinate(refs[0] as string);
@@ -207,6 +212,10 @@ function readSheet(
   }
   // Column definitions often run to the last Excel column; keep widths only for the
   // columns the sheet uses (at least A:Z), without growing the sheet.
+  // Ranges may not overlap, so expanding them is bounded by the column count.
+  widths.sort((a, b) => a.min - b.min);
+  for (const [i, range] of widths.entries())
+    requireXlsx(i === 0 || range.min > (widths[i - 1]?.max as number), "Overlapping Excel columns");
   const widthColumns = Math.max(sheet.columnCount as number, 26);
   for (const { min, max, w } of widths)
     for (let c = min - 1; c < Math.min(max, widthColumns); c++)
@@ -225,9 +234,18 @@ function readSheet(
         ySplit <= LIMITS.rows,
       "Invalid Excel frozen pane",
     );
-    const topLeft = pane.getAttribute("topLeftCell");
-    const start = topLeft ? coordinate(topLeft) : { row: ySplit, column: xSplit };
-    sheet.freeze = { xSplit, ySplit, startRow: start.row, startColumn: start.column };
+    // Excel freezes the first ySplit rows and xSplit columns shown from the sheet view's
+    // top-left cell; the pane's own topLeftCell is only where the scrolling pane is.
+    // Univer marks the line after the frozen rows and columns (-1 when none are frozen).
+    const view = elements(doc, "sheetView")[0]?.getAttribute("topLeftCell");
+    const origin = view ? coordinate(view) : { row: 0, column: 0 };
+    const startRow = ySplit > 0 ? origin.row + ySplit : -1;
+    const startColumn = xSplit > 0 ? origin.column + xSplit : -1;
+    requireXlsx(
+      startRow <= LIMITS.rows && startColumn <= LIMITS.columns,
+      "Invalid Excel frozen pane",
+    );
+    if (xSplit > 0 || ySplit > 0) sheet.freeze = { xSplit, ySplit, startRow, startColumn };
   }
   return sheet;
 }
@@ -236,10 +254,73 @@ function relationshipId(sheet: Element): string {
   return sheet.getAttributeNS(REL, "id") ?? sheet.getAttributeNS(STRICT_REL, "id") ?? "";
 }
 
+/** Bytes of input fed to the inflater per step, which bounds the work done past a size limit. */
+const CHUNK = 16 * 1024;
+
+/**
+ * Extract the wanted ZIP entries. The sizes a ZIP declares can't be trusted, so the
+ * inflated bytes are counted as they arrive and extraction stops at the first entry that
+ * exceeds the limits. Entries that aren't wanted are skipped without inflating them.
+ */
+function extract(
+  data: Uint8Array,
+  wanted: (name: string) => boolean,
+  budget: { total: number },
+): Map<string, Uint8Array> {
+  const files = new Map<string, Uint8Array>();
+  const names = new Set<string>();
+  let failure: unknown;
+  const unzip = new Unzip((file) => {
+    try {
+      requireXlsx(!names.has(file.name), "Duplicate Excel ZIP entry");
+      names.add(file.name);
+      requireXlsx(names.size <= LIMITS.entries, "Too many Excel ZIP entries");
+      requireXlsx(
+        !/vbaProject\.bin$/i.test(file.name),
+        "Macro-enabled Excel files are not supported",
+      );
+      if (!wanted(file.name)) return;
+      const chunks: Uint8Array[] = [];
+      let size = 0;
+      file.ondata = (error, chunk, final) => {
+        if (failure) return;
+        try {
+          if (error) throw error;
+          size += chunk.length;
+          budget.total += chunk.length;
+          requireXlsx(
+            size <= LIMITS.entryBytes && budget.total <= LIMITS.totalBytes,
+            "Excel file exceeds the uncompressed size limit",
+          );
+          chunks.push(chunk);
+          if (final) {
+            const bytes = new Uint8Array(size);
+            let offset = 0;
+            for (const part of chunks) {
+              bytes.set(part, offset);
+              offset += part.length;
+            }
+            files.set(file.name, bytes);
+          }
+        } catch (caught) {
+          failure = caught;
+        }
+      };
+      file.start();
+    } catch (caught) {
+      failure ??= caught;
+    }
+  });
+  unzip.register(UnzipInflate);
+  for (let offset = 0; offset < data.length && !failure; offset += CHUNK)
+    unzip.push(data.subarray(offset, offset + CHUNK), offset + CHUNK >= data.length);
+  if (failure) throw failure;
+  requireXlsx(names.size > 0, "Couldn't read this Excel file. Choose a valid .xlsx file.");
+  return files;
+}
+
 export function readXlsx(data: Uint8Array, options: { title: string }): Snapshot {
   try {
-    let total = 0;
-    const entries = new Set<string>();
     const metadata = new Set([
       "[Content_Types].xml",
       "xl/workbook.xml",
@@ -247,39 +328,25 @@ export function readXlsx(data: Uint8Array, options: { title: string }): Snapshot
       "xl/styles.xml",
       "xl/sharedStrings.xml",
     ]);
-    const parts = unzipSync(data, {
-      filter: (entry) => {
-        requireXlsx(!entries.has(entry.name), "Duplicate Excel ZIP entry");
-        entries.add(entry.name);
-        total += entry.originalSize;
-        requireXlsx(entries.size <= LIMITS.entries, "Too many Excel ZIP entries");
-        requireXlsx(
-          entry.originalSize <= LIMITS.entryBytes &&
-            entry.size <= LIMITS.entryBytes &&
-            total <= LIMITS.totalBytes,
-          "Excel file exceeds the uncompressed size limit",
-        );
-        requireXlsx(
-          !/vbaProject\.bin$/i.test(entry.name),
-          "Macro-enabled Excel files are not supported",
-        );
-        return metadata.has(entry.name);
-      },
-    });
-    const content = parseXml(parts["[Content_Types].xml"], "content types");
+    const budget = { total: 0 };
+    const parts = extract(data, (name) => metadata.has(name), budget);
+    const content = parseXml(parts.get("[Content_Types].xml"), "content types");
     requireXlsx(
       ![...content.getElementsByTagNameNS("*", "Override")].some((part) =>
         /macroEnabled/i.test(part.getAttribute("ContentType") ?? ""),
       ),
       "Macro-enabled Excel files are not supported",
     );
-    const workbook = parseXml(parts["xl/workbook.xml"], "workbook");
+    const workbook = parseXml(parts.get("xl/workbook.xml"), "workbook");
     const date1904 = elements(workbook, "workbookPr")[0]?.getAttribute("date1904");
     requireXlsx(
       date1904 !== "1" && date1904 !== "true",
       "Excel's 1904 date system is not supported",
     );
-    const relationships = parseXml(parts["xl/_rels/workbook.xml.rels"], "workbook relationships");
+    const relationships = parseXml(
+      parts.get("xl/_rels/workbook.xml.rels"),
+      "workbook relationships",
+    );
     const targets = new Map<string, string>();
     const relationshipIds = new Set<string>();
     for (const rel of relationships.getElementsByTagNameNS(PACKAGE_REL, "Relationship")) {
@@ -304,13 +371,13 @@ export function readXlsx(data: Uint8Array, options: { title: string }): Snapshot
       "Excel file must contain between 1 and 200 worksheets",
     );
     const needed = new Set(sheets.map((sheet) => targets.get(relationshipId(sheet)) as string));
-    const worksheets = unzipSync(data, { filter: (entry) => needed.has(entry.name) });
-    const strings = parts["xl/sharedStrings.xml"]
-      ? elements(parseXml(parts["xl/sharedStrings.xml"], "shared strings"), "si").map(richText)
+    const worksheets = extract(data, (name) => needed.has(name), budget);
+    const strings = parts.get("xl/sharedStrings.xml")
+      ? elements(parseXml(parts.get("xl/sharedStrings.xml"), "shared strings"), "si").map(richText)
       : [];
     const formats: (string | undefined)[] = [];
-    if (parts["xl/styles.xml"]) {
-      const styles = parseXml(parts["xl/styles.xml"], "styles");
+    if (parts.get("xl/styles.xml")) {
+      const styles = parseXml(parts.get("xl/styles.xml"), "styles");
       const codes = new Map(BUILTIN_FORMATS);
       for (const format of elements(styles, "numFmt"))
         codes.set(
@@ -332,19 +399,24 @@ export function readXlsx(data: Uint8Array, options: { title: string }): Snapshot
       sheets: {},
     } as IWorkbookData;
     let cells = 0;
+    let text = 0;
     let area = 0;
     for (const [i, sheet] of sheets.entries()) {
       const id = `sheet${i + 1}`;
       const path = targets.get(relationshipId(sheet)) as string;
       snapshot.sheetOrder.push(id);
       snapshot.sheets[id] = readSheet(
-        parseXml(worksheets[path], path),
+        parseXml(worksheets.get(path), path),
         id,
         sheet.getAttribute("name") ?? "Sheet",
         strings,
         formats,
         () => {
           requireXlsx(++cells <= LIMITS.cells, "Excel cell limit exceeded");
+        },
+        (length) => {
+          text += length;
+          requireXlsx(text <= LIMITS.text, "Excel text exceeds the size limit");
         },
       );
       area +=

@@ -103,12 +103,18 @@ it.each([
   await ui.unmount();
 });
 
-it.each(["broken.xlsx", "macro.xlsm"])("shows an Excel failure toast for %s", async (name) => {
+it.each([
+  ["broken.xlsx", "Couldn't read this Excel file. Choose a valid .xlsx file."],
+  ["macro.xlsm", "Couldn't import this Excel file"],
+  ["offline.xlsx", "Couldn't import this Excel file"],
+])("shows an Excel failure toast for %s", async (name, message) => {
+  if (name === "offline.xlsx")
+    vi.spyOn(mocks.service as WorkbookService, "createFromXlsx").mockRejectedValueOnce(
+      new Error("offline"),
+    );
   const ui = await mount(h(SheetsSidebar));
   await choose(new File(["invalid"], name));
-  await vi.waitFor(() =>
-    expect(mocks.toast.error).toHaveBeenCalledWith("Couldn't import this Excel file"),
-  );
+  await vi.waitFor(() => expect(mocks.toast.error).toHaveBeenCalledWith(message));
   expect(mocks.push).not.toHaveBeenCalled();
   await ui.unmount();
 });

@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useRef } from "react";
 import { encodeRef } from "@/lib/refs";
+import { XlsxImportError } from "../lib/xlsx/common";
 import { useWorkbookService } from "../state/service";
 
 export const workbookHref = (container: string) => `/sheets/s/${encodeRef(container)}`;
@@ -52,11 +53,14 @@ export function SheetsSidebar() {
                   csv: await file.text(),
                 });
             router.push(workbookHref(opened.container));
-          } catch {
+          } catch (error) {
+            // An Excel file's own problem (too large, macros, 1904 dates) says what's wrong.
             toast.error(
-              excel || /\.xlsm$/i.test(file.name)
-                ? "Couldn't import this Excel file"
-                : "Couldn't import this CSV",
+              error instanceof XlsxImportError
+                ? error.message
+                : excel || /\.xlsm$/i.test(file.name)
+                  ? "Couldn't import this Excel file"
+                  : "Couldn't import this CSV",
             );
           }
         }}

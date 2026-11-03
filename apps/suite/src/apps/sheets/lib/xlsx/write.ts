@@ -1,8 +1,84 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import type { ICellData, IStyleData, IWorkbookData } from "@univerjs/core";
+import type { ICellData, IStyleData, IWorkbookData, IWorksheetData } from "@univerjs/core";
 import { strToU8, zipSync } from "fflate";
 import type { Snapshot } from "../model/snapshot";
 import { cellRef, documentXml, MAIN, PACKAGE_REL, REL, sheetNames, xml } from "./common";
+
+interface SharedFormula {
+  readonly index: number;
+  readonly row: number;
+  readonly column: number;
+  readonly ref: string;
+  readonly text: string;
+}
+
+/**
+ * Univer stores a filled or copied formula once, on the first cell with an `si` id, and
+ * gives the other cells only the id. Excel's shared formulas work the same way when that
+ * cell is the top-left of the group, so those groups are written as shared formulas.
+ * Other groups keep only their cached values.
+ */
+function sharedFormulas(cellData: NonNullable<IWorksheetData["cellData"]>) {
+  const groups = new Map<
+    string,
+    {
+      row: number;
+      column: number;
+      text?: string;
+      lastRow: number;
+      lastColumn: number;
+      firstRow: number;
+      firstColumn: number;
+    }
+  >();
+  for (const [r, cells] of Object.entries(cellData))
+    for (const [c, cell] of Object.entries(cells ?? {}) as [string, ICellData | null][]) {
+      if (!cell?.si) continue;
+      const row = Number(r);
+      const column = Number(c);
+      const group = groups.get(cell.si) ?? {
+        row: -1,
+        column: -1,
+        firstRow: row,
+        firstColumn: column,
+        lastRow: row,
+        lastColumn: column,
+      };
+      group.firstRow = Math.min(group.firstRow, row);
+      group.firstColumn = Math.min(group.firstColumn, column);
+      group.lastRow = Math.max(group.lastRow, row);
+      group.lastColumn = Math.max(group.lastColumn, column);
+      if (cell.f && group.text === undefined) {
+        group.text = cell.f.replace(/^=/, "");
+        group.row = row;
+        group.column = column;
+      }
+      groups.set(cell.si, group);
+    }
+  const result = new Map<string, SharedFormula>();
+  for (const [id, group] of groups)
+    if (group.text && group.row === group.firstRow && group.column === group.firstColumn)
+      result.set(id, {
+        index: result.size,
+        row: group.row,
+        column: group.column,
+        ref: `${cellRef(group.row, group.column)}:${cellRef(group.lastRow, group.lastColumn)}`,
+        text: group.text,
+      });
+  return result;
+}
+
+/** Excel's sheet view for a Univer freeze: the frozen rows and columns start at its top-left cell. */
+function sheetView(freeze: IWorksheetData["freeze"] | undefined): string {
+  const ySplit = Math.max(0, freeze?.ySplit ?? 0);
+  const xSplit = Math.max(0, freeze?.xSplit ?? 0);
+  if (!freeze || (xSplit === 0 && ySplit === 0)) return '<sheetView workbookViewId="0"/>';
+  const top = ySplit > 0 ? Math.max(0, freeze.startRow - ySplit) : 0;
+  const left = xSplit > 0 ? Math.max(0, freeze.startColumn - xSplit) : 0;
+  const activePane =
+    ySplit > 0 && xSplit > 0 ? "bottomRight" : ySplit > 0 ? "bottomLeft" : "topRight";
+  return `<sheetView workbookViewId="0"${top || left ? ` topLeftCell="${cellRef(top, left)}"` : ""}><pane xSplit="${xSplit}" ySplit="${ySplit}" topLeftCell="${cellRef(top + ySplit, left + xSplit)}" activePane="${activePane}" state="frozen"/></sheetView>`;
+}
 
 /** Write the supported workbook subset without loading the spreadsheet engine. */
 export function writeXlsx(snapshot: Snapshot): Uint8Array {
@@ -29,17 +105,29 @@ export function writeXlsx(snapshot: Snapshot): Uint8Array {
     }
     return id;
   }
-  function cellXml(cell: ICellData, row: number, column: number): string {
+  function cellXml(
+    cell: ICellData,
+    row: number,
+    column: number,
+    shared: Map<string, SharedFormula>,
+  ): string {
     const style = styleId(cell);
-    const formula = cell.f ? `<f>${xml(cell.f.replace(/^=/, ""))}</f>` : "";
+    const group = cell.si ? shared.get(cell.si) : undefined;
+    let formula = "";
+    if (group && group.row === row && group.column === column)
+      formula = `<f t="shared" ref="${group.ref}" si="${group.index}">${xml(group.text)}</f>`;
+    else if (group) formula = `<f t="shared" si="${group.index}"/>`;
+    else if (cell.f) formula = `<f>${xml(cell.f.replace(/^=/, ""))}</f>`;
     let value = cell.v;
-    if (cell.p?.body) value = cell.p.body.dataStream.replace(/\r\n$/, "");
+    // Univer rich text ends with "\r\n" and separates paragraphs with "\r".
+    if (cell.p?.body) value = cell.p.body.dataStream.replace(/\r\n$/, "").replace(/\r/g, "\n");
     let type = "";
     let body = "";
     if (value != null) {
       if (cell.t === 3 || typeof value === "boolean") {
         type = ' t="b"';
-        body = `<v>${value === true || value === 1 || value === "1" ? 1 : 0}</v>`;
+        const truthy = value === true || value === 1 || /^(?:1|true)$/i.test(String(value));
+        body = `<v>${truthy ? 1 : 0}</v>`;
       } else if (typeof value === "number") body = `<v>${value}</v>`;
       else if (cell.t === 2 && String(value).trim() !== "" && Number.isFinite(Number(value)))
         body = `<v>${Number(value)}</v>`;
@@ -48,12 +136,14 @@ export function writeXlsx(snapshot: Snapshot): Uint8Array {
         body = `<v>${xml(String(value))}</v>`;
       } else {
         type = ' t="inlineStr"';
-        body = `<is><t xml:space="preserve">${xml(String(value))}</t></is>`;
+        // Excel's cell text limit.
+        body = `<is><t xml:space="preserve">${xml(String(value).slice(0, 32_767))}</t></is>`;
       }
     }
     return `<c r="${cellRef(row, column)}" s="${style}"${type}>${formula}${body}</c>`;
   }
   for (const [index, sheet] of sheets.entries()) {
+    const shared = sharedFormulas(sheet.cellData ?? {});
     const columns = Object.entries(sheet.columnData ?? {})
       .filter(([, col]) => col.w != null)
       .map(
@@ -71,7 +161,7 @@ export function writeXlsx(snapshot: Snapshot): Uint8Array {
         const height = sheet.rowData?.[Number(r)]?.h;
         const cells = Object.entries(sheet.cellData?.[Number(r)] ?? {})
           .sort(([a], [b]) => Number(a) - Number(b))
-          .map(([c, cell]) => cellXml(cell, Number(r), Number(c)))
+          .map(([c, cell]) => cellXml(cell, Number(r), Number(c), shared))
           .join("");
         return `<row r="${Number(r) + 1}"${height == null ? "" : ` ht="${(height * 72) / 96}" customHeight="1"`}>${cells}</row>`;
       })
@@ -82,14 +172,10 @@ export function writeXlsx(snapshot: Snapshot): Uint8Array {
           `<mergeCell ref="${cellRef(range.startRow, range.startColumn)}:${cellRef(range.endRow, range.endColumn)}"/>`,
       )
       .join("");
-    const freeze = sheet.freeze;
-    const pane =
-      freeze && (freeze.xSplit > 0 || freeze.ySplit > 0)
-        ? `<pane xSplit="${freeze.xSplit}" ySplit="${freeze.ySplit}" topLeftCell="${cellRef(Math.max(freeze.ySplit, freeze.startRow), Math.max(freeze.xSplit, freeze.startColumn))}" state="frozen"/>`
-        : "";
+    const view = sheetView(sheet.freeze);
     put(
       `xl/worksheets/sheet${index + 1}.xml`,
-      `<worksheet xmlns="${MAIN}"><sheetViews><sheetView workbookViewId="0">${pane}</sheetView></sheetViews>${columns ? `<cols>${columns}</cols>` : ""}<sheetData>${rows}</sheetData>${merges ? `<mergeCells>${merges}</mergeCells>` : ""}</worksheet>`,
+      `<worksheet xmlns="${MAIN}"><sheetViews>${view}</sheetViews>${columns ? `<cols>${columns}</cols>` : ""}<sheetData>${rows}</sheetData>${merges ? `<mergeCells>${merges}</mergeCells>` : ""}</worksheet>`,
     );
   }
   put(

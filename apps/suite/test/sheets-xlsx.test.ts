@@ -84,7 +84,7 @@ describe("Excel supported data", () => {
           `${relationship()}<Relationship Id="r2" Type="${REL}/worksheet" Target="./worksheets/../worksheets/other.xml"/><Relationship Id="chart" Type="${REL}/chartsheet" Target="chartsheets/ignored.xml"/>`,
         ),
         "xl/worksheets/other.xml": worksheet(
-          '<sheetViews><sheetView><pane state="frozen" xSplit="2" ySplit="1" topLeftCell="D3"/></sheetView></sheetViews><cols><col min="1" max="2" width="12"/><col min="3" max="3"/></cols><sheetData><row r="1" ht="24"><c r="A1" t="inlineStr"><is><t>Hello &amp; &lt;world&gt;</t></is></c><c r="B1"><v>3.5</v></c></row><row r="3"/></sheetData><mergeCells><mergeCell ref="B2:D3"/></mergeCells>',
+          '<sheetViews><sheetView topLeftCell="B5"><pane state="frozen" xSplit="2" ySplit="1" topLeftCell="D9"/></sheetView></sheetViews><cols><col min="1" max="2" width="12"/><col min="3" max="3"/></cols><sheetData><row r="1" ht="24"><c r="A1" t="inlineStr"><is><t>Hello &amp; &lt;world&gt;</t></is></c><c r="B1"><v>3.5</v></c></row><row r="3"/></sheetData><mergeCells><mergeCell ref="B2:D3"/></mergeCells>',
         ),
       }),
     );
@@ -94,7 +94,8 @@ describe("Excel supported data", () => {
     expect(result.sheets.sheet1).toMatchObject({
       rowCount: 3,
       columnCount: 4,
-      freeze: { xSplit: 2, ySplit: 1, startRow: 2, startColumn: 3 },
+      // Rows 5 and columns B:C are frozen; the pane's own topLeftCell is only a scroll position.
+      freeze: { xSplit: 2, ySplit: 1, startRow: 5, startColumn: 3 },
       rowData: { 0: { h: 32 } },
       columnData: { 0: { w: 89 }, 1: { w: 89 } },
       mergeData: [{ startRow: 1, endRow: 2, startColumn: 1, endColumn: 3 }],
@@ -182,7 +183,7 @@ describe("Excel supported data", () => {
       sheet(
         '<sheetViews><sheetView><pane state="frozenSplit" ySplit="2"/></sheetView></sheetViews>',
       ).freeze,
-    ).toEqual({ xSplit: 0, ySplit: 2, startRow: 2, startColumn: 0 });
+    ).toEqual({ xSplit: 0, ySplit: 2, startRow: 2, startColumn: -1 });
     expect(sheet('<pane state="split"/>').freeze).toBeUndefined();
     expect(cell('<c r="A1" t="inlineStr"/>')).toEqual({ v: "", t: 1 });
     expect(cell('<c r="A1"><f>1+2</f><v/></c>')).toEqual({ f: "=1+2" });
@@ -506,32 +507,244 @@ function directoryEntries(
   }
   return bytes;
 }
-it("rejects ZIP bombs by entry size, total size, entry count and duplicate names", () => {
-  const oversized = directoryEntries(fixture({ huge: "x" }), (view, offset, name) => {
-    if (name === "huge") view.setUint32(offset + 24, LIMITS.entryBytes + 1, true);
-  });
-  expect(() => read(oversized)).toThrow("uncompressed size");
-  const compressed = directoryEntries(fixture({ huge: "x" }), (view, offset, name) => {
-    if (name === "huge") view.setUint32(offset + 20, LIMITS.entryBytes + 1, true);
-  });
-  expect(() => read(compressed)).toThrow("uncompressed size");
-  const total = directoryEntries(
-    fixture(Object.fromEntries(Array.from({ length: 6 }, (_, i) => [`ignored${i}`, "x"]))),
-    (view, offset, name) => {
-      if (name.startsWith("ignored")) view.setUint32(offset + 24, LIMITS.entryBytes, true);
-    },
-  );
-  expect(() => read(total)).toThrow("uncompressed size");
+// Rewrite a local file header field, which the streaming reader trusts for layout only.
+function localEntries(
+  bytes: Uint8Array,
+  update: (view: DataView, offset: number, name: string) => void,
+) {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  for (let i = 0; i < bytes.length - 30; i++) {
+    if (view.getUint32(i, true) !== 0x04034b50) continue;
+    const length = view.getUint16(i + 26, true);
+    update(view, i, strFromU8(bytes.subarray(i + 30, i + 30 + length)));
+    i += 29 + length;
+  }
+  return bytes;
+}
+it("counts inflated bytes against the size limits, whatever sizes the ZIP declares", () => {
+  const { entryBytes, totalBytes } = LIMITS;
+  LIMITS.entryBytes = 1000;
+  LIMITS.totalBytes = 1500;
+  try {
+    const understated = (bytes: Uint8Array) =>
+      directoryEntries(
+        localEntries(bytes, (view, offset) => view.setUint32(offset + 22, 10, true)),
+        (view, offset) => view.setUint32(offset + 24, 10, true),
+      );
+    // One highly compressible part inflates past the entry limit.
+    expect(() =>
+      read(understated(fixture({ "xl/worksheets/data.xml": worksheet(" ".repeat(5000)) }))),
+    ).toThrow("uncompressed size");
+    // Parts within the entry limit add up past the total, across both extraction passes.
+    expect(() =>
+      read(
+        understated(
+          fixture({
+            "xl/sharedStrings.xml": `<sst xmlns="${MAIN}">${" ".repeat(700)}</sst>`,
+            "xl/worksheets/data.xml": worksheet(" ".repeat(700)),
+          }),
+        ),
+      ),
+    ).toThrow("uncompressed size");
+    // Large parts that are never read don't count.
+    expect(read(fixture({ "xl/media/image1.png": "x".repeat(5000) })).sheetOrder).toEqual([
+      "sheet1",
+    ]);
+  } finally {
+    LIMITS.entryBytes = entryBytes;
+    LIMITS.totalBytes = totalBytes;
+  }
+});
+it("rejects too many ZIP entries and duplicate names", () => {
   expect(() =>
     read(fixture(Object.fromEntries(Array.from({ length: 1001 }, (_, i) => [`entry${i}`, ""])))),
   ).toThrow("Too many Excel ZIP entries");
+  const rename = (view: DataView, offset: number, name: string, at: number) => {
+    if (name === "extra2") view.setUint8(offset + at + 5, "1".charCodeAt(0));
+  };
   const duplicate = directoryEntries(
-    fixture({ extra1: "a", extra2: "b" }),
-    (view, offset, name) => {
-      if (name === "extra2") view.setUint8(offset + 46 + 5, "1".charCodeAt(0));
-    },
+    localEntries(fixture({ extra1: "a", extra2: "b" }), (view, offset, name) =>
+      rename(view, offset, name, 30),
+    ),
+    (view, offset, name) => rename(view, offset, name, 46),
   );
   expect(() => read(duplicate)).toThrow("Duplicate Excel ZIP entry");
+});
+
+it("exports filled formulas as Excel shared formulas when the first cell holds the formula", () => {
+  const result = {
+    sheetOrder: ["a"],
+    sheets: {
+      a: {
+        name: "A",
+        cellData: {
+          0: { 1: { f: "=A1*2", si: "fill", v: 2, t: 2 }, 3: { si: "up", v: 1, t: 2 } },
+          1: { 1: { si: "fill", v: 4, t: 2 }, 3: { f: "=C2", si: "up", v: 1, t: 2 } },
+          2: { 1: { si: "fill", v: 6, t: 2 }, 2: { si: "orphan", v: 7, t: 2 } },
+          5: null,
+        },
+      },
+    },
+  } as unknown as Snapshot;
+  const xmlText = strFromU8(unzipSync(writeXlsx(result))["xl/worksheets/sheet1.xml"] as Uint8Array);
+  expect(xmlText).toContain(
+    '<c r="B1" s="0"><f t="shared" ref="B1:B3" si="0">A1*2</f><v>2</v></c>',
+  );
+  expect(xmlText).toContain('<c r="B3" s="0"><f t="shared" si="0"/><v>6</v></c>');
+  // A group whose formula isn't in its first cell, or has no formula, keeps its values.
+  expect(xmlText).toContain('<c r="D1" s="0"><v>1</v></c>');
+  expect(xmlText).toContain('<c r="D2" s="0"><f>C2</f><v>1</v></c>');
+  expect(xmlText).toContain('<c r="C3" s="0"><v>7</v></c>');
+});
+
+it("exports a freeze below scrolled rows and columns with the sheet view's top-left cell", () => {
+  const freeze = (value: unknown) =>
+    strFromU8(
+      unzipSync(
+        writeXlsx({
+          sheetOrder: ["a"],
+          sheets: { a: { name: "A", freeze: value } },
+        } as unknown as Snapshot),
+      )["xl/worksheets/sheet1.xml"] as Uint8Array,
+    );
+  expect(freeze({ xSplit: 1, ySplit: 2, startRow: 12, startColumn: 4 })).toContain(
+    '<sheetView workbookViewId="0" topLeftCell="D11"><pane xSplit="1" ySplit="2" topLeftCell="E13" activePane="bottomRight" state="frozen"/></sheetView>',
+  );
+  expect(freeze({ xSplit: 0, ySplit: 1, startRow: 1, startColumn: -1 })).toContain(
+    '<sheetView workbookViewId="0"><pane xSplit="0" ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView>',
+  );
+  expect(freeze({ xSplit: 2, ySplit: 0, startRow: -1, startColumn: 2 })).toContain(
+    'activePane="topRight"',
+  );
+  const round = read(
+    writeXlsx({
+      sheetOrder: ["a"],
+      sheets: { a: { name: "A", freeze: { xSplit: 1, ySplit: 2, startRow: 12, startColumn: 4 } } },
+    } as unknown as Snapshot),
+  );
+  expect(round.sheets.sheet1.freeze).toEqual({
+    xSplit: 1,
+    ySplit: 2,
+    startRow: 12,
+    startColumn: 4,
+  });
+});
+
+it("exports text booleans, rich-text paragraphs and over-long text the way Excel reads them", () => {
+  const data = read(
+    writeXlsx({
+      sheetOrder: ["a"],
+      sheets: {
+        a: {
+          name: "A",
+          cellData: {
+            0: {
+              0: { v: "TRUE", t: 3 },
+              1: { v: "no", t: 3 },
+              2: { p: { body: { dataStream: "one\rtwo\r\n" } } },
+              3: { v: "x".repeat(40_000) },
+            },
+          },
+        },
+      },
+    } as unknown as Snapshot),
+  );
+  const row = data.sheets.sheet1.cellData?.[0];
+  expect(row?.[0]).toEqual({ v: 1, t: 3 });
+  expect(row?.[1]).toEqual({ v: 0, t: 3 });
+  expect(row?.[2]).toEqual({ v: "one\ntwo", t: 1 });
+  expect(String(row?.[3]?.v)).toHaveLength(32_767);
+});
+
+it("strips Excel's future-function prefixes from imported formulas", () =>
+  expect(
+    cell('<c r="A1"><f>_xlfn.XLOOKUP(1,_xlws.FILTER(B:B,B:B&gt;0),C:C)</f><v>1</v></c>'),
+  ).toEqual({
+    v: 1,
+    t: 2,
+    f: "=XLOOKUP(1,FILTER(B:B,B:B>0),C:C)",
+  }));
+
+it("caps cell text counted per reference, merges and overlapping column ranges", () => {
+  const { text, merges } = LIMITS;
+  LIMITS.text = 10;
+  LIMITS.merges = 1;
+  try {
+    // One shared string referenced by many cells counts once per cell.
+    rejects(
+      {
+        "xl/sharedStrings.xml": `<sst xmlns="${MAIN}"><si><t>four</t></si></sst>`,
+        "xl/worksheets/data.xml": cellsXml(
+          '<c r="A1" t="s"><v>0</v></c><c r="B1" t="s"><v>0</v></c><c r="C1" t="s"><v>0</v></c>',
+        ),
+      },
+      "text exceeds",
+    );
+    rejects(
+      {
+        "xl/worksheets/data.xml": worksheet(
+          '<mergeCells><mergeCell ref="A1:B1"/><mergeCell ref="A2:B2"/></mergeCells>',
+        ),
+      },
+      "Too many merged",
+    );
+  } finally {
+    LIMITS.text = text;
+    LIMITS.merges = merges;
+  }
+  rejects(
+    {
+      "xl/worksheets/data.xml": worksheet(
+        '<cols><col min="1" max="16384" width="9"/><col min="3" max="3" width="9"/></cols>',
+      ),
+    },
+    "Overlapping Excel columns",
+  );
+});
+
+it("reads column-only freezes and rejects frozen panes past the sheet limits", () => {
+  expect(
+    sheet(
+      '<sheetViews><sheetView topLeftCell="C1"><pane state="frozen" xSplit="1"/></sheetView></sheetViews>',
+    ).freeze,
+  ).toEqual({ xSplit: 1, ySplit: 0, startRow: -1, startColumn: 3 });
+  rejects(
+    {
+      "xl/worksheets/data.xml": worksheet(
+        '<sheetViews><sheetView topLeftCell="A100000"><pane state="frozen" ySplit="5"/></sheetView></sheetViews>',
+      ),
+    },
+    "frozen pane",
+  );
+  rejects(
+    {
+      "xl/worksheets/data.xml": worksheet(
+        '<sheetViews><sheetView topLeftCell="XFD1"><pane state="frozen" xSplit="5"/></sheetView></sheetViews>',
+      ),
+    },
+    "frozen pane",
+  );
+});
+
+it("stops reading the parts after the first one over the limit", () => {
+  const { entryBytes } = LIMITS;
+  LIMITS.entryBytes = 40;
+  try {
+    expect(() => read()).toThrow("uncompressed size");
+  } finally {
+    LIMITS.entryBytes = entryBytes;
+  }
+});
+
+it("rejects a ZIP whose compressed data is corrupt", () => {
+  const bytes = fixture({ "xl/worksheets/data.xml": worksheet(" ".repeat(2000)) });
+  localEntries(bytes, (view, offset, name) => {
+    if (name !== "xl/worksheets/data.xml") return;
+    const start =
+      offset + 30 + view.getUint16(offset + 26, true) + view.getUint16(offset + 28, true);
+    for (let i = 0; i < 8; i++) view.setUint8(start + i, 0xff);
+  });
+  expect(() => read(bytes)).toThrow(XlsxImportError);
 });
 
 it("rejects an export with a missing sheet rather than silently dropping its data", () => {
