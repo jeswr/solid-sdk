@@ -108,6 +108,8 @@ async function labels() {
   return { inbox, home };
 }
 beforeEach(async () => {
+  // Some date labels read the real clock rather than useNow, so pin it to `now` too.
+  vi.useFakeTimers({ toFake: ["Date"], now });
   localStorage.clear();
   vi.stubGlobal("matchMedia", window.matchMedia);
   vi.stubGlobal("HTMLFormElement", window.HTMLFormElement);
@@ -117,6 +119,7 @@ beforeEach(async () => {
 });
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.useRealTimers();
 });
 
 describe("malformed external task timestamps", () => {
