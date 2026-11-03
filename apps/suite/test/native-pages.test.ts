@@ -19,8 +19,11 @@ it.each([
   ["../src/app/(suite)/money/a/[ref]/page.tsx", "ref"],
   ["../src/app/(suite)/photos/a/[ref]/page.tsx", "ref"],
   ["../src/app/(suite)/photos/p/[ref]/page.tsx", "ref"],
+  ["../src/app/(suite)/home/[domain]/page.tsx", "domain"],
+  ["../src/app/(suite)/home/[domain]/i/[ref]/page.tsx", ["domain", "ref"]],
+  ["../src/app/(suite)/permissions/a/[agentRef]/page.tsx", "agentRef"],
   ["../src/app/dev/components/[component]/page.tsx", "component"],
-])("keeps %s on demand on web and exports one native placeholder", (path, key) => {
+] as const)("keeps %s on demand on web and exports one native placeholder", (path, keys) => {
   const text = readFileSync(new URL(path, import.meta.url), "utf8");
   const source = ts.createSourceFile(path, text, ts.ScriptTarget.Latest, true);
   expect(text).not.toContain('"use client"');
@@ -45,7 +48,8 @@ it.each([
       exports: {},
       process: { env: { NEXT_PUBLIC_SUITE_TARGET: target } },
     });
-    expect(params).toEqual(target === "native" ? [{ [key]: "__" }] : []);
+    const placeholder = Object.fromEntries([keys].flat().map((key) => [key, "__"]));
+    expect(params).toEqual(target === "native" ? [placeholder] : []);
   }
 });
 

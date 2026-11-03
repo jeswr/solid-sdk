@@ -51,3 +51,24 @@ export function httpIriOrUndefined(value: string | undefined): string | undefine
 export function isHttpIri(value: string | undefined): value is string {
   return value !== undefined && httpIriOrUndefined(value) === value;
 }
+
+/**
+ * True for a document URL that subject IRIs may be minted from: a canonical absolute
+ * http(s) URL ({@link isHttpIri}) with no fragment. A fragment would yield
+ * `…#frag#it`, and a non-canonical value could carry characters (`>`, spaces) that
+ * break out of an IRI in serialized Turtle.
+ */
+export function isResourceUrl(value: string | undefined): value is string {
+  return isHttpIri(value) && !value.includes("#");
+}
+
+/**
+ * Return `value` unchanged when {@link isResourceUrl} holds, else throw a
+ * `TypeError`. Every subject helper calls this before appending its fragment.
+ */
+export function assertResourceUrl(value: string): string {
+  if (!isResourceUrl(value)) {
+    throw new TypeError("resource URL must be a canonical absolute http(s) URL without a fragment");
+  }
+  return value;
+}

@@ -8,6 +8,7 @@ import type { ClientProvider } from "./ClientProvider.js";
 import type { CodeProvider } from "./CodeProvider.js";
 import { generateDPoPKey, withDPoPNonceRetry } from "./dpopNonce.js";
 import type { Identity } from "./Identity.js";
+import { IssuerNotAuthorizedError } from "./IssuerNotAuthorizedError.js";
 import { contextKey, withLock } from "./locks.js";
 import { ReactiveAuthenticationError } from "./ReactiveAuthenticationError.js";
 import { SessionFence } from "./SessionFence.js";
@@ -515,9 +516,7 @@ export class OidcSession {
     let webIdVerified = false;
     if (webId !== undefined && this.#options.verifyWebId === true) {
       if (!(await webIdTrustsIssuer(webId, claims.iss, signal, this.#options.http))) {
-        throw new ReactiveAuthenticationError(
-          `WebID profile ${webId.href} does not list issuer ${claims.iss}`,
-        );
+        throw new IssuerNotAuthorizedError(webId.href, claims.iss);
       }
       webIdVerified = true;
     }
