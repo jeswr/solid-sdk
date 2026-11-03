@@ -33,7 +33,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Hint } from "@/apps/docs/components/common";
 import { validLink } from "@/apps/docs/lib/editor/logic";
 import { buildDocument, parseDocument } from "@/apps/docs/lib/model/document";
@@ -44,10 +44,12 @@ import { PREFIXES } from "@/apps/docs/lib/model/vocab";
 import { encodeRef } from "@/lib/refs";
 import { notesExtensions } from "../editor/extensions";
 import type { StoredNote } from "../lib/model/store";
+import { checklistItems } from "../lib/ui/checklist";
 import { getPendingDrafts } from "../state/draft-registry";
 import { useNotesContext } from "../state/notes-context";
 import { useNoteDraft } from "../state/use-note-draft";
 import { ColourPicker, ConfirmDialog, LabelChips, LabelPicker } from "./controls";
+import { hasOpenItems, SendToTasksDialog } from "./send-to-tasks";
 
 export function NoteDialog({ note }: { note: StoredNote }) {
   const { store, refresh, session, prefs, pin, colour, closeNote, opener, move } =
@@ -65,6 +67,8 @@ export function NoteDialog({ note }: { note: StoredNote }) {
     new Map<string, { document: StoredDocument; title: string; body: string }>(),
   );
   const [confirmDocs, setConfirmDocs] = useState(false);
+  const [sendingTasks, setSendingTasks] = useState(false);
+  const checklist = useMemo(() => checklistItems(draft.body), [draft.body]);
   const [linkOpen, setLinkOpen] = useState(false);
   const [url, setUrl] = useState("");
   const [linkError, setLinkError] = useState(false);
@@ -403,6 +407,12 @@ export function NoteDialog({ note }: { note: StoredNote }) {
                   <FileText size={16} aria-hidden="true" />
                   Open in Docs
                 </Button>
+                {hasOpenItems(checklist) && (
+                  <Button variant="ghost" disabled={busy} onClick={() => setSendingTasks(true)}>
+                    <ListTodo size={16} aria-hidden="true" />
+                    Add to Tasks
+                  </Button>
+                )}
                 <Hint text="Sharing arrives with the suite shell">
                   <Button variant="ghost" disabled>
                     <Share2 size={16} aria-hidden="true" />
@@ -434,6 +444,14 @@ export function NoteDialog({ note }: { note: StoredNote }) {
           </div>
         </footer>
       </DialogContent>
+      {sendingTasks && (
+        <SendToTasksDialog
+          items={checklist}
+          noteKey={note.created ?? note.url}
+          session={session}
+          close={() => setSendingTasks(false)}
+        />
+      )}
       {confirmDocs && (
         <ConfirmDialog
           title="Open in Docs?"

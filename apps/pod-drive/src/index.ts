@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 //
 // Public barrel for @jeswr/pod-drive — the non-throwaway data-layer core.
@@ -10,7 +11,9 @@
 
 export {
   type ContainerListing,
+  createDriveStore,
   DriveAccessError,
+  type DriveEntry,
   type ListOptions,
   listContainer,
 } from "./drive.js";

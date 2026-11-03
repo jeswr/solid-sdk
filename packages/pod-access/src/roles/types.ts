@@ -37,6 +37,12 @@ export interface RoleModes {
 }
 /** Mapping context; WAC is the default. */
 export interface RoleContext {
+  /**
+   * The access model. For role mapping it selects the dialect (WAC by default). Given to a
+   * function that reads or writes access documents, it pins the model: a resource whose detected
+   * model differs is refused with an `unsupported` RoleError before anything is written.
+   * Leave it unset to work with whichever model the resource uses.
+   */
   model?: "wac" | "acp";
   commentsContainer?: string;
   /** Trusted dialect, default CSS: resource Control; ESS: own-ACR Read+Write; NSS: WAC defaultForNew. */

@@ -3,6 +3,7 @@
 // AUTHORED-BY Codex GPT-6
 import Capacitor
 import UIKit
+import WebKit
 
 /// The suite shell: registers the local plugins and puts the bridge behind the origin guard.
 class MainViewController: CAPBridgeViewController {
@@ -12,6 +13,26 @@ class MainViewController: CAPBridgeViewController {
     // WKWebView.navigationDelegate is weak too; retain the forwarding proxy alongside KVO.
     private var navigationGuard: SecureStoreNavigationGuard?
     private var navigationObserver: SecureStoreNavigationObserver?
+
+    /// Bundled mode (MOB-P3 E4): SuiteSchemeHandler takes over the local scheme, wrapping
+    /// Capacitor's handler for device files. It refuses to start without a valid route manifest.
+    override open func webViewConfiguration(for instanceConfiguration: InstanceConfiguration) -> WKWebViewConfiguration {
+        let base = super.webViewConfiguration(for: instanceConfiguration)
+        guard SuiteOrigin.isBundled(serverURL: instanceConfiguration.serverURL,
+                                    localURL: instanceConfiguration.localURL) else {
+            return base
+        }
+        let root = instanceConfiguration.appLocation
+        guard let data = try? Data(contentsOf: root.appendingPathComponent("route-manifest.json")),
+              let resolver = try? RouteResolver(manifest: data) else {
+            fatalError("Bundled mode needs public/route-manifest.json")
+        }
+        let config = SuiteBundledWebViewConfiguration.adopting(base)
+        config.wrapLocalHandler = { capacitor in
+            SuiteSchemeHandler(capacitor: capacitor, resolver: resolver, root: root)
+        }
+        return config
+    }
 
     override open func capacitorDidLoad() {
         // The protocol hides the delegation handler; the concrete bridge exposes it.
@@ -27,8 +48,8 @@ class MainViewController: CAPBridgeViewController {
         bridge.registerPluginInstance(secureStore)
         // Takes over the "Share" name from @capacitor/share so only staged files can be shared.
         bridge.registerPluginInstance(SuiteSharePlugin())
-        guard let allowed = SuiteOrigin(url: bridge.config.serverURL) else {
-            fatalError("server.url must be the https suite origin")
+        guard let allowed = SuiteOrigin.app(serverURL: bridge.config.serverURL, localURL: bridge.config.localURL) else {
+            fatalError("server.url must be the https suite origin, or unset for bundled mode")
         }
         let handler = bridge.webViewDelegationHandler
         let controller = handler.contentController
