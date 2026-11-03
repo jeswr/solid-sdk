@@ -42,7 +42,10 @@ describe("browser auth singleton", () => {
     );
     expect(config.redirectUri).toBe(`${origin}/callback.html`);
     expect(config.allowInsecureLoopback).toBe(loopback);
-    expect(config.boundary).toBeUndefined();
+    // Default automatic boundary, extended only to the pod server's own account and notification APIs.
+    expect(config.boundary).toEqual({
+      storageEndpoints: ["/account/domains", "/account/domains/", "/.notifications/"],
+    });
     expect(globalThis.fetch).toBe(original);
     await expect(config.ui.getWebId()).rejects.toThrow();
     await expect(

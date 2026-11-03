@@ -75,7 +75,9 @@ or copy them into the project.
 
 Use the shared core exclusively. `src/lib/pod-auth.ts` constructs one browser singleton with
 an HTTPS `/clientid.jsonld` client ID, `/callback.html` redirect and the default automatic
-credential boundary. Only development builds on loopback use dynamic registration and allow
+credential boundary, extended by `boundary.storageEndpoints` to the pod server's own
+`/account/domains` and `/.notifications/` APIs (they share the storage's grant). Add a server API
+there, never as a static root. Only development builds on loopback use dynamic registration and allow
 loopback HTTP. Read [the package skill](../../packages/pod-auth/SKILL.md) for its API and policy.
 
 `SessionProvider` restores once across StrictMode replay, fences stale operations, loads public
@@ -87,7 +89,9 @@ addresses with `resolveLoginTarget`, pristine `publicFetch` and a 15-second abor
 Never patch global fetch or call `registerGlobally`. Every Pod read/write receives `podFetch`
 from `useSession()` explicitly, including stores, ACLs, notifications and forms. Source APIs use
 `sourceFetch`; public discovery uses `publicFetch` with `credentials: "omit"`. Pod binary previews
-and linked Pod artwork use object URLs loaded with `podFetch` and revoked on cleanup.
+and linked Pod artwork use object URLs loaded with `podFetch` and revoked on cleanup. Object URLs
+run on the app origin, so pass every pod blob through `inertBlob` (`src/lib/viewers.ts`): only
+raster images, audio, video and PDF keep their type.
 
 The click handler opens the popup synchronously. `ui.getCode` only navigates that existing window,
 returns the complete callback URL and honors abort. Always decline `prompt=none` and requests
