@@ -714,3 +714,18 @@ test("an endpoint inside another verified storage uses that storage's grant", as
   expect((await auth.fetch("https://pod.example/svc/hook")).status).toBe(200);
   expect(op.stats.tokens).toBe(3);
 });
+
+test("an endpoint inside a fixed root uses that root's grant", async () => {
+  const op = createMockOp({ protectedUrls: ["https://pod.example/.notifications/"] });
+  vi.stubGlobal("fetch", op.fetch);
+  const auth = createPodAuth({
+    clientId: op.clientId,
+    redirectUri: op.redirectUri,
+    boundary: { roots: ["https://pod.example/"], storageEndpoints: ["/.notifications/"] },
+    ui: { getWebId: vi.fn(async () => op.webId!), getCode: vi.fn(op.getCode) },
+  });
+  await auth.login({ webId: op.webId! });
+  expect(op.stats.tokens).toBe(1);
+  expect((await auth.fetch("https://pod.example/.notifications/ws")).status).toBe(200);
+  expect(op.stats.tokens).toBe(1);
+});

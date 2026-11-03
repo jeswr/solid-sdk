@@ -181,9 +181,10 @@ export function createBoundary(
           )
             continue;
           add(next, endpoint);
-          // Use the grant of the storage that contains the endpoint, else the first on its origin.
+          // Use the grant of the root (verified or fixed) that contains the endpoint, else the
+          // first verified storage on its origin.
           const owner =
-            verified
+            [...verified, ...fixed.entries]
               .filter((storage) => storage.endsWith("/") && isWithin(new URL(endpoint), storage))
               .sort((a, b) => b.length - a.length)[0] ?? root;
           if (next.entries.includes(endpoint)) nextEndpoints.set(endpoint, owner);
