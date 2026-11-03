@@ -110,7 +110,7 @@ function useTasksValue(session: PodSession) {
             projectsContainer: cache.isOwnProject(project.url) ? cache.store.projects : undefined,
             ensurePrivate: (url, owner) => ensurePrivateTasksAccess(session, url, owner),
             syncMembers: async (webId, granted) => {
-              if (!(await cache.syncProjectMember(project, webId, granted)))
+              if (!(await cache.syncProjectMember(project, webId, granted, { silent: true })))
                 throw new Error("Couldn't update project members");
             },
           });

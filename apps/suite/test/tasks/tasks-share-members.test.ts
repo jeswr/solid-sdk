@@ -30,7 +30,10 @@ describe("sharing membership mutation queue", () => {
     if (!first || !second) throw new Error("Missing task");
     const listing = vi.spyOn(store, "listTasks");
     await other.syncProjectMember(inbox, bob, false);
-    expect(listing).toHaveBeenCalledWith(inbox.tracker.stateStore, { strict: true });
+    expect(listing).toHaveBeenCalledWith(inbox.tracker.stateStore, {
+      strict: true,
+      skipInvalid: true,
+    });
     expect((await store.readTask(first.url)).task.assignee).toBeUndefined();
     expect((await store.readTask(second.url)).task.assignee).toBe(webId);
     expect((await store.readProject(inbox.url)).tracker.groupMembers).toEqual([webId]);
@@ -79,15 +82,14 @@ describe("sharing membership mutation queue", () => {
     pod.seed(stray, await serialize(new Store()));
     const task = await cache.createTask(inbox, { title: "Assigned", assignee: bob });
     if (!task) throw new Error("Missing task");
-    expect(await cache.syncProjectMember(inbox, bob, false)).toBeUndefined();
-    expect(failures.mock.calls.at(-1)?.[0].cause).toMatchObject({
-      message: "Expected a wf:Task.",
-    });
-    expect((await store.readProject(inbox.url)).tracker.groupMembers).toContain(bob);
-    pod.files.delete(stray);
     expect(await cache.syncProjectMember(inbox, bob, false)).toBeDefined();
     expect((await store.readTask(task.url)).task.assignee).toBeUndefined();
     expect((await store.readProject(inbox.url)).tracker.groupMembers).not.toContain(bob);
+    expect(pod.files.has(stray)).toBe(true);
+    expect(pod.requests.some((request) => request.url === stray && request.method === "PUT")).toBe(
+      false,
+    );
+    expect(failures).not.toHaveBeenCalled();
   });
   it("waits for queued assignments before the strict fresh removal listing", async () => {
     const { cache, inbox, store, pod } = await frameCache();
@@ -114,6 +116,21 @@ describe("sharing membership mutation queue", () => {
     await assign;
     await removal;
     expect((await store.readTask(task.url)).task.assignee).toBeUndefined();
+  });
+  it.each([412, 503])("still fails removal on a real task write error (%s)", async (status) => {
+    const { cache, inbox, store, pod, failures } = await frameCache();
+    await cache.syncProjectMember(inbox, bob, true);
+    const task = await cache.createTask(inbox, { title: "Assigned", assignee: bob });
+    if (!task) throw new Error("Missing task");
+    pod.intercept = (request) =>
+      request.method === "PUT" && request.url === task.url
+        ? new Response(null, { status })
+        : undefined;
+    expect(await cache.syncProjectMember(inbox, bob, false)).toBeUndefined();
+    expect(failures).toHaveBeenCalledOnce();
+    expect(failures.mock.calls[0]?.[0].cause).toMatchObject({ status });
+    expect((await store.readProject(inbox.url)).tracker.groupMembers).toContain(bob);
+    expect((await store.readTask(task.url)).task.assignee).toBe(bob);
   });
   it("removes a folder ACL before deleting its folder, with a fresh validator", async () => {
     const { store, pod } = await frameCache();

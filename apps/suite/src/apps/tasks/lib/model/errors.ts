@@ -73,3 +73,12 @@ export class ProjectMembersSyncError extends Error {
     this.name = "ProjectMembersSyncError";
   }
 }
+
+export class InboxAclRecoveryError extends ModelError {
+  constructor(url: string, cause: unknown) {
+    super(403, url, null, { cause });
+    this.name = "InboxAclRecoveryError";
+    this.message =
+      "Can't restore private access to your Inbox. Check its permissions and try again.";
+  }
+}

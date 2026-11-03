@@ -14,6 +14,8 @@ export interface SharingState {
   general: { mode: "restricted" | "link" | "signed-in"; role?: "viewer" | "commenter" | "editor" };
   canManage: boolean;
   readOnly?: "forbidden" | "offline";
+  /** Access is available even while the application's derived member list needs repair. */
+  warning?: "members-sync";
 }
 export interface ShareCapabilities {
   publicLinks: boolean;

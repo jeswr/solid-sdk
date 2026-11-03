@@ -69,6 +69,8 @@ export class TasksSharingAdapter implements SharingAdapter {
   private readonly io: RdfIO;
   private readonly tracker: WacSharingAdapter;
   private tail: Promise<unknown> = Promise.resolve();
+  // A failed write may still commit after its recovery read. Only an explicit action may widen.
+  private unconfirmedChange = false;
   constructor(private readonly options: Options) {
     this.fetch = refuseRedirects(options.fetch);
     this.io = new RdfIO(this.fetch);
@@ -131,13 +133,16 @@ export class TasksSharingAdapter implements SharingAdapter {
     return pending;
   }
   load(url: string, signal: AbortSignal): Promise<SharingState> {
-    return this.enqueue(() => this.readState(url, signal, "all"));
+    return this.enqueue(() =>
+      this.readState(url, signal, this.unconfirmedChange ? "narrow" : "all", false, true),
+    );
   }
   private async readState(
     url: string,
     signal: AbortSignal,
     reconcile: Reconcile,
     forceFolderWrite = false,
+    warnOnMembersFailure = false,
   ): Promise<SharingState> {
     this.validate(url);
     try {
@@ -168,14 +173,22 @@ export class TasksSharingAdapter implements SharingAdapter {
       } else this.state(url, acl);
       const state = await this.tracker.load(url, signal);
       if (reconcile !== "none" && state.canManage && !state.readOnly) {
-        await this.reconcile(
-          state,
-          folder,
-          tracker.groupMembers,
-          signal,
-          reconcile,
-          forceFolderWrite,
-        );
+        try {
+          await this.reconcile(
+            state,
+            folder,
+            tracker.groupMembers,
+            signal,
+            reconcile,
+            forceFolderWrite,
+          );
+        } catch (error) {
+          if (
+            !(warnOnMembersFailure && error instanceof ShareError && error.code === "members-sync")
+          )
+            throw error;
+          return { ...state, warning: "members-sync" };
+        }
       }
       return state;
     } catch (error) {
@@ -305,6 +318,7 @@ export class TasksSharingAdapter implements SharingAdapter {
       this.requireFolderControl(existing, before);
       // Intersect *all* principals so a pre-existing mismatch cannot survive a failed tracker write.
       const lower = this.intersect(before.people, existing.people, next);
+      this.unconfirmedChange = true;
       try {
         await this.io.write(
           `${folderUrl}.acl`,
@@ -314,6 +328,7 @@ export class TasksSharingAdapter implements SharingAdapter {
         await this.tracker.setPerson(url, webId, role, opts);
         const confirmed = await this.readState(url, signal, "all", true);
         if (!confirmed.canManage || confirmed.readOnly) throw new ShareError("forbidden");
+        this.unconfirmedChange = false;
       } catch (error) {
         // A lost tracker response may still have committed. Re-read before syncing members;
         // leave any failed recovery for the next load, while preserving the original error.

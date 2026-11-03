@@ -2,7 +2,7 @@
 import { AclResource, Authorization } from "@solid/object";
 import { DataFactory, Parser, Store, Writer } from "n3";
 import { describe, expect, it, vi } from "vitest";
-import { NS, node } from "../../src/apps/tasks/lib/model/rdf";
+import { NS, node, serialize } from "../../src/apps/tasks/lib/model/rdf";
 import { TaskStore } from "../../src/apps/tasks/lib/model/store";
 import {
   TasksSharingAdapter,
@@ -27,7 +27,8 @@ async function fixture() {
   });
   const project = await store.createProject("Home");
   const notice = vi.fn();
-  const cache = new TasksCache(store, vi.fn(), owner, notice);
+  const failures = vi.fn();
+  const cache = new TasksCache(store, failures, owner, notice);
   await cache.start();
   await cache.loadTasks(project);
   const folder = project.tracker.stateStore as string;
@@ -41,7 +42,7 @@ async function fixture() {
   };
   const ensurePrivate = vi.fn(async (_url: string, _owner: string) => true);
   const syncMembers = vi.fn(async (webId: string, granted: boolean) => {
-    if (!(await cache.syncProjectMember(project, webId, granted)))
+    if (!(await cache.syncProjectMember(project, webId, granted, { silent: true })))
       throw new Error("Members sync failed");
   });
   const options = {
@@ -79,6 +80,7 @@ async function fixture() {
     syncMembers,
     cache,
     notice,
+    failures,
     intercept: (next: typeof intercept) => {
       intercept = next;
     },
@@ -88,6 +90,92 @@ const puts = (f: Awaited<ReturnType<typeof fixture>>) =>
   f.requests.filter((request) => request.init.method === "PUT");
 
 describe("Tasks named sharing", () => {
+  it("revokes an editor despite stray non-task and invalid-task Turtle documents", async () => {
+    const f = await fixture();
+    await f.adapter.setPerson(f.project.url, bob, "editor");
+    const task = await f.cache.createTask(f.project, { title: "Assigned", assignee: bob });
+    const keep = await f.cache.createTask(f.project, { title: "Keep", assignee: owner });
+    if (!task || !keep) throw new Error("Missing tasks");
+    const stray = `${f.folder}stray.ttl`;
+    const invalid = `${f.folder}invalid.ttl`;
+    for (const [url, dataset] of [
+      [stray, new Store()],
+      [invalid, new Store()],
+    ] as const) {
+      // A wf:Task with no title is invalid too, even when assigned to the revoked editor.
+      if (url === invalid) {
+        const value = node(`${url}#it`, dataset);
+        value.types.add(`${NS.WF}Task`);
+        value.setIri(`${NS.WF}assignee`, bob);
+      }
+      await f.pod.fetch(url, {
+        method: "PUT",
+        headers: { "Content-Type": "text/turtle", "If-None-Match": "*" },
+        body: await serialize(dataset),
+      });
+    }
+    f.requests.length = 0;
+    await f.adapter.setPerson(f.project.url, bob, null);
+    expect((await f.load()).people.some((person) => person.webId === bob)).toBe(false);
+    expect((await f.store.readProject(f.project.url)).tracker.groupMembers).not.toContain(bob);
+    expect((await f.store.readTask(task.url)).task.assignee).toBeUndefined();
+    expect((await f.store.readTask(keep.url)).task.assignee).toBe(owner);
+    expect(f.failures).not.toHaveBeenCalled();
+    expect(f.notice).not.toHaveBeenCalled();
+    expect(puts(f).every((request) => request.url !== stray && request.url !== invalid)).toBe(true);
+  });
+
+  it("returns access with one inline warning on repeated load sync failures, then clears it", async () => {
+    const f = await fixture();
+    await f.adapter.setPerson(f.project.url, bob, "editor");
+    await installAcl(f, f.project.url, [{ webId: owner, owner: true }]);
+    const update = vi.spyOn(f.store, "updateProject").mockRejectedValue(new Error("Unavailable"));
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const state = await f.load();
+      expect(state).toMatchObject({
+        people: [{ webId: owner, role: "owner" }],
+        canManage: true,
+        warning: "members-sync",
+      });
+    }
+    expect(f.failures).not.toHaveBeenCalled();
+    expect(f.notice).not.toHaveBeenCalled();
+    update.mockRestore();
+    expect((await f.load()).warning).toBeUndefined();
+    expect((await f.store.readProject(f.project.url)).tracker.groupMembers).not.toContain(bob);
+  });
+
+  it("never widens after a failed revoke that commits after the recovery read", async () => {
+    const f = await fixture();
+    await f.adapter.setPerson(f.project.url, bob, "editor");
+    let delayed: (() => Promise<Response>) | undefined;
+    f.intercept((url, init) => {
+      if (url === `${f.project.url}.acl` && init.method === "PUT" && !delayed) {
+        delayed = () => f.pod.fetch(url, init);
+        throw new Error("Lost response while PUT remains in flight");
+      }
+    });
+    await expect(f.adapter.setPerson(f.project.url, bob, null)).rejects.toBeDefined();
+    let committed = false;
+    let trackerReads = 0;
+    f.intercept(async (url, init) => {
+      if (url === `${f.project.url}.acl` && init.method !== "PUT" && ++trackerReads === 2) {
+        // Capture the load's access snapshot before the delayed revoke commits.
+        const response = await f.pod.fetch(url, init);
+        committed = true;
+        if (!delayed) throw new Error("Missing delayed revoke");
+        expect((await delayed()).ok).toBe(true);
+        return response;
+      }
+    });
+    f.requests.length = 0;
+    await f.load();
+    expect(committed).toBe(true);
+    expect((await f.grants(f.project.url)).some((grant) => grant.agents.includes(bob))).toBe(false);
+    expect((await f.grants(f.folder)).some((grant) => grant.agents.includes(bob))).toBe(false);
+    expect(puts(f).filter((request) => request.url === `${f.folder}.acl`)).toHaveLength(0);
+  });
+
   it("reconciles members and assignments after a committed tracker revoke loses its response", async () => {
     const f = await fixture();
     await f.adapter.setPerson(f.project.url, bob, "editor");
@@ -104,11 +192,11 @@ describe("Tasks named sharing", () => {
     await expect(f.adapter.setPerson(f.project.url, bob, null)).rejects.toBeDefined();
     expect((await f.store.readProject(f.project.url)).tracker.groupMembers).not.toContain(bob);
     expect((await f.store.readTask(task.url)).task.assignee).toBeUndefined();
-    expect(f.notice).toHaveBeenCalledExactlyOnceWith("Unassigned 1 tasks");
+    expect(f.notice).not.toHaveBeenCalled();
     expect((await f.grants(f.folder)).some((grant) => grant.agents.includes(bob))).toBe(false);
     f.intercept(undefined);
     await f.load();
-    expect(f.notice).toHaveBeenCalledOnce();
+    expect(f.notice).not.toHaveBeenCalled();
   });
 
   it("syncs a committed grant even when folder widening returns 412, then repairs on load", async () => {
@@ -159,7 +247,7 @@ describe("Tasks named sharing", () => {
     expect((await f.grants(f.folder)).some((grant) => grant.agents.includes(bob))).toBe(false);
     expect((await f.store.readProject(f.project.url)).tracker.groupMembers).not.toContain(bob);
     expect((await f.store.readTask(task.url)).task.assignee).toBeUndefined();
-    expect(f.notice).toHaveBeenCalledExactlyOnceWith("Unassigned 1 tasks");
+    expect(f.notice).not.toHaveBeenCalled();
   });
 
   it("never grants another tracker owner's folder Control during narrowing", async () => {
@@ -260,7 +348,7 @@ describe("Tasks named sharing", () => {
     await f.load();
     expect((await f.store.readTask(task.url)).task.assignee).toBeUndefined();
     expect((await f.store.readProject(f.project.url)).tracker.groupMembers).not.toContain(bob);
-    expect(f.notice).toHaveBeenCalledExactlyOnceWith("Unassigned 1 tasks");
+    expect(f.notice).not.toHaveBeenCalled();
   });
 
   it("bootstraps only a verified private tracker, conditionally", async () => {

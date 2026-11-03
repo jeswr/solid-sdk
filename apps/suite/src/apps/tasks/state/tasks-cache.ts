@@ -1546,8 +1546,13 @@ export class TasksCache {
       );
     return attempt();
   }
-  /** Strict fresh reads and conditional writes share the task mutation queue, including Retry. */
-  syncProjectMember(project: StoredProject, webId: string, granted: boolean) {
+  /** Fresh reads and conditional writes share the task mutation queue, including Retry. */
+  syncProjectMember(
+    project: StoredProject,
+    webId: string,
+    granted: boolean,
+    { silent = false } = {},
+  ) {
     const unassigned = new Set<string>();
     const restored = new Set<string>();
     let byMember = this.removedAssignments.get(project.url);
@@ -1571,7 +1576,7 @@ export class TasksCache {
           const folder = requireProjectFolder(project.url, current.tracker.stateStore, projects);
           const confirmed: StoredTask[] = [];
           if (!granted) {
-            const items = await this.store.listTasks(folder, { strict: true });
+            const items = await this.store.listTasks(folder, { strict: true, skipInvalid: true });
             for (const item of items) {
               if (item.task.assignee !== webId) {
                 confirmed.push(item);
@@ -1630,8 +1635,10 @@ export class TasksCache {
               : await this.store.updateProject(current, (tracker) =>
                   tracker.setGroupMembers([...members]),
                 );
-          if (unassigned.size) this.onNotice(`Unassigned ${unassigned.size} tasks`);
-          if (restored.size) this.onNotice(`Restored ${restored.size} assignments`);
+          if (!silent) {
+            if (unassigned.size) this.onNotice(`Unassigned ${unassigned.size} tasks`);
+            if (restored.size) this.onNotice(`Restored ${restored.size} assignments`);
+          }
           unassigned.clear();
           restored.clear();
           return {
@@ -1647,7 +1654,10 @@ export class TasksCache {
           void attempt();
         },
         [project.url],
-        (error, retry) => this.onFailure(new ProjectMembersSyncError(error), retry),
+        (error, retry) => {
+          // ShareDialog owns feedback for its actions and background reconciliation.
+          if (!silent) this.onFailure(new ProjectMembersSyncError(error), retry);
+        },
       );
     return attempt();
   }

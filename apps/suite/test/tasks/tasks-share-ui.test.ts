@@ -381,3 +381,40 @@ it("shows saved-access member-sync copy without a contradictory success toast", 
   expect(toast.success).not.toHaveBeenCalled();
   expect(toast.error).not.toHaveBeenCalled();
 });
+
+it("keeps the dialog usable with one member-sync warning across repeated opens", async () => {
+  const f = await frameCache();
+  cache = f.cache;
+  const home = await cache.createProject("Home");
+  if (!home) throw new Error("Missing project");
+  ref = encodeRef(home.url);
+  path = `/tasks/p/${ref}`;
+  const load = adapter.load.bind(adapter);
+  vi.spyOn(adapter, "load").mockImplementation(async (...args) => ({
+    ...(await load(...args)),
+    warning: "members-sync",
+  }));
+  const { host } = await mount(h(TasksApp, null, "Project"));
+  for (let attempt = 0; attempt < 2; attempt++) {
+    await click(button("Share", host.querySelector("header") as HTMLElement));
+    await act(async () => {
+      await vi.waitFor(() => {
+        const dialog = document.querySelector('[role="dialog"]');
+        expect(dialog?.querySelectorAll('[role="alert"]')).toHaveLength(1);
+        expect(dialog?.querySelector('[role="alert"]')?.textContent).toBe(
+          new ShareError("members-sync").message,
+        );
+        expect(dialog?.querySelector<HTMLInputElement>('input[role="combobox"]')?.disabled).toBe(
+          false,
+        );
+      });
+    });
+    expect(document.querySelector('[role="dialog"]')?.textContent).not.toContain(
+      "Can't load sharing",
+    );
+    await click(button("Done", document.querySelector('[role="dialog"]') as HTMLElement));
+  }
+  expect(toast).not.toHaveBeenCalled();
+  expect(toast.success).not.toHaveBeenCalled();
+  expect(toast.error).not.toHaveBeenCalled();
+});

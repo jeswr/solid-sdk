@@ -174,6 +174,7 @@ function SharingContent({
   }, [adapter, url, attempt]);
   const readOnly = !online || state?.readOnly || !state?.canManage;
   const disabled = !!readOnly || !!saving;
+  const warning = state?.warning ? new ShareError(state.warning).message : "";
   const roles = shareRoleOptions(kind, caps, !!state?.canManage, adapter.supportsCommenter);
   const generalAllowed = generalAccessOptions(caps).some(
     (option) => option.value === state?.general.mode && !option.disabled,
@@ -308,7 +309,7 @@ function SharingContent({
           </Description>
         </div>
       </header>
-      {error && <p role="alert">{error}</p>}
+      {(error || warning) && <p role="alert">{error || warning}</p>}
       {!state ? (
         error ? (
           <Button variant="outline" onClick={() => setAttempt((value) => value + 1)}>

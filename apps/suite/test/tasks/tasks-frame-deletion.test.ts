@@ -1,8 +1,11 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+
+import { AclResource } from "@solid/object";
 import { describe, expect, it } from "vitest";
-import { ModelError } from "../../src/apps/tasks/lib/model/errors";
-import { NS, node, Store, serialize } from "../../src/apps/tasks/lib/model/rdf";
-import { Pod } from "./pod";
+import { InboxAclRecoveryError } from "../../src/apps/tasks/lib/model/errors";
+import { DataFactory, NS, node, Store, serialize } from "../../src/apps/tasks/lib/model/rdf";
+import { TaskStore } from "../../src/apps/tasks/lib/model/store";
+import { Pod, storage, webId } from "./pod";
 import { frameStore } from "./tasks-frame-fixtures";
 
 describe("project deletion boundaries and recovery", () => {
@@ -41,6 +44,8 @@ describe("project deletion boundaries and recovery", () => {
     const home = await store.createProject("Home");
     await store.deleteProject(home);
     pod.seed(`${home.url}.acl`, await serialize(new Store()));
+    const folder = home.tracker.stateStore as string;
+    pod.seed(`${folder}.acl`, await serialize(new Store()));
     pod.intercept = (request) =>
       request.url === `${home.url}.acl` && request.method === "GET"
         ? new Response(null, { status: 503 })
@@ -50,12 +55,13 @@ describe("project deletion boundaries and recovery", () => {
     await frameStore(pod).deleteProject(home);
     await frameStore(pod).deleteProject(home);
     expect(pod.files.has(`${home.url}.acl`)).toBe(false);
+    expect(pod.files.has(`${folder}.acl`)).toBe(false);
   });
 
   it.each([
     "tracker",
     "folder",
-  ])("refuses to create a project over a stale %s ACL", async (kind) => {
+  ])("skips the slug with a stale %s ACL without adopting its grants", async (kind) => {
     const pod = new Pod();
     const store = frameStore(pod);
     await store.bootstrapInbox();
@@ -64,12 +70,96 @@ describe("project deletion boundaries and recovery", () => {
     const acl = `${kind === "tracker" ? url : folder}.acl`;
     pod.seed(acl, await serialize(new Store()));
     pod.requests.length = 0;
-    const error = await store.createProject("Home").catch((error: unknown) => error);
-    expect(error).toBeInstanceOf(ModelError);
-    expect(error).toMatchObject({ status: 409, url: acl });
+    const created = await store.createProject("Home");
+    expect(created.url).toBe(`${store.projects}home-2.ttl`);
     expect(pod.files.has(url)).toBe(false);
     expect(pod.files.has(folder)).toBe(false);
     expect(pod.files.has(acl)).toBe(true);
+    expect(pod.requests.some((request) => request.url === acl && request.method !== "GET")).toBe(
+      false,
+    );
+  });
+
+  it("keeps a reserved slug fenced when an ACL appears before Retry", async () => {
+    const pod = new Pod();
+    const store = frameStore(pod);
+    await store.bootstrapInbox();
+    const acl = `${store.projects}home.ttl.acl`;
+    pod.seed(acl, await serialize(new Store()));
+    await expect(
+      store.createProject("Home", false, {
+        owner: "reserved",
+        reservation: { name: "home", dataset: new Store() },
+      }),
+    ).rejects.toMatchObject({ status: 409, url: acl });
+    expect(pod.files.has(`${store.projects}home-2.ttl`)).toBe(false);
+  });
+
+  it.each([
+    "tracker",
+    "folder",
+  ])("conditionally replaces a stale Inbox %s ACL after verifying private access", async (kind) => {
+    const pod = new Pod();
+    const store = frameStore(pod);
+    const url = `${store.projects}inbox${kind === "tracker" ? ".ttl" : "/"}`;
+    const acl = `${url}.acl`;
+    if (kind === "folder") await pod.emptyContainer(url);
+    pod.seed(acl, await serialize(new Store()));
+    const inbox = await store.bootstrapInbox();
+    expect(inbox.tracker.title).toBe("Inbox");
+    const rules = [...new AclResource(await pod.dataset(acl), DataFactory).authorizations];
+    expect(rules).toHaveLength(1);
+    const rule = rules[0];
+    if (!rule) throw new Error("Missing Inbox owner policy");
+    expect([...rule.agent]).toEqual([webId]);
+    expect([...rule.mode].sort()).toEqual(
+      ["Control", "Read", "Write"].map((mode) => `http://www.w3.org/ns/auth/acl#${mode}`),
+    );
+    expect(rule.accessTo).toBe(url);
+    expect(rule.default).toBe(kind === "folder" ? url : undefined);
+    expect(pod.privatePolicies.has(url)).toBe(true);
+    expect(
+      pod.requests
+        .find((request) => request.url === acl && request.method === "PUT")
+        ?.headers.get("If-Match"),
+    ).toBe('"1"');
+  });
+
+  it("fails closed with a clear typed error when stale Inbox ACL privacy cannot be verified", async () => {
+    const pod = new Pod();
+    const inbox = `${storage}tasks/projects/inbox.ttl`;
+    const acl = `${inbox}.acl`;
+    pod.seed(acl, await serialize(new Store()));
+    const store = new TaskStore({
+      storage,
+      webId,
+      fetch: pod.fetch,
+      typeIndex: false,
+      ensurePrivateTasksAccess: async (url) => url !== inbox,
+    });
+    const error = await store.bootstrapInbox().catch((cause: unknown) => cause);
+    expect(error).toBeInstanceOf(InboxAclRecoveryError);
+    expect(error).toMatchObject({
+      status: 403,
+      url: inbox,
+      message: "Can't restore private access to your Inbox. Check its permissions and try again.",
+    });
+    expect(pod.files.get(acl)?.version).toBe(1);
+    expect(pod.files.has(inbox)).toBe(false);
+  });
+
+  it.each([
+    412, 503,
+  ])("preserves the stale Inbox ACL when its conditional replacement fails (%s)", async (status) => {
+    const pod = new Pod();
+    const store = frameStore(pod);
+    const acl = `${store.projects}inbox.ttl.acl`;
+    pod.seed(acl, await serialize(new Store()));
+    pod.intercept = (request) =>
+      request.url === acl && request.method === "PUT" ? new Response(null, { status }) : undefined;
+    await expect(store.bootstrapInbox()).rejects.toMatchObject({ status, url: acl });
+    expect(pod.files.get(acl)?.version).toBe(1);
+    expect(pod.files.has(`${store.projects}inbox.ttl`)).toBe(false);
   });
 
   it("rejects a Home member redirected to a Work task before deleting anything", async () => {
