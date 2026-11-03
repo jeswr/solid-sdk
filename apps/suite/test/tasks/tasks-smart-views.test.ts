@@ -108,6 +108,8 @@ async function labels() {
   return { inbox, home };
 }
 beforeEach(async () => {
+  // The composer reads the wall clock for relative due labels; pin it to the views' clock.
+  vi.useFakeTimers({ toFake: ["Date"], now });
   localStorage.clear();
   vi.stubGlobal("matchMedia", window.matchMedia);
   vi.stubGlobal("HTMLFormElement", window.HTMLFormElement);
@@ -116,6 +118,7 @@ beforeEach(async () => {
   ({ cache, pod } = await frameCache());
 });
 afterEach(() => {
+  vi.useRealTimers();
   vi.restoreAllMocks();
 });
 
