@@ -11,8 +11,18 @@ import { exampleRecords } from "@jeswr/agent-model/testing";
 import { serialize } from "@jeswr/rdf-serialize";
 import { type KeyPair, publishVerificationMethod } from "@jeswr/solid-vc";
 import { Store } from "n3";
-import type { DemoSeedFile } from "../../../lib/demo-pod/pod";
 import { AGENT, metadataNode, PROV, RDF } from "./paths";
+
+/**
+ * Structurally the demo pod's DemoSeedFile. Declared here because the native build stages the
+ * app without src/lib/demo-pod, and this module must still type-check there.
+ */
+interface DemoSeedFile {
+  readonly path: string;
+  readonly body: Uint8Array | string;
+  readonly contentType: string;
+  readonly modified?: number;
+}
 
 const ROOT = "https://alice.demo.pod/";
 const BASE = `${ROOT}agent/`;

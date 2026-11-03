@@ -243,6 +243,7 @@ it("refreshes on the storage-root focus notice, on its own writes, and quietly o
   let invalidate: ((url: string, quiet?: boolean) => void) | undefined;
   let reads = 0;
   let failNext = false;
+  let slow = false;
   const seen: string[] = [];
   function Probe() {
     const { client } = useAgentWorkspace();
@@ -252,6 +253,8 @@ it("refreshes on the storage-root focus notice, on its own writes, and quietly o
         failNext = false;
         throw new Error("transient");
       }
+      // A slow read lets the loading state render before the data arrives.
+      if (slow) await new Promise((resolve) => setTimeout(resolve, 30));
       return ++reads;
     });
     seen.push(current.status);
@@ -289,6 +292,16 @@ it("refreshes on the storage-root focus notice, on its own writes, and quietly o
     await new Promise((resolve) => setTimeout(resolve, 50));
   });
   expect(current).toMatchObject({ status: "ready", data: 4 });
+  // A loud notice keeps its loading state even if a quiet poll lands inside the debounce.
+  seen.length = 0;
+  slow = true;
+  await act(() => {
+    invalidate?.(DEMO_ROOT);
+    invalidate?.(`${BASE}control/`, true);
+  });
+  await eventually(() => current?.status === "ready" && current.data === 5);
+  expect(seen).toContain("loading");
+  slow = false;
   // A quiet poll never fans out: a notice for something inside the key is ignored.
   await act(() => invalidate?.(`${BASE}control/heartbeat.ttl`, true));
   // A sibling container's notice leaves the query alone.
@@ -296,7 +309,7 @@ it("refreshes on the storage-root focus notice, on its own writes, and quietly o
   await act(async () => {
     await new Promise((resolve) => setTimeout(resolve, 200));
   });
-  expect(current).toMatchObject({ status: "ready", data: 4 });
+  expect(current).toMatchObject({ status: "ready", data: 5 });
   await view.unmount();
 });
 it("polls daemon status on an interval without a pod notice", async () => {
@@ -334,6 +347,11 @@ it("polls daemon status on an interval without a pod notice", async () => {
   await act(() => vi.advanceTimersByTime(STATUS_REFRESH_MS));
   await eventually(() => heartbeatReads() > before && status?.query.status === "ready");
   expect(statuses).not.toContain("loading");
+  // Showing the tab again polls at once.
+  const shown = heartbeatReads();
+  await act(() => document.dispatchEvent(new Event("visibilitychange")));
+  await eventually(() => heartbeatReads() > shown);
+  visibility.mockRestore();
   await view.unmount();
 });
 it("announces only successful writes, whatever form the request takes", () => {

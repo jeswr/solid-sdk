@@ -140,10 +140,16 @@ export function AgentWorkspaceProvider({
   useEffect(() => {
     if (!pollClient) return;
     // One poller per workspace; it targets the status key only and skips hidden tabs.
-    const timer = setInterval(() => {
+    const poll = () => {
       if (document.visibilityState !== "hidden") bus.invalidate(pollClient.paths.control, true);
-    }, STATUS_REFRESH_MS);
-    return () => clearInterval(timer);
+    };
+    const timer = setInterval(poll, STATUS_REFRESH_MS);
+    // A tab shown again catches up at once instead of waiting for the next tick.
+    document.addEventListener("visibilitychange", poll);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", poll);
+    };
   }, [pollClient, bus]);
   if (state.status !== "ready") return fallback(state);
   if (state.data.session !== session) return fallback({ status: "loading", reload });
@@ -178,6 +184,7 @@ export function useAgentQuery<T>(
     let active = true;
     let generation = 0;
     let timer: ReturnType<typeof setTimeout>;
+    let pendingQuiet = true;
     // A quiet notice refreshes in place: ready data stays on screen until the new read settles.
     const run = (refresh = false) => {
       const request = ++generation;
@@ -208,7 +215,13 @@ export function useAgentQuery<T>(
       if (quiet ? url === key : noticeAffects(url, key)) {
         ++generation;
         clearTimeout(timer);
-        timer = setTimeout(() => run(quiet), 150);
+        // A pending loud refresh stays loud if a quiet poll lands inside its debounce.
+        pendingQuiet = pendingQuiet && quiet;
+        timer = setTimeout(() => {
+          const refresh = pendingQuiet;
+          pendingQuiet = true;
+          run(refresh);
+        }, 150);
       }
     };
     const unsubscribe = session.subscribe(notice);
