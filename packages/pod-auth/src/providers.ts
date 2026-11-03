@@ -594,6 +594,9 @@ export function createProviders(
     forget: async () => await provider.forget!(),
   });
   const manager = new ReactiveFetchManager({
+    ...(options.maxReplayBodyBytes === undefined
+      ? {}
+      : { maxReplayBodyBytes: options.maxReplayBodyBytes }),
     providers: [
       observe(solidProvider, "solid-oidc", true),
       observe(umaProvider, "solid-oidc"),

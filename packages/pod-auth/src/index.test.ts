@@ -620,3 +620,40 @@ test("a storage endpoint maps to the first storage on its origin, and eligible()
   expect((await auth.fetch("https://pod.example/blocked")).status).toBe(401);
   expect(op.stats.tokens).toBe(1);
 });
+
+test("a verified storage that matches an endpoint path stays a storage, and option mutation adds nothing", async () => {
+  const api = "https://pod.example/api/";
+  const op = createMockOp({
+    storages: ["https://pod.example/alice/", api],
+    protectedUrls: ["https://pod.example/later"],
+  });
+  vi.stubGlobal("fetch", op.fetch);
+  const storageEndpoints = ["/api/", "/fixed/"];
+  const auth = createPodAuth({
+    clientId: op.clientId,
+    redirectUri: op.redirectUri,
+    boundary: { roots: ["https://pod.example/fixed/"], storageEndpoints },
+    ui: { getWebId: vi.fn(async () => op.webId!), getCode: vi.fn(op.getCode) },
+  });
+  storageEndpoints.push("/later");
+  expect((await auth.login({ webId: op.webId! })).storages).toEqual([
+    "https://pod.example/fixed/",
+    op.root,
+    api,
+  ]);
+  expect((await auth.fetch("https://pod.example/later")).status).toBe(401);
+});
+
+test("maxReplayBodyBytes bounds the buffered request body and is validated", async () => {
+  const { op, options } = fixture();
+  const auth = createPodAuth({ ...options, maxReplayBodyBytes: 2 });
+  await auth.login({ webId: op.webId });
+  await expect(auth.fetch(op.root + "upload", { method: "PUT", body: "abc" })).rejects.toThrow(
+    "exceeds 2 bytes",
+  );
+  expect((await auth.fetch(op.root + "upload", { method: "PUT", body: "ab" })).status).toBe(200);
+  for (const value of [-1, 1.5, Number.NaN, "1" as unknown as number])
+    expect(() => createPodAuth({ ...options, maxReplayBodyBytes: value })).toThrow(
+      "maxReplayBodyBytes",
+    );
+});
