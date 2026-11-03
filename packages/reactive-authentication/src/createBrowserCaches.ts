@@ -1,4 +1,5 @@
-import type { ClearableStore, ExpiringValue } from "@key-value-kit/core";
+// AUTHORED-BY Codex GPT-6.1-Sol
+import type { ClearableStore, ExpiringValue, KeyValueStore } from "@key-value-kit/core";
 import { withExpiry } from "@key-value-kit/core";
 import { createIndexedDbStore } from "@key-value-kit/storage/indexeddb";
 import { createMemoryStore } from "@key-value-kit/storage/memory";
@@ -28,6 +29,9 @@ export interface BrowserCacheOptions {
    * with a refresh grant. Access and ID tokens stay in memory. @defaultValue false
    */
   readonly persistSessions?: boolean;
+
+  /** Decorate the durable fence store, for example to classify storage failures for session policy. */
+  readonly wrapFenceStore?: (store: KeyValueStore<number>) => KeyValueStore<number>;
 }
 
 /**
@@ -41,12 +45,16 @@ export function createBrowserCaches(
   options: BrowserCacheOptions | number = {},
 ): ProviderCaches {
   if (namespace.length === 0) throw new TypeError("A cache namespace is required");
-  const { metadataMaxAgeMs = 60 * 60 * 1000, persistSessions = false } =
-    typeof options === "number" ? { metadataMaxAgeMs: options } : options;
+  const {
+    metadataMaxAgeMs = 60 * 60 * 1000,
+    persistSessions = false,
+    wrapFenceStore,
+  } = typeof options === "number" ? { metadataMaxAgeMs: options } : options;
   const expiring = <T extends {}>(name: string): ClearableStore<T> =>
     withExpiry(createIndexedDbStore<ExpiringValue<T>>({ namespace: `${namespace}:v2:${name}` }), {
       ttlMs: metadataMaxAgeMs,
     });
+  const fenceStore = createIndexedDbStore<number>({ namespace: `${namespace}:v2:fence` });
 
   return {
     issuer: expiring<string>("issuer"),
@@ -62,7 +70,7 @@ export function createBrowserCaches(
         }
       : {}),
     fence: new SessionFence(namespace, {
-      store: createIndexedDbStore<number>({ namespace: `${namespace}:v2:fence` }),
+      store: wrapFenceStore === undefined ? fenceStore : wrapFenceStore(fenceStore),
     }),
   };
 }

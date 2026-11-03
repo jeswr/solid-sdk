@@ -166,9 +166,17 @@ test("fenced caches clear non-clearable stores and reject stale values", async (
   fence.close();
   assert.throws(() => new SessionFence(""), /namespace/);
   vi.stubGlobal("navigator", undefined);
+  assert.equal(await withLock("node-fallback", async () => 1), 1);
+  const nodeProcess = globalThis.process;
+  for (const browserProcess of [undefined, {}, { versions: {} }]) {
+    vi.stubGlobal("process", browserProcess);
+    const result = withLock("no-locks", async () => 1);
+    vi.stubGlobal("process", nodeProcess);
+    await assert.rejects(result, /Web Locks/);
+  }
   await assert.rejects(
-    withLock("no-locks", async () => 1),
-    /Web Locks/,
+    withLock("aborted", async () => 1, { signal: AbortSignal.abort() }),
+    { name: "AbortError" },
   );
   assert.notEqual(await contextKey("k", [undefined]), await contextKey("k", ["-"]));
 });

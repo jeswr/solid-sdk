@@ -17,6 +17,103 @@ const factories = [
   { protocol: "lws", create: createLwsBackend },
 ] as const;
 
+describe.each(factories)("$protocol observation revalidation", ({ create, protocol }) => {
+  test("keeps request headers local and forwards them on every listing page", async () => {
+    const requests: Request[] = [];
+    const storage = create({
+      root: ROOT,
+      fetch: async (input, init) => {
+        const request = new Request(input, init);
+        requests.push(request);
+        if (request.method === "HEAD") return new Response(null);
+        if (protocol === "solid")
+          return new Response("", { headers: { "content-type": "text/turtle" } });
+        return Response.json(
+          { type: "Container", items: [] },
+          {
+            headers: {
+              "content-type": "application/lws+json",
+              ...(request.url === ROOT ? { link: '<?page=2>; rel="next"' } : {}),
+            },
+          },
+        );
+      },
+    });
+    const headers = new Headers({
+      "x-warm-request": "crawl",
+      Accept: "invalid",
+      Range: "bytes=0-1",
+      "If-None-Match": "invalid",
+    });
+    await storage.head(NOTE, { headers });
+    await storage.read(NOTE, {
+      headers,
+      accept: "text/plain",
+      ifNoneMatch: '"v1"',
+      range: { start: 2, end: 3 },
+    });
+    await Array.fromAsync(storage.listAll(ROOT, { headers }));
+    for (const request of requests) expect(request.headers.get("x-warm-request")).toBe("crawl");
+    expect(requests[0]?.headers.get("accept")).toBe("*/*");
+    expect(requests[0]?.headers.has("range")).toBe(false);
+    expect(requests[0]?.headers.has("if-none-match")).toBe(false);
+    expect(requests[1]?.headers.get("accept")).toBe("text/plain");
+    expect(requests[1]?.headers.get("range")).toBe("bytes=2-3");
+    expect(requests[1]?.headers.get("if-none-match")).toBe('"v1"');
+    expect(requests.slice(2)).toHaveLength(protocol === "solid" ? 1 : 2);
+    for (const request of requests.slice(2)) {
+      expect(request.headers.get("accept")).toBe(
+        protocol === "solid" ? "text/turtle" : "application/lws+json, application/ld+json;q=0.5",
+      );
+      expect(request.headers.has("range")).toBe(false);
+      expect(request.headers.has("if-none-match")).toBe(false);
+    }
+    await storage.read(NOTE);
+    expect(requests.at(-1)?.headers.has("x-warm-request")).toBe(false);
+    expect(headers.get("accept")).toBe("invalid");
+  });
+
+  test.each([
+    undefined,
+    false,
+    true,
+  ])("forwards revalidate=%s to HEAD and every listing page", async (revalidate) => {
+    const signal = new AbortController().signal;
+    const fetch = vi.fn<AuthFetch>(async (input, init) => {
+      if (init?.method === "HEAD") return new Response(null);
+      if (protocol === "solid") {
+        return new Response("", { headers: { "content-type": "text/turtle" } });
+      }
+      const next = String(input) === ROOT;
+      return Response.json(
+        { type: "Container", items: [{ id: next ? "a" : "b", type: "DataResource" }] },
+        {
+          headers: {
+            "content-type": "application/lws+json",
+            ...(next ? { link: '<?page=2&opaque=a%2Fb>; rel="next"' } : {}),
+          },
+        },
+      );
+    });
+    const storage = create({ root: ROOT, fetch });
+    await storage.head(NOTE, { signal, revalidate });
+    await storage.list(ROOT, { signal, revalidate });
+    const entries = await Array.fromAsync(storage.listAll(ROOT, { signal, revalidate }));
+    expect(entries.map((entry) => entry.url)).toEqual(
+      protocol === "lws" ? [`${ROOT}a`, `${ROOT}b`] : [],
+    );
+    expect(fetch).toHaveBeenCalledTimes(protocol === "lws" ? 4 : 3);
+    for (const [, init] of fetch.mock.calls) {
+      expect(init?.cache).toBe(revalidate ? "no-cache" : undefined);
+      expect(init?.signal).toBe(signal);
+      expect(init?.redirect).toBe("manual");
+    }
+    if (protocol === "lws") {
+      expect(fetch.mock.calls.at(-1)?.[0]).toBe(`${ROOT}?page=2&opaque=a%2Fb`);
+    }
+  });
+});
+
 describe.each(factories)("$protocol request scope", ({ create, protocol }) => {
   test.each([
     "https://alice:SECRET@evil.example/",

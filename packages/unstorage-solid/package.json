@@ -18,14 +18,13 @@
     "LICENSE"
   ],
   "scripts": {
-    "build:deps": "node scripts/build-deps.mjs",
     "build": "node scripts/build-dist.mjs",
-    "build:dev": "npm run build:deps && tsc -p tsconfig.build.json",
-    "typecheck": "npm run build:deps && tsc -p tsconfig.json --noEmit",
+    "build:dev": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "biome check src test scripts",
     "lint:fix": "biome check --write src test scripts",
-    "test": "npm run build:deps && vitest run",
-    "test:coverage": "npm run build:deps && vitest run --coverage",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
     "api": "api-extractor run --local",
     "check:api": "api-extractor run",
     "publint": "publint",
@@ -60,6 +59,8 @@
   "dependencies": {
     "@jeswr/guarded-fetch": "workspace:*",
     "@jeswr/ldp-container": "workspace:*",
+    "@jeswr/pod-notifications": "workspace:*",
+    "@jeswr/storage-client": "workspace:*",
     "@rdfjs/types": "^2.0.1",
     "@rdfjs/wrapper": "^0.34.0",
     "content-type": "^1.0.5",
@@ -82,7 +83,7 @@
     "vitest": "^3.2.6"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=24"
   },
   "publishConfig": {
     "access": "public"

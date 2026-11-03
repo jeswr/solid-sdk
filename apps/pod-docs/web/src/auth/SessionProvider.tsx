@@ -70,7 +70,9 @@ import {
 import { appUrl } from "./app-url";
 import { authFlowHolder, getCodeThroughHolder, lazyElementGetCode } from "./auth-flow-holder";
 import { planAutologin } from "./autologin-plan";
+import { respectOmittedCredentials } from "./credential-free-fetch";
 import { assessLoginProbe } from "./login-result";
+import { isLoopbackOrigin } from "./loopback";
 import { readProfile } from "./profile";
 import { type DerivedSession, deriveSession } from "./session-derivation";
 import { decideSingleFlight } from "./single-flight";
@@ -116,15 +118,6 @@ export function useSession(): SessionContextValue {
   if (!ctx) throw new Error("useSession must be used inside <SessionProvider>");
   return ctx;
 }
-
-const isLoopbackOrigin = (origin: string): boolean => {
-  try {
-    const h = new URL(origin).hostname;
-    return h === "localhost" || h === "127.0.0.1" || h === "[::1]";
-  } catch {
-    return false;
-  }
-};
 
 /**
  * MODULE-LEVEL singleton for the auth runtime — the fix for the global-fetch
@@ -359,6 +352,7 @@ function getAuthRuntime(cfg: AuthRuntimeConfig): Promise<AuthRuntime> {
     // (see `establishSessionFor` / the doLogin probe / the logout teardown below).
     const fetchInstall = installProactiveAuthFetch();
     const profileFetch = fetchInstall.pristineFetch;
+    globalThis.fetch = respectOmittedCredentials(fetchInstall.fetch, profileFetch);
     // REGISTER the <authorization-code-flow> custom element. Its definition runs as a
     // module SIDE EFFECT of @solid/reactive-authentication (customElements.define in
     // AuthorizationCodeFlow.js). We adopted the proactive seam instead of the package's
