@@ -331,9 +331,10 @@ export function parseTask(resourceUrl: string, dataset: DatasetCore): TaskData |
   if (!tryRead(() => doc.isTask)) return undefined;
 
   // Pod data is untrusted. Every read is guarded so a malformed value (a literal where
-  // an IRI belongs, a wrong datatype) drops that value instead of aborting the parse,
-  // and every object-property IRI must use the http(s) scheme, so a `javascript:` or
-  // `data:` IRI never reaches a consumer. Accepted IRIs are returned exactly as stored
+  // an IRI belongs, a wrong datatype) drops that value instead of aborting the parse.
+  // IRI-valued fields are read object by object and keep only absolute http(s) IRIs, so
+  // a `javascript:` or `data:` IRI never reaches a consumer; a single-valued field takes
+  // the first such IRI, so a bad value ahead of a good one does not hide it. Accepted IRIs are returned exactly as stored
   // (not canonicalised), so foreign data round-trips and IRI comparisons still match.
   const data: TaskData = {
     title: tryRead(() => doc.title) ?? "",
@@ -347,9 +348,9 @@ export function parseTask(resourceUrl: string, dataset: DatasetCore): TaskData |
   setIfDefined(data, "created", validDate(tryRead(() => doc.created)));
   setIfDefined(data, "modified", validDate(tryRead(() => doc.modified)));
   setIfDefined(data, "endedAt", validDate(tryRead(() => doc.endedAt)));
-  setIfDefined(data, "creator", httpScheme(tryRead(() => doc.creator)));
-  setIfDefined(data, "assignee", httpScheme(tryRead(() => doc.assignee)));
-  setIfDefined(data, "project", httpScheme(tryRead(() => doc.project)));
+  setIfDefined(data, "creator", httpObjects(doc, dct("creator"))[0]);
+  setIfDefined(data, "assignee", httpObjects(doc, wf("assignee"))[0]);
+  setIfDefined(data, "project", httpObjects(doc, wf("tracker"))[0]);
   setIfDefined(data, "dueDate", validDate(tryRead(() => doc.dueDate)));
   setIfDefined(
     data,
@@ -357,12 +358,11 @@ export function parseTask(resourceUrl: string, dataset: DatasetCore): TaskData |
     tryRead(() => doc.priority),
   );
   setIfDefined(data, "rank", finite(tryRead(() => doc.rank)));
-  setIfDefined(data, "parent", httpScheme(tryRead(() => doc.parent)));
-  setIfDefined(data, "duplicateOf", httpScheme(tryRead(() => doc.duplicateOf)));
-  setIfDefined(data, "clonedFrom", httpScheme(tryRead(() => doc.clonedFrom)));
+  setIfDefined(data, "parent", httpObjects(doc, dct("isPartOf"))[0]);
+  setIfDefined(data, "duplicateOf", httpObjects(doc, dct("isReplacedBy"))[0]);
+  setIfDefined(data, "clonedFrom", httpObjects(doc, prov("wasDerivedFrom"))[0]);
 
-  // The two set-valued relations are read member by member (a literal or blank-node
-  // member drops alone) and omitted when empty (absence vs an empty array is
+  // The two set-valued relations keep every http(s) member and are omitted when empty (absence vs an empty array is
   // observable to consumers, so this is kept explicit).
   const blockedBy = httpObjects(doc, dct("requires"));
   const relatesTo = httpObjects(doc, dct("relation"));
@@ -390,9 +390,17 @@ function finite(value: number | undefined): number | undefined {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
 }
 
-/** `value` unchanged when it parses as an absolute http(s) URL, else `undefined`. */
-function httpScheme(value: string | undefined): string | undefined {
-  if (value === undefined) return undefined;
+/** Characters that cannot appear in an IRI (RFC 3987 excludes them; Turtle forbids them). */
+const NON_IRI_CHARS = /[\s<>"{}|\\^`]/;
+
+/**
+ * `value` unchanged when it is an absolute http(s) URL written with `//` and free of
+ * characters an IRI cannot contain, else `undefined`. The extra checks stop a value such
+ * as `https:foo` or one holding whitespace from passing because WHATWG URL parsing
+ * repairs it.
+ */
+function httpScheme(value: string): string | undefined {
+  if (!/^https?:\/\//i.test(value) || NON_IRI_CHARS.test(value)) return undefined;
   try {
     const { protocol } = new URL(value);
     return protocol === "http:" || protocol === "https:" ? value : undefined;

@@ -36,9 +36,11 @@ const task: TaskData | undefined = await parseTaskTtl(resourceUrl, turtle, "text
 Pod data is untrusted. `buildTask` drops object-property values that are not absolute
 http(s) IRIs, and `parseTask` applies the same scheme check on read: a `javascript:` or
 `data:` creator, assignee, project, parent, duplicate-of, cloned-from, blocked-by or
-relates-to IRI is left out. Accepted IRIs come back exactly as stored, not
+relates-to IRI is left out, as is any value with characters an IRI cannot contain or
+without the `//` after the scheme. Accepted IRIs come back exactly as stored, not
 canonicalised. A malformed value, such as a literal where an IRI belongs or an invalid
-date, drops only that value instead of aborting the parse.
+date, drops only that value instead of aborting the parse; a single-valued IRI field
+takes the first acceptable IRI among its values.
 
 ## Key API
 

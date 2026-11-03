@@ -277,4 +277,39 @@ describe("parseTask returns accepted IRIs as stored (sst-ild.7.9 review)", () =>
     expect(back?.blockedBy).toEqual(["https://ok.example/t#it"]);
     expect(back?.relatesTo).toEqual(["https://ok.example/r#it"]);
   });
+
+  it("takes the first http(s) IRI for a scalar, whatever precedes it", () => {
+    const back = parseTask(
+      URL_,
+      parseStore(`${Pre}
+        <${URL_}#it> a wf:Task, wf:Open ; dct:title "T" ;
+          wf:assignee "lit", <javascript:x>, <https://ok.example/me> ;
+          dct:creator [], <https://ok.example/c> .`),
+    );
+    expect(back?.assignee).toBe("https://ok.example/me");
+    expect(back?.creator).toBe("https://ok.example/c");
+  });
+
+  it("rejects values that only parse as http(s) after WHATWG URL repair", () => {
+    const { namedNode, quad } = DataFactory;
+    const it_ = namedNode(`${URL_}#it`);
+    const store = new Store([
+      quad(
+        it_,
+        namedNode("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"),
+        namedNode(TASK_CLASS),
+      ),
+      quad(it_, namedNode("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"), namedNode(WF_OPEN)),
+      quad(it_, namedNode(dct("title")), DataFactory.literal("T")),
+      quad(it_, namedNode(wf("assignee")), namedNode("https:foo")),
+      quad(it_, namedNode(dct("requires")), namedNode("https://a.example/x y")),
+      quad(it_, namedNode(dct("requires")), namedNode("https://a.example/<b>")),
+      quad(it_, namedNode(dct("relation")), namedNode("http:\t//evil.example/")),
+    ]);
+    const back = parseTask(URL_, store);
+    expect(back?.title).toBe("T");
+    expect(back?.assignee).toBeUndefined();
+    expect(back?.blockedBy).toBeUndefined();
+    expect(back?.relatesTo).toBeUndefined();
+  });
 });
