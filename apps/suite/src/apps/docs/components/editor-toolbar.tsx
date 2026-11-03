@@ -7,7 +7,11 @@ import {
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
+  IconButton,
   Kbd,
   Tooltip,
   TooltipContent,
@@ -15,11 +19,28 @@ import {
   TooltipTrigger,
 } from "@jeswr/suite-ui";
 import type { Editor } from "@tiptap/react";
-import { AlignLeft, MoreHorizontal } from "lucide-react";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import {
+  AlignLeft,
+  Highlighter,
+  IndentDecrease,
+  IndentIncrease,
+  ListFilter,
+  MoreHorizontal,
+  Palette,
+  PanelLeft,
+  Printer,
+} from "lucide-react";
+import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { EditorAction } from "../editor/actions";
+import { indentDocument } from "../editor/formatting";
 import { keyboardLabel } from "../lib/editor/logic";
+import { FONT_FAMILIES } from "../lib/editor/styles";
+import { SpacingItems, ZOOMS } from "./editor-menubar";
+import { ColourPopover, FontSelect, FontSizeControl } from "./formatting-controls";
 import { tableCommands } from "./table-actions";
+
+const OVERFLOW_FIRST = new Set(["Print", "Zoom"]);
+
 export function ToolButton({
   action,
   mac,
@@ -95,96 +116,322 @@ export function EditorToolbar({
   actions,
   mac,
   online,
+  zoom = 100,
+  setZoom = () => {},
+  print = () => {},
+  outline = true,
+  toggleOutline = () => {},
 }: {
   editor: Editor;
   actions: EditorAction[];
   mac: boolean;
   online: boolean;
+  zoom?: number;
+  setZoom?: (value: number) => void;
+  print?: () => void;
+  outline?: boolean;
+  toggleOutline?: () => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
-  const activeControl = useRef<HTMLElement | null>(null);
-  // A command chosen from the More menu returns the caret to the document, rather than
-  // the menu handing focus back to its trigger, so typing continues where it applied.
-  const chose = useRef<{ run: () => unknown; opensControl: boolean } | null>(null);
-  const choose =
-    (run: () => unknown, opensControl = false) =>
-    () => {
-      chose.current = { run, opensControl };
-      if (!opensControl) run();
-    };
-  const returnToDocument = (event: Event) => {
-    if (!chose.current) return;
-    const destination = chose.current;
-    chose.current = null;
-    event.preventDefault();
-    // Open controls after the menu's focus trap has gone. This includes the
-    // non-modal Find bar, whose autofocus must survive menu teardown.
-    if (destination.opensControl) {
-      destination.run();
-      return;
+  const active = useRef<HTMLElement | null>(null);
+  const pending = useRef<(() => void) | null>(null);
+  const [width, setWidth] = useState(0);
+  const [colour, setColour] = useState<"color" | "backgroundColor" | null>(null);
+  const choose = (run: () => void) => () => {
+    pending.current = run;
+  };
+  const afterClose = (event: Event) => {
+    const run = pending.current;
+    if (run) {
+      event.preventDefault();
+      pending.current = null;
+      run();
     }
-    if (document.querySelector('[role="dialog"], [role="alertdialog"]')) return;
-    editor.commands.focus();
   };
   const controls = () =>
-    Array.from(ref.current?.querySelectorAll<HTMLElement>("button, select") ?? []).filter(
-      (control) =>
-        !control.matches(":disabled") && (!control.closest(".docs-toolbar-undo") || !small),
+    Array.from(ref.current?.querySelectorAll<HTMLElement>("button,select,input") ?? []).filter(
+      (control) => !control.matches(":disabled"),
     );
-  const rove = (active: HTMLElement) => {
-    activeControl.current = active;
-    for (const control of ref.current?.querySelectorAll<HTMLElement>("button, select") ?? [])
-      control.tabIndex = control === active ? 0 : -1;
+  const rove = (target: HTMLElement) => {
+    active.current = target;
+    for (const control of controls()) control.tabIndex = control === target ? 0 : -1;
   };
-  // Resize and connectivity changes may remove or disable the previous Tab stop.
   useLayoutEffect(() => {
     const available = controls();
-    const active = activeControl.current;
-    const target = active && available.includes(active) ? active : available[0];
+    const target =
+      active.current && available.includes(active.current) ? active.current : available[0];
     if (target) rove(target);
   });
-  const [capacity, setCapacity] = useState(3);
-  const [small, setSmall] = useState(false);
-  const [wide, setWide] = useState(false);
   useEffect(() => {
-    if (!ref.current) return;
     const observer = new ResizeObserver(([entry]) => {
-      if (entry) {
-        const small = matchMedia("(max-width: 767px)").matches;
-        const wide = entry.contentRect.width >= 800;
-        const unit = matchMedia("(pointer: coarse)").matches ? 46 : 32;
-        setSmall(small);
-        setWide(wide);
-        setCapacity(
-          Math.max(
-            0,
-            Math.min(
-              11,
-              Math.floor((entry.contentRect.width - (small ? 170 : wide ? 300 : 230)) / unit),
-            ),
-          ),
-        );
-      }
+      if (entry) setWidth(entry.contentRect.width);
     });
-    observer.observe(ref.current);
+    if (ref.current) observer.observe(ref.current);
     return () => observer.disconnect();
   }, []);
-  const primary = actions.slice(0, 13);
-  const shown = new Set(primary.slice(2, capacity + 2).map((action) => action.label));
-  if (!small) {
-    shown.add("Undo");
-    shown.add("Redo");
-  }
+  const menuAction = (action: EditorAction) => (
+    <DropdownMenuItem
+      key={action.label}
+      disabled={!online && action.label === "Insert image"}
+      textValue={action.label}
+      onSelect={choose(() => {
+        action.run();
+        if (
+          !action.opensControl &&
+          !document.querySelector('[role="dialog"], [role="alertdialog"]')
+        )
+          editor.commands.focus();
+      })}
+    >
+      {action.label}
+      {action.keys && (
+        <>
+          {" "}
+          <Kbd>{keyboardLabel(action.keys, mac)}</Kbd>
+        </>
+      )}
+    </DropdownMenuItem>
+  );
+  const dropdown = (label: string, icon: typeof AlignLeft, items: ReactNode) => {
+    const Icon = icon;
+    return (
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <IconButton variant="ghost" size="icon-sm" label={label}>
+            <Icon aria-hidden="true" size={18} />
+          </IconButton>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent className="docs-editor-menu" onCloseAutoFocus={afterClose}>
+          {items}
+        </DropdownMenuContent>
+      </DropdownMenu>
+    );
+  };
   const align = actions.filter((action) =>
     ["Align left", "Align centre", "Align right", "Justify"].includes(action.label),
   );
-  const clear = actions.find((action) => action.label === "Clear formatting");
-  if (wide) {
-    align.forEach((action) => {
-      shown.add(action.label);
+  const groups: { label: string; width: number; control: ReactNode; overflow: ReactNode }[] = [];
+  const addAction = (label: string) => {
+    const action = actions.find((action) => action.label === label);
+    if (action)
+      groups.push({
+        label,
+        width: 34,
+        control: (
+          <ToolButton action={action} mac={mac} disabled={!online && label === "Insert image"} />
+        ),
+        overflow: menuAction(action),
+      });
+  };
+  addAction("Undo");
+  addAction("Redo");
+  groups.push({
+    label: "Print",
+    width: 34,
+    control: (
+      <IconButton variant="ghost" size="icon-sm" label="Print" onClick={print}>
+        <Printer aria-hidden="true" size={18} />
+      </IconButton>
+    ),
+    overflow: <DropdownMenuItem onSelect={choose(print)}>Print</DropdownMenuItem>,
+  });
+  groups.push({
+    label: "Zoom",
+    width: 72,
+    control: (
+      <select
+        aria-label="Zoom"
+        className="docs-block-select docs-zoom-select"
+        value={zoom}
+        onChange={(event) => setZoom(Number(event.target.value))}
+      >
+        {ZOOMS.map((value) => (
+          <option key={value} value={value}>
+            {value}%
+          </option>
+        ))}
+      </select>
+    ),
+    overflow: (
+      <DropdownMenuSub>
+        <DropdownMenuSubTrigger>Zoom</DropdownMenuSubTrigger>
+        <DropdownMenuSubContent>
+          {ZOOMS.map((value) => (
+            <DropdownMenuItem key={value} onSelect={choose(() => setZoom(value))}>
+              {value}%
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuSubContent>
+      </DropdownMenuSub>
+    ),
+  });
+  groups.push({
+    label: "Paragraph style",
+    width: 116,
+    control: <BlockSelect editor={editor} />,
+    overflow: (
+      <DropdownMenuSub>
+        <DropdownMenuSubTrigger>Paragraph style</DropdownMenuSubTrigger>
+        <DropdownMenuSubContent>
+          {actions
+            .filter((action) =>
+              [
+                "Normal text",
+                "Heading 1",
+                "Heading 2",
+                "Heading 3",
+                "Quote",
+                "Code block",
+              ].includes(action.label),
+            )
+            .map(menuAction)}
+        </DropdownMenuSubContent>
+      </DropdownMenuSub>
+    ),
+  });
+  groups.push({
+    label: "Font family",
+    width: 130,
+    control: <FontSelect editor={editor} />,
+    overflow: (
+      <DropdownMenuSub>
+        <DropdownMenuSubTrigger>Font family</DropdownMenuSubTrigger>
+        <DropdownMenuSubContent>
+          {FONT_FAMILIES.map((font) => (
+            <DropdownMenuItem
+              key={font.value}
+              onSelect={choose(() => {
+                editor.chain().focus().setFontFamily(font.value).run();
+              })}
+            >
+              {font.label}
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuSubContent>
+      </DropdownMenuSub>
+    ),
+  });
+  groups.push({
+    label: "Font size",
+    width: 100,
+    control: <FontSizeControl editor={editor} />,
+    overflow: (
+      <DropdownMenuSub>
+        <DropdownMenuSubTrigger>Font size</DropdownMenuSubTrigger>
+        <DropdownMenuSubContent>
+          <div className="docs-size-menu">
+            <FontSizeControl editor={editor} />
+          </div>
+          {[8, 10, 11, 12, 14, 18, 24, 36, 48, 72, 96].map((value) => (
+            <DropdownMenuItem
+              key={value}
+              onSelect={choose(() => {
+                editor.chain().focus().setFontSize(`${value}pt`).run();
+              })}
+            >
+              {value} pt
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuSubContent>
+      </DropdownMenuSub>
+    ),
+  });
+  ["Bold", "Italic", "Underline"].forEach(addAction);
+  for (const [kind, label, Icon] of [
+    ["color", "Text colour", Palette],
+    ["backgroundColor", "Highlight colour", Highlighter],
+  ] as const)
+    groups.push({
+      label,
+      width: 34,
+      control: (
+        <IconButton
+          variant="ghost"
+          size="icon-sm"
+          label={label}
+          aria-haspopup="dialog"
+          aria-expanded={colour === kind}
+          onClick={() => setColour(kind)}
+        >
+          <Icon aria-hidden="true" size={18} />
+        </IconButton>
+      ),
+      overflow: (
+        <DropdownMenuItem onSelect={choose(() => setColour(kind))}>{label}</DropdownMenuItem>
+      ),
     });
-    shown.add("Clear formatting");
+  addAction("Link");
+  addAction("Insert image");
+  groups.push({
+    label: "Text alignment",
+    width: 34,
+    control: dropdown("Text alignment", AlignLeft, align.map(menuAction)),
+    overflow: (
+      <DropdownMenuSub>
+        <DropdownMenuSubTrigger>Text alignment</DropdownMenuSubTrigger>
+        <DropdownMenuSubContent>{align.map(menuAction)}</DropdownMenuSubContent>
+      </DropdownMenuSub>
+    ),
+  });
+  groups.push({
+    label: "Line and paragraph spacing",
+    width: 34,
+    control: dropdown(
+      "Line and paragraph spacing",
+      ListFilter,
+      <SpacingItems editor={editor} choose={choose} />,
+    ),
+    overflow: (
+      <DropdownMenuSub>
+        <DropdownMenuSubTrigger>Line and paragraph spacing</DropdownMenuSubTrigger>
+        <DropdownMenuSubContent>
+          <SpacingItems editor={editor} choose={choose} />
+        </DropdownMenuSubContent>
+      </DropdownMenuSub>
+    ),
+  });
+  ["Checklist", "Bulleted list", "Numbered list"].forEach(addAction);
+  for (const [label, direction, Icon] of [
+    ["Decrease indent", -1, IndentDecrease],
+    ["Increase indent", 1, IndentIncrease],
+  ] as const) {
+    const run = () => {
+      indentDocument(editor, direction);
+    };
+    groups.push({
+      label,
+      width: 34,
+      control: (
+        <IconButton
+          variant="ghost"
+          size="icon-sm"
+          label={label}
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={run}
+        >
+          <Icon aria-hidden="true" size={18} />
+        </IconButton>
+      ),
+      overflow: <DropdownMenuItem onSelect={choose(run)}>{label}</DropdownMenuItem>,
+    });
   }
+  addAction("Clear formatting");
+  // Controls keep their order but leave for More by priority: print and zoom go first
+  // (phones pinch to zoom), so the Block type control stays on the bar on a phone.
+  const ranked = [
+    ...groups.filter((group) => !OVERFLOW_FIRST.has(group.label)),
+    ...groups.filter((group) => OVERFLOW_FIRST.has(group.label)),
+  ];
+  let used = 76;
+  // At the smallest widths the primary undo buttons still fit beside the overflow trigger.
+  const shown = new Set(ranked.slice(0, 2).map((group) => group.label));
+  for (const group of ranked) {
+    used += group.width;
+    if (used > width) break;
+    shown.add(group.label);
+  }
+  const visible = groups.filter((group) => shown.has(group.label));
+  const hidden = groups.filter((group) => !shown.has(group.label));
   return (
     <div
       ref={ref}
@@ -192,7 +439,7 @@ export function EditorToolbar({
       role="toolbar"
       aria-label="Formatting"
       onFocusCapture={(event) => {
-        const control = (event.target as HTMLElement).closest<HTMLElement>("button, select");
+        const control = (event.target as HTMLElement).closest<HTMLElement>("button,select,input");
         if (control && controls().includes(control)) rove(control);
       }}
       onKeyDown={(event) => {
@@ -200,12 +447,13 @@ export function EditorToolbar({
           !["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key) ||
           event.altKey ||
           event.ctrlKey ||
-          event.metaKey
+          event.metaKey ||
+          (event.target as HTMLElement).tagName === "INPUT"
         )
           return;
         const available = controls();
         const index = available.indexOf(event.target as HTMLElement);
-        if (index < 0) return; // Portalled menus own their keyboard interaction.
+        if (index < 0) return;
         event.preventDefault();
         const next =
           event.key === "Home"
@@ -221,89 +469,54 @@ export function EditorToolbar({
         }
       }}
     >
-      <div className="docs-toolbar-undo">
-        {primary.slice(0, 2).map((action) => (
-          <ToolButton key={action.label} action={action} mac={mac} />
-        ))}
-      </div>
-      <BlockSelect editor={editor} />
-      <span className="docs-toolbar-divider" />
-      {primary.slice(2, capacity + 2).map((action) => (
-        <ToolButton
-          key={action.label}
-          action={action}
-          mac={mac}
-          disabled={!online && action.label === "Insert image"}
-        />
+      <IconButton
+        variant="ghost"
+        size="icon-sm"
+        label={outline ? "Hide outline" : "Show outline"}
+        aria-pressed={outline}
+        data-docs-outline-toggle=""
+        onClick={toggleOutline}
+      >
+        <PanelLeft aria-hidden="true" size={18} />
+      </IconButton>
+      {visible.map((group) => (
+        <div className="docs-toolbar-control" key={group.label}>
+          {group.control}
+        </div>
       ))}
-      {wide && (
-        <>
-          <span className="docs-toolbar-divider" />
-          <DropdownMenu>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="icon-sm" aria-label="Text alignment">
-                    <AlignLeft aria-hidden="true" />
-                  </Button>
-                </DropdownMenuTrigger>
-              </TooltipTrigger>
-              <TooltipContent>Text alignment</TooltipContent>
-            </Tooltip>
-            <DropdownMenuContent onCloseAutoFocus={returnToDocument}>
-              {align.map((action) => (
-                <DropdownMenuItem
-                  key={action.label}
-                  onSelect={choose(action.run, action.opensControl)}
-                >
-                  {action.label}
-                  <Kbd>{keyboardLabel(action.keys, mac)}</Kbd>
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
-          {clear && <ToolButton action={clear} mac={mac} />}
-        </>
-      )}
       <DropdownMenu>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon-sm" aria-label="More formatting">
-                <MoreHorizontal aria-hidden="true" />
-              </Button>
-            </DropdownMenuTrigger>
-          </TooltipTrigger>
-          <TooltipContent>More formatting</TooltipContent>
-        </Tooltip>
+        <DropdownMenuTrigger asChild>
+          <IconButton variant="ghost" size="icon-sm" label="More formatting">
+            <MoreHorizontal aria-hidden="true" />
+          </IconButton>
+        </DropdownMenuTrigger>
         <DropdownMenuContent
           align="end"
-          className="docs-more-menu"
-          onCloseAutoFocus={returnToDocument}
+          className="docs-more-menu docs-editor-menu"
+          onCloseAutoFocus={afterClose}
         >
-          <DropdownMenuLabel>Formatting</DropdownMenuLabel>
+          <DropdownMenuLabel>More</DropdownMenuLabel>
+          {hidden.map((group) => (
+            <div key={group.label}>{group.overflow}</div>
+          ))}
+          <DropdownMenuSeparator />
           {actions
-            .filter((action) => !shown.has(action.label))
-            .map((action) => {
-              const Icon = action.icon;
-              return (
-                <DropdownMenuItem
-                  key={action.label}
-                  disabled={!online && action.label === "Insert image"}
-                  onSelect={choose(action.run, action.opensControl)}
-                >
-                  <Icon aria-hidden="true" />
-                  {action.label}
-                  {action.keys && <Kbd>{keyboardLabel(action.keys, mac)}</Kbd>}
-                </DropdownMenuItem>
-              );
-            })}
+            .filter(
+              (action) =>
+                !shown.has(action.label) && !groups.some((group) => group.label === action.label),
+            )
+            .map(menuAction)}
           {editor.isActive("table") && (
             <>
               <DropdownMenuSeparator />
               <DropdownMenuLabel>Table</DropdownMenuLabel>
               {tableCommands(editor).map(([label, run]) => (
-                <DropdownMenuItem key={label} onSelect={choose(run)}>
+                <DropdownMenuItem
+                  key={label}
+                  onSelect={choose(() => {
+                    run();
+                  })}
+                >
                   {label}
                 </DropdownMenuItem>
               ))}
@@ -312,24 +525,26 @@ export function EditorToolbar({
           {editor.isActive("image") && (
             <>
               <DropdownMenuSeparator />
-              {[25, 50, 75, 100].map((width) => (
+              {[25, 50, 75, 100].map((value) => (
                 <DropdownMenuItem
-                  key={width}
-                  onSelect={choose(() =>
+                  key={value}
+                  onSelect={choose(() => {
                     editor
                       .chain()
                       .focus()
                       .updateAttributes("image", {
-                        width: Math.round((editor.view.dom.clientWidth * width) / 100),
+                        width: Math.round((editor.view.dom.clientWidth * value) / 100),
                       })
-                      .run(),
-                  )}
+                      .run();
+                  })}
                 >
-                  Image width {width}%
+                  Image width {value}%
                 </DropdownMenuItem>
               ))}
               <DropdownMenuItem
-                onSelect={choose(() => editor.chain().focus().deleteSelection().run())}
+                onSelect={choose(() => {
+                  editor.chain().focus().deleteSelection().run();
+                })}
               >
                 Remove image
               </DropdownMenuItem>
@@ -337,6 +552,7 @@ export function EditorToolbar({
           )}
         </DropdownMenuContent>
       </DropdownMenu>
+      {colour && <ColourPopover editor={editor} kind={colour} close={() => setColour(null)} />}
     </div>
   );
 }

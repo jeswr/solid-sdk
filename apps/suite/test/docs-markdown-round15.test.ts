@@ -4,6 +4,7 @@ import type { JSONContent } from "@tiptap/react";
 import { expect, it, vi } from "vitest";
 import { exportMarkdown, importMarkdown } from "../src/apps/docs/lib/convert/markdown";
 import { normaliseImport } from "../src/apps/docs/lib/convert/schema";
+import { BLOCK_STYLE_DEFAULTS } from "./helpers/docs-block-defaults";
 
 function linkedImage(label: string, title: string | null, url: string): JSONContent {
   const original = importMarkdown(
@@ -96,7 +97,13 @@ it.each([
 ])("exports literal HTML blocks as inert paragraph text: %j", (text) => {
   const original: JSONContent = {
     type: "doc",
-    content: [{ type: "paragraph", attrs: { textAlign: null }, content: [{ type: "text", text }] }],
+    content: [
+      {
+        type: "paragraph",
+        attrs: { textAlign: null, ...BLOCK_STYLE_DEFAULTS },
+        content: [{ type: "text", text }],
+      },
+    ],
   };
   const exported = exportMarkdown(original);
   expect(exported).not.toMatch(/(^|[^\\])</);

@@ -1,8 +1,19 @@
 // AUTHORED-BY Codex
 "use client";
-import { Button, Input, Popover, PopoverAnchor, toast } from "@jeswr/suite-ui";
+import {
+  Button,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+  Input,
+  Popover,
+  PopoverAnchor,
+  toast,
+} from "@jeswr/suite-ui";
 import type { Editor } from "@tiptap/react";
-import { useId, useState } from "react";
+import { useId, useRef, useState } from "react";
+import { focusDocument } from "../editor/focus";
 import { normaliseImageLink } from "../editor/image-link";
 import { normaliseDestination } from "../lib/editor/destination";
 import { wordCount } from "../lib/editor/logic";
@@ -131,20 +142,52 @@ export function CountPopover({
   pinned: boolean;
   setPinned: (value: boolean) => void;
 }) {
+  const outside = useRef(false);
+  const [scope, setScope] = useState(editor.state.selection.empty ? "document" : "selection");
   let stats: ReturnType<typeof wordCount>;
   try {
-    stats = wordCount(editor.getJSON());
+    const { from, to } = editor.state.selection;
+    const text = editor.state.doc.textBetween(from, to, "\n", "\n");
+    stats = wordCount(
+      scope === "selection"
+        ? {
+            type: "doc",
+            content: [
+              { type: "paragraph", ...(text ? { content: [{ type: "text", text }] } : {}) },
+            ],
+          }
+        : editor.getJSON(),
+    );
   } catch {
     toast.error("This document is too large to count.");
     return null;
   }
   return (
-    <Popover open onOpenChange={(open) => !open && close()}>
-      <PopoverAnchor asChild>
-        <span className="docs-popover-anchor" />
-      </PopoverAnchor>
-      <EditorPopoverContent editor={editor} aria-label="Word count">
-        <h2>Word count</h2>
+    <Dialog open modal={false} onOpenChange={(open) => !open && close()}>
+      <DialogContent
+        onInteractOutside={() => {
+          outside.current = true;
+        }}
+        onEscapeKeyDown={() => {
+          outside.current = false;
+        }}
+        onCloseAutoFocus={(event) => {
+          event.preventDefault();
+          if (!outside.current) focusDocument(editor);
+        }}
+      >
+        <DialogTitle>Word count</DialogTitle>
+        <DialogDescription>Statistics for the document or selected text.</DialogDescription>
+        <select
+          aria-label="Count scope"
+          value={scope}
+          onChange={(event) => setScope(event.target.value)}
+        >
+          <option value="document">Document</option>
+          <option value="selection" disabled={editor.state.selection.empty}>
+            Selection
+          </option>
+        </select>
         <dl className="docs-statistics">
           <dt>Words</dt>
           <dd>{stats.words}</dd>
@@ -163,7 +206,7 @@ export function CountPopover({
           />
           Show while typing
         </label>
-      </EditorPopoverContent>
-    </Popover>
+      </DialogContent>
+    </Dialog>
   );
 }

@@ -43,6 +43,8 @@ export default defineConfig({
         "src/apps/home/lib/forms/**/*.ts",
         "src/apps/docs/lib/model/**/*.ts",
         "src/apps/docs/lib/editor/**/*.ts",
+        "src/apps/docs/components/{editor-menubar,formatting-controls,inline-title,page-canvas}.tsx",
+        "src/apps/docs/editor/{clipboard,formatting,text-style}.ts",
         "src/apps/docs/lib/convert/**/*.ts",
         "src/apps/docs/lib/autoformat/**/*.ts",
         "src/apps/health/lib/model/**/*.ts",
