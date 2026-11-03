@@ -59,6 +59,11 @@ export function validateOptions(options: PodAuthOptions): void {
     throw new TypeError("ui requires getWebId, getCode and an optional chooseIssuer function");
   if (options.clock !== undefined && typeof options.clock !== "function")
     throw new TypeError("clock must be a function");
+  if (
+    options.maxReplayBodyBytes !== undefined &&
+    (!Number.isSafeInteger(options.maxReplayBodyBytes) || options.maxReplayBodyBytes < 0)
+  )
+    throw new TypeError("maxReplayBodyBytes must be a non-negative safe integer");
   if (options.boundary?.automatic !== undefined && typeof options.boundary.automatic !== "boolean")
     throw new TypeError("boundary.automatic must be boolean");
   if (options.boundary?.eligible !== undefined && typeof options.boundary.eligible !== "function")

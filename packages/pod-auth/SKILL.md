@@ -91,6 +91,8 @@ first; storage failures are harmless. Providers use monograms by default; host-s
   `boundary.storageEndpoints` names exact (or trailing-`/` prefix) paths on each verified storage's
   origin, for server APIs outside the pod folder; they share that storage's grant and stay out of
   `Identity.storages`. Use it only for endpoints of the server that hosts the storage.
+- `auth.fetch` buffers bodies for replay after a 401, up to `maxReplayBodyBytes` (default 16 MiB);
+  larger bodies reject. Apps that upload large files raise it explicitly.
   Do not trust an origin merely because it hosts the issuer/WebID or returned a 401. Excluded or
   public resources must not prompt; unverified 401s remain 401s.
 - Automatic roots load on login/restore from `pim:storage` assertions naming the exact authenticated

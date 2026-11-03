@@ -33,6 +33,11 @@ export interface PodAuthOptions {
   lws?: { subject: "oidc-id-token" | { cid: CidSubject } };
   allowInsecureLoopback?: boolean;
   clock?: () => number;
+  /**
+   * Largest request body `auth.fetch` buffers so it can replay a request after a 401 challenge
+   * (default 16 MiB). Raise it for apps that upload large files; larger bodies reject.
+   */
+  maxReplayBodyBytes?: number;
 }
 
 /** Existing CID identity and its caller-owned signing key; no key is generated implicitly. */

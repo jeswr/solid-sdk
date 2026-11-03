@@ -30,6 +30,8 @@ export function createBoundary(
     );
   };
   const fixed = new CredentialBoundary(options.boundary?.roots, { allowInsecureHttp: insecure });
+  // Validated at construction; snapshot so later mutation of the caller's options cannot add grants.
+  const storageEndpoints = Object.freeze([...(options.boundary?.storageEndpoints ?? [])]);
   let automatic = new CredentialBoundary([], { allowInsecureHttp: insecure });
   // Configured server endpoints on a verified storage's origin, mapped to that storage root.
   let endpoints = new Map<string, string>();
@@ -165,10 +167,18 @@ export function createBoundary(
           for (const root of await descriptionRoots(storage, signal)) add(next, root);
       }
       const nextEndpoints = new Map<string, string>();
-      for (const root of [...next.entries])
-        for (const path of options.boundary?.storageEndpoints ?? []) {
-          const endpoint = new URL(path, root).href;
-          if (nextEndpoints.has(endpoint)) continue;
+      const verified = [...next.entries];
+      for (const root of verified)
+        for (const path of storageEndpoints) {
+          // Built on the storage's own origin; validation already rejected "//", "..", "?" and "#".
+          const endpoint = new URL(new URL(root).origin + path).href;
+          // A verified storage or fixed root keeps its own identity and grant; it is never an alias.
+          if (
+            nextEndpoints.has(endpoint) ||
+            verified.includes(endpoint) ||
+            fixed.entries.includes(endpoint)
+          )
+            continue;
           add(next, endpoint);
           if (next.entries.includes(endpoint)) nextEndpoints.set(endpoint, root);
         }
