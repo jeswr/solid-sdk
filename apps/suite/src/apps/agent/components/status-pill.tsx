@@ -8,16 +8,23 @@ import {
   SheetTitle,
   StatusDot,
 } from "@jeswr/suite-ui";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { formatRelativeTime } from "../lib/format";
-import { useAgentClock, useAgentQuery, useAgentWorkspace } from "../lib/hooks";
+import { useAgentClock, useAgentInvalidate, useAgentQuery, useAgentWorkspace } from "../lib/hooks";
 import { loadedRecords, readControl, readHeartbeat } from "../lib/readers";
 import { type AgentStatus, agentStatus } from "../lib/status";
 import { createAgentVerifier } from "../lib/verify";
 import { AgentControl } from "./agent-control";
 
+/** Heartbeats land without a change notice on some sessions, so status re-reads on a timer. */
+export const STATUS_REFRESH_MS = 30_000;
 export function useDaemonStatus() {
-  const { session } = useAgentWorkspace();
+  const { session, client } = useAgentWorkspace();
+  const invalidate = useAgentInvalidate();
+  useEffect(() => {
+    const timer = setInterval(() => invalidate(client.paths.heartbeat, true), STATUS_REFRESH_MS);
+    return () => clearInterval(timer);
+  }, [invalidate, client]);
   const now = useAgentClock();
   const query = useAgentQuery(session.storageUrl, async (c) => ({
     heartbeat: await readHeartbeat(c),

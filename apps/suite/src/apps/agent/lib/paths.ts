@@ -95,29 +95,40 @@ export function agentPaths(workspace: string) {
   };
 }
 
-/** Discovery only reads the selected pod; a poisoned registration never releases fetch. */
+/**
+ * Discovery reads private resources only inside the selected pod; a poisoned registration never
+ * releases fetch. With `publicIo` (credential-free, e.g. the extension's page fetch) the public
+ * WebID profile may live outside that storage; without it, the profile must be inside the scope,
+ * so the authenticated fetch is never pointed at another origin.
+ */
 export async function discoverWorkspace(
   io: PodSession["fetch"],
   webId: string,
   selectedStorage?: string,
+  publicIo?: PodSession["fetch"],
 ): Promise<string> {
   const profileUrl = new URL(webId);
   profileUrl.hash = "";
-  const initialScope = selectedStorage ?? new URL("/", profileUrl).href;
-  const scoped = createPodScopedFetch(initialScope, { fetch: io, maxRedirects: 0 });
-  const get = async (url: string) => {
-    const response = await scoped(assertWithinPodScope(initialScope, url), {
-      headers: { accept: "text/turtle" },
-    });
-    if (!response.ok) throw new Error(`Workspace discovery failed (${response.status})`);
-    const doc = await readRdfDocument(response);
-    return parseRdf(doc.text, doc.contentType, { baseIRI: url });
+  const getFrom = (scope: string, reader: PodSession["fetch"]) => {
+    const scoped = createPodScopedFetch(scope, { fetch: reader, maxRedirects: 0 });
+    return async (url: string) => {
+      const response = await scoped(assertWithinPodScope(scope, url), {
+        headers: { accept: "text/turtle" },
+      });
+      if (!response.ok) throw new Error(`Workspace discovery failed (${response.status})`);
+      const doc = await readRdfDocument(response);
+      return parseRdf(doc.text, doc.contentType, { baseIRI: url });
+    };
   };
-  const profile = await get(profileUrl.href);
+  const profileScope = publicIo
+    ? new URL("/", profileUrl).href
+    : (selectedStorage ?? new URL("/", profileUrl).href);
+  const profile = await getFrom(profileScope, publicIo ?? io)(profileUrl.href);
   const storages = [...new Agent(webId, profile, DataFactory).storageUrls];
   const storage = selectedStorage ?? (storages.length === 1 ? storages[0] : undefined);
   if (!storage || !storages.includes(storage)) throw new Error("Choose a storage for your agent");
-  assertWithinPodScope(storage, profileUrl.href);
+  if (!publicIo) assertWithinPodScope(storage, profileUrl.href);
+  const get = getFrom(storage, io);
   const owner = metadataNode(profile, webId);
   let index = owner.iri(`${SOLID}privateTypeIndex`);
   if (!index) {
