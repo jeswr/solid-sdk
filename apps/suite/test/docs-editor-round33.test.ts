@@ -880,11 +880,16 @@ it("round37 editor Undo opens the restored document instead of a reused original
       view.host.querySelector("[data-docs-menu-trigger]") as HTMLElement,
       "Move to trash",
     );
-    const confirm = Array.from(
-      document.querySelectorAll<HTMLButtonElement>('[role="alertdialog"] button'),
-    ).find((button) => button.textContent === "Move to trash");
-    expect(confirm).toBeDefined();
-    await act(async () => confirm?.click());
+    // The confirmation opens once the menu has closed and returned focus, which can take
+    // more than one frame on a loaded runner.
+    const confirm = await vi.waitFor(() => {
+      const button = Array.from(
+        document.querySelectorAll<HTMLButtonElement>('[role="alertdialog"] button'),
+      ).find((candidate) => candidate.textContent === "Move to trash");
+      expect(button).toBeDefined();
+      return button as HTMLButtonElement;
+    });
+    await act(async () => confirm.click());
     await vi.waitFor(() => expect(mocks.toast).toHaveBeenCalled());
     await act(async () => mocks.toast.mock.calls.at(-1)?.[1].action.onClick());
     const { encodeRef } = await import("../src/lib/refs");
