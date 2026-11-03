@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 //
 // Breadcrumb derivation for the file-browser view — pure string logic, kept out
@@ -23,6 +24,14 @@ function labelForSegment(url: string): string {
   const trimmed = url.replace(/\/$/, "");
   const last = trimmed.slice(trimmed.lastIndexOf("/") + 1);
   return decodeSegment(last) || url;
+}
+
+/** Label visited containers without deriving parent identifiers from URL paths. */
+export function breadcrumbFromTrail(trail: readonly string[]): Crumb[] {
+  return trail.map((url, index) => ({
+    url,
+    label: index === 0 ? "Drive" : labelForSegment(url),
+  }));
 }
 
 /**

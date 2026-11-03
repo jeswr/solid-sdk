@@ -3,7 +3,7 @@
   "name": "@jeswr/pod-notifications",
   "version": "0.1.0",
   "private": true,
-  "description": "Pod change subscriptions across notification transports. Experimental, AI-agent-generated scaffold.",
+  "description": "Pod change subscriptions across notification transports. Experimental, AI-agent-generated.",
   "type": "module",
   "sideEffects": false,
   "securityCritical": true,
@@ -60,6 +60,9 @@
     "test": "vitest run"
   },
   "license": "MIT",
+  "dependencies": {
+    "@jeswr/storage-client": "workspace:*"
+  },
   "devDependencies": {
     "@biomejs/biome": "^2.5.1",
     "typescript": "^6.0.3",

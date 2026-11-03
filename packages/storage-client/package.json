@@ -1,5 +1,5 @@
 {
-  "$comment": "AUTHORED-BY Codex GPT-6.1-Sol; AUTHORED-BY Claude Opus 5.5",
+  "$comment": "AUTHORED-BY Codex GPT-6.1-Sol; AUTHORED-BY Claude Opus 5.5; AUTHORED-BY Codex GPT-6",
   "name": "@jeswr/storage-client",
   "version": "0.1.0",
   "private": true,
@@ -32,6 +32,14 @@
       "types": "./dist/helpers.d.ts",
       "default": "./dist/helpers.js"
     },
+    "./trash": {
+      "types": "./dist/trash.d.ts",
+      "default": "./dist/trash.js"
+    },
+    "./versions": {
+      "types": "./dist/versions.d.ts",
+      "default": "./dist/versions.js"
+    },
     "./testing": {
       "types": "./dist/testing.d.ts",
       "default": "./dist/testing.js"
@@ -40,7 +48,8 @@
   "files": [
     "dist",
     "README.md",
-    "SKILL.md"
+    "SKILL.md",
+    "references"
   ],
   "engines": {
     "node": ">=24"

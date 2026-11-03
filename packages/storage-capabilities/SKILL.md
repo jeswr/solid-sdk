@@ -1,12 +1,50 @@
 ---
 name: storage-capabilities
-description: Use when working on @jeswr/storage-capabilities, the storage description discovery and feature flags package in the Solid SDK workspace.
+description: Use when discovering Solid or LWS storage, selecting features with @jeswr/storage-capabilities, handling unknown support, or maintaining description parsing and caches.
 ---
 <!-- AUTHORED-BY GPT-6.1-Sol -->
 <!-- AUTHORED-BY Codex GPT-6 -->
 <!-- AUTHORED-BY Claude Opus 5.5 -->
 
 # @jeswr/storage-capabilities
+
+## Quick reference
+
+Use `capabilities` for feature decisions and `resolveStorageDescription` for the storage id,
+root and advertised entries. Inject the bounded `auth.fetch` from
+[pod-auth](../pod-auth/SKILL.md); never infer protocol or permissions from a server hostname.
+Use [storage-client](../storage-client/SKILL.md) when the app also needs resource operations.
+
+```ts
+import { capabilities, resolveStorageDescription } from '@jeswr/storage-capabilities';
+import { createMemoryCache } from '@jeswr/storage-capabilities/cache';
+
+export async function inspectStorage(fetch: typeof globalThis.fetch, url: string) {
+  const cache = createMemoryCache();
+  const options = { fetch, cache };
+  const description = await resolveStorageDescription(url, options);
+  const features = await capabilities(url, options);
+  return {
+    root: description.root,
+    protocol: description.protocol,
+    canSearch: features.serverSearch.state === 'available',
+    searchEndpoint: features.serverSearch.detail.endpoint,
+    accessModel: features.accessControl.state === 'available'
+      ? features.accessControl.detail.model : null,
+  };
+}
+```
+
+Keep a cache per application account/session and share it across capability consumers; the
+example creates an isolated one. The default is shared in-memory storage. `createIndexedDbCache`
+from `/cache` persists public metadata only. On logout, discard session-owned memory caches
+or delete each known storage id from a persistent cache; there is no `clear()` method.
+`seedHeaders` can reuse headers from a response already obtained for the same URL.
+`unknown` means insufficient evidence, including absent entries in a fetched description;
+`unavailable` requires explicit negative support. Enable an optional feature only on
+`state === 'available'`. `evidence` is diagnostic text, never a permission or routing key.
+See [LWS app differences](../../skills/lws-vs-solid/SKILL.md) for cross-protocol decisions.
+
 
 T-010 implements the ADR-002 vocabulary and type contracts, plus internal Link/probe-header parsers.
 T-011 adds `parseLwsDescription(json, storageUrl, requestUrl)` and `CapabilitiesError` at the root.
