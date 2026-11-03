@@ -2,6 +2,11 @@
 
 # @jeswr/solid-dpop
 
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+
+> **Deprecated — use `@jeswr/pod-auth`.** See the [pod-auth migration guide](../pod-auth/SKILL.md).
+> This package remains available for existing consumers and pinned mirrors; the API below is legacy.
+
 Solid-OIDC login and session helpers for Node.js, plus RFC 9449 DPoP proof primitives.
 
 > Experimental and security-sensitive. Review the authentication flow before production use.

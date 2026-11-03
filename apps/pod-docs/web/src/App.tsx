@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 //
 // App — the host shell's router-free root: logged out → <LoginScreen>; logged in
@@ -8,7 +9,6 @@
 // task #123), so every read/write PROACTIVELY carries the DPoP token on the FIRST
 // request to an allowed origin — no per-resource 401-dance.
 import { AccountMenu, FeedbackButton, ThemeToggle } from "@jeswr/app-shell";
-import { DocumentBrowser } from "@jeswr/pod-docs/ui";
 // SOLID-ELEMENTS (#115 / D-parity rollout #67/#68/#70): the framework-agnostic W3C
 // Web Components consumed through the @lit/react adapter. <Loading> is a Lit custom
 // element (spinner + polite-live label, prefers-reduced-motion aware) wrapped by
@@ -21,6 +21,7 @@ import { DocumentBrowser } from "@jeswr/pod-docs/ui";
 // step, so the client-only custom elements need no mount-gating here.
 import { Loading } from "@jeswr/solid-elements/react";
 import { useSession } from "./auth/SessionProvider";
+import { CollectionBrowser } from "./CollectionBrowser";
 import { LoginScreen } from "./LoginScreen";
 
 /**
@@ -100,10 +101,11 @@ export function App() {
         </p>
       ) : null}
       <main className="app-main">
-        {/* podRoot + webId only — DocsStore discovers the documents container via
-            the Type Index (else falls back to ${podRoot}pod-docs/). No fetch prop:
-            the global fetch is auth-patched. */}
-        <DocumentBrowser podRoot={session.podRoot} webId={session.webId} title="Your documents" />
+        <CollectionBrowser
+          key={JSON.stringify([session.webId, session.podRoot])}
+          podRoot={session.podRoot}
+          webId={session.webId}
+        />
       </main>
     </div>
   );

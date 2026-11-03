@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
 "use client";
 import { Button, Toaster, toast } from "@jeswr/suite-ui";
@@ -28,7 +29,7 @@ function Sidebar() {
   const mutations = useContactMutations();
   const { stars } = useStarred();
   const duplicates = useDuplicates().groups.length;
-  const pathname = usePathname();
+  const pathname = usePathname().replace(/\/+$/, "");
   const [menu, setMenu] = useState<string>();
   const [editing, setEditing] = useState<string>();
   const [name, setName] = useState("");
@@ -204,7 +205,7 @@ function MigrationBanner() {
   );
 }
 function ContactsChrome({ children }: { children: ReactNode }) {
-  const pathname = usePathname();
+  const pathname = usePathname().replace(/\/+$/, "");
   const router = useRouter();
   const params = useSearchParams();
   const state = useAddressBook();

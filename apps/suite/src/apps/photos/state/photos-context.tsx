@@ -14,11 +14,24 @@ import {
 import type { PodSession } from "@/lib/session/pod-session";
 import { ensureSample } from "../demo/sample";
 import { browserEncoder, LocationStripError } from "../lib/browser/encoder";
-import { createAlbum, createAlbumWriter, listAlbums, type StoredAlbum } from "../lib/data/albums";
+import {
+  changeMembers,
+  createAlbum,
+  createAlbumWriter,
+  listAlbums,
+  type StoredAlbum,
+} from "../lib/data/albums";
 import { preferenceStore, setFavourites } from "../lib/data/favourites";
 import { createKeywordWriter, type LibraryPhoto, listLibrary } from "../lib/data/library";
 import { type Failure, statusOf } from "../lib/data/shared";
 import { photoDataStorage } from "../lib/data/storage";
+import type { TakeoutItem, TakeoutPlan } from "../lib/data/takeout";
+import {
+  importTakeoutPlan,
+  type TakeoutFailure,
+  type TakeoutImportResult,
+  takeoutFailure,
+} from "../lib/data/takeout-import";
 import {
   emptyTrash,
   listTrash,
@@ -28,7 +41,8 @@ import {
   type TrashedPhoto,
   trashPhoto,
 } from "../lib/data/trash";
-import { uploadFiles } from "../lib/data/upload";
+import { type UploadResult, uploadFiles } from "../lib/data/upload";
+import type { CaptureMetadata } from "../lib/model";
 
 interface Snapshot {
   photos: LibraryPhoto[];
@@ -61,12 +75,19 @@ function usePhotosState(session: PodSession) {
   const [announcement, announce] = useState("");
   const baseline = useRef(empty);
   const pending = useRef<{ id: number; patch: Patch }[]>([]);
+  /** Takeout imports in progress; they refresh the library once, at their end. */
+  const importing = useRef(0);
   const sequence = useRef(0);
   const generation = useRef(0);
   const alive = useRef(true);
   const queue = useRef(Promise.resolve());
   const [uploads, setUploads] = useState<UploadItem[]>([]);
-  const uploadInputs = useRef(new Map<string, { file: File; stripLocation: boolean }>());
+  const uploadInputs = useRef(
+    new Map<
+      string,
+      { file: Blob; name: string; stripLocation: boolean; metadata?: CaptureMetadata | undefined }
+    >(),
+  );
   const cancelled = useRef(new Set<string>());
   const redraw = useCallback(() => {
     if (alive.current)
@@ -151,7 +172,8 @@ function usePhotosState(session: PodSession) {
           redraw();
           if (alive.current && !pending.current.length) {
             setSaving(false);
-            await refresh();
+            // An import refreshes once at its end, not after every batch.
+            if (!importing.current) await refresh();
           }
         }
       });
@@ -379,15 +401,17 @@ function usePhotosState(session: PodSession) {
     },
     [writeKeywords, run],
   );
+  /** Resolves with the saved photo's document URL, or undefined when it didn't save. */
   const startUpload = useCallback(
-    (id: string) => {
+    (id: string): Promise<string | undefined> => {
       const input = uploadInputs.current.get(id);
-      if (!input) return;
+      if (!input) return Promise.resolve(undefined);
+      let saved: string | undefined;
       cancelled.current.delete(id);
       setUploads((items) =>
         items.map((item) => (item.id === id ? { ...item, status: "queued", sent: 0 } : item)),
       );
-      void run(
+      return run(
         (s) => s,
         async () => {
           if (cancelled.current.has(id)) return (s) => s;
@@ -397,18 +421,22 @@ function usePhotosState(session: PodSession) {
             ),
           );
           const result = (
-            await uploadFiles(io, [{ name: input.file.name, original: input.file }], {
-              encoder: browserEncoder,
-              stripLocation: input.stripLocation,
-              now: new Date().toISOString(),
-              id: () => id,
-              onProgress: (_index, percent) =>
-                setUploads((items) =>
-                  items.map((item) =>
-                    item.id === id ? { ...item, sent: (input.file.size * percent) / 100 } : item,
+            await uploadFiles(
+              io,
+              [{ name: input.name, original: input.file, metadata: input.metadata }],
+              {
+                encoder: browserEncoder,
+                stripLocation: input.stripLocation,
+                now: new Date().toISOString(),
+                id: () => id,
+                onProgress: (_index, percent) =>
+                  setUploads((items) =>
+                    items.map((item) =>
+                      item.id === id ? { ...item, sent: (input.file.size * percent) / 100 } : item,
+                    ),
                   ),
-                ),
-            })
+              },
+            )
           )[0];
           setUploads((items) =>
             items.map((item) =>
@@ -427,12 +455,15 @@ function usePhotosState(session: PodSession) {
                 ? "This upload already exists or changed elsewhere. Your library has been refreshed. Check Photos before retrying."
                 : result && !result.ok && result.error instanceof LocationStripError
                   ? result.error.message
-                  : `Couldn't upload ${input.file.name}. Retry in the upload panel.`,
+                  : `Couldn't upload ${input.name}. Retry in the upload panel.`,
             );
-          else announce(`${input.file.name} uploaded`);
+          else {
+            saved = result.url;
+            announce(`${input.name} uploaded`);
+          }
           return (s) => s;
         },
-      );
+      ).then(() => saved);
     },
     [io, run],
   );
@@ -440,7 +471,7 @@ function usePhotosState(session: PodSession) {
     (files: File[], stripLocation: boolean) => {
       const added = files.map((file) => {
         const id = crypto.randomUUID();
-        uploadInputs.current.set(id, { file, stripLocation });
+        uploadInputs.current.set(id, { file, name: file.name, stripLocation });
         return {
           id,
           name: file.name,
@@ -451,9 +482,91 @@ function usePhotosState(session: PodSession) {
         };
       });
       setUploads((items) => [...items, ...added]);
-      for (const item of added) startUpload(item.id);
+      for (const item of added) void startUpload(item.id);
     },
     [startUpload],
+  );
+  /** Takeout upload IDs per item, so a retry reuses the prepared upload. */
+  const takeoutIds = useRef(new WeakMap<TakeoutItem, string>());
+  /** Frees the prepared copies kept for retrying these items. */
+  const discardTakeout = useCallback(
+    (items: readonly TakeoutItem[]) => {
+      for (const item of items) {
+        const id = takeoutIds.current.get(item);
+        if (id) io.uploads.delete(id);
+        takeoutIds.current.delete(item);
+      }
+    },
+    [io],
+  );
+  /**
+   * Imports a Takeout plan in batches (each one queued write) and files the saved
+   * photos into albums. Progress goes to `onProgress` rather than the upload panel,
+   * so a large library doesn't add thousands of rows, toasts or announcements.
+   */
+  const importTakeout = useCallback(
+    async (
+      plan: TakeoutPlan,
+      stripLocation: boolean,
+      progress: { onProgress?: (done: number, total: number) => void; onAlbums?: () => void } = {},
+    ): Promise<TakeoutImportResult> => {
+      importing.current += 1;
+      try {
+        return await importTakeoutPlan(plan, {
+          upload: async (items) => {
+            let results: UploadResult[] = [];
+            // uploadFiles asks for one ID per file, in order.
+            let next = 0;
+            await run(
+              (s) => s,
+              async () => {
+                results = await uploadFiles(
+                  io,
+                  items.map((item) => ({
+                    name: item.name,
+                    original: item.file,
+                    metadata: item.metadata,
+                  })),
+                  {
+                    encoder: browserEncoder,
+                    stripLocation,
+                    now: new Date().toISOString(),
+                    id: () => {
+                      const item = items[next++] as TakeoutItem;
+                      const id = takeoutIds.current.get(item) ?? crypto.randomUUID();
+                      takeoutIds.current.set(item, id);
+                      return id;
+                    },
+                  },
+                );
+                return (s) => s;
+              },
+            );
+            return items.map((item, index): string | TakeoutFailure => {
+              const result = results[index];
+              if (!result) return { kind: "pod" };
+              if (result.ok) return `${result.url}#it`;
+              return result.error instanceof LocationStripError
+                ? { kind: "photo", reason: result.error.message }
+                : takeoutFailure(result.error, item.file.type, stripLocation);
+            });
+          },
+          findAlbum: (title) => baseline.current.albums.find((album) => album.name === title)?.url,
+          addToAlbum: (url, title, refs) =>
+            editAlbum(
+              url,
+              (current) => changeMembers(current, refs, true),
+              `Added photos to ${title}`,
+            ),
+          createAlbum: (title, refs) => newAlbum(title, refs),
+          ...progress,
+        });
+      } finally {
+        importing.current -= 1;
+        if (alive.current) await refresh();
+      }
+    },
+    [io, run, editAlbum, newAlbum, refresh],
   );
   const cancelUpload = (id: string) => {
     // The model's atomic file pipeline cannot be interrupted safely. Queued files
@@ -497,6 +610,8 @@ function usePhotosState(session: PodSession) {
     keywords,
     uploads,
     upload,
+    importTakeout,
+    discardTakeout,
     dismissUploads,
     retryUpload: startUpload,
     cancelUpload,

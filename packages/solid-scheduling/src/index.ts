@@ -41,7 +41,7 @@ export {
   parseCalendarTtl,
   serializeCalendar,
 } from "./calendar.js";
-export { httpIriOrUndefined, isHttpIri } from "./iri.js";
+export { assertResourceUrl, httpIriOrUndefined, isHttpIri, isResourceUrl } from "./iri.js";
 export {
   buildSchedulingTask,
   parseSchedulingTask,

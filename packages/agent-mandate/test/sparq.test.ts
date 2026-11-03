@@ -284,6 +284,8 @@ it.each([
   [`${AGENT}SendMessage`, `${AGENT}Transfer`, false],
   ["use", "https://example.org/Action", false],
 ] as const)("filters %s rules for %s before backend matching (match: %s)", async (action, requested, matches) => {
+  // A prohibition also covers a broader request that includes the prohibited act.
+  const prohibits = matches || (action === "append" && requested === "write");
   for (const type of ["permission", "prohibition"] as const) {
     let input = "";
     const rule: Rule = {
@@ -309,7 +311,7 @@ it.each([
       .one("https://www.w3.org/2018/credentials#credentialSubject")
       .one(`${AGENT}policy`)
       .values(`${ODRL}${type}`);
-    expect(serialized).toHaveLength(matches ? 1 : 0);
+    expect(serialized).toHaveLength((type === "prohibition" ? prohibits : matches) ? 1 : 0);
     expect(doc.request.action).toBe(`${ODRL}use`);
     for (const lowered of serialized) {
       expect(lowered.iri(`${ODRL}action`)).toBe(`${ODRL}use`);
@@ -1908,4 +1910,30 @@ it("requires confirmation on process failure while checking an unsupported polic
     decision: "confirm-required",
     reason: "indeterminate",
   });
+});
+
+it("decides a mistyped rule by the list it sits in, as solid-odrl does", async () => {
+  // A hand-built policy whose prohibitions entry says type "permission": the
+  // array, not the field, makes it a prohibition for both engines.
+  const p: Policy = {
+    ...policy,
+    prohibitions: [
+      {
+        type: "permission",
+        action: "read",
+        duties: [{ action: "inform" }],
+        constraints: [{ leftOperand: "count", operator: "gt", rightOperand: "2" }],
+      },
+    ],
+  };
+  const request = intent({ action: "read", attributes: { count: "10" } });
+  expect(await solidOdrlEngine.evaluate(p, request)).toEqual({ effect: "prohibited" });
+  const run = vi.fn((_binary: string, _args: ProcessOptions) => ({
+    stdout: response({ effect: "deny", matchedRules: ["urn:duty-prohibition"] }),
+    status: 0,
+  }));
+  expect(await sparqPolicyEngine({ binary: "test", run }).evaluate(p, request)).toEqual({
+    effect: "prohibited",
+  });
+  expect(run).toHaveBeenCalledOnce();
 });

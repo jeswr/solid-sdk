@@ -97,6 +97,53 @@ describe("EXIF extraction and upload preparation", () => {
     // A different RIFF container must still be rejected by the EXIF reader.
     await expect(readExif(new TextEncoder().encode("RIFF1234WAVE").buffer)).rejects.toThrow();
   });
+  // AUTHORED-BY Claude Opus 5.5
+  it("fills missing EXIF from outside metadata without overriding the file's own", async () => {
+    const webp = new Blob(
+      [Buffer.from("UklGRhoAAABXRUJQVlA4TA0AAAAvAAAAEAcQERGIiP4HAA==", "base64")],
+      { type: "image/webp" },
+    );
+    const image = encoder();
+    image.dimensions = vi.fn(async () => ({ width: 1, height: 1 }));
+    const metadata = {
+      dateTimeOriginal: "2019-05-01T10:00:00.000Z",
+      location: { lat: 38.72, long: -9.14 },
+      description: "  Lisbon  ",
+    };
+    const filled = await preparePhoto(storage, { ...input, original: webp, metadata }, image, now);
+    expect(filled.photo).toMatchObject({
+      description: "Lisbon",
+      exif: {
+        dateTimeOriginal: "2019-05-01T10:00:00.000Z",
+        location: { lat: 38.72, long: -9.14 },
+      },
+    });
+    // Invalid outside values are dropped by the same validation as EXIF.
+    const invalid = await preparePhoto(
+      storage,
+      {
+        ...input,
+        original: webp,
+        metadata: { dateTimeOriginal: "soon", location: { lat: 100, long: 0 }, description: " " },
+      },
+      image,
+      now,
+    );
+    expect(invalid.photo.exif).toEqual({ pixelWidth: 1, pixelHeight: 1 });
+    expect(invalid.photo.description).toBeUndefined();
+    // The file's own EXIF wins, and removing location removes the outside place too.
+    const own = await preparePhoto(storage, { ...input, metadata }, encoder(), now);
+    expect(own.photo.exif.dateTimeOriginal).toBe("2026-06-15T09:41:07.000Z");
+    expect(own.photo.exif.location).toEqual({ lat: 51.5, long: -0.12 });
+    const stripped = await preparePhoto(
+      storage,
+      { ...input, original: webp, metadata, stripLocation: true },
+      { ...image, stripLocation: vi.fn(async () => webp) },
+      now,
+    );
+    expect(stripped.photo.exif.location).toBeUndefined();
+    expect(stripped.photo.exif.dateTimeOriginal).toBe("2019-05-01T10:00:00.000Z");
+  });
   it("prepares fixed paths and passes raw orientation to the injected encoder", async () => {
     const image = encoder();
     const prepared = await preparePhoto(storage, input, image, now);

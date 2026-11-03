@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
 "use client";
 import { toast } from "@jeswr/suite-ui";
@@ -107,6 +108,7 @@ export function ContactsProvider({ children }: { children: ReactNode }) {
       removeEventListener("storage", sync);
     };
   }, [session, controller]);
+  if (session.status === "signed-out") return <p role="status">Sign in to open your Contacts</p>;
   if (session.status === "error")
     return <div role="alert">This browser couldn't open the demo pod's storage.</div>;
   if (!controller || session.status !== "ready") return <div role="status">Opening Contacts…</div>;

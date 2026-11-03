@@ -3,5 +3,5 @@
   "compilerOptions": {
     "noEmit": false
   },
-  "exclude": ["src/**/*.test.ts", "src/testPod.ts"]
+  "exclude": ["src/**/*.test.ts", "src/testPod.ts", "src/storage-setup.ts"]
 }

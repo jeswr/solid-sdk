@@ -6,6 +6,7 @@ import { CheckIcon, ChevronRightIcon, CircleIcon } from "lucide-react";
 import { DropdownMenu as DropdownMenuPrimitive } from "radix-ui";
 import type * as React from "react";
 import { DensityProvider, useDensity } from "../../lib/density.js";
+import { InertOutside } from "../../lib/inert-outside.js";
 import { cn } from "../../lib/utils.js";
 
 function DropdownMenu({ ...props }: React.ComponentProps<typeof DropdownMenuPrimitive.Root>) {
@@ -30,6 +31,7 @@ function DropdownMenuTrigger({
 
 function DropdownMenuContent({
   className,
+  children,
   sideOffset = 4,
   ...props
 }: React.ComponentProps<typeof DropdownMenuPrimitive.Content>) {
@@ -44,7 +46,10 @@ function DropdownMenuContent({
           className,
         )}
         {...props}
-      />
+      >
+        {children}
+        <InertOutside />
+      </DropdownMenuPrimitive.Content>
     </DropdownMenuPrimitive.Portal>
   );
 }
