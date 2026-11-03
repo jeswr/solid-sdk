@@ -264,10 +264,13 @@ function unboundedValidation(shapes: Store, data: Store): string | undefined {
   }
 
   // Full RDF term identity: a literal's language and datatype distinguish it.
+  // JSON-encoded, so no split of value and datatype can collide.
   const key = (t: Term): string =>
-    t.termType === "Literal"
-      ? `Literal:${t.value}@${t.language}^^${t.datatype.value}`
-      : `${t.termType}:${t.value}`;
+    JSON.stringify(
+      t.termType === "Literal"
+        ? [t.termType, t.value, t.language, t.datatype.value]
+        : [t.termType, t.value],
+    );
   const objects = (graph: Store, subject: Term, predicate: string) =>
     graph.getObjects(subject as Quad["subject"], predicate, null);
 
