@@ -1,5 +1,6 @@
 // AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex GPT-6.1-Sol
 "use client";
 /**
@@ -170,6 +171,14 @@ function DriveChrome({ children }: { children: ReactNode }) {
 
 function SessionGate({ children }: { children: ReactNode }) {
   const state = usePodSessionState();
+  if (state.status === "signed-out") {
+    return (
+      <div className="drv-boot" role="status">
+        <h1>Sign in to open your Drive</h1>
+        <p>Sign-in is not available in this preview build.</p>
+      </div>
+    );
+  }
   if (state.status === "loading") {
     return (
       <div className="drv-boot" role="status">

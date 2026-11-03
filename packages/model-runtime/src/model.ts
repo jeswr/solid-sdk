@@ -1380,7 +1380,11 @@ function parseShapeAt(
       link.target !== undefined &&
       (field.hasClass === undefined ||
         hasDatasetClass(doc, link.target, [field.hasClass], budget.migration))
-        ? parseShapeAt(child, link.target, dataset, factory, byName, true, budget)
+        ? // An sh:node child must conform, so any present violation rejects it (strict).
+          // A class-only (sh:class) child is its own class-targeted focus node: its
+          // optional Warning/Info failures degrade exactly as they do at the root, and
+          // only its required (fail-closed) constraints can reject it.
+          parseShapeAt(child, link.target, dataset, factory, byName, !field.classOnly, budget)
         : undefined;
     if (budget.visits > MAX_NODE_VISITS) return undefined;
     if (childData === undefined) {

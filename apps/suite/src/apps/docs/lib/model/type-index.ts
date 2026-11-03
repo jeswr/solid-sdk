@@ -231,7 +231,7 @@ function documentUrl(webId: string): string {
  * Only the WebID subject supplies index links. Every linked document is scoped,
  * fragments/cycles are de-duplicated, and an incomplete graph cannot prove absence.
  */
-async function discoverProfileLinks(
+export async function discoverProfileLinks(
   webId: string,
   profile: DatasetCore,
   fetchImpl: typeof fetch,

@@ -1,5 +1,5 @@
 // AUTHORED-BY Codex GPT-6
-import { mkdir } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import AxeBuilder from "@axe-core/playwright";
 import { expect, type Page, type TestInfo, test } from "@playwright/test";
@@ -339,4 +339,144 @@ test("search, selection, direct lightbox reload and album deletion keep original
     .click();
   await navigate(page, "Photos");
   await expect(opens(page)).toHaveCount(12);
+});
+
+// AUTHORED-BY Claude Opus 5.5
+test("storage lists the largest photos and moving one to trash moves its space", async ({
+  page,
+}, info) => {
+  await page.goto("/photos");
+  await expect(opens(page)).toHaveCount(12);
+  await navigate(page, "Storage");
+  const largest = page.getByRole("region", { name: "Largest photos", exact: true });
+  const rows = largest.getByRole("listitem");
+  await expect(rows).toHaveCount(12);
+  const summary = page.getByRole("region", { name: "Storage summary", exact: true });
+  await expect(summary.getByText(/· 12 photos$/)).toBeVisible();
+  await expect(summary.getByText(/· 0 photos$/)).toBeVisible();
+  await expect(page.getByText(/Couldn't measure/)).toHaveCount(0);
+  const sizes = await largest.locator(".pho-storage-size").allTextContents();
+  const bytes = (text: string) => {
+    const [value = "0", unit = "B"] = text.split(/\s+/);
+    return Number(value) * ({ B: 1, KB: 1e3, MB: 1e6 }[unit] ?? 1);
+  };
+  expect(sizes.every((size) => bytes(size) > 0)).toBe(true);
+  expect(sizes.map(bytes)).toEqual([...sizes.map(bytes)].sort((a, b) => b - a));
+  await capture(page, info, "storage");
+  const first = rows.first();
+  const name = (await first.locator(".pho-storage-name > span").first().textContent()) ?? "";
+  const secondName =
+    (await rows.nth(1).locator(".pho-storage-name > span").first().textContent()) ?? "";
+  await first.getByRole("button", { name: `Move ${name} to trash`, exact: true }).focus();
+  await page.keyboard.press("Enter");
+  await saved(page);
+  await expect(rows).toHaveCount(11);
+  // Keyboard focus stays in the list on the row that took the trashed row's place.
+  await expect(
+    page.getByRole("button", { name: `Move ${secondName} to trash`, exact: true }),
+  ).toBeFocused();
+  await expect(summary.getByText(/· 1 photo · Review trash$/)).toBeVisible();
+  await summary.getByRole("link", { name: "Review trash", exact: true }).click();
+  await expect(page.getByRole("heading", { level: 1, name: "Trash", exact: true })).toBeVisible();
+  await expect(opens(page)).toHaveCount(1);
+});
+
+test("storage still shows trash space when every photo is in the trash", async ({ page }) => {
+  await page.goto("/photos");
+  await expect(opens(page)).toHaveCount(12);
+  await navigate(page, "Storage");
+  const rows = page
+    .getByRole("region", { name: "Largest photos", exact: true })
+    .getByRole("listitem");
+  for (let left = 12; left > 0; left--) {
+    await expect(rows).toHaveCount(left);
+    await rows
+      .first()
+      .getByRole("button", { name: /^Move .* to trash$/ })
+      .click();
+    await saved(page);
+  }
+  await expect(page.getByText("No photos in your pod yet", { exact: true })).toBeVisible();
+  const summary = page.getByRole("region", { name: "Storage summary", exact: true });
+  await expect(summary.getByText(/· 12 photos · Review trash$/)).toBeVisible();
+  await page.reload();
+  await expect(summary.getByText(/· 12 photos · Review trash$/)).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: "Storage", exact: true })).toBeVisible();
+});
+
+// AUTHORED-BY Claude Opus 5.5
+test("imports a Google Takeout folder with sidecar dates and album folders", async ({
+  page,
+}, info) => {
+  test.setTimeout(120_000);
+  const root = info.outputPath("Google Photos");
+  const png = (n: number) => Buffer.from((scenes[n] ?? scenes[0])[0], "base64");
+  const sidecar = (title: string, description: string) =>
+    JSON.stringify({
+      title,
+      description,
+      photoTakenTime: { timestamp: "1556704800" },
+      geoData: { latitude: 38.72, longitude: -9.14 },
+    });
+  const files: [string, string | Buffer][] = [
+    ["Photos from 2019/Beach.png", png(1)],
+    ["Photos from 2019/Beach.png.json", sidecar("Beach.png", "Beach day")],
+    ["Photos from 2019/clip.mp4", "not really a video"],
+    ["Lisbon/Beach.png", png(1)],
+    ["Lisbon/Tram.png", png(2)],
+    ["Lisbon/Tram.png.supplemental-metadata.json", sidecar("Tram.png", "")],
+    ["Lisbon/metadata.json", JSON.stringify({ title: "Lisbon" })],
+    ["Trash/Deleted.png", png(3)],
+    // Location can't be removed from HEIC in the browser, so it is reported, not retried.
+    ["Photos from 2019/IMG_9.HEIC", "not really a HEIC"],
+  ];
+  for (const [path, body] of files) {
+    await mkdir(resolve(root, path, ".."), { recursive: true });
+    await writeFile(resolve(root, path), body);
+  }
+  await page.goto("/photos");
+  await expect(opens(page)).toHaveCount(12);
+  await page.getByRole("button", { name: "Upload", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Import from Google Takeout", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { level: 1, name: "Import from Google Takeout", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("checkbox", { name: "Remove location from imported photos", exact: true }),
+  ).toBeChecked();
+  await page
+    .locator(".pho-takeout-pick")
+    .getByLabel("Choose folder", { exact: true })
+    .setInputFiles(root);
+  const panel = page.locator(".pho-takeout-panel");
+  await expect(panel.getByRole("heading", { name: "Ready to import" })).toBeFocused();
+  for (const [label, value] of [
+    ["Photos", "3"],
+    ["With dates, places or captions from Takeout", "2"],
+    ["Albums", "1"],
+  ] as const)
+    await expect(
+      panel.locator("div", { has: page.getByText(label, { exact: true }) }).locator("dd"),
+    ).toHaveText(value);
+  await expect(panel).toContainText(
+    "1 copy of photos that are also in an album will be imported once.",
+  );
+  await expect(panel).toContainText("1 video will be left out.");
+  await expect(panel).toContainText("1 deleted item from the Google Photos bin will be left out.");
+  await capture(page, info, "takeout-preview");
+  await page.getByRole("button", { name: "Import 3 photos", exact: true }).click();
+  await expect(panel.getByRole("heading", { name: "Import finished" })).toBeFocused({
+    timeout: 60_000,
+  });
+  await expect(panel).toContainText("Imported 2 photos into 1 album.");
+  await panel.getByText("1 photo couldn't be imported", { exact: true }).click();
+  await expect(panel).toContainText("IMG_9.HEIC: Location can't be removed from this format here.");
+  await expect(panel.getByRole("button", { name: /^Retry/ })).toHaveCount(0);
+  await capture(page, info, "takeout-done");
+  await page.getByRole("link", { name: "View photos", exact: true }).click();
+  await expect(opens(page)).toHaveCount(14);
+  await expect(page.getByRole("link", { name: "Open Beach.png", exact: true })).toBeVisible();
+  await navigate(page, "Albums");
+  await page.getByRole("link", { name: /Lisbon/ }).click();
+  await expect(opens(page)).toHaveCount(2);
 });

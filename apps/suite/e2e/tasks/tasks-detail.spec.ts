@@ -62,7 +62,7 @@ async function addTask(page: Page, title: string) {
   await input.fill(title);
   await input.press("Enter");
   await input.press("Escape");
-  const row = page.locator("li[data-task-url]").filter({ hasText: title });
+  const row = page.locator("[data-task-url]").filter({ hasText: title });
   await expect(row).toBeVisible();
   const url = await row.getAttribute("data-task-url");
   if (!url) throw new Error("Missing task URL");

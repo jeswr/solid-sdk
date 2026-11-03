@@ -56,6 +56,8 @@ dependencies {
     // PluginManager; Capacitor already ships Cordova at runtime, so this adds compile-time types only.
     compileOnly "org.apache.cordova:framework:$cordovaAndroidVersion"
     testImplementation "junit:junit:$junitVersion"
+    // AUTHORED-BY Claude Opus 5.5: the real org.json for JVM unit tests (android.jar ships stubs).
+    testImplementation "org.json:json:20250517"
     androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
     androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
     implementation project(':capacitor-cordova-android-plugins')

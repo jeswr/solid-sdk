@@ -1,0 +1,12 @@
+{
+  "extends": "//",
+  "files": {
+    "includes": ["**", "!!src/generated"]
+  },
+  "overrides": [
+    {
+      "includes": ["src/scrobble.test.ts"],
+      "linter": { "rules": { "correctness": { "noUnsafeOptionalChaining": "off" } } }
+    }
+  ]
+}

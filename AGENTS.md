@@ -23,6 +23,8 @@ additions are inventoried in `suite.json`. Maintainer-directed packages include
 helper `@jeswr/ldp-container` (bead sst-8xm.7). The latter has no mirror repository configured.
 The codegen rev-3 packages `@jeswr/model-runtime` and `@jeswr/federation-codegen` were imported
 with full history (bead sst-ild.4; design of record `decisions/0003-domain-model-codegen.md`).
+`@jeswr/solid-listening` was imported with full history as codegen Phase M (bead sst-ild.7.3).
+`@jeswr/solid-scheduling` was imported with full history as codegen Phase S (bead sst-ild.7.5); its task and calendar build/parse run on a generated core.
 The browser extension (`apps/extension`, `@jeswr/app-extension`) was imported with full history
 from `jeswr/solid-suite-extension`. Mirror publishing has NOT run yet. Do not import further packages outside the phased
 package plan or explicit maintainer direction.
@@ -80,6 +82,13 @@ dependencies and source import restrictions are outside this manifest check's sc
 Fixture tests run through `pnpm run test:root`; `--root <directory>` selects
 an isolated workspace for testing the script.
 
+`pnpm run check:codegen` (also part of `lint:root`) runs `scripts/check-codegen.mjs`: every
+`packages/*` or `apps/*` project that commits a generated model (`src/generated/codegen.lock.json`)
+must have a `codegen` script that runs `@jeswr/federation-codegen` into `src/generated`, a
+`workspace:` dependency on the generator (so Turbo re-runs the project when the generator
+changes), and a drift test that runs `pnpm run codegen --out <tmp>` and compares every
+generated file byte-for-byte. Fixture tests are in `test/check-codegen.test.mjs`.
+
 <!-- AUTHORED-BY Codex GPT-5 -->
 ## Local agent skills
 
@@ -133,6 +142,31 @@ review, never auto-merged — the drive/verify-merge security exclusion maps to 
   ported from prod-solid-server).
 - Follow-up (tracked, not yet wired): the gitleaks/pre-commit stack — not trivially portable
   from PSS (python/ruff hooks don't apply here).
+
+## Domain models are generated, not hand-written
+
+A domain model package (typed read/write accessors over a vocabulary, plus its SHACL
+shape) is **generated**: `@jeswr/federation-codegen` compiles the ontology, the SHACL
+profile and a `codegen.config.json` into `src/generated/`, and `@jeswr/model-runtime`
+interprets it. The package keeps only a thin facade, its vocabulary constants and any
+domain policy SHACL cannot express (bead sst-ild.7.6; design of record
+`decisions/0003-domain-model-codegen.md`).
+
+- Start from the federation sector's SHACL where one exists
+  (`packages/solid-federation-vocab/sectors/<sector>/<sector>.shacl.ttl`). A package's
+  codegen profile may narrow it, and states each narrowing and omission in the profile
+  header or the package README (see `packages/solid-listening/codegen/media.shapes.ttl`).
+- When closed admission rejects a construct the model needs, file a bead against the
+  generator (or extend it under review) instead of hand-writing accessors around it.
+- Every generated project carries a `codegen` script and a byte-for-byte drift test;
+  `pnpm run check:codegen` (part of `lint:root`) enforces both. Never edit
+  `src/generated/` by hand.
+- Migrating an existing hand-written model uses the oracle method: its original tests
+  pass verbatim through the facade, and every behaviour change is pinned in a test and
+  listed in the README. `packages/solid-bookmark` is the reference.
+- Normative vocabulary questions (which profile is canonical, whether to widen a
+  datatype) are decisions for the maintainer: file them as tracker beads labelled
+  `needs:jesse`, and keep the generated model on the current profile meanwhile.
 
 ## Conventions inherited verbatim from the suite
 

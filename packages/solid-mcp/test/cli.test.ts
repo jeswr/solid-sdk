@@ -158,6 +158,14 @@ describe("stdio executable", () => {
         arguments: { provider: conversation.provider, conversationId: conversation.conversationId },
       });
       expect(JSON.parse(text(chat))).toEqual({ ...conversation, url });
+      const context = await callTool({ name: "context_read", arguments: {} });
+      expect(JSON.parse(text(context))).toEqual({
+        status: "ok",
+        url: `${POD}agent/context/shared-context.md`,
+        contentType: "text/plain",
+        text: "hello fixture",
+        redactedCardNumbers: 0,
+      });
       // New registrations require a successful stdio exercise, not just a listing update.
       expect([...calledTools].sort()).toEqual(expectedNames);
       expect(stderr).not.toContain("fixture-secret");
