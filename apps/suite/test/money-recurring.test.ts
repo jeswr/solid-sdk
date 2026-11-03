@@ -329,6 +329,76 @@ describe("recurring payments", () => {
     ]);
   });
 
+  it("finds no schedules in everyday shopping", () => {
+    // A small seeded generator, so the test is the same every run.
+    const random = (seed: number) => () => {
+      seed = (seed + 0x6d2b79f5) | 0;
+      let value = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+      value = (value + Math.imul(value ^ (value >>> 7), 61 | value)) ^ value;
+      return ((value ^ (value >>> 14)) >>> 0) / 4_294_967_296;
+    };
+    const patterns = [
+      // Visits a week, lowest and highest amount.
+      ["Grocer", 1.5, 30, 60],
+      ["Grocer", 2.5, 20, 90],
+      ["Takeaway", 1, 18, 28],
+      ["Coffee", 4, 3, 4],
+      ["Fuel", 0.85, 40, 70],
+    ] as const;
+    const found: string[] = [];
+    for (let seed = 1; seed <= 50; seed++) {
+      const next = random(seed);
+      for (const [payee, perWeek, low, high] of patterns) {
+        const rows: Transaction[] = [];
+        for (let day = 0; day < 365; day++) {
+          if (next() >= perWeek / 7) continue;
+          const date = new Date(Date.UTC(2025, 10, 1 + day)).toISOString().slice(0, 10);
+          rows.push(row(payee, date, `-${(low + next() * (high - low)).toFixed(2)}`));
+        }
+        for (const value of recurringPayments(rows, "2026-10-28")) {
+          found.push(`${seed} ${payee} ${describeRecurrence(value.recurrence)} ${value.count}`);
+        }
+      }
+    }
+    expect(found).toEqual([]);
+    // Varying amounts on the 10th, among many other visits, are still shopping.
+    const shop = [
+      row("Corner shop", "2026-08-10", "-20"),
+      row("Corner shop", "2026-09-10", "-22"),
+      row("Corner shop", "2026-10-10", "-18"),
+      ...Array.from({ length: 15 }, (_, index) =>
+        row(
+          "Corner shop",
+          new Date(Date.UTC(2026, 7, 12 + index * 4)).toISOString().slice(0, 10),
+          `-${50 + index * 2}`,
+        ),
+      ),
+    ];
+    expect(recurringPayments(shop, "2026-10-28")).toEqual([]);
+    // The same amount every time is a schedule, however busy the payee.
+    const fixed = shop.map((value, index) => (index < 3 ? { ...value, amount: "-20" } : value));
+    expect(recurringPayments(fixed, "2026-10-28")).toMatchObject([{ count: 3 }]);
+  });
+
+  it("takes a new price once it repeats, but not a one-off on the date", () => {
+    const energy = [
+      ...monthly("Energy", "12", "-80", ["06", "07", "08", "09"]),
+      row("Energy", "2026-10-12", "-110"),
+      row("Energy", "2026-11-12", "-112"),
+    ];
+    expect(recurringPayments(energy, "2026-11-14")).toMatchObject([
+      { amount: "-112.00", count: 6, nextDate: "2026-12-12" },
+    ]);
+    const subscription = [
+      ...monthly("Stream", "05", "-9.99", ["07", "08", "09", "10"]),
+      row("Stream", "2026-11-04", "-250"),
+      row("Stream", "2026-11-05", "-9.99"),
+    ];
+    expect(recurringPayments(subscription, "2026-11-06")).toMatchObject([
+      { amount: "-9.99", count: 5, lastDate: "2026-11-05", nextDate: "2026-12-05" },
+    ]);
+  });
+
   it("describes schedules in words", () => {
     expect(describeRecurrence({ frequency: "weekly" })).toBe("Weekly");
     expect(describeRecurrence({ frequency: "biweekly" })).toBe("Every 2 weeks");
