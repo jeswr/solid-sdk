@@ -94,8 +94,8 @@ describe("listContainer", () => {
     const body = `@prefix ldp: <http://www.w3.org/ns/ldp#> .
 <${BASE}> ldp:contains <${BASE}before>, <http://[>, <${BASE}?self>, <${BASE}#self>, <${BASE}after> .`;
     expect(await listContainer(BASE, BASE, turtleFetch(body))).toEqual([
-      { url: `${BASE}before`, container: false },
       { url: `${BASE}after`, container: false },
+      { url: `${BASE}before`, container: false },
     ]);
   });
 

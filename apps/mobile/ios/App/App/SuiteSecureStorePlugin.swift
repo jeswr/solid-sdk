@@ -1,5 +1,6 @@
 // AUTHORED-BY GPT-5.6 Codex
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 import Foundation
 import Capacitor
 import UIKit
@@ -24,7 +25,7 @@ public class SuiteSecureStorePlugin: CAPPlugin, CAPBridgedPlugin {
     private var loaded: Result<SecureStore, Error>?
 
     override public func load() {
-        let origin = SuiteOrigin(url: bridge?.config.serverURL)
+        let origin = SuiteOrigin.app(serverURL: bridge?.config.serverURL, localURL: bridge?.config.localURL)
         let authenticator = SecureStoreAuthenticator { [weak self] in
             self?.bridge?.webView?.window?.windowScene?.activationState == .foregroundActive
         }

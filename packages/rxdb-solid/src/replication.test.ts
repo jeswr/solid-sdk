@@ -1,7 +1,8 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
 import { createRxDatabase, type RxCollection, type WithDeleted } from "rxdb";
 import { getRxStorageMemory } from "rxdb/plugins/storage-memory";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { replicateSolid, type SolidReplicationOptions } from "./replication.js";
 import { keyToResourceName, resourceNameToKey, SolidDocStore } from "./store.js";
 import { type FakePod, makePod } from "./testPod.js";
@@ -280,6 +281,50 @@ describe("6. key sanitisation — adversarial primary keys replicate end-to-end"
 });
 
 describe("conflict detection delegates to RxDB's conflictHandler", () => {
+  it("reports a missing-parent create conflict and retries without deleting the local insert", async () => {
+    const pod = makePod(CONTAINER);
+    let parentExists = false;
+    const collection = await makeCollection();
+    const item = { id: "new", title: "Keep locally", n: 1 };
+    await collection.insert(item);
+    const fetchImpl: typeof globalThis.fetch = async (input, init) =>
+      parentExists
+        ? pod.fetchImpl(input, init)
+        : new Response(null, { status: init?.method === "PUT" ? 409 : 404 });
+    const replication = replicateSolid<Item>({
+      collection,
+      container: CONTAINER,
+      fetch: fetchImpl,
+      live: false,
+      retryTime: 25,
+    });
+    const onError = vi.fn();
+    const sub = replication.error$.subscribe(onError);
+    try {
+      await vi.waitFor(() => expect(onError).toHaveBeenCalled());
+      expect(onError.mock.calls[0]?.[0]).toMatchObject({
+        code: "RC_PUSH",
+        parameters: {
+          direction: "push",
+          errors: [{ code: "conflict" }],
+        },
+      });
+      expect((await collection.findOne(item.id).exec())?.toJSON()).toEqual(item);
+
+      parentExists = true;
+      await replication.awaitInitialReplication();
+      const stored = await new SolidDocStore({ container: CONTAINER, fetch: pod.fetchImpl }).getDoc(
+        keyToResourceName(item.id),
+      );
+      expect(JSON.parse(stored?.body ?? "{}").doc).toEqual(withDeleted(item, false));
+      expect((await collection.findOne(item.id).exec())?.toJSON()).toEqual(item);
+    } finally {
+      parentExists = true;
+      sub.unsubscribe();
+      await replication.cancel();
+    }
+  });
+
   it("returns the pod's master state as a conflict when the fork's assumption is stale", async () => {
     const pod = makePod(CONTAINER);
     // Producer A writes id=z, n=1 to the pod.
