@@ -4,6 +4,7 @@
 import { useEffect, useState } from "react";
 import { useSession } from "./session-provider";
 import { isInOwnPods } from "@/lib/pod-scope";
+import { inertBlob } from "@/lib/viewers";
 
 /** Private Pod images need explicit auth too. Public foreign artwork keeps its existing URL. */
 export function usePodMedia(url: string | undefined): string | undefined {
@@ -20,7 +21,7 @@ export function usePodMedia(url: string | undefined): string | undefined {
         if (!response.ok) return;
         const blob = await response.blob();
         if (disposed) return;
-        objectUrl = URL.createObjectURL(blob);
+        objectUrl = URL.createObjectURL(inertBlob(blob));
         setLoaded({ url, objectUrl, webId });
       })
       .catch(() => {});

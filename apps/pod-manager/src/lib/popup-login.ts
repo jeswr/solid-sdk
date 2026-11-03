@@ -23,6 +23,13 @@ export class PopupBlockedError extends Error {
     this.name = "PopupBlockedError";
   }
 }
+/** The sign-in window stayed open past its limit; distinct from an address lookup timeout. */
+export class PopupTimeoutError extends Error {
+  constructor() {
+    super("The sign-in window timed out");
+    this.name = "PopupTimeoutError";
+  }
+}
 export interface PopupLoginControllerOptions {
   expectedOrigin: string;
   windowRef?: OpenerWindowLike;
@@ -114,7 +121,7 @@ export class PopupLoginController {
         if (popup.closed) finish(undefined, new CodeRequestCancelledError(url));
       }, this.#options.pollMs ?? 500);
       const timeout = setTimeout(
-        () => finish(undefined, new DOMException("Sign-in timed out", "TimeoutError")),
+        () => finish(undefined, new PopupTimeoutError()),
         this.#options.timeoutMs ?? 300_000,
       );
       this.#cancelPending = () => finish(undefined, new CodeRequestCancelledError(url));

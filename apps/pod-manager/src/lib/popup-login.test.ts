@@ -124,7 +124,7 @@ describe("gesture-owned popup", () => {
       controller.open();
       const result = controller.getCode(URL_AUTH, new AbortController().signal);
       const failure = expect(result).rejects.toMatchObject({
-        name: close ? "CodeRequestCancelledError" : "TimeoutError",
+        name: close ? "CodeRequestCancelledError" : "PopupTimeoutError",
       });
       if (close) popup.closed = true;
       await vi.advanceTimersByTimeAsync(500);

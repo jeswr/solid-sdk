@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { chooseViewer, normaliseMediaType, viewerKindLabel } from "./viewers.js";
+import { chooseViewer, inertBlob, normaliseMediaType, viewerKindLabel } from "./viewers.js";
 
 describe("normaliseMediaType", () => {
   it("strips parameters and lowercases", () => {
@@ -50,5 +50,26 @@ describe("viewerKindLabel", () => {
   it("gives a human label for each kind", () => {
     expect(viewerKindLabel("rdf")).toBe("Structured data");
     expect(viewerKindLabel("generic")).toBe("File");
+  });
+});
+
+describe("inertBlob (blob: URLs run on the app origin)", () => {
+  it.each(["image/png", "image/jpeg", "audio/mpeg", "video/mp4", "application/pdf", "IMAGE/PNG; q=1"])(
+    "keeps %s",
+    (type) => {
+      const blob = new Blob(["x"], { type });
+      expect(inertBlob(blob)).toBe(blob);
+    },
+  );
+  it.each(["image/svg+xml", "text/html", "application/xhtml+xml", "text/xml", "", "application/octet-stream"])(
+    "rewraps %s as a download-only octet stream",
+    async (type) => {
+      const result = inertBlob(new Blob(["<svg onload=alert(1)>"], { type }));
+      expect(result.type).toBe("application/octet-stream");
+      expect(await result.text()).toBe("<svg onload=alert(1)>");
+    },
+  );
+  it("treats SVG as a download-only resource rather than an inline image", () => {
+    expect(chooseViewer("image/svg+xml")).toMatchObject({ kind: "generic", embeddable: false });
   });
 });

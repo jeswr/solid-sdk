@@ -264,6 +264,26 @@ describe("shared Pod auth session", () => {
     expect(popup.closed).toBe(true);
     expect(auth.logout).toHaveBeenCalledOnce();
   });
+  it("cancel abandons only the attempt: no logout, so remembered accounts and sessions stay", async () => {
+    const pending = deferred<typeof identity>();
+    auth.login.mockReturnValue(pending.promise);
+    auth.remembered.mockResolvedValue([{ webId: WEB_ID, issuer: ISSUER }]);
+    await mount();
+    let result!: Promise<void>;
+    await act(async () => {
+      result = session.loginWithAccount(WEB_ID);
+    });
+    await act(async () => session.cancelLogin());
+    await act(async () => {
+      pending.reject(new DOMException("closed", "AbortError"));
+      await result;
+    });
+    expect(session.status).toBe("logged-out");
+    expect(session.error).toBe("Sign-in was cancelled.");
+    expect(popup.closed).toBe(true);
+    expect(auth.logout).not.toHaveBeenCalled();
+    expect(session.recentAccounts.map((account) => account.webId)).toEqual([WEB_ID]);
+  });
   it("ignores duplicate clicks while a login is pending", async () => {
     const pending = deferred<typeof identity>();
     auth.login.mockReturnValue(pending.promise);

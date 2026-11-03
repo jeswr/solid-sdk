@@ -25,7 +25,8 @@ test.describe("Login surface", () => {
     await expect(page.getByRole("heading", { name: "Sign in", exact: true })).toBeVisible();
     await expect(page.getByText("to continue to Pod Manager", { exact: true })).toBeVisible();
     const picker = page.getByRole("list", { name: "Providers", exact: true });
-    await expect(picker.getByRole("button").first()).toHaveText("Local provider");
+    // The button text includes the monogram; its accessible name is the provider name alone.
+    await expect(picker.getByRole("button").first()).toHaveAccessibleName("Local provider");
     await expect(picker.getByRole("button", { name: "solidcommunity.net", exact: true })).toBeVisible();
     await expect(page.getByRole("link", { name: "Get a pod", exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "What is a WebID?", exact: true })).toBeVisible();
@@ -34,7 +35,8 @@ test.describe("Login surface", () => {
   test("expands another provider inline", async ({ page }) => {
     await revealSignInForm(page);
     await page.getByRole("button", { name: "Other provider", exact: true }).click();
-    await expect(page.getByRole("textbox", { name: "Provider address", exact: true })).toBeEditable();
+    // A URL input with a recent-providers datalist is a combobox, so select it by label.
+    await expect(page.getByLabel("Provider address", { exact: true })).toBeEditable();
   });
 
   test("rejects a malformed pod address without navigating away", async ({ page }) => {

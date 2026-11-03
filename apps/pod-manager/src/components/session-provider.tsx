@@ -84,6 +84,7 @@ export function SessionProvider({
   const controller = useRef<PopupLoginController | null>(null);
   const mounted = useRef(false);
   const generation = useRef(0);
+  const cancelled = useRef<symbol | null>(null);
   const activeLogin = useRef<symbol | null>(null);
   const suggested = useRef<string | undefined>(undefined);
   const cleaned = useRef(false);
@@ -231,7 +232,11 @@ export function SessionProvider({
         const hint = await target();
         if (!current()) return;
         const identity = await auth.login(hint);
-        if (!current()) return;
+        if (!current()) {
+          // Cancelled after the provider already answered: drop that new session, nothing else.
+          if (mounted.current && cancelled.current === token) await auth.logout().catch(() => {});
+          return;
+        }
         controller.current!.closeIfOpen();
         await publish(identity, current);
         if (!current()) return;
@@ -293,10 +298,17 @@ export function SessionProvider({
     }
   }, [reset]);
   const cancelLogin = useCallback(() => {
-    void logout().then(() => {
-      if (mounted.current) setError("Sign-in was cancelled.");
-    });
-  }, [logout]);
+    // Abandon only this attempt: remembered accounts and their stored sessions stay.
+    const token = activeLogin.current;
+    if (!token) return;
+    cancelled.current = token;
+    ++generation.current;
+    activeLogin.current = null;
+    controller.current?.cancel();
+    reset();
+    setPending(null);
+    setError("Sign-in was cancelled.");
+  }, [reset]);
   const retry = useCallback(() => {
     restoreRef.current = null;
     setStartupFailed(false);

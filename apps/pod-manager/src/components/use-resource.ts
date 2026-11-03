@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { parseRdf } from "@jeswr/fetch-rdf";
 import type { DatasetCore } from "@rdfjs/types";
 import { useSession } from "@/components/session-provider";
-import { chooseViewer, type ViewerChoice } from "@/lib/viewers";
+import { chooseViewer, inertBlob, type ViewerChoice } from "@/lib/viewers";
 import { readResourceProperties, type PropertyGroup } from "@/lib/resource-view";
 
 /** A fetched resource ready to render: its viewer choice + decoded content. */
@@ -96,7 +96,7 @@ export function useResource(url: string): {
         const blob = await res.blob();
         if (cancelled) return;
         // Unknown/active formats are download-only, including when a link is opened in a new tab.
-        const preview = viewer.embeddable ? blob : new Blob([blob], { type: "application/octet-stream" });
+        const preview = viewer.embeddable ? inertBlob(blob) : new Blob([blob], { type: "application/octet-stream" });
         objectUrl = URL.createObjectURL(preview);
         loaded.objectUrl = objectUrl;
       }

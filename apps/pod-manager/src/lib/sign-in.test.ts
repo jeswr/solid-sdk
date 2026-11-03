@@ -3,7 +3,7 @@ import { AmbiguousIssuerError, IssuerNotAuthorizedError } from "@jeswr/pod-auth"
 import { InvalidLoginAddressError, NotALoginAddressError } from "@jeswr/pod-auth/directory";
 import { CodeRequestCancelledError } from "@jeswr/reactive-authentication";
 import { describe, expect, it } from "vitest";
-import { PopupBlockedError } from "./popup-login";
+import { PopupBlockedError, PopupTimeoutError } from "./popup-login";
 import { signInError } from "./sign-in";
 
 describe("safe sign-in error copy", () => {
@@ -24,6 +24,7 @@ describe("safe sign-in error copy", () => {
       new DOMException("secret", "TimeoutError"),
       "That address didn't respond. Check it, or choose your provider.",
     ],
+    [new PopupTimeoutError(), "The sign-in window was open too long. Try again."],
     [
       new PopupBlockedError(),
       "Your browser blocked the sign-in window. Allow popups for this site and try again.",
