@@ -116,6 +116,10 @@ test("searches messages and follows a highlighted result to the focused room mes
   await expect(results.getByRole("link")).toHaveCount(1);
   await expect(results.locator("mark")).toHaveText("Garden");
   await expect(page.getByRole("main").getByRole("status")).toContainText("1 message in 1 room");
+  await expect(page.getByRole("main").getByRole("status")).not.toContainText("days");
+  await expect(
+    page.getByRole("searchbox", { name: "Search messages in joined rooms", exact: true }),
+  ).toHaveValue("garden");
   await accessible(page);
   await capture(page, info, "search");
   await results.getByRole("link").click();
@@ -124,6 +128,13 @@ test("searches messages and follows a highlighted result to the focused room mes
   await expect(target).toBeFocused();
   await expect(target).toHaveAttribute("data-highlighted", "");
   await accessible(page);
+  const badHint = new URL(page.url());
+  badHint.searchParams.set("message", "bad%message");
+  await page.goto(badHint.href);
+  await expect(
+    page.getByRole("heading", { name: "Search room", level: 1, exact: true }),
+  ).toBeVisible();
+  await expect(page.getByRole("textbox", { name: "Message", exact: true })).toBeVisible();
 });
 test("create, append, edit, tombstone, turn into task, live sync and keyboard navigation", async ({
   page,

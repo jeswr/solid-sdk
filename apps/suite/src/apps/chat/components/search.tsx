@@ -2,6 +2,7 @@
 "use client";
 import { Button, LoadingSkeleton } from "@jeswr/suite-ui";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { type ReactNode, useCallback, useEffect } from "react";
 import { encodeRef } from "@/lib/refs";
 import { SearchError, type SearchSnippet } from "../lib/search";
@@ -20,15 +21,37 @@ function Snippet({ snippet }: { snippet: SearchSnippet }) {
   parts.push(snippet.text.slice(cursor));
   return <p className="chat-search-snippet">{parts}</p>;
 }
+export function ChatSearchRoute() {
+  const params = useSearchParams();
+  return <ChatSearchPage query={params.get("q") ?? ""} />;
+}
+function resultHref(room: string, message: string) {
+  let href = "/chat";
+  try {
+    href = `/chat/r/${encodeRef(room)}`;
+    return `${href}?message=${encodeRef(message)}`;
+  } catch {
+    return href;
+  }
+}
 export function ChatSearchPage({ query }: { query: string }) {
   const { client, setCurrentRoom } = useChat();
   const term = query.trim();
   const search = useAsync(
     useCallback(
-      () =>
-        term
-          ? client.search(term, { timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone })
-          : Promise.resolve(null),
+      async (signal: AbortSignal) => {
+        if (!term) return null;
+        try {
+          return await client.search(term, {
+            timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+            signal,
+          });
+        } catch (error) {
+          if (!(error instanceof SearchError && error.code === "INVALID_TIME_ZONE")) throw error;
+          signal.throwIfAborted();
+          return client.search(term, { timeZone: "UTC", signal });
+        }
+      },
       [client, term],
     ),
     false,
@@ -44,6 +67,26 @@ export function ChatSearchPage({ query }: { query: string }) {
     <div className="chat-search-page">
       <h1>Search</h1>
       <ChatSearchField query={query} page />
+      <p role="status" aria-atomic="true">
+        {term && search.status === "loading" ? (
+          "Searching messages…"
+        ) : term && search.status === "ready" && data ? (
+          <>
+            {data.results.length} {data.results.length === 1 ? "message" : "messages"} in{" "}
+            {roomCount} {roomCount === 1 ? "room" : "rooms"}
+            {data.truncationReasons.includes("rooms") &&
+              `. Searched ${data.searchedRooms} rooms; other rooms were outside the room limit`}
+            {data.truncationReasons.includes("days") &&
+              `. Searched the last ${data.searchedDays} days; older history remains`}
+            {data.truncationReasons.includes("results") && ". Showing the first 200 results"}
+            {data.truncationReasons.includes("records") &&
+              ". Some messages were outside the search record limit"}
+            {data.droppedRecords > 0 && `. Skipped ${data.droppedRecords} records`}
+          </>
+        ) : (
+          ""
+        )}
+      </p>
       {!term ? (
         <p>Search messages across your joined rooms.</p>
       ) : search.status === "loading" ? (
@@ -60,11 +103,6 @@ export function ChatSearchPage({ query }: { query: string }) {
       ) : (
         data && (
           <>
-            <p role="status" aria-atomic="true">
-              {data.results.length} {data.results.length === 1 ? "message" : "messages"} in{" "}
-              {roomCount} {roomCount === 1 ? "room" : "rooms"}
-              {data.truncated && ". Searched the last 30 days"}
-            </p>
             {data.skipped.length > 0 && (
               <div className="chat-search-skipped">
                 <p>
@@ -83,10 +121,7 @@ export function ChatSearchPage({ query }: { query: string }) {
               <ul className="chat-search-results" aria-label="Search results">
                 {data.results.map(({ room, message, snippet }) => (
                   <li key={message.id}>
-                    <Link
-                      className="chat-search-result"
-                      href={`/chat/r/${encodeRef(room.url)}?message=${encodeRef(message.id)}`}
-                    >
+                    <Link className="chat-search-result" href={resultHref(room.url, message.id)}>
                       <strong>{room.name || "Untitled conversation"}</strong>
                       <span className="chat-search-meta">
                         <span>

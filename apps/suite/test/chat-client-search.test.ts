@@ -61,8 +61,8 @@ it("searches only joined rooms, excludes deletions and skips unavailable rooms",
     },
   ]);
   expect(result.searchedRooms).toBe(1);
-  expect(result.skipped).toEqual([{ url: unavailable, name: unavailable }]);
-  expect(result.truncated).toBe(true);
+  expect(result.skipped).toEqual([]);
+  expect(result.truncated).toBe(false);
   expect(
     (await client.search(`in:${joined.url} garden`, { timeZone: "UTC" })).results,
   ).toHaveLength(1);
@@ -95,32 +95,57 @@ it("limits room loads to four at once and reports a failed day without losing ot
   expect(result.results).toHaveLength(6);
   expect(result.skipped).toEqual([{ url: rooms[1]?.url, name: "Room 1" }]);
   expect(result.truncated).toBe(false);
-  expect(loads).toHaveBeenCalledWith(rooms[0]?.url, { before: NOW, days: 30 });
+  expect(loads).toHaveBeenCalledWith(rooms[0]?.url, {
+    before: NOW,
+    days: 30,
+    since: NOW,
+    signal: undefined,
+  });
 });
 it("caps rooms and days, respects explicit budgets and limits results to the best 200", async () => {
   vi.spyOn(client, "joinedRooms").mockResolvedValue(Array.from({ length: 51 }, (_, i) => room(i)));
   const loads = vi.spyOn(client, "messages").mockResolvedValue({ messages: [], next: null });
   expect((await client.search("hello", { timeZone: "UTC" })).truncated).toBe(true);
   expect(loads).toHaveBeenCalledTimes(50);
-  expect(loads).toHaveBeenCalledWith(room().url, { before: NOW, days: 30 });
+  expect(loads).toHaveBeenCalledWith(room().url, {
+    before: NOW,
+    days: 30,
+    since: NOW,
+    signal: undefined,
+  });
   loads.mockClear();
   expect(
     (await client.search("hello", { days: 60, maxRooms: 51, timeZone: "UTC" })).truncated,
   ).toBe(false);
   expect(loads).toHaveBeenCalledTimes(51);
-  expect(loads).toHaveBeenCalledWith(room().url, { before: NOW, days: 60 });
+  expect(loads).toHaveBeenCalledWith(room().url, {
+    before: NOW,
+    days: 60,
+    since: NOW,
+    signal: undefined,
+  });
   loads.mockClear();
   expect(
     (await client.search("hello", { days: 1000, maxRooms: 1000, timeZone: "UTC" })).truncated,
-  ).toBe(true);
+  ).toBe(false);
   expect(loads).toHaveBeenCalledTimes(51);
-  expect(loads).toHaveBeenCalledWith(room().url, { before: NOW, days: 366 });
+  expect(loads).toHaveBeenCalledWith(room().url, {
+    before: NOW,
+    days: 366,
+    since: NOW,
+    signal: undefined,
+  });
   loads.mockClear();
   expect((await client.search("hello", { days: 2, maxRooms: 1, timeZone: "UTC" })).truncated).toBe(
     true,
   );
   expect(loads).toHaveBeenCalledTimes(1);
-  expect(loads).toHaveBeenCalledWith(room().url, { before: NOW, days: 2 });
+  expect(loads).toHaveBeenCalledWith(room().url, {
+    before: NOW,
+    days: 2,
+    since: NOW,
+    signal: undefined,
+  });
   vi.mocked(client.joinedRooms).mockResolvedValue([room()]);
   loads.mockResolvedValue({
     messages: Array.from({ length: 205 }, (_, i) => message(i)),
@@ -188,6 +213,9 @@ it("validates queries, time zones and budgets before loading rooms and propagate
     searchedRooms: 0,
     skipped: [],
     truncated: false,
+    truncationReasons: [],
+    searchedDays: 30,
+    droppedRecords: 0,
   });
   expect((await client.search("hello", { maxRooms: 100, timeZone: "UTC" })).truncated).toBe(false);
   joined.mockRejectedValue(new TypeError("offline"));

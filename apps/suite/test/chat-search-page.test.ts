@@ -1,4 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+
+import { readFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { afterEach, expect, it, vi } from "vitest";
 import { ChatClient, type ChatSearchResult, type Message } from "../src/apps/chat/lib/client";
@@ -8,8 +10,11 @@ import { createDemoPod } from "../src/lib/demo-pod/pod";
 import { encodeRef } from "../src/lib/refs";
 import { act, click, deferred, h, mount } from "./drive-ui-dom";
 
-const routing = vi.hoisted(() => ({ push: vi.fn() }));
-vi.mock("next/navigation", () => ({ useRouter: () => routing }));
+const routing = vi.hoisted(() => ({ push: vi.fn(), params: new URLSearchParams() }));
+vi.mock("next/navigation", () => ({
+  useRouter: () => routing,
+  useSearchParams: () => routing.params,
+}));
 vi.mock("../src/apps/chat/components/chat-app", () => ({
   PersonName: ({ webId }: { webId: string }) => webId || "Unknown author",
   ChatFailure: ({ retry }: { retry: () => void }) =>
@@ -21,7 +26,7 @@ vi.mock("../src/apps/chat/components/chat-app", () => ({
     ),
 }));
 
-import { ChatSearchPage } from "../src/apps/chat/components/search";
+import { ChatSearchPage, ChatSearchRoute } from "../src/apps/chat/components/search";
 
 const ROOT = "https://alice.example/";
 const ME = `${ROOT}profile#me`;
@@ -58,6 +63,9 @@ const response: ChatSearchResult = {
   searchedRooms: 3,
   skipped: [],
   truncated: true,
+  truncationReasons: ["days"],
+  searchedDays: 30,
+  droppedRecords: 0,
 };
 const requireUi = createRequire(
   new URL("../../../packages/suite-ui/package.json", import.meta.url),
@@ -92,7 +100,7 @@ it("renders safe highlighted text, local time, counts and a native message link"
   expect(view.host.querySelector("img")).toBeNull();
   expect(view.host.querySelector(".chat-search-snippet")?.textContent).toBe(message.content);
   expect(view.host.querySelector('[role="status"]')?.textContent).toBe(
-    "1 message in 1 room. Searched the last 30 days",
+    "1 message in 1 room. Searched the last 30 days; older history remains",
   );
   expect(view.host.querySelector("time")?.getAttribute("datetime")).toBe(message.published);
   expect(view.host.querySelector("time")?.textContent).toBe(
@@ -134,6 +142,7 @@ it("shows initial, loading, empty and skipped-room states with retry", async () 
   const pending = deferred<ChatSearchResult>();
   const search = vi.spyOn(ChatClient.prototype, "search").mockReturnValueOnce(pending.promise);
   const view = await mount(tree(""));
+  const status = view.host.querySelector('[role="status"]');
   expect(search).not.toHaveBeenCalled();
   expect(view.host.textContent).toContain("Search messages across your joined rooms.");
   await accessible(view.host);
@@ -146,9 +155,13 @@ it("shows initial, loading, empty and skipped-room states with retry", async () 
       searchedRooms: 2,
       skipped: [{ url: ROOM, name: "Unavailable room" }],
       truncated: false,
+      truncationReasons: [],
+      searchedDays: 30,
+      droppedRecords: 0,
     }),
   );
   expect(view.host.querySelector('[role="status"]')?.textContent).toBe("0 messages in 0 rooms");
+  expect(view.host.querySelector('[role="status"]')).toBe(status);
   expect(view.host.textContent).toContain("No messages found.");
   expect(view.host.textContent).toContain("Couldn't search 1 room: Unavailable room");
   await accessible(view.host);
@@ -187,11 +200,87 @@ it("ignores stale responses after the query changes or becomes empty", async () 
     .mockReturnValueOnce(first.promise)
     .mockReturnValueOnce(second.promise);
   const view = await mount(tree("first"));
+  const firstSignal = search.mock.calls[0]?.[1].signal;
+  expect(firstSignal?.aborted).toBe(false);
   await view.render(tree("second"));
+  expect(firstSignal?.aborted).toBe(true);
+  const secondSignal = search.mock.calls[1]?.[1].signal;
   await act(() => second.resolve({ ...response, results: [] }));
   await act(() => first.resolve(response));
   expect(view.host.querySelectorAll(".chat-search-results li")).toHaveLength(0);
   await view.render(tree(""));
+  expect(secondSignal?.aborted).toBe(true);
   expect(view.host.textContent).toContain("Search messages across your joined rooms.");
   expect(search).toHaveBeenCalledTimes(2);
+});
+
+it("reads q in the client route and retries a rejected browser time zone with UTC", async () => {
+  routing.params.set("q", "garden");
+  const search = vi
+    .spyOn(ChatClient.prototype, "search")
+    .mockRejectedValueOnce(new SearchError("INVALID_TIME_ZONE"))
+    .mockResolvedValue(response);
+  const view = await mount(h(ChatProvider, { session, children: h(ChatSearchRoute) }));
+  expect(view.host.querySelector("input")?.value).toBe("garden");
+  expect(search).toHaveBeenCalledTimes(2);
+  expect(search).toHaveBeenLastCalledWith("garden", expect.objectContaining({ timeZone: "UTC" }));
+  expect(search.mock.calls[0]?.[1].signal).toBe(search.mock.calls[1]?.[1].signal);
+  expect(view.host.querySelectorAll(".chat-search-results li")).toHaveLength(1);
+  await view.unmount();
+  expect(search.mock.calls[1]?.[1].signal?.aborted).toBe(true);
+  routing.params.delete("q");
+});
+
+it("describes each actual truncation reason and dropped records without inventing a date limit", async () => {
+  const search = vi.spyOn(ChatClient.prototype, "search").mockResolvedValue({
+    ...response,
+    truncationReasons: ["rooms", "results"],
+    searchedRooms: 50,
+    droppedRecords: 2,
+  });
+  const view = await mount(tree("garden"));
+  const status = view.host.querySelector('[role="status"]');
+  expect(status?.textContent).toContain(
+    "Searched 50 rooms; other rooms were outside the room limit",
+  );
+  expect(status?.textContent).toContain("Showing the first 200 results");
+  expect(status?.textContent).toContain("Skipped 2 records");
+  expect(status?.textContent).not.toContain("days");
+  search.mockResolvedValue({ ...response, truncationReasons: ["days"], searchedDays: 7 });
+  await view.render(tree("another"));
+  expect(view.host.querySelector('[role="status"]')).toBe(status);
+  expect(status?.textContent).toContain("Searched the last 7 days; older history remains");
+  search.mockResolvedValue({
+    ...response,
+    results: [],
+    truncationReasons: ["records"],
+    droppedRecords: 1,
+  });
+  await view.render(tree("limited"));
+  expect(status?.textContent).toContain("Some messages were outside the search record limit");
+  expect(status?.textContent).not.toContain("first 200 results");
+});
+
+it("falls back to the room link when a result identifier cannot be encoded", async () => {
+  vi.spyOn(ChatClient.prototype, "search").mockResolvedValue({
+    ...response,
+    results: response.results.map((result) => ({
+      ...result,
+      message: { ...message, id: "urn:uuid:1" },
+    })),
+  });
+  const view = await mount(tree("garden"));
+  expect(view.host.querySelector("li a")?.getAttribute("href")).toBe(`/chat/r/${encodeRef(ROOM)}`);
+});
+
+it("keeps server pages independent of search params for native static export", async () => {
+  const [search, room] = await Promise.all([
+    readFile(new URL("../src/app/(suite)/chat/search/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../src/app/(suite)/chat/r/[ref]/page.tsx", import.meta.url), "utf8"),
+  ]);
+  expect(search).not.toContain("searchParams");
+  expect(search).toContain("<Suspense>");
+  expect(search).toContain("<ChatSearchRoute />");
+  expect(room).not.toContain("searchParams");
+  expect(room).toContain("<RoomRoute reference={ref} />");
 });

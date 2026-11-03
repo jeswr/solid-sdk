@@ -103,6 +103,10 @@
 .chat-message-notice {
   padding: var(--space-3) var(--space-6);
 }
+.chat-message-notice:empty {
+  margin: 0;
+  padding: 0;
+}
 .chat-message[data-highlighted] {
   outline: 2px solid var(--primary);
   outline-offset: -2px;

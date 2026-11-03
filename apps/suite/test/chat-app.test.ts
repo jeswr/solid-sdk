@@ -135,13 +135,20 @@ it("prefers the search page field for slash and renders real client results acce
   const client = setup();
   const room = await client.createRoom({ name: "Garden club", members: [] });
   await client.send(room.url, "Garden plans");
-  const view = await mount(h(ChatApp, { children: h(ChatSearchPage, { query: "garden" }) }));
+  const view = await mount(
+    h(ChatApp, { children: h(ChatSearchPage, { query: "from:alice garden" }) }),
+  );
   const main = view.host.querySelector("main") as HTMLElement;
   const pageField = main.querySelector("input");
   await act(() => main.focus());
   await key(main, "/");
   expect(document.activeElement).toBe(pageField);
   expect(main.querySelector("mark")?.textContent).toBe("Garden");
+  expect(view.host.querySelector('search[aria-label="Search messages"]')).not.toBeNull();
+  const fields = [...view.host.querySelectorAll<HTMLInputElement>('input[type="search"]')];
+  expect(
+    fields.map((field) => view.host.querySelector(`label[for="${field.id}"]`)?.textContent),
+  ).toEqual(["Search messages", "Search messages in joined rooms"]);
   await accessible(main);
   await click(view.host.querySelector('[aria-label="Open navigation"]') as Element);
   const drawer = document.querySelector('[role="dialog"]') as HTMLElement;
@@ -163,4 +170,30 @@ it("opens the search page on narrow screens when the sidebar field is hidden", a
   await act(() => main.focus());
   await key(main, "/");
   expect(mocks.push).toHaveBeenCalledWith("/chat/search");
+});
+it("leaves slash in dialogs, alerts, menus and listboxes and only cancels an acting shortcut", async () => {
+  setup();
+  const view = await mount(h(ChatApp, { children: h(ChatLanding) }));
+  const main = view.host.querySelector("main") as HTMLElement;
+  for (const role of ["dialog", "alertdialog", "menu", "listbox"]) {
+    const popup = document.createElement("div");
+    popup.setAttribute("role", role);
+    const target = document.createElement("button");
+    popup.append(target);
+    main.append(popup);
+    await act(() => target.focus());
+    const event = new KeyboardEvent("keydown", { key: "/", bubbles: true, cancelable: true });
+    await act(() => target.dispatchEvent(event));
+    expect(event.defaultPrevented).toBe(false);
+    expect(document.activeElement).toBe(target);
+    popup.remove();
+  }
+  await act(() => main.focus());
+  const acting = new KeyboardEvent("keydown", { key: "/", bubbles: true, cancelable: true });
+  await act(() => main.dispatchEvent(acting));
+  expect(acting.defaultPrevented).toBe(true);
+  view.host.querySelector('[data-chat-search="sidebar"]')?.remove();
+  const idle = new KeyboardEvent("keydown", { key: "/", bubbles: true, cancelable: true });
+  await act(() => main.dispatchEvent(idle));
+  expect(idle.defaultPrevented).toBe(false);
 });

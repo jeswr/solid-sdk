@@ -14,7 +14,7 @@ export function ChatSearchField({ query = "", page = false }: { query?: string; 
     if (page) input.current?.focus();
   }, [page]);
   return (
-    <search aria-label={page ? "Message search" : "Search conversations"}>
+    <search aria-label={page ? "Message search results" : "Search messages"}>
       <form
         className="chat-search-form"
         onSubmit={(event) => {
@@ -22,7 +22,7 @@ export function ChatSearchField({ query = "", page = false }: { query?: string; 
           router.push(`/chat/search?q=${encodeURIComponent(value.trim())}`);
         }}
       >
-        <Label htmlFor={id}>Search messages</Label>
+        <Label htmlFor={id}>{page ? "Search messages in joined rooms" : "Search messages"}</Label>
         <div className="chat-search-controls">
           <Input
             ref={input}

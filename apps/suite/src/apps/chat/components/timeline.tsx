@@ -16,7 +16,15 @@ import {
   toast,
 } from "@jeswr/suite-ui";
 import { MoreHorizontal, SmilePlus } from "lucide-react";
-import { type KeyboardEvent, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  type KeyboardEvent,
+  type RefObject,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import type { Message } from "../lib/client";
 import { buildTimeline, visibleReactions } from "../lib/timeline";
 import { type Outgoing, useChat, useChatActions } from "../state/chat-context";
@@ -252,6 +260,7 @@ export function Timeline({
   url,
   messages,
   messageId,
+  historyLoading,
   outgoing,
   loading,
   hasOlder,
@@ -267,6 +276,7 @@ export function Timeline({
   url: string;
   messages: Message[];
   messageId?: string | undefined;
+  historyLoading?: RefObject<boolean>;
   outgoing: Outgoing[];
   loading: boolean;
   hasOlder: boolean;
@@ -284,7 +294,8 @@ export function Timeline({
   const anchor = useRef<{ id: string; top: number } | null>(null);
   const known = useRef<Set<string> | null>(null);
   const nearBottom = useRef(true);
-  const historyRequest = useRef(false);
+  const ownHistoryRequest = useRef(false);
+  const historyRequest = historyLoading ?? ownHistoryRequest;
   const [announcement, setAnnouncement] = useState("");
   const [focused, setFocused] = useState<string>();
   const target = useRef<string | undefined>(undefined);
@@ -362,7 +373,7 @@ export function Timeline({
     }
     known.current = ids;
     if (!loading) historyRequest.current = false;
-  }, [messages, session.webId, loading]);
+  }, [messages, session.webId, loading, historyRequest]);
   useLayoutEffect(() => {
     const node = scroll.current;
     if (!node) return;
@@ -419,7 +430,15 @@ export function Timeline({
     if (!article) return;
     jumpedTo.current = messageId;
     article.scrollIntoView?.({ block: "center", behavior: "auto" });
-    article.focus({ preventScroll: true });
+    if (
+      !(
+        document.activeElement instanceof Element &&
+        document.activeElement.closest(
+          'input,textarea,select,[contenteditable]:not([contenteditable="false"]),[role="textbox"]',
+        )
+      )
+    )
+      article.focus({ preventScroll: true });
     setHighlighted(messageId);
   }, [messageId, rows, start, virtual]);
   useEffect(() => {

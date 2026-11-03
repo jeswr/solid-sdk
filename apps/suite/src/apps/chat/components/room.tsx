@@ -24,7 +24,8 @@ import {
   toast,
 } from "@jeswr/suite-ui";
 import { Copy, Info, MessageSquare } from "lucide-react";
-import { useEffect, useId, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useId, useRef, useState } from "react";
 import { decodeRef } from "@/lib/refs";
 import type { Message } from "../lib/client";
 import { roomContainer } from "../lib/model";
@@ -148,6 +149,7 @@ export function RoomView({ url, messageId }: { url: string; messageId?: string |
   const read = useRef(0);
   const [renderedAt, setRenderedAt] = useState(0);
   const [messageNotice, setMessageNotice] = useState("");
+  const historyRequest = useRef(false);
   const jump = useRef({ messageId, pages: 0, cursor: "" });
   const member = room.data?.members.includes(session.webId);
   const isJoined = joined.data?.some((room) => room.url === url);
@@ -173,6 +175,7 @@ export function RoomView({ url, messageId }: { url: string; messageId?: string |
     if (jump.current.cursor === cursor) return;
     jump.current.cursor = cursor;
     jump.current.pages++;
+    historyRequest.current = true;
     messages.loadOlder();
   }, [messageId, messages.data, messages.status, messages.loadOlder]);
   // Only mark the visible snapshot read while this tab has the user's attention.
@@ -209,11 +212,22 @@ export function RoomView({ url, messageId }: { url: string; messageId?: string |
       () => toast.error("Couldn't copy invite link"),
     );
   };
+  const notice = (
+    <p key="message-notice" className="chat-message-notice" role="status" aria-atomic="true">
+      {messageNotice}
+    </p>
+  );
   if (!room.data && room.status === "loading")
-    return <LoadingSkeleton preset="list" label="Opening conversation" />;
+    return (
+      <div className="chat-room">
+        {notice}
+        <LoadingSkeleton preset="list" label="Opening conversation" />
+      </div>
+    );
   if (!room.data)
     return (
       <div className="chat-state">
+        {notice}
         <ChatFailure error={room.error} retry={room.retry} />
         <Composer
           url={url}
@@ -263,11 +277,7 @@ export function RoomView({ url, messageId }: { url: string; messageId?: string |
       </header>
       {room.status === "error" && <ChatFailure error={room.error} retry={room.retry} />}
       {messages.status === "error" && <ChatFailure error={messages.error} retry={messages.retry} />}
-      {messageNotice && (
-        <p className="chat-message-notice" role="status">
-          {messageNotice}
-        </p>
-      )}
+      {notice}
       {!messages.data && messages.status === "error" ? (
         <div className="chat-timeline" />
       ) : !messages.data ? (
@@ -277,6 +287,7 @@ export function RoomView({ url, messageId }: { url: string; messageId?: string |
           url={url}
           messages={list}
           messageId={messageId}
+          historyLoading={historyRequest}
           outgoing={send.data}
           loading={messages.status === "loading"}
           hasOlder={!!messages.data.next}
@@ -372,19 +383,20 @@ export function RoomView({ url, messageId }: { url: string; messageId?: string |
     </div>
   );
 }
-export function RoomRoute({
-  reference,
-  messageReference,
-}: {
-  reference: string;
-  messageReference?: string | undefined;
-}) {
+export function RoomRoute({ reference }: { reference: string }) {
+  return (
+    <Suspense>
+      <RoomRouteContent reference={reference} />
+    </Suspense>
+  );
+}
+function RoomRouteContent({ reference }: { reference: string }) {
+  const messageReference = useSearchParams().get("message");
   const { client } = useChat();
   let url: string;
   let messageId: string | undefined;
   try {
     url = roomContainer(decodeRef(reference));
-    if (messageReference) messageId = decodeRef(messageReference);
   } catch {
     return (
       <div className="chat-state" role="alert">
@@ -393,6 +405,12 @@ export function RoomRoute({
         <a href="/chat">Back to Chat</a>
       </div>
     );
+  }
+  // A malformed message hint must never invalidate an otherwise usable room link.
+  try {
+    if (messageReference) messageId = decodeRef(messageReference);
+  } catch {
+    messageId = undefined;
   }
   if (!client.canOpen(url))
     return (

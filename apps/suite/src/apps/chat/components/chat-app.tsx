@@ -239,13 +239,32 @@ function Chrome({ children }: { children: ReactNode }) {
       )
         return;
       if (event.key === "/") {
+        if (
+          event.target instanceof Element &&
+          event.target.closest(
+            '[role="alertdialog"],[role="menu"],[role="listbox"],[role="dialog"]:not(.ish-drawer)',
+          )
+        )
+          return;
         const field =
-          document.querySelector<HTMLInputElement>('[role="dialog"] [data-chat-search]') ??
-          document.querySelector<HTMLInputElement>('[data-chat-search="page"]');
-        event.preventDefault();
-        if (field) field.focus();
-        else if (window.matchMedia("(max-width: 1023px)").matches) router.push("/chat/search");
-        else document.querySelector<HTMLInputElement>(".ish-sidebar [data-chat-search]")?.focus();
+          document.querySelector<HTMLInputElement>(
+            '[role="dialog"].ish-drawer [data-chat-search]',
+          ) ?? document.querySelector<HTMLInputElement>('[data-chat-search="page"]');
+        if (field) {
+          field.focus();
+          event.preventDefault();
+        } else if (window.matchMedia("(max-width: 1023px)").matches) {
+          router.push("/chat/search");
+          event.preventDefault();
+        } else {
+          const sidebar = document.querySelector<HTMLInputElement>(
+            ".ish-sidebar [data-chat-search]",
+          );
+          if (sidebar) {
+            sidebar.focus();
+            event.preventDefault();
+          }
+        }
       }
       if (event.key === "]") {
         event.preventDefault();

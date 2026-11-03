@@ -3,7 +3,7 @@
 
 # Chat client
 
-`new ChatClient(fetch, storageUrl, webId, publicFetch = globalThis.fetch)` is the framework-free application facade.
+`new ChatClient(fetch, storageUrl, webId, publicFetch = globalThis.fetch, displayName?)` is the framework-free application facade.
 All RDF operations delegate to `../model`. The authenticated transport permanently stays inside
 the storage origin and path; room and day fetches refuse redirects;
 preference transport is isolated in `preferences-store.ts` until the SDK preference API lands.
@@ -37,16 +37,30 @@ preference transport is isolated in `preferences-store.ts` until the SDK prefere
   use the separately injected public transport with credentials omitted and redirects refused.
   Message URLs are linkified;
   preview metadata, images and arbitrary link destinations are never fetched.
-- `search(source, { days = 30, maxRooms = 50, timeZone })` searches only joined rooms,
-  in their listed order, with four room reads at a time. Positive integer budgets default to
+- `search(source, { days = 30, maxRooms = 50, timeZone, signal? })` searches only joined rooms,
+  in their listed order, with four room reads at a time, including metadata discovery. Search
+  refreshes joined membership and reuses resolved room metadata when available. Positive integer budgets default to
   30 UTC day shards and 50 rooms; callers can choose smaller or larger budgets, with days
   capped at the model's 366-shard maximum. At most 200 ranked results are returned. `truncated`
-  reports omitted rooms, older day pages or results. `searchedRooms` counts successful room
+  reports omitted rooms, older day pages or results; `truncationReasons` identifies `rooms`,
+  `days` and/or `results`, and `searchedDays` gives the actual day budget. Valid creation dates
+  stop history reads at the room's first day. `records` identifies the engine's 100,000-record
+  snapshot bound separately from the 200-result limit.
+  Cancellation reaches discovery and day fetches.
+  `searchedRooms` counts successful room
   loads; unavailable indexes/day pages appear in `skipped` without discarding other rooms.
   `in:` accepts an exact room URL or an exact, case-insensitive joined room name (quote
   names with spaces, e.g. `in:"Book club"`). Duplicate names resolve to the first listed room;
-  negated room filters follow the same rule. Filters never discover or join other rooms.
-  Author names use already cached profiles, falling back to WebIDs; search fetches no profiles.
+  negated room filters follow the same rule. Positive `in:` filters load only those rooms,
+  including rooms beyond `maxRooms`. Rewritten queries are validated before message reads.
+  Filters never discover or join other rooms. Author names use resolved cached profiles,
+  falling back to WebIDs; search never waits for pending profiles or fetches new ones. The
+  session's display name seeds the current user's name.
+  Malformed text/names are repaired to well-formed Unicode and names are bounded to the
+  engine's field limit. Records with oversized text/identifiers, invalid timestamps, or IDs
+  outside the loading room's HTTP(S) container are counted in `droppedRecords` and excluded.
+  Duplicate IDs prefer the most specific owning container, then listed order; failures retain
+  listed order regardless of request completion.
   Foreign notes without authors/timestamps use “Unknown author”/the Unix epoch. Deleted
   notes and tombstones are excluded. Attachments and reply relations are not yet represented
   by this client, so `has:attachment` and `is:thread` do not match; text link/mention filters
