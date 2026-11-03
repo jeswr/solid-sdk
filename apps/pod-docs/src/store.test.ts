@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 import { describe, expect, it } from "vitest";
 import { OutOfScopeError } from "./errors.js";
 import { createDocsStore, DOCS_SLUG, type DocsStore, nameFromUrl, toSlug } from "./store.js";
@@ -74,8 +75,9 @@ describe("scope guard", () => {
     await expect(s.read(`${CONTAINER}a%2Fb`)).rejects.toBeInstanceOf(OutOfScopeError);
   });
   it("rejects a query or fragment", async () => {
-    await expect(s.read(`${DOC}?x=1`)).rejects.toBeInstanceOf(OutOfScopeError);
-    await expect(s.read(`${DOC}#frag`)).rejects.toBeInstanceOf(OutOfScopeError);
+    for (const suffix of ["?x=1", "#frag", "?", "#"]) {
+      await expect(s.read(`${DOC}${suffix}`)).rejects.toBeInstanceOf(OutOfScopeError);
+    }
   });
   it("rejects an unparseable URL", async () => {
     await expect(s.read("::not a url")).rejects.toBeInstanceOf(OutOfScopeError);
@@ -103,7 +105,7 @@ describe("read", () => {
     await expect(store(fetch).read(DOC)).resolves.toBeUndefined();
   });
 
-  it("propagates a 404 as an RdfFetchError", async () => {
+  it("propagates a 404 as a StorageError", async () => {
     const { fetch } = mockFetch({});
     await expect(store(fetch).read(DOC)).rejects.toMatchObject({ status: 404 });
   });
@@ -113,8 +115,10 @@ describe("create", () => {
   it("registers the container then writes the document create-only", async () => {
     const PrivateIndex = "https://alice.pod/settings/privateTypeIndex.ttl";
     const { fetch, calls } = mockFetch({
+      [`HEAD ${CONTAINER}`]: { status: 200 },
+      [`HEAD ${POD}settings/`]: { status: 200 },
       // type-index bootstrap path
-      [`GET ${WEBID}`]: {
+      [`GET ${WEBID.split("#")[0]}`]: {
         body: `<${WEBID}> a <http://xmlns.com/foaf/0.1/Person> .`,
         etag: 'W/"p"',
       },
@@ -166,7 +170,7 @@ describe("create", () => {
       const url = typeof input === "string" ? input : input.toString();
       const method = init?.method ?? "GET";
       calls.push({ url, method });
-      if (method === "GET" && url === WEBID) {
+      if (method === "GET" && url === WEBID.split("#")[0]) {
         return new Response(
           `<${WEBID}> <http://www.w3.org/ns/solid/terms#privateTypeIndex> <${PrivateIndex}> .`,
           { status: 200, headers: { "content-type": "text/turtle", etag: 'W/"p"' } },
@@ -241,9 +245,13 @@ describe("save", () => {
 
 describe("remove", () => {
   it("deletes a document in scope", async () => {
-    const { fetch, calls } = mockFetch({ [`DELETE ${DOC}`]: { status: 205 } });
+    const { fetch, calls } = mockFetch({
+      [`HEAD ${DOC}`]: { status: 200, etag: '"old"' },
+      [`DELETE ${DOC}`]: { status: 205 },
+    });
     await expect(store(fetch).remove(DOC)).resolves.toBeUndefined();
-    expect(calls[0]?.method).toBe("DELETE");
+    expect(calls.at(-1)?.method).toBe("DELETE");
+    expect(calls.at(-1)?.headers["if-match"]).toBe('"old"');
   });
   it("rejects an out-of-scope delete before any I/O", async () => {
     const { fetch, calls } = mockFetch({});

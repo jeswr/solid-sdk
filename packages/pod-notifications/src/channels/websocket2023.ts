@@ -1,3 +1,8 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-/** Reserved channels/websocket2023 entry point for @jeswr/pod-notifications; implementation follows T-001. */
-export {};
+import { createWebSocketChannel, type WebSocketChannelOptions } from "./websocket.js";
+
+export type { WebSocketChannelOptions } from "./websocket.js";
+/** Subscribe once per Solid topic with the discovered WebSocketChannel2023 service. */
+export function createWebSocket2023Channel(options: WebSocketChannelOptions) {
+  return createWebSocketChannel(options, "solid");
+}

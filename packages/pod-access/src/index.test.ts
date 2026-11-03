@@ -1,8 +1,14 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { expect, test } from "vitest";
+// AUTHORED-BY Codex GPT-6
+import { expect, expectTypeOf, test } from "vitest";
 import {
   ACL,
+  type AccessClient,
+  type AccessGrant,
+  type AccessMode,
   emptyPolicy,
+  type Grant,
+  type Mode,
   readAcp,
   readModes,
   readWac,
@@ -11,6 +17,18 @@ import {
   writeWac,
 } from "./index.js";
 import * as testing from "./testing.js";
+
+test("keeps sharing grants distinct from translation rules in the public API", () => {
+  expectTypeOf<Parameters<AccessClient["share"]>[1]>().toEqualTypeOf<AccessGrant>();
+  expectTypeOf<Awaited<ReturnType<AccessClient["share"]>>>().toEqualTypeOf<AccessGrant>();
+  expectTypeOf<Awaited<ReturnType<AccessClient["grants"]>>>().toEqualTypeOf<
+    readonly AccessGrant[]
+  >();
+  expectTypeOf<AccessGrant["modes"]>().toEqualTypeOf<readonly AccessMode[]>();
+  expectTypeOf<Grant["modes"]>().toEqualTypeOf<Set<Mode>>();
+  expectTypeOf<Grant>().not.toExtend<AccessGrant>();
+  expectTypeOf<AccessGrant>().not.toExtend<Grant>();
+});
 
 test("exposes the translation core and keeps the testing entry point reserved", () => {
   expect(emptyPolicy()).toEqual({ grants: [], denials: [] });

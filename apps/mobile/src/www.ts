@@ -1,7 +1,7 @@
 // AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY GPT-5.6 Codex
-import { readFileSync, writeFileSync } from "node:fs";
-import { type MobileEnv, suiteOrigin } from "./config.ts";
+import { cpSync, existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { type MobileEnv, suiteMode, suiteOrigin } from "./config.ts";
 
 const escapeXml = (value: string) =>
   value.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -14,11 +14,27 @@ export function renderOfflinePage(template: string, env: MobileEnv): string {
 }
 
 const APP_BOUND = /(<key>WKAppBoundDomains<\/key>\s*<array>)[\s\S]*?(<\/array>)/;
+const APP_BOUND_ENTRY = /\t<key>WKAppBoundDomains<\/key>\s*<array>[\s\S]*?<\/array>/;
+const NO_APP_BOUND = "\t<!-- WKAppBoundDomains: none in bundled mode (MOB-P3 E6) -->";
 
-/** Points the iOS app-bound domain list at this build's suite hostname (DESIGN D2). */
+/**
+ * Points the iOS app-bound domain list at this build's suite hostname (DESIGN D2). Bundled mode
+ * removes the list (E6), leaving a marker so a later remote build restores it in place.
+ */
 export function withAppBoundDomain(plist: string, env: MobileEnv): string {
-  if (!APP_BOUND.test(plist)) throw new Error("Info.plist has no WKAppBoundDomains array");
+  if (suiteMode(env) === "bundled") {
+    if (plist.includes(NO_APP_BOUND)) return plist;
+    if (!APP_BOUND_ENTRY.test(plist)) throw new Error("Info.plist has no WKAppBoundDomains array");
+    return plist.replace(APP_BOUND_ENTRY, NO_APP_BOUND);
+  }
   const host = escapeXml(suiteOrigin(env).hostname);
+  if (plist.includes(NO_APP_BOUND)) {
+    return plist.replace(
+      NO_APP_BOUND,
+      `\t<key>WKAppBoundDomains</key>\n\t<array>\n\t\t<string>${host}</string>\n\t</array>`,
+    );
+  }
+  if (!APP_BOUND.test(plist)) throw new Error("Info.plist has no WKAppBoundDomains array");
   return plist.replace(APP_BOUND, `$1\n\t\t<string>${host}</string>\n\t$2`);
 }
 
@@ -28,8 +44,10 @@ const LOCAL_ATS = new RegExp(`\\n\\t${LOCAL_ATS_START}[\\s\\S]*?${LOCAL_ATS_END}
 
 /** Reversible debug loopback ATS; the App build phase rejects it in every non-Debug product. */
 export function withLocalNetworking(plist: string, env: MobileEnv): string {
-  const origin = suiteOrigin(env);
   const clean = plist.replace(LOCAL_ATS, "\n");
+  // Bundled builds load nothing from loopback servers.
+  if (suiteMode(env) === "bundled") return clean;
+  const origin = suiteOrigin(env);
   if (env.MOBILE_DEBUG !== "1" || !["localhost", "127.0.0.1"].includes(origin.hostname)) {
     return clean;
   }
@@ -46,10 +64,45 @@ export function withLocalNetworking(plist: string, env: MobileEnv): string {
   return clean.replace(/\n<\/dict>\s*<\/plist>/, `${exception}</dict>\n</plist>`);
 }
 
-/** Writes www/offline.html and the iOS build policy; run before `cap sync`. */
-export function prepareNative(root: URL, env: MobileEnv): void {
-  const template = readFileSync(new URL("templates/offline.html", root), "utf8");
-  writeFileSync(new URL("www/offline.html", root), renderOfflinePage(template, env));
+/**
+ * Refuses a bundle that was not built for the native target or whose Client ID Document is not an
+ * https URL (MOB-P3 E11), or that lacks the route manifest or 404 page the native resolvers need.
+ */
+export function checkBundle(exportDir: URL): void {
+  const file = (name: string) => new URL(name, exportDir);
+  if (!existsSync(file("build-info.json"))) {
+    throw new Error("The suite export has no build-info.json; run build:native in apps/suite");
+  }
+  const info = JSON.parse(readFileSync(file("build-info.json"), "utf8")) as Record<string, unknown>;
+  if (info.target !== "native")
+    throw new Error("The suite export was not built for the native target");
+  const clientId = typeof info.clientIdUrl === "string" ? URL.parse(info.clientIdUrl) : null;
+  if (!clientId || clientId.protocol !== "https:" || clientId.username || clientId.password) {
+    throw new Error("The suite export's Client ID URL must be https");
+  }
+  for (const name of ["route-manifest.json", "404.html", "index.html"]) {
+    if (!existsSync(file(name))) throw new Error(`The suite export has no ${name}`);
+  }
+}
+
+/**
+ * Writes the web directory and the iOS build policy; run before `cap sync`. Remote mode renders
+ * www/offline.html; bundled mode copies the suite's native export into www-bundled, from
+ * `SUITE_EXPORT_DIR` (default apps/suite/www).
+ */
+export function prepareNative(root: URL, env: MobileEnv & { SUITE_EXPORT_DIR?: string }): void {
+  if (suiteMode(env) === "bundled") {
+    const exportDir = env.SUITE_EXPORT_DIR
+      ? new URL(`${env.SUITE_EXPORT_DIR.replace(/\/?$/, "/")}`, root)
+      : new URL("../suite/www/", root);
+    checkBundle(exportDir);
+    const target = new URL("www-bundled/", root);
+    rmSync(target, { recursive: true, force: true });
+    cpSync(exportDir, target, { recursive: true });
+  } else {
+    const template = readFileSync(new URL("templates/offline.html", root), "utf8");
+    writeFileSync(new URL("www/offline.html", root), renderOfflinePage(template, env));
+  }
   const plistPath = new URL("ios/App/App/Info.plist", root);
   writeFileSync(
     plistPath,

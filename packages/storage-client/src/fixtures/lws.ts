@@ -113,3 +113,45 @@ export const lwsReadExchanges: RecordedExchanges = {
     }),
   },
 };
+
+// T-024 synthetic write exchanges. These represent the ADR-003 §7 wire contract, not
+// deployment captures; move's Content-Location variant is supplied by the mutation tests.
+export const LWS_WRITE_RESOURCE = `${LWS_CONTAINER}write.ttl`;
+export const LWS_WRITE_METADATA = `${LWS_WRITE_RESOURCE}.meta`;
+export const lwsWriteExchanges: RecordedExchanges = {
+  [`PUT ${LWS_WRITE_RESOURCE}`]: { status: 204, headers: { etag: '"written"' } },
+  [`POST ${LWS_CONTAINER}`]: {
+    status: 201,
+    headers: { location: LWS_WRITE_RESOURCE },
+  },
+  [`HEAD ${LWS_WRITE_RESOURCE}`]: {
+    status: 200,
+    headers: {
+      etag: '"resource"',
+      "content-type": "text/turtle",
+      link: `<${LWS_WRITE_METADATA}>; rel="linkset", <${LWS_CONTAINER}>; rel="up"`,
+    },
+  },
+  [`GET ${LWS_WRITE_RESOURCE}`]: {
+    status: 200,
+    headers: { etag: '"resource"', "content-type": "text/turtle" },
+    body: '<urn:s> <urn:p> "old".\n',
+  },
+  [`PATCH ${LWS_WRITE_RESOURCE}`]: { status: 204, headers: { etag: '"patched"' } },
+  [`DELETE ${LWS_WRITE_RESOURCE}`]: { status: 204, headers: {} },
+  [`GET ${LWS_WRITE_METADATA}`]: {
+    status: 200,
+    headers: { etag: '"metadata"', "content-type": "application/linkset+json" },
+    body: JSON.stringify({
+      linkset: [
+        {
+          anchor: LWS_WRITE_RESOURCE,
+          up: [{ href: LWS_CONTAINER }],
+          related: [{ href: "urn:old" }],
+        },
+      ],
+    }),
+  },
+  [`PATCH ${LWS_WRITE_METADATA}`]: { status: 204, headers: { etag: '"updated-metadata"' } },
+  [`HEAD ${LWS_WRITE_METADATA}`]: { status: 200, headers: { etag: '"observed-metadata"' } },
+};

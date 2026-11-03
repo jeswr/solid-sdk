@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
 "use client";
 /**
@@ -5,7 +6,7 @@
  * it reassures the user their logs are safe on-device and will sync (UX invariant
  * #2/#3); when there are un-synced writes it shows the pending count.
  */
-import { useOfflineStatus } from "solid-offline/react";
+import { useOfflineStatus } from "@jeswr/solid-offline/react";
 
 export function OfflineBanner({ pendingWrites }: { pendingWrites: number }) {
   const { online } = useOfflineStatus();

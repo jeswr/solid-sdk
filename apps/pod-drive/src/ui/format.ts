@@ -1,10 +1,11 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 //
 // Pure presentation helpers for the file-browser view. No React, no RDF — just
 // the size/date/name formatting the view renders. Kept separate so they are
 // trivially unit-testable and reusable by any future view (a list AND a grid).
 
-import type { DriveResource } from "../model.js";
+import type { DriveEntry } from "../drive.js";
 
 /**
  * Human-readable byte size (e.g. `1.5 KB`). Returns `"—"` when the server did
@@ -47,7 +48,7 @@ export function formatModified(date: Date | undefined): string {
  * `dcterms:format` content type, falling back to `File` when the server exposes
  * neither. Drives the icon + accessible row description in the view.
  */
-export function formatKind(resource: DriveResource): string {
+export function formatKind(resource: DriveEntry): string {
   if (resource.isContainer) {
     return "Folder";
   }
@@ -70,6 +71,6 @@ export function errorMessage(err: unknown): string {
  * host for a path-less pod root, so this is a thin, named alias the view reads —
  * keeping all name logic in one place should that fallback need to grow.
  */
-export function displayName(resource: DriveResource): string {
+export function displayName(resource: DriveEntry): string {
   return resource.name;
 }
