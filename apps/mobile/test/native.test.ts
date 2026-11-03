@@ -363,7 +363,10 @@ describe("iOS project", () => {
     expect(source).toContain("QLPreviewController.canPreview(file as NSURL)");
     // Sign-out closes the viewer this plugin presented and empties the store (sst-8wx.18).
     expect(source).toMatch(
-      /func pdfClear\(_ call: CAPPluginCall\) \{[\s\S]*?viewer\?\.dismiss\(animated: false\)[\s\S]*?store\(\)\.clear\(\)/,
+      /func pdfClear\(_ call: CAPPluginCall\) \{\s*queue\.async \{[\s\S]*?store\(\)\.clear\(\)[\s\S]*?DispatchQueue\.main\.async \{[\s\S]*?self\.close\(viewer\)/,
+    );
+    expect(source).toMatch(
+      /isBeingPresented, let coordinator = viewer\.transitionCoordinator[\s\S]*?presentingViewController\?\.dismiss\(animated: false\)/,
     );
     expect(source).toMatch(/editingModeFor previewItem[^}]*\.disabled/);
     expect(source).toMatch(/previewControllerDidDismiss[\s\S]*release\(file\)/);

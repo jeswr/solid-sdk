@@ -10,6 +10,10 @@ const mocks = vi.hoisted(() => ({
       (plugin: unknown, name: string, bytes: Uint8Array, signal?: AbortSignal) => Promise<void>
     >(),
   plugin: { pluginName: "SuiteFiles" },
+  activeId: "alice" as string | undefined,
+}));
+vi.mock("@/shell/session/accounts-provider", () => ({
+  useAccounts: () => ({ active: mocks.activeId ? { id: mocks.activeId } : null }),
 }));
 vi.mock("../src/apps/drive/state/drive-context", () => ({
   useDrive: () => ({ client: { readLimited: mocks.readLimited } }),
@@ -35,7 +39,10 @@ beforeEach(() => {
   mocks.readLimited.mockResolvedValue(pdf);
   mocks.openPdf.mockResolvedValue();
 });
-afterEach(() => vi.clearAllMocks());
+afterEach(() => {
+  vi.clearAllMocks();
+  mocks.activeId = "alice";
+});
 
 const button = (host: HTMLElement, label: string) => {
   const found = [...host.querySelectorAll("button")].find((b) => b.textContent?.includes(label));
@@ -155,4 +162,31 @@ it("stops after the read when the preview went away during it", async () => {
   finish(pdf);
   await new Promise((resolve) => setTimeout(resolve, 0));
   expect(mocks.openPdf).not.toHaveBeenCalled();
+});
+
+it.each([
+  ["a switch", "bob"],
+  ["sign-out", undefined],
+])("stops the transfer on %s, before the read's late result reaches the viewer", async (_, next) => {
+  let finish!: (blob: Blob) => void;
+  mocks.readLimited.mockReturnValue(
+    new Promise<Blob>((resolve) => {
+      finish = resolve;
+    }),
+  );
+  const view = await mount(h(NativePdfHandoff, { item: item(9) }));
+  await click(button(view.host, "Open PDF"));
+  mocks.activeId = next;
+  await view.render(h(NativePdfHandoff, { item: item(9) }));
+  finish(pdf);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(mocks.openPdf).not.toHaveBeenCalled();
+});
+
+it("keeps the transfer when the same account re-renders", async () => {
+  mocks.openPdf.mockReturnValue(new Promise<void>(() => undefined));
+  const view = await mount(h(NativePdfHandoff, { item: item(9) }));
+  await click(button(view.host, "Open PDF"));
+  await view.render(h(NativePdfHandoff, { item: item(9) }));
+  expect(mocks.openPdf.mock.calls[0]?.[3]?.aborted).toBe(false);
 });

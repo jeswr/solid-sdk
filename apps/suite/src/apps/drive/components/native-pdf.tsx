@@ -9,6 +9,7 @@
 import { Button } from "@jeswr/suite-ui";
 import { Download, FileText } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { useAccounts } from "@/shell/session/accounts-provider";
 import type { DriveItem } from "../lib/client/client";
 import { useDrive } from "../state/drive-context";
 import { useDriveActions } from "../state/ui";
@@ -44,9 +45,12 @@ export function NativePdfHandoff({ item }: { item: DriveItem }) {
   const [state, setState] = useState<HandoffState>(
     item.size !== undefined && item.size > PDF_PREVIEW_LIMIT ? "too-large" : "idle",
   );
-  // Leaving the preview stops the transfer before its next native call.
+  // Leaving the preview, or the account changing under it, stops the transfer before its next
+  // native call, so one account's file never opens after the shell cleared previews (sst-8wx.18).
+  const activeId = useAccounts().active?.id;
   const transfer = useRef<AbortController | undefined>(undefined);
-  useEffect(() => () => transfer.current?.abort(), []);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the cleanup must run when the account changes.
+  useEffect(() => () => transfer.current?.abort(), [activeId]);
   const open = async () => {
     transfer.current?.abort();
     const controller = new AbortController();

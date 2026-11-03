@@ -101,21 +101,33 @@ public class SuiteFilesPlugin: CAPPlugin, CAPBridgedPlugin, QLPreviewControllerD
         call.resolve()
     }
 
-    /// Sign-out or account switch (sst-8wx.18): closes QuickLook, drops any transfer and deletes
-    /// every preview file, so the next account never sees them.
+    /// Sign-out or account switch (sst-8wx.18): drops any transfer, deletes every preview file and
+    /// closes QuickLook, so the next account never sees them. The store work runs on the serial
+    /// queue first, so a pdfOpen that finished earlier has already queued its presentation on the
+    /// main thread ahead of the close below; one that comes later finds its handle gone.
     @objc func pdfClear(_ call: CAPPluginCall) {
-        DispatchQueue.main.async {
-            self.showing = nil
-            self.viewer?.dismiss(animated: false)
-            self.viewer = nil
-            self.queue.async {
-                do {
-                    try self.store().clear()
-                    call.resolve()
-                } catch {
-                    call.reject("Cannot clear PDF previews", "failed")
-                }
+        queue.async {
+            let cleared = (try? self.store().clear()) != nil
+            DispatchQueue.main.async {
+                self.showing = nil
+                let viewer = self.viewer
+                self.viewer = nil
+                self.close(viewer)
+                if cleared { call.resolve() } else { call.reject("Cannot clear PDF previews", "failed") }
             }
+        }
+    }
+
+    /// Dismisses from the presenter, which also closes a share sheet QuickLook has open, and waits
+    /// for a presentation still animating in (UIKit ignores a dismiss during one).
+    private func close(_ viewer: QLPreviewController?) {
+        guard let viewer = viewer else { return }
+        if viewer.isBeingPresented, let coordinator = viewer.transitionCoordinator {
+            coordinator.animate(alongsideTransition: nil) { _ in
+                viewer.presentingViewController?.dismiss(animated: false)
+            }
+        } else {
+            viewer.presentingViewController?.dismiss(animated: false)
         }
     }
 
