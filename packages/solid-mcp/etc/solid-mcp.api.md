@@ -10,6 +10,9 @@ import { Store } from 'n3';
 import { z } from 'zod';
 
 // @public
+export function createContextToolRegistry(pod: PodPort): readonly PodTool[];
+
+// @public
 export function createFetchPodPort(input: SolidMcpConfig): PodPort;
 
 // @public
@@ -75,6 +78,7 @@ export interface PodPort {
 // @public
 export interface PodReadOptions {
     accept?: string;
+    redirect?: "follow" | "error";
 }
 
 // @public
@@ -126,6 +130,9 @@ export interface ReadResult {
 }
 
 // @public
+export function readSharedContext(pod: PodPort): Promise<SharedContextResult>;
+
+// @public
 export function registerPodTools(server: McpServer, tools: readonly PodTool[]): void;
 
 // @public
@@ -155,6 +162,26 @@ export interface SearchOptions {
     maxTimeMs?: number;
     scope?: string;
 }
+
+// @public
+export const SHARED_CONTEXT_PATH = "agent/context/shared-context.md";
+
+// @public
+export type SharedContextResult = {
+    status: "ok";
+    url: string;
+    contentType: string;
+    etag?: string;
+    text: string;
+    redactedCardNumbers: number;
+} | {
+    status: "not_found";
+    url: string;
+    setup: string;
+};
+
+// @public
+export function sharedContextUrl(root: string): string;
 
 // @public
 export interface SolidMcpConfig {

@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 "use client";
 import {
   AppRail,
@@ -15,8 +16,9 @@ import {
   type ShellPreferences,
 } from "@jeswr/suite-ui/shell";
 import { OfflinePill, SyncSheet } from "@jeswr/suite-ui/sync";
-import { usePathname, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { type ReactNode, Suspense, useEffect, useState } from "react";
+import { useRoutePathname } from "@/lib/route-params";
 import { AccountMenu } from "./account/account-menu";
 import { useSuiteEnvironment } from "./environment";
 import { parseRailPreferences } from "./lib/preferences";
@@ -53,7 +55,8 @@ function Frame({
   searchSource,
   children,
 }: SuiteShellProps) {
-  const pathname = usePathname();
+  // The registry compares slash-free routes; the native export adds a trailing slash.
+  const pathname = useRoutePathname();
   const router = useRouter();
   const shellSource = useShellSearchSource();
   const sync = useSyncSnapshot();

@@ -1,11 +1,13 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 "use client";
 import { Button, IconButton, Toaster, toast } from "@jeswr/suite-ui";
 import { Grid2X2, List } from "lucide-react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { type ReactNode, useEffect, useRef } from "react";
 import { SuiteFrame } from "@/components/interim-shell/suite-frame";
 import { decodeRef } from "@/lib/refs";
+import { useRoutePathname } from "@/lib/route-params";
 import { PodSessionProvider, usePodSessionState } from "@/lib/session/pod-session";
 import type { StoredNote } from "../lib/model/store";
 import { NotesProvider, useNotesContext } from "../state/notes-context";
@@ -15,7 +17,7 @@ import { NotesSidebar } from "./sidebar";
 
 const purged = new Set<string>();
 function NotesRoutes() {
-  const pathname = usePathname();
+  const pathname = useRoutePathname();
   const query = useSearchParams().get("q") ?? "";
   const { notes, active, archived, trashed } = useNotesContext();
   const router = useRouter();
@@ -143,6 +145,14 @@ function SessionGate({ children }: { children: ReactNode }) {
         <Button variant="outline" onClick={() => location.reload()}>
           Retry
         </Button>
+      </div>
+    );
+  // Native builds start signed out until native sign-in lands.
+  if (state.status === "signed-out")
+    return (
+      <div className="notes-boot">
+        <h1>Notes</h1>
+        <p role="status">Sign in to open your Notes</p>
       </div>
     );
   return (
