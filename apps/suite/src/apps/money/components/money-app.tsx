@@ -9,6 +9,7 @@ import {
   ListChecks,
   ListTree,
   Plus,
+  Repeat,
   Wallet,
 } from "lucide-react";
 import Link from "next/link";
@@ -29,6 +30,7 @@ function Chrome({ children }: { children: ReactNode }) {
     { href: "/money", label: "Overview", Icon: LayoutDashboard },
     { href: "/money/accounts", label: "Accounts", Icon: Wallet },
     { href: "/money/reports", label: "Reports", Icon: BarChart3 },
+    { href: "/money/recurring", label: "Recurring", Icon: Repeat },
     { href: "/money/categories", label: "Categories", Icon: ListTree },
     { href: "/money/rules", label: "Rules", Icon: ListChecks },
     { href: "/money/import", label: "Import", Icon: ArrowDownToLine },

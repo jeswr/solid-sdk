@@ -5,10 +5,17 @@ import {
   type GuardOptions,
   type guardedFetch,
   refuseRedirects,
+  SsrfError,
 } from "@jeswr/guarded-fetch";
 import { createNodeGuardedFetch } from "@jeswr/guarded-fetch/node";
+import { ResponseSizeRefusedError } from "./errors.js";
 
 const MAX_BODY_BYTES = 1024 * 1024;
+
+/** guarded-fetch currently shares SsrfError between size caps and other refusals. */
+function isResponseSizeRefusal(error: unknown): boolean {
+  return error instanceof SsrfError && /^Response body for .+ exceeds cap \(/.test(error.message);
+}
 
 /** Buffer only under the guard's deadline, without waiting for source cancellation. */
 async function bufferRequestBody(
@@ -52,15 +59,22 @@ export interface OriginFetchOptions {
   readonly createTransport?: (options: {
     readonly maxRedirects: 0;
     readonly allowLoopback: boolean;
+    /** Must run after all transport preflight awaits, immediately before dispatch. */
+    readonly beforeDispatch?: () => void;
   }) => typeof guardedFetch;
   readonly allowLoopback?: boolean;
   readonly dnsLookup?: GuardOptions["dnsLookup"];
+}
+/** Request-local fence, never a way to override origin or guard policy. */
+export interface OriginRequestInit extends RequestInit {
+  readonly beforeDispatch?: () => void;
 }
 /** Snapshot ORIGINS; reject before DNS or connection and refuse every redirect. */
 export function createOriginScopedFetch(
   origins: ReadonlySet<string>,
   options: OriginFetchOptions = {},
-): ReturnType<typeof createGuardedFetch> {
+): (input: Parameters<typeof guardedFetch>[0], init?: OriginRequestInit) => Promise<Response> {
+  const { createTransport = createNodeGuardedFetch, allowLoopback, dnsLookup } = options;
   const allowed = new Set(origins);
   for (const origin of allowed) {
     let url: URL;
@@ -77,38 +91,72 @@ export function createOriginScopedFetch(
     )
       throw new TypeError("invalid binding origin");
   }
-  const transport = (options.createTransport ?? createNodeGuardedFetch)(
-    Object.freeze({ allowLoopback: options.allowLoopback ?? false, maxRedirects: 0 }),
-  );
-  const singleHop = refuseRedirects(transport);
-  const guarded = createGuardedFetch({
-    pinningFetch: async (input, init) => {
-      // The guard always supplies init and its combined caller/deadline signal.
-      const effective = init as RequestInit & { signal: AbortSignal };
-      const body = effective.body;
-      // Explicit streams are incompatible with keepalive and no-cors.
-      const transportInit = {
-        ...effective,
-        body:
-          body instanceof ReadableStream && (effective.keepalive || effective.mode === "no-cors")
-            ? await bufferRequestBody(body, effective.signal)
-            : body,
-      };
-      try {
-        return await singleHop(input, transportInit);
-      } catch {
-        // An inner guard may parse Location before refusal and retain it in its cause.
-        // Replace the whole error rather than passing untrusted transport details outward.
-        throw new TypeError("binding transport failed or refused redirect");
-      }
-    },
-    allowLoopback: options.allowLoopback,
-    dnsLookup: options.dnsLookup,
-    maxBytes: MAX_BODY_BYTES,
-    requireDnsPinning: true,
-    maxRedirects: 0,
-  });
+  function createSingleHop(beforeDispatch?: () => void) {
+    const transport = createTransport(
+      Object.freeze({
+        allowLoopback: allowLoopback ?? false,
+        maxRedirects: 0,
+        ...(beforeDispatch ? { beforeDispatch } : {}),
+      }),
+    );
+    return refuseRedirects(transport);
+  }
+  // The outer guard is cheap and per request, so a nested size refusal is recorded locally:
+  // guarded-fetch drops transport causes from its sanitised SsrfError.
+  function createGuard(singleHop: typeof guardedFetch, onSizeRefusal: () => void) {
+    return createGuardedFetch({
+      pinningFetch: async (input, init) => {
+        // The guard always supplies init and its combined caller/deadline signal.
+        const effective = init as RequestInit & { signal: AbortSignal };
+        const body = effective.body;
+        // Explicit streams are incompatible with keepalive and no-cors.
+        const transportInit = {
+          ...effective,
+          body:
+            body instanceof ReadableStream && (effective.keepalive || effective.mode === "no-cors")
+              ? await bufferRequestBody(body, effective.signal)
+              : body,
+        };
+        try {
+          return await singleHop(input, transportInit);
+        } catch (error) {
+          if (isResponseSizeRefusal(error)) {
+            onSizeRefusal();
+            throw new ResponseSizeRefusedError();
+          }
+          // An inner guard may parse Location before refusal and retain it in its cause.
+          // Replace the whole error rather than passing untrusted transport details outward.
+          throw new TypeError("binding transport failed or refused redirect");
+        }
+      },
+      allowLoopback,
+      dnsLookup,
+      maxBytes: MAX_BODY_BYTES,
+      requireDnsPinning: true,
+      maxRedirects: 0,
+    });
+  }
+  const defaultSingleHop = createSingleHop();
   return async (input, init) => {
+    const beforeDispatch = init?.beforeDispatch;
+    // Guard layers sanitize/wrap transport errors. Retain this request's exact fence refusal.
+    let refusal: { error: unknown } | undefined;
+    let sizeRefused = false;
+    let fenced = false;
+    const singleHop = beforeDispatch
+      ? createSingleHop(() => {
+          fenced = true;
+          try {
+            beforeDispatch();
+          } catch (error) {
+            refusal = { error };
+            throw error;
+          }
+        })
+      : defaultSingleHop;
+    const guarded = createGuard(singleHop, () => {
+      sizeRefused = true;
+    });
     // Snapshot mutable URL/Request inputs before any asynchronous work.
     // Request construction resets inherited referrer settings unless supplied explicitly.
     const inherited = input instanceof Request ? input : undefined;
@@ -134,15 +182,30 @@ export function createOriginScopedFetch(
     const url = new URL(request.url);
     if (!allowed.has(url.origin)) throw new TypeError("request origin is outside binding ORIGINS");
     // guarded-fetch normalizes only part of Request; retain the effective policies explicitly.
-    return guarded(request, {
-      body: request.body,
-      redirect: "manual",
-      integrity: request.integrity,
-      cache: request.cache,
-      mode: request.mode,
-      keepalive: request.keepalive,
-      referrer: request.referrer,
-      referrerPolicy: request.referrerPolicy,
-    });
+    let response: Response;
+    try {
+      response = await guarded(request, {
+        body: request.body,
+        redirect: "manual",
+        integrity: request.integrity,
+        cache: request.cache,
+        mode: request.mode,
+        keepalive: request.keepalive,
+        referrer: request.referrer,
+        referrerPolicy: request.referrerPolicy,
+      });
+    } catch (error) {
+      if (refusal) throw refusal.error;
+      // Guard layers sanitise transport errors; keep only the request-local size refusal type.
+      if (sizeRefused || isResponseSizeRefusal(error)) throw new ResponseSizeRefusedError();
+      throw error;
+    }
+    // A transport that drops beforeDispatch (e.g. an older guarded-fetch) would dispatch
+    // unfenced; surface that loudly rather than treat the send as authorised.
+    if (beforeDispatch && !fenced) {
+      await Promise.allSettled([response.body?.cancel()]);
+      throw new TypeError("binding transport did not run the dispatch fence");
+    }
+    return response;
   };
 }

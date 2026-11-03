@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// AUTHORED-BY Codex GPT-6.1-Sol
 // Triage evaluation over the LABELLED SYNTHETIC corpus (24 invented messages; see
 // src/triage/corpus.ts). Requires `npm run build`.
 //
@@ -7,47 +8,19 @@
 // one author's labels this measures nothing about production quality, and nothing about any
 // hosted model.
 //
-// Optional hosted run (TypeSafe), ONLY with all of:
-//   TYPESAFE_API_KEY in the environment (never on the command line), optional TYPESAFE_MODEL
-//   (pinned jev-X.Y.Z), and the flag --send-synthetic-corpus-to-typesafe. It sends the 24
-//   synthetic samples to https://api.typesafe.ai/v1/systemone. Thresholds are uncalibrated.
-//
+// Hosted pilot triage was retired in A-011. This evaluation uses local rules only.
 // Usage: node scripts/triage-eval.mjs [--out=reports/triage-eval-report.json]
-//        [--send-synthetic-corpus-to-typesafe]
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
-const { SYNTHETIC_CORPUS, evaluate, triageSample, typeSafeFromEnv } = await import(
+const { SYNTHETIC_CORPUS, evaluate, triageSample } = await import(
   join(root, "dist", "triage", "index.js")
 );
 const flag = (name) => process.argv.find((a) => a.startsWith(`--${name}=`))?.slice(name.length + 3);
 const OUT = flag("out") ?? join(root, "reports", "triage-eval-report.json");
-const hostedRequested = process.argv.includes("--send-synthetic-corpus-to-typesafe");
-
-const runs = {};
-runs.baseline = await evaluate(SYNTHETIC_CORPUS, (item) => triageSample(item.sample));
-
-if (hostedRequested) {
-  const hosted = typeSafeFromEnv(process.env);
-  if (!hosted.classifier) {
-    console.error(`hosted run not possible: ${hosted.problem ?? "TYPESAFE_API_KEY is not set"}`);
-    process.exit(3);
-  }
-  const statuses = {};
-  runs.typesafe = await evaluate(SYNTHETIC_CORPUS, async (item) => {
-    const r = await triageSample(item.sample, {
-      classifier: hosted.classifier,
-      allowed: true,
-      why: "explicit flag for the synthetic corpus",
-    });
-    statuses[r.hosted.status] = (statuses[r.hosted.status] ?? 0) + 1;
-    return r;
-  });
-  runs.typesafe.hostedStatuses = statuses;
-  runs.typesafe.model = hosted.model;
-}
+const runs = { baseline: await evaluate(SYNTHETIC_CORPUS, (item) => triageSample(item.sample)) };
 
 const report = {
   report: "Message triage — evaluation over the labelled synthetic corpus",

@@ -1,0 +1,22 @@
+# AUTHORED-BY Codex GPT-6.1-Sol
+@prefix agent: <https://jeswr.org/ns/agent#>.
+@prefix as: <https://www.w3.org/ns/activitystreams#>.
+@prefix prov: <http://www.w3.org/ns/prov#>.
+@prefix schema: <https://schema.org/>.
+
+<urn:agent:binding:discord> a agent:ChannelCapability;
+    agent:channel "discord";
+    agent:binding "discord";
+    agent:carriage "discord-footer/0.1";
+    <http://purl.org/dc/terms/description> "Bot-visible guild channels and bot DMs only. Personal user DMs are unavailable; bots cannot DM users who do not share a server. MESSAGE_CONTENT must be enabled and approved where Discord requires it.";
+    agent:structuredPayload false;
+    agent:endToEndEncrypted false;
+    agent:deliveryReceipts false;
+    agent:historyWindow "P0D"^^<http://www.w3.org/2001/XMLSchema#duration>;
+    agent:maxMessageBytes 8192;
+    agent:sendSupported true;
+    agent:costPerMessage "0"^^<http://www.w3.org/2001/XMLSchema#decimal>;
+    agent:rateLimit <urn:agent:node:aa26447519e92a9811d7e94d3e8eb789>;
+    agent:credentialState "connected".
+<urn:agent:node:aa26447519e92a9811d7e94d3e8eb789> agent:perRecipient 0;
+    agent:perDay 0.

@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
+// AUTHORED-BY Codex GPT-6.1-Sol
 /**
  * Rung 4 (LEGACY-INTEROP.md §5.2) — the channel-upgrade NEGOTIATION logic.
  *
@@ -12,6 +13,7 @@
  * `@jeswr/guarded-fetch` — is the M2 adapter; M1 has no untrusted network surface.
  */
 
+import { AGENT_FOOTER, decodeEnvelope, decodeEnvelopeObject } from "@jeswr/agent-channels";
 import { safeHttpIri } from "./safe-iri.js";
 
 /** The channels the bridge can negotiate, most-preferred first. */
@@ -50,7 +52,22 @@ export interface InboundSignals {
   readonly headers?: Readonly<Record<string, string>>;
   /** A parsed inline JSON-LD block from the inbound body, if any. */
   readonly jsonLd?: unknown;
+  /** Raw bounded JSON-LD blocks from EmailMessage / BridgeMessage. */
+  readonly jsonLdBlocks?: readonly string[];
+  /** Plain text from the parsed message, used for the footer discovery hint. */
+  readonly textBody?: string;
+  /** Trusted deployment footer configuration, with the J2 default. */
+  readonly footer?: string;
 }
+
+/** DESIGN §3.2 carriage ranking; independent of the legacy negotiation vocabulary. */
+export type DetectedCarriage = "rdf" | "a2a" | "email-mime" | "footer-url-only";
+const CARRIAGE_PREFERENCE: readonly DetectedCarriage[] = [
+  "rdf",
+  "a2a",
+  "email-mime",
+  "footer-url-only",
+];
 
 /** The detected capability of an inbound counterparty. */
 export interface BridgeCapability {
@@ -60,6 +77,8 @@ export interface BridgeCapability {
   readonly channels: readonly Channel[];
   /** The authoritative pod-copy URL from `X-Agentic-Reply`, when present + safe. */
   readonly podCopyUrl?: string;
+  /** Highest observed modern carriage hint. Never verifies identity or authorizes a send. */
+  readonly carriage?: DetectedCarriage;
 }
 
 /**
@@ -82,13 +101,65 @@ export function detectBridgeCapability(input: InboundSignals): BridgeCapability 
   }
 
   const jsonLdMarker = isAgenticReply(input.jsonLd);
-  const capable = podCopyUrl !== undefined || channelHeader !== undefined || jsonLdMarker;
+  const advertised = (channelHeader ?? "")
+    .split(",")
+    .slice(0, 16)
+    .map((s) => s.trim());
+  const emailMarker =
+    replyPointer?.trim() === "1" ||
+    isSignedEnvelope(input.jsonLd) ||
+    (input.jsonLdBlocks ?? []).slice(0, 16).some((block) => {
+      try {
+        decodeEnvelope(block);
+        return true;
+      } catch {
+        return false;
+      }
+    });
+  const footerMarker = hasFooterUrl(input.textBody ?? "", input.footer ?? AGENT_FOOTER);
+  // Keep legacy channel negotiation stable. The modern rank is separate because
+  // a footer advertises discovery, not a negotiated structured transport.
+  const carriage = CARRIAGE_PREFERENCE.find(
+    (c) =>
+      advertised.includes(c) ||
+      (c === "email-mime" && emailMarker) ||
+      (c === "footer-url-only" && footerMarker),
+  );
+  const capable =
+    podCopyUrl !== undefined ||
+    channelHeader !== undefined ||
+    jsonLdMarker ||
+    emailMarker ||
+    footerMarker;
 
   return {
     capable,
     channels: orderChannels(channels),
     ...(podCopyUrl !== undefined ? { podCopyUrl } : {}),
+    ...(carriage !== undefined ? { carriage } : {}),
   };
+}
+
+function isSignedEnvelope(value: unknown): boolean {
+  try {
+    decodeEnvelopeObject(value);
+    return true;
+  } catch {
+    return false;
+  }
+}
+function hasFooterUrl(text: string, footer: string): boolean {
+  // The first footer URL is the agent card; the spec URL alone claims no capability.
+  const card = footer.match(/https?:\/\/[^\s<>"']+/)?.[0];
+  if (card === undefined) return false;
+  const normalizedCard = normalizeFooterUrl(card);
+  return (text.slice(0, 512 * 1024).match(/https?:\/\/[^\s<>"']+/g) ?? []).some(
+    (url) => normalizeFooterUrl(url) === normalizedCard,
+  );
+}
+
+function normalizeFooterUrl(url: string): string {
+  return url.replace(/[),.;!?]+$/, "").replace(/\/$/, "");
 }
 
 /** True if a parsed JSON-LD object declares the `AgenticReply` type. */
@@ -105,9 +176,12 @@ function isAgenticReply(jsonLd: unknown): boolean {
 function normalizeHeaders(
   headers: Readonly<Record<string, string>> | undefined,
 ): Record<string, string> {
-  const out: Record<string, string> = {};
+  const out: Record<string, string> = Object.create(null);
   if (headers === undefined) return out;
-  for (const [k, v] of Object.entries(headers)) out[k.toLowerCase()] = v;
+  for (const [k, v] of Object.entries(headers)) {
+    const name = k.toLowerCase();
+    if (!Object.hasOwn(out, name)) out[name] = v;
+  }
   return out;
 }
 

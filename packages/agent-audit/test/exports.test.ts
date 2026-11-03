@@ -3,10 +3,14 @@
 
 import * as entry0 from "@jeswr/agent-audit";
 import * as entry1 from "@jeswr/agent-audit/testing";
+// biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
+import { execFile } from "child_process";
 // biome-ignore lint/style/useNodejsImportProtocol: agent imports allow only bare package names or relative paths
 import { existsSync, readFileSync } from "fs";
 // biome-ignore lint/style/useNodejsImportProtocol: agent imports allow only bare package names or relative paths
 import { fileURLToPath } from "url";
+// biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
+import { promisify } from "util";
 import { expect, it } from "vitest";
 
 const manifest = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
@@ -24,10 +28,19 @@ it("declares the root and testing entry points on Node >=24", () => {
   expect(manifest.engines.node).toBe(">=24");
 });
 
-it.each(entries)("resolves %s without exposing runtime capabilities", (subpath, target) => {
+it.each(entries)("resolves %s", (subpath, target) => {
   expect(existsSync(fileURLToPath(new URL(`../${target.types}`, import.meta.url)))).toBe(true);
   const entry = new URL(`../${target.default}`, import.meta.url);
   const specifier = manifest.name + (subpath === "." ? "" : subpath.slice(1));
   expect(import.meta.resolve(specifier)).toBe(entry.href);
-  expect(Object.getOwnPropertyNames(modules[subpath])).toEqual([]);
+  expect(Object.keys(modules[subpath] as object)).toContain(
+    subpath === "." ? "AuditWriter" : "createMemoryAuditPod",
+  );
+});
+
+it("runs the packaged audit binary", async () => {
+  const binary = fileURLToPath(new URL("../bin/audit.mjs", import.meta.url));
+  const result = await promisify(execFile)(process.execPath, [binary, "--help"]);
+  expect(result.stdout).toContain("Usage: audit <proposal-iri>");
+  expect(result.stderr).toBe("");
 });

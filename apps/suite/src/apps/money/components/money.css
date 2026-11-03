@@ -910,6 +910,49 @@
   transform: rotate(225deg);
 }
 
+.mon-recurring {
+  margin-bottom: var(--space-4);
+}
+.mon-recurring h2 {
+  margin: 0 0 var(--space-3);
+  font-size: var(--text-lg);
+}
+.mon-recurring ul {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.mon-recurring-row {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-3) 0;
+  border-top: 1px solid var(--border);
+}
+.mon-recurring-row:first-child {
+  border-top: 0;
+}
+.mon-recurring-main,
+.mon-recurring-side {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+}
+.mon-recurring-main strong {
+  overflow-wrap: anywhere;
+}
+.mon-recurring-side {
+  flex-shrink: 0;
+  justify-items: end;
+  text-align: end;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.mon-recurring-meta {
+  color: var(--foreground-muted);
+  font-size: var(--text-sm);
+}
 .mon-rules {
   display: grid;
   gap: var(--space-2);

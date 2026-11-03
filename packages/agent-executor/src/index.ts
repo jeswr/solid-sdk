@@ -1,3 +1,10 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-// Reserved scaffold surface; no runtime capability is implemented.
-export {};
+export { createExecutor, proposalApprovalTerms, proposalTermsDigest } from "./executor.js";
+export {
+  createFileTransmissionStore,
+  createHaltFileCheck,
+  type DurableFile,
+  type ExecutorFileSystem,
+} from "./files.js";
+export { MAX_TRANSMISSION_ATTEMPTS } from "./transmission.js";
+export type * from "./types.js";
