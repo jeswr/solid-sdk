@@ -29,6 +29,11 @@ export interface PodConditions {
 export interface PodReadOptions {
   /** Accepted media types; omitted for the backend's default representation. */
   accept?: string;
+  /**
+   * `"error"` refuses any redirect without requesting its target. Ports that resolve
+   * aliases themselves must still report the resolved `url`, so callers can refuse it.
+   */
+  redirect?: "follow" | "error";
 }
 
 /** Raw resource bytes, media type and optional ETag. */
@@ -144,11 +149,20 @@ export function createFetchPodPort(input: SolidMcpConfig): PodPort {
       const response = await fetcher(target, {
         method: "GET",
         // Follow through the scoped loop, or the CLI's validated anonymous profile loop.
-        redirect: !offPodProfile || handlesProfileRedirects(config.fetch) ? "follow" : "manual",
+        // A caller that refuses redirects gets the first 3xx back and no second request.
+        redirect:
+          options.redirect === "error" || (offPodProfile && !handlesProfileRedirects(config.fetch))
+            ? "manual"
+            : "follow",
         // Generic reads preserve the server's default representation.
         headers: options.accept === undefined ? undefined : { accept: options.accept },
       });
       if (!response.ok) void response.body?.cancel().catch(() => {});
+      if (
+        options.redirect === "error" &&
+        (response.type === "opaqueredirect" || (response.status >= 300 && response.status < 400))
+      )
+        throw new Error(`redirect refused reading ${target} (HTTP ${response.status})`);
       if (response.status === 401 || response.status === 403) {
         throw new Error(
           `unauthenticated/forbidden (${response.status}) reading ${target} (HTTP ${response.status}) — supply an authenticated fetch (the Solid-MCP server holds no credentials of its own).`,

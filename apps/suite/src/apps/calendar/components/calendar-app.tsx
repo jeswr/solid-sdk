@@ -23,6 +23,7 @@ import { type ReactNode, Suspense, useCallback, useEffect, useRef, useState } fr
 import { SuiteFrame } from "@/components/interim-shell/suite-frame";
 import { PodSessionProvider } from "@/lib/session/pod-session";
 import { CalendarProvider, useCalendarState, useCalendars } from "../state/calendar-context";
+import { editorHref } from "../state/editing";
 import {
   type CalendarView,
   calendarHref,
@@ -38,6 +39,9 @@ import {
   stepDate,
   VIEWS,
 } from "../state/view";
+import { CalendarReminders, DesktopRemindersButton } from "./calendar-reminders";
+import { CalendarDropArea, CalendarMenu, CalendarTransferProvider } from "./calendar-transfer";
+import { CalendarEditingProvider } from "./event-editor";
 
 export function useCalendarNavigation() {
   const pathname = usePathname();
@@ -45,8 +49,11 @@ export function useCalendarNavigation() {
   const router = useRouter();
   const { prefs, setPrefs } = useCalendarState();
   const segment = pathname.split("/")[2] ?? "week";
-  const view = isView(segment) ? segment : prefs.view;
-  const date = parseDate(params.get("d"));
+  const returnTo = params.get("return");
+  // The editor route keeps the view it was opened from (in `return`) behind the sheet.
+  const returnView = returnTo?.match(/^\/calendar\/([a-z]+)/)?.[1] ?? "";
+  const view = isView(segment) ? segment : isView(returnView) ? returnView : prefs.view;
+  const date = parseDate(params.get("d") ?? returnTo?.match(/[?&]d=(\d{4}-\d{2}-\d{2})/)?.[1]);
   const navigate = useCallback(
     (nextDate: string, nextView: CalendarView = view) => {
       const href = calendarHref(nextView, nextDate);
@@ -145,23 +152,26 @@ function Sidebar() {
       <h3>My calendars</h3>
       {calendars.status === "ready" &&
         calendars.calendars.map((calendar) => (
-          <label className="cal-calendar-choice" key={calendar.url} htmlFor={`cal-${calendar.url}`}>
-            <Checkbox
-              id={`cal-${calendar.url}`}
-              checked={!prefs.hidden.includes(calendar.url)}
-              onCheckedChange={(checked) =>
-                setPrefs((current) => ({
-                  ...current,
-                  hidden: checked
-                    ? current.hidden.filter((id) => id !== calendar.url)
-                    : [...current.hidden, calendar.url],
-                }))
-              }
-              aria-label={`Show ${calendar.title} calendar`}
-            />
-            <span className="cal-swatch" style={{ backgroundColor: calendar.colour }} />
-            <span>{calendar.title}</span>
-          </label>
+          <div className="cal-calendar-row" key={calendar.url}>
+            <label className="cal-calendar-choice" htmlFor={`cal-${calendar.url}`}>
+              <Checkbox
+                id={`cal-${calendar.url}`}
+                checked={!prefs.hidden.includes(calendar.url)}
+                onCheckedChange={(checked) =>
+                  setPrefs((current) => ({
+                    ...current,
+                    hidden: checked
+                      ? current.hidden.filter((id) => id !== calendar.url)
+                      : [...current.hidden, calendar.url],
+                  }))
+                }
+                aria-label={`Show ${calendar.title} calendar`}
+              />
+              <span className="cal-swatch" style={{ backgroundColor: calendar.colour }} />
+              <span>{calendar.title}</span>
+            </label>
+            <CalendarMenu calendar={calendar} />
+          </div>
         ))}
       <h3>Shared with me</h3>
       <p className="cal-muted">No shared calendars yet.</p>
@@ -183,11 +193,16 @@ function Sidebar() {
           )}
         </select>
       </label>
+      <footer>
+        <DesktopRemindersButton />
+      </footer>
     </div>
   );
 }
 function Details() {
   const { selected, closeEvent } = useCalendarState();
+  const router = useRouter();
+  const { date, view } = useCalendarNavigation();
   const close = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     close.current?.focus();
@@ -230,14 +245,24 @@ function Details() {
       ) : (
         <p>No reminders</p>
       )}
+      <div className="cal-details-actions">
+        <Button
+          onClick={() => {
+            closeEvent();
+            router.push(editorHref(selected.url, selected.data.start, calendarHref(view, date)));
+          }}
+        >
+          Edit
+        </Button>
+      </div>
     </div>
   );
 }
 function CalendarChrome({ children }: { children: ReactNode }) {
   const { date, view, navigate, weekStart } = useCalendarNavigation();
-  const { selected, closeEvent, eventTrigger } = useCalendarState();
+  const { selected, closeEvent, eventTrigger, syncStatus } = useCalendarState();
   const pathname = usePathname();
-  const search = pathname === "/calendar/search";
+  const search = pathname.replace(/\/+$/, "") === "/calendar/search";
   const [picker, setPicker] = useState(false);
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -345,7 +370,12 @@ function CalendarChrome({ children }: { children: ReactNode }) {
           </label>
         </div>
       )}
-      {children}
+      {syncStatus && (
+        <p className="cal-sync-status" role="status" aria-live="polite">
+          {syncStatus}
+        </p>
+      )}
+      <CalendarDropArea>{children}</CalendarDropArea>
     </SuiteFrame>
   );
 }
@@ -354,7 +384,12 @@ export function CalendarApp({ children }: { children: ReactNode }) {
     <PodSessionProvider>
       <Suspense fallback={<LoadingSkeleton preset="grid" />}>
         <CalendarProvider>
-          <CalendarChrome>{children}</CalendarChrome>
+          <CalendarEditingProvider>
+            <CalendarTransferProvider>
+              <CalendarChrome>{children}</CalendarChrome>
+              <CalendarReminders />
+            </CalendarTransferProvider>
+          </CalendarEditingProvider>
         </CalendarProvider>
       </Suspense>
       <Toaster position="bottom-center" />

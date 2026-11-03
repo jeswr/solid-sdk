@@ -1,8 +1,9 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 "use client";
 import { Button, ErrorState, LoadingSkeleton, Toaster } from "@jeswr/suite-ui";
-import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   type ReactNode,
   Suspense,
@@ -14,6 +15,7 @@ import {
 } from "react";
 import { SuiteFrame } from "@/components/interim-shell/suite-frame";
 import { decodeRef, encodeRef } from "@/lib/refs";
+import { useRouteParams, useRoutePathname } from "@/lib/route-params";
 import { PodSessionProvider, usePodSessionState } from "@/lib/session/pod-session";
 import { parseQuickAdd } from "../lib/compose/quick-add";
 import { classifyError } from "../lib/model/errors";
@@ -21,9 +23,11 @@ import { isEditing, openAddTask } from "../state/add-focus";
 import { TasksProvider, useTasks } from "../state/tasks-context";
 import { Composer } from "./composer/composer";
 import { TaskDetail } from "./detail/task-detail";
+import { TasksDnd } from "./dnd/tasks-dnd";
 import "./detail/detail.css";
 import { TasksSidebar } from "./sidebar";
 import { SortMenu } from "./sort-menu";
+import { ViewToggle } from "./view-toggle";
 
 const VIEW_NAMES: Readonly<Record<string, string>> = {
   "/tasks/inbox": "Inbox",
@@ -34,20 +38,31 @@ const VIEW_NAMES: Readonly<Record<string, string>> = {
 
 function TasksChrome({ children }: { children: ReactNode }) {
   const tasks = useTasks();
-  const pathname = usePathname();
+  const pathname = useRoutePathname();
+  // Smart views have fixed grouping/order; only project lists consume the sort preference.
+  const supportsSort = pathname === "/tasks/inbox" || /^\/tasks\/p\/[^/]+$/.test(pathname);
   const params = useSearchParams();
-  const route = useParams();
+  const label = useRouteParams<{ label: string }>("/tasks/l/[label]")?.label;
+  const listRef = useRouteParams<{ ref: string }>("/tasks/p/[ref]")?.ref;
+  const boardRef = useRouteParams<{ ref: string }>("/tasks/p/[ref]/board")?.ref;
+  const ref = listRef ?? boardRef;
   const router = useRouter();
   const [quickAdd, setQuickAdd] = useState(false);
   const restoreFocus = useRef<HTMLElement | null>(null);
   const title =
     VIEW_NAMES[pathname] ??
-    (typeof route.label === "string"
-      ? `@${route.label}`
-      : route.ref
-        ? (tasks.projects.find((project) => encodeRef(project.url) === route.ref)?.tracker.title ??
+    (typeof label === "string"
+      ? `@${label}`
+      : ref
+        ? (tasks.projects.find((project) => encodeRef(project.url) === ref)?.tracker.title ??
           "Project")
         : "Tasks");
+  let projectUrl: string | undefined;
+  try {
+    if (typeof ref === "string") projectUrl = decodeRef(ref);
+  } catch {
+    /* The project route renders its own not-found state. */
+  }
   const taskRef = params.get("task");
   let taskUrl: string | undefined;
   try {
@@ -178,52 +193,59 @@ function TasksChrome({ children }: { children: ReactNode }) {
   }, []);
   const inbox = tasks.projects.find((project) => project.url === tasks.inboxUrl);
   return (
-    <SuiteFrame
-      app="tasks"
-      sidebar={<TasksSidebar />}
-      context={<span className="tsk-context-title">{title}</span>}
-      actions={
-        <SortMenu
-          viewId={pathname}
-          defaultSort={
-            pathname === "/tasks/today" || pathname === "/tasks/upcoming" ? "due" : "manual"
-          }
-        />
-      }
-      details={details}
-      onDetailsClose={closeDetails}
-    >
-      {quickAdd && inbox && (
-        <Composer
-          modal
-          project={inbox}
-          due={
-            pathname === "/tasks/today"
-              ? parseQuickAdd("today", {
-                  now: new Date(),
-                  tz: Intl.DateTimeFormat().resolvedOptions().timeZone,
-                  projects: [],
-                  labels: [],
-                }).due
-              : undefined
-          }
-          onClose={() => {
-            setQuickAdd(false);
-            requestAnimationFrame(() => restoreFocus.current?.focus());
-          }}
-        />
-      )}
-      <div data-tsk-task-ref={taskRef ?? undefined}>
-        {tasks.status === "error" ? (
-          <div className="tsk-content">
-            <h1>Tasks</h1>
-            <ErrorState error={classifyError(tasks.error)} actions={{ retry: tasks.retry }} />
-          </div>
-        ) : (
-          children
+    <TasksDnd>
+      <SuiteFrame
+        app="tasks"
+        sidebar={<TasksSidebar />}
+        context={<span className="tsk-context-title">{title}</span>}
+        actions={
+          supportsSort || projectUrl ? (
+            <>
+              {supportsSort && <SortMenu viewId={pathname} />}
+              {projectUrl && (
+                <ViewToggle
+                  projectUrl={projectUrl}
+                  mode={pathname.endsWith("/board") ? "board" : "list"}
+                />
+              )}
+            </>
+          ) : undefined
+        }
+        details={details}
+        onDetailsClose={closeDetails}
+      >
+        {quickAdd && inbox && (
+          <Composer
+            modal
+            project={inbox}
+            due={
+              pathname === "/tasks/today"
+                ? parseQuickAdd("today", {
+                    now: new Date(),
+                    tz: Intl.DateTimeFormat().resolvedOptions().timeZone,
+                    projects: [],
+                    labels: [],
+                  }).due
+                : undefined
+            }
+            onClose={() => {
+              setQuickAdd(false);
+              requestAnimationFrame(() => restoreFocus.current?.focus());
+            }}
+          />
         )}
-      </div>
-    </SuiteFrame>
+        <div data-tsk-task-ref={taskRef ?? undefined}>
+          {tasks.status === "error" ? (
+            <div className="tsk-content">
+              <h1>Tasks</h1>
+              <ErrorState error={classifyError(tasks.error)} actions={{ retry: tasks.retry }} />
+            </div>
+          ) : (
+            children
+          )}
+        </div>
+      </SuiteFrame>
+    </TasksDnd>
   );
 }
 function SessionGate({ children }: { children: ReactNode }) {
@@ -232,6 +254,14 @@ function SessionGate({ children }: { children: ReactNode }) {
     return (
       <div className="tsk-boot" role="status">
         Opening your Tasks…
+      </div>
+    );
+  // Native builds start signed out until native sign-in lands.
+  if (state.status === "signed-out")
+    return (
+      <div className="tsk-boot">
+        <h1>Tasks</h1>
+        <p role="status">Sign in to open your Tasks</p>
       </div>
     );
   if (state.status === "error")

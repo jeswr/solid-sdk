@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 "use client";
 import { Button, Toaster, toast } from "@jeswr/suite-ui";
 import { Download, Plus, Star, Tag, Users, X } from "lucide-react";
@@ -16,6 +17,7 @@ import {
 } from "../state/contacts-context";
 import { encodeContactRef } from "../state/data";
 import { ContactDetail } from "./contact-detail";
+import { ContactExport } from "./contact-export";
 import { ContactsList } from "./contacts-list";
 
 const ignoreFailure = () => {}; // The controller reports and reconciles write errors.
@@ -24,7 +26,7 @@ function Sidebar() {
   const groups = useGroups();
   const mutations = useContactMutations();
   const { stars } = useStarred();
-  const pathname = usePathname();
+  const pathname = usePathname().replace(/\/+$/, "");
   const [menu, setMenu] = useState<string>();
   const [editing, setEditing] = useState<string>();
   const [name, setName] = useState("");
@@ -150,6 +152,7 @@ function Sidebar() {
         </Button>
       )}
       {link("/contacts/import", "Import", <Download size={18} aria-hidden="true" />)}
+      <ContactExport contacts={data.people.map((person) => person.data)} all />
     </div>
   );
 }
@@ -193,12 +196,13 @@ function MigrationBanner() {
   );
 }
 function ContactsChrome({ children }: { children: ReactNode }) {
-  const pathname = usePathname();
+  const pathname = usePathname().replace(/\/+$/, "");
   const router = useRouter();
   const params = useSearchParams();
   const state = useAddressBook();
   const match = /^\/contacts\/c\/([^/]+)$/.exec(pathname);
   const ref = match?.[1];
+  const formRoute = pathname === "/contacts/new" || /^\/contacts\/c\/[^/]+\/edit$/.test(pathname);
   const [wide, setWide] = useState(false);
   const returnPath = useRef("/contacts");
   const openedId = useRef<string | null>(null);
@@ -215,40 +219,76 @@ function ContactsChrome({ children }: { children: ReactNode }) {
     pathname === "/contacts" ||
     pathname === "/contacts/starred" ||
     pathname.startsWith("/contacts/label/");
-  if (listRoute)
-    returnPath.current =
-      pathname + (params.get("q") ? `?q=${encodeURIComponent(params.get("q") as string)}` : "");
+  if (listRoute) returnPath.current = pathname + (params.toString() ? `?${params.toString()}` : "");
+  if (pathname === "/contacts/new") returnPath.current = "/contacts";
   const close = () => {
     restoreFocus.current = true;
     router.push(returnPath.current);
   };
-  // Route completion makes the mobile list visible. Its virtual rows may arrive after layout;
-  // find the contact by identity rather than focusing a detached or still-hidden trigger.
+  // Route completion makes the mobile list visible. Its virtual rows may arrive (or be replaced)
+  // after layout, and a hidden row ignores focus(); keep retrying by identity until focus has
+  // stuck for a few frames, without stealing focus the user has since moved elsewhere.
   useEffect(() => {
     const host = listHost.current;
     if (!listRoute || !restoreFocus.current || !host) return;
-    const observer = new MutationObserver(focus);
-    function focus() {
+    let frame = 0;
+    let attempts = 0;
+    let settled = 0;
+    let focused: HTMLElement | undefined;
+    const observer = new MutationObserver(() => {
+      settled = 0;
+      schedule();
+    });
+    function find() {
       const person = [...(host?.querySelectorAll<HTMLElement>("[data-contact-id]") ?? [])].find(
         (element) => element.dataset.contactId === openedId.current,
       );
-      const target =
+      return (
         person?.closest<HTMLElement>("[data-collection-item]") ??
-        (!state.data.people.some((person) => `${person.url}#this` === openedId.current)
-          ? host?.querySelector<HTMLElement>("[data-collection-item][tabindex='0']")
-          : null);
-      if (!target) return;
-      target.focus({ preventScroll: true });
+        host?.querySelector<HTMLElement>("[data-collection-item][tabindex='0']") ??
+        host?.querySelector<HTMLElement>("[data-collection-item]") ??
+        host?.querySelector<HTMLElement>(".con-list button, .con-list a")
+      );
+    }
+    function movedElsewhere() {
+      const active = document.activeElement as HTMLElement | null;
+      if (!active || active === document.body || active === focused) return false;
+      // Inside the list, only a different element than the one we focused is a user move.
+      if (host?.contains(active)) return focused !== undefined;
+      return active.isConnected && (active.checkVisibility?.() ?? true);
+    }
+    function stop() {
       restoreFocus.current = false;
       observer.disconnect();
+      cancelAnimationFrame(frame);
+      frame = 0;
+    }
+    function attempt() {
+      frame = 0;
+      if (movedElsewhere()) return stop();
+      const target = find();
+      // No row yet: wait for the list to render (the observer reschedules on mutation).
+      if (!target) return;
+      if (document.activeElement !== target) {
+        settled = 0;
+        target.focus({ preventScroll: true });
+        focused = target;
+      }
+      if (document.activeElement === target) settled += 1;
+      attempts += 1;
+      if (settled >= 3 || attempts > 120) return stop();
+      schedule();
+    }
+    function schedule() {
+      if (!frame) frame = requestAnimationFrame(attempt);
     }
     observer.observe(host, { childList: true, subtree: true });
-    const frame = requestAnimationFrame(focus);
+    schedule();
     return () => {
       cancelAnimationFrame(frame);
       observer.disconnect();
     };
-  }, [listRoute, state.data.people]);
+  }, [listRoute]);
   useEffect(() => {
     if (!ref) return;
     const key = (event: KeyboardEvent) => {
@@ -266,7 +306,7 @@ function ContactsChrome({ children }: { children: ReactNode }) {
     return () => removeEventListener("keydown", key);
   });
   const detail = ref ? <ContactDetail contactRef={ref} onClose={close} /> : undefined;
-  const basePath = ref ? (returnPath.current.split("?")[0] as string) : pathname;
+  const basePath = ref || formRoute ? (returnPath.current.split("?")[0] as string) : pathname;
   return (
     <SuiteFrame
       app="contacts"
@@ -285,7 +325,7 @@ function ContactsChrome({ children }: { children: ReactNode }) {
         <div className="con-save" role="status" aria-live="polite">
           {state.saving ? "Saving…" : ""}
         </div>
-        {(listRoute || ref) && (
+        {(listRoute || ref || (formRoute && wide)) && (
           <>
             <div
               ref={listHost}
@@ -312,7 +352,7 @@ function ContactsChrome({ children }: { children: ReactNode }) {
                   if (!state.book) return;
                   openedId.current = contact.id;
                   router.push(
-                    `/contacts/c/${encodeContactRef(state.book.url, contact.id)}${params.get("q") ? `?q=${encodeURIComponent(params.get("q") as string)}` : ""}`,
+                    `/contacts/c/${encodeContactRef(state.book.url, contact.id)}${params.toString() ? `?${params.toString()}` : ""}`,
                   );
                 }}
               />

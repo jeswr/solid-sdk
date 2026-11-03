@@ -12,7 +12,6 @@ import type { Quad } from "@rdfjs/types";
 import { DataFactory, Writer } from "n3";
 import { HILLS_PNG, REPORT_PDF, SUNSET_PNG } from "./binaries";
 import type { DemoSeedFile } from "./pod";
-import { seedCalendar } from "./seed-calendar";
 import { seedContacts } from "./seed-contacts";
 import { seedPermissions } from "./seed-permissions";
 import { DEMO_INBOX, seedRequests } from "./seed-requests";
@@ -42,7 +41,19 @@ function turtle(quads: Quad[], prefixes: Record<string, string>): Promise<string
 const DAY = 86_400_000;
 
 /** Build the seed relative to `now` so "Modified" columns look recent. */
-export async function buildDemoSeed(now: number): Promise<DemoSeedFile[]> {
+export interface DemoSeedOptions {
+  /**
+   * Seed Calendar events (default true). Calendar seeding is loaded lazily: it pulls in
+   * `rrule`, whose CommonJS build has no named ESM exports, so Node-based e2e helpers that
+   * only need other apps' data pass `false` to avoid importing it.
+   */
+  calendar?: boolean;
+}
+
+export async function buildDemoSeed(
+  now: number,
+  options: DemoSeedOptions = {},
+): Promise<DemoSeedFile[]> {
   const me = namedNode(DEMO_WEBID);
   const root = namedNode(DEMO_ROOT);
   const profile = await turtle(
@@ -136,10 +147,10 @@ export async function buildDemoSeed(now: number): Promise<DemoSeedFile[]> {
     { path: "drive/data.ttl", body: contact, contentType: "text/turtle", modified: now - 12 * DAY },
     { path: "drive/Archive/", body: "", contentType: "text/turtle", modified: now - 30 * DAY },
   ];
-  return seedRequests(
-    await seedContacts(await seedCalendar(files, now), now),
-    DEMO_ROOT,
-    DEMO_WEBID,
-    now,
-  );
+  const seeded = async () => {
+    if (options.calendar === false) return seedContacts(files, now);
+    const { seedCalendar } = await import("./seed-calendar");
+    return seedContacts(await seedCalendar(files, now), now);
+  };
+  return seedRequests(await seeded(), DEMO_ROOT, DEMO_WEBID, now);
 }

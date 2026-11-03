@@ -39,7 +39,10 @@ On 412 re-read and observe the winner. Require strong ETags for request updates;
 `./roles` `addGrant` (roles, additive, conditional) and rethrow its refusals unretried. Reject off-storage targets and credentialed discovery links.
 Keep parsing lenient, byte/member work bounded, and requester metadata notification-local.
 Approvals grant Viewer or Editor only (append-only requests are refused). Reject ACP/unknown materialisation with the typed
-error. WAC expiry is receipt metadata only: document `expiryEnforced: false` and never imply revocation.
+error, and never read a `rel="acl"` link as proof of WAC (ESS advertises ACRs with it): detect the
+model from the advertised document with the roles layer's `detectModel`, check it before using the
+records folder ACL, and pin grants to `model: "wac"` (the roles layer then refuses an ACP target
+before writing; translate that into `UnsupportedAccessModelError`). WAC expiry is receipt metadata only: document `expiryEnforced: false` and never imply revocation.
 Delivery through unauthenticated `publicFetch` is best effort and cannot roll back committed decisions;
 it never falls back to global fetch, and requester URLs must be public HTTPS (a URL check only: in
 Node pass a DNS-checking `publicFetch`, e.g. `createGuardedFetch()` from `@jeswr/guarded-fetch`).
@@ -57,7 +60,8 @@ under `<storage>settings/`, whether discovered or pinned; compare the decoded pa
 case-insensitively, never raw strings, and refuse any target with a query, fragment, empty segment
 or an ambiguous percent-encoding (unreserved characters, `%`, `/`, `\`, controls, invalid UTF-8),
 and segments ending in a dot or space or containing `::`;
-ordinary encoded names (spaces, non-ASCII) stay shareable. A resumed approval
+ordinary encoded names (spaces, non-ASCII) stay shareable; access-control and metadata documents
+(`.acl`, `.acr`, `.meta`) are never targets. A resumed approval
 (pending or Approving) refuses explicit choices (`dataTypes`, `role`, `expiresAt`) that differ from
 the pinned ones. A lost pin or CAS reports the request's re-read status in `RequestConflictError`.
 Known limit: a requester-authored `approved` notification at a reused URL that matches an earlier
@@ -90,7 +94,13 @@ and retain successful results accurately. Re-read discovery and governing valida
 conditional persistence; never retry a 412 silently. Copy WAC defaults through typed setters
 and preserve materializedFrom provenance across reapplication, including descendant defaults.
 Do not edit ancestor documents. Keep the HTTP body/quad/ancestor bounds, root checks,
-redirect refusal and fetch-rdf remote-context refusal. No network in tests.
+redirect refusal and fetch-rdf remote-context refusal. No network in tests. A pinned
+`options.model` refuses (`unsupported`, before any write) a resource whose detected model
+differs (a behaviour change: these functions used to ignore it); `detectModel` is
+read-only and the only path that admits a query-addressed access document (ESS `?ext=acr`).
+Writing paths keep refusing queries. `detectModel` fails closed: only an existing, non-empty
+access document decides the model, otherwise it reports `unknown`; `isMixedModel` tags its
+mixed-model refusals, which requests-solid reports as `UnsupportedAccessModelError("unknown")`.
 
 <!-- AUTHORED-BY Codex GPT-6 -->
 

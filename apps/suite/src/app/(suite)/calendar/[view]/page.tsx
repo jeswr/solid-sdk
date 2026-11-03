@@ -1,9 +1,17 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { LoadingSkeleton } from "@jeswr/suite-ui";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { CalendarScreen } from "@/apps/calendar/components/calendar-views";
 import { isView } from "@/apps/calendar/state/view";
+
+export const dynamicParams = true;
+// Native staging replaces this file with its own placeholder-param page.
+export function generateStaticParams() {
+  return [];
+}
+
 export default async function CalendarViewPage({ params }: { params: Promise<{ view: string }> }) {
   const { view } = await params;
   if (!isView(view)) notFound();

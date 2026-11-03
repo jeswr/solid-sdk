@@ -482,31 +482,34 @@ export function usePermissions() {
         const partial = error instanceof PartialRevokeError ? error : undefined;
         const cause = partial ? partial.cause : error;
         const restored = [...new Set(partial?.undo.restore?.map((delta) => delta.source))];
-        if (restored.length) {
-          const unrestored = (entry.plan.restore ?? []).filter(
-            (delta) => !restored.includes(delta.source),
-          );
-          // The refused document can't come back here; documents after it still can.
-          const conflict =
-            cause instanceof RestoreConflictError
-              ? (cause.source ?? unrestored[0]?.source)
-              : undefined;
-          const remaining = unrestored.filter((delta) => delta.source !== conflict);
+        const unrestored = (entry.plan.restore ?? []).filter(
+          (delta) => !restored.includes(delta.source),
+        );
+        // The refused document can't come back here; documents after it still can.
+        const conflict =
+          cause instanceof RestoreConflictError
+            ? (cause.source ?? unrestored[0]?.source)
+            : undefined;
+        const remaining = unrestored.filter((delta) => delta.source !== conflict);
+        if (restored.length || (conflict && remaining.length)) {
           if (remaining.length)
             sessionCache.undos.set(token, { ...entry, plan: { changes: [], restore: remaining } });
           else sessionCache.undos.delete(token);
           if (live())
             dispatch(conflict ? { type: "undo-unavailable", token } : { type: "write-error" });
-          const message = `Access restored for ${itemNames(entry, restored)}. ${
+          const message = [
+            ...(restored.length ? [`Access restored for ${itemNames(entry, restored)}.`] : []),
             conflict
               ? `Access to ${itemNames(entry, [conflict])} was changed elsewhere, so it can't be restored here`
               : `Couldn't restore access to ${itemNames(
                   entry,
                   remaining.map((delta) => delta.source),
-                )}. Refresh and try again.`
-          }`;
+                )}. Refresh and try again.`,
+          ].join(" ");
+          // Stays until dismissed: once the line goes stale this is the only way back.
           if (remaining.length)
             toast.error(message, {
+              duration: Number.POSITIVE_INFINITY,
               action: {
                 label: "Undo remaining",
                 onClick: (click) => void undo(token, click),

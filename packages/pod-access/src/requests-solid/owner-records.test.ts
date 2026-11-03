@@ -296,12 +296,8 @@ describe("owner-controlled approval records", () => {
     };
     await refuse('<x>; rel="http://www.w3.org/ns/solid/acp#accessControl"', "acp");
     await refuse("<https://evil.example/records.acl>; rel=acl", /.+/);
-    // Without a Link header the conventional sibling is used.
-    const plain = buildPod();
-    plain.intercept = (method, url) =>
-      method === "HEAD" && url === RECORDS && plain.has(RECORDS) ? new Response(null) : undefined;
-    await decide({ id: ID }, { approve: false }, opts(plain));
-    expect(plain.body(`${RECORDS}.acl`)).toContain(OWNER);
+    // Without a Link header the folder's access model is unknown: no conventional sibling is guessed.
+    await refuse(null, "unknown access model");
   });
 
   /** A pinned approval of the whole storage at the old design's record name, built up front. */

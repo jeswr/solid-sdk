@@ -127,7 +127,12 @@ resource Control; ESS ACP managers instead add Read+Write on the own ACR.
 arrays or an iterable of resource modes, returns the highest fully covered role, and
 returns undefined for partial management or odd permissions. Append on a file is not
 comment access. WAC is the mapping default; for ACP pass `model: "acp"` and the trusted
-`implementation` (`css` by default, or `ess`) to both mapping helpers.
+`implementation` (`css` by default, or `ess`) to both mapping helpers. Given to the reading and
+writing functions (`grantsWithRoles`, `readGrants`, `setGrants`, `addGrant`, `removeGrant`),
+`model` pins the access model instead: a resource whose detected model differs is refused with an
+`unsupported` `RoleError` before anything is written. Leave it unset to work with either model.
+This is a behaviour change: these functions used to ignore `model` and go on with whichever model
+the resource used, so a caller that passed it for mapping now gets a refusal on the other model.
 
 `AgentRef` supports WebIDs, public and authenticated agents, WAC groups, and ACP apps
 (client matchers). ACP groups require a membership snapshot and WAC cannot express apps;
@@ -290,8 +295,9 @@ append-only request is refused before any write. `role: "viewer"` narrows to req
 approval ever grants Control. The owner Type Index resolves classes
 to registered instances and bounded, recursively listed instance-container members. Unknown classes
 and off-storage targets fail before the Approving CAS, and so do targets an approval may never
-share: the storage root itself (with or without its trailing slash) and anything under
-`<storage>settings/` (Type Indexes, preferences, the access records). Targets are compared by their
+share: the storage root itself (with or without its trailing slash), anything under
+`<storage>settings/` (Type Indexes, preferences, the access records), and access-control or
+metadata documents (`.acl`, `.acr`, `.meta`). Targets are compared by their
 decoded path, case-insensitively, never as raw strings, so dot segments, case or encoding cannot
 hide a refused path. A target with a query, a fragment, an empty path segment (`//`), or a
 percent-encoding a server may decode into another name (an unreserved character, `%`, `/`, `\`, a
@@ -382,9 +388,19 @@ Every document the pipeline writes back (including the requester-authored reques
 serialised with regenerated blank-node labels, validated language tags and no named graphs, so a
 foreign JSON-LD label or tag cannot inject Turtle.
 
-`accessModel({ fetch, storage, target?, signal? })` returns `wac`, `acp`, or `unknown` from Link
-relations; ACP wins if both are advertised. Decisions throw typed `UnsupportedAccessModelError` for
-ACP or unknown models; ACP materialisation remains follow-up work. HTTP discovery errors propagate.
+`accessModel({ fetch, storage, target?, signal? })` returns `wac`, `acp`, or `unknown`. An ACP
+`accessControl` link means `acp`. ACP servers such as ESS also advertise their access control
+resources with `rel="acl"` (ESS as `?ext=acr`), so an `acl` link alone is not taken as WAC: the
+advertised document is read with the roles layer's detection (its RDF vocabulary and ACP type
+links, walking to the nearest existing ancestor) to tell the two apart. Only an existing, non-empty
+access document decides: a missing or empty one never counts as WAC. No access link, no deciding
+document, or documents that mix models (both vocabularies, or ancestors of different models) are
+`unknown`; any other discovery failure propagates. Decisions throw typed
+`UnsupportedAccessModelError` for ACP or unknown models before writing anything, and the model is
+enforced again where writes happen: the records folder's ACL is used only once its document is
+shown to be WAC (a folder that advertises no ACL is refused rather than guessed at), and grants go
+through `./roles` pinned to WAC, which refuses an ACP target before writing. ACP materialisation
+remains follow-up work.
 
 Inbox children and `settings/access-records/` must be owner-write-only; public Append to the inbox
 is fine. A deterministic hash is an idempotency key, not an authenticity proof for requester-writable

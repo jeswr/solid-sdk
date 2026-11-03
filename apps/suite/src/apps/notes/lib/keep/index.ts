@@ -1,4 +1,14 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+
+export {
+  KEEP_SKIP_REASONS,
+  type KeepImportItem,
+  type KeepImportPlan,
+  keepBodyHtml,
+  keepDraftToNote,
+  keepFingerprint,
+  planKeepImport,
+} from "./import-plan";
 export { parseKeepBatch, parseKeepNote } from "./parse";
 export {
   KEEP_COLOURS,

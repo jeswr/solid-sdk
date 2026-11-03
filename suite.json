@@ -92,7 +92,9 @@
     "@jeswr/fetch-rdf-engine-tests",
     "@jeswr/suite-native",
     "@jeswr/federation-codegen",
-    "@jeswr/model-runtime"
+    "@jeswr/model-runtime",
+    "@jeswr/solid-listening",
+    "@jeswr/solid-scheduling"
   ],
   "applications": [
     {

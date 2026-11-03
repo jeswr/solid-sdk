@@ -5,6 +5,8 @@ import { parseLinkHeaders } from "@jeswr/storage-capabilities";
 import { AclResource, Authorization } from "@solid/object";
 import { DataFactory, Store } from "n3";
 import { addGrant, planAddGrant } from "../roles/client.js";
+import { isRoleError } from "../roles/errors.js";
+import { detectModel, isMixedModel, mismatchedModel } from "../roles/http.js";
 import { put, read, scoped, transport } from "./http.js";
 import type { RequestMode } from "./inbox.js";
 import { set, turtle, values } from "./rdf.js";
@@ -17,19 +19,49 @@ export class UnsupportedAccessModelError extends Error {
   }
 }
 
-/** Inspect the target's Link headers. ACP wins if both models are advertised. */
+const ACP_ACCESS_CONTROL = "http://www.w3.org/ns/solid/acp#accessControl";
+
+/**
+ * The target's access model. An explicit ACP `accessControl` link means ACP. ACP servers (ESS)
+ * also advertise their access control resources with `rel="acl"`, so an `acl` link alone proves
+ * nothing: the advertised document is read, with the roles layer's detection (its content and
+ * type links, walking to the nearest existing, non-empty ancestor), to tell WAC from ACP. No access
+ * link at all, no deciding document, or documents that mix models are "unknown"; any other failure
+ * is thrown, so nothing proceeds on a guess.
+ */
 export async function accessModel(options: {
   fetch: typeof fetch;
   target?: string;
   storage: string;
   signal?: AbortSignal;
 }): Promise<"wac" | "acp" | "unknown"> {
-  const target = scoped(options.storage, options.target ?? options.storage);
-  const response = await transport(options.fetch, options.signal)(target, { method: "HEAD" });
+  const storage = container(options.storage);
+  const target = scoped(storage, options.target ?? storage);
+  const fetchFn = transport(options.fetch, options.signal);
+  const response = await fetchFn(target, { method: "HEAD" });
   if (!response.ok) throw new Error(`Access model discovery failed (${response.status})`);
   const links = response.headers.get("link") ?? "";
-  if (link(links, "http://www.w3.org/ns/solid/acp#accessControl", target)) return "acp";
-  return link(links, "acl", target) ? "wac" : "unknown";
+  if (link(links, ACP_ACCESS_CONTROL, target)) return "acp";
+  if (link(links, "acl", target) === undefined) return "unknown";
+  return (await detect(target, storage, fetchFn))?.model ?? "unknown";
+}
+
+function container(storage: string): string {
+  return storage.endsWith("/") ? storage : `${storage}/`;
+}
+
+/**
+ * The roles layer's read-only detection; undefined (an unknown model) when no access document is
+ * advertised or the documents mix models.
+ */
+async function detect(resource: string, storage: string, fetchFn: typeof fetch) {
+  try {
+    return await detectModel(resource, { fetch: fetchFn, root: container(storage) });
+  } catch (error) {
+    if ((isRoleError(error) && error.code === "unsupported") || isMixedModel(error))
+      return undefined;
+    throw error;
+  }
 }
 
 /** Authoritative bounded parsing: quoted parameters and foreign anchors cannot select an ACL. */
@@ -39,13 +71,34 @@ function link(header: string, relation: string, base: string): string | undefine
   )?.target;
 }
 
+/**
+ * The ACL that `resource` advertises, refused (UnsupportedAccessModelError) before anything reads
+ * or writes it unless the document really is WAC: an ACP server advertises its ACRs with the
+ * same `acl` relation, and no relation at all leaves the model unknown.
+ */
 async function aclUrl(resource: string, storage: string, fetchFn: typeof fetch): Promise<string> {
   const response = await fetchFn(resource, { method: "HEAD" });
+  if (!response.ok) throw new Error(`Access model discovery failed (${response.status})`);
   const header = response.headers.get("link") ?? "";
-  if (link(header, "http://www.w3.org/ns/solid/acp#accessControl", resource))
-    throw new UnsupportedAccessModelError("acp");
+  if (link(header, ACP_ACCESS_CONTROL, resource)) throw new UnsupportedAccessModelError("acp");
   const target = link(header, "acl", resource);
-  return scoped(storage, target === undefined ? `${resource}.acl` : new URL(target, resource).href);
+  if (target === undefined) throw new UnsupportedAccessModelError("unknown");
+  const url = scoped(storage, new URL(target, resource).href);
+  const detected = await detect(resource, storage, fetchFn);
+  if (detected === undefined) throw new UnsupportedAccessModelError("unknown");
+  if (detected.model !== "wac") throw new UnsupportedAccessModelError(detected.model);
+  // Both Link parsers must agree on which document governs the folder.
+  if (detected.ownUrl !== url) throw new Error("The advertised ACL is ambiguous");
+  return url;
+}
+
+/**
+ * A sharing-layer refusal for a resource that is not WAC, or whose access documents mix models, as
+ * the error callers expect.
+ */
+function modelRefusal(error: unknown): unknown {
+  if (mismatchedModel(error) === "acp") return new UnsupportedAccessModelError("acp");
+  return isMixedModel(error) ? new UnsupportedAccessModelError("unknown") : error;
 }
 
 function authSubject(auth: Authorization) {
@@ -77,8 +130,9 @@ export function roleFor(modes: readonly RequestMode[]): "viewer" | "editor" {
 /**
  * Grant `agent` the role matching `modes` on `target` through the `./roles` layer (SDK-APP-04):
  * additive (never downgrades), conditional on every write, materialising a missing own ACL with
- * the owner's access kept. Refusals (for example `unsupported` or `owner-lockout`) are rethrown
- * unchanged for the caller to show; they are never retried here.
+ * the owner's access kept. The roles layer is pinned to WAC, so a target that turns out to be ACP
+ * is refused before any write and reported as UnsupportedAccessModelError. Other refusals (for
+ * example `owner-lockout`) are rethrown unchanged for the caller to show; they are never retried.
  */
 export async function applyGrant(
   target: string,
@@ -90,7 +144,7 @@ export async function applyGrant(
 ): Promise<void> {
   const result = await addGrant(...grantArgs(target, storage, owner, agent, modes, fetchFn));
   const failure = result.failed[0];
-  if (failure) throw failure.error;
+  if (failure) throw modelRefusal(failure.error);
 }
 
 /** Throws whatever refusal `applyGrant` would hit for this target, without writing anything. */
@@ -102,7 +156,11 @@ export async function checkGrant(
   modes: readonly RequestMode[],
   fetchFn: typeof fetch,
 ): Promise<void> {
-  await planAddGrant(...grantArgs(target, storage, owner, agent, modes, fetchFn));
+  try {
+    await planAddGrant(...grantArgs(target, storage, owner, agent, modes, fetchFn));
+  } catch (error) {
+    throw modelRefusal(error);
+  }
 }
 
 function grantArgs(
@@ -121,6 +179,7 @@ function grantArgs(
       fetch: fetchFn,
       webId: owner,
       root: storage,
+      // Pinned: the roles layer refuses a resource that is not WAC before writing anything.
       model: "wac",
       kind: target.endsWith("/") ? "folder" : "resource",
     },
@@ -158,8 +217,11 @@ export async function ensureOwnerOnlyContainer(
 ): Promise<string> {
   scoped(storage, container);
   const head = await fetchFn(container, { method: "HEAD" });
-  if (head.status === 404) await put(container, "", fetchFn, null, true);
-  else if (!head.ok) throw new Error(`Records folder check failed (${head.status})`);
+  if (head.status === 404) {
+    // Nothing is created on storage that is not WAC.
+    await aclUrl(storage, storage, fetchFn);
+    await put(container, "", fetchFn, null, true);
+  } else if (!head.ok) throw new Error(`Records folder check failed (${head.status})`);
   const url = await aclUrl(container, storage, fetchFn);
   for (let attempt = 0; attempt < 3; attempt++) {
     const existing = await read(url, fetchFn);

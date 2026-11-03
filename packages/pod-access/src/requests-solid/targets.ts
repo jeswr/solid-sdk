@@ -97,8 +97,8 @@ export async function resolveTargets(
   if (targets.size === 0 || targets.size > MAX_MEMBERS)
     throw new RangeError("Invalid resolved target count");
   for (const target of targets) {
-    if (/\.(acl|acr)(?:[?#]|$)/i.test(target))
-      throw new Error("Access-control documents cannot be targets");
+    if (/\.(acl|acr|meta)(?:[?#]|$)/i.test(target))
+      throw new Error("Access-control and metadata documents cannot be targets");
   }
   return [...targets].sort();
 }

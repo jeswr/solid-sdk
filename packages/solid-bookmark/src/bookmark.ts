@@ -137,9 +137,31 @@ function firstText(
   return undefined;
 }
 
+/** An `xsd:date` lexical form with its optional timezone (`2025-03-04`, `2025-03-04+00:00`). */
+const XSD_DATE = /^(\d{4})-(\d{2})-(\d{2})(Z|([+-])(\d{2}):(\d{2}))?$/;
+
+/** Midnight of a valid `xsd:date` in its zone (UTC when none); undefined if not a real date. */
+function parseXsdDate(match: RegExpExecArray): Date | undefined {
+  const [, year, month, day, , sign, hours, minutes] = match;
+  const utc = new Date(0);
+  // setUTCFullYear, not Date.UTC, which maps years 0–99 to 1900–1999.
+  utc.setUTCFullYear(Number(year), Number(month) - 1, Number(day));
+  // Reject calendar overflow (2025-02-30) rather than rolling into the next month.
+  if (utc.getUTCMonth() !== Number(month) - 1 || utc.getUTCDate() !== Number(day)) return undefined;
+  if (sign === undefined) return utc;
+  const offset = Number(hours) * 60 + Number(minutes);
+  // xsd timezones are at most ±14:00.
+  if (Number(minutes) > 59 || offset > 14 * 60) return undefined;
+  return new Date(utc.getTime() - (sign === "+" ? 1 : -1) * offset * 60_000);
+}
+
 function firstDate(dataset: DatasetCore, subject: string, predicate: string): Date | undefined {
   const [first] = literals(dataset, subject, predicate);
   if (first === undefined) return undefined;
+  // `new Date` rejects a timezone-qualified date-only value and rolls over invalid days,
+  // so date-only forms are parsed explicitly; anything else keeps the old `new Date` read.
+  const dateOnly = XSD_DATE.exec(first.value);
+  if (dateOnly) return parseXsdDate(dateOnly);
   const date = new Date(first.value);
   return Number.isNaN(date.getTime()) ? undefined : date;
 }

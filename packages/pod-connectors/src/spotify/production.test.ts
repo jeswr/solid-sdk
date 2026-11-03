@@ -7,6 +7,7 @@ import { fixtureFetch } from "../core/fixture-fetch.js";
 import { runImport } from "../core/import-runner.js";
 import { buildAuthorizationUrl } from "../core/oauth.js";
 import { createFetchPodWriter } from "../core/pod-writer.js";
+import { PROV } from "../core/provenance.js";
 import { createMemoryPod, TEST_POD_ROOT, TEST_PROFILE_DOC, TEST_WEBID } from "../core/testing.js";
 import type { ConnectorState, ImportContext, NormalisedDoc } from "../core/types.js";
 import { MusicPlaylist } from "../core/vocab.js";
@@ -539,6 +540,150 @@ describe("Spotify production import", () => {
   });
 });
 
+describe("Spotify playlist permissions", () => {
+  const All = spotifyAdapter.metadata.scopes;
+  const withoutPrivate = All.filter((scope) => scope !== "playlist-read-private");
+  const withoutCollaborative = All.filter((scope) => scope !== "playlist-read-collaborative");
+  const withoutBoth = withoutPrivate.filter((scope) => scope !== "playlist-read-collaborative");
+  const Playlists = `${ROOT}music/playlists.ttl`;
+  const Name = nn(`${SCHEMA}name`);
+  const track = (id: string, name: string) => ({ item: { id, name, type: "track" } });
+  function playlists(listed: readonly string[], sharedItems: unknown[]) {
+    return source((url) => {
+      if (url.pathname === "/v1/me/playlists")
+        return json({
+          items: [
+            { id: "mine", name: "Mine", owner: { id: "fixture-user" }, collaborative: false },
+            { id: "shared", name: "Shared", owner: { id: "fixture-other" }, collaborative: true },
+          ].filter(({ id }) => listed.includes(id)),
+        });
+      if (url.pathname === "/v1/playlists/mine/items")
+        return json({ items: [track("a", "A"), track("a", "A"), track("s", "S")] });
+      if (url.pathname === "/v1/playlists/shared/items") return json({ items: sharedItems });
+      return undefined;
+    });
+  }
+  const run = (api: typeof fetch, pod: ReturnType<typeof createMemoryPod>, scopes?: string[]) =>
+    runImport({
+      adapter: spotifyAdapter,
+      mode: "live",
+      podWriter: writer(pod),
+      sourceAuth: { fetch: api },
+      ...(scopes ? { scopes } : {}),
+    });
+  const names = (ds: DatasetCore, subject: string) =>
+    [...ds.match(nn(subject), Name, null, null)].map((quad) => quad.object.value).sort();
+
+  it("keeps previously imported playlists of a withheld kind on a partial re-sync", async () => {
+    const pod = createMemoryPod();
+    await run(playlists(["mine", "shared"], [track("s", "S")]), pod);
+    const full = pod.dataset(Playlists);
+    const mine = [...full].filter(({ subject }) =>
+      [`${Playlists}#playlist-mine`, `${Playlists}#track-a`].includes(subject.value),
+    );
+    const partial = playlists(["mine", "shared"], [track("s", "S renamed"), track("b", "B")]);
+    await run(partial, pod, withoutPrivate);
+    const ds = pod.dataset(Playlists);
+    expect(partial.mock.calls.some(([input]) => String(input).includes("/playlists/mine/"))).toBe(
+      false,
+    );
+    expect(new MusicPlaylist(`${Playlists}#playlist-mine`, ds, DataFactory).name).toBe("Mine");
+    for (const quad of mine.filter(({ predicate }) => !predicate.value.startsWith(PROV)))
+      expect(ds.has(quad)).toBe(true);
+    for (const position of [1, 2, 3])
+      expect(ds.match(nn(`${Playlists}#playlist-mine-item-${position}`)).size).toBeGreaterThan(0);
+    // The shared track takes this run's description; the collaborative playlist is updated.
+    expect(names(ds, `${Playlists}#track-s`)).toEqual(["S renamed"]);
+    expect(names(ds, `${Playlists}#track-b`)).toEqual(["B"]);
+    expect(ds.match(nn(`${Playlists}#playlist-shared-item-2`)).size).toBeGreaterThan(0);
+
+    // Only a full grant proves an unlisted playlist was deleted at the source.
+    await run(playlists(["shared"], [track("b", "B")]), pod);
+    const latest = pod.dataset(Playlists);
+    expect(latest.match(nn(`${Playlists}#playlist-mine`)).size).toBe(0);
+    expect(latest.match(nn(`${Playlists}#track-a`)).size).toBe(0);
+  });
+
+  // Spotify leaves playlists of a withheld kind out of /me/playlists entirely.
+  it.each([
+    ["private ones", withoutPrivate, ["shared"], "mine", "shared"],
+    ["private ones, with no public playlists listed", withoutPrivate, [], "mine", "shared"],
+    ["collaborative ones", withoutCollaborative, ["mine"], "shared", "mine"],
+    ["collaborative ones, with nothing listed", withoutCollaborative, [], "shared", "mine"],
+    ["both kinds", withoutBoth, [], "mine", "shared"],
+  ] as const)("keeps playlists the source omits while withholding %s", async (_kind, scopes, listed, kept, other) => {
+    const pod = createMemoryPod();
+    await run(playlists(["mine", "shared"], [track("s", "S")]), pod);
+    const before = pod.dataset(Playlists);
+    const stored = (subject: string) =>
+      [...before].filter(
+        (quad) => quad.subject.value === subject && !quad.predicate.value.startsWith(PROV),
+      );
+    const keptQuads = [
+      `${Playlists}#playlist-${kept}`,
+      ...[1, 2, 3].map((n) => `${Playlists}#playlist-${kept}-item-${n}`),
+    ].flatMap(stored);
+    expect(keptQuads.length).toBeGreaterThan(0);
+    const api = playlists(listed, [track("s", "S")]);
+    const report = await run(api, pod, [...scopes]);
+    const ds = pod.dataset(Playlists);
+    for (const quad of keptQuads) expect(ds.has(quad)).toBe(true);
+    expect(ds.match(nn(`${Playlists}#playlist-${kept}`), TYPE).size).toBeGreaterThan(0);
+    // A listed playlist of a granted kind is re-described; an unlisted one is kept too while
+    // any playlist scope is withheld, because the listing cannot prove it was deleted.
+    expect(ds.match(nn(`${Playlists}#playlist-${other}`), TYPE).size).toBeGreaterThan(0);
+    expect(api.mock.calls.some(([input]) => String(input).includes(`/playlists/${kept}/`))).toBe(
+      false,
+    );
+    expect(report.skipped).toBeUndefined();
+  });
+
+  it("does not carry forward the item or track nodes of a playlist this run re-describes", async () => {
+    const pod = createMemoryPod();
+    await run(playlists(["mine", "shared"], [track("s", "S"), track("old", "Old")]), pod);
+    await run(playlists(["shared"], [track("b", "B")]), pod, withoutPrivate);
+    const ds = pod.dataset(Playlists);
+    expect(ds.match(nn(`${Playlists}#playlist-shared-item-2`)).size).toBe(0);
+    expect(ds.match(nn(`${Playlists}#track-old`)).size).toBe(0);
+    expect(names(ds, `${Playlists}#track-b`)).toEqual(["B"]);
+    expect(new MusicPlaylist(`${Playlists}#playlist-mine`, ds, DataFactory).name).toBe("Mine");
+  });
+
+  // AUTHORED-BY Claude Opus 5.5
+  it("does not count playlists it only keeps from the stored snapshot as added items", async () => {
+    const synced = createMemoryPod();
+    await run(playlists(["mine", "shared"], [track("s", "S")]), synced);
+    const kept = await run(playlists([], []), synced, withoutPrivate);
+    expect(
+      synced.dataset(Playlists).match(nn(`${Playlists}#playlist-mine`), TYPE).size,
+    ).toBeGreaterThan(0);
+    // The same partial run against an empty pod imports exactly what this one imported.
+    const fresh = await run(playlists([], []), createMemoryPod(), withoutPrivate);
+    expect(kept.state?.counts.items).toBe(fresh.state?.counts.items);
+    expect(kept.state?.counts.documents).toBe(fresh.state?.counts.documents);
+  });
+
+  it("keeps no earlier playlists when a partial grant re-syncs an empty pod", async () => {
+    const pod = createMemoryPod();
+    const report = await run(playlists([], []), pod, withoutPrivate);
+    expect(report.written.some(({ url }) => url === Playlists)).toBe(true);
+    expect(pod.dataset(Playlists).match(null, TYPE, nn(`${SCHEMA}MusicPlaylist`)).size).toBe(0);
+  });
+
+  it("omits a withheld kind without requesting its contents when nothing was imported before", async () => {
+    const pod = createMemoryPod();
+    const api = playlists(["mine", "shared"], [track("s", "S")]);
+    const report = await run(api, pod, withoutPrivate);
+    const ds = pod.dataset(Playlists);
+    expect(ds.match(nn(`${Playlists}#playlist-mine`)).size).toBe(0);
+    expect(new MusicPlaylist(`${Playlists}#playlist-shared`, ds, DataFactory).name).toBe("Shared");
+    expect(api.mock.calls.some(([input]) => String(input).includes("/playlists/mine/"))).toBe(
+      false,
+    );
+    expect(report.skipped).toBeUndefined();
+  });
+});
+
 describe("Spotify API failures", () => {
   it.each(["2", "Sun, 25 Oct 2026 12:00:02 GMT"])("honours Retry-After %s", async (retryAfter) => {
     vi.useFakeTimers();
@@ -570,6 +715,60 @@ describe("Spotify API failures", () => {
           `${API}/me/tracks`,
         ),
       ).rejects.toBeInstanceOf(RateLimitedError);
+  });
+  it("ends a Retry-After wait as soon as the run is cancelled", async () => {
+    vi.useFakeTimers();
+    const controller = new AbortController();
+    const api = vi.fn<typeof fetch>(async () => json({}, 429, { "retry-after": "3600" }));
+    const pending = spotifyJson(api, `${API}/me/tracks`, undefined, controller.signal);
+    pending.catch(() => {});
+    await vi.waitFor(() => expect(vi.getTimerCount()).toBe(1));
+    controller.abort(new Error("cancelled"));
+    await expect(pending).rejects.toThrow("cancelled");
+    expect(api).toHaveBeenCalledTimes(1);
+  });
+  it("does not start a Retry-After wait for a cancelled run", async () => {
+    const controller = new AbortController();
+    const api = vi.fn<typeof fetch>(async () => {
+      controller.abort(new Error("cancelled"));
+      return json({}, 429, { "retry-after": "3600" });
+    });
+    await expect(
+      spotifyJson(api, `${API}/me/tracks`, undefined, controller.signal),
+    ).rejects.toThrow("cancelled");
+    expect(api).toHaveBeenCalledTimes(1);
+  });
+  it("retries after the delay while the run's signal stays live", async () => {
+    vi.useFakeTimers();
+    const signal = new AbortController().signal;
+    const remove = vi.spyOn(signal, "removeEventListener");
+    const api = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(json({}, 429, { "retry-after": "1" }))
+      .mockResolvedValueOnce(json({ items: [] }));
+    const promise = spotifyJson(api, `${API}/me/tracks`, undefined, signal);
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(await promise).toEqual({ items: [] });
+    expect(remove).toHaveBeenCalledWith("abort", expect.any(Function));
+  });
+  it("cancels an import waiting on a rate limit through runImport's signal", async () => {
+    vi.useFakeTimers();
+    const controller = new AbortController();
+    const api = source((url) =>
+      url.pathname === "/v1/me/tracks" ? json({}, 429, { "retry-after": "3600" }) : undefined,
+    );
+    const pending = runImport({
+      adapter: spotifyAdapter,
+      mode: "live",
+      podWriter: writer(),
+      sourceAuth: { fetch: api },
+      signal: controller.signal,
+    });
+    pending.catch(() => {});
+    await vi.waitFor(() => expect(vi.getTimerCount()).toBe(1));
+    controller.abort(new Error("cancelled"));
+    await expect(pending).rejects.toThrow("cancelled");
+    expect(api).toHaveBeenCalledTimes(1);
   });
   it.each([401, 403, 500, 503])("surfaces %s without unbounded retries", async (status) => {
     const api = vi.fn<typeof fetch>(async () => json({}, status));
