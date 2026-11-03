@@ -1,0 +1,43 @@
+{
+  "version": 1,
+  "request": {
+    "method": "PUT",
+    "url": "http://localhost:46617/conformance-5b1905a4-4edd-484a-83f5-39e9bf5a71f7/move-source/",
+    "headers": [
+      ["content-type", "text/turtle"],
+      ["if-none-match", "*"],
+      ["link", "<http://www.w3.org/ns/ldp#BasicContainer>; rel=\"type\""]
+    ],
+    "body": ""
+  },
+  "response": {
+    "url": "http://localhost:46617/conformance-5b1905a4-4edd-484a-83f5-39e9bf5a71f7/move-source/",
+    "status": 201,
+    "statusText": "Created",
+    "headers": [
+      ["accept-ranges", "bytes"],
+      ["access-control-allow-credentials", "true"],
+      ["access-control-allow-origin", "*"],
+      [
+        "access-control-expose-headers",
+        "Accept-Patch,Accept-Post,Accept-Put,Allow,Content-Range,ETag,Last-Modified,Link,Location,Updates-Via,WAC-Allow,Www-Authenticate"
+      ],
+      ["connection", "keep-alive"],
+      ["date", "Sun, 01 Nov 2026 00:00:04 GMT"],
+      ["keep-alive", "timeout=5"],
+      [
+        "link",
+        "<http://localhost:46617/.notifications/StreamingHTTPChannel2023/b0>; rel=\"http://www.w3.org/ns/solid/terms#updatesViaStreamingHttp2023\""
+      ],
+      [
+        "location",
+        "http://localhost:46617/conformance-5b1905a4-4edd-484a-83f5-39e9bf5a71f7/move-source/"
+      ],
+      ["transfer-encoding", "chunked"],
+      ["vary", "Accept,Authorization,Origin"],
+      ["x-powered-by", "Community Solid Server"]
+    ],
+    "body": "",
+    "redirected": false
+  }
+}

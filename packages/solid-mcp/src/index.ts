@@ -20,6 +20,13 @@ export {
   type SolidMcpConfig,
   writesEnabled,
 } from "./auth.js";
+export {
+  createContextToolRegistry,
+  readSharedContext,
+  SHARED_CONTEXT_PATH,
+  type SharedContextResult,
+  sharedContextUrl,
+} from "./context-tools.js";
 export { type FetchResult, fetchDocument } from "./fetch.js";
 export {
   listContainer,

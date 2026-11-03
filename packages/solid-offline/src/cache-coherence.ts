@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate; see docs/MODEL-PROVENANCE.md
+// AUTHORED-BY Codex GPT-6.1-Sol
 /**
  * Shared byte-cache ↔ metadata COHERENCE primitives (internal).
  *
@@ -45,6 +46,9 @@ import {
   type RequestLike,
   type ResponseLike,
 } from './cache-policy.js';
+import { nextPages } from './listing-pages.js';
+import type { MetadataStore } from './metadata-store.js';
+import type { ByteCache } from './swr.js';
 import type { CacheMetadata } from './types.js';
 
 /**
@@ -82,6 +86,7 @@ export function metadataFromResponse(
   negative: boolean,
   lastState?: string,
 ): CacheMetadata {
+  const pages = nextPages(req.url, res.headers.get('link'));
   return {
     key: computeCacheKey(req, res),
     url: req.url,
@@ -92,6 +97,7 @@ export function metadataFromResponse(
     vary: res.headers.get('vary') ?? undefined,
     aclStatus: aclStatusFor(res.status),
     status: res.status,
+    ...(pages.length ? { nextPages: pages } : {}),
     ...(lastState !== undefined ? { lastState } : {}),
     ...(negative ? { negativeUntil: now + NEGATIVE_CACHE_TTL_MS } : {}),
   };
@@ -135,5 +141,42 @@ export async function deleteVariantBytes(
   }
   if (!sawTurtle) {
     await cache.delete(keyRequest(url, CANONICAL_TURTLE_VARY_KEY), IGNORE_VARY).catch(() => false);
+  }
+}
+
+/** Evict the old cursor chain before replacing or purging its pagination metadata. */
+export async function evictListingPages(
+  container: string,
+  records: CacheMetadata[],
+  deps: { cache: ByteCache; meta: MetadataStore },
+  // SWR has no StorageClient; keep its local eviction within the listing's origin.
+  isWithinStorage: (url: string) => boolean = (url) =>
+    URL.canParse(url) && new URL(url).origin === new URL(container).origin,
+): Promise<void> {
+  const pending = [{ url: container, records }];
+  const seen = new Set([container]);
+  for (let index = 0; index < pending.length; index += 1) {
+    const page = pending[index];
+    if (!page) continue;
+    for (const record of page.records) {
+      // Legacy records predate nextPages; their cached headers remain usable.
+      const cached = record.nextPages
+        ? undefined
+        : await deps.cache.match(keyRequest(page.url, record.varyKey), IGNORE_VARY);
+      for (const next of record.nextPages ??
+        nextPages(page.url, cached?.headers.get('link') ?? null)) {
+        if (seen.has(next) || !isWithinStorage(next)) continue;
+        seen.add(next);
+        pending.push({ url: next, records: await deps.meta.getByUrl(next) });
+      }
+      void cached?.body?.cancel().catch(() => undefined);
+    }
+    if (page.url === container) continue;
+    await deleteVariantBytes(
+      deps.cache,
+      page.url,
+      page.records.map((record) => record.varyKey),
+    );
+    for (const record of page.records) await deps.meta.delete(record.key);
   }
 }

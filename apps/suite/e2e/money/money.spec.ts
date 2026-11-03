@@ -323,3 +323,62 @@ test("reports compare periods and break spending down by category and month", as
   await expect(categories.getByRole("columnheader", { name: "Share", exact: true })).toBeVisible();
   await shot(page, info, "reports-tables");
 });
+
+test("rules file matching transactions and are ordered, edited and deleted", async ({
+  page,
+}, info) => {
+  await page.goto("/money");
+  await expect(
+    page.getByRole("heading", { level: 1, name: "Overview", exact: true }),
+  ).toBeVisible();
+  await page.goto("/money/rules");
+  await expect(page.getByRole("heading", { level: 1, name: "Rules", exact: true })).toBeVisible();
+  await expect(page.getByText("Sort transactions automatically", { exact: true })).toBeVisible();
+  const addRule = async (match: string, text: string, category: string) => {
+    await page.getByRole("button", { name: "Add rule", exact: true }).first().click();
+    const dialog = page.getByRole("dialog", { name: "Add rule", exact: true });
+    await dialogFits(page);
+    await choose(page, "When the description", match);
+    await dialog.getByLabel("Text", { exact: true }).fill(text);
+    await choose(page, "File under", category);
+    await dialog.getByRole("button", { name: "Save rule", exact: true }).click();
+    await expect(dialog).toBeHidden();
+  };
+  // An empty rule is refused with a message.
+  await page.getByRole("button", { name: "Add rule", exact: true }).first().click();
+  await page.getByRole("dialog").getByRole("button", { name: "Save rule", exact: true }).click();
+  await expect(page.locator(".mon-rules-error")).toHaveText("Enter the text to look for.");
+  await page.keyboard.press("Escape");
+  await addRule("contains", "cinema", "Fun");
+  await addRule("starts with", "Book", "Fun");
+  const rules = page.locator(".mon-rule");
+  await expect(rules).toHaveText([
+    /Description contains “cinema”.*Fun/,
+    /Description starts with “Book”.*Fun/,
+  ]);
+  const apply = page.getByRole("region", { name: "Existing transactions", exact: true });
+  await expect(apply).toContainText(/uncategorised transactions? match/);
+  await shot(page, info, "rules");
+  await apply.getByRole("button", { name: /^Categorise \d+ transactions?$/ }).click();
+  await expect(apply).toBeHidden();
+  await page
+    .getByRole("button", { name: "Move up: Description starts with “Book”", exact: true })
+    .click();
+  await expect(rules.first()).toContainText("starts with “Book”");
+  await page
+    .getByRole("button", { name: "Edit: Description contains “cinema”", exact: true })
+    .click();
+  const edit = page.getByRole("dialog", { name: "Edit rule", exact: true });
+  await edit.getByLabel("Text", { exact: true }).fill("Weekend");
+  await edit.getByRole("button", { name: "Save rule", exact: true }).click();
+  await expect(edit).toBeHidden();
+  await expect(rules.last()).toContainText("contains “Weekend”");
+  await page
+    .getByRole("button", { name: "Delete: Description starts with “Book”", exact: true })
+    .click();
+  await page.getByRole("button", { name: "Delete rule", exact: true }).click();
+  await expect(rules).toHaveCount(1);
+  // Rules persist in the pod.
+  await page.reload();
+  await expect(page.locator(".mon-rule")).toHaveText([/Description contains “Weekend”.*Fun/]);
+});

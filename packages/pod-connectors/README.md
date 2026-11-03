@@ -295,7 +295,8 @@ retaining the last successful checkpoint. Before accessing JSON, it discovers th
 `rel="acl"` link and writes a WAC ACL granting only the owner WebID Read, Write and Control.
 The ACL must be in the same connector container. Missing ACL discovery or rejected ACL
 writes fail closed; ACP/LWS state protection belongs to later storage integration.
-Conditional JSON PUTs reject stale ETags and concurrent creates. State persistence failures
+Conditional JSON PUTs reject stale ETags and concurrent creates. Once the CLI is cancelled it
+sends no further Pod or source request, so a cancelled run leaves the checkpoint unchanged. State persistence failures
 fail the command even if import documents were already written; deterministic slugs allow retry.
 
 Exit codes: **0** success/help, **1** import/state failure, **2** usage/config/file error,
@@ -377,8 +378,9 @@ the current ETag.
 Item counts retain one counter per written document. Replacement counts the adapter's current
 local subjects (excluding the document URL); merging counts each local source subject once per document
 in the current run, using stored provenance to detect repeats. Removal drops the document's
-count. Subjects added only by sector mappings are excluded. Session accounting therefore
-scales with documents, including when Takeout releases its reconciliation manifests.
+count. Subjects added only by sector mappings, and subjects an adapter lists in
+`NormalisedDoc.carriedForward` (kept unchanged from the stored document), are excluded.
+Session accounting therefore scales with documents, including when Takeout releases its reconciliation manifests.
 
 Run provenance retains at most `MAX_RUN_SOURCES = 1,000` distinct source IRIs, including
 the connector's own source IRI, added first. `createImportSession` accepts `maxRunSources`
@@ -393,6 +395,15 @@ fallback. Otherwise the source API origin or a connector export URN is used. Eac
 activity in the connector's reserved `_provenance.ttl`, with the bounded source summary,
 connector IRI and start/end times. This companion document is excluded from imported-document
 counts and Type Index registration. Failed runs attempt provenance recording and retain the original error.
+A cancelled run makes no further Pod request, so it records no activity: documents and items it
+already wrote keep `prov:wasGeneratedBy` naming an activity absent from `_provenance.ttl`. Read
+such an unrecorded activity as a cancelled, incomplete run; the next run that rewrites those
+documents or items links them to its own recorded activity. `runImport` checks its signal at the
+PodWriter boundary, immediately before every port call, so a cancel while a session's implicit
+read or the provenance read is pending still stops the write that follows and the run rejects
+with the abort reason. Pass the same signal as `createFetchPodWriter({ signal })` to check it
+before every HTTP request inside a port (binary ETag reads, Type Index and profile updates) and
+to abort requests in flight.
 
 Each adapter exposes a `vocab-map.ts` seam, applied by the runner without mutating adapter
 input. Existing music, calendar and social class alignments add sector types alongside legacy
@@ -653,7 +664,10 @@ endpoint without a client secret or API bearer header; redirects are refused. Co
 401s share one refresh. Refresh responses are capped at 64 KiB; oversized or invalid responses
 fail with an authentication error without updating the in-memory token. GET retries are
 limited to one refresh per request. API 429s wait
-for `Retry-After` (seconds or HTTP date), with at most three retries. Playlist item 403/404
+for `Retry-After` (seconds or HTTP date), with at most three retries; aborting the run's
+`signal` (`RunImportOptions.signal`) ends a pending wait with the abort reason. For every
+adapter, `runImport` starts no further source request, Pod read or write, progress report,
+Type Index registration or provenance write once that signal aborts. Playlist item 403/404
 responses retain the playlist metadata and count its inaccessible contents once in `skipped`;
 other failures reach the host without advancing its checkpoint. Unusable or oversized delays
 surface as `RateLimitedError` for the host to schedule later.
@@ -672,7 +686,13 @@ host application. Playlist item requests use Spotify's current `/playlists/{id}/
 endpoint with `additional_types=track,episode` and accept both `item` and legacy `track`
 payloads, including podcast episodes
 as `media:PodcastEpisode` plus `schema:PodcastEpisode`. Items are requested only for playlists
-owned by the current user or marked collaborative. Other playlists retain their metadata
+owned by the current user or marked collaborative. When `scopes` (`RunImportOptions.scopes`)
+withholds `playlist-read-private` or `playlist-read-collaborative`, listed playlists of that
+kind are omitted after the bounded, budgeted list read and their items are not requested.
+Spotify also leaves withheld kinds out of `/me/playlists`, so while either playlist scope is
+withheld every previously imported playlist this run does not describe (with its list items
+and tracks) carries forward into the replaced `music/playlists.ttl` without counting as an
+imported item; only a run with both playlist scopes drops playlists the source no longer lists. Other adapters ignore `scopes`. Other playlists retain their metadata
 without items and count once in `skipped`. Inaccessible contents do not prevent the remaining
 resources and recently-played history from importing or the successful cursor from advancing.
 ## Tier A sync behavior

@@ -1,6 +1,8 @@
 {
+  "$comment": "AUTHORED-BY Codex GPT-6.1-Sol",
   "name": "@jeswr/solid-auth-core",
   "version": "0.1.0",
+  "deprecated": "Use @jeswr/pod-auth",
   "description": "The shared, framework-free Solid login/auth core for the @jeswr app suite: createSolidAuth() constructs the WebID/DPoP token provider, captures the pristine fetch FIRST, and pins every OIDC hop to it — so the proactive-patched-global login-stall deadlock is unrepresentable by construction. Includes silent session restore (via @jeswr/solid-session-restore), a proactive authenticated-fetch wrapper, and a thin /react SessionProvider.",
   "author": "Jesse Wright",
   "license": "MIT",

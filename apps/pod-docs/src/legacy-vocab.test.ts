@@ -184,7 +184,7 @@ it("adds a canonical registration alongside an old registration on ensure", asyn
   const indexUrl = "https://pod.example/settings/privateTypeIndex.ttl";
   const container = "https://pod.example/docs/";
   const { fetch, calls } = mockFetch({
-    [`GET ${webId}`]: { body: `<${webId}> <${SUITE_NS.SOLID}privateTypeIndex> <${indexUrl}> .` },
+    [`GET ${webId.split("#")[0]}`]: { body: `<${webId}> <${SUITE_NS.SOLID}privateTypeIndex> <${indexUrl}> .` },
     [`GET ${indexUrl}`]: {
       body: `@prefix solid: <${SUITE_NS.SOLID}> .
       <#old> a solid:TypeRegistration ; solid:forClass <${legacy}Document> ; solid:instanceContainer <${container}> .`,
