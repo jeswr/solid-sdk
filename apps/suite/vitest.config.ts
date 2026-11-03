@@ -39,6 +39,7 @@ export default defineConfig({
         "src/apps/home/state/presentation.ts",
         "src/apps/home/lib/connect/**/*.ts",
         "src/apps/home/lib/permissions/**/*.ts",
+        "src/apps/home/lib/requests/**/*.ts",
         "src/apps/home/lib/forms/**/*.ts",
         "src/apps/docs/lib/model/**/*.ts",
         "src/apps/docs/lib/editor/**/*.ts",
