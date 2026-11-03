@@ -3,6 +3,7 @@ import type { ICellData, IWorkbookData, IWorksheetData } from "@univerjs/core";
 import { strFromU8, Unzip, UnzipInflate } from "fflate";
 import type { Snapshot } from "../model/snapshot";
 import {
+  children,
   coordinate,
   elements,
   LIMITS,
@@ -24,7 +25,7 @@ const BUILTIN_FORMATS = new Map<number, string>([
   [11, "0.00E+00"],
   [12, "# ?/?"],
   [13, "# ??/??"],
-  [14, "mm-dd-yy"],
+  [14, "m/d/yyyy"],
   [15, "d-mmm-yy"],
   [16, "d-mmm"],
   [17, "mmm-yy"],
@@ -32,7 +33,7 @@ const BUILTIN_FORMATS = new Map<number, string>([
   [19, "h:mm:ss AM/PM"],
   [20, "h:mm"],
   [21, "h:mm:ss"],
-  [22, "m/d/yy h:mm"],
+  [22, "m/d/yyyy h:mm"],
   [37, "#,##0 ;(#,##0)"],
   [38, "#,##0 ;[Red](#,##0)"],
   [39, "#,##0.00;(#,##0.00)"],
@@ -122,13 +123,13 @@ function readSheet(
     sheet.columnCount = Math.max(sheet.columnCount as number, column + 1);
   };
   const rows = new Set<number>();
-  for (const row of elements(doc, "row")) {
+  for (const row of children(doc, "sheetData", "row")) {
     const r = numberAttribute(row, "r", 0);
     requireXlsx(Number.isInteger(r) && r > 0, "Invalid Excel row");
     requireXlsx(!rows.has(r), "Duplicate Excel row");
     rows.add(r);
     // Spreadsheet apps often write empty formatted rows to the sheet's end: skip those.
-    if (r > LIMITS.rows && elements(row, "c").length === 0) continue;
+    if (r > LIMITS.rows && children(row, "c").length === 0) continue;
     requireXlsx(r <= LIMITS.rows, "Excel row limit exceeded");
     if (row.hasAttribute("ht")) {
       const h = (numberAttribute(row, "ht", 0) * 96) / 72;
@@ -139,7 +140,7 @@ function readSheet(
     }
   }
   const widths: { min: number; max: number; w: number }[] = [];
-  for (const col of elements(doc, "col")) {
+  for (const col of children(doc, "cols", "col")) {
     const min = numberAttribute(col, "min", 0);
     const max = numberAttribute(col, "max", 0);
     requireXlsx(
@@ -156,13 +157,13 @@ function readSheet(
       widths.push({ min, max, w });
     }
   }
-  for (const element of elements(doc, "c")) {
+  for (const element of children(doc, "sheetData", "row", "c")) {
     countCell();
     const { row, column } = coordinate(element.getAttribute("r") ?? "");
     touch(row, column);
     const cell: ICellData = {};
-    const value = elements(element, "v")[0]?.textContent;
-    const formulaElement = elements(element, "f")[0];
+    const value = children(element, "v")[0]?.textContent;
+    const formulaElement = children(element, "f")[0];
     const type = element.getAttribute("t");
     if (type === "s") {
       const index = Number(value);
@@ -199,7 +200,7 @@ function readSheet(
     requireXlsx(!Object.hasOwn(cells[row], column), "Duplicate Excel cell reference");
     cells[row][column] = cell;
   }
-  const merges = elements(doc, "mergeCell");
+  const merges = children(doc, "mergeCells", "mergeCell");
   requireXlsx(merges.length <= LIMITS.merges, "Too many merged Excel cells");
   const ranges: NonNullable<IWorksheetData["mergeData"]> = [];
   for (const merge of merges) {
@@ -242,7 +243,8 @@ function readSheet(
   for (const { min, max, w } of widths)
     for (let c = min - 1; c < Math.min(max, widthColumns); c++)
       (sheet.columnData as IWorksheetData["columnData"])[c] = { w };
-  const pane = elements(doc, "pane")[0];
+  const sheetView = children(doc, "sheetViews", "sheetView")[0];
+  const pane = sheetView && children(sheetView, "pane")[0];
   if (
     pane &&
     (pane.getAttribute("state") === "frozen" || pane.getAttribute("state") === "frozenSplit")
@@ -259,7 +261,7 @@ function readSheet(
     // Excel freezes the first ySplit rows and xSplit columns shown from the sheet view's
     // top-left cell; the pane's own topLeftCell is only where the scrolling pane is.
     // Univer marks the line after the frozen rows and columns (-1 when none are frozen).
-    const view = elements(doc, "sheetView")[0]?.getAttribute("topLeftCell");
+    const view = sheetView.getAttribute("topLeftCell");
     const origin = view ? coordinate(view) : { row: 0, column: 0 };
     const startRow = ySplit > 0 ? origin.row + ySplit : -1;
     const startColumn = xSplit > 0 ? origin.column + xSplit : -1;
@@ -267,7 +269,11 @@ function readSheet(
       startRow <= LIMITS.rows && startColumn <= LIMITS.columns,
       "Invalid Excel frozen pane",
     );
-    if (xSplit > 0 || ySplit > 0) sheet.freeze = { xSplit, ySplit, startRow, startColumn };
+    if (xSplit > 0 || ySplit > 0) {
+      // The sheet reaches at least as far as its frozen rows and columns.
+      touch(Math.max(0, startRow - 1), Math.max(0, startColumn - 1));
+      sheet.freeze = { xSplit, ySplit, startRow, startColumn };
+    }
   }
   return sheet;
 }
@@ -360,7 +366,7 @@ export function readXlsx(data: Uint8Array, options: { title: string }): Snapshot
       "Macro-enabled Excel files are not supported",
     );
     const workbook = parseXml(parts.get("xl/workbook.xml"), "workbook");
-    const date1904 = elements(workbook, "workbookPr")[0]?.getAttribute("date1904");
+    const date1904 = children(workbook, "workbookPr")[0]?.getAttribute("date1904");
     requireXlsx(
       date1904 !== "1" && date1904 !== "true",
       "Excel's 1904 date system is not supported",
@@ -383,7 +389,7 @@ export function readXlsx(data: Uint8Array, options: { title: string }): Snapshot
       );
       targets.set(id, targetPath(rel.getAttribute("Target") ?? ""));
     }
-    const sheets = elements(workbook, "sheet").filter((sheet) => {
+    const sheets = children(workbook, "sheets", "sheet").filter((sheet) => {
       const id = relationshipId(sheet);
       requireXlsx(relationshipIds.has(id), "Missing Excel sheet relationship");
       return targets.has(id);
@@ -397,21 +403,19 @@ export function readXlsx(data: Uint8Array, options: { title: string }): Snapshot
     requireXlsx(needed.size === sheets.length, "Excel worksheets must be separate parts");
     const worksheets = extract(data, (name) => needed.has(name), budget);
     const strings = parts.get("xl/sharedStrings.xml")
-      ? elements(parseXml(parts.get("xl/sharedStrings.xml"), "shared strings"), "si").map(richText)
+      ? children(parseXml(parts.get("xl/sharedStrings.xml"), "shared strings"), "si").map(richText)
       : [];
     const formats: (string | undefined)[] = [];
     if (parts.get("xl/styles.xml")) {
       const styles = parseXml(parts.get("xl/styles.xml"), "styles");
       const codes = new Map(BUILTIN_FORMATS);
-      for (const format of elements(styles, "numFmt"))
+      for (const format of children(styles, "numFmts", "numFmt"))
         codes.set(
           Number(format.getAttribute("numFmtId")),
           format.getAttribute("formatCode") ?? "General",
         );
-      const xfs = elements(styles, "cellXfs")[0];
-      if (xfs)
-        for (const xf of elements(xfs, "xf"))
-          formats.push(codes.get(numberAttribute(xf, "numFmtId", 0)));
+      for (const xf of children(styles, "cellXfs", "xf"))
+        formats.push(codes.get(numberAttribute(xf, "numFmtId", 0)));
     }
     const snapshot = {
       id: "new",

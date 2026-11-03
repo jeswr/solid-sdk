@@ -61,7 +61,7 @@ describe("Excel supported data", () => {
       4: { v: 0, t: 3 },
       5: { v: "#DIV/0!", t: 1 },
       6: { v: "no", t: 1, f: '=IF(A1="x","yes","no")' },
-      7: { v: 45200, t: 2, s: { n: { pattern: "mm-dd-yy" } } },
+      7: { v: 45200, t: 2, s: { n: { pattern: "m/d/yyyy" } } },
       8: { v: 45201, t: 2, f: "=SUM(H1,1)", s: { n: { pattern: '0.000 & "kg"' } } },
       9: { v: 0.5, t: 2, s: { n: { pattern: "0%" } } },
       10: { v: 0.25, t: 2, s: { n: { pattern: "h:mm:ss" } } },
@@ -92,7 +92,8 @@ describe("Excel supported data", () => {
       result.sheetOrder.map((id) => (result.sheets[id] as Partial<IWorksheetData>).name),
     ).toEqual(["Second & more", "Data"]);
     expect(result.sheets.sheet1).toMatchObject({
-      rowCount: 3,
+      // The sheet grows to cover its frozen rows (5) as well as its merges (D3).
+      rowCount: 5,
       columnCount: 4,
       // Rows 5 and columns B:C are frozen; the pane's own topLeftCell is only a scroll position.
       freeze: { xSplit: 2, ySplit: 1, startRow: 5, startColumn: 3 },
@@ -184,7 +185,9 @@ describe("Excel supported data", () => {
         '<sheetViews><sheetView><pane state="frozenSplit" ySplit="2"/></sheetView></sheetViews>',
       ).freeze,
     ).toEqual({ xSplit: 0, ySplit: 2, startRow: 2, startColumn: -1 });
-    expect(sheet('<pane state="split"/>').freeze).toBeUndefined();
+    expect(
+      sheet('<sheetViews><sheetView><pane state="split"/></sheetView></sheetViews>').freeze,
+    ).toBeUndefined();
     expect(cell('<c r="A1" t="inlineStr"/>')).toEqual({ v: "", t: 1 });
     expect(cell('<c r="A1"><f>1+2</f><v/></c>')).toEqual({ f: "=1+2" });
     expect(cell('<c r="A1"><f t="shared" si="0"/><v/></c>')).toEqual({});
@@ -403,7 +406,7 @@ describe("Excel hostile input", () => {
   });
   it.each(["-1", "NaN", "Infinity"])("rejects invalid numeric attributes %s", (ht) =>
     rejects(
-      { "xl/worksheets/data.xml": worksheet(`<row r="1" ht="${ht}"/>`) },
+      { "xl/worksheets/data.xml": worksheet(`<sheetData><row r="1" ht="${ht}"/></sheetData>`) },
       "Invalid Excel ht",
     ));
   it.each(["", "NaN", "Infinity"])("rejects invalid numeric cells %s", (n) =>
@@ -420,7 +423,10 @@ describe("Excel hostile input", () => {
       "shared string",
     ));
   it.each(["<row/>", '<row r="0"/>', '<row r="0.5"/>'])("rejects invalid row %s", (row) =>
-    rejects({ "xl/worksheets/data.xml": worksheet(row) }, "Invalid Excel row"));
+    rejects(
+      { "xl/worksheets/data.xml": worksheet(`<sheetData>${row}</sheetData>`) },
+      "Invalid Excel row",
+    ));
   it("skips empty rows past the row limit but rejects cells there", () => {
     expect(sheet('<sheetData><row r="1048576" ht="20"/></sheetData>').rowCount).toBe(1);
     rejects(
@@ -456,14 +462,17 @@ describe("Excel hostile input", () => {
     '<col min="2" max="1"/>',
     '<col min="1" max="16385"/>',
   ])("rejects invalid column %s", (col) =>
-    rejects({ "xl/worksheets/data.xml": worksheet(col) }, "column limit"));
+    rejects({ "xl/worksheets/data.xml": worksheet(`<cols>${col}</cols>`) }, "column limit"));
   it.each([
     "<mergeCell/>",
     '<mergeCell ref="A1"/>',
     '<mergeCell ref="B2:A3"/>',
     '<mergeCell ref="B2:C1"/>',
   ])("rejects invalid merge %s", (merge) =>
-    rejects({ "xl/worksheets/data.xml": worksheet(merge) }, "merge range"));
+    rejects(
+      { "xl/worksheets/data.xml": worksheet(`<mergeCells>${merge}</mergeCells>`) },
+      "merge range",
+    ));
   it.each([
     'xSplit="0.5"',
     'ySplit="0.5"',
@@ -471,7 +480,11 @@ describe("Excel hostile input", () => {
     'ySplit="100001"',
   ])("rejects invalid frozen pane %s", (attr) =>
     rejects(
-      { "xl/worksheets/data.xml": worksheet(`<pane state="frozen" ${attr}/>`) },
+      {
+        "xl/worksheets/data.xml": worksheet(
+          `<sheetViews><sheetView><pane state="frozen" ${attr}/></sheetView></sheetViews>`,
+        ),
+      },
       "frozen pane",
     ));
   it("caps sheets and occupied grid area", () => {
@@ -792,6 +805,37 @@ it("skips one-cell merges and rejects overlapping merges", () => {
     );
 });
 
+it("reads only cells in sheetData rows, so nesting can't multiply the work", () => {
+  const read = sheet(
+    '<c r="C1"><v>3</v></c><sheetData><row r="1"><c r="A1"><v>1</v><c r="A2"><v>2</v></c></c></row><x><row r="5"><c r="A5"><v>5</v></c></row></x></sheetData>',
+  );
+  expect(read.cellData).toEqual({ 0: { 0: { v: 1, t: 2 } } });
+  expect(read.rowCount).toBe(1);
+});
+
+it("writes each formula of a group with several formula cells as its own formula", () => {
+  const xmlText = strFromU8(
+    unzipSync(
+      writeXlsx({
+        sheetOrder: ["a"],
+        sheets: {
+          a: {
+            name: "A",
+            cellData: {
+              0: { 0: { f: "=B1", si: "g", v: 1, t: 2 } },
+              1: { 0: { f: "=C2", si: "g", v: 2, t: 2 } },
+              2: { 0: { si: "g", v: 3, t: 2 } },
+            },
+          },
+        },
+      } as unknown as Snapshot),
+    )["xl/worksheets/sheet1.xml"] as Uint8Array,
+  );
+  expect(xmlText).not.toContain('t="shared"');
+  expect(xmlText).toContain('<c r="A2" s="0"><f>C2</f><v>2</v></c>');
+  expect(xmlText).toContain('<c r="A3" s="0"><v>3</v></c>');
+});
+
 it("rejects a ZIP whose compressed data is corrupt", () => {
   const bytes = fixture({ "xl/worksheets/data.xml": worksheet(" ".repeat(2000)) });
   localEntries(bytes, (view, offset, name) => {
@@ -808,9 +852,12 @@ it("rejects an export with a missing sheet rather than silently dropping its dat
 });
 
 it("rejects overflowing dimension conversions", () => {
-  rejects({ "xl/worksheets/data.xml": worksheet('<row r="1" ht="1e308"/>') }, "row height");
   rejects(
-    { "xl/worksheets/data.xml": worksheet('<col min="1" max="1" width="1e308"/>') },
+    { "xl/worksheets/data.xml": worksheet('<sheetData><row r="1" ht="1e308"/></sheetData>') },
+    "row height",
+  );
+  rejects(
+    { "xl/worksheets/data.xml": worksheet('<cols><col min="1" max="1" width="1e308"/></cols>') },
     "column width",
   );
 });

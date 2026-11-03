@@ -42,4 +42,6 @@ worksheets, 100,000 rows, 16,384 columns, 2 million cells or occupied grid
 positions (row heights and merges count as cells), 10,000 merges per sheet, and 20 million characters of cell text and
 formulas (a shared string counts once per cell that uses it). Only workbook
 metadata and referenced worksheets are inflated, so media doesn't count. Empty
-rows past the row limit and one-cell merges are skipped. Sheet IDs are generated.
+rows past the row limit and one-cell merges are skipped. Elements are read only
+at their schema positions (cells in `sheetData` rows, and so on), so nesting can't
+multiply the work. Sheet IDs are generated.

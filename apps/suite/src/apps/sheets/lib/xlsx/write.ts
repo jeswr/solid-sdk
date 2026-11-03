@@ -22,6 +22,7 @@ function sharedFormulas(cellData: NonNullable<IWorksheetData["cellData"]>) {
   const groups = new Map<
     string,
     {
+      masters: number;
       row: number;
       column: number;
       text?: string;
@@ -37,6 +38,7 @@ function sharedFormulas(cellData: NonNullable<IWorksheetData["cellData"]>) {
       const row = Number(r);
       const column = Number(c);
       const group = groups.get(cell.si) ?? {
+        masters: 0,
         row: -1,
         column: -1,
         firstRow: row,
@@ -48,7 +50,8 @@ function sharedFormulas(cellData: NonNullable<IWorksheetData["cellData"]>) {
       group.firstColumn = Math.min(group.firstColumn, column);
       group.lastRow = Math.max(group.lastRow, row);
       group.lastColumn = Math.max(group.lastColumn, column);
-      if (cell.f && group.text === undefined) {
+      if (cell.f) {
+        group.masters += 1;
         group.text = cell.f.replace(/^=/, "");
         group.row = row;
         group.column = column;
@@ -56,8 +59,15 @@ function sharedFormulas(cellData: NonNullable<IWorksheetData["cellData"]>) {
       groups.set(cell.si, group);
     }
   const result = new Map<string, SharedFormula>();
+  // Univer reads a group with several formula cells differently, so only a group with one
+  // formula, in its top-left cell, is shared.
   for (const [id, group] of groups)
-    if (group.text && group.row === group.firstRow && group.column === group.firstColumn)
+    if (
+      group.masters === 1 &&
+      group.text &&
+      group.row === group.firstRow &&
+      group.column === group.firstColumn
+    )
       result.set(id, {
         index: result.size,
         row: group.row,

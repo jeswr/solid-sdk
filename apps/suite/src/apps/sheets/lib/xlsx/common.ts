@@ -35,6 +35,22 @@ export function elements(root: Document | Element, name: string): Element[] {
   ];
 }
 
+const spreadsheetMl = (element: Element) =>
+  element.namespaceURI === MAIN || element.namespaceURI === STRICT_MAIN;
+
+/**
+ * The SpreadsheetML elements reached from the root element by `path`, one level of
+ * direct children per name. Unlike a subtree search, nesting can't make this quadratic.
+ */
+export function children(root: Document | Element, ...path: string[]): Element[] {
+  let current: Element[] = "documentElement" in root ? [root.documentElement] : [root];
+  for (const name of path)
+    current = current.flatMap((parent) =>
+      [...parent.children].filter((child) => child.localName === name && spreadsheetMl(child)),
+    );
+  return current;
+}
+
 export function coordinate(ref: string): { row: number; column: number } {
   const match = /^([A-Z]{1,3})([1-9]\d{0,6})(?![\s\S])/.exec(ref);
   requireXlsx(match, "Invalid Excel cell reference");
