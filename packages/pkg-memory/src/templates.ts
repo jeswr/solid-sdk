@@ -97,15 +97,15 @@ interface PaymentCardSnapshot {
   billingAddress: string | undefined;
 }
 
-/**
- * Read each field exactly once into a plain snapshot and check that, so a getter or proxy
- * cannot pass validation and then return a card number when the RDF is written.
- */
 /** An own property's value; inherited (possibly polluted) properties read as absent. */
 function own(record: Record<string, unknown>, key: string): unknown {
   return Object.hasOwn(record, key) ? record[key] : undefined;
 }
 
+/**
+ * Read each field exactly once into a plain snapshot and check that, so a getter or proxy
+ * cannot pass validation and then return a card number when the RDF is written.
+ */
 function paymentCardSnapshot(value: unknown): PaymentCardSnapshot | undefined {
   if (typeof value !== "object" || value === null) return undefined;
   const card = value as Record<string, unknown>;

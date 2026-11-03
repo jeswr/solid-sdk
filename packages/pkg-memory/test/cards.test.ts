@@ -108,8 +108,6 @@ describe("payment-card fact template", () => {
     const polluted = Object.assign(
       Object.create({
         billingAddress: "https://example.org/polluted",
-        last4: "4111111111111111",
-        brand: "visa",
       }),
       withoutAddress,
     );
@@ -126,6 +124,25 @@ describe("payment-card fact template", () => {
     expect(() => createFactAssertion(owner, card({ ...valid, expires }))).toThrow(
       "Invalid payment card",
     );
+  });
+
+  it("never takes an absent billing address from a polluted Object.prototype", () => {
+    // Non-enumerable, so for-in loops elsewhere are unaffected while property lookup still sees it.
+    Object.defineProperty(Object.prototype, "billingAddress", {
+      value: "https://example.org/polluted",
+      configurable: true,
+      enumerable: false,
+      writable: true,
+    });
+    try {
+      const { billingAddress: _omitted, ...withoutAddress } = valid;
+      for (const value of [withoutAddress, { ...valid, billingAddress: undefined }]) {
+        const store = createFactAssertion(owner, card(value));
+        expect(store.getQuads(null, df.namedNode(`${NS.schema}address`), null, null)).toEqual([]);
+      }
+    } finally {
+      delete (Object.prototype as Record<string, unknown>).billingAddress;
+    }
   });
 
   it("validates brands against a frozen list", () => {
