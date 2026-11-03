@@ -11,6 +11,7 @@ import {
   REL,
   requireXlsx,
   STRICT_REL,
+  sheetNames,
   XlsxImportError,
 } from "./common";
 
@@ -105,6 +106,7 @@ function readSheet(
   strings: string[],
   formats: (string | undefined)[],
   countCell: () => void,
+  countMerges: (count: number) => void,
   countText: (length: number) => void,
 ): Partial<IWorksheetData> {
   const sheet: Partial<IWorksheetData> = {
@@ -132,7 +134,8 @@ function readSheet(
     if (r > LIMITS.rows && children(row, "c").length === 0) continue;
     requireXlsx(r <= LIMITS.rows, "Excel row limit exceeded");
     if (row.hasAttribute("ht")) {
-      const h = (numberAttribute(row, "ht", 0) * 96) / 72;
+      // Excel's tallest row is 409 points.
+      const h = (Math.min(numberAttribute(row, "ht", 0), 409) * 96) / 72;
       requireXlsx(Number.isFinite(h), "Invalid Excel row height");
       // Row heights count towards the workbook's cell limit, like cells and merges.
       countCell();
@@ -152,7 +155,8 @@ function readSheet(
       "Excel column limit exceeded",
     );
     if (col.hasAttribute("width")) {
-      const w = numberAttribute(col, "width", 0) * 7 + 5;
+      // Excel's widest column is 255 characters.
+      const w = Math.min(numberAttribute(col, "width", 0), 255) * 7 + 5;
       requireXlsx(Number.isFinite(w), "Invalid Excel column width");
       widths.push({ min, max, w });
     }
@@ -183,7 +187,7 @@ function readSheet(
       } else if (type === "str" || type === "e" || type === "d") {
         cell.v = value;
         cell.t = 1;
-      } else if (value !== "" || !formulaElement) {
+      } else if (value !== "") {
         requireXlsx(value.trim() !== "" && Number.isFinite(Number(value)), "Invalid Excel number");
         cell.v = Number(value);
         cell.t = 2;
@@ -192,16 +196,21 @@ function readSheet(
     // Newer Excel functions are stored with a _xlfn./_xlws. prefix that Univer doesn't know.
     const formula = formulaElement?.textContent?.replace(/\b_xl(?:fn|ws)\./gi, "");
     if (formula) cell.f = `=${formula}`;
-    countText((typeof cell.v === "string" ? cell.v.length : 0) + (formula?.length ?? 0));
     const style = numberAttribute(element, "s", 0);
     const pattern = formats[style];
     if (pattern && pattern !== "General") cell.s = { n: { pattern } };
+    // Each cell carries its own copy of strings and formats in the snapshot, so count them all.
+    countText(
+      (typeof cell.v === "string" ? cell.v.length : 0) +
+        (formula?.length ?? 0) +
+        (cell.s ? (pattern as string).length : 0),
+    );
     cells[row] ??= {};
     requireXlsx(!Object.hasOwn(cells[row], column), "Duplicate Excel cell reference");
     cells[row][column] = cell;
   }
   const merges = children(doc, "mergeCells", "mergeCell");
-  requireXlsx(merges.length <= LIMITS.merges, "Too many merged Excel cells");
+  countMerges(merges.length);
   const ranges: NonNullable<IWorksheetData["mergeData"]> = [];
   for (const merge of merges) {
     const refs = (merge.getAttribute("ref") ?? "").split(":");
@@ -409,11 +418,11 @@ export function readXlsx(data: Uint8Array, options: { title: string }): Snapshot
     if (parts.get("xl/styles.xml")) {
       const styles = parseXml(parts.get("xl/styles.xml"), "styles");
       const codes = new Map(BUILTIN_FORMATS);
-      for (const format of children(styles, "numFmts", "numFmt"))
-        codes.set(
-          Number(format.getAttribute("numFmtId")),
-          format.getAttribute("formatCode") ?? "General",
-        );
+      for (const format of children(styles, "numFmts", "numFmt")) {
+        const code = format.getAttribute("formatCode") ?? "General";
+        requireXlsx(code.length <= 255, "Excel number format is too long");
+        codes.set(Number(format.getAttribute("numFmtId")), code);
+      }
       for (const xf of children(styles, "cellXfs", "xf"))
         formats.push(codes.get(numberAttribute(xf, "numFmtId", 0)));
     }
@@ -427,8 +436,11 @@ export function readXlsx(data: Uint8Array, options: { title: string }): Snapshot
       sheets: {},
     } as IWorkbookData;
     let cells = 0;
+    let merged = 0;
     let text = 0;
     let area = 0;
+    // Names are made valid and unique the way Excel requires.
+    const names = sheetNames(sheets.map((sheet) => sheet.getAttribute("name") ?? "Sheet"));
     for (const [i, sheet] of sheets.entries()) {
       const id = `sheet${i + 1}`;
       const path = targets.get(relationshipId(sheet)) as string;
@@ -436,11 +448,16 @@ export function readXlsx(data: Uint8Array, options: { title: string }): Snapshot
       snapshot.sheets[id] = readSheet(
         parseXml(worksheets.get(path), path),
         id,
-        sheet.getAttribute("name") ?? "Sheet",
+        names[i] as string,
         strings,
         formats,
         () => {
           requireXlsx(++cells <= LIMITS.cells, "Excel cell limit exceeded");
+        },
+        (count) => {
+          merged += count;
+          // The overlap check compares merges pairwise, so the limit is for the workbook.
+          requireXlsx(merged <= LIMITS.merges, "Too many merged Excel cells");
         },
         (length) => {
           text += length;

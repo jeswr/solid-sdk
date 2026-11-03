@@ -143,7 +143,7 @@ export function writeXlsx(snapshot: Snapshot): Uint8Array {
         body = `<v>${Number(value)}</v>`;
       else if (formula) {
         type = ' t="str"';
-        body = `<v>${xml(String(value))}</v>`;
+        body = `<v>${xml(String(value).slice(0, 32_767))}</v>`;
       } else {
         type = ' t="inlineStr"';
         // Excel's cell text limit.

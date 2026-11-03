@@ -409,7 +409,8 @@ describe("Excel hostile input", () => {
       { "xl/worksheets/data.xml": worksheet(`<sheetData><row r="1" ht="${ht}"/></sheetData>`) },
       "Invalid Excel ht",
     ));
-  it.each(["", "NaN", "Infinity"])("rejects invalid numeric cells %s", (n) =>
+  it("reads an empty value as an empty cell", () => expect(cell('<c r="A1"><v/></c>')).toEqual({}));
+  it.each([" ", "NaN", "Infinity"])("rejects invalid numeric cells %s", (n) =>
     rejects(
       { "xl/worksheets/data.xml": cellsXml(`<c r="A1"><v>${n}</v></c>`) },
       "Invalid Excel number",
@@ -851,15 +852,83 @@ it("rejects an export with a missing sheet rather than silently dropping its dat
   expect(() => writeXlsx({ sheetOrder: ["missing"], sheets: {} })).toThrow("Missing sheet data");
 });
 
-it("rejects overflowing dimension conversions", () => {
-  rejects(
-    { "xl/worksheets/data.xml": worksheet('<sheetData><row r="1" ht="1e308"/></sheetData>') },
-    "row height",
+it("clamps row heights and column widths to Excel's maxima", () => {
+  const big = sheet(
+    '<cols><col min="1" max="1" width="1e308"/></cols><sheetData><row r="1" ht="1e308"/></sheetData>',
   );
+  expect(big.rowData?.[0]?.h).toBeCloseTo((409 * 96) / 72);
+  expect(big.columnData?.[0]?.w).toBe(255 * 7 + 5);
+});
+
+it("limits number formats, counts them per cell, and caps merges across the workbook", () => {
   rejects(
-    { "xl/worksheets/data.xml": worksheet('<cols><col min="1" max="1" width="1e308"/></cols>') },
-    "column width",
+    {
+      "xl/styles.xml": `<styleSheet xmlns="${MAIN}"><numFmts><numFmt numFmtId="164" formatCode="${"0".repeat(256)}"/></numFmts></styleSheet>`,
+    },
+    "number format is too long",
   );
+  const { text, merges } = LIMITS;
+  LIMITS.text = 10;
+  LIMITS.merges = 1;
+  try {
+    rejects(
+      {
+        "xl/styles.xml": `<styleSheet xmlns="${MAIN}"><numFmts><numFmt numFmtId="164" formatCode="0.000000"/></numFmts><cellXfs><xf/><xf numFmtId="164"/></cellXfs></styleSheet>`,
+        "xl/worksheets/data.xml": cellsXml(
+          '<c r="A1" s="1"><v>1</v></c><c r="B1" s="1"><v>1</v></c>',
+        ),
+      },
+      "text exceeds",
+    );
+    const twoSheets = {
+      "xl/workbook.xml": bookXml('<sheet name="A" r:id="r1"/><sheet name="B" r:id="r2"/>'),
+      "xl/_rels/workbook.xml.rels": relsXml(
+        `${relationship()}<Relationship Id="r2" Type="${REL}/worksheet" Target="worksheets/other.xml"/>`,
+      ),
+      "xl/worksheets/data.xml": worksheet('<mergeCells><mergeCell ref="A1:B1"/></mergeCells>'),
+      "xl/worksheets/other.xml": worksheet('<mergeCells><mergeCell ref="A1:B1"/></mergeCells>'),
+    };
+    rejects(twoSheets, "Too many merged");
+  } finally {
+    LIMITS.text = text;
+    LIMITS.merges = merges;
+  }
+});
+
+it("makes imported sheet names valid and unique", () => {
+  const result = read(
+    fixture({
+      "xl/workbook.xml": bookXml(
+        `<sheet name="${"Long name ".repeat(5)}" r:id="r1"/><sheet name="Data" r:id="r2"/><sheet name="data" r:id="r3"/>`,
+      ),
+      "xl/_rels/workbook.xml.rels": relsXml(
+        `${relationship()}<Relationship Id="r2" Type="${REL}/worksheet" Target="worksheets/b.xml"/><Relationship Id="r3" Type="${REL}/worksheet" Target="worksheets/c.xml"/>`,
+      ),
+      "xl/worksheets/b.xml": worksheet(),
+      "xl/worksheets/c.xml": worksheet(),
+    }),
+  );
+  expect(
+    result.sheetOrder.map((id) => (result.sheets[id] as Partial<IWorksheetData>).name),
+  ).toEqual(["Long name Long name Long name L", "Data", "data (2)"]);
+});
+
+it("cuts cached formula text to Excel's cell limit on export", () => {
+  const xmlText = strFromU8(
+    unzipSync(
+      writeXlsx({
+        sheetOrder: ["a"],
+        sheets: {
+          a: {
+            name: "A",
+            cellData: { 0: { 0: { f: '=REPT("x",40000)', v: "x".repeat(40_000) } } },
+          },
+        },
+      } as unknown as Snapshot),
+    )["xl/worksheets/sheet1.xml"] as Uint8Array,
+  );
+  expect(xmlText).toContain(`<v>${"x".repeat(32_767)}</v>`);
+  expect(xmlText).not.toContain("x".repeat(32_768));
 });
 
 it("rejects a cell reference with an encoded trailing newline", () => {
