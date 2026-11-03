@@ -99,6 +99,7 @@ export default defineConfig({
         "src/apps/sheets/lib/refs/**/*.ts",
         "src/apps/sheets/lib/structure/**/*.ts",
         "src/apps/sheets/lib/csv/**/*.ts",
+        "src/apps/sheets/lib/xlsx/**/*.ts",
         "src/apps/sheets/lib/format/**/*.ts",
         "src/apps/sheets/lib/condformat/**/*.ts",
         "src/apps/calendar/lib/layout/**/*.ts",
