@@ -736,6 +736,32 @@ describe("access-controlled resources: the ACL lands before any data", () => {
     expect(grantsPublicRead(pod.resources.get(`${Secret}.acl`)?.body, `${Secret}.acl`)).toBe(false);
   });
 
+  it("an accepted (202) write is not a completed one", async () => {
+    const pod = new MemoryPod("https://pod.example");
+    pod.acceptOnly.add("/public/secret");
+    const error = await seedPods({ layout: access(pod, "private data", true) }).catch(
+      (caught: unknown) => caught,
+    );
+    expect(error).toBeInstanceOf(SeedError);
+    expect(String((error as SeedError).cause)).toMatch(/202/);
+    // The grants never went on.
+    expect(pod.resources.has(`${Secret}.acl`)).toBe(false);
+  });
+
+  it("an accepted (202) cleanup DELETE keeps the ACL", async () => {
+    const pod = new MemoryPod("https://pod.example");
+    pod.failNextPut("/public/secret", 500, 1, true);
+    pod.deleteFailures.set("/public/secret", 202);
+    const error = await seedPods({ layout: access(pod, "private data", true) }).catch(
+      (caught: unknown) => caught,
+    );
+    expect(String((error as SeedError).cause)).toMatch(
+      /could not remove .*status 202.*ACL was left in place/,
+    );
+    expect(pod.resources.has(`${Secret}.acl`)).toBe(true);
+    expect(grantsPublicRead(pod.resources.get(`${Secret}.acl`)?.body, `${Secret}.acl`)).toBe(false);
+  });
+
   it("a cleanup that removes the resource but not its ACL says so", async () => {
     const pod = new MemoryPod("https://pod.example");
     pod.failNextPut("/public/secret", 500, 1);
@@ -1000,6 +1026,26 @@ describe("access-controlled resources: the ACL lands before any data", () => {
       seedPods({ layout: containerLayout(pod, true), mode: "replace" }),
     ).rejects.toBeInstanceOf(SeedError);
     expect(pod.resources.get(acl)?.body).toBe("# narrowed elsewhere\n");
+  });
+
+  it("the final grant on a created container goes only over the owner-only ACL this run wrote", async () => {
+    const pod = new MemoryPod("https://pod.example");
+    const acl = "https://pod.example/c/.acl";
+    // Between the owner-only ACL and the grant (at the emptiness check, after the
+    // HEAD that locates the ACL), another writer changes the ACL.
+    let reads = 0;
+    pod.afterGet = (url) => {
+      if (url === "https://pod.example/c/" && ++reads === 2) {
+        pod.afterGet = undefined;
+        pod.resources.set(acl, { body: "# changed elsewhere\n", contentType: "text/turtle" });
+      }
+    };
+    const error = await seedPods({ layout: containerLayout(pod, true) }).catch(
+      (caught: unknown) => caught,
+    );
+    expect(error).toBeInstanceOf(SeedError);
+    expect(String((error as SeedError).cause)).toMatch(/412/);
+    expect(grantsPublicRead(pod.resources.get(acl)?.body, acl)).toBe(false);
   });
 
   it("ensure on an expander group never broadens, and checks every member before writing", async () => {

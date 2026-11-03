@@ -345,6 +345,39 @@ async function exists(target: SeedTarget, url: string): Promise<boolean> {
   throw new HttpFailure("preflight", url, response.status, await responseDetail(response));
 }
 
+/**
+ * Statuses that report a write or delete as done. A 202 (or any other 2xx) only
+ * accepts it for later processing, so the ACL transition that depends on it
+ * cannot advance yet.
+ */
+function completed(status: number): boolean {
+  return status >= 200 && status < 300 && status !== 202;
+}
+
+/**
+ * PUT a body. Returns the status and the strong ETag of the stored
+ * representation, when the server sends one.
+ */
+async function putTagged(
+  target: SeedTarget,
+  url: string,
+  body: string,
+  contentType: string,
+  conditional: boolean | { ifMatch: string },
+): Promise<{ status: number; etag?: string }> {
+  const headers = new Headers({ "content-type": contentType });
+  if (conditional === true) headers.set("if-none-match", "*");
+  else if (conditional !== false) headers.set("if-match", conditional.ifMatch);
+  const response = await podFetch(target, url, { method: "PUT", headers, body });
+  if (!completed(response.status))
+    throw new HttpFailure("PUT", url, response.status, await responseDetail(response));
+  await response.body?.cancel();
+  const etag = response.headers.get("etag") ?? undefined;
+  return etag === undefined || etag.startsWith("W/")
+    ? { status: response.status }
+    : { status: response.status, etag };
+}
+
 async function put(
   target: SeedTarget,
   url: string,
@@ -352,14 +385,7 @@ async function put(
   contentType: string,
   conditional: boolean | { ifMatch: string },
 ): Promise<number> {
-  const headers = new Headers({ "content-type": contentType });
-  if (conditional === true) headers.set("if-none-match", "*");
-  else if (conditional !== false) headers.set("if-match", conditional.ifMatch);
-  const response = await podFetch(target, url, { method: "PUT", headers, body });
-  if (!response.ok)
-    throw new HttpFailure("PUT", url, response.status, await responseDetail(response));
-  await response.body?.cancel();
-  return response.status;
+  return (await putTagged(target, url, body, contentType, conditional)).status;
 }
 
 /**
@@ -380,7 +406,9 @@ async function removeCreated(
     try {
       const response = await podFetch(target, resource, { method: "DELETE" });
       await response.body?.cancel();
-      return response.ok || response.status === 404 ? undefined : `status ${response.status}`;
+      return completed(response.status) || response.status === 404
+        ? undefined
+        : `status ${response.status}`;
     } catch (error) {
       return error instanceof Error ? error.message : String(error);
     }
@@ -720,14 +748,17 @@ async function writeProtected(
     // overwritten. A PUT that errors may still have landed, so cleanup tries it,
     // unless the server refused it as a stale ACL this run did not write.
     aclAttempted = true;
+    let ownerAclEtag: string | undefined;
     try {
-      await put(
-        pod.target,
-        aclUrl,
-        resource.ownerAclBody as string,
-        DEFAULT_CONTENT_TYPE,
-        ownerCondition,
-      );
+      ownerAclEtag = (
+        await putTagged(
+          pod.target,
+          aclUrl,
+          resource.ownerAclBody as string,
+          DEFAULT_CONTENT_TYPE,
+          ownerCondition,
+        )
+      ).etag;
     } catch (error) {
       if (error instanceof HttpFailure && error.status === 412) aclAttempted = false;
       throw error;
@@ -745,7 +776,9 @@ async function writeProtected(
       // and another writer could add a child before the owner-only ACL landed), and
       // its acl:default would reach every child. Grant only over an empty container.
       if (createdPlaceholder && url.endsWith("/")) await assertEmptyContainer(pod.target, url);
-      await writeAcl(pod, resource, false);
+      // Only over the owner-only ACL this run wrote: a change since fails (412).
+      // A server that returned no strong ETag for it gets an unconditional write.
+      await writeAcl(pod, resource, ownerAclEtag === undefined ? false : { ifMatch: ownerAclEtag });
     }
     return outcome;
   } catch (error) {
