@@ -13,6 +13,7 @@ let route = { pathname: "/tasks/inbox", query: "" };
 const routeListeners = new Set<() => void>();
 const router = { replace: vi.fn(), push: vi.fn() };
 let dismissDetails: (() => void) | undefined;
+let replaceState: ReturnType<typeof vi.spyOn>;
 function useRoute() {
   return useSyncExternalStore(
     (listener) => {
@@ -160,6 +161,7 @@ beforeEach(() => {
     value: vi.fn(),
   });
   router.replace.mockClear();
+  replaceState = vi.spyOn(window.history, "replaceState").mockImplementation(() => undefined);
 });
 afterEach(() => {
   vi.useRealTimers();
@@ -345,7 +347,23 @@ describe("detail edits", () => {
       document.removeEventListener("keydown", captureEscape, true);
     }
     expect(router.replace).not.toHaveBeenCalled();
+    expect(replaceState).not.toHaveBeenCalled();
     expect(host.querySelector('input[aria-label="Sub-task title"]')).toBeNull();
+  });
+  it("closes the detail by dropping only the task param from the URL", async () => {
+    await setup();
+    await mount(h(TasksApp, null, "List"));
+    await act(() => dismissDetails?.());
+    expect(replaceState).toHaveBeenCalledExactlyOnceWith(null, "", "/tasks/inbox?keep=value");
+    expect(router.replace).not.toHaveBeenCalled();
+  });
+  it("names the breadcrumb after its visible project and section", async () => {
+    await setup();
+    const { host } = await mount(h(TasksApp, null, "List"));
+    const breadcrumb = host.querySelector<HTMLButtonElement>(".tsk-detail-breadcrumb");
+    const label = breadcrumb?.getAttribute("aria-label") ?? "";
+    expect(label).toMatch(/, move task$/);
+    expect(label.startsWith(breadcrumb?.textContent?.trim() ?? "missing")).toBe(true);
   });
   it("expands one sub-task row, adds on Enter, and collapses on Escape", async () => {
     const { parent, store, inbox } = await setup();
