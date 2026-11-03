@@ -1,6 +1,17 @@
 // AUTHORED-BY Codex GPT-6
-import { MetricView } from "@/apps/health/components/metric-view";
-export default async function Page({ params }: { params: Promise<{ metric: string }> }) {
-  const values = await params;
-  return <MetricView metric={values.metric} />;
+// AUTHORED-BY Claude Opus 5.5
+import { Suspense } from "react";
+import { MetricRoute } from "@/apps/health/components/native-routes";
+
+// Staging sets this literal to false; the web target retains on-demand routes.
+export const dynamicParams = true;
+export function generateStaticParams() {
+  return process.env.NEXT_PUBLIC_SUITE_TARGET === "native" ? [{ metric: "__" }] : [];
+}
+export default function Page() {
+  return (
+    <Suspense>
+      <MetricRoute />
+    </Suspense>
+  );
 }

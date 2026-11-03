@@ -5,8 +5,33 @@
 
 Fail-closed verification of agent authorization chains composed from signed credentials and ODRL delegation policies.
 
-The package performs no network I/O or RDF parsing. Key control and credential-status checks enter
-only through injected seams, so a decision can be reproduced independently.
+The package performs no network I/O. Key control and credential-status checks enter only through
+injected seams, so a decision can be reproduced independently.
+
+Each hop's policy is evaluated as parsed from its signed policy content, not from the presented
+policy object. The parsed policy must re-serialise to exactly the signed graph; content the ODRL
+projection cannot fully represent denies with `POLICY_INTEGRITY`, as does a scalar operator (`eq`,
+`lteq`, …) with several right operands, since a graph does not order them. A hop presented without content
+denies unless `allowProvisionalPolicy: true` is set, which marks the permit
+`policyIntegrityProvisional`.
+
+`isControlledBy` is required, and an invalid `now`, `revoked` or `maxChainLength` denies with
+`INVALID_OPTIONS`. The chain-length cap (default 8) applies before any key is resolved. An unknown
+request action, a multi-valued or malformed request attribute, a value for an operand the chain
+compares as an instant (`dateTime`, or any constraint typed `xsd:dateTime`/`xsd:date`) that is not a
+dateTime string with a timezone (and no precision past milliseconds, which the evaluator drops), a value for an operand the chain compares as numbers that does not
+read as a number, a signed bound the evaluator would compare as text (a temporal bound that is not an
+instant, such as an `xsd:date` with an offset, an `xsd:date` under any operator but `lt` or `gteq`
+(which would match only its UTC midnight), a dateTime finer than milliseconds, or an ordering over durations or names), or a chain
+prohibition that may apply but constrains an operand the request leaves out,
+denies in Phase D, as does any evaluator failure. The prohibition check probes each policy exactly
+as the delegation walk reads it (the same agent, action and injected `delegationDepth`), dropping
+only the constraints whose operand is missing, so a prohibition assigned to someone else or out of
+depth range does not deny. A single policy under the `perm` conflict strategy keeps its own
+semantics: a matching permission overrides its prohibitions. A credential validity bound that is not a dateTime with a
+timezone denies in Phase A. Signed policy content is parsed with its relative IRIs resolved against
+the policy document (the policy IRI without its fragment). The credential's `svc:action` and `svc:target` claims are read
+but not enforced; the bound policy decides scope.
 
 Authorization credentials must contain one subject record (a single-element array is
 accepted). Canonical and legacy claim aliases must agree, including action sets after

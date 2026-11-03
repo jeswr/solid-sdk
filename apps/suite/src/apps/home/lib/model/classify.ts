@@ -11,6 +11,23 @@ export function classificationForType(id: string): Classification {
   return { domain: UNCATEGORISED };
 }
 
+/** Shared by discovered subjects and connector destination previews. Account
+ * classes need the source to distinguish work accounts from social accounts. */
+export function classificationForSourceClass(
+  iri: string,
+  sourceUrls: readonly string[],
+): Classification {
+  if (canonicalize(iri) !== `${NS.FOAF}OnlineAccount`) return classificationForClass(iri);
+  const work = sourceUrls.some((value) => {
+    const host = httpUrl(value)?.hostname;
+    return (
+      host !== undefined &&
+      ["github.com", "slack.com"].some((base) => host === base || host.endsWith(`.${base}`))
+    );
+  });
+  return classificationForType(work ? "work-experience" : "following");
+}
+
 export function isProfileSubject(subject: HomeSubject, webId?: string): boolean {
   return (
     subject.termType === "NamedNode" &&
@@ -28,14 +45,7 @@ export function classifySubject(subject: HomeSubject, webId?: string): Classific
   }
   if (types.includes(`${NS.FOAF}OnlineAccount`)) {
     const urls = [...subject.sourceUrls, ...subject.iris(`${NS.FOAF}accountServiceHomepage`)];
-    const work = urls.some((value) => {
-      const host = httpUrl(value)?.hostname;
-      return (
-        host !== undefined &&
-        ["github.com", "slack.com"].some((base) => host === base || host.endsWith(`.${base}`))
-      );
-    });
-    return classificationForType(work ? "work-experience" : "following");
+    return classificationForSourceClass(`${NS.FOAF}OnlineAccount`, urls);
   }
   if (types.includes(`${NS.VCARD}Individual`)) {
     return classificationForType(isProfileSubject(subject, webId) ? "identity" : "contacts");
