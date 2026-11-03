@@ -3,11 +3,14 @@
 import { Button, EmptyState, IconButton, Input } from "@jeswr/suite-ui";
 import { ArrowDown, ArrowUp, Pencil, Plus, Trash2 } from "lucide-react";
 import Link from "next/link";
-import { useId, useMemo, useState } from "react";
-import { bulkCategorise } from "../lib/data/ledger";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import {
+  addRule,
+  categoriseByRules,
   checkRule,
   type RuleMatch,
+  replaceRule,
+  resetRules,
   ruleMatches,
   type SavedRule,
   saveRules,
@@ -24,14 +27,29 @@ const MATCH_LABELS: Record<RuleMatch, string> = {
 const count = (value: number, noun: string) =>
   `${value.toLocaleString("en")} ${noun}${value === 1 ? "" : "s"}`;
 
-type Draft = { id?: string; match: RuleMatch; value: string; category?: string | undefined };
+/** A new rule's id is fixed when its dialog opens, so retrying a save adds it once. */
+type Draft = {
+  id: string;
+  isNew: boolean;
+  match: RuleMatch;
+  value: string;
+  category?: string | undefined;
+};
 
 export function RulesScreen() {
   const money = useMoney();
   const valueId = useId();
   const [draft, setDraft] = useState<Draft>();
   const [deleting, setDeleting] = useState<SavedRule>();
-  const [error, setError] = useState("");
+  const [error, setError] = useState<{ field: "value" | "category"; text: string }>();
+  const [announcement, setAnnouncement] = useState("");
+  // After a move, keep focus on the same control of the moved rule.
+  const focusAfterMove = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    if (!focusAfterMove.current) return;
+    document.querySelector<HTMLElement>(`[data-rule-control="${focusAfterMove.current}"]`)?.focus();
+    focusAfterMove.current = undefined;
+  });
   const label = (id: string) => money.categories.find((c) => c.id === id)?.label;
   const describe = (rule: SavedRule) => `Description ${MATCH_LABELS[rule.match]} “${rule.value}”`;
   const matches = useMemo(
@@ -43,21 +61,45 @@ export function RulesScreen() {
   const change = (update: (rules: SavedRule[]) => SavedRule[]) =>
     money.mutate(
       () => saveRules(money.session, update),
-      (snapshot) => ({ ...snapshot, rules: update([...snapshot.rules]) }),
+      (snapshot) => {
+        try {
+          return { ...snapshot, rules: update([...snapshot.rules]) };
+        } catch {
+          // The save reports the conflict; show the rules as they were meanwhile.
+          return snapshot;
+        }
+      },
     );
-  const move = (rule: SavedRule, by: -1 | 1) =>
+  const move = (rule: SavedRule, by: -1 | 1) => {
+    const from = money.rules.findIndex((value) => value.id === rule.id);
+    const to = from + by;
+    if (from < 0 || to < 0 || to >= money.rules.length) return;
+    // At the new end, the button just used no longer applies; use the other one.
+    const end = to === 0 || to === money.rules.length - 1;
+    focusAfterMove.current = `${rule.id}:${end ? (by < 0 ? "down" : "up") : by < 0 ? "up" : "down"}`;
+    setAnnouncement(`Moved to position ${to + 1} of ${money.rules.length}`);
     void change((rules) => {
-      const from = rules.findIndex((value) => value.id === rule.id);
-      const to = from + by;
-      if (from < 0 || to < 0 || to >= rules.length) return rules;
+      const index = rules.findIndex((value) => value.id === rule.id);
+      const target = index + by;
+      if (index < 0 || target < 0 || target >= rules.length) return rules;
       const next = [...rules];
-      next.splice(to, 0, ...next.splice(from, 1));
+      next.splice(target, 0, ...next.splice(index, 1));
       return next;
     });
+  };
   const apply = () =>
     void money.mutate(async () => {
-      for (const [category, ids] of matches) await bulkCategorise(money.session, ids, category);
+      const filed = await categoriseByRules(money.session, money.rules, money.categories);
+      setAnnouncement(`Categorised ${count(filed, "transaction")}`);
     });
+  const openDraft = (value: Draft) => {
+    setError(undefined);
+    // A rule whose category was deleted must pick a new one before saving.
+    const known = money.categories.some((category) => category.id === value.category);
+    setDraft({ ...value, category: known ? value.category : undefined });
+  };
+  const newDraft = () =>
+    openDraft({ id: crypto.randomUUID(), isNew: true, match: "contains", value: "" });
 
   return (
     <>
@@ -69,22 +111,28 @@ export function RulesScreen() {
             File imported transactions automatically. The first rule that matches wins.
           </p>
         </div>
-        <Button
-          disabled={!money.categories.length}
-          onClick={() => {
-            setError("");
-            setDraft({ match: "contains", value: "" });
-          }}
-        >
+        <Button disabled={!money.categories.length} onClick={newDraft}>
           <Plus size={16} aria-hidden="true" />
           Add rule
         </Button>
       </header>
+      <p className="sr-only" aria-live="polite">
+        {announcement}
+      </p>
       {money.rulesUnreadable && (
-        <p className="mon-rules-warning" role="status">
-          Your saved rules couldn&apos;t be read. Imports use category names until they&apos;re
-          fixed; saving a rule will try again.
-        </p>
+        <div className="mon-rules-warning" role="status">
+          <p>
+            Your saved rules couldn&apos;t be read, so imports use category names instead. Start
+            again with no rules to add new ones.
+          </p>
+          <Button
+            variant="outline"
+            disabled={money.saving}
+            onClick={() => void money.mutate(() => resetRules(money.session))}
+          >
+            Start again with no rules
+          </Button>
+        </div>
       )}
       <section className="mon-panel">
         <h2 className="sr-only">Your rules</h2>
@@ -98,13 +146,11 @@ export function RulesScreen() {
               </Button>
             }
           />
-        ) : !money.rules.length ? (
+        ) : money.rulesUnreadable ? null : !money.rules.length ? (
           <EmptyState
             title="Sort transactions automatically"
             body="For example: when the description contains “Tesco”, file it under Groceries. Without rules, imports look for category names in descriptions."
-            primaryAction={
-              <Button onClick={() => setDraft({ match: "contains", value: "" })}>Add rule</Button>
-            }
+            primaryAction={<Button onClick={newDraft}>Add rule</Button>}
           />
         ) : (
           <ol className="mon-rules">
@@ -120,7 +166,8 @@ export function RulesScreen() {
                   <IconButton
                     label={`Move up: ${describe(rule)}`}
                     variant="ghost"
-                    disabled={index === 0 || money.saving}
+                    data-rule-control={`${rule.id}:up`}
+                    disabled={index === 0}
                     onClick={() => move(rule, -1)}
                   >
                     <ArrowUp size={16} aria-hidden="true" />
@@ -128,7 +175,8 @@ export function RulesScreen() {
                   <IconButton
                     label={`Move down: ${describe(rule)}`}
                     variant="ghost"
-                    disabled={index === money.rules.length - 1 || money.saving}
+                    data-rule-control={`${rule.id}:down`}
+                    disabled={index === money.rules.length - 1}
                     onClick={() => move(rule, 1)}
                   >
                     <ArrowDown size={16} aria-hidden="true" />
@@ -136,10 +184,7 @@ export function RulesScreen() {
                   <IconButton
                     label={`Edit: ${describe(rule)}`}
                     variant="ghost"
-                    onClick={() => {
-                      setError("");
-                      setDraft(rule);
-                    }}
+                    onClick={() => openDraft({ ...rule, isNew: false })}
                   >
                     <Pencil size={16} aria-hidden="true" />
                   </IconButton>
@@ -173,7 +218,7 @@ export function RulesScreen() {
         onOpenChange={(open) => {
           if (!open) setDraft(undefined);
         }}
-        title={draft?.id ? "Edit rule" : "Add rule"}
+        title={draft?.isNew === false ? "Edit rule" : "Add rule"}
         description="Rules apply to new imports. Existing transactions can be categorised from this page."
       >
         {draft && (
@@ -181,23 +226,22 @@ export function RulesScreen() {
             className="mon-form"
             onSubmit={async (event) => {
               event.preventDefault();
-              setError("");
+              setError(undefined);
               let rule: SavedRule;
               try {
                 rule = checkRule({
-                  id: draft.id ?? crypto.randomUUID(),
+                  id: draft.id,
                   match: draft.match,
                   value: draft.value,
                   category: draft.category ?? "",
                 });
               } catch (failure) {
-                setError((failure as Error).message);
+                const text = (failure as Error).message;
+                setError({ field: /category/u.test(text) ? "category" : "value", text });
                 return;
               }
               const saved = await change((rules) =>
-                rules.some((value) => value.id === rule.id)
-                  ? rules.map((value) => (value.id === rule.id ? rule : value))
-                  : [...rules, rule],
+                draft.isNew ? addRule(rules, rule) : replaceRule(rules, rule),
               );
               if (saved) setDraft(undefined);
             }}
@@ -218,17 +262,23 @@ export function RulesScreen() {
                 value={draft.value}
                 maxLength={200}
                 onChange={(event) => setDraft({ ...draft, value: event.target.value })}
-                aria-describedby={error ? `${valueId}-error` : undefined}
+                aria-invalid={error?.field === "value" ? true : undefined}
+                aria-describedby={error?.field === "value" ? `${valueId}-error` : undefined}
               />
             </label>
+            {error?.field === "value" && (
+              <p id={`${valueId}-error`} role="alert" className="mon-rules-error">
+                {error.text}
+              </p>
+            )}
             <CategorySelect
               label="File under"
               value={draft.category}
               onChange={(category) => setDraft({ ...draft, category })}
             />
-            {error && (
-              <p id={`${valueId}-error`} role="alert" className="mon-rules-error">
-                {error}
+            {error?.field === "category" && (
+              <p role="alert" className="mon-rules-error">
+                {error.text}
               </p>
             )}
             <Button type="submit" disabled={money.saving}>

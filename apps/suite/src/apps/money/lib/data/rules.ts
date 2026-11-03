@@ -1,7 +1,8 @@
 // AUTHORED-BY Claude Opus 5.5
 import { type CategoryRule, categoriseTransactions } from "../import";
-import { type Category, MoneyIoError, type Transaction } from "../model";
+import { type Category, MoneyIoError, putTransaction, type Transaction } from "../model";
 import { type MoneyClient, storeOf } from "./container";
+import { allTransactions, categorised } from "./ledger";
 import { reconcileMutation } from "./mutations";
 
 export const RULE_MATCHES = ["contains", "startsWith", "endsWith", "equals"] as const;
@@ -67,7 +68,39 @@ export async function loadRules(client: MoneyClient): Promise<RuleFile> {
   });
   if (response.status === 404) return { rules: [], etag: null };
   if (!response.ok) throw new MoneyIoError(response.status);
-  return { rules: parseRules(await response.json()), etag: response.headers.get("etag") };
+  const rules = parseRules(await response.json());
+  const etag = response.headers.get("etag");
+  // Without a version tag a save can't be made safely against other devices' edits.
+  if (!etag) throw new Error("Your pod didn't say which version of your rules it has.");
+  return { rules, etag };
+}
+
+/** Replaces an unreadable rules file with an empty one. */
+export async function resetRules(client: MoneyClient): Promise<void> {
+  const store = storeOf(client);
+  const response = await client.fetch(store.resolve(RULES_FILE), {
+    method: "HEAD",
+    redirect: "error",
+    headers: { "cache-control": "no-cache" },
+  });
+  if (!response.ok && response.status !== 404) throw new MoneyIoError(response.status);
+  const etag = response.headers.get("etag");
+  await store.put(
+    RULES_FILE,
+    JSON.stringify({ rules: [] }),
+    "application/json",
+    response.status === 404 || !etag ? { create: true } : { etag },
+  );
+}
+
+/** Edits must not bring back a rule another device deleted. */
+export function replaceRule(rules: readonly SavedRule[], rule: SavedRule): SavedRule[] {
+  if (!rules.some((value) => value.id === rule.id)) throw new MoneyIoError(412);
+  return rules.map((value) => (value.id === rule.id ? rule : value));
+}
+/** Adding is keyed by the rule's id, so retrying after a lost response adds it once. */
+export function addRule(rules: readonly SavedRule[], rule: SavedRule): SavedRule[] {
+  return rules.some((value) => value.id === rule.id) ? [...rules] : [...rules, rule];
 }
 
 const same = (a: readonly SavedRule[], b: readonly SavedRule[]) =>
@@ -160,4 +193,52 @@ export function ruleMatches(
     groups.set(row.category, ids);
   });
   return groups;
+}
+
+/** True while a row is still there, uncategorised and not a transfer leg. */
+export function stillUncategorised(row: Transaction | undefined): row is Transaction {
+  return !!row && !row.category && !row.debitAccount && !row.creditAccount;
+}
+
+/**
+ * Files the uncategorised transactions the saved rules match, reading the latest
+ * ledger first and skipping any row that gained a category or became a transfer
+ * leg meanwhile. One conditional write per month; a partial failure says how many
+ * were saved (running it again finishes the rest).
+ */
+export async function categoriseByRules(
+  client: MoneyClient,
+  saved: readonly SavedRule[],
+  categories: readonly Category[],
+): Promise<number> {
+  const wanted = new Map<string, string>();
+  for (const [category, ids] of ruleMatches(saved, categories, await allTransactions(client)))
+    for (const id of ids) wanted.set(id, category);
+  const months = new Map<string, string[]>();
+  for (const id of wanted.keys()) {
+    const key = id.slice(0, id.indexOf("#"));
+    months.set(key, [...(months.get(key) ?? []), id]);
+  }
+  const store = storeOf(client);
+  let filed = 0;
+  for (const [url, ids] of months) {
+    try {
+      const loaded = await store.read(url);
+      let changed = 0;
+      for (const id of ids) {
+        const latest = loaded.document.transactions().find((value) => value.id === id);
+        if (!stillUncategorised(latest)) continue;
+        putTransaction(loaded.document, categorised(latest, wanted.get(id)));
+        changed += 1;
+      }
+      if (changed) await store.write(loaded.url, loaded.document, loaded.condition);
+      filed += changed;
+    } catch (error) {
+      if (!filed) throw error;
+      throw new Error(
+        `Categorised ${filed} of ${wanted.size} transactions. The rest couldn't be saved; try again.`,
+      );
+    }
+  }
+  return filed;
 }

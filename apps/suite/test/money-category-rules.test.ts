@@ -1,15 +1,27 @@
 // AUTHORED-BY Claude Opus 5.5
 import { describe, expect, it } from "vitest";
+import { createAccount } from "../src/apps/money/lib/data/accounts";
 import { type MoneyClient, storeOf } from "../src/apps/money/lib/data/container";
+import { previewImport } from "../src/apps/money/lib/data/import";
 import {
+  addTransaction,
+  allTransactions,
+  updateTransaction,
+} from "../src/apps/money/lib/data/ledger";
+import {
+  addRule,
+  categoriseByRules,
   checkRule,
   importRules,
   loadRules,
   parseRules,
   RULES_FILE,
+  replaceRule,
+  resetRules,
   ruleMatches,
   type SavedRule,
   saveRules,
+  stillUncategorised,
 } from "../src/apps/money/lib/data/rules";
 import type { Category, Transaction } from "../src/apps/money/lib/model";
 import { createDemoPod } from "../src/lib/demo-pod/pod";
@@ -24,6 +36,14 @@ const categories: Category[] = [
   { id: "food", label: "Food" },
   { id: "groceries", label: "Groceries", parent: "food" },
   { id: "travel", label: "Travel" },
+];
+const G = "https://rules.example/money/categories.ttl#groceries";
+const T = "https://rules.example/money/categories.ttl#travel";
+const F = "https://rules.example/money/categories.ttl#food";
+const iriCategories: Category[] = [
+  { id: F, label: "Food" },
+  { id: G, label: "Groceries", parent: F },
+  { id: T, label: "Travel" },
 ];
 const tx = (id: string, description: string, extra: Partial<Transaction> = {}): Transaction => ({
   id,
@@ -150,5 +170,173 @@ describe("categorisation rules", () => {
       ],
     );
     expect(Object.fromEntries(groups)).toEqual({ groceries: ["1"], travel: ["2"] });
+  });
+
+  it("adds by id and refuses to bring back a rule deleted elsewhere", () => {
+    const a = rule("a", "Tesco", "groceries");
+    expect(addRule([a], a)).toEqual([a]);
+    expect(addRule([], a)).toEqual([a]);
+    expect(replaceRule([a], { ...a, value: "Aldi" })).toEqual([{ ...a, value: "Aldi" }]);
+    const b = rule("b", "Rail", "travel");
+    expect(replaceRule([a, b], { ...a, value: "Aldi" })).toEqual([{ ...a, value: "Aldi" }, b]);
+    expect(() => replaceRule([], a)).toThrow(expect.objectContaining({ status: 412 }));
+    expect(stillUncategorised(tx("1", "x"))).toBe(true);
+    expect(stillUncategorised(undefined)).toBe(false);
+    expect(stillUncategorised(tx("1", "x", { category: "food" }))).toBe(false);
+    expect(stillUncategorised(tx("1", "x", { debitAccount: "a" }))).toBe(false);
+    expect(stillUncategorised(tx("1", "x", { creditAccount: "a" }))).toBe(false);
+  });
+
+  it("refuses rules files it can't save safely, and can start again", async () => {
+    const c = client();
+    const url = storeOf(c).resolve(RULES_FILE);
+    // Nothing to reset yet: creates an empty file.
+    await resetRules(c);
+    expect(await loadRules(c)).toMatchObject({ rules: [] });
+    await c.fetch(url, {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ rules: [{ id: "a", match: "regex", value: "x", category: "y" }] }),
+    });
+    await expect(loadRules(c)).rejects.toThrow(TypeError);
+    await resetRules(c);
+    expect((await loadRules(c)).rules).toEqual([]);
+    const tagless: MoneyClient = {
+      storageUrl: c.storageUrl,
+      fetch: async (input, init) => {
+        const response = await c.fetch(input, init);
+        const headers = new Headers(response.headers);
+        headers.delete("etag");
+        return new Response(init?.method === "HEAD" ? null : await response.text(), {
+          status: response.status,
+          headers,
+        });
+      },
+    };
+    await expect(loadRules(tagless)).rejects.toThrow("didn't say which version");
+    // Resetting without a version tag can only create, which fails while the file exists.
+    await expect(resetRules(tagless)).rejects.toMatchObject({ status: 412 });
+    const failing: MoneyClient = {
+      storageUrl: c.storageUrl,
+      fetch: async () => new Response(null, { status: 503 }),
+    };
+    await expect(resetRules(failing)).rejects.toMatchObject({ status: 503 });
+  });
+
+  it("applies saved rules ahead of category names when previewing an import", async () => {
+    const c = client();
+    const account = await createAccount(c, "current", {
+      name: "Current",
+      type: "current",
+      currency: "GBP",
+      openingBalance: "0",
+      date: "2026-08-01",
+    });
+    const rows = await previewImport(
+      c,
+      account.id,
+      "GBP",
+      "Date,Description,Amount\n2026-09-01,Travel shop TESCO,-5.00\n2026-09-02,Travel pass,-3.00\n",
+      "csv",
+      { columns: { date: "Date", description: "Description", amount: "Amount" } },
+      importRules([rule("a", "tesco", "groceries")], categories),
+    );
+    expect(rows.map((row) => row.category)).toEqual(["groceries", "travel"]);
+  });
+
+  it("categorises existing transactions from the latest ledger, month by month", async () => {
+    const c = client();
+    const account = await createAccount(c, "current", {
+      name: "Current",
+      type: "current",
+      currency: "GBP",
+      openingBalance: "0",
+      date: "2026-08-01",
+    });
+    const add = (key: string, description: string, at: string, category?: string) =>
+      addTransaction(c, key, {
+        account: account.id,
+        postingTime: at,
+        description,
+        amount: "-1",
+        currency: "GBP",
+        ...(category ? { category } : {}),
+      });
+    await add("s1", "TESCO 1", "2026-09-01T00:00:00Z");
+    await add("s2", "Tesco 2", "2026-10-01T00:00:00Z");
+    await add("s3", "Tesco 3", "2026-10-02T00:00:00Z", F);
+    const rules = [rule("a", "tesco", G)];
+    // Another device files s2 between the page's snapshot and this action.
+    const stale = await allTransactions(c);
+    expect(ruleMatches(rules, iriCategories, stale).get(G)).toHaveLength(2);
+    const s2 = stale.find((row) => row.description === "Tesco 2") as Transaction;
+    await updateTransaction(c, s2, { ...s2, category: T });
+    expect(await categoriseByRules(c, rules, iriCategories)).toBe(1);
+    const byDescription = Object.fromEntries(
+      (await allTransactions(c)).map((row) => [row.description, row.category]),
+    );
+    expect(byDescription).toMatchObject({
+      "TESCO 1": G,
+      "Tesco 2": T,
+      "Tesco 3": F,
+    });
+    // Running it again has nothing left to do.
+    expect(await categoriseByRules(c, rules, iriCategories)).toBe(0);
+    // A row filed elsewhere after the ledger was read is left alone.
+    await add("s4", "Tesco 4", "2026-11-01T00:00:00Z");
+    const shard = storeOf(c).resolve("transactions/2026-11.ttl");
+    let reads = 0;
+    const racing: MoneyClient = {
+      storageUrl: c.storageUrl,
+      fetch: async (input, init) => {
+        if ((init?.method ?? "GET") === "GET" && String(input) === shard && ++reads === 2) {
+          const row = (await allTransactions(c)).find((value) => value.description === "Tesco 4");
+          await updateTransaction(c, row as Transaction, { ...(row as Transaction), category: F });
+        }
+        return c.fetch(input, init);
+      },
+    };
+    expect(await categoriseByRules(racing, rules, iriCategories)).toBe(0);
+    expect(
+      (await allTransactions(c)).find((value) => value.description === "Tesco 4")?.category,
+    ).toBe(F);
+  });
+
+  it("says how many were saved when a later month fails", async () => {
+    const c = client();
+    const account = await createAccount(c, "current", {
+      name: "Current",
+      type: "current",
+      currency: "GBP",
+      openingBalance: "0",
+      date: "2026-08-01",
+    });
+    for (const [key, at] of [
+      ["a", "2026-09-01T00:00:00Z"],
+      ["b", "2026-10-01T00:00:00Z"],
+    ] as const)
+      await addTransaction(c, key, {
+        account: account.id,
+        postingTime: at,
+        description: "Tesco",
+        amount: "-1",
+        currency: "GBP",
+      });
+    const rules = [rule("a", "tesco", G)];
+    let puts = 0;
+    const flaky = (failAt: number): MoneyClient => ({
+      storageUrl: c.storageUrl,
+      fetch: async (input, init) =>
+        init?.method === "PUT" && String(input).includes("/transactions/") && ++puts === failAt
+          ? new Response(null, { status: 500 })
+          : c.fetch(input, init),
+    });
+    await expect(categoriseByRules(flaky(1), rules, iriCategories)).rejects.toMatchObject({
+      status: 500,
+    });
+    puts = 0;
+    await expect(categoriseByRules(flaky(2), rules, iriCategories)).rejects.toThrow(
+      "Categorised 1 of 2 transactions",
+    );
   });
 });
