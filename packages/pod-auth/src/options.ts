@@ -75,20 +75,7 @@ export function validateOptions(options: PodAuthOptions): void {
   )
     throw new TypeError("boundary.roots must be an array of URLs");
   for (const root of options.boundary?.roots ?? []) secureUrl(root, insecure, "boundary root");
-  const endpoints = options.boundary?.storageEndpoints;
-  if (
-    endpoints !== undefined &&
-    (!Array.isArray(endpoints) ||
-      endpoints.some(
-        (path) =>
-          typeof path !== "string" ||
-          !path.startsWith("/") ||
-          path.startsWith("//") ||
-          /[?#\\]|(?:^|\/)\.\.?(?:\/|$)/u.test(path) ||
-          new URL(path, "https://origin.invalid").pathname !== path,
-      ))
-  )
-    throw new TypeError("boundary.storageEndpoints must be absolute, normalised paths");
+  storageEndpointPaths(options.boundary?.storageEndpoints);
   if (options.lws !== undefined && options.lws.subject !== "oidc-id-token")
     validateCid(options.lws.subject?.cid);
   if (options.storage !== undefined) {
@@ -122,4 +109,23 @@ export function validateCid(cid: import("./types.js").CidSubject): void {
     !key.usages.includes("sign")
   )
     throw new TypeError("CID requires a non-extractable ES256 private signing key");
+}
+
+/** Validate and copy storage endpoint paths; read once so a getter cannot swap them later. */
+export function storageEndpointPaths(value: unknown): readonly string[] {
+  if (value === undefined) return [];
+  const paths = Array.isArray(value) ? [...value] : undefined;
+  if (
+    paths === undefined ||
+    paths.some(
+      (path) =>
+        typeof path !== "string" ||
+        !path.startsWith("/") ||
+        path.startsWith("//") ||
+        /[?#\\@]|(?:^|\/)\.\.?(?:\/|$)/u.test(path) ||
+        new URL(path, "https://origin.invalid").pathname !== path,
+    )
+  )
+    throw new TypeError("boundary.storageEndpoints must be absolute, normalised paths");
+  return Object.freeze(paths as string[]);
 }

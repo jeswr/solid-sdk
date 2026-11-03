@@ -588,6 +588,8 @@ test.each([
   "/a#x",
   "/a\\b",
   "/a b",
+  "@evil.example/",
+  "/a@b",
 ])("storageEndpoints rejects %s", (path) => {
   expect(() =>
     createPodAuth({
@@ -656,4 +658,59 @@ test("maxReplayBodyBytes bounds the buffered request body and is validated", asy
     expect(() => createPodAuth({ ...options, maxReplayBodyBytes: value })).toThrow(
       "maxReplayBodyBytes",
     );
+});
+
+test("storageEndpoints must be an array", () => {
+  expect(() =>
+    createPodAuth({
+      clientId: "https://app.example/clientid.jsonld",
+      redirectUri: "https://app.example/callback",
+      boundary: { storageEndpoints: "/account" as unknown as string[] },
+      ui: { getWebId: async () => "", getCode: async () => "" },
+    }),
+  ).toThrow("storageEndpoints");
+});
+
+test("storage endpoints are read once: a getter cannot swap in another origin after validation", () => {
+  let reads = 0;
+  const boundary = {
+    get storageEndpoints() {
+      reads++;
+      return reads === 1 ? ["/account/domains"] : ["@evil.example/"];
+    },
+  };
+  expect(() =>
+    createPodAuth({
+      clientId: "https://app.example/clientid.jsonld",
+      redirectUri: "https://app.example/callback",
+      boundary,
+      ui: { getWebId: async () => "", getCode: async () => "" },
+    }),
+  ).toThrow("storageEndpoints");
+});
+
+test("an endpoint inside another verified storage uses that storage's grant", async () => {
+  const op = createMockOp({
+    storages: ["https://pod.example/alice/", "https://pod.example/", "https://pod.example/svc/"],
+    protectedUrls: ["https://pod.example/.notifications/", "https://pod.example/svc/hook"],
+  });
+  vi.stubGlobal("fetch", op.fetch);
+  const auth = createPodAuth({
+    clientId: op.clientId,
+    redirectUri: op.redirectUri,
+    boundary: { storageEndpoints: ["/.notifications/", "/svc/hook"] },
+    ui: { getWebId: vi.fn(async () => op.webId!), getCode: vi.fn(op.getCode) },
+  });
+  expect((await auth.login({ webId: op.webId! })).storages).toEqual([
+    op.root,
+    "https://pod.example/",
+    "https://pod.example/svc/",
+  ]);
+  expect(op.stats.tokens).toBe(1);
+  expect((await auth.fetch("https://pod.example/.notifications/ws")).status).toBe(200);
+  // The root storage's context, not alice's login grant.
+  expect(op.stats.tokens).toBe(2);
+  // The innermost containing storage wins.
+  expect((await auth.fetch("https://pod.example/svc/hook")).status).toBe(200);
+  expect(op.stats.tokens).toBe(3);
 });

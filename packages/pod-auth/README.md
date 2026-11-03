@@ -55,8 +55,9 @@ storage's grant and are not reported in `Identity.storages`. A path ending in `/
 descendants; any other path matches exactly. A path that is itself a verified storage or a static
 root stays a storage with its own grant.
 
-`auth.fetch` buffers request bodies so it can replay them after a 401; `maxReplayBodyBytes`
-(default 16 MiB) bounds that buffer, and larger bodies reject. Raise it for large uploads.
+`auth.fetch` buffers request bodies so it can replay them after a 401. Bodies larger than
+`maxReplayBodyBytes` (default 16 MiB) reject; the size is checked after the body is read, so it
+limits requests, not peak memory. Raise it for large uploads.
 
 Credential roots come exclusively from `boundary.roots` (including explicit application/user grants)
 or the authenticated WebID profile's `pim:storage` statements about that exact WebID. Automatic roots
