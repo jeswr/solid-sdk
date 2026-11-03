@@ -88,6 +88,8 @@ export function SessionProvider({
   const mounted = useRef(false);
   const generation = useRef(0);
   const cancelled = useRef<symbol | null>(null);
+  // The attempt whose login already produced a pod-auth session (cancel must then drop it).
+  const established = useRef<symbol | null>(null);
   const activeLogin = useRef<symbol | null>(null);
   const suggested = useRef<string | undefined>(undefined);
   const cleaned = useRef(false);
@@ -218,6 +220,11 @@ export function SessionProvider({
     };
   }, [suppliedAuth, attempt, accounts, publish, reset, store]);
 
+  const dropCancelled = useCallback(async (auth: PodAuth) => {
+    // Runs even after unmount: the core outlives the provider and would restore this session.
+    await auth.logout().catch(() => {});
+    if (mounted.current) setReady(true);
+  }, []);
   const runLogin = useCallback(
     async (
       action: NonNullable<Pending>,
@@ -236,15 +243,18 @@ export function SessionProvider({
       setError(null);
       setIssuerChoice(undefined);
       let hint: LoginHint | undefined;
-      let established = false;
       try {
         // Before the first await: the click's activation is still live.
         controller.current!.open();
         hint = await target();
         if (!current()) return;
         const identity = await auth.login(hint);
-        established = true;
-        if (!current()) return;
+        established.current = token;
+        if (!current()) {
+          // Cancelled while the provider answered: drop the session before sign-in reopens.
+          if (cancelled.current === token) await dropCancelled(auth);
+          return;
+        }
         controller.current!.closeIfOpen();
         await publish(identity, current);
         if (!current()) return;
@@ -261,9 +271,9 @@ export function SessionProvider({
           else if (choice) setIssuerChoice(choice);
         }
       } finally {
-        // Cancelled after the provider answered (login or profile phase): drop that new session.
-        if (established && cancelled.current === token && mounted.current)
-          await auth.logout().catch(() => {});
+        // A cancel before any session existed reopens sign-in once this attempt has settled.
+        if (cancelled.current === token && established.current !== token && mounted.current)
+          setReady(true);
         if (activeLogin.current === token) {
           activeLogin.current = null;
           controller.current?.closeIfOpen();
@@ -271,7 +281,7 @@ export function SessionProvider({
         }
       }
     },
-    [ready, publish, accounts, reset, store],
+    [ready, publish, accounts, reset, store, dropCancelled],
   );
   const loginWithAddress = useCallback(
     (input: string, kind: "webid" | "custom" = "webid") =>
@@ -323,7 +333,8 @@ export function SessionProvider({
     }
   }, [reset]);
   const cancelLogin = useCallback(() => {
-    // Abandon only this attempt: remembered accounts and their stored sessions stay.
+    // Abandon only this attempt: remembered accounts and their stored sessions stay, unless this
+    // attempt already signed in, in which case that new session is dropped at once.
     const token = activeLogin.current;
     if (!token) return;
     cancelled.current = token;
@@ -333,7 +344,10 @@ export function SessionProvider({
     reset();
     setPending(null);
     setError("Sign-in was cancelled.");
-  }, [reset]);
+    // Sign-in stays closed until the abandoned attempt can no longer leave a session behind.
+    setReady(false);
+    if (established.current === token && coreRef.current) void dropCancelled(coreRef.current);
+  }, [reset, dropCancelled]);
   const retry = useCallback(() => {
     restoreRef.current = null;
     setStartupFailed(false);

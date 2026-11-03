@@ -324,6 +324,28 @@ describe("shared Pod auth session", () => {
     expect(session.webId).toBeUndefined();
     expect(auth.logout).toHaveBeenCalledOnce();
   });
+  it("cancel during profile loading then a retry: the stale attempt cannot sign the retry out", async () => {
+    const stale = deferred<Response>();
+    vi.mocked(publicFetch).mockReturnValueOnce(stale.promise);
+    await mount();
+    let first!: Promise<void>;
+    await act(async () => {
+      first = session.loginWithIssuer(ISSUER);
+    });
+    await act(async () => session.cancelLogin());
+    // The granted session is dropped at once, and sign-in reopens after that.
+    expect(auth.logout).toHaveBeenCalledOnce();
+    expect(session.ready).toBe(true);
+    await act(async () => session.loginWithIssuer(ISSUER));
+    expect(session.status).toBe("logged-in");
+    await act(async () => {
+      stale.resolve(new Response(null, { status: 500 }));
+      await first;
+    });
+    expect(session.status).toBe("logged-in");
+    expect(session.webId).toBe(WEB_ID);
+    expect(auth.logout).toHaveBeenCalledOnce();
+  });
   it("ignores duplicate clicks while a login is pending", async () => {
     const pending = deferred<typeof identity>();
     auth.login.mockReturnValue(pending.promise);
