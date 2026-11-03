@@ -541,3 +541,82 @@ test("automatic boundary: one interactive authorization covers login and the fir
     expect(op.stats.authorizations - before).toBe(1);
   }
 });
+
+test("storage endpoints on a verified storage origin share its grant; other paths and origins get nothing", async () => {
+  const op = createMockOp({
+    requireInteraction: true,
+    protectedUrls: ["https://pod.example/account/domains", "https://pod.example/.notifications/"],
+  });
+  vi.stubGlobal("fetch", op.fetch);
+  const getCode = vi.fn(op.getCode);
+  const auth = createPodAuth({
+    clientId: op.clientId,
+    redirectUri: op.redirectUri,
+    boundary: { storageEndpoints: ["/account/domains", "/.notifications/"] },
+    ui: { getWebId: vi.fn(async () => op.webId!), getCode },
+  });
+  await auth.login({ webId: op.webId! });
+  expect(await (await auth.fetch("https://pod.example/account/domains")).text()).toBe(
+    "protected Solid",
+  );
+  expect(await (await auth.fetch("https://pod.example/.notifications/ws/")).text()).toBe(
+    "protected Solid",
+  );
+  expect(await (await auth.fetch(op.root + "private")).text()).toBe("protected Solid");
+  expect(getCode).toHaveBeenCalledTimes(1);
+  expect(op.stats.tokens).toBe(1);
+  const accepted = op.stats.accepted;
+  // Exact paths stay exact, and nothing is granted on another origin or before discovery.
+  expect((await auth.fetch("https://pod.example/account/domains-evil")).status).toBe(401);
+  expect((await auth.fetch("https://pod.example/account/domains/x")).status).toBe(401);
+  expect((await auth.fetch("https://other.example/account/domains")).status).toBe(401);
+  expect(op.stats.accepted).toBe(accepted);
+  expect(
+    op.requests.filter(
+      (r) => r.headers.has("authorization") && !r.url.startsWith("https://pod.example/"),
+    ),
+  ).toEqual([]);
+  await auth.logout();
+  expect((await auth.fetch("https://pod.example/account/domains")).status).toBe(401);
+});
+
+test.each([
+  "account/domains",
+  "//evil.example/x",
+  "/a/../b",
+  "/a?x",
+  "/a#x",
+  "/a\\b",
+  "/a b",
+])("storageEndpoints rejects %s", (path) => {
+  expect(() =>
+    createPodAuth({
+      clientId: "https://app.example/clientid.jsonld",
+      redirectUri: "https://app.example/callback",
+      boundary: { storageEndpoints: [path] },
+      ui: { getWebId: async () => "", getCode: async () => "" },
+    }),
+  ).toThrow("storageEndpoints");
+});
+
+test("a storage endpoint maps to the first storage on its origin, and eligible() still filters it", async () => {
+  const second = "https://pod.example/alice-work/";
+  const op = createMockOp({
+    storages: ["https://pod.example/alice/", second],
+    protectedUrls: ["https://pod.example/account/domains", "https://pod.example/blocked"],
+  });
+  vi.stubGlobal("fetch", op.fetch);
+  const auth = createPodAuth({
+    clientId: op.clientId,
+    redirectUri: op.redirectUri,
+    boundary: {
+      storageEndpoints: ["/account/domains", "/blocked"],
+      eligible: (url) => url.pathname !== "/blocked",
+    },
+    ui: { getWebId: vi.fn(async () => op.webId!), getCode: vi.fn(op.getCode) },
+  });
+  expect((await auth.login({ webId: op.webId! })).storages).toEqual([op.root, second]);
+  expect((await auth.fetch("https://pod.example/account/domains")).status).toBe(200);
+  expect((await auth.fetch("https://pod.example/blocked")).status).toBe(401);
+  expect(op.stats.tokens).toBe(1);
+});

@@ -31,6 +31,8 @@ export function createBoundary(
   };
   const fixed = new CredentialBoundary(options.boundary?.roots, { allowInsecureHttp: insecure });
   let automatic = new CredentialBoundary([], { allowInsecureHttp: insecure });
+  // Configured server endpoints on a verified storage's origin, mapped to that storage root.
+  let endpoints = new Map<string, string>();
   let learnedWebId: string | undefined;
   let learnedSignal: AbortSignal | undefined;
   let epoch = 0;
@@ -39,6 +41,7 @@ export function createBoundary(
     learnedSignal?.removeEventListener("abort", clear);
     learnedSignal = undefined;
     automatic = new CredentialBoundary([], { allowInsecureHttp: insecure });
+    endpoints = new Map();
     learnedWebId = undefined;
   };
   const roots = () => [...new Set([...fixed.entries, ...automatic.entries])];
@@ -115,6 +118,8 @@ export function createBoundary(
   };
   return {
     roots,
+    /** Credential roots that are storages, without the configured server endpoints. */
+    storages: () => roots().filter((root) => !endpoints.has(root)),
     allows,
     // No response-driven discovery, including ancestor HEADs or self-asserted pim:Storage types.
     isCandidate: (_url: string | URL) => false,
@@ -159,11 +164,20 @@ export function createBoundary(
         if (next.allows(storage) && !storage.endsWith("/"))
           for (const root of await descriptionRoots(storage, signal)) add(next, root);
       }
+      const nextEndpoints = new Map<string, string>();
+      for (const root of [...next.entries])
+        for (const path of options.boundary?.storageEndpoints ?? []) {
+          const endpoint = new URL(path, root).href;
+          if (nextEndpoints.has(endpoint)) continue;
+          add(next, endpoint);
+          if (next.entries.includes(endpoint)) nextEndpoints.set(endpoint, root);
+        }
       signal.throwIfAborted();
       lifetime.throwIfAborted();
       if (started !== epoch) throw new Error("Credential boundary changed during discovery");
       learnedSignal?.removeEventListener("abort", clear);
       automatic = next;
+      endpoints = nextEndpoints;
       learnedWebId = webId;
       learnedSignal = lifetime;
       lifetime.addEventListener("abort", clear, { once: true });
@@ -172,15 +186,15 @@ export function createBoundary(
     contextKey: async (request: Request) => {
       const url = new URL(request.url);
       url.hash = "";
-      return (
-        roots()
-          .filter((r) =>
-            r.endsWith("/")
-              ? isWithin(url, r)
-              : new URL(r).origin === url.origin && new URL(r).pathname === url.pathname,
-          )
-          .sort((a, b) => b.length - a.length)[0] ?? url.href
-      );
+      const best = roots()
+        .filter((r) =>
+          r.endsWith("/")
+            ? isWithin(url, r)
+            : new URL(r).origin === url.origin && new URL(r).pathname === url.pathname,
+        )
+        .sort((a, b) => b.length - a.length)[0];
+      // A storage endpoint uses its storage's grant rather than a separate authorization.
+      return best === undefined ? url.href : (endpoints.get(best) ?? best);
     },
   };
 }
