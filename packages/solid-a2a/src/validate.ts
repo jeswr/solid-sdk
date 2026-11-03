@@ -263,7 +263,11 @@ function unboundedValidation(shapes: Store, data: Store): string | undefined {
     return `Intent graphs using rdfs:subClassOf ${UNBOUNDED}`;
   }
 
-  const key = (t: Term) => `${t.termType}:${t.value}`;
+  // Full RDF term identity: a literal's language and datatype distinguish it.
+  const key = (t: Term): string =>
+    t.termType === "Literal"
+      ? `Literal:${t.value}@${t.language}^^${t.datatype.value}`
+      : `${t.termType}:${t.value}`;
   const objects = (graph: Store, subject: Term, predicate: string) =>
     graph.getObjects(subject as Quad["subject"], predicate, null);
 
@@ -271,14 +275,16 @@ function unboundedValidation(shapes: Store, data: Store): string | undefined {
   const listLength = new Map<string, number>();
   const walk = (cell: Term, depth: number): number | undefined => {
     if (cell.termType === "NamedNode" && cell.value === `${RDF_NS}nil`) return 0;
+    // The cap holds whichever cell a list is first reached from: on a cached
+    // length as on a computed one.
     const known = listLength.get(key(cell));
-    if (known !== undefined) return known;
+    if (known !== undefined) return depth + known > MAX_LIST_LENGTH ? undefined : known;
     if (depth > MAX_LIST_LENGTH) return undefined;
     const first = objects(shapes, cell, `${RDF_NS}first`);
     const rest = objects(shapes, cell, `${RDF_NS}rest`);
     if (first.length !== 1 || rest.length !== 1) return undefined;
     const tail = walk(rest[0] as Term, depth + 1);
-    if (tail === undefined) return undefined;
+    if (tail === undefined || tail + 1 > MAX_LIST_LENGTH) return undefined;
     listLength.set(key(cell), tail + 1);
     return tail + 1;
   };

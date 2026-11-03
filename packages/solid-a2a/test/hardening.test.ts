@@ -421,6 +421,33 @@ ${body}`,
     expect(report.results[0]?.message).toMatch(/evaluations over this intent/);
   });
 
+  it("caps a list however its cells are first reached", async () => {
+    // A 300-cell list whose tail (200 cells) another shape walks first.
+    let cells = "";
+    for (let i = 0; i < 300; i++)
+      cells += `<urn:c${i}> rdf:first "v${i}" ; rdf:rest ${i < 299 ? `<urn:c${i + 1}>` : "rdf:nil"} .\n`;
+    for (const order of [
+      "<urn:A> sh:targetNode <urn:x> ; sh:in <urn:c100> .\n<urn:B> sh:targetNode <urn:x> ; sh:in <urn:c0> .",
+      "<urn:B> sh:targetNode <urn:x> ; sh:in <urn:c0> .\n<urn:A> sh:targetNode <urn:x> ; sh:in <urn:c100> .",
+    ]) {
+      const report = await quick(`${order}\n${cells}`);
+      expect(report.conforms).toBe(false);
+      expect(report.results[0]?.message).toMatch(/list/);
+    }
+  });
+
+  it("keeps literals with the same text but another datatype or language apart", async () => {
+    let data = "";
+    for (let i = 0; i < 80; i++)
+      data += `<urn:f> <urn:ex:p> "a"^^<urn:dt:${i}> .\n<urn:f> <urn:ex:r> "z"@en-v${i} .\n`;
+    const report = await quick(
+      "<urn:S> sh:targetNode <urn:f> ; sh:path [ sh:zeroOrOnePath <urn:ex:p> ] ; sh:lessThan <urn:ex:r> .",
+      await parseRdf(data, "text/turtle"),
+    );
+    expect(report.conforms).toBe(false);
+    expect(report.results[0]?.message).toMatch(/evaluations over this intent/);
+  });
+
   it("reads an sh:alternativePath list with a named head, as the validator does", async () => {
     const report = await quick(
       `<urn:S> sh:targetClass a2a:Intent ; sh:property [ sh:path [ sh:alternativePath <urn:alts> ] ; sh:minCount 1 ] .
