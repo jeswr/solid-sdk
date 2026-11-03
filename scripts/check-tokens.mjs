@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { readdirSync, readFileSync } from "node:fs";
 import { extname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -82,7 +83,12 @@ export function scanColours(source, extension = ".ts") {
 export function scanDirectory(directory) {
   const failures = [];
   for (const entry of readdirSync(directory, { withFileTypes: true })) {
-    if (["node_modules", ".next", "dist", "artifacts", "coverage"].includes(entry.name)) continue;
+    if (
+      ["node_modules", ".next", ".native-stage", "www", "dist", "artifacts", "coverage"].includes(
+        entry.name,
+      )
+    )
+      continue;
     const path = join(directory, entry.name);
     if (entry.isDirectory()) failures.push(...scanDirectory(path));
     else if (

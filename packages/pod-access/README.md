@@ -8,7 +8,8 @@
 Offline access-control readers, writers, a neutral policy model, conservative translation,
 inheritance composition, and bounded symbolic access proofs. Pod Migrator consumes this package;
 migration HTTP, group fetching, planning, decisions, and execution remain in the app.
-The `./roles` subpath adds injected-fetch Solid sharing with conditional persistence.
+The `./roles` subpath adds injected-fetch Solid sharing with conditional persistence, and
+`./requests-solid` provides the Solid request inbox and decision pipeline on top of it.
 
 Private at version 0.1.0. Requires Node.js >=24 and the root pnpm workspace tooling.
 The role layer implements the Solid sharing portion of SDK core ADR-003 §9; the broader
@@ -68,7 +69,7 @@ The root entry point exports:
 `@jeswr/pod-access/testing` remains reserved and exports nothing.
 
 In-process callers are trusted code. Internal mode lists are private and frozen, and public
-exports expose no reader or error classes, so one caller cannot alter another caller's proof
+offline exports expose no reader or error classes, so one caller cannot alter another caller's proof
 through exported state or helper prototypes. Returned policies and reports are caller-owned.
 Patching shared JavaScript built-ins or dependencies directly is outside this trust boundary.
 
@@ -126,7 +127,12 @@ resource Control; ESS ACP managers instead add Read+Write on the own ACR.
 arrays or an iterable of resource modes, returns the highest fully covered role, and
 returns undefined for partial management or odd permissions. Append on a file is not
 comment access. WAC is the mapping default; for ACP pass `model: "acp"` and the trusted
-`implementation` (`css` by default, or `ess`) to both mapping helpers.
+`implementation` (`css` by default, or `ess`) to both mapping helpers. Given to the reading and
+writing functions (`grantsWithRoles`, `readGrants`, `setGrants`, `addGrant`, `removeGrant`),
+`model` pins the access model instead: a resource whose detected model differs is refused with an
+`unsupported` `RoleError` before anything is written. Leave it unset to work with either model.
+This is a behaviour change: these functions used to ignore `model` and go on with whichever model
+the resource used, so a caller that passed it for mapping now gets a refusal on the other model.
 
 `AgentRef` supports WebIDs, public and authenticated agents, WAC groups, and ACP apps
 (client matchers). ACP groups require a membership snapshot and WAC cannot express apps;
@@ -247,3 +253,161 @@ root when a host serves several pods. Access RDF is limited to 1 MiB, 10,000 qua
 64-step ancestor walk; remote JSON-LD contexts and named graphs are refused. No group or
 app identifier is fetched. RDF edits use typed wrappers and n3.Writer. The roles tests use
 in-memory HTTP fixtures only.
+
+### Solid access requests
+
+```ts
+import { listRequests, decide, accessModel } from "@jeswr/pod-access/requests-solid";
+
+const options = { fetch: authenticatedFetch, webId, storage };
+const requests = await listRequests(options);
+const request = requests.find((entry) => entry.status === "pending");
+if (request) {
+  const result = await decide(request, {
+    approve: true,
+    role: "viewer",
+    dataTypes: request.dataTypes,
+    expiresAt: new Date("2027-01-01T00:00:00Z"),
+  }, options);
+  // result.status, grantUrl, receiptUrl, notified, expiryEnforced
+}
+// Deny: await decide(request, { approve: false }, options).
+// Detect: await accessModel({ fetch: authenticatedFetch, storage, target? }).
+```
+
+`listRequests({ fetch, webId, storage, inbox?, profile?, publicFetch?, signal? })` discovers
+`ldp:inbox` unless supplied. A WebID profile inside `storage` is read with `fetch`; one hosted
+elsewhere is read only through `publicFetch` (never the session), and is skipped without it. It visits at most 100 inbox members and reads at most 256 KiB per RDF document,
+including streamed responses. Results can be incomplete at these caps. A malformed, oversized,
+missing, or non-request member becomes `{ id, status: "unreadable" }`; containers and ACLs are skipped.
+Other statuses are `pending`, `approving`, `approved`, and `denied`. Entries carry `requester`,
+notification-local `requesterName?`, `purpose?` (IRI or label), `dataTypes`, `modes`
+(`read`, `write`, `append`), `modesByType` (a rule targeting a data type applies to that type
+only; a rule with any other target applies to every requested type), `requestedDuration?`, `expiresAt?`, `created?`, and `decidedAt?`.
+Foreign dates and durations retain lexical strings. Listing never dereferences requesters or purposes.
+Discovery/listing failures and cancellation propagate; an individual bad notification does not.
+
+`decide(entry, { approve, role?, expiresAt?, dataTypes? }, options)` re-reads `entry.id`.
+`dataTypes` must be a nonempty requested subset, and each approved type grants only its own
+`modesByType` entry on its own targets, granted as a sharing role: a target whose requested
+modes include Write is granted Editor (Read, Write, Append), otherwise Viewer (Read); an
+append-only request is refused before any write. `role: "viewer"` narrows to requested Read, and no
+approval ever grants Control. The owner Type Index resolves classes
+to registered instances and bounded, recursively listed instance-container members. Unknown classes
+and off-storage targets fail before the Approving CAS, and so do targets an approval may never
+share: the storage root itself (with or without its trailing slash), anything under
+`<storage>settings/` (Type Indexes, preferences, the access records), and access-control or
+metadata documents (`.acl`, `.acr`, `.meta`). Targets are compared by their
+decoded path, case-insensitively, never as raw strings, so dot segments, case or encoding cannot
+hide a refused path. A target with a query, a fragment, an empty path segment (`//`), or a
+percent-encoding a server may decode into another name (an unreserved character, `%`, `/`, `\`, a
+control character, or invalid UTF-8), or a segment ending in a dot or space or containing `::`
+(names Windows backends alias to another file), is refused outright; ordinary encoded names such as
+`John%20Smith.ttl` or `caf%C3%A9.ttl` stay shareable. A requested type that grants no mode (it has no permission of its own, or
+`role: "viewer"` drops its only mode) is left out of the approval rather than blocking it. `options.typeIndex` accepts an owner-controlled
+dataset or in-storage index URL; otherwise discovery reads profile public/private links and
+`pim:preferencesFile` → private index. All authenticated discovered URLs stay in `storage`, with
+redirects refused. Options also accept `publicFetch?`, `now?: () => Date`, and `signal?`.
+
+Approval resolves once, then CASes Pending → Approving with a pinned snapshot and deterministic
+SHA-256 grant ID. The grant ID is derived from the owner's decision record (below), whose address
+names the requester, so identical requests from different requesters never share a grant or receipt
+ID; a denial receipt is named the same way. It creates the ODRL grant and DPV receipt under `settings/access-records/` using
+`If-None-Match: *`, grants each role with `addGrant` from `./roles`, then CASes to Approved. The
+role layer is additive (it never downgrades an existing role), writes conditionally, materialises a
+missing own ACL keeping the owner's Control, and refuses a legacy `acl:defaultForNew` ancestor on
+CSS. Each grant is planned (without writing) before anything is recorded, so a refusal the role
+layer can foresee (`owner-lockout`, `unsupported`, an unknown ACL construct) stops the decision while
+the request is still pending. A refusal that only appears later (for example a `conflict` from a
+concurrent edit) is rethrown unchanged and never retried; the approval stays Approving and can be
+retried, and a lost race against another approver that finished reports the approval. Initial CAS races throw `RequestConflictError` with
+the re-read winner's status. Explicitly retrying resumes the pinned decision without resolving
+again or rolling back ACLs. A retry may repeat the same choices or leave them out, but if it passes
+different `dataTypes`, `role` or `expiresAt` it fails with an error saying an earlier approval is
+still finishing, rather than silently granting something other than what the owner just chose. Completed decisions are idempotent; reversing
+approval/denial is rejected. Denial receipt writes can also be retried. Requester-supplied grant/receipt
+references never select write locations.
+
+**WAC does not enforce expiry.** An explicit decision `expiresAt` is receipt metadata, persisted in
+the recovery snapshot. It does not expire or automatically revoke WAC access; results always report
+`expiryEnforced: false`. Requested expiry is displayed but never silently adopted. Purpose is DPV
+metadata too; this client does not enforce purposes or authenticate the claimed requester identity.
+
+After committing, requester inbox discovery and ActivityStreams `Accept`/`Reject` delivery are best
+effort and happen only when the caller passes an unauthenticated `publicFetch` (forced to
+`credentials: "omit"` and `redirect: "error"`); global fetch is never used, since an application
+may have patched it with authentication. Requester profile and inbox URLs must be public HTTPS:
+loopback, private, link-local and local-name hosts are refused. That check reads only the URL: a
+public name can still resolve to a private address. On a server (Node), pass a DNS-checking fetch
+such as `createGuardedFetch()` from `@jeswr/guarded-fetch` as `publicFetch`; in a browser, where
+names cannot be resolved, the URL check is the only guard. Failures and a missing `publicFetch`
+return `notified: false` without rollback.
+
+Grant records, consent receipts and each approval's pinned decision live in
+`<storage>settings/access-records/`. Before writing there, `decide` creates the folder with an
+owner-only ACL, or checks that its existing ACL names only the owner and gives them Read, Write
+and Control over the folder and its contents; a shared folder stops the decision. A folder that
+exists without its own ACL is made private only while it lists as empty, because anything already in
+it may have been written by someone else: its new ACL is marked unverified, and the mark is removed
+(with a conditional write) only once the folder still lists as empty. A crash or a failed check
+leaves the mark, so later calls check again and keep refusing while anything is inside; a folder
+that cannot be listed is refused. (A server that lists the folder's own ACL as a member is fine.)
+
+When the mark is removed, `decide` also stores a random **records key** in the folder's ACL. Only
+the owner can read that ACL, and the key is created only after the folder is known to be private,
+so nobody else can predict where a decision record lives, and nothing written before the folder was
+sealed (or slipped in while it was being sealed) can sit at one. A key found next to the unverified
+mark is not trusted and is replaced. A private folder with no key (sealed before keys existed, or
+whose key went missing) gets one only while it holds nothing but its ACL; if it holds other files,
+`decide` refuses ("The access records folder has records this version can't read; move them out of
+settings/access-records/ first") rather than silently orphaning them. Looking up a decision creates nothing on a pod that has no records folder ACL
+yet.
+
+Each decision is a **decision record** in that folder, named from the records key, the request URL,
+its requester, what it asks for and a generation number. A record says `approving` (the decision is
+pinned: targets, modes, expiry and the owner's own choices), `approved` or `denied`. Approval first
+pins its decision in a create-only `approving` record, then moves the request to Approving, and
+marks the record `approved` once the request is Approved. A retry resumes only from an `approving`
+record (even when the crash came before the request changed state, so the Type Index is not read
+again): a notification that claims to be Approving or Approved without one was written by the
+requester, so `decide` refuses to approve it (it can still be denied). Denying a request whose
+approval was pinned but never reached Approving turns that record into `denied`, so it can never be
+resumed. A finished record only matches a request in the same state, so when a new request arrives
+at a reused notification URL, even an identical one, it is decided afresh under the next generation
+and never reuses the old decision. A pinned decision must name this requester, stay within the role
+its request maps to, and pass the same target checks as a new one. After 32 decisions at one
+request URL, `decide` refuses that URL.
+
+One limit follows from the request status being requester-authored. If a new notification at a
+reused URL, asking for the same thing as an earlier approved one, itself claims `approved`, it
+matches the earlier `approved` record: `decide` returns that earlier grant and grants nothing new.
+The owner also cannot record a denial for that notification, since denying a finished approval is
+refused; remove the notification (and revoke the earlier grant if it should end) instead.
+
+Every document the pipeline writes back (including the requester-authored request during CAS) is
+serialised with regenerated blank-node labels, validated language tags and no named graphs, so a
+foreign JSON-LD label or tag cannot inject Turtle.
+
+`accessModel({ fetch, storage, target?, signal? })` returns `wac`, `acp`, or `unknown`. An ACP
+`accessControl` link means `acp`. ACP servers such as ESS also advertise their access control
+resources with `rel="acl"` (ESS as `?ext=acr`), so an `acl` link alone is not taken as WAC: the
+advertised document is read with the roles layer's detection (its RDF vocabulary and ACP type
+links, walking to the nearest existing ancestor) to tell the two apart. Only an existing, non-empty
+access document decides: a missing or empty one never counts as WAC. No access link, no deciding
+document, or documents that mix models (both vocabularies, or ancestors of different models) are
+`unknown`; any other discovery failure propagates. Decisions throw typed
+`UnsupportedAccessModelError` for ACP or unknown models before writing anything, and the model is
+enforced again where writes happen: the records folder's ACL is used only once its document is
+shown to be WAC (a folder that advertises no ACL is refused rather than guessed at), and grants go
+through `./roles` pinned to WAC, which refuses an ACP target before writing. ACP materialisation
+remains follow-up work.
+
+Inbox children and `settings/access-records/` must be owner-write-only; public Append to the inbox
+is fine. A deterministic hash is an idempotency key, not an authenticity proof for requester-writable
+snapshots. Resume only as an explicit user-confirmed decision, never an automatic inbox sweep.
+
+The subpath exports frozen `ACCM`, `DPV`, `ODRL`, `ACL`, `LDP` and supporting vocabulary constants,
+`MAX_MEMBERS`, `MAX_NOTIFICATION_BYTES`, `deriveGrantId`, public option/result types, and canonical/legacy
+accm helpers. RDF uses `@jeswr/fetch-rdf`, typed accessors/RDF factories, and `n3.Writer`.
+Access Manager imports shared vocabulary and
+canonicalisation; its UI-specific request/approval interfaces remain deprecated compatibility code.

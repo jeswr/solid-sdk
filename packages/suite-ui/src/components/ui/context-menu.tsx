@@ -6,6 +6,7 @@ import { CheckIcon, ChevronRightIcon, CircleIcon } from "lucide-react";
 import { ContextMenu as ContextMenuPrimitive } from "radix-ui";
 import type * as React from "react";
 import { DensityProvider, useDensity } from "../../lib/density.js";
+import { InertOutside } from "../../lib/inert-outside.js";
 import { cn } from "../../lib/utils.js";
 
 function ContextMenu({ ...props }: React.ComponentProps<typeof ContextMenuPrimitive.Root>) {
@@ -107,6 +108,7 @@ function ContextMenuSubContent({
 
 function ContextMenuContent({
   className,
+  children,
   ...props
 }: React.ComponentProps<typeof ContextMenuPrimitive.Content>) {
   return (
@@ -119,7 +121,10 @@ function ContextMenuContent({
           className,
         )}
         {...props}
-      />
+      >
+        {children}
+        <InertOutside />
+      </ContextMenuPrimitive.Content>
     </ContextMenuPrimitive.Portal>
   );
 }

@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 "use client";
 import {
   Badge,
@@ -14,9 +15,9 @@ import {
 } from "@jeswr/suite-ui";
 import { Disc3, Heart, History, House, ListMusic, Music2, Settings2, Users } from "lucide-react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { SuiteFrame } from "@/components/interim-shell/suite-frame";
+import { useRoutePathname } from "@/lib/route-params";
 import { PodSessionProvider, usePodSessionState } from "@/lib/session/pod-session";
 import { playlistHref } from "../lib/navigation";
 import { MusicProvider, useMusic } from "../state/music-context";
@@ -32,7 +33,7 @@ const navigation = [
   ["History", "/music/history", History],
 ] as const;
 function Sidebar() {
-  const pathname = usePathname();
+  const pathname = useRoutePathname();
   const music = useMusic();
   return (
     <nav className="mus-sidebar" aria-label="Music">
@@ -133,6 +134,14 @@ function SessionGate({ children }: { children: ReactNode }) {
       <div className="mus-content">
         <h1>Music</h1>
         <LoadingSkeleton label="Opening Music" preset="grid" />
+      </div>
+    );
+  // Native builds start signed out until native sign-in lands.
+  if (state.status === "signed-out")
+    return (
+      <div className="mus-content">
+        <h1>Music</h1>
+        <p role="status">Sign in to open your Music</p>
       </div>
     );
   if (state.status === "error")

@@ -10,7 +10,8 @@ description: Use when working on @jeswr/pod-access, the pod sharing and permissi
 This package owns the offline WAC/ACP translation core extracted from `apps/pod-migrator`:
 readers/writers, neutral policy/report types, conservative translation, inheritance composition,
 and bounded access proofs. See `README.md` for exports. The `./roles` subpath owns the injected-fetch Solid role client from SDK-APP-04; the broader
-AccessClient/LWS work remains separate. The `./testing` entry point remains reserved.
+AccessClient/LWS work remains separate. The `./testing` entry point remains reserved. The `./requests-solid` entry adds Solid request listing and
+decisions ported from Access Manager, granting through `./roles`.
 
 Before implementation, read SDK core ADR-001 D4 and `ADR-003-storage-client.md` in
 `solid-suite-planning/specs/sdk-core/`, alongside this repository's `AGENTS.md`.
@@ -31,6 +32,44 @@ serializing a translated policy alone does not establish safe migration.
 
 Keep development tool versions aligned with the root manifest. The pinned pnpm 10.4.1 with
 `ignore-scripts` requires local tool declarations for filtered scripts.
+
+For `./requests-solid`, preserve resolve-once target pinning before the Approving CAS, deterministic
+grant IDs, create-only records/receipts, ACL writes after the CAS, and forward-only snapshot recovery.
+On 412 re-read and observe the winner. Require strong ETags for request updates; grant through
+`./roles` `addGrant` (roles, additive, conditional) and rethrow its refusals unretried. Reject off-storage targets and credentialed discovery links.
+Keep parsing lenient, byte/member work bounded, and requester metadata notification-local.
+Approvals grant Viewer or Editor only (append-only requests are refused). Reject ACP/unknown materialisation with the typed
+error, and never read a `rel="acl"` link as proof of WAC (ESS advertises ACRs with it): detect the
+model from the advertised document with the roles layer's `detectModel`, check it before using the
+records folder ACL, and pin grants to `model: "wac"` (the roles layer then refuses an ACP target
+before writing; translate that into `UnsupportedAccessModelError`). WAC expiry is receipt metadata only: document `expiryEnforced: false` and never imply revocation.
+Delivery through unauthenticated `publicFetch` is best effort and cannot roll back committed decisions;
+it never falls back to global fetch, and requester URLs must be public HTTPS (a URL check only: in
+Node pass a DNS-checking `publicFetch`, e.g. `createGuardedFetch()` from `@jeswr/guarded-fetch`).
+Records live in an owner-only `settings/access-records/` folder (created or verified before any
+write); resume only from the owner's pinned decision there, never from the requester's notification.
+Sealing the folder stores a random records key in its ACL (minted only after the folder is shown
+private; a key found next to the unverified mark is replaced; a private folder with no key is given
+one only while it holds nothing but its ACL, and otherwise refused so its records are never silently
+orphaned). Decision records are named from that
+key, the request URL, the requester, what was asked and a generation number, and say `approving`,
+`approved` or `denied`; a finished record only matches a request in the same state, so a new request
+at a reused URL starts a new generation. Grant and denial-receipt IDs derive from the record URL, so
+they are bound to the requester. Never grant the storage root (slashless form included) or anything
+under `<storage>settings/`, whether discovered or pinned; compare the decoded path
+case-insensitively, never raw strings, and refuse any target with a query, fragment, empty segment
+or an ambiguous percent-encoding (unreserved characters, `%`, `/`, `\`, controls, invalid UTF-8),
+and segments ending in a dot or space or containing `::`;
+ordinary encoded names (spaces, non-ASCII) stay shareable; access-control and metadata documents
+(`.acl`, `.acr`, `.meta`) are never targets. A resumed approval
+(pending or Approving) refuses explicit choices (`dataTypes`, `role`, `expiresAt`) that differ from
+the pinned ones. A lost pin or CAS reports the request's re-read status in `RequestConflictError`.
+Known limit: a requester-authored `approved` notification at a reused URL that matches an earlier
+`approved` record returns that earlier grant (nothing new is granted), and the owner cannot record a
+denial for it. Each approved data type
+grants only its own requested modes (`modesByType`); a type that grants no mode is dropped.
+Request/record documents must be owner-write-only; retries are explicit user-confirmed recovery.
+Internal RDF wrappers remain private; the request subpath exports only its typed error classes.
 
 Validate changes with this package's `lint`, dependency-first `build`, `typecheck`, and `test` scripts,
 plus the migrator's regression suite and the repository gate.
@@ -55,7 +94,13 @@ and retain successful results accurately. Re-read discovery and governing valida
 conditional persistence; never retry a 412 silently. Copy WAC defaults through typed setters
 and preserve materializedFrom provenance across reapplication, including descendant defaults.
 Do not edit ancestor documents. Keep the HTTP body/quad/ancestor bounds, root checks,
-redirect refusal and fetch-rdf remote-context refusal. No network in tests.
+redirect refusal and fetch-rdf remote-context refusal. No network in tests. A pinned
+`options.model` refuses (`unsupported`, before any write) a resource whose detected model
+differs (a behaviour change: these functions used to ignore it); `detectModel` is
+read-only and the only path that admits a query-addressed access document (ESS `?ext=acr`).
+Writing paths keep refusing queries. `detectModel` fails closed: only an existing, non-empty
+access document decides the model, otherwise it reports `unknown`; `isMixedModel` tags its
+mixed-model refusals, which requests-solid reports as `UnsupportedAccessModelError("unknown")`.
 
 <!-- AUTHORED-BY Codex GPT-6 -->
 

@@ -69,7 +69,7 @@ describe("public export boundary", () => {
     }
   });
 
-  it("exposes no reader or error classes from any built public entry", async () => {
+  it("keeps reader classes private and exposes only the two request error classes", async () => {
     await checkBuiltExports(`
       assert.ok(entries.length > 0);
       const roles = await load("@jeswr/pod-access/roles");
@@ -81,6 +81,10 @@ describe("public export boundary", () => {
         assert.equal("PolicyTooComplex" in entry, false);
         for (const [name, value] of Object.entries(entry)) {
           if (typeof value !== "function") continue;
+          if (["UnsupportedAccessModelError", "RequestConflictError"].includes(name)) {
+            assert.ok(value.prototype instanceof Error);
+            continue;
+          }
           assert.doesNotMatch(Function.prototype.toString.call(value), /^class\\b/, name);
           if (value.prototype)
             assert.deepEqual(Reflect.ownKeys(value.prototype), ["constructor"], name);
