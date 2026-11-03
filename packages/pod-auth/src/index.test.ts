@@ -729,3 +729,31 @@ test("an endpoint inside a fixed root uses that root's grant", async () => {
   expect((await auth.fetch("https://pod.example/.notifications/ws")).status).toBe(200);
   expect(op.stats.tokens).toBe(1);
 });
+
+test("core CID mode honours maxReplayBodyBytes", async () => {
+  const op = createMockOp();
+  vi.stubGlobal("fetch", op.fetch);
+  const key = (await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, false, [
+    "sign",
+    "verify",
+  ])) as CryptoKeyPair;
+  const auth = createPodAuth({
+    clientId: op.clientId,
+    redirectUri: op.redirectUri,
+    boundary: { roots: [op.root] },
+    maxReplayBodyBytes: 2,
+    ui: { getWebId: async () => op.webId!, getCode: op.getCode },
+    lws: {
+      subject: {
+        cid: {
+          documentUrl: "https://agent.example/id",
+          keyId: "https://agent.example/id#key",
+          privateKey: key.privateKey,
+        },
+      },
+    },
+  });
+  await expect(auth.fetch(op.root + "upload", { method: "PUT", body: "abc" })).rejects.toThrow(
+    "exceeds 2 bytes",
+  );
+});
