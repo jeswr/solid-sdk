@@ -1,6 +1,7 @@
 // AUTHORED-BY Claude Opus 5.5
-// 03-home-permissions §9 scenarios 9 and 10. The server and this runner share SUITE_TEST_CAPS
-// (the Playwright web server sets SUITE_E2E=1, without which the server ignores it):
+// 03-home-permissions §9 scenarios 9 and 10. The build and this runner share SUITE_TEST_CAPS
+// (with SUITE_E2E=1, without which it is ignored). The pages are statically exportable for the
+// native build, so the capabilities are read when the suite is built, not per request:
 //   SUITE_TEST_CAPS='{"accessRequests":true,"grantExpiry":true}'  scenario 9 (expiring access)
 //   SUITE_TEST_CAPS='{"accessRequests":true}'                     scenario 9 (WAC: no expiry)
 //   SUITE_TEST_CAPS unset                                         scenario 10

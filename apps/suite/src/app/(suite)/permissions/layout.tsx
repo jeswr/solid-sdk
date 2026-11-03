@@ -5,9 +5,6 @@ import { HomeApp } from "@/apps/home/components/home-app";
 import "@/apps/home/components/home.css";
 
 export const metadata: Metadata = { title: "Permissions · Solid Suite" };
-// Capability overrides (SUITE_TEST_CAPS, honoured only with SUITE_E2E=1; see shell/lib/env.ts)
-// are read when a request arrives, not baked in at build.
-export const dynamic = "force-dynamic";
 
 export default function Layout({ children }: { children: ReactNode }) {
   return <HomeApp>{children}</HomeApp>;
