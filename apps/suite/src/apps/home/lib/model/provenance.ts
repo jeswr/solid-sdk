@@ -1,11 +1,14 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 // Host patterns ported from PM docs/typed-data-views.md §2.1 and typed-views/sources.ts.
 import { NS } from "@jeswr/suite-vocab";
 import type { DatasetCore, Term } from "@rdfjs/types";
 import { httpUrl, inStorage, subjectOf } from "./rdf";
 
 export interface Provenance {
-  kind: "source" | "app" | "you";
+  /** `other`: another agent the loaded data doesn't name or type, person or software. */
+  kind: "source" | "app" | "person" | "other" | "you";
   label: string;
   logoId?: string;
 }
@@ -73,6 +76,52 @@ function providedBy(connector: Connector): Provenance {
   return { kind: "source", label: connector.label, logoId: connector.id };
 }
 
+/** Resolve only names already present in the loaded item graph; never dereference an agent. */
+export function identitiesIn(
+  dataset: DatasetCore,
+  subject: string | Term,
+): NonNullable<ProvenanceContext["identities"]> {
+  const node = subjectOf(dataset, subject);
+  const identities = new Map<string, { kind: "app" | "person"; label: string }>();
+  for (const predicate of ["wasAttributedTo", "wasGeneratedBy"]) {
+    for (const iri of node.iris(NS.PROV + predicate)) {
+      const label = subjectOf(dataset, iri).name?.trim();
+      if (!label || /http/i.test(label)) continue;
+      identities.set(iri, { kind: isPerson(dataset, iri) ? "person" : "app", label });
+    }
+  }
+  return identities;
+}
+
+const PERSON_TYPES = [
+  `${NS.FOAF}Person`,
+  `${NS.SCHEMA}Person`,
+  `${NS.VCARD}Individual`,
+  `${NS.PROV}Person`,
+];
+/** Whether the loaded graph types this agent as a person (e.g. a WebID's profile). */
+function isPerson(dataset: DatasetCore, iri: string): boolean {
+  return subjectOf(dataset, iri).types.some((type) => PERSON_TYPES.includes(type));
+}
+const SOFTWARE_TYPES = [
+  `${NS.PROV}SoftwareAgent`,
+  `${NS.SCHEMA}SoftwareApplication`,
+  "http://schema.org/SoftwareApplication",
+  // ActivityStreams actors that are not people (bots, AI agents).
+  "https://www.w3.org/ns/activitystreams#Application",
+  "https://www.w3.org/ns/activitystreams#Service",
+];
+/**
+ * What the loaded graph says an attributed agent is, without fetching its profile: a person
+ * only when typed as one, an app when typed as software (an AI agent included). An IRI's
+ * shape proves nothing: an AI agent's WebID (`…/agent#me`) looks just like a person's.
+ */
+function typedAgent(dataset: DatasetCore, iri: string): "person" | "app" | undefined {
+  if (isPerson(dataset, iri)) return "person";
+  if (subjectOf(dataset, iri).types.some((type) => SOFTWARE_TYPES.includes(type))) return "app";
+  return undefined;
+}
+
 /** Home §5.3, in precedence order; labels contain names, never raw identifiers. */
 export function provenanceOf(
   dataset: DatasetCore,
@@ -81,6 +130,9 @@ export function provenanceOf(
   context: ProvenanceContext = {},
 ): Provenance {
   const node = subjectOf(dataset, subject);
+  let attributedToAnother = false;
+  let attributedToPerson = false;
+  let attributedToSomeone = false;
   for (const value of node.sourceUrls) {
     const connector = connectorForUrl(value);
     if (connector) return providedBy(connector);
@@ -88,9 +140,22 @@ export function provenanceOf(
   for (const predicate of ["wasAttributedTo", "wasGeneratedBy"]) {
     for (const iri of node.iris(NS.PROV + predicate)) {
       if (iri === context.userWebId) continue;
+      attributedToAnother = true;
       const identity = context.identities?.get(iri);
-      if (identity?.label.trim())
-        return { kind: identity.kind === "app" ? "app" : "source", label: identity.label };
+      // A person's WebID is labelled with that profile's name, never as an app.
+      if (identity?.label.trim() && !/http/i.test(identity.label))
+        return { kind: identity.kind, label: identity.label.trim() };
+      const typed = typedAgent(dataset, iri);
+      if (identity?.kind === "person" || typed === "person") attributedToPerson = true;
+      else if (
+        // An activity (wasGeneratedBy) is no person, and a resolved or typed app stays one.
+        predicate === "wasAttributedTo" &&
+        identity?.kind !== "app" &&
+        typed === undefined &&
+        (httpUrl(iri)?.hash.length ?? 0) > 1
+      )
+        // A fragment IRI is the usual shape of a WebID, a person's or an agent's alike.
+        attributedToSomeone = true;
     }
   }
   const url = httpUrl(containerUrl);
@@ -103,5 +168,9 @@ export function provenanceOf(
     const connector = CONNECTORS.find((connector) => connector.id === id);
     if (connector) return providedBy(connector);
   }
-  return { kind: "you", label: "Added by you" };
+  if (attributedToPerson) return { kind: "person", label: "another person" };
+  if (attributedToSomeone) return { kind: "other", label: "someone else" };
+  return attributedToAnother
+    ? { kind: "app", label: "another app" }
+    : { kind: "you", label: "Added by you" };
 }
