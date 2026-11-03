@@ -1,6 +1,6 @@
 // AUTHORED-BY Claude Opus 5.5
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { click, h, mount } from "./drive-ui-dom";
+import { act, click, h, mount } from "./drive-ui-dom";
 
 const mocks = vi.hoisted(() => ({
   readLimited: vi.fn<(url: string, limit: number) => Promise<Blob | undefined>>(),
@@ -10,10 +10,6 @@ const mocks = vi.hoisted(() => ({
       (plugin: unknown, name: string, bytes: Uint8Array, signal?: AbortSignal) => Promise<void>
     >(),
   plugin: { pluginName: "SuiteFiles" },
-  activeId: "alice" as string | undefined,
-}));
-vi.mock("@/shell/session/accounts-provider", () => ({
-  useAccounts: () => ({ active: mocks.activeId ? { id: mocks.activeId } : null }),
 }));
 vi.mock("../src/apps/drive/state/drive-context", () => ({
   useDrive: () => ({ client: { readLimited: mocks.readLimited } }),
@@ -25,6 +21,7 @@ vi.mock("@jeswr/suite-native/capacitor", () => ({ filesPlugin: mocks.plugin }));
 vi.mock("@jeswr/suite-native", () => ({ openPdf: mocks.openPdf }));
 
 import { NativePdfHandoff, PDF_PREVIEW_LIMIT } from "../src/apps/drive/components/native-pdf";
+import { bumpAccountEpoch } from "../src/lib/native/account-epoch";
 
 const item = (size?: number) => ({
   url: "https://pod.example/drive/report.pdf",
@@ -39,10 +36,7 @@ beforeEach(() => {
   mocks.readLimited.mockResolvedValue(pdf);
   mocks.openPdf.mockResolvedValue();
 });
-afterEach(() => {
-  vi.clearAllMocks();
-  mocks.activeId = "alice";
-});
+afterEach(() => vi.clearAllMocks());
 
 const button = (host: HTMLElement, label: string) => {
   const found = [...host.querySelectorAll("button")].find((b) => b.textContent?.includes(label));
@@ -164,10 +158,7 @@ it("stops after the read when the preview went away during it", async () => {
   expect(mocks.openPdf).not.toHaveBeenCalled();
 });
 
-it.each([
-  ["a switch", "bob"],
-  ["sign-out", undefined],
-])("stops the transfer on %s, before the read's late result reaches the viewer", async (_, next) => {
+it("stops the transfer when the account changes, before the read's late result reaches the viewer", async () => {
   let finish!: (blob: Blob) => void;
   mocks.readLimited.mockReturnValue(
     new Promise<Blob>((resolve) => {
@@ -176,8 +167,7 @@ it.each([
   );
   const view = await mount(h(NativePdfHandoff, { item: item(9) }));
   await click(button(view.host, "Open PDF"));
-  mocks.activeId = next;
-  await view.render(h(NativePdfHandoff, { item: item(9) }));
+  await act(() => bumpAccountEpoch());
   finish(pdf);
   await new Promise((resolve) => setTimeout(resolve, 0));
   expect(mocks.openPdf).not.toHaveBeenCalled();

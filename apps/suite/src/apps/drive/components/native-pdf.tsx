@@ -9,7 +9,7 @@
 import { Button } from "@jeswr/suite-ui";
 import { Download, FileText } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { useAccounts } from "@/shell/session/accounts-provider";
+import { useAccountEpoch } from "@/lib/native/account-epoch";
 import type { DriveItem } from "../lib/client/client";
 import { useDrive } from "../state/drive-context";
 import { useDriveActions } from "../state/ui";
@@ -47,10 +47,10 @@ export function NativePdfHandoff({ item }: { item: DriveItem }) {
   );
   // Leaving the preview, or the account changing under it, stops the transfer before its next
   // native call, so one account's file never opens after the shell cleared previews (sst-8wx.18).
-  const activeId = useAccounts().active?.id;
+  const accountEpoch = useAccountEpoch();
   const transfer = useRef<AbortController | undefined>(undefined);
   // biome-ignore lint/correctness/useExhaustiveDependencies: the cleanup must run when the account changes.
-  useEffect(() => () => transfer.current?.abort(), [activeId]);
+  useEffect(() => () => transfer.current?.abort(), [accountEpoch]);
   const open = async () => {
     transfer.current?.abort();
     const controller = new AbortController();

@@ -6,6 +6,7 @@
  * sign-out-all or a switch), clear every cached preview so the next account never sees it.
  */
 import { useEffect, useRef } from "react";
+import { bumpAccountEpoch } from "@/lib/native/account-epoch";
 import { useAccounts } from "@/shell/session/accounts-provider";
 
 /**
@@ -41,7 +42,13 @@ export async function clearNativePdfPreviews(): Promise<void> {
   }
 }
 
+/** Stops in-flight Drive transfers first, then clears what native code already holds. */
+function onAccountChange() {
+  bumpAccountEpoch();
+  void clearNativePdfPreviews();
+}
+
 export function NativePreviewCleanup() {
   const { active } = useAccounts();
-  return <ClearOnAccountChange activeId={active?.id} clear={clearNativePdfPreviews} />;
+  return <ClearOnAccountChange activeId={active?.id} clear={onAccountChange} />;
 }
