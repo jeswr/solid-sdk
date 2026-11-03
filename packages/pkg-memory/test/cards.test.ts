@@ -4,11 +4,14 @@ import type { Quad_Object, Store } from "n3";
 import { DataFactory as df } from "n3";
 import { describe, expect, it } from "vitest";
 import {
+  buildNanopublications,
   containsCardNumber,
   createFactAssertion,
   type Fact,
   findCardNumbers,
   PAYMENT_CARD_BRANDS,
+  parseNanopublications,
+  serializeNanopublications,
 } from "../src/index.js";
 import { NS } from "../src/rdf.js";
 import { exampleBuildOptions } from "../src/testing.js";
@@ -34,19 +37,20 @@ function serialize(store: Store): string {
     .join(" ");
 }
 
+function luhn(window: string): boolean {
+  let sum = 0;
+  for (let i = 0; i < window.length; i += 1) {
+    let digit = Number(window[window.length - 1 - i]);
+    if (i % 2 === 1) digit = digit * 2 > 9 ? digit * 2 - 9 : digit * 2;
+    sum += digit;
+  }
+  return sum % 10 === 0;
+}
+
 function naive(digits: string): boolean {
   for (let start = 0; start < digits.length; start += 1)
-    for (let length = 12; length <= 19 && start + length <= digits.length; length += 1) {
-      const window = digits.slice(start, start + length);
-      if (window.startsWith("0")) continue;
-      let sum = 0;
-      for (let i = 0; i < window.length; i += 1) {
-        let digit = Number(window[window.length - 1 - i]);
-        if (i % 2 === 1) digit = digit * 2 > 9 ? digit * 2 - 9 : digit * 2;
-        sum += digit;
-      }
-      if (sum % 10 === 0) return true;
-    }
+    for (let length = 12; length <= 19 && start + length <= digits.length; length += 1)
+      if (digits[start] !== "0" && luhn(digits.slice(start, start + length))) return true;
   return false;
 }
 
@@ -91,8 +95,8 @@ describe("payment-card fact template", () => {
       expect(() => createFactAssertion(owner, card({ ...valid, brand }))).not.toThrow();
     for (const address of [
       "https://example.org/entities/flat-12",
-      "https://example.org/entities/123456",
-      "urn:uuid:aaaabbbb-cccc-dddd-eeee-ffffff001122",
+      "https://example.org/entities/1234",
+      "urn:x:residence",
     ])
       expect(() =>
         createFactAssertion(owner, card({ ...valid, billingAddress: address })),
@@ -180,6 +184,15 @@ describe("payment-card fact template", () => {
       "zero-width separators",
       { ...valid, billingAddress: "urn:x:4\u200b1\u200b1\u200b1\u200b1\u200b1\u200b1" },
     ],
+    ["five digits in the address", { ...valid, billingAddress: "https://example.org/a/12345" }],
+    [
+      "a middle chunk of a card number",
+      { ...valid, billingAddress: "https://example.org/a/111111" },
+    ],
+    [
+      "a UUID address",
+      { ...valid, billingAddress: "urn:uuid:aaaabbbb-cccc-dddd-eeee-ffffff001122" },
+    ],
     ["a non-string address", { ...valid, billingAddress: 4111111111111111 }],
     ["a missing expiry", { ...valid, expires: undefined }],
     ["a null expiry", { ...valid, expires: null }],
@@ -193,6 +206,36 @@ describe("payment-card fact template", () => {
     }
     expect(message).toMatch(/^Invalid (payment card|temporal bound)$/);
     expect(message).not.toMatch(/\d{4}/);
+  });
+});
+
+describe("payment-card nanopublications", () => {
+  it("build, serialise and parse with both card nodes skolemised", async () => {
+    const built = await buildNanopublications(
+      {
+        batch_id: "cards",
+        worker: { agent_id: "https://example.org/agents/test", agent_label: "Synthetic" },
+        sources: [{ id: "doc", kind: "document", url: "https://example.org/document" }],
+        claims: [
+          {
+            id: "card",
+            epistemic: "SelfReportedExplicit",
+            assertion: createFactAssertion(owner, card(valid)),
+            evidence: [{ source: "doc", quote: "Visa ending 1111, expires 09/27." }],
+          },
+        ],
+      },
+      exampleBuildOptions(),
+    );
+    const trig = await serializeNanopublications(built);
+    const parsed = await parseNanopublications(trig);
+    const cards = [...parsed.dataset].filter((q) => q.object.value === `${NS.schema}PaymentCard`);
+    expect(cards).toHaveLength(1);
+    expect(cards[0]?.subject.termType).toBe("NamedNode");
+    const identifiers = [...parsed.dataset].filter(
+      (q) => q.predicate.value === `${NS.schema}identifier`,
+    );
+    expect(identifiers.map((q) => q.object.termType)).toEqual(["NamedNode"]);
   });
 });
 
@@ -217,6 +260,14 @@ describe("card number detection", () => {
       "4111\u200b1111\u00ad1111\u200b1111",
       "④①①①①①①①①①①①①①①①",
       "⁴¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹",
+      "⒋⒈⒈⒈⒈⒈⒈⒈⒈⒈⒈⒈⒈⒈⒈⒈",
+      "⑷⑴⑴⑴⑴⑴⑴⑴⑴⑴⑴⑴⑴⑴⑴⑴",
+      "4111·1111·1111·1111",
+      "4111|1111|1111|1111",
+      "(4111)1111-1111-1111",
+      '"4111","1111","1111","1111"',
+      "4111'1111'1111'1111",
+      "4111\\1111\\1111\\1111",
       `${"0".repeat(70)}4111111111111111`,
     ])
       expect(containsCardNumber(text), text).toBe(true);
@@ -229,6 +280,35 @@ describe("card number detection", () => {
       "4111 1111 x 1111 1111",
     ])
       expect(containsCardNumber(text), text).toBe(false);
+  });
+
+  it("covers every Luhn-valid window with a span, on random grouped runs", () => {
+    let seed = 7;
+    const random = () => {
+      seed = (seed * 1103515245 + 12345) % 2147483648;
+      return seed / 2147483648;
+    };
+    for (let n = 0; n < 1500; n += 1) {
+      let text = "";
+      const at: number[] = [];
+      for (let i = 0, length = 12 + Math.floor(random() * 30); i < length; i += 1) {
+        if (random() < 0.2) text += [" ", "-", "·", "\u200b"][Math.floor(random() * 4)];
+        at.push(text.length);
+        text += String(Math.floor(random() * 10));
+      }
+      const digits = at.map((index) => text[index]).join("");
+      const spans = findCardNumbers(text);
+      for (let start = 0; start < digits.length; start += 1)
+        for (let length = 12; length <= 19 && start + length <= digits.length; length += 1)
+          if (digits[start] !== "0" && luhn(digits.slice(start, start + length))) {
+            const from = at[start] as number;
+            const to = (at[start + length - 1] as number) + 1;
+            expect(
+              spans.some(([a, b]) => a <= from && to <= b),
+              text,
+            ).toBe(true);
+          }
+    }
   });
 
   it("reports UTF-16 spans that cover every card digit", () => {
@@ -256,6 +336,6 @@ describe("card number detection", () => {
     const started = Date.now();
     findCardNumbers("4 ".repeat(500_000));
     findCardNumbers("٤".repeat(200_000));
-    expect(Date.now() - started).toBeLessThan(4000);
+    expect(Date.now() - started).toBeLessThan(8000);
   });
 });

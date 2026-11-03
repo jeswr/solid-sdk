@@ -13,22 +13,26 @@
 const CARD_PREFIX = /^[1-9]/;
 
 /**
- * Characters that may sit between digit groups without ending a run: whitespace, dashes,
- * invisible format characters (zero-width space, soft hyphen), combining marks, and
- * `. , _ / + : ; ~ = *`. Callers should percent-decode IRIs before scanning them.
+ * Characters that may sit between digit groups without ending a run: whitespace, any
+ * punctuation (dashes, dots, quotes, brackets, slashes, middle dots), invisible format
+ * characters (zero-width space, soft hyphen), combining marks, and `+ = ~ |`. Callers
+ * should percent-decode IRIs before scanning them. Ideographic numerals are not covered.
  */
-const SEPARATOR = /^[\s\p{Zs}\p{Pd}\p{Cf}\p{Mn}\p{Me}.,_/+:;~=*]$/u;
+const SEPARATOR = /^[\s\p{Z}\p{P}\p{Cf}\p{Mn}\p{Me}+=~|]$/u;
 const DECIMAL = /^\p{Nd}$/u;
 const NUMBER = /^\p{N}$/u;
+const PUNCTUATION = /\p{P}/gu;
 
 /**
  * Value of a digit character: any Unicode decimal digit, or a number character whose NFKC
- * form is a single decimal digit (circled, superscript, subscript digits). Undefined otherwise.
+ * form is one decimal digit, possibly with punctuation (circled, superscript, subscript,
+ * parenthesised or full-stop digits). Undefined otherwise. Only number characters are cached.
  */
 const digitValues = new Map<number, number | undefined>();
 function digitValue(char: string): number | undefined {
   const code = char.codePointAt(0) as number;
   if (code >= 48 && code <= 57) return code - 48;
+  if (!NUMBER.test(char)) return undefined;
   if (digitValues.has(code)) return digitValues.get(code);
   let value: number | undefined;
   if (DECIMAL.test(char)) {
@@ -36,8 +40,8 @@ function digitValue(char: string): number | undefined {
     // Walk back to the start of this run of decimal digits; runs are whole blocks of ten.
     while (zero > 0 && code - zero < 60 && DECIMAL.test(String.fromCodePoint(zero - 1))) zero -= 1;
     value = (code - zero) % 10;
-  } else if (NUMBER.test(char)) {
-    const folded = char.normalize("NFKC");
+  } else {
+    const folded = char.normalize("NFKC").replace(PUNCTUATION, "");
     if (folded !== char && [...folded].length === 1) value = digitValue(folded);
   }
   digitValues.set(code, value);

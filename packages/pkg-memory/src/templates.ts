@@ -57,7 +57,7 @@ export type Fact =
         last4: string;
         /** Expiry month, as `gYearMonth` (for example `2027-09`). */
         expires: TemporalValue;
-        /** Billing-address entity IRI: no query or fragment, at most six digits in all. */
+        /** Billing-address entity IRI: no query or fragment, at most four digits in all. */
         billingAddress?: string;
       };
     }
@@ -126,10 +126,9 @@ function paymentCardSnapshot(value: unknown): PaymentCardSnapshot | undefined {
 }
 
 /**
- * A billing-address IRI may not hide card data: no query or fragment, and at most six digits
- * in all (any Unicode number form) once percent-decoded and NFKC-normalised. Six is the most
- * of a card number's leading digits that may ever be shown, and the last four are stored
- * separately.
+ * A billing-address IRI may not hide card data: no query or fragment, and at most four digits
+ * in all (any Unicode number form) once percent-decoded and NFKC-normalised. That leaves room
+ * for a house or flat number, not a useful share of a card number.
  */
 function safeBillingAddress(value: unknown): boolean {
   if (typeof value !== "string" || /[?#]/.test(value)) return false;
@@ -145,7 +144,7 @@ function safeBillingAddress(value: unknown): boolean {
     text = decoded;
   }
   if (/[%?#]/.test(text)) return false;
-  return (text.normalize("NFKC").match(/\p{N}/gu)?.length ?? 0) <= 6;
+  return (text.normalize("NFKC").match(/\p{N}/gu)?.length ?? 0) <= 4;
 }
 
 function temporal(node: RdfNode, predicate: string, bound: TemporalValue): void {
