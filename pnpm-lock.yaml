@@ -1114,15 +1114,21 @@ importers:
       '@jeswr/pod-access':
         specifier: workspace:*
         version: link:../../../packages/pod-access
+      '@jeswr/pod-auth':
+        specifier: workspace:*
+        version: link:../../../packages/pod-auth
+      '@jeswr/reactive-authentication':
+        specifier: workspace:*
+        version: link:../../../packages/reactive-authentication
       '@jeswr/solid-elements':
         specifier: workspace:*
         version: link:../../../packages/solid-elements
-      '@jeswr/solid-session-restore':
-        specifier: workspace:*
-        version: link:../../../packages/solid-session-restore
       '@jeswr/storage-client':
         specifier: workspace:*
         version: link:../../../packages/storage-client
+      '@jeswr/suite-ui':
+        specifier: workspace:*
+        version: link:../../../packages/suite-ui
       '@jeswr/suite-vocab':
         specifier: workspace:*
         version: link:../../../packages/suite-vocab
@@ -1141,12 +1147,6 @@ importers:
       '@solid/object':
         specifier: ^0.6.0
         version: 0.6.0
-      '@solid/reactive-authentication':
-        specifier: ^0.1.3
-        version: 0.1.5
-      dpop:
-        specifier: ^2.1.1
-        version: 2.1.1
       lit:
         specifier: ^3.3.1
         version: 3.3.3
@@ -1156,9 +1156,6 @@ importers:
       n3:
         specifier: ^2.0.3
         version: 2.1.1
-      oauth4webapi:
-        specifier: ^3.8.6
-        version: 3.8.6
       react:
         specifier: ^19.2.0
         version: 19.2.7
