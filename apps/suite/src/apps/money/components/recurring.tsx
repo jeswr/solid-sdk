@@ -52,7 +52,11 @@ function PaymentList({
             </span>
             <span className="mon-recurring-side">
               <Amount amount={payment.amount} currency={payment.currency} />
-              <span className="mon-recurring-meta">Next {day(payment.nextDate)}</span>
+              <span className="mon-recurring-meta">
+                {payment.late
+                  ? `Expected ${day(payment.nextDate)} · not seen yet`
+                  : `Next ${day(payment.nextDate)}`}
+              </span>
             </span>
           </li>
         ))}
@@ -98,8 +102,8 @@ export function RecurringScreen() {
             <PaymentList title="Income" payments={income} accounts={accounts} />
           )}
           <p className="mon-hint">
-            Found from at least three payments with the same description on a regular schedule. A
-            schedule that misses its date by more than a week is hidden.
+            Found from at least three payments with the same payee or description on a regular
+            schedule. A schedule that misses its date by more than a week is hidden.
           </p>
         </>
       )}

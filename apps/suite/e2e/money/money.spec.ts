@@ -329,7 +329,8 @@ test("recurring lists repeating bills and income with their next dates", async (
   await expect(
     page.getByRole("heading", { level: 1, name: "Overview", exact: true }),
   ).toBeVisible();
-  if (!info.project.name.startsWith("375"))
+  // Below 1280 the Money sidebar sits behind the navigation button.
+  if (info.project.name.startsWith("1280"))
     await page
       .getByRole("navigation", { name: "Money", exact: true })
       .getByRole("link", { name: "Recurring", exact: true })
