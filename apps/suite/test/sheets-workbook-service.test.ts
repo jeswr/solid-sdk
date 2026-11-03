@@ -97,6 +97,55 @@ describe("Sheets workbook service", () => {
     expect(defaultName.metadata.sheets[0]?.name).toBe("Sheet1");
   });
 
+  it("preserves opaque plugin resources, freeze and merges in authoritative snapshots", async () => {
+    const h = await harness();
+    const input = snapshot();
+    input.resources = [
+      {
+        name: "SHEET_DATA_VALIDATION_PLUGIN",
+        data: JSON.stringify({
+          data: [{ uid: "dv", type: "list", formula1: "Yes,No", allowBlank: true }],
+        }),
+      },
+      {
+        name: "SHEET_CONDITIONAL_FORMATTING_PLUGIN",
+        data: JSON.stringify({
+          data: [{ cfId: "cf", stopIfTrue: false, rule: { type: "highlightCell" } }],
+        }),
+      },
+      { name: "FUTURE_PLUGIN", data: '{"opaque":[null,false,42]}' },
+    ];
+    const sheet = (input as unknown as IWorkbookData).sheets.data;
+    assert(sheet);
+    sheet.freeze = { startRow: 1, startColumn: -1, ySplit: 1, xSplit: 0 };
+    sheet.mergeData = [{ startRow: 0, endRow: 0, startColumn: 0, endColumn: 1 }];
+    const book = await h.service.create({ title: "Rules", snapshot: input });
+    expect(book.snapshot.resources).toEqual(input.resources);
+    const opened = await h.service.open(book.container);
+    expect(opened.snapshot).toEqual(book.snapshot);
+    const edited = structuredClone(opened.snapshot);
+    edited.resources = [
+      {
+        name: "SHEET_DATA_VALIDATION_PLUGIN",
+        data: JSON.stringify({ data: [{ uid: "dv", type: "list", formula1: "Red,Green" }] }),
+      },
+      { name: "SHEET_CONDITIONAL_FORMATTING_PLUGIN", data: "{}" },
+      { name: "FUTURE_PLUGIN", data: '{"opaque":[null,false,42]}' },
+    ];
+    await h.service.save(book.container, edited, opened.version);
+    const stored = await (await h.fetch(workbookLayout(book.container).snapshot)).json();
+    expect(stored).toEqual(edited);
+    const freshService = createWorkbookService(h.options);
+    const reloaded = await freshService.open(book.container);
+    expect(reloaded.snapshot).toEqual(edited);
+    expect((reloaded.snapshot as unknown as IWorkbookData).sheets.data).toMatchObject({
+      freeze: sheet.freeze,
+      mergeData: sheet.mergeData,
+    });
+    const copy = await freshService.copy(book.container, "Rules copy");
+    expect(copy.snapshot.resources).toEqual(edited.resources);
+  });
+
   it("allocates collisions through -2 and -3, caps long slugs, and has an ASCII fallback", async () => {
     const h = await harness();
     const input = { title: "One!", snapshot: snapshot() };
