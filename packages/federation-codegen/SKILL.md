@@ -30,6 +30,11 @@ const result = generateModel({ ontologyTtl, shapesTtl, config });
 CLI: `federation-codegen gen --ontology <ttl> --shapes <ttl> --config <json> --out <dir>`
 (`--update-lock` accepts a reviewed input change).
 
+A workspace package that commits generated output must pass the root `check:codegen` guard.
+It needs a `codegen` script writing to `src/generated`, a `workspace:*` devDependency on this
+package, and a drift test running `pnpm run codegen --out <tmp>` with a byte comparison.
+`packages/solid-bookmark` (`package.json`, `test/codegen.test.ts`) is the reference.
+
 ## Rules
 
 - Admission (tier a) must pass: every class/property labelled and defined, domain/range or a
@@ -67,6 +72,11 @@ CLI: `federation-codegen gen --ontology <ttl> --shapes <ttl> --config <json> --o
   admission, compilation and fidelity fail closed.
 - A nested link's `sh:minCount` is emitted on the link and fidelity-checked independently of
   severity-graded requiredness.
+- A composite's flat `*Data` type marks a child node's required fields required only when
+  every link on the path from the root is required, because parse returns such an object
+  without an optional child that is absent or invalid. The flat type does not stop a
+  caller from filling an optional child only partly; build then writes a non-conforming
+  child (tracked as sst-ild.4.14), so facades must supply all or none of its MUST fields.
 - SHACL admission is closed: unsupported property/node constraint components and unknown
   patterns are errors. Supported patterns are exactly `^https?://`, `^https://`, and `\S`
   for string-valued nonblank fields. At the root, advisory flat class hints may only be

@@ -1,0 +1,38 @@
+# AUTHORED-BY Claude Opus 5.5
+#
+# Generation INPUT (ontology, L0) for @jeswr/solid-scheduling's generated model.
+#
+# A minimal projection of the three scheduling-sector classes the generated model spans
+# (sched:Task, sched:RecurrenceRule, sched:Calendar). rdfs:label and skos:definition are
+# copied verbatim from solid-federation-vocab sectors/scheduling/scheduling.ttl, which is
+# the source of truth for their full gUFO axiomatisation. This input carries only what
+# tier-a admission needs.
+#
+# Namespace: this package writes the legacy `https://w3id.org/jeswr/` identifiers (see
+# src/vocab.ts). The sector has since re-minted to `https://jeswr.org/ns/`; moving the
+# package is a normative call tracked outside this input.
+@prefix sched: <https://w3id.org/jeswr/sectors/scheduling#> .
+@prefix core:  <https://w3id.org/jeswr/core#> .
+@prefix owl:   <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs:  <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix skos:  <http://www.w3.org/2004/02/skos/core#> .
+@prefix vann:  <http://purl.org/vocab/vann/> .
+
+<https://w3id.org/jeswr/sectors/scheduling> a owl:Ontology ;
+    vann:preferredNamespacePrefix "sched" ;
+    vann:preferredNamespaceUri "https://w3id.org/jeswr/sectors/scheduling#" .
+
+sched:Task a owl:Class ;
+    rdfs:subClassOf core:Activity ;
+    rdfs:label "Task"@en ;
+    skos:definition "A to-do item: something to be done over time, optionally with a due date and completion state. Rooted in core:Activity (it acts/generates over time, it is not merely an occurrence); aligns to iCalendar VTODO and schema:PlanAction."@en .
+
+sched:RecurrenceRule a owl:Class ;
+    rdfs:subClassOf core:InformationResource ;
+    rdfs:label "Recurrence Rule"@en ;
+    skos:definition "A specification (frequency, interval, by-day/by-month, count/until) that generates a series of recurring entries. An information object describing a series, not an occurrence itself. Aligns to iCalendar RRULE and schema:Schedule."@en .
+
+sched:Calendar a owl:Class ;
+    rdfs:subClassOf core:InformationResource ;
+    rdfs:label "Calendar"@en ;
+    skos:definition "A named collection of calendar entries (events, tasks) — an information resource the Calendar app manages. Aligns to iCalendar VCALENDAR and schema:Schedule's host context."@en .

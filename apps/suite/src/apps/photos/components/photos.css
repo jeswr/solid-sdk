@@ -586,6 +586,91 @@
 .pho-page .pho-tile > a:focus-visible {
   outline-offset: -4px;
 }
+/* Storage usage (AUTHORED-BY Claude Opus 5.5) */
+.pho-storage-summary {
+  display: grid;
+  gap: var(--space-4);
+  padding: var(--space-6);
+  margin-bottom: var(--space-8);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+.pho-storage-total {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+.pho-storage-total p:last-child,
+.pho-storage-note,
+.pho-storage-meta {
+  color: var(--foreground-muted);
+  font-size: var(--text-sm);
+}
+.pho-storage-figure {
+  font-size: var(--text-2xl);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.pho-storage-breakdown {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: var(--space-4);
+}
+.pho-storage-breakdown dt {
+  font-weight: 600;
+}
+.pho-storage-breakdown dd {
+  margin: 0;
+  color: var(--foreground-muted);
+}
+.pho-storage h2 {
+  margin-bottom: var(--space-4);
+}
+.pho-storage-list {
+  list-style: none;
+  margin: 0 0 var(--space-4);
+  padding: 0;
+  display: grid;
+  gap: var(--space-2);
+}
+.pho-storage-row {
+  display: grid;
+  grid-template-columns: 3.5rem minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-2);
+  border-radius: var(--radius-md);
+}
+.pho-storage-row:hover {
+  background: var(--surface-muted, var(--surface));
+}
+.pho-storage-thumb {
+  display: block;
+  width: 3.5rem;
+  height: 3.5rem;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+.pho-storage-thumb .pho-image,
+.pho-storage-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.pho-storage-name {
+  display: grid;
+  min-width: 0;
+}
+.pho-storage-name > span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pho-storage-size {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
 @media (max-width: 767px) {
   .pho-page {
     padding: var(--space-4);
@@ -660,4 +745,129 @@
   .pho-upload-mobile {
     display: block;
   }
+}
+
+/* AUTHORED-BY Claude Opus 5.5: Google Takeout import */
+.pho-takeout-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  max-width: 720px;
+  padding: var(--space-6);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+.pho-takeout-card h2,
+.pho-takeout-card h3,
+.pho-takeout-card p {
+  margin: 0;
+}
+.pho-takeout-card h2 {
+  font-size: var(--text-lg);
+}
+.pho-takeout-card h3 {
+  font-size: var(--text-base);
+}
+.pho-takeout-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+  color: var(--primary);
+}
+.pho-takeout-steps,
+.pho-takeout-notes {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding-left: var(--space-5);
+  color: var(--foreground-muted);
+}
+.pho-takeout-steps a {
+  color: var(--primary);
+}
+.pho-takeout-option {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 44px;
+}
+.pho-takeout-option input {
+  width: 20px;
+  height: 20px;
+  accent-color: var(--primary);
+}
+.pho-takeout-pick {
+  display: grid;
+  gap: var(--space-2);
+}
+.pho-takeout-pick label {
+  font-weight: 600;
+}
+.pho-takeout-pick input {
+  max-width: 100%;
+  min-height: 44px;
+}
+.pho-takeout-panel {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+}
+.pho-takeout-panel dl {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+}
+.pho-takeout-panel dl div {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+.pho-takeout-panel dd {
+  margin: 0;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.pho-takeout-panel progress {
+  width: 100%;
+  accent-color: var(--primary);
+}
+.pho-takeout-count {
+  margin: 0;
+  color: var(--foreground-muted);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+}
+.pho-takeout-unreadable {
+  font-size: var(--text-sm);
+}
+.pho-takeout-unreadable summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.pho-takeout-unreadable ul {
+  margin: var(--space-2) 0 0;
+  padding-inline-start: var(--space-5);
+  color: var(--foreground-muted);
+  overflow-wrap: anywhere;
+}
+.pho-takeout-error {
+  color: var(--destructive);
+}
+.pho-takeout-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+.pho-takeout-note {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  gap: var(--space-2);
+  color: var(--foreground-muted);
+  font-size: var(--text-sm);
 }

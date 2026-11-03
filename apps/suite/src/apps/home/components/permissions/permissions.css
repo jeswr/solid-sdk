@@ -1,0 +1,244 @@
+/* AUTHORED-BY Codex GPT-6 */
+.hm-permissions-page {
+  max-width: 1040px;
+}
+.hm-permissions-page :is(a, button, input),
+:where(body:has(.hm-permissions-page)) [role="alertdialog"] button {
+  min-height: 40px;
+}
+.hm-permissions-page h1 {
+  font-size: var(--text-2xl);
+  font-weight: 600;
+}
+.hm-permission-muted {
+  color: var(--foreground-muted);
+}
+.hm-permission-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+.hm-permission-search {
+  flex: 1;
+  min-width: 180px;
+}
+.hm-permission-requests {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding-inline: var(--space-3);
+  color: var(--foreground-muted);
+  font-weight: 500;
+}
+.hm-permission-requests:hover,
+.hm-permission-requests:focus-visible {
+  color: var(--foreground);
+}
+.hm-permission-count {
+  min-width: 1.5em;
+  padding-inline: var(--space-1);
+  border-radius: 999px;
+  background: var(--primary);
+  color: var(--primary-foreground);
+  font-size: var(--text-xs);
+  text-align: center;
+}
+.hm-permissions-page [data-slot="tabs-trigger"],
+.hm-permissions-page [data-slot="toggle-group-item"] {
+  min-height: 40px;
+}
+.hm-permission-list {
+  display: grid;
+  gap: var(--space-4);
+}
+.hm-permission-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  overflow: clip;
+}
+.hm-permission-card[data-pseudo] {
+  border-color: var(--warning);
+  background: color-mix(in oklch, var(--warning) 14%, var(--surface));
+}
+.hm-permission-name {
+  grid-column: 1 / -1;
+  grid-row: 1;
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+  font-weight: 600;
+}
+.hm-permission-card[data-line-slot] .su-permission-items > :not(.hm-permission-lines) {
+  display: none;
+}
+.hm-permission-lines {
+  display: grid;
+}
+.hm-permission-line {
+  display: grid;
+  gap: var(--space-3);
+  padding-block: var(--space-4);
+  border-bottom: 1px solid var(--border);
+  overflow-wrap: anywhere;
+}
+.hm-permission-line:last-child {
+  border-bottom: 0;
+}
+.hm-permission-line-main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+.hm-permission-switch {
+  min-height: 40px;
+  width: 48px;
+}
+/* Saving keeps controls focusable (aria-disabled, not disabled), so style them as disabled. */
+.hm-permission-line [aria-disabled="true"] {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+.hm-permission-name a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px;
+  overflow-wrap: anywhere;
+}
+.hm-permission-card .su-permission {
+  border: 0;
+  background: transparent;
+  border-radius: 0;
+}
+/* Keep the shared trigger's accessible name while linking the visible name above it. */
+.hm-permission-card .su-permission-trigger strong {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+.hm-permission-card .su-permission-trigger {
+  min-width: 0;
+  min-height: 40px;
+}
+.hm-permission-card .su-permission-item {
+  overflow-wrap: anywhere;
+}
+.hm-permission-card .su-switch {
+  min-height: 40px;
+  width: 48px;
+  flex-shrink: 0;
+}
+.hm-permission-card .su-consequence {
+  color: var(--consent-consequence-foreground);
+}
+.hm-permission-technical {
+  display: grid;
+  gap: var(--space-2);
+}
+.hm-permission-chips,
+.hm-permission-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.hm-permission-chip {
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  border-radius: var(--radius-full);
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--text-xs);
+}
+.hm-permission-path {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+.hm-permission-path code,
+.hm-permission-id code {
+  font-family: var(--font-mono);
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+.hm-permission-hint {
+  display: block;
+}
+.hm-permission-path a,
+.hm-permission-back,
+.hm-permission-links a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.hm-permission-notice {
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--warning);
+  color: var(--warning-foreground);
+}
+.hm-permission-profile,
+.hm-permission-about {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
+  background: var(--surface);
+}
+.hm-permission-profile {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-4);
+}
+.hm-permission-profile-text {
+  min-width: 0;
+}
+.hm-permission-avatar {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  flex-shrink: 0;
+  border-radius: var(--radius-full);
+  background: var(--surface-2);
+  font-size: var(--text-xl);
+}
+.hm-permission-id {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+.hm-permission-about {
+  display: grid;
+  justify-items: start;
+  gap: var(--space-3);
+}
+.hm-permission-about h2 {
+  font-size: var(--text-lg);
+  font-weight: 600;
+}
+.hm-permission-logo {
+  object-fit: contain;
+}
+.hm-permissions-page :is(a, button, input, [tabindex]):focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+@media (max-width: 639px) {
+  .hm-permission-search {
+    order: 3;
+    flex-basis: 100%;
+  }
+  .hm-permission-profile {
+    flex-wrap: wrap;
+  }
+  .hm-permission-card .su-permission-header > button {
+    margin-left: auto;
+  }
+}

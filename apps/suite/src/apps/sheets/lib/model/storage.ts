@@ -1,8 +1,10 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { parseRdf } from "@jeswr/fetch-rdf";
 import { assertWithinPodScope, createPodScopedFetch, refuseRedirects } from "@jeswr/guarded-fetch";
 import { serialize } from "@jeswr/rdf-serialize";
 import { DatasetWrapper } from "@rdfjs/wrapper";
+import { ContainerDataset } from "@solid/object";
 import { DataFactory } from "n3";
 import { type Column, csvToGrid, type Grid, gridToCsv } from "./grid";
 import {
@@ -73,14 +75,38 @@ export function createSheetStorage(fetch: typeof globalThis.fetch, podRoot: stri
     url: string,
     body: string,
     contentType: string,
-    condition: Precondition,
+    condition?: Precondition,
   ): Promise<string | null> {
-    const headers = { "Content-Type": contentType, ...preconditionHeaders(condition) };
+    const headers = {
+      "Content-Type": contentType,
+      ...(condition === undefined ? {} : preconditionHeaders(condition)),
+    };
     const response = await scopedFetch(url, { method: "PUT", headers, body });
     if (!response.ok) throw new SheetStorageError(response.status, response.headers.get("etag"));
     return response.headers.get("etag");
   }
   return {
+    async listContainer(url: string) {
+      const result = await read(url, "text/turtle");
+      const dataset = await parseRdf(result.value, "text/turtle", { baseIRI: url });
+      return [...(new ContainerDataset(dataset, DataFactory).container?.contains ?? [])];
+    },
+    async deleteResource(url: string, condition?: Precondition): Promise<void> {
+      const response = await scopedFetch(url, {
+        method: "DELETE",
+        headers: condition === undefined ? {} : preconditionHeaders(condition),
+      });
+      if (!response.ok && response.status !== 404)
+        throw new SheetStorageError(response.status, response.headers.get("etag"));
+    },
+    async loadEtag(url: string): Promise<string | null> {
+      return (await read(url, "*/*")).etag;
+    },
+    async headEtag(url: string): Promise<string | null> {
+      const response = await scopedFetch(url, { method: "HEAD", cache: "no-store" });
+      if (!response.ok) throw new SheetStorageError(response.status, response.headers.get("etag"));
+      return response.headers.get("etag");
+    },
     async loadIndex(container: string): Promise<Stored<WorkbookMetadata>> {
       const result = await read(workbookLayout(container).index, "text/turtle");
       return { ...result, value: await parseWorkbook(container, result.value) };
@@ -97,10 +123,15 @@ export function createSheetStorage(fetch: typeof globalThis.fetch, podRoot: stri
       const result = await read(workbookLayout(container).sheet(number).csv, "text/csv");
       return { ...result, value: csvToGrid(result.value, columns) };
     },
-    async saveCsv(container: string, number: number, grid: Grid, condition: Precondition) {
+    async saveCsv(
+      container: string,
+      number: number,
+      grid: Grid | string,
+      condition?: Precondition,
+    ) {
       return write(
         workbookLayout(container).sheet(number).csv,
-        gridToCsv(grid),
+        typeof grid === "string" ? grid : gridToCsv(grid),
         "text/csv",
         condition,
       );
@@ -116,7 +147,7 @@ export function createSheetStorage(fetch: typeof globalThis.fetch, podRoot: stri
       container: string,
       number: number,
       descriptor: SheetDescriptor,
-      condition: Precondition,
+      condition?: Precondition,
     ) {
       return write(
         workbookLayout(container).sheet(number).descriptor,

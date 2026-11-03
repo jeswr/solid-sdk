@@ -34,7 +34,8 @@ export interface PodTool {
   handler(input: unknown): Promise<CallToolResult>;
 }
 
-function toolText(text: string): CallToolResult {
+/** A plain-text tool result. */
+export function toolText(text: string): CallToolResult {
   return { content: [{ type: "text", text }] };
 }
 
@@ -45,7 +46,8 @@ function toolError(error: unknown): CallToolResult {
   };
 }
 
-function defineTool<Shape extends z.ZodRawShape>(
+/** Wrap a handler with schema validation, read-only enforcement and sanitised errors. */
+export function defineTool<Shape extends z.ZodRawShape>(
   definition: Omit<PodTool, "inputSchema" | "handler"> & {
     inputSchema: z.ZodObject<Shape>;
     handler(input: z.output<z.ZodObject<Shape>>): Promise<CallToolResult>;

@@ -71,6 +71,9 @@ export class SolidApi implements ICredentialType {
   // "Test" button: a HEAD/GET against the pod base should not 401 if the token is
   // valid. (A 404 on the base still proves the token was accepted, so n8n's
   // default test only fails the credential on auth errors.)
+  // Redirects are refused like every node request: n8n would otherwise forward
+  // the Bearer token on a cross-origin redirect (e.g. a provider root that 302s
+  // to its web UI or IdP).
   test: ICredentialTestRequest = {
     request: {
       baseURL: "={{$credentials.podBaseUrl}}",
@@ -79,6 +82,8 @@ export class SolidApi implements ICredentialType {
       headers: {
         Accept: "text/turtle, application/ld+json;q=0.9",
       },
+      disableFollowRedirect: true,
+      sendCredentialsOnCrossOriginRedirect: false,
     },
   };
 }

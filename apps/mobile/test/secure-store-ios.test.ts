@@ -1,5 +1,6 @@
 // AUTHORED-BY GPT-5.6 Codex
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 import { readFileSync } from "node:fs";
 import { describe, expect, test } from "vitest";
 
@@ -26,7 +27,9 @@ describe("iOS secure store guardrails", () => {
     expect(plugin).toContain("call.reject(code, code)");
     expect(plugin.match(/call\.reject\(/g)).toHaveLength(1);
     expect(plugin).toContain("DispatchQueue(label:");
-    expect(plugin).toContain("SuiteOrigin(url: bridge?.config.serverURL)");
+    expect(plugin).toContain(
+      "SuiteOrigin.app(serverURL: bridge?.config.serverURL, localURL: bridge?.config.localURL)",
+    );
     expect(plugin).not.toMatch(/call\.(?:getString|options).*namespace/);
   });
 
