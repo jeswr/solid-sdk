@@ -16,7 +16,7 @@ export default defineConfig({
   test: {
     environment: "node",
     server: { deps: { inline: ["@jeswr/y-solid"] } },
-    include: ["test/**/*.test.ts", "test/**/*.test.tsx"],
+    include: ["test/**/*.test.{ts,mjs}", "test/**/*.test.tsx"],
     setupFiles: ["test/drive-locks.setup.ts", "test/setup-web-crypto.ts"],
     // CI safety net: budget tests run slowly under v8 coverage on shared runners (SUITE-T2 bounds them properly).
     testTimeout: 30_000,
@@ -27,6 +27,7 @@ export default defineConfig({
         "src/apps/agent/lib/**/*.ts",
         "src/shell/lib/**/*.ts",
         "src/shell/search/local-source.ts",
+        "src/shell/registration/{demo-backend,types}.ts",
         "src/apps/tasks/lib/model/**/*.ts",
         "src/apps/tasks/lib/detail/**/*.ts",
         "src/apps/tasks/lib/views/**/*.ts",
@@ -36,6 +37,7 @@ export default defineConfig({
         "src/apps/calendar/lib/drag/**/*.ts",
         "src/apps/photos/lib/model/**/*.ts",
         "src/apps/home/lib/model/**/*.ts",
+        "src/apps/home/lib/connect/**/*.ts",
         "src/apps/home/lib/permissions/**/*.ts",
         "src/apps/docs/lib/model/**/*.ts",
         "src/apps/docs/lib/editor/**/*.ts",
@@ -139,6 +141,8 @@ export default defineConfig({
         "src/apps/mail/lib/quotes/**/*.ts",
         "src/lib/demo-pod/{pod,seed,binaries}.ts",
         "src/lib/refs.ts",
+        "src/lib/route-params.ts",
+        "src/lib/urls.ts",
         "src/apps/drive/lib/client/**/*.ts",
         "src/apps/drive/lib/operations/**/*.ts",
         "src/apps/drive/lib/view/**/*.ts",

@@ -3,8 +3,8 @@
 import { Button } from "@jeswr/suite-ui";
 import { useSearchParams } from "next/navigation";
 import { Suspense } from "react";
-import { useSuiteEnvironment } from "@/shell/environment";
 import { DemoButton } from "@/shell/public/demo-button";
+import { useRegistration } from "@/shell/registration/use-registration";
 export default function Page() {
   return (
     <Suspense>
@@ -13,7 +13,7 @@ export default function Page() {
   );
 }
 function Welcome() {
-  const env = useSuiteEnvironment();
+  const registration = useRegistration();
   const next = useSearchParams().get("next");
   return (
     <>
@@ -23,7 +23,7 @@ function Welcome() {
         <Button asChild>
           <a href="/signin">Sign in</a>
         </Button>
-        {env.SUITE_TEST_CAPS.selfRegistration === true && (
+        {registration.available && (
           <Button variant="outline" asChild>
             <a href="/signup">Create account</a>
           </Button>

@@ -13,6 +13,7 @@ import {
   didKeyFromPublicKey,
   LwsTokenProvider,
   OidcIdTokenSource,
+  OidcSession,
   ReactiveFetchManager,
   SamlAssertionSource,
   SelfIssuedJwtSource,
@@ -887,3 +888,52 @@ test("follow-through #2: OIDC credential source IDs separate accounts sharing an
   assert.equal(lws.stats.exchanges.length, exchanges + 1, "bob did not reuse alice's access token");
   fence.close();
 });
+
+for (const [dimension, configuration] of Object.entries({
+  namespace: { namespace: "other-session" },
+  account: { account: "other-account" },
+  scopes: { scopes: ["openid"] },
+  callbackUri: { callbackUri: "https://app.example/other-callback" },
+})) {
+  test(`shared OIDC sessions with different ${dimension} isolate LWS exchange caches`, async () => {
+    const metadata = await new XASProvider(
+      { getIssuer: async () => new URL(op.issuer) },
+      insecure,
+    ).getAuthorizationServer(new Request("https://unused.example/"));
+    const fence = new SessionFence(`lws-session-${dimension}`, { broadcast: false });
+    const code = automaticCodeProvider();
+    const client = new DynamicRegistrationClientProvider(insecure);
+    const source = ({ callbackUri = callback, ...options }) =>
+      new OidcIdTokenSource(metadata, callback, code, client, {
+        http: insecure,
+        namespace: "same-source-label",
+        account: "same-account-label",
+        scopes: ["openid"],
+        fence,
+        context: "shared",
+        session: new OidcSession(callbackUri, code, client, { http: insecure, fence, ...options }),
+      });
+    try {
+      const first = source({});
+      const second = source(configuration);
+      assert.notEqual(
+        first.id,
+        second.id,
+        "source identity follows the actual session configuration",
+      );
+      const shared = { namespace: "shared-exchange", tokenStore: createMemoryStore(), fence };
+      const request = `${lws.url}/root/session-${dimension}`;
+      const exchanges = lws.stats.exchanges.length;
+      const a = lwsManager(first, shared).manager;
+      const b = lwsManager(second, shared).manager;
+      assert.equal((await a.fetch(request)).status, 200);
+      assert.equal((await a.fetch(request)).status, 200);
+      assert.equal(lws.stats.exchanges.length, exchanges + 1);
+      assert.equal((await b.fetch(request)).status, 200);
+      assert.equal(lws.stats.exchanges.length, exchanges + 2);
+      assert.equal(code.calls, 2, "both actual sessions obtained their own credentials");
+    } finally {
+      fence.close();
+    }
+  });
+}

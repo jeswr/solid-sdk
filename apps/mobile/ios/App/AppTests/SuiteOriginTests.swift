@@ -1,4 +1,5 @@
 // AUTHORED-BY GPT-5.6 Codex
+// AUTHORED-BY Claude Opus 5.5
 import Foundation
 import XCTest
 @testable import App
@@ -52,5 +53,32 @@ final class SuiteOriginTests: XCTestCase {
         ] {
             XCTAssertFalse(SuiteOrigin.mayOpenExternally(try XCTUnwrap(URL(string: raw))), raw)
         }
+    }
+
+    func testBundledModeTrustsOnlyTheLocalCapacitorOrigin() throws {
+        let local = try XCTUnwrap(URL(string: "capacitor://localhost"))
+        let bundled = try XCTUnwrap(SuiteOrigin.app(serverURL: local, localURL: local))
+        XCTAssertEqual(bundled.scheme, "capacitor")
+        XCTAssertEqual(bundled.port, 0)
+        XCTAssertTrue(SuiteOrigin.isBundled(serverURL: local, localURL: local))
+        let remote = try XCTUnwrap(URL(string: "https://suite.example"))
+        XCTAssertEqual(SuiteOrigin.app(serverURL: remote, localURL: local), SuiteOrigin(url: remote))
+        XCTAssertFalse(SuiteOrigin.isBundled(serverURL: remote, localURL: local))
+        // A capacitor server URL that is not Capacitor's own local URL is never trusted.
+        XCTAssertNil(SuiteOrigin.app(serverURL: local, localURL: URL(string: "capacitor://other")))
+        XCTAssertNil(SuiteOrigin.app(serverURL: URL(string: "capacitor://evil"), localURL: URL(string: "capacitor://evil")))
+        XCTAssertNil(SuiteOrigin.app(serverURL: nil, localURL: local))
+        XCTAssertEqual(SuiteOrigin.of(URL(string: "capacitor://LOCALHOST/drive/f/YQ/")), bundled)
+        for raw in ["capacitor://localhost:8080/", "capacitor://user@localhost/", "capacitor://evil/", "file:///x"] {
+            XCTAssertNil(SuiteOrigin.local(URL(string: raw)), raw)
+        }
+        XCTAssertEqual(SuiteOrigin(securityScheme: "CAPACITOR", host: "localhost", port: 0), bundled)
+        XCTAssertNil(SuiteOrigin(securityScheme: "capacitor", host: "evil", port: 0))
+        XCTAssertNil(SuiteOrigin(securityScheme: "capacitor", host: "localhost", port: 1))
+        XCTAssertNil(SuiteOrigin(securityScheme: "file", host: "", port: 0))
+        XCTAssertEqual(SuiteOrigin(securityScheme: "https", host: "Suite.Example", port: 0), SuiteOrigin(url: remote))
+        XCTAssertFalse(BridgeOriginGuard.allows(isMainFrame: true, origin: bundled, allowed: try XCTUnwrap(SuiteOrigin(url: remote))))
+        XCTAssertTrue(BridgeOriginGuard.allows(isMainFrame: true, origin: bundled, allowed: bundled))
+        XCTAssertNotEqual(SecureStoreValidation.namespace(bundled), SecureStoreValidation.namespace(try XCTUnwrap(SuiteOrigin(url: remote))))
     }
 }

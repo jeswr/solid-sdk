@@ -2,3 +2,5 @@
 .next/
 next-env.d.ts
 *.tsbuildinfo
+.native-stage/
+www/

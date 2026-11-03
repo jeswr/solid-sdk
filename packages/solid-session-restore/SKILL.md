@@ -1,10 +1,17 @@
 ---
 name: solid-session-restore
-description: Use when persisting and silently restoring browser Solid-OIDC sessions with @jeswr/solid-session-restore, including WebID/issuer-scoped IndexedDB credentials, remembered-account pointers, DPoP-bound refresh grants, authenticated fetch restoration, and logout cleanup.
+description: Use when maintaining legacy @jeswr/solid-session-restore integrations. Deprecated; use @jeswr/pod-auth and its package skill for new suite authentication.
 ---
 <!-- AUTHORED-BY Codex GPT-5 -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 
 # Work with `@jeswr/solid-session-restore`
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+
+> **Deprecated — use `@jeswr/pod-auth`.** Read [the pod-auth skill](../pod-auth/SKILL.md) for
+> migration, the current API and security policy. The guidance below maintains existing consumers;
+> it does not describe pod-auth or authorize deleting legacy exports.
 
 Use this package as the audited core. Keep application wiring thin; do not duplicate refresh-token storage, DPoP-key persistence, or restore-decision logic per app.
 

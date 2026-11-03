@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "request": {
+    "method": "GET",
+    "url": "http://localhost:46617/conformance-5b1905a4-4edd-484a-83f5-39e9bf5a71f7/.well-known/solid",
+    "headers": [["accept", "application/ld+json, text/turtle;q=0.9"]],
+    "body": null
+  },
+  "response": {
+    "url": "http://localhost:46617/conformance-5b1905a4-4edd-484a-83f5-39e9bf5a71f7/.well-known/solid",
+    "status": 200,
+    "statusText": "OK",
+    "headers": [
+      ["accept-ranges", "bytes"],
+      ["access-control-allow-credentials", "true"],
+      ["access-control-allow-origin", "*"],
+      [
+        "access-control-expose-headers",
+        "Accept-Patch,Accept-Post,Accept-Put,Allow,Content-Range,ETag,Last-Modified,Link,Location,Updates-Via,WAC-Allow,Www-Authenticate"
+      ],
+      ["connection", "keep-alive"],
+      ["content-type", "text/turtle"],
+      ["date", "Sun, 01 Nov 2026 00:00:09 GMT"],
+      ["keep-alive", "timeout=5"],
+      [
+        "link",
+        "<http://localhost:46617/.notifications/StreamingHTTPChannel2023/b0>; rel=\"http://www.w3.org/ns/solid/terms#updatesViaStreamingHttp2023\""
+      ],
+      ["transfer-encoding", "chunked"],
+      ["vary", "Accept,Authorization,Origin"],
+      ["x-powered-by", "Community Solid Server"]
+    ],
+    "body": "PC4uLz4gYSA8aHR0cDovL3d3dy53My5vcmcvbnMvcGltL3NwYWNlI1N0b3JhZ2U+OwogICAgPGh0dHA6Ly93d3cudzMub3JnL25zL3NvbGlkL25vdGlmaWNhdGlvbnMjc3Vic2NyaXB0aW9uPiA8Li4vLi4vLm5vdGlmaWNhdGlvbnMvV2ViU29ja2V0Q2hhbm5lbDIwMjMvPiwgPC4uLy4uLy5ub3RpZmljYXRpb25zL1dlYmhvb2tDaGFubmVsMjAyMy8+Lgo8Li4vLi4vLm5vdGlmaWNhdGlvbnMvV2ViU29ja2V0Q2hhbm5lbDIwMjMvPiA8aHR0cDovL3d3dy53My5vcmcvbnMvc29saWQvbm90aWZpY2F0aW9ucyNjaGFubmVsVHlwZT4gPGh0dHA6Ly93d3cudzMub3JnL25zL3NvbGlkL25vdGlmaWNhdGlvbnMjV2ViU29ja2V0Q2hhbm5lbDIwMjM+OwogICAgPGh0dHA6Ly93d3cudzMub3JnL25zL3NvbGlkL25vdGlmaWNhdGlvbnMjZmVhdHVyZT4gPGh0dHA6Ly93d3cudzMub3JnL25zL3NvbGlkL25vdGlmaWNhdGlvbnMjYWNjZXB0PiwgPGh0dHA6Ly93d3cudzMub3JnL25zL3NvbGlkL25vdGlmaWNhdGlvbnMjZW5kQXQ+LCA8aHR0cDovL3d3dy53My5vcmcvbnMvc29saWQvbm90aWZpY2F0aW9ucyNyYXRlPiwgPGh0dHA6Ly93d3cudzMub3JnL25zL3NvbGlkL25vdGlmaWNhdGlvbnMjc3RhcnRBdD4sIDxodHRwOi8vd3d3LnczLm9yZy9ucy9zb2xpZC9ub3RpZmljYXRpb25zI3N0YXRlPi4KPC4uLy4uLy5ub3RpZmljYXRpb25zL1dlYmhvb2tDaGFubmVsMjAyMy8+IDxodHRwOi8vd3d3LnczLm9yZy9ucy9zb2xpZC9ub3RpZmljYXRpb25zI2NoYW5uZWxUeXBlPiA8aHR0cDovL3d3dy53My5vcmcvbnMvc29saWQvbm90aWZpY2F0aW9ucyNXZWJob29rQ2hhbm5lbDIwMjM+OwogICAgPGh0dHA6Ly93d3cudzMub3JnL25zL3NvbGlkL25vdGlmaWNhdGlvbnMjZmVhdHVyZT4gPGh0dHA6Ly93d3cudzMub3JnL25zL3NvbGlkL25vdGlmaWNhdGlvbnMjYWNjZXB0PiwgPGh0dHA6Ly93d3cudzMub3JnL25zL3NvbGlkL25vdGlmaWNhdGlvbnMjZW5kQXQ+LCA8aHR0cDovL3d3dy53My5vcmcvbnMvc29saWQvbm90aWZpY2F0aW9ucyNyYXRlPiwgPGh0dHA6Ly93d3cudzMub3JnL25zL3NvbGlkL25vdGlmaWNhdGlvbnMjc3RhcnRBdD4sIDxodHRwOi8vd3d3LnczLm9yZy9ucy9zb2xpZC9ub3RpZmljYXRpb25zI3N0YXRlPi4K",
+    "redirected": false
+  }
+}
