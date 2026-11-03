@@ -651,9 +651,12 @@ function exactInstant(value: unknown): boolean {
   return fraction === undefined || /^\d{0,3}0*$/.test(fraction);
 }
 
-/** A validity bound that is absent, or a well-formed zoned dateTime. */
+/**
+ * A validity bound that is absent, or a zoned dateTime the credential check can
+ * compare without loss (a sub-millisecond `validFrom` would open early).
+ */
 function validBound(value: unknown): boolean {
-  return value === undefined || zonedDateTime(value);
+  return value === undefined || exactInstant(value);
 }
 
 const XSD_DATE_TIME = "http://www.w3.org/2001/XMLSchema#dateTime";
