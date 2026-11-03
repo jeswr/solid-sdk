@@ -17,6 +17,7 @@ import {
   useEffect,
   useMemo,
   useRef,
+  useState,
   useSyncExternalStore,
 } from "react";
 import {
@@ -34,7 +35,12 @@ import {
   type OutboxSnapshot,
   outboxKey,
 } from "../lib/outbox";
-import { parseRecentItems, recentItemsKey, recordRecentItem } from "../lib/recent-items";
+import {
+  clearRecentItems,
+  parseRecentItems,
+  recentItemsKey,
+  recordRecentItem,
+} from "../lib/recent-items";
 import { useAccounts } from "../session/accounts-provider";
 import type { SuiteAccount } from "../session/types";
 import { useAllPreferences } from "../settings/preferences";
@@ -144,12 +150,11 @@ export function useOutbox(): OutboxBinding {
   };
 }
 
-function OfflineEffects({ pageTitle, outbox }: { pageTitle: string; outbox: Outbox | null }) {
+function OfflineEffects({ pageTitle, outbox }: { pageTitle?: string; outbox: Outbox | null }) {
   const { active, status } = useAccounts();
   const { preferences, update, ready } = useAllPreferences();
   const state = useConnectionState();
   const pathname = usePathname();
-  const previous = useRef(state);
   const hinted = useRef("");
   const accountId = active?.id ?? "";
   useEffect(() => {
@@ -157,8 +162,7 @@ function OfflineEffects({ pageTitle, outbox }: { pageTitle: string; outbox: Outb
   }, [active]);
   // Send what is waiting once the storage answers again.
   useEffect(() => {
-    if (state === "online" && previous.current !== "online") void outbox?.reconnected();
-    previous.current = state;
+    if (state === "online") void outbox?.reconnected();
   }, [state, outbox]);
   useEffect(() => {
     if (!outbox || !accountId) return;
@@ -179,21 +183,70 @@ function OfflineEffects({ pageTitle, outbox }: { pageTitle: string; outbox: Outb
   }, [state, ready, accountId, preferences.offlineHintSeen]);
   // Titles and paths only: the index behind /offline.
   useEffect(() => {
-    if (status !== "ready" || !accountId) return;
-    try {
-      const key = recentItemsKey(accountId);
-      const next = recordRecentItem(
-        parseRecentItems(localStorage.getItem(key)),
-        { title: pageTitle, href: pathname },
-        new Date(),
-      );
-      localStorage.setItem(key, JSON.stringify(next));
-    } catch {
-      /* The index is a convenience; storage may be unavailable. */
+    if (status !== "ready" || !accountId || !ready) return;
+    if (!preferences.offline) {
+      try {
+        clearRecentItems(localStorage, accountId);
+      } catch {
+        /* The index is a convenience; storage may be unavailable. */
+      }
+      return;
     }
+    // Next may apply a route's title after its pathname changes, including streamed metadata.
+    let recordedTitle: string | undefined;
+    const record = () => {
+      const title = pageTitle ?? document.title;
+      if (title === recordedTitle) return;
+      recordedTitle = title;
+      try {
+        const key = recentItemsKey(accountId);
+        const next = recordRecentItem(
+          parseRecentItems(localStorage.getItem(key)),
+          { title, href: pathname },
+          new Date(),
+        );
+        localStorage.setItem(key, JSON.stringify(next));
+      } catch {
+        /* The index is a convenience; storage may be unavailable. */
+      }
+    };
+    const timer = window.setTimeout(record, 0);
+    const observer = new MutationObserver(record);
+    if (!pageTitle)
+      observer.observe(document.head, { childList: true, subtree: true, characterData: true });
     rememberPage(pathname);
-  }, [status, accountId, pageTitle, pathname]);
+    return () => {
+      window.clearTimeout(timer);
+      observer.disconnect();
+    };
+  }, [status, accountId, ready, preferences.offline, pageTitle, pathname]);
   return null;
+}
+
+function ConnectionAnnouncement() {
+  const state = useConnectionState();
+  const initial = useRef(state);
+  const changed = useRef(false);
+  const [message, setMessage] = useState("");
+  useEffect(() => {
+    if (state !== initial.current) changed.current = true;
+    if (!changed.current && state === "online") return;
+    const timer = window.setTimeout(() => {
+      setMessage(
+        state === "offline"
+          ? "You're offline"
+          : state === "reconnecting"
+            ? "Reconnecting…"
+            : "Back online",
+      );
+    }, 500);
+    return () => window.clearTimeout(timer);
+  }, [state]);
+  return (
+    <span className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+      {message}
+    </span>
+  );
 }
 
 export function OfflineProvider({
@@ -201,7 +254,7 @@ export function OfflineProvider({
   children,
 }: {
   /** Recorded with the path in the recent-items index. */
-  pageTitle: string;
+  pageTitle?: string;
   children: ReactNode;
 }) {
   const { active } = useAccounts();
@@ -211,7 +264,8 @@ export function OfflineProvider({
   const value = useMemo(() => ({ outbox }), [outbox]);
   return (
     <OfflineContext.Provider value={value}>
-      <OfflineEffects pageTitle={pageTitle} outbox={outbox} />
+      <OfflineEffects {...(pageTitle !== undefined ? { pageTitle } : {})} outbox={outbox} />
+      <ConnectionAnnouncement />
       {children}
     </OfflineContext.Provider>
   );

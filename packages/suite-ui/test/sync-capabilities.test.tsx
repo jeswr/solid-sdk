@@ -124,6 +124,33 @@ describe("capability gates", () => {
 
 // AUTHORED-BY Claude Opus 5.5
 describe("online gate", () => {
+  it.each([
+    false,
+    true,
+  ])("keeps the focused child and its identity across connection changes (fragment: %s)", (fragment) => {
+    const control = <button type="button">Share</button>;
+    const view = (online: boolean) => (
+      <OnlineGate online={online}>
+        {fragment ? (
+          <>
+            {control}
+            <span>Sharing</span>
+          </>
+        ) : (
+          control
+        )}
+      </OnlineGate>
+    );
+    const { rerender } = render(view(true));
+    const child = screen.getByRole("button");
+    child.focus();
+    for (const online of [false, true]) {
+      rerender(view(online));
+      expect(screen.getByRole("button")).toBe(child);
+      expect(document.activeElement).toBe(child);
+      expect(child.hasAttribute("disabled")).toBe(!online);
+    }
+  });
   it("is transparent online and disables controls with a reachable explanation offline", async () => {
     const user = userEvent.setup();
     const click = vi.fn();

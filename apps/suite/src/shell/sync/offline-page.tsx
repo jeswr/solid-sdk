@@ -8,7 +8,12 @@
 import { Button, EmptyState, LoadingSkeleton } from "@jeswr/suite-ui";
 import { useEffect, useState } from "react";
 import { ACCOUNTS_KEY, parseAccounts } from "../lib/accounts-store";
-import { parseRecentItems, type RecentItem, recentItemsKey } from "../lib/recent-items";
+import {
+  parseRecentItems,
+  type RecentItem,
+  recentItemsKey,
+  savedRecentItems,
+} from "../lib/recent-items";
 import { useConnectionState } from "./offline-provider";
 
 function readRecentItems(): RecentItem[] {
@@ -23,7 +28,16 @@ function readRecentItems(): RecentItem[] {
 export function OfflinePage() {
   const [items, setItems] = useState<RecentItem[] | null>(null);
   const online = useConnectionState() === "online";
-  useEffect(() => setItems(readRecentItems()), []);
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const saved = "caches" in window ? await savedRecentItems(readRecentItems(), caches) : [];
+      if (!cancelled) setItems(saved);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   const viewed = new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" });
   return (
     <main id="main-content" className="shell-public">

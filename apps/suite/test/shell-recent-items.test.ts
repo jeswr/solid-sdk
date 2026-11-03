@@ -1,12 +1,14 @@
 // AUTHORED-BY Claude Opus 5.5
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
+  clearRecentItems,
   isRecordablePath,
   parseRecentItems,
   RECENT_LIMIT,
   type RecentItem,
   recentItemsKey,
   recordRecentItem,
+  savedRecentItems,
 } from "../src/shell/lib/recent-items";
 
 const now = new Date("2026-11-01T12:00:00Z");
@@ -17,6 +19,43 @@ const item = (href: string, title = "Search"): RecentItem => ({
 });
 
 describe("recent items", () => {
+  it("clears one account or every recent index while retaining pending outboxes", () => {
+    const entries = new Map([
+      [recentItemsKey("one"), "[]"],
+      [recentItemsKey("two"), "[]"],
+      ["suite.outbox.v1.one", "unsent"],
+    ]);
+    const storage = {
+      get length() {
+        return entries.size + 1;
+      },
+      key: (index: number) => [...entries.keys()][index] ?? null,
+      removeItem: (key: string) => entries.delete(key),
+    };
+    clearRecentItems(storage, "one");
+    expect([...entries.keys()]).toEqual([recentItemsKey("two"), "suite.outbox.v1.one"]);
+    clearRecentItems(storage);
+    expect([...entries.keys()]).toEqual(["suite.outbox.v1.one"]);
+  });
+
+  it("offers only recent pages saved in the shell or page caches", async () => {
+    const items = [item("/docs"), item("/tasks"), item("/missing")];
+    const cacheStorage = {
+      keys: async () => ["suite-pages-v1", "app-shell-v1", "unrelated"],
+      match: vi.fn(async (href: RequestInfo | URL, options?: MultiCacheQueryOptions) =>
+        (href === "/docs" && options?.cacheName === "suite-pages-v1") ||
+        (href === "/tasks" && options?.cacheName === "app-shell-v1")
+          ? new Response("saved")
+          : undefined,
+      ),
+    };
+    expect(await savedRecentItems(items, cacheStorage)).toEqual(items.slice(0, 2));
+    expect(
+      cacheStorage.match.mock.calls.some(([, options]) => options?.cacheName === "unrelated"),
+    ).toBe(false);
+    cacheStorage.match.mockRejectedValue(new Error("blocked"));
+    expect(await savedRecentItems(items, cacheStorage)).toEqual([]);
+  });
   it("keys the index per account and keeps twenty", () => {
     expect(recentItemsKey("demo")).toBe("suite.recent.v1.demo");
     expect(RECENT_LIMIT).toBe(20);

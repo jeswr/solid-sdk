@@ -33,8 +33,9 @@ export const REMEMBER_PAGE = "remember-page";
 interface ExtendableEventLike {
   waitUntil(promise: Promise<unknown>): void;
 }
-interface FetchEventLike {
+interface FetchEventLike extends ExtendableEventLike {
   request: Request;
+  preloadResponse?: Promise<Response | undefined>;
   respondWith(response: Promise<Response>): void;
 }
 interface MessageEventLike extends ExtendableEventLike {
@@ -55,6 +56,7 @@ export interface WorkerScope {
     delete(name: string): Promise<boolean>;
   };
   clients: { claim(): Promise<void> };
+  registration?: { navigationPreload?: { enable(): Promise<void> } };
   skipWaiting(): Promise<void>;
   fetch(request: Request | string): Promise<Response>;
   addEventListener(
@@ -81,12 +83,13 @@ export function installServiceWorker(
     response.type === "basic" &&
     !response.redirected &&
     (response.headers.get("content-type") ?? "").includes("text/html");
-  const isAsset = (response: Response) => response.ok && response.type === "basic";
+  const isAsset = (response: Response) =>
+    response.ok && response.type === "basic" && !response.redirected;
   /** The hashed assets a page loads first; anything later is cached when it is fetched. */
   const assetsIn = (html: string) => {
     const found = new Set<string>();
-    for (const match of html.matchAll(/(?:src|href)="(\/_next\/static\/[^"?#]+)"/g))
-      found.add(match[1] as string);
+    for (const match of html.matchAll(/(?:src|href)="(\/_next\/static\/[^"#]+)"/g))
+      found.add((match[1] as string).replaceAll("&amp;", "&"));
     return [...found];
   };
   /** A page path the shell may ask to remember: same-origin, no query, not an asset. */
@@ -116,17 +119,31 @@ export function installServiceWorker(
     );
     return true;
   }
-  async function asset(request: Request): Promise<Response> {
-    const shell = await sw.caches.open(shellName);
-    const hit = await shell.match(request);
-    if (hit) return hit;
+  async function asset(event: FetchEventLike): Promise<Response> {
+    const { request } = event;
+    try {
+      const hit = await (await sw.caches.open(shellName)).match(request);
+      if (hit) return hit;
+    } catch {
+      /* A disabled or full cache must never prevent an online load. */
+    }
     const response = await sw.fetch(request);
-    if (isAsset(response)) await shell.put(request, response.clone());
+    if (isAsset(response)) {
+      const copy = response.clone();
+      event.waitUntil(
+        sw.caches
+          .open(shellName)
+          .then((shell) => shell.put(request, copy))
+          .catch(() => {}),
+      );
+    }
     return response;
   }
-  async function navigate(request: Request, path: string): Promise<Response> {
+  async function navigate(event: FetchEventLike, path: string): Promise<Response> {
+    const preloaded = await event.preloadResponse?.catch(() => undefined);
+    if (preloaded) return preloaded;
     try {
-      return await sw.fetch(request);
+      return await sw.fetch(event.request);
     } catch {
       for (const name of [pagesName, shellName]) {
         const hit = await (await sw.caches.open(name)).match(absolute(path));
@@ -176,6 +193,7 @@ export function installServiceWorker(
             )
             .map((name) => sw.caches.delete(name)),
         );
+        await sw.registration?.navigationPreload?.enable().catch(() => {});
         await sw.clients.claim();
       })(),
     );
@@ -186,15 +204,13 @@ export function installServiceWorker(
     if (request.headers.has("authorization") || request.headers.has("dpop")) return;
     const url = new URL(request.url);
     if (url.origin !== origin) return;
-    if (url.pathname.startsWith("/_next/static/")) return event.respondWith(asset(request));
-    // Online navigations go straight to the network, untouched.
-    if (request.mode === "navigate" && !sw.navigator.onLine)
-      event.respondWith(navigate(request, url.pathname));
+    if (url.pathname.startsWith("/_next/static/")) return event.respondWith(asset(event));
+    // Network-first even when the browser has not detected a lost connection.
+    if (request.mode === "navigate") event.respondWith(navigate(event, url.pathname));
   });
   sw.addEventListener("message", (event) => {
     const data = event.data as { type?: unknown; path?: unknown } | null;
-    if (!data || data.type !== "remember-page" || !isPagePath(data.path) || !sw.navigator.onLine)
-      return;
+    if (data?.type !== "remember-page" || !isPagePath(data.path) || !sw.navigator.onLine) return;
     event.waitUntil(remember(data.path));
   });
 }

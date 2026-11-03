@@ -54,12 +54,16 @@ test("offline: pill, one-time hint, reconnecting, saved pages and the /offline f
   await expect(offlinePill).toHaveCount(0);
   await context.setOffline(true);
   await expect(offlinePill).toBeVisible();
+  const announcement = page.locator('span.sr-only[role="status"]');
+  await expect(announcement).toHaveText("You're offline");
   await expect(page.getByText(HINT)).toBeVisible();
   await accessible(page);
 
   await context.setOffline(false);
   await expect(page.getByRole("button", { name: "Reconnecting…" })).toBeVisible();
+  await expect(announcement).toHaveText("Reconnecting…");
   await expect(page.getByRole("button", { name: /Reconnecting|Offline/ })).toHaveCount(0);
+  await expect(announcement).toHaveText("Back online");
 
   // Offline again, on a fresh load from the saved copy: the hint was already shown.
   await context.setOffline(true);
@@ -77,15 +81,15 @@ test("offline: pill, one-time hint, reconnecting, saved pages and the /offline f
     }),
   ).toBeVisible();
   const recent = page.getByRole("region", { name: "Recent items" });
-  await expect(recent.getByRole("link", { name: "Notifications" })).toHaveAttribute(
+  await expect(recent.getByRole("link", { name: /^Notifications ·/ })).toHaveAttribute(
     "href",
     "/notifications",
   );
-  await expect(recent.getByRole("link", { name: "Search" })).toHaveAttribute("href", "/search");
+  await expect(recent.getByRole("link", { name: /^Search ·/ })).toHaveAttribute("href", "/search");
   await accessible(page);
 
   // Something viewed before opens from this device.
-  await recent.getByRole("link", { name: "Search" }).click();
+  await recent.getByRole("link", { name: /^Search ·/ }).click();
   await expect(page).toHaveURL(/\/search$/);
   await expect(offlinePill).toBeVisible();
   await context.setOffline(false);
@@ -140,9 +144,10 @@ test("sync sheet: waiting changes, Retry all and a conflict resolved with Keep b
   await pill.click();
   const sheet = page.getByRole("dialog", { name: "Sync status" });
   const waiting = sheet.getByRole("region", { name: "Waiting to sync" });
-  await expect(waiting.getByRole("listitem")).toHaveCount(2);
-  await expect(waiting.getByRole("listitem").first()).toContainText("Rename project brief");
-  await expect(waiting.getByRole("listitem").first()).toContainText("My Drive / Work");
+  // Pending changes from an earlier visit send as soon as this account binds online.
+  await expect(waiting.getByRole("listitem")).toHaveCount(1);
+  await expect(waiting.getByRole("listitem").first()).toContainText("Save meeting notes");
+  await expect(waiting.getByRole("listitem").first()).toContainText("My Drive");
   await expect(waiting.getByRole("listitem").first().locator("time")).toHaveText(/ago/);
   await expect(sheet.getByRole("alert")).toHaveText("Your storage could not save this change.");
   await expect(sheet.getByText(/Last synced/)).toBeVisible();
@@ -157,8 +162,10 @@ test("sync sheet: waiting changes, Retry all and a conflict resolved with Keep b
   await closeSheet(page);
   // Reconnecting sends what was waiting; the failed change waits for Retry.
   await context.setOffline(false);
-  await expect(page.getByRole("button", { name: "Reconnecting…" })).toHaveCount(0);
   await pill.click();
+  await expect(sheet.getByRole("button", { name: "Retry all" })).toBeDisabled();
+  await expect(page.locator('span.sr-only[role="status"]')).toHaveText("Reconnecting…");
+  await expect(page.locator('span.sr-only[role="status"]')).toHaveText("Back online");
   await expect(waiting.getByRole("listitem")).toHaveCount(1);
   await expect(waiting).toContainText("Save meeting notes");
   await sheet.getByRole("button", { name: "Retry all" }).click();
@@ -202,4 +209,61 @@ test("requiresOnline: share changes are disabled offline with an explanation", a
   await context.setOffline(false);
   await expect(add).toBeEnabled();
   await expect(gate).toHaveCount(0);
+});
+
+test("recent recording covers app routes, honours opt-out and only links saved pages", async ({
+  page,
+  context,
+}) => {
+  await signInDemo(page);
+  await workerInControl(page);
+  for (const path of ["/drive/my", "/docs", "/tasks/today"]) {
+    await page.goto(path);
+    await expect
+      .poll(() =>
+        page.evaluate((href) => {
+          const items = JSON.parse(localStorage.getItem("suite.recent.v1.demo") ?? "[]");
+          return items.some(
+            (item: { href: string; title: string }) =>
+              item.href === href && item.title === document.title,
+          );
+        }, path),
+      )
+      .toBe(true);
+    await expect(page.locator('span.sr-only[role="status"]')).toHaveCount(1);
+    await expect.poll(() => savedPage(page, path)).toBe(true);
+    await accessible(page);
+  }
+  await page.goto("/settings/offline");
+  await page.getByRole("checkbox", { name: "Keep my recent items available offline" }).uncheck();
+  await expect
+    .poll(() => page.evaluate(() => localStorage.getItem("suite.recent.v1.demo")))
+    .toBeNull();
+  // A full load also proves the stored preference is honoured before the first recording.
+  await page.goto("/notifications");
+  await expect(page.getByRole("heading", { level: 1, name: "Notifications" })).toBeVisible();
+  expect(await page.evaluate(() => localStorage.getItem("suite.recent.v1.demo"))).toBeNull();
+  await page.goto("/settings/offline");
+  await page.getByRole("checkbox", { name: "Keep my recent items available offline" }).check();
+  await page.evaluate(() => {
+    const key = "suite.recent.v1.demo";
+    const items = JSON.parse(localStorage.getItem(key) ?? "[]");
+    items.push({
+      title: "Never saved document",
+      href: "/docs/d/not-saved",
+      viewedAt: new Date().toISOString(),
+    });
+    localStorage.setItem(key, JSON.stringify(items));
+  });
+  await context.setOffline(true);
+  await page.goto("/never-saved");
+  await expect(
+    page.getByRole("heading", {
+      level: 1,
+      name: "You're offline — open something you've viewed before",
+    }),
+  ).toBeVisible();
+  await expect(page.getByRole("link", { name: "Never saved document" })).toHaveCount(0);
+  await accessible(page);
+  await context.setOffline(false);
 });

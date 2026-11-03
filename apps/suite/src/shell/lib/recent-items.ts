@@ -13,7 +13,45 @@ export interface RecentItem {
 }
 
 export const RECENT_LIMIT = 20;
-export const recentItemsKey = (accountId: string) => `suite.recent.v1.${accountId}`;
+export const RECENT_ITEMS_PREFIX = "suite.recent.v1.";
+export const recentItemsKey = (accountId: string) => `${RECENT_ITEMS_PREFIX}${accountId}`;
+
+/** Forget only browsing history; pending changes are the account's only unsent copy. */
+export function clearRecentItems(
+  storage: Pick<Storage, "length" | "key" | "removeItem">,
+  accountId?: string,
+): void {
+  if (accountId !== undefined) {
+    storage.removeItem(recentItemsKey(accountId));
+    return;
+  }
+  for (let index = storage.length - 1; index >= 0; index--) {
+    const key = storage.key(index);
+    if (key?.startsWith(RECENT_ITEMS_PREFIX)) storage.removeItem(key);
+  }
+}
+
+/** Only offer navigation when this device can actually answer it from a page cache. */
+export async function savedRecentItems(
+  items: RecentItem[],
+  cacheStorage: Pick<CacheStorage, "keys" | "match">,
+): Promise<RecentItem[]> {
+  try {
+    const names = (await cacheStorage.keys()).filter(
+      (name) => name.startsWith("suite-pages-") || name.startsWith("app-shell-"),
+    );
+    const saved = await Promise.all(
+      items.map(async (item) =>
+        (
+          await Promise.all(names.map((cacheName) => cacheStorage.match(item.href, { cacheName })))
+        ).some(Boolean),
+      ),
+    );
+    return items.filter((_, index) => saved[index]);
+  } catch {
+    return [];
+  }
+}
 
 /** Pages that are not "something you've viewed": sign-in, the fallback itself, fixtures. */
 const EXCLUDED = ["/offline", "/signin", "/signup", "/welcome", "/onboarding", "/auth", "/dev"];

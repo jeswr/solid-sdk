@@ -29,7 +29,6 @@ import { useAccounts } from "./session/accounts-provider";
 import { SessionGuard } from "./session/session-guard";
 import { GlobalShortcuts } from "./shortcuts/global-shortcuts";
 import { ShortcutsProvider, useShortcutSettings } from "./shortcuts/provider";
-import { OfflineProvider } from "./sync/offline-provider";
 import { useSyncSnapshot } from "./sync/online";
 import { ShellSyncSheet } from "./sync/shell-sync-sheet";
 
@@ -64,6 +63,9 @@ function Frame({
   const { characterKeys } = useShortcutSettings();
   const env = useSuiteEnvironment();
   const app = appRegistry.find((item) => item.slug === slug);
+  useEffect(() => {
+    if (app) document.title = `${pageTitle} · ${app.name} · Solid Suite`;
+  }, [app, pageTitle]);
   const [preferences, setPreferences] = useState<ShellPreferences>(defaultShellPreferences);
   const [rail, setRail] = useState<RailPreferences>(() => parseRailPreferences(null));
   useEffect(() => {
@@ -166,9 +168,7 @@ export function SuiteShell(props: SuiteShellProps) {
       <SessionGuard>
         <ShortcutsProvider>
           <ReadyShortcuts />
-          <OfflineProvider pageTitle={props.pageTitle}>
-            <Frame {...props} />
-          </OfflineProvider>
+          <Frame {...props} />
         </ShortcutsProvider>
       </SessionGuard>
     </Suspense>

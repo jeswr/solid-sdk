@@ -45,7 +45,7 @@ export function SyncSheet({
   const returnFocus = useRef<HTMLElement | null>(null);
   const titleRef = useRef<HTMLHeadingElement>(null);
   const id = useId();
-  const retry = useRequiresOnline(snapshot.online, "retry");
+  const retry = useRequiresOnline(snapshot.online && !snapshot.reconnecting, "retry");
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent

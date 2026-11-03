@@ -13,7 +13,7 @@ export function useSyncSnapshot(): SyncSnapshot {
   const { snapshot } = useOutbox();
   return useMemo(
     () => ({
-      online: state !== "offline",
+      online: state === "online",
       reconnecting: state === "reconnecting",
       pending: snapshot.pending,
       conflicts: snapshot.conflicts,

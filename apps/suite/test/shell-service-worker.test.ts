@@ -87,8 +87,9 @@ function scope(responses: Record<string, () => Response | Promise<Response>> = {
       },
     };
     (listeners.get(type) as (event: unknown) => void)(event);
+    const result = await response;
     await Promise.all(waits);
-    return response;
+    return result;
   };
   return { sw, stores, fetcher, dispatch, listeners };
 }
@@ -193,6 +194,32 @@ describe("install and activate", () => {
     );
     expect(context.sw.clients.claim).toHaveBeenCalledOnce();
   });
+
+  it.each([false, true])("enables supported navigation preload (failure: %s)", async (fails) => {
+    const context = await installed();
+    const enable = vi.fn(async () => {
+      if (fails) throw new Error("unavailable");
+    });
+    Object.assign(context.sw, { registration: { navigationPreload: { enable } } });
+    await context.dispatch("activate");
+    expect(enable).toHaveBeenCalledOnce();
+    expect(context.sw.clients.claim).toHaveBeenCalledOnce();
+    Object.assign(context.sw, { registration: {} });
+    await context.dispatch("activate");
+  });
+
+  it("discovers assets with query strings and decodes HTML ampersands", async () => {
+    const asset = "/_next/static/app.js?v=1&build=2";
+    const { stores, fetcher } = await installed({
+      "/offline": () =>
+        basic('<script src="/_next/static/app.js?v=1&amp;build=2"></script>', {
+          headers: { "content-type": "text/html" },
+        }),
+      [asset]: () => basic("queried"),
+    });
+    expect(fetcher).toHaveBeenCalledWith(`${origin}${asset}`);
+    expect(stores.get("app-shell-v2")?.entries.has(`${origin}${asset}`)).toBe(true);
+  });
 });
 
 describe("fetch", () => {
@@ -234,9 +261,96 @@ describe("fetch", () => {
     );
   });
 
-  it("leaves online navigations to the network", async () => {
-    const { dispatch } = await installed();
-    expect(await dispatch("fetch", { request: navigate("/tasks/upcoming") })).toBeUndefined();
+  it("returns online navigations untouched and falls back even if the browser reports online", async () => {
+    const response = page("tasks live");
+    const { dispatch, sw } = await installed({ "/tasks/upcoming": () => response });
+    expect(await dispatch("fetch", { request: navigate("/tasks/upcoming") })).toBe(response);
+    expect(sw.navigator.onLine).toBe(true);
+    expect(
+      await (await dispatch("fetch", { request: navigate("/unreachable") }))?.text(),
+    ).toContain("<h1>offline</h1>");
+  });
+
+  it("uses navigation preload and fetches normally if it fails", async () => {
+    const { dispatch } = await installed({ "/docs": () => page("network") });
+    const preloaded = page("preloaded");
+    expect(
+      await dispatch("fetch", {
+        request: navigate("/docs"),
+        preloadResponse: Promise.resolve(preloaded),
+      }),
+    ).toBe(preloaded);
+    expect(
+      await (
+        await dispatch("fetch", {
+          request: navigate("/docs"),
+          preloadResponse: Promise.reject(new Error("preload failed")),
+        })
+      )?.text(),
+    ).toContain("network");
+    expect(
+      await (
+        await dispatch("fetch", {
+          request: navigate("/docs"),
+          preloadResponse: Promise.resolve(undefined),
+        })
+      )?.text(),
+    ).toContain("network");
+  });
+
+  it.each([
+    "open",
+    "match",
+    "put",
+  ] as const)("returns online assets when cache %s fails", async (operation) => {
+    const { sw, dispatch, stores } = await installed({
+      "/_next/static/new.js": () => basic("online"),
+    });
+    if (operation === "open") vi.spyOn(sw.caches, "open").mockRejectedValue(new Error("blocked"));
+    else
+      vi.spyOn(stores.get("app-shell-v2") as FakeCache, operation).mockRejectedValue(
+        new Error("full"),
+      );
+    expect(
+      await (
+        await dispatch("fetch", { request: new Request(`${origin}/_next/static/new.js`) })
+      )?.text(),
+    ).toBe("online");
+  });
+
+  it("returns an asset before its cache write finishes", async () => {
+    const { listeners, stores } = await installed({
+      "/_next/static/new.js": () => basic("online"),
+    });
+    let finish!: () => void;
+    vi.spyOn(stores.get("app-shell-v2") as FakeCache, "put").mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const waits: Promise<unknown>[] = [];
+    let response!: Promise<Response>;
+    (listeners.get("fetch") as (event: unknown) => void)({
+      request: new Request(`${origin}/_next/static/new.js`),
+      waitUntil: (promise: Promise<unknown>) => waits.push(promise),
+      respondWith: (promise: Promise<Response>) => {
+        response = promise;
+      },
+    });
+    expect(await (await response).text()).toBe("online");
+    expect(waits).toHaveLength(1);
+    finish();
+    await Promise.all(waits);
+  });
+
+  it.each([
+    ["redirected", () => basic("redirect", { redirected: true })],
+    ["cross-origin", () => new Response("opaque")],
+  ])("never caches %s assets", async (_name, respond) => {
+    const { dispatch, stores } = await installed({ "/_next/static/unsafe.js": respond });
+    await dispatch("fetch", { request: new Request(`${origin}/_next/static/unsafe.js`) });
+    expect(stores.get("app-shell-v2")?.entries.has(`${origin}/_next/static/unsafe.js`)).toBe(false);
   });
 
   it("offline: tries the network, then saved pages, then the shell, then /offline", async () => {

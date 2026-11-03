@@ -37,7 +37,7 @@ export function useRequiresOnline(online: boolean, action: string) {
   return { disabled: !online, reason: `Reconnect to ${action}` };
 }
 
-function disabledChildren(children: ReactNode): ReactNode {
+function disabledChildren(children: ReactNode, disabled = true): ReactNode {
   return Children.map(children, (child) => {
     if (
       !isValidElement<{ children?: ReactNode; disabled?: boolean; "aria-disabled"?: boolean }>(
@@ -46,8 +46,8 @@ function disabledChildren(children: ReactNode): ReactNode {
     )
       return child;
     if (child.type === Fragment)
-      return cloneElement(child, {}, disabledChildren(child.props.children));
-    return cloneElement(child, { disabled: true, "aria-disabled": true });
+      return cloneElement(child, {}, disabledChildren(child.props.children, disabled));
+    return disabled ? cloneElement(child, { disabled: true, "aria-disabled": true }) : child;
   });
 }
 
@@ -94,7 +94,7 @@ export function CapabilityGate({
 /** The default explanation for a control that needs a connection (02-suite-shell §10). */
 export const OFFLINE_REASON = "You're offline. This needs a connection.";
 export interface OnlineGateProps {
-  /** The current connection state; the gate is transparent while online. */
+  /** True only when connected; reconnecting is treated as offline. */
   online: boolean;
   reason?: string;
   /** Controls must forward the native disabled and aria-disabled props. */
@@ -105,18 +105,22 @@ export interface OnlineGateProps {
  * The trigger is a span (not a fieldset) so it stays focusable inside a disabled fieldset.
  */
 export function OnlineGate({ online, reason = OFFLINE_REASON, children }: OnlineGateProps) {
-  if (online) return children;
   return (
     <TooltipProvider>
       <Tooltip>
         <TooltipTrigger asChild>
-          {/* biome-ignore lint/a11y/noNoninteractiveTabindex: Disabled controls need a keyboard target for their explanation. */}
           {/* biome-ignore lint/a11y/useSemanticElements: A fieldset inside a disabled fieldset is disabled and unfocusable; a span keeps the explanation reachable. */}
-          <span className="suite-disabled-trigger" role="group" tabIndex={0} aria-label={reason}>
-            {disabledChildren(children)}
+          <span
+            className="suite-disabled-trigger"
+            role="group"
+            tabIndex={online ? undefined : 0}
+            aria-label={online ? undefined : reason}
+            aria-disabled={online ? undefined : true}
+          >
+            {disabledChildren(children, !online)}
           </span>
         </TooltipTrigger>
-        <TooltipContent>{reason}</TooltipContent>
+        {!online && <TooltipContent>{reason}</TooltipContent>}
       </Tooltip>
     </TooltipProvider>
   );
