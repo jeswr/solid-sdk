@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { safeHttpIri } from "@jeswr/rdf-serialize";
 import { DataFactory as df, Store } from "n3";
+import { containsCardNumber } from "./cards.js";
 import { dateTime, iri, NS, RdfNode, validCalendarDate } from "./rdf.js";
 
 /** Temporal bound whose datatype records its precision (KG §2.3). */
@@ -12,6 +13,49 @@ interface Period {
   validFrom?: TemporalValue;
   validThrough?: TemporalValue;
 }
+
+/** Clinical event time, retaining day or date-time precision. */
+export type HealthTemporalValue = TemporalValue & { datatype: "date" | "dateTime" };
+
+/** A clinical concept: the health profile requires its code, not just its identifier. */
+export interface HealthCode {
+  id: string;
+  code: string;
+  /** Coding-system entity IRI. */
+  system?: string;
+  display?: string;
+}
+
+/** A measurement or lab result about the owner. */
+export interface ObservationValue {
+  id: string;
+  code: HealthCode;
+  value: number | string;
+  unitCode?: string;
+  effective: HealthTemporalValue;
+  /** Optional source category, represented with schema:category. */
+  kind?: "measurement" | "lab";
+}
+
+/** A vaccination record referencing the administered medicinal product. */
+export interface ImmunizationValue {
+  id: string;
+  vaccine: Omit<HealthCode, "code"> & {
+    /** Required when system is supplied, so the nested concept has a code value. */
+    code?: string;
+  };
+  occurrence: HealthTemporalValue;
+  lotNumber?: string;
+}
+
+/** A clinical encounter, with an optionally open-ended occurrence interval. */
+export interface EncounterValue {
+  id: string;
+  type?: HealthCode;
+  period: { start: HealthTemporalValue; end?: HealthTemporalValue };
+  serviceProvider?: string;
+}
+
 /** Supported structured memory facts; identifiers are caller-controlled entity IRIs. */
 export type Fact =
   | { template: "email" | "phone"; value: string }
@@ -44,6 +88,9 @@ export type Fact =
         dose?: { value: string; unit: string; frequency?: string };
       };
     }
+  | { template: "observation"; value: ObservationValue }
+  | { template: "immunization"; value: ImmunizationValue }
+  | { template: "encounter"; value: EncounterValue }
   | {
       /**
        * A payment card on file, without its number: brand, last four digits, expiry month and
@@ -145,6 +192,140 @@ function safeBillingAddress(value: unknown): boolean {
   }
   if (/[%?#]/.test(text)) return false;
   return (text.normalize("NFKC").match(/\p{N}/gu)?.length ?? 0) <= 4;
+}
+
+function invalidHealthFact(): never {
+  throw new Error("Invalid health fact");
+}
+
+/** Snapshot even optional fields once; reject unknown non-enumerable and symbol keys too. */
+function healthSnapshot(value: unknown, keys: readonly string[]): Record<string, unknown> {
+  if (typeof value !== "object" || value === null) return invalidHealthFact();
+  if (Reflect.ownKeys(value).some((key) => !keys.includes(key as string)))
+    return invalidHealthFact();
+  const record = value as Record<string, unknown>;
+  return Object.fromEntries(keys.map((key) => [key, record[key]]));
+}
+
+function healthIri(value: unknown): string {
+  if (typeof value !== "string") return invalidHealthFact();
+  const identifier = iri(value);
+  if (identifier !== value) return invalidHealthFact();
+  return identifier;
+}
+
+function healthText(value: unknown): string {
+  if (typeof value !== "string" || containsCardNumber(value)) return invalidHealthFact();
+  return value;
+}
+
+function optionalHealthText(value: unknown): string | undefined {
+  return value === undefined ? undefined : healthText(value);
+}
+
+function healthTemporalSnapshot(value: unknown): HealthTemporalValue {
+  const bound = healthSnapshot(value, ["value", "datatype"]);
+  const text = bound.value;
+  const datatype = bound.datatype;
+  if (typeof text !== "string" || (datatype !== "date" && datatype !== "dateTime"))
+    return invalidHealthFact();
+  return { value: text, datatype };
+}
+
+function healthCodeSnapshot(value: unknown): ImmunizationValue["vaccine"] {
+  const code = healthSnapshot(value, ["id", "system", "code", "display"]);
+  return {
+    id: healthIri(code.id),
+    system: code.system === undefined ? undefined : healthIri(code.system),
+    code: optionalHealthText(code.code),
+    display: optionalHealthText(code.display),
+  };
+}
+
+function requiredHealthCodeSnapshot(value: unknown): HealthCode {
+  const code = healthCodeSnapshot(value);
+  if (code.code === undefined) return invalidHealthFact();
+  return { ...code, code: code.code };
+}
+
+function observationSnapshot(value: unknown): ObservationValue {
+  const v = healthSnapshot(value, ["id", "code", "value", "unitCode", "effective", "kind"]);
+  const measured = v.value;
+  if (
+    (typeof measured !== "number" && typeof measured !== "string") ||
+    (typeof measured === "number" && !Number.isFinite(measured))
+  )
+    return invalidHealthFact();
+  if (v.kind !== undefined && v.kind !== "measurement" && v.kind !== "lab")
+    return invalidHealthFact();
+  return {
+    id: healthIri(v.id),
+    code: requiredHealthCodeSnapshot(v.code),
+    value: typeof measured === "string" ? healthText(measured) : measured,
+    unitCode: optionalHealthText(v.unitCode),
+    effective: healthTemporalSnapshot(v.effective),
+    kind: v.kind,
+  };
+}
+
+function immunizationSnapshot(value: unknown): ImmunizationValue {
+  const v = healthSnapshot(value, ["id", "vaccine", "occurrence", "lotNumber"]);
+  const vaccine = healthCodeSnapshot(v.vaccine);
+  if (vaccine.system !== undefined && vaccine.code === undefined) return invalidHealthFact();
+  return {
+    id: healthIri(v.id),
+    vaccine,
+    occurrence: healthTemporalSnapshot(v.occurrence),
+    lotNumber: optionalHealthText(v.lotNumber),
+  };
+}
+
+function encounterSnapshot(value: unknown): EncounterValue {
+  const v = healthSnapshot(value, ["id", "type", "period", "serviceProvider"]);
+  const bounds = healthSnapshot(v.period, ["start", "end"]);
+  return {
+    id: healthIri(v.id),
+    type: v.type === undefined ? undefined : requiredHealthCodeSnapshot(v.type),
+    period: {
+      start: healthTemporalSnapshot(bounds.start),
+      end: bounds.end === undefined ? undefined : healthTemporalSnapshot(bounds.end),
+    },
+    serviceProvider: v.serviceProvider === undefined ? undefined : healthIri(v.serviceProvider),
+  };
+}
+
+/** Use the package's decimal literal guard, expanding JS's extreme-magnitude exponents. */
+function healthDecimal(value: number): string {
+  const text = Object.is(value, -0) ? "-0" : String(value);
+  const match = /^(-?)(\d)(?:\.(\d+))?e([+-]\d+)$/.exec(text);
+  if (!match) return text;
+  const [, sign, whole, fraction = "", exponent] = match;
+  const digits = whole + fraction;
+  const point = Number(exponent) + 1;
+  // JS scientific notation occurs only below 1e-6 or at/above 1e21: the point
+  // is always outside the significand, whose length is at most 17 digits.
+  return sign + (point > 0 ? digits.padEnd(point, "0") : `0.${"0".repeat(-point)}${digits}`);
+}
+
+function writeHealthCode(concept: RdfNode, value: Omit<HealthCode, "id">): void {
+  concept
+    .link(`${NS.rdf}type`, `${NS.health}CodeableConcept`)
+    .link(`${NS.rdf}type`, `${NS.core}Identifier`)
+    .text(`${NS.core}value`, value.code);
+  if (value.system !== undefined) {
+    concept.link(`${NS.core}inScheme`, value.system);
+    new RdfNode(value.system, concept.dataset).link(`${NS.rdf}type`, `${NS.core}IdentifierScheme`);
+  }
+  if (value.display !== undefined) concept.text(`${NS.schema}name`, value.display);
+}
+
+function healthInstant(node: RdfNode, predicate: string, value: HealthTemporalValue): void {
+  const instant = df.blankNode();
+  node.add(predicate, instant);
+  const time = new RdfNode(instant, node.dataset)
+    .link(`${NS.rdf}type`, `${NS.time}Instant`)
+    .link(`${NS.rdf}type`, `${NS.time}TemporalEntity`);
+  temporal(time, NS.time + (value.datatype === "date" ? "inXSDDate" : "inXSDDateTime"), value);
 }
 
 function temporal(node: RdfNode, predicate: string, bound: TemporalValue): void {
@@ -267,6 +448,78 @@ export function createFactAssertion(about: string, fact: Fact): Store {
           schedule.text(`${NS.schema}frequency`, v.dose.frequency);
       }
       period(statement, v);
+      break;
+    }
+    case "observation": {
+      try {
+        const v = observationSnapshot(fact.value);
+        person.link(type, `${NS.core}Person`);
+        const observation = new RdfNode(v.id, store)
+          .link(type, `${NS.health}Observation`)
+          .link(`${NS.health}patient`, owner)
+          .link(`${NS.health}hasCode`, v.code.id)
+          .text(
+            `${NS.health}value`,
+            typeof v.value === "number" ? healthDecimal(v.value) : v.value,
+            NS.xsd + (typeof v.value === "number" ? "decimal" : "string"),
+          );
+        writeHealthCode(new RdfNode(v.code.id, store), v.code);
+        if (v.unitCode !== undefined) observation.text(`${NS.health}unitCode`, v.unitCode);
+        if (v.kind !== undefined) observation.text(`${NS.schema}category`, v.kind);
+        healthInstant(observation, `${NS.health}effectiveTime`, v.effective);
+      } catch {
+        throw new Error("Invalid observation");
+      }
+      break;
+    }
+    case "immunization": {
+      try {
+        const v = immunizationSnapshot(fact.value);
+        person.link(type, `${NS.core}Person`);
+        const immunization = new RdfNode(v.id, store)
+          .link(type, `${NS.health}Immunization`)
+          .link(`${NS.health}patient`, owner)
+          .link(`${NS.health}medication`, v.vaccine.id);
+        const vaccine = new RdfNode(v.vaccine.id, store).link(type, `${NS.health}MedicinalProduct`);
+        if (v.vaccine.display !== undefined) vaccine.text(`${NS.schema}name`, v.vaccine.display);
+        if (v.vaccine.code !== undefined) {
+          const code = df.blankNode();
+          vaccine.add(`${NS.core}identifiedBy`, code);
+          writeHealthCode(new RdfNode(code, store), { ...v.vaccine, code: v.vaccine.code });
+        }
+        healthInstant(immunization, `${NS.core}atTime`, v.occurrence);
+        if (v.lotNumber !== undefined) immunization.text(`${NS.schema}lotNumber`, v.lotNumber);
+      } catch {
+        throw new Error("Invalid immunization");
+      }
+      break;
+    }
+    case "encounter": {
+      try {
+        const v = encounterSnapshot(fact.value);
+        person.link(type, `${NS.core}Person`);
+        const encounter = new RdfNode(v.id, store)
+          .link(type, `${NS.health}Encounter`)
+          .link(`${NS.health}patient`, owner);
+        if (v.type !== undefined) {
+          // health:hasCode is domained onto ClinicalEntry; Encounter is an activity.
+          encounter.link(`${NS.schema}additionalType`, v.type.id);
+          writeHealthCode(new RdfNode(v.type.id, store), v.type);
+        }
+        const interval = df.blankNode();
+        encounter.add(`${NS.core}atTime`, interval);
+        const time = new RdfNode(interval, store)
+          .link(type, `${NS.time}Interval`)
+          .link(type, `${NS.time}TemporalEntity`);
+        healthInstant(time, `${NS.time}hasBeginning`, v.period.start);
+        if (v.period.end !== undefined) healthInstant(time, `${NS.time}hasEnd`, v.period.end);
+        if (v.serviceProvider !== undefined) {
+          encounter.link(`${NS.health}careProvider`, v.serviceProvider);
+          new RdfNode(v.serviceProvider, store).link(type, `${NS.core}Organization`);
+        }
+      } catch {
+        throw new Error("Invalid encounter");
+      }
       break;
     }
     case "paymentCard": {

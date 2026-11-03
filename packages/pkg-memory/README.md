@@ -32,7 +32,8 @@ const parsed = await parseNanopublications(trig);
 ```
 
 `createFactAssertion` supports `address`, `email`, `phone`, `preference`,
-`condition`, `allergy`, `medication`, `relationship`, and `paymentCard`. Use its discriminated
+`condition`, `allergy`, `medication`, `relationship`, `paymentCard`, `observation`,
+`immunization`, and `encounter`. Use its discriminated
 `Fact` type for the value fields. Residence, clinical, product and role identifiers
 are explicit entity IRIs. Nested preferences, codes and dose schedules use blank
 nodes, canonically skolemized on build. Temporal bounds retain their declared
@@ -50,6 +51,50 @@ address IRIs, so mint a slug for the address entity or leave it out. One fact
 cannot reveal more than its last four digits; splitting a number across many
 facts or other templates is outside what this template can check. Each field is read once, so a getter or proxy cannot
 change a value after it is checked.
+
+`observation` records a measurement or lab result as `health:Observation`, with
+an explicit entity `id`, a `code: HealthCode`, exactly one numeric or string
+`value`, an `effective: HealthTemporalValue`, optional UCUM `unitCode` and optional
+`kind` (`measurement` or `lab`, stored as `schema:category`). Numbers use the
+package's canonical `xsd:decimal` spelling, expanding exponent notation; strings
+remain `xsd:string`. `health:hasCode` links the explicitly identified
+`health:CodeableConcept`. `HealthCode.code` is required: the health SHACL profile
+MUST have `core:value`, even when an identifier or display label is supplied.
+Its optional `system` is an IRI linked through `core:inScheme`, and `display`
+becomes `schema:name`.
+
+`immunization` records `health:Immunization` with an explicit `id`, `vaccine`,
+`occurrence: HealthTemporalValue` and optional `lotNumber` (`schema:lotNumber`).
+The shape requires `health:medication` to reference a `health:MedicinalProduct`,
+so `vaccine.id` identifies that product. Its optional `display` becomes
+`schema:name`; when `code` is supplied, a nested blank-node
+`health:CodeableConcept` is linked through `core:identifiedBy`. Supplying a
+coding `system` also requires `code`, satisfying the concept's MUST value.
+Occurrence uses `core:atTime` because the health profile has no occurrence property.
+
+`encounter` records `health:Encounter` with an explicit `id`, a required
+`period: { start: HealthTemporalValue; end?: HealthTemporalValue }`, optional
+`type: HealthCode` and optional `serviceProvider` IRI. The period is an OWL-Time
+interval linked through `core:atTime`, with `time:hasBeginning` and optional
+`time:hasEnd` instants; these describe occurrence, not assertion validity.
+The provider uses the vocabulary's `health:careProvider`. The type concept uses
+`schema:additionalType`: `health:hasCode` is domained onto clinical records,
+whereas an encounter is an activity. The template does not assume that a
+custodial provider also performed the encounter (`health:recordedBy`, a SHOULD).
+
+All three health templates mirror `condition`'s entry-to-owner `health:patient`
+link, with no reverse link. They explicitly type the owner as `core:Person`
+and time nodes as `time:TemporalEntity`, satisfying MUST class constraints
+without an ontology reasoner. `HealthTemporalValue` accepts only `date` and
+`dateTime`; dates use `time:inXSDDate`, date-times `time:inXSDDateTime`, through
+the existing temporal validation and normalization. The shape requires a temporal
+entity, not `xsd:dateTimeStamp` (which the package does not support). Nested times
+and vaccine codes are blank nodes, skolemized on build. Every field is read once
+into a snapshot; unknown keys, wrong types, invalid IRIs/times, non-finite numbers
+and detected card numbers in free text are refused with fixed messages
+(`Invalid observation`, `Invalid immunization`, `Invalid encounter`). Tests use
+the vocabulary package's installed SHACL validator against the canonical health
+profile, checking MUST violations separately from SHOULD warnings.
 
 `findCardNumbers` and `containsCardNumber` expose the detector. It flags every
 Luhn-valid window of 12 to 19 digits that does not start with 0, in linear time.

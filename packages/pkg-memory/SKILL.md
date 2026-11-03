@@ -1,6 +1,6 @@
 ---
 name: pkg-memory
-description: Use when building, serializing, parsing or classifying PKG nanopublications and the nine typed memory fact templates (including the payment-card template that never stores a card number), enforcing purpose policies, or storing memory through PodPort.
+description: Use when building, serializing, parsing or classifying PKG nanopublications and the twelve typed memory fact templates (including the payment-card template that never stores a card number), enforcing purpose policies, or storing memory through PodPort.
 ---
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 <!-- AUTHORED-BY Codex GPT-6 -->
@@ -34,6 +34,15 @@ swap values after the check. Refusals never echo the value. Ask the user for the
 full number each time a form needs it. The template does not scan other templates
 or Turtle bodies; run `containsCardNumber` on untrusted text (percent-decoded
 first) before storing it. `findCardNumbers` returns UTF-16 spans for redaction.
+
+Use `observation` for measurements/lab results, `immunization` for vaccine
+administration records and `encounter` for clinical visits. Their snapshots reject
+unknown keys and card numbers in free text, with fixed refusal messages. Clinical
+times accept only `date` or `dateTime`. Supplied `HealthCode` concepts require a
+code (`core:value`); a vaccine product may omit coding, but supplying its system
+also requires a code. Vaccines use `health:medication`, providers use
+`health:careProvider`, and occurrence/encounter intervals use `core:atTime`.
+See the README for the remaining shape-driven property mappings.
 
 Use `purposeFilter(policy, purpose, clientId)` on every personal-data read. It
 requires an ODRL permit for every category and denies uncategorized data and
