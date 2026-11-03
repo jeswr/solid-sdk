@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 import { DataFactory } from "n3";
 import { describe, expect, it } from "vitest";
@@ -204,4 +205,36 @@ describe("DriveContainerDataset", () => {
     );
     expect(ds.container).toBeUndefined();
   });
+});
+
+it("sorts same-kind drive entries by their decoded names", () => {
+  const container = readContainer(
+    "https://pod.example/drive/",
+    turtle(
+      `
+    @prefix ldp: <http://www.w3.org/ns/ldp#>.
+    <> a ldp:Container; ldp:contains <b.txt>, <a.txt>.
+    <b.txt> a ldp:Resource.
+    <a.txt> a ldp:Resource.
+  `,
+      "https://pod.example/drive/",
+    ),
+  );
+  expect(container.entries.map((entry) => entry.name)).toEqual(["a.txt", "b.txt"]);
+});
+
+it("keeps folders first when the server lists a file before a folder", () => {
+  const container = readContainer(
+    "https://pod.example/drive/",
+    turtle(
+      `
+    @prefix ldp: <http://www.w3.org/ns/ldp#>.
+    <> a ldp:Container; ldp:contains <file>, <folder/>.
+    <folder/> a ldp:Container.
+    <file> a ldp:Resource.
+  `,
+      "https://pod.example/drive/",
+    ),
+  );
+  expect(container.entries.map((entry) => entry.name)).toEqual(["folder", "file"]);
 });

@@ -2,6 +2,11 @@
 
 # @jeswr/solid-session-restore
 
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+
+> **Deprecated — use `@jeswr/pod-auth`.** See the [pod-auth migration guide](../pod-auth/SKILL.md).
+> This package remains available for existing consumers and pinned mirrors; the API below is legacy.
+
 Framework-agnostic browser helpers for securely persisting and silently restoring Solid-OIDC
 sessions with DPoP-bound refresh tokens.
 

@@ -1,6 +1,8 @@
 {
+  "$comment": "AUTHORED-BY Codex GPT-6.1-Sol",
   "name": "@jeswr/solid-dpop",
   "version": "0.1.0",
+  "deprecated": "Use @jeswr/pod-auth",
   "description": "Solid-OIDC client-credentials session + RFC 9449 DPoP proof primitives, plus the user-delegated authorization-code + PKCE + DPoP flow. jose-only crypto; ESM + CJS.",
   "type": "module",
   "license": "MIT",

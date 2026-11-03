@@ -1,3 +1,8 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-/** Reserved channels/lws-sse entry point for @jeswr/pod-notifications; implementation follows T-001. */
-export {};
+import { createPushChannel, type PushChannelOptions } from "./push.js";
+
+export type { PushChannelOptions } from "./push.js";
+/** Batch LWS topics into one SSE subscription with native Last-Event-ID replay. */
+export function createLwsSseChannel(options: PushChannelOptions) {
+  return createPushChannel(options, "lws", "sse");
+}
