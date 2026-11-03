@@ -228,6 +228,8 @@ it("performs SDK DCR + PKCE + Solid login + consent and calls every tool on priv
   expect(await call("chat_get", { provider: "claude", conversationId: "mcp-e2e" })).toContain(
     "Please remember my preferences",
   );
+  // No shared-context document exists on the fresh pod, so context_read reports setup guidance.
+  expect(await call("context_read", {})).toContain('"status":"not_found"');
   expect(called).toEqual(new Set((await client.listTools()).tools.map((tool) => tool.name)));
   // The composition preserves the tool package's scope and purpose boundaries.
   await call("fetch", { id: "http://169.254.169.254/latest/meta-data/" }, true);
