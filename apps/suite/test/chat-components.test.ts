@@ -193,6 +193,95 @@ it("windows long histories and can focus the actual first and last messages", as
   });
   expect((document.activeElement as HTMLElement).dataset.messageId).toBe(messages[236]?.id);
 });
+it("reveals a linked message outside the virtual window and briefly highlights it without stealing focus on refresh", async () => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  try {
+    const pod = createDemoPod({ root: ROOT });
+    const activeSession = session(pod);
+    const messages = Array.from({ length: 240 }, (_, i) =>
+      message(`linked-${String(i).padStart(3, "0")}`, ME, new Date(Date.now() + i * 1000)),
+    );
+    const target = messages[0] as Message;
+    const scroll = vi.fn();
+    Object.defineProperty(window.HTMLElement.prototype, "scrollIntoView", {
+      configurable: true,
+      value: scroll,
+    });
+    const tree = (items: Message[]) =>
+      h(ChatProvider, {
+        session: activeSession,
+        children: h(Timeline, { ...timelineProps, messages: items, messageId: target.id }),
+      });
+    const view = await mount(tree(messages));
+    const article = view.host.querySelector(`[data-message-id="${target.id}"]`) as HTMLElement;
+    expect(document.activeElement).toBe(article);
+    expect(article.hasAttribute("data-highlighted")).toBe(true);
+    expect(scroll).toHaveBeenCalledWith({ block: "center", behavior: "auto" });
+    const log = view.host.querySelector('[role="log"]') as HTMLElement;
+    await act(() => log.focus());
+    await view.render(tree([...messages]));
+    expect(document.activeElement).toBe(log);
+    await act(() => vi.advanceTimersByTime(3000));
+    expect(article.hasAttribute("data-highlighted")).toBe(false);
+    await view.unmount();
+    delete (window.HTMLElement.prototype as { scrollIntoView?: unknown }).scrollIntoView;
+  } finally {
+    vi.useRealTimers();
+  }
+});
+it("honours an encoded message reference by paging backwards and focusing the room article", async () => {
+  const pod = createDemoPod({ root: ROOT });
+  const client = new ChatClient(pod.fetch, ROOT, ME);
+  const room = await client.createRoom({ name: "Search history", members: [] });
+  const target = await client.send(room.url, "An older garden plan", {
+    at: new Date(Date.now() - 16 * 86400000),
+  });
+  await client.send(room.url, "A recent message");
+  vi.spyOn(ChatClient.prototype, "room").mockResolvedValue({
+    ...room,
+    created: new Date(Date.now() - 28 * 86400000).toISOString(),
+  });
+  const view = await mount(
+    h(ChatProvider, {
+      session: session(pod),
+      children: h(RoomRoute, {
+        reference: encodeRef(room.url),
+        messageReference: encodeRef(target.id),
+      }),
+    }),
+  );
+  expect(view.host.querySelectorAll("article")).toHaveLength(2);
+  const article = [...view.host.querySelectorAll<HTMLElement>("article")].find(
+    (node) => node.dataset.messageId === target.id,
+  );
+  expect(document.activeElement).toBe(article);
+  expect(article?.hasAttribute("data-highlighted")).toBe(true);
+});
+it("bounds missing-message history loads to four older pages and announces an unavailable target", async () => {
+  const pod = createDemoPod({ root: ROOT });
+  const client = new ChatClient(pod.fetch, ROOT, ME);
+  const room = await client.createRoom({ name: "Missing target", members: [] });
+  const loads = vi
+    .spyOn(ChatClient.prototype, "messages")
+    .mockImplementation(async (_url, options) => ({
+      messages: [],
+      next: new Date((options?.before?.getTime() ?? Date.now()) - 7 * 86400000),
+    }));
+  const view = await mount(
+    h(ChatProvider, {
+      session: session(pod),
+      children: h(RoomView, { url: room.url, messageId: `${room.url}2026/01/01.ttl#absent` }),
+    }),
+  );
+  expect(view.host.textContent).toContain("This message couldn't be found in the loaded history.");
+  const earliest = Math.min(
+    ...loads.mock.calls.map(([, options]) => options?.before?.getTime() ?? Date.now()),
+  );
+  expect(earliest).toBeGreaterThanOrEqual(Date.now() - 28 * 86400000 - 1000);
+  expect(earliest).toBeLessThan(Date.now() - 27 * 86400000);
+  expect(loads.mock.calls.length).toBeLessThanOrEqual(20);
+  await accessible(view.host);
+});
 it("renders named pressed/unpressed reaction chips and toggles through the invalidating action", async () => {
   const pod = createDemoPod({ root: ROOT });
   const react = vi.spyOn(ChatClient.prototype, "react").mockResolvedValue();

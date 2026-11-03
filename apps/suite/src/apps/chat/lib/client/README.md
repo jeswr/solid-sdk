@@ -37,6 +37,20 @@ preference transport is isolated in `preferences-store.ts` until the SDK prefere
   use the separately injected public transport with credentials omitted and redirects refused.
   Message URLs are linkified;
   preview metadata, images and arbitrary link destinations are never fetched.
+- `search(source, { days = 30, maxRooms = 50, timeZone })` searches only joined rooms,
+  in their listed order, with four room reads at a time. Positive integer budgets default to
+  30 UTC day shards and 50 rooms; callers can choose smaller or larger budgets, with days
+  capped at the model's 366-shard maximum. At most 200 ranked results are returned. `truncated`
+  reports omitted rooms, older day pages or results. `searchedRooms` counts successful room
+  loads; unavailable indexes/day pages appear in `skipped` without discarding other rooms.
+  `in:` accepts an exact room URL or an exact, case-insensitive joined room name (quote
+  names with spaces, e.g. `in:"Book club"`). Duplicate names resolve to the first listed room;
+  negated room filters follow the same rule. Filters never discover or join other rooms.
+  Author names use already cached profiles, falling back to WebIDs; search fetches no profiles.
+  Foreign notes without authors/timestamps use “Unknown author”/the Unix epoch. Deleted
+  notes and tombstones are excluded. Attachments and reply relations are not yet represented
+  by this client, so `has:attachment` and `is:thread` do not match; text link/mention filters
+  use the pure engine. Query and zone failures propagate as its typed `SearchError`.
 
 `test/chat-client*.test.ts` exercises the facade against the demo pod, including LongChat,
 UTC midnight, competing writers and preference conflicts. The client and model retain

@@ -1,19 +1,20 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 import { createRequire } from "node:module";
-import { expect, it, vi } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 import { ChatClient } from "../src/apps/chat/lib/client";
 import type { ChatSession } from "../src/apps/chat/state/chat-context";
 import { createDemoPod } from "../src/lib/demo-pod/pod";
-import { h, mount } from "./drive-ui-dom";
+import { act, click, h, key, mount } from "./drive-ui-dom";
 
 const mocks = vi.hoisted(() => ({
   session: undefined as ChatSession | undefined,
   replace: vi.fn(),
+  push: vi.fn(),
 }));
 vi.mock("next/navigation", () => ({
   usePathname: () => "/chat",
-  useRouter: () => ({ replace: mocks.replace }),
+  useRouter: () => ({ replace: mocks.replace, push: mocks.push }),
 }));
 vi.mock(
   "@/components/interim-shell/suite-frame",
@@ -27,6 +28,7 @@ vi.mock("@/lib/session/pod-session", () => ({
 
 import { ChatApp, ChatLanding } from "../src/apps/chat/components/chat-app";
 import { RoomView } from "../src/apps/chat/components/room";
+import { ChatSearchPage } from "../src/apps/chat/components/search";
 
 const ROOT = "https://alice.example/";
 const ME = `${ROOT}profile#me`;
@@ -58,6 +60,11 @@ function setup(live = true) {
   };
   return new ChatClient(pod.fetch, ROOT, ME);
 }
+afterEach(() => {
+  vi.restoreAllMocks();
+  mocks.push.mockClear();
+  localStorage.clear();
+});
 it("wires the actual session, frame, empty sidebar and empty main with valid heading order", async () => {
   setup();
   const view = await mount(h(ChatApp, { children: h(ChatLanding) }));
@@ -84,4 +91,76 @@ it("renders the polling capability fallback once and keeps unread/read hooks in 
   expect(view.host.querySelector('[data-slot="badge"]')).toBeNull();
   expect(view.host.textContent).not.toContain("Load earlier messages");
   await accessible(view.host.querySelector("main") as HTMLElement);
+});
+it("submits sidebar searches and scopes the slash shortcut to non-editable Chat content", async () => {
+  setup();
+  const view = await mount(h(ChatApp, { children: h(ChatLanding) }));
+  const field = view.host.querySelector<HTMLInputElement>(
+    '[data-chat-search="sidebar"]',
+  ) as HTMLInputElement;
+  const main = view.host.querySelector("main") as HTMLElement;
+  await act(() => main.focus());
+  await key(main, "/");
+  expect(document.activeElement).toBe(field);
+  const editable = document.createElement("div");
+  editable.contentEditable = "true";
+  editable.setAttribute("contenteditable", "");
+  editable.tabIndex = 0;
+  main.append(editable);
+  await act(() => editable.focus());
+  await key(editable, "/");
+  expect(document.activeElement).toBe(editable);
+  await act(() => main.focus());
+  localStorage.setItem("suite.settings.shortcuts", "off");
+  await key(main, "/");
+  expect(document.activeElement).toBe(main);
+  localStorage.removeItem("suite.settings.shortcuts");
+  await act(() => {
+    Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set?.call(
+      field,
+      "garden & books",
+    );
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  // Submit after the controlled edit is committed.
+  await act(() =>
+    field.closest("form")?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
+  );
+  expect(mocks.push).toHaveBeenLastCalledWith("/chat/search?q=garden%20%26%20books");
+  await view.unmount();
+  await key(document.body, "/");
+  expect(document.activeElement).not.toBe(field);
+});
+it("prefers the search page field for slash and renders real client results accessibly", async () => {
+  const client = setup();
+  const room = await client.createRoom({ name: "Garden club", members: [] });
+  await client.send(room.url, "Garden plans");
+  const view = await mount(h(ChatApp, { children: h(ChatSearchPage, { query: "garden" }) }));
+  const main = view.host.querySelector("main") as HTMLElement;
+  const pageField = main.querySelector("input");
+  await act(() => main.focus());
+  await key(main, "/");
+  expect(document.activeElement).toBe(pageField);
+  expect(main.querySelector("mark")?.textContent).toBe("Garden");
+  await accessible(main);
+  await click(view.host.querySelector('[aria-label="Open navigation"]') as Element);
+  const drawer = document.querySelector('[role="dialog"]') as HTMLElement;
+  const drawerField = drawer.querySelector("input");
+  const link = drawer.querySelector('a[href="/chat/new"]') as HTMLElement;
+  await act(() => link.focus());
+  await key(link, "/");
+  expect(document.activeElement).toBe(drawerField);
+});
+it("opens the search page on narrow screens when the sidebar field is hidden", async () => {
+  setup();
+  const matchMedia = window.matchMedia;
+  vi.spyOn(window, "matchMedia").mockImplementation((query) => ({
+    ...matchMedia(query),
+    matches: true,
+  }));
+  const view = await mount(h(ChatApp, { children: h(ChatLanding) }));
+  const main = view.host.querySelector("main") as HTMLElement;
+  await act(() => main.focus());
+  await key(main, "/");
+  expect(mocks.push).toHaveBeenCalledWith("/chat/search");
 });

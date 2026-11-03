@@ -54,6 +54,7 @@ function MessageArticle({
   retry,
   discard,
   canRewrite,
+  highlighted,
 }: {
   url: string;
   message: TimelineMessage;
@@ -66,6 +67,7 @@ function MessageArticle({
   retry: (id: string) => void;
   discard: (id: string) => void;
   canRewrite: boolean;
+  highlighted: boolean;
 }) {
   const { session } = useChat();
   const actions = useChatActions();
@@ -113,6 +115,7 @@ function MessageArticle({
     <article
       className="chat-message"
       data-message-id={message.id}
+      data-highlighted={highlighted ? "" : undefined}
       data-grouped={grouped ? "" : undefined}
       tabIndex={tabIndex}
       aria-label={`${name}, ${time}`}
@@ -248,6 +251,7 @@ function MessageArticle({
 export function Timeline({
   url,
   messages,
+  messageId,
   outgoing,
   loading,
   hasOlder,
@@ -262,6 +266,7 @@ export function Timeline({
 }: {
   url: string;
   messages: Message[];
+  messageId?: string | undefined;
   outgoing: Outgoing[];
   loading: boolean;
   hasOlder: boolean;
@@ -285,6 +290,8 @@ export function Timeline({
   const target = useRef<string | undefined>(undefined);
   const [windowStart, setWindowStart] = useState(0);
   const heights = useRef(new Map<string, number>());
+  const jumpedTo = useRef<string | undefined>(undefined);
+  const [highlighted, setHighlighted] = useState<string>();
   const all = useMemo(
     () =>
       [
@@ -361,6 +368,16 @@ export function Timeline({
     if (!node) return;
     for (const row of node.querySelectorAll<HTMLElement>("[data-row-id]"))
       heights.current.set(row.dataset.rowId as string, row.getBoundingClientRect().height);
+    // A pending deep link owns the window; automatic bottom scrolling could unmount its article.
+    if (
+      messageId &&
+      jumpedTo.current !== messageId &&
+      rows.some((row) => row.message.id === messageId)
+    ) {
+      nearBottom.current = false;
+      anchor.current = null;
+      return;
+    }
     if (anchor.current && !loading) {
       const mark = anchor.current;
       const index = rows.findIndex((row) => row.message.id === mark.id);
@@ -379,7 +396,37 @@ export function Timeline({
       if (virtual && start !== rows.length - 200) setWindowStart(rows.length - 200);
       else node.scrollTop = node.scrollHeight;
     }
-  }, [rows, start, virtual, loading]);
+  }, [messageId, rows, start, virtual, loading]);
+  useLayoutEffect(() => {
+    if (!messageId) {
+      jumpedTo.current = undefined;
+      return;
+    }
+    if (jumpedTo.current === messageId) return;
+    const index = rows.findIndex((row) => row.message.id === messageId);
+    if (index < 0) return;
+    nearBottom.current = false;
+    anchor.current = null;
+    target.current = messageId;
+    setFocused(messageId);
+    if (virtual && (index < start || index >= start + 200)) {
+      setWindowStart(Math.max(0, Math.min(rows.length - 200, index - 30)));
+      return;
+    }
+    const article = [
+      ...(scroll.current?.querySelectorAll<HTMLElement>("[data-message-id]") ?? []),
+    ].find((node) => node.dataset.messageId === messageId);
+    if (!article) return;
+    jumpedTo.current = messageId;
+    article.scrollIntoView?.({ block: "center", behavior: "auto" });
+    article.focus({ preventScroll: true });
+    setHighlighted(messageId);
+  }, [messageId, rows, start, virtual]);
+  useEffect(() => {
+    if (!highlighted) return;
+    const timer = setTimeout(() => setHighlighted(undefined), 3000);
+    return () => clearTimeout(timer);
+  }, [highlighted]);
   const older = () => {
     if (loading || !hasOlder) return;
     const node = scroll.current;
@@ -508,6 +555,7 @@ export function Timeline({
               url={url}
               message={message}
               grouped={grouped}
+              highlighted={highlighted === message.id}
               tabIndex={focused === message.id ? 0 : -1}
               onFocus={() => setFocused(message.id)}
               onEdit={onEdit}

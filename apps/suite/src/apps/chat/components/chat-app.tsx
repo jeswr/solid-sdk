@@ -18,6 +18,7 @@ import { type ReactNode, useCallback, useEffect, useState } from "react";
 import { SuiteFrame } from "@/components/interim-shell/suite-frame";
 import { encodeRef } from "@/lib/refs";
 import { PodSessionProvider, usePodSessionState } from "@/lib/session/pod-session";
+import { characterShortcutsEnabled } from "@/shell/lib/shortcut-settings";
 import { classifyChatError, type Room } from "../lib/client";
 import {
   ChatProvider,
@@ -27,6 +28,7 @@ import {
   useRooms,
   useUnread,
 } from "../state/chat-context";
+import { ChatSearchField } from "./search-field";
 
 export function ChatFailure({ error, retry }: { error: unknown; retry: () => void }) {
   return (
@@ -113,6 +115,7 @@ function Sidebar() {
   const unread = useUnread();
   return (
     <nav className="chat-sidebar" aria-label="Conversations">
+      <ChatSearchField />
       <Button asChild className="chat-new-room">
         <Link href="/chat/new">
           <Plus aria-hidden="true" size={18} />
@@ -219,17 +222,31 @@ function Details({ url }: { url: string }) {
 }
 function Chrome({ children }: { children: ReactNode }) {
   const { details, setDetails, currentRoom } = useChat();
+  const router = useRouter();
   useEffect(() => {
     const shortcut = (event: KeyboardEvent) => {
       if (
         event.defaultPrevented ||
+        event.isComposing ||
         event.metaKey ||
         event.ctrlKey ||
         event.altKey ||
         (event.target instanceof Element &&
-          event.target.closest("input,textarea,select,[contenteditable=true]"))
+          event.target.closest(
+            'input,textarea,select,[contenteditable]:not([contenteditable="false"]),[role="textbox"]',
+          )) ||
+        !characterShortcutsEnabled()
       )
         return;
+      if (event.key === "/") {
+        const field =
+          document.querySelector<HTMLInputElement>('[role="dialog"] [data-chat-search]') ??
+          document.querySelector<HTMLInputElement>('[data-chat-search="page"]');
+        event.preventDefault();
+        if (field) field.focus();
+        else if (window.matchMedia("(max-width: 1023px)").matches) router.push("/chat/search");
+        else document.querySelector<HTMLInputElement>(".ish-sidebar [data-chat-search]")?.focus();
+      }
       if (event.key === "]") {
         event.preventDefault();
         setDetails(!details);
@@ -237,7 +254,7 @@ function Chrome({ children }: { children: ReactNode }) {
     };
     addEventListener("keydown", shortcut);
     return () => removeEventListener("keydown", shortcut);
-  }, [details, setDetails]);
+  }, [details, setDetails, router]);
   return (
     <SuiteFrame
       app="chat"

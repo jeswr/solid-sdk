@@ -1,6 +1,18 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { RoomRoute } from "@/apps/chat/components/room";
-export default async function RoomPage({ params }: { params: Promise<{ ref: string }> }) {
+export default async function RoomPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ ref: string }>;
+  searchParams: Promise<{ message?: string | string[] }>;
+}) {
   const { ref } = await params;
-  return <RoomRoute reference={ref} />;
+  const { message } = await searchParams;
+  return (
+    <RoomRoute
+      reference={ref}
+      messageReference={typeof message === "string" ? message : undefined}
+    />
+  );
 }

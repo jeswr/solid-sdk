@@ -133,7 +133,7 @@ function MemberAvatar({ webId }: { webId: string }) {
     </li>
   );
 }
-export function RoomView({ url }: { url: string }) {
+export function RoomView({ url, messageId }: { url: string; messageId?: string | undefined }) {
   const room = useRoom(url);
   const joined = useRooms();
   const messages = useMessages(url, room.data?.created);
@@ -147,11 +147,34 @@ export function RoomView({ url }: { url: string }) {
   const [deleteError, setDeleteError] = useState("");
   const read = useRef(0);
   const [renderedAt, setRenderedAt] = useState(0);
+  const [messageNotice, setMessageNotice] = useState("");
+  const jump = useRef({ messageId, pages: 0, cursor: "" });
   const member = room.data?.members.includes(session.webId);
   const isJoined = joined.data?.some((room) => room.url === url);
   useEffect(() => {
     setCurrentRoom(url);
   }, [url, setCurrentRoom]);
+  useEffect(() => {
+    if (jump.current.messageId !== messageId) {
+      jump.current = { messageId, pages: 0, cursor: "" };
+      setMessageNotice("");
+    }
+    if (!messageId || !messages.data || messages.status !== "ready") return;
+    if (messages.data.messages.some((message) => message.id === messageId)) {
+      setMessageNotice("");
+      return;
+    }
+    const cursor = messages.data.next?.toISOString();
+    if (!cursor || jump.current.pages >= 4) {
+      setMessageNotice("This message couldn't be found in the loaded history.");
+      return;
+    }
+    // A paging render can still expose the previous snapshot. Consume each cursor once.
+    if (jump.current.cursor === cursor) return;
+    jump.current.cursor = cursor;
+    jump.current.pages++;
+    messages.loadOlder();
+  }, [messageId, messages.data, messages.status, messages.loadOlder]);
   // Only mark the visible snapshot read while this tab has the user's attention.
   // A monotonic local fence prevents preference notifications causing a write loop.
   useEffect(() => {
@@ -240,6 +263,11 @@ export function RoomView({ url }: { url: string }) {
       </header>
       {room.status === "error" && <ChatFailure error={room.error} retry={room.retry} />}
       {messages.status === "error" && <ChatFailure error={messages.error} retry={messages.retry} />}
+      {messageNotice && (
+        <p className="chat-message-notice" role="status">
+          {messageNotice}
+        </p>
+      )}
       {!messages.data && messages.status === "error" ? (
         <div className="chat-timeline" />
       ) : !messages.data ? (
@@ -248,6 +276,7 @@ export function RoomView({ url }: { url: string }) {
         <Timeline
           url={url}
           messages={list}
+          messageId={messageId}
           outgoing={send.data}
           loading={messages.status === "loading"}
           hasOlder={!!messages.data.next}
@@ -343,11 +372,19 @@ export function RoomView({ url }: { url: string }) {
     </div>
   );
 }
-export function RoomRoute({ reference }: { reference: string }) {
+export function RoomRoute({
+  reference,
+  messageReference,
+}: {
+  reference: string;
+  messageReference?: string | undefined;
+}) {
   const { client } = useChat();
   let url: string;
+  let messageId: string | undefined;
   try {
     url = roomContainer(decodeRef(reference));
+    if (messageReference) messageId = decodeRef(messageReference);
   } catch {
     return (
       <div className="chat-state" role="alert">
@@ -368,5 +405,5 @@ export function RoomRoute({ reference }: { reference: string }) {
         <a href="/chat">Back to Chat</a>
       </div>
     );
-  return <RoomView key={url} url={url} />;
+  return <RoomView key={url} url={url} messageId={messageId} />;
 }

@@ -37,6 +37,7 @@ import {
   unreact,
 } from "../model";
 import { copyMessageTask, loadProfileName, loadRoomFiles } from "../model/extras";
+import { evaluateQuery, parseQuery, type SearchMessage, type SearchSnippet } from "../search";
 import { aggregateReactions, type ReactionSummary } from "../timeline";
 import { PreferencesStore } from "./preferences-store";
 
@@ -54,6 +55,22 @@ export interface Message extends ChatMessage {
   deleted: boolean;
   edited: boolean;
   reactions: ReactionSummary[];
+}
+export interface ChatSearchOptions {
+  days?: number;
+  maxRooms?: number;
+  timeZone: string;
+}
+export interface ChatSearchResult {
+  results: {
+    room: { url: string; name: string };
+    message: Message;
+    snippet: SearchSnippet;
+    score: number;
+  }[];
+  searchedRooms: number;
+  skipped: { url: string; name: string }[];
+  truncated: boolean;
 }
 export class ChatClientError extends Error {
   override name = "ChatClientError";
@@ -157,6 +174,80 @@ export class ChatClient {
       for (const [message, found] of readReactions(document.dataset, document.url))
         reactions.set(message, [...(reactions.get(message) ?? []), ...found]);
     return { messages: this.remember(page.messages, reactions), next: page.next };
+  }
+  async search(
+    source: string,
+    { days = 30, maxRooms = 50, timeZone }: ChatSearchOptions,
+  ): Promise<ChatSearchResult> {
+    const parsed = parseQuery(source);
+    // Fail invalid queries/zones before reading any pod data; preserve the engine's typed errors.
+    evaluateQuery(parsed, [], timeZone);
+    if (!Number.isSafeInteger(days) || days < 1 || !Number.isSafeInteger(maxRooms) || maxRooms < 1)
+      throw new ChatModelError("invalid-input");
+    const joined = await this.joinedRooms();
+    const rooms = joined.slice(0, maxRooms);
+    const budget = Math.min(days, 366);
+    const query = {
+      ...parsed,
+      terms: parsed.terms.map((term) => {
+        if (term.type !== "filter" || term.field !== "in") return term;
+        const room = joined.find(
+          (room) => !("error" in room) && room.name.toLowerCase() === term.value.toLowerCase(),
+        );
+        return room ? { ...term, value: room.url } : term;
+      }),
+    };
+    const result: ChatSearchResult = {
+      results: [],
+      searchedRooms: 0,
+      skipped: [],
+      truncated: joined.length > rooms.length || days > budget,
+    };
+    const snapshot = new Map<string, { room: { url: string; name: string }; message: Message }>();
+    const before = new Date();
+    let cursor = 0;
+    await Promise.all(
+      Array.from({ length: Math.min(4, rooms.length) }, async () => {
+        while (cursor < rooms.length) {
+          const room = rooms[cursor++] as JoinedRoom;
+          const summary = { url: room.url, name: "error" in room ? room.url : room.name };
+          try {
+            if ("error" in room) throw room.error;
+            const page = await this.messages(room.url, { before, days: budget });
+            result.searchedRooms++;
+            if (page.next) result.truncated = true;
+            for (const message of page.messages) {
+              if (!message.deleted && !message.tombstone && message.deletedAt === undefined) {
+                snapshot.set(message.id, { room: summary, message });
+              }
+            }
+          } catch {
+            result.skipped.push(summary);
+          }
+        }
+      }),
+    );
+    const records: SearchMessage[] = await Promise.all(
+      [...snapshot.values()].map(async ({ room, message }) => ({
+        id: message.id,
+        roomId: room.url,
+        authorWebId: message.author ?? "unknown",
+        authorName:
+          (await this.profiles.get(message.author ?? "")) ?? message.author ?? "Unknown author",
+        text: message.content,
+        createdAt: message.published ? Date.parse(message.published) : 0,
+        hasAttachment: false,
+        inReplyTo: null,
+      })),
+    );
+    const matches = evaluateQuery(query, records, timeZone);
+    if (matches.length > 200) result.truncated = true;
+    result.results = matches.slice(0, 200).map(({ message, snippet, score }) => ({
+      ...(snapshot.get(message.id) as { room: { url: string; name: string }; message: Message }),
+      snippet,
+      score,
+    }));
+    return result;
   }
   async send(
     room: string,
