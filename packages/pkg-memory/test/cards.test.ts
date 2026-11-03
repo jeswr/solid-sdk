@@ -1,4 +1,6 @@
 // AUTHORED-BY Claude Opus 5.5
+
+import type { Quad_Object, Store } from "n3";
 import { DataFactory as df } from "n3";
 import { describe, expect, it } from "vitest";
 import {
@@ -12,7 +14,6 @@ import { NS } from "../src/rdf.js";
 import { exampleBuildOptions } from "../src/testing.js";
 
 const owner = exampleBuildOptions().owner;
-const CARD = "https://example.org/entities/card";
 const BILLING = "https://example.org/entities/residence";
 
 function card(value: Record<string, unknown>): Fact {
@@ -20,18 +21,24 @@ function card(value: Record<string, unknown>): Fact {
 }
 
 const valid = {
-  id: CARD,
   brand: "visa",
   last4: "1111",
   expires: { value: "2027-09", datatype: "gYearMonth" },
   billingAddress: BILLING,
 };
 
+function serialize(store: Store): string {
+  return store
+    .getQuads(null, null, null, null)
+    .map(({ object }) => object.value)
+    .join(" ");
+}
+
 function naive(digits: string): boolean {
   for (let start = 0; start < digits.length; start += 1)
     for (let length = 12; length <= 19 && start + length <= digits.length; length += 1) {
       const window = digits.slice(start, start + length);
-      if (!/^(?:4|5[1-5]|2[2-7]|3[0-9]|6)/.test(window)) continue;
+      if (window.startsWith("0")) continue;
       let sum = 0;
       for (let i = 0; i < window.length; i += 1) {
         let digit = Number(window[window.length - 1 - i]);
@@ -46,17 +53,33 @@ function naive(digits: string): boolean {
 describe("payment-card fact template", () => {
   it("records brand, last four, expiry month and billing address only", () => {
     const store = createFactAssertion(owner, card(valid));
-    const has = (s: string, p: string, o: string) =>
-      store.has(df.quad(df.namedNode(s), df.namedNode(p), df.namedNode(o)));
-    expect(has(owner, `${NS.schema}owns`, CARD)).toBe(true);
-    expect(has(CARD, `${NS.rdf}type`, `${NS.schema}PaymentCard`)).toBe(true);
-    expect(has(CARD, `${NS.schema}address`, BILLING)).toBe(true);
+    const [owns, ...more] = store.getQuads(
+      df.namedNode(owner),
+      df.namedNode(`${NS.schema}owns`),
+      null,
+      null,
+    );
+    expect(more).toEqual([]);
+    const node = owns?.object as Quad_Object;
+    expect(node.termType).toBe("BlankNode");
+    expect(
+      store.has(
+        df.quad(
+          node as never,
+          df.namedNode(`${NS.rdf}type`),
+          df.namedNode(`${NS.schema}PaymentCard`),
+        ),
+      ),
+    ).toBe(true);
+    expect(
+      store.has(df.quad(node as never, df.namedNode(`${NS.schema}address`), df.namedNode(BILLING))),
+    ).toBe(true);
     const literals = store
       .getQuads(null, null, null, null)
       .flatMap(({ object }) => (object.termType === "Literal" ? [object.value] : []));
     expect(literals.sort()).toEqual(["1111", "2027-09", "last4", "visa"]);
     const expiry = store.getQuads(
-      df.namedNode(CARD),
+      node as never,
       df.namedNode(`${NS.schema}validThrough`),
       null,
       null,
@@ -66,6 +89,43 @@ describe("payment-card fact template", () => {
     expect(noAddress.getQuads(null, df.namedNode(`${NS.schema}address`), null, null)).toEqual([]);
     for (const brand of PAYMENT_CARD_BRANDS)
       expect(() => createFactAssertion(owner, card({ ...valid, brand }))).not.toThrow();
+    for (const address of [
+      "https://example.org/entities/flat-12",
+      "https://example.org/entities/123456",
+      "urn:uuid:aaaabbbb-cccc-dddd-eeee-ffffff001122",
+    ])
+      expect(() =>
+        createFactAssertion(owner, card({ ...valid, billingAddress: address })),
+      ).not.toThrow();
+  });
+
+  it("reads each field once, so a getter or proxy cannot swap in a card number", () => {
+    const pan = "4111111111111111";
+    const swapping = (safe: string) => {
+      let reads = 0;
+      return { enumerable: true, get: () => (reads++ === 0 ? safe : pan) };
+    };
+    for (const [key, safe] of [
+      ["brand", "visa"],
+      ["last4", "1111"],
+      ["billingAddress", BILLING],
+    ] as const) {
+      const value = Object.defineProperty({ ...valid }, key, swapping(safe));
+      const store = createFactAssertion(owner, card(value));
+      expect(serialize(store)).not.toContain("4111111111111111");
+    }
+    let reads = 0;
+    const proxy = new Proxy(
+      { ...valid },
+      { get: (target, key) => (key === "last4" && reads++ > 0 ? pan : Reflect.get(target, key)) },
+    );
+    expect(serialize(createFactAssertion(owner, card(proxy)))).not.toContain(pan);
+    let monthReads = 0;
+    const expires = Object.defineProperty({ datatype: "gYearMonth" }, "value", {
+      enumerable: true,
+      get: () => (monthReads++ === 0 ? "2027-09" : pan),
+    });
+    expect(serialize(createFactAssertion(owner, card({ ...valid, expires })))).not.toContain(pan);
   });
 
   it.each([
@@ -83,13 +143,46 @@ describe("payment-card fact template", () => {
       "an expiry carrying a number",
       { ...valid, expires: { value: "4111111111111111", datatype: "gYearMonth" } },
     ],
-    ["a card number in the id", { ...valid, id: "https://example.org/cards/4111-1111-1111-1111" }],
+    ["a caller-chosen id", { ...valid, id: "https://example.org/cards/4111-1111-1111-1111" }],
     [
       "a card number in the address",
       { ...valid, billingAddress: "https://example.org/4111111111111111" },
     ],
-    ["a non-string id", { ...valid, id: 4111111111111111 }],
+    [
+      "a truncated card number in the address",
+      { ...valid, billingAddress: "https://example.org/a/453201511283" },
+    ],
+    [
+      "seven digits split by letters",
+      { ...valid, billingAddress: "https://example.org/4a5b3c2d0e1f5g" },
+    ],
+    [
+      "URL-encoded separators",
+      { ...valid, billingAddress: "https://example.org/4111%201111%201111%201111" },
+    ],
+    [
+      "percent-encoded digits",
+      { ...valid, billingAddress: "https://example.org/%34%31%31%31%31%31%31" },
+    ],
+    [
+      "double-encoded digits",
+      { ...valid, billingAddress: "https://example.org/%2534%2531%2531%2531%2531%2531%2531" },
+    ],
+    ["a broken escape", { ...valid, billingAddress: "https://example.org/%E0%A4%A" }],
+    ["an encoded query", { ...valid, billingAddress: "https://example.org/a%3Fcvv=123" }],
+    ["a query", { ...valid, billingAddress: "https://example.org/visa?cvv=123" }],
+    ["a fragment", { ...valid, billingAddress: "https://example.org/visa#123" }],
+    ["form-encoded spaces", { ...valid, billingAddress: "urn:x:4111+1111+1111+1111" }],
+    ["circled digits", { ...valid, billingAddress: "urn:x:④①①①①①①" }],
+    ["superscript digits", { ...valid, billingAddress: "urn:x:⁴¹¹¹¹¹¹" }],
+    ["full-width digits", { ...valid, billingAddress: "urn:x:４１１１１１１" }],
+    [
+      "zero-width separators",
+      { ...valid, billingAddress: "urn:x:4\u200b1\u200b1\u200b1\u200b1\u200b1\u200b1" },
+    ],
     ["a non-string address", { ...valid, billingAddress: 4111111111111111 }],
+    ["a missing expiry", { ...valid, expires: undefined }],
+    ["a null expiry", { ...valid, expires: null }],
     ["a missing value", undefined],
   ])("refuses %s without echoing it", (_label, value) => {
     let message = "";
@@ -115,12 +208,22 @@ describe("card number detection", () => {
       "٤١١١١١١١١١١١١١١١",
       "𝟒𝟏𝟏𝟏𝟏𝟏𝟏𝟏𝟏𝟏𝟏𝟏𝟏𝟏𝟏𝟏",
       "378282246310005",
+      "5018000000000009",
+      "5600000000000003",
+      "8100000000000002",
+      "100000000000009",
+      "4111+1111+1111+1111",
+      "urn:card:4111:1111:1111:1111",
+      "4111\u200b1111\u00ad1111\u200b1111",
+      "④①①①①①①①①①①①①①①①",
+      "⁴¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹",
       `${"0".repeat(70)}4111111111111111`,
     ])
       expect(containsCardNumber(text), text).toBe(true);
     for (const text of [
-      "4111111111111112",
-      "1111 1111 1111 1117",
+      "0000 0000 0000 0000",
+      "12345678901",
+      "ⅣⅠⅠⅠ ⅣⅠⅠⅠ ⅣⅠⅠⅠ ⅣⅠⅠⅠ",
       "phone 07700 900123",
       "",
       "4111 1111 x 1111 1111",

@@ -38,14 +38,22 @@ are explicit entity IRIs. Nested preferences, codes and dose schedules use blank
 nodes, canonically skolemized on build. Temporal bounds retain their declared
 `date`, `dateTime`, `gYearMonth`, or `gYear` precision.
 
-`paymentCard` records `schema:PaymentCard` with `schema:brand`, the last four
-digits as a `schema:PropertyValue` (`propertyID` "last4"), `schema:validThrough`
-as an `xsd:gYearMonth` and an optional `schema:address`. It has no field for a full
-card number or security code, refuses any extra key, and refuses an id, address
-or expiry containing a Luhn-valid card number. `findCardNumbers` and
-`containsCardNumber` expose the detector: every 12 to 19 digit window with a card
-prefix and a valid Luhn check, over Unicode decimal digits with space, dash, dot,
-comma, underscore or slash separators, in linear time.
+`paymentCard` records a blank-node `schema:PaymentCard` that the owner
+`schema:owns`, with `schema:brand`, the last four digits as a
+`schema:PropertyValue` (`propertyID` "last4"), `schema:validThrough` as an
+`xsd:gYearMonth` and an optional `schema:address`. It has no field for a full
+card number, a security code or a card id, and refuses any extra key. A billing
+address IRI may have no query or fragment and at most six digits in all, counted
+after percent-decoding and NFKC normalisation, so it cannot carry a full or
+truncated card number. Each field is read once, so a getter or proxy cannot
+change a value after it is checked.
+
+`findCardNumbers` and `containsCardNumber` expose the detector. It flags every
+Luhn-valid window of 12 to 19 digits that does not start with 0, in linear time.
+Digits can be any Unicode decimal digit or a character that NFKC folds to one
+(circled or superscript digits). Groups can be split by whitespace, dashes,
+invisible format characters, combining marks or `. , _ / + : ; ~ = *`.
+Percent-decode IRIs before scanning them.
 
 The batch contract follows `np_builder.py` (snake-case source fields). Claims can
 supply a default-graph RDF/JS dataset or a Turtle assertion body using the reference

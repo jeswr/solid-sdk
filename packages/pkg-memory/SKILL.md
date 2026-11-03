@@ -26,12 +26,14 @@ shared. Past/revised claims stay in history; Mentioned is never an inference inp
 
 The `paymentCard` template stores only the brand, the last four ASCII digits, the
 expiry month (`gYearMonth`) and an optional billing-address IRI. It never stores a
-full card number (PAN) or security code: extra keys are refused, and an id,
-address or expiry that contains a card number is refused. Refusals never echo the
-value. Ask the user for the full number each time a form needs it. The template
-does not scan other templates or Turtle bodies; run `containsCardNumber` on
-untrusted text before storing it. `findCardNumbers` returns UTF-16 spans for
-redaction and accepts any Unicode decimal digits and common separators.
+full card number (PAN) or security code. The card is a blank node, so there is no
+caller-chosen id. Extra keys are refused. A billing-address IRI with a query, a
+fragment, or more than six digits once percent-decoded and NFKC-normalised is
+refused. Each field is read once into a snapshot, so getters and proxies cannot
+swap values after the check. Refusals never echo the value. Ask the user for the
+full number each time a form needs it. The template does not scan other templates
+or Turtle bodies; run `containsCardNumber` on untrusted text (percent-decoded
+first) before storing it. `findCardNumbers` returns UTF-16 spans for redaction.
 
 Use `purposeFilter(policy, purpose, clientId)` on every personal-data read. It
 requires an ODRL permit for every category and denies uncategorized data and

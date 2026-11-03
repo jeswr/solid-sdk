@@ -1,7 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { safeHttpIri } from "@jeswr/rdf-serialize";
 import { DataFactory as df, Store } from "n3";
-import { containsCardNumber } from "./cards.js";
 import { dateTime, iri, NS, RdfNode, validCalendarDate } from "./rdf.js";
 
 /** Temporal bound whose datatype records its precision (KG §2.3). */
@@ -49,15 +48,16 @@ export type Fact =
       /**
        * A payment card on file, without its number: brand, last four digits, expiry month and
        * an optional billing-address entity. There is deliberately no field for a full card
-       * number (PAN) or security code, and values that carry one are refused.
+       * number (PAN) or security code, and the card node is a blank node, so no caller-chosen
+       * identifier can carry one.
        */
       template: "paymentCard";
       value: {
-        id: string;
         brand: PaymentCardBrand;
         last4: string;
         /** Expiry month, as `gYearMonth` (for example `2027-09`). */
         expires: TemporalValue;
+        /** Billing-address entity IRI: no query or fragment, at most six digits in all. */
         billingAddress?: string;
       };
     }
@@ -86,29 +86,66 @@ export const PAYMENT_CARD_BRANDS = [
 ] as const;
 /** A card network name from {@link PAYMENT_CARD_BRANDS}. */
 export type PaymentCardBrand = (typeof PAYMENT_CARD_BRANDS)[number];
-const CARD_KEYS = new Set(["id", "brand", "last4", "expires", "billingAddress"]);
+const CARD_KEYS = new Set(["brand", "last4", "expires", "billingAddress"]);
 
-/** Refuse anything beyond brand, last four, expiry and billing address; never echo values. */
-function validPaymentCard(value: unknown): boolean {
-  if (typeof value !== "object" || value === null) return false;
+interface PaymentCardSnapshot {
+  brand: PaymentCardBrand;
+  last4: string;
+  expires: { value: string; datatype: "gYearMonth" };
+  billingAddress?: string;
+}
+
+/**
+ * Read each field exactly once into a plain snapshot and check that, so a getter or proxy
+ * cannot pass validation and then return a card number when the RDF is written.
+ */
+function paymentCardSnapshot(value: unknown): PaymentCardSnapshot | undefined {
+  if (typeof value !== "object" || value === null) return undefined;
   const card = value as Record<string, unknown>;
-  if (Object.keys(card).some((key) => !CARD_KEYS.has(key))) return false;
-  if (!(PAYMENT_CARD_BRANDS as readonly unknown[]).includes(card.brand)) return false;
-  if (typeof card.last4 !== "string" || !/^[0-9]{4}$/.test(card.last4)) return false;
-  const expires = card.expires as TemporalValue | undefined;
-  if (
-    typeof expires !== "object" ||
-    expires === null ||
-    expires.datatype !== "gYearMonth" ||
-    typeof expires.value !== "string" ||
-    Object.keys(expires).some((key) => key !== "value" && key !== "datatype")
-  )
-    return false;
-  for (const text of [card.id, card.billingAddress, expires.value])
-    if (typeof text === "string" && containsCardNumber(text)) return false;
-  if (typeof card.id !== "string") return false;
-  if (card.billingAddress !== undefined && typeof card.billingAddress !== "string") return false;
-  return true;
+  if (Object.keys(card).some((key) => !CARD_KEYS.has(key))) return undefined;
+  const brand = card.brand;
+  const last4 = card.last4;
+  const expires = card.expires;
+  const billingAddress = card.billingAddress;
+  if (!(PAYMENT_CARD_BRANDS as readonly unknown[]).includes(brand)) return undefined;
+  if (typeof last4 !== "string" || !/^[0-9]{4}$/.test(last4)) return undefined;
+  if (typeof expires !== "object" || expires === null) return undefined;
+  const bound = expires as Record<string, unknown>;
+  if (Object.keys(bound).some((key) => key !== "value" && key !== "datatype")) return undefined;
+  const month = bound.value;
+  const datatype = bound.datatype;
+  if (datatype !== "gYearMonth" || typeof month !== "string" || !/^\d{4}-\d\d$/.test(month))
+    return undefined;
+  if (billingAddress !== undefined && !safeBillingAddress(billingAddress)) return undefined;
+  return {
+    brand: brand as PaymentCardBrand,
+    last4,
+    expires: { value: month, datatype },
+    ...(billingAddress === undefined ? {} : { billingAddress: billingAddress as string }),
+  };
+}
+
+/**
+ * A billing-address IRI may not hide card data: no query or fragment, and at most six digits
+ * in all (any Unicode number form) once percent-decoded and NFKC-normalised. Six is the most
+ * of a card number's leading digits that may ever be shown, and the last four are stored
+ * separately.
+ */
+function safeBillingAddress(value: unknown): boolean {
+  if (typeof value !== "string" || /[?#]/.test(value)) return false;
+  let text = value;
+  for (let round = 0; round < 4; round += 1) {
+    let decoded: string;
+    try {
+      decoded = decodeURIComponent(text);
+    } catch {
+      return false;
+    }
+    if (decoded === text) break;
+    text = decoded;
+  }
+  if (/[%?#]/.test(text)) return false;
+  return (text.normalize("NFKC").match(/\p{N}/gu)?.length ?? 0) <= 6;
 }
 
 function temporal(node: RdfNode, predicate: string, bound: TemporalValue): void {
@@ -234,10 +271,11 @@ export function createFactAssertion(about: string, fact: Fact): Store {
       break;
     }
     case "paymentCard": {
-      if (!validPaymentCard(fact.value)) throw new Error("Invalid payment card");
-      const v = fact.value;
-      person.link(`${NS.schema}owns`, v.id);
-      const card = new RdfNode(v.id, store)
+      const v = paymentCardSnapshot(fact.value);
+      if (!v) throw new Error("Invalid payment card");
+      const node = df.blankNode();
+      person.add(`${NS.schema}owns`, node);
+      const card = new RdfNode(node, store)
         .link(type, `${NS.schema}PaymentCard`)
         .text(`${NS.schema}brand`, v.brand);
       const last4 = df.blankNode();
