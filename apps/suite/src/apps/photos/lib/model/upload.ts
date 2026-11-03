@@ -98,11 +98,18 @@ export interface PreparedPhoto {
   thumbnail: Blob;
   plan: ThumbnailPlan;
 }
+/** Details from outside the file (e.g. a Google Takeout sidecar), used only where EXIF has none. */
+export interface CaptureMetadata {
+  dateTimeOriginal?: string;
+  location?: { lat: number; long: number };
+  description?: string;
+}
 export interface UploadInput {
   id: string;
   name: string;
   original: Blob;
   stripLocation: boolean;
+  metadata?: CaptureMetadata | undefined;
 }
 
 /** Pure orchestration with an injected encoder; no DOM, clock or random IDs. */
@@ -128,7 +135,16 @@ export async function preparePhoto(
   const extension = extensions[input.original.type];
   if (!extension) throw new TypeError("Unsupported image media type");
   const created = isoDate(now);
-  const exif = await readExif(await input.original.arrayBuffer());
+  const read = await readExif(await input.original.arrayBuffer());
+  const extra = input.metadata;
+  // The file's own EXIF wins; outside details only fill gaps, and are validated alike.
+  const dateTimeOriginal = read.dateTimeOriginal ?? extra?.dateTimeOriginal;
+  const location = read.location ?? extra?.location;
+  const exif = normaliseExif({
+    ...read,
+    ...(dateTimeOriginal ? { dateTimeOriginal } : {}),
+    ...(location ? { location } : {}),
+  });
   const dimensions = await encoder.dimensions(input.original);
   const plan = thumbnailPlan(dimensions.width, dimensions.height, exif.orientation);
   exif.pixelWidth = dimensions.width;
@@ -144,6 +160,7 @@ export async function preparePhoto(
     itemUrl: `${root}photos/items/${id}.ttl`,
     photo: {
       name: input.name,
+      ...(extra?.description?.trim() ? { description: extra.description.trim() } : {}),
       contentUrl: `${root}photos/originals/${id}.${extension}`,
       thumbnailUrl: `${root}photos/thumbs/${id}.webp`,
       keywords: [],

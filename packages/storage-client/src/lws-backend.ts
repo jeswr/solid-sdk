@@ -1,8 +1,10 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex GPT-6.1-Sol
-// LWS read side (ADR-003 §7, T-023); mutations arrive with T-024.
+// LWS backend (ADR-003 §7, T-023/T-024).
 import { deriveFeatures, type Features } from "@jeswr/storage-capabilities";
 import { StorageError } from "./errors.js";
 import {
+  boundedText,
   dateOf,
   discard,
   linksOf,
@@ -11,13 +13,15 @@ import {
   type ReadShape,
   scoped,
 } from "./http.js";
-import { paginate, throwIfAborted } from "./internal.js";
+import { listingTooLarge, paginate, validateListingMaxBytes } from "./internal.js";
+import { lwsWrites } from "./lws-write.js";
 import {
   acceptReadStatus,
   createReadOperations,
   MEDIA_TYPE,
   type ReadExpectation,
 } from "./read.js";
+import { versionHistoryQuery } from "./services.js";
 import type { AuthFetch, Entry, MetadataLink, ReadResult, StorageClient } from "./types.js";
 
 const LWS = "https://www.w3.org/ns/lws#";
@@ -73,42 +77,24 @@ function resolve(value: string, base: string): string | null {
 }
 
 /** Bounded JSON collection, with transport errors kept as network errors. */
-async function jsonBody(
-  result: ReadResult,
+export async function jsonBody(
+  result: Pick<ReadResult, "url" | "contentType" | "body">,
   accepted: string[],
   signal?: AbortSignal,
+  maxBytes?: number,
 ): Promise<unknown> {
   if (!accepted.includes(mediaTypeOf(result.contentType) ?? "")) {
     discard(result.body);
     throw invalid(result.url, "Unexpected JSON media type");
   }
-  let text = "";
-  let size = 0;
-  const decoder = new TextDecoder();
-  if (result.body) {
-    const reader = result.body.getReader();
-    const cancel = () => void reader.cancel(signal?.reason).catch(() => undefined);
-    signal?.addEventListener("abort", cancel, { once: true });
-    try {
-      throwIfAborted("GET", result.url, signal);
-      for (;;) {
-        const chunk = await reader.read();
-        throwIfAborted("GET", result.url, signal);
-        if (chunk.done) break;
-        size += chunk.value.byteLength;
-        if (size > MAX_JSON_BYTES) {
-          cancel();
-          throw invalid(result.url, "JSON exceeds 16 MiB");
-        }
-        text += decoder.decode(chunk.value, { stream: true });
-      }
-      text += decoder.decode();
-    } finally {
-      signal?.removeEventListener("abort", cancel);
-      // Also releases an unread body when already aborted before collection.
-      cancel();
-    }
-  }
+  const text = await boundedText(
+    result,
+    Math.min(maxBytes ?? MAX_JSON_BYTES, MAX_JSON_BYTES),
+    maxBytes !== undefined && maxBytes <= MAX_JSON_BYTES
+      ? listingTooLarge(result.url, maxBytes)
+      : invalid(result.url, "JSON exceeds 16 MiB"),
+    signal,
+  );
   try {
     return JSON.parse(text);
   } catch {
@@ -117,7 +103,7 @@ async function jsonBody(
 }
 
 /** RFC 9264 §4.2: anchors and targets resolve against the delivering linkset URL. */
-function linksetOf(raw: unknown, url: string): Map<string, Map<string, MetadataLink[]>> {
+export function linksetOf(raw: unknown, url: string): Map<string, Map<string, MetadataLink[]>> {
   if (!object(raw) || !Array.isArray(raw.linkset)) throw invalid(url, "Expected linkset array");
   const links = new Map<string, Map<string, MetadataLink[]>>();
   let targetCount = 0;
@@ -159,17 +145,7 @@ function linksetOf(raw: unknown, url: string): Map<string, Map<string, MetadataL
   return links;
 }
 
-function writesPending(method: string, url: string): Promise<never> {
-  return Promise.reject(
-    new StorageError("unsupported", {
-      method,
-      url,
-      message: `${method} on the LWS backend is not available yet (T-024)`,
-    }),
-  );
-}
-
-/** Create the LWS StorageClient. Read operations only; mutations reject with `unsupported`. */
+/** Create a scoped LWS StorageClient with conditional mutations. */
 export function createLwsBackend(options: LwsBackendOptions): StorageClient {
   const root = scoped(options.root, "GET", options.root);
   if (!root.endsWith("/") || /[?#]/.test(root))
@@ -208,12 +184,7 @@ export function createLwsBackend(options: LwsBackendOptions): StorageClient {
   const safeLink = (url: string | undefined) =>
     url !== undefined && isWithinStorage(url) ? url : null;
 
-  async function shapeOf(
-    method: string,
-    url: string,
-    response: Response,
-    expect: ReadExpectation,
-  ): Promise<ReadShape> {
+  function inspect(method: string, url: string, response: Response) {
     const links = linksOf(response, url, method);
     if ((links.get(`${LWS}storage`) ?? []).some(({ target }) => target !== storage)) {
       discard(response.body);
@@ -223,6 +194,15 @@ export function createLwsBackend(options: LwsBackendOptions): StorageClient {
         message: `${method} ${url} advertises a foreign storage`,
       });
     }
+    return links;
+  }
+  async function shapeOf(
+    method: string,
+    url: string,
+    response: Response,
+    expect: ReadExpectation,
+  ): Promise<ReadShape> {
+    const links = inspect(method, url, response);
     await acceptReadStatus(method, url, response, expect);
     const status = response.status as 200 | 206 | 304;
     return {
@@ -239,6 +219,96 @@ export function createLwsBackend(options: LwsBackendOptions): StorageClient {
     };
   }
   const { get, head, read, readRdf } = createReadOperations(options.fetch, root, shapeOf);
+  async function metadata(url: string, signal?: AbortSignal, described?: ReadResult) {
+    described ??= await head(url, { signal });
+    if (described.metadataUrl === null)
+      throw new StorageError("unsupported", {
+        method: "GET",
+        url: described.url,
+        message: `${described.url} advertises no linkset metadata`,
+      });
+    const result = await get(described.metadataUrl, { Accept: "application/linkset+json" }, signal);
+    const raw = await jsonBody(result, ["application/linkset+json", "application/json"], signal);
+    return { url: result.url, etag: result.etag, raw, links: linksetOf(raw, result.url) };
+  }
+
+  // Container identifiers may be slashless; validate the representation rather than URL shape.
+  // Also used by recursive deletion, after HEAD confirms a scoped target is a container.
+  const list: StorageClient["list"] = async (container, opts = {}) => {
+    validateListingMaxBytes(opts.maxBytes);
+    const result = await get(
+      opts.cursor === undefined ? container : opts.cursor.url,
+      { Accept: LIST_ACCEPT },
+      opts.signal,
+      false,
+      opts.revalidate,
+      opts.headers,
+    );
+    const raw = await jsonBody(
+      result,
+      ["application/lws+json", "application/ld+json"],
+      opts.signal,
+      opts.maxBytes,
+    );
+    if (
+      !object(raw) ||
+      !(hasType(typesOf(raw.type), "Container") || hasType(typesOf(raw.type), "ContainerPage")) ||
+      !Array.isArray(raw.items)
+    )
+      throw invalid(result.url, "Expected Container or ContainerPage with items array");
+    if (raw.items.length > MAX_LIST_ITEMS) throw invalid(result.url, "Listing exceeds 10000 items");
+    const seen = new Set<string>();
+    const items: Entry[] = [];
+    let urlLength = 0;
+    for (const item of raw.items) {
+      if (!object(item) || typeof item.id !== "string")
+        throw invalid(result.url, "Expected item with string id");
+      const id = resolve(item.id, result.url);
+      if (id === null) continue;
+      urlLength += id.length;
+      if (urlLength > MAX_LIST_URL_LENGTH)
+        throw invalid(result.url, "Resolved listing IDs exceed 4 MiB");
+      if (!isWithinStorage(id) || seen.has(id)) continue;
+      seen.add(id);
+      const types = typesOf(item.type);
+      const kind = hasType(types, "Container") ? "container" : "resource";
+      items.push({
+        url: id,
+        kind,
+        contentType:
+          kind !== "container" && typeof item.format === "string" && MEDIA_TYPE.test(item.format)
+            ? item.format
+            : null,
+        size: count(item.size),
+        modified: typeof item.modified === "string" ? dateOf(item.modified) : null,
+        types: types.filter(
+          (type) =>
+            !["Container", "DataResource", `${LWS}Container`, `${LWS}DataResource`].includes(
+              type,
+            ) &&
+            /^[a-z][a-z0-9+.-]*:[^\s<>"{}|^`\\]*$/i.test(type) &&
+            URL.canParse(type),
+        ),
+      });
+    }
+    const nextLink = result.links.get("next")?.[0]?.target;
+    let next: string | null = null;
+    if (nextLink !== undefined) {
+      try {
+        next = scoped(root, "GET", nextLink);
+      } catch {
+        throw invalid(result.url, "Invalid next page URL");
+      }
+      if (next.length > MAX_CURSOR_LENGTH || next === result.url)
+        throw invalid(result.url, "Invalid next page URL");
+    }
+    return {
+      items,
+      next: next === null ? null : { url: next },
+      total: count(raw.totalItems),
+      etag: result.etag,
+    };
+  };
 
   const client: StorageClient = {
     protocol: "lws",
@@ -248,113 +318,23 @@ export function createLwsBackend(options: LwsBackendOptions): StorageClient {
     read,
     readRdf,
     isWithinStorage,
-    async list(url, opts = {}) {
-      const container = listingContainer(root, url, "lws");
-      const result = await get(
-        opts.cursor === undefined ? container : opts.cursor.url,
-        { Accept: LIST_ACCEPT },
-        opts.signal,
-      );
-      const raw = await jsonBody(
-        result,
-        ["application/lws+json", "application/ld+json"],
-        opts.signal,
-      );
-      if (
-        !object(raw) ||
-        !(hasType(typesOf(raw.type), "Container") || hasType(typesOf(raw.type), "ContainerPage")) ||
-        !Array.isArray(raw.items)
-      )
-        throw invalid(result.url, "Expected Container or ContainerPage with items array");
-      if (raw.items.length > MAX_LIST_ITEMS)
-        throw invalid(result.url, "Listing exceeds 10000 items");
-      const seen = new Set<string>();
-      const items: Entry[] = [];
-      let urlLength = 0;
-      for (const item of raw.items) {
-        if (!object(item) || typeof item.id !== "string")
-          throw invalid(result.url, "Expected item with string id");
-        const id = resolve(item.id, result.url);
-        if (id === null) continue;
-        urlLength += id.length;
-        if (urlLength > MAX_LIST_URL_LENGTH)
-          throw invalid(result.url, "Resolved listing IDs exceed 4 MiB");
-        if (!isWithinStorage(id) || seen.has(id)) continue;
-        seen.add(id);
-        const types = typesOf(item.type);
-        const kind = hasType(types, "Container") ? "container" : "resource";
-        items.push({
-          url: id,
-          kind,
-          contentType:
-            kind !== "container" && typeof item.format === "string" && MEDIA_TYPE.test(item.format)
-              ? item.format
-              : null,
-          size: count(item.size),
-          modified: typeof item.modified === "string" ? dateOf(item.modified) : null,
-          types: types.filter(
-            (type) =>
-              !["Container", "DataResource", `${LWS}Container`, `${LWS}DataResource`].includes(
-                type,
-              ) &&
-              /^[a-z][a-z0-9+.-]*:[^\s<>"{}|^`\\]*$/i.test(type) &&
-              URL.canParse(type),
-          ),
-        });
-      }
-      const nextLink = result.links.get("next")?.[0]?.target;
-      let next: string | null = null;
-      if (nextLink !== undefined) {
-        try {
-          next = scoped(root, "GET", nextLink);
-        } catch {
-          throw invalid(result.url, "Invalid next page URL");
-        }
-        if (next.length > MAX_CURSOR_LENGTH || next === result.url)
-          throw invalid(result.url, "Invalid next page URL");
-      }
-      return {
-        items,
-        next: next === null ? null : { url: next },
-        total: count(raw.totalItems),
-        etag: result.etag,
-      };
+    async list(url, opts) {
+      return list(listingContainer(root, url, versionHistoryQuery(features, root, url)), opts);
     },
     async *listAll(url, opts = {}) {
-      const container = listingContainer(root, url, "lws");
+      const container = listingContainer(root, url, versionHistoryQuery(features, root, url));
       yield* paginate(
         container,
-        (cursor) => client.list(container, { cursor, signal: opts.signal }),
+        (cursor) => client.list(container, { ...opts, cursor }),
         opts.signal,
       );
     },
-    async metadata(url) {
-      const described = await head(url);
-      if (described.metadataUrl === null)
-        throw new StorageError("unsupported", {
-          method: "GET",
-          url: described.url,
-          message: `${described.url} advertises no linkset metadata`,
-        });
-      const result = await get(
-        described.metadataUrl,
-        { Accept: "application/linkset+json" },
-        undefined,
-      );
-      const raw = await jsonBody(result, ["application/linkset+json", "application/json"]);
-      return { url: result.url, etag: result.etag, raw, links: linksetOf(raw, result.url) };
-    },
+    metadata,
     async parentOf(url) {
       const target = scoped(root, "HEAD", url);
       return isRoot(target) ? null : (await head(target)).parent;
     },
-    write: (url) => writesPending("PUT", url),
-    writeRdf: (url) => writesPending("PUT", url),
-    create: (url) => writesPending("POST", url),
-    patch: (url) => writesPending("PATCH", url),
-    move: (url) => writesPending("MOVE", url),
-    delete: (url) => writesPending("DELETE", url),
-    setMetadata: (url) => writesPending("PATCH", url),
+    ...lwsWrites({ ...options, root }, () => client, inspect, metadata, list),
   };
   return client;
 }
