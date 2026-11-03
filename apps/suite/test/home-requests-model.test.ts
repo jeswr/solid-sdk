@@ -296,6 +296,7 @@ describe("data type cards", () => {
     expect(classLocalName(`https://vocab.example/${"x".repeat(100)}`)).toBe(`${"x".repeat(59)}…`);
     expect(classLocalName("https://vocab.example/")).toBe("Other data");
     expect(classLocalName("not a url/Thing")).toBe("Thing");
+    expect(classLocalName("#/")).toBe("Other data");
   });
 
   it("marks append-only and mode-less classes as not shareable", () => {
