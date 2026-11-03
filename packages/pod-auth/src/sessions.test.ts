@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import type { RefreshSessionRecord } from "@jeswr/reactive-authentication";
 import { beforeAll, expect, test, vi } from "vitest";
 import { scopedStore } from "./kv.js";
@@ -35,6 +36,59 @@ function setup() {
   const persistence = sessionStorage(raw, namespace, options);
   return { state, persistence, raw };
 }
+
+async function credentialKey(state: ReturnType<typeof setup>["state"], key = "account") {
+  const accounts = (await state.getItem("accounts")) as { key: string; credential: string }[];
+  return accounts.find((account) => account.key === key)!.credential;
+}
+
+test("distinct grants for one account retain their own tokens and keys across contexts and reloads", async () => {
+  const { persistence: p, raw } = setup();
+  const other = {
+    ...record,
+    refreshToken: "other-grant",
+    dpopKey: await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, false, [
+      "sign",
+      "verify",
+    ]),
+  };
+  await p.sessions.setItem("first", record);
+  await p.sessions.setItem("second", other);
+  const reloaded = sessionStorage(raw, namespace, options);
+  expect(await reloaded.sessions.getItem("first")).toEqual(record);
+  expect(await reloaded.sessions.getItem("second")).toEqual(other);
+  expect(await reloaded.lock("first")).not.toBe(await reloaded.lock("second"));
+  const rotated = { ...other, refreshToken: "rotated-other-grant" };
+  await reloaded.sessions.setItem("second", rotated);
+  expect(await reloaded.keys()).toHaveLength(2);
+  expect(await reloaded.sessions.getItem("first")).toEqual(record);
+  expect(await reloaded.sessions.getItem("second")).toEqual(rotated);
+  await reloaded.sessions.removeItem("second");
+  expect(await reloaded.sessions.getItem("first")).toEqual(record);
+  expect(await reloaded.sessions.getItem("second")).toBeNull();
+  await reloaded.clear();
+});
+
+test("a new grant at the same context preserves the old grant solely for logout", async () => {
+  const { persistence: p, raw } = setup();
+  const replacement = {
+    ...record,
+    refreshToken: "replacement-grant",
+    dpopKey: await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, false, [
+      "sign",
+      "verify",
+    ]),
+  };
+  await p.sessions.setItem("account", record);
+  await p.sessions.setItem("account", replacement);
+  const reloaded = sessionStorage(raw, namespace, options);
+  expect(await reloaded.sessions.getItem("account")).toEqual(replacement);
+  expect(await reloaded.keys()).toHaveLength(2);
+  expect(
+    await Promise.all((await reloaded.keys()).map((key) => reloaded.sessions.getItem(key))),
+  ).toEqual(expect.arrayContaining([record, replacement]));
+  await reloaded.clear();
+});
 
 test("catalog aliases point to one credential tuple, support scoped removal, and preserve account separation", async () => {
   const { persistence: p, state } = setup();
@@ -74,6 +128,22 @@ test("catalog aliases point to one credential tuple, support scoped removal, and
   expect(await state.getItem("accounts")).toBeNull();
 });
 
+test("legacy account-scoped records remain readable and discoverable for logout after an upgrade", async () => {
+  const { state, raw } = setup();
+  const credential = JSON.stringify([issuer, webId, clientId]);
+  await state.setItem("accounts", [{ key: "account", credential, webId, issuer, clientId }]);
+  await state.setItem(credential, record);
+  const reloaded = sessionStorage(raw, namespace, options);
+  expect(await reloaded.sessions.getItem("account")).toEqual(record);
+  await reloaded.sessions.setItem("account", { ...record, refreshToken: "rotated-refresh" });
+  expect(await reloaded.keys()).toHaveLength(2);
+  expect(
+    await Promise.all((await reloaded.keys()).map((key) => reloaded.sessions.getItem(key))),
+  ).toContainEqual(record);
+  await reloaded.clear();
+  expect(await state.getItem(credential)).toBeNull();
+});
+
 test("superseded credential tuples remain available only for cleanup across reloads", async () => {
   const { persistence: p, state, raw } = setup();
   const replacement = {
@@ -97,11 +167,9 @@ test("superseded credential tuples remain available only for cleanup across relo
   await reloaded.sessions.setItem("account", record);
   await reloaded.sessions.setItem("account", replacement);
   expect(await reloaded.keys()).toHaveLength(2);
+  const credentials = (await state.getItem("accounts")) as { credential: string }[];
   await reloaded.clear();
-  for (const value of [record, replacement])
-    expect(
-      await state.getItem(JSON.stringify([issuer, value.identity!.webId, clientId])),
-    ).toBeNull();
+  for (const { credential } of credentials) expect(await state.getItem(credential)).toBeNull();
 });
 
 test("a failed replacement credential write retains the previous tuple for cleanup", async () => {
@@ -111,10 +179,9 @@ test("a failed replacement credential write retains the previous tuple for clean
     ...record,
     identity: { ...record.identity!, webId: "https://id.example/bob#me" },
   };
-  const credential = JSON.stringify([issuer, replacement.identity.webId, clientId]);
   const write = raw.setItem;
   vi.spyOn(raw, "setItem").mockImplementation(async (key, value) => {
-    if (JSON.parse(key)[1] === credential) throw new Error("write denied");
+    if (value === replacement) throw new Error("write denied");
     await write(key, value);
   });
   await expect(p.sessions.setItem("account", replacement)).rejects.toThrow(
@@ -176,7 +243,7 @@ test.each([
 ])("a %s record is discarded before credential use", async (_name, corrupt) => {
   const { persistence: p, state } = setup();
   await p.sessions.setItem("account", record);
-  const key = JSON.stringify([issuer, webId, clientId]);
+  const key = await credentialKey(state);
   await state.setItem(key, corrupt(record));
   expect(await p.sessions.getItem("account")).toBeNull();
   expect(await state.getItem(key)).toBeNull();
@@ -232,7 +299,7 @@ test("extractable, wrong curve, wrong algorithm, missing usages and mismatched D
     { ...record.dpopKey, publicKey: other.publicKey },
   ]) {
     await p.sessions.setItem("account", record);
-    await state.setItem(JSON.stringify([issuer, webId, clientId]), { ...record, dpopKey });
+    await state.setItem(await credentialKey(state), { ...record, dpopKey });
     expect(await p.sessions.getItem("account")).toBeNull();
   }
   await expect(p.sessions.setItem("bad", { ...record, dpopKey: extractable })).rejects.toThrow(

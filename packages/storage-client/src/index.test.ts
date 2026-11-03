@@ -9,6 +9,8 @@ import * as lws from "./lws.js";
 import * as memory from "./memory.js";
 import * as solid from "./solid.js";
 import * as testing from "./testing.js";
+import * as trash from "./trash.js";
+import * as versions from "./versions.js";
 
 test("entry points expose the storage client and testing surface", () => {
   expect(Object.keys(api).sort()).toEqual(["StorageError", "createPodClient", "toStorageError"]);
@@ -29,6 +31,8 @@ test("entry points expose the storage client and testing surface", () => {
   expect(Object.keys(memory)).toEqual(["createMemoryStorage"]);
   expect(Object.keys(solid).sort()).toEqual(["buildN3Patch", "createSolidBackend"]);
   expect(Object.keys(lws)).toEqual(["createLwsBackend"]);
+  expect(Object.keys(trash)).toEqual(["createTrashClient"]);
+  expect(Object.keys(versions)).toEqual(["createVersionsClient"]);
   expect(Object.keys(testing).sort()).toEqual([
     "createRecordingFetch",
     "createReplayFetch",

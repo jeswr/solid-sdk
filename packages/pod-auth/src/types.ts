@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 /** Structural key-value seam; values must support structured cloning, including CryptoKeys. */
 export interface KvStore<T extends {} = {}> {
   getItem(key: string): Promise<T | null>;
@@ -9,6 +10,7 @@ export interface KvStore<T extends {} = {}> {
 export interface PodAuthOptions {
   clientId: string | { dynamicRegistration: true };
   redirectUri: string;
+  /** Explicit grants plus WebID-profile roots loaded on login/restore; server hints never grant access. */
   boundary?: { roots?: string[]; automatic?: boolean; eligible?: (url: URL) => boolean };
   storage?: { sessions: KvStore; caches: KvStore };
   ui: {

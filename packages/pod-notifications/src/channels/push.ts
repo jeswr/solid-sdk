@@ -1,11 +1,13 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { createPodClient, type PodClientOptions } from "@jeswr/storage-client";
 import { createChangeNormalizer } from "../normalise.js";
-import { isOnline, platform, systemTimers } from "../runtime.js";
+import { isOnline, platform, runCleanups, systemTimers } from "../runtime.js";
 import { SubscriptionController } from "../subscription.js";
 import type { EventSourceLike, NotificationsDependencies, WebSocketLike } from "../types.js";
 import { channelUrl, validateChannelUrl } from "./channel-url.js";
 import { readJsonLines } from "./json-lines.js";
+import { registerRelay } from "./relay-registration.js";
 
 /** Dependencies and scoped topics for the push adapters. */
 export interface PushChannelOptions extends NotificationsDependencies {
@@ -44,9 +46,10 @@ function discoveryCache(): NonNullable<PodClientOptions["capabilities"]> {
 export function createPushChannel(
   options: PushChannelOptions,
   protocol: "solid" | "lws",
-  transport: "websocket" | "sse" | "legacy-ws",
+  transport: "websocket" | "sse" | "legacy-ws" | "webhook-relay",
 ): SubscriptionController {
   const { storage } = options;
+  const eventStream = transport === "sse" || transport === "webhook-relay";
   if (
     storage.protocol !== protocol ||
     options.topics.length === 0 ||
@@ -70,6 +73,7 @@ export function createPushChannel(
     validateChannelUrl(url, storage.root, service, socket, insecure);
   let stopped = false;
   let retry: unknown;
+  let renewal: unknown;
   let active: AbortController | undefined;
   let attempt = 0;
   let interrupted = false;
@@ -106,14 +110,23 @@ export function createPushChannel(
       lastFrame = new Date(earliest);
     }
     frameTimes.clear();
-    active?.abort();
-    active = undefined;
-    for (const cleanup of sockets.values()) cleanup();
-    sockets.clear();
-    for (const stream of streams) stream.close();
-    streams.clear();
-    for (const url of subscriptions) removeSubscription(url);
-    subscriptions.clear();
+    try {
+      runCleanups([
+        () => {
+          if (renewal !== undefined) timers.clearTimeout(renewal);
+        },
+        () => active?.abort(),
+        ...sockets.values(),
+        ...Array.from(streams, (stream) => () => stream.close()),
+        ...Array.from(subscriptions, (url) => () => removeSubscription(url)),
+      ]);
+    } finally {
+      renewal = undefined;
+      active = undefined;
+      sockets.clear();
+      streams.clear();
+      subscriptions.clear();
+    }
   };
   const schedule = (delay: number) => {
     if (stopped) return;
@@ -166,42 +179,45 @@ export function createPushChannel(
         pod.description.protocol !== protocol ||
         pod.description.root !== storage.root ||
         live.state !== "available" ||
-        !live.detail.channels.includes(transport)
+        !live.detail.channels.includes(transport === "webhook-relay" ? "webhook" : transport)
       )
         throw new Error("No notification subscription service");
       // The feature endpoint belongs to the preferred channel, which may be WebSocket.
       // SSE adapters must resolve their own service again on every discovery.
-      const serviceEndpoint =
-        transport === "sse"
-          ? pod.description.services.find((service) => {
-              if (protocol === "solid") {
-                const channels = [
-                  service.extra["http://www.w3.org/ns/solid/notifications#channelType"],
-                ].flat();
-                return (
-                  service.type.includes("https://jeswr.org/ns/solid-sd#SolidNotificationService") &&
-                  (channels.includes(
-                    "http://www.w3.org/ns/solid/notifications#StreamingHTTPChannel2023",
-                  ) ||
-                    channels.includes("https://jeswr.org/ns/solid-sd#StreamingHttpChannel"))
-                );
-              }
+      const serviceEndpoint = eventStream
+        ? pod.description.services.find((service) => {
+            if (protocol === "solid") {
+              const channels = [
+                service.extra["http://www.w3.org/ns/solid/notifications#channelType"],
+              ].flat();
               return (
-                service.type.includes("https://www.w3.org/ns/lws#NotificationService") &&
-                new URL(service.endpoint).origin === new URL(storage.root).origin &&
-                [
-                  "subscriptionType",
-                  "ssd:subscriptionType",
-                  "https://jeswr.org/ns/solid-sd#subscriptionType",
-                  "https://www.w3.org/ns/lws#subscriptionType",
-                ].some((key) =>
-                  [service.extra[key]]
-                    .flat()
-                    .includes("https://jeswr.org/ns/solid-sd#SseSubscription"),
-                )
+                service.type.includes("https://jeswr.org/ns/solid-sd#SolidNotificationService") &&
+                (channels.includes(
+                  "http://www.w3.org/ns/solid/notifications#StreamingHTTPChannel2023",
+                ) ||
+                  channels.includes("https://jeswr.org/ns/solid-sd#StreamingHttpChannel"))
               );
-            })?.endpoint
-          : live.detail.endpoint;
+            }
+            return (
+              service.type.includes("https://www.w3.org/ns/lws#NotificationService") &&
+              new URL(service.endpoint).origin === new URL(storage.root).origin &&
+              [
+                "subscriptionType",
+                "ssd:subscriptionType",
+                "https://jeswr.org/ns/solid-sd#subscriptionType",
+                "https://www.w3.org/ns/lws#subscriptionType",
+              ].some((key) =>
+                [service.extra[key]]
+                  .flat()
+                  .includes(
+                    transport === "webhook-relay"
+                      ? "https://www.w3.org/ns/lws#WebhookSubscription"
+                      : "https://jeswr.org/ns/solid-sd#SseSubscription",
+                  ),
+              )
+            );
+          })?.endpoint
+        : live.detail.endpoint;
       const endpoint =
         transport === "legacy-ws"
           ? validate(serviceEndpoint, storage.root, true)
@@ -219,6 +235,16 @@ export function createPushChannel(
         protocol === "lws" || transport === "legacy-ws"
           ? [subscription.topics]
           : subscription.topics.map((topic) => [topic]);
+      const relay =
+        transport === "webhook-relay"
+          ? await registerRelay(options, pod.description.id, request.signal, () => {
+              if (current()) {
+                subscription.transition("closed", "forbidden");
+                void subscription.close();
+              }
+            })
+          : undefined;
+      if (!current()) return;
       let opened = 0;
       const ready = () => {
         if (opened !== groups.length) return;
@@ -234,7 +260,10 @@ export function createPushChannel(
           protocol === "lws"
             ? {
                 "@context": ["https://www.w3.org/ns/lws/v1"],
-                type: `https://jeswr.org/ns/solid-sd#${transport === "sse" ? "Sse" : "WebSocket"}Subscription`,
+                type: relay
+                  ? "WebhookSubscription"
+                  : `https://jeswr.org/ns/solid-sd#${transport === "sse" ? "Sse" : "WebSocket"}Subscription`,
+                ...(relay ? { inbox: relay.inbox } : {}),
                 topic: topics,
                 expires: new Date(now() + 86_400_000).toISOString(),
               }
@@ -263,11 +292,31 @@ export function createPushChannel(
             else removeSubscription(url);
           }
           if (!current()) return;
-          receiveFrom = validate(
-            "receiveFrom" in channel ? channel.receiveFrom : undefined,
-            endpoint,
-            transport === "websocket",
-          );
+          if (relay && "expires" in channel) {
+            const expires = typeof channel.expires === "string" ? Date.parse(channel.expires) : NaN;
+            const remaining = expires - now();
+            if (!Number.isFinite(remaining) || remaining <= 0)
+              throw new Error("Invalid notification expiry");
+            // Renew before the server's deadline even while relay SSE remains healthy.
+            // Bound the delay to avoid overflowing native 32-bit timeout implementations.
+            renewal = timers.setTimeout(
+              () => {
+                if (!current()) return;
+                disconnect();
+                interrupted = true;
+                subscription.transition("degraded", "reconnecting");
+                return connect();
+              },
+              Math.min(2_147_483_647, remaining * 0.9),
+            );
+          }
+          receiveFrom =
+            relay?.stream ??
+            validate(
+              "receiveFrom" in channel ? channel.receiveFrom : undefined,
+              endpoint,
+              transport === "websocket",
+            );
         }
         if (transport === "sse" && protocol === "solid") {
           const response = await fetch(receiveFrom, { headers: { accept: "application/ld+json" } });
@@ -280,7 +329,11 @@ export function createPushChannel(
           // Register cancellation before publishing live; observers may close synchronously.
           const stream = {
             close: () => {
-              void reader.cancel().catch(() => {});
+              try {
+                void reader.cancel().catch(() => {});
+              } catch {
+                // Cancellation is best effort, including synchronous reader failures.
+              }
             },
           };
           streams.add(stream);
@@ -300,10 +353,9 @@ export function createPushChannel(
           );
           continue;
         }
-        const socket =
-          transport === "sse"
-            ? eventSourceFactory(receiveFrom)
-            : socketFactory(receiveFrom, transport === "legacy-ws" ? ["solid-0.1"] : undefined);
+        const socket = eventStream
+          ? eventSourceFactory(receiveFrom)
+          : socketFactory(receiveFrom, transport === "legacy-ws" ? ["solid-0.1"] : undefined);
         frameTimes.set(socket, now());
         let heartbeat: unknown;
         let open = false;
@@ -311,7 +363,7 @@ export function createPushChannel(
           if (heartbeat !== undefined) timers.clearTimeout(heartbeat);
         };
         const armHeartbeat = () => {
-          if (transport === "sse") return;
+          if (eventStream) return;
           clearHeartbeat();
           heartbeat = timers.setTimeout(onFailure, 90_000);
         };
@@ -322,7 +374,7 @@ export function createPushChannel(
           if (!current()) return;
           // Keep the same EventSource while it reconnects: the browser retains its
           // last-event-id buffer and sends Last-Event-ID, including empty-id resets.
-          if (transport === "sse" && socket.readyState === 0) {
+          if (eventStream && socket.readyState === 0) {
             if (open) {
               open = false;
               opened--;
@@ -372,21 +424,27 @@ export function createPushChannel(
         };
         socket.addEventListener("open", onOpen);
         socket.addEventListener("message", onMessage);
-        if (transport === "sse") socket.addEventListener("notification", onMessage);
+        if (eventStream) socket.addEventListener("notification", onMessage);
         socket.addEventListener("error", onError);
         socket.addEventListener("close", onFailure);
         sockets.set(socket, () => {
-          clearHeartbeat();
-          socket.removeEventListener("open", onOpen);
-          socket.removeEventListener("message", onMessage);
-          if (transport === "sse") socket.removeEventListener("notification", onMessage);
-          socket.removeEventListener("error", onError);
-          socket.removeEventListener("close", onFailure);
-          try {
-            socket.close();
-          } catch {
-            /* Detached first: close errors cannot prevent cleanup. */
-          }
+          runCleanups([
+            clearHeartbeat,
+            () => socket.removeEventListener("open", onOpen),
+            () => socket.removeEventListener("message", onMessage),
+            () => {
+              if (eventStream) socket.removeEventListener("notification", onMessage);
+            },
+            () => socket.removeEventListener("error", onError),
+            () => socket.removeEventListener("close", onFailure),
+            () => {
+              try {
+                socket.close();
+              } catch {
+                /* Detached first: close errors cannot prevent cleanup. */
+              }
+            },
+          ]);
         });
         armHeartbeat();
       }
@@ -406,14 +464,19 @@ export function createPushChannel(
   const abort = () => {
     void subscription.close();
   };
-  subscription.cleanup = () => {
+  subscription.cleanup = async () => {
     stopped = true;
-    clearRetry();
-    disconnect();
-    platform.removeEventListener?.("offline", offline);
-    platform.removeEventListener?.("online", online);
-    options.signal?.removeEventListener("abort", abort);
-    return Promise.all(deletions).then(() => {});
+    try {
+      runCleanups([
+        clearRetry,
+        disconnect,
+        () => platform.removeEventListener?.("offline", offline),
+        () => platform.removeEventListener?.("online", online),
+        () => options.signal?.removeEventListener("abort", abort),
+      ]);
+    } finally {
+      await Promise.all(deletions);
+    }
   };
   platform.addEventListener?.("offline", offline);
   platform.addEventListener?.("online", online);

@@ -262,7 +262,7 @@ function CalendarChrome({ children }: { children: ReactNode }) {
   const { date, view, navigate, weekStart } = useCalendarNavigation();
   const { selected, closeEvent, eventTrigger, syncStatus } = useCalendarState();
   const pathname = usePathname();
-  const search = pathname === "/calendar/search";
+  const search = pathname.replace(/\/+$/, "") === "/calendar/search";
   const [picker, setPicker] = useState(false);
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {

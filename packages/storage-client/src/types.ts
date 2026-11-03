@@ -1,5 +1,6 @@
 // AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 // ADR-003 §1, verbatim except where marked "Extension".
 
 import type { DatasetCore, Quad } from "@jeswr/fetch-rdf";
@@ -55,6 +56,8 @@ export interface ReadResult {
   etag: string | null;
   contentType: string | null;
   lastModified: Date | null;
+  /** Memento-Datetime on an immutable version, when supplied by the server. */
+  mementoDatetime?: Date | null;
   /** null on 304 / HEAD. */
   body: ReadableStream<Uint8Array> | null;
   bytes(): Promise<Uint8Array>;
@@ -93,7 +96,7 @@ export interface CreateOptions {
   contentType?: string;
   /** Default 'resource'. */
   kind?: ResourceKind;
-  /** Name hint. Honoured on Solid (PUT container+name, If-None-Match:*). Sent as Slug on LWS; server decides. */
+  /** Decoded name hint. Honoured on Solid (encoded PUT child, If-None-Match:*). Percent-encoded as Slug on LWS; server decides. */
   name?: string;
   /** Initial user metadata (LWS: Link headers on POST; Solid: ignored unless describedby is writable). */
   links?: readonly { rel: string; target: string }[];
@@ -142,8 +145,20 @@ export interface MetadataOp {
 /** Options for fresh HEAD and listing observations. */
 export interface ObservationOptions {
   signal?: AbortSignal;
+  /** Additional HTTP headers; Accept, Range and If-None-Match remain operation-controlled. */
+  headers?: RequestInit["headers"];
   /** Revalidate HTTP cache entries before use (`cache: 'no-cache'`), on every listing page. */
   revalidate?: boolean;
+}
+
+/** Options shared by single-page and paginated listings. */
+export interface ListingOptions extends ObservationOptions {
+  /**
+   * Maximum response bytes per page, enforced while streaming before parsing. A non-negative
+   * safe integer; exact limits are accepted. Overflow throws StorageError('payload-too-large')
+   * without returning entries from that page. Existing backend hard limits still apply.
+   */
+  maxBytes?: number;
 }
 
 export interface StorageClient {
@@ -151,11 +166,8 @@ export interface StorageClient {
   readonly root: string;
   readonly features: Features;
 
-  list(
-    container: string,
-    opts?: ObservationOptions & { cursor?: PageCursor },
-  ): Promise<Page<Entry>>;
-  listAll(container: string, opts?: ObservationOptions): AsyncIterable<Entry>;
+  list(container: string, opts?: ListingOptions & { cursor?: PageCursor }): Promise<Page<Entry>>;
+  listAll(container: string, opts?: ListingOptions): AsyncIterable<Entry>;
   head(url: string, opts?: ObservationOptions): Promise<ReadResult>;
   read(
     url: string,
@@ -164,6 +176,8 @@ export interface StorageClient {
       ifNoneMatch?: string;
       range?: { start: number; end?: number };
       signal?: AbortSignal;
+      /** Additional HTTP headers; Accept, Range and If-None-Match remain option-controlled. */
+      headers?: RequestInit["headers"];
     },
   ): Promise<ReadResult>;
   /** read + parseRdf (fetch-rdf). Accept: text/turtle, application/ld+json. Throws 'not-rdf' when the body is not RDF. */

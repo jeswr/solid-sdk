@@ -12,9 +12,13 @@ public class SuiteNavigationPlugin: CAPPlugin, CAPBridgedPlugin {
     public let pluginMethods: [CAPPluginMethod] = []
 
     override public func shouldOverrideLoad(_ navigationAction: WKNavigationAction) -> NSNumber? {
+        // No frame may navigate to a device file at the local origin (MOB-P3 E5).
+        if let url = navigationAction.request.url, SuiteNavigationPlugin.isLocalDeviceFile(url, local: bridge?.config.localURL) {
+            return NSNumber(value: true)
+        }
         guard navigationAction.targetFrame?.isMainFrame ?? true,
               let url = navigationAction.request.url,
-              let allowed = SuiteOrigin(url: bridge?.config.serverURL) else {
+              let allowed = SuiteOrigin.app(serverURL: bridge?.config.serverURL, localURL: bridge?.config.localURL) else {
             return nil
         }
         // The bundled offline page (server.errorPath) is the only local page; its frame gets no
@@ -23,10 +27,19 @@ public class SuiteNavigationPlugin: CAPPlugin, CAPBridgedPlugin {
            url.path == "/offline.html" {
             return nil
         }
-        if SuiteOrigin(url: url) == allowed { return nil }
+        if SuiteOrigin.of(url) == allowed { return nil }
         if SuiteOrigin.mayOpenExternally(url) {
             DispatchQueue.main.async { UIApplication.shared.open(url) }
         }
         return NSNumber(value: true)
+    }
+
+    /// A Capacitor device-file URL on the app's local scheme, whatever the host: Capacitor's
+    /// handler serves the scheme for every host (decoded-path prefix test).
+    static func isLocalDeviceFile(_ url: URL, local: URL?) -> Bool {
+        guard let local = local, url.scheme?.lowercased() == local.scheme?.lowercased() else {
+            return false
+        }
+        return SuiteSchemeHandler.isNativeFilePath(url.path)
     }
 }

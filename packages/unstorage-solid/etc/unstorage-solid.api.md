@@ -5,7 +5,9 @@
 ```ts
 
 import type { Driver } from 'unstorage';
+import { NotificationsClient } from '@jeswr/pod-notifications';
 import { RedirectRefusedError as SolidRedirectError } from '@jeswr/guarded-fetch';
+import { StorageClient } from '@jeswr/storage-client';
 
 // @public
 const solidDriver: (opts: SolidDriverOptions) => Driver<SolidDriverOptions, undefined>;
@@ -17,8 +19,10 @@ interface SolidDriverOptions {
     defaultContentType?: string;
     fetch?: typeof globalThis.fetch;
     headers?: Record<string, string>;
+    notifications?: NotificationsClient;
     // @internal
     onWatchDegrade?: (reason: string) => void;
+    storage?: StorageClient;
     watch?: boolean;
     // @internal
     wsFactory?: WatchSocketFactory;

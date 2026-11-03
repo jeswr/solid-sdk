@@ -1,7 +1,8 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Fable 5
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { resolveAppShellConfig, shellCacheName } from "solid-offline";
+import { resolveAppShellConfig, shellCacheName } from "@jeswr/solid-offline";
 import { describe, expect, it } from "vitest";
 import {
   APP_SHELL_ROUTES,
