@@ -8,7 +8,7 @@ import { Container, Resource } from "@solid/object/solid";
 import { DataFactory } from "n3";
 import { StorageError } from "./errors.js";
 import { allowOf, discard, linksOf, listingContainer, type ReadShape, scoped } from "./http.js";
-import { paginate, pathParent } from "./internal.js";
+import { paginate, pathParent, validateListingMaxBytes } from "./internal.js";
 import {
   acceptReadStatus,
   createReadOperations,
@@ -16,6 +16,7 @@ import {
   type ReadExpectation,
   rdfBody,
 } from "./read.js";
+import { versionHistoryQuery } from "./services.js";
 import { type InspectContainer, solidWrites } from "./solid-write.js";
 import type { AuthFetch, Entry, Metadata, MetadataLink, Page, StorageClient } from "./types.js";
 
@@ -159,7 +160,8 @@ export function createSolidBackend(options: SolidBackendOptions): StorageClient 
     opts: Parameters<StorageClient["list"]>[1] = {},
     inspect?: InspectContainer,
   ) {
-    const container = listingContainer(root, url);
+    const container = listingContainer(root, url, versionHistoryQuery(features, root, url));
+    validateListingMaxBytes(opts.maxBytes);
     if (opts.cursor !== undefined) {
       throw new StorageError("bad-request", {
         method: "GET",
@@ -173,6 +175,7 @@ export function createSolidBackend(options: SolidBackendOptions): StorageClient 
       opts.signal,
       false,
       opts.revalidate,
+      opts.headers,
     );
     if (result.kind !== "container") {
       discard(result.body);
@@ -182,12 +185,15 @@ export function createSolidBackend(options: SolidBackendOptions): StorageClient 
         message: `${container} is not a container`,
       });
     }
-    const { dataset } = await rdfBody(result, "invalid-response");
+    const { dataset } = await rdfBody(result, "invalid-response", opts.maxBytes, opts.signal);
     const listed = new Container(container, dataset, DataFactory);
     const items: Entry[] = [];
     // `contains` is a set of distinct members, so URLs are unique.
     for (const resource of listed.contains) {
-      const entry = entryOf(new Member(resource.id, dataset, DataFactory), container);
+      const entry = entryOf(
+        new Member(resource.id, dataset, DataFactory),
+        container.split("?")[0] as string,
+      );
       if (entry) items.push(entry);
     }
     items.sort((a, b) => (a.url < b.url ? -1 : 1));
@@ -200,7 +206,7 @@ export function createSolidBackend(options: SolidBackendOptions): StorageClient 
     opts: Parameters<StorageClient["listAll"]>[1] = {},
     inspect?: InspectContainer,
   ) {
-    const container = listingContainer(root, url);
+    const container = listingContainer(root, url, versionHistoryQuery(features, root, url));
     yield* paginate(
       container,
       (cursor) =>

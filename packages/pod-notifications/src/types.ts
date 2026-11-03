@@ -64,6 +64,7 @@ export interface Timers {
 export interface TransportEvents {
   open: unknown;
   message: { data: unknown; lastEventId?: string };
+  notification: { data: unknown; lastEventId?: string };
   error: unknown;
   close: unknown;
 }
@@ -83,15 +84,22 @@ export interface WebSocketLike {
   ): void;
 }
 
-/** Browser-compatible event source surface; close is always explicit. */
+/** Native EventSource semantics: 0 reconnecting, 1 open, 2 closed; retries retain Last-Event-ID. */
 export type EventSourceLike = Omit<WebSocketLike, "send">;
 
-/** All I/O is injected; browser WebSocket and system clocks are the defaults. */
+/** All I/O is injected; browser WebSocket/EventSource and system clocks are the defaults. */
 export interface NotificationsDependencies {
   fetch: typeof fetch;
   storage: StorageClient;
-  relay?: { url: string };
+  relay?: {
+    url: string;
+    /** Session ID token (LWS subject token), never a storage access token. Required for relay subscriptions. */
+    getIdToken?: (signal: AbortSignal) => Promise<string>;
+    /** Separate relay transport; defaults to global fetch, never the pod-auth fetch. */
+    fetch?: typeof fetch;
+  };
   socketFactory?: (url: string, protocols?: string[]) => WebSocketLike;
+  /** Must retain the native Last-Event-ID buffer across automatic reconnects. */
   eventSourceFactory?: (url: string) => EventSourceLike;
   timers?: Timers;
   now?: () => number;

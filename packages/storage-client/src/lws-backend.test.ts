@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { deriveFeatures } from "@jeswr/storage-capabilities";
 import { describe, expect, test, vi } from "vitest";
@@ -81,6 +82,52 @@ async function collect(entries: AsyncIterable<Entry>) {
 }
 
 describe("sparq fixtures and pagination", () => {
+  test("list and listAll preserve slashless container identifiers and opaque pagination", async () => {
+    const container = `${ROOT}grants`;
+    const next = `${container}?token=a%2fb&x=1&x=2`;
+    const { storage, calls } = backend({
+      [`GET ${container}`]: {
+        status: 200,
+        headers: { "content-type": "application/lws+json", link: `<${next}>; rel="next"` },
+        body: JSON.stringify(pageBody([{ id: "grant-one" }], { totalItems: 2 })),
+      },
+      [`GET ${next}`]: {
+        status: 200,
+        headers: { "content-type": "application/lws+json" },
+        body: JSON.stringify(pageBody([{ id: `${ROOT}records/grant-two` }], { totalItems: 2 })),
+      },
+    });
+    const page = await storage.list(container);
+    expect(page.next).toEqual({ url: next });
+    expect(page.items.map(({ url }) => url)).toEqual([`${ROOT}grant-one`]);
+    expect((await collect(storage.listAll(container))).map(({ url }) => url)).toEqual([
+      `${ROOT}grant-one`,
+      `${ROOT}records/grant-two`,
+    ]);
+    expect(calls.map(({ method, url }) => [method, url])).toEqual([
+      ["GET", container],
+      ["GET", container],
+      ["GET", next],
+    ]);
+  });
+
+  test.each([
+    [200, "invalid-response"],
+    [405, "method-not-allowed"],
+  ])("slashless noncontainers still fail on a %i response", async (status, code) => {
+    const container = `${ROOT}file`;
+    const { storage, calls } = backend({
+      [`GET ${container}`]: {
+        status,
+        headers: { "content-type": "application/lws+json" },
+        body: JSON.stringify({ type: "DataResource", items: [] }),
+      },
+    });
+    await rejects(storage.list(container), code);
+    await rejects(collect(storage.listAll(container)), code);
+    expect(calls.map(({ url }) => url)).toEqual([container, container]);
+  });
+
   test("lists a created opaque container at its exact identifier across pages", async () => {
     const container = `${ROOT}opaque-container`;
     const next = `${container}?cursor=a%2fb&x=1&x=2`;

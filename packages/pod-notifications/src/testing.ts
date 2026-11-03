@@ -46,6 +46,7 @@ export class FakeTimers implements Timers {
 /** Manual transport with explicit open/message/error/close events and listener cleanup checks. */
 export class FakeEventSource {
   readyState = 0;
+  private lastEventId = "";
   readonly url: string;
   private readonly listeners = new Map<keyof TransportEvents, Set<(event: never) => void>>();
 
@@ -85,8 +86,15 @@ export class FakeEventSource {
     this.readyState = 1;
     this.dispatch("open", {});
   }
-  message(data: unknown, lastEventId = ""): void {
-    this.dispatch("message", { data, lastEventId });
+  message(data: unknown, lastEventId = "", type: "message" | "notification" = "message"): void {
+    this.lastEventId = lastEventId;
+    this.dispatch(type, { data, lastEventId });
+  }
+  /** Model a native recoverable drop and expose the next request's replay header. */
+  reconnect(): Record<string, string> {
+    this.readyState = 0;
+    this.error();
+    return this.lastEventId ? { "Last-Event-ID": this.lastEventId } : {};
   }
   error(): void {
     this.dispatch("error", {});

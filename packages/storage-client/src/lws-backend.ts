@@ -1,8 +1,10 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex GPT-6.1-Sol
 // LWS backend (ADR-003 §7, T-023/T-024).
 import { deriveFeatures, type Features } from "@jeswr/storage-capabilities";
 import { StorageError } from "./errors.js";
 import {
+  boundedText,
   dateOf,
   discard,
   linksOf,
@@ -11,7 +13,7 @@ import {
   type ReadShape,
   scoped,
 } from "./http.js";
-import { paginate, throwIfAborted } from "./internal.js";
+import { listingTooLarge, paginate, validateListingMaxBytes } from "./internal.js";
 import { lwsWrites } from "./lws-write.js";
 import {
   acceptReadStatus,
@@ -19,6 +21,7 @@ import {
   MEDIA_TYPE,
   type ReadExpectation,
 } from "./read.js";
+import { versionHistoryQuery } from "./services.js";
 import type { AuthFetch, Entry, MetadataLink, ReadResult, StorageClient } from "./types.js";
 
 const LWS = "https://www.w3.org/ns/lws#";
@@ -78,38 +81,20 @@ export async function jsonBody(
   result: Pick<ReadResult, "url" | "contentType" | "body">,
   accepted: string[],
   signal?: AbortSignal,
+  maxBytes?: number,
 ): Promise<unknown> {
   if (!accepted.includes(mediaTypeOf(result.contentType) ?? "")) {
     discard(result.body);
     throw invalid(result.url, "Unexpected JSON media type");
   }
-  let text = "";
-  let size = 0;
-  const decoder = new TextDecoder();
-  if (result.body) {
-    const reader = result.body.getReader();
-    const cancel = () => void reader.cancel(signal?.reason).catch(() => undefined);
-    signal?.addEventListener("abort", cancel, { once: true });
-    try {
-      throwIfAborted("GET", result.url, signal);
-      for (;;) {
-        const chunk = await reader.read();
-        throwIfAborted("GET", result.url, signal);
-        if (chunk.done) break;
-        size += chunk.value.byteLength;
-        if (size > MAX_JSON_BYTES) {
-          cancel();
-          throw invalid(result.url, "JSON exceeds 16 MiB");
-        }
-        text += decoder.decode(chunk.value, { stream: true });
-      }
-      text += decoder.decode();
-    } finally {
-      signal?.removeEventListener("abort", cancel);
-      // Also releases an unread body when already aborted before collection.
-      cancel();
-    }
-  }
+  const text = await boundedText(
+    result,
+    Math.min(maxBytes ?? MAX_JSON_BYTES, MAX_JSON_BYTES),
+    maxBytes !== undefined && maxBytes <= MAX_JSON_BYTES
+      ? listingTooLarge(result.url, maxBytes)
+      : invalid(result.url, "JSON exceeds 16 MiB"),
+    signal,
+  );
   try {
     return JSON.parse(text);
   } catch {
@@ -250,17 +235,20 @@ export function createLwsBackend(options: LwsBackendOptions): StorageClient {
   // Container identifiers may be slashless; validate the representation rather than URL shape.
   // Also used by recursive deletion, after HEAD confirms a scoped target is a container.
   const list: StorageClient["list"] = async (container, opts = {}) => {
+    validateListingMaxBytes(opts.maxBytes);
     const result = await get(
       opts.cursor === undefined ? container : opts.cursor.url,
       { Accept: LIST_ACCEPT },
       opts.signal,
       false,
       opts.revalidate,
+      opts.headers,
     );
     const raw = await jsonBody(
       result,
       ["application/lws+json", "application/ld+json"],
       opts.signal,
+      opts.maxBytes,
     );
     if (
       !object(raw) ||
@@ -331,10 +319,10 @@ export function createLwsBackend(options: LwsBackendOptions): StorageClient {
     readRdf,
     isWithinStorage,
     async list(url, opts) {
-      return list(listingContainer(root, url), opts);
+      return list(listingContainer(root, url, versionHistoryQuery(features, root, url)), opts);
     },
     async *listAll(url, opts = {}) {
-      const container = listingContainer(root, url);
+      const container = listingContainer(root, url, versionHistoryQuery(features, root, url));
       yield* paginate(
         container,
         (cursor) => client.list(container, { ...opts, cursor }),

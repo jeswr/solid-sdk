@@ -15,7 +15,6 @@ import {
   DPoPTokenProvider,
   DynamicRegistrationClientProvider,
   type HttpOptions,
-  LwsTokenProvider,
   nonReactiveFetch,
   OidcIdTokenSource,
   ReactiveFetchManager,
@@ -30,6 +29,7 @@ import {
 } from "@jeswr/reactive-authentication";
 import { createBoundary } from "./boundary.js";
 import { protectStore, scopedStore } from "./kv.js";
+import { createLwsProvider } from "./lws-provider.js";
 import { secureUrl } from "./options.js";
 import { memoryStore, sessionStorage } from "./sessions.js";
 import type { CidSubject, Identity, KvStore, LoginHint, PodAuthOptions } from "./types.js";
@@ -145,7 +145,7 @@ export function createAgentProviders(
         signal.removeEventListener("abort", onAbort);
       }
     };
-    provider = new LwsTokenProvider(
+    provider = createLwsProvider(
       {
         id: source.id,
         fence,
@@ -159,7 +159,8 @@ export function createAgentProviders(
           resolved = undefined;
         },
       },
-      { http, fence },
+      boundary,
+      fence,
     );
     identity = {
       webId: null,
@@ -460,13 +461,18 @@ export function createProviders(
     codeProvider,
     asProvider,
     clientProvider,
-    { ...sessionOptions, session: umaSession },
+    {
+      ...sessionOptions,
+      http: boundary.exchangeHttp,
+      session: umaSession,
+      trustAuthorizationServer: boundary.trustAuthorizationServer,
+    },
   );
   const lwsContexts = new Map<
     string,
-    { provider: LwsTokenProvider; validate(signal: AbortSignal): Promise<void> }
+    { provider: TokenProvider; validate(signal: AbortSignal): Promise<void> }
   >();
-  const lwsRequests = new WeakMap<Request, LwsTokenProvider>();
+  const lwsRequests = new WeakMap<Request, TokenProvider>();
   const lwsFor = async (request: Request) => {
     // Capture the selected Solid session before any awaits; another upgrade may select a new one.
     const target = sessionRequest ?? request;
@@ -516,7 +522,10 @@ export function createProviders(
           return credential;
         },
       };
-      binding = { provider: new LwsTokenProvider(source, { http, fence }), validate };
+      binding = {
+        provider: createLwsProvider(source, boundary, fence),
+        validate,
+      };
       lwsContexts.set(key, binding);
     }
     return binding;
@@ -533,9 +542,10 @@ export function createProviders(
       lwsRequests.set(upgraded, provider);
       return upgraded;
     },
-    invalidate: async (request) => await lwsRequests.get(request)!.invalidate(request),
+    invalidate: async (request, challenge) =>
+      await lwsRequests.get(request)!.invalidate!(request, challenge),
     forget: async () => {
-      await Promise.all([...lwsContexts.values()].map(({ provider }) => provider.forget()));
+      await Promise.all([...lwsContexts.values()].map(({ provider }) => provider.forget!()));
       lwsContexts.clear();
     },
   };
@@ -619,6 +629,7 @@ export function createProviders(
       return claims;
     },
     logout: async () => {
+      boundary.clear();
       const failures: unknown[] = [];
       // Load the catalog without redeeming a token, so a fresh instance can revoke and purge too.
       try {

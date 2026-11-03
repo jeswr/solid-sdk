@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import type { ChangeEvent, ChangeType } from "./types.js";
 
 const AS = "https://www.w3.org/ns/activitystreams#";
@@ -56,12 +57,14 @@ export interface NormalisationOptions {
 /**
  * Normalise decoded Solid AS2 or LWS Notification messages without JSON-LD context fetching.
  * Unknown/malformed activities and foreign storage/resources are dropped before id deduplication.
- * Each normaliser owns a five-second dedupe window; create one per subscription.
+ * Each normaliser owns a five-second publisher-id dedupe window; create one per subscription.
+ * ID-less activities receive fresh ids rather than being mistaken for replays.
  */
 export function createChangeNormalizer(
   options: NormalisationOptions,
 ): (raw: unknown) => ChangeEvent[] {
   const seen = new Map<string, number>();
+  let sequence = 0n;
   const now = options.now ?? Date.now;
   const scoped = (url: string) => {
     // biome-ignore lint/suspicious/noControlCharactersInRegex: Reject controls before URL parsing strips them.
@@ -90,15 +93,17 @@ export function createChangeNormalizer(
       const published =
         typeof activity.published === "string" ? new Date(activity.published) : new Date(time);
       if (!Number.isFinite(published.getTime())) continue;
-      const eventId = id(activity.id) ?? `${object}#${published.toISOString()}`;
-      if (seen.has(eventId)) continue;
-      seen.set(eventId, time + 5_000);
+      const activityId = id(activity.id);
+      if (activityId) {
+        if (seen.has(activityId)) continue;
+        seen.set(activityId, time + 5_000);
+      }
       const event: ChangeEvent = {
         type,
         object,
         objectKind: kind(activity.object),
         published,
-        id: eventId,
+        id: activityId ?? `${object}#${published.toISOString()}:${++sequence}`,
         via: options.via,
         raw,
       };

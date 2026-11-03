@@ -5,6 +5,7 @@ import { parseRdf, SUPPORTED_RDF_MEDIA_TYPES } from "@jeswr/fetch-rdf";
 import { Store } from "n3";
 import { StorageError } from "./errors.js";
 import {
+  boundedText,
   discard,
   failed,
   mediaTypeOf,
@@ -13,12 +14,23 @@ import {
   scoped,
   send,
 } from "./http.js";
+import { listingTooLarge, throwIfAborted } from "./internal.js";
 import type { AuthFetch, RdfReadResult, ReadResult, StorageClient } from "./types.js";
 
 /** RFC 6838 type/subtype without parameters. */
 export const MEDIA_TYPE = /^[a-z0-9][a-z0-9!#$&^_.+-]{0,126}\/[a-z0-9][a-z0-9!#$&^_.+-]{0,126}$/i;
 const RDF_ACCEPT = "text/turtle, application/ld+json;q=0.9";
 const RDF_READABLE: ReadonlySet<string> = new Set(SUPPORTED_RDF_MEDIA_TYPES);
+
+/** Preserve protocol headers while allowing request-local transport markers. */
+function requestHeaders(
+  headers: Record<string, string>,
+  extra?: RequestInit["headers"],
+): Record<string, string> {
+  const additional = new Headers(extra);
+  for (const name of ["accept", "range", "if-none-match"]) additional.delete(name);
+  return { ...Object.fromEntries(additional), ...headers };
+}
 
 export interface ReadExpectation {
   range: boolean;
@@ -61,6 +73,8 @@ export async function acceptReadStatus(
 export async function rdfBody(
   result: ReadResult,
   code: "not-rdf" | "invalid-response",
+  maxBytes?: number,
+  signal?: AbortSignal,
 ): Promise<{ type: string; dataset: Awaited<ReturnType<typeof parseRdf>> }> {
   const type = mediaTypeOf(result.contentType) ?? "";
   if (!RDF_READABLE.has(type)) {
@@ -72,10 +86,24 @@ export async function rdfBody(
     });
   }
   // Body transport failures surface as `network` (from bytes()), not as a parse error.
-  const text = await result.text();
+  const text =
+    maxBytes === undefined
+      ? await result.text()
+      : await boundedText(result, maxBytes, listingTooLarge(result.url, maxBytes), signal);
   try {
-    return { type, dataset: await parseRdf(text, result.contentType, { baseIRI: result.url }) };
+    // fetch-rdf caps parsing at its own default budget, so a caller's larger byte cap must reach
+    // it. boundedText already enforced the cap on raw bytes; decoding can turn each invalid byte
+    // into U+FFFD (3 UTF-8 bytes), so fetch-rdf, which re-measures the decoded text, gets 3x room.
+    const parseBytes =
+      maxBytes === undefined ? undefined : Math.min(maxBytes * 3, Number.MAX_SAFE_INTEGER);
+    const options = {
+      baseIRI: result.url,
+      ...(parseBytes === undefined ? {} : { maxBytes: parseBytes }),
+      ...(signal === undefined ? {} : { signal }),
+    };
+    return { type, dataset: await parseRdf(text, result.contentType, options) };
   } catch (cause) {
+    throwIfAborted("GET", result.url, signal);
     throw new StorageError(code, {
       method: "GET",
       url: result.url,
@@ -93,9 +121,18 @@ export function createReadOperations(fetch: AuthFetch, root: string, shapeOf: Sh
     signal: AbortSignal | undefined,
     range = false,
     revalidate = false,
+    extraHeaders?: RequestInit["headers"],
   ): Promise<ReadResult> {
     const target = scoped(root, "GET", url);
-    const response = await send(fetch, "GET", target, headers, signal, undefined, revalidate);
+    const response = await send(
+      fetch,
+      "GET",
+      target,
+      requestHeaders(headers, extraHeaders),
+      signal,
+      undefined,
+      revalidate,
+    );
     const shape = await shapeOf("GET", target, response, {
       range,
       conditional: "If-None-Match" in headers,
@@ -111,7 +148,7 @@ export function createReadOperations(fetch: AuthFetch, root: string, shapeOf: Sh
         fetch,
         "HEAD",
         target,
-        { Accept: "*/*" },
+        requestHeaders({ Accept: "*/*" }, opts.headers),
         opts.signal,
         undefined,
         opts.revalidate,
@@ -137,7 +174,7 @@ export function createReadOperations(fetch: AuthFetch, root: string, shapeOf: Sh
         }
         headers.Range = `bytes=${start}-${end ?? ""}`;
       }
-      return get(url, headers, opts.signal, opts.range !== undefined);
+      return get(url, headers, opts.signal, opts.range !== undefined, false, opts.headers);
     },
 
     async readRdf(
@@ -156,7 +193,7 @@ export function createReadOperations(fetch: AuthFetch, root: string, shapeOf: Sh
           notModified: true,
         };
       }
-      const { type, dataset } = await rdfBody(result, "not-rdf");
+      const { type, dataset } = await rdfBody(result, "not-rdf", undefined, opts.signal);
       return { url: result.url, etag: result.etag, contentType: type, dataset };
     },
   };

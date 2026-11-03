@@ -1,4 +1,5 @@
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 
 # @jeswr/pod-auth
 
@@ -43,10 +44,86 @@ matcher. Credentials only attach within static roots or automatically verified s
 Set `boundary.automatic: false` for a static-only boundary. `boundary.eligible` restricts both static
 and discovered roots. Public and excluded resources never prompt; unverified 401s remain 401s.
 
+Credential roots come exclusively from `boundary.roots` (including explicit application/user grants)
+or the authenticated WebID profile's `pim:storage` statements about that exact WebID. Automatic roots
+load during `login()` and `restore()`; call one before fetching when no static roots are configured.
+Without a WebID, configure roots explicitly. Neither the WebID document's origin nor the OIDC issuer's
+origin is implicitly a resource grant. Profile-linked non-container storage identifiers may resolve to
+LWS descriptions (`id`, `Storage`, `StorageRoot.serviceEndpoint`) or Solid descriptions (`pim:Storage`).
+Description requests omit credentials and reject redirects. Profile redirects locate the public
+document; assertions must still name the original WebID. Invalid assertions grant nothing.
+
+A target's `Link` headers, `pim:Storage` type, ancestor responses, storage description, or
+`WWW-Authenticate` challenge never adds a credential root. UMA/LWS authorization servers and exchange
+endpoints must use an already granted storage origin or an explicitly configured AS origin; configure
+such an AS using `boundary.roots`. LWS realms must fit a grant, or identify a description whose root
+contains the resource within that grant. A challenge cannot expand the token audience beyond it.
+These checks apply to both OIDC ID-token and CID subject-token exchanges. An untrusted target receives
+no SDK Authorization header, token-bound DPoP proof, UMA claim token, or LWS subject token.
+
+Credentialed fetch attempts use manual redirects. Each visible hop rechecks the same boundary and
+creates credentials only for an authorized destination; foreign hops receive no SDK credentials.
+Browser `opaqueredirect` responses remain opaque. Exchange requests reject redirects. Logout and
+session supersession clear automatic roots and fence pending profile discovery; restore reloads roots
+from the profile rather than trusting remembered resource URLs or cached response hints.
+
 Client Identifier Documents require HTTPS. `{ dynamicRegistration: true }` is permitted only with a
 loopback callback outside production. Plain HTTP additionally requires `allowInsecureLoopback: true`;
 it is checked on every protocol hop and never authorizes non-loopback HTTP. Browser callback origins
 must match the current application origin. Loopback includes localhost, 127.0.0.0/8 and ::1.
+
+## Generate the suite Client Identifier Document
+
+From the workspace root, generate the static document required by ADR-004 D7:
+
+```sh
+node scripts/client-id.mjs client-id.config.json path/to/public
+```
+
+The JSON config describes one HTTPS suite origin and every permitted popup or full-page callback:
+
+```json
+{
+  "origin": "https://suite.example",
+  "name": "Solid Suite",
+  "logo": "https://suite.example/logo.svg",
+  "redirectUris": [
+    "https://suite.example/auth/callback.html",
+    "https://suite.example/drive/auth/callback.html"
+  ],
+  "fedapp": {
+    "sectors": ["https://jeswr.org/ns/sectors/scheduling#sector"],
+    "access": ["http://www.w3.org/ns/auth/acl#Read"],
+    "consumes": ["http://www.w3.org/2005/01/wf/flow#Task"],
+    "produces": ["http://www.w3.org/2005/01/wf/flow#Task"],
+    "declaresShape": ["https://suite.example/shapes#TaskShape"]
+  }
+}
+```
+
+`origin`, `name`, a non-empty `redirectUris`, and `fedapp.sectors` are required. `logo` and the other
+federation arrays are optional. Federation values are absolute HTTP(S) IRIs; `access` accepts only
+the canonical `http://www.w3.org/ns/auth/acl#Read`, `Write`, `Append`, or `Control` mode IRIs.
+`consumes`/`produces` reference shapes or shared classes; `declaresShape` claims authorship of a SHACL
+shape, so include it only when the app defines that shape. This generator supports flat app-level
+declarations. It does not infer per-sector permissions.
+
+The generator writes `path/to/public/.well-known/solid-client-id.jsonld`. It fixes the client ID to
+the configured origin plus that path, requests `openid webid offline_access`, declares a public
+client (`none`) and DPoP-bound access tokens, and embeds canonical federation mappings from
+`packages/solid-federation-vocab/context.jsonld`. It never fetches contexts or reads environment
+variables. Unknown fields, credentials in URLs, non-HTTPS deployment URLs, cross-origin callbacks,
+fragments in callbacks, and URLs requiring silent normalization fail before any output is written.
+Redirect URLs remain byte-for-byte intact; exact duplicates are removed in first-seen order.
+HTTP federation IRIs are identifiers, not transport destinations.
+
+Serve the generated resource at exactly `https://suite.example/.well-known/solid-client-id.jsonld`
+with `Content-Type: application/ld+json`, and use that URL as pod-auth's `clientId`. Include the
+artifact in each Vercel deploy; keep its contents fixed for that deploy. The script generates the
+file only; the hosting application configures the route and headers. It does not change app builds
+or publish a deployment.
+
+## Session lifecycle
 
 Optional `storage.sessions` and `storage.caches` accept structural async key-value stores, namespaced
 by client configuration. Metadata and refresh-only session records use separate stores; access/ID
@@ -56,7 +133,9 @@ event timestamps; protocol expiry validation remains in the engine.
 
 `restore()` reads the last-active account pointer and attempts a DPoP refresh grant without opening
 interactive authorization. The same non-extractable ES256 private key and exportable public key are
-persisted beside the refresh token under `(issuer, WebID, actual client_id)`, within the app namespace.
+persisted beside the refresh token under `(issuer, WebID, actual client_id, DPoP public key)`, within
+the app namespace. Separate grants for the same account keep their own credentials and refresh locks;
+rotation updates only the matching grant. Superseded grants remain available for logout across reloads.
 An unloadable, extractable, mismatched or non-ES256 key discards the credential before redemption.
 Access and ID tokens stay in memory. Rotation is persisted before an identity or restore event is exposed.
 Web Locks serialize refreshes across tabs; Node falls back to keyed FIFO locks within the current realm
@@ -120,7 +199,8 @@ so UI hooks are unused; configuration without a signing key fails closed. CID UR
 Agent credentials, access tokens and keys stay in memory. `restore()` returns an existing live identity
 or null; `remembered()` is empty. Logout fences outstanding work, clears token caches, and requires
 CID resolution again on the next login. The caller owns provisioning and retention of the signing key.
-Node factories require explicit static roots; the core CID configuration also supports the normal boundary options.
+Node factories require explicit static roots. Core CID mode also needs configured roots for authenticated
+resource access: a CID subject does not implicitly authorize storage origins.
 
 React consumers mount one provider and read `usePodAuth()` from `@jeswr/pod-auth/react`:
 

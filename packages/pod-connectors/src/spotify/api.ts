@@ -10,11 +10,28 @@ export interface Page<T> {
   cursors?: { before?: string; after?: string };
 }
 
+/** Wait out a rate-limit delay, ending early with the abort reason when the run is cancelled. */
+function retryDelay(ms: number, signal: AbortSignal | undefined): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) return reject(signal.reason);
+    const stop = () => {
+      clearTimeout(timer);
+      reject(signal?.reason);
+    };
+    const timer = setTimeout(() => {
+      signal?.removeEventListener("abort", stop);
+      resolve();
+    }, ms);
+    signal?.addEventListener("abort", stop, { once: true });
+  });
+}
+
 /** Bound retries; never retry forbidden or failed requests using another identity. */
 export async function spotifyJson<T>(
   api: typeof fetch,
   url: string,
   budget = new RunBudget("spotify"),
+  signal?: AbortSignal,
 ): Promise<T> {
   for (let attempt = 0; ; attempt++) {
     budget.request();
@@ -31,7 +48,7 @@ export async function spotifyJson<T>(
       await res.body?.cancel();
       if (attempt >= 3 || delay === undefined || delay * 1000 > 2_147_483_647)
         throw new RateLimitedError("spotify", url, delay);
-      await new Promise((resolve) => setTimeout(resolve, delay * 1000));
+      await retryDelay(delay * 1000, signal);
       continue;
     }
     if (!res.ok)
@@ -65,7 +82,12 @@ export async function* pages<T>(
     )
       throw new IntegrationSyncError("spotify", "Unsafe or repeated Spotify pagination link.");
     seen.add(url.href);
-    const json = await spotifyJson<Page<T> & { artists?: Page<T> }>(ctx.api, url.href, budget);
+    const json = await spotifyJson<Page<T> & { artists?: Page<T> }>(
+      ctx.api,
+      url.href,
+      budget,
+      ctx.signal,
+    );
     if (!json || typeof json !== "object")
       throw new IntegrationSyncError("spotify", "Invalid Spotify page.");
     const page = unwrap(json);

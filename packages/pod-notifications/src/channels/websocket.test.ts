@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import * as storageModule from "@jeswr/storage-client";
 import { createMemoryStorage } from "@jeswr/storage-client/memory";
 import { afterEach, expect, test, vi } from "vitest";
@@ -641,6 +642,97 @@ test("LWS DELETE is best effort and close waits for its completion", async () =>
   await close;
   expect(done).toBe(true);
   expect(sub.state).toBe("closed");
+});
+
+test.each([
+  "heartbeat",
+  "listener",
+])("push cleanup survives a %s teardown failure across topics", async (failure) => {
+  const net = network();
+  const f = fixture();
+  const abort = new AbortController();
+  const removeAbort = vi.spyOn(abort.signal, "removeEventListener");
+  const sub = await f.client.subscribe([f.root, `${f.root}hot`], { signal: abort.signal });
+  await f.timers.advanceBy(0);
+  for (const socket of f.sockets) socket.open();
+  const error = new Error("push cleanup failed");
+  const first = f.sockets[0] as FakeWebSocket;
+  if (failure === "heartbeat") {
+    const clearTimeout = f.timers.clearTimeout.bind(f.timers);
+    vi.spyOn(f.timers, "clearTimeout").mockImplementationOnce((handle) => {
+      clearTimeout(handle);
+      throw error;
+    });
+  } else {
+    const removeListener = first.removeEventListener.bind(first);
+    vi.spyOn(first, "removeEventListener").mockImplementationOnce((...args) => {
+      removeListener(...args);
+      throw error;
+    });
+  }
+  const waiting = sub[Symbol.asyncIterator]().next();
+  const close = sub.close();
+  await expect(close).rejects.toBe(error);
+  expect(sub.close()).toBe(close);
+  expect(await waiting).toEqual({ done: true, value: undefined });
+  for (const socket of f.sockets) {
+    expect(socket.readyState).toBe(3);
+    expect(socket.listenerCount).toBe(0);
+  }
+  expect(f.timers.pending).toBe(0);
+  expect([...net.listeners.values()].every((handlers) => handlers.size === 0)).toBe(true);
+  expect(removeAbort).toHaveBeenCalledExactlyOnceWith("abort", expect.any(Function));
+});
+
+test("push close waits for LWS deletion even when earlier teardown steps throw", async () => {
+  const net = network();
+  const f = fixture("lws");
+  const base = f.fetch.getMockImplementation() as typeof globalThis.fetch;
+  const deletion = Promise.withResolvers<Response>();
+  f.fetch.mockImplementation((input, init) =>
+    init?.method === "DELETE" ? deletion.promise : base(input, init),
+  );
+  const abort = new AbortController();
+  const removeAbort = vi.spyOn(abort.signal, "removeEventListener");
+  const sub = await f.client.subscribe([f.root], { signal: abort.signal });
+  await f.timers.advanceBy(0);
+  const socket = f.sockets[0] as FakeWebSocket;
+  const error = new Error("socket listener cleanup failed");
+  const removeListener = socket.removeEventListener.bind(socket);
+  vi.spyOn(socket, "removeEventListener").mockImplementationOnce((...args) => {
+    removeListener(...args);
+    throw error;
+  });
+  const close = sub.close();
+  const outcome = vi.fn();
+  void close.then(outcome, outcome);
+  await Promise.resolve();
+  expect(outcome).not.toHaveBeenCalled();
+  expect(f.deletes()).toHaveLength(1);
+  expect(socket.listenerCount).toBe(0);
+  expect(socket.readyState).toBe(3);
+  expect([...net.listeners.values()].every((handlers) => handlers.size === 0)).toBe(true);
+  expect(removeAbort).toHaveBeenCalledExactlyOnceWith("abort", expect.any(Function));
+  deletion.reject(new Error("best-effort deletion failed"));
+  await expect(close).rejects.toBe(error);
+  expect(outcome).toHaveBeenCalledExactlyOnceWith(error);
+  expect(sub.close()).toBe(close);
+});
+
+test("push cleanup removes network listeners even when cancelling a retry throws", async () => {
+  const net = network();
+  const f = fixture();
+  const sub = await f.client.subscribe([f.root]);
+  const error = new Error("retry cleanup failed");
+  const clearTimeout = f.timers.clearTimeout.bind(f.timers);
+  vi.spyOn(f.timers, "clearTimeout").mockImplementationOnce((handle) => {
+    clearTimeout(handle);
+    throw error;
+  });
+  await expect(sub.close()).rejects.toBe(error);
+  expect(f.timers.pending).toBe(0);
+  expect([...net.listeners.values()].every((handlers) => handlers.size === 0)).toBe(true);
+  expect(f.posts()).toHaveLength(0);
 });
 
 test("LWS invalid receiveFrom still deletes a validated subscription; invalid DELETE hosts are refused", async () => {

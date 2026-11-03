@@ -1,11 +1,12 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import {
   type Entry,
   type ReadResult,
   type StorageClient,
   StorageError,
 } from "@jeswr/storage-client";
-import { isOnline, platform } from "../runtime.js";
+import { isOnline, platform, runCleanups } from "../runtime.js";
 import { SubscriptionController } from "../subscription.js";
 import type { ChangeEvent, Timers } from "../types.js";
 
@@ -20,6 +21,7 @@ export interface PollChannelOptions {
 }
 
 interface Snapshot {
+  kind: ReadResult["kind"];
   etag: string | null;
   members: Map<string, Entry>;
 }
@@ -38,7 +40,8 @@ export function createPollChannel(options: PollChannelOptions): SubscriptionCont
   let active: AbortController | undefined;
   let stopped = false;
   let resume = false;
-  let offlineSince: Date | undefined;
+  // Reconcile once after setup, including changes absorbed by the quiet baseline.
+  let resyncSince: Date | undefined = new Date(0);
   let sequence = 0;
 
   const clear = () => {
@@ -90,7 +93,9 @@ export function createPollChannel(options: PollChannelOptions): SubscriptionCont
           } catch (error) {
             request.signal.throwIfAborted();
             if (error instanceof StorageError && error.code === "not-found") {
+              const previous = snapshots.get(topic);
               snapshots.set(topic, null);
+              if (previous) emit("Delete", topic, previous.kind, error, {});
               continue;
             }
             throw error;
@@ -108,7 +113,8 @@ export function createPollChannel(options: PollChannelOptions): SubscriptionCont
           }
           request.signal.throwIfAborted();
           const previous = snapshots.get(topic);
-          snapshots.set(topic, { etag: head.etag, members });
+          snapshots.set(topic, { kind: head.kind, etag: head.etag, members });
+          if (previous === null) emit("Create", topic, head.kind, head, {});
           if (!previous) continue;
           if (head.etag !== null && previous.etag !== null && head.etag !== previous.etag) {
             emit("Update", topic, head.kind, head, { state: head.etag });
@@ -139,9 +145,9 @@ export function createPollChannel(options: PollChannelOptions): SubscriptionCont
     } finally {
       active = undefined;
       if (!stopped && isOnline()) {
-        if (offlineSince && !request.signal.aborted && reconciled) {
-          subscription.resync(offlineSince);
-          offlineSince = undefined;
+        if (resyncSince && !request.signal.aborted && reconciled) {
+          subscription.resync(resyncSince);
+          resyncSince = undefined;
         }
         schedule(resume ? 0 : options.intervalMs);
         resume = false;
@@ -149,7 +155,7 @@ export function createPollChannel(options: PollChannelOptions): SubscriptionCont
     }
   };
   const offline = () => {
-    offlineSince = new Date(options.now());
+    resyncSince ??= new Date(options.now());
     clear();
     active?.abort();
     subscription.transition("degraded", "offline");
@@ -163,12 +169,14 @@ export function createPollChannel(options: PollChannelOptions): SubscriptionCont
   };
   subscription.cleanup = () => {
     stopped = true;
-    clear();
-    active?.abort();
-    snapshots.clear();
-    platform.removeEventListener?.("offline", offline);
-    platform.removeEventListener?.("online", online);
-    options.signal?.removeEventListener("abort", abort);
+    runCleanups([
+      clear,
+      () => active?.abort(),
+      () => snapshots.clear(),
+      () => platform.removeEventListener?.("offline", offline),
+      () => platform.removeEventListener?.("online", online),
+      () => options.signal?.removeEventListener("abort", abort),
+    ]);
   };
   platform.addEventListener?.("offline", offline);
   platform.addEventListener?.("online", online);

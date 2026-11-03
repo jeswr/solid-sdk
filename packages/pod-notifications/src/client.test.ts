@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { type AuthFetch, StorageError } from "@jeswr/storage-client";
 import { createLwsBackend } from "@jeswr/storage-client/lws";
 import { createMemoryStorage } from "@jeswr/storage-client/memory";
@@ -261,6 +262,8 @@ test("opaque LWS containers establish a baseline, observe changes and reconcile 
   sub.on("resync", resync);
   await timers.advanceBy(0);
   expect(changes).toEqual([]);
+  expect(resync).toHaveBeenCalledExactlyOnceWith(new Date(0));
+  resync.mockClear();
   revision = 1;
   await timers.advanceBy(10);
   expect(changes).toMatchObject([
@@ -310,6 +313,8 @@ test.each([
   sub.on("change", changes);
   sub.on("resync", resync);
   await timers.advanceBy(0);
+  expect(resync).toHaveBeenCalledExactlyOnceWith(new Date(0));
+  resync.mockClear();
   net.set(false);
   await storage.delete(hot.url, { ifMatch: hot.etag as string });
   const realHead = storage.head.bind(storage);
@@ -325,9 +330,10 @@ test.each([
   expect(changes.mock.calls.map(([event]) => [event.type, event.object])).toEqual([
     ["Update", root],
     ["Delete", hot.url],
+    ["Delete", hot.url], // Membership and independently watched presence both invalidate it.
   ]);
   await timers.advanceBy(30);
-  expect(changes).toHaveBeenCalledTimes(2);
+  expect(changes).toHaveBeenCalledTimes(3);
   net.set(false);
   net.set(true);
   await timers.advanceBy(0);
@@ -336,7 +342,7 @@ test.each([
   await sub.close();
 });
 
-test("initially absent hot resources and reappearances establish quiet baselines", async () => {
+test("an initially absent resource is quiet, then creation, deletion and recreation emit changes", async () => {
   const net = network(false);
   const { storage, client, timers } = fixture();
   const hot = `${root}hot`;
@@ -348,9 +354,13 @@ test("initially absent hot resources and reappearances establish quiet baselines
   net.set(true);
   await timers.advanceBy(0);
   expect(resync).toHaveBeenCalledTimes(1);
-  const created = await storage.create(root, "first", { contentType: "text/plain", name: "hot" });
   await timers.advanceBy(10);
   expect(changes).not.toHaveBeenCalled();
+  const created = await storage.create(root, "first", { contentType: "text/plain", name: "hot" });
+  await timers.advanceBy(10);
+  expect(changes).toHaveBeenCalledExactlyOnceWith(
+    expect.objectContaining({ type: "Create", object: hot }),
+  );
   await storage.delete(hot, { ifMatch: created.etag as string });
   await timers.advanceBy(10);
   const recreated = await storage.create(root, "second", {
@@ -358,13 +368,18 @@ test("initially absent hot resources and reappearances establish quiet baselines
     name: "hot",
   });
   await timers.advanceBy(10);
-  expect(changes).not.toHaveBeenCalled();
+  expect(changes.mock.calls.map(([event]) => [event.type, event.object])).toEqual([
+    ["Create", hot],
+    ["Delete", hot],
+    ["Create", hot],
+  ]);
   const written = await storage.write(hot, "third", {
     contentType: "text/plain",
     ifMatch: recreated.etag as string,
   });
   await timers.advanceBy(10);
-  expect(changes).toHaveBeenCalledExactlyOnceWith(
+  expect(changes).toHaveBeenCalledTimes(4);
+  expect(changes).toHaveBeenLastCalledWith(
     expect.objectContaining({ type: "Update", object: hot, state: written.etag }),
   );
   await sub.close();
@@ -379,6 +394,8 @@ test("an absent hot resource cannot hide transient failures or missing listing p
   sub.on("resync", resync);
   sub.on("change", changes);
   await timers.advanceBy(0);
+  expect(resync).toHaveBeenCalledExactlyOnceWith(new Date(0));
+  resync.mockClear();
   net.set(false);
   const created = await storage.create(root, "new", { contentType: "text/plain", name: "new" });
   vi.spyOn(storage, "listAll").mockImplementationOnce(async function* () {
@@ -629,6 +646,78 @@ test("queued callbacks cannot restart a closed or silently offline subscription"
   await queued();
   expect(head).not.toHaveBeenCalled();
   await offline.close();
+});
+
+test("poll cleanup releases listeners after timer cancellation throws", async () => {
+  const net = network();
+  const { client, timers } = fixture();
+  const abort = new AbortController();
+  const removeAbort = vi.spyOn(abort.signal, "removeEventListener");
+  const sub = await client.subscribe([root], { signal: abort.signal });
+  const waiting = sub[Symbol.asyncIterator]().next();
+  const error = new Error("timer cleanup failed");
+  const clearTimeout = timers.clearTimeout.bind(timers);
+  vi.spyOn(timers, "clearTimeout").mockImplementation((handle) => {
+    clearTimeout(handle);
+    throw error;
+  });
+  const close = sub.close();
+  await expect(close).rejects.toBe(error);
+  expect(sub.close()).toBe(close);
+  expect(sub.state).toBe("closed");
+  expect(await waiting).toEqual({ done: true, value: undefined });
+  expect(timers.pending).toBe(0);
+  expect([...net.listeners.values()].every((handlers) => handlers.size === 0)).toBe(true);
+  expect(removeAbort).toHaveBeenCalledExactlyOnceWith("abort", expect.any(Function));
+  net.set(false);
+  net.set(true);
+  await timers.advanceBy(100_000);
+  expect(timers.pending).toBe(0);
+});
+
+test("poll cleanup aborts in-flight work and removes remaining listeners after a removal throws", async () => {
+  const net = network();
+  const { storage, client, timers } = fixture();
+  const head = await storage.head(root);
+  const gate = Promise.withResolvers<typeof head>();
+  const request = vi.spyOn(storage, "head").mockReturnValueOnce(gate.promise);
+  const abort = new AbortController();
+  const removeAbort = vi.spyOn(abort.signal, "removeEventListener");
+  const sub = await client.subscribe([root], { signal: abort.signal });
+  const tick = timers.advanceBy(0);
+  const error = new Error("listener cleanup failed");
+  const removeListener = globalThis.removeEventListener;
+  vi.stubGlobal("removeEventListener", (type: string, handler: () => void) => {
+    removeListener(type, handler);
+    if (type === "offline") throw error;
+  });
+  await expect(sub.close()).rejects.toBe(error);
+  expect(request.mock.calls[0]?.[1]?.signal?.aborted).toBe(true);
+  expect([...net.listeners.values()].every((handlers) => handlers.size === 0)).toBe(true);
+  expect(removeAbort).toHaveBeenCalledExactlyOnceWith("abort", expect.any(Function));
+  gate.resolve(head);
+  await tick;
+  expect(timers.pending).toBe(0);
+});
+
+test("disabled polling close rejects a throwing abort-listener cleanup without hanging", async () => {
+  const { client } = fixture();
+  const abort = new AbortController();
+  const sub = await client.subscribe([root], { signal: abort.signal, pollIntervalMs: 0 });
+  const waiting = sub[Symbol.asyncIterator]().next();
+  const error = new Error("abort listener cleanup failed");
+  const removeListener = abort.signal.removeEventListener.bind(abort.signal);
+  const removeAbort = vi
+    .spyOn(abort.signal, "removeEventListener")
+    .mockImplementation((...args) => {
+      removeListener(...args);
+      throw error;
+    });
+  const close = sub.close();
+  await expect(close).rejects.toBe(error);
+  expect(sub.close()).toBe(close);
+  expect(await waiting).toEqual({ done: true, value: undefined });
+  expect(removeAbort).toHaveBeenCalledTimes(1);
 });
 
 test("closing from resync cannot leave a timer behind; failed reconciliation postpones resync", async () => {

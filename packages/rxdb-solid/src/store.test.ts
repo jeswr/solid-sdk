@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -197,6 +198,49 @@ describe("putDoc — conditional writes (concurrency control)", () => {
     expect(second.precondition).toBe("failed");
   });
 
+  it.each([404, 410])("propagates a create conflict when the target returns %s", async (status) => {
+    const fetchImpl = vi.fn<typeof globalThis.fetch>(
+      async (_input, init) => new Response(null, { status: init?.method === "PUT" ? 409 : status }),
+    );
+    const store = new SolidDocStore({ container: CONTAINER, fetch: fetchImpl });
+    const name = keyToResourceName("a");
+    await expect(
+      store.putDoc(name, "{}", DOC_CONTENT_TYPE, { ifNoneMatch: "*" }),
+    ).rejects.toMatchObject({
+      code: "conflict",
+      status: 409,
+      method: "PUT",
+      url: CONTAINER + name,
+    });
+    expect(fetchImpl.mock.calls.map(([, init]) => init?.method)).toEqual(["PUT", "GET"]);
+  });
+
+  it("treats a generic create conflict as a precondition failure only when the target exists", async () => {
+    const pod = makePod(CONTAINER);
+    const name = keyToResourceName("a");
+    await new SolidDocStore({ container: CONTAINER, fetch: pod.fetchImpl }).putDoc(
+      name,
+      '{"v":1}',
+      DOC_CONTENT_TYPE,
+    );
+    const fetchImpl: typeof globalThis.fetch = async (input, init) =>
+      init?.method === "PUT" ? new Response(null, { status: 409 }) : pod.fetchImpl(input, init);
+    const store = new SolidDocStore({ container: CONTAINER, fetch: fetchImpl });
+    await expect(
+      store.putDoc(name, '{"v":2}', DOC_CONTENT_TYPE, { ifNoneMatch: "*" }),
+    ).resolves.toEqual({ ok: false, precondition: "failed" });
+    expect((await store.getDoc(name))?.body).toBe('{"v":1}');
+  });
+
+  it.each([403, 500])("propagates a failed target confirmation (%s)", async (status) => {
+    const fetchImpl: typeof globalThis.fetch = async (_input, init) =>
+      new Response(null, { status: init?.method === "PUT" ? 409 : status });
+    const store = new SolidDocStore({ container: CONTAINER, fetch: fetchImpl });
+    await expect(
+      store.putDoc(keyToResourceName("a"), "{}", DOC_CONTENT_TYPE, { ifNoneMatch: "*" }),
+    ).rejects.toMatchObject({ status, method: "GET" });
+  });
+
   it("if-match succeeds on the current etag and fails on a stale one", async () => {
     const pod = condPod();
     const store = new SolidDocStore({ container: CONTAINER, fetch: pod.fetchImpl });
@@ -259,14 +303,17 @@ describe("redirect refusal on credentialed requests (SSRF / credential-exfil gua
           { status: 200, headers: { "content-type": "text/turtle" } },
         );
       }
-      return new Response("{}", { status: 200, headers: { "content-type": DOC_CONTENT_TYPE } });
+      return new Response("{}", {
+        status: 200,
+        headers: { "content-type": DOC_CONTENT_TYPE, etag: '"v1"' },
+      });
     };
     const store = new SolidDocStore({ container: CONTAINER, fetch: fetchImpl });
     await store.getDoc(keyToResourceName("a"));
     await store.putDoc(keyToResourceName("a"), "{}", DOC_CONTENT_TYPE);
     await store.deleteDoc(keyToResourceName("a"));
     await store.listDocUrls();
-    expect(seen).toHaveLength(4);
+    expect(seen).toHaveLength(5);
     expect(seen.every((i) => i?.redirect === "manual")).toBe(true);
   });
 

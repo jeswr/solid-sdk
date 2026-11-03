@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { expect, test, vi } from "vitest";
 import { SubscriptionController } from "./subscription.js";
 import type { ChangeEvent, SubscriptionState } from "./types.js";
@@ -138,15 +139,46 @@ test("reentrant close observers share the promise that awaits asynchronous clean
   expect(done).toBe(true);
 });
 
-test("asynchronous cleanup rejection reaches close callers after iterators settle", async () => {
+test.each([
+  "throw",
+  "reject",
+])("cleanup %s settles close after releasing all observers and iterators", async (failure) => {
   const sub = new SubscriptionController([]);
   const cleanup = Promise.withResolvers<void>();
-  sub.cleanup = () => cleanup.promise;
-  const waiting = sub[Symbol.asyncIterator]().next();
+  const error = new Error("cleanup failed");
+  let reentrant: Promise<void> | undefined;
+  sub.on("state", () => {
+    reentrant = sub.close();
+  });
+  sub.on("change", vi.fn());
+  sub.on("resync", vi.fn());
+  sub.cleanup = vi.fn(() => {
+    expect(sub.state).toBe("closed");
+    if (failure === "throw") throw error;
+    return cleanup.promise;
+  });
+  const iterator = sub[Symbol.asyncIterator]();
+  const queued = sub[Symbol.asyncIterator]();
+  sub.change(event);
+  expect(await iterator.next()).toEqual({ value: event, done: false });
+  const waiting = [iterator.next(), iterator.next()];
   const close = sub.close();
-  const rejection = expect(close).rejects.toThrow("cleanup failed");
-  expect(await waiting).toEqual({ done: true, value: undefined });
-  cleanup.reject(new Error("cleanup failed"));
+  const rejection = expect(close).rejects.toBe(error);
+  expect(reentrant).toBe(close);
+  expect(sub.close()).toBe(close);
+  expect(sub).toMatchObject({
+    listeners: { change: new Set(), state: new Set(), resync: new Set() },
+    finish: new Set(),
+  });
+  expect(await Promise.all(waiting)).toEqual([
+    { done: true, value: undefined },
+    { done: true, value: undefined },
+  ]);
+  expect(await queued.next()).toEqual({ done: true, value: undefined });
+  if (failure === "reject") cleanup.reject(error);
   await rejection;
   expect(sub.close()).toBe(close);
+  await expect(sub.close()).rejects.toBe(error);
+  expect(sub.cleanup).toHaveBeenCalledTimes(1);
+  expect(await sub[Symbol.asyncIterator]().next()).toEqual({ done: true, value: undefined });
 });

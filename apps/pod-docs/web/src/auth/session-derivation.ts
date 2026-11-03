@@ -1,15 +1,14 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 //
 // session-derivation.ts — derive the values <DocumentBrowser> needs (the pod
 // ROOT URL + the WebID) from the authenticated profile.
 //
-// WHY THE BROWSER ONLY NEEDS A POD ROOT (not the documents container):
-// <DocumentBrowser podRoot webId /> hands those two to @jeswr/pod-docs's
-// `useDocsListing` → `DocsStore`, which OWNS container discovery: it registers /
-// resolves the `pod-docs/` container via the user's Type Index
-// (`ensureTypeRegistrations`) for cross-app discovery, falling back to the
-// conventional `${podRoot}pod-docs/` path. So the host's job is ONLY to derive a
-// correct pod root; the documents-container derivation lives in the data layer.
+// This derives the storage root and identity. CollectionBrowser restores their
+// saved collection selection and persists server-assigned collection URLs.
+// With no saved selection, DocsStore starts from `${podRoot}pod-docs/` and
+// records the identifier returned by collection creation. Solid Type Index
+// registration remains in the data layer.
 //
 // POD-ROOT DERIVATION (first that yields a value):
 //   1. the FIRST `pim:storage` advertised on the WebID profile (the canonical
