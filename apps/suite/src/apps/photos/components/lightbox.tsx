@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 "use client";
 import { createPodScopedFetch } from "@jeswr/guarded-fetch";
 import {
@@ -29,9 +30,10 @@ import {
   ZoomOut,
 } from "lucide-react";
 import Link from "next/link";
-import { useParams, useRouter, useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { type PointerEvent, useEffect, useRef, useState } from "react";
 import { decodeRef, encodeRef } from "@/lib/refs";
+import { useRouteParams } from "@/lib/route-params";
 import type { LibraryPhoto } from "../lib/data/library";
 import { usePhotos } from "../state/photos-context";
 import { AlbumDialog } from "./album-dialogs";
@@ -320,7 +322,7 @@ function InfoPane({ photo }: { photo: LibraryPhoto }) {
 }
 export function LightboxScreen() {
   const state = usePhotos();
-  const params = useParams<{ ref: string }>();
+  const params = useRouteParams<{ ref: string }>("/photos/p/[ref]");
   const search = useSearchParams();
   const router = useRouter();
   const from = safeFrom(search.get("from"));
@@ -328,7 +330,7 @@ export function LightboxScreen() {
   const [add, setAdd] = useState(false);
   let ref: string | undefined;
   try {
-    ref = decodeRef(params.ref);
+    if (params) ref = decodeRef(params.ref);
   } catch {
     /* Show the unavailable view. */
   }
@@ -340,9 +342,12 @@ export function LightboxScreen() {
   const route = (item: LibraryPhoto) =>
     `/photos/p/${encodeRef(item.ref)}?from=${encodeURIComponent(from)}`;
   const close = () =>
-    router.push(`${from}${from.includes("?") ? "&" : "?"}focus=${encodeURIComponent(params.ref)}`, {
-      scroll: false,
-    });
+    router.push(
+      `${from}${from.includes("?") ? "&" : "?"}focus=${encodeURIComponent(params?.ref ?? "")}`,
+      {
+        scroll: false,
+      },
+    );
   async function download() {
     if (!photo) return;
     try {

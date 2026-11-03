@@ -16,6 +16,10 @@
       "types": "./dist/testing.d.ts",
       "default": "./dist/testing.js"
     },
+    "./requests-solid": {
+      "types": "./dist/requests-solid/index.d.ts",
+      "default": "./dist/requests-solid/index.js"
+    },
     "./roles": {
       "types": "./dist/roles/index.d.ts",
       "default": "./dist/roles/index.js"
@@ -44,10 +48,15 @@
     "@vitest/coverage-v8": "^4.1.9"
   },
   "dependencies": {
+    "@jeswr/fetch-rdf": "workspace:*",
+    "@jeswr/guarded-fetch": "workspace:*",
+    "@jeswr/rdf-serialize": "workspace:*",
+    "@jeswr/solid-odrl": "workspace:*",
+    "@jeswr/storage-capabilities": "workspace:*",
+    "@jeswr/suite-vocab": "workspace:*",
     "@rdfjs/types": "2.0.1",
     "@rdfjs/wrapper": "0.34.0",
     "@solid/object": "0.6.0",
-    "n3": "2.0.3",
-    "@jeswr/fetch-rdf": "workspace:*"
+    "n3": "2.0.3"
   }
 }

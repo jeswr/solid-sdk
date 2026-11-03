@@ -506,3 +506,19 @@ it.each([
   expect(document.querySelector('[role="alert"]')?.textContent).toContain("changed somewhere else");
   if (surface === "empty trash") expect(mocks.context.refresh).toHaveBeenCalled();
 });
+
+it("offers Add to Tasks only for notes with unchecked checklist items", async () => {
+  const checklist =
+    '<ul data-type="taskList"><li data-type="taskItem" data-checked="false"><label><input type="checkbox"><span></span></label><div><p>Buy milk</p></div></li></ul>';
+  const ui = await mount(h(NoteDialog, { note: { ...note(), body: checklist } }));
+  await click(button("Add to Tasks"));
+  expect(document.body.textContent).toContain("Each unchecked item becomes a task");
+  expect(document.body.textContent).toContain("Buy milk");
+  await click(button("Cancel"));
+  expect(document.body.textContent).not.toContain("Each unchecked item becomes a task");
+  await ui.unmount();
+  await mount(h(NoteDialog, { note: note() }));
+  expect(
+    [...document.querySelectorAll("button")].some((b) => b.textContent?.trim() === "Add to Tasks"),
+  ).toBe(false);
+});
