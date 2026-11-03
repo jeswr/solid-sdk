@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -13,7 +14,7 @@ const suitePackages = [
   "@jeswr/guarded-fetch",
   "@jeswr/solid-session-restore",
   "@jeswr/fetch-rdf",
-  "solid-offline",
+  "@jeswr/solid-offline",
 ];
 
 /** Absolute path to a file inside a node_modules package (symlink-followed). */

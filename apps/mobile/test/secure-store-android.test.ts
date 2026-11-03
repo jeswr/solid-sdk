@@ -1,3 +1,4 @@
+// AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY GPT-5.6 Codex
 // AUTHORED-BY Codex GPT-6
 import { readdirSync, readFileSync } from "node:fs";
@@ -25,7 +26,8 @@ describe("Android secure store guardrails", () => {
     for (const guard of [
       'WebViewCompat.removeWebMessageListener(webView, "androidBridge")',
       "bridge.getAllowedOriginRules().clear()",
-      "bridge.getAllowedOriginRules().add(bridge.getServerUrl())",
+      "NavigationPolicy.appUrl(bridge.getServerUrl(), bridge.getLocalUrl())",
+      "bridge.getAllowedOriginRules().add(appUrl)",
     ]) {
       expect(activity.indexOf(guard)).toBeGreaterThan(-1);
       expect(activity.indexOf(guard)).toBeLessThan(install);

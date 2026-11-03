@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "request": {
+    "method": "DELETE",
+    "url": "http://localhost:46617/conformance-5b1905a4-4edd-484a-83f5-39e9bf5a71f7/move-source/note.txt",
+    "headers": [["if-match", "\"1793491205048-text/plain\""]],
+    "body": null
+  },
+  "response": {
+    "url": "http://localhost:46617/conformance-5b1905a4-4edd-484a-83f5-39e9bf5a71f7/move-source/note.txt",
+    "status": 205,
+    "statusText": "Reset Content",
+    "headers": [
+      ["accept-ranges", "bytes"],
+      ["access-control-allow-credentials", "true"],
+      ["access-control-allow-origin", "*"],
+      [
+        "access-control-expose-headers",
+        "Accept-Patch,Accept-Post,Accept-Put,Allow,Content-Range,ETag,Last-Modified,Link,Location,Updates-Via,WAC-Allow,Www-Authenticate"
+      ],
+      ["connection", "keep-alive"],
+      ["date", "Sun, 01 Nov 2026 00:00:07 GMT"],
+      ["keep-alive", "timeout=5"],
+      ["transfer-encoding", "chunked"],
+      ["vary", "Accept,Authorization,Origin"],
+      ["x-powered-by", "Community Solid Server"]
+    ],
+    "body": null,
+    "redirected": false
+  }
+}
