@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 import { useSyncExternalStore } from "react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { NS, node, serialize } from "../../src/apps/tasks/lib/model/rdf";
 import type { StoredProject } from "../../src/apps/tasks/lib/model/store";
 import type { TasksCache } from "../../src/apps/tasks/state/tasks-cache";
@@ -302,6 +303,11 @@ describe("Upcoming", () => {
   });
 
   it("honours weekStart, shifts seven days, shows overdue only from Today, and opens a day composer", async () => {
+    // The day composer labels its chip from the real clock, not the mocked useNow: pin it to `now`.
+    vi.useFakeTimers({ toFake: ["Date"], now });
+    onTestFinished(() => {
+      vi.useRealTimers();
+    });
     localStorage.setItem("suite.tasks.prefs", JSON.stringify({ weekStart: "sunday" }));
     const inbox = cache.getSnapshot().projects[0] as StoredProject;
     await cache.createTask(inbox, { title: "Late", allDay: "2026-10-31" });
