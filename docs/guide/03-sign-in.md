@@ -194,8 +194,11 @@ export async function findStorages(auth: PodAuth): Promise<string[]> {
 
 Use the only storage when there is one, and let the user choose when there are several. When
 there are none (a new account on some servers starts with a bare profile), ask the user for their
-storage URL and remember it. `identity.storages` lists the roots `auth.fetch` currently trusts with
-credentials; it can be empty straight after a Solid sign-in, so do not use it to find the pod.
+storage URL and remember it. `auth.fetch` sends credentials only to storages the profile lists or
+you configure, and the configured list is fixed when the auth object is made: create a new one with
+that URL in `boundary.roots`, then call `restore()`. `identity.storages` lists every root
+`auth.fetch` trusts, including any you configured, so read the profile rather than that list to
+find the user's pod.
 
 ## Listen for session changes
 
@@ -226,14 +229,15 @@ Use `auth.fetch` for every pod request, and pass it to the other SDK packages. I
 credentials only to URLs inside two kinds of storage root:
 
 - roots you list in `boundary.roots`, and
-- roots it learns automatically: when a server answers 401, `auth.fetch` reads the storage
-  metadata that server sends (for example a `pim:Storage` type link, or a storage description on
-  the same origin) and trusts that root until the entry expires.
+- the storages the signed-in user's own WebID profile lists (`pim:storage`), loaded when they sign
+  in or the session is restored, and dropped on logout.
 
-Automatic roots rest on the server's own claim. Any site can say it is a storage, and nothing
-checks who owns it, so a link to someone else's pod, or to any site that claims to be one, can
-receive the user's credentials. When your app should send credentials only to known pods, list
-them and turn automatic roots off:
+Nothing a server sends back adds a root. A site that says it is a storage, or answers 401, gets no
+credentials unless the user's profile names it or you listed it. A request anywhere else goes out
+without credentials.
+
+To send credentials only to pods you list, for example in an app tied to one pod, turn the profile
+roots off:
 
 ```ts
 import { createPodAuth, type PodAuthOptions } from '@jeswr/pod-auth';
@@ -248,9 +252,9 @@ export const strictAuth = createPodAuth({
 });
 ```
 
-To keep automatic roots but accept only some hosts, leave `automatic` out and pass
-`eligible: (url) => url.origin === 'https://pod.example'`. `eligible` filters listed roots as well
-as learned ones. These options only decide where credentials go; requests elsewhere still run,
+To keep profile roots but accept only some hosts, leave `automatic` out and pass
+`eligible: (url) => url.origin === 'https://pod.example'`. `eligible` filters listed roots and
+profile roots alike. These options only decide where credentials go; requests elsewhere still run,
 without them.
 
 Never call `registerGlobally`, never patch `globalThis.fetch`, and never add `Authorization` or `DPoP`
