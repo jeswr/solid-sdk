@@ -182,6 +182,8 @@ public final class PdfPreviewStore {
 
     private boolean contained(File entry) throws IOException {
         File canonical = entry.getCanonicalFile();
-        return entry.getAbsoluteFile().equals(canonical) && canonical.toPath().startsWith(root.toPath());
+        // String prefix, not Path: File#toPath needs API 26 and minSdk is 24.
+        return entry.getAbsoluteFile().equals(canonical)
+            && canonical.getPath().startsWith(root.getPath() + File.separator);
     }
 }
