@@ -37,6 +37,7 @@ import {
 } from "../lib/outbox";
 import {
   clearRecentItems,
+  isRecordablePath,
   parseRecentItems,
   recentItemsKey,
   recordRecentItem,
@@ -156,6 +157,9 @@ function OfflineEffects({ pageTitle, outbox }: { pageTitle?: string; outbox: Out
   const state = useConnectionState();
   const pathname = usePathname();
   const hinted = useRef("");
+  // The page each account was last seen on, and a page opened under another account.
+  const lastSeen = useRef({ accountId: "", pathname: "" });
+  const inherited = useRef<string | null>(null);
   const accountId = active?.id ?? "";
   useEffect(() => {
     probeAccount = active ? { kind: active.kind, storageUrl: active.storageUrl } : null;
@@ -184,6 +188,13 @@ function OfflineEffects({ pageTitle, outbox }: { pageTitle?: string; outbox: Out
   // Titles and paths only: the index behind /offline.
   useEffect(() => {
     if (status !== "ready" || !accountId || !ready) return;
+    // After an account switch or sign-out the open page belongs to the previous account:
+    // never copy it (or its title, which can name a document) into the new account's list.
+    const previous = lastSeen.current;
+    if (previous.accountId && previous.accountId !== accountId && previous.pathname === pathname)
+      inherited.current = pathname;
+    else if (inherited.current !== pathname) inherited.current = null;
+    lastSeen.current = { accountId, pathname };
     if (!preferences.offline) {
       try {
         clearRecentItems(localStorage, accountId);
@@ -192,6 +203,7 @@ function OfflineEffects({ pageTitle, outbox }: { pageTitle?: string; outbox: Out
       }
       return;
     }
+    if (inherited.current === pathname || !isRecordablePath(pathname)) return;
     // Next may apply a route's title after its pathname changes, including streamed metadata.
     let recordedTitle: string | undefined;
     const record = () => {

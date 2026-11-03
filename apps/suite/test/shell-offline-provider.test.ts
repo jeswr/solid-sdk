@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 import { createRequire } from "node:module";
 import { act as reactAct } from "react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
@@ -116,6 +117,44 @@ it("records a route's title after navigation and disconnects the previous title 
     { href: "/docs", title: "Documents · Solid Suite" },
     { href: "/drive/my", title: "Drive · Solid Suite" },
   ]);
+});
+
+it("never copies the open page into the next account's history after a switch or sign-out", async () => {
+  document.title = "Salary review · Docs · Solid Suite";
+  fixture.pathname = "/docs/d/salary";
+  const view = render(h(OfflineProvider, { children: h(Snapshot) }));
+  await tick();
+  expect(JSON.parse(localStorage.getItem("suite.recent.v1.one") ?? "[]")).toHaveLength(1);
+  fixture.remember.mockClear();
+  fixture.account.active.id = "two";
+  view.rerender(h(OfflineProvider, { children: h(Snapshot) }));
+  await tick();
+  // A later re-run on the same page (preferences settling for the new account) still skips it.
+  fixture.settings.ready = false;
+  view.rerender(h(OfflineProvider, { children: h(Snapshot) }));
+  fixture.settings.ready = true;
+  view.rerender(h(OfflineProvider, { children: h(Snapshot) }));
+  await tick();
+  expect(localStorage.getItem("suite.recent.v1.two")).toBeNull();
+  expect(fixture.remember).not.toHaveBeenCalled();
+  fixture.pathname = "/drive/my";
+  view.rerender(h(OfflineProvider, { children: h(Snapshot) }));
+  await reactAct(async () => {
+    document.title = "Drive · Solid Suite";
+  });
+  await tick();
+  expect(JSON.parse(localStorage.getItem("suite.recent.v1.two") ?? "[]")).toMatchObject([
+    { href: "/drive/my", title: "Drive · Solid Suite" },
+  ]);
+  expect(fixture.remember).toHaveBeenCalledWith("/drive/my");
+});
+
+it("does not save excluded pages such as onboarding for offline use", async () => {
+  fixture.pathname = "/onboarding";
+  render(h(OfflineProvider, { children: h(Snapshot) }));
+  await tick();
+  expect(fixture.remember).not.toHaveBeenCalled();
+  expect(localStorage.getItem("suite.recent.v1.one")).toBeNull();
 });
 
 it("flushes an outbox on its initial online binding, on account change and after reconnect", async () => {
