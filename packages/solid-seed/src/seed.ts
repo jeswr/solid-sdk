@@ -346,9 +346,8 @@ async function exists(target: SeedTarget, url: string): Promise<boolean> {
 }
 
 /**
- * Statuses that report a write or delete as done. A 202 (or any other 2xx) only
- * accepts it for later processing, so the ACL transition that depends on it
- * cannot advance yet.
+ * Statuses that report a write or delete as done. A 202 only accepts it for
+ * later processing, so the ACL transition that depends on it cannot advance yet.
  */
 function completed(status: number): boolean {
   return status >= 200 && status < 300 && status !== 202;
@@ -417,6 +416,14 @@ async function removeCreated(
   if (failure !== undefined) {
     return new Error(
       `${original instanceof Error ? original.message : String(original)}; could not remove ${url} (${failure}), so its ACL was left in place`,
+      { cause: original },
+    );
+  }
+  // A write that was only accepted (202) may still land after the DELETE, and
+  // would then sit under the inherited ACL: keep this one in place.
+  if (aclAttempted && original instanceof HttpFailure && original.status === 202) {
+    return new Error(
+      `${original.message}; removed ${url}, but the accepted write may still land, so its ACL was left in place`,
       { cause: original },
     );
   }

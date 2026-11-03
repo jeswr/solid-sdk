@@ -748,6 +748,34 @@ describe("access-controlled resources: the ACL lands before any data", () => {
     expect(pod.resources.has(`${Secret}.acl`)).toBe(false);
   });
 
+  it("a data write that is only accepted (202) keeps the owner-only ACL through cleanup", async () => {
+    const pod = new MemoryPod("https://pod.example");
+    const inner = pod.authFetch;
+    let puts = 0;
+    let late: (() => Promise<Response>) | undefined;
+    const target = {
+      webid: pod.webid,
+      baseUrl: pod.baseUrl,
+      authFetch: (async (input, init) => {
+        // The placeholder lands; the data PUT is only queued, and lands later.
+        if (init?.method === "PUT" && String(input) === Secret && ++puts === 2) {
+          late = () => inner(input, init);
+          return new Response(null, { status: 202 });
+        }
+        return inner(input, init);
+      }) as typeof fetch,
+    };
+    const layout = access(pod, "private data", true);
+    const error = await seedPods({
+      layout: { pods: [{ ...layout.pods[0], account: { target } } as PodLayout["pods"][number]] },
+    }).catch((caught: unknown) => caught);
+    expect(String((error as SeedError).cause)).toMatch(/accepted write may still land/);
+    await late?.();
+    expect(pod.resources.get(Secret)?.body).toBe("private data");
+    expect(pod.resources.has(`${Secret}.acl`)).toBe(true);
+    expect(grantsPublicRead(pod.resources.get(`${Secret}.acl`)?.body, `${Secret}.acl`)).toBe(false);
+  });
+
   it("an accepted (202) cleanup DELETE keeps the ACL", async () => {
     const pod = new MemoryPod("https://pod.example");
     pod.failNextPut("/public/secret", 500, 1, true);

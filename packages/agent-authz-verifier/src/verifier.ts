@@ -1042,7 +1042,7 @@ export async function verifyAgentAuthority(
       return deny(
         "A",
         "MALFORMED",
-        `Phase A (credential verification) failed for hop <${hop.id}>: a validity bound is not a dateTime with a timezone.`,
+        `Phase A (credential verification) failed for hop <${hop.id}>: a validity bound is not a dateTime with a timezone and at most millisecond precision.`,
         chainIds,
       );
     }
