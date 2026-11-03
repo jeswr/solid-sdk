@@ -1,11 +1,14 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { readFile } from "node:fs/promises";
+// AUTHORED-BY Codex GPT-6
+import { existsSync } from "node:fs";
+import { readdir, readFile } from "node:fs/promises";
+import { basename, dirname, join } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { parseRdf } from "@jeswr/fetch-rdf";
-import { DataFactory as df, type Store } from "n3";
+import { DataFactory as df, Store } from "n3";
 import { isomorphic } from "rdf-isomorphic";
-import { describe, expect, it } from "vitest";
-// Reuse the vocabulary package's installed test dependency; no additional dependency.
-import SHACLValidator from "../../solid-federation-vocab/node_modules/rdf-validate-shacl/index.js";
+import SHACLValidator from "rdf-validate-shacl";
+import { describe, expect, it, vi } from "vitest";
 import {
   buildNanopublications,
   createFactAssertion,
@@ -19,6 +22,7 @@ import {
   parseNanopublications,
   serializeNanopublications,
 } from "../src/index.js";
+import * as rdf from "../src/rdf.js";
 import { graph, NS, RdfNode } from "../src/rdf.js";
 import { exampleBuildOptions } from "../src/testing.js";
 
@@ -45,11 +49,9 @@ const immunization: ImmunizationValue = {
   id: "https://example.org/immunizations/one",
   vaccine: { ...code, id: "https://example.org/products/vaccine", code: "EX-VAC" },
   occurrence: day,
-  lotNumber: "EX-LOT",
 };
 const encounter: EncounterValue = {
   id: "https://example.org/encounters/one",
-  type: code,
   period: { start: day, end: instant },
   serviceProvider: "https://example.org/providers/clinic",
 };
@@ -98,7 +100,7 @@ describe("health fact graphs", () => {
   it("emits a string lab result at day precision and omits absent options", async () => {
     const value = {
       ...observation,
-      code: { id: code.id, code: "EX-LAB" },
+      code: { id: code.id, code: "EX-LAB", system: code.system },
       value: "Negative",
       effective: day,
       unitCode: undefined,
@@ -113,7 +115,9 @@ describe("health fact graphs", () => {
         health:hasCode <${code.id}> ; health:value "Negative" ; schema:category "lab" ;
         health:effectiveTime [ a time:Instant, time:TemporalEntity ;
           time:inXSDDate "2026-11-01"^^xsd:date ] .
-      <${code.id}> a health:CodeableConcept, core:Identifier ; core:value "EX-LAB" .
+      <${code.id}> a health:CodeableConcept, core:Identifier ; core:value "EX-LAB" ;
+        core:inScheme <${code.system}> .
+      <${code.system}> a core:IdentifierScheme .
     `,
     );
     const uncategorized = assertion("observation", { ...value, kind: undefined });
@@ -136,13 +140,44 @@ describe("health fact graphs", () => {
     expect(measured).toEqual(df.literal(expected, df.namedNode(`${NS.xsd}decimal`)));
   });
 
-  it("emits a vaccine product with a nested code, occurrence and lot", async () => {
+  it.each([
+    "1.10",
+    "-1.100",
+    "0.0000",
+    "-0",
+    "12",
+  ])("retains decimal precision for %s", (decimal) => {
+    const store = assertion("observation", { ...observation, value: { decimal } });
+    expect(store.getQuads(observation.id, `${NS.health}value`, null, null)[0]?.object).toEqual(
+      df.literal(decimal, df.namedNode(`${NS.xsd}decimal`)),
+    );
+  });
+
+  it("accepts HTTP identifiers, percent-encoded safe slugs, and a coded vaccine without display", () => {
+    expect(
+      assertion("observation", { ...observation, id: "http://example.org/observations/one" }).size,
+    ).toBeGreaterThan(0);
+    expect(
+      assertion("encounter", {
+        ...encounter,
+        serviceProvider: "https://example.org/clinic%25252541",
+      }).size,
+    ).toBeGreaterThan(0);
+    expect(
+      assertion("immunization", {
+        ...immunization,
+        vaccine: { id: immunization.vaccine.id, code: code.code, system: code.system },
+      }).size,
+    ).toBeGreaterThan(0);
+  });
+
+  it("emits a vaccine product with a nested code and occurrence", async () => {
     await matches(
       assertion("immunization"),
       `
       <${owner}> a core:Person .
       <${immunization.id}> a health:Immunization ; health:patient <${owner}> ;
-        health:medication <${immunization.vaccine.id}> ; schema:lotNumber "EX-LOT" ;
+        health:medication <${immunization.vaccine.id}> ;
         core:atTime [ a time:Instant, time:TemporalEntity ;
           time:inXSDDate "2026-11-01"^^xsd:date ] .
       <${immunization.vaccine.id}> a health:MedicinalProduct ;
@@ -155,7 +190,7 @@ describe("health fact graphs", () => {
     );
   });
 
-  it("accepts a vaccine entity without optional coding or lot information", async () => {
+  it("accepts a vaccine entity without optional coding", async () => {
     await matches(
       assertion("immunization", {
         id: immunization.id,
@@ -173,29 +208,25 @@ describe("health fact graphs", () => {
     );
   });
 
-  it("emits an encounter's type, provider and interval endpoints", async () => {
+  it("emits an encounter's provider link and interval endpoints", async () => {
     await matches(
       assertion("encounter"),
       `
       <${owner}> a core:Person .
       <${encounter.id}> a health:Encounter ; health:patient <${owner}> ;
-        schema:additionalType <${code.id}> ; health:careProvider <${encounter.serviceProvider}> ;
+        health:careProvider <${encounter.serviceProvider}> ;
         core:atTime [ a time:Interval, time:TemporalEntity ;
           time:hasBeginning [ a time:Instant, time:TemporalEntity ;
             time:inXSDDate "2026-11-01"^^xsd:date ] ;
           time:hasEnd [ a time:Instant, time:TemporalEntity ;
             time:inXSDDateTime "2026-11-01T09:00:00+00:00"^^xsd:dateTime ]
         ] .
-      <${code.id}> a health:CodeableConcept, core:Identifier ;
-        core:value "EX-TEMP" ; core:inScheme <${code.system}> ;
-        schema:name "Fictional temperature code" .
-      <${code.system}> a core:IdentifierScheme .
-      <${encounter.serviceProvider}> a core:Organization .
+
     `,
     );
   });
 
-  it("accepts an open-ended encounter without a type or provider", async () => {
+  it("accepts an open-ended encounter without a provider", async () => {
     await matches(
       assertion("encounter", { id: encounter.id, period: { start: instant } }),
       `
@@ -219,6 +250,19 @@ describe("health template refusal boundaries", () => {
     "relative",
     "javascript:alert(1)",
     "urn:x:unsafe value",
+    "urn:example:clinical",
+    "tel:+441234567890",
+    "mailto:patient@example.org",
+    "file:///clinical",
+    "https://example.org/unsafe value",
+    "https://example.org/%",
+    "https://example.org/%FF",
+    owner,
+    "https://example.org/4111111111111111",
+    "https://example.org/?card=4111%201111%201111%201111",
+    "https://example.org/#4111%25201111%25201111%25201111",
+    "https://example.org/%EF%BC%94%EF%BC%91%EF%BC%91%EF%BC%91%EF%BC%91%EF%BC%91%EF%BC%91%EF%BC%91%EF%BC%91%EF%BC%91%EF%BC%91%EF%BC%91%EF%BC%91%EF%BC%91%EF%BC%91%EF%BC%91",
+    `https://example.org/${"4111%201111%201111%201111".replaceAll("%", "%25252525")}`,
   ];
   const invalidTimes: unknown[] = [
     ...invalidObjects,
@@ -227,6 +271,11 @@ describe("health template refusal boundaries", () => {
     { ...day, value: 42 },
     { ...day, value: undefined },
     { ...day, value: "2026-02-30" },
+    { ...day, value: "0000-01-01" },
+    { ...instant, value: "0000-01-01T09:00:00Z" },
+    { ...instant, value: "2026-11-01T09:00:00" },
+    { ...instant, value: "2026-11-01T09:00:00+14:01" },
+    { ...instant, value: "2026-02-29T09:00:00Z" },
     { ...day, value: "2026-13-01" },
     { ...day, value: "2026-11-01\n" },
     { value: "2026-11", datatype: "gYearMonth" },
@@ -289,21 +338,18 @@ describe("health template refusal boundaries", () => {
     for (const kind of [null, 42, "unknown", pan]) refuses("observation", { ...observation, kind });
     for (const unitCode of [null, 42, pan, "bad\u2028"])
       refuses("observation", { ...observation, unitCode });
-    for (const lotNumber of [null, 42, pan, "bad\u2028"])
-      refuses("immunization", { ...immunization, lotNumber });
   });
 
   for (const [template, field] of [
     ["observation", "code"],
     ["immunization", "vaccine"],
-    ["encounter", "type"],
   ] as const) {
     it(`${template}: validates every code field and nested key`, () => {
       const base = examples[template];
       for (const value of invalidObjects.filter((v) => v !== undefined))
         refuses(template, { ...base, [field]: value });
       for (const id of invalidIris) refuses(template, { ...base, [field]: { ...code, id } });
-      for (const system of invalidIris.filter((v) => v !== undefined))
+      for (const system of invalidIris)
         refuses(template, { ...base, [field]: { ...code, system } });
       for (const invalid of [null, 42, pan, "bad\u2028"]) {
         refuses(template, { ...base, [field]: { ...code, code: invalid } });
@@ -311,6 +357,7 @@ describe("health template refusal boundaries", () => {
       }
       refuses(template, { ...base, [field]: { ...code, unknown: pan } });
       if (template !== "immunization") refuses(template, { ...base, [field]: { id: code.id } });
+      refuses(template, { ...base, [field]: { id: code.id, code: "EX-NO-SYSTEM" } });
     });
   }
 
@@ -345,8 +392,181 @@ describe("health template refusal boundaries", () => {
       refuses("observation", { ...observation, value: text });
       refuses("observation", { ...observation, code: { ...code, display: text } });
       refuses("immunization", { ...immunization, vaccine: { ...code, display: text } });
-      refuses("immunization", { ...immunization, lotNumber: text });
-      refuses("encounter", { ...encounter, type: { ...code, display: text } });
+    }
+  });
+
+  it("rejects every pair of equal identifiers and every identifier equal to the owner", () => {
+    for (const template of ["observation", "immunization"] as const) {
+      const field = template === "observation" ? "code" : "vaccine";
+      const base = examples[template];
+      refuses(template, { ...base, [field]: { ...code, id: base.id } });
+      refuses(template, { ...base, [field]: { ...code, system: base.id } });
+      refuses(template, { ...base, [field]: { ...code, system: code.id } });
+      refuses(template, { ...base, [field]: { ...code, id: owner } });
+      refuses(template, { ...base, [field]: { ...code, system: owner } });
+    }
+    refuses("encounter", { ...encounter, serviceProvider: encounter.id });
+  });
+
+  it("rejects malformed decimals and removed vocabulary-gap fields", () => {
+    for (const decimal of [
+      undefined,
+      null,
+      1.1,
+      "+1.10",
+      "01.10",
+      ".10",
+      "1.",
+      "1e2",
+      "1.10\n",
+      "bad\u2028",
+      pan,
+    ]) {
+      refuses("observation", { ...observation, value: { decimal } });
+    }
+    refuses("observation", { ...observation, value: { decimal: "1.10", extra: "secret" } });
+    refuses("immunization", { ...immunization, lotNumber: "EX-LOT" });
+    refuses("encounter", { ...encounter, type: code });
+  });
+
+  it("ignores inherited options and refuses inherited required fields at every nesting level", () => {
+    function inheriting(record: object, key: string, value: unknown): object {
+      const { [key]: _removed, ...own } = record as Record<string, unknown>;
+      return Object.assign(Object.create({ [key]: value }), own);
+    }
+    for (const template of templates) {
+      refuses(template, Object.create(examples[template]));
+      for (const key of template === "observation"
+        ? ["id", "code", "value", "effective"]
+        : template === "immunization"
+          ? ["id", "vaccine", "occurrence"]
+          : ["id", "period"]) {
+        refuses(
+          template,
+          inheriting(
+            examples[template],
+            key,
+            (examples[template] as unknown as Record<string, unknown>)[key],
+          ),
+        );
+      }
+      const outer = Object.assign(Object.create({ value: examples[template] }), { template });
+      expect(() => createFactAssertion(owner, outer)).toThrow(new Error(`Invalid ${template}`));
+    }
+    expect(() =>
+      createFactAssertion(owner, Object.create({ template: "observation", value: observation })),
+    ).toThrow("Unknown fact template");
+    for (const key of ["id", "code", "system"]) {
+      refuses("observation", {
+        ...observation,
+        code: inheriting(code, key, code[key as keyof HealthCode]),
+      });
+      refuses("immunization", {
+        ...immunization,
+        vaccine: inheriting(code, key, code[key as keyof HealthCode]),
+      });
+    }
+    for (const key of ["value", "datatype"]) {
+      const time = inheriting(instant, key, instant[key as keyof HealthTemporalValue]);
+      refuses("observation", { ...observation, effective: time });
+      refuses("immunization", { ...immunization, occurrence: time });
+      refuses("encounter", { ...encounter, period: { start: time } });
+    }
+    refuses("encounter", { ...encounter, period: inheriting({ start: day }, "start", day) });
+    refuses("observation", { ...observation, value: Object.create({ decimal: "1.10" }) });
+    const inheritedSecret = Object.create(null);
+    for (const key of ["kind", "unitCode", "serviceProvider", "end", "display", "code", "system"]) {
+      Object.defineProperty(inheritedSecret, key, {
+        get: () => {
+          throw new Error(pan);
+        },
+      });
+    }
+    const onSecret = (own: object) => Object.setPrototypeOf({ ...own }, inheritedSecret);
+    const minimalObservation = {
+      id: observation.id,
+      code: { id: code.id, code: code.code, system: code.system },
+      value: 1,
+      effective: day,
+    };
+    expect(
+      isomorphic(
+        [
+          ...assertion(
+            "observation",
+            onSecret({ ...minimalObservation, code: onSecret(minimalObservation.code) }),
+          ),
+        ],
+        [...assertion("observation", minimalObservation)],
+      ),
+    ).toBe(true);
+    const minimalVaccine = { id: immunization.vaccine.id };
+    expect(
+      isomorphic(
+        [...assertion("immunization", { ...immunization, vaccine: onSecret(minimalVaccine) })],
+        [...assertion("immunization", { ...immunization, vaccine: minimalVaccine })],
+      ),
+    ).toBe(true);
+    const minimalEncounter = { id: encounter.id, period: { start: day } };
+    expect(
+      isomorphic(
+        [
+          ...assertion(
+            "encounter",
+            onSecret({ ...minimalEncounter, period: onSecret(minimalEncounter.period) }),
+          ),
+        ],
+        [...assertion("encounter", minimalEncounter)],
+      ),
+    ).toBe(true);
+  });
+
+  it("rejects reversed intervals across precisions, offsets, days and microseconds", () => {
+    const dt = (value: string): HealthTemporalValue => ({ value, datatype: "dateTime" });
+    const date = (value: string): HealthTemporalValue => ({ value, datatype: "date" });
+    for (const [start, end] of [
+      [date("2026-11-02"), day],
+      [dt("2026-11-02T00:00:00Z"), day],
+      [day, dt("2026-10-31T23:59:59.999999Z")],
+      [dt("2026-11-01T09:00:00Z"), dt("2026-11-01T10:00:00+02:00")],
+      [dt("2026-11-01T09:00:00.000002Z"), dt("2026-11-01T09:00:00.000001Z")],
+      [dt("2026-11-01T24:00:00Z"), dt("2026-11-01T23:59:59Z")],
+    ])
+      refuses("encounter", { ...encounter, period: { start, end } });
+    for (const [start, end] of [
+      [day, day],
+      [instant, day],
+      [day, instant],
+      [instant, instant],
+      [dt("2026-11-01T10:00:00+02:00"), instant],
+      [dt("2026-11-01T23:00:00-02:00"), date("2026-11-02")],
+      [dt("2026-11-01T24:00:00.000Z"), dt("2026-11-02T00:00:00Z")],
+      [dt("0001-01-01T00:00:00Z"), dt("0001-01-01T00:00:00.000001Z")],
+    ])
+      expect(assertion("encounter", { ...encounter, period: { start, end } }).size).toBeGreaterThan(
+        0,
+      );
+  });
+
+  it("lets programming errors surface from snapshot helpers and RDF builds", () => {
+    const bug = new Error("programming error");
+    try {
+      vi.spyOn(rdf, "normalizeLiteral").mockImplementationOnce(() => {
+        throw bug;
+      });
+      expect(() => assertion("observation")).toThrow(bug);
+      vi.spyOn(rdf, "dateTime").mockImplementationOnce(() => {
+        throw bug;
+      });
+      expect(() => assertion("observation")).toThrow(bug);
+      for (const template of templates) {
+        vi.spyOn(RdfNode.prototype, "link").mockImplementationOnce(() => {
+          throw bug;
+        });
+        expect(() => assertion(template)).toThrow(bug);
+      }
+    } finally {
+      vi.restoreAllMocks();
     }
   });
 
@@ -382,6 +602,54 @@ describe("health template refusal boundaries", () => {
   });
 });
 
+/** Mirror shacl-fixtures.mjs: group local sector shapes, then recursively follow ontology imports. */
+async function combinedHealthShapes(): Promise<Store> {
+  const root = dirname(
+    fileURLToPath(import.meta.resolve("@jeswr/solid-federation-vocab/package.json")),
+  );
+  const sectors = join(root, "sectors");
+  const parse = async (file: string) =>
+    new Store([
+      ...(await parseRdf(await readFile(file, "utf8"), "text/turtle", {
+        baseIRI: pathToFileURL(file).href,
+      })),
+    ]);
+  const profiles = new Map<string, { shapes: Store; ontology: Store }>();
+  for (const file of (await readdir(sectors, { recursive: true }))
+    .filter((name) => name.endsWith(".shacl.ttl"))
+    .sort()) {
+    const directory = dirname(join(sectors, file));
+    if (!profiles.has(directory)) {
+      const ontology = join(directory, `${basename(directory)}.ttl`);
+      profiles.set(directory, {
+        shapes: new Store(),
+        ontology: existsSync(ontology) ? await parse(ontology) : new Store(),
+      });
+    }
+    profiles.get(directory)?.shapes.addQuads([...(await parse(join(sectors, file)))]);
+  }
+  const shapes = new Store();
+  const included = new Set<object>();
+  const owl = "http://www.w3.org/2002/07/owl#";
+  function include(profile: { shapes: Store; ontology: Store }): void {
+    if (included.has(profile)) return;
+    included.add(profile);
+    shapes.addQuads([...profile.shapes]);
+    for (const imported of profile.ontology.getObjects(null, `${owl}imports`, null)) {
+      const dependency = [...profiles.values()].find(
+        ({ ontology }) =>
+          ontology.countQuads(imported, `${NS.rdf}type`, `${owl}Ontology`, null) ||
+          ontology.countQuads(null, `${owl}versionIRI`, imported, null),
+      );
+      if (dependency) include(dependency);
+    }
+  }
+  const health = profiles.get(join(sectors, "health"));
+  expect(health).toBeDefined();
+  include(health as NonNullable<typeof health>);
+  return shapes;
+}
+
 describe("health nanopublications and profile conformance", () => {
   it("builds, serializes and parses all three templates with stable graphs and provenance", async () => {
     const built = await buildNanopublications(
@@ -411,14 +679,10 @@ describe("health nanopublications and profile conformance", () => {
     }
   });
 
-  it("conforms to the health profile's MUSTs and detects deliberately broken graphs", async () => {
-    const shapes = await parseRdf(
-      await readFile(
-        new URL("../../solid-federation-vocab/sectors/health/health.shacl.ttl", import.meta.url),
-        "utf8",
-      ),
-      "text/turtle",
-    );
+  it("conforms to health + imported Core MUSTs, checks SHOULD warnings, and detects broken graphs", async () => {
+    const shapes = await combinedHealthShapes();
+    expect(shapes.countQuads(`${NS.core}IdentifierShape`, null, null, null)).toBeGreaterThan(0);
+    expect(shapes.countQuads(`${NS.core}OrganizationShape`, null, null, null)).toBeGreaterThan(0);
     const validator = new SHACLValidator(shapes);
     const mustFailures = async (data: Store) =>
       (await validator.validate(data)).results.filter(
@@ -435,11 +699,43 @@ describe("health nanopublications and profile conformance", () => {
       `${NS.health}value`,
       `${NS.health}effectiveTime`,
       `${NS.core}value`,
+      `${NS.core}inScheme`,
     ]) {
       const data = assertion("observation");
       data.removeQuads(data.getQuads(null, predicate, null, null));
       expect((await mustFailures(data)).length).toBeGreaterThan(0);
     }
+    for (const [template, value] of [
+      [
+        "observation",
+        {
+          id: observation.id,
+          code: { id: code.id, code: code.code, system: code.system },
+          value: { decimal: "1.10" },
+          effective: day,
+        },
+      ],
+      [
+        "immunization",
+        { id: immunization.id, vaccine: { id: immunization.vaccine.id }, occurrence: instant },
+      ],
+      ["encounter", { id: encounter.id, period: { start: day } }],
+    ] as const)
+      expect(await mustFailures(assertion(template, value))).toEqual([]);
+    const warnings = (await validator.validate(assertion("encounter"))).results.filter(
+      (result) => result.severity.value === "http://www.w3.org/ns/shacl#Warning",
+    );
+    expect(warnings.some((result) => result.path?.value === `${NS.health}recordedBy`)).toBe(true);
+    const missingOrganizationId = assertion("encounter");
+    new RdfNode(encounter.serviceProvider as string, missingOrganizationId).link(
+      `${NS.rdf}type`,
+      `${NS.core}Organization`,
+    );
+    expect(
+      (await mustFailures(missingOrganizationId)).some(
+        (result) => result.path?.value === `${NS.core}identifiedBy`,
+      ),
+    ).toBe(true);
     const duplicate = assertion("observation");
     new RdfNode(observation.id, duplicate).text(`${NS.health}value`, "extra");
     expect((await mustFailures(duplicate)).length).toBeGreaterThan(0);

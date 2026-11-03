@@ -55,46 +55,64 @@ change a value after it is checked.
 `observation` records a measurement or lab result as `health:Observation`, with
 an explicit entity `id`, a `code: HealthCode`, exactly one numeric or string
 `value`, an `effective: HealthTemporalValue`, optional UCUM `unitCode` and optional
-`kind` (`measurement` or `lab`, stored as `schema:category`). Numbers use the
-package's canonical `xsd:decimal` spelling, expanding exponent notation; strings
-remain `xsd:string`. `health:hasCode` links the explicitly identified
-`health:CodeableConcept`. `HealthCode.code` is required: the health SHACL profile
-MUST have `core:value`, even when an identifier or display label is supplied.
-Its optional `system` is an IRI linked through `core:inScheme`, and `display`
-becomes `schema:name`.
+`kind` (`measurement` or `lab`, stored as `schema:category`). Finite numbers use the
+package's canonical `xsd:decimal` spelling, expanding exponent notation. To retain
+clinical scale, pass `value: { decimal: "1.10" }`: the lexical form is validated
+against the package's decimal policy (optional minus, no leading zeroes except
+zero itself, optional fractional digits, no exponent or whitespace) and kept
+verbatim. Plain strings remain `xsd:string`. `health:hasCode` links the explicitly
+identified `health:CodeableConcept`, also typed `core:Identifier` as the ontology
+defines it. Both `HealthCode.code` (`core:value`) and `system` (`core:inScheme`)
+are required by the combined health and Core shapes. The system is typed
+`core:IdentifierScheme`; optional `display` becomes `schema:name`.
 
-`immunization` records `health:Immunization` with an explicit `id`, `vaccine`,
-`occurrence: HealthTemporalValue` and optional `lotNumber` (`schema:lotNumber`).
-The shape requires `health:medication` to reference a `health:MedicinalProduct`,
-so `vaccine.id` identifies that product. Its optional `display` becomes
-`schema:name`; when `code` is supplied, a nested blank-node
-`health:CodeableConcept` is linked through `core:identifiedBy`. Supplying a
-coding `system` also requires `code`, satisfying the concept's MUST value.
+`immunization` records `health:Immunization` with an explicit `id`, `vaccine` and
+`occurrence: HealthTemporalValue`. The shape requires `health:medication` to
+reference a `health:MedicinalProduct`, so `vaccine.id` identifies that product.
+Its optional `display` becomes `schema:name`; when coding is supplied, both
+`code` and `system` are required and a nested blank-node `health:CodeableConcept`
+is linked through `core:identifiedBy`. An uncoded vaccine product is accepted.
 Occurrence uses `core:atTime` because the health profile has no occurrence property.
 
 `encounter` records `health:Encounter` with an explicit `id`, a required
-`period: { start: HealthTemporalValue; end?: HealthTemporalValue }`, optional
-`type: HealthCode` and optional `serviceProvider` IRI. The period is an OWL-Time
-interval linked through `core:atTime`, with `time:hasBeginning` and optional
-`time:hasEnd` instants; these describe occurrence, not assertion validity.
-The provider uses the vocabulary's `health:careProvider`. The type concept uses
-`schema:additionalType`: `health:hasCode` is domained onto clinical records,
-whereas an encounter is an activity. The template does not assume that a
+`period: { start: HealthTemporalValue; end?: HealthTemporalValue }` and optional
+`serviceProvider` IRI. The period is an OWL-Time interval linked through
+`core:atTime`, with `time:hasBeginning` and optional `time:hasEnd` instants; these
+describe occurrence, not assertion validity. The provider is linked through
+`health:careProvider`, without asserting a Core Organization whose required
+identifier this template cannot supply. The template does not assume that a
 custodial provider also performed the encounter (`health:recordedBy`, a SHOULD).
+
+Vocabulary gaps: the health ontology and alignments define no lot/batch-number
+predicate and no encounter-type predicate. The templates therefore omit and
+reject `lotNumber` and encounter `type`; `schema:lotNumber` is not a schema.org
+term and `schema:additionalType` requires a class IRI rather than a coded instance.
 
 All three health templates mirror `condition`'s entry-to-owner `health:patient`
 link, with no reverse link. They explicitly type the owner as `core:Person`
 and time nodes as `time:TemporalEntity`, satisfying MUST class constraints
 without an ontology reasoner. `HealthTemporalValue` accepts only `date` and
-`dateTime`; dates use `time:inXSDDate`, date-times `time:inXSDDateTime`, through
-the existing temporal validation and normalization. The shape requires a temporal
-entity, not `xsd:dateTimeStamp` (which the package does not support). Nested times
-and vaccine codes are blank nodes, skolemized on build. Every field is read once
-into a snapshot; unknown keys, wrong types, invalid IRIs/times, non-finite numbers
-and detected card numbers in free text are refused with fixed messages
-(`Invalid observation`, `Invalid immunization`, `Invalid encounter`). Tests use
-the vocabulary package's installed SHACL validator against the canonical health
-profile, checking MUST violations separately from SHOULD warnings.
+`dateTime`; dates use `time:inXSDDate`, date-times `time:inXSDDateTime`. Year 0000
+is refused and every date-time must carry `Z` or a valid ±hh:mm timezone.
+Date-times retain the package's microsecond normalization. Encounter endpoints
+are compared as UTC instants at that precision. A date-only bound denotes the
+whole UTC calendar day: its earliest instant is used for a start and its latest
+instant for an end. An end before the earliest possible start is refused; mixed
+precision on the same UTC day is accepted. Nested times and vaccine codes are
+blank nodes, skolemized on build.
+
+Every input field is read once from its own properties into a snapshot; inherited
+fields are ignored. Unknown keys, wrong types, invalid times, non-finite numbers
+and detected card numbers in free text are refused. Entity IRIs must be unchanged
+HTTP(S) IRIs accepted by `safeHttpIri`; all entity, concept, vaccine, coding-system
+and provider identifiers must differ from each other and from the owner. IRIs are
+percent-decoded up to four rounds and NFKC-normalized before card-number scanning;
+malformed or residual percent escapes are refused. Snapshot refusals use fixed
+messages (`Invalid observation`, `Invalid immunization`, `Invalid encounter`);
+programming errors during graph construction surface unchanged. Tests resolve the
+vocabulary through its package, compose the health and imported Core shapes using
+the fixture gate's local `owl:imports` traversal, assert zero MUST Violations for
+complete and minimal variants, and check the Encounter `recordedBy` SHOULD Warning.
 
 `findCardNumbers` and `containsCardNumber` expose the detector. It flags every
 Luhn-valid window of 12 to 19 digits that does not start with 0, in linear time.

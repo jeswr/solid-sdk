@@ -38,10 +38,18 @@ first) before storing it. `findCardNumbers` returns UTF-16 spans for redaction.
 Use `observation` for measurements/lab results, `immunization` for vaccine
 administration records and `encounter` for clinical visits. Their snapshots reject
 unknown keys and card numbers in free text, with fixed refusal messages. Clinical
-times accept only `date` or `dateTime`. Supplied `HealthCode` concepts require a
-code (`core:value`); a vaccine product may omit coding, but supplying its system
-also requires a code. Vaccines use `health:medication`, providers use
-`health:careProvider`, and occurrence/encounter intervals use `core:atTime`.
+times accept only `date` or timezone-bearing `dateTime`, never year 0000. A date-only
+encounter bound covers its UTC calendar day; an end before the earliest possible
+start is refused. Supplied `HealthCode` concepts require both a code (`core:value`)
+and system (`core:inScheme`), satisfying health + Core shapes. A vaccine product
+may omit coding; supplied coding requires both fields. Vaccines use
+`health:medication`, providers use `health:careProvider` without an Organization
+type assertion, and occurrence/encounter intervals use `core:atTime`. Lot/batch
+numbers and encounter types are vocabulary gaps and are not accepted. Measurements
+also accept `{ decimal: "1.10" }` to preserve validated decimal scale. Read only
+own properties and validate snapshots before writing RDF; programming errors must
+surface. Entity IRIs must be unchanged HTTP(S), distinct from each other and the
+owner, and free of card numbers after repeated percent-decoding and NFKC folding.
 See the README for the remaining shape-driven property mappings.
 
 Use `purposeFilter(policy, purpose, clientId)` on every personal-data read. It
