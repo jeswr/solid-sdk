@@ -71,6 +71,7 @@ describe("public export boundary", () => {
 
   it("keeps reader classes private and exposes only the two request error classes", async () => {
     await checkBuiltExports(`
+      assert.equal(typeof access.createAccessClient, "function");
       assert.ok(entries.length > 0);
       const roles = await load("@jeswr/pod-access/roles");
       assert.deepEqual(Object.keys(roles).sort(),
@@ -79,6 +80,7 @@ describe("public export boundary", () => {
       for (const entry of entries) {
         assert.equal("RdfNode" in entry, false);
         assert.equal("PolicyTooComplex" in entry, false);
+        assert.equal("copyDataset" in entry, false);
         for (const [name, value] of Object.entries(entry)) {
           if (typeof value !== "function") continue;
           if (["UnsupportedAccessModelError", "RequestConflictError"].includes(name)) {

@@ -6,6 +6,7 @@ import {
   ArrowDownToLine,
   BarChart3,
   LayoutDashboard,
+  ListChecks,
   ListTree,
   Plus,
   Repeat,
@@ -31,6 +32,7 @@ function Chrome({ children }: { children: ReactNode }) {
     { href: "/money/reports", label: "Reports", Icon: BarChart3 },
     { href: "/money/recurring", label: "Recurring", Icon: Repeat },
     { href: "/money/categories", label: "Categories", Icon: ListTree },
+    { href: "/money/rules", label: "Rules", Icon: ListChecks },
     { href: "/money/import", label: "Import", Icon: ArrowDownToLine },
   ];
   return (

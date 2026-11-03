@@ -71,6 +71,7 @@
     "@jeswr/pod-auth",
     "@jeswr/pod-notifications",
     "@jeswr/pod-access",
+    "@jeswr/suite-sdk",
     "@jeswr/rdf-engine",
     "@jeswr/storage-conformance",
     "@jeswr/pkg-memory",
@@ -91,6 +92,7 @@
     "@jeswr/reactive-authentication",
     "@jeswr/fetch-rdf-engine-tests",
     "@jeswr/suite-native",
+    "@jeswr/pod-type-index",
     "@jeswr/federation-codegen",
     "@jeswr/model-runtime",
     "@jeswr/solid-listening",
@@ -185,6 +187,11 @@
     {
       "slug": "pod-migrator",
       "name": "@jeswr/app-pod-migrator",
+      "kind": "application"
+    },
+    {
+      "slug": "notification-relay",
+      "name": "@jeswr/app-notification-relay",
       "kind": "application"
     }
   ],

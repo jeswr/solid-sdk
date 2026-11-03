@@ -953,3 +953,50 @@
   color: var(--foreground-muted);
   font-size: var(--text-sm);
 }
+.mon-rules {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.mon-rule {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+.mon-rule-text {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.mon-rule-actions {
+  display: flex;
+  gap: var(--space-1);
+}
+.mon-rules-apply {
+  display: grid;
+  justify-items: start;
+  gap: var(--space-3);
+  margin-top: var(--space-4);
+}
+.mon-rules-apply h2 {
+  margin: 0;
+  font-size: var(--text-lg);
+}
+.mon-rules-apply p {
+  margin: 0;
+}
+.mon-rules-warning {
+  margin: 0 0 var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+}
+.mon-rules-error {
+  color: var(--destructive);
+}

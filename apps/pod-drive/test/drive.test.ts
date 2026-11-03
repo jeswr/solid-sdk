@@ -1,5 +1,6 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
-import { RdfFetchError } from "@jeswr/fetch-rdf";
+import { StorageError } from "@jeswr/storage-client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { DriveAccessError, listContainer } from "../src/drive.js";
 import { fakeFetch, withUrl } from "./helpers.js";
@@ -67,13 +68,13 @@ describe("listContainer", () => {
     expect(err).toBeInstanceOf(DriveAccessError);
     expect(err.status).toBe(403);
     expect(err.message).toContain("Forbidden");
-    expect(err.cause).toBeInstanceOf(RdfFetchError);
+    expect(err.cause).toBeInstanceOf(StorageError);
   });
 
-  it("re-throws a 404 as the original RdfFetchError (not an access error)", async () => {
+  it("re-throws a 404 as the original StorageError (not an access error)", async () => {
     const fetch = fakeFetch({ status: 404 });
     const err = await listContainer("https://pod.example/missing/", { fetch }).catch((e) => e);
-    expect(err).toBeInstanceOf(RdfFetchError);
+    expect(err).toBeInstanceOf(StorageError);
     expect(err).not.toBeInstanceOf(DriveAccessError);
     expect(err.status).toBe(404);
   });
@@ -83,7 +84,7 @@ describe("listContainer", () => {
       throw new TypeError("boom");
     }) as unknown as typeof globalThis.fetch;
     const err = await listContainer("https://pod.example/x/", { fetch: stubFetch }).catch((e) => e);
-    expect(err).toBeInstanceOf(RdfFetchError);
+    expect(err).toBeInstanceOf(StorageError);
     expect(err).not.toBeInstanceOf(DriveAccessError);
   });
 

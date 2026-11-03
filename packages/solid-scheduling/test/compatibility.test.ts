@@ -98,7 +98,7 @@ it("strips control characters from written text in both graphs", async () => {
 });
 
 it("rejects an unsafe or relative resource URL", async () => {
-  expect(() => serializeSchedulingTask("https://a.example/x y", { summary: "x" })).toThrow(
+  await expect(serializeSchedulingTask("https://a.example/x y", { summary: "x" })).rejects.toThrow(
     TypeError,
   );
   expect(() => buildCalendar("tasks/x", { summary: "x" })).toThrow(TypeError);

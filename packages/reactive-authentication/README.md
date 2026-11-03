@@ -1,4 +1,5 @@
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 
 # Reactive authentication
 
@@ -98,6 +99,11 @@ More examples: [LWS suites, service worker, client credentials, custom protocols
   exact URL; see [protocols](docs/protocols.md#discovery-and-trust).
 - **Identity.** `provider.identity(request)` reports validated ID token claims (issuer, subject, `webid`,
   `azp`), optionally checked against the WebID profile (`verifyWebId: true`). Tokens are never exposed.
+
+`DPoPTokenProvider.session` exposes its `OidcSession` for composition. Pass that session and the same
+`fence` to `SolidUmaTokenProvider`'s `session` option to reuse the Solid credential context, or to
+`OidcIdTokenSource`'s `session` and `context` options for LWS exchange. A different fence is rejected.
+Without these options, the providers retain their independent-session behavior.
 
 ## Automatic credential boundary
 
@@ -208,6 +214,8 @@ StorageRoot using this package's storage discovery. The first listed AS accepted
 `/.well-known/lws-configuration` must identify that issuer and must not redirect. Only then is a credential
 obtained and exchanged with `resource=S`; the access token is presented as Bearer and cached per AS, S and
 credential context until 30 seconds before expiry, with session fencing, rejection renewal and logout.
+If the response omits `expires_in`, the token is used only for the current request and is never cached,
+including when the access token is a JWT. Older cache entries without an expiry are discarded.
 
 Legacy `Bearer as_uri="…", realm="…"` remains enabled by default: its AS and realm must share the resource's
 origin unless explicitly trusted through `trustAuthorizationServers` or `trustBindings`, and containment
@@ -237,8 +245,9 @@ await manager.logout() // aborts in-flight upgrades and fences writes in every t
   durable record is authoritative and written before memory; a failed write leaves nothing usable.
 - Logout increments a generation kept in IndexedDB, aborts in-flight work locally and (via BroadcastChannel) in
   other tabs, and clears stores; credentials from an older generation are never used. Refresh tokens known
-  to the instance are revoked (RFC 7009) when the server supports it. Logout does not end the session at the
-  identity provider.
+  to the instance are revoked (RFC 7009) when the server supports it, after local cleanup releases the fence
+  lock. Each revocation has a five-second deadline and aborts on timeout; failures reject logout after local
+  state is cleared. Logout does not end the session at the identity provider.
 - Namespaces isolate applications, client configurations and accounts; they are a convention, not a security
   boundary against same-origin scripts. Non-extractable keys prevent export, not use, by malicious same-origin
   JavaScript ([OAuth 2.0 for Browser-Based Applications](https://www.rfc-editor.org/rfc/rfc10017.html)).
