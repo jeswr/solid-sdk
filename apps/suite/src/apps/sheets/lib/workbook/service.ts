@@ -359,6 +359,10 @@ export function createWorkbookService(options: WorkbookServiceOptions): Workbook
         ]) as unknown as Snapshot,
       });
     },
+    async createFromXlsx({ title, data }) {
+      const { readXlsx } = await import("../xlsx");
+      return create({ title, snapshot: readXlsx(data, { title }) });
+    },
     open,
     save,
     rename,

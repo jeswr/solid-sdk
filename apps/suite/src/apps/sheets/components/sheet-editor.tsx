@@ -201,6 +201,22 @@ export function SheetEditor({ container }: { container: string }) {
     link.click();
     setTimeout(() => URL.revokeObjectURL(url), 0);
   };
+  const downloadExcel = () =>
+    action(async () => {
+      if (!engine.current) return;
+      const { writeXlsx } = await import("../lib/xlsx");
+      const data = writeXlsx(engine.current.snapshot());
+      const url = URL.createObjectURL(
+        new Blob([new Uint8Array(data)], {
+          type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        }),
+      );
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `${title}.xlsx`.replace(/[\\/]/g, "-");
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 0);
+    });
   if (state.error instanceof WorkbookNotFoundError && state.error.reason === "missing")
     return <SheetNotFound />;
   if (state.error)
@@ -255,6 +271,9 @@ export function SheetEditor({ container }: { container: string }) {
               </DropdownMenuItem>
               <DropdownMenuItem onSelect={() => setDialog("import")}>Import CSV</DropdownMenuItem>
               <DropdownMenuItem onSelect={download}>Download current sheet as CSV</DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => void downloadExcel()}>
+                Download as Excel (.xlsx)
+              </DropdownMenuItem>
               <DropdownMenuItem
                 onSelect={() =>
                   void action(async () => {
