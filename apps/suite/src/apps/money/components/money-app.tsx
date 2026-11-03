@@ -2,7 +2,15 @@
 // AUTHORED-BY Claude Opus 5.5
 "use client";
 import { Button, ErrorState, LoadingSkeleton, Toaster } from "@jeswr/suite-ui";
-import { ArrowDownToLine, BarChart3, LayoutDashboard, ListTree, Plus, Wallet } from "lucide-react";
+import {
+  ArrowDownToLine,
+  BarChart3,
+  LayoutDashboard,
+  ListChecks,
+  ListTree,
+  Plus,
+  Wallet,
+} from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { useState } from "react";
@@ -22,6 +30,7 @@ function Chrome({ children }: { children: ReactNode }) {
     { href: "/money/accounts", label: "Accounts", Icon: Wallet },
     { href: "/money/reports", label: "Reports", Icon: BarChart3 },
     { href: "/money/categories", label: "Categories", Icon: ListTree },
+    { href: "/money/rules", label: "Rules", Icon: ListChecks },
     { href: "/money/import", label: "Import", Icon: ArrowDownToLine },
   ];
   return (

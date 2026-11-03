@@ -34,7 +34,10 @@ import { secureUrl } from "./options.js";
 import { memoryStore, sessionStorage } from "./sessions.js";
 import type { CidSubject, Identity, KvStore, LoginHint, PodAuthOptions } from "./types.js";
 
-export type AgentPolicy = Pick<PodAuthOptions, "boundary" | "allowInsecureLoopback" | "clock">;
+export type AgentPolicy = Pick<
+  PodAuthOptions,
+  "boundary" | "allowInsecureLoopback" | "clock" | "maxReplayBodyBytes"
+>;
 export type AgentConfiguration =
   | { kind: "cid"; cid: CidSubject }
   | { kind: "client-credentials"; issuer: string; clientId: string; clientSecret: string };
@@ -227,7 +230,15 @@ export function createAgentProviders(
   return {
     boundary,
     identity,
-    manager: new ReactiveFetchManager({ providers: [observed], boundary, fetch: transport, fence }),
+    manager: new ReactiveFetchManager({
+      ...(policy.maxReplayBodyBytes === undefined
+        ? {}
+        : { maxReplayBodyBytes: policy.maxReplayBodyBytes }),
+      providers: [observed],
+      boundary,
+      fetch: transport,
+      fence,
+    }),
     login: async () => {
       const initial = fence.signal;
       const generation = await fence.generation();
