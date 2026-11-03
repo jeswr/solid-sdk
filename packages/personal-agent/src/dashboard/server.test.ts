@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import type { Server } from "node:http";
 import { request } from "node:http";
@@ -464,7 +465,7 @@ describe("dashboard server: triage", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it("with a key: no call while disabled or without consent; one call with both; key never exposed", async () => {
+  it("ignores retired provider keys even with hosted triage enabled and consent", async () => {
     await start({ TYPESAFE_API_KEY: KEY });
     const { cookie, csrf } = await signIn();
     const headers = { cookie, origin: origin(), "x-csrf-token": csrf };
@@ -480,13 +481,21 @@ describe("dashboard server: triage", () => {
     expect(noConsent.json.hosted.status).toBe("not-allowed");
     expect(fetchMock).not.toHaveBeenCalled();
     const ok = await classify(true);
-    expect(ok.json.source).toBe("typesafe");
-    expect(ok.json.primary).toBe("needs_reply");
+    expect(ok.json.source).toBe("deterministic-baseline");
+    expect(ok.json.hosted.status).toBe("not-allowed");
+    expect(ok.json.primary).toBe("uncertain");
+    expect(ok.json.primaryCandidate).toBe("needs_reply");
     expect(ok.json.mayAct).toBe(false);
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-    expect(url).toBe("https://api.typesafe.ai/v1/systemone");
-    expect(init.redirect).toBe("error");
+    const status = await http("GET", "/api/triage", { headers: { cookie } });
+    expect(status.json.hosted).toMatchObject({
+      provider: "disabled",
+      endpoint: null,
+      configured: false,
+    });
+    const asset = await http("GET", "/assets/app.js", { headers: { cookie } });
+    expect(asset.text).toContain("Hosted triage retired");
+    expect(asset.text).not.toContain("TYPESAFE_API_KEY");
+    expect(fetchMock).not.toHaveBeenCalled();
     // The key appears in no response, settings file or log.
     const everything = [
       off.text,
@@ -539,8 +548,9 @@ describe("dashboard server: triage", () => {
     expect(hostedDenied.json.hosted.status).toBe("not-allowed");
     expect(fetchMock).not.toHaveBeenCalled();
     const hosted = await classify("all-ok", true);
-    expect(hosted.json.source).toBe("typesafe");
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(hosted.json.source).toBe("deterministic-baseline");
+    expect(hosted.json.hosted.status).toBe("not-allowed");
+    expect(fetchMock).not.toHaveBeenCalled();
     expect((await classify("no-such-account", false)).status).toBe(404);
     // The capability display agrees with enforcement.
     const perms = await http("GET", "/api/permissions", { headers: { cookie } });
@@ -550,7 +560,7 @@ describe("dashboard server: triage", () => {
         .capabilities.find((c: { capability: string }) => c.capability === "hostedTriage");
     expect(hostedCap("hosted-only").allowed).toBe(false);
     expect(hostedCap("local-ok").allowed).toBe(false);
-    expect(hostedCap("all-ok").allowed).toBe(true);
+    expect(hostedCap("all-ok").allowed).toBe(false);
   });
 
   it("refuses samples not declared synthetic", async () => {

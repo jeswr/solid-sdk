@@ -1,4 +1,6 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
+// AUTHORED-BY Codex GPT-6.1-Sol
+import { AGENT_FOOTER, encodeEnvelope, encodeEnvelopeObject } from "@jeswr/agent-channels";
 import { describe, expect, it } from "vitest";
 import {
   asChannel,
@@ -16,6 +18,119 @@ describe("asChannel", () => {
 });
 
 describe("detectBridgeCapability", () => {
+  it.each([
+    { name: "header only", input: { headers: { "X-Agentic-Reply": "1" } }, carriage: "email-mime" },
+    {
+      name: "part only",
+      input: { jsonLdBlocks: [encodeEnvelope("a.b.c")] },
+      carriage: "email-mime",
+    },
+    {
+      name: "parsed part only",
+      input: { jsonLd: encodeEnvelopeObject("a.b.c") },
+      carriage: "email-mime",
+    },
+    { name: "footer only", input: { textBody: AGENT_FOOTER }, carriage: "footer-url-only" },
+    { name: "none", input: {}, carriage: undefined },
+  ])("detects $name as an unverified carriage hint", ({ input, carriage }) => {
+    const cap = detectBridgeCapability(input);
+    expect(cap.capable).toBe(carriage !== undefined);
+    expect(cap.carriage).toBe(carriage);
+    expect(cap.podCopyUrl).toBeUndefined();
+    expect(cap.channels).toEqual(["email"]);
+  });
+
+  it.each([
+    ["rdf,a2a", "rdf"],
+    ["a2a,rdf", "rdf"],
+    ["rdf", "rdf"],
+    ["a2a", "a2a"],
+    ["footer-url-only,email-mime,a2a,rdf", "rdf"],
+    ["footer-url-only,email-mime,a2a", "a2a"],
+    ["footer-url-only,email-mime", "email-mime"],
+    ["footer-url-only", "footer-url-only"],
+  ])("ranks the advertised carriages %s", (channels, expected) => {
+    expect(detectBridgeCapability({ headers: { "X-Agentic-Channels": channels } }).carriage).toBe(
+      expected,
+    );
+  });
+
+  it("ranks discovered email support above the footer and below rdf/a2a", () => {
+    const input = { headers: { "x-agentic-reply": "1" }, textBody: AGENT_FOOTER };
+    expect(detectBridgeCapability(input).carriage).toBe("email-mime");
+    for (const channel of ["rdf", "a2a"])
+      expect(
+        detectBridgeCapability({
+          ...input,
+          headers: { ...input.headers, "x-agentic-channels": channel },
+        }).carriage,
+      ).toBe(channel);
+  });
+
+  it("matches the configured card URL with punctuation but refuses lookalikes and the spec URL", () => {
+    const [card, spec] = AGENT_FOOTER.match(/https:\/\/\S+/g) as string[];
+    for (const textBody of [`See ${card}.`, `See (${card}/).`])
+      expect(detectBridgeCapability({ textBody }).carriage).toBe("footer-url-only");
+    for (const textBody of [
+      spec,
+      `${card}ic-web`,
+      `${card}/other`,
+      `${card}.evil.example`,
+      `${card}?redirect=evil`,
+      `${card}#fake`,
+    ])
+      expect(detectBridgeCapability({ textBody }).capable).toBe(false);
+    const footer = "Custom agent: https://configured.example/agent · spec";
+    expect(detectBridgeCapability({ footer, textBody: footer }).carriage).toBe("footer-url-only");
+    expect(detectBridgeCapability({ footer: "No URLs", textBody: AGENT_FOOTER }).capable).toBe(
+      false,
+    );
+    expect(
+      detectBridgeCapability({ textBody: " ".repeat(512 * 1024) + AGENT_FOOTER }).capable,
+    ).toBe(false);
+  });
+
+  it.each([
+    ["(", ")"],
+    ["(", "/)."],
+    ["", "."],
+    ["", ","],
+    ["", ";"],
+    ["", "!"],
+    ["", "?"],
+  ])("round-trips a configured footer URL surrounded by '%s' and '%s'", (prefix, suffix) => {
+    const card = "https://configured.example/agent";
+    const footer = `Agent: ${prefix}${card}${suffix}`;
+    for (const textBody of [footer, `See ${card}.`, `See (${card}/).`])
+      expect(detectBridgeCapability({ footer, textBody })).toEqual({
+        capable: true,
+        channels: ["email"],
+        carriage: "footer-url-only",
+      });
+    for (const textBody of [
+      `${card}/other`,
+      `${card}.evil.example`,
+      `${card}?redirect=evil`,
+      `${card}#fake`,
+    ])
+      expect(detectBridgeCapability({ footer, textBody }).capable).toBe(false);
+  });
+
+  it("ignores invalid carriers and gives the first case-insensitive header precedence", () => {
+    for (const jsonLdBlocks of [
+      ["{"],
+      ["{}"],
+      [encodeEnvelope("a.b.c").replace("jws-compact", "unsigned")],
+    ])
+      expect(detectBridgeCapability({ jsonLdBlocks }).capable).toBe(false);
+    expect(
+      detectBridgeCapability({ headers: { "X-Agentic-Reply": "0", "x-agentic-reply": "1" } })
+        .capable,
+    ).toBe(false);
+    expect(detectBridgeCapability({ headers: { "X-Agentic-Reply": " 1 " } }).carriage).toBe(
+      "email-mime",
+    );
+  });
   it("detects capability from the X-Agentic-Reply header + reads channels", () => {
     const cap = detectBridgeCapability({
       headers: {
