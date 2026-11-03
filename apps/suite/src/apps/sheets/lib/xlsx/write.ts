@@ -2,7 +2,16 @@
 import type { ICellData, IStyleData, IWorkbookData, IWorksheetData } from "@univerjs/core";
 import { strToU8, zipSync } from "fflate";
 import type { Snapshot } from "../model/snapshot";
-import { cellRef, documentXml, MAIN, PACKAGE_REL, REL, sheetNames, xml } from "./common";
+import {
+  cellRef,
+  documentXml,
+  MAIN,
+  PACKAGE_REL,
+  REL,
+  sheetNames,
+  toExcelFormula,
+  xml,
+} from "./common";
 
 interface SharedFormula {
   readonly index: number;
@@ -52,7 +61,7 @@ function sharedFormulas(cellData: NonNullable<IWorksheetData["cellData"]>) {
       group.lastColumn = Math.max(group.lastColumn, column);
       if (cell.f) {
         group.masters += 1;
-        group.text = cell.f.replace(/^=/, "");
+        group.text = toExcelFormula(cell.f);
         group.row = row;
         group.column = column;
       }
@@ -107,7 +116,8 @@ export function writeXlsx(snapshot: Snapshot): Uint8Array {
   function styleId(cell: ICellData): number {
     const style = typeof cell.s === "string" ? workbook.styles?.[cell.s] : cell.s;
     const pattern = (style as IStyleData | undefined)?.n?.pattern;
-    if (!pattern) return 0;
+    // Excel rejects number formats longer than 255 characters.
+    if (!pattern || pattern.length > 255) return 0;
     let id = patterns.get(pattern);
     if (id === undefined) {
       id = patterns.size + 1;
@@ -127,7 +137,7 @@ export function writeXlsx(snapshot: Snapshot): Uint8Array {
     if (group && group.row === row && group.column === column)
       formula = `<f t="shared" ref="${group.ref}" si="${group.index}">${xml(group.text)}</f>`;
     else if (group) formula = `<f t="shared" si="${group.index}"/>`;
-    else if (cell.f) formula = `<f>${xml(cell.f.replace(/^=/, ""))}</f>`;
+    else if (cell.f) formula = `<f>${xml(toExcelFormula(cell.f))}</f>`;
     let value = cell.v;
     // Univer rich text ends with "\r\n" and separates paragraphs with "\r".
     if (cell.p?.body) value = cell.p.body.dataStream.replace(/\r\n$/, "").replace(/\r/g, "\n");
@@ -138,8 +148,10 @@ export function writeXlsx(snapshot: Snapshot): Uint8Array {
         type = ' t="b"';
         const truthy = value === true || value === 1 || /^(?:1|true)$/i.test(String(value));
         body = `<v>${truthy ? 1 : 0}</v>`;
-      } else if (typeof value === "number") body = `<v>${value}</v>`;
-      else if (cell.t === 2 && String(value).trim() !== "" && Number.isFinite(Number(value)))
+      } else if (typeof value === "number") {
+        // Excel has no NaN or infinity; such a cell is written empty.
+        if (Number.isFinite(value)) body = `<v>${value}</v>`;
+      } else if (cell.t === 2 && String(value).trim() !== "" && Number.isFinite(Number(value)))
         body = `<v>${Number(value)}</v>`;
       else if (formula) {
         type = ' t="str"';
@@ -158,7 +170,7 @@ export function writeXlsx(snapshot: Snapshot): Uint8Array {
       .filter(([, col]) => col.w != null)
       .map(
         ([c, col]) =>
-          `<col min="${Number(c) + 1}" max="${Number(c) + 1}" width="${Math.max(0, ((col.w as number) - 5) / 7)}" customWidth="1"/>`,
+          `<col min="${Number(c) + 1}" max="${Number(c) + 1}" width="${Math.min(255, Math.max(0, ((col.w as number) - 5) / 7))}" customWidth="1"/>`,
       )
       .join("");
     const rowIndices = new Set([
@@ -173,7 +185,7 @@ export function writeXlsx(snapshot: Snapshot): Uint8Array {
           .sort(([a], [b]) => Number(a) - Number(b))
           .map(([c, cell]) => cellXml(cell, Number(r), Number(c), shared))
           .join("");
-        return `<row r="${Number(r) + 1}"${height == null ? "" : ` ht="${(height * 72) / 96}" customHeight="1"`}>${cells}</row>`;
+        return `<row r="${Number(r) + 1}"${height == null ? "" : ` ht="${Math.min(409, (height * 72) / 96)}" customHeight="1"`}>${cells}</row>`;
       })
       .join("");
     const merges = (sheet.mergeData ?? [])

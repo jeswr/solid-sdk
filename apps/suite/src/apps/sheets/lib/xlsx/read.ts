@@ -6,6 +6,7 @@ import {
   children,
   coordinate,
   elements,
+  fromExcelFormula,
   LIMITS,
   PACKAGE_REL,
   REL,
@@ -99,13 +100,45 @@ function richText(root: Element): string {
     .join("");
 }
 
+interface Range {
+  startRow: number;
+  endRow: number;
+  startColumn: number;
+  endColumn: number;
+  anchorRow?: number;
+  anchorColumn?: number;
+}
+
+/** A1 or A1:B2 as a range; undefined for more than two corners or an inverted range. */
+function rangeOf(ref: string): Range | undefined {
+  const refs = ref.split(":");
+  if (refs.length > 2) return undefined;
+  const start = coordinate(refs[0] as string);
+  const end = coordinate((refs[1] ?? refs[0]) as string);
+  if (end.row < start.row || end.column < start.column) return undefined;
+  return { startRow: start.row, endRow: end.row, startColumn: start.column, endColumn: end.column };
+}
+
+function area(range: Range): number {
+  return (range.endRow - range.startRow + 1) * (range.endColumn - range.startColumn + 1);
+}
+
+function inside(range: Range, row: number, column: number): boolean {
+  return (
+    row >= range.startRow &&
+    row <= range.endRow &&
+    column >= range.startColumn &&
+    column <= range.endColumn
+  );
+}
+
 function readSheet(
   doc: Document,
   id: string,
   name: string,
   strings: string[],
   formats: (string | undefined)[],
-  countCell: () => void,
+  countCell: (count?: number) => void,
   countMerges: (count: number) => void,
   countText: (length: number) => void,
 ): Partial<IWorksheetData> {
@@ -124,6 +157,9 @@ function readSheet(
     sheet.rowCount = Math.max(sheet.rowCount as number, row + 1);
     sheet.columnCount = Math.max(sheet.columnCount as number, column + 1);
   };
+  // Shared formulas by Excel `si`: the Univer id and the range the group may cover.
+  const shared = new Map<string, { id: string; range: Range }>();
+  const arrays: Range[] = [];
   const rows = new Set<number>();
   for (const row of children(doc, "sheetData", "row")) {
     const r = numberAttribute(row, "r", 0);
@@ -182,7 +218,7 @@ function readSheet(
       cell.t = 1;
     } else if (value != null) {
       if (type === "b") {
-        cell.v = value === "1" ? 1 : 0;
+        cell.v = /^(?:1|true)$/i.test(value.trim()) ? 1 : 0;
         cell.t = 3;
       } else if (type === "str" || type === "e" || type === "d") {
         cell.v = value;
@@ -193,22 +229,53 @@ function readSheet(
         cell.t = 2;
       }
     }
-    // Newer Excel functions are stored with a _xlfn./_xlws. prefix that Univer doesn't know.
-    const formula = formulaElement?.textContent?.replace(/\b_xl(?:fn|ws)\./gi, "");
-    if (formula) cell.f = `=${formula}`;
+    const formula = fromExcelFormula(formulaElement?.textContent ?? "");
+    const kind = formulaElement?.getAttribute("t");
+    const group = formulaElement?.getAttribute("si") ?? "";
+    if (formula) {
+      cell.f = `=${formula}`;
+      const ref = formulaElement?.getAttribute("ref");
+      const range = ref ? rangeOf(ref) : undefined;
+      // A shared formula's first cell holds the text; Univer gives the group one id.
+      if (kind === "shared" && range && !shared.has(group)) {
+        const sharedId = `${id}-f${shared.size}`;
+        shared.set(group, { id: sharedId, range });
+        cell.si = sharedId;
+      }
+      // An array formula's other cells hold cached results. Univer spills the formula
+      // into them itself, and refuses to spill over values, so those are dropped below.
+      if (kind === "array" && range && area(range) > 1) {
+        countCell(area(range));
+        arrays.push({ ...range, anchorRow: row, anchorColumn: column });
+      }
+    } else if (kind === "shared") {
+      // The other cells of a shared formula. Excel's group always starts at the first
+      // cell; a cell outside it keeps only its cached value.
+      const owner = shared.get(group);
+      if (owner && inside(owner.range, row, column)) cell.si = owner.id;
+    }
     const style = numberAttribute(element, "s", 0);
     const pattern = formats[style];
     if (pattern && pattern !== "General") cell.s = { n: { pattern } };
     // Each cell carries its own copy of strings and formats in the snapshot, so count them all.
     countText(
       (typeof cell.v === "string" ? cell.v.length : 0) +
-        (formula?.length ?? 0) +
+        formula.length +
         (cell.s ? (pattern as string).length : 0),
     );
     cells[row] ??= {};
     requireXlsx(!Object.hasOwn(cells[row], column), "Duplicate Excel cell reference");
     cells[row][column] = cell;
   }
+  for (const range of arrays)
+    for (let r = range.startRow; r <= range.endRow; r++)
+      for (let c = range.startColumn; c <= range.endColumn; c++) {
+        const cell = cells[r]?.[c];
+        if (!cell || cell.f || cell.si || (r === range.anchorRow && c === range.anchorColumn))
+          continue;
+        delete cell.v;
+        delete cell.t;
+      }
   const merges = children(doc, "mergeCells", "mergeCell");
   countMerges(merges.length);
   const ranges: NonNullable<IWorksheetData["mergeData"]> = [];
@@ -451,8 +518,9 @@ export function readXlsx(data: Uint8Array, options: { title: string }): Snapshot
         names[i] as string,
         strings,
         formats,
-        () => {
-          requireXlsx(++cells <= LIMITS.cells, "Excel cell limit exceeded");
+        (count = 1) => {
+          cells += count;
+          requireXlsx(cells <= LIMITS.cells, "Excel cell limit exceeded");
         },
         (count) => {
           merged += count;

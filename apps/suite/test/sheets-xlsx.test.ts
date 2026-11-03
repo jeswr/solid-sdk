@@ -934,3 +934,125 @@ it("cuts cached formula text to Excel's cell limit on export", () => {
 it("rejects a cell reference with an encoded trailing newline", () => {
   rejects({ "xl/worksheets/data.xml": cellsXml('<c r="A1&#10;"/>') }, "reference");
 });
+
+it("imports Excel shared formulas as one Univer formula group and round trips it", () => {
+  const imported = sheet(
+    '<sheetData><row r="1"><c r="B1"><f t="shared" ref="B1:B3" si="4">A1*2</f><v>2</v></c><c r="C1"><f t="shared" si="9"/><v>5</v></c></row><row r="2"><c r="B2"><f t="shared" si="4"/><v>4</v></c></row><row r="3"><c r="B3"><f t="shared" si="4"/><v>6</v></c></row><row r="4"><c r="B4"><f t="shared" si="4"/><v>8</v></c><c r="C4"><f t="shared" ref="C4:C5" si="4">A4</f><v>1</v></c></row></sheetData>',
+  );
+  const cells = imported.cellData ?? {};
+  expect(cells[0]?.[1]).toEqual({ v: 2, t: 2, f: "=A1*2", si: "sheet1-f0" });
+  expect(cells[1]?.[1]).toEqual({ v: 4, t: 2, si: "sheet1-f0" });
+  expect(cells[2]?.[1]).toEqual({ v: 6, t: 2, si: "sheet1-f0" });
+  // Outside the group's range, or naming an unknown group: the cached value only.
+  expect(cells[3]?.[1]).toEqual({ v: 8, t: 2 });
+  expect(cells[0]?.[2]).toEqual({ v: 5, t: 2 });
+  // A second formula with a used group number is an ordinary formula.
+  expect(cells[3]?.[2]).toEqual({ v: 1, t: 2, f: "=A4" });
+  const xmlText = strFromU8(
+    unzipSync(
+      writeXlsx({ sheetOrder: ["sheet1"], sheets: { sheet1: imported } } as unknown as Snapshot),
+    )["xl/worksheets/sheet1.xml"] as Uint8Array,
+  );
+  expect(xmlText).toContain('<f t="shared" ref="B1:B3" si="0">A1*2</f>');
+  expect(xmlText).toContain('<c r="B3" s="0"><f t="shared" si="0"/><v>6</v></c>');
+});
+
+it("lets Univer spill array formulas instead of importing their cached results", () => {
+  const imported = sheet(
+    '<sheetData><row r="1"><c r="A1"><f t="array" ref="A1:B2">_xlfn.SEQUENCE(2,2)</f><v>1</v></c><c r="B1"><v>2</v></c><c r="D1"><f t="array" ref="D1">1</f><v>1</v></c><c r="E1"><f t="array" ref="E1:E2">F1:F2</f><v>0</v></c></row><row r="2"><c r="A2"><v>3</v></c><c r="B2"><f>A2</f><v>3</v></c><c r="E2"><f t="shared" si="1"/><v>0</v></c></row></sheetData>',
+  );
+  const cells = imported.cellData ?? {};
+  expect(cells[0]?.[0]).toEqual({ v: 1, t: 2, f: "=SEQUENCE(2,2)" });
+  expect(cells[0]?.[1]).toEqual({});
+  expect(cells[1]?.[0]).toEqual({});
+  // A cell holding its own formula keeps its value.
+  expect(cells[1]?.[1]).toEqual({ v: 3, t: 2, f: "=A2" });
+  // A one-cell array formula is an ordinary formula.
+  expect(cells[0]?.[3]).toEqual({ v: 1, t: 2, f: "=1" });
+  expect(cells[1]?.[4]).toEqual({});
+  // Each covered cell counts towards the cell limit.
+  const { cells: limit } = LIMITS;
+  LIMITS.cells = 3;
+  try {
+    expect(() =>
+      sheet(
+        '<sheetData><row r="1"><c r="A1"><f t="array" ref="A1:A3">B1:B3</f><v>0</v></c></row></sheetData>',
+      ),
+    ).toThrow("cell limit");
+  } finally {
+    LIMITS.cells = limit;
+  }
+  expect(
+    sheet('<sheetData><row r="1"><c r="A1"><f t="array" ref="A1:B2:C3">1</f></c></row></sheetData>')
+      .cellData?.[0]?.[0],
+  ).toEqual({ f: "=1" });
+  expect(() =>
+    sheet('<sheetData><row r="1"><c r="A1"><f t="array" ref="A0:B2">1</f></c></row></sheetData>'),
+  ).toThrow(XlsxImportError);
+  expect(
+    sheet('<sheetData><row r="2"><c r="B2"><f t="array" ref="B2:A1">1</f></c></row></sheetData>')
+      .cellData?.[1]?.[1],
+  ).toEqual({ f: "=1" });
+});
+
+it("reads Excel's TRUE spelling of booleans", () => {
+  expect(cell('<c r="A1" t="b"><v>TRUE</v></c>')).toEqual({ v: 1, t: 3 });
+  expect(cell('<c r="A1" t="b"><v>false</v></c>')).toEqual({ v: 0, t: 3 });
+});
+
+it("keeps string literals and adds Excel's prefixes to newer functions on export", () => {
+  expect(cell('<c r="A1"><f>"_xlfn.x"&amp;_xlfn.CONCAT("a""_xlws.",B1)</f></c>')).toEqual({
+    f: '="_xlfn.x"&CONCAT("a""_xlws.",B1)',
+  });
+  const xmlText = strFromU8(
+    unzipSync(
+      writeXlsx({
+        sheetOrder: ["a"],
+        sheets: {
+          a: {
+            name: "A",
+            cellData: {
+              0: {
+                0: {
+                  f: '=xlookup(1,FILTER(B:B,B:B>0),sort(C:C))&"IFS(x)"&SUM(1)&_xlfn.IFS(1,2)&my.IFS(1)',
+                },
+                1: { f: "=STDEV.S(A:A)", si: "g" },
+                2: { si: "g" },
+              },
+            },
+          },
+        },
+      } as unknown as Snapshot),
+    )["xl/worksheets/sheet1.xml"] as Uint8Array,
+  );
+  expect(xmlText).toContain(
+    "<f>_xlfn.xlookup(1,_xlfn._xlws.FILTER(B:B,B:B&gt;0),_xlfn._xlws.sort(C:C))&amp;&quot;IFS(x)&quot;&amp;SUM(1)&amp;_xlfn.IFS(1,2)&amp;my.IFS(1)</f>",
+  );
+  expect(xmlText).toContain('<f t="shared" ref="B1:C1" si="0">_xlfn.STDEV.S(A:A)</f>');
+});
+
+it("keeps exported sizes, numbers and formats within Excel's limits", () => {
+  const bytes = writeXlsx({
+    sheetOrder: ["a"],
+    sheets: {
+      a: {
+        name: "A",
+        cellData: {
+          0: {
+            0: { v: Number.NaN, t: 2 },
+            1: { v: Number.POSITIVE_INFINITY, t: 2 },
+            2: { v: 1, t: 2, s: { n: { pattern: "0".repeat(256) } } },
+          },
+        },
+        rowData: { 0: { h: 10_000 } },
+        columnData: { 0: { w: 10_000 } },
+      },
+    },
+  } as unknown as Snapshot);
+  const files = unzipSync(bytes);
+  const xmlText = strFromU8(files["xl/worksheets/sheet1.xml"] as Uint8Array);
+  expect(xmlText).toContain('width="255"');
+  expect(xmlText).toContain('ht="409"');
+  expect(xmlText).toContain('<c r="A1" s="0"></c><c r="B1" s="0"></c><c r="C1" s="0"><v>1</v></c>');
+  expect(strFromU8(files["xl/styles.xml"] as Uint8Array)).toContain('<numFmts count="0">');
+});

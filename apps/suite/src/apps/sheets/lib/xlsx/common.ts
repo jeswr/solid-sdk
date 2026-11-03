@@ -118,3 +118,53 @@ export function sheetNames(names: string[]): string[] {
     return candidate;
   });
 }
+
+/** Apply `edit` to the parts of a formula outside its string literals. */
+function outsideStrings(formula: string, edit: (code: string) => string): string {
+  return formula
+    .split(/("(?:[^"]|"")*")/)
+    .map((part, i) => (i % 2 === 1 ? part : edit(part)))
+    .join("");
+}
+
+/**
+ * Functions added to Excel after 2007 are stored in files with a `_xlfn.` prefix (and
+ * `_xlfn._xlws.` for FILTER and SORT). Excel shows #NAME? for them without it.
+ */
+const FUTURE_FUNCTIONS = new Map<string, string>([
+  ...`ACOT ACOTH AGGREGATE ARABIC ARRAYTOTEXT BASE BETA.DIST BETA.INV BINOM.DIST BINOM.DIST.RANGE
+BINOM.INV BITAND BITLSHIFT BITOR BITRSHIFT BITXOR BYCOL BYROW CEILING.MATH CEILING.PRECISE
+CHISQ.DIST CHISQ.DIST.RT CHISQ.INV CHISQ.INV.RT CHISQ.TEST CHOOSECOLS CHOOSEROWS COMBINA CONCAT
+CONFIDENCE.NORM CONFIDENCE.T COT COTH COVARIANCE.P COVARIANCE.S CSC CSCH DAYS DECIMAL DROP
+ECMA.CEILING ERF.PRECISE ERFC.PRECISE EXPAND EXPON.DIST F.DIST F.DIST.RT F.INV F.INV.RT F.TEST
+FILTERXML FLOOR.MATH FLOOR.PRECISE FORECAST.ETS FORECAST.ETS.CONFINT FORECAST.ETS.SEASONALITY
+FORECAST.ETS.STAT FORECAST.LINEAR FORMULATEXT GAMMA GAMMA.DIST GAMMA.INV GAMMALN.PRECISE GAUSS
+HSTACK HYPGEOM.DIST IFNA IFS IMAGE IMCOSH IMCOT IMCSC IMCSCH IMSEC IMSECH IMSINH IMTAN ISFORMULA
+ISO.CEILING ISOMITTED ISOWEEKNUM LAMBDA LET LOGNORM.DIST LOGNORM.INV MAKEARRAY MAP MAXIFS MINIFS
+MODE.MULT MODE.SNGL MUNIT NEGBINOM.DIST NETWORKDAYS.INTL NORM.DIST NORM.INV NORM.S.DIST NORM.S.INV
+NUMBERVALUE PDURATION PERCENTILE.EXC PERCENTILE.INC PERCENTRANK.EXC PERCENTRANK.INC PERMUTATIONA
+PHI POISSON.DIST QUARTILE.EXC QUARTILE.INC QUERYSTRING RANDARRAY RANK.AVG RANK.EQ REDUCE RRI SCAN
+SEC SECH SEQUENCE SHEET SHEETS SKEW.P SORTBY STDEV.P STDEV.S SWITCH T.DIST T.DIST.2T T.DIST.RT
+T.INV T.INV.2T T.TEST TAKE TEXTAFTER TEXTBEFORE TEXTJOIN TEXTSPLIT TOCOL TOROW UNICHAR UNICODE
+UNIQUE VALUETOTEXT VAR.P VAR.S VSTACK WEBSERVICE WEIBULL.DIST WORKDAY.INTL WRAPCOLS WRAPROWS
+XLOOKUP XMATCH XOR Z.TEST`
+    .split(/\s+/)
+    .map((name): [string, string] => [name, "_xlfn."]),
+  ["FILTER", "_xlfn._xlws."],
+  ["SORT", "_xlfn._xlws."],
+]);
+
+/** Excel's stored formula text (no `=`) to the text the spreadsheet engine reads. */
+export function fromExcelFormula(text: string): string {
+  return outsideStrings(text, (code) => code.replace(/\b_xl(?:fn|ws)\./gi, ""));
+}
+
+/** A formula as typed (with or without `=`) to Excel's stored formula text. */
+export function toExcelFormula(formula: string): string {
+  return outsideStrings(formula.replace(/^=/, ""), (code) =>
+    code.replace(/(^|[^\w.])([A-Za-z][\w.]*)(?=\()/g, (match, before: string, name: string) => {
+      const prefix = FUTURE_FUNCTIONS.get(name.toUpperCase());
+      return prefix ? `${before}${prefix}${name}` : match;
+    }),
+  );
+}
