@@ -460,7 +460,8 @@ describe("release builds ignore the debug opt-in", () => {
       /#if !DEBUG\n(?:\s*\/\/.*\n)*\s*if #available\(iOS 16\.4, \*\) \{\n\s*webView\?\.isInspectable = false\n\s*\}\n\s*#endif/,
     );
     expect(didLoad.indexOf("#if !DEBUG")).toBeLessThan(didLoad.indexOf("registerPluginInstance"));
-    // DEBUG is defined for the Debug configurations only.
+    // DEBUG is defined for the Debug configurations only, in either flag spelling, and no Release
+    // configuration inherits settings from an xcconfig this test cannot see.
     const project = read("ios/App/App.xcodeproj/project.pbxproj");
     const release = [
       ...project.matchAll(/\{\n\t\t\tisa = XCBuildConfiguration;[\s\S]*?name = (\w+);/g),
@@ -469,7 +470,9 @@ describe("release builds ignore the debug opt-in", () => {
       .map((m) => m[0]);
     expect(release.length).toBeGreaterThan(0);
     for (const config of release)
-      expect(config).not.toMatch(/SWIFT_ACTIVE_COMPILATION_CONDITIONS[^;]*DEBUG|-DDEBUG/);
+      expect(config).not.toMatch(
+        /SWIFT_ACTIVE_COMPILATION_CONDITIONS[^;]*DEBUG|-D\W*DEBUG\b|\bDEBUG=1|baseConfigurationReference/,
+      );
   });
 });
 
