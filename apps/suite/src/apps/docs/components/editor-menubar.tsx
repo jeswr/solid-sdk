@@ -355,11 +355,15 @@ export function EditorMenubar(props: EditorMenubarProps) {
             onFocusCapture={() => {
               if (!lastItem.current) return;
               lastItem.current = false;
+              // The content can hold non-item children (the shared inert-outside helper), so
+              // take the last menu item rather than the content's last child.
               requestAnimationFrame(() =>
-                document
-                  .querySelector<HTMLElement>(
-                    '[data-slot="dropdown-menu-content"] [role="menuitem"]:last-child',
-                  )
+                [
+                  ...document.querySelectorAll<HTMLElement>(
+                    '[data-slot="dropdown-menu-content"] [role="menuitem"]',
+                  ),
+                ]
+                  .at(-1)
                   ?.focus(),
               );
             }}
