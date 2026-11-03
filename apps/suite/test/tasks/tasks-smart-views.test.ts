@@ -116,6 +116,7 @@ beforeEach(async () => {
   ({ cache, pod } = await frameCache());
 });
 afterEach(() => {
+  vi.useRealTimers();
   vi.restoreAllMocks();
 });
 
@@ -302,6 +303,9 @@ describe("Upcoming", () => {
   });
 
   it("honours weekStart, shifts seven days, shows overdue only from Today, and opens a day composer", async () => {
+    // The composer labels due dates against the wall clock, so pin it to the mocked `now`.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(now);
     localStorage.setItem("suite.tasks.prefs", JSON.stringify({ weekStart: "sunday" }));
     const inbox = cache.getSnapshot().projects[0] as StoredProject;
     await cache.createTask(inbox, { title: "Late", allDay: "2026-10-31" });
