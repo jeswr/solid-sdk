@@ -9,7 +9,7 @@ export interface RecurringPayment {
   readonly accountId: string;
   readonly payee: string;
   readonly currency: string;
-  /** The latest amount, as a signed decimal string. */
+  /** The latest amount close to the usual one, as a signed decimal string. */
   readonly amount: string;
   readonly recurrence: Recurrence;
   readonly count: number;
@@ -23,14 +23,14 @@ export interface RecurringPayment {
 export const AMOUNT_TOLERANCE = 0.2;
 /** Small payments may vary by this many whole currency units. */
 export const AMOUNT_TOLERANCE_FLOOR = 5;
-/** Banks take a payment up to this many days late (weekends, bank holidays). */
+/** Banks move a payment up to this many days either way (weekends, bank holidays). */
 export const SHIFT_DAYS = 3;
 /** A payment more than this many days past its expected date has probably stopped. */
 export const STOPPED_AFTER_DAYS = 7;
 /** The latest few payments to a payee may be one-offs, so a schedule is tried from each. */
 const ANCHORS = 3;
-/** Every supported schedule repeats within this many days (a 29 February one within four years). */
-const HORIZON_DAYS = 1500;
+/** Nearest first, so on a tie a payment counts as on time. */
+const SHIFTS = [0, 1, -1, 2, -2, 3, -3];
 
 interface Payment {
   readonly day: number;
@@ -39,52 +39,93 @@ interface Payment {
 
 interface Run {
   readonly rule: Recurrence;
+  /** The schedule's latest expected date. */
   readonly anchor: number;
   /** Indexes into the payee's payments, latest first. */
   readonly indexes: readonly number[];
+  /** How many payments landed exactly on their expected date. */
+  readonly exact: number;
+  /** The latest payment within the amount tolerance: the schedule's amount. */
+  readonly amount: number;
 }
 
 const DAY = 86_400_000;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const dateOf = (day: number) => new Date(day * DAY).toISOString().slice(0, 10);
-const lastOfMonth = (day: number) => dateOf(day + 1).endsWith("-01");
+const utcDay = (year: number, month: number, date: number) => Date.UTC(year, month, date) / DAY;
+const lastOfMonth = (day: number) => new Date((day + 1) * DAY).getUTCDate() === 1;
 
-function onSchedule(day: number, anchor: number, rule: Recurrence): boolean {
+/** The next (or previous) date on a schedule, from a date on it. */
+function step(day: number, rule: Recurrence, direction: 1 | -1): number | undefined {
+  const date = new Date(day * DAY);
+  const year = date.getUTCFullYear();
+  const month = date.getUTCMonth();
   switch (rule.frequency) {
     case "weekly":
-      return (anchor - day) % 7 === 0;
+      return day + 7 * direction;
     case "biweekly":
-      return (anchor - day) % 14 === 0;
-    case "yearly":
-      return dateOf(day).slice(5) === dateOf(anchor).slice(5);
-    case "monthly":
-      return rule.day === "last" ? lastOfMonth(day) : Number(dateOf(day).slice(8)) === rule.day;
+      return day + 14 * direction;
+    case "monthly": {
+      if (rule.day === "last") return utcDay(year, month + direction + 1, 0);
+      // A 29th, 30th or 31st skips the months without one; every second month has a 31st.
+      for (let months = direction; ; months += direction) {
+        const next = utcDay(year, month + months, rule.day);
+        if (new Date(next * DAY).getUTCDate() === rule.day) return next;
+      }
+    }
+    case "yearly": {
+      // 29 February returns within four years, except across a century that isn't a leap year.
+      for (let years = 1; years <= 4; years++) {
+        const next = utcDay(year + years * direction, month, date.getUTCDate());
+        if (new Date(next * DAY).getUTCMonth() === month) return next;
+      }
+      return undefined;
+    }
   }
-}
-
-function step(day: number, anchor: number, rule: Recurrence, direction: 1 | -1) {
-  for (let next = day + direction; Math.abs(next - day) <= HORIZON_DAYS; next += direction) {
-    if (onSchedule(next, anchor, rule)) return next;
-  }
-  return undefined;
 }
 
 function rulesFor(anchor: number): Recurrence[] {
-  // "Last day" first: on a tie it also covers the 30th in a 31-day month.
   return [
     { frequency: "weekly" },
     { frequency: "biweekly" },
     ...(lastOfMonth(anchor) ? [{ frequency: "monthly", day: "last" } as const] : []),
-    { frequency: "monthly", day: Number(dateOf(anchor).slice(8)) },
+    { frequency: "monthly", day: new Date(anchor * DAY).getUTCDate() },
     { frequency: "yearly" },
   ];
 }
 
+/** The unused payment closest to `expected` (earliest on a tie), within SHIFT_DAYS either way. */
+function nearest(
+  payments: readonly Payment[],
+  used: ReadonlySet<number>,
+  from: number,
+  expected: number,
+  fits: (payment: Payment) => boolean,
+): number | undefined {
+  let found: number | undefined;
+  let distance = SHIFT_DAYS + 1;
+  for (let index = from; index >= 0; index--) {
+    const payment = payments[index] as Payment;
+    if (payment.day < expected - SHIFT_DAYS) break;
+    const gap = Math.abs(payment.day - expected);
+    if (payment.day <= expected + SHIFT_DAYS && !used.has(index) && fits(payment)) {
+      if (gap <= distance) {
+        found = index;
+        distance = gap;
+      }
+    }
+  }
+  return found;
+}
+
+const toleranceFor = (minor: number, floor: number) =>
+  Math.max(Math.round(Math.abs(minor) * AMOUNT_TOLERANCE), floor);
+
 /**
  * Walks back from one payment through the dates a schedule expects, taking the
- * earliest unused payment within SHIFT_DAYS after each date whose amount is close
- * to the latest one. Payments between those dates are skipped as one-offs; the
- * run ends at the first expected date with no payment.
+ * unused payment nearest each date (up to SHIFT_DAYS early or late) whose amount
+ * is close to the latest one. Payments between those dates are skipped as
+ * one-offs; the run ends at the first expected date with no payment.
  */
 function walk(
   payments: readonly Payment[],
@@ -94,35 +135,38 @@ function walk(
   rule: Recurrence,
   floor: number,
 ): Run {
-  const latest = (payments[start] as Payment).minor;
-  const tolerance = Math.max(Math.round(Math.abs(latest) * AMOUNT_TOLERANCE), floor);
+  const amount = (payments[start] as Payment).minor;
+  const tolerance = toleranceFor(amount, floor);
+  const fits = (payment: Payment) => Math.abs(payment.minor - amount) <= tolerance;
   const indexes = [start];
+  let exact = (payments[start] as Payment).day === anchor ? 1 : 0;
   let expected = anchor;
   let cursor = start - 1;
   for (;;) {
-    const previous = step(expected, anchor, rule, -1);
+    const previous = step(expected, rule, -1);
     if (previous === undefined) break;
     while (cursor >= 0 && (payments[cursor] as Payment).day > previous + SHIFT_DAYS) cursor--;
-    let found: number | undefined;
-    for (let index = cursor; index >= 0; index--) {
-      const payment = payments[index] as Payment;
-      if (payment.day < previous) break;
-      if (!used.has(index) && Math.abs(payment.minor - latest) <= tolerance) found = index;
-    }
+    const found = nearest(payments, used, cursor, previous, fits);
     if (found === undefined) break;
     indexes.push(found);
+    if ((payments[found] as Payment).day === previous) exact++;
     cursor = found - 1;
     expected = previous;
   }
-  return { rule, anchor, indexes };
+  return { rule, anchor, indexes, exact, amount };
 }
 
+/** A payment off its date counts for a quarter, so moved dates don't invent a schedule. */
+const score = (run: Run) => run.exact + (run.indexes.length - run.exact) / 4;
+const better = (run: Run, best: Run | undefined) => !best || score(run) > score(best);
+
 /**
- * The schedules in one payee's payments (sorted by date), latest run first. Each
- * pass keeps the run with the most payments, then looks again among the rest, so
- * two schedules with one payee (pay on the 1st and the 15th) are both found. A run
- * with more one-off payments inside it than on schedule is no schedule at all (a
- * daily coffee is not seven weekly ones), and the search stops there.
+ * The schedules in one payee's payments (sorted by date). Each pass keeps the
+ * best run (most payments, mostly on their exact dates), then looks
+ * again among the rest, so two schedules with one payee (pay on the 1st and the
+ * 15th) are both found. A run with more one-off payments of a similar amount
+ * inside it than on schedule is no schedule (a daily coffee is not seven weekly
+ * ones), and the search stops there.
  */
 function schedules(payments: readonly Payment[], floor: number): Run[] {
   const used = new Set<number>();
@@ -134,25 +178,39 @@ function schedules(payments: readonly Payment[], floor: number): Run[] {
       if (used.has(index)) continue;
       anchors++;
       const day = (payments[index] as Payment).day;
-      for (let shift = 0; shift <= SHIFT_DAYS; shift++) {
+      for (const shift of SHIFTS) {
         for (const rule of rulesFor(day - shift)) {
           const run = walk(payments, used, index, day - shift, rule, floor);
-          if (!best || run.indexes.length > best.indexes.length) best = run;
+          if (better(run, best)) best = run;
         }
       }
     }
     if (!best || best.indexes.length < 3) return runs;
-    const first = (payments[best.indexes.at(-1) as number] as Payment).day;
-    const inRun = new Set(best.indexes);
+    const run: Run = best;
+    const first = (payments[run.indexes.at(-1) as number] as Payment).day;
+    const inRun = new Set(run.indexes);
+    const tolerance = toleranceFor(run.amount, floor);
     let strays = 0;
     payments.forEach((payment, index) => {
-      if (payment.day >= first && payment.day <= best.anchor + SHIFT_DAYS) {
-        if (!used.has(index) && !inRun.has(index)) strays++;
-      }
+      if (used.has(index) || inRun.has(index) || payment.day < first) return;
+      if (payment.day > run.anchor + SHIFT_DAYS) return;
+      if (Math.abs(payment.minor - run.amount) <= tolerance) strays++;
     });
-    if (strays > best.indexes.length) return runs;
-    runs.push(best);
-    for (const index of best.indexes) used.add(index);
+    if (strays > run.indexes.length) return runs;
+    for (const index of run.indexes) used.add(index);
+    // A payment on the next date of any amount (a price rise) keeps the schedule going.
+    let anchor = run.anchor;
+    const indexes = [...run.indexes];
+    for (;;) {
+      const next = step(anchor, run.rule, 1);
+      if (next === undefined) break;
+      const found = nearest(payments, used, payments.length - 1, next, () => true);
+      if (found === undefined) break;
+      used.add(found);
+      indexes.unshift(found);
+      anchor = next;
+    }
+    runs.push({ ...run, anchor, indexes });
   }
 }
 
@@ -199,7 +257,7 @@ export function recurringPayments(
     const payments = group.payments.sort((a, b) => a.day - b.day || a.id.localeCompare(b.id));
     const floor = AMOUNT_TOLERANCE_FLOOR * 10 ** minorUnits(group.currency);
     schedules(payments, floor).forEach((run, index) => {
-      const next = step(run.anchor, run.anchor, run.rule, 1);
+      const next = step(run.anchor, run.rule, 1);
       // 29 February in a century year that isn't a leap year.
       if (next === undefined || next + STOPPED_AFTER_DAYS < todayDay) return;
       const latest = payments[run.indexes[0] as number] as Payment;
@@ -210,7 +268,7 @@ export function recurringPayments(
         currency: group.currency,
         amount: formatMoney({
           currency: group.currency as Parameters<typeof formatMoney>[0]["currency"],
-          minor: latest.minor,
+          minor: run.amount,
         }),
         recurrence: run.rule,
         count: run.indexes.length,

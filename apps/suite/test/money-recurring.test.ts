@@ -8,6 +8,7 @@ import {
 } from "../src/apps/money/lib/data/recurring";
 import type { Transaction } from "../src/apps/money/lib/model";
 
+const DAY = 86_400_000;
 let n = 0;
 const row = (
   description: string,
@@ -256,10 +257,76 @@ describe("recurring payments", () => {
         `-${1 + (index % 17)}`,
       ),
     );
+    // And ten years of thirteen monthly bills.
+    const bills = Array.from({ length: 13 * 120 }, (_, index) =>
+      row(
+        `Bill ${index % 13}`,
+        new Date(Date.UTC(2016, 10 + Math.floor(index / 13), 1 + (index % 13)))
+          .toISOString()
+          .slice(0, 10),
+        "-20",
+      ),
+    );
     const started = performance.now();
-    const found = recurringPayments([...weekly, ...noise], "2026-10-28");
+    const found = recurringPayments([...weekly, ...noise, ...bills], "2026-10-28");
     expect(performance.now() - started).toBeLessThan(500);
     expect(found.find((value) => value.payee === "Allotment")).toMatchObject({ count: 520 });
+    expect(found.filter((value) => value.count === 120)).toHaveLength(13);
+  });
+
+  it("follows pay moved earlier by a weekend", () => {
+    const iso = (time: number) => new Date(time).toISOString().slice(0, 10);
+    // Back to Friday from a weekend.
+    const working = (time: number) => {
+      const weekday = new Date(time).getUTCDay();
+      return weekday === 6 ? time - DAY : weekday === 0 ? time - 2 * DAY : time;
+    };
+    const months = Array.from({ length: 22 }, (_, index) => index);
+    const lastWorking = months.map((month) =>
+      row("Last day pay", iso(working(Date.UTC(2025, month + 1, 0))), "2400"),
+    );
+    const the25th = months.map((month) =>
+      row("Pay on the 25th", iso(working(Date.UTC(2025, month, 25))), "1800"),
+    );
+    expect(
+      recurringPayments([...lastWorking, ...the25th], "2026-11-05").map((value) => [
+        value.payee,
+        describeRecurrence(value.recurrence),
+        value.nextDate,
+        value.count,
+      ]),
+    ).toEqual([
+      ["Pay on the 25th", "Monthly on the 25th", "2026-11-25", 22],
+      ["Last day pay", "Monthly on the last day", "2026-11-30", 22],
+    ]);
+  });
+
+  it("ignores one-offs of other amounts and keeps a schedule through a price rise", () => {
+    const months = ["11", "12", "01", "02", "03", "04", "05", "06", "07", "08", "09", "10"];
+    const prime = months.map((month) =>
+      row("Amazon", `${month < "11" ? 2026 : 2025}-${month}-03`, "-8.99"),
+    );
+    const purchases = Array.from({ length: 30 }, (_, index) =>
+      row(
+        "Amazon",
+        new Date(Date.UTC(2025, 10, 5 + index * 11)).toISOString().slice(0, 10),
+        `-${20 + ((index * 7) % 57)}`,
+      ),
+    );
+    expect(
+      recurringPayments([...prime, ...purchases], "2026-10-28").map((value) => [
+        value.amount,
+        value.count,
+      ]),
+    ).toEqual([["-8.99", 12]]);
+    // £80 a month, then £110 on 12 October: the schedule carries on.
+    const energy = [
+      ...monthly("Energy", "12", "-80", ["06", "07", "08", "09"]),
+      row("Energy", "2026-10-12", "-110"),
+    ];
+    expect(recurringPayments(energy, "2026-10-18")).toMatchObject([
+      { amount: "-80.00", count: 5, lastDate: "2026-10-12", nextDate: "2026-11-12", late: false },
+    ]);
   });
 
   it("describes schedules in words", () => {
