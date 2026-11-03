@@ -14,12 +14,15 @@ public class SuiteFilesPlugin: CAPPlugin, CAPBridgedPlugin, QLPreviewControllerD
     public let pluginMethods: [CAPPluginMethod] = [
         CAPPluginMethod(name: "pdfBegin", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "pdfChunk", returnType: CAPPluginReturnPromise),
-        CAPPluginMethod(name: "pdfOpen", returnType: CAPPluginReturnPromise)
+        CAPPluginMethod(name: "pdfOpen", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "pdfClear", returnType: CAPPluginReturnPromise)
     ]
     private let queue = DispatchQueue(label: "org.jeswr.suite.pdf-preview")
     private var cachedStore: PdfPreviewStore?
     /// The file the open viewer shows (main thread only).
     private var showing: URL?
+    /// The viewer this plugin presented, dismissed by pdfClear (main thread only).
+    private weak var viewer: QLPreviewController?
 
     private func store() throws -> PdfPreviewStore {
         if let store = cachedStore { return store }
@@ -93,8 +96,27 @@ public class SuiteFilesPlugin: CAPPlugin, CAPBridgedPlugin, QLPreviewControllerD
         viewer.dataSource = self
         viewer.delegate = self
         showing = file
+        self.viewer = viewer
         presenter.present(viewer, animated: true)
         call.resolve()
+    }
+
+    /// Sign-out or account switch (sst-8wx.18): closes QuickLook, drops any transfer and deletes
+    /// every preview file, so the next account never sees them.
+    @objc func pdfClear(_ call: CAPPluginCall) {
+        DispatchQueue.main.async {
+            self.showing = nil
+            self.viewer?.dismiss(animated: false)
+            self.viewer = nil
+            self.queue.async {
+                do {
+                    try self.store().clear()
+                    call.resolve()
+                } catch {
+                    call.reject("Cannot clear PDF previews", "failed")
+                }
+            }
+        }
     }
 
     private func topViewController() -> UIViewController? {

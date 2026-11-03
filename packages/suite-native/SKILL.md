@@ -75,6 +75,10 @@ Validate with this package's `lint`, `build`, `typecheck` and `test` scripts.
   editing off. Keep `PdfPreviewStore` free of Capacitor and platform UI so the JVM and XCTest
   suites cover it, including the bridge argument checks (`declaredSize`, `checkChunk` /
   `decodeChunk`).
+- `clearPdfPreviews(filesPlugin)` (native `pdfClear`) drops any transfer, dismisses QuickLook on
+  iOS and empties `cache/pdf-preview/`. The suite shell calls it whenever the active account
+  changes away from a signed-in one (sign-out, sign-out-all, switch), never on first mount, so a
+  recreated view cannot delete a file the viewer is reading for the same account.
 - Import `@jeswr/suite-native/capacitor` lazily from web code, so only native builds load it.
 
 ## Refresh-token secure store (MOB-P4 S11/S12)
