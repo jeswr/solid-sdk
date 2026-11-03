@@ -1126,12 +1126,15 @@ it("loads the series master for editing an occurrence and detaches just that occ
 });
 it("keeps the loaded calendar on screen when a refresh finds the pod unreachable", async () => {
   const account = mocks.session as PodSession;
-  let offline = false;
+  let failure: Error | undefined;
   mocks.session = {
     ...account,
     fetch: async (input, init) => {
-      if (offline) throw new TypeError("Failed to fetch");
-      return account.fetch(input, init);
+      if (failure) throw failure;
+      // Personal already fails, so its warning stays rather than keeping stale events.
+      return String(input) === `${DEMO_ROOT}calendar/personal/`
+        ? new Response(null, { status: 500 })
+        : account.fetch(input, init);
     },
   };
   mocks.date = "2026-10-28";
@@ -1139,13 +1142,24 @@ it("keeps the loaded calendar on screen when a refresh finds the pod unreachable
   await settle();
   const before = buttons(mounted.host, "Team stand-up").length;
   expect(before).toBeGreaterThan(0);
-  offline = true;
-  // A pod notification (e.g. a late write from another tab) asks every range to reload.
-  await act(() => notify?.(`${DEMO_ROOT}calendar/work/stand-up.ttl`));
-  await settle();
-  await settle();
-  expect(buttons(mounted.host, "Team stand-up")).toHaveLength(before);
-  expect(mounted.host.textContent).not.toContain("Can't reach your storage");
+  const refresh = async () => {
+    // A pod notification (e.g. a late write from another tab) asks every range to reload.
+    await act(() => notify?.(`${DEMO_ROOT}calendar/work/stand-up.ttl`));
+    await settle();
+    await settle();
+    expect(buttons(mounted.host, "Team stand-up")).toHaveLength(before);
+    expect(mounted.host.textContent).not.toContain("Can't reach your storage");
+    expect(mounted.host.textContent).toContain("Could not load events from Personal");
+  };
+  failure = new TypeError("Failed to fetch");
+  await refresh();
+  // Offline, any failure counts as unreachable.
+  failure = new Error("connection reset");
+  Object.defineProperty(window.navigator, "onLine", { value: false, configurable: true });
+  onTestFinished(() => {
+    Object.defineProperty(window.navigator, "onLine", { value: true, configurable: true });
+  });
+  await refresh();
 });
 it("hides a detached occurrence at once while its replacement write is still confirming", async () => {
   const account = mocks.session as PodSession;
