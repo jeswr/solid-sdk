@@ -324,6 +324,42 @@ test("reports compare periods and break spending down by category and month", as
   await shot(page, info, "reports-tables");
 });
 
+test("recurring lists repeating bills and income with their next dates", async ({ page }, info) => {
+  await page.goto("/money");
+  await expect(
+    page.getByRole("heading", { level: 1, name: "Overview", exact: true }),
+  ).toBeVisible();
+  // Below 1280 the Money sidebar sits behind the navigation button.
+  if (info.project.name.startsWith("1280"))
+    await page
+      .getByRole("navigation", { name: "Money", exact: true })
+      .getByRole("link", { name: "Recurring", exact: true })
+      .click();
+  else await page.goto("/money/recurring");
+  await expect(
+    page.getByRole("heading", { level: 1, name: "Recurring", exact: true }),
+  ).toBeVisible();
+  const bills = page.getByRole("region", { name: "Bills", exact: true });
+  const income = page.getByRole("region", { name: "Income", exact: true });
+  await expect(bills.locator("li", { hasText: "Willow Court · Rent" })).toContainText(
+    "Monthly on the 1st",
+  );
+  await expect(bills.locator("li", { hasText: "Bright Energy" })).toContainText(
+    "Monthly on the 12th",
+  );
+  await expect(income.locator("li", { hasText: "Northbank Studio · Salary" })).toContainText(
+    "Next 1 Dec 2026",
+  );
+  await shot(page, info, "recurring");
+  await bills
+    .locator("li", { hasText: "Willow Court · Rent" })
+    .getByRole("link", { name: "Current account", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { level: 1, name: "Current account", exact: true }),
+  ).toBeVisible();
+});
+
 test("rules file matching transactions and are ordered, edited and deleted", async ({
   page,
 }, info) => {
