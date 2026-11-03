@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
 /**
  * `replicateSolid` — an RxDB replication plugin that syncs an RxDB collection
@@ -66,6 +67,7 @@
  * injective, traversal-proof encoder — see {@link ./store.js}.
  */
 
+import type { StorageClient } from "@jeswr/storage-client";
 import type { RxCollection, WithDeleted } from "rxdb";
 import { type RxReplicationState, replicateRxCollection } from "rxdb/plugins/replication";
 import {
@@ -103,7 +105,9 @@ export interface SolidReplicationOptions<RxDocType> {
   /** Absolute pod container URL the replication owns (normalised internally). */
   container: string;
   /** An already-authenticated `fetch` (the auth seam — bring your own Solid auth). */
-  fetch: typeof globalThis.fetch;
+  fetch?: typeof globalThis.fetch;
+  /** Existing storage client (preferred); bypasses fetch-based discovery. */
+  storage?: StorageClient;
   /**
    * Stable identifier for this replication (RxDB uses it to resume + flag
    * revisions). Defaults to a value derived from the container URL, so the same
@@ -220,7 +224,7 @@ export function replicateSolid<RxDocType>(
   if ((options.toRdf && !options.fromRdf) || (!options.toRdf && options.fromRdf)) {
     throw new Error("[rxdb-solid] `toRdf` and `fromRdf` must be supplied together (or neither).");
   }
-  const store = new SolidDocStore({ container, fetch });
+  const store = new SolidDocStore({ container, fetch, storage: options.storage });
   // The primary-key field name (e.g. "id"), read from the collection schema.
   const primaryPath = collection.schema.primaryPath as keyof WithDeleted<RxDocType> & string;
   const replicationIdentifier = options.replicationIdentifier ?? `rxdb-solid:${store.container}`;

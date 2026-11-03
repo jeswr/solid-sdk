@@ -7,9 +7,17 @@ description: Use when reading or writing Solid tasks and calendars through @jesw
 # Solid scheduling model
 
 Tasks (`sched:Task`), calendars (`sched:Calendar`), recurrence rules and reminders from
-the federation scheduling sector; the package mints no IRIs. The model is still
-hand-written: flipping it to a generated core is codegen Phase S (bead sst-ild.7.5), and
-the workspace charter now requires new domain models to be generated.
+the federation scheduling sector; the package mints no IRIs. Task and calendar
+build/parse run on a model generated from `codegen/` (codegen Phase S, bead sst-ild.7.5):
+`src/task.ts` and `src/calendar.ts` are facades over `src/generated/model.js`. Never edit
+`src/generated/`; change `codegen/scheduling.shapes.ttl` or `codegen/codegen.config.json`,
+then run `pnpm run codegen --update-lock`. The drift test (`test/codegen.test.ts`) and
+the divergence pins (`test/compatibility.test.ts`, README "Exact divergences") must pass.
+
+The generated composite covers the `sched:Task` core and its one `sched:RecurrenceRule`.
+The facade adds what SHACL cannot express: the `wf:Task` overlay, unified completion,
+frequency normalisation on write, `dct:subject` labels, and any number of
+`sched:hasReminder` nodes through the typed views in `src/nodes.ts`.
 
 Load-bearing behaviour (`DECISIONS.md` D2): every `sched:Task` is also written as the
 shared `wf:Task` from `@jeswr/solid-task-model` on the same `#it` subject.
@@ -21,7 +29,9 @@ http(s)-filters every `wf:` IRI it returns. The completion timestamp is computed
 once and written to both `sched:completedAt` and `prov:endedAtTime`; an explicit
 `completed: false` wins over a supplied `completedAt`.
 
-`scheduling.shacl.ttl` is the package profile (Task, RecurrenceRule, Reminder, Calendar);
+`scheduling.shacl.ttl` is the published package profile (Task, RecurrenceRule, Reminder,
+Calendar); `codegen/scheduling.shapes.ttl` is the generation input derived from it, with
+the differences listed in its header;
 `src/shape.test.ts` validates it with rdf-validate-shacl. `scheduling.proposals.ttl` holds
 `fedcon:Proposal` candidates for sector gaps; do not edit the sector from here.
 

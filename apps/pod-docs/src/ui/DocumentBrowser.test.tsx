@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 // @vitest-environment jsdom
 //
@@ -262,7 +263,7 @@ function writeStub(opts: {
     }
 
     // GET routes.
-    if (url === WEBID) {
+    if (url === WEBID.split("#")[0]) {
       return new Response(
         `<${WEBID}> <http://www.w3.org/ns/solid/terms#privateTypeIndex> <${PRIVATE_INDEX}> .`,
         { status: 200, headers: { "content-type": "text/turtle", etag: 'W/"p"' } },

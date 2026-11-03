@@ -4,7 +4,7 @@ import type { DatasetCore } from "@rdfjs/types";
 import { AccessControlResource, type Matcher, Policy } from "@solid/object";
 import { DataFactory, Store } from "n3";
 import { ACL, ACP, copyDataset, modeIri, RDF, RdfNode, readModes, serialize } from "../rdf.js";
-import type { EffectivePolicy, Grant, Subject } from "../types.js";
+import type { EffectivePolicy, Grant, Mode, Subject } from "../types.js";
 import { assertUnvalidatedTargetAcp } from "./acp-target.js";
 
 // Refusals are plain Errors branded privately: a caught error exposes no constructor
@@ -23,6 +23,24 @@ export function isPolicyTooComplex(error: unknown): boolean {
 }
 /** Independently established ACP server semantics supported by the migrator. */
 export type AcpDialect = "css" | "ess";
+/** Mode vocabulary for an independently established server dialect. */
+export function acpModeIri(mode: Mode, dialect: AcpDialect): string {
+  return dialect === "css" ? modeIri(mode) : modeIri(mode).replace(ACL, ACP);
+}
+/** Canonical vocabulary after the caller has established activation and scope. */
+export function canonicalAcpModeIris(values: Iterable<string>): string[] {
+  return [...values].map((value) =>
+    value.startsWith(ACP) ? ACL + value.slice(ACP.length) : value,
+  );
+}
+/** ESS activates only acp:* source grant modes; editable RDF cannot select a dialect. */
+export function activeAcpGrantModes(values: readonly string[], dialect?: AcpDialect): string[] {
+  return dialect === "ess"
+    ? values.filter((value) =>
+        ["Read", "Write", "Append", "Control"].some((name) => value === ACP + name),
+      )
+    : [...values];
+}
 function product(left: Subject[][], right: Subject[][]): Subject[][] {
   if (left.length * right.length > 64) throw policyTooComplex("ACP policy exceeds 64 clauses");
   return left.flatMap((a) => right.map((b) => [...a, ...b]));
@@ -163,12 +181,7 @@ export function readAcp(
       );
       if (excluded.some((clause) => clause.length !== 1))
         throw policyTooComplex("Conjunctive ACP exclusions need a richer normal form");
-      const convert = (values: Iterable<string>) =>
-        readModes(
-          [...values].map((value) =>
-            value.startsWith(ACP) ? ACL + value.slice(ACP.length) : value,
-          ),
-        );
+      const convert = (values: Iterable<string>) => readModes(canonicalAcpModeIris(values));
       for (const [field, values] of [
         ["grants", policy.allow],
         ["denials", policy.deny],
@@ -178,9 +191,7 @@ export function readAcp(
         // not grant acl:* modes. Denials keep both plausible vocabularies.
         const establishedModes =
           !target && dialect === "ess" && field === "grants"
-            ? rawModes.filter((value) =>
-                ["Read", "Write", "Append", "Control"].some((name) => value === ACP + name),
-              )
+            ? activeAcpGrantModes(rawModes, dialect)
             : rawModes;
         if (establishedModes.length !== rawModes.length)
           onInactive?.(
@@ -418,7 +429,7 @@ export async function writeAcp(
         for (const subject of rule.except) p.add(`${ACP}noneOf`, matcher(subject));
         for (const mode of rule.modes) {
           if (dialect === "ess" && mode === "control") continue;
-          p.add(ACP + field, dialect === "css" ? modeIri(mode) : modeIri(mode).replace(ACL, ACP));
+          p.add(ACP + field, acpModeIri(mode, dialect));
         }
         if (rule.appliesTo !== "members") acr.add(`${ACP}accessControl`, ac.value);
         if (rule.appliesTo !== "resource") acr.add(`${ACP}memberAccessControl`, ac.value);
