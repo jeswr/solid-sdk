@@ -332,5 +332,10 @@ it("refreshes Today, Upcoming, due chips and sidebar counts as clock boundaries 
   expect([...host.querySelectorAll("#today .tsk-due")].map((chip) => chip.textContent)).toContain(
     "Today",
   );
+  // WCAG 2.5.3: each chip's accessible name begins with its visible due text.
+  for (const chip of host.querySelectorAll("#today .tsk-due"))
+    expect(chip.getAttribute("aria-label")).toMatch(
+      new RegExp(`^${chip.textContent}, reschedule '(Timed|Tomorrow) task'$`),
+    );
   await unmount();
 });

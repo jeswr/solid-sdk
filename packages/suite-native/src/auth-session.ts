@@ -39,15 +39,17 @@ export interface NativeCodeDriverOptions {
 const SCHEME = /^[a-z][a-z0-9+.-]*\.[a-z0-9+.-]*[a-z0-9]$/;
 const RESERVED_SCHEMES = new Set(["http", "https", "file", "data", "javascript", "blob", "about"]);
 const LOOPBACK = new Set(["localhost", "127.0.0.1", "[::1]"]);
+const ERROR_CODE = /^[\x20\x21\x23-\x5b\x5d-\x7e]{1,128}$/;
+const ERROR_DESCRIPTION = /^[\x20\x21\x23-\x5b\x5d-\x7e]{1,500}$/;
 
-interface Redirect {
+export interface Redirect {
   href: string;
   scheme: string;
   protocol: string;
   pathname: string;
 }
 
-function parseRedirect(redirectUri: string): Redirect {
+export function parseRedirect(redirectUri: string): Redirect {
   let url: URL;
   try {
     url = new URL(redirectUri);
@@ -90,6 +92,11 @@ function checkAuthorizationUrl(url: URL, redirect: Redirect, allowLoopback: bool
   if (single(params, "code_challenge_method", bad("needs code_challenge_method")) !== "S256") {
     throw bad("must use PKCE S256")();
   }
+  // A request object (JAR) or pushed request (PAR) would carry its own
+  // redirect_uri, PKCE method and state, making the checks above vacuous.
+  if (params.has("request") || params.has("request_uri")) {
+    throw bad("must not use a request object or request_uri")();
+  }
   const modes = params.getAll("response_mode");
   if (modes.length > 1 || (modes.length === 1 && modes[0] !== "query")) {
     throw bad("must use the query response mode")();
@@ -117,8 +124,18 @@ function checkCallback(raw: string, redirect: Redirect, state: string, issuer: s
     throw bad("iss does not match the authorization server")();
   }
   if (params.has("error")) {
+    // RFC 6749 §4.1.2.1 limits both fields to %x20-21 / %x23-5B / %x5D-7E; the
+    // identity provider is the user's choice, so its text is bounded before it
+    // reaches an Error message a UI may show.
     const code = single(params, "error", bad("carries a malformed error"));
-    throw new AuthorizationError(code, params.get("error_description") ?? undefined);
+    if (!ERROR_CODE.test(code)) throw bad("carries a malformed error")();
+    const description = params.getAll("error_description");
+    throw new AuthorizationError(
+      code,
+      description.length === 1 && ERROR_DESCRIPTION.test(description[0] as string)
+        ? description[0]
+        : undefined,
+    );
   }
   return single(params, "code", bad("needs exactly one code"));
 }

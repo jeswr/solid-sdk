@@ -1,5 +1,5 @@
 {
-  "name": "solid-offline",
+  "name": "@jeswr/solid-offline",
   "version": "0.1.0",
   "description": "Offline-first drop-in layer for Solid apps: a service worker that intercepts fetch and caches documents never-authoritatively, with proactive cache warming, notification-driven invalidation, and React/vanilla DX hooks.",
   "type": "module",
@@ -45,7 +45,9 @@
     "api:check": "node scripts/api-report.mjs --check"
   },
   "dependencies": {
-    "n3": "^1.21.0"
+    "n3": "^1.21.0",
+    "@jeswr/storage-client": "workspace:*",
+    "@jeswr/pod-notifications": "workspace:*"
   },
   "peerDependencies": {
     "react": ">=18.0.0"

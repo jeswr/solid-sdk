@@ -209,3 +209,107 @@ describe("vocabulary IRIs are the converged standard terms", () => {
     expect(store.getQuads(subject, schema("position"), null, null).length).toBe(1);
   });
 });
+
+describe("parseTask hardens untrusted reads (sst-ild.7.9)", () => {
+  const Pre = `@prefix wf: <http://www.w3.org/2005/01/wf/flow#> .
+    @prefix dct: <http://purl.org/dc/terms/> .
+    @prefix schema: <http://schema.org/> .
+    @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .`;
+
+  it("drops non-http(s) object-property IRIs", () => {
+    const back = parseTask(
+      URL_,
+      parseStore(`${Pre}
+        <${URL_}#it> a wf:Task, wf:Open ; dct:title "T" ;
+          wf:assignee <javascript:alert(1)> ; dct:creator <data:text/html,x> ;
+          wf:tracker <javascript:p> ; dct:isPartOf <javascript:q> ;
+          dct:isReplacedBy <javascript:r> ;
+          dct:requires <javascript:s>, <https://pod.example/tasks/a#it> ;
+          dct:relation <javascript:t> .`),
+    );
+    expect(back).toMatchObject({ title: "T", blockedBy: ["https://pod.example/tasks/a#it"] });
+    for (const key of ["assignee", "creator", "project", "parent", "duplicateOf", "relatesTo"]) {
+      expect(back).not.toHaveProperty(key);
+    }
+  });
+
+  it("drops a literal where an IRI belongs and a malformed date instead of throwing", () => {
+    const back = parseTask(
+      URL_,
+      parseStore(`${Pre}
+        <${URL_}#it> a wf:Task, wf:Open ; dct:title "Survivor" ;
+          wf:assignee "bob" ; dct:requires "x" ;
+          wf:dateDue "not-a-date"^^xsd:dateTime .`),
+    );
+    expect(back?.title).toBe("Survivor");
+    expect(back?.assignee).toBeUndefined();
+    expect(back?.blockedBy).toBeUndefined();
+    expect(back?.dueDate).toBeUndefined();
+  });
+});
+
+describe("parseTask returns accepted IRIs as stored (sst-ild.7.9 review)", () => {
+  const Pre = `@prefix wf: <http://www.w3.org/2005/01/wf/flow#> .
+    @prefix dct: <http://purl.org/dc/terms/> .`;
+
+  it("keeps a valid non-canonical IRI unchanged on scalars and sets", () => {
+    const back = parseTask(
+      URL_,
+      parseStore(`${Pre}
+        <${URL_}#it> a wf:Task, wf:Open ; dct:title "T" ;
+          wf:assignee <https://Alice.Example/profile/card#me> ;
+          wf:tracker <http://x.org> ;
+          dct:requires <https://B.example/x#it> .`),
+    );
+    expect(back?.assignee).toBe("https://Alice.Example/profile/card#me");
+    expect(back?.project).toBe("http://x.org");
+    expect(back?.blockedBy).toEqual(["https://B.example/x#it"]);
+  });
+
+  it("drops a bad set member alone and keeps the valid ones", () => {
+    const back = parseTask(
+      URL_,
+      parseStore(`${Pre}
+        <${URL_}#it> a wf:Task, wf:Open ; dct:title "T" ;
+          dct:requires "lit", [], <javascript:x>, <https://ok.example/t#it> ;
+          dct:relation <https://ok.example/r#it>, "x" .`),
+    );
+    expect(back?.blockedBy).toEqual(["https://ok.example/t#it"]);
+    expect(back?.relatesTo).toEqual(["https://ok.example/r#it"]);
+  });
+
+  it("takes the first http(s) IRI for a scalar, whatever precedes it", () => {
+    const back = parseTask(
+      URL_,
+      parseStore(`${Pre}
+        <${URL_}#it> a wf:Task, wf:Open ; dct:title "T" ;
+          wf:assignee "lit", <javascript:x>, <https://ok.example/me> ;
+          dct:creator [], <https://ok.example/c> .`),
+    );
+    expect(back?.assignee).toBe("https://ok.example/me");
+    expect(back?.creator).toBe("https://ok.example/c");
+  });
+
+  it("rejects values that only parse as http(s) after WHATWG URL repair", () => {
+    const { namedNode, quad } = DataFactory;
+    const it_ = namedNode(`${URL_}#it`);
+    const store = new Store([
+      quad(
+        it_,
+        namedNode("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"),
+        namedNode(TASK_CLASS),
+      ),
+      quad(it_, namedNode("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"), namedNode(WF_OPEN)),
+      quad(it_, namedNode(dct("title")), DataFactory.literal("T")),
+      quad(it_, namedNode(wf("assignee")), namedNode("https:foo")),
+      quad(it_, namedNode(dct("requires")), namedNode("https://a.example/x y")),
+      quad(it_, namedNode(dct("requires")), namedNode("https://a.example/<b>")),
+      quad(it_, namedNode(dct("relation")), namedNode("http:\t//evil.example/")),
+    ]);
+    const back = parseTask(URL_, store);
+    expect(back?.title).toBe("T");
+    expect(back?.assignee).toBeUndefined();
+    expect(back?.blockedBy).toBeUndefined();
+    expect(back?.relatesTo).toBeUndefined();
+  });
+});

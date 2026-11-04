@@ -27,6 +27,7 @@ import * as entry6 from "@jeswr/agent-channels/matrix";
 import * as entry22 from "@jeswr/agent-channels/matrix/send";
 import * as entry15 from "@jeswr/agent-channels/mcp";
 import * as entry30 from "@jeswr/agent-channels/mcp/send";
+import * as providerSend from "@jeswr/agent-channels/provider/send";
 import * as entry16 from "@jeswr/agent-channels/public-http";
 import * as entry31 from "@jeswr/agent-channels/public-http/send";
 import * as entry7 from "@jeswr/agent-channels/slack";
@@ -35,6 +36,7 @@ import * as entry12 from "@jeswr/agent-channels/telegram";
 import * as entry27 from "@jeswr/agent-channels/telegram/send";
 import * as entry1 from "@jeswr/agent-channels/testing";
 import * as entry33 from "@jeswr/agent-channels/testing/send";
+import * as x from "@jeswr/agent-channels/x";
 // biome-ignore lint/style/useNodejsImportProtocol: agent imports allow only bare package names or relative paths
 import { existsSync, readFileSync } from "fs";
 // biome-ignore lint/style/useNodejsImportProtocol: agent imports allow only bare package names or relative paths
@@ -47,6 +49,7 @@ const modules: Record<string, object> = {
   "./testing": entry1,
   "./email-mime": entry2,
   "./gmail": entry3,
+  "./x": x,
   "./graph-mail": entry4,
   "./graph-teams": entry5,
   "./matrix": entry6,
@@ -76,6 +79,7 @@ const modules: Record<string, object> = {
   "./mcp/send": entry30,
   "./public-http/send": entry31,
   "./direct/send": entry32,
+  "./provider/send": providerSend,
   "./testing/send": entry33,
 };
 const entries = Object.entries(manifest.exports) as [string, { types: string; default: string }][];
@@ -93,14 +97,86 @@ it.each(entries)("resolves the declared %s surface", (subpath, target) => {
   const entry = new URL(`../${target.default}`, import.meta.url);
   const specifier = manifest.name + (subpath === "." ? "" : subpath.slice(1));
   expect(import.meta.resolve(specifier)).toBe(entry.href);
-  if (![".", "./testing", "./direct", "./direct/send"].includes(subpath))
+  if (
+    ![
+      ".",
+      "./testing",
+      "./direct",
+      "./direct/send",
+      "./email-mime",
+      "./email-mime/send",
+      "./gmail",
+      "./gmail/send",
+      "./x",
+      "./github",
+      "./graph-mail",
+      "./graph-mail/send",
+      "./mastodon",
+      "./mastodon/send",
+      "./discord",
+      "./discord/send",
+      "./matrix",
+      "./matrix/send",
+      "./provider/send",
+    ].includes(subpath)
+  )
     expect(Object.getOwnPropertyNames(modules[subpath])).toEqual([]);
 });
 
 it("keeps send factories out of root and reader exports", () => {
+  expect(providerSend.ProviderRejectedError).toBe(entry0.ProviderRejectedError);
+  expect(entry0).toHaveProperty("readEnvelope");
   expect(entry0).not.toHaveProperty("createDirectSend");
   expect(entry0).not.toHaveProperty("createInMemoryDirectBinding");
   expect(entry17).not.toHaveProperty("createDirectSend");
   expect(entry32).toHaveProperty("createDirectSend");
   expect(entry1).toHaveProperty("createInMemoryDirectBinding");
+  expect(entry11).toHaveProperty("createGithubReader");
+  expect(entry11).not.toHaveProperty("send");
+  expect(manifest.exports).not.toHaveProperty("./github/send");
+});
+
+it("keeps Gmail send and MIME render factories out of read surfaces", () => {
+  expect(entry0).not.toHaveProperty("createGmailSend");
+  expect(entry3).not.toHaveProperty("createGmailSend");
+  expect(entry2).not.toHaveProperty("createEmailRenderer");
+  expect(entry19).toHaveProperty("createGmailSend");
+  expect(entry18).toHaveProperty("createEmailRenderer");
+  expect(x).toHaveProperty("createXReader");
+  expect(x).not.toHaveProperty("send");
+  expect(entry0).not.toHaveProperty("createXReader");
+  expect(manifest.exports).not.toHaveProperty("./x/send");
+});
+
+it("keeps Graph mail sending out of the root and reader surfaces", () => {
+  expect(entry0).not.toHaveProperty("createGraphMailSend");
+  expect(entry4).toHaveProperty("createGraphMailReader");
+  expect(entry4).not.toHaveProperty("createGraphMailSend");
+  expect(entry20).toHaveProperty("createGraphMailSend");
+});
+
+it("keeps Mastodon sending out of root and reader exports", () => {
+  expect(entry0).not.toHaveProperty("createMastodonSend");
+  expect(entry10).toHaveProperty("createMastodonReader");
+  expect(entry10).not.toHaveProperty("createMastodonSend");
+  expect(entry26).toHaveProperty("createMastodonSend");
+});
+
+it("keeps Discord sending out of the root and reader surfaces", () => {
+  expect(entry0).not.toHaveProperty("createDiscordSend");
+  expect(entry8).not.toHaveProperty("createDiscordSend");
+  expect(entry8).toHaveProperty("createDiscordReader");
+  expect(entry24).toHaveProperty("createDiscordSend");
+});
+
+it("keeps Matrix sends out of the reader and root surfaces", () => {
+  expect(entry0).not.toHaveProperty("createMatrixSend");
+  expect(entry6).not.toHaveProperty("createMatrixSend");
+  expect(entry6).toHaveProperty("createMatrixReader");
+});
+
+it("exposes Matrix sends only on the executor subpath", () => {
+  expect(entry22).toHaveProperty("createMatrixSend");
+  expect(entry0).not.toHaveProperty("createMatrixSend");
+  expect(entry6).not.toHaveProperty("createMatrixSend");
 });

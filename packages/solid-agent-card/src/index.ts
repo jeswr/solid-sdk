@@ -21,8 +21,8 @@
  * RDF discipline: parse via `@jeswr/fetch-rdf`, extract via `@rdfjs/wrapper`,
  * serialise via `n3.Writer`. Never a bespoke parser; never a hand-built triple.
  *
- * Standard vocabularies only (no bespoke `@jeswr/…` agent vocab is minted): ANP
- * Agent Description, A2A Agent Card, schema.org, Solid Interop (SAI).
+ * Uses ANP Agent Description, A2A Agent Card, schema.org, Solid Interop (SAI),
+ * and the shared agent-model vocabulary for channel capability extensions.
  *
  * Scope note (roadmap M1): this is the SEPARATE-CODEBASE entry point, with ZERO
  * prod-solid-server core risk for the common case — the pod serves the descriptor
@@ -64,10 +64,12 @@ export {
   ANP_AD,
   ANP_CONTEXT_URL,
   ANP_INLINE_CONTEXT,
+  BINDINGS_EXTENSION_URI,
   HAS_AUTHORIZATION_AGENT,
   SCHEMA_AGENT,
   SECURITY_SCHEME_TYPES,
   type SecuritySchemeType,
+  SUPPORTS_BINDING,
   VALID_SECURITY_SCHEME_TYPES,
   WELL_KNOWN_AGENT_CARD,
   WELL_KNOWN_AGENT_DESCRIPTIONS,

@@ -4,6 +4,11 @@
 
 # @jeswr/solid-auth-core
 
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+
+> **Deprecated — use `@jeswr/pod-auth`.** See the [pod-auth migration guide](../pod-auth/SKILL.md).
+> This package remains available for existing consumers and pinned mirrors; the API below is legacy.
+
 Framework-independent browser Solid authentication with WebID-first login, DPoP, silent restore,
 and safe fetch boundaries.
 

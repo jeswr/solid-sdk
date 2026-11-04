@@ -56,6 +56,38 @@ const protocol = await buildProtocolDocument({
 - Handshake: `encodeUpgradeOffer`, `decodeUpgradeOffer`, `encodeUpgradeResponse`,
   `decodeUpgradeResponse`, `mayDowngradeToNl`, and RDF codecs.
 
+## Reading untrusted intents
+
+- `intentFromRdf` / `parseIntentGraph` return `undefined` for anything ambiguous: a
+  graph with more than one `a2a:Intent`, an action typed with more than one kind, more than one target, recipient or agent, an
+  action agent that differs from the intent agent, an unknown `a2a:mode`, or an IRI that
+  is not absolute. The request shapes do not bound these, so act on the projection, not
+  on `validateIntent` alone.
+- `validateIntent` never throws: an Intent the writers refuse, or a shape the validator
+  cannot compile, is `conforms: false`. Shapes using `sh:pattern` are refused, because a
+  peer's pinned Protocol Document is not vetted and a backtracking regex cannot be timed out.
+  For the same reason a validation is refused before it starts when its cost is not bounded:
+  SHACL outside the Core subset (no `sh:pattern`, `sh:qualifiedValueShapesDisjoint` or SPARQL),
+  `rdfs:subClassOf` in the shapes or the intent graph, a looping, branching or long RDF list, a
+  property path that unfolds past 64 nodes, inverts anything but a predicate, nests a `*`/`+`
+  path inside another, or gives one path node two forms, a repeated constraint parameter (other
+  than shape references, `sh:class`, targets and labels), a shape reference cycle, an oversized
+  graph, or more than 5000 validation steps over this intent. Steps are counted the way the
+  validator, which memoises nothing, spends them: each shape evaluation, value node and path
+  step, including the path re-walks of `sh:equals`-style and qualified components and the
+  members a property shape's `sh:and` re-runs over its own path. That pre-check models the
+  validator, so the validator also runs under a hard budget of 20,000 graph operations (each
+  match, quad read and report write, metered through its datasets): a validation that spends it
+  stops and is refused, whatever drove the cost. Work the validator does on term text, outside
+  any graph operation, is bounded by refusing terms over 4096 characters (a literal counted
+  with its language tag and datatype IRI), language tags over 35, shape labels
+  (`sh:message`, `sh:name`, `sh:description`) over 1024, and typed literals other than strings
+  over 128 (their lexical patterns backtrack); `sh:lessThan`-style pairwise comparisons count
+  as steps.
+- The deterministic NL parser reads verbs, ACL modes and recipient markers from the prose
+  only, never from inside a URL.
+- Handshake decoders accept only an http(s) `protocolSource` and `xsd:boolean` flags.
+
 ## Vocabulary compatibility
 
 Phase-1 writers keep emitting `https://w3id.org/jeswr/a2a#` intents, shapes, protocol

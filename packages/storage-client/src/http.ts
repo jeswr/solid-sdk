@@ -1,5 +1,6 @@
 // AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 // HTTP plumbing shared by the network backends: scope-checked requests, network-error mapping,
 // Link / WAC-Allow parsing and ReadResult construction (ADR-003 §2, §6, §7). Not exported.
 import { assertWithinPodScope, redactUserinfo } from "@jeswr/guarded-fetch";
@@ -52,15 +53,14 @@ export function scoped(root: string, method: string, url: string): string {
 }
 
 /** Scope and validate a listing container before requests or pagination can check aborts. */
-export function listingContainer(root: string, url: string, protocol: "solid" | "lws"): string {
+export function listingContainer(root: string, url: string, versionQuery = false): string {
   const container = scoped(root, "GET", url);
   // Empty query/fragment delimiters survive in href even though URL.search/hash report "".
-  if (/[?#]/.test(container) || (protocol === "lws" && !container.endsWith("/"))) {
-    const ending = protocol === "lws" ? " ending with '/'" : "";
+  if ((!versionQuery && /[?#]/.test(container)) || container.includes("#")) {
     throw new StorageError("bad-request", {
       method: "GET",
       url: container,
-      message: `list() takes a container URL${ending} without a query or fragment`,
+      message: "list() takes a container URL without a query or fragment",
     });
   }
   return container;
@@ -77,6 +77,7 @@ export async function send(
   headers: Record<string, string>,
   signal: AbortSignal | undefined,
   body?: Body,
+  revalidate = false,
 ): Promise<Response> {
   throwIfAborted(method, url, signal);
   try {
@@ -84,6 +85,7 @@ export async function send(
       method,
       headers,
       redirect: "manual",
+      ...(revalidate ? { cache: "no-cache" } : {}),
       ...(signal ? { signal } : {}),
       ...(body === undefined
         ? {}
@@ -105,6 +107,44 @@ export async function send(
 /** Release an unread body without waiting (a tee'd body's cancel can stay pending). */
 export function discard(body: ReadableStream<Uint8Array> | null): void {
   body?.cancel().catch(() => undefined);
+}
+
+/**
+ * Shared capped-body reader, extracted from LWS JSON collection. Count actual streamed bytes
+ * before decoding or parsing; never trust Content-Length. Cancellation must not delay rejection
+ * (tee'd bodies and hostile sources may never settle their cancellation promise).
+ */
+export async function boundedText(
+  result: Pick<ReadResult, "url" | "body">,
+  maxBytes: number,
+  overflow: StorageError,
+  signal?: AbortSignal,
+): Promise<string> {
+  let text = "";
+  let size = 0;
+  const decoder = new TextDecoder();
+  if (result.body) {
+    const reader = result.body.getReader();
+    const cancel = () => void reader.cancel(signal?.reason).catch(() => undefined);
+    signal?.addEventListener("abort", cancel, { once: true });
+    try {
+      throwIfAborted("GET", result.url, signal);
+      for (;;) {
+        const chunk = await reader.read();
+        throwIfAborted("GET", result.url, signal);
+        if (chunk.done) break;
+        size += chunk.value.byteLength;
+        if (size > maxBytes) throw overflow;
+        text += decoder.decode(chunk.value, { stream: true });
+      }
+      text += decoder.decode();
+    } finally {
+      signal?.removeEventListener("abort", cancel);
+      cancel();
+      reader.releaseLock();
+    }
+  }
+  return text;
 }
 
 /**
@@ -278,6 +318,7 @@ export function readResultFrom(
     etag: response.headers.get("etag"),
     contentType,
     lastModified: dateOf(response.headers.get("last-modified")),
+    mementoDatetime: dateOf(response.headers.get("memento-datetime")),
     body,
     bytes,
     text: async () => new TextDecoder().decode(await bytes()),

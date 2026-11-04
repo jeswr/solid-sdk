@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 /**
  * Stale-while-revalidate engine for §2.
  *
@@ -19,6 +20,7 @@
 
 import {
   deleteVariantBytes,
+  evictListingPages,
   IGNORE_VARY,
   metadataFromResponse,
   putCanonicalBytes,
@@ -67,8 +69,8 @@ export type ServeSource =
   | 'network-miss-store' // cache miss → network → stored
   | 'network-miss-nostore' // cache miss → network → not cacheable
   | 'network-no-cache' // request was never-cache; straight passthrough
-  | 'request-no-store' // request sent `Cache-Control: no-store`; pure network bypass
-  | 'request-no-cache-revalidated' // request sent `Cache-Control: no-cache`; forced synchronous revalidation
+  | 'request-no-store' // request demanded no-store; pure network bypass
+  | 'request-no-cache-revalidated' // request demanded freshness; forced synchronous revalidation
   | 'offline-miss'; // cache miss while offline → network error surfaces
 
 export interface HandleResult {
@@ -108,7 +110,7 @@ function withOfflineStale(response: Response): Response {
  * function (so each security branch is independently readable):
  *   1. never-cache endpoint → straight passthrough;
  *   2. HEAD → non-destructive passthrough (`handleHead`);
- *   3. an online `Cache-Control: no-store`/`no-cache` request → `handleDirective`;
+ *   3. an online request demanding freshness via header/cache mode → `handleDirective`;
  *   4. otherwise the metadata-first SWR cache path (`handleCachePath`).
  */
 export async function handleFetch(request: Request, deps: SwrDeps): Promise<HandleResult> {
@@ -126,9 +128,14 @@ export async function handleFetch(request: Request, deps: SwrDeps): Promise<Hand
     return handleHead(request, rl, deps);
   }
 
-  // 3. An online request-directive (no-store/no-cache) opts out of the SWR fast
-  //    path (offline they can't be satisfied → fall through to the cache path).
-  const directive = requestCacheDirective(rl);
+  // 3. Honor both Cache-Control and Request.cache: StorageClient observations
+  //    use cache: 'no-cache' without a header. Polling must await revalidation of
+  //    every page rather than mix a stale first page with fresh cursor pages.
+  //    no-store wins over freshness; offline retains the existing stale fallback.
+  let directive = requestCacheDirective(rl);
+  if (request.cache === 'no-store') directive = 'no-store';
+  else if (directive === 'default' && (request.cache === 'no-cache' || request.cache === 'reload'))
+    directive = 'no-cache';
   if (deps.isOnline() && directive !== 'default') {
     return handleDirective(directive, request, rl, deps);
   }
@@ -455,6 +462,7 @@ function varyHeaders(vary: string | undefined): Headers {
  */
 async function purgeAllVariants(url: string, deps: SwrDeps): Promise<void> {
   const rows = await deps.meta.getByUrl(url);
+  await evictListingPages(url, rows, deps);
   // Drop EVERY variant's bytes (+ the defensive canonical-Turtle orphan sweep).
   await deleteVariantBytes(
     deps.cache,
@@ -520,6 +528,9 @@ async function store(
   negative: boolean,
 ): Promise<void> {
   const now = deps.now();
+  // Cache misses can still have metadata after byte eviction; retain the old
+  // pagination links until their cursor chain is gone, before overwriting them.
+  await evictListingPages(rl.url, await deps.meta.getByUrl(rl.url), deps);
   // Store the bytes UN-mutated under the canonical (url, varyKey) key + the 1:1
   // metadata row (the shared coherence primitives — see `cache-coherence.ts`).
   await putCanonicalBytes(deps.cache, rl, response);

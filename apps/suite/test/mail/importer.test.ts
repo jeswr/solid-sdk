@@ -493,3 +493,44 @@ it("sorts equal-dated threads stably and resolves message-side membership alone"
   ]);
   expect(folderCounts(mailbox)).toEqual([]);
 });
+
+it("recovers at separators after byte/quote-prefix limits and reports each oversized message once", async () => {
+  for (const body of [
+    "x".repeat(30),
+    ">".repeat(30),
+    ">>>From escaped",
+    "xxxx\n>From escaped",
+    "xxxxxxxx\nFr",
+    "xxxxxxxx\n>",
+  ]) {
+    const errors: unknown[] = [];
+    const source = bytes(`From a\nok\nFrom b\n${body}\nFrom c\nend\n`);
+    const recovered = await collect(splitMbox(chunks(source, 1), 4, (error) => errors.push(error)));
+    expect(recovered.map((raw) => new TextDecoder().decode(raw as Uint8Array))).toEqual([
+      "ok\n",
+      "end\n",
+    ]);
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toBeInstanceOf(RangeError);
+  }
+  const errors: unknown[] = [];
+  expect(
+    await collect(
+      splitMbox(chunks(bytes("From a\nxxxxx\n>"), 1), 4, (error) => errors.push(error)),
+    ),
+  ).toEqual([]);
+  expect(errors).toHaveLength(1);
+});
+
+it("keeps fail-fast MIME errors for callers that have not requested per-message recovery", async () => {
+  await expect(
+    collect(
+      importMbox(
+        chunks(bytes("From a\nDate: invalid\n\nBody\n")),
+        storage,
+        "personal",
+        () => "broken",
+      ),
+    ),
+  ).rejects.toThrow("Invalid message date");
+});

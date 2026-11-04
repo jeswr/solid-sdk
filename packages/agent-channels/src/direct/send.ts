@@ -1,10 +1,12 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+
 import { assertJsonBounds, canonicalJson, digestBytes, validateMessage } from "@jeswr/agent-model";
 import type { CarriageProfile, ChannelBinding } from "../binding.js";
 import { createDirectReader } from "../direct.js";
 import { ChannelParseError, ProviderRejectedError } from "../errors.js";
 import { DIRECT } from "../profiles.js";
+import { sendAttempt } from "../provider/attempt.js";
 import type { RenderableProposal, TokenProvider } from "../types.js";
 import { accountId, assertGrant, assertWire, type DirectMailbox, envelope } from "./shared.js";
 
@@ -80,36 +82,40 @@ export function createDirectSend(
         return { ok: false, reason: "malformed" };
       }
     },
-    async transmit(wire, io) {
-      if (io.dryRun !== false) return { outcome: "rejected", detail: "dry-run" };
-      const account = accountId(io.account);
-      const accountRef = Object.freeze({ id: account });
-      // Keep the checked bytes and their identity stable across asynchronous checks.
-      const snapshot = { ...wire };
-      const compactJws = assertWire(snapshot);
-      // Register each attempt before verification or credentials can suspend it.
-      const attempt = { bytes: snapshot.bytes };
-      pending.add(attempt);
-      try {
-        const message = await verified(compactJws);
-        assertCurrent(message);
-        assertGrant(await io.tokens.send(accountRef), "send");
-        assertCurrent(message);
-        const previous = mailbox.accepted.get(message.id);
-        if (previous) {
-          if (previous.bytes !== snapshot.bytes || previous.account !== account)
-            throw new ProviderRejectedError("direct message id conflicts with accepted bytes");
-          return { outcome: "accepted", providerRef: previous.providerRef };
+    transmit(wire, io) {
+      return sendAttempt(async (dispatched) => {
+        if (io.dryRun !== false) return { outcome: "rejected", detail: "dry-run" };
+        const account = accountId(io.account);
+        const accountRef = Object.freeze({ id: account });
+        // Keep the checked bytes and their identity stable across asynchronous checks.
+        const snapshot = { ...wire };
+        const compactJws = assertWire(snapshot);
+        // Register each attempt before verification or credentials can suspend it.
+        const attempt = { bytes: snapshot.bytes };
+        pending.add(attempt);
+        try {
+          const message = await verified(compactJws);
+          assertCurrent(message);
+          assertGrant(await io.tokens.send(accountRef), "send");
+          assertCurrent(message);
+          io.assertAuthority();
+          const previous = mailbox.accepted.get(message.id);
+          if (previous) {
+            if (previous.bytes !== snapshot.bytes || previous.account !== account)
+              throw new ProviderRejectedError("direct message id conflicts with accepted bytes");
+            return { outcome: "accepted", providerRef: previous.providerRef };
+          }
+          const providerRef = `direct:${snapshot.digest}`;
+          dispatched();
+          mailbox.accepted.set(message.id, { bytes: snapshot.bytes, providerRef, account });
+          const inbox = mailbox.inboxes.get(account) ?? [];
+          inbox.push({ id: message.id, raw: snapshot.bytes });
+          mailbox.inboxes.set(account, inbox);
+          return { outcome: "accepted", providerRef };
+        } finally {
+          pending.delete(attempt);
         }
-        const providerRef = `direct:${snapshot.digest}`;
-        mailbox.accepted.set(message.id, { bytes: snapshot.bytes, providerRef, account });
-        const inbox = mailbox.inboxes.get(account) ?? [];
-        inbox.push({ id: message.id, raw: snapshot.bytes });
-        mailbox.inboxes.set(account, inbox);
-        return { outcome: "accepted", providerRef };
-      } finally {
-        pending.delete(attempt);
-      }
+      });
     },
     async lookup(wire) {
       const snapshot = { ...wire };
