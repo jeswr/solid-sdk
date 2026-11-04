@@ -28,7 +28,8 @@ export interface ReactiveAuthenticationOptions {
   /**
    * Largest request body buffered for replay. Larger bodies reject with {@link ReactiveAuthenticationError}.
    * Bodies are buffered for URLs the boundary allows and for discovery candidates it may still authorize;
-   * excluded URLs (neither) are never buffered.
+   * excluded URLs (neither) are never buffered. A `Blob` or `File` given as `init.body` is replayed as it is,
+   * without buffering, so this limit does not apply to it.
    * @defaultValue 16 MiB
    */
   readonly maxReplayBodyBytes?: number;
@@ -104,7 +105,12 @@ export class ReactiveAuthenticationClient {
 
     const generation = await this.#fence?.generation();
     const session = this.#session(request.signal, generation);
-    const body = await bufferBody(request, session.signal, this.#maxReplayBodyBytes);
+    // A Blob or File passed as the body is immutable and readable again, so it replays as it is: no copy into
+    // memory and no size limit (a File stays on disk). Other bodies are read once, so they are buffered.
+    const body =
+      init?.body instanceof Blob
+        ? withContentType([init.body], request)
+        : await bufferBody(request, session.signal, this.#maxReplayBodyBytes);
     return await this.#run(new Attempt(request, body), { generation, signal: session.signal }, 0);
   }
 
