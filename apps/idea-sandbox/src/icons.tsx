@@ -1,6 +1,6 @@
 // AUTHORED-BY Claude Opus 5.5
 // Icons: one per story, automation and connected system, so people can scan rather than read.
-import { APP, SYSTEM } from "@jeswr/agent-sandbox/world";
+import { APP, MORTGAGE_SYSTEM, SYSTEM } from "@jeswr/agent-sandbox/world";
 import {
   BarChart3,
   Bot,
@@ -10,6 +10,8 @@ import {
   Contact,
   CreditCard,
   Database,
+  FileText,
+  Gauge,
   Handshake,
   Hash,
   HeartPulse,
@@ -81,6 +83,11 @@ export const SYSTEM_LOOK: Record<string, { icon: LucideIcon; name: string; hue: 
   [APP.hubspot]: { icon: Contact, name: "HubSpot", hue: 45 },
   [APP.jira]: { icon: Ticket, name: "Jira", hue: 250 },
   [APP.slack]: { icon: Hash, name: "Slack", hue: 300 },
+  [MORTGAGE_SYSTEM.pod]: { icon: Home, name: "Alex's pod", hue: 160 },
+  [MORTGAGE_SYSTEM.portal]: { icon: FileText, name: "Applications", hue: 250 },
+  [MORTGAGE_SYSTEM.bureau]: { icon: Gauge, name: "Credit bureau", hue: 60 },
+  [MORTGAGE_SYSTEM.offers]: { icon: Landmark, name: "Offers", hue: 305 },
+  [MORTGAGE_SYSTEM.partners]: { icon: Handshake, name: "Partners", hue: 20 },
 };
 
 export function SystemBadge({ system, label = true }: { system: string; label?: boolean }) {

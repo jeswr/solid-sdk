@@ -56,8 +56,8 @@ This package is `securityCritical` and private (not mirror-published).
 
 | Import                          | What                                                                                   |
 | ------------------------------- | -------------------------------------------------------------------------------------- |
-| `@jeswr/agent-sandbox`          | `createSandbox`, the record, plain-English rule text (`describeMandate`, `describePolicy`), the story and agent runners. |
-| `@jeswr/agent-sandbox/world`    | Harbour & Finch, a fictional company: 17 tools over 10 systems, people, data policies and nine scenarios. |
+| `@jeswr/agent-sandbox`          | `createSandbox`, the record, plain-English rule text (`describeMandate`, `describePolicy`), the story and agent runners, and automation rules (`validateRule`, `ruleMandate`, `runAutomation`). |
+| `@jeswr/agent-sandbox/world`    | Harbour & Finch, a fictional company: 17 tools over 10 systems, people, data policies and nine scenarios; simulated Gmail, HubSpot, Jira and Slack with four example automations (`createAppsWorld`, `AUTOMATION_EXAMPLES`); and a mortgage application worked by three agents for two organisations, each in its own sandbox (`createMortgageWorld`, `MORTGAGE_STORY`, `runMortgageStep`). |
 | `@jeswr/agent-sandbox/code`     | `runCode`: runs agent-written JavaScript in QuickJS (WebAssembly) with no network, files or timers, CPU, memory, call and wall-clock limits, and `tools.<name>()` as its only way out. |
 | `@jeswr/agent-sandbox/mcp`      | `createMcpProxy` (an MCP server offering only permitted tools) and `upstreamTools` (wrap a real MCP server's tools; unmapped tools are never offered). |
 
@@ -74,6 +74,18 @@ const sandbox = createSandbox({
 });
 const result = await sandbox.call({ tool: "email_send", args: { to: ["x@example.org"] } });
 ```
+
+## Automation rules
+
+An `AutomationRule` is plain data: a trigger (an email, a schedule or a manual run), a runner
+(fixed code for the code box, or instructions for a model) and the rule's own policy in a
+closed vocabulary: the tools it may use, who a sending tool may reach (`"sender"`, `"staff"`,
+`"anyone"` or listed addresses), which uses need a person, and a daily message limit.
+`validateRule` checks a drafted rule (for example one a model wrote) against the tool
+catalogue. `runAutomation` runs one event in a fresh sandbox whose rules are the organisation's
+mandate plus `ruleMandate(rule)` in `GlobalRules.also`, so every call must satisfy both and a
+rule can only narrow what the organisation allows. `"sender"` is bound to whoever sent the
+email that started the run.
 
 ## MCP lockdown proxy
 

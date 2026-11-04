@@ -25,5 +25,12 @@ Rules for changes:
 - New scenarios go in src/world/scenarios.ts with an expectation per step, and must pass in
   `test/stories.test.ts` under policy and hybrid modes.
 
+- Automation rules (src/automation.ts) are data checked by `validateRule`; their policy is
+  built from the closed vocabulary in `RulePolicy`, never from free ODRL a model wrote. A rule's
+  mandate goes in `GlobalRules.also`, which may only narrow the organisation's rules.
+- The mortgage world (src/world/mortgage.ts) gives each agent its own sandbox and mandate;
+  data labels carry the data owner's policy across organisations. Its steps are pinned in
+  `test/mortgage.test.ts`.
+
 Run `pnpm turbo run test --filter=@jeswr/agent-sandbox` (coverage thresholds are per file).
 The app that shows this package to non-technical visitors is apps/idea-sandbox.

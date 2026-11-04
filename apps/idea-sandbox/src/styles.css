@@ -1539,3 +1539,67 @@ dialog.sheet[open] {
   margin-top: 0.2rem;
   color: var(--muted-foreground);
 }
+
+/* ------------------------------------------------------------------ */
+/* The mortgage story: who is involved                                */
+/* ------------------------------------------------------------------ */
+a.suggestion {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  border: 1px solid var(--border);
+  background: var(--card);
+  text-decoration: none;
+}
+a.suggestion:hover {
+  background: var(--accent);
+}
+.agent-map {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1.25rem;
+}
+.org {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding: 0.6rem 0.7rem;
+  border: 1px dashed var(--border);
+  border-radius: 0.9rem;
+}
+.org.outsider {
+  opacity: 0.75;
+}
+.org-name {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.78rem;
+  font-weight: 650;
+  color: var(--muted-foreground);
+}
+.org-agents {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+.agent-card {
+  display: flex;
+  flex-direction: column;
+  padding: 0.4rem 0.65rem;
+  border-radius: 0.65rem;
+  background: oklch(0.95 0.04 var(--hue));
+  border-left: 3px solid oklch(0.6 0.13 var(--hue));
+  font-size: 0.86rem;
+}
+.dark .agent-card {
+  background: oklch(0.3 0.06 var(--hue));
+}
+.agent-card .hint {
+  font-size: 0.74rem;
+}
+.agent-map-arrow {
+  color: var(--muted-foreground);
+}

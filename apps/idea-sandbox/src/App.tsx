@@ -12,6 +12,7 @@ import {
   ClipboardList,
   Code2,
   GitCompare,
+  Landmark,
   Menu,
   Plug,
   ScrollText,
@@ -29,6 +30,7 @@ import { AutomationView } from "./views/AutomationView.js";
 import { CodeBox } from "./views/CodeBox.js";
 import { Compare } from "./views/Compare.js";
 import { type ChatState, Home } from "./views/Home.js";
+import { Mortgage } from "./views/Mortgage.js";
 import { Record } from "./views/Record.js";
 import { RuleSheet } from "./views/RuleSheet.js";
 import { Rules } from "./views/Rules.js";
@@ -68,6 +70,7 @@ type Route =
   | { page: "home" }
   | { page: "automation"; id: string }
   | { page: "story"; id?: string }
+  | { page: "mortgage" }
   | { page: (typeof HOOD)[number]["id"] };
 
 function readRoute(): Route {
@@ -75,6 +78,7 @@ function readRoute(): Route {
   if (head === "automation" && rest) return { page: "automation", id: decodeURIComponent(rest) };
   if (head === "story" || head === "stories")
     return rest ? { page: "story", id: decodeURIComponent(rest) } : { page: "story" };
+  if (head === "mortgage") return { page: "mortgage" };
   const hood = HOOD.find((h) => h.id === head);
   if (hood) return { page: hood.id };
   return { page: "home" };
@@ -250,6 +254,10 @@ export function App() {
           </nav>
           <nav aria-label="Stories">
             <h2 className="nav-title">Stories</h2>
+            <a href="#mortgage" aria-current={here("mortgage") ? "page" : undefined}>
+              <Landmark size={16} aria-hidden="true" />
+              <span className="nav-label">A mortgage, three agents</span>
+            </a>
             {SCENARIOS.filter((s) => !s.code).map((s) => {
               const I = STORY_ICONS[s.id] ?? Bot;
               return (
@@ -297,6 +305,7 @@ export function App() {
               <AutomationView id={route.id} apiKey={apiKey} mode={mode} judge={judge} />
             )}
             {route.page === "story" && <Stories shared={shared} />}
+            {route.page === "mortgage" && <Mortgage />}
             {route.page === "rules" && <Rules shared={shared} />}
             {route.page === "systems" && <Systems shared={shared} />}
             {route.page === "code" && <CodeBox shared={shared} />}

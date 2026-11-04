@@ -130,3 +130,16 @@ describe("automations", () => {
     expect(within(panel).getByText("nadia.price@example.org")).toBeTruthy();
   });
 });
+
+describe("the mortgage story", () => {
+  it("plays three agents: the insurer share and the health record are blocked, offers wait for people", async () => {
+    render(<App />);
+    await go("mortgage");
+    await waitFor(() => expect(screen.getByText(/What this shows/)).toBeTruthy());
+    expect(screen.getAllByText("Blocked by policy")).toHaveLength(2);
+    expect(screen.getByText(/Ruth Okafor \(senior underwriter\) approved/)).toBeTruthy();
+    expect(screen.getByText(/at 4.1% over 25 years, accepted/)).toBeTruthy();
+    expect(screen.queryAllByText(/✕/)).toHaveLength(0);
+    expect(screen.getAllByText(/✓ What Alex and Northgate want/).length).toBeGreaterThan(5);
+  });
+});

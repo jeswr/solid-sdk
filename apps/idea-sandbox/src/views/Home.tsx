@@ -2,7 +2,7 @@
 // Describe a process in your own words (typed or spoken); Claude drafts an automation rule,
 // shows its thinking, and the rule opens in a pop-up for review.
 import { ruleTools } from "@jeswr/agent-sandbox";
-import { ArrowUp, Bot, Check, Code2, Mic, MicOff } from "lucide-react";
+import { ArrowUp, Bot, Check, Code2, Landmark, Mic, MicOff } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import {
   type Automation,
@@ -157,6 +157,10 @@ export function Home({
                 {e.title}
               </button>
             ))}
+            <a className="suggestion" href="#mortgage">
+              <Landmark size={16} aria-hidden="true" />
+              Watch three agents handle a mortgage
+            </a>
           </div>
         )}
         <p className="composer-note hint">

@@ -56,6 +56,8 @@ export type TraceItem =
       readonly expect?: Outcome;
       readonly why?: string;
       readonly verdict?: Verdict;
+      /** Whose wishes `expect` states (default Harbour & Finch). */
+      readonly wantedBy?: string;
       readonly settled?: {
         readonly by: string;
         readonly approved: boolean;
@@ -151,10 +153,15 @@ export function Trace({
   const { shown, total, skip } = useReveal(items, instant);
   let used = 0;
   const rows: ReactNode[] = [];
+  let lastAgent: string | undefined;
   for (const item of items) {
     if (used >= shown) break;
     const partial = item.kind === "call" && shown - used < 2;
-    rows.push(<Row key={item.id} item={item} partial={partial} />);
+    // Name the agent only when a different one starts acting.
+    const agent = "agent" in item ? item.agent?.name : undefined;
+    const shownItem = agent && agent === lastAgent ? { ...item, agent: undefined } : item;
+    lastAgent = agent ?? (item.kind === "user" || item.kind === "notice" ? undefined : lastAgent);
+    rows.push(<Row key={item.id} item={shownItem as TraceItem} partial={partial} />);
     used += units(item);
   }
   const catchingUp = shown < total;
@@ -244,6 +251,8 @@ function Call({ item, partial }: { item: Extract<TraceItem, { kind: "call" }>; p
   const outcome = outcomeOfResult(item.result);
   const failed = item.result.status === "failed";
   const [open, setOpen] = useState(false);
+  const who = item.wantedBy ?? "Harbour & Finch";
+  const verb = who.includes(" and ") ? "want" : "wants";
   return (
     <li className="t-call">
       <AgentName agent={item.agent} />
@@ -340,8 +349,8 @@ function Call({ item, partial }: { item: Extract<TraceItem, { kind: "call" }>; p
       {!partial && item.expect && (
         <p className={`expect expect-${item.verdict}`}>
           {item.verdict === "right"
-            ? "✓ What Harbour & Finch wants."
-            : `✕ Harbour & Finch wants “${OUTCOME_LABEL[item.expect]}”.`}{" "}
+            ? `✓ What ${who} ${verb}.`
+            : `✕ ${who} ${verb} “${OUTCOME_LABEL[item.expect]}”.`}{" "}
           {item.why && <span className="hint">{item.why}</span>}
         </p>
       )}
