@@ -94,15 +94,9 @@ describe("resolveOriginValue — origin precedence", () => {
 });
 
 describe("clientIdDocument — redirect_uris", () => {
-  it("registers BOTH the popup callback.html AND the app-root (autologin) redirect targets", () => {
+  it("registers only the popup callback.html redirect target", () => {
     const doc = clientIdDocument("https://docs.example");
-    // The popup path posts the code back from callback.html; the full-page redirect
-    // (autologin) path redirects back to the app root which re-runs SessionProvider.
-    // Both MUST be registered or the OP rejects the respective redirect_uri.
-    expect(doc.redirect_uris).toEqual([
-      "https://docs.example/callback.html",
-      "https://docs.example/",
-    ]);
+    expect(doc.redirect_uris).toEqual(["https://docs.example/callback.html"]);
     // client_id is byte-exact the served URL, and the doc stays a public client.
     expect(doc.client_id).toBe("https://docs.example/clientid.jsonld");
     expect(doc.token_endpoint_auth_method).toBe("none");
@@ -129,10 +123,7 @@ describe("GitHub Pages client identity", () => {
     const doc = clientIdDocument("https://jeswr.github.io", "/solid-sdk/pod-docs/");
     expect(doc.client_id).toBe("https://jeswr.github.io/solid-sdk/pod-docs/clientid.jsonld");
     expect(doc.client_uri).toBe("https://jeswr.github.io/solid-sdk/pod-docs/");
-    expect(doc.redirect_uris).toEqual([
-      "https://jeswr.github.io/solid-sdk/pod-docs/callback.html",
-      "https://jeswr.github.io/solid-sdk/pod-docs/",
-    ]);
+    expect(doc.redirect_uris).toEqual(["https://jeswr.github.io/solid-sdk/pod-docs/callback.html"]);
   });
   it.each([
     "https://other.example/",

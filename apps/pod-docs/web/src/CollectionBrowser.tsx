@@ -2,7 +2,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { DocumentBrowser } from "@jeswr/pod-docs/ui";
 import { useState } from "react";
-import { isLoopbackOrigin } from "./auth/loopback";
+import { allowInsecureLoopback } from "./auth/pod-auth";
 
 type Selection = { webId: string; podRoot: string; container: string };
 const keyFor = (webId: string, podRoot: string) =>
@@ -26,7 +26,11 @@ function validate(container: string, podRoot: string): string {
 }
 
 /** Mounted per WebID/root so stale completions can save only their original selection. */
-export function CollectionBrowser({ webId, podRoot }: Pick<Selection, "webId" | "podRoot">) {
+export function CollectionBrowser({
+  webId,
+  podRoot,
+  fetch,
+}: Pick<Selection, "webId" | "podRoot"> & { fetch: typeof globalThis.fetch }) {
   const [selection, setSelection] = useState(() => {
     try {
       const saved = localStorage.getItem(keyFor(webId, podRoot));
@@ -59,7 +63,8 @@ export function CollectionBrowser({ webId, podRoot }: Pick<Selection, "webId" | 
       title="Your documents"
       container={selection.container}
       onContainerChange={remember}
-      allowInsecureLoopback={import.meta.env.DEV && isLoopbackOrigin(window.location.origin)}
+      fetch={fetch}
+      allowInsecureLoopback={allowInsecureLoopback()}
     />
   );
 }
