@@ -242,6 +242,7 @@ class HealthInput {
 
   iri(value: unknown): string {
     const identifier = safeHttpIri(value);
+    if (typeof value === "string" && snomedIri(value)) return this.distinct(value);
     if (identifier === undefined || identifier !== value) return this.invalid();
     let text = identifier;
     for (let round = 0; round < 4; round += 1) {
@@ -256,14 +257,17 @@ class HealthInput {
     }
     // Residual escapes can hide another decoding layer; refuse instead of storing it.
     if (text.includes("%") || containsCardNumber(text.normalize("NFKC"))) return this.invalid();
+    return this.distinct(identifier);
+  }
+
+  private distinct(identifier: string): string {
     if (this.identifiers.has(identifier)) return this.invalid();
     this.identifiers.add(identifier);
     return identifier;
   }
 
   literal(value: unknown, datatype: "string" | "decimal"): string {
-    if (typeof value !== "string" || (datatype === "string" && containsCardNumber(value)))
-      return this.invalid();
+    if (typeof value !== "string" || containsCardNumber(value)) return this.invalid();
     try {
       return normalizeLiteral(df.literal(value, df.namedNode(NS.xsd + datatype))).value;
     } catch (error) {
@@ -309,7 +313,11 @@ class HealthInput {
     const id = this.iri(code.id);
     const display = this.optionalText(code.display);
     if (code.code === undefined && code.system === undefined) return { id, display };
-    return { id, display, code: this.literal(code.code, "string"), system: this.iri(code.system) };
+    const system = this.iri(code.system);
+    // A SNOMED CT identifier carries its own check digit, so it is not mistaken for a card.
+    if (system.startsWith(SNOMED_PREFIX) && typeof code.code === "string" && sctid(code.code))
+      return { id, display, code: code.code, system };
+    return { id, display, code: this.literal(code.code, "string"), system };
   }
 
   requiredCode(value: unknown): HealthCode {
@@ -332,6 +340,7 @@ class HealthInput {
 
 function observationSnapshot(fact: Fact, owner: string) {
   const input = new HealthInput("observation", owner);
+  if (input.own(fact, "template") !== "observation") return input.invalid();
   const v = input.snapshot(input.own(fact, "value"), [
     "id",
     "code",
@@ -353,6 +362,7 @@ function observationSnapshot(fact: Fact, owner: string) {
 
 function immunizationSnapshot(fact: Fact, owner: string): ImmunizationValue {
   const input = new HealthInput("immunization", owner);
+  if (input.own(fact, "template") !== "immunization") return input.invalid();
   const v = input.snapshot(input.own(fact, "value"), ["id", "vaccine", "occurrence"]);
   return {
     id: input.iri(v.id),
@@ -362,22 +372,80 @@ function immunizationSnapshot(fact: Fact, owner: string): ImmunizationValue {
 }
 
 /** Microseconds in UTC; a date-only end includes its entire calendar day. */
-function healthTimePosition(value: HealthTemporalValue, end: boolean): bigint {
+const MICROS_PER_HOUR = 3_600_000_000n;
+
+/**
+ * Earliest and latest instant (microseconds) a bound can denote. A date-only bound has no
+ * timezone, so following XSD it may fall in any zone from -14:00 to +14:00.
+ */
+function healthTimeRange(value: HealthTemporalValue): [bigint, bigint] {
   if (value.datatype === "date") {
     const midnight = BigInt(Date.parse(`${value.value}T00:00:00Z`)) * 1000n;
-    return midnight + (end ? 86_400_000_000n - 1n : 0n);
+    return [midnight - 14n * MICROS_PER_HOUR, midnight + 38n * MICROS_PER_HOUR - 1n];
   }
   const fraction = /\.(\d+)/.exec(value.value)?.[1] ?? "";
-  return BigInt(Date.parse(value.value)) * 1000n + BigInt(fraction.padEnd(6, "0").slice(3, 6));
+  const instant =
+    BigInt(Date.parse(value.value)) * 1000n + BigInt(fraction.padEnd(6, "0").slice(3, 6));
+  return [instant, instant];
+}
+
+const SNOMED_PREFIX = "http://snomed.info/";
+
+/** Verhoeff check (ISO 7064-like dihedral scheme) used by SNOMED CT identifiers. */
+const VERHOEFF_D = [
+  [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+  [1, 2, 3, 4, 0, 6, 7, 8, 9, 5],
+  [2, 3, 4, 0, 1, 7, 8, 9, 5, 6],
+  [3, 4, 0, 1, 2, 8, 9, 5, 6, 7],
+  [4, 0, 1, 2, 3, 9, 5, 6, 7, 8],
+  [5, 9, 8, 7, 6, 0, 4, 3, 2, 1],
+  [6, 5, 9, 8, 7, 1, 0, 4, 3, 2],
+  [7, 6, 5, 9, 8, 2, 1, 0, 4, 3],
+  [8, 7, 6, 5, 9, 3, 2, 1, 0, 4],
+  [9, 8, 7, 6, 5, 4, 3, 2, 1, 0],
+];
+const VERHOEFF_P = [
+  [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+  [1, 5, 7, 6, 2, 8, 3, 0, 9, 4],
+  [5, 8, 0, 3, 7, 9, 6, 1, 4, 2],
+  [8, 9, 1, 6, 0, 4, 3, 5, 2, 7],
+  [9, 4, 5, 3, 1, 2, 8, 7, 6, 0],
+  [4, 2, 8, 6, 5, 7, 3, 9, 0, 1],
+  [2, 7, 9, 3, 8, 0, 6, 4, 1, 5],
+  [7, 0, 4, 6, 9, 1, 3, 2, 5, 8],
+];
+
+/**
+ * A SNOMED CT identifier: 6-18 ASCII digits, no leading zero, a partition identifier
+ * (second- and third-last digits) of 00-05 or 10-15, and a valid Verhoeff check digit.
+ */
+function sctid(text: string): boolean {
+  if (!/^[1-9][0-9]{5,17}$/.test(text) || !/(?:0[0-5]|1[0-5])[0-9]$/.test(text)) return false;
+  let check = 0;
+  for (let i = 0; i < text.length; i += 1) {
+    const digit = text.charCodeAt(text.length - 1 - i) - 48;
+    check = (VERHOEFF_D[check] as number[])[
+      (VERHOEFF_P[i % 8] as number[])[digit] as number
+    ] as number;
+  }
+  return check === 0;
+}
+
+/** `http://snomed.info/id/<sctid>`, exactly. */
+function snomedIri(text: string): boolean {
+  const match = /^http:\/\/snomed\.info\/id\/([0-9]+)$/.exec(text);
+  return match !== null && sctid(match[1] as string);
 }
 
 function encounterSnapshot(fact: Fact, owner: string): EncounterValue {
   const input = new HealthInput("encounter", owner);
+  if (input.own(fact, "template") !== "encounter") return input.invalid();
   const v = input.snapshot(input.own(fact, "value"), ["id", "period", "serviceProvider"]);
   const bounds = input.snapshot(v.period, ["start", "end"]);
   const start = input.temporal(bounds.start);
   const end = bounds.end === undefined ? undefined : input.temporal(bounds.end);
-  if (end !== undefined && healthTimePosition(end, true) < healthTimePosition(start, false))
+  // Refuse only an interval that is reversed in every possible timezone.
+  if (end !== undefined && healthTimeRange(end)[1] < healthTimeRange(start)[0])
     return input.invalid();
   return {
     id: input.iri(v.id),
@@ -455,7 +523,6 @@ export function createFactAssertion(about: string, fact: Fact): Store {
   const store = new Store();
   const person = new RdfNode(owner, store);
   const type = `${NS.rdf}type`;
-  if (!Object.hasOwn(fact, "template")) throw new Error("Unknown fact template");
   switch (fact.template) {
     case "email":
     case "phone": {
