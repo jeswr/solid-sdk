@@ -384,9 +384,12 @@ describe("card number detection", () => {
   });
 
   it("scans a large document in linear time", () => {
-    const started = Date.now();
+    // CPU time, not wall time: a loaded CI runner stretches wall time but not the work done.
+    // A quadratic scan of these inputs would take hours, so 8 s of CPU still separates the two.
+    const started = process.cpuUsage();
     findCardNumbers("4 ".repeat(500_000));
     findCardNumbers("٤".repeat(200_000));
-    expect(Date.now() - started).toBeLessThan(8000);
-  });
+    const used = process.cpuUsage(started);
+    expect((used.user + used.system) / 1000).toBeLessThan(8000);
+  }, 60_000);
 });
