@@ -2,9 +2,9 @@
 
 import { normaliseEmail, normalisePhone } from "./dedupe/normalise";
 import { contactFormData, contactFormDefaults, contactFormSchema } from "./form-schema";
-import type { ContactData } from "./model";
+import type { ContactAddress, ContactData } from "./model";
 import { parseVcards } from "./model/import";
-import { parseVCards, serializeVCards } from "./vcard";
+import { parseVCards, serializeVCards, type VCardAddress, type VCardField } from "./vcard";
 
 export interface ImportRow {
   data: ContactData;
@@ -41,6 +41,49 @@ export function duplicateContacts(
     }),
   );
 }
+// AUTHORED-BY Claude Opus 5.5
+const words = (parts: readonly string[]) =>
+  parts
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .join(" ");
+/** PO box and extended address fold into the street lines; TYPE=home/work becomes the kind. */
+export function vcardAddress(field: VCardField<VCardAddress>): ContactAddress | undefined {
+  const { poBox, extended, street, locality, region, postalCode, country } = field.value;
+  const address: ContactAddress = {};
+  const lines = [...poBox, ...extended, ...street].map((line) => line.trim()).filter(Boolean);
+  if (lines.length) address.street = lines.join("\n");
+  for (const [key, parts] of [
+    ["locality", locality],
+    ["region", region],
+    ["postalCode", postalCode],
+    ["country", country],
+  ] as const) {
+    const value = words(parts);
+    if (value) address[key] = value;
+  }
+  if (!Object.keys(address).length) return undefined;
+  const types = field.parameters.TYPE ?? [];
+  if (types.includes("work")) address.kind = "work";
+  else if (types.includes("home")) address.kind = "home";
+  return address;
+}
+function adr(address: ContactAddress): VCardField<VCardAddress> {
+  const part = (value: string | undefined) => (value ? [value] : []);
+  return {
+    value: {
+      poBox: [],
+      extended: [],
+      street: address.street ? address.street.split("\n") : [],
+      locality: part(address.locality),
+      region: part(address.region),
+      postalCode: part(address.postalCode),
+      country: part(address.country),
+    },
+    parameters: address.kind ? { TYPE: [address.kind] } : {},
+  };
+}
+
 /** Strict parser rejects malformed envelopes; the model mapper retains supported DAV fields. */
 export function previewVcards(text: string, existing: readonly ContactData[]): ImportRow[] {
   const cards = parseVCards(text);
@@ -54,6 +97,10 @@ export function previewVcards(text: string, existing: readonly ContactData[]): I
       emails: card.emails.map(({ value }) => `mailto:${value.replace(/^mailto:/i, "")}`),
       phones: card.tels.map(({ value }) => `tel:${value.replace(/^tel:/i, "")}`),
     };
+    const addresses = card.addresses
+      .map(vcardAddress)
+      .filter((address): address is ContactAddress => address !== undefined);
+    if (addresses.length) data.addresses = addresses;
     // The older DAV mapper folds ORG into NOTE; the current model supports it directly.
     if (card.org) data.organization = card.org.join("; ");
     delete data.note;
@@ -66,17 +113,17 @@ export function previewVcards(text: string, existing: readonly ContactData[]): I
         "Only the first URL can be saved as a WebID. Keep the original file for additional URLs.",
       );
     if (
-      card.addresses.length ||
       card.bday !== undefined ||
       card.photo !== undefined ||
       card.title !== undefined ||
       card.categories.length
     )
       warnings.push(
-        "Addresses, birthdays, photos, titles and source labels cannot be saved by this contact model. Keep the original file.",
+        "Birthdays, photos, titles and source labels cannot be saved by this contact model. Keep the original file.",
       );
     if ([...card.emails, ...card.tels].some((field) => field.parameters.TYPE?.length))
       warnings.push("Email and phone types cannot be saved by this contact model.");
+
     const validation = contactFormSchema.safeParse(contactFormDefaults(data));
     if (!validation.success)
       warnings.push(...validation.error.issues.map((issue) => issue.message));
@@ -102,7 +149,7 @@ export function exportContacts(contacts: readonly ContactData[]): string {
         parameters: {},
       })),
       tels: (data.phones ?? []).map((value) => ({ value, parameters: { VALUE: ["uri"] } })),
-      addresses: [],
+      addresses: (data.addresses ?? []).map(adr),
       categories: [],
       ...(data.webId === undefined ? {} : { urls: [{ value: data.webId, parameters: {} }] }),
       ...(data.organization === undefined ? {} : { org: [data.organization] }),

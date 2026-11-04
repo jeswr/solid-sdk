@@ -281,7 +281,7 @@ function validateAddresses(addresses: readonly ContactAddress[]): void {
 }
 
 /** Compare as the shared reader would see the result: trimmed, empties dropped. */
-function addressKey(addresses: readonly ContactAddress[]): string {
+export function addressKey(addresses: readonly ContactAddress[]): string {
   return JSON.stringify(
     addresses
       .map((address) => [

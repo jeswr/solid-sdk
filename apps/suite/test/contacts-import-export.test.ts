@@ -7,6 +7,7 @@ import {
   importContacts,
   previewVcards,
 } from "../src/apps/contacts/lib/import-export";
+import type { ContactData } from "../src/apps/contacts/lib/model";
 import { parseVCards } from "../src/apps/contacts/lib/vcard";
 
 const card = (name: string, fields = "") =>
@@ -65,7 +66,6 @@ describe("vCard preview and export", () => {
     expect(() => previewVcards("BEGIN:VCARD", [])).toThrow();
   });
   it.each([
-    "ADR:;;1 Main St;Town;;;Country\r\n",
     "BDAY:20000101\r\n",
     "PHOTO:https://example.org/photo.jpg\r\n",
     "TITLE:Captain\r\n",
@@ -96,6 +96,57 @@ describe("vCard preview and export", () => {
     expect(multiple?.warnings).toContain(
       "Only the first URL can be saved as a WebID. Keep the original file for additional URLs.",
     );
+  });
+  // AUTHORED-BY Claude Opus 5.5
+  it("imports ADR as postal addresses and exports them back", () => {
+    const [row] = previewVcards(
+      card(
+        "Addressed",
+        [
+          "ADR;TYPE=home:Box 7;Flat 3;1 Main St,Rear;Town;;12345;Country",
+          "ADR;TYPE=work,pref:;;;Lyon;;;France",
+          "ADR;TYPE=postal:;;;;Region;;",
+          "ADR:;;;;;;",
+          "",
+        ].join("\r\n"),
+      ),
+      [],
+    );
+    expect(row?.warnings).toEqual([]);
+    expect(row?.data.addresses).toEqual([
+      {
+        kind: "home",
+        street: "Box 7\nFlat 3\n1 Main St\nRear",
+        locality: "Town",
+        postalCode: "12345",
+        country: "Country",
+      },
+      { kind: "work", locality: "Lyon", country: "France" },
+      { region: "Region" },
+    ]);
+    const [exported] = parseVCards(exportContacts([row?.data as ContactData]));
+    expect(exported?.addresses.map((a) => [a.parameters.TYPE, a.value])).toEqual([
+      [
+        ["home"],
+        {
+          poBox: [""],
+          extended: [""],
+          street: ["Box 7", "Flat 3", "1 Main St", "Rear"],
+          locality: ["Town"],
+          region: [""],
+          postalCode: ["12345"],
+          country: ["Country"],
+        },
+      ],
+      [["work"], expect.objectContaining({ locality: ["Lyon"], street: [""] })],
+      [undefined, expect.objectContaining({ region: ["Region"] })],
+    ]);
+  });
+  it("rejects cards with more addresses than a contact can hold", () => {
+    const many = Array.from({ length: 17 }, (_, i) => `ADR:;;${i} Way;;;;\r\n`).join("");
+    const [row] = previewVcards(card("Many", many), []);
+    expect(row).toMatchObject({ valid: false, include: false });
+    expect(row?.warnings).toContain("A contact can have at most 16 addresses.");
   });
   it("exports parseable multiple cards with escaped text and all represented fields", () => {
     const text = exportContacts([

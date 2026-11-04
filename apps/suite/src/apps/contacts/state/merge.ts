@@ -3,8 +3,14 @@ import type { DatasetCore, Quad, Term } from "@rdfjs/types";
 import { DataFactory, Store } from "n3";
 import { clusterContacts, type DedupeContact, planMerges } from "../lib/dedupe";
 import { normaliseEmail, normalisePhone, validateWebId } from "../lib/dedupe/normalise";
-import { Contact, type ContactData, type ContactGroupData, type Snapshot } from "../lib/model";
-import { applyContact, VCARD } from "../lib/model/data";
+import {
+  Contact,
+  type ContactAddress,
+  type ContactData,
+  type ContactGroupData,
+  type Snapshot,
+} from "../lib/model";
+import { addressKey, applyContact, MAX_ADDRESSES, VCARD } from "../lib/model/data";
 import type { ContactsData, MergeOutcome } from "./controller";
 import type { StarStorage } from "./data";
 
@@ -225,6 +231,17 @@ export function mergeContactData(
   }
   if (emails.length) merged.emails = emails;
   if (phones.length) merged.phones = phones;
+  // AUTHORED-BY Claude Opus 5.5
+  const byKey = new Map<string, ContactAddress>();
+  for (const address of all.flatMap((data) => data.addresses ?? [])) {
+    const key = addressKey([address]);
+    if (!byKey.has(key)) byKey.set(key, address);
+  }
+  const addresses = [...byKey.values()];
+  // Past the per-contact limit the rest stay on the copy and show up as a loss in review.
+  // A primary already past it (written by another app) keeps all of its own.
+  const limit = Math.max(MAX_ADDRESSES, primary.addresses?.length ?? 0);
+  if (addresses.length) merged.addresses = addresses.slice(0, limit);
   return merged;
 }
 
@@ -250,8 +267,12 @@ const POINTS: Record<string, string> = {
   [`${VCARD}hasTelephone`]: "phone",
   [`${VCARD}url`]: "website",
 };
+// AUTHORED-BY Claude Opus 5.5
+const ADDRESS_PARTS = new Set(
+  ["street-address", "locality", "region", "postal-code", "country-name"].map((p) => VCARD + p),
+);
+const ADDRESS_KINDS = new Set([`${VCARD}Home`, `${VCARD}Work`]);
 const NAMED: Record<string, string> = {
-  [`${VCARD}hasAddress`]: "address",
   [`${VCARD}bday`]: "birthday",
   [`${VCARD}anniversary`]: "anniversary",
   [`${VCARD}hasPhoto`]: "photo",
@@ -310,6 +331,12 @@ export function mergeLosses(merged: DatasetCore, primaryId: string, duplicate: S
     }
   };
   const target = DataFactory.namedNode(primaryId);
+  const keptAddresses = new Set(
+    new Contact(primaryId, merged, DataFactory).addresses.map((a) => addressKey([a])),
+  );
+  const addressesKept = new Contact(subject, source, DataFactory).addresses.every((a) =>
+    keptAddresses.has(addressKey([a])),
+  );
   for (const quad of source.match(DataFactory.namedNode(subject))) {
     covered.add(key(quad));
     const predicate = quad.predicate.value;
@@ -317,6 +344,25 @@ export function mergeLosses(merged: DatasetCore, primaryId: string, duplicate: S
     if (predicate === RDF_TYPE) {
       if (quad.object.value !== `${VCARD}Individual`)
         losses.add(`type ${local(quad.object.value)}`);
+      continue;
+    }
+    if (predicate === `${VCARD}hasAddress`) {
+      cover(quad.object);
+      if (!addressesKept || quad.object.termType === "Literal") {
+        losses.add("address");
+        continue;
+      }
+      // The merge carries the address text and its Home/Work kind; anything else on it is lost.
+      for (const detail of source.match(quad.object)) {
+        const part = detail.predicate.value;
+        if (ADDRESS_PARTS.has(part) && detail.object.termType === "Literal") continue;
+        if (part === RDF_TYPE && ADDRESS_KINDS.has(detail.object.value)) continue;
+        losses.add(
+          part === RDF_TYPE
+            ? `${local(detail.object.value)} label on address`
+            : `${local(part)} on address`,
+        );
+      }
       continue;
     }
     const kind = POINTS[predicate];

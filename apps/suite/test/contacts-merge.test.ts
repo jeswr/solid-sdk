@@ -666,12 +666,12 @@ describe("review follow-ups", () => {
     const document = mergedDocument(primary, merged);
     expect(mergeLosses(document, id(primary), copy)).toEqual([
       "Work label on email PAT@example.org",
-      "address",
       "birthday",
       "email",
       "https://example.org/custom/",
       "other data in the contact's document",
       "pref on email pat@example.org",
+      "street-address on address",
       "type Extra",
       "website https://d.example/home",
       "x",
@@ -686,6 +686,50 @@ describe("review follow-ups", () => {
     });
     const both = mergedDocument(primary, mergeContactData(primary.data, [plain.data], {}));
     expect(mergeLosses(both, id(primary), plain)).toEqual([]);
+  });
+
+  // AUTHORED-BY Claude Opus 5.5
+  it("unions addresses and reports only what an address merge cannot carry", async () => {
+    const primary = await openDocument({
+      url: `${ROOT}contacts/people/ann.ttl`,
+      etag: '"1"',
+      turtle: `${VCARD_PREFIX} <#this> a vcard:Individual; vcard:fn "Ann";
+        vcard:hasAddress [ a vcard:Home; vcard:locality "Paris" ] .`,
+    });
+    const copy = await openDocument({
+      url: `${ROOT}contacts/people/ann-copy.ttl`,
+      etag: '"1"',
+      turtle: `${VCARD_PREFIX} <#this> a vcard:Individual; vcard:fn "Ann";
+        vcard:hasAddress [ a vcard:Home; vcard:locality " Paris " ],
+          [ a vcard:Work, vcard:Postal; vcard:locality "Lyon"; <https://example.org/geo> "45,4" ] .`,
+    });
+    const merged = mergeContactData(primary.data, [copy.data], {});
+    expect(merged.addresses).toEqual([
+      { kind: "home", locality: "Paris" },
+      { kind: "work", locality: "Lyon" },
+    ]);
+    expect(mergeLosses(mergedDocument(primary, merged), id(primary), copy)).toEqual([
+      "Postal label on address",
+      "geo on address",
+    ]);
+    // A literal "address" and addresses past the per-contact limit stay with the copy.
+    const many = await openDocument({
+      url: `${ROOT}contacts/people/ann-many.ttl`,
+      etag: '"1"',
+      turtle: `${VCARD_PREFIX} <#this> a vcard:Individual; vcard:fn "Ann";
+        vcard:hasAddress "1 Way", ${Array.from({ length: 16 }, (_, i) => `[ vcard:postal-code "${i}" ]`).join(", ")} .`,
+    });
+    const capped = mergeContactData(primary.data, [many.data], {});
+    expect(capped.addresses).toHaveLength(16);
+    expect(mergeLosses(mergedDocument(primary, capped), id(primary), many)).toEqual(["address"]);
+    expect(mergeContactData({ name: "No address" }, [], {})).not.toHaveProperty("addresses");
+    const crowded = mergeContactData(
+      { name: "Crowded", addresses: Array.from({ length: 17 }, (_, i) => ({ region: `${i}` })) },
+      [{ name: "Copy", addresses: [{ region: "new" }] }],
+      {},
+    );
+    expect(crowded.addresses).toHaveLength(17);
+    expect(crowded.addresses).not.toContainEqual({ region: "new" });
   });
 
   it("only claims what each merge failure outcome guarantees", () => {
