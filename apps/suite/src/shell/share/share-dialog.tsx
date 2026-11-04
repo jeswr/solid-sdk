@@ -43,7 +43,7 @@ import {
   shareRoleOptions,
   shareSubtitle,
 } from "../lib/share-options";
-import { useSyncSnapshot } from "../sync/online";
+import { RequiresOnline, useNeedsConnection } from "../sync/requires-online";
 import styles from "./share.module.css";
 import {
   type ShareCapabilities,
@@ -122,7 +122,7 @@ function SharingContent({
   mobile,
 }: ShareDialogProps & { mobile: boolean }) {
   const id = useId();
-  const online = useSyncSnapshot().online;
+  const online = !useNeedsConnection().disabled;
   const [state, setState] = useState<SharingState>();
   const [error, setError] = useState("");
   const [attempt, setAttempt] = useState(0);
@@ -379,9 +379,11 @@ function SharingContent({
                   )}
                 </>
               )}
-              <Button disabled={disabled || !selected.length} onClick={() => void add()}>
-                Add
-              </Button>
+              <RequiresOnline>
+                <Button disabled={disabled || !selected.length} onClick={() => void add()}>
+                  Add
+                </Button>
+              </RequiresOnline>
               {saving === "add" && <span role="status">Saving access…</span>}
             </fieldset>
           </section>

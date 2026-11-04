@@ -43,10 +43,10 @@ describe("syncStatus", () => {
                   kind: "conflict",
                   label: `${conflicts} ${conflicts === 1 ? "conflict" : "conflicts"}`,
                 }
-              : !online
-                ? { kind: "offline", label: "Offline — showing saved copies" }
-                : reconnecting
-                  ? { kind: "reconnecting", label: "Reconnecting…" }
+              : reconnecting
+                ? { kind: "reconnecting", label: "Reconnecting…" }
+                : !online
+                  ? { kind: "offline", label: "Offline — showing saved copies" }
                   : pending
                     ? {
                         kind: "waiting",

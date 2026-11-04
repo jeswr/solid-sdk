@@ -79,6 +79,7 @@ export function OfflineSettings() {
                   setMessage("");
                   try {
                     await clearSavedCopies({
+                      storage: localStorage,
                       ...("caches" in window ? { cacheStorage: caches } : {}),
                       ...("indexedDB" in window ? { databaseFactory: indexedDB } : {}),
                     });
