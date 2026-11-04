@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex
 // AUTHORED-BY Codex GPT-6
 import { DataFactory, Parser, Store, Writer } from "n3";
@@ -36,10 +37,10 @@ afterEach(() => {
 });
 
 describe("demo seed and binary fixtures", () => {
-  it("seeds a profile, owner-only ACL, registered calendars, Contacts type index and the Drive acceptance tree", async () => {
+  it("seeds a profile, owner-only ACL, registered calendars, Contacts type index, agent type registration and the Drive acceptance tree", async () => {
     const seed = await buildDemoSeed(NOW);
     const pod = createDemoPod({ root: DEMO_ROOT, seed, now: () => NOW });
-    expect(seed).toHaveLength(87);
+    expect(seed.filter((file) => !file.path.startsWith("agent/"))).toHaveLength(87);
     expect(DRIVE_ROOT_CLASS).toBe("https://jeswr.org/ns/pod-drive#DriveRoot");
     for (const file of seed) {
       const url = new URL(file.path, DEMO_ROOT).href;
@@ -70,7 +71,10 @@ describe("demo seed and binary fixtures", () => {
     ]);
     const indexUrl = `${DEMO_ROOT}settings/privateTypeIndex.ttl`;
     const index = await graph(await pod.fetch(indexUrl), indexUrl);
-    expect(index.size).toBe(23);
+    expect(index.size).toBe(26);
+    expect(
+      objects(index, `${indexUrl}#agent-workspace`, "http://www.w3.org/ns/solid/terms#instance"),
+    ).toEqual([`${DEMO_ROOT}agent/`]);
     expect(objects(index, indexUrl, TYPE)).toEqual([
       "http://www.w3.org/ns/solid/terms#TypeIndex",
       "http://www.w3.org/ns/solid/terms#UnlistedDocument",
@@ -152,6 +156,7 @@ describe("demo pod HTTP contract", () => {
       "http://www.w3.org/ns/pim/space#Storage",
     ]);
     expect(objects(rootGraph, DEMO_ROOT, `${LDP}contains`)).toEqual([
+      `${DEMO_ROOT}agent/`,
       `${DEMO_ROOT}bookmarks/`,
       `${DEMO_ROOT}calendar/`,
       `${DEMO_ROOT}contacts-pm/`,

@@ -34,7 +34,7 @@ export function useResourceNotifications(
   onChange: () => void,
   debounceMs = 500,
 ): void {
-  const { status } = useSession();
+  const { status, podFetch } = useSession();
   // Keep the latest onChange without making it a subscription dependency — a new
   // callback identity each render must not tear down and re-open the socket.
   const onChangeRef = useRef(onChange);
@@ -57,7 +57,7 @@ export function useResourceNotifications(
 
     // subscribeToResource never rejects (it degrades to a no-op unsubscribe), but
     // guard with .catch anyway so a future change can't break the view.
-    subscribeToResource(topicUrl, fire)
+    subscribeToResource(topicUrl, fire, { fetchImpl: podFetch })
       .then((unsub) => {
         if (cancelled) {
           unsub(); // unmounted before the subscription settled — tear it down now
@@ -74,5 +74,5 @@ export function useResourceNotifications(
       if (timer) clearTimeout(timer);
       unsubscribe?.();
     };
-  }, [topicUrl, status, debounceMs]);
+  }, [topicUrl, status, debounceMs, podFetch]);
 }

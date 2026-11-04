@@ -137,6 +137,9 @@ test.each([
 test("Node CID factory resolves an existing identity and cached-token rejection invalidates the provider", async () => {
   const f = await cidFixture();
   const auth = await forCid({ ...f.cid, boundary: [f.as.root], clock: () => 7 });
+  const cancelled = new AbortController();
+  cancelled.abort(new Error("cancelled"));
+  await expect(auth.login(undefined, { signal: cancelled.signal })).rejects.toThrow("cancelled");
   const event = vi.fn();
   auth.on("challenge", event);
   await auth.fetch(f.as.root + "private");
@@ -759,4 +762,28 @@ test.each([
     await expect(auth).rejects.toThrow("ES256");
     expect(op.stats.tokens).toBe(0);
   }
+});
+
+test("Node credentials capture an injected transport without replacing global fetch", async () => {
+  const original = globalThis.fetch;
+  const op = createMockOp({ clientCredentials: credentials });
+  const auth = await forClientCredentials({
+    issuer: op.issuer,
+    clientId: "test-agent",
+    clientSecret: "test-credential",
+    boundary: [op.root],
+    fetch: op.fetch,
+  });
+  expect(globalThis.fetch).toBe(original);
+  expect((await auth.identity())?.webId).toBeNull();
+  expect((await auth.fetch(op.root + "private")).status).toBe(200);
+  await expect(
+    forClientCredentials({
+      issuer: op.issuer,
+      clientId: "id",
+      clientSecret: "secret",
+      boundary: [op.root],
+      fetch: "invalid" as unknown as typeof fetch,
+    }),
+  ).rejects.toThrow("fetch must be a function");
 });

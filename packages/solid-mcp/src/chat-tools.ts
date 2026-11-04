@@ -18,38 +18,7 @@ import { PodOutput, podOutputError } from "./output.js";
 import { containerCandidates } from "./pod.js";
 import { withPodReadLimits } from "./pod-operation.js";
 import { createFetchPodPort, type PodPort } from "./pod-port.js";
-
-/** Parse a conservative Link-header subset; ambiguous/unsupported discovery fails closed. */
-function wacAclLink(header: string): string {
-  const acls: string[] = [];
-  let remaining = header;
-  while (remaining.trim()) {
-    const link =
-      /^\s*<([^<>]*)>((?:\s*;\s*[\w-]+\s*=\s*(?:"(?:[^"\\]|\\.)*"|[^\s;,"]+))*)\s*(?:,|$)/.exec(
-        remaining,
-      );
-    if (!link) throw new Error("Invalid chat ACL discovery Link header");
-    remaining = remaining.slice(link[0].length);
-    const params = new Map<string, string>();
-    for (const param of (link[2] ?? "").matchAll(
-      /;\s*([\w-]+)\s*=\s*("(?:[^"\\]|\\.)*"|[^\s;,"]+)/g,
-    )) {
-      const name = (param[1] ?? "").toLowerCase();
-      const raw = param[2] ?? "";
-      if (params.has(name)) throw new Error("Ambiguous chat ACL discovery Link header");
-      params.set(name, raw.startsWith('"') ? raw.slice(1, -1).replace(/\\(.)/g, "$1") : raw);
-    }
-    const relations = (params.get("rel") ?? "").split(/\s+/);
-    if (relations.includes("http://www.w3.org/ns/solid/acp#accessControl"))
-      throw new Error("Unsupported chat access-control model: ACP");
-    if (relations.includes("acl")) {
-      if (params.has("anchor")) throw new Error("Unsupported anchored chat ACL link");
-      acls.push(link[1] ?? "");
-    }
-  }
-  if (acls.length !== 1 || !acls[0]) throw new Error("A unique WAC ACL link is required for chats");
-  return acls[0];
-}
+import { wacAclLink } from "./wac-link.js";
 
 /** Adapt only the chat storage surface while MCP-01's shared port is absent. */
 export function createChatPodPort(config: SolidMcpConfig, pod?: PodPort): ChatPodPort {
@@ -139,21 +108,9 @@ export function createChatPodPort(config: SolidMcpConfig, pod?: PodPort): ChatPo
     async write(url, body, contentType, cond) {
       if (!writesEnabled(config)) throw new Error("write disabled: server is read-only");
       const target = requirePodScopedWriteUrl(config, url);
-      if (pod) return portOperation(() => pod.write(target, body, contentType, cond));
-      const headers = new Headers({ "content-type": contentType });
-      if (cond.ifMatch !== undefined) headers.set("if-match", cond.ifMatch);
-      if (cond.ifNoneMatch !== undefined) headers.set("if-none-match", cond.ifNoneMatch);
-      const response = await config.fetch(target, {
-        method: "PUT",
-        headers,
-        body: new Uint8Array(body),
-        redirect: "manual",
-      });
-      if (response.status >= 300 && response.status < 400)
-        throw new Error(`Refusing a redirect (${response.status}) on a chat write`);
-      check(response);
-      const etag = response.headers.get("etag");
-      return etag === null ? {} : { etag };
+      return portOperation(() =>
+        new PodOutput(pod ?? createFetchPodPort(config)).write(target, body, contentType, cond),
+      );
     },
   };
 }

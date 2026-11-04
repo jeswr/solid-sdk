@@ -10,6 +10,7 @@
  * registrar). Where the server doesn't offer purchases the quote route is
  * absent and this page sends people to the connect-your-own flow instead.
  */
+import { useSession } from "@/components/session-provider";
 import { Suspense, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -55,6 +56,7 @@ export default function BuyDomainPage() {
 function BuyDomain() {
   // The list state doubles as the feature/session probe (same pattern as the
   // add page); the purchase probe runs once the list has answered.
+  const { podFetch } = useSession();
   const { base, podRoot, data, loading, error, reload } = useDomains();
   const { available: purchasable } = usePurchaseFeature(base, data !== undefined);
   const router = useRouter();
@@ -84,7 +86,7 @@ function BuyDomain() {
     if (!validation.ok || !base) return;
     setQuoting(true);
     try {
-      setQuote(await quotePurchase(base, validation.domain));
+      setQuote(await quotePurchase(base, validation.domain, podFetch));
     } catch (e: unknown) {
       if (e instanceof DomainPurchaseUnavailableError) {
         setServerError("Buying a domain isn't offered on your pod server.");
@@ -105,7 +107,7 @@ function BuyDomain() {
     setConfirming(true);
     setServerError(null);
     try {
-      const binding = await purchaseDomain(base, { domain: quote.domain, podRoot });
+      const binding = await purchaseDomain(base, { domain: quote.domain, podRoot }, podFetch);
       // The detail page owns the rest of the journey (approval → registering → live).
       router.replace(`/settings/domains/domain?name=${encodeURIComponent(binding.domain)}`);
     } catch (e: unknown) {

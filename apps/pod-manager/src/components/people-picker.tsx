@@ -12,6 +12,7 @@
  * `people-search` matchers, and reports selections via `onChange` so the
  * consuming feature decides what a selection means.
  */
+import { useSession } from "@/components/session-provider";
 import { useId, useMemo, useState } from "react";
 import { Loader2, Search, UserPlus, X } from "lucide-react";
 import { usePeople } from "@/components/use-people";
@@ -58,6 +59,7 @@ export function PeoplePicker({
   label = "Find people",
   placeholder = "Search contacts, or paste a WebID…",
 }: PeoplePickerProps) {
+  const { podFetch } = useSession();
   const inputId = useId();
   const [query, setQuery] = useState("");
   const [resolving, setResolving] = useState(false);
@@ -103,7 +105,7 @@ export function PeoplePicker({
       // Resolve for a friendly label (best-effort) and remember it so the chip
       // shows the person's name rather than the raw WebID. The WebID is the
       // value we add regardless of whether resolution succeeds.
-      const option = await resolveWebIdOption(webId);
+      const option = await resolveWebIdOption(webId, podFetch);
       if (option.label && option.label !== webId) {
         setResolvedLabels((prev) => ({ ...prev, [webId]: option.label }));
       }

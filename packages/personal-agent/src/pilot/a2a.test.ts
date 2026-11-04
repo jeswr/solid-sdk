@@ -23,6 +23,7 @@ import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { freePort } from "../test-support/free-port.js";
 import {
   A2A_ACK_MEDIA_TYPE,
   A2A_BINDING,
@@ -55,30 +56,6 @@ async function cli(args: string[]) {
   let out = "";
   await main([...args], { stdout: (s) => (out += s) });
   return out.trim().startsWith("{") ? (JSON.parse(out) as Record<string, unknown>) : {};
-}
-
-/**
- * A free port below Linux's ephemeral range (32768-60999). The port is written into a config and bound
- * later by the host, so an OS-assigned ephemeral port could be taken in between by an outgoing
- * connection from a parallel test (seen in CI as EADDRINUSE).
- */
-const handedOut = new Set<number>();
-async function freePort(): Promise<number> {
-  for (let attempt = 0; attempt < 50; attempt++) {
-    const port = 20_000 + Math.floor(Math.random() * 12_000);
-    if (handedOut.has(port)) continue;
-    const s = createServer();
-    const bound = await new Promise<boolean>((r) => {
-      s.once("error", () => r(false));
-      s.listen(port, "127.0.0.1", () => r(true));
-    });
-    if (bound) {
-      await new Promise<void>((r) => s.close(() => r()));
-      handedOut.add(port);
-      return port;
-    }
-  }
-  throw new Error("No free port found below the ephemeral range");
 }
 
 /** Stand-in SPARQ executable (permits except the init probe's gated prohibition). */
