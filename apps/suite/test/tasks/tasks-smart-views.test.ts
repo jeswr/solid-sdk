@@ -306,7 +306,7 @@ describe("Upcoming", () => {
   });
 
   it("honours weekStart, shifts seven days, shows overdue only from Today, and opens a day composer", async () => {
-    // The composer's due chip names days relative to the real clock: pin it to the mocked now.
+    // The composer's due chip words dates against the real clock ("Tomorrow"); pin it to `now`.
     vi.useFakeTimers({ toFake: ["Date"], now });
     onTestFinished(() => {
       vi.useRealTimers();

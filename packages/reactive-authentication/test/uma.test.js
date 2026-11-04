@@ -11,6 +11,7 @@ import {
   DPoPTokenProvider,
   DynamicRegistrationClientProvider,
   LwsTokenProvider,
+  OidcSession,
   ReactiveFetchManager,
   SessionFence,
   SolidUmaTokenProvider,
@@ -48,6 +49,51 @@ function umaClient(server, options = {}) {
     fetch: options.fetch ?? transport,
   });
   return { code, provider, manager };
+}
+
+for (const [dimension, configuration] of Object.entries({
+  namespace: { namespace: "other-session" },
+  account: { account: "other-account" },
+  scopes: { scopes: ["openid"] },
+  callbackUri: { callbackUri: "https://app.example/other-callback" },
+})) {
+  test(`shared OIDC sessions with different ${dimension} isolate UMA RPT caches`, async () => {
+    const fence = new SessionFence(`uma-session-${dimension}`, { broadcast: false });
+    const rptStore = createMemoryStore();
+    const code = automaticCodeProvider();
+    const client = new CachingClientProvider(new DynamicRegistrationClientProvider(insecure));
+    const as = new XASProvider({ getIssuer: async () => new URL(op.issuer) }, insecure);
+    const provider = ({ callbackUri = callback, ...options }) =>
+      new SolidUmaTokenProvider(callback, code, as, client, {
+        http: insecure,
+        namespace: "same-provider-label",
+        account: "same-account-label",
+        scopes: ["openid"],
+        fence,
+        rptStore,
+        context: async () => "shared",
+        session: new OidcSession(callbackUri, code, client, { http: insecure, fence, ...options }),
+      });
+    try {
+      const a = provider({});
+      const b = provider(configuration);
+      const request = new Request(`${uma.url}/uma/session-${dimension}`);
+      const upgrade = async (provider) =>
+        provider.upgrade(request, challengeContext(await transport(request)));
+      const exchanges = uma.stats.exchanges.length;
+      const first = await upgrade(a);
+      assert.equal((await transport(first)).status, 200);
+      assert.equal((await transport(await upgrade(a))).status, 200);
+      assert.equal(uma.stats.exchanges.length, exchanges + 1);
+      const second = await upgrade(b);
+      assert.equal((await transport(second)).status, 200);
+      assert.equal(uma.stats.exchanges.length, exchanges + 2);
+      assert.notEqual(first.headers.get("authorization"), second.headers.get("authorization"));
+      assert.equal(code.calls, 2, "both actual sessions obtained their own credentials");
+    } finally {
+      fence.close();
+    }
+  });
 }
 
 test("Solid-OIDC §9 UMA: ticket + DPoP-bound ID token exchanged for an RPT presented with fresh proofs", async () => {

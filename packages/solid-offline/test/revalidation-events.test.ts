@@ -1,9 +1,12 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
+import { createSolidBackend } from '@jeswr/storage-client/solid';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { handleNotification, resyncSweep } from '../src/invalidation.js';
+import { handleNotification, type InvalidateDeps, resyncSweep } from '../src/invalidation.js';
 import { MetadataStore } from '../src/metadata-store.js';
 import { reportRevalidation } from '../src/revalidation-events.js';
 import { createStatusSurface } from '../src/status.js';
+import { createPolicyStorage } from '../src/storage.js';
 import { handleFetch, type SwrDeps } from '../src/swr.js';
 import { MockBroadcaster, MockByteCache, makeGet, turtleResponse } from './mocks.js';
 
@@ -20,7 +23,11 @@ async function setup() {
   stores.push(meta);
   const cache = new MockByteCache();
   const broadcast = new MockBroadcaster();
-  const deps: SwrDeps & { broadcast: MockBroadcaster; cache: MockByteCache } = {
+  const deps: SwrDeps & InvalidateDeps & { broadcast: MockBroadcaster; cache: MockByteCache } = {
+    storage: await createPolicyStorage(
+      (fetch) => createSolidBackend({ fetch, root: 'https://pod.example/' }),
+      (input, init) => deps.fetch(input, init),
+    ),
     meta,
     cache,
     broadcast,
@@ -229,7 +236,7 @@ describe.each([
   'notification',
   'listing',
 ] as const)('%s adversarial outcomes', (path) => {
-  async function run(deps: SwrDeps) {
+  async function run(deps: SwrDeps & InvalidateDeps) {
     if (path === 'notification' || path === 'listing') {
       return handleNotification(
         { type: path === 'listing' ? 'Remove' : 'Update', object: URL },
@@ -302,18 +309,26 @@ it.each([
   ]);
 });
 
-it('reports a failed sweep attempt before propagating its error', async () => {
+it('reports each failed sweep attempt and continues to the next resource', async () => {
   const deps = await setup();
   await handleFetch(makeGet('https://pod.example/other'), deps);
   const failure = new TypeError('fixture offline');
   deps.fetch = vi.fn(async () => {
     throw failure;
   });
-  await expect(resyncSweep(deps)).rejects.toBe(failure);
-  expect(deps.fetch).toHaveBeenCalledTimes(1);
+  await expect(resyncSweep(deps)).resolves.toEqual({
+    checked: 2,
+    confirmed: 0,
+    replaced: 0,
+    purged: 0,
+    skipped: 2,
+  });
+  expect(deps.fetch).toHaveBeenCalledTimes(4);
   expect(deps.broadcast.messages).toEqual([
     { url: URL, event: 'revalidating', attemptId: expect.any(String) },
     { url: URL, event: 'revalidate-failed', attemptId: expect.any(String) },
+    { url: 'https://pod.example/other', event: 'revalidating', attemptId: expect.any(String) },
+    { url: 'https://pod.example/other', event: 'revalidate-failed', attemptId: expect.any(String) },
   ]);
 });
 

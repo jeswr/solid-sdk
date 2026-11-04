@@ -8,6 +8,7 @@ import { protectiveLinkRel } from "../../editor/link-rel";
 import { normaliseDestination, normaliseImageDestination } from "../editor/destination";
 import { normaliseHtmlLists } from "../editor/html-lists";
 import { parseDocumentHtml, parseHtmlDocument } from "../editor/parse-html";
+import { sanitiseStyleAttrs } from "../editor/styles";
 import { normaliseHtmlTableSpans, normaliseTableSpan } from "../editor/table-spans";
 import { sanitiseImport } from "./sanitise";
 import { reportSkipped, type SkippedItem } from "./skipped";
@@ -53,7 +54,7 @@ export function normaliseImport(json: JSONContent, skipped: SkippedItem[] = []) 
       reportSkipped(skipped, "Unsupported nodes");
       return [];
     }
-    const attrs = { ...node.attrs };
+    const attrs = sanitiseStyleAttrs({ ...node.attrs });
     if (node.type === "image") {
       const link = node.marks?.find((mark) => mark.type === "link");
       if (link) attrs.link = normaliseImageLink(link.attrs);
@@ -84,16 +85,22 @@ export function normaliseImport(json: JSONContent, skipped: SkippedItem[] = []) 
     }
     if (
       "textAlign" in attrs &&
-      ![null, "left", "center", "right", "justify"].includes(attrs.textAlign)
+      !([null, "left", "center", "right", "justify"] as unknown[]).includes(attrs.textAlign)
     ) {
       attrs.textAlign = null;
       reportSkipped(skipped, "Unsupported alignment");
     }
-    const marks = (node.marks ?? []).filter((mark) => {
-      if (importSchema.marks[mark.type]) return true;
-      reportSkipped(skipped, "Unsupported marks");
-      return false;
-    });
+    const marks = (node.marks ?? [])
+      .map((mark) =>
+        mark.type === "textStyle"
+          ? { ...mark, attrs: sanitiseStyleAttrs({ ...mark.attrs }) }
+          : mark,
+      )
+      .filter((mark) => {
+        if (importSchema.marks[mark.type]) return true;
+        reportSkipped(skipped, "Unsupported marks");
+        return false;
+      });
     const mapped: JSONContent = {
       ...node,
       attrs,
@@ -131,10 +138,23 @@ export function normaliseImport(json: JSONContent, skipped: SkippedItem[] = []) 
   return { json: result, skipped };
 }
 
+/** A standalone web page: browsers need the charset to read non-ASCII text from a file. */
+export function htmlDocument(body: string, title: string) {
+  const name = (title || "Untitled document")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
+  return `<!doctype html>\n<html>\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1">\n<title>${name}</title>\n</head>\n<body>\n${body}\n</body>\n</html>\n`;
+}
+
 export function importHtml(source: string, skipped: SkippedItem[] = []) {
   // All six HTML heading levels have the same meaning as Markdown/DOCX levels.
   const fragment = document.createElement("template");
-  fragment.innerHTML = source;
+  // A whole page (such as the suite's own export) contributes only its body, so the
+  // title and metadata never become document text.
+  fragment.innerHTML = /<(?:!doctype|html|head|body)[\s>]/i.test(source)
+    ? parseHtmlDocument(source).body.innerHTML
+    : source;
   normaliseHtmlLists(fragment.content);
   const html = sanitiseImport(fragment.innerHTML, skipped);
   const dom = parseHtmlDocument(html);

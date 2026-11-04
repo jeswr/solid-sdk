@@ -13,6 +13,7 @@ import {
   DIRECT,
   ProviderRejectedError,
   type SendGrant,
+  SendNotDispatchedError,
   type TokenProvider,
 } from "../src/index.js";
 import { createInMemoryDirectBinding } from "../src/testing.js";
@@ -36,7 +37,7 @@ describe("direct loopback", () => {
     const wire = await binding.send.render(proposal, DIRECT);
     expect(await binding.send.validate(wire, proposal)).toEqual({ ok: true });
     expect(await binding.send.lookup?.(wire)).toEqual({ outcome: "absent" });
-    const io = { account, tokens: config.tokens };
+    const io = { assertAuthority: vi.fn(), account, tokens: config.tokens };
     expect(await binding.send.transmit(wire, io)).toEqual({
       outcome: "rejected",
       detail: "dry-run",
@@ -111,7 +112,12 @@ describe("direct loopback", () => {
     expect(await binding.send.validate(wire, proposal)).toEqual({ ok: true });
     const result = { outcome: "accepted", providerRef: `direct:${wire.digest}` };
     expect(
-      await binding.send.transmit(wire, { account, tokens: config.tokens, dryRun: false }),
+      await binding.send.transmit(wire, {
+        assertAuthority: vi.fn(),
+        account,
+        tokens: config.tokens,
+        dryRun: false,
+      }),
     ).toEqual(result);
     expect(await binding.send.lookup?.(wire)).toEqual({
       outcome: "found",
@@ -370,7 +376,12 @@ describe("direct loopback", () => {
     await expect(binding.send.render(proposal, DIRECT)).rejects.toThrow();
     expect(await binding.send.validate(wire, proposal)).toEqual({ ok: false, reason: "malformed" });
     await expect(
-      binding.send.transmit(wire, { account, tokens: config.tokens, dryRun: false }),
+      binding.send.transmit(wire, {
+        assertAuthority: vi.fn(),
+        account,
+        tokens: config.tokens,
+        dryRun: false,
+      }),
     ).rejects.toThrow();
     await expect(binding.send.lookup?.(wire)).rejects.toThrow();
     expect(verify).toHaveBeenCalledTimes(4);
@@ -428,7 +439,7 @@ describe("direct loopback", () => {
       });
 
     const ref = { ...account };
-    const io = { account: ref, tokens, dryRun: false };
+    const io = { assertAuthority: vi.fn(), account: ref, tokens, dryRun: false };
     const pending = binding.send.transmit(wire, io);
     await started.promise;
     const other = { id: "other-account" };
@@ -475,7 +486,12 @@ describe("direct loopback", () => {
           return config.tokens.send(ref);
         });
 
-      const pending = binding.send.transmit(wire, { account, tokens, dryRun: false });
+      const pending = binding.send.transmit(wire, {
+        assertAuthority: vi.fn(),
+        account,
+        tokens,
+        dryRun: false,
+      });
       await started.promise;
       expect(binding.send.finalAbsence).toBe(true);
       expect(await binding.send.lookup?.(wire)).toMatchObject({ outcome: "unknown" });
@@ -517,7 +533,7 @@ describe("direct loopback", () => {
         signed({ ...message, id: "urn:example:message:replacement" }),
         DIRECT,
       );
-      const io = { account, tokens, dryRun: false };
+      const io = { assertAuthority: vi.fn(), account, tokens, dryRun: false };
       const result = { outcome: "accepted", providerRef: `direct:${original.digest}` };
       if (retry) expect(await binding.send.transmit(original, io)).toEqual(result);
 
@@ -573,7 +589,7 @@ describe("direct loopback", () => {
       signed({ ...message, body: { want: ["different"] } }),
       DIRECT,
     );
-    const io = { account, tokens, dryRun: false };
+    const io = { assertAuthority: vi.fn(), account, tokens, dryRun: false };
     const sendStarted = deferred<void>();
     const sendResume = deferred<void>();
     if (state === "verification")
@@ -642,7 +658,12 @@ describe("direct loopback", () => {
         return grant.promise;
       },
     };
-    const pending = binding.send.transmit(wire, { account, tokens, dryRun: false });
+    const pending = binding.send.transmit(wire, {
+      assertAuthority: vi.fn(),
+      account,
+      tokens,
+      dryRun: false,
+    });
     await started.promise;
     expect(await binding.send.lookup?.(wire)).toMatchObject({ outcome: "unknown" });
     expect((await binding.ingest.list(account, undefined, limits)).items).toEqual([]);
@@ -694,7 +715,12 @@ describe("direct loopback", () => {
           return config.tokens.send(ref);
         });
 
-      const pending = sender.transmit(wire, { account, tokens, dryRun: false });
+      const pending = sender.transmit(wire, {
+        assertAuthority: vi.fn(),
+        account,
+        tokens,
+        dryRun: false,
+      });
       await started.promise;
       const observer = createDirectSend(mailbox, config);
       expect(observer.finalAbsence).toBe(true);
@@ -753,7 +779,7 @@ describe("direct loopback", () => {
           return secondGrant.promise;
         }),
     };
-    const io = { account, tokens, dryRun: false };
+    const io = { assertAuthority: vi.fn(), account, tokens, dryRun: false };
     const first = binding.send.transmit(wire, io);
     await firstStarted.promise;
     const second = secondSender.transmit(wire, io);
@@ -802,9 +828,19 @@ describe("direct loopback", () => {
     const config = options();
     const b = createInMemoryDirectBinding(config);
     const wire = await b.send.render(signed(), DIRECT);
-    await b.send.transmit(wire, { account, tokens: config.tokens, dryRun: false });
+    await b.send.transmit(wire, {
+      assertAuthority: vi.fn(),
+      account,
+      tokens: config.tokens,
+      dryRun: false,
+    });
     const second = await b.send.render(signed({ ...message, id: "urn:example:message:2" }), DIRECT);
-    await b.send.transmit(second, { account, tokens: config.tokens, dryRun: false });
+    await b.send.transmit(second, {
+      assertAuthority: vi.fn(),
+      account,
+      tokens: config.tokens,
+      dryRun: false,
+    });
     const first = await b.ingest.list(account, undefined, {
       maxItems: 10,
       maxBytes: Buffer.byteLength(wire.bytes),
@@ -1043,9 +1079,9 @@ describe("direct loopback", () => {
       const b = createInMemoryDirectBinding(config);
       const wire = await b.send.render(signed(), DIRECT);
       const tokens = { send: async () => grant } as unknown as TokenProvider;
-      await expect(b.send.transmit(wire, { account, tokens, dryRun: false })).rejects.toThrow(
-        "grant",
-      );
+      await expect(
+        b.send.transmit(wire, { assertAuthority: vi.fn(), account, tokens, dryRun: false }),
+      ).rejects.toThrow("grant");
       expect(await b.send.lookup?.(wire)).toEqual({ outcome: "absent" });
     }
     const b = createInMemoryDirectBinding({
@@ -1093,8 +1129,16 @@ describe("direct loopback", () => {
       { ...wire, digest: "wrong" },
     ])
       await expect(
-        b.send.transmit(changed as never, { account, tokens: config.tokens, dryRun: false }),
-      ).rejects.toBeInstanceOf(ChannelParseError);
+        b.send.transmit(changed as never, {
+          assertAuthority: vi.fn(),
+          account,
+          tokens: config.tokens,
+          dryRun: false,
+        }),
+      ).rejects.toMatchObject({
+        constructor: SendNotDispatchedError,
+        cause: expect.any(ChannelParseError),
+      });
     expect(config.tokens.calls).toEqual([]);
   });
 
@@ -1122,7 +1166,12 @@ describe("direct loopback", () => {
       const wire = await binding.send.render(expiredProposal, DIRECT);
       expect((await binding.send.validate(wire, expiredProposal)).ok).toBe(false);
       await expect(
-        binding.send.transmit(wire, { account, tokens: config.tokens, dryRun: false }),
+        binding.send.transmit(wire, {
+          assertAuthority: vi.fn(),
+          account,
+          tokens: config.tokens,
+          dryRun: false,
+        }),
       ).rejects.toThrow("expired or not yet valid");
       expect(config.tokens.calls).toEqual([]);
     }
@@ -1165,7 +1214,7 @@ describe("direct loopback", () => {
       signed({ ...message, body: { want: ["different"] } }),
       DIRECT,
     );
-    const io = { account, tokens: config.tokens, dryRun: false };
+    const io = { assertAuthority: vi.fn(), account, tokens: config.tokens, dryRun: false };
     await b.send.transmit(first, io);
     await expect(b.send.transmit(other, io)).rejects.toBeInstanceOf(ProviderRejectedError);
     await expect(
@@ -1187,6 +1236,7 @@ describe("direct loopback", () => {
     const proposal = signed();
     const wire = await binding.send.render(proposal, DIRECT);
     const result = await binding.send.transmit(wire, {
+      assertAuthority: vi.fn(),
       account,
       tokens: config.tokens,
       dryRun: false,
@@ -1225,7 +1275,12 @@ describe("direct loopback", () => {
       mediaType: "application/ld+json",
     };
     await expect(
-      b.send.transmit(wire, { account, tokens: options().tokens, dryRun: false }),
+      b.send.transmit(wire, {
+        assertAuthority: vi.fn(),
+        account,
+        tokens: options().tokens,
+        dryRun: false,
+      }),
     ).rejects.toThrow();
   });
 });

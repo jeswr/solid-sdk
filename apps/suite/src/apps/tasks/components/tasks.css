@@ -556,7 +556,11 @@ button.tsk-due:hover {
   button.tsk-due::before {
     content: "";
     position: absolute;
-    inset: -10px -8px;
+    top: 50%;
+    left: 50%;
+    width: max(100% + 16px, 44px);
+    height: max(100% + 20px, 44px);
+    transform: translate(-50%, -50%);
   }
 }
 .tsk-property-anchor {

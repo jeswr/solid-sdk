@@ -1,0 +1,24 @@
+[
+  {
+    "id": "101",
+    "repository": { "full_name": "octocat/Hello-World" },
+    "subject": {
+      "title": "Review the parser",
+      "type": "PullRequest",
+      "url": "https://api.github.com/repos/octocat/Hello-World/pulls/42",
+      "latest_comment_url": null
+    },
+    "reason": "review_requested",
+    "unread": true,
+    "updated_at": "2026-10-30T12:00:00Z",
+    "url": "https://api.github.com/notifications/threads/101"
+  },
+  {
+    "id": "102",
+    "repository": { "full_name": "octocat/Hello-World" },
+    "subject": { "title": "Fix the build", "type": "Issue", "url": null },
+    "reason": "mention",
+    "unread": false,
+    "updated_at": "2026-10-30T11:00:00Z"
+  }
+]

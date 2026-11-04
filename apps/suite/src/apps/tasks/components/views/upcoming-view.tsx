@@ -13,10 +13,37 @@ import { useDropTarget } from "../dnd/use-task-drag";
 import { CrossProjectView } from "./cross-project-view";
 import { ViewGroup } from "./view-group";
 
-/** A week-strip cell is also a drop target: dropping a row reschedules it to that day. */
-function DayCell({ dayKey, ...props }: ComponentProps<"button"> & { dayKey: string }) {
+/**
+ * A week-strip cell is also a drop target: dropping a row reschedules it to that day. The
+ * weekday letter and task count are decorative overlays beside the button, so the button's
+ * visible text (the date) stays within its expanded accessible name (WCAG 2.5.3).
+ */
+function DayCell({
+  dayKey,
+  letter,
+  count,
+  today,
+  ...props
+}: ComponentProps<"button"> & { dayKey: string; letter: string; count: number; today: boolean }) {
   const drop = useDropTarget(`strip:${dayKey}`, { kind: "day", dayKey });
-  return <button ref={drop.ref} data-drop-over={drop.over || undefined} {...props} type="button" />;
+  return (
+    <div className="tsk-day" data-today={today || undefined}>
+      <button
+        ref={drop.ref}
+        data-drop-over={drop.over || undefined}
+        data-today={today || undefined}
+        {...props}
+        type="button"
+      />
+      <span className="tsk-day-letter" aria-hidden="true">
+        {letter}
+      </span>
+      <span className="tsk-day-count" aria-hidden="true">
+        <span className="tsk-day-dot" data-empty={!count || undefined} />
+        {count}
+      </span>
+    </div>
+  );
 }
 
 export function UpcomingView() {
@@ -97,7 +124,9 @@ export function UpcomingView() {
                 dayKey={day.dayKey}
                 className="tsk-day-cell"
                 data-day-key={day.dayKey}
-                data-today={day.isToday || undefined}
+                today={day.isToday}
+                letter={day.weekdayLetter}
+                count={day.count}
                 aria-current={day.isToday ? "date" : undefined}
                 aria-pressed={selected === day.dayKey}
                 aria-label={`${shortDayLabel(day.date)}, ${day.count} ${day.count === 1 ? "task" : "tasks"}`}
@@ -110,12 +139,7 @@ export function UpcomingView() {
                   heading?.focus({ preventScroll: true });
                 }}
               >
-                <span aria-hidden="true">{day.weekdayLetter}</span>
-                <strong aria-hidden="true">{day.dayOfMonth}</strong>
-                <span className="tsk-day-count" aria-hidden="true">
-                  <span className="tsk-day-dot" data-empty={!day.count || undefined} />
-                  {day.count}
-                </span>
+                <strong>{day.dayOfMonth}</strong>
               </DayCell>
             ))}
           </div>

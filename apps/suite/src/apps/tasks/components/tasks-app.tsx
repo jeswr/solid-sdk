@@ -1,19 +1,22 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 "use client";
 import { Button, ErrorState, LoadingSkeleton, Toaster } from "@jeswr/suite-ui";
-import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   type ReactNode,
   Suspense,
   useCallback,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
 import { SuiteFrame } from "@/components/interim-shell/suite-frame";
 import { decodeRef, encodeRef } from "@/lib/refs";
+import { useRouteParams, useRoutePathname } from "@/lib/route-params";
 import { PodSessionProvider, usePodSessionState } from "@/lib/session/pod-session";
 import { parseQuickAdd } from "../lib/compose/quick-add";
 import { classifyError } from "../lib/model/errors";
@@ -41,26 +44,29 @@ function TasksChrome({ children }: { children: ReactNode }) {
   const tasks = useTasks();
   const { preferences, dispatch } = useTasksPreferences();
   const [sharing, setSharing] = useState(false);
-  const pathname = usePathname();
+  const pathname = useRoutePathname();
   // Smart views have fixed grouping/order; only project lists consume the sort preference.
   const supportsSort = pathname === "/tasks/inbox" || /^\/tasks\/p\/[^/]+$/.test(pathname);
   const params = useSearchParams();
-  const route = useParams();
+  const label = useRouteParams<{ label: string }>("/tasks/l/[label]")?.label;
+  const listRef = useRouteParams<{ ref: string }>("/tasks/p/[ref]")?.ref;
+  const boardRef = useRouteParams<{ ref: string }>("/tasks/p/[ref]/board")?.ref;
+  const ref = listRef ?? boardRef;
   const router = useRouter();
   const [quickAdd, setQuickAdd] = useState(false);
   const restoreFocus = useRef<HTMLElement | null>(null);
   const title =
     VIEW_NAMES[pathname] ??
-    (typeof route.label === "string"
-      ? `@${route.label}`
-      : route.ref
-        ? (tasks.projects.find((project) => encodeRef(project.url) === route.ref)?.tracker.title ??
-          preferences.sharedProjects.find((shared) => encodeRef(shared.url) === route.ref)?.title ??
+    (typeof label === "string"
+      ? `@${label}`
+      : ref
+        ? (tasks.projects.find((project) => encodeRef(project.url) === ref)?.tracker.title ??
+          preferences.sharedProjects.find((shared) => encodeRef(shared.url) === ref)?.title ??
           "Project")
         : "Tasks");
   let projectUrl: string | undefined;
   try {
-    if (typeof route.ref === "string") projectUrl = decodeRef(route.ref);
+    if (typeof ref === "string") projectUrl = decodeRef(ref);
   } catch {
     /* The project route renders its own not-found state. */
   }
@@ -108,13 +114,30 @@ function TasksChrome({ children }: { children: ReactNode }) {
     router.push(`${pathname}?${query}`, { scroll: false });
   });
   const origin = useRef<string | undefined>(undefined);
+  const returnTo = useRef<string | undefined>(undefined);
+  // A narrow-viewport details Sheet restores focus itself once it unmounts; point it at the
+  // originating row (06-tasks §2.8) rather than the link that opened it, which re-renders.
+  const detailsReturnFocus = useMemo(
+    () => ({
+      get current() {
+        const url = origin.current ?? returnTo.current;
+        return url
+          ? document.querySelector<HTMLElement>(`[data-task-url="${CSS.escape(url)}"]`)
+          : null;
+      },
+    }),
+    [],
+  );
   useEffect(() => {
+    // A new pane must not fall back to a row from an earlier, already closed pane.
+    if (taskRef !== null) returnTo.current = undefined;
     if (taskRef !== null && origin.current === undefined) {
       const row = document.activeElement?.closest<HTMLElement>("[data-task-url]");
       origin.current = row?.dataset.taskUrl ?? taskUrl;
     }
     if (taskRef === null && origin.current) {
       const url = origin.current;
+      returnTo.current = url;
       origin.current = undefined;
       requestAnimationFrame(() =>
         requestAnimationFrame(() =>
@@ -130,8 +153,10 @@ function TasksChrome({ children }: { children: ReactNode }) {
     if (document.activeElement?.matches('.tsk-detail input[aria-label="Sub-task title"]')) return;
     const query = new URLSearchParams(params.toString());
     query.delete("task");
-    router.replace(`${pathname}${query.size ? `?${query}` : ""}`, { scroll: false });
-  }, [params, pathname, router]);
+    // Native replaceState syncs with useSearchParams. router.replace ignores a same-pathname
+    // replace after a hard load of a `?task=` URL, so a shared link's pane could not close.
+    window.history.replaceState(null, "", `${pathname}${query.size ? `?${query}` : ""}`);
+  }, [params, pathname]);
   useEffect(() => {
     if (taskRef === null) return;
     const keydown = (event: KeyboardEvent) => {
@@ -242,6 +267,7 @@ function TasksChrome({ children }: { children: ReactNode }) {
           ) : undefined
         }
         details={details}
+        detailsReturnFocus={detailsReturnFocus}
         onDetailsClose={closeDetails}
       >
         {sharing && activeProject && (
@@ -287,6 +313,14 @@ function SessionGate({ children }: { children: ReactNode }) {
     return (
       <div className="tsk-boot" role="status">
         Opening your Tasks…
+      </div>
+    );
+  // Native builds start signed out until native sign-in lands.
+  if (state.status === "signed-out")
+    return (
+      <div className="tsk-boot">
+        <h1>Tasks</h1>
+        <p role="status">Sign in to open your Tasks</p>
       </div>
     );
   if (state.status === "error")

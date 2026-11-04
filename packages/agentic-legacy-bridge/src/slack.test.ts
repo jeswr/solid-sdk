@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8
+// AUTHORED-BY Codex GPT-6.1-Sol
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { Parser } from "n3";
@@ -206,6 +207,7 @@ describe("slackEventToBridgeMessage — the detectBridgeCapability signal carrie
       capable: true,
       channels: ["rdf", "dpop-sk", "a2a", "email"],
       podCopyUrl: "https://pod.example/replies/alb-123.ttl",
+      carriage: "rdf",
     });
   });
 

@@ -23,7 +23,11 @@ export interface ChatRoom {
 }
 export function buildRoom(room: string, input: RoomInput): Store {
   const subject = `${roomIndex(room)}#it`;
-  const name = text(input.name);
+  // Unnamed two-person rooms are the wire format for direct messages.
+  const name =
+    input.name === "" && new Set([input.creator, ...input.members]).size === 2
+      ? ""
+      : text(input.name);
   httpIri(input.creator);
   isoDate(input.created);
   const members = new Set([input.creator, ...input.members.map(httpIri)]);
@@ -65,6 +69,14 @@ export function joinRoom(url: string, dataset: DatasetCore, room: string): Store
   const doc = new ChatNode(`${httpIri(url)}#it`, result, DataFactory);
   doc.types.add(`${NS.AS}Collection`);
   doc.refs(`${NS.AS}items`).add(roomContainer(room));
+  return result;
+}
+/** Removes only this reference from the caller's joined collection. */
+export function leaveRoom(url: string, dataset: DatasetCore, room: string): Store {
+  const result = new Store([...dataset]);
+  new ChatNode(`${httpIri(url)}#it`, result, DataFactory)
+    .refs(`${NS.AS}items`)
+    .delete(roomContainer(room));
   return result;
 }
 /** The advertised ACL URL is supplied by I/O; owner control is always retained. */

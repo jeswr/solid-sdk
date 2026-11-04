@@ -205,6 +205,7 @@ test("scenario 4: recurring completion advances in place, Undo removes its copy,
         title: "Water plants",
         state: "open",
         allDay: "2026-11-02",
+        dueDate: new Date("2026-11-02T00:00:00Z"),
         recurrence: { frequency: "DAILY", interval: 2 },
       })
     ).url;
@@ -322,8 +323,13 @@ test("delayed Delete supports Undo, expires after eight seconds, and flushes on 
     .getByRole("button", { name: "Undo", exact: true })
     .click();
   await expect(row).toBeVisible();
+  // A pointer resting on the toaster pauses the countdown (next test), so leave it first.
+  await page.mouse.move(0, 0);
   await row.focus();
   await row.press("Backspace");
+  // The countdown starts when the new toast mounts; only then can the clock jump past it.
+  await expect(undoToast(page, "Deleted 'Remove me'")).toHaveCount(1);
+  await expect(undoToast(page, "Deleted 'Remove me'")).toBeVisible();
   await page.clock.fastForward(8100);
   await expect.poll(async () => (await (await durablePod(page)).fetch(url)).status).toBe(404);
   const flushing = rowFor(page, "Flush me");
@@ -389,9 +395,15 @@ test("a selection that leaves Today does not complete a hidden task", async ({ p
         title: "Selected today",
         state: "open",
         allDay: "2026-11-02",
+        dueDate: new Date("2026-11-02T00:00:00Z"),
       })
     ).url;
-    await store.createTask(inbox, { title: "Still today", state: "open", allDay: "2026-11-02" });
+    await store.createTask(inbox, {
+      title: "Still today",
+      state: "open",
+      allDay: "2026-11-02",
+      dueDate: new Date("2026-11-02T00:00:00Z"),
+    });
   });
   await page.goto("/tasks/today");
   const selected = rowFor(page, "Selected today");
@@ -414,14 +426,32 @@ test.describe("touch targets and selection", () => {
     page,
   }, testInfo) => {
     await seed(page, async (store, inbox) => {
-      await store.createTask(inbox, { title: "Touch task", state: "open", allDay: "2026-11-02" });
+      await store.createTask(inbox, {
+        title: "Touch task",
+        state: "open",
+        allDay: "2026-11-02",
+        dueDate: new Date("2026-11-02T00:00:00Z"),
+      });
     });
     await page.goto("/tasks/inbox");
     expect(await page.evaluate(() => matchMedia("(pointer: coarse)").matches)).toBe(true);
     const row = rowFor(page, "Touch task");
-    const bounds = await row.locator("button.tsk-due").boundingBox();
-    expect(bounds?.width).toBeGreaterThanOrEqual(44);
-    expect(bounds?.height).toBeGreaterThanOrEqual(44);
+    // The chip keeps its line height; on coarse pointers an invisible ::before hit area makes
+    // the touch target 44 by 44 (tasks.css). Measure what a tap actually hits.
+    const target = await row.locator("button.tsk-due").evaluate((button) => {
+      const bounds = button.getBoundingClientRect();
+      const x = bounds.left + bounds.width / 2;
+      const y = bounds.top + bounds.height / 2;
+      const hits = (dx: number, dy: number) =>
+        button.contains(document.elementFromPoint(x + dx, y + dy));
+      const edge = [-21.9, 21.9];
+      return {
+        width: edge.every((dx) => hits(dx, 0)),
+        height: edge.every((dy) => hits(0, dy)),
+        corners: edge.every((dx) => edge.every((dy) => hits(dx, dy))),
+      };
+    });
+    expect(target).toEqual({ width: true, height: true, corners: true });
     await row.focus();
     await row.press("Space");
     await expect(row).toHaveAttribute("aria-selected", "true");

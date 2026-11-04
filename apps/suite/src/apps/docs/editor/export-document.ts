@@ -1,15 +1,17 @@
 // AUTHORED-BY Codex
-import type { JSONContent } from "@tiptap/react";
+import { generateHTML, type JSONContent } from "@tiptap/react";
 import { Packer } from "docx";
 import type { PodSession } from "@/lib/session/pod-session";
 import { type ExportImage, toDocx } from "../lib/convert/docx-export";
 import { exportMarkdown } from "../lib/convert/markdown";
+import { htmlDocument } from "../lib/convert/schema";
 import { normaliseImageDestination } from "../lib/editor/destination";
+import { baseExtensions } from "./extensions";
 import { imagePng } from "./image-blob";
 import { loadDocumentContent } from "./persistence";
 import { podScopedFetch } from "./private-image";
 
-export type DownloadFormat = "docx" | "md";
+export type DownloadFormat = "docx" | "md" | "html";
 export async function readExportImage(session: PodSession, src: string): Promise<ExportImage> {
   const url = normaliseImageDestination(src);
   if (!url) throw new Error("Invalid image URL");
@@ -35,7 +37,11 @@ export async function downloadDocument(
   const blob =
     format === "md"
       ? new Blob([exportMarkdown(json)], { type: "text/markdown;charset=utf-8" })
-      : await Packer.toBlob(await toDocx(json, (src) => readExportImage(session, src)));
+      : format === "html"
+        ? new Blob([htmlDocument(generateHTML(json, baseExtensions(globalThis.fetch)), title)], {
+            type: "text/html;charset=utf-8",
+          })
+        : await Packer.toBlob(await toDocx(json, (src) => readExportImage(session, src)));
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;

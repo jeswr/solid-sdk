@@ -297,7 +297,8 @@ export function TaskRow({
                 type="button"
                 className="tsk-due"
                 disabled={pending || completing}
-                aria-label={`Reschedule '${task.title}'`}
+                // The accessible name must contain the visible due text (WCAG 2.5.3).
+                aria-label={`${formatDue(task, now)}, reschedule '${task.title}'`}
                 onClick={() => setRescheduleOpen(true)}
                 data-overdue={isOverdue(task, now) || undefined}
               >

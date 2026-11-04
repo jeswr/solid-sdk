@@ -39,6 +39,7 @@ import {
   AD_URL,
   AGENT_POINTER_PREDICATES,
   RDF_TYPE,
+  SUPPORTS_BINDING,
 } from "./vocab.js";
 
 /** A typed view of an `ad:Skill` node. */
@@ -71,6 +72,10 @@ export class SecuritySchemeNode extends TermWrapper {
  * A typed view of an `ad:AgentDescription` node — the agent's self-description.
  */
 export class AgentDescriptionNode extends TermWrapper {
+  // AUTHORED-BY Codex GPT-6.1-Sol
+  get bindings(): Set<TermWrapperType> {
+    return objectTerms(this, SUPPORTS_BINDING);
+  }
   get names(): Set<TermWrapperType> {
     return objectTerms(this, AD_NAME);
   }
@@ -186,6 +191,15 @@ class WritableSecurityScheme extends TermWrapper {
 
 /** An `ad:AgentDescription` node opened for WRITING. */
 class WritableAgentDescription extends TermWrapper {
+  // AUTHORED-BY Codex GPT-6.1-Sol
+  addBinding(iri: string): void {
+    SetFrom.subjectPredicate(
+      this,
+      SUPPORTS_BINDING,
+      (term) => term.value,
+      NamedNodeFrom.string,
+    ).add(iri);
+  }
   typeAgentDescription(): void {
     addHttpIriTriple(this, RDF_TYPE, AD_AGENT_DESCRIPTION);
   }
@@ -244,6 +258,12 @@ class WritableAgentDescription extends TermWrapper {
 export class AgentBuilder {
   private readonly store = new Store();
   private readonly factory = DataFactory as unknown as DataFactoryType;
+
+  // AUTHORED-BY Codex GPT-6.1-Sol
+  /** Include capability graphs produced by agent-model's validated typed mapping. */
+  addDataset(dataset: DatasetCore): void {
+    for (const quad of dataset) this.store.addQuad(quad);
+  }
 
   /** Open the agent-description subject (`id` is the agent IRI) for writing. */
   agent(id: string): WritableAgentDescription {

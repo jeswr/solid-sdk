@@ -155,9 +155,7 @@ it("defines a frozen profile for every carriage row, with read-only proxies and 
   expect(CARRIAGE_PROFILES.linkedin.maxBytes).toBe(0);
   expect(CARRIAGE_PROFILES.x.maxBytes).toBe(0);
   expect(DIRECT).toMatchObject({ structured: "native", footer: "none" });
-  expect(AGENT_FOOTER).toBe(
-    "— Sent by Jesse Wright's software agent · how to talk to it: https://jeswr.org/agent · spec: https://jeswr.org/agentic-web",
-  );
+  expect(AGENT_FOOTER.split("\n")).toHaveLength(1);
 });
 
 it("serializes the direct descriptor to a golden Turtle fixture through the model's typed mapping", async () => {

@@ -30,7 +30,7 @@ import {
   SetFrom,
   TermWrapper,
 } from "@rdfjs/wrapper";
-import { DataFactory, Store, Writer } from "n3";
+import { DataFactory, Parser, Store, Writer } from "n3";
 
 const LDP = "http://www.w3.org/ns/ldp#";
 const POSIX = "http://www.w3.org/ns/posix/stat#";
@@ -39,6 +39,38 @@ const XSD = "http://www.w3.org/2001/XMLSchema#";
 const RDF_TYPE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
 const IANA = "http://www.w3.org/ns/iana/media-types/";
 const PIM_STORAGE = "http://www.w3.org/ns/pim/space#Storage";
+
+/** Find the envelope boundary without interpreting Turtle inside it. N3 validates the body. */
+function insertDataBody(source: string): string | null {
+  const header = /^\s*INSERT\s+DATA\s*\{/i.exec(source);
+  if (!header) return null;
+  const start = header[0].length;
+  let index = start;
+  while (index < source.length) {
+    const char = source[index];
+    if (char === "#") {
+      while (index < source.length && source[index] !== "\n" && source[index] !== "\r") index++;
+    } else if (char === "<" || char === '"' || char === "'") {
+      const delimiter =
+        char === "<" ? ">" : source.startsWith(char.repeat(3), index) ? char.repeat(3) : char;
+      index += char === "<" ? 1 : delimiter.length;
+      let closed = false;
+      while (index < source.length) {
+        if (source[index] === "\\") index += 2;
+        else if (source.startsWith(delimiter, index)) {
+          index += delimiter.length;
+          closed = true;
+          break;
+        } else index++;
+      }
+      if (!closed) return null;
+    } else if (char === "}") {
+      return source.slice(index + 1).trim() === "" ? source.slice(start, index) : null;
+    } else if (char === "{") return null;
+    else index++;
+  }
+  return null;
+}
 
 class ListedResource extends TermWrapper {
   get types(): Set<string> {
@@ -421,6 +453,63 @@ export function createDemoPod(options: DemoPodOptions): DemoPod {
       : response;
   };
 
+  // Deliberately small SPARQL-Update subset. Only the envelope is recognised
+  // here: RDF syntax, including strings containing braces, belongs to N3.
+  const patch = async (url: string, init: RequestInit, headers: Headers): Promise<Response> => {
+    if (
+      headers.get("content-type")?.split(";")[0]?.trim().toLowerCase() !==
+      "application/sparql-update"
+    )
+      return respond(415);
+    const conditions = new Headers(headers);
+    const ifMatch = headers.get("if-match");
+    // If-Match uses strong comparison. Weak cache validators remain valid for
+    // If-None-Match, but cannot authorize an append to a particular version.
+    if (ifMatch !== null)
+      conditions.set(
+        "if-match",
+        ifMatch
+          .split(",")
+          .filter((tag) => !tag.trim().startsWith("W/"))
+          .join(","),
+      );
+    const source = new TextDecoder().decode(await bodyBytes(init.body));
+    const insert = insertDataBody(source);
+    if (insert === null) return respond(422);
+    if (preconditionFails(url, conditions)) return respond(412);
+    const existing = resources.get(url);
+    if (!existing && conditions.get("if-none-match") !== "*") return respond(404);
+    if (isContainerUrl(url)) return respond(422);
+    if (
+      existing &&
+      !["text/turtle", "application/n-triples"].includes(
+        existing.contentType.split(";")[0]?.trim().toLowerCase() as string,
+      )
+    )
+      return respond(415);
+    let dataset: Store;
+    try {
+      const parser = () => new Parser({ baseIRI: url, format: "text/turtle" });
+      dataset = new Store(existing ? parser().parse(new TextDecoder().decode(existing.body)) : []);
+      dataset.addQuads(parser().parse(insert));
+    } catch {
+      return respond(422);
+    }
+    const writer = new Writer({ format: "text/turtle" });
+    writer.addQuads([...dataset]);
+    const body = await new Promise<string>((resolve, reject) =>
+      writer.end((error, result) => (error ? reject(error) : resolve(result))),
+    );
+    // Recheck caller conditions after serialization and fence our read as well.
+    // write() does the final atomic check after materialising the body.
+    if (preconditionFails(url, conditions)) return respond(412);
+    const guarded = new Headers(conditions);
+    if (existing) guarded.set("if-match", existing.etag);
+    else guarded.set("if-none-match", "*");
+    guarded.set("content-type", "text/turtle");
+    return write(url, { body }, guarded);
+  };
+
   const remove = (url: string): Response => {
     if (url === root) return respond(405);
     const auxiliary = isAuxiliary(url);
@@ -463,13 +552,15 @@ export function createDemoPod(options: DemoPodOptions): DemoPod {
         return write(url, effectiveInit, headers);
       case "POST":
         return post(url, effectiveInit, headers);
+      case "PATCH":
+        return patch(url, effectiveInit, headers);
       case "DELETE":
         if (preconditionFails(url, headers)) return respond(412);
         return remove(url);
       case "OPTIONS":
-        return respond(204, { allow: "GET, HEAD, PUT, POST, DELETE, OPTIONS" });
+        return respond(204, { allow: "GET, HEAD, PUT, POST, PATCH, DELETE, OPTIONS" });
       default:
-        return respond(405, { allow: "GET, HEAD, PUT, POST, DELETE, OPTIONS" });
+        return respond(405, { allow: "GET, HEAD, PUT, POST, PATCH, DELETE, OPTIONS" });
     }
   };
 
