@@ -53,6 +53,7 @@ vi.mock("@jeswr/solid-elements/react", () => ({
 
 import { App } from "../App";
 import { signInProviders } from "../LoginScreen";
+import { IssuerChoiceRequiredError } from "./issuer-choice";
 import { type SessionContextValue, SessionProvider, useSession } from "./SessionProvider";
 
 let session: SessionContextValue;
@@ -273,6 +274,43 @@ describe("Drive shared authentication", () => {
     );
     expect(auth.login).not.toHaveBeenCalled();
     expect(session.pending).toBeNull();
+  });
+
+  it("offers a WebID's several providers and keeps the WebID when one is chosen", async () => {
+    const other = "https://other.example/";
+    const fake = fakePodAuth();
+    fake.auth.login
+      .mockRejectedValueOnce(new IssuerChoiceRequiredError([ISSUER, other]))
+      .mockRejectedValueOnce(new CodeRequestCancelledError(new URL(`${other}authorize`)));
+    mount(fake);
+    await ready();
+    submitAddress(WEB_ID);
+    expect(await screen.findByText(`Choose the provider for ${new URL(WEB_ID).host}`)).toBeVisible();
+    expect(session.issuerChoice).toEqual({ webId: WEB_ID, issuers: [ISSUER, other] });
+    expect(screen.getByRole("button", { name: "Home provider" })).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "other.example" }));
+    await waitFor(() =>
+      expect(fake.auth.login).toHaveBeenLastCalledWith({ webId: WEB_ID, issuer: other }),
+    );
+    // A failed choice keeps the list, so the person can pick again.
+    expect(await screen.findByRole("alert")).toHaveTextContent("Sign-in was cancelled.");
+    expect(session.issuerChoice?.issuers).toEqual([ISSUER, other]);
+    fireEvent.click(screen.getByRole("button", { name: "Home provider" }));
+    await waitFor(() =>
+      expect(fake.auth.login).toHaveBeenLastCalledWith({ webId: WEB_ID, issuer: ISSUER }),
+    );
+    await waitFor(() => expect(session.issuerChoice).toBeUndefined());
+  });
+
+  it("a provider outside the listed choice signs in with that provider alone", async () => {
+    const fake = fakePodAuth();
+    fake.auth.login.mockRejectedValueOnce(new IssuerChoiceRequiredError([ISSUER]));
+    mount(fake);
+    await ready();
+    submitAddress(WEB_ID);
+    await waitFor(() => expect(session.issuerChoice).toBeDefined());
+    await act(async () => session.loginWithIssuer("https://elsewhere.example/"));
+    expect(fake.auth.login).toHaveBeenLastCalledWith({ issuer: "https://elsewhere.example/" });
   });
 
   it("uses recent-provider storage for the custom address suggestions", async () => {

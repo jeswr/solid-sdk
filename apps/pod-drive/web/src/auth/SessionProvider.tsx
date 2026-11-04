@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import type { Identity, LoginHint, PodAuth } from "@jeswr/pod-auth";
 import { createRecentProvidersStore, resolveLoginTarget } from "@jeswr/pod-auth/directory";
+import { sameIssuer } from "@jeswr/reactive-authentication";
 import type { AuthorizationCodeFlow } from "@jeswr/reactive-authentication/elements";
 import type { SignInCardProps, SignInRecentAccount } from "@jeswr/suite-ui/sign-in";
 import {
@@ -14,6 +15,7 @@ import {
   useState,
 } from "react";
 import { authFlowHolder, lazyElementGetCode } from "./auth-flow-holder";
+import { IssuerChoiceRequiredError } from "./issuer-choice";
 import { allowInsecureLoopback, getPodAuth, publicFetch } from "./pod-auth";
 import { readProfile } from "./profile";
 import { type DerivedSession, deriveSession } from "./session-derivation";
@@ -31,6 +33,8 @@ export interface SessionContextValue {
   pending: Pending;
   recentAccounts: SignInRecentAccount[];
   recentProviders: string[];
+  /** Set when a WebID lists several providers; the card then offers just those, keeping the WebID. */
+  issuerChoice?: { webId: string; issuers: readonly string[] };
   loginWithAddress(input: string, kind?: "webid" | "custom"): Promise<void>;
   loginWithIssuer(issuer: string): Promise<void>;
   loginWithAccount(webId: string): Promise<void>;
@@ -108,6 +112,7 @@ export function SessionProvider({
   const [ready, setReady] = useState(false);
   const [pending, setPending] = useState<Pending>(null);
   const [error, setError] = useState<string | null>(null);
+  const [issuerChoice, setIssuerChoice] = useState<SessionContextValue["issuerChoice"]>();
   const [recentAccounts, setRecentAccounts] = useState<SignInRecentAccount[]>([]);
   const store = useMemo(recentProvidersStore, []);
   const [recentProviders, setRecentProviders] = useState(() => store.list());
@@ -222,7 +227,11 @@ export function SessionProvider({
   }, [identity]);
 
   const runLogin = useCallback(
-    async (action: NonNullable<Pending>, target: () => Promise<LoginHint>) => {
+    async (
+      action: NonNullable<Pending>,
+      target: () => Promise<LoginHint>,
+      choice?: SessionContextValue["issuerChoice"],
+    ) => {
       const core = authRef.current;
       if (!core || !ready || activeLogin.current) return;
       const attempt = Symbol();
@@ -230,10 +239,12 @@ export function SessionProvider({
       activeLogin.current = attempt;
       setPending(action);
       setError(null);
+      setIssuerChoice(undefined);
+      let hint: LoginHint | undefined;
       const current = () =>
         mounted.current && generation.current === started && activeLogin.current === attempt;
       try {
-        const hint = await target();
+        hint = await target();
         if (!current()) return;
         const loggedIn = await core.login(hint);
         if (!current()) return;
@@ -241,7 +252,13 @@ export function SessionProvider({
         setRecentProviders(store.list());
         setIdentity(loggedIn);
       } catch (failure) {
-        if (current()) setError(signInError(failure));
+        if (current()) {
+          setError(signInError(failure));
+          // Offer the WebID's own providers and keep the WebID; a failed choice keeps the list.
+          if (failure instanceof IssuerChoiceRequiredError && hint?.webId)
+            setIssuerChoice({ webId: hint.webId, issuers: failure.issuers });
+          else if (choice) setIssuerChoice(choice);
+        }
       } finally {
         if (activeLogin.current === attempt) {
           activeLogin.current = null;
@@ -265,8 +282,17 @@ export function SessionProvider({
     [runLogin],
   );
   const loginWithIssuer = useCallback(
-    (issuer: string) => runLogin({ kind: "provider", key: issuer }, async () => ({ issuer })),
-    [runLogin],
+    (issuer: string) => {
+      const choice = issuerChoice?.issuers.some((listed) => sameIssuer(listed, issuer))
+        ? issuerChoice
+        : undefined;
+      return runLogin(
+        { kind: "provider", key: issuer },
+        async () => (choice ? { webId: choice.webId, issuer } : { issuer }),
+        choice,
+      );
+    },
+    [runLogin, issuerChoice],
   );
   const loginWithAccount = useCallback(
     (webId: string) =>
@@ -283,6 +309,7 @@ export function SessionProvider({
     setIdentity(null);
     setSession(null);
     setError(null);
+    setIssuerChoice(undefined);
     try {
       await authRef.current?.logout();
     } catch {
@@ -309,6 +336,7 @@ export function SessionProvider({
     pending,
     recentAccounts,
     recentProviders,
+    issuerChoice,
     loginWithAddress,
     loginWithIssuer,
     loginWithAccount,
