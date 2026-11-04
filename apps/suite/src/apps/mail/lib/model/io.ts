@@ -8,6 +8,12 @@ import { MailboxDataset } from "./mailbox.js";
 import { serialiseToTurtle } from "./serialise.js";
 import { TypeIndexDataset } from "./typeIndex.js";
 
+/**
+ * Message documents carry whole decoded bodies as literals, which can exceed fetch-rdf's default
+ * 1 MiB term budget. Allow terms up to the default 16 MiB document budget so an accepted
+ * message never becomes unreadable; the document byte budget still bounds the parse.
+ */
+export const MAIL_MAX_TERM_LENGTH = 16 * 1024 * 1024;
 export class MailError extends Error {
   constructor(
     public readonly code: "not-found" | "forbidden" | "conflict" | "no-validator" | "http",
@@ -82,7 +88,10 @@ export class MailStore {
   }
   async load(url: string, create = false): Promise<LoadedMail> {
     try {
-      const result = await fetchRdf(url, { fetch: this.fetch });
+      const result = await fetchRdf(url, {
+        fetch: this.fetch,
+        maxTermLength: MAIL_MAX_TERM_LENGTH,
+      });
       return {
         mailbox: new MailboxDataset(result.dataset, DataFactory),
         url: result.url,

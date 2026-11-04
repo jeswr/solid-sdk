@@ -1,6 +1,8 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import assert from "node:assert/strict";
 import { createMemoryStore } from "@key-value-kit/storage/memory";
+import { UnsecuredJWT } from "jose";
 import { test, vi } from "vitest";
 import { challengeContext } from "../src/challenge.js";
 import { LWS_STORAGE_REL, TOKEN_EXCHANGE_GRANT, TokenType } from "../src/lws/constants.js";
@@ -285,6 +287,132 @@ test("same-origin HTTP PRM requires allowInsecureRequests before any discovery o
 
 const prm = (fields) => Response.json({ resource, authorization_servers: [issuer], ...fields });
 const at = (url, response) => (request) => (request.url === url ? response() : undefined);
+
+for (const legacy of [false, true]) {
+  const form = legacy ? "legacy" : "RFC 9728";
+  const header = legacy ? `Bearer as_uri="${origin}/", realm="${origin}/root/"` : undefined;
+  const discovery = at(`${origin}/.well-known/lws-configuration`, () =>
+    Response.json({ issuer: `${origin}/`, token_endpoint: tokenEndpoint }),
+  );
+
+  for (const [format, accessToken] of [
+    ["opaque", (i) => `opaque-${i}`],
+    [
+      "JWT",
+      (i) => new UnsecuredJWT({ exp: Math.floor(Date.now() / 1000) + 60, jti: `${i}` }).encode(),
+    ],
+    ["malformed JWT", (i) => `not.a.jwt-${i}`],
+  ]) {
+    test(`${form} does not cache ${format} access tokens without expires_in`, async () => {
+      const exchange = vi.fn(() =>
+        Response.json({
+          access_token: accessToken(exchange.mock.calls.length),
+          token_type: "Bearer",
+        }),
+      );
+      const f = fixture({
+        header,
+        respond: (request) => (request.url === tokenEndpoint ? exchange() : discovery(request)),
+      });
+      const fence = new SessionFence(`lws-no-expiry-${crypto.randomUUID()}`, { broadcast: false });
+      const tokenStore = createMemoryStore();
+      const write = vi.spyOn(tokenStore, "setItem");
+      const shared = { namespace: fence.namespace, fence, tokenStore };
+      const { manager } = f.client(shared);
+      const now = Date.now();
+      const clock = vi.spyOn(Date, "now").mockReturnValue(now);
+      try {
+        assert.equal((await f.http.fetch(resource)).status, 401);
+        assert.equal((await manager.fetch(resource)).status, 200);
+        assert.equal((await manager.fetch(`${origin}/root/another`)).status, 200);
+        assert.equal(exchange.mock.calls.length, 2, "even immediate requests exchange again");
+        clock.mockReturnValue(now + 60_000);
+        const peer = f.client(shared);
+        const responses = await Promise.all([
+          manager.fetch(resource),
+          peer.manager.fetch(resource),
+        ]);
+        assert.ok(responses.every((response) => response.status === 200));
+        assert.equal(
+          exchange.mock.calls.length,
+          4,
+          "concurrent instances cannot reuse unknown lifetimes",
+        );
+        assert.equal(new Set(f.accepted).size, 4, "every request presents its fresh token");
+        assert.equal(write.mock.calls.length, 0, "unknown lifetimes are never persisted");
+      } finally {
+        clock.mockRestore();
+        fence.close();
+      }
+    });
+  }
+
+  test(`${form} discards stored access tokens without expiry`, async () => {
+    const f = fixture({ header, respond: discovery });
+    const fence = new SessionFence(`lws-stored-expiry-${crypto.randomUUID()}`, {
+      broadcast: false,
+    });
+    const tokenStore = createMemoryStore();
+    const write = vi.spyOn(tokenStore, "setItem");
+    const shared = { namespace: fence.namespace, fence, tokenStore };
+    const { manager } = f.client(shared);
+    try {
+      assert.equal((await manager.fetch(resource)).status, 200);
+      const [key, stamped] = write.mock.calls[0];
+      await tokenStore.setItem(key, {
+        ...stamped,
+        value: { accessToken: stamped.value.accessToken },
+      });
+      const peer = f.client(shared);
+      assert.equal((await peer.manager.fetch(resource)).status, 200);
+      assert.equal(f.exchanges.length, 2, "a legacy record without expiry is exchanged again");
+      assert.notEqual(f.accepted[0], f.accepted[1]);
+      assert.equal((await manager.fetch(resource)).status, 200);
+      assert.equal(f.exchanges.length, 2, "the replacement with a known lifetime remains cached");
+    } finally {
+      fence.close();
+    }
+  });
+}
+
+test("logout fences an LWS exchange without expires_in before its token can be attached", async () => {
+  const started = Promise.withResolvers();
+  const gate = Promise.withResolvers();
+  const exchange = vi.fn(async () => {
+    if (exchange.mock.calls.length === 1) {
+      started.resolve();
+      await gate.promise;
+    }
+    return Response.json({ access_token: "unknown-lifetime", token_type: "Bearer" });
+  });
+  const f = fixture({ respond: at(tokenEndpoint, exchange) });
+  const fence = new SessionFence(`lws-no-expiry-logout-${crypto.randomUUID()}`, {
+    broadcast: false,
+  });
+  const tokenStore = createMemoryStore();
+  const write = vi.spyOn(tokenStore, "setItem");
+  const { manager, provider } = f.client({ namespace: fence.namespace, fence, tokenStore });
+  const pending = manager.fetch(resource);
+  const failed = assert.rejects(
+    pending,
+    (error) => error.name === "AbortError" || error.name === "SessionSupersededError",
+  );
+  try {
+    await started.promise;
+    await provider.forget();
+    gate.resolve();
+    await failed;
+    assert.deepEqual(f.accepted, [], "logout prevents disclosure of the late token");
+    assert.equal((await manager.fetch(resource)).status, 200);
+    assert.equal(exchange.mock.calls.length, 2, "the next session exchanges again");
+    assert.equal(write.mock.calls.length, 0);
+  } finally {
+    gate.resolve();
+    await Promise.allSettled([pending, failed]);
+    fence.close();
+  }
+});
+
 const opaqueRedirect = () => {
   const response = new Response(null);
   Object.defineProperty(response, "type", { value: "opaqueredirect" });

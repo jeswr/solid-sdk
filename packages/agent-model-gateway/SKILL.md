@@ -6,8 +6,11 @@ description: Use when working on the reader and proposer model gateway surface i
 
 # @jeswr/agent-model-gateway
 
-This is the A-003 scaffold, not an implemented API. Read the agent DESIGN §2 and the
-package README before adding behavior. Root and `./testing` modules are reserved.
+A-011 implements createGateway, Reader extraction, Proposer tools and caller-owned model
+call counters. Read agent DESIGN §2 and §6 and the README before changing behavior.
+The root is the runtime API; `./testing` contains only synthetic provider fakes.
+Keep origins provider-pinned, Reader tool-free, Proposer restricted to the four declared
+tools, and credentials behind TokenProvider.read. The gateway never persists audit or proposals.
 
 Follow ADR-001 D4: Node >=24, ESM exports, workspace dependencies, strict TypeScript,
 Biome, and Vitest. Maintain 100% branches/functions/lines/statements coverage.

@@ -21,7 +21,11 @@ D5 redirect + Client ID Document, D7 share, D9 hardening) and sdk-core `ADR-004-
   `SuiteShareIntake`, `SuiteShareStaging`, `SuiteSecureStore`, `SuiteFiles` and `Share`. Changing a plugin method means changing the Swift/Java plugin
   in `apps/mobile` in the same PR.
 - Everything from native code is untrusted: validate with `validateShareBatch` and enforce sizes in
-  `readFile`; native code validates too.
+  `readFile`; native code validates too. The sending app declares a shared file's type, so active
+  types (HTML, XML, SVG, script) become `application/octet-stream`. `sanitiseFileName` also
+  replaces `%`, `?`, `#`, `:`, C1 controls and bidi overrides, and caps names at 255 UTF-8 bytes.
+- The driver refuses authorization URLs carrying `request` or `request_uri` (JAR/PAR would bypass
+  its checks) and drops an IdP error description outside the RFC 6749 charset.
 - The redirect URI is the private-use scheme `org.jeswr.suite:/oauth/callback`; the Client ID
   Document is served from the suite origin at `/.well-known/solid-client-id-mobile.jsonld`.
 
@@ -102,7 +106,8 @@ Read `solid-suite-planning/specs/mobile/P4-SECURE-STORE.md` completely before ch
 - An aborted `get` rejects immediately with `cancelled`, requests native `cancel()`, drops late
   results and removes its listener. An already-aborted signal calls neither native method.
   `cancelled`, `background` and `lockout` never justify deleting a session.
-- `refreshTokenKey({ issuer, webId, clientId })` is `pod-auth:refresh:` plus the lowercase hex
+- `refreshTokenKey({ issuer, webId, clientId })` (each a non-empty string, else TypeError) is
+  `pod-auth:refresh:` plus the lowercase hex
   WebCrypto SHA-256 of `JSON.stringify([issuer, webId, clientId])`, without URL normalisation.
   Store only refresh tokens. Gate them when user presence is supported and unlock is enabled.
 - Keep the root pure and `secureStorePlugin` in `./capacitor`. There is no web fallback;

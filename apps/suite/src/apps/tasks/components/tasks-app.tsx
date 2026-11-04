@@ -10,6 +10,7 @@ import {
   useCallback,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -20,6 +21,7 @@ import { PodSessionProvider, usePodSessionState } from "@/lib/session/pod-sessio
 import { parseQuickAdd } from "../lib/compose/quick-add";
 import { classifyError } from "../lib/model/errors";
 import { isEditing, openAddTask } from "../state/add-focus";
+import { useReminderScheduler } from "../state/reminders";
 import { TasksProvider, useTasks } from "../state/tasks-context";
 import { Composer } from "./composer/composer";
 import { TaskDetail } from "./detail/task-detail";
@@ -82,14 +84,37 @@ function TasksChrome({ children }: { children: ReactNode }) {
       }),
     [tasks.cache, taskUrl, params, pathname, router],
   );
+  // Reminder notifications and toasts open the same `?task=` detail pane as a task row.
+  useReminderScheduler(tasks.cache, (url) => {
+    const query = new URLSearchParams(params.toString());
+    query.set("task", encodeRef(url));
+    router.push(`${pathname}?${query}`, { scroll: false });
+  });
   const origin = useRef<string | undefined>(undefined);
+  const returnTo = useRef<string | undefined>(undefined);
+  // A narrow-viewport details Sheet restores focus itself once it unmounts; point it at the
+  // originating row (06-tasks §2.8) rather than the link that opened it, which re-renders.
+  const detailsReturnFocus = useMemo(
+    () => ({
+      get current() {
+        const url = origin.current ?? returnTo.current;
+        return url
+          ? document.querySelector<HTMLElement>(`[data-task-url="${CSS.escape(url)}"]`)
+          : null;
+      },
+    }),
+    [],
+  );
   useEffect(() => {
+    // A new pane must not fall back to a row from an earlier, already closed pane.
+    if (taskRef !== null) returnTo.current = undefined;
     if (taskRef !== null && origin.current === undefined) {
       const row = document.activeElement?.closest<HTMLElement>("[data-task-url]");
       origin.current = row?.dataset.taskUrl ?? taskUrl;
     }
     if (taskRef === null && origin.current) {
       const url = origin.current;
+      returnTo.current = url;
       origin.current = undefined;
       requestAnimationFrame(() =>
         requestAnimationFrame(() =>
@@ -105,8 +130,10 @@ function TasksChrome({ children }: { children: ReactNode }) {
     if (document.activeElement?.matches('.tsk-detail input[aria-label="Sub-task title"]')) return;
     const query = new URLSearchParams(params.toString());
     query.delete("task");
-    router.replace(`${pathname}${query.size ? `?${query}` : ""}`, { scroll: false });
-  }, [params, pathname, router]);
+    // Native replaceState syncs with useSearchParams. router.replace ignores a same-pathname
+    // replace after a hard load of a `?task=` URL, so a shared link's pane could not close.
+    window.history.replaceState(null, "", `${pathname}${query.size ? `?${query}` : ""}`);
+  }, [params, pathname]);
   useEffect(() => {
     if (taskRef === null) return;
     const keydown = (event: KeyboardEvent) => {
@@ -212,6 +239,7 @@ function TasksChrome({ children }: { children: ReactNode }) {
           ) : undefined
         }
         details={details}
+        detailsReturnFocus={detailsReturnFocus}
         onDetailsClose={closeDetails}
       >
         {quickAdd && inbox && (

@@ -1,3 +1,8 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-/** Reserved channels/lws-websocket entry point for @jeswr/pod-notifications; implementation follows T-001. */
-export {};
+import { createWebSocketChannel, type WebSocketChannelOptions } from "./websocket.js";
+
+export type { WebSocketChannelOptions } from "./websocket.js";
+/** Batch all LWS topics into one WebSocketSubscription and delete it on close. */
+export function createLwsWebSocketChannel(options: WebSocketChannelOptions) {
+  return createWebSocketChannel(options, "lws");
+}

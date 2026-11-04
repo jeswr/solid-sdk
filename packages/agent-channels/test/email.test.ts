@@ -1,0 +1,681 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
+import { type AnyMessage, canonicalJson, digestBytes, digestOf } from "@jeswr/agent-model";
+import { expect, it, vi } from "vitest";
+import { parseEmail } from "../../agentic-legacy-bridge/src/email/parse.js";
+import { envelope } from "../src/direct/shared.js";
+import { renderBodies, renderHuman, summaryLines } from "../src/email/bodies.js";
+import { createEmailRenderer } from "../src/email-mime/send.js";
+import {
+  assertEmailAddress,
+  assertFooter,
+  decodeEmailProposal,
+  emailMessageIdFor,
+  inspectEmail,
+  MAX_EMAIL_BYTES,
+  verifyProviderCopy,
+} from "../src/email-mime.js";
+import { AGENT_FOOTER, EMAIL_MIME } from "../src/profiles.js";
+import { at, message, signed, verifyMessage } from "./fixtures/signed.js";
+
+const from = "sender@example.test";
+const recipient = "receiver@example.test";
+const config = { parseEmail, recipient, ownAccounts: new Set([recipient]), footer: AGENT_FOOTER };
+const renderOptions = {
+  from,
+  footer: AGENT_FOOTER,
+  recipients: new Map([[message.to?.actor as string, recipient]]),
+  verify: verifyMessage,
+  now: () => at,
+};
+const wireFor = async (value: unknown = message) =>
+  createEmailRenderer(renderOptions).render(signed(value), EMAIL_MIME);
+const base64 = (text: string) =>
+  (
+    Buffer.from(text)
+      .toString("base64")
+      .match(/.{1,76}/g) ?? []
+  ).join("\r\n");
+const rewrite = (raw: string, oldText: string, text: string) =>
+  raw.replace(base64(oldText), base64(text));
+
+it("renders exact deterministic MIME with three copies, approved footer and legacy BridgeMessage observations", async () => {
+  const renderer = createEmailRenderer(renderOptions);
+  const proposal = signed();
+  const wire = await renderer.render(proposal, EMAIL_MIME);
+  expect(wire).toEqual(await renderer.render(proposal, { ...EMAIL_MIME }));
+  expect(wire.bytes).toContain("X-Agentic-Reply: 1\r\n");
+  expect(wire.bytes).not.toContain("List-Unsubscribe:");
+  expect(wire.digest).toBe(digestBytes(wire.bytes));
+  const parsed = inspectEmail(wire.bytes, config);
+  expect(parsed).toMatchObject({
+    parity: "match",
+    proposal,
+    message: {
+      channel: "email",
+      sender: { handle: from },
+      rawSha256: wire.digest.slice(8),
+      warnings: ["signature-unverified"],
+    },
+  });
+  expect(parsed).not.toHaveProperty("root");
+  expect(parsed.message.textBody).not.toContain("<html>");
+  expect(parsed.message.textBody).toContain(AGENT_FOOTER);
+  expect(parsed.message.jsonLdBlocks).toHaveLength(2);
+  expect(parsed.message.signals["x-agentic-reply"]).toBe("1");
+  expect(await renderer.validate(wire, proposal)).toEqual({ ok: true });
+  expect(emailMessageIdFor(message.id)).toMatch(/^<awp-[a-f0-9]{40}@awp-pilot\.invalid>$/);
+  expect(inspectEmail(Buffer.from(wire.bytes), config).parity).toBe("match");
+});
+
+it("defaults the footer from one config constant and preserves custom-footer STRICT parity", async () => {
+  const { footer: _footer, ...defaults } = renderOptions;
+  const { footer: _configFooter, ...defaultConfig } = config;
+  const proposal = signed();
+  const wire = await createEmailRenderer(defaults).render(proposal, EMAIL_MIME);
+  expect(wire).toEqual(await createEmailRenderer(renderOptions).render(proposal, EMAIL_MIME));
+  expect(inspectEmail(wire.bytes, defaultConfig).parity).toBe("match");
+  const footer = "— Sent by a configured software agent · https://configured.example/agent";
+  const custom = await createEmailRenderer({ ...defaults, footer }).render(proposal, EMAIL_MIME);
+  expect(inspectEmail(custom.bytes, { ...defaultConfig, footer }).parity).toBe("match");
+  expect(parseEmail(custom.bytes).textBody).toContain(footer);
+  expect(parseEmail(custom.bytes).textBody).not.toContain(AGENT_FOOTER);
+  expect(() => inspectEmail(custom.bytes, defaultConfig)).toThrow("human-parity-mismatch");
+});
+
+it.each([
+  "propose",
+  "accept",
+  "receipt",
+] as const)("keeps %s MIME identical when the verifier reconstructs object key order", async (kind) => {
+  const object = { z: 2, a: 1 };
+  const terms = { object, array: [{ z: 4, a: 3 }, object] };
+  const cases = {
+    propose: {
+      body: {
+        operation: { id: "urn:op", version: "1" },
+        round: 1,
+        terms,
+        termsDigest: digestOf(terms),
+      },
+      summaries: ['Term object: {"a":1,"z":2}', 'Term array: [{"a":3,"z":4},{"a":1,"z":2}]'],
+    },
+    accept: {
+      body: {
+        proposal: "urn:proposal",
+        agreement: "urn:agreement",
+        termsDigest: digestOf(terms),
+        selection: terms,
+      },
+      summaries: ['Selection: {"array":[{"a":3,"z":4},{"a":1,"z":2}],"object":{"a":1,"z":2}}'],
+    },
+    receipt: {
+      body: {
+        ref: "urn:invocation",
+        activity: "urn:activity",
+        outcome: "completed",
+        observed: terms,
+      },
+      summaries: ['Observed: {"array":[{"a":3,"z":4},{"a":1,"z":2}],"object":{"a":1,"z":2}}'],
+    },
+  };
+  const { body, summaries } = cases[kind];
+  const proposal = signed({ ...message, kind, body });
+  const renderer = createEmailRenderer({
+    ...renderOptions,
+    verify: async (jws) => {
+      expect(await verifyMessage(jws)).toEqual(proposal.message);
+      return proposal.message;
+    },
+  });
+  const wire = await renderer.render(proposal, EMAIL_MIME);
+  expect(wire).toEqual(await createEmailRenderer(renderOptions).render(proposal, EMAIL_MIME));
+  expect(await renderer.validate(wire, proposal)).toEqual({ ok: true });
+  const parsed = inspectEmail(Buffer.from(wire.bytes), config);
+  expect(parsed.parity).toBe("match");
+  for (const summary of summaries) expect(parsed.message.textBody).toContain(summary);
+});
+
+it.for([
+  null,
+  true,
+  1,
+  {},
+  [],
+  ["Alice", "Bob"],
+  [null],
+  [true, 1],
+  [[]],
+  [{}],
+  [{ start: "a" }],
+  [{ end: "b" }],
+  [{ start: 1, end: "b" }],
+  [{ start: "a", end: null }],
+  [{ start: "a", end: "b" }, "Alice"],
+])("renders nonscheduling candidates as JSON (%j)", async (candidates) => {
+  const terms = { candidates };
+  const value = {
+    ...message,
+    kind: "propose",
+    body: {
+      operation: { id: "urn:op", version: "1" },
+      round: 1,
+      terms,
+      termsDigest: digestOf(terms),
+    },
+  };
+  const wire = await wireFor(value);
+  const parsed = inspectEmail(Buffer.from(wire.bytes), config);
+  expect(parsed.parity).toBe("match");
+  expect(parsed.message.textBody).toContain(`Term candidates: ${canonicalJson(candidates)}`);
+  expect(parsed.message.textBody).not.toContain("Candidate times (UTC):");
+});
+
+it("retains scheduling summaries for arrays of time-slot objects", async () => {
+  const terms = {
+    candidates: [
+      { start: "2026-11-01T12:00:00Z", end: "2026-11-01T13:00:00Z" },
+      { start: "2026-11-02T12:00:00Z", end: "2026-11-02T13:00:00Z" },
+    ],
+  };
+  const wire = await wireFor({
+    ...message,
+    kind: "propose",
+    body: {
+      operation: { id: "urn:op", version: "1" },
+      round: 1,
+      terms,
+      termsDigest: digestOf(terms),
+    },
+  });
+  const parsed = inspectEmail(Buffer.from(wire.bytes), config);
+  expect(parsed.parity).toBe("match");
+  expect(parsed.message.textBody).toContain(
+    "Candidate times (UTC):\n  - 2026-11-01T12:00:00Z to 2026-11-01T13:00:00Z\n  - 2026-11-02T12:00:00Z to 2026-11-02T13:00:00Z",
+  );
+});
+
+it.each([
+  [`${"x".repeat(156)}😀 more`, `${"x".repeat(156)}😀...`],
+  [`${"x".repeat(157)}😀 more`, `${"x".repeat(157)}...`],
+  [`${"x".repeat(159)}😀`, `${"x".repeat(159)}😀`],
+  ["😀".repeat(160), "😀".repeat(160)],
+  ["😀".repeat(161), `${"😀".repeat(157)}...`],
+])("preserves Unicode code points in term summaries (%s)", async (text, expected) => {
+  const terms = { text };
+  const proposal = signed({
+    ...message,
+    kind: "propose",
+    body: {
+      operation: { id: "urn:op", version: "1" },
+      round: 1,
+      terms,
+      termsDigest: digestOf(terms),
+    },
+  });
+  const renderer = createEmailRenderer(renderOptions);
+  const wire = await renderer.render(proposal, EMAIL_MIME);
+  expect(await renderer.validate(wire, proposal)).toEqual({ ok: true });
+  const parsed = inspectEmail(Buffer.from(wire.bytes), config);
+  expect(parsed.parity).toBe("match");
+  expect(parsed.message.textBody).toContain(`Term text: ${expected}`);
+  expect(parsed.message.textBody).not.toContain("\uFFFD");
+});
+
+it("rejects changed visible parts under STRICT and preserves unverified human mail under LENIENT", async () => {
+  const wire = await wireFor();
+  const proposal = signed();
+  const { human, html, carrier } = renderBodies(message, proposal.compactJws, config.footer);
+  for (const altered of [
+    rewrite(wire.bytes, human, "different terms"),
+    rewrite(wire.bytes, html, `${html}<p>pay me</p>`),
+    wire.bytes.replace("Content-Type: text/plain", "X-Untrusted: yes\r\nContent-Type: text/plain"),
+    wire.bytes.replace("multipart/alternative", "multipart/mixed"),
+  ]) {
+    expect(() => inspectEmail(altered, config)).toThrow("human-parity-mismatch");
+    expect(inspectEmail(altered, { ...config, ownAccounts: new Set() })).toMatchObject({
+      parity: "unverified",
+      message: { warnings: ["signature-unverified", "human-parity-unverified"] },
+    });
+  }
+  // The trusted receiving account chooses parity; forged To cannot downgrade it.
+  expect(() =>
+    inspectEmail(
+      rewrite(wire.bytes.replace(recipient, "human@example.test"), human, "changed"),
+      config,
+    ),
+  ).toThrow("human-parity-mismatch");
+  const changedCarrier = ` ${carrier}`;
+  expect(() => inspectEmail(rewrite(wire.bytes, carrier, changedCarrier), config)).toThrow(
+    "human-parity-mismatch",
+  );
+  expect(inspectEmail(wire.bytes, { ...config, recipient: recipient.toUpperCase() }).parity).toBe(
+    "match",
+  );
+  const plain = inspectEmail("Subject: Human\r\n\r\nHello", config);
+  expect(plain.parity).toBe("none");
+  expect(plain.message.textBody).toBe("Hello");
+});
+
+it("normalizes CRLF and trailing newlines while preserving other human text", async () => {
+  const wire = await wireFor();
+  const human = renderHuman(message, config.footer);
+  for (const text of [`${human}\n\n`, `${human.replace(/\n/g, "\r\n")}\r\n\r\n`])
+    expect(inspectEmail(rewrite(wire.bytes, human, text), config).parity).toBe("match");
+  for (const text of ["", `${human}\r`, `${human}\n \n`])
+    expect(() => inspectEmail(rewrite(wire.bytes, human, text), config)).toThrow(
+      "human-parity-mismatch",
+    );
+});
+
+it("checks parity of long internal newline runs within the byte cap without stalling", async () => {
+  const wire = await wireFor();
+  const text = `${"\n".repeat(131072)}changed\n\n`;
+  const raw = rewrite(wire.bytes, renderHuman(message, config.footer), text);
+  expect(Buffer.byteLength(raw)).toBeLessThan(MAX_EMAIL_BYTES);
+  const start = performance.now();
+  expect(() => inspectEmail(raw, config)).toThrow("human-parity-mismatch");
+  expect(performance.now() - start).toBeLessThan(1000);
+});
+
+it("fails closed on conflicting/malformed carriers and leaves unrelated JSON-LD untrusted", async () => {
+  const raw = (await wireFor()).bytes;
+  const withBlocks = (blocks?: readonly string[]) => ({
+    ...config,
+    parseEmail: () => ({ ...parseEmail(raw), jsonLdBlocks: blocks }),
+  });
+  for (const block of [
+    '{"@type":"agent:SignedMessage",',
+    canonicalJson({ "@type": "agent:SignedMessage", "agent:compactJws": 1 }),
+    canonicalJson({ "@type": "agent:SignedMessage", "agent:compactJws": "a.b.c" }),
+  ])
+    expect(() => inspectEmail(raw, withBlocks([block]))).toThrow();
+  expect(() =>
+    inspectEmail(
+      raw,
+      withBlocks([
+        envelope(signed().compactJws),
+        envelope(signed({ ...message, id: "urn:other" }).compactJws),
+      ]),
+    ),
+  ).toThrow("conflicting");
+  for (const blocks of [undefined, [], ["not json", "null", "1", '"string"', '{"@type":"Person"}']])
+    expect(inspectEmail(raw, withBlocks(blocks)).parity).toBe("none");
+  expect(() => inspectEmail("x".repeat(MAX_EMAIL_BYTES + 1), config)).toThrow("byte cap");
+  expect(() =>
+    inspectEmail(raw, {
+      ...config,
+      parseEmail: () => {
+        throw new Error("parser refused");
+      },
+    }),
+  ).toThrow();
+});
+
+it.each([true, false])("checks carriers past the legacy block cap (STRICT=%s)", async (strict) => {
+  const proposal = signed();
+  const copy = envelope(proposal.compactJws);
+  const other = envelope(signed({ ...message, id: "urn:other" }).compactJws);
+  const script = (block: string) => `<script type="application/ld+json">${block}</script>`;
+  const options = { ...config, ownAccounts: strict ? config.ownAccounts : new Set<string>() };
+  for (const format of ["html", "mime"]) {
+    const rawFor = (last: string) => {
+      const blocks = [...Array<string>(8).fill(copy), last];
+      if (format === "html")
+        return `Content-Type: text/html; charset=utf-8\r\n\r\n${blocks.map(script).join("")}`;
+      return `Content-Type: multipart/mixed; boundary=copies\r\n\r\n${blocks
+        .map((block) => `--copies\r\nContent-Type: application/ld+json\r\n\r\n${block}\r\n`)
+        .join("")}--copies--\r\n`;
+    };
+    for (const last of [other, '{"@type":"agent:SignedMessage",']) {
+      const raw = rawFor(last);
+      expect(parseEmail(raw).jsonLdBlocks).toEqual(Array(8).fill(copy));
+      expect(() => inspectEmail(raw, options)).toThrow(
+        last === other ? "conflicting structured copies" : "malformed structured copy",
+      );
+    }
+    if (strict) expect(() => inspectEmail(rawFor(copy), options)).toThrow("human-parity-mismatch");
+    else
+      expect(inspectEmail(rawFor(copy), options)).toMatchObject({ proposal, parity: "unverified" });
+  }
+});
+
+it.each([
+  true,
+  false,
+])("checks carriers in HTML siblings the legacy parser omits (STRICT=%s)", async (strict) => {
+  const copy = envelope(signed().compactJws);
+  const other = envelope(signed({ ...message, id: "urn:other" }).compactJws);
+  const raw = [
+    'Content-Type: multipart/mixed; boundary="copies"',
+    "",
+    "--copies",
+    "Content-Type: application/ld+json",
+    "",
+    copy,
+    "--copies",
+    "Content-Type: text/html",
+    "",
+    "<p>First HTML body</p>",
+    "--copies",
+    "Content-Type: text/html; charset=utf-8",
+    "",
+    `İ<SCRIPT TYPE="application/ld+json">${other}</SCRIPT>`,
+    "--copies--",
+    "",
+  ].join("\r\n");
+  expect(parseEmail(raw).jsonLdBlocks).toEqual([copy]);
+  expect(() =>
+    inspectEmail(raw, { ...config, ownAccounts: strict ? config.ownAccounts : new Set() }),
+  ).toThrow("conflicting structured copies");
+});
+
+it("checks oversized carriers that the legacy parser drops", async () => {
+  const wire = await wireFor();
+  const { html, carrier } = renderBodies(message, signed().compactJws, config.footer);
+  const other = envelope(signed({ ...message, id: "urn:other" }).compactJws);
+  // Include an escaped type name: an unparseable block cannot be classified by substring.
+  const oversized = `${" ".repeat(65536)}${other.replace("SignedMessage", "Signed\\u004dessage")}`;
+  for (const raw of [
+    rewrite(wire.bytes, html, `${html}<script type="application/ld+json">${oversized}</script>`),
+    rewrite(wire.bytes, carrier, oversized),
+  ]) {
+    expect(parseEmail(raw).jsonLdBlocks).toContain(carrier);
+    expect(parseEmail(raw).jsonLdBlocks).not.toContain(oversized);
+    expect(Buffer.byteLength(raw)).toBeLessThan(MAX_EMAIL_BYTES);
+    expect(() => inspectEmail(raw, { ...config, ownAccounts: new Set() })).toThrow(
+      "malformed structured copy",
+    );
+  }
+});
+
+it("refuses proposals when MIME or HTML carrier extraction cannot complete", async () => {
+  const wire = await wireFor();
+  const { html } = renderBodies(message, signed().compactJws, config.footer);
+  for (const raw of [
+    wire.bytes.replace(/--agent-mixed-[a-f0-9]+--\r\n$/, ""),
+    wire.bytes.replace("charset=utf-8", "charset=iso-8859-1"),
+    rewrite(wire.bytes, html, `${html}<script type="application/ld+json"`),
+    rewrite(wire.bytes, html, `${html}<script type="application/ld+json">{`),
+    rewrite(wire.bytes, html, `${html}<script type="application/ld+json">{}</script`),
+    rewrite(wire.bytes, html, `${html}<script type="application/ld+json">{}</scripture>`),
+  ])
+    for (const ownAccounts of [config.ownAccounts, new Set<string>()])
+      expect(() => inspectEmail(raw, { ...config, ownAccounts })).toThrow(
+        "incomplete structured-copy extraction",
+      );
+});
+
+it("scans all HTML script attributes while leaving unrelated scripts and JSON-LD untrusted", async () => {
+  const wire = await wireFor();
+  const { html } = renderBodies(message, signed().compactJws, config.footer);
+  const other = envelope(signed({ ...message, id: "urn:other" }).compactJws);
+  for (const attrs of [
+    `${" ".repeat(1024)}type="application/ld+json"`,
+    `data-test='>' type="application/ld+json"`,
+  ]) {
+    const changed = rewrite(wire.bytes, html, `${html}<script ${attrs}>${other}</script>`);
+    expect(parseEmail(changed).jsonLdBlocks).toHaveLength(2);
+    expect(() => inspectEmail(changed, { ...config, ownAccounts: new Set() })).toThrow(
+      "conflicting structured copies",
+    );
+  }
+  const raw = rewrite(
+    wire.bytes,
+    html,
+    `${html}<script>untrusted</script><script type="application/ld+json">{}</script>`,
+  );
+  expect(inspectEmail(raw, { ...config, ownAccounts: new Set() })).toMatchObject({
+    proposal: signed(),
+    parity: "unverified",
+  });
+});
+
+it("requires the same signed payload, recipient, every header, bytes and digest at validation", async () => {
+  const renderer = createEmailRenderer(renderOptions);
+  const proposal = signed();
+  const wire = await renderer.render(proposal, EMAIL_MIME);
+  const bytes = wire.bytes.replace("To: receiver", "To: stranger");
+  expect(await renderer.validate({ ...wire, bytes, digest: digestBytes(bytes) }, proposal)).toEqual(
+    { ok: false, reason: "terms-digest-mismatch" },
+  );
+  for (const bad of [
+    { ...wire, digest: "changed" },
+    { ...wire, mediaType: "text/plain" },
+    { ...wire, bytes: 1 },
+    { ...wire, bytes: "x".repeat(MAX_EMAIL_BYTES + 1) },
+    { ...wire, extra: "Bcc" },
+  ])
+    expect(await renderer.validate(bad as never, proposal)).toEqual({
+      ok: false,
+      reason: "malformed",
+    });
+  await expect(renderer.render(proposal, { ...EMAIL_MIME, footer: "none" })).rejects.toThrow(
+    "carriage",
+  );
+  await expect(
+    renderer.render({ ...proposal, message: { ...message, id: "urn:tampered" } }, EMAIL_MIME),
+  ).rejects.toThrow("differs");
+  await expect(
+    createEmailRenderer({ ...renderOptions, verify: async () => ({}) }).render(
+      proposal,
+      EMAIL_MIME,
+    ),
+  ).rejects.toThrow("differs");
+  await expect(
+    createEmailRenderer({
+      ...renderOptions,
+      verify: async () => ({ ...message, id: "urn:other" }),
+    }).render(proposal, EMAIL_MIME),
+  ).rejects.toThrow("differs");
+  await expect(
+    createEmailRenderer({ ...renderOptions, recipients: new Map() }).render(proposal, EMAIL_MIME),
+  ).rejects.toThrow("pinned");
+  await expect(
+    createEmailRenderer(renderOptions).render(signed({ ...message, to: null }), EMAIL_MIME),
+  ).rejects.toThrow();
+  for (const now of [() => at + 24 * 3600000, () => at - 24 * 3600000, () => NaN])
+    expect(await createEmailRenderer({ ...renderOptions, now }).validate(wire, proposal)).toEqual({
+      ok: false,
+      reason: "malformed",
+    });
+  expect(
+    await createEmailRenderer({ ...renderOptions, now: undefined }).validate(wire, proposal),
+  ).toEqual({ ok: false, reason: "malformed" });
+  const cyclic = { ...message, body: {} as Record<string, unknown> };
+  cyclic.body.self = cyclic;
+  await expect(
+    renderer.render({ ...proposal, message: cyclic as never }, EMAIL_MIME),
+  ).rejects.toThrow();
+  const spy = vi.fn(verifyMessage);
+  await expect(
+    createEmailRenderer({ ...renderOptions, verify: spy }).render(
+      { ...proposal, compactJws: "bad" },
+      EMAIL_MIME,
+    ),
+  ).rejects.toThrow();
+  expect(spy).not.toHaveBeenCalled();
+});
+
+it("accepts provider-added headers and rejects recipient smuggling, changed signed bytes and original headers", async () => {
+  const raw = (await wireFor()).bytes;
+  const expected = { sent: raw, config };
+  expect(verifyProviderCopy(Buffer.from(`Received: by google.test\r\n${raw}`), expected)).toBe(
+    true,
+  );
+  for (const name of ["Cc", "Bcc", "Resent-To", "Resent-Cc", "Resent-Bcc", "Reply-To", "Sender"])
+    expect(
+      verifyProviderCopy(Buffer.from(`${name}: stranger@example.test\r\n${raw}`), expected),
+    ).toBe(false);
+  for (const altered of [
+    raw.replace("From: sender", "From: stranger"),
+    raw.replace("Subject: [Agent]", "Subject: changed"),
+    `To: extra@example.test\r\n${raw}`,
+    "not MIME",
+    (await wireFor({ ...message, id: "urn:another" })).bytes,
+  ])
+    expect(verifyProviderCopy(Buffer.from(altered), expected)).toBe(false);
+  expect(verifyProviderCopy(Buffer.from(raw), { ...expected, sent: "plain message" })).toBe(false);
+});
+
+it("refuses injectable address/footer values and malformed signed payloads", () => {
+  for (const value of ["bad", "a@b\r\nBcc:x@y", "Name <a@b>", "a@b,c@d", "x".repeat(255), 1])
+    expect(() => assertEmailAddress(value as string)).toThrow();
+  for (const value of ["", " ", "x\nline", "\u2028", "x".repeat(2049), 1])
+    expect(() => assertFooter(value as string)).toThrow();
+  assertFooter(AGENT_FOOTER);
+  assertEmailAddress(from);
+  for (const value of ["invalid", "a..b", "x".repeat(65537), 1, "a.e30.c", "a._w.c", "a.eA.c"])
+    expect(() => decodeEmailProposal(value as string)).toThrow();
+  expect(() => createEmailRenderer({ ...renderOptions, from: "a@b\nBcc:c@d" })).toThrow();
+  expect(() =>
+    createEmailRenderer({ ...renderOptions, recipients: new Map([["actor", "bad"]]) }),
+  ).toThrow();
+});
+
+it("retains all pilot summary branches and escapes hostile text in HTML", () => {
+  const digest = digestBytes("terms");
+  const op = { id: "https://example.test/op", version: "1" };
+  const bodies = [
+    [
+      "propose",
+      {
+        operation: op,
+        round: 1,
+        termsDigest: digest,
+        terms: { candidates: [{ start: "a", end: "b" }], z: "x".repeat(200), bool: true },
+      },
+    ],
+    [
+      "accept",
+      { proposal: "urn:p", agreement: "urn:a", termsDigest: digest, selection: { x: true } },
+    ],
+    ["accept", { proposal: "urn:p", agreement: "urn:a", termsDigest: digest }],
+    ["refuse", { reason: "malformed", detail: "x".repeat(400) }],
+    ["unsupported", { reason: "malformed" }],
+    ["indeterminate", { reason: "malformed" }],
+    ["invoke", { operation: op, basis: { kind: "public" }, purpose: "urn:purpose" }],
+    ["invoke", { operation: op, basis: { kind: "public" } }],
+    ["deliver", { operation: op, output: { a: 1 } }],
+    ["receipt", { activity: "urn:a", outcome: "success", final: true, observed: { a: 1 } }],
+    ["receipt", { activity: "urn:a", outcome: "uncertain" }],
+    ["describe", {}],
+    ["description", { description: {} }],
+  ] as const;
+  for (const [kind, body] of bodies) {
+    const m = {
+      ...message,
+      inReplyTo: "urn:previous",
+      from: { actor: '<actor>&"\u2028\u2029', operator: "urn:operator", onBehalfOf: "urn:person" },
+      kind,
+      body,
+    } as AnyMessage;
+    expect(summaryLines(m).length).toBeGreaterThan(3);
+    expect(renderHuman(m, "footer")).toContain("on behalf of");
+    expect(renderBodies(m, "<>&\u2028\u2029", "footer").html).toContain(
+      "\\u003c\\u003e\\u0026\\u2028\\u2029",
+    );
+  }
+  expect(renderHuman({ ...message, from: {} }, "footer")).toContain("an anonymous client");
+});
+
+it("bounds expanded human/HTML MIME bytes even for a bounded signed payload", async () => {
+  const terms = Object.fromEntries(
+    Array.from({ length: 3 }, (_, i) => ["&".repeat(15500) + i, "value"]),
+  );
+  const value = {
+    ...message,
+    kind: "propose",
+    body: {
+      operation: { id: "urn:op", version: "1" },
+      round: 1,
+      terms,
+      termsDigest: digestOf(terms),
+    },
+  };
+  await expect(wireFor(value)).rejects.toThrow("local byte cap");
+});
+it("refuses a provider copy whose human rendering is changed", async () => {
+  const wire = await wireFor();
+  const human = renderHuman(message, config.footer);
+  expect(
+    verifyProviderCopy(Buffer.from(rewrite(wire.bytes, human, "pay me")), {
+      sent: wire.bytes,
+      config,
+    }),
+  ).toBe(false);
+});
+
+it("snapshots wire and proposal fields before asynchronous verification", async () => {
+  const renderer = createEmailRenderer(renderOptions);
+  const proposal = signed();
+  const wire = await renderer.render(proposal, EMAIL_MIME);
+  let reads = 0;
+  const input = {
+    mediaType: wire.mediaType,
+    digest: wire.digest,
+    get bytes() {
+      return reads++ === 0 ? wire.bytes : "tampered";
+    },
+  };
+  expect(await renderer.validate(input, proposal)).toEqual({ ok: true });
+  expect(reads).toBe(1);
+  let messageReads = 0;
+  const changingProposal = {
+    compactJws: proposal.compactJws,
+    get message() {
+      messageReads++;
+      return message;
+    },
+  };
+  expect(await renderer.render(changingProposal, EMAIL_MIME)).toEqual(wire);
+  expect(messageReads).toBe(1);
+  let resolve!: () => void;
+  const wait = new Promise<void>((done) => {
+    resolve = done;
+  });
+  const delayed = createEmailRenderer({
+    ...renderOptions,
+    verify: async (jws) => {
+      await wait;
+      return verifyMessage(jws);
+    },
+  });
+  const pending = delayed.validate(wire, proposal);
+  proposal.message = { ...message, createdAt: "2020-01-01T00:00:00Z" };
+  resolve();
+  // Only the original protected message governs the checked bytes.
+  expect(await pending).toEqual({ ok: true });
+});
+
+it("cannot extend an expired signed message by editing the proposal during validation", async () => {
+  const proposal = signed();
+  const renderer = createEmailRenderer(renderOptions);
+  const wire = await renderer.render(proposal, EMAIL_MIME);
+  let resolve!: () => void;
+  const wait = new Promise<void>((done) => {
+    resolve = done;
+  });
+  const delayed = createEmailRenderer({
+    ...renderOptions,
+    now: () => at + 24 * 3600000,
+    verify: async (jws) => {
+      await wait;
+      return verifyMessage(jws);
+    },
+  });
+  const pending = delayed.validate(wire, proposal);
+  proposal.message = { ...message, expiresAt: "2027-01-01T00:00:00Z" };
+  resolve();
+  expect(await pending).toEqual({ ok: false, reason: "malformed" });
+});
+
+it("round-trips the largest carrier accepted by the legacy parser and refuses expansion past its cap", async () => {
+  const description = { first: "x".repeat(16384), second: "x".repeat(16384), third: "" };
+  const value = { ...message, kind: "description", body: { description } };
+  const initial = Buffer.byteLength(envelope(signed(value).compactJws));
+  description.third = "x".repeat(Math.floor(((65536 - initial) * 3) / 4));
+  const wire = await wireFor(value);
+  expect(inspectEmail(wire.bytes, config).parity).toBe("match");
+  description.third += "x".repeat(30);
+  await expect(wireFor(value)).rejects.toThrow("carrier exceeds parser byte cap");
+});

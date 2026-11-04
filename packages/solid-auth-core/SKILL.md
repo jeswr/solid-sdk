@@ -1,12 +1,18 @@
 ---
 name: solid-auth-core
-description: Use when implementing browser Solid login with @jeswr/solid-auth-core, including WebID-first issuer discovery, DPoP login, pristine/public fetch separation, proactive authenticated fetch, silent restore, recent accounts, logout, or the React SessionProvider.
+description: Use when maintaining legacy @jeswr/solid-auth-core integrations. Deprecated; use @jeswr/pod-auth and its package skill for new suite authentication.
 ---
 <!-- AUTHORED-BY Codex GPT-5 -->
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 <!-- AUTHORED-BY Codex GPT-6 -->
 
 # Work with `@jeswr/solid-auth-core`
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+
+> **Deprecated — use `@jeswr/pod-auth`.** Read [the pod-auth skill](../pod-auth/SKILL.md) for
+> migration, the current API and security policy. The guidance below maintains existing consumers;
+> it does not describe pod-auth or authorize deleting legacy exports.
 
 Use `createSolidAuth()` instead of copying token-provider, login UX, restore, or React session code into an app.
 
