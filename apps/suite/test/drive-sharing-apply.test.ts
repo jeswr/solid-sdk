@@ -21,6 +21,7 @@ import {
   loadError,
   loadSharing,
   SharingConflictError,
+  SharingIncompleteError,
   SharingRefreshError,
   type SharingSession,
   saveError,
@@ -467,7 +468,8 @@ it.each(["HEAD", "GET"])("reports a committed change when the refresh %s fails",
     applySharing({ ...env.session, fetch }, snapshot, { ...snapshot.state, ...viewLink }),
   ).rejects.toMatchObject({
     committed: true,
-    message: "Sharing was saved, but current access couldn't be reloaded. Retry to verify access.",
+    message:
+      "Your sharing change was sent, but current access couldn't be reloaded to confirm it. Retry to verify access.",
     cause: expect.any(SharingError),
   });
   expect(fetch.mock.calls.filter(([, init]) => init?.method === "PUT")).toHaveLength(1);
@@ -724,6 +726,142 @@ it("maps every SDK role error to the dialog's error copy", async () => {
   const own = new SharingError("own");
   expect(loadError(own)).toBe(own);
   expect(saveError(errors.scope, false).cause).toBe(errors.scope);
+});
+
+// Review round 1 (#282): access copied from a parent's default (materialized) must be removable,
+// and a save is reported only when the reloaded access matches the selection.
+async function materialized() {
+  const env = await setup("wac", true);
+  authorization(env.doc, CAROL, ["Read"]);
+  authorization(env.doc, PUBLIC, ["Read"]);
+  await writeDoc(env);
+  let snapshot = await env.load();
+  expect(snapshot.state.people.find((p) => p.webId === CAROL)?.inherited).toBe(true);
+  // The first share copies Carol's and the public's inherited access into the file's own ACL.
+  snapshot = await applySharing(env.session, snapshot, {
+    ...snapshot.state,
+    people: [...snapshot.state.people, { webId: BOB, role: "viewer" }],
+  });
+  expect(snapshot.state.people.map((p) => [p.webId, p.inherited])).toEqual([
+    [ALICE, false],
+    [BOB, false],
+    [CAROL, false],
+  ]);
+  expect(snapshot.state).toMatchObject({ link: "viewer", general: { inherited: false } });
+  env.fetch.mockClear();
+  return { env, snapshot };
+}
+const agents = async (env: Env) =>
+  [...new AclResource(await stored(env, `${FILE}.acl`), DataFactory).authorizations]
+    .filter((a) => properties(a).values(`${ACL}accessTo`).has(FILE))
+    .flatMap((a) => [...a.agent, ...a.agentClass]);
+
+it("removes a person whose access was copied from the parent folder's default", async () => {
+  const { env, snapshot } = await materialized();
+  const result = await applySharing(env.session, snapshot, {
+    ...snapshot.state,
+    people: snapshot.state.people.filter((p) => p.webId !== CAROL),
+  });
+  expect(result.state.people.map((p) => p.webId)).toEqual([ALICE, BOB]);
+  expect(await agents(env)).not.toContain(CAROL);
+  expect((await env.load()).state.people.some((p) => p.webId === CAROL)).toBe(false);
+});
+
+it("restricts general access that was copied from the parent folder's default", async () => {
+  const { env, snapshot } = await materialized();
+  const result = await applySharing(env.session, snapshot, {
+    ...snapshot.state,
+    link: "none",
+    public: "none",
+  });
+  expect(result.state).toMatchObject({ link: "none", public: "none" });
+  expect(await agents(env)).not.toContain(PUBLIC);
+  // Raising copied access works through the explicit grant, and Carol keeps her copy.
+  const raised = await applySharing(env.session, result, { ...result.state, link: "editor" });
+  expect(raised.state.link).toBe("editor");
+  expect(raised.state.people.map((p) => p.webId)).toEqual([ALICE, BOB, CAROL]);
+});
+
+it("reports access that did not change instead of saving when a removal fails", async () => {
+  const { env, snapshot } = await materialized();
+  const fetch: typeof globalThis.fetch = async (url, init) =>
+    init?.method === "PUT" ? new Response(null, { status: 500 }) : env.session.fetch(url, init);
+  const error = await applySharing({ ...env.session, fetch }, snapshot, {
+    ...snapshot.state,
+    people: snapshot.state.people.filter((p) => p.webId !== CAROL),
+    link: "none",
+    public: "none",
+  }).catch((reason: unknown) => reason);
+  expect(error).toBeInstanceOf(SharingIncompleteError);
+  expect(error).toMatchObject({
+    message: `Sharing wasn't saved as chosen for ${CAROL}, general access. The current access is shown; review it and try again.`,
+    unchanged: [CAROL, "general access"],
+  });
+  expect((error as Error).cause).toMatchObject({ code: "invalid-response" });
+  const fresh = (error as SharingIncompleteError).snapshot;
+  expect(fresh.state.people.map((p) => p.webId)).toEqual([ALICE, BOB, CAROL]);
+  expect(fresh.state.link).toBe("viewer");
+});
+
+it("reports a removal refused by the owner-lockout guard after a concurrent change", async () => {
+  const { env, snapshot } = await materialized();
+  let gets = 0;
+  const fetch: typeof globalThis.fetch = async (url, init) => {
+    if (url === `${FILE}.acl` && (init?.method ?? "GET") === "GET" && ++gets === 2) {
+      // Between the conditional setGrants and removeGrant, Alice's Control disappears.
+      const own = document("wac");
+      authorization(own, ALICE, ["Read", "Write"]);
+      authorization(own, CAROL, ["Read"]);
+      await writeDoc(env, own);
+    }
+    return env.session.fetch(url, init);
+  };
+  const error = await applySharing({ ...env.session, fetch }, snapshot, {
+    ...snapshot.state,
+    people: snapshot.state.people.filter((p) => p.webId !== CAROL),
+  }).catch((reason: unknown) => reason);
+  expect(error).toBeInstanceOf(SharingIncompleteError);
+  expect(error).toMatchObject({ unchanged: [ALICE, BOB, CAROL, "general access"] });
+  expect((error as Error).cause).toMatchObject({ code: "owner-lockout" });
+  expect(env.puts()).toHaveLength(0);
+});
+
+it("never reports a save when someone else changes access before the reload", async () => {
+  const env = await setup();
+  const snapshot = await env.load();
+  const fetch: typeof globalThis.fetch = async (url, init) => {
+    const response = await env.session.fetch(url, init);
+    if (init?.method === "PUT") {
+      authorization(env.doc, BOB, ["Read"]);
+      authorization(env.doc, CAROL, ["Read"]);
+      await writeDoc(env);
+    }
+    return response;
+  };
+  const error = await applySharing({ ...env.session, fetch }, snapshot, {
+    ...snapshot.state,
+    people: [...snapshot.state.people, { webId: BOB, role: "editor" }],
+  }).catch((reason: unknown) => reason);
+  expect(error).toBeInstanceOf(SharingIncompleteError);
+  expect(error).toMatchObject({ unchanged: [BOB, CAROL] });
+  expect((error as Error).cause).toBeUndefined();
+});
+
+it("treats a failed removal whose result cannot be reloaded as an unknown outcome", async () => {
+  const { env, snapshot } = await materialized();
+  let gets = 0;
+  const fetch: typeof globalThis.fetch = async (url, init) =>
+    (init?.method ?? "GET") === "GET" && ++gets > 1
+      ? new Response(null, { status: 503 })
+      : env.session.fetch(url, init);
+  // setGrants writes nothing (the copied row is retained); removeGrant and the reload fail.
+  await expect(
+    applySharing({ ...env.session, fetch }, snapshot, {
+      ...snapshot.state,
+      people: snapshot.state.people.filter((p) => p.webId !== CAROL),
+    }),
+  ).rejects.toMatchObject({ committed: false });
+  expect((await env.load()).state.people.some((p) => p.webId === CAROL)).toBe(true);
 });
 
 // Review round 1 (#282): grants the role projection cannot map are never silently dropped.

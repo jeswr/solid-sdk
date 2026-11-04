@@ -22,6 +22,7 @@ import {
   FOLDER_READ_ONLY,
   loadSharing,
   SharingConflictError,
+  SharingIncompleteError,
   SharingRefreshError,
   type SharingSession,
   type SharingSnapshot,
@@ -252,6 +253,23 @@ it("notes when a folder's contents are shared differently from the folder", asyn
   expect(CONTENTS_DIFFER).toMatch(/inside are shared differently/);
 });
 
+it("shows the reloaded access, not a save, when the selection was only partly applied", async () => {
+  const fresh = snapshot(state);
+  apply.mockRejectedValueOnce(new SharingIncompleteError(fresh, [BOB]));
+  show();
+  await ready();
+  fireEvent.click(screen.getByRole("button", { name: `Remove access for ${BOB}` }));
+  await screen.findByText(
+    `Sharing wasn't saved as chosen for ${BOB}. The current access is shown; review it and try again.`,
+  );
+  // Bob still has access in the reloaded state, so his row stays.
+  expect(screen.getByLabelText(`Role for ${BOB}`)).toBeTruthy();
+  expect(screen.queryByText("Sharing saved")).toBeNull();
+  expect(screen.getByText("Sharing not saved as chosen")).toBeTruthy();
+  expect(onSaved).toHaveBeenCalledOnce();
+  expect(screen.queryByRole("button", { name: "Retry" })).toBeNull();
+});
+
 it("reloads and displays the exact conflict message without retrying a save", async () => {
   apply.mockRejectedValueOnce(
     new SharingConflictError(
@@ -364,16 +382,18 @@ it("invalidates stale permissions after a committed save and retries only the re
   show();
   await ready();
   fireEvent.change(screen.getByLabelText("Who can access"), { target: { value: "anyone" } });
-  await screen.findByText(/Sharing was saved, but current access couldn't be reloaded/);
+  await screen.findByText(/sharing change was sent, but current access couldn't be reloaded/);
   expect(screen.queryByRole("region", { name: "General access" })).toBeNull();
   expect(screen.queryByRole("region", { name: "People with access" })).toBeNull();
-  expect(screen.getByText("Sharing saved")).toBeTruthy();
+  // Unverified access is never announced as saved.
+  expect(screen.queryByText("Sharing saved")).toBeNull();
+  expect(screen.getByText("Sharing not confirmed")).toBeTruthy();
   expect(onSaved).toHaveBeenCalledOnce();
   load.mockRejectedValueOnce(new Error("Still unavailable"));
   fireEvent.click(screen.getByRole("button", { name: "Retry" }));
   await screen.findByText("Still unavailable");
   expect(screen.queryByLabelText("Who can access")).toBeNull();
-  expect(screen.getByText("Sharing saved")).toBeTruthy();
+  expect(screen.getByText("Sharing not confirmed")).toBeTruthy();
   load.mockResolvedValueOnce(snapshot({ ...state, link: "viewer", public: "viewer" }));
   fireEvent.click(screen.getByRole("button", { name: "Retry" }));
   await ready();

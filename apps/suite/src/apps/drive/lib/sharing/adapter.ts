@@ -4,6 +4,7 @@
 // live in @jeswr/pod-access/roles; this module only maps grants to the dialog's shape,
 // keeps the dialog-specific guards the SDK does not have, and maps SDK refusals to UI copy.
 import {
+  type AgentRef,
   type GrantSnapshot,
   isRoleError,
   type ResourceKind,
@@ -12,6 +13,7 @@ import {
   type RoleGrant,
   type RolesOptions,
   readGrants,
+  removeGrant,
   setGrants,
 } from "@jeswr/pod-access/roles";
 import { safeHttpIri } from "@jeswr/rdf-serialize";
@@ -52,7 +54,10 @@ export class SharingConflictError extends Error {
     super(snapshot ? CONFLICT_RELOADED : CONFLICT_RELOAD);
   }
 }
-/** The PUT committed or its response was lost. Discard stale controls; retry only the read. */
+/**
+ * The pod accepted the change (`committed`) or the write's outcome is unknown, and the access
+ * could not be reloaded to confirm it. Discard stale controls; retry only the read.
+ */
 export class SharingRefreshError extends Error {
   constructor(
     cause: unknown,
@@ -60,9 +65,22 @@ export class SharingRefreshError extends Error {
   ) {
     super(
       committed
-        ? "Sharing was saved, but current access couldn't be reloaded. Retry to verify access."
+        ? "Your sharing change was sent, but current access couldn't be reloaded to confirm it. Retry to verify access."
         : "The sharing write outcome is unknown. Retry to verify current access before making more changes.",
       { cause },
+    );
+  }
+}
+/** The reloaded access does not match the selection. `snapshot` is that reloaded access. */
+export class SharingIncompleteError extends Error {
+  constructor(
+    readonly snapshot: SharingSnapshot,
+    readonly unchanged: readonly string[],
+    options?: ErrorOptions,
+  ) {
+    super(
+      `Sharing wasn't saved as chosen for ${unchanged.join(", ")}. The current access is shown; review it and try again.`,
+      options,
     );
   }
 }
@@ -221,6 +239,30 @@ export async function loadSharing(
   };
 }
 
+/** The anonymous role a selection asks for. Anonymous Read has two presentations. */
+function generalChoice(selection: SharingSelection): SharingState["link"] {
+  return selection.link === "editor"
+    ? "editor"
+    : selection.link === "viewer" || selection.public === "viewer"
+      ? "viewer"
+      : "none";
+}
+/** Principals whose access in `state` is not what `selection` asked for. */
+function unmet(state: SharingState, selection: SharingSelection): string[] {
+  const wanted = new Map(selection.people.map((person) => [person.webId, person.role]));
+  const actual = new Map(state.people.map((person) => [person.webId, person.role]));
+  const people = [...new Set([...wanted.keys(), ...actual.keys()])]
+    .filter((webId) => wanted.get(webId) !== actual.get(webId))
+    .sort();
+  return generalChoice(selection) === state.link ? people : [...people, "general access"];
+}
+
+export interface SharingPlan {
+  /** The full grant set for `setGrants`; removed principals are omitted. */
+  readonly grants: RoleGrant[];
+  /** Principals the selection removes, applied again with `removeGrant` (see `applySharing`). */
+  readonly removals: AgentRef[];
+}
 /**
  * Translate the dialog's full selection into SDK grants. Unchanged principals keep their
  * SDK rows verbatim (including inherited provenance). Dialog guards the SDK lacks: other
@@ -231,7 +273,7 @@ export function toGrants(
   session: SharingSession,
   snapshot: SharingSnapshot,
   selection: SharingSelection,
-): RoleGrant[] | undefined {
+): SharingPlan | undefined {
   const selected = new Map<string, SharingRole>();
   for (const person of selection.people) {
     if (safeHttpIri(person.webId) !== person.webId) throw new SharingError("Enter a valid WebID");
@@ -241,6 +283,7 @@ export function toGrants(
   const rows = (id: string) => snapshot.grants.grants.filter((grant) => key(grant) === id);
   const current = new Map(snapshot.state.people.map((person) => [person.webId, person]));
   const grants: RoleGrant[] = [];
+  const removals: AgentRef[] = [];
   let changed = false;
   for (const webId of new Set([...current.keys(), ...selected.keys()])) {
     const before = current.get(webId);
@@ -262,14 +305,10 @@ export function toGrants(
         inherited: false,
         source: "",
       });
+    else removals.push({ type: "webid", id: webId });
   }
-  // Anonymous Read has two presentations. Clear both to restrict access.
-  const general =
-    selection.link === "editor"
-      ? "editor"
-      : selection.link === "viewer" || selection.public === "viewer"
-        ? "viewer"
-        : "none";
+  // Clearing both anonymous presentations restricts access.
+  const general = generalChoice(selection);
   if (general === snapshot.state.link) grants.push(...rows("public"));
   else {
     if (snapshot.state.general.inherited)
@@ -277,11 +316,21 @@ export function toGrants(
     changed = true;
     if (general !== "none")
       grants.push({ agent: { type: "public" }, role: general, inherited: false, source: "" });
+    else removals.push({ type: "public" });
   }
-  return changed ? grants : undefined;
+  return changed ? { grants, removals } : undefined;
 }
 
-/** Apply a selection with `setGrants`, conditional on the snapshot the dialog showed. */
+/**
+ * Apply a selection, conditional on the snapshot the dialog showed, and report success only
+ * when the reloaded access matches the selection (`SharingIncompleteError` otherwise).
+ *
+ * SDK gap: `setGrants` seeds a WAC ACL's rows copied from an inherited default
+ * (materializedFrom) before the caller's grants, so omitting such a principal never removes
+ * it. After the conditional `setGrants`, each removed principal therefore also goes through
+ * `removeGrant`, which deletes that principal from the own document and is a no-op when the
+ * principal is already gone.
+ */
 export async function applySharing(
   session: SharingSession,
   snapshot: SharingSnapshot,
@@ -289,18 +338,18 @@ export async function applySharing(
 ): Promise<SharingSnapshot> {
   if (!snapshot.canManage)
     throw new SharingError(snapshot.readOnly ?? "Only an owner can change sharing");
-  const grants = toGrants(session, snapshot, selection);
-  if (!grants) return snapshot;
+  const plan = toGrants(session, snapshot, selection);
+  if (!plan) return snapshot;
   let writing = false;
   const fetch: typeof globalThis.fetch = (input, init) => {
     if (init?.method === "PUT") writing = true;
     return session.fetch(input, init);
   };
+  const mutation = { ...options({ ...session, fetch }, snapshot.resource), webId: session.webId };
   let failure: unknown;
   try {
-    const result = await setGrants([snapshot.resource], grants, {
-      ...options({ ...session, fetch }, snapshot.resource),
-      webId: session.webId,
+    const result = await setGrants([snapshot.resource], plan.grants, {
+      ...mutation,
       expected: snapshot.grants,
     });
     failure = result.failed[0]?.error;
@@ -314,9 +363,29 @@ export async function applySharing(
       );
     throw saveError(failure, writing);
   }
-  try {
-    return await loadSharing(session, snapshot.resource);
-  } catch (cause) {
-    throw new SharingRefreshError(cause);
+  // From here on part of the selection may already be stored, so every failure is reported
+  // against the reloaded access rather than as "not saved".
+  const failures: unknown[] = [];
+  for (const agent of plan.removals) {
+    try {
+      const result = await removeGrant([snapshot.resource], agent, mutation);
+      failures.push(...result.failed.map((failed) => failed.error));
+    } catch (error) {
+      failures.push(error);
+    }
   }
+  let fresh: SharingSnapshot;
+  try {
+    fresh = await loadSharing(session, snapshot.resource);
+  } catch (cause) {
+    throw new SharingRefreshError(cause, writing && !failures.length);
+  }
+  const unchanged = unmet(fresh.state, selection);
+  if (unchanged.length)
+    throw new SharingIncompleteError(
+      fresh,
+      unchanged,
+      failures.length ? { cause: failures[0] } : undefined,
+    );
+  return fresh;
 }

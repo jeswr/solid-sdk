@@ -19,6 +19,7 @@ import {
   CONTENTS_DIFFER,
   loadSharing,
   SharingConflictError,
+  SharingIncompleteError,
   SharingRefreshError,
   type SharingSession,
   type SharingSnapshot,
@@ -130,11 +131,19 @@ export function ShareDialog({
       onSaved();
     } catch (reason) {
       if (reason instanceof SharingConflictError) setSnapshot(reason.snapshot);
+      // Part of the selection may be stored: show the reloaded access, never "saved".
+      if (reason instanceof SharingIncompleteError) {
+        setSnapshot(reason.snapshot);
+        setPeople([]);
+        setQuery("");
+        setAnnouncement("Sharing not saved as chosen");
+        onSaved();
+      }
       if (reason instanceof SharingRefreshError) {
         setSnapshot(undefined);
         setPeople([]);
         setQuery("");
-        setAnnouncement(reason.committed ? "Sharing saved" : "Sharing outcome unknown");
+        setAnnouncement(reason.committed ? "Sharing not confirmed" : "Sharing outcome unknown");
         onSaved();
       }
       setError(reason instanceof Error ? reason.message : "Couldn't save sharing");
