@@ -96,7 +96,8 @@
     "@jeswr/federation-codegen",
     "@jeswr/model-runtime",
     "@jeswr/solid-listening",
-    "@jeswr/solid-scheduling"
+    "@jeswr/solid-scheduling",
+    "@jeswr/agent-sandbox"
   ],
   "applications": [
     {
@@ -192,6 +193,11 @@
     {
       "slug": "notification-relay",
       "name": "@jeswr/app-notification-relay",
+      "kind": "application"
+    },
+    {
+      "slug": "idea-sandbox",
+      "name": "@jeswr/app-idea-sandbox",
       "kind": "application"
     }
   ],

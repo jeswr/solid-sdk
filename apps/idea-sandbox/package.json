@@ -1,0 +1,37 @@
+{
+  "name": "@jeswr/app-idea-sandbox",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "description": "IDEA agent sandbox: an explorable demo of policy-as-code for AI agents. A fictional company's support agent works through stories while real ODRL rules, data policies and limits decide every action. Experimental, AI-agent-generated.",
+  "x-authored-by": "Claude Opus 5.5",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "lint": "biome check src test vite.config.ts vitest.config.ts",
+    "lint:fix": "biome check --write src test vite.config.ts vitest.config.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@jeswr/agent-sandbox": "workspace:*",
+    "@jeswr/app-shell": "workspace:*",
+    "@jeswr/solid-odrl": "workspace:*",
+    "@modelcontextprotocol/sdk": "1.29.0",
+    "react": "19.2.7",
+    "react-dom": "19.2.7"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.0",
+    "@testing-library/react": "16.3.2",
+    "@types/node": "22.19.3",
+    "@types/react": "19.2.17",
+    "@types/react-dom": "19.2.3",
+    "@vitejs/plugin-react": "5.2.0",
+    "jsdom": "26.1.0",
+    "typescript": "5.7.3",
+    "vite": "7.3.5",
+    "vitest": "4.1.10"
+  }
+}

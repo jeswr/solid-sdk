@@ -72,7 +72,7 @@ function redirect(fallback, href) {
 }
 
 describe("Pages artifact", () => {
-  it("selects all eleven Vite apps with the Vercel project prefixes removed", () => {
+  it("selects all twelve Vite apps with the Vercel project prefixes removed", () => {
     const root = fileURLToPath(new URL("..", import.meta.url));
     expect(
       pagesApps(root)
@@ -81,6 +81,7 @@ describe("Pages artifact", () => {
     ).toEqual([
       "access-manager",
       "app-store",
+      "idea-sandbox",
       "pod-chat",
       "pod-docs",
       "pod-drive",
