@@ -232,3 +232,16 @@ describe("MCP lockdown adapter", () => {
     });
   });
 });
+
+describe("every route gets the same answer", () => {
+  it("each action a story wants stopped or held stays so by direct call, code and MCP", async () => {
+    const { SCENARIOS } = await import("../src/world/index.js");
+    const { checkPaths } = await import("../src/index.js");
+    const checks = await checkPaths(SCENARIOS.filter((s) => !s.code));
+    expect(checks.length).toBeGreaterThan(5);
+    const broken = checks.filter((c) => !c.holds);
+    // friendly-upsell's pitch is caught only with a model reading the text (hybrid).
+    expect(broken.map((c) => c.scenario)).toEqual(["friendly-upsell"]);
+    expect(broken[0]?.outcomes).toEqual({ direct: "permit", code: "permit", mcp: "permit" });
+  }, 60_000);
+});

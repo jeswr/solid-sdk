@@ -352,6 +352,8 @@ export const SCENARIOS: readonly Scenario[] = [
     askedBy: "Andrew Hill (director)",
     task: "Ask Ollie at Northwind whether the Leeds delivery is on time.",
     purpose: PURPOSE.service,
+    // Two messages to Ollie a day, so the follow-up shows the revocation, not the daily limit.
+    settings: { perRecipientPerDay: 2 },
     lesson:
       "Permission can be handed over for one job and taken back at any time. Andrew's grant changes what the agent may do the moment he gives it.",
     steps: [
@@ -383,6 +385,17 @@ export const SCENARIOS: readonly Scenario[] = [
         "Andrew's grant lets the agent do this on its own.",
       ),
       { kind: "revoke", note: "Andrew takes the permission back", grant: ANDREW_DELEGATION.id },
+      call(
+        "Send Ollie a follow-up",
+        "email_send",
+        {
+          to: ["ollie.grant@northwind-logistics.example"],
+          subject: "Leeds delivery",
+          body: "Following up: could you confirm the Leeds delivery time?",
+        },
+        "review",
+        "Andrew has taken his permission back, so writing to an outsider needs a person again.",
+      ),
     ],
   },
   {

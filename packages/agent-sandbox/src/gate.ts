@@ -85,6 +85,8 @@ export interface HeldCall {
 export interface CatalogueEntry {
   readonly tool: ToolSpec;
   readonly visible: boolean;
+  /** Offered, but no rule lets the agent use it on its own: each use goes to a person. */
+  readonly approval: boolean;
   readonly reason: string;
 }
 
@@ -170,7 +172,10 @@ export function createSandbox(options: SandboxOptions): Sandbox {
 
   const currentMandate = () => effectiveMandate(options.rules().mandate, options.grants?.() ?? []);
 
-  function visibility(spec: ToolSpec, mandate: Mandate): { visible: boolean; reason: string } {
+  function visibility(
+    spec: ToolSpec,
+    mandate: Mandate,
+  ): { visible: boolean; approval: boolean; reason: string } {
     const banned = mandate.prohibitions.find(
       (r) =>
         actionCovers(r.action, spec.action) &&
@@ -180,21 +185,33 @@ export function createSandbox(options: SandboxOptions): Sandbox {
     if (banned)
       return {
         visible: false,
+        approval: false,
         reason: `Hidden: the agent may never ${ruleWords(banned, directory)}.`,
       };
-    const permissions = [
-      ...(mandate.autonomous.permissions ?? []),
-      ...(mandate.withApproval.permissions ?? []),
-    ];
-    const allowed = permissions.find(
-      (r) => actionCovers(r.action, spec.action) && ruleTargets(r, spec.system),
-    );
-    if (allowed)
-      return { visible: true, reason: `Offered: the agent may ${ruleWords(allowed, directory)}.` };
+    const covers = (r: Rule) => actionCovers(r.action, spec.action) && ruleTargets(r, spec.system);
+    const own = (mandate.autonomous.permissions ?? []).find(covers);
+    if (own)
+      return {
+        visible: true,
+        approval: false,
+        reason: `Offered: the agent may ${ruleWords(own, directory)}.`,
+      };
+    const asked = (mandate.withApproval.permissions ?? []).find(covers);
+    if (asked)
+      return {
+        visible: true,
+        approval: true,
+        reason: `Offered, but each use needs a person's approval: the agent may ${ruleWords(asked, directory)}.`,
+      };
     if (unlisted === "review")
-      return { visible: true, reason: "Offered: no rule covers it, so each use goes to a person." };
+      return {
+        visible: true,
+        approval: true,
+        reason: "Offered: no rule covers it, so each use goes to a person.",
+      };
     return {
       visible: false,
+      approval: false,
       reason: `Hidden: no rule lets the agent ${spec.title.toLowerCase()} (${nameOf(directory, spec.system)}).`,
     };
   }

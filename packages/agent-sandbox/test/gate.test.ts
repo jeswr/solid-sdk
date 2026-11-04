@@ -421,3 +421,36 @@ describe("review fixes", () => {
     expect(d.outcome).not.toBe("permit");
   });
 });
+
+describe("ask a person for one action", () => {
+  it("moves an action to approval: offered, flagged in the catalogue and over MCP, and held", async () => {
+    const { Client } = await import("@modelcontextprotocol/sdk/client/index.js");
+    const { InMemoryTransport } = await import("@modelcontextprotocol/sdk/inMemory.js");
+    const { createMcpProxy } = await import("../src/mcp/proxy.js");
+    const { sandbox, world } = createWorldSandbox(care);
+    const payments = "https://harbourfinch.example/systems/payments";
+    world.setSettings({
+      ...world.settings(),
+      reviewActions: [{ system: payments, action: "https://jeswr.org/ns/agent#Transfer" }],
+    });
+    const entry = sandbox.catalogue().find((e) => e.tool.name === "payments_refund");
+    expect(entry).toMatchObject({ visible: true, approval: true });
+    expect(entry?.reason).toMatch(/^Offered, but each use needs a person's approval/);
+    const r = await sandbox.call({
+      tool: "payments_refund",
+      args: { customer: "c-1003", amount: 20 },
+    });
+    expect(r.status).toBe("held");
+    const [a, b] = InMemoryTransport.createLinkedPair();
+    const client = new Client({ name: "t", version: "0" });
+    await Promise.all([createMcpProxy(sandbox).connect(b), client.connect(a)]);
+    const listed = await client.listTools();
+    expect(listed.tools.find((t) => t.name === "payments_refund")?.description).toMatch(
+      /waits for a person's approval/,
+    );
+    expect(listed.tools.find((t) => t.name === "tickets_list")?.description).not.toMatch(
+      /approval/,
+    );
+    await client.close();
+  });
+});

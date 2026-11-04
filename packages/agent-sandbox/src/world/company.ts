@@ -230,6 +230,8 @@ export interface RuleSettings {
   readonly lockedSystems: readonly string[];
   /** Single actions switched off on a system (locks every tool that performs them). */
   readonly lockedActions: readonly { readonly system: string; readonly action: string }[];
+  /** Single actions on a system the agent may take only with a person's approval. */
+  readonly reviewActions?: readonly { readonly system: string; readonly action: string }[];
 }
 
 export const DEFAULT_SETTINGS: RuleSettings = {
@@ -241,6 +243,7 @@ export const DEFAULT_SETTINGS: RuleSettings = {
   analyticsAccess: true,
   lockedSystems: [],
   lockedActions: [],
+  reviewActions: [],
 };
 
 const AGENT_ACTIONS = ["SendMessage", "Transfer", "Sign", "BookAppointment"].map(
@@ -286,18 +289,24 @@ export function supportMandate(
       ? [{ type: "permission" as const, action: "distribute", target: SYSTEM.insights }]
       : []),
   ];
+  // "Ask a person" for one action on one system moves its own-initiative rules to approval.
+  const ask = (r: Rule) =>
+    (settings.reviewActions ?? []).some((x) => x.system === r.target && x.action === r.action);
+  const onItsOwn = autonomous.filter((r) => !ask(r));
+  const askFirst = autonomous.filter(ask);
   return {
     id: `${HF}mandates/finch-assist`,
     issuer: OWNER,
     subject: AGENT_ID,
     validFrom: at,
     validUntil: "2027-11-01T00:00:00.000Z",
-    autonomous: { id: `${HF}mandates/finch-assist#autonomous`, permissions: autonomous },
+    autonomous: { id: `${HF}mandates/finch-assist#autonomous`, permissions: onItsOwn },
     withApproval: {
       id: `${HF}mandates/finch-assist#with-approval`,
       permissions: [
         ...(settings.customerEmailsNeedApproval ? [emailCustomers] : []),
         { type: "permission", action: `${AGENT}SendMessage`, target: SYSTEM.email },
+        ...askFirst,
       ],
     },
     prohibitions: [

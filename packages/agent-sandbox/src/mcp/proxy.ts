@@ -22,14 +22,24 @@ export function createMcpProxy(
     instructions:
       "Every tool call is checked against the organisation's rules before it runs. A call may be stopped, held for a person's approval, or return with records withheld.",
   });
-  server.setRequestHandler(ListToolsRequestSchema, async () => ({
-    tools: sandbox.tools().map((t) => ({
-      name: t.name,
-      title: t.title,
-      description: t.description,
-      inputSchema: t.inputSchema as unknown as { type: "object"; [k: string]: unknown },
-    })),
-  }));
+  server.setRequestHandler(ListToolsRequestSchema, async () => {
+    const asks = new Set(
+      sandbox
+        .catalogue()
+        .filter((e) => e.approval)
+        .map((e) => e.tool.name),
+    );
+    return {
+      tools: sandbox.tools().map((t) => ({
+        name: t.name,
+        title: t.title,
+        description: asks.has(t.name)
+          ? `${t.description} Each use waits for a person's approval.`
+          : t.description,
+        inputSchema: t.inputSchema as unknown as { type: "object"; [k: string]: unknown },
+      })),
+    };
+  });
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const args = (request.params.arguments ?? {}) as Args;
     const result = await sandbox.call({ tool: request.params.name, args });

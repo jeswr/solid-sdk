@@ -39,6 +39,12 @@ export {
   runAgent,
 } from "./runners/agent.js";
 export {
+  checkPaths,
+  ENFORCEMENT_PATHS,
+  type EnforcementPath,
+  type PathCheck,
+} from "./runners/paths.js";
+export {
   compareModes,
   createWorldSandbox,
   DEMO_START,

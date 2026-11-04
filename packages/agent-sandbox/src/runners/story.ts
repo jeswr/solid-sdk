@@ -104,6 +104,16 @@ export interface StoryRun {
 const decisionOf = (sandbox: Sandbox, result: CallResult) =>
   sandbox.record.entries()[result.entry]?.decision;
 
+/** Give or take back a grant (a delegation) mid-story. */
+export function applyGrantStep(
+  world: World,
+  step: Exclude<StoryStep, { kind: "call" }>,
+): void {
+  const id = step.kind === "grant" ? step.grant.id : step.grant;
+  const others = world.grants().filter((g) => g.id !== id);
+  world.setGrants(step.kind === "grant" ? [...others, step.grant] : others);
+}
+
 /** Run one story in one mode. Held calls stay held (nobody approves them). */
 export async function runStory(
   scenario: Scenario,
@@ -118,13 +128,8 @@ export async function runStory(
   }
   for (const step of scenario.steps) {
     clock.now += 60_000;
-    if (step.kind === "grant") {
-      world.setGrants([...world.grants().filter((g) => g.id !== step.grant.id), step.grant]);
-      events.push({ step });
-      continue;
-    }
-    if (step.kind === "revoke") {
-      world.setGrants(world.grants().filter((g) => g.id !== step.grant));
+    if (step.kind !== "call") {
+      applyGrantStep(world, step);
       events.push({ step });
       continue;
     }
