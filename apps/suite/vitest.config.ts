@@ -24,6 +24,7 @@ export default defineConfig({
       enabled: true,
       provider: "v8",
       include: [
+        "src/apps/agent/lib/**/*.ts",
         "src/shell/lib/**/*.ts",
         "src/shell/search/local-source.ts",
         "src/shell/registration/{demo-backend,types}.ts",

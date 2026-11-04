@@ -1,3 +1,5 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Fable 5
 //
 // The W3C Bitstring Status List v1.0 bitstring: a compressed bit array where
@@ -15,8 +17,6 @@
 // (herd-privacy MUST), and — the zip-bomb guard — an expansion larger than
 // `maxDecodedBytes` (default 16 MiB ≈ 134M entries). A status list that cannot
 // be decoded must never read as "not revoked".
-
-import { gunzipSync, gzipSync } from "node:zlib";
 
 /**
  * The spec's minimum bitstring length in BITS: 131,072 entries = 16KB
@@ -95,18 +95,78 @@ export function setStatusBit(bits: Uint8Array, index: number, value: boolean): v
   }
 }
 
-/** The base64url alphabet (no padding) — validated BEFORE decoding, because
- * `Buffer.from(s, "base64url")` silently SKIPS invalid characters (lenient),
- * and a lenient decode of a corrupted list must not "succeed". */
+/** The base64url alphabet (no padding), validated BEFORE decoding. */
 const BASE64URL = /^[A-Za-z0-9_-]+$/;
+const ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+
+function base64urlEncode(bytes: Uint8Array): string {
+  let result = "";
+  let value = 0;
+  let count = 0;
+  for (const byte of bytes) {
+    value = (value << 8) | byte;
+    count += 8;
+    while (count >= 6) {
+      count -= 6;
+      result += ALPHABET[(value >>> count) & 63];
+    }
+  }
+  if (count) result += ALPHABET[(value << (6 - count)) & 63];
+  return result;
+}
+
+function base64urlDecode(payload: string): Uint8Array<ArrayBuffer> {
+  const out = new Uint8Array(Math.floor((payload.length * 6) / 8));
+  let value = 0;
+  let count = 0;
+  let offset = 0;
+  for (const char of payload) {
+    const digit = ALPHABET.indexOf(char);
+    if (digit < 0) throw new BitstringDecodeError("encodedList payload is not valid base64url");
+    value = (value << 6) | digit;
+    count += 6;
+    if (count >= 8) {
+      count -= 8;
+      out[offset++] = (value >>> count) & 255;
+    }
+  }
+  // Reject impossible lengths and nonzero unused bits (noncanonical aliases).
+  if (payload.length % 4 === 1 || (value & ((1 << count) - 1)) !== 0)
+    throw new BitstringDecodeError("encodedList payload is not valid base64url");
+  return out;
+}
+
+/** Compressed input slice size: DEFLATE expands at most ~1032:1, so one slice
+ * can add only ~1 MiB beyond `maxDecodedBytes` before the reader cancels. */
+const INPUT_SLICE_BYTES = 1024;
+
+/** Feed bytes through a pull-based web stream in small slices, so a transform
+ * only receives more input as its output is consumed (bounded inflation). */
+function byteStream(bytes: Uint8Array<ArrayBuffer>): ReadableStream<Uint8Array<ArrayBuffer>> {
+  let offset = 0;
+  return new ReadableStream(
+    {
+      pull(controller) {
+        if (offset >= bytes.byteLength) {
+          controller.close();
+          return;
+        }
+        controller.enqueue(bytes.subarray(offset, offset + INPUT_SLICE_BYTES));
+        offset += INPUT_SLICE_BYTES;
+      },
+    },
+    { highWaterMark: 0 },
+  );
+}
 
 /**
  * Encode a raw status bitstring to the spec's `encodedList` form:
  * GZIP → base64url (unpadded) → multibase prefix `u`.
  */
-export function encodeStatusList(bits: Uint8Array): string {
-  const compressed = gzipSync(bits);
-  return `u${Buffer.from(compressed).toString("base64url")}`;
+export async function encodeStatusList(bits: Uint8Array): Promise<string> {
+  const stream = byteStream(new Uint8Array(bits)).pipeThrough(new CompressionStream("gzip"));
+  const compressed = new Uint8Array(await new Response(stream).arrayBuffer());
+  return `u${base64urlEncode(compressed)}`;
 }
 
 /**
@@ -120,10 +180,10 @@ export function encodeStatusList(bits: Uint8Array): string {
  *  - the expansion MUST NOT exceed `maxDecodedBytes` (zip-bomb guard,
  *    default {@link DEFAULT_MAX_DECODED_BYTES}).
  */
-export function decodeStatusList(
+export async function decodeStatusList(
   encoded: string,
   options?: { readonly maxDecodedBytes?: number },
-): Uint8Array {
+): Promise<Uint8Array> {
   const maxDecodedBytes = options?.maxDecodedBytes ?? DEFAULT_MAX_DECODED_BYTES;
   if (typeof encoded !== "string" || encoded.length < 2) {
     throw new BitstringDecodeError("encodedList is not a non-empty string");
@@ -137,10 +197,27 @@ export function decodeStatusList(
   if (!BASE64URL.test(payload)) {
     throw new BitstringDecodeError("encodedList payload is not valid base64url");
   }
-  const compressed = Buffer.from(payload, "base64url");
-  let bits: Buffer;
+  const compressed = base64urlDecode(payload);
+  const chunks: Uint8Array[] = [];
+  let total = 0;
   try {
-    bits = gunzipSync(compressed, { maxOutputLength: maxDecodedBytes });
+    if (!Number.isSafeInteger(maxDecodedBytes) || maxDecodedBytes <= 0)
+      throw new Error("maxDecodedBytes must be a positive safe integer");
+    const reader = byteStream(compressed).pipeThrough(new DecompressionStream("gzip")).getReader();
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        total += value.byteLength;
+        if (total > maxDecodedBytes) {
+          await reader.cancel();
+          throw new Error("decoded bitstring exceeds maxDecodedBytes");
+        }
+        chunks.push(value);
+      }
+    } finally {
+      reader.releaseLock();
+    }
   } catch (e) {
     throw new BitstringDecodeError(
       `encodedList did not decompress as GZIP within ${maxDecodedBytes} bytes: ${
@@ -148,11 +225,17 @@ export function decodeStatusList(
       }`,
     );
   }
-  if (bits.length * 8 < MIN_STATUS_LIST_LENGTH) {
+  if (total * 8 < MIN_STATUS_LIST_LENGTH) {
     throw new BitstringDecodeError(
-      `decoded bitstring is ${bits.length * 8} bits — below the spec's ` +
+      `decoded bitstring is ${total * 8} bits — below the spec's ` +
         `${MIN_STATUS_LIST_LENGTH}-bit (16KB) minimum`,
     );
   }
-  return new Uint8Array(bits.buffer, bits.byteOffset, bits.byteLength);
+  const bits = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bits.set(chunk, offset);
+    offset += chunk.length;
+  }
+  return bits;
 }
