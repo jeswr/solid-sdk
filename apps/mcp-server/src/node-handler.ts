@@ -8,6 +8,7 @@ import { handler } from "./handler.js";
 export async function nodeHandler(
   request: IncomingMessage,
   response: ServerResponse,
+  webHandler: (request: Request) => Promise<Response> = handler,
 ): Promise<void> {
   const controller = new AbortController();
   let body: ReadableStream<Uint8Array> | undefined;
@@ -38,7 +39,7 @@ export async function nodeHandler(
       init.duplex = "half";
     }
     const url = new URL(request.url ?? "/", `http://${request.headers.host ?? "localhost"}`);
-    const result = await handler(new Request(url, init));
+    const result = await webHandler(new Request(url, init));
     if (controller.signal.aborted || response.destroyed) {
       await result.body?.cancel();
       return;

@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Codex GPT-6.1-Sol
 /** The sole projection from caller-authorized PodPort data to public pod output. */
 import { isContainerUrl } from "@jeswr/guarded-fetch";
 import {
@@ -11,13 +12,21 @@ import {
 } from "@rdfjs/wrapper";
 import { ContainerDataset } from "@solid/object";
 import { DataFactory, Store } from "n3";
-import { podScopedUrlOrUndefined, requirePodScopedUrl } from "./auth.js";
+import { podScopedUrlOrUndefined, requirePodScopedUrl, requirePodScopedWriteUrl } from "./auth.js";
 import { parseBoundedRdf, serializeBoundedTurtle } from "./bounded-rdf.js";
 import { MAX_CONTENT_BYTES, mediaType, RDF_MEDIA_TYPES, resourceTitle } from "./content.js";
+import { PERSONAL_DATA_DENIED, requireGenericPodAccess } from "./personal-data.js";
 import type { PodChild, SearchMatch } from "./pod.js";
-import { podReadMode, withPodReadLimits, withPodReadMode } from "./pod-operation.js";
+import {
+  podReadMode,
+  withPodDataAccess,
+  withPodReadLimits,
+  withPodReadMode,
+} from "./pod-operation.js";
 import {
   isFetchPodRead,
+  type PodConditions,
+  type PodHeadResult,
   type PodPort,
   type PodReadOptions,
   type PodReadResult,
@@ -25,7 +34,7 @@ import {
 
 const LDP = "http://www.w3.org/ns/ldp#";
 const RDF_TYPE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
-const RDF_ACCEPT = "text/turtle, application/ld+json;q=0.9";
+const CONTAINER_ACCEPT = "text/turtle, application/ld+json;q=0.9, application/lws+json;q=0.8";
 
 class ListedResource extends TermWrapper {
   set name(value: string) {
@@ -66,23 +75,58 @@ export class PodOutput {
   private readonly authorized = new Set<string>();
   private readonly decisions = new Map<string, boolean>();
 
-  constructor(private readonly pod: PodPort) {}
+  constructor(
+    private readonly pod: PodPort,
+    private readonly personal = false,
+  ) {}
+
+  private target(url: string, mutation = false): string {
+    if (!this.personal) requireGenericPodAccess(this.pod, url, mutation);
+    return (mutation ? requirePodScopedWriteUrl : requirePodScopedUrl)(
+      { podRoot: this.pod.root },
+      url,
+    );
+  }
+
+  private operation<T>(operation: () => T): T {
+    return withPodDataAccess(this.pod, this.personal, operation);
+  }
+
+  /** Scope and personal-area filtering for listings and Type Index discovery. */
+  candidate(url: string): string | undefined {
+    const scoped = podScopedUrlOrUndefined({ podRoot: this.pod.root }, url);
+    if (!scoped) return undefined;
+    try {
+      return this.target(scoped);
+    } catch {
+      return undefined;
+    }
+  }
+
+  /** Metadata inspection never authorizes disclosure of resource contents. */
+  async head(url: string): Promise<PodHeadResult> {
+    return withPodReadLimits(async () => {
+      const target = this.target(url);
+      return (await this.operation(() => this.pod.head?.(target))) ?? {};
+    });
+  }
 
   async read(url: string, options?: PodReadOptions): Promise<PodReadResult> {
     return withPodReadLimits(async () => {
-      const target = requirePodScopedUrl({ podRoot: this.pod.root }, url);
-      const result = await this.pod.read(target, options);
+      const target = this.target(url);
+      const result = await this.operation(() => this.pod.read(target, options));
       // Portable ports bound their own backend allocations. Fetch can cap their
       // already-authorized bytes at output; projection checks require a full,
       // bounded result. Native fetch prefixes may carry one overflow byte.
       const cap = MAX_CONTENT_BYTES + (podReadMode() === "fetch" ? 1 : 0);
       if (podReadMode() !== "fetch-complete" && result.body.byteLength > cap)
         throw new Error("Resource exceeds the bounded read limit.");
-      const finalUrl = requirePodScopedUrl({ podRoot: this.pod.root }, result.url ?? target);
+      const finalUrl = this.target(result.url ?? target);
       let output = result;
       // A redirect/alias is a separate resource, subject to the same purpose check.
       if (!isFetchPodRead(this.pod.read) && documentUrl(finalUrl) !== documentUrl(target)) {
-        const final = await this.pod.read(finalUrl, options);
+        const final = await this.operation(() => this.pod.read(finalUrl, options));
+        this.target(final.url ?? finalUrl);
         if (podReadMode() !== "fetch-complete" && final.body.byteLength > cap)
           throw new Error("Resource exceeds the bounded read limit.");
         if (documentUrl(final.url ?? finalUrl) !== documentUrl(finalUrl))
@@ -94,6 +138,24 @@ export class PodOutput {
           ...(result.isContainer || final.isContainer ? { isContainer: true } : {}),
         };
       }
+      // RDF can identify a slashless container alias even when the backend has
+      // no URL/type metadata. Check that identity before authorizing descriptions
+      // or filename-only search hits; ordinary document links remain untouched.
+      if (!this.personal && RDF_MEDIA_TYPES.has(mediaType(output.contentType))) {
+        try {
+          const dataset = await parseBoundedRdf(
+            new TextDecoder().decode(output.body),
+            mediaType(output.contentType),
+            finalUrl,
+          );
+          const identity = this.containerIdentity(dataset);
+          if (identity) this.target(identity);
+        } catch (error) {
+          if (error instanceof Error && error.message === PERSONAL_DATA_DENIED) throw error;
+          // Parsing/output paths own malformed/oversized RDF. A successful raw
+          // read can still authorize a filename, as with other non-RDF data.
+        }
+      }
       this.authorized.add(documentUrl(target));
       this.authorized.add(documentUrl(finalUrl));
       return output;
@@ -101,7 +163,7 @@ export class PodOutput {
   }
 
   private async allows(url: string): Promise<boolean> {
-    const scoped = podScopedUrlOrUndefined({ podRoot: this.pod.root }, url);
+    const scoped = this.candidate(url);
     if (!scoped) return false;
     const doc = documentUrl(scoped);
     if (this.authorized.has(doc)) return true;
@@ -128,11 +190,11 @@ export class PodOutput {
 
   async children(url: string): Promise<PodChild[]> {
     return withPodReadLimits(async () => {
-      const target = requirePodScopedUrl({ podRoot: this.pod.root }, url);
+      const target = this.target(url);
       if (!this.authorized.has(documentUrl(target)))
-        await this.read(target, { accept: RDF_ACCEPT });
+        await this.read(target, { accept: CONTAINER_ACCEPT });
       const children: PodChild[] = [];
-      for (const entry of await this.pod.list(target)) {
+      for (const entry of await this.candidates(target)) {
         const scoped = podScopedUrlOrUndefined({ podRoot: this.pod.root }, entry.url);
         if (!scoped || !(await this.allows(scoped))) continue;
         children.push({
@@ -147,6 +209,33 @@ export class PodOutput {
       }
       return children;
     });
+  }
+
+  /** Discovery is untrusted: omit protected entries before any candidate read. */
+  async candidates(url: string): Promise<PodChild[]> {
+    const target = this.target(url);
+    const children: PodChild[] = [];
+    for (const entry of await this.operation(() => this.pod.list(target))) {
+      const scoped = this.candidate(entry.url);
+      if (!scoped) continue;
+      children.push({
+        ...entry,
+        url: scoped,
+        name: entry.name ?? resourceTitle(scoped),
+        type: entry.type ?? [],
+      });
+    }
+    return children;
+  }
+
+  async write(url: string, body: Uint8Array, contentType: string, cond: PodConditions) {
+    const target = this.target(url, true);
+    return this.operation(() => this.pod.write(target, body, contentType, cond));
+  }
+
+  async delete(url: string, cond?: PodConditions): Promise<void> {
+    const target = this.target(url, true);
+    return this.operation(() => this.pod.delete(target, cond));
   }
 
   /** A search name, snippet and URL are one authorized resource description. */
@@ -179,34 +268,30 @@ export class PodOutput {
   }
 
   /** Recognize containers before interpreting or returning any server-rendered body. */
+  private containerIdentity(dataset: Store): string | undefined {
+    const typed = new ContainerDataset(dataset, DataFactory).container;
+    const membership = dataset
+      .getSubjects(DataFactory.namedNode(`${LDP}contains`), null, null)
+      .find((subject) => subject.termType === "NamedNode");
+    return typed?.id ?? membership?.value;
+  }
+
   async containerRdf(
     url: string,
     read: PodReadResult,
     dataset?: Store,
   ): Promise<Store | undefined> {
     return withPodReadLimits(async () => {
-      const finalUrl = read.url ?? url;
-      const typedContainer = dataset && new ContainerDataset(dataset, DataFactory).container;
-      const membershipSubject = dataset
-        ?.getSubjects(DataFactory.namedNode(`${LDP}contains`), null, null)
-        .find((subject) => subject.termType === "NamedNode");
+      this.target(url);
+      const finalUrl = this.target(read.url ?? url);
+      const identity = dataset && this.containerIdentity(dataset);
       const containerAddress = (address: string) =>
         isContainerUrl(address) ||
         new URL(address).pathname === new URL(this.pod.root).pathname.slice(0, -1);
       // Either end of an alias, response type links, and RDF membership identify
       // a container. Never interpret a non-RDF listing as ordinary document data.
-      if (
-        containerAddress(url) ||
-        containerAddress(finalUrl) ||
-        read.isContainer ||
-        typedContainer ||
-        membershipSubject
-      ) {
-        const containerUrl = typedContainer
-          ? requirePodScopedUrl({ podRoot: this.pod.root }, typedContainer.id)
-          : membershipSubject
-            ? requirePodScopedUrl({ podRoot: this.pod.root }, membershipSubject.value)
-            : finalUrl;
+      if (containerAddress(url) || containerAddress(finalUrl) || read.isContainer || identity) {
+        const containerUrl = identity ? this.target(identity) : finalUrl;
         if (!(await this.allows(containerUrl))) throw new Error("purpose denied");
         return this.container(containerUrl);
       }
@@ -246,6 +331,9 @@ export class PodOutput {
 /** Public diagnostics are fixed strings: backend errors may contain rejected values. */
 export function podOutputError(error: unknown): Error {
   const message = error instanceof Error ? error.message : String(error);
+  if (message === PERSONAL_DATA_DENIED) return new Error(message);
+  if (message === "Audit protection unavailable") return new Error(message);
+  if (message === "Memory protection unavailable") return new Error(message);
   if (/purpose denied/i.test(message)) return new Error("purpose denied");
   if (/grant denied/i.test(message)) return new Error("grant denied");
   if (/pod-scope/i.test(message)) return new Error("pod-scope violation");

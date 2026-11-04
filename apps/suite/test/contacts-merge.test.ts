@@ -269,6 +269,8 @@ describe("merge review choices", () => {
         group("work", [id(keep)]),
         group("empty"),
       ],
+      trash: [],
+      trashIncomplete: false,
       flat: [],
       incomplete: false,
       registrationPending: false,

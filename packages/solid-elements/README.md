@@ -61,6 +61,21 @@ A pod on the issuer origin stays allowed through `podRoot`.
 `computeAllowedOrigins` keeps its separate default of including the issuer origin. See the
 [proactive API behavior report](./etc/proactive-fetch.api.md) for the helper's contract.
 
+## Login panel field label
+
+Set `webid-label` on `<jeswr-login-panel>` or its reflected `webIdLabel` string property
+to customize the sign-in field label. The default remains `Your WebID`. The value renders
+as plain text, never HTML, and the wrapping label supplies the input's accessible name.
+The host must also set the panel's `controller` property to show the sign-in form.
+
+```html
+<jeswr-login-panel webid-label="Your account address"></jeswr-login-panel>
+```
+
+```js
+panel.webIdLabel = "Your account address"; // Reflects to webid-label.
+```
+
 ## Links
 
 - [Source](https://github.com/jeswr/solid-elements)

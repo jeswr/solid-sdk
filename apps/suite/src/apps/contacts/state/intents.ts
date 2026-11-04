@@ -5,6 +5,8 @@ import type { ContactsModel } from "../lib/model/book";
 import { registerAddressBook } from "../lib/model/discovery";
 import {
   absentOr,
+  discardCreated,
+  ensureCreated,
   ensureDeleted,
   ensurePerson,
   ensureReplaced,
@@ -20,6 +22,8 @@ import { ensureBook, ensurePrivateIndex } from "./recovery";
 export interface DeleteToken {
   person: SavedDocument;
   labels: string[];
+  /** The trash document holding the contact; absent for records journaled before trash. */
+  trash?: string;
 }
 export class IntentConflictError extends ContactsWriteError {
   constructor(cause: ContactsWriteError) {
@@ -35,7 +39,10 @@ export function newIntent(
   bookUrl: string,
   destination: string,
   details: Partial<
-    Pick<Intent, "person" | "source" | "labels" | "destinations" | "duplicates" | "selection">
+    Pick<
+      Intent,
+      "person" | "source" | "trash" | "labels" | "destinations" | "duplicates" | "selection"
+    >
   > = {},
 ): Intent {
   return {
@@ -159,6 +166,10 @@ export class IntentRunner {
                       membership(this.model, intent.bookUrl, label, id, true),
                     );
                 }
+                // The contact survives, so the copy we may have put in the trash must not.
+                const trash = intent.trash;
+                if (trash && removed.has("trash"))
+                  await step("repair:trash", () => discardCreated(this.model, trash));
                 checkpoint("rolled-back");
               } else {
                 // A DELETE can finish after a failed response and the first reconciliation.
@@ -167,6 +178,9 @@ export class IntentRunner {
               }
             }
             if (intent.phase === "forward") {
+              // Copy first: nothing is unlinked until the contact is safely in the trash.
+              const trash = intent.trash;
+              if (trash) await step("trash", () => ensureCreated(this.model, trash));
               for (const label of intent.labels)
                 await step(label, () => membership(this.model, intent.bookUrl, label, id, false));
               await step("index", () => personLink(this.model, intent.bookUrl, person, false));
@@ -197,14 +211,19 @@ export class IntentRunner {
             await step("index", () => personLink(this.model, intent.bookUrl, current, true));
             for (const label of intent.labels)
               await step(label, () => membership(this.model, intent.bookUrl, label, id, true));
-            if (intent.kind === "migrate")
-              await step("source", () => ensureDeleted(this.model, intent.source as SavedDocument));
+            // A migration's flat original, or the trash document a restore came from, goes last.
+            const source = intent.source;
+            if (source) await step("source", () => ensureDeleted(this.model, source));
           }
         }
         checkpoint("done");
       }
       if (intent.kind === "delete" && !intent.completed.includes("rolled-back"))
-        this.deleted({ person: intent.person as SavedDocument, labels: intent.labels });
+        this.deleted({
+          person: intent.person as SavedDocument,
+          labels: intent.labels,
+          ...(intent.trash ? { trash: intent.trash.url } : {}),
+        });
       journal.remove(intent);
     } catch (error) {
       if (error instanceof PartialWriteError) {

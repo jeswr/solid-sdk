@@ -87,9 +87,64 @@ console.log(note.url, note.etag);
 `folder.url + 'shopping.txt'` works on one and breaks on the other.
 
 Save the URLs your app needs to find again, such as the container for each collection, somewhere
-it can read on the next start. The Type Index (a pod's directory of where each kind of data lives)
-is the standard place; its SDK client is **not ready yet**, so for now keep the URL in your app's
-settings.
+it can read on the next start. On Solid the standard place is the user's Type Index. On LWS the
+server keeps the index itself, so keep the container URL in your app's settings.
+
+## Find and register data with the Type Index
+
+The Type Index is a pod's directory of where each kind of data lives, so apps can find each
+other's data: "notes are in `/notes/`". `@jeswr/pod-type-index` reads and writes it on Solid, and
+uses the server's own type services on LWS.
+
+```ts
+import { createTypeIndex } from '@jeswr/pod-type-index';
+import type { PodAuth } from '@jeswr/pod-auth';
+import type { Features } from '@jeswr/storage-capabilities';
+import type { StorageClient } from '@jeswr/storage-client';
+
+declare const auth: PodAuth;
+declare const storage: StorageClient;
+declare const features: Features;
+declare const webId: string;
+declare const notesFolder: string; // The URL `create` returned for your container.
+
+const NOTE = 'https://schema.org/NoteDigitalDocument';
+const index = createTypeIndex({ storage, features, profile: webId, fetch: auth.fetch });
+
+// Solid: the containers and resources registered for notes. LWS: the notes themselves.
+const where = await index.find(NOTE);
+// On Solid, reuse a folder another app registered (Solid container URLs end in '/').
+// On LWS, use the folder URL from your app's settings.
+const registered = where.find((url) => url.endsWith('/'));
+const folder = storage.protocol === 'solid' && registered ? registered : notesFolder;
+
+// Solid: adds the registration once, later calls write nothing.
+// LWS: writes nothing and returns `links` to send with each create.
+const hint = await index.register(NOTE, { container: folder });
+await storage.create(folder, 'Remember the milk', { contentType: 'text/plain', ...hint });
+```
+
+Things to know:
+
+- `find` returns places, not data. It does not list containers for you, and finding a location
+  does not mean the user can read it. It throws, rather than returning `[]`, when an index can't
+  be read.
+- **On Solid, the WebID profile must be inside this storage.** If it is hosted elsewhere,
+  `createTypeIndex` throws a `scope` error.
+- **The first Solid registration changes the pod.** It can create `settings/`,
+  `settings/prefs.ttl` and the index document, and it links them from the WebID profile. Creating
+  those needs Write and Control on the storage root and fails with `forbidden` otherwise; later
+  registrations only edit the existing index.
+- **Private means unlisted, not protected.** `register` uses the private index unless you pass
+  `{ index: 'public' }`, but the package never changes permissions: new documents get the
+  permissions of their folder. Before the first registration, check who can read `settings/`
+  (or the root, if `settings/` does not exist yet) with `readGrants` from
+  `@jeswr/pod-access/roles` ([chapter 7](07-sharing.md)), and ask the user to fix it if anyone
+  else can. A public index needs public read, set separately. Only register public locations for
+  data the user means to be discoverable.
+- **On LWS**, `register` and `unregister` write nothing, and `{ index }` has no effect. `find`
+  needs the `fetch` you gave `createPodClient` and a server that advertises type services;
+  otherwise it throws `unsupported`. Results can lag a little behind recent creates.
 
 ## Edit a resource
 

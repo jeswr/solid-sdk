@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Fable 5
+// AUTHORED-BY Codex GPT-6.1-Sol
 //
 // The AGENT-DELEGATION PROFILE chain evaluator (docs/delegation-profile.md) — the
 // accountability keystone of the agentic-Solid roadmap: an agent grants a sub-agent
@@ -130,6 +131,10 @@ export function evaluateDelegated(
   options: DelegationEvaluateOptions = {},
 ): DelegatedEvaluationResult {
   const now = options.now ?? new Date();
+  const evaluationOptions: EvaluateOptions = {
+    now,
+    resolvePartyCollection: options.resolvePartyCollection,
+  };
   const maxLen = options.maxChainLength ?? DEFAULT_MAX_CHAIN_LENGTH;
   const hops: DelegationHopTrace[] = [];
 
@@ -191,7 +196,7 @@ export function evaluateDelegated(
     // The number of delegation hops at-or-below this edge (the edge itself plus
     // every descendant edge) — the depth this edge's grantUse budget must cover.
     const remainingDepth = chain.length - i;
-    const edge = checkDelegationEdge(parent, child, remainingDepth, req, now);
+    const edge = checkDelegationEdge(parent, child, remainingDepth, req, evaluationOptions);
     if (!edge.ok) {
       hops.push({ index: i, policyId: child.id, ok: false, reason: edge.reason });
       return denied(`Hop ${i} (<${child.id}>): ${edge.reason}`, hops);
@@ -211,7 +216,7 @@ export function evaluateDelegated(
     const ancestor = chain[i]!;
     // biome-ignore lint/style/noNonNullAssertion: i+1 bounded by chain.length
     const delegator = chain[i + 1]!.assigner as string; // defined — checked per edge
-    const scope = evaluate(ancestor, { ...req, agent: delegator }, { now });
+    const scope = evaluate(ancestor, { ...req, agent: delegator }, evaluationOptions);
     if (scope.decision !== "permit" || scope.matchedProhibitions.length > 0) {
       return denied(
         `Hop ${i} (<${ancestor.id}>) does not cleanly grant the requested capability to its delegate <${delegator}> (${scope.decision}${scope.matchedProhibitions.length > 0 ? ", with a matched prohibition" : ""}: ${scope.reason}) — a delegate cannot receive more than the delegator holds.`,
@@ -222,7 +227,7 @@ export function evaluateDelegated(
     // delegation must never launder a request around an upstream prohibition.
     // STRICT: a matched prohibition denies even when the ancestor's own
     // `odrl:perm` conflict strategy would override it for direct use.
-    const direct = evaluate(ancestor, req, { now });
+    const direct = evaluate(ancestor, req, evaluationOptions);
     if (direct.decision === "deny" || direct.matchedProhibitions.length > 0) {
       return denied(
         `Hop ${i} (<${ancestor.id}>) prohibits the request directly (${direct.reason}).`,
@@ -235,7 +240,7 @@ export function evaluateDelegated(
   // --- the leaf grant itself -------------------------------------------------
   // biome-ignore lint/style/noNonNullAssertion: non-empty checked above
   const leafPolicy = chain[chain.length - 1]!;
-  const leaf = evaluate(leafPolicy, req, { now });
+  const leaf = evaluate(leafPolicy, req, evaluationOptions);
   if (leaf.decision !== "permit" || (strictProhibitions && leaf.matchedProhibitions.length > 0)) {
     return {
       ...denied(
@@ -328,7 +333,7 @@ function checkDelegationEdge(
   child: OdrlPolicy,
   remainingDepth: number,
   req: RequestContext,
-  now: Date,
+  options: EvaluateOptions,
 ): EdgeCheck {
   // Structural profile requirements on a delegated hop.
   if (child.type !== "Agreement") {
@@ -363,7 +368,7 @@ function checkDelegationEdge(
   // strategy are honoured. STRICT in a chain: a matched prohibition on grantUse
   // denies the edge even where the parent's own `odrl:perm` conflict strategy
   // would override it (spec §6.2 — prohibitions are strict in a delegation chain).
-  const auth = evaluate(parent, authRequest, { now });
+  const auth = evaluate(parent, authRequest, options);
   if (auth.decision !== "permit" || auth.matchedProhibitions.length > 0) {
     return edgeFailure(
       `the parent policy does not cleanly authorise delegation by <${child.assigner}> (${auth.decision}${auth.matchedProhibitions.length > 0 ? ", with a matched prohibition" : ""}: ${auth.reason}).`,
@@ -374,7 +379,7 @@ function checkDelegationEdge(
   // (effective) assignee naming the delegator. An assignee-FREE grantUse would
   // let ANY agent re-delegate — the profile requires delegation authority to be
   // individually granted (spec §5.2.4), so such a rule never authorises an edge.
-  const candidates = matchingPermissions(parent, authRequest, { now }).filter(
+  const candidates = matchingPermissions(parent, authRequest, options).filter(
     (r) => r.action === "grantUse" && r.assignee === child.assigner,
   );
   if (candidates.length === 0) {
@@ -415,7 +420,7 @@ function checkDelegationEdge(
     permissions: authorizing,
     ...(parent.obligations !== undefined && { obligations: parent.obligations }),
   };
-  const edgeDuties = evaluate(dutySource, authRequest, { now }).duties;
+  const edgeDuties = evaluate(dutySource, authRequest, options).duties;
   return {
     ok: true,
     duties: edgeDuties.filter((d) => d.action !== "nextPolicy"),

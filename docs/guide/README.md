@@ -24,8 +24,8 @@ app before. It does not assume you know Solid or RDF.
    accessors.
 6. [Live updates, offline and collaboration](06-live-updates-and-offline.md):
    `@jeswr/pod-notifications`, `solid-offline` and `@jeswr/y-solid`.
-7. [Sharing and permissions](07-sharing.md): what the SDK supports today and what to do until
-   it supports more.
+7. [Sharing and permissions](07-sharing.md): sharing, roles, access requests and share
+   notifications with `@jeswr/pod-access`.
 8. [The user interface](08-user-interface.md): the shared shell, components and design rules.
 9. [Testing](09-testing.md): memory pods, recorded traffic and a local Solid server.
 10. [Shipping](10-shipping.md): the Client Identifier Document, the workspace rules and the gate.
@@ -40,9 +40,10 @@ app before. It does not assume you know Solid or RDF.
 | Change notifications | `@jeswr/pod-notifications` | Works: WebSocket, streaming HTTP, polling |
 | Collaborative documents | `@jeswr/y-solid` | Works on Solid; LWS **not ready yet** |
 | Shared sign-in screen | `@jeswr/suite-ui/sign-in` (`SignInCard`), `@jeswr/pod-auth/directory` | Ready |
-| Sharing | `@jeswr/pod-access` | **Not ready yet**: translation core only |
-| React data hooks | `@jeswr/suite-sdk` | **Not ready yet**: planned |
-| Type Index, preferences, trash, versions | various | In progress |
+| Sharing, roles, access requests | `@jeswr/pod-access` | Works; roles and the access-request inbox are Solid only (the inbox WAC only) |
+| React data hooks | `@jeswr/suite-sdk` | **Not ready yet**: only `useNotify()` exists |
+| Type Index | `@jeswr/pod-type-index` | Works; on Solid the WebID profile must be in the storage |
+| Preferences, trash, versions | various | In progress |
 
 ## For coding agents
 

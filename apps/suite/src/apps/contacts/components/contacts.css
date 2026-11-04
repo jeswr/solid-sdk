@@ -719,3 +719,86 @@
   outline: 2px solid var(--app-contacts);
   outline-offset: 2px;
 }
+/* AUTHORED-BY Claude Opus 5.5 — app-managed Trash */
+.con-trash {
+  max-width: 960px;
+  margin: 0 auto;
+}
+.con-trash .con-list-heading {
+  align-items: center;
+}
+.con-trash-count,
+.con-trash-intro,
+.con-trash-meta {
+  color: var(--muted-foreground);
+  font-size: 13px;
+}
+.con-trash-empty-action {
+  margin-left: auto;
+}
+.con-trash-intro {
+  margin: 0 0 4px;
+}
+.con-trash-status {
+  min-height: 20px;
+  margin: 0 0 8px;
+  font-size: 13px;
+}
+.con-trash-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+}
+.con-trash-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  min-width: 0;
+}
+.con-trash-item + .con-trash-item {
+  border-top: 1px solid var(--border);
+}
+.con-trash-item .con-person-text {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.con-trash-item h2 {
+  font-size: 15px;
+  font-weight: 600;
+  margin: 0;
+}
+.con-trash-meta {
+  margin: 2px 0 0;
+}
+.con-trash-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+.con-trash-icon {
+  color: var(--muted-foreground);
+}
+.con-trash :focus-visible,
+.con-dup-empty h2:focus-visible {
+  outline: 2px solid var(--app-contacts);
+  outline-offset: 2px;
+}
+@media (max-width: 639px) {
+  .con-trash-item {
+    flex-wrap: wrap;
+    padding: 12px;
+  }
+  .con-trash-item .con-person-text {
+    flex-basis: calc(100% - 64px);
+  }
+  .con-trash-actions {
+    flex-basis: 100%;
+    justify-content: flex-start;
+  }
+}

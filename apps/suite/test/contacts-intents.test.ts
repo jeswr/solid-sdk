@@ -295,7 +295,10 @@ describe("Contacts durable intent recovery across controller lifetimes", () => {
     };
     await expect(controller.delete(`${ALICE}#this`)).rejects.toThrow();
     expect(controller.getSnapshot().status).toBe("error");
-    expect(intents()[0]).toMatchObject({ phase: "rollback", completed: [FRIENDS, "index"] });
+    expect(intents()[0]).toMatchObject({
+      phase: "rollback",
+      completed: ["trash", FRIENDS, "index"],
+    });
     // A second mount must stay in error while the repair still cannot finish.
     const reopened = fresh();
     await reopened.refresh();
@@ -311,6 +314,8 @@ describe("Contacts durable intent recovery across controller lifetimes", () => {
     ).toBe(true);
     expect(deleted).not.toHaveBeenCalled();
     expect(storage.length).toBe(0);
+    // The surviving contact's trash copy was discarded by the rollback.
+    expect([...pod.files.keys()].some((url) => url.includes("/.trash/"))).toBe(false);
   });
 
   it("returns Undo's serialized confirmed snapshot after queued edits settle, and restores it from a fresh controller", async () => {
