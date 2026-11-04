@@ -1,6 +1,6 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
 import { describe, expect, it } from "vitest";
-import { httpIriOrUndefined, isHttpIri } from "./iri.js";
+import { assertResourceUrl, httpIriOrUndefined, isHttpIri, isResourceUrl } from "./iri.js";
 
 describe("isHttpIri — canonical-consistent boolean guard", () => {
   it("accepts absolute http(s) URLs that are ALREADY canonical", () => {
@@ -75,6 +75,28 @@ describe("httpIriOrUndefined — returns the CANONICAL href (whitespace/control 
   it("returns undefined for non-http(s) / invalid input", () => {
     for (const bad of ["javascript:alert(1)", "urn:uuid:1", "nope", "", undefined]) {
       expect(httpIriOrUndefined(bad)).toBeUndefined();
+    }
+  });
+});
+
+describe("isResourceUrl / assertResourceUrl (sst-ild.7.9)", () => {
+  it("accepts a canonical http(s) document URL", () => {
+    expect(isResourceUrl("https://alice.pod.example/tasks/a")).toBe(true);
+    expect(assertResourceUrl("http://localhost:3000/alice/t")).toBe(
+      "http://localhost:3000/alice/t",
+    );
+  });
+
+  it("rejects a fragment, a relative or non-http(s) URL, and Turtle-breaking characters", () => {
+    for (const bad of [
+      "https://alice.pod.example/tasks/a#x",
+      "tasks/a",
+      "javascript:alert(1)",
+      "https://a.example/b> <https://evil/p> <https://evil/o",
+      "https://a.example/x y",
+    ]) {
+      expect(isResourceUrl(bad)).toBe(false);
+      expect(() => assertResourceUrl(bad)).toThrow(TypeError);
     }
   });
 });

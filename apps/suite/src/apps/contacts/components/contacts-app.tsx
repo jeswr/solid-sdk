@@ -1,8 +1,9 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 "use client";
 import { Button, Toaster, toast } from "@jeswr/suite-ui";
-import { Download, Plus, Star, Tag, Users, X } from "lucide-react";
+import { Download, Merge, Plus, Star, Tag, Trash2, Users, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { type ReactNode, useEffect, useRef, useState } from "react";
@@ -12,6 +13,7 @@ import {
   ContactsProvider,
   useAddressBook,
   useContactMutations,
+  useDuplicates,
   useGroups,
   useStarred,
 } from "../state/contacts-context";
@@ -26,6 +28,7 @@ function Sidebar() {
   const groups = useGroups();
   const mutations = useContactMutations();
   const { stars } = useStarred();
+  const duplicates = useDuplicates().groups.length;
   const pathname = usePathname().replace(/\/+$/, "");
   const [menu, setMenu] = useState<string>();
   const [editing, setEditing] = useState<string>();
@@ -61,6 +64,18 @@ function Sidebar() {
           "Starred",
           <Star size={18} aria-hidden="true" />,
           data.people.filter((p) => stars.has(`${p.url}#this`)).length,
+        )}
+        {link(
+          "/contacts/duplicates",
+          "Merge duplicates",
+          <Merge size={18} aria-hidden="true" />,
+          duplicates || undefined,
+        )}
+        {link(
+          "/contacts/trash",
+          "Trash",
+          <Trash2 size={18} aria-hidden="true" />,
+          data.trash.length,
         )}
       </nav>
       <h2>Labels</h2>

@@ -1,4 +1,5 @@
 // AUTHORED-BY GPT-5.6 Codex
+// AUTHORED-BY Claude Opus 5.5
 import Foundation
 import CoreFoundation
 import CryptoKit
@@ -59,7 +60,8 @@ enum SecureStoreValidation {
     static func namespace(_ origin: SuiteOrigin) -> String {
         let host = origin.host.contains(":") && !origin.host.hasPrefix("[") ? "[\(origin.host)]" : origin.host
         let defaultPort = origin.scheme == "https" ? 443 : 80
-        let port = origin.port == defaultPort ? "" : ":\(origin.port)"
+        // The bundled capacitor://localhost origin has no port (0).
+        let port = origin.port == defaultPort || origin.port == 0 ? "" : ":\(origin.port)"
         return SHA256.hash(data: Data("\(origin.scheme)://\(host)\(port)".utf8)).map { String(format: "%02x", $0) }.joined()
     }
 }

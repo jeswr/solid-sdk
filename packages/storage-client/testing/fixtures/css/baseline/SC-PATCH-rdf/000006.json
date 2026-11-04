@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "request": {
+    "method": "PATCH",
+    "url": "http://localhost:46617/conformance-5b1905a4-4edd-484a-83f5-39e9bf5a71f7/patch-rdf/graph.ttl",
+    "headers": [["content-type", "text/n3"], ["if-match", "\"1793491202657-text/turtle\""]],
+    "body": "QHByZWZpeCBzb2xpZDogPGh0dHA6Ly93d3cudzMub3JnL25zL3NvbGlkL3Rlcm1zIz4uCl86cGF0Y2ggYSBzb2xpZDpJbnNlcnREZWxldGVQYXRjaDsKICBzb2xpZDpkZWxldGVzIHsKPGh0dHBzOi8vZXhhbXBsZS5vcmcvaXRlbT4gPGh0dHBzOi8vZXhhbXBsZS5vcmcvbGFiZWw+ICJiZWZvcmUiIC4KfTsKICBzb2xpZDppbnNlcnRzIHsKPGh0dHBzOi8vZXhhbXBsZS5vcmcvaXRlbT4gPGh0dHBzOi8vZXhhbXBsZS5vcmcvbGFiZWw+ICJhZnRlciIgLgp9OwouCg=="
+  },
+  "response": {
+    "url": "http://localhost:46617/conformance-5b1905a4-4edd-484a-83f5-39e9bf5a71f7/patch-rdf/graph.ttl",
+    "status": 205,
+    "statusText": "Reset Content",
+    "headers": [
+      ["accept-ranges", "bytes"],
+      ["access-control-allow-credentials", "true"],
+      ["access-control-allow-origin", "*"],
+      [
+        "access-control-expose-headers",
+        "Accept-Patch,Accept-Post,Accept-Put,Allow,Content-Range,ETag,Last-Modified,Link,Location,Updates-Via,WAC-Allow,Www-Authenticate"
+      ],
+      ["connection", "keep-alive"],
+      ["date", "Sun, 01 Nov 2026 00:00:02 GMT"],
+      ["keep-alive", "timeout=5"],
+      ["transfer-encoding", "chunked"],
+      ["vary", "Accept,Authorization,Origin"],
+      ["x-powered-by", "Community Solid Server"]
+    ],
+    "body": null,
+    "redirected": false
+  }
+}

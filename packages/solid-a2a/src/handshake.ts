@@ -15,7 +15,7 @@ import { parseRdf } from "@jeswr/fetch-rdf";
 import type { DatasetCore, Quad } from "@rdfjs/types";
 import { DatasetWrapper, TermFrom, TermWrapper } from "@rdfjs/wrapper";
 import { DataFactory, Store } from "n3";
-import { requireHttpIri } from "./iri.js";
+import { requireHttpIri, safeHttpIri } from "./iri.js";
 import { serialize } from "./serialize.js";
 import type { HandshakeMessage, UpgradeOffer, UpgradeResponse } from "./types.js";
 import { A2A, legacyA2aIri, RDF_TYPE, XSD } from "./vocab.js";
@@ -99,6 +99,9 @@ export function decodeUpgradeOffer(input: unknown): UpgradeOffer {
     throw new TypeError(
       "decodeUpgradeOffer: protocolHash and protocolSource are required strings.",
     );
+  }
+  if (safeHttpIri(o.protocolSource) !== o.protocolSource) {
+    throw new TypeError("decodeUpgradeOffer: protocolSource must be an http(s) IRI.");
   }
   // `required` is optional, but if PRESENT it must be a genuine boolean — a
   // malformed `required: "true"` must NOT be silently coerced to `false`
@@ -289,7 +292,15 @@ export async function handshakeFromRdf(
    * than silently defaulting a security-bearing flag.
    */
   const strictBool = (predicate: string): boolean | undefined => {
-    const v = lit(predicate);
+    const matches = [...objectTerms(subject, predicate)];
+    // An xsd:boolean literal only: `"false"@en` is a string, not a flag.
+    if (matches.length !== 1 || matches[0]?.termType !== "Literal") {
+      return undefined;
+    }
+    if (matches[0].datatype.value !== XSD_BOOLEAN) {
+      return undefined;
+    }
+    const v = matches[0].value;
     if (v === "true") {
       return true;
     }
@@ -301,7 +312,9 @@ export async function handshakeFromRdf(
 
   if (isOffer) {
     const protocolHash = lit(A2A_PROTOCOL_HASH);
-    const protocolSource = iri(A2A_PROTOCOL_SOURCE);
+    const source = iri(A2A_PROTOCOL_SOURCE);
+    // The fetch target must be an http(s) IRI the encoder would also emit.
+    const protocolSource = safeHttpIri(source) === source ? source : undefined;
     const required = strictBool(A2A_REQUIRED);
     // A malformed/missing `required` must NOT be coerced to optional — reject.
     if (protocolHash === undefined || protocolSource === undefined || required === undefined) {

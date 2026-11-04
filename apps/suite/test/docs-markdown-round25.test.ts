@@ -7,6 +7,7 @@ import { expect, it, vi } from "vitest";
 import { applyUpdate, Doc, encodeStateAsUpdate } from "yjs";
 import { baseExtensions, editorExtensions } from "../src/apps/docs/editor/extensions";
 import { exportMarkdown, importMarkdown } from "../src/apps/docs/lib/convert/markdown";
+import { exportedMarks } from "./helpers/docs-markdown-omissions";
 import { markdownText, markdownWhitespace } from "./helpers/docs-markdown-text";
 
 const schema = getSchema(baseExtensions(vi.fn()));
@@ -75,7 +76,7 @@ it("round trips generated whitespace in every Markdown text position and isolate
     fc.property(
       markdownText,
       fc.boolean(),
-      fc.constantFrom(null, ...Object.keys(schema.marks)),
+      fc.constantFrom(null, ...exportedMarks(schema)),
       (value, checked, mark) => {
         if (mark) visitedMarks.add(mark);
         const labelled = paragraph(
@@ -125,7 +126,7 @@ it("round trips generated whitespace in every Markdown text position and isolate
     ),
     { seed: 2507, numRuns: 1000 },
   );
-  expect([...visitedMarks].sort()).toEqual(Object.keys(schema.marks).sort());
+  expect([...visitedMarks].sort()).toEqual(exportedMarks(schema).sort());
 }, 120_000);
 
 it("recognizes task markers before whitespace-only, empty and invisible labels", () => {

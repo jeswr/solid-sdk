@@ -15,10 +15,10 @@ const CARD_PREFIX = /^[1-9]/;
 /**
  * Characters that may sit between digit groups without ending a run: whitespace, any
  * punctuation (dashes, dots, quotes, brackets, slashes, middle dots), invisible format
- * characters (zero-width space, soft hyphen), combining marks, and `+ = ~ |`. Callers
+ * characters (zero-width space, soft hyphen), any combining mark, and `+ = ~ |`. Callers
  * should percent-decode IRIs before scanning them. Ideographic numerals are not covered.
  */
-const SEPARATOR = /^[\s\p{Z}\p{P}\p{Cf}\p{Mn}\p{Me}+=~|]$/u;
+const SEPARATOR = /^[\s\p{Z}\p{P}\p{Cf}\p{M}+=~|]$/u;
 const DECIMAL = /^\p{Nd}$/u;
 const NUMBER = /^\p{N}$/u;
 const PUNCTUATION = /\p{P}/gu;

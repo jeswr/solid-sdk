@@ -547,6 +547,29 @@ describe("signed-content reading is order- and accessor-independent", () => {
     }
   });
 
+  it("a validity bound finer than milliseconds denies", async () => {
+    for (const bounds of [
+      { validFrom: "2026-01-01T00:00:00.0005Z", validUntil: VALID_UNTIL },
+      { validFrom: VALID_FROM, validUntil: "2027-01-01T00:00:00.0005Z" },
+    ]) {
+      const vc = await issueAgentAuthorization(
+        {
+          principal: CAST.inst,
+          agent: CAST.agentR,
+          action: "read",
+          target: CAST.records,
+          policy: CAST.instituteInternalId,
+          policyContent: base.policyDocuments.instituteInternal,
+          ...bounds,
+        },
+        base.keys.inst,
+      );
+      const r = await verifyInternal(internalChain({ credentials: [vc] }));
+      expect(r.authorized).toBe(false);
+      expect(r.phase).toBe("A");
+    }
+  });
+
   it("a leaf grantUse prohibition on depth does not block a read, whatever depth the caller claims", async () => {
     const leafDepth: OdrlPolicy = {
       ...base.instituteInternal,

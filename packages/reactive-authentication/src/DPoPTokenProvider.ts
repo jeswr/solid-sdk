@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 import type { KeyValueStore } from "@key-value-kit/core";
 import { createMemoryStore } from "@key-value-kit/storage/memory";
 import * as DPoP from "dpop";
@@ -74,6 +75,11 @@ export class DPoPTokenProvider implements TokenProvider {
 
   get fence(): SessionFence {
     return this.#fence;
+  }
+
+  /** Share this session with UMA and LWS credential sources instead of creating another login. */
+  get session(): OidcSession {
+    return this.#session;
   }
 
   /**

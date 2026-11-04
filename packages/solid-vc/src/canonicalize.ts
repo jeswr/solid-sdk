@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 //
 // The W3C Data Integrity "transformation" + "hashing" steps for the `*-rdfc-*`
@@ -12,7 +13,6 @@
 // i.e. the SHA-256 of the canonical proof options concatenated with the SHA-256
 // of the canonical credential graph (proof node removed). We follow that exactly.
 
-import { createHash } from "node:crypto";
 import type { Quad } from "@rdfjs/types";
 import { canonize } from "rdf-canonize";
 
@@ -30,8 +30,10 @@ export async function canonicalNQuads(quads: readonly Quad[]): Promise<string> {
 }
 
 /** SHA-256 of a UTF-8 string, as raw bytes. */
-function sha256(input: string): Uint8Array {
-  return new Uint8Array(createHash("sha256").update(input, "utf8").digest());
+async function sha256(input: string): Promise<Uint8Array> {
+  return new Uint8Array(
+    await globalThis.crypto.subtle.digest("SHA-256", new TextEncoder().encode(input)),
+  );
 }
 
 /**
@@ -51,8 +53,7 @@ export async function dataIntegrityHash(
 ): Promise<Uint8Array> {
   const docCanon = await canonicalNQuads(documentQuads);
   const proofCanon = await canonicalNQuads(proofOptionsQuads);
-  const proofHash = sha256(proofCanon);
-  const docHash = sha256(docCanon);
+  const [proofHash, docHash] = await Promise.all([sha256(proofCanon), sha256(docCanon)]);
   const out = new Uint8Array(proofHash.length + docHash.length);
   out.set(proofHash, 0);
   out.set(docHash, proofHash.length);

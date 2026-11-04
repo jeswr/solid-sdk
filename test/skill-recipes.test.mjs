@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Codex GPT-6.1-Sol
 // Execute the documented examples so API and credential-boundary regressions fail the gate.
 import * as nodeCrypto from "node:crypto";
 import { EventEmitter } from "node:events";
@@ -22,7 +23,12 @@ const jose = await import(fixtureRequire.resolve("jose"));
 const AsyncFunction = Object.getPrototypeOf(async () => {}).constructor;
 
 function blocks(skill, language, section = "", file = "SKILL.md") {
-  const directory = skill === "solid-fetch-rdf" ? "packages/fetch-rdf" : `skills/${skill}`;
+  const directory =
+    skill === "solid-fetch-rdf"
+      ? "packages/fetch-rdf"
+      : skill === "pod-notifications"
+        ? "packages/pod-notifications"
+        : `skills/${skill}`;
   const markdown = readFileSync(new URL(`../${directory}/${file}`, import.meta.url), "utf8");
   const start = section ? markdown.indexOf(section) : 0;
   if (start < 0) throw new Error(`Missing section: ${section}`);
@@ -323,30 +329,475 @@ describe("reviewed recipe failure boundaries", () => {
     expect(mark).not.toHaveBeenCalled();
   });
 
-  it("posts the exact discovered notification channel type to its service", async () => {
-    const code = blocks("solid-notifications", "ts", "### 2. Subscribe")[0];
-    for (const channelTypeIri of [
-      "http://www.w3.org/ns/solid/notifications#WebSocketChannel2023",
-      "https://server.example/channels#WebSocketChannel2023",
-    ]) {
-      const fetch = vi.fn(async () =>
-        Response.json({ receiveFrom: "wss://server.example/receive" }),
-      );
-      const subscriptionServiceUrl = "https://server.example/subscriptions";
-      const resourceUrl = "https://pod.example/notes.ttl";
-      expect(
-        await execute(
-          code,
-          { fetch, subscriptionServiceUrl, channelTypeIri, resourceUrl },
-          {},
-          "wsUrl",
-        ),
-      ).toBe("wss://server.example/receive");
-      const [url, init] = fetch.mock.calls[0];
-      expect(url).toBe(subscriptionServiceUrl);
-      expect(init.method).toBe("POST");
-      expect(JSON.parse(init.body)).toMatchObject({ type: channelTypeIri, topic: resourceUrl });
+  async function notificationRecipe(state = "connecting") {
+    const code = blocks("pod-notifications", "ts")[0];
+    const handlers = new Map();
+    const removers = [];
+    const subscription = {
+      state,
+      on: vi.fn((event, handler) => {
+        handlers.set(event, handler);
+        const remove = vi.fn(() => handlers.delete(event));
+        removers.push(remove);
+        return remove;
+      }),
+      close: vi.fn(async () => {
+        subscription.state = "closed";
+      }),
+    };
+    const subscribe = vi.fn(async () => subscription);
+    const createNotifications = vi.fn(() => ({ subscribe }));
+    const { watchCollection } = await execute(
+      code,
+      {},
+      {
+        "@jeswr/pod-notifications": { createNotifications },
+      },
+      "({ watchCollection })",
+    );
+    const fetch = vi.fn();
+    const storage = { root: "https://pod.example/alice/" };
+    const hotResource = "https://pod.example/alice/note.txt";
+    const invalidate = vi.fn();
+    const reportError = vi.fn();
+    return {
+      handlers,
+      removers,
+      subscription,
+      subscribe,
+      createNotifications,
+      fetch,
+      storage,
+      hotResource,
+      invalidate,
+      reportError,
+      watch: (reconcile) =>
+        watchCollection(fetch, storage, hotResource, invalidate, reconcile, reportError),
+      transition: (next) => {
+        subscription.state = next;
+        handlers.get("state")?.(next);
+      },
+    };
+  }
+
+  it("wires the documented notification client to bounded fetch, invalidation, resync and cleanup", async () => {
+    const {
+      watch,
+      createNotifications,
+      subscribe,
+      fetch,
+      storage,
+      hotResource,
+      handlers,
+      invalidate,
+      removers,
+      subscription,
+      reportError,
+    } = await notificationRecipe("degraded");
+    const reconcile = vi.fn();
+    const cleanup = await watch(reconcile);
+    expect(createNotifications).toHaveBeenCalledWith({ fetch, storage });
+    expect(subscribe).toHaveBeenCalledWith([storage.root], {
+      depth: "recursive",
+      hot: [hotResource],
+      pollIntervalMs: 30_000,
+    });
+    expect(reconcile).toHaveBeenCalledWith(new Date(0));
+    handlers.get("change")({ type: "Update", object: hotResource, raw: { untrusted: true } });
+    expect(invalidate.mock.calls).toEqual([[hotResource]]);
+    const since = new Date("2026-10-01T00:00:00Z");
+    handlers.get("resync")(since);
+    await vi.waitFor(() => expect(reconcile).toHaveBeenLastCalledWith(since));
+    await cleanup();
+    for (const remove of removers) expect(remove).toHaveBeenCalledOnce();
+    expect(subscription.close).toHaveBeenCalledOnce();
+    expect(handlers.size).toBe(0);
+    expect(reportError).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["Create", { target: "incoming/" }],
+    ["Delete", { origin: "outgoing/" }],
+    ["Move", { target: "incoming/", origin: "outgoing/" }],
+    ["Add", { target: "incoming/" }],
+    ["Remove", { origin: "outgoing/" }],
+  ])("invalidates affected collections for %s with or without container hints", async (type, hints) => {
+    const { watch, handlers, storage, hotResource, invalidate, reportError } =
+      await notificationRecipe("live");
+    const reconcile = vi.fn();
+    const cleanup = await watch(reconcile);
+    const containers = Object.fromEntries(
+      Object.entries(hints).map(([field, path]) => [field, `${storage.root}${path}`]),
+    );
+    handlers.get("change")({
+      type,
+      object: hotResource,
+      ...containers,
+      raw: { target: "https://foreign.example/", origin: "https://foreign.example/" },
+    });
+    expect(invalidate.mock.calls).toEqual(
+      [hotResource, storage.root, ...Object.values(containers)].map((url) => [url]),
+    );
+    invalidate.mockClear();
+    handlers.get("change")({ type, object: hotResource });
+    expect(invalidate.mock.calls).toEqual([[hotResource], [storage.root]]);
+    invalidate.mockClear();
+    handlers.get("change")({
+      type,
+      object: storage.root,
+      target: storage.root,
+      origin: storage.root,
+    });
+    expect(invalidate.mock.calls).toEqual([[storage.root]]);
+    expect(reconcile).toHaveBeenCalledOnce();
+    expect(reportError).not.toHaveBeenCalled();
+    await cleanup();
+  });
+
+  it("reconciles changes during push setup on first live without waiting for resync", async () => {
+    const { watch, transition } = await notificationRecipe();
+    let authoritative = "initial";
+    let cached;
+    const reconcile = vi.fn(async () => {
+      cached = authoritative;
+    });
+    const cleanup = await watch(reconcile);
+    expect(cached).toBe("initial");
+    authoritative = "changed before push connected";
+    transition("live");
+    await vi.waitFor(() => expect(cached).toBe(authoritative));
+    expect(reconcile.mock.calls).toEqual([[new Date(0)], [new Date(0)]]);
+    transition("degraded");
+    transition("live");
+    expect(reconcile).toHaveBeenCalledTimes(2); // Later reconnects use resync.
+    await cleanup();
+  });
+
+  it.each([
+    ["live", "resync"],
+    ["resync", "live"],
+  ])("serializes initial, %s and %s reads despite reverse completion", async (first, second) => {
+    const { watch, transition, handlers, reportError } = await notificationRecipe();
+    const reads = Array.from({ length: 3 }, () => ({
+      started: Promise.withResolvers(),
+      release: Promise.withResolvers(),
+      completed: Promise.withResolvers(),
+    }));
+    let authoritative = "initial snapshot";
+    let cached;
+    let active = 0;
+    let peakActive = 0;
+    let nextRead = 0;
+    const reconcile = vi.fn(async () => {
+      const read = reads[nextRead++];
+      const snapshot = authoritative;
+      peakActive = Math.max(peakActive, ++active);
+      read.started.resolve();
+      await read.release.promise;
+      cached = snapshot;
+      active--;
+      read.completed.resolve();
+    });
+    const watching = watch(reconcile);
+    await reads[0].started.promise;
+    const since = new Date("2026-10-01T00:00:00Z");
+    for (const event of [first, second]) {
+      authoritative = `snapshot before ${event}`;
+      if (event === "live") transition("live");
+      else handlers.get("resync")(since);
+      await Promise.resolve();
     }
+    // Concurrent reads would commit newer snapshots first and the initial snapshot last.
+    reads[2].release.resolve();
+    await reads[2].release.promise;
+    reads[1].release.resolve();
+    await reads[1].release.promise;
+    reads[0].release.resolve();
+    const cleanup = await watching;
+    await reads[2].completed.promise;
+    expect(cached).toBe(authoritative);
+    expect(peakActive).toBe(1);
+    expect(reconcile.mock.calls).toEqual([
+      [new Date(0)],
+      [first === "live" ? new Date(0) : since],
+      [second === "live" ? new Date(0) : since],
+    ]);
+    expect(reportError).not.toHaveBeenCalled();
+    await cleanup();
+  });
+
+  it("serializes repeated resync reads after setup", async () => {
+    const { watch, handlers } = await notificationRecipe("live");
+    const pending = Promise.withResolvers();
+    const started = Promise.withResolvers();
+    const completed = Promise.withResolvers();
+    const first = new Date("2026-10-01T00:00:00Z");
+    const second = new Date("2026-10-02T00:00:00Z");
+    let authoritative = "initial snapshot";
+    let cached;
+    const reconcile = vi.fn(async (since) => {
+      const snapshot = authoritative;
+      if (since === first) {
+        started.resolve();
+        await pending.promise;
+      }
+      cached = snapshot;
+      if (since === second) completed.resolve();
+    });
+    const cleanup = await watch(reconcile);
+    authoritative = "first resync snapshot";
+    handlers.get("resync")(first);
+    await started.promise;
+    authoritative = "second resync snapshot";
+    handlers.get("resync")(second);
+    await Promise.resolve();
+    pending.resolve();
+    await completed.promise;
+    expect(cached).toBe(authoritative);
+    expect(reconcile.mock.calls).toEqual([[new Date(0)], [first], [second]]);
+    await cleanup();
+  });
+
+  it.each([
+    "initial",
+    "live",
+    "resync",
+  ])("preserves change invalidations across an in-flight %s read", async (phase) => {
+    const { watch, handlers, transition, storage, hotResource, invalidate, reportError } =
+      await notificationRecipe();
+    const started = Promise.withResolvers();
+    const release = Promise.withResolvers();
+    const target = `${storage.root}incoming/`;
+    const origin = `${storage.root}outgoing/`;
+    const urls = [hotResource, storage.root, target, origin];
+    const cache = new Map();
+    let authoritative = "old snapshot";
+    let holdRead = phase === "initial";
+    invalidate.mockImplementation((url) => cache.delete(url));
+    const reconcile = vi.fn(async () => {
+      const snapshot = authoritative;
+      if (holdRead) {
+        started.resolve();
+        await release.promise;
+      }
+      for (const url of urls) cache.set(url, snapshot);
+    });
+    const watching = watch(reconcile);
+    let cleanup;
+    if (phase !== "initial") {
+      cleanup = await watching;
+      holdRead = true;
+      if (phase === "live") transition("live");
+      else handlers.get("resync")(new Date());
+    }
+    await started.promise;
+    authoritative = "new snapshot";
+    handlers.get("change")({ type: "Update", object: hotResource });
+    handlers.get("change")({ type: "Move", object: hotResource, target, origin });
+    release.resolve();
+    cleanup ??= await watching;
+    await new Promise((resolve) => setImmediate(resolve));
+    // No later event or reconciliation is needed to discard the stale commit.
+    for (const url of urls) expect(cache.has(url)).toBe(false);
+    expect(reconcile).toHaveBeenCalledTimes(phase === "initial" ? 1 : 2);
+    handlers.get("change")({ type: "Update", object: `${storage.root}other` });
+    expect(invalidate).toHaveBeenLastCalledWith(`${storage.root}other`);
+    expect(reportError).not.toHaveBeenCalled();
+    await cleanup();
+  });
+
+  it("fences event reads queued before cleanup and ignores late callbacks", async () => {
+    const { watch, handlers, transition, subscription, reportError } = await notificationRecipe();
+    const reconcile = vi.fn();
+    const cleanup = await watch(reconcile);
+    const lateResync = handlers.get("resync");
+    lateResync(new Date());
+    transition("live");
+    await cleanup();
+    // A callback already dispatched before listener removal can still reach the queue.
+    lateResync(new Date());
+    await cleanup();
+    expect(reconcile).toHaveBeenCalledOnce();
+    expect(subscription.close).toHaveBeenCalledOnce();
+    expect(handlers.size).toBe(0);
+    expect(reportError).not.toHaveBeenCalled();
+  });
+
+  it("invalidates a stale partial commit before reporting a failed reconciliation", async () => {
+    const { watch, handlers, hotResource, invalidate, subscription, reportError } =
+      await notificationRecipe("live");
+    const started = Promise.withResolvers();
+    const release = Promise.withResolvers();
+    const failure = new Error("Reconciliation failed after a partial commit");
+    const cache = new Map();
+    invalidate.mockImplementation((url) => cache.delete(url));
+    const reconcile = vi.fn().mockImplementationOnce(() => {});
+    reconcile.mockImplementation(async () => {
+      started.resolve();
+      await release.promise;
+      cache.set(hotResource, "old snapshot");
+      throw failure;
+    });
+    const cleanup = await watch(reconcile);
+    handlers.get("resync")(new Date());
+    await started.promise;
+    handlers.get("change")({ type: "Update", object: hotResource });
+    release.resolve();
+    await vi.waitFor(() => expect(reportError).toHaveBeenCalledExactlyOnceWith(failure));
+    expect(cache.has(hotResource)).toBe(false);
+    expect(subscription.close).toHaveBeenCalledOnce();
+    await cleanup();
+  });
+
+  it.each([
+    { readFails: false, closeFails: false },
+    { readFails: true, closeFails: false },
+    { readFails: false, closeFails: true },
+    { readFails: true, closeFails: true },
+  ])("drains the active read on cleanup (readFails=$readFails, closeFails=$closeFails)", async ({
+    readFails,
+    closeFails,
+  }) => {
+    const { watch, handlers, transition, subscription, reportError, hotResource, invalidate } =
+      await notificationRecipe();
+    const started = Promise.withResolvers();
+    const release = Promise.withResolvers();
+    const readFailure = new Error("Read failed during cleanup");
+    const closeFailure = new Error("Subscription cleanup failed");
+    let cached = "initial";
+    const reconcile = vi
+      .fn()
+      .mockImplementationOnce(() => {})
+      .mockImplementation(async () => {
+        started.resolve();
+        await release.promise;
+        if (readFails) throw readFailure;
+        cached = "updated";
+      });
+    const cleanup = await watch(reconcile);
+    handlers.get("resync")(new Date());
+    await started.promise;
+    const lateChange = handlers.get("change");
+    lateChange({ type: "Update", object: hotResource });
+    handlers.get("resync")(new Date());
+    transition("live");
+    if (closeFails) subscription.close.mockRejectedValue(closeFailure);
+    const settled = vi.fn();
+    const closing = Promise.allSettled([cleanup(), cleanup()]).then((outcomes) => {
+      settled();
+      return outcomes;
+    });
+    // Flush promise continuations while the application read remains outstanding.
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(settled).not.toHaveBeenCalled();
+    expect(subscription.close).toHaveBeenCalledOnce();
+    expect(handlers.size).toBe(0);
+    lateChange({ type: "Update", object: hotResource });
+    release.resolve();
+    expect(await closing).toEqual(
+      Array.from({ length: 2 }, () =>
+        closeFails
+          ? { status: "rejected", reason: closeFailure }
+          : { status: "fulfilled", value: undefined },
+      ),
+    );
+    expect(cached).toBe(readFails ? "initial" : "updated");
+    expect(reconcile).toHaveBeenCalledTimes(2);
+    expect(invalidate).not.toHaveBeenCalled();
+    if (readFails) {
+      await vi.waitFor(() =>
+        expect(reportError).toHaveBeenCalledWith(closeFails ? closeFailure : readFailure),
+      );
+      for (const [error] of reportError.mock.calls) {
+        expect(error).toBe(closeFails ? closeFailure : readFailure);
+      }
+    } else {
+      expect(reportError).not.toHaveBeenCalled();
+    }
+  });
+
+  it("reconciles an already-live subscription after registering every listener", async () => {
+    const { watch, handlers, transition } = await notificationRecipe("live");
+    const reconcile = vi.fn(() => {
+      expect(new Set(handlers.keys())).toEqual(new Set(["change", "resync", "state"]));
+    });
+    const cleanup = await watch(reconcile);
+    transition("degraded");
+    transition("live");
+    expect(reconcile).toHaveBeenCalledOnce();
+    await cleanup();
+  });
+
+  it("awaits initial async reconciliation before returning cleanup", async () => {
+    const { watch } = await notificationRecipe("degraded");
+    const pending = Promise.withResolvers();
+    const resolved = vi.fn();
+    const watching = watch(() => pending.promise).then((cleanup) => {
+      resolved();
+      return cleanup;
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(resolved).not.toHaveBeenCalled();
+    pending.resolve();
+    const cleanup = await watching;
+    expect(resolved).toHaveBeenCalledOnce();
+    await cleanup();
+  });
+
+  it.each([false, true])("closes on initial reconciliation failure (async=%s)", async (async) => {
+    const { watch, handlers, removers, subscription, reportError } = await notificationRecipe();
+    const failure = new Error("Initial reconciliation failed");
+    const reconcile = async
+      ? () => Promise.reject(failure)
+      : () => {
+          throw failure;
+        };
+    await expect(watch(reconcile)).rejects.toBe(failure);
+    expect(subscription.close).toHaveBeenCalledOnce();
+    for (const remove of removers) expect(remove).toHaveBeenCalledOnce();
+    expect(handlers.size).toBe(0);
+    expect(reportError).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["resync", false],
+    ["resync", true],
+    ["state", false],
+    ["state", true],
+  ])("closes and reports later %s reconciliation failure (async=%s)", async (event, async) => {
+    const { watch, handlers, removers, subscription, reportError, transition } =
+      await notificationRecipe();
+    const failure = new Error("Later reconciliation failed");
+    const reconcile = vi.fn().mockImplementationOnce(() => {});
+    reconcile.mockImplementation(() => {
+      if (async) return Promise.reject(failure);
+      throw failure;
+    });
+    await watch(reconcile);
+    if (event === "state") transition("live");
+    else handlers.get("resync")(new Date());
+    await vi.waitFor(() => expect(reportError).toHaveBeenCalledExactlyOnceWith(failure));
+    expect(subscription.close).toHaveBeenCalledOnce();
+    for (const remove of removers) expect(remove).toHaveBeenCalledOnce();
+    expect(handlers.size).toBe(0);
+  });
+
+  it("reports cleanup rejection after an event reconciliation failure", async () => {
+    const { watch, handlers, subscription, reportError } = await notificationRecipe();
+    const failure = new Error("Cleanup failed");
+    const reconcile = vi
+      .fn()
+      .mockImplementationOnce(() => {})
+      .mockImplementation(() => {
+        throw new Error("Later reconciliation failed");
+      });
+    await watch(reconcile);
+    subscription.close.mockRejectedValueOnce(failure);
+    handlers.get("resync")(new Date());
+    await vi.waitFor(() => expect(reportError).toHaveBeenCalledExactlyOnceWith(failure));
+    expect(subscription.close).toHaveBeenCalledOnce();
+    expect(handlers.size).toBe(0);
   });
 
   it.each([

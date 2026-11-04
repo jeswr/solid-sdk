@@ -43,6 +43,8 @@ export class MemoryPod implements SeedTarget {
   ignoreIfNoneMatch = false;
   /** Answer 201 to every successful PUT, even an overwrite. */
   alwaysCreated = false;
+  /** Paths whose PUT is only accepted (202) and never stored. */
+  readonly acceptOnly = new Set<string>();
   /** Paths whose DELETE is refused with the given status. */
   readonly deleteFailures = new Map<string, number>();
   #failure?: { path: string; remaining: number; status: number; skip: number; partial: boolean };
@@ -124,6 +126,9 @@ export class MemoryPod implements SeedTarget {
         if (existed && this.deleteAclWithResource) this.resources.delete(`${request.url}.acl`);
         return new Response(null, { status: existed ? 205 : 404 });
       }
+      if (request.method === "PUT" && this.acceptOnly.has(path)) {
+        return new Response(null, { status: 202 });
+      }
       if (request.method === "PUT") {
         const existed = this.resources.has(request.url);
         if (this.containerPutConflict && request.url.endsWith("/") && existed) {
@@ -140,7 +145,10 @@ export class MemoryPod implements SeedTarget {
           body,
           contentType: request.headers.get("content-type") ?? "",
         });
-        return new Response(null, { status: existed && !this.alwaysCreated ? 204 : 201 });
+        return new Response(null, {
+          status: existed && !this.alwaysCreated ? 204 : 201,
+          headers: { etag: this.etag(request.url) },
+        });
       }
       return new Response("method not allowed", { status: 405 });
     };

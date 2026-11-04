@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vitest/config";
 
@@ -29,7 +30,7 @@ export default defineConfig({
     // Loaded once before the suite: @testing-library/jest-dom matchers
     // (toBeInTheDocument, …) + automatic React cleanup between tests. A no-op
     // for the node-environment data-layer suites (no `document`).
-    setupFiles: ["./src/ui/setup-dom.ts"],
+    setupFiles: ["./test/storage-setup.ts", "./src/ui/setup-dom.ts"],
     coverage: {
       provider: "v8",
       reporter: ["text", "json-summary", "html"],

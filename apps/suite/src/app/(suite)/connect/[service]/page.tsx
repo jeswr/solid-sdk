@@ -1,17 +1,23 @@
 // AUTHORED-BY Codex GPT-6
-import { notFound } from "next/navigation";
+// AUTHORED-BY Claude Opus 5.5
+import { Suspense } from "react";
 import { entries } from "@/apps/home/components/connect/config";
-import { ConnectFlow } from "@/apps/home/components/connect/flow";
+import { ConnectRoute } from "@/apps/home/components/connect/connect-route";
 import "@/apps/home/components/connect/connect.css";
 
-/** Every connector page is known at build time; anything else is a real 404. */
-export const dynamicParams = false;
+// Staging sets this literal to false; the web target retains on-demand routes.
+export const dynamicParams = true;
+/** The native export ships one placeholder page; the web prerenders every known connector. */
 export function generateStaticParams() {
-  return entries.map((entry) => ({ service: entry.id }));
+  return process.env.NEXT_PUBLIC_SUITE_TARGET === "native"
+    ? [{ service: "__" }]
+    : entries.map((entry) => ({ service: entry.id }));
 }
 
-export default async function Page({ params }: { params: Promise<{ service: string }> }) {
-  const { service } = await params;
-  if (!entries.some((entry) => entry.id === service)) notFound();
-  return <ConnectFlow service={service} />;
+export default function Page() {
+  return (
+    <Suspense>
+      <ConnectRoute />
+    </Suspense>
+  );
 }

@@ -23,6 +23,7 @@ import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { freePort } from "../test-support/free-port.js";
 import {
   A2A_ACK_MEDIA_TYPE,
   A2A_BINDING,
@@ -55,14 +56,6 @@ async function cli(args: string[]) {
   let out = "";
   await main([...args], { stdout: (s) => (out += s) });
   return out.trim().startsWith("{") ? (JSON.parse(out) as Record<string, unknown>) : {};
-}
-
-async function freePort(): Promise<number> {
-  const s = createServer();
-  await new Promise<void>((r) => s.listen(0, "127.0.0.1", r));
-  const port = (s.address() as AddressInfo).port;
-  await new Promise<void>((r) => s.close(() => r()));
-  return port;
 }
 
 /** Stand-in SPARQ executable (permits except the init probe's gated prohibition). */

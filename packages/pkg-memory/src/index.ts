@@ -53,3 +53,5 @@ export type {
   TemporalValue,
 } from "./templates.js";
 export { createFactAssertion, PAYMENT_CARD_BRANDS } from "./templates.js";
+export type { WacDiscoveryOptions } from "./wac.js";
+export { discoverWacAcl, validateDedicatedWacAcl } from "./wac.js";

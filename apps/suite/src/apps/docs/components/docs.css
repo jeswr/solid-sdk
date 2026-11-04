@@ -167,13 +167,18 @@
   display: none;
 }
 .docs-editor-shell .ish-frame {
-  grid-template-columns: 56px 240px minmax(0, 1fr);
+  grid-template-columns: 56px minmax(0, 1fr);
+  grid-template-areas: "rail topbar" "rail main";
 }
 .docs-editor-shell[data-outline="closed"] .ish-frame {
-  grid-template-columns: 56px 0 minmax(0, 1fr);
+  grid-template-columns: 56px minmax(0, 1fr);
 }
-.docs-editor-shell[data-outline="closed"] .ish-sidebar {
-  visibility: hidden;
+.docs-editor-shell .ish-sidebar {
+  display: none;
+}
+.docs-editor-shell .ish-topbar,
+.docs-editor-shell .ish-main {
+  grid-column: 2;
 }
 .docs-editor-shell .ish-context {
   flex: 1;
@@ -209,6 +214,7 @@
   border-color: transparent;
   background: transparent;
   box-shadow: none;
+  text-overflow: ellipsis;
 }
 .docs-title-input[data-slot]:hover {
   border-color: var(--input);
@@ -238,7 +244,62 @@
   line-height: 1.3;
 }
 .docs-outline {
-  padding: 32px 16px;
+  padding: 20px 12px;
+}
+.docs-outline-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.docs-writing-area {
+  display: flex;
+  align-items: stretch;
+  min-height: calc(100dvh - 132px);
+  background: var(--surface-2);
+}
+.docs-outline-pane {
+  width: 240px;
+  flex: none;
+  position: sticky;
+  top: 80px;
+  align-self: flex-start;
+  max-height: calc(100dvh - 150px);
+  overflow-y: auto;
+}
+.docs-account {
+  flex: none;
+  padding-inline: 8px;
+}
+.docs-menubar {
+  display: flex;
+  padding-inline: 56px;
+  height: 32px;
+  background: var(--background);
+  position: sticky;
+  top: 0;
+  z-index: 12;
+}
+.docs-menubar > button {
+  height: 30px;
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  font-weight: 400;
+}
+.docs-editor-menu {
+  min-width: 220px;
+  max-height: min(70dvh, 640px);
+  overflow-y: auto;
+  box-shadow: var(--shadow-2);
+}
+.docs-editor-menu kbd {
+  margin-inline-start: auto;
+  padding-inline-start: 24px;
+  color: var(--foreground-muted);
+  font-size: 12px;
+}
+.docs-editor-menu [data-highlighted] {
+  background: var(--primary-soft);
+  color: var(--primary-soft-foreground);
 }
 .docs-outline h2 {
   font-size: 16px;
@@ -268,16 +329,79 @@
 }
 .docs-toolbar {
   position: sticky;
-  top: 0;
+  top: 32px;
   z-index: 10;
   height: 44px;
   display: flex;
   gap: 2px;
   align-items: center;
   padding: 4px 12px;
-  background: var(--background);
-  border-bottom: 1px solid var(--border);
+  background: var(--surface-3);
+  border-radius: var(--radius-full);
+  margin: 0 12px 8px;
   min-width: 0;
+}
+.docs-toolbar-control {
+  display: flex;
+  flex: none;
+}
+.docs-font-size {
+  display: flex;
+  align-items: center;
+  width: 98px;
+}
+.docs-font-size input {
+  width: 36px;
+  height: 28px;
+  min-width: 0;
+  appearance: textfield;
+  text-align: center;
+  border: 1px solid var(--input);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--foreground);
+  font: inherit;
+  font-size: 12px;
+}
+.docs-font-size input::-webkit-inner-spin-button,
+.docs-font-size input::-webkit-outer-spin-button {
+  appearance: none;
+}
+.docs-font-size button[data-slot] {
+  width: 30px;
+  min-width: 30px;
+}
+.docs-colour-anchor {
+  position: absolute;
+  top: 40px;
+  left: 50%;
+}
+.docs-colour-popover {
+  width: 200px;
+}
+.docs-colour-popover p {
+  margin-bottom: 12px;
+  font-size: 13px;
+}
+.docs-colour-grid {
+  display: grid;
+  gap: 6px;
+}
+.docs-colour-grid [role="row"] {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+}
+.docs-colour-grid button {
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+}
+.docs-colour-grid button:focus-visible,
+.docs-colour-grid [aria-selected="true"] {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
 }
 .docs-toolbar-undo {
   display: flex;
@@ -322,23 +446,38 @@
   font-size: 12px;
 }
 .docs-page-wrap {
-  display: flex;
-  justify-content: center;
-  padding: 32px 24px 120px;
-  background: var(--background);
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+  padding: 20px 24px 120px;
+  background: var(--surface-2);
+}
+.docs-page-scale {
+  position: relative;
+  margin-inline: auto;
+  width: calc(816px * var(--docs-zoom));
+  height: calc(var(--docs-page-height) * var(--docs-zoom));
 }
 .docs-page {
-  width: 100%;
-  max-width: 816px;
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: top left;
+  transform: scale(var(--docs-zoom));
+  width: 816px;
+  max-width: none;
   min-height: 1056px;
   border: 1px solid var(--border);
   padding: 96px;
+  /* The page canvas sets the light palette inline: paper stays light in every theme. */
+  color-scheme: light;
   background: var(--surface);
   color: var(--foreground);
+  box-shadow: var(--shadow-1);
 }
 .docs-page .tiptap {
   min-height: 800px;
-  font-family: var(--font-serif);
+  font-family: var(--font-ui);
   font-size: 14.667px;
   line-height: 1.6;
   outline: none;
@@ -397,17 +536,23 @@
   list-style: none;
   padding-left: 0;
 }
-.docs-page li[data-type="taskItem"] {
+.docs-page li[data-type="taskItem"],
+.docs-page li[data-checked] {
   display: flex;
   gap: 10px;
 }
-.docs-page li[data-type="taskItem"] > label {
+.docs-page li[data-checked] > label {
+  display: inline-flex;
+  align-items: flex-start;
   flex: none;
   padding-top: 4px;
 }
-.docs-page li[data-type="taskItem"] > div {
+.docs-page li[data-checked] > div {
   flex: 1;
   min-width: 0;
+}
+.docs-page li[data-checked] > div > p {
+  margin-block: 0 0.5em;
 }
 .docs-page li[data-type="taskItem"] input {
   width: 16px;
@@ -610,7 +755,7 @@
     grid-template-columns: 56px minmax(0, 1fr);
   }
   .docs-page {
-    padding: 48px;
+    padding: 96px;
   }
   .docs-owner {
     display: none;
@@ -681,6 +826,13 @@
   .docs-editor-shell[data-outline="closed"] .ish-frame {
     grid-template-columns: minmax(0, 1fr);
   }
+  .docs-editor-shell .ish-frame {
+    grid-template-areas: "topbar" "main" "tabbar";
+  }
+  .docs-editor-shell .ish-topbar,
+  .docs-editor-shell .ish-main {
+    grid-column: 1;
+  }
   .docs-editor-shell .ish-topbar {
     padding-inline: 4px;
     gap: 0;
@@ -691,6 +843,16 @@
   .docs-title-icon,
   .docs-star {
     display: none;
+  }
+  .docs-outline-pane {
+    width: 160px;
+  }
+  .docs-menubar {
+    padding-inline: 4px;
+    overflow-x: auto;
+  }
+  .docs-menubar > button {
+    padding-inline: 7px;
   }
   .docs-share span {
     display: none;
@@ -712,7 +874,7 @@
   }
   .docs-toolbar {
     padding-inline: 8px;
-    top: 0;
+    top: 32px;
     bottom: var(--docs-keyboard-inset, 0px);
   }
   .docs-toolbar-undo {
@@ -725,12 +887,25 @@
     left: 0;
     right: 0;
   }
+  /* Phones fit the page to the screen width and reflow, like Google Docs on mobile;
+     zoom then scales the text instead of the Letter-sized sheet. */
   .docs-page-wrap {
-    padding: 0 0 64px;
+    padding: 8px 8px 64px;
+  }
+  .docs-page-scale {
+    width: auto;
+    height: auto;
   }
   .docs-page {
-    padding: 16px;
-    border: none;
+    position: static;
+    width: 100%;
+    min-height: 0;
+    padding: 24px 20px;
+    transform: none;
+    zoom: var(--docs-zoom);
+  }
+  .docs-page .tiptap {
+    min-height: 50dvh;
   }
   .docs-page .tiptap:focus-visible {
     outline-offset: 6px;
@@ -790,6 +965,8 @@
     padding: 0;
   }
   .docs-toolbar,
+  .docs-menubar,
+  .docs-outline-pane,
   .docs-outline,
   .docs-find-bar,
   .docs-word-pill,
@@ -802,11 +979,23 @@
     padding: 0;
   }
   .docs-page {
+    position: static;
+    transform: none;
+    zoom: normal;
+    box-shadow: none;
     max-width: none;
     width: 100%;
     border: 0;
     padding: 0;
     min-height: 0;
+  }
+  .docs-writing-area {
+    display: block;
+    min-height: 0;
+  }
+  .docs-page-scale {
+    width: 100%;
+    height: auto;
   }
   .docs-page .tiptap,
   .docs-page .tiptap:focus-visible {

@@ -11,15 +11,14 @@ import type { AsyncState } from "@/components/use-pod-data";
 /**
  * Manage the signed-in user's `foaf:knows` friend list. Reads the card,
  * exposes `add`/`remove` (read-modify-write on the card), and keeps local
- * state in step with the server's authoritative result. Production paths pass
- * NO `fetch` (auth-patched global runs).
+ * state in step with the server's authoritative result using the session transport.
  */
 export function useFriends(): AsyncState<string[]> & {
   reload: () => void;
   add: (webId: string) => Promise<void>;
   remove: (webId: string) => Promise<void>;
 } {
-  const { webId, status } = useSession();
+  const { webId, status, podFetch } = useSession();
   const [state, setState] = useState<AsyncState<string[]>>({ loading: true });
   const [nonce, setNonce] = useState(0);
   const reload = useCallback(() => setNonce((n) => n + 1), []);
@@ -32,7 +31,7 @@ export function useFriends(): AsyncState<string[]> & {
     let cancelled = false;
     setState({ loading: true });
     (async () => {
-      const { dataset } = await freshRdf(profileDocUrl(webId));
+      const { dataset } = await freshRdf(profileDocUrl(webId), podFetch);
       if (!cancelled) setState({ loading: false, data: readKnows(webId, dataset) });
     })().catch((e: unknown) => {
       if (!cancelled) {
@@ -42,24 +41,24 @@ export function useFriends(): AsyncState<string[]> & {
     return () => {
       cancelled = true;
     };
-  }, [webId, status, nonce]);
+  }, [webId, status, nonce, podFetch]);
 
   const add = useCallback(
     async (friend: string) => {
       if (!webId) return;
-      const next = await addFriend({ webId, friend });
+      const next = await addFriend({ webId, friend, fetchImpl: podFetch });
       setState({ loading: false, data: next });
     },
-    [webId],
+    [webId, podFetch],
   );
 
   const remove = useCallback(
     async (friend: string) => {
       if (!webId) return;
-      const next = await removeFriend({ webId, friend });
+      const next = await removeFriend({ webId, friend, fetchImpl: podFetch });
       setState({ loading: false, data: next });
     },
-    [webId],
+    [webId, podFetch],
   );
 
   return { ...state, reload, add, remove };

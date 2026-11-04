@@ -1,6 +1,7 @@
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 <!-- AUTHORED-BY Codex GPT-6 -->
 <!-- AUTHORED-BY Codex GPT-5 -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 
 # @jeswr/guarded-fetch
 
@@ -36,6 +37,13 @@ transport's connection use separate DNS lookups, leaving a DNS-rebinding window 
 validation and connect. Set `requireDnsPinning: true` with an explicitly DNS-pinning
 `pinningFetch`, or use `@jeswr/guarded-fetch/node`, which pins validated DNS results to
 the connection. `requireDnsPinning` defaults to `false` in the root entry.
+
+`beforeDispatch?: () => void` is an optional synchronous authority fence on guard
+construction. It runs after each awaited destination/DNS check, immediately before
+calling the underlying fetch, without an intervening await. A thrown refusal is
+propagated unchanged and that hop is never dispatched. For request-specific authority,
+construct a separate guard for each request; never share mutable authority state across
+requests. The Node entry forwards this option to its inner destination guard.
 
 ## Key API
 

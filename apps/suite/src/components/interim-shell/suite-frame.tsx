@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex
@@ -12,13 +13,16 @@
 
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@jeswr/suite-ui";
 import {
+  Bot,
   CalendarDays,
   FileText,
   HardDrive,
   HeartPulse,
   House,
   Images,
+  Mail,
   Menu,
+  MessageSquare,
   Music,
   Search,
   SquareCheckBig,
@@ -38,12 +42,15 @@ export type SuiteAppId =
   | "calendar"
   | "contacts"
   | "photos"
+  | "mail"
+  | "chat"
   | "money"
   | "health"
   | "tasks"
   | "music"
   | "notes"
-  | "sheets";
+  | "sheets"
+  | "agent";
 
 const APPS: { id: SuiteAppId; label: string; href: string; icon: typeof HardDrive }[] = [
   { id: "home", label: "Home", href: "/home", icon: House },
@@ -54,10 +61,13 @@ const APPS: { id: SuiteAppId; label: string; href: string; icon: typeof HardDriv
   { id: "notes", label: "Notes", href: "/notes", icon: StickyNote },
   { id: "contacts", label: "Contacts", href: "/contacts", icon: Users },
   { id: "photos", label: "Photos", href: "/photos", icon: Images },
+  { id: "mail", label: "Mail", href: "/mail", icon: Mail },
+  { id: "chat", label: "Chat", href: "/chat", icon: MessageSquare },
   { id: "money", label: "Money", href: "/money", icon: Wallet },
   { id: "health", label: "Health", href: "/health", icon: HeartPulse },
   { id: "tasks", label: "Tasks", href: "/tasks", icon: SquareCheckBig },
   { id: "music", label: "Music", href: "/music", icon: Music },
+  { id: "agent", label: "Agent", href: "/agent", icon: Bot },
 ];
 
 export interface SuiteFrameProps {

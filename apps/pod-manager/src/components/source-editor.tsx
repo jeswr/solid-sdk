@@ -18,6 +18,7 @@
  * preserved, and lets the user retry against the fresh version (no silent
  * overwrite, no lost edits).
  */
+import { useSession } from "@/components/session-provider";
 import { useEffect, useRef, useState } from "react";
 import { Loader2, Save, RotateCcw, TriangleAlert, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
@@ -43,6 +44,7 @@ type SaveState =
   | { kind: "error"; message: string };
 
 export function SourceEditor({ url }: { url: string }) {
+  const { podFetch } = useSession();
   const [raw, setRaw] = useState<RawResource | null>(null);
   const [body, setBody] = useState("");
   const [loadError, setLoadError] = useState<Error | null>(null);
@@ -55,7 +57,7 @@ export function SourceEditor({ url }: { url: string }) {
     let cancelled = false;
     setLoading(true);
     setLoadError(null);
-    readRaw(url)
+    readRaw(url, podFetch)
       .then((r) => {
         if (cancelled) return;
         setRaw(r);
@@ -71,7 +73,7 @@ export function SourceEditor({ url }: { url: string }) {
     return () => {
       cancelled = true;
     };
-  }, [url]);
+  }, [url, podFetch]);
 
   const dirty = raw != null && body !== raw.text;
   const turtle = isTurtleEditable(raw?.contentType);
@@ -91,6 +93,7 @@ export function SourceEditor({ url }: { url: string }) {
       const { etag } = await writeRaw(url, body, {
         contentType: raw.contentType ?? "text/turtle",
         etag: etagRef.current,
+        fetchImpl: podFetch,
       });
       etagRef.current = etag;
       // The saved body is now the server truth — rebase the dirty check.
@@ -102,7 +105,7 @@ export function SourceEditor({ url }: { url: string }) {
         // Someone else changed it. Re-read so the next save has the fresh ETag,
         // but KEEP the user's text (never lose their edits).
         try {
-          const fresh = await readRaw(url);
+          const fresh = await readRaw(url, podFetch);
           etagRef.current = fresh.etag;
           setRaw((prev) => (prev ? { ...prev, etag: fresh.etag } : prev));
         } catch {

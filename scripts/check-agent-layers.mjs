@@ -21,12 +21,27 @@ const ignoredDirectories = new Set([
   "__fixtures__",
 ]);
 const dependencyFields = ["dependencies", "optionalDependencies", "peerDependencies"];
-const modelSdks = ["openai", "@anthropic-ai/sdk"];
+const modelSdks = ["openai", "@anthropic-ai/sdk", "@anthropic-ai/claude-agent-sdk"];
 const agent = (name) => `@jeswr/agent-${name}`;
 const allowed = {
   "agent-executor": new Set(["model", "mandate", "audit", "credentials", "channels"].map(agent)),
-  "agent-model-gateway": new Set([agent("model"), agent("channels"), ...modelSdks]),
+  "agent-model-gateway": new Set([
+    agent("model"),
+    agent("channels"),
+    agent("credentials"),
+    "@jeswr/agentic-legacy-bridge",
+    "@jeswr/solid-mcp",
+    "@jeswr/guarded-fetch",
+    "zod",
+    "@anthropic-ai/claude-agent-sdk",
+    "fs",
+    "os",
+    "path",
+    ...modelSdks,
+  ]),
   "agent-channels": new Set([
+    "@jeswr/matrix-chat-to-pod",
+    "@matrix-org/matrix-sdk-crypto-nodejs",
     agent("model"),
     "@jeswr/guarded-fetch",
     "@jeswr/fetch-rdf",
@@ -84,6 +99,7 @@ function context(root, file, projects) {
       /^packages\/agent-channels\/(?:src|test)\//.test(path) &&
       /\.(?:test|spec)\.[cm]?[jt]sx?$/.test(path),
     test: testExemptPath(path),
+    uiData: /^apps\/suite\/src\/apps\/agent\/lib\//.test(path),
     ui: /^apps\/suite\/(?:src\/)?apps\/agent\//.test(path),
   };
 }
@@ -200,7 +216,11 @@ function importFailures(ctx, target, typeOnly = false, manifest = false) {
     failures.push("send subpaths are executor-only (except agent-channels tests)");
   if (/^@jeswr\/agent-channels\/(?:src\/|dist\/)?testing(?:\/|$)/.test(target) && !ctx.test)
     failures.push("channel testing helpers are test-only");
-  if (modelSdks.includes(name) && ctx.project !== "agent-model-gateway")
+  // The legacy pilot (personal-agent) predates DESIGN §2.2 and already ships its Claude actor;
+  // that one pre-existing edge stays allowed. New agent code reaches models only via the gateway.
+  const legacyPilotActor =
+    ctx.project === "personal-agent" && name === "@anthropic-ai/claude-agent-sdk";
+  if (modelSdks.includes(name) && ctx.project !== "agent-model-gateway" && !legacyPilotActor)
     failures.push("model SDKs are gateway-only");
   if (ctx.project === "agent-model-gateway" && name === agent("audit"))
     failures.push("gateway must not import agent-audit");
@@ -211,7 +231,15 @@ function importFailures(ctx, target, typeOnly = false, manifest = false) {
     name !== (ctx.packageName ?? `@jeswr/${ctx.project}`);
   if (external && !ctx.test) {
     const allowlist = allowed[ctx.project];
-    if (allowlist && !allowlist.has(name) && !(ctx.project === "agent-executor" && send))
+    // A-033 delegates read-only GitHub requests to gh; no other production module gets this edge.
+    const githubProcess =
+      ctx.path === "packages/agent-channels/src/github.ts" && target === "child_process";
+    if (
+      allowlist &&
+      !allowlist.has(name) &&
+      !(ctx.project === "agent-executor" && send) &&
+      !githubProcess
+    )
       failures.push(`${ctx.project} dependency is outside DESIGN §2.2`);
     if (ctx.project === "agent-executor" && name === agent("channels") && !send && !manifest)
       failures.push("executor may import channel send subpaths only");
@@ -223,7 +251,23 @@ function importFailures(ctx, target, typeOnly = false, manifest = false) {
     )
       failures.push("gateway may import channel ingest types only");
     if (ctx.ui) {
-      const uiAllowed = new Set([agent("model"), agent("mandate"), agent("registry")]);
+      const uiAllowed = new Set([
+        agent("model"),
+        agent("mandate"),
+        agent("registry"),
+        "@jeswr/suite-ui",
+      ]);
+      // A-015 pod adapters and A-016's browser-safe signing/resolver live only
+      // in lib; components stay RDF-free.
+      if (ctx.uiData)
+        for (const dependency of [
+          "@jeswr/guarded-fetch",
+          "@jeswr/fetch-rdf",
+          "@jeswr/rdf-serialize",
+          "@jeswr/ldp-container",
+          "@jeswr/solid-vc",
+        ])
+          uiAllowed.add(dependency);
       if (
         (name.startsWith("@jeswr/") &&
           !uiAllowed.has(name) &&
@@ -234,9 +278,10 @@ function importFailures(ctx, target, typeOnly = false, manifest = false) {
       if (
         name === agent("mandate") &&
         !typeOnly &&
-        !/^@jeswr\/agent-mandate\/(?:issue|verify)(?:\/|$)/.test(target)
+        !/^@jeswr\/agent-mandate\/(?:issue|verify)(?:\/|$)/.test(target) &&
+        !(ctx.uiData && /^@jeswr\/agent-mandate\/(?:approval|control)(?:\/|$)/.test(target))
       )
-        failures.push("agent UI mandate values must use issue/verify subpaths");
+        failures.push("agent UI mandate values must use issue/verify or approval/control subpaths");
     }
   }
   return failures;

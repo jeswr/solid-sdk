@@ -25,6 +25,7 @@ import {
 } from "@rdfjs/wrapper";
 import { type Store, Writer } from "n3";
 import { entities } from "./generated/model.js";
+import { assertResourceUrl, isResourceUrl } from "./iri.js";
 import {
   CALENDAR_CLASS,
   PREFIXES,
@@ -46,7 +47,7 @@ export interface CalendarData {
 
 /** The conventional subject IRI for the `sched:Calendar` at `resourceUrl`. */
 export function calendarSubject(resourceUrl: string): string {
-  return `${resourceUrl}#it`;
+  return `${assertResourceUrl(resourceUrl)}#it`;
 }
 
 /** Typed `@rdfjs/wrapper` view of a `sched:Calendar` subject. */
@@ -103,7 +104,7 @@ export class Calendar extends TermWrapper {
  * and a non-http(s) organizer are dropped by its guards.
  */
 export function buildCalendar(resourceUrl: string, data: CalendarData): Store {
-  return entities.Calendar.build(resourceUrl, data);
+  return entities.Calendar.build(assertResourceUrl(resourceUrl), data);
 }
 
 /** Serialise a `Store` to Turtle with the model's prefixes. */
@@ -116,7 +117,7 @@ export function calendarStoreToTurtle(store: Store): Promise<string> {
 }
 
 /** Build + serialise a calendar to a Turtle document in one call. */
-export function serializeCalendar(resourceUrl: string, data: CalendarData): Promise<string> {
+export async function serializeCalendar(resourceUrl: string, data: CalendarData): Promise<string> {
   return calendarStoreToTurtle(buildCalendar(resourceUrl, data));
 }
 
@@ -126,6 +127,7 @@ export function serializeCalendar(resourceUrl: string, data: CalendarData): Prom
  * optional fields drop; the organizer is http(s)-filtered.
  */
 export function parseCalendar(resourceUrl: string, dataset: DatasetCore): CalendarData | undefined {
+  if (!isResourceUrl(resourceUrl)) return undefined;
   return entities.Calendar.parse(resourceUrl, dataset);
 }
 

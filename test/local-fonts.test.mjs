@@ -96,6 +96,7 @@ it("invalidates font consumer builds and selects them when suite-ui changes", ()
         ".gitignore",
         "{packages,apps,tools}/*/package.json",
         "apps/*/web/package.json",
+        "packages/*/turbo.json",
         "apps/*/turbo.json",
         "apps/*/web/turbo.json",
         "packages/suite-ui/src/font-assets/**/*.woff2",

@@ -10,6 +10,7 @@ import {
   useCallback,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -20,11 +21,14 @@ import { PodSessionProvider, usePodSessionState } from "@/lib/session/pod-sessio
 import { parseQuickAdd } from "../lib/compose/quick-add";
 import { classifyError } from "../lib/model/errors";
 import { isEditing, openAddTask } from "../state/add-focus";
+import { useTasksPreferences } from "../state/preferences";
+import { useReminderScheduler } from "../state/reminders";
 import { TasksProvider, useTasks } from "../state/tasks-context";
 import { Composer } from "./composer/composer";
 import { TaskDetail } from "./detail/task-detail";
 import { TasksDnd } from "./dnd/tasks-dnd";
 import "./detail/detail.css";
+import { ShareProject } from "./share-project";
 import { TasksSidebar } from "./sidebar";
 import { SortMenu } from "./sort-menu";
 import { ViewToggle } from "./view-toggle";
@@ -38,6 +42,8 @@ const VIEW_NAMES: Readonly<Record<string, string>> = {
 
 function TasksChrome({ children }: { children: ReactNode }) {
   const tasks = useTasks();
+  const { preferences, dispatch } = useTasksPreferences();
+  const [sharing, setSharing] = useState(false);
   const pathname = useRoutePathname();
   // Smart views have fixed grouping/order; only project lists consume the sort preference.
   const supportsSort = pathname === "/tasks/inbox" || /^\/tasks\/p\/[^/]+$/.test(pathname);
@@ -55,6 +61,7 @@ function TasksChrome({ children }: { children: ReactNode }) {
       ? `@${label}`
       : ref
         ? (tasks.projects.find((project) => encodeRef(project.url) === ref)?.tracker.title ??
+          preferences.sharedProjects.find((shared) => encodeRef(shared.url) === ref)?.title ??
           "Project")
         : "Tasks");
   let projectUrl: string | undefined;
@@ -63,6 +70,29 @@ function TasksChrome({ children }: { children: ReactNode }) {
   } catch {
     /* The project route renders its own not-found state. */
   }
+  const activeProject = tasks.projects.find((project) => project.url === projectUrl);
+  const projectLoad = projectUrl ? tasks.tasks[projectUrl] : undefined;
+  // Navigating to a project may reopen one removed from Shared with me; a re-render on the
+  // same route may not, so a project removed while it is showing stays removed.
+  useEffect(() => {
+    if (projectUrl) tasks.cache.allowSharedProject(projectUrl);
+  }, [projectUrl, tasks.cache]);
+  useEffect(() => {
+    if (projectUrl && tasks.status === "ready" && !activeProject && !projectLoad)
+      void tasks.cache.openProject(projectUrl);
+  }, [projectUrl, activeProject, projectLoad, tasks.status, tasks.cache]);
+  useEffect(() => {
+    if (
+      activeProject &&
+      !tasks.cache.isOwnProject(activeProject.url) &&
+      tasks.cache.hasSharedProject(activeProject.url)
+    )
+      dispatch({
+        type: "sharedProject",
+        url: activeProject.url,
+        title: activeProject.tracker.title ?? "Project",
+      });
+  }, [activeProject, tasks.cache, dispatch]);
   const taskRef = params.get("task");
   let taskUrl: string | undefined;
   try {
@@ -82,14 +112,37 @@ function TasksChrome({ children }: { children: ReactNode }) {
       }),
     [tasks.cache, taskUrl, params, pathname, router],
   );
+  // Reminder notifications and toasts open the same `?task=` detail pane as a task row.
+  useReminderScheduler(tasks.cache, (url) => {
+    const query = new URLSearchParams(params.toString());
+    query.set("task", encodeRef(url));
+    router.push(`${pathname}?${query}`, { scroll: false });
+  });
   const origin = useRef<string | undefined>(undefined);
+  const returnTo = useRef<string | undefined>(undefined);
+  // A narrow-viewport details Sheet restores focus itself once it unmounts; point it at the
+  // originating row (06-tasks §2.8) rather than the link that opened it, which re-renders.
+  const detailsReturnFocus = useMemo(
+    () => ({
+      get current() {
+        const url = origin.current ?? returnTo.current;
+        return url
+          ? document.querySelector<HTMLElement>(`[data-task-url="${CSS.escape(url)}"]`)
+          : null;
+      },
+    }),
+    [],
+  );
   useEffect(() => {
+    // A new pane must not fall back to a row from an earlier, already closed pane.
+    if (taskRef !== null) returnTo.current = undefined;
     if (taskRef !== null && origin.current === undefined) {
       const row = document.activeElement?.closest<HTMLElement>("[data-task-url]");
       origin.current = row?.dataset.taskUrl ?? taskUrl;
     }
     if (taskRef === null && origin.current) {
       const url = origin.current;
+      returnTo.current = url;
       origin.current = undefined;
       requestAnimationFrame(() =>
         requestAnimationFrame(() =>
@@ -105,8 +158,10 @@ function TasksChrome({ children }: { children: ReactNode }) {
     if (document.activeElement?.matches('.tsk-detail input[aria-label="Sub-task title"]')) return;
     const query = new URLSearchParams(params.toString());
     query.delete("task");
-    router.replace(`${pathname}${query.size ? `?${query}` : ""}`, { scroll: false });
-  }, [params, pathname, router]);
+    // Native replaceState syncs with useSearchParams. router.replace ignores a same-pathname
+    // replace after a hard load of a `?task=` URL, so a shared link's pane could not close.
+    window.history.replaceState(null, "", `${pathname}${query.size ? `?${query}` : ""}`);
+  }, [params, pathname]);
   useEffect(() => {
     if (taskRef === null) return;
     const keydown = (event: KeyboardEvent) => {
@@ -201,6 +256,11 @@ function TasksChrome({ children }: { children: ReactNode }) {
         actions={
           supportsSort || projectUrl ? (
             <>
+              {activeProject && tasks.sharingAvailable && (
+                <Button variant="outline" onClick={() => setSharing(true)}>
+                  Share
+                </Button>
+              )}
               {supportsSort && <SortMenu viewId={pathname} />}
               {projectUrl && (
                 <ViewToggle
@@ -212,8 +272,12 @@ function TasksChrome({ children }: { children: ReactNode }) {
           ) : undefined
         }
         details={details}
+        detailsReturnFocus={detailsReturnFocus}
         onDetailsClose={closeDetails}
       >
+        {sharing && activeProject && (
+          <ShareProject project={activeProject} onClose={() => setSharing(false)} />
+        )}
         {quickAdd && inbox && (
           <Composer
             modal

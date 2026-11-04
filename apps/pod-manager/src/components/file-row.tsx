@@ -13,6 +13,7 @@
  * Blob URL) because the resource may be private — a bare `<a download>` would
  * fetch unauthenticated and 401.
  */
+import { useSession } from "@/components/session-provider";
 import { useState } from "react";
 import Link from "next/link";
 import {
@@ -121,6 +122,7 @@ function RowActions({
   root: string;
   onChange: () => void;
 }) {
+  const { podFetch } = useSession();
   const [renaming, setRenaming] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [downloading, setDownloading] = useState(false);
@@ -131,7 +133,7 @@ function RowActions({
       // Authenticated, byte-exact GET (the resource may be private and/or
       // binary), then a Blob download — a bare <a download> would fetch
       // unauthenticated and 401, and a text round-trip would corrupt binaries.
-      const { blob } = await readBytes(item.url);
+      const { blob } = await readBytes(item.url, podFetch);
       const objectUrl = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = objectUrl;
@@ -224,6 +226,7 @@ function RenameDialog({
   onOpenChange: (open: boolean) => void;
   onDone: () => void;
 }) {
+  const { podFetch } = useSession();
   const [name, setName] = useState(item.name);
   const [busy, setBusy] = useState(false);
 
@@ -236,7 +239,7 @@ function RenameDialog({
         onOpenChange(false);
         return;
       }
-      await renameResource(item.url, to);
+      await renameResource(item.url, to, podFetch);
       toast.success(`Renamed to “${nameFromUrl(to)}”.`);
       onDone();
       onOpenChange(false);
@@ -299,13 +302,14 @@ function DeleteDialog({
   onOpenChange: (open: boolean) => void;
   onDone: () => void;
 }) {
+  const { podFetch } = useSession();
   const [busy, setBusy] = useState(false);
   const isFolder = isContainerUrl(item.url);
 
   async function remove() {
     setBusy(true);
     try {
-      await deleteEntry(item.url);
+      await deleteEntry(item.url, podFetch);
       toast.success(`Deleted “${item.name}”.`);
       onDone();
       onOpenChange(false);

@@ -103,6 +103,56 @@ describe("payment-card fact template", () => {
       ).not.toThrow();
   });
 
+  it("ignores inherited fields, so a polluted prototype cannot supply one", () => {
+    const { billingAddress: _omitted, ...withoutAddress } = valid;
+    const polluted = Object.assign(
+      Object.create({
+        billingAddress: "https://example.org/polluted",
+      }),
+      withoutAddress,
+    );
+    const store = createFactAssertion(owner, card(polluted));
+    expect(store.getQuads(null, df.namedNode(`${NS.schema}address`), null, null)).toEqual([]);
+    const { brand: _brand, ...withoutBrand } = valid;
+    expect(() =>
+      createFactAssertion(
+        owner,
+        card(Object.assign(Object.create({ brand: "visa" }), withoutBrand)),
+      ),
+    ).toThrow("Invalid payment card");
+    const expires = Object.assign(Object.create({ datatype: "gYearMonth" }), { value: "2027-09" });
+    expect(() => createFactAssertion(owner, card({ ...valid, expires }))).toThrow(
+      "Invalid payment card",
+    );
+  });
+
+  it("never takes an absent billing address from a polluted Object.prototype", () => {
+    // Non-enumerable, so for-in loops elsewhere are unaffected while property lookup still sees it.
+    Object.defineProperty(Object.prototype, "billingAddress", {
+      value: "https://example.org/polluted",
+      configurable: true,
+      enumerable: false,
+      writable: true,
+    });
+    try {
+      const { billingAddress: _omitted, ...withoutAddress } = valid;
+      for (const value of [withoutAddress, { ...valid, billingAddress: undefined }]) {
+        const store = createFactAssertion(owner, card(value));
+        expect(store.getQuads(null, df.namedNode(`${NS.schema}address`), null, null)).toEqual([]);
+      }
+    } finally {
+      delete (Object.prototype as Record<string, unknown>).billingAddress;
+    }
+  });
+
+  it("validates brands against a frozen list", () => {
+    expect(Object.isFrozen(PAYMENT_CARD_BRANDS)).toBe(true);
+    expect(() => (PAYMENT_CARD_BRANDS as unknown as string[]).push("4111111111111111")).toThrow();
+    expect(() => createFactAssertion(owner, card({ ...valid, brand: "4111111111111111" }))).toThrow(
+      "Invalid payment card",
+    );
+  });
+
   it("reads each field once, so a getter or proxy cannot swap in a card number", () => {
     const pan = "4111111111111111";
     const swapping = (safe: string) => {
@@ -267,6 +317,7 @@ describe("card number detection", () => {
       "(4111)1111-1111-1111",
       '"4111","1111","1111","1111"',
       "4111'1111'1111'1111",
+      "4111\u09031111\u09031111\u09031111",
       "4111\\1111\\1111\\1111",
       `${"0".repeat(70)}4111111111111111`,
     ])
@@ -333,9 +384,12 @@ describe("card number detection", () => {
   });
 
   it("scans a large document in linear time", () => {
-    const started = Date.now();
+    // CPU time, not wall time: a loaded CI runner stretches wall time but not the work done.
+    // A quadratic scan of these inputs would take hours, so 8 s of CPU still separates the two.
+    const started = process.cpuUsage();
     findCardNumbers("4 ".repeat(500_000));
     findCardNumbers("٤".repeat(200_000));
-    expect(Date.now() - started).toBeLessThan(8000);
-  });
+    const used = process.cpuUsage(started);
+    expect((used.user + used.system) / 1000).toBeLessThan(8000);
+  }, 60_000);
 });

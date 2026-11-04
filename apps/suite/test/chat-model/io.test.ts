@@ -136,6 +136,104 @@ it("creates a room's container, advertised ACL, and descriptor without public or
   );
 });
 
+it("resumes an interrupted room only when asked, keeping any existing ACL or index", async () => {
+  const p = pod();
+  const head = (url: string, method: string) =>
+    url === room && method === "HEAD"
+      ? new Response(null, { status: 200, headers: { link: '<.acl>; rel="acl"' } })
+      : undefined;
+  p.setFault(head);
+  await createRoom(p.fetch, storage, "team", roomInput);
+  const acl = p.files.get(`${room}.acl`)?.body;
+  // Interrupted after the ACL: a plain create still refuses the claimed container.
+  p.files.delete(roomIndex(room));
+  await expect(createRoom(p.fetch, storage, "team", roomInput)).rejects.toMatchObject({
+    status: 412,
+  });
+  const resumed = await createRoom(p.fetch, storage, "team", roomInput, { resume: true });
+  expect(readRoom(room, resumed.dataset)?.members).toEqual([alice, bob]);
+  expect(p.files.get(`${room}.acl`)?.body).toBe(acl);
+  expect(p.files.get(roomIndex(room))?.etag).toBe(resumed.etag);
+  // Already complete: the existing descriptor is loaded, never overwritten.
+  const before = p.files.get(roomIndex(room));
+  const again = await createRoom(
+    p.fetch,
+    storage,
+    "team",
+    { ...roomInput, name: "Other" },
+    {
+      resume: true,
+    },
+  );
+  expect(readRoom(room, again.dataset)?.name).toBe("Team");
+  expect(p.files.get(roomIndex(room))).toBe(before);
+  // Interrupted before the ACL: both auxiliary writes complete.
+  p.files.delete(roomIndex(room));
+  p.files.delete(`${room}.acl`);
+  await createRoom(p.fetch, storage, "team", roomInput, { resume: true });
+  expect(p.files.has(`${room}.acl`)).toBe(true);
+  expect(p.files.has(roomIndex(room))).toBe(true);
+  // A foreign index already at the address is returned untouched, and its missing ACL is
+  // never written on the caller's behalf (the caller decides whether it is the expected room).
+  p.files.delete(`${room}.acl`);
+  const foreign = await createRoom(
+    p.fetch,
+    storage,
+    "team",
+    { ...roomInput, members: [] },
+    {
+      resume: true,
+    },
+  );
+  expect(readRoom(room, foreign.dataset)?.members).toEqual([alice, bob]);
+  expect(p.files.has(`${room}.acl`)).toBe(false);
+  // The index appearing between the check and the write is loaded, not overwritten.
+  let raced = false;
+  p.setFault((url, method) => {
+    if (url === roomIndex(room) && method === "GET" && !raced) {
+      raced = true;
+      return new Response(null, { status: 404 });
+    }
+    return head(url, method);
+  });
+  const late = await createRoom(
+    p.fetch,
+    storage,
+    "team",
+    { ...roomInput, name: "Late" },
+    {
+      resume: true,
+    },
+  );
+  expect(readRoom(room, late.dataset)?.name).toBe("Team");
+  // Non-412 failures still surface while resuming.
+  p.setFault(
+    (url, method) =>
+      head(url, method) ??
+      (url === roomIndex(room) && method === "GET"
+        ? new Response(null, { status: 503 })
+        : undefined),
+  );
+  await expect(
+    createRoom(p.fetch, storage, "team", roomInput, { resume: true }),
+  ).rejects.toMatchObject({ status: 503 });
+  p.files.delete(roomIndex(room));
+  p.setFault(
+    (url, method) =>
+      head(url, method) ??
+      (url === roomIndex(room) ? new Response(null, { status: 507 }) : undefined),
+  );
+  await expect(
+    createRoom(p.fetch, storage, "team", roomInput, { resume: true }),
+  ).rejects.toMatchObject({ status: 507 });
+  p.setFault((url, method) =>
+    url === room && method === "PUT" ? new Response(null, { status: 403 }) : undefined,
+  );
+  await expect(
+    createRoom(p.fetch, storage, "team", roomInput, { resume: true }),
+  ).rejects.toMatchObject({ status: 403 });
+});
+
 it("fails closed on missing, empty or escaping ACL links and propagates ACL/descriptor errors", async () => {
   for (const link of [
     undefined,

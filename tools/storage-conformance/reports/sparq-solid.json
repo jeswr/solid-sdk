@@ -1,0 +1,8 @@
+[
+  {
+    "test": "start",
+    "status": "fail",
+    "feature": null,
+    "reason": "start-failed:no-storage-link"
+  }
+]
