@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
+// AUTHORED-BY Codex GPT-6.1-Sol
 /**
  * PURE MAPPERS — iCalendar VEVENT → schema:Event RDF, and vCard → the suite's
  * `ContactData` (consumed by `@jeswr/solid-task-model`'s `buildPerson`). No
@@ -16,8 +17,8 @@
  * to the plain `ContactData` shape and hand it to `@jeswr/solid-task-model`'s
  * `buildPerson`, which writes the SolidOS-readable structured `vcard:hasEmail [
  * vcard:value <mailto:..> ]` form. Email → canonical `mailto:` IRI, TEL →
- * canonical `tel:` IRI, FN → name, NOTE → note. `ContactData` has no ORG field, so
- * ORG is folded sensibly into `note` (flagged as a model gap to upstream).
+ * canonical `tel:` IRI, FN → name, NOTE → note, ORG's first component →
+ * organization. Any organisational units are preserved in `note`.
  *
  * UNTRUSTED-INPUT DISCIPLINE throughout: an unparseable date drops THAT field
  * (never aborts the event); a non-http(s) URL/UID is dropped from the IRI fields;
@@ -283,6 +284,25 @@ export interface VcardToContactOptions {
   readonly inAddressBook?: string;
 }
 
+/** Split ORG on unescaped semicolons BEFORE TEXT-unescaping each component. */
+function organizationComponents(value: string): string[] {
+  const parts: string[] = [];
+  let start = 0;
+  for (let i = 0; i < value.length; i++) {
+    if (value[i] === "\\") {
+      // Skip the escaped character, including an escaped backslash. This keeps
+      // odd/even backslash runs from turning literal semicolons into separators.
+      i++;
+    } else if (value[i] === ";") {
+      parts.push(value.slice(start, i));
+      start = i + 1;
+    }
+  }
+  parts.push(value.slice(start));
+  // Preserve an empty first component: a unit must never become the name.
+  return parts.map((part) => unescapeText(part).trim());
+}
+
 /**
  * Map a single vCard {@link Component} to `ContactData` (the input to
  * `@jeswr/solid-task-model`'s `buildPerson`). We do NOT build vcard triples here —
@@ -295,7 +315,7 @@ export interface VcardToContactOptions {
  *  - `UID`   → `webId` IF it is an http(s) WebID, else carried as the re-sync uid only
  *  - `URL`   → `webId` when `UID` was not a WebID and the URL is http(s)
  *  - `NOTE`  → `note`
- *  - `ORG`   → folded into `note` (ContactData has no ORG field — model gap, flagged)
+ *  - `ORG`   → first component to `organization`, remaining units to `note`
  *
  * Untrusted-input hardened: every field is independently guarded; a malformed
  * entry is dropped, never fatal.
@@ -341,20 +361,14 @@ export function vcardToContact(
     }
   }
 
-  // NOTE + ORG (ORG folded into note — ContactData has no organization field).
+  // ORG is structured (name;unit;...), with RFC 6350 §3.4 TEXT escaping.
   const noteText = textProp(component, "NOTE");
-  const orgRaw = textProp(component, "ORG");
-  // ORG is a structured value `;`-separated (org;unit;...). The TEXT unescape
-  // already turned `\,`/`\;` into literals; for ORG the `;` is a STRUCTURE
-  // separator, but since we are folding it into a free-text note, join with " — ".
-  const org = orgRaw
-    ?.split(";")
-    .map((p) => p.trim())
-    .filter((p) => p.length > 0)
-    .join(" — ");
+  const orgRaw = getProperty(component, "ORG")?.value;
+  const [organization, ...units] = typeof orgRaw === "string" ? organizationComponents(orgRaw) : [];
+  const orgUnits = units.filter((p) => p.length > 0).join(" — ");
   const noteParts: string[] = [];
   if (noteText) noteParts.push(noteText);
-  if (org) noteParts.push(`Organization: ${org}`);
+  if (orgUnits) noteParts.push(`Organization: ${orgUnits}`);
   const note = noteParts.length > 0 ? noteParts.join("\n") : undefined;
 
   const data: ContactData = { name };
@@ -366,6 +380,7 @@ export function vcardToContact(
   if (emails.length > 0) data.emails = emails;
   if (phones.length > 0) data.phones = phones;
   if (webId !== undefined) data.webId = webId;
+  if (organization) data.organization = organization;
   if (note !== undefined) data.note = note;
 
   // The re-sync uid is the raw UID (which may be `urn:uuid:` or an http WebID) —

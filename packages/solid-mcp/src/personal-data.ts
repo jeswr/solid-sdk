@@ -1,0 +1,102 @@
+// AUTHORED-BY Codex GPT-6
+import { NanopubStore } from "@jeswr/pkg-memory";
+import { podScopedUrlOrUndefined } from "./auth.js";
+import type { PodPort } from "./pod-port.js";
+
+/** Container of the owner-written shared-context document (see context-tools.ts). */
+const SHARED_CONTEXT_CONTAINER = "agent/context/";
+
+export const PERSONAL_DATA_DENIED = "Personal data requires a purpose-limited tool";
+
+/** The store owns the layout. Derive its parent, including policy, locks and audit. */
+export function personalDataRoot(pod: PodPort): string {
+  // Layout inspection performs no I/O and does not require a configured owner.
+  const root = new URL(pod.root).href;
+  const store = new NanopubStore({ ...pod, root, webId: root });
+  return new URL("../", store.container).href;
+}
+
+export function auditContainer(pod: PodPort): string {
+  return new URL("audit/", personalDataRoot(pod)).href;
+}
+
+function within(path: string, prefix: string): boolean {
+  return path === prefix || path.startsWith(`${prefix}/`) || path.startsWith(`${prefix}.`);
+}
+
+/** ACLs must stay within the same memory area that generic tools cannot access. */
+export function personalAclOptions(pod: PodPort) {
+  const root = new URL(personalDataRoot(pod));
+  const prefixes = pathAliases(root);
+  return {
+    allowAclUrl(url: string): boolean {
+      const target = new URL(url);
+      return (
+        target.origin === root.origin &&
+        pathAliases(target).every((path) => prefixes.some((prefix) => within(path, prefix)))
+      );
+    },
+  };
+}
+
+/** Check every decoding stage: backends may decode different numbers of times. */
+function pathAliases(url: URL): string[] {
+  let path = url.pathname;
+  const aliases: string[] = [];
+  for (let depth = 0; ; depth++) {
+    aliases.push(normalizedPath(path));
+    if (!/%[\da-f]{2}/iu.test(path)) return aliases;
+    if (depth === 8) throw new Error(PERSONAL_DATA_DENIED);
+    // Keep literal malformed escapes in unrelated filenames, while decoding
+    // every valid escape that could spell a protected segment or delimiter.
+    path = decodeURIComponent(path.replace(/%(?![\da-f]{2})/giu, "%25"));
+  }
+}
+
+/** Conservative identity for servers that fold case or normalize paths. */
+function normalizedPath(path: string): string {
+  const segments: string[] = [];
+  // Some transports decode before splitting URL components or path parameters.
+  path = path.split(/[?#]/u)[0] ?? "";
+  for (const segment of path.replaceAll("\\", "/").toLowerCase().split("/")) {
+    const part = segment.split(";")[0];
+    if (part === "..") segments.pop();
+    else if (part && part !== ".") segments.push(part);
+  }
+  return `/${segments.join("/")}`;
+}
+
+/** No URL or backend-supplied value may enter this diagnostic. */
+export function requireGenericPodAccess(
+  pod: PodPort,
+  url: string,
+  mutation = false,
+  profileDiscovery = false,
+): void {
+  try {
+    const target = new URL(url, pod.root);
+    const protectedRoot = new URL(personalDataRoot(pod));
+    if (target.origin !== protectedRoot.origin) return; // The pod-scope guard owns this.
+    const prefixes = pathAliases(protectedRoot);
+    // The whole profile document carries Contact data, independent of its WebID fragment.
+    const profile = pod.webId && podScopedUrlOrUndefined({ podRoot: pod.root }, pod.webId);
+    if (profile && (!profileDiscovery || mutation)) prefixes.push(...pathAliases(new URL(profile)));
+    // Only the owner writes the shared context that later conversations load (ADR 0004),
+    // so generic tools may read it but never create, replace or delete it or an ancestor.
+    if (mutation) prefixes.push(...pathAliases(new URL(SHARED_CONTEXT_CONTAINER, pod.root)));
+    for (const path of pathAliases(target)) {
+      if (
+        prefixes.some(
+          (prefix) =>
+            // Protect slashless container ACL/metadata aliases too.
+            within(path, prefix) ||
+            // Replacing/deleting an ancestor can destroy the protected subtree.
+            (mutation && prefix.startsWith(`${path}/`)),
+        )
+      )
+        throw new Error();
+    }
+  } catch {
+    throw new Error(PERSONAL_DATA_DENIED);
+  }
+}
