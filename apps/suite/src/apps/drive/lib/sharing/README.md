@@ -62,8 +62,9 @@ including the barrel and type declarations in the coverage include glob.
 ## Drive share dialog adapter (SDK role layer)
 
 `readSharing`/`diffSharing` above remain the offline WAC projection used by the shell
-`WacSharingAdapter` and Drive's access label. The Drive share dialog no longer uses them:
-`adapter.ts` routes every read and write through `@jeswr/pod-access/roles`.
+`WacSharingAdapter`. Drive's share dialog and its access labels (Details, the upload dialogs
+and the copy-link toast) no longer use them: `adapter.ts` routes every read and write through
+`@jeswr/pod-access/roles`.
 
 `loadSharing(session, resource)` calls `readGrants` with the session's fetch and
 `root: storageUrl`, and maps the SDK grants to the dialog's `SharingState`
@@ -72,6 +73,16 @@ authenticated-agent grants and anonymous Commenter/Manager fail closed. The SDK 
 discovery, scope and redirect refusal, WAC/ACP parsing, the inherited-ACL copy
 (materialized with provenance), the owner-lockout guard and the conditional PUT.
 
+`readGrants` silently drops principals whose modes map to no role (public Read+Append, Write
+without Read, Control without Write) and reads a folder's own rules without its member rules.
+`verify.ts` therefore records the access documents the SDK fetched (`recordAccess` wraps the
+fetch; each GET is attributed to the HEAD before it) and re-reads them with the SDK's neutral
+`readWac`/`readAcp`. `loadSharing` fails closed (`UNMAPPED`) unless every principal with
+effective access appears at the role its raw modes map to and nobody else does; denials,
+conditional rules, misattributed documents and reader failures fail the same way. For a
+folder, `contentsDiffer` reports member access that differs from the folder's own; the
+dialog notes it (`CONTENTS_DIFFER`) and `accessSummary` labels such a folder "Access unknown".
+
 `applySharing(session, snapshot, selection)` translates the full selection into SDK grants:
 unchanged principals keep their SDK rows verbatim, changed rows become explicit grants, and
 `setGrants` runs with `expected: snapshot.grants`, so a stale snapshot never overwrites newer
@@ -79,11 +90,20 @@ access. App guards the SDK lacks stay here: owner-only saves, safe WebIDs, no du
 other owners and inherited rows are immutable. The caller's own owner row is left to the
 SDK's owner-lockout guard. Unchanged selections send no request.
 
+SDK gap: `setGrants` seeds a WAC ACL's rows copied from an inherited default
+(`materializedFrom`) before the caller's grants, so omitting such a principal never removes it.
+After the conditional `setGrants`, each removed person (and anonymous access, when restricted)
+also goes through `removeGrant`, which is a no-op once the principal is gone. The access is
+then reloaded and compared with the selection: a mismatch is `SharingIncompleteError` with the
+reloaded snapshot and the principals that did not change, and the dialog never announces
+"Sharing saved" unless the reloaded access matches.
+
 Errors: an SDK `conflict` (stale token, changed source or 412) becomes
 `SharingConflictError` with a freshly loaded snapshot, or none with a reload prompt when the
 re-read fails. Other `RoleError` codes map to fixed copy in `saveError`/`loadError`. An
-unclassified failure after the PUT began is `SharingRefreshError` with `committed: false`;
-a failed reload after a successful save is `SharingRefreshError` with `committed: true`.
+unclassified failure or a refused (redirected) response after the PUT began is
+`SharingRefreshError` with `committed: false`; a failed reload after an accepted write is
+`SharingRefreshError` with `committed: true`, announced as "Sharing not confirmed".
 
 Folders are read-only in the dialog for now: the SDK edits `acl:accessTo` /
 `acp:accessControl` only, so a folder grant would not reach its contents and a removal
@@ -94,7 +114,7 @@ separate comments resource.
 
 The ACP dialect is the SDK default (CSS: managers hold resource Control); no
 `implementation` is passed, so Inrupt ESS pods are not recognised as owned. They fail
-closed without writes: the SDK refuses ESS's query-string ACR URL (`?ext=acr`) for every
-implementation, and rejects acp:* modes under the CSS dialect. Passing `"ess"` needs both
+closed without writes, with `UNSUPPORTED_SYSTEM` copy: the SDK refuses ESS's query-string ACR
+URL (`?ext=acr`) for every implementation, and rejects acp:* modes under the CSS dialect. Passing `"ess"` needs both
 that SDK work and a trusted implementation signal, which the session does not provide;
 see the comment above `options` in `adapter.ts`.
