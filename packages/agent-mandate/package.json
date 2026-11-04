@@ -20,6 +20,14 @@
       "types": "./dist/testing.d.ts",
       "default": "./dist/testing.js"
     },
+    "./approval": {
+      "types": "./dist/approval.d.ts",
+      "default": "./dist/approval.js"
+    },
+    "./control": {
+      "types": "./dist/control.d.ts",
+      "default": "./dist/control.js"
+    },
     "./sparq": {
       "types": "./dist/sparq.d.ts",
       "default": "./dist/sparq.js"
@@ -37,12 +45,14 @@
     "test": "pnpm -w exec vitest run --root packages/agent-mandate --coverage"
   },
   "devDependencies": {
-    "@vitest/coverage-v8": "^4.1.10",
     "@rdfjs/types": "^2.0.1",
-    "@types/n3": "^1.16.0"
+    "@types/n3": "^1.16.0",
+    "@vitest/coverage-v8": "^4.1.10",
+    "esbuild": "^0.28.1"
   },
   "dependencies": {
     "@jeswr/agent-authz-verifier": "workspace:*",
+    "@jeswr/agent-model": "workspace:*",
     "@jeswr/fetch-rdf": "workspace:*",
     "@jeswr/solid-odrl": "workspace:*",
     "@jeswr/solid-vc": "workspace:*",
