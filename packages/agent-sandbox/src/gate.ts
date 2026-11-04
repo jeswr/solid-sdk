@@ -247,13 +247,28 @@ export function createSandbox(options: SandboxOptions): Sandbox {
     };
   }
 
+  /** The tool's visibility under the main mandate and every narrowing one (strictest wins). */
+  function combinedVisibility(spec: ToolSpec, mandate: Mandate) {
+    const main = visibility(spec, mandate);
+    let out = main;
+    for (const extra of options.rules().also ?? []) {
+      const v = visibility(spec, extra.mandate);
+      if (!v.visible && out.visible)
+        out = { ...v, reason: `${v.reason.replace(/^Hidden: /, `Hidden by ${extra.name}: `)}` };
+      else if (v.visible && v.approval && out.visible && !out.approval)
+        out = { ...v, reason: `${v.reason} (${extra.name})` };
+    }
+    return out;
+  }
+
   function catalogue(): CatalogueEntry[] {
     const mandate = currentMandate();
-    return options.tools.map((tool) => ({ tool, ...visibility(tool, mandate) }));
+    return options.tools.map((tool) => ({ tool, ...combinedVisibility(tool, mandate) }));
   }
 
   function rulesDigest(mandate: Mandate): string {
-    return digestOf(JSON.parse(JSON.stringify(mandate)));
+    const also = options.rules().also ?? [];
+    return digestOf(JSON.parse(JSON.stringify(also.length ? { mandate, also } : mandate)) as Json);
   }
 
   /** Step 2: the global mandate, once per recipient (or once if there is none). */
@@ -395,9 +410,14 @@ export function createSandbox(options: SandboxOptions): Sandbox {
     return { steps, obligations: owed };
   }
 
-  function limitsStep(spec: ToolSpec, ctx: CallContext, now: number): StepResult[] {
+  function limitsStep(
+    spec: ToolSpec,
+    ctx: CallContext,
+    now: number,
+    mandate: Mandate = options.rules().mandate,
+  ): StepResult[] {
     if (spec.kind !== "send" && spec.kind !== "pay") return [];
-    const { mandate, currency } = options.rules();
+    const { currency } = options.rules();
     const breaches = checkLimits(
       mandate.limits,
       currency,
@@ -569,6 +589,25 @@ export function createSandbox(options: SandboxOptions): Sandbox {
     const send = dataSendStep(spec.kind === "read" || spec.kind === "pay" ? {} : ctx, purpose, now);
     steps.push(...send.steps);
     steps.push(...limitsStep(spec, ctx, nowMs));
+    // Each narrowing mandate (an automation rule's own policy) must allow the call too.
+    for (const extra of options.rules().also ?? []) {
+      const tag = (x: StepResult): StepResult => ({
+        ...x,
+        explanation: `${extra.name}: ${x.explanation}`,
+        reason: `also:${x.reason}`,
+      });
+      const v = visibility(spec, extra.mandate);
+      steps.push(
+        tag({
+          step: "catalogue",
+          outcome: v.visible ? "permit" : "stop",
+          reason: v.visible ? "listed" : "hidden",
+          explanation: v.reason,
+        }),
+      );
+      steps.push(...(await globalStep(spec, ctx, purpose, extra.mandate, at)).map(tag));
+      steps.push(...limitsStep(spec, ctx, nowMs, extra.mandate).map(tag));
+    }
     if (approved)
       return {
         steps: steps.map((s) =>

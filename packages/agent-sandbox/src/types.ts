@@ -199,4 +199,17 @@ export interface GlobalRules {
    * added, so a delegation cannot lift them.
    */
   readonly askFirst?: readonly { readonly target: string; readonly action: string }[];
+  /**
+   * Further mandates that must ALSO allow every call, such as an automation rule's own,
+   * narrower policy. Each is checked like the main mandate (catalogue, rules, limits) and the
+   * strictest answer wins, so one can only narrow what the others allow.
+   */
+  readonly also?: readonly ScopedMandate[];
+}
+
+/** A named mandate that narrows the main one (for example, one automation rule's policy). */
+export interface ScopedMandate {
+  /** Shown before each of its reasons, e.g. "Automation rule \"Meeting replies\"". */
+  readonly name: string;
+  readonly mandate: Mandate;
 }
