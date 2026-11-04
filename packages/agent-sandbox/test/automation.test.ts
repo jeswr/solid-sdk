@@ -485,10 +485,12 @@ describe("review fixes", () => {
         ],
       },
     };
-    expect(validateRule(mixed, env).join(" ")).toMatch(/same recipients and approval/);
+    expect(validateRule(mixed, env).join(" ")).toMatch(
+      /must have the same recipients and approval/,
+    );
     expect(() =>
       ruleMandate(mixed, env, { agent: AUTOMATION_AGENT, event: { kind: "manual" }, at: "x" }),
-    ).toThrow(/same recipients and approval/);
+    ).toThrow(/must have the same recipients and approval/);
     const asked: AutomationRule = {
       ...mixed,
       policy: {
@@ -499,7 +501,9 @@ describe("review fixes", () => {
         ],
       },
     };
-    expect(validateRule(asked, env).join(" ")).toMatch(/same recipients and approval/);
+    expect(validateRule(asked, env).join(" ")).toMatch(
+      /must have the same recipients and approval/,
+    );
     const same: AutomationRule = {
       ...mixed,
       policy: {
@@ -514,6 +518,29 @@ describe("review fixes", () => {
     await expect(
       runAutomation(mixed, world.receive(ask("t2", "a@example.org")), env),
     ).rejects.toThrow(/cannot run/);
+  });
+
+  it("tools whose actions overlap in one system must be allowed on the same terms", () => {
+    const { env } = setup();
+    const base = env.tools.find((t) => t.name === "jira_search");
+    if (!base) throw new Error("jira_search");
+    const tools = [
+      { ...base, name: "jira_use", action: "use" },
+      { ...base, name: "jira_peek", action: "read" },
+    ];
+    const rule: AutomationRule = {
+      ...meeting(),
+      policy: {
+        ...meeting().policy,
+        allow: [{ tool: "jira_use" }, { tool: "jira_peek", approval: true }],
+      },
+    };
+    expect(validateRule(rule, { ...env, tools }).join(" ")).toMatch(/overlapping things/);
+    const agreed = {
+      ...rule,
+      policy: { ...rule.policy, allow: [{ tool: "jira_use" }, { tool: "jira_peek" }] },
+    };
+    expect(validateRule(agreed, { ...env, tools })).toEqual([]);
   });
 
   it("an invalid rule never runs, and a sending tool without recipients never compiles", async () => {
