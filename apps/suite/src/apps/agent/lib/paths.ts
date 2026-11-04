@@ -70,6 +70,8 @@ export function agentPaths(workspace: string) {
   const paths = {
     accounts: at("accounts/"),
     descriptors: at("descriptors/"),
+    // The agent introduces itself at one fixed address, so finding its WebID costs one read.
+    agentIntroduction: at("descriptors/agent.ttl"),
     inbox: at("inbox/"),
     conversations: at("conversations/"),
     proposals: at("proposals/"),

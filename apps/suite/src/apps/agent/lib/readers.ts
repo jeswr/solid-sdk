@@ -6,6 +6,7 @@ import type { ConversationTurn, InboundMessage, PodRecord, RecordType } from "@j
 import { type AgentClient, AgentReadError, isLoaded, type Loaded, type Row } from "./client";
 import {
   type Collection,
+  type CollectionMetadata,
   collection,
   mapBounded,
   selectMembers,
@@ -81,8 +82,11 @@ async function optional<T>(load: () => Promise<T>): Promise<T | undefined> {
 }
 export const readAccounts = (client: AgentClient) =>
   records(client, client.paths.accounts, "account");
+/** Channel capabilities; the agent's own introduction lives beside them and is skipped. */
 export const readDescriptors = (client: AgentClient) =>
-  records(client, client.paths.descriptors, "channel-capability");
+  records(client, client.paths.descriptors, "channel-capability", "display", [
+    client.paths.agentIntroduction,
+  ]);
 export const readProposals = (client: AgentClient) =>
   records(client, client.paths.proposals, "action-proposal");
 export type DisplayApproval = Approval & { createdAt: string; verification: Verification };
@@ -134,10 +138,14 @@ export async function readApprovals(
     { ...selected, incompleteMessage: "Too many approval records to check" },
   );
 }
-export const readMandates = (client: AgentClient) =>
+/** Legacy reference listing. The permissions history reads signed credentials through mandates.ts. */
+export const readMandates = async (client: AgentClient) =>
   records(client, client.paths.mandates, "mandate-reference", "trust", [
     client.paths.mandatesCurrent,
     client.paths.mandatesStatus,
+    ...(await client.list(client.paths.mandates))
+      .filter((m) => m.url.endsWith(".trig"))
+      .map((m) => m.url),
   ]);
 export async function readControl(
   client: AgentClient,
@@ -174,7 +182,8 @@ export const readOutbox = (client: AgentClient) =>
   records(client, client.paths.outbox, "transmission", "trust");
 export async function readMandateCurrent(client: AgentClient) {
   const row = await optional(() => client.read(client.paths.mandatesCurrent, "mandate-reference"));
-  return collection(row ? [row] : []);
+  const rows = row ? [row] : [];
+  return collection(rows) as typeof rows & CollectionMetadata;
 }
 export interface Heartbeat {
   id: string;

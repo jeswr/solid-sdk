@@ -9,6 +9,7 @@ import {
   collection,
   isTruncated,
   mapBounded,
+  metadataOf,
   selectMembers,
   selectTrustMembers,
 } from "../src/apps/agent/lib/collections";
@@ -266,4 +267,22 @@ it("sorts a displayed UUID-name sample by its records' timestamps without claimi
   expect(rows).toMatchObject({ truncated: true, newest: false, total: 501 });
   expect(rows[0]?.url).toBe(members[1]?.url);
   expect(rows.at(-1)?.url).toBe(members[500]?.url);
+});
+
+it("carries collection metadata, and only the flags that are set, onto a filtered copy", () => {
+  const source = collection([], {
+    truncated: true,
+    total: 900,
+    newest: false,
+    complete: true,
+    totalIsLowerBound: true,
+  });
+  expect(metadataOf(source)).toEqual({
+    truncated: true,
+    total: 900,
+    newest: false,
+    complete: true,
+    totalIsLowerBound: true,
+  });
+  expect(metadataOf([])).toEqual({});
 });
