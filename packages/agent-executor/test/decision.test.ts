@@ -528,7 +528,8 @@ it("property: for all 4^4 halt/resume/file control sequences no send begins whil
       );
     }
   }
-});
+  // 256 exhaustive sequences each verify signed controls; CI runners take over 5 s.
+}, 30_000);
 
 it("a changed wire media type invalidates an earlier approval even with identical bytes", async () => {
   const h = harness();
