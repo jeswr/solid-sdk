@@ -21,6 +21,8 @@ import { SharingError } from "./rdf";
 import type { AccessOrigin, SharingRole, SharingSelection, SharingState } from "./types";
 import {
   type AccessCapture,
+  CHANGED_WHILE_SAVING,
+  pinFetch,
   recordAccess,
   UNSUPPORTED_SYSTEM,
   usesEssModes,
@@ -213,6 +215,13 @@ export async function loadSharing(
   session: SharingSession,
   resource: string,
 ): Promise<SharingSnapshot> {
+  return (await readSharing(session, resource)).snapshot;
+}
+/** `loadSharing`, plus the access documents' validators for binding a follow-up write. */
+async function readSharing(
+  session: SharingSession,
+  resource: string,
+): Promise<{ snapshot: SharingSnapshot; pins: ReadonlyMap<string, string> }> {
   const recorder = recordAccess(session.fetch);
   let grants: GrantSnapshot;
   try {
@@ -230,12 +239,15 @@ export async function loadSharing(
   const owner = state.people.some((p) => p.webId === session.webId && p.role === "owner");
   const folder = resource.endsWith("/");
   return {
-    resource,
-    grants,
-    state,
-    canManage: owner && !folder,
-    ...(owner && folder ? { readOnly: FOLDER_READ_ONLY } : {}),
-    contentsDiffer,
+    snapshot: {
+      resource,
+      grants,
+      state,
+      canManage: owner && !folder,
+      ...(owner && folder ? { readOnly: FOLDER_READ_ONLY } : {}),
+      contentsDiffer,
+    },
+    pins: recorder.validators(),
   };
 }
 
@@ -255,6 +267,27 @@ function unmet(state: SharingState, selection: SharingSelection): string[] {
     .filter((webId) => wanted.get(webId) !== actual.get(webId))
     .sort();
   return generalChoice(selection) === state.link ? people : [...people, "general access"];
+}
+/**
+ * Whether `state` is exactly the selection except for principals still awaiting removal,
+ * each still at the access the dialog showed. Anything else is a concurrent change.
+ */
+function onlyPending(
+  state: SharingState,
+  shown: SharingState,
+  selection: SharingSelection,
+  pending: readonly AgentRef[],
+): boolean {
+  return unmet(state, selection).every((id) => {
+    if (id === "general access")
+      return pending.some((agent) => agent.type === "public") && state.link === shown.link;
+    const role = (people: SharingState["people"]) =>
+      people.find((person) => person.webId === id)?.role;
+    return (
+      pending.some((agent) => agent.type === "webid" && agent.id === id) &&
+      role(state.people) === role(shown.people)
+    );
+  });
 }
 
 export interface SharingPlan {
@@ -365,13 +398,32 @@ export async function applySharing(
   }
   // From here on part of the selection may already be stored, so every failure is reported
   // against the reloaded access rather than as "not saved".
+  // SDK gap: removeGrant takes no expected snapshot. Each removal is therefore bound to a
+  // fresh read that must equal the selection plus the removals still to come; the pinned
+  // fetch then refuses the removal if any access document changed since that read, and the
+  // SDK's If-Match covers the rest. A concurrent change stops the removals.
   const failures: unknown[] = [];
-  for (const agent of plan.removals) {
+  for (const [index, agent] of plan.removals.entries()) {
     try {
-      const result = await removeGrant([snapshot.resource], agent, mutation);
+      const { snapshot: current, pins } = await readSharing(session, snapshot.resource);
+      if (!onlyPending(current.state, snapshot.state, selection, plan.removals.slice(index))) {
+        failures.push(new SharingError(CHANGED_WHILE_SAVING));
+        break;
+      }
+      const gone =
+        agent.type === "webid"
+          ? !current.state.people.some((person) => person.webId === agent.id)
+          : current.state.link === "none";
+      if (gone) continue;
+      const result = await removeGrant([snapshot.resource], agent, {
+        ...mutation,
+        fetch: pinFetch(fetch, pins),
+      });
       failures.push(...result.failed.map((failed) => failed.error));
+      if (result.failed.length) break;
     } catch (error) {
       failures.push(error);
+      break;
     }
   }
   let fresh: SharingSnapshot;

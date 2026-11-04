@@ -29,6 +29,8 @@ import {
 } from "../src/apps/drive/lib/sharing/adapter";
 import { SharingError } from "../src/apps/drive/lib/sharing/rdf";
 import {
+  CAPTURE_LIMIT,
+  CHANGED_WHILE_SAVING,
   recordAccess,
   UNMAPPED,
   UNSUPPORTED_SYSTEM,
@@ -803,7 +805,7 @@ it("reports access that did not change instead of saving when a removal fails", 
   expect(fresh.state.link).toBe("viewer");
 });
 
-it("reports a removal refused by the owner-lockout guard after a concurrent change", async () => {
+it("stops a removal when access changed after the conditional setGrants", async () => {
   const { env, snapshot } = await materialized();
   let gets = 0;
   const fetch: typeof globalThis.fetch = async (url, init) => {
@@ -822,8 +824,86 @@ it("reports a removal refused by the owner-lockout guard after a concurrent chan
   }).catch((reason: unknown) => reason);
   expect(error).toBeInstanceOf(SharingIncompleteError);
   expect(error).toMatchObject({ unchanged: [ALICE, BOB, CAROL, "general access"] });
-  expect((error as Error).cause).toMatchObject({ code: "owner-lockout" });
+  // The bound re-read sees the change before removeGrant plans anything.
+  expect((error as Error).cause).toMatchObject({ message: CHANGED_WHILE_SAVING });
   expect(env.puts()).toHaveLength(0);
+});
+
+// Codex gate (#282): a follow-up removal is bound to the state it verified, so a change made
+// between that read and the removal is never overwritten and never reported as saved.
+it("refuses a removal when access changes between its verified read and the write", async () => {
+  const { env, snapshot } = await materialized();
+  let gets = 0;
+  const fetch: typeof globalThis.fetch = async (url, init) => {
+    // GETs: setGrants' load, the bound re-read, then removeGrant's own load.
+    if (url === `${FILE}.acl` && (init?.method ?? "GET") === "GET" && ++gets === 3) {
+      const own = document("wac");
+      authorization(own, ALICE, ["Read", "Write", "Control"]);
+      authorization(own, BOB, ["Read"]);
+      authorization(own, CAROL, ["Read", "Write"]); // Someone else promotes Carol.
+      authorization(own, PUBLIC, ["Read"]);
+      await writeDoc(env, own);
+    }
+    return env.session.fetch(url, init);
+  };
+  const error = await applySharing({ ...env.session, fetch }, snapshot, {
+    ...snapshot.state,
+    people: snapshot.state.people.filter((p) => p.webId !== CAROL),
+  }).catch((reason: unknown) => reason);
+  expect(gets).toBeGreaterThanOrEqual(3);
+  expect(error).toBeInstanceOf(SharingIncompleteError);
+  expect(error).toMatchObject({ unchanged: [CAROL] });
+  expect((error as Error).cause).toMatchObject({ message: CHANGED_WHILE_SAVING });
+  expect(env.puts()).toHaveLength(0);
+  const fresh = await env.load();
+  expect(fresh.state.people.find((p) => p.webId === CAROL)?.role).toBe("editor");
+});
+
+it("removes several people, each bound to the state left by the previous removal", async () => {
+  const { env, snapshot } = await materialized();
+  const result = await applySharing(env.session, snapshot, {
+    ...snapshot.state,
+    people: snapshot.state.people.filter((p) => p.webId === ALICE),
+    link: "none",
+    public: "none",
+  });
+  expect(result.state.people.map((p) => p.webId)).toEqual([ALICE]);
+  expect(result.state.link).toBe("none");
+  expect(await agents(env)).toEqual([ALICE]);
+});
+
+// Codex gate (#282): the recorder's copy must not stall the SDK's bounded reader when it
+// refuses an oversized access document.
+it("fails a load on an oversized access document instead of hanging", async () => {
+  const env = await setup();
+  const chunk = new TextEncoder().encode(`# ${"x".repeat(65_533)}\n`);
+  const fetch: typeof globalThis.fetch = async (url, init) => {
+    const response = await env.session.fetch(url, init);
+    if (url !== `${FILE}.acl` || (init?.method ?? "GET") !== "GET") return response;
+    const body = new ReadableStream<Uint8Array>({
+      pull: (controller) => controller.enqueue(chunk),
+    });
+    return new Response(body, { status: 200, headers: response.headers });
+  };
+  await expect(loadSharing({ ...env.session, fetch }, FILE)).rejects.toBeInstanceOf(SharingError);
+});
+
+it("abandons a recorded copy whose body fails", async () => {
+  const body = new ReadableStream<Uint8Array>({
+    pull: (controller) => controller.error(new Error("reset")),
+  });
+  const recorder = recordAccess(async () => new Response(body, { status: 200 }));
+  await (await recorder.fetch(`${FILE}.acl`)).text().catch(() => undefined);
+  await expect(recorder.documents(FILE)).rejects.toThrow(UNMAPPED);
+});
+
+it("abandons a recorded copy over the capture limit", async () => {
+  const big = new Uint8Array(CAPTURE_LIMIT + 1);
+  const recorder = recordAccess(
+    async () => new Response(big, { status: 200, headers: { "content-type": "text/turtle" } }),
+  );
+  await (await recorder.fetch(`${FILE}.acl`)).arrayBuffer();
+  await expect(recorder.documents(FILE)).rejects.toThrow(UNMAPPED);
 });
 
 it("never reports a save when someone else changes access before the reload", async () => {

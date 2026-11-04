@@ -26,7 +26,49 @@ export interface AccessCapture {
 interface Call {
   readonly method: string;
   readonly url: string;
-  readonly response: Response;
+  readonly status: number;
+  readonly etag: string | null;
+  readonly contentType: string | null;
+  /** The body, read concurrently and bounded; undefined when over the cap or unreadable. */
+  readonly text?: Promise<string | undefined>;
+}
+
+/** The SDK's access-document cap. A larger copy is abandoned, never buffered whole. */
+export const CAPTURE_LIMIT = 1024 * 1024;
+/**
+ * Drain a response copy as it arrives, up to `CAPTURE_LIMIT` bytes. Reading concurrently
+ * matters: a tee'd body only finishes cancelling once both branches are cancelled or drained,
+ * so an unread copy would block the SDK's own bounded reader when it refuses a document.
+ */
+async function capture(response: Response): Promise<string | undefined> {
+  const reader = (response.body as ReadableStream<Uint8Array>).getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > CAPTURE_LIMIT) {
+        await reader.cancel();
+        return undefined;
+      }
+      chunks.push(value);
+    }
+  } catch {
+    return undefined;
+  }
+  const bytes = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return new TextDecoder().decode(bytes);
+}
+/** A GET response's validator: status plus ETag. */
+export function validator(response: { status: number; headers: Headers }): string {
+  return `${response.status} ${response.headers.get("etag")}`;
 }
 
 /**
@@ -39,7 +81,15 @@ export function recordAccess(fetch: typeof globalThis.fetch) {
   return {
     fetch: (async (input, init) => {
       const response = await fetch(input, init);
-      calls.push({ method: init?.method ?? "GET", url: String(input), response: response.clone() });
+      const method = init?.method ?? "GET";
+      calls.push({
+        method,
+        url: String(input),
+        status: response.status,
+        etag: response.headers.get("etag"),
+        contentType: response.headers.get("content-type"),
+        ...(method === "GET" && response.body ? { text: capture(response.clone()) } : {}),
+      });
       return response;
     }) as typeof globalThis.fetch,
     /** The existing access documents, parsed. Only call after the SDK read succeeded. */
@@ -48,21 +98,49 @@ export function recordAccess(fetch: typeof globalThis.fetch) {
       let resource = target;
       for (const call of calls) {
         if (call.method === "HEAD") resource = call.url;
-        else if (call.response.status !== 404)
+        else if (call.status !== 404) {
+          const text = await (call.text ?? Promise.resolve(""));
+          if (text === undefined) throw new SharingError(UNMAPPED);
           documents.push({
             resource,
             url: call.url,
-            dataset: await parseRdf(
-              await call.response.text(),
-              call.response.headers.get("content-type"),
-              { baseIRI: call.url },
-            ),
+            dataset: await parseRdf(text, call.contentType, { baseIRI: call.url }),
           });
+        }
       }
       return documents;
     },
+    /** Each access document GET's validator, keyed by URL (see `pinFetch`). */
+    validators(): ReadonlyMap<string, string> {
+      return new Map(
+        calls
+          .filter((call) => call.method === "GET")
+          .map((call) => [call.url, `${call.status} ${call.etag}`] as const),
+      );
+    },
   };
 }
+
+/**
+ * Wrap a fetch so every access-document GET must still match `pins` (status and ETag from the
+ * read the caller verified). On any mismatch, including a document the pinned read never
+ * fetched, the call fails before the SDK can plan a write. The SDK's write is If-Match on the
+ * ETag it read, so a pinned read binds the write to the verified state.
+ */
+export function pinFetch(
+  fetch: typeof globalThis.fetch,
+  pins: ReadonlyMap<string, string>,
+): typeof globalThis.fetch {
+  return async (input, init) => {
+    const response = await fetch(input, init);
+    if ((init?.method ?? "GET") === "GET" && pins.get(String(input)) !== validator(response)) {
+      await response.body?.cancel();
+      throw new SharingError(CHANGED_WHILE_SAVING);
+    }
+    return response;
+  };
+}
+export const CHANGED_WHILE_SAVING = "Sharing changed while it was being saved.";
 
 /** Whether a document the SDK could not read uses ESS's acp:* access modes. */
 export function usesEssModes(documents: readonly AccessCapture[]): boolean {

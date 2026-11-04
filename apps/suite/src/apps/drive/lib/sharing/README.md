@@ -76,7 +76,8 @@ discovery, scope and redirect refusal, WAC/ACP parsing, the inherited-ACL copy
 `readGrants` silently drops principals whose modes map to no role (public Read+Append, Write
 without Read, Control without Write) and reads a folder's own rules without its member rules.
 `verify.ts` therefore records the access documents the SDK fetched (`recordAccess` wraps the
-fetch; each GET is attributed to the HEAD before it) and re-reads them with the SDK's neutral
+fetch; each GET is attributed to the HEAD before it, and its copy is drained concurrently up
+to the SDK's 1 MiB cap so it never stalls the SDK's own bounded reader) and re-reads them with the SDK's neutral
 `readWac`/`readAcp`. `loadSharing` fails closed (`UNMAPPED`) unless every principal with
 effective access appears at the role its raw modes map to and nobody else does; denials,
 conditional rules, misattributed documents and reader failures fail the same way. For a
@@ -93,8 +94,11 @@ SDK's owner-lockout guard. Unchanged selections send no request.
 SDK gap: `setGrants` seeds a WAC ACL's rows copied from an inherited default
 (`materializedFrom`) before the caller's grants, so omitting such a principal never removes it.
 After the conditional `setGrants`, each removed person (and anonymous access, when restricted)
-also goes through `removeGrant`, which is a no-op once the principal is gone. The access is
-then reloaded and compared with the selection: a mismatch is `SharingIncompleteError` with the
+also goes through `removeGrant`. `removeGrant` takes no expected snapshot, so each removal is
+bound app-side: a fresh verified read must equal the selection plus the removals still to come
+(otherwise the removals stop with `CHANGED_WHILE_SAVING`), and `pinFetch` refuses the removal
+if any access document's status or ETag differs from that read. The SDK's If-Match covers the
+gap between its own read and its PUT. The access is then reloaded and compared with the selection: a mismatch is `SharingIncompleteError` with the
 reloaded snapshot and the principals that did not change, and the dialog never announces
 "Sharing saved" unless the reloaded access matches.
 
