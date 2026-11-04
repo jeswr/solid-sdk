@@ -4,6 +4,7 @@ import { isSharedTrackerUrl } from "../../src/apps/tasks/lib/model/rdf";
 import {
   defaultPreferences,
   parsePreferences,
+  parseSharedProjects,
   preferencesReducer,
 } from "../../src/apps/tasks/state/preferences-reducer";
 
@@ -86,8 +87,11 @@ it("validates and deduplicates opened shared projects in storage and reducer act
       "https://bob.example/",
     ].map((url) => ({ ...valid, url })),
   ];
-  const state = parsePreferences(JSON.stringify({ sharedProjects: [...invalid, valid, valid] }));
-  expect(state.sharedProjects).toEqual([valid]);
+  expect(parseSharedProjects(JSON.stringify([...invalid, valid, valid]))).toEqual([valid]);
+  for (const raw of [null, "{", "{}", '"x"']) expect(parseSharedProjects(raw)).toEqual([]);
+  // A browser-wide list (from before the per-account split) is never read.
+  expect(parsePreferences(JSON.stringify({ sharedProjects: [valid] })).sharedProjects).toEqual([]);
+  const state = { ...defaultPreferences, sharedProjects: [valid] };
   expect(preferencesReducer(state, { type: "sharedProject", ...valid })).toBe(state);
   expect(
     preferencesReducer(state, { type: "sharedProject", ...valid, title: "Renamed" }).sharedProjects,
@@ -125,9 +129,7 @@ it("requires HTTPS and removes remembered shared projects", () => {
     expect(
       preferencesReducer(defaultPreferences, { type: "sharedProject", url, title: "Home" }),
     ).toBe(defaultPreferences);
-    expect(
-      parsePreferences(JSON.stringify({ sharedProjects: [{ url, title: "Home" }] })).sharedProjects,
-    ).toEqual([]);
+    expect(parseSharedProjects(JSON.stringify([{ url, title: "Home" }]))).toEqual([]);
   }
 });
 
@@ -140,10 +142,9 @@ it("allows HTTP loopback shared projects only with the explicit fixture flag", (
       "http://[::1]/home.ttl",
     ]) {
       expect(isSharedTrackerUrl(url)).toBe(flag === "1");
-      expect(
-        parsePreferences(JSON.stringify({ sharedProjects: [{ url, title: "Home" }] }))
-          .sharedProjects,
-      ).toEqual(flag === "1" ? [{ url, title: "Home" }] : []);
+      expect(parseSharedProjects(JSON.stringify([{ url, title: "Home" }]))).toEqual(
+        flag === "1" ? [{ url, title: "Home" }] : [],
+      );
     }
     expect(isSharedTrackerUrl("http://bob.example/home.ttl")).toBe(false);
     expect(isSharedTrackerUrl("http://localhost.example/home.ttl")).toBe(false);

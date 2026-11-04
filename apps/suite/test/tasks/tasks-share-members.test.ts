@@ -292,6 +292,51 @@ describe("sharing regressions", () => {
       false,
     );
   });
+  it("keeps a removed shared project closed until the user navigates to it again", async () => {
+    const { cache, pod } = await frameCache();
+    const url = "https://bob.example/home.ttl";
+    const data = createTracker(url, "Shared", url.replace(/\.ttl$/, "/"), [bob], now);
+    pod.seed(url, await serialize(data.dataset));
+    expect(await cache.openProject(url)).toBeDefined();
+    cache.forgetSharedProject(url);
+    // A re-render or retry on the same route does not bring it back.
+    expect(await cache.openProject(url)).toBeUndefined();
+    expect(cache.hasSharedProject(url)).toBe(false);
+    cache.allowSharedProject(url);
+    expect(await cache.openProject(url)).toBeDefined();
+    expect(cache.hasSharedProject(url)).toBe(true);
+    expect(cache.getSnapshot().projects.some((project) => project.url === url)).toBe(true);
+  });
+  it.each([
+    true,
+    false,
+  ])("drops a shared read still in flight when the project is removed (read fails: %s)", async (fails) => {
+    const { cache, pod } = await frameCache();
+    const url = "https://bob.example/home.ttl";
+    const data = createTracker(url, "Shared", url.replace(/\.ttl$/, "/"), [bob], now);
+    pod.seed(url, await serialize(data.dataset));
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    pod.intercept = async (request) => {
+      if (request.url !== url || request.method !== "GET") return undefined;
+      await gate;
+      return fails ? new Response(null, { status: 503 }) : undefined;
+    };
+    const opening = cache.openProject(url);
+    await vi.waitFor(() => expect(cache.getSnapshot().tasks[url]?.status).toBe("loading"));
+    cache.forgetSharedProject(url);
+    // Navigating back before the old read lands must not let that stale read through.
+    cache.allowSharedProject(url);
+    release();
+    expect(await opening).toBeUndefined();
+    expect(cache.hasSharedProject(url)).toBe(false);
+    expect(cache.getSnapshot().projects.some((project) => project.url === url)).toBe(false);
+    expect(cache.getSnapshot().tasks[url]).toBeUndefined();
+    pod.intercept = undefined;
+    expect(await cache.openProject(url)).toBeDefined();
+  });
   it("forgets removed projects and stops refreshing them", async () => {
     const { cache, pod } = await frameCache();
     const url = "https://bob.example/home.ttl";

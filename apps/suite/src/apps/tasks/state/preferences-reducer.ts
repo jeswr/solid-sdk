@@ -1,8 +1,12 @@
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 import { isSharedTrackerUrl } from "../lib/model/rdf";
 import type { SortMode } from "../lib/views/project-groups";
 export interface TasksPreferences {
+  /** Projects shared with `sharedOwner`; stored per WebID, never in the browser-wide record. */
   sharedProjects: { url: string; title: string }[];
+  /** The WebID `sharedProjects` belongs to; undefined while signed out. */
+  sharedOwner?: string | undefined;
   viewMode: Record<string, "list" | "board">;
   sort: Record<string, SortMode>;
   collapsedSections: string[];
@@ -88,15 +92,8 @@ export function parsePreferences(raw: string | null): TasksPreferences {
         ? (data.sidebar as Record<string, unknown>)
         : {};
     return {
-      sharedProjects: Array.isArray(data.sharedProjects)
-        ? [
-            ...new Map(
-              data.sharedProjects
-                .filter(validSharedProject)
-                .map((project) => [project.url, { url: project.url, title: project.title }]),
-            ).values(),
-          ]
-        : [],
+      // Shared projects are per account (parseSharedProjects); a browser-wide list is ignored.
+      sharedProjects: [],
       viewMode: entries(data.viewMode, ["list", "board"]),
       sort: entries(data.sort, ["manual", "due", "priority", "name"]),
       collapsedSections: Array.isArray(data.collapsedSections)
@@ -112,6 +109,23 @@ export function parsePreferences(raw: string | null): TasksPreferences {
     };
   } catch {
     return defaultPreferences;
+  }
+}
+
+/** One account's Shared with me list, as stored under its own key. */
+export function parseSharedProjects(raw: string | null): TasksPreferences["sharedProjects"] {
+  try {
+    const value: unknown = JSON.parse(raw ?? "null");
+    if (!Array.isArray(value)) return [];
+    return [
+      ...new Map(
+        value
+          .filter(validSharedProject)
+          .map((project) => [project.url, { url: project.url, title: project.title }]),
+      ).values(),
+    ];
+  } catch {
+    return [];
   }
 }
 

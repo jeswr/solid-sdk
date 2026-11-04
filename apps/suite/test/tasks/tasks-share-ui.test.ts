@@ -71,6 +71,11 @@ import { toast } from "@jeswr/suite-ui";
 import { TaskDetail } from "../../src/apps/tasks/components/detail/task-detail";
 import { TasksApp } from "../../src/apps/tasks/components/tasks-app";
 import { ProjectView } from "../../src/apps/tasks/components/views/project-view";
+import {
+  setPreferencesIdentity,
+  sharedProjectsKey,
+  useTasksPreferences,
+} from "../../src/apps/tasks/state/preferences";
 
 const button = (text: string, root: ParentNode = document) => {
   const element = [...root.querySelectorAll<HTMLButtonElement>('button, [role="menuitem"]')].find(
@@ -95,6 +100,8 @@ beforeEach(() => {
     value: vi.fn(),
   });
   localStorage.clear();
+  setPreferencesIdentity(undefined);
+  setPreferencesIdentity(webId);
   vi.mocked(toast).mockClear();
   vi.mocked(toast.error).mockClear();
   vi.mocked(toast.success).mockClear();
@@ -163,7 +170,7 @@ it("records an opened external tracker, lists Shared with me, and keeps the save
     await vi.waitFor(() => expect(host.textContent).toContain("Shared with me"));
   });
   expect(host.querySelector(`nav a[href="${path}"]`)?.textContent).toContain("Bob's Home");
-  expect(JSON.parse(localStorage.getItem("suite.tasks.prefs") ?? "{}").sharedProjects).toEqual([
+  expect(JSON.parse(localStorage.getItem(sharedProjectsKey(webId)) ?? "[]")).toEqual([
     { url, title: "Bob's Home" },
   ]);
   f.pod.intercept = (request) =>
@@ -232,7 +239,7 @@ it("removes a shared sidebar entry from preferences and the refresh cache", asyn
   await click(
     button("Remove from Shared with me", document.querySelector('[role="menu"]') as HTMLElement),
   );
-  expect(JSON.parse(localStorage.getItem("suite.tasks.prefs") ?? "{}").sharedProjects).toEqual([]);
+  expect(JSON.parse(localStorage.getItem(sharedProjectsKey(webId)) ?? "[]")).toEqual([]);
   expect(host.querySelector(`nav a[href="${path}"]`)).toBeNull();
   f.pod.requests.length = 0;
   await act(() => cache.refreshProjects());
@@ -252,9 +259,7 @@ it.each([
   path = `/tasks/p/${ref}`;
   await mount(h(TasksApp, null, h(ProjectView, { projectUrl: url })));
   await act(() => cache.openProject(url));
-  expect(
-    JSON.parse(localStorage.getItem("suite.tasks.prefs") ?? "{}").sharedProjects ?? [],
-  ).toEqual([]);
+  expect(JSON.parse(localStorage.getItem(sharedProjectsKey(webId)) ?? "[]")).toEqual([]);
 });
 it("renders malformed foreign assignee IRIs in the row, picker and detail hint", async () => {
   const f = await frameCache();
@@ -417,4 +422,44 @@ it("keeps the dialog usable with one member-sync warning across repeated opens",
   expect(toast).not.toHaveBeenCalled();
   expect(toast.success).not.toHaveBeenCalled();
   expect(toast.error).not.toHaveBeenCalled();
+});
+
+it("keeps Shared with me per WebID and never shows another account's list", async () => {
+  const project = { url: "https://bob.example/projects/home.ttl", title: "Bob's Home" };
+  localStorage.setItem(sharedProjectsKey(webId), JSON.stringify([project]));
+  // A list in the browser-wide record (older builds) is never read.
+  localStorage.setItem("suite.tasks.prefs", JSON.stringify({ sharedProjects: [project] }));
+  let seen: ReturnType<typeof useTasksPreferences> | undefined;
+  function Probe() {
+    seen = useTasksPreferences();
+    return null;
+  }
+  await mount(h(Probe));
+  expect(seen?.preferences.sharedProjects).toEqual([project]);
+  expect(seen?.preferences.sharedOwner).toBe(webId);
+  const carol = "https://carol.example/profile#me";
+  await act(() => setPreferencesIdentity(carol));
+  expect(seen?.preferences.sharedProjects).toEqual([]);
+  expect(seen?.preferences.sharedOwner).toBe(carol);
+  const other = { url: "https://dan.example/projects/plan.ttl", title: "Plan" };
+  await act(() => seen?.dispatch({ type: "sharedProject", ...other }));
+  expect(JSON.parse(localStorage.getItem(sharedProjectsKey(carol)) ?? "[]")).toEqual([other]);
+  expect(JSON.parse(localStorage.getItem(sharedProjectsKey(webId)) ?? "[]")).toEqual([project]);
+  // Other preferences stay browser-wide and never carry a shared list.
+  await act(() => seen?.dispatch({ type: "showCompleted", value: true }));
+  expect(JSON.parse(localStorage.getItem("suite.tasks.prefs") ?? "{}")).not.toHaveProperty(
+    "sharedProjects",
+  );
+  // Signed out: nothing is shown and nothing is recorded.
+  await act(() => setPreferencesIdentity(undefined));
+  expect(seen?.preferences.sharedProjects).toEqual([]);
+  await act(() => seen?.dispatch({ type: "sharedProject", ...project }));
+  expect(seen?.preferences.sharedProjects).toEqual([]);
+  // Another tab changing this account's list is picked up.
+  await act(() => setPreferencesIdentity(carol));
+  localStorage.setItem(sharedProjectsKey(carol), "[]");
+  await act(() =>
+    window.dispatchEvent(new window.StorageEvent("storage", { key: sharedProjectsKey(carol) })),
+  );
+  expect(seen?.preferences.sharedProjects).toEqual([]);
 });

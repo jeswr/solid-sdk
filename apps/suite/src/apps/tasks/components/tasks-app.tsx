@@ -72,6 +72,11 @@ function TasksChrome({ children }: { children: ReactNode }) {
   }
   const activeProject = tasks.projects.find((project) => project.url === projectUrl);
   const projectLoad = projectUrl ? tasks.tasks[projectUrl] : undefined;
+  // Navigating to a project may reopen one removed from Shared with me; a re-render on the
+  // same route may not, so a project removed while it is showing stays removed.
+  useEffect(() => {
+    if (projectUrl) tasks.cache.allowSharedProject(projectUrl);
+  }, [projectUrl, tasks.cache]);
   useEffect(() => {
     if (projectUrl && tasks.status === "ready" && !activeProject && !projectLoad)
       void tasks.cache.openProject(projectUrl);

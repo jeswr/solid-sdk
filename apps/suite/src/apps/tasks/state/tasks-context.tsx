@@ -6,6 +6,7 @@ import {
   type ReactNode,
   useContext,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useState,
   useSyncExternalStore,
@@ -17,7 +18,7 @@ import { TasksSharingAdapter } from "../lib/share/adapter";
 import { ensurePrivateIndexAccess, ensurePrivateTasksAccess, supportsTasksSharing } from "./access";
 import { pendingDeletes } from "./actions";
 import { completionVisuals } from "./completion-visuals";
-import { useTasksPreferences } from "./preferences";
+import { setPreferencesIdentity, useTasksPreferences } from "./preferences";
 import { TasksCache } from "./tasks-cache";
 
 export type { NewTask, TaskLoad, TasksSnapshot } from "./tasks-cache";
@@ -49,9 +50,15 @@ function useTasksValue(session: PodSession) {
       ),
   );
   const { preferences } = useTasksPreferences();
+  useLayoutEffect(() => {
+    setPreferencesIdentity(session.webId);
+    return () => setPreferencesIdentity(undefined);
+  }, [session.webId]);
   useEffect(() => {
+    // Only this account's list: never another WebID's, even for the render that switches.
+    if (preferences.sharedOwner !== session.webId) return;
     void cache.setSharedProjects(preferences.sharedProjects);
-  }, [cache, preferences.sharedProjects]);
+  }, [cache, preferences.sharedProjects, preferences.sharedOwner, session.webId]);
   const sharing = useMemo(() => new Map<string, TasksSharingAdapter>(), []);
   const snapshot = useSyncExternalStore(cache.subscribe, cache.getSnapshot, cache.getSnapshot);
   useEffect(() => {

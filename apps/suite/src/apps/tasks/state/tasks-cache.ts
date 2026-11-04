@@ -138,6 +138,8 @@ export class TasksCache {
   private sharedProjects = new Map<string, string>();
   private ownProjects = new Set<string>();
   private removedSharedProjects = new Set<string>();
+  /** Bumped when a shared project is forgotten, so a read already in flight is dropped. */
+  private sharedGenerations = new Map<string, number>();
   private removedAssignments = new Map<string, Map<string, Map<string, string | null>>>();
   readonly inboxUrl: string;
   isOwnProject(url: string) {
@@ -165,6 +167,7 @@ export class TasksCache {
   }
   forgetSharedProject(url: string) {
     this.removedSharedProjects.add(url);
+    this.sharedGenerations.set(url, (this.sharedGenerations.get(url) ?? 0) + 1);
     this.sharedProjects.delete(url);
     this.projectFailures.delete(url);
     ++this.projectRead;
@@ -182,9 +185,20 @@ export class TasksCache {
     if (!isSharedTrackerUrl(project.url)) throw new ModelError(400, project.url);
     requireProjectFolder(project.url, project.tracker.stateStore);
   }
+  /**
+   * The user navigated to this project: a project removed from Shared with me may be opened
+   * again. Background re-renders and retries on the same route keep it removed.
+   */
+  allowSharedProject(url: string) {
+    this.removedSharedProjects.delete(url);
+  }
+  /** Read a project that isn't one of the user's own. */
   async openProject(url: string): Promise<StoredProject | undefined> {
     if (!isSharedTrackerUrl(url) || this.removedSharedProjects.has(url)) return undefined;
+    const generation = this.sharedGenerations.get(url) ?? 0;
+    const stale = () => (this.sharedGenerations.get(url) ?? 0) !== generation;
     await this.start();
+    if (stale()) return undefined;
     const existing = this.baseline.projects.find((project) => project.url === url);
     if (existing) return existing;
     this.baseline = {
@@ -195,14 +209,14 @@ export class TasksCache {
     try {
       const project = await this.store.readProject(url);
       this.validateSharedProject(project);
-      if (this.removedSharedProjects.has(url)) return undefined;
+      if (stale()) return undefined;
       this.sharedProjects.set(url, project.tracker.title ?? "Project");
       this.baseline = replaceProject(this.baseline, project);
       this.projectFailures.delete(url);
       this.emit();
       return project;
     } catch (error) {
-      if (this.removedSharedProjects.has(url)) return undefined;
+      if (stale()) return undefined;
       this.baseline = {
         ...this.baseline,
         tasks: { ...this.baseline.tasks, [url]: { status: "error", items: [], error } },
