@@ -68,7 +68,13 @@ using only the supplied pristine public fetch, honors abort, and caps responses 
 `InvalidLoginAddressError` (a `TypeError`) for invalid URLs or `NotALoginAddressError` for failed probes.
 
 ```ts
+import type { PodAuth } from '@jeswr/pod-auth';
 import { resolveLoginTarget } from '@jeswr/pod-auth/directory';
+
+declare const auth: PodAuth;
+declare const address: string; // What the user typed.
+declare const publicFetch: typeof fetch; // A pristine, credential-free fetch.
+
 const target = await resolveLoginTarget(address, { fetch: publicFetch });
 const hint = target.kind === 'webid'
   ? { webId: target.webId }

@@ -5,6 +5,22 @@ import { clearSavedCopies } from "../src/shell/lib/settings-offline";
 import { defaultPreferences } from "../src/shell/lib/settings-preferences";
 
 describe("clearing saved copies", () => {
+  it("clears recent history for every account and leaves outbox keys", async () => {
+    const entries = new Map([
+      ["suite.recent.v1.one", "[]"],
+      ["suite.recent.v1.two", "[]"],
+      ["suite.outbox.v1.one", "unsent"],
+    ]);
+    const storage = {
+      get length() {
+        return entries.size;
+      },
+      key: (index: number) => [...entries.keys()][index] ?? null,
+      removeItem: (key: string) => entries.delete(key),
+    };
+    await clearSavedCopies({ storage });
+    expect([...entries.keys()]).toEqual(["suite.outbox.v1.one"]);
+  });
   it("deletes suite copies and preserves unrelated caches, demo originals and sessions", async () => {
     const cacheStorage = {
       keys: vi.fn(async () => ["suite-files", "other-cache", "suite-shell"]),

@@ -10,8 +10,8 @@ export function syncStatus(snapshot: SyncSnapshot): { kind: SyncStatusKind; labe
     const count = snapshot.conflicts.length;
     return { kind: "conflict", label: `${count} ${count === 1 ? "conflict" : "conflicts"}` };
   }
-  if (!snapshot.online) return { kind: "offline", label: "Offline — showing saved copies" };
   if (snapshot.reconnecting) return { kind: "reconnecting", label: "Reconnecting…" };
+  if (!snapshot.online) return { kind: "offline", label: "Offline — showing saved copies" };
   if (snapshot.pending.length)
     return { kind: "waiting", label: waitingLabel(snapshot.pending.length) };
   return { kind: "hidden", label: "" };
