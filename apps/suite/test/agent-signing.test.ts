@@ -172,6 +172,8 @@ describe("device approval keys", () => {
     ).toBe("verified");
     expect(credentialed).not.toHaveBeenCalled();
     expect(external.publicFetch).toHaveBeenCalled();
+    await expect(setupApprovalKey(external)).rejects.toThrow("outside the storage you shared");
+    expect(credentialed).not.toHaveBeenCalled();
   });
   it.each([
     "PUT",

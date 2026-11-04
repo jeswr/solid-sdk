@@ -132,6 +132,11 @@ export async function approvalKeyStatus(
   return (await resolver.isControlledBy(id, session.webId)) ? "ready" : "unavailable";
 }
 export async function setupApprovalKey(session: ProfileSession, store = new ApprovalKeyStore()) {
+  // Publishing writes the profile, which needs a credential the storage grant doesn't cover.
+  if (profileReader(session) !== session.fetch)
+    throw new Error(
+      "Your profile is outside the storage you shared, so this device can't add its approval key there.",
+    );
   const key = await store.generate(session.webId);
   try {
     await publishApprovalKey(session, key);
