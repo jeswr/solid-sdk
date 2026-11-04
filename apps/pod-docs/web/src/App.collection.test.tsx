@@ -8,11 +8,17 @@ const fixtures = vi.hoisted(() => ({
   session: { webId: "https://alice.example/#me", podRoot: "https://storage.example/pod/" },
   browser: undefined as DocumentBrowserProps | undefined,
   loopback: false,
+  fetch: (async () => new Response()) as typeof fetch,
 }));
 vi.mock("./auth/SessionProvider", () => ({
-  useSession: () => ({ webId: fixtures.session.webId, session: fixtures.session }),
+  useSession: () => ({
+    webId: fixtures.session.webId,
+    session: fixtures.session,
+    fetch: fixtures.fetch,
+    ready: true,
+  }),
 }));
-vi.mock("./auth/loopback", () => ({ isLoopbackOrigin: () => fixtures.loopback }));
+vi.mock("./auth/pod-auth", () => ({ allowInsecureLoopback: () => fixtures.loopback }));
 vi.mock("@jeswr/app-shell", () => ({
   AccountMenu: () => null,
   FeedbackButton: () => null,
@@ -37,18 +43,15 @@ beforeEach(() => {
 it.each([
   false,
   true,
-])("threads the host's explicit auth loopback opt-in (%s) into the document browser", (loopback) => {
-  vi.stubEnv("DEV", true);
+])("threads pod-auth's development loopback opt-in (%s) into the document browser", (loopback) => {
   fixtures.loopback = loopback;
   render(<App />);
   expect(fixtures.browser?.allowInsecureLoopback).toBe(loopback);
 });
 
-it("keeps loopback HTTP disabled in production even when hosted on localhost", () => {
-  vi.stubEnv("DEV", false);
-  fixtures.loopback = true;
+it("passes pod-auth's fetch to the document browser explicitly", () => {
   render(<App />);
-  expect(fixtures.browser?.allowInsecureLoopback).toBe(false);
+  expect(fixtures.browser?.fetch).toBe(fixtures.fetch);
 });
 afterEach(() => {
   cleanup();

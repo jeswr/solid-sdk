@@ -3,11 +3,8 @@
 //
 // App — the host shell's router-free root: logged out → <LoginScreen>; logged in
 // → a thin header (the shared app-shell chrome) over the LOCAL @jeswr/pod-docs
-// <DocumentBrowser> pointed at the user's pod. The browser receives NO `fetch`
-// prop — it uses the ambient global fetch, which the SessionProvider patched via
-// the @jeswr/solid-elements PROACTIVE auth-fetch seam (installProactiveAuthFetch,
-// task #123), so every read/write PROACTIVELY carries the DPoP token on the FIRST
-// request to an allowed origin — no per-resource 401-dance.
+// <DocumentBrowser> pointed at the user's pod. The browser gets pod-auth's
+// `auth.fetch` explicitly; global fetch is never patched.
 import { AccountMenu, FeedbackButton, ThemeToggle } from "@jeswr/app-shell";
 // SOLID-ELEMENTS (#115 / D-parity rollout #67/#68/#70): the framework-agnostic W3C
 // Web Components consumed through the @lit/react adapter. <Loading> is a Lit custom
@@ -34,23 +31,20 @@ export const FEEDBACK_REPO = "jeswr/pod-docs";
 export const FEEDBACK_APP_NAME = "Pod Docs";
 
 export function App() {
-  const { webId, session, logout, autologinPending } = useSession();
+  const { webId, session, logout, fetch, restoringSession, ready, error } = useSession();
 
   if (!webId || !session) {
-    // Autologin (a Pod-Manager deep-link or a redirect return) is silently signing
-    // the user in via a full-page redirect — show a brief restoring state rather than
-    // the interactive login form, since there is no gesture to prompt for.
-    if (autologinPending) {
+    // Restoring a remembered session (or loading the signed-in profile) shows a brief wait
+    // instead of the sign-in card.
+    if (restoringSession || (!ready && !error) || (webId && !session)) {
       return (
         <main className="login-screen" aria-busy="true">
           <section className="login-card">
             <h1>Pod Docs</h1>
-            {/* SOLID-ELEMENTS: the <jeswr-loading> spinner + label (via @lit/react).
-                It carries its own role="status" + aria-live, so the label is
-                announced; the .login-sub wrapper only keeps the existing
-                spacing/typography. */}
             <p className="login-sub">
-              <Loading label="Signing you in…" />
+              <Loading
+                label={restoringSession ? "Restoring your session…" : "Loading your account…"}
+              />
             </p>
           </section>
         </main>
@@ -61,21 +55,6 @@ export function App() {
 
   return (
     <div className="app-shell">
-      {/* The header now uses the shared @jeswr/app-shell chrome: a header-level
-          <FeedbackButton/> (opens a themed dialog that files a GitHub issue against
-          THIS app's own repo), a light/dark/system <ThemeToggle/>, and a real
-          top-right <AccountMenu/> (avatar + display name, dropdown showing the WebID
-          + Sign out) — replacing the old raw-WebID span + bare logout button. The
-          session's WebID / profile name / avatar / logout wire straight into the
-          props (the components are fully decoupled — everything is a prop).
-          `app-header-actions` right-aligns the trio.
-
-          FEEDBACK: `repo` is the only app-specific value — pod-docs files against
-          `jeswr/pod-docs`. `appVersion` is the build SHA injected by Vite
-          (`__APP_VERSION__`), so a filed issue pins the deployed commit. `webId` is
-          attached to diagnostics ONLY if the reporter ticks the consent box. `submit`
-          is intentionally UNSET → the dialog uses the GitHub prefill page; the
-          feedback-proxy hook is wired suite-wide later. */}
       <header className="app-header">
         <span className="app-brand">Pod Docs</span>
         <div className="app-header-actions">
@@ -105,6 +84,7 @@ export function App() {
           key={JSON.stringify([session.webId, session.podRoot])}
           podRoot={session.podRoot}
           webId={session.webId}
+          fetch={fetch}
         />
       </main>
     </div>

@@ -1,6 +1,6 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 //
-// Playwright globalSetup for the task #123 401-budget e2e. Runs once after the
+// Playwright globalSetup for the shared sign-in e2e. Runs once after the
 // webServers (CSS@3000 + vite@5173) are up. It:
 //   1. creates a fresh CSS account + pod (the verified solid-test-infrastructure recipe);
 //   2. seeds the WebID profile (foaf:name + pim:storage — a fresh CSS pod has neither,

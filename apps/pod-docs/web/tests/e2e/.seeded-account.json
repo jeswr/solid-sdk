@@ -1,0 +1,9 @@
+{
+  "base": "http://localhost:3000",
+  "webId": "http://localhost:3000/alice/profile/card#me",
+  "email": "alice@example.com",
+  "password": "test-password-123",
+  "podRoot": "http://localhost:3000/alice/",
+  "docsContainer": "http://localhost:3000/alice/pod-docs/",
+  "documentCount": 12
+}
