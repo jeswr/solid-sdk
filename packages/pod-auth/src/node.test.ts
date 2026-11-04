@@ -763,3 +763,27 @@ test.each([
     expect(op.stats.tokens).toBe(0);
   }
 });
+
+test("Node credentials capture an injected transport without replacing global fetch", async () => {
+  const original = globalThis.fetch;
+  const op = createMockOp({ clientCredentials: credentials });
+  const auth = await forClientCredentials({
+    issuer: op.issuer,
+    clientId: "test-agent",
+    clientSecret: "test-credential",
+    boundary: [op.root],
+    fetch: op.fetch,
+  });
+  expect(globalThis.fetch).toBe(original);
+  expect((await auth.identity())?.webId).toBeNull();
+  expect((await auth.fetch(op.root + "private")).status).toBe(200);
+  await expect(
+    forClientCredentials({
+      issuer: op.issuer,
+      clientId: "id",
+      clientSecret: "secret",
+      boundary: [op.root],
+      fetch: "invalid" as unknown as typeof fetch,
+    }),
+  ).rejects.toThrow("fetch must be a function");
+});

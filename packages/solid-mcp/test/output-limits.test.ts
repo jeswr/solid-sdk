@@ -1,10 +1,14 @@
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Codex GPT-6.1-Sol
+import { createPodClient } from "@jeswr/storage-client";
+import { createSolidBackend } from "@jeswr/storage-client/solid";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { MAX_CONTENT_BYTES } from "../src/content.js";
 import { fetchDocument } from "../src/fetch.js";
 import { listContainer, readRdf, readResource } from "../src/pod.js";
 import { POD_READ_TIMEOUT_MS } from "../src/pod-operation.js";
 import { createFetchPodPort, type PodPort } from "../src/pod-port.js";
+import { createStoragePodPort } from "../src/storage-pod-port.js";
 import { containerTurtle } from "./fake-pod.js";
 
 const ROOT = "https://pod.example.org/data/";
@@ -12,9 +16,12 @@ const CHILD = `${ROOT}child`;
 const CHUNK_BYTES = 64 * 1024;
 const operations = { fetchDocument, readResource, readRdf, listContainer };
 
+vi.mock("@jeswr/storage-client", () => ({ createPodClient: vi.fn() }));
+
 afterEach(() => vi.useRealTimers());
 
 function fixture(
+  adapter: "fetch" | "storage",
   kind: "huge" | "body stalls" | "headers stall",
   decorated: boolean,
   delay = 0,
@@ -56,7 +63,16 @@ function fixture(
       { headers: { "content-type": "application/octet-stream" } },
     );
   });
-  const pod = createFetchPodPort({ fetch, podRoot: ROOT });
+  vi.mocked(createPodClient).mockImplementation(
+    async (options) =>
+      ({
+        storage: createSolidBackend({ root: ROOT, fetch: options.fetch }),
+      }) as Awaited<ReturnType<typeof createPodClient>>,
+  );
+  const pod = (adapter === "fetch" ? createFetchPodPort : createStoragePodPort)({
+    fetch,
+    podRoot: ROOT,
+  });
   if (decorated) {
     const read = pod.read;
     pod.read = vi.fn(async (url, options) => {
@@ -70,77 +86,79 @@ function fixture(
   return { pod, fetch, cancel, downloaded: () => downloaded, signal: () => signal };
 }
 
-describe.each(["text/turtle", "text/plain", "text/html"])("%s", (contentType) => {
-  describe.each(
-    Object.entries(operations),
-  )("bounded container projection: %s", (_name, operation) => {
-    it.each([
-      "huge",
-      "body stalls",
-    ] as const)("discards an unused native child body (%s)", async (kind) => {
-      const f = fixture(kind, false, 0, contentType);
-      const result = await operation(f.pod, ROOT);
-      expect(JSON.stringify(result)).toContain(CHILD);
-      expect(f.downloaded()).toBe(0);
-      expect(f.cancel).toHaveBeenCalledOnce();
-    });
+describe.each(["fetch", "storage"] as const)("%s adapter", (adapter) => {
+  describe.each(["text/turtle", "text/plain", "text/html"])("%s", (contentType) => {
+    describe.each(
+      Object.entries(operations),
+    )("bounded container projection: %s", (_name, operation) => {
+      it.each([
+        "huge",
+        "body stalls",
+      ] as const)("discards an unused native child body (%s)", async (kind) => {
+        const f = fixture(adapter, kind, false, 0, contentType);
+        const result = await operation(f.pod, ROOT);
+        expect(JSON.stringify(result)).toContain(CHILD);
+        expect(f.downloaded()).toBe(0);
+        expect(f.cancel).toHaveBeenCalledOnce();
+      });
 
-    it("bounds a huge decorated child read and omits its membership and descriptions", async () => {
-      const f = fixture("huge", true, 0, contentType);
-      const result = await operation(f.pod, ROOT);
-      expect(JSON.stringify(result)).not.toContain(CHILD);
-      expect(f.downloaded()).toBeLessThanOrEqual(MAX_CONTENT_BYTES + CHUNK_BYTES);
-      expect(f.cancel).toHaveBeenCalledOnce();
-    });
+      it("bounds a huge decorated child read and omits its membership and descriptions", async () => {
+        const f = fixture(adapter, "huge", true, 0, contentType);
+        const result = await operation(f.pod, ROOT);
+        expect(JSON.stringify(result)).not.toContain(CHILD);
+        expect(f.downloaded()).toBeLessThanOrEqual(MAX_CONTENT_BYTES + CHUNK_BYTES);
+        expect(f.cancel).toHaveBeenCalledOnce();
+      });
 
-    it.each([
-      "body stalls",
-      "headers stall",
-    ] as const)("shares the initial read's deadline when child %s", async (kind) => {
-      vi.useFakeTimers();
-      const f = fixture(kind, true, 2000, contentType);
-      const pending = operation(f.pod, ROOT);
-      const settled = pending.then(
-        () => "completed",
-        (error: Error) => error.message,
-      );
-      await vi.advanceTimersByTimeAsync(POD_READ_TIMEOUT_MS - 1);
-      expect(f.signal()).toBeDefined();
-      expect(f.signal()?.aborted).toBe(false);
-      await vi.advanceTimersByTimeAsync(1);
-      expect(await settled).toBe("Pod read deadline reached.");
-      expect(f.signal()?.aborted).toBe(true);
-      expect(f.downloaded()).toBe(0);
-      if (kind === "body stalls") expect(f.cancel).toHaveBeenCalledOnce();
-      expect(vi.getTimerCount()).toBe(0);
-    });
+      it.each([
+        "body stalls",
+        "headers stall",
+      ] as const)("shares the initial read's deadline when child %s", async (kind) => {
+        vi.useFakeTimers();
+        const f = fixture(adapter, kind, true, 2000, contentType);
+        const pending = operation(f.pod, ROOT);
+        const settled = pending.then(
+          () => "completed",
+          (error: Error) => error.message,
+        );
+        await vi.advanceTimersByTimeAsync(POD_READ_TIMEOUT_MS - 1);
+        expect(f.signal()).toBeDefined();
+        expect(f.signal()?.aborted).toBe(false);
+        await vi.advanceTimersByTimeAsync(1);
+        expect(await settled).toBe("Pod read deadline reached.");
+        expect(f.signal()?.aborted).toBe(true);
+        expect(f.downloaded()).toBe(0);
+        if (kind === "body stalls") expect(f.cancel).toHaveBeenCalledOnce();
+        expect(vi.getTimerCount()).toBe(0);
+      });
 
-    it("bounds pending authorization by an injected portable port too", async () => {
-      vi.useFakeTimers();
-      const pod: PodPort = {
-        root: ROOT,
-        webId: "",
-        async read(url) {
-          if (url === CHILD) return new Promise(() => {});
-          return {
-            body: new TextEncoder().encode(containerTurtle(ROOT, [{ name: "child" }])),
-            contentType: "text/turtle",
-          };
-        },
-        async list() {
-          return [{ url: CHILD, isContainer: false }];
-        },
-        async write() {
-          throw new Error("read-only");
-        },
-        async delete() {
-          throw new Error("read-only");
-        },
-      };
-      const settled = operation(pod, ROOT).catch((error: Error) => error.message);
-      await vi.advanceTimersByTimeAsync(POD_READ_TIMEOUT_MS);
-      expect(await settled).toBe("Pod read deadline reached.");
-      expect(vi.getTimerCount()).toBe(0);
+      it("bounds pending authorization by an injected portable port too", async () => {
+        vi.useFakeTimers();
+        const pod: PodPort = {
+          root: ROOT,
+          webId: "",
+          async read(url) {
+            if (url === CHILD) return new Promise(() => {});
+            return {
+              body: new TextEncoder().encode(containerTurtle(ROOT, [{ name: "child" }])),
+              contentType: "text/turtle",
+            };
+          },
+          async list() {
+            return [{ url: CHILD, isContainer: false }];
+          },
+          async write() {
+            throw new Error("read-only");
+          },
+          async delete() {
+            throw new Error("read-only");
+          },
+        };
+        const settled = operation(pod, ROOT).catch((error: Error) => error.message);
+        await vi.advanceTimersByTimeAsync(POD_READ_TIMEOUT_MS);
+        expect(await settled).toBe("Pod read deadline reached.");
+        expect(vi.getTimerCount()).toBe(0);
+      });
     });
   });
 });

@@ -1,8 +1,9 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
-import { DEFAULT_MAX_REPLAY_BODY_BYTES } from "@jeswr/solid-openid-client";
+import { SERVER_MAX_REPLAY_BODY_BYTES as DEFAULT_MAX_REPLAY_BODY_BYTES } from "@jeswr/pod-auth/node";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { fixture, RESOURCE } from "../test/fixtures.js";
+import { lwsStorage } from "../test/lws-storage.js";
 import {
   POD_CALLBACK,
   POD_CLIENT,
@@ -21,7 +22,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-function brokerFixture() {
+function brokerFixture(wrapFetch = (op: ReturnType<typeof podIssuer>) => op.fetch) {
   const op = podIssuer();
   const store = new MemoryVaultStore();
   const vault = createSessionVault({ key: Buffer.alloc(32, 9).toString("base64"), store });
@@ -30,7 +31,7 @@ function brokerFixture() {
     clientId: POD_CLIENT,
     redirectUri: POD_CALLBACK,
     vault,
-    fetch: op.fetch,
+    fetch: wrapFetch(op),
     now: () => now,
   };
   const provider = createPodSessionProvider(options);
@@ -54,6 +55,47 @@ function brokerFixture() {
 }
 
 describe("Solid-OIDC pod broker", () => {
+  it("authenticates private LWS reads through the default broker and refreshes after restore", async () => {
+    let lws!: ReturnType<typeof lwsStorage>;
+    const f = brokerFixture((op) => {
+      lws = lwsStorage(op);
+      return lws.fetch;
+    });
+    const { session } = await f.login();
+    const fetcher = await f.provider.fetchFor(session.id);
+    expect(await (await fetcher(`${POD_ROOT}note.txt`)).text()).toBe("private LWS content");
+    expect(await (await fetcher(`${POD_ROOT}note.txt`)).text()).toBe("private LWS content");
+    expect(lws.exchanges).toHaveLength(1);
+    const restored = createPodSessionProvider(f.options);
+    const restoredFetch = await restored.fetchFor(session.id);
+    expect(await (await restoredFetch(`${POD_ROOT}note.txt`)).text()).toBe("private LWS content");
+    expect(lws.exchanges).toHaveLength(2);
+    await f.provider.revoke(session.id);
+    const count = lws.requests.length;
+    await expect(restoredFetch(`${POD_ROOT}note.txt`)).rejects.toThrow("inactive");
+    expect(lws.requests).toHaveLength(count);
+  });
+
+  it.each([
+    "discovery",
+    "exchange",
+  ])("fences LWS credentials when the broker is revoked during %s", async (phase) => {
+    let lws!: ReturnType<typeof lwsStorage>;
+    const f = brokerFixture((op) => {
+      lws = lwsStorage(op);
+      return lws.fetch;
+    });
+    const { session } = await f.login();
+    const fetcher = await f.provider.fetchFor(session.id);
+    if (phase === "exchange") lws.controls.onExchange = () => f.provider.revoke(session.id);
+    else lws.controls.onDiscovery = () => f.provider.revoke(session.id);
+    await expect(fetcher(`${POD_ROOT}note.txt`)).rejects.toThrow("inactive");
+    expect(lws.exchanges).toHaveLength(phase === "exchange" ? 1 : 0);
+    expect(
+      lws.requests.some((request) => request.headers.get("authorization")?.startsWith("Bearer")),
+    ).toBe(false);
+  });
+
   it("binds PKCE + nonce + DPoP, returns identity only, scopes fetch and retries nonces once", async () => {
     const f = brokerFixture();
     f.op.controls.tokenNonce = true;
@@ -394,7 +436,7 @@ describe("Solid-OIDC pod broker", () => {
     };
     const provider = createPodSessionProvider({ ...f.options, fetch: fetcher });
     await expect(provider.begin(POD_ISSUER, POD_CALLBACK)).rejects.toMatchObject({
-      cause: { message: "Pod issuer mismatch" },
+      message: "Pod issuer mismatch",
     });
     const defaultClock = createPodSessionProvider({ ...f.options, now: undefined });
     f.op.controls.discoveryIssuer = POD_ISSUER;
@@ -442,7 +484,8 @@ describe("Solid-OIDC pod broker", () => {
       return (await provider.fetchFor(session.id))(`${POD_ROOT}notes`);
     };
     await expect(operation()).rejects.toMatchObject({
-      cause: { error: "invalid_request", status: 413 },
+      error: "invalid_request",
+      status: 413,
     });
     expect(cancel).toHaveBeenCalledOnce();
     expect(response?.bodyUsed).toBe(true);

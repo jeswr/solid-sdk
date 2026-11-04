@@ -65,8 +65,31 @@ export async function ensureReplaced(model: ContactsModel, saved: SavedDocument)
   await model.transport.commit([replacement({ ...existing, etag: saved.etag }, expected.dataset)]);
 }
 
+/** Create a document, adopting only an identical one left by an earlier attempt. */
+export async function ensureCreated(model: ContactsModel, saved: SavedDocument) {
+  const expected = await parseRdf(saved.turtle, "text/turtle", { baseIRI: saved.url });
+  const existing = await absentOr(() => model.transport.read(saved.url, (dataset) => dataset));
+  if (existing) {
+    if (!isomorphic([...existing.dataset], [...expected]))
+      throw new ContactsWriteError(412, saved.url, existing.etag);
+    return;
+  }
+  await model.transport.commit([{ url: saved.url, dataset: expected, etag: null }]);
+}
+
+/** Undo `ensureCreated`: delete the document only while it is still exactly what we wrote. */
+export async function discardCreated(model: ContactsModel, saved: SavedDocument) {
+  const expected = await parseRdf(saved.turtle, "text/turtle", { baseIRI: saved.url });
+  const existing = await absentOr(() => model.transport.read(saved.url, (dataset) => dataset));
+  if (!existing || !isomorphic([...existing.dataset], [...expected])) return;
+  await ensureDeleted(model, { ...saved, etag: existing.etag });
+}
+
 /** Absence is success even when the DELETE response was lost. Preserve concurrent edits. */
-export async function ensureDeleted(model: ContactsModel, saved: SavedDocument) {
+export async function ensureDeleted(
+  model: ContactsModel,
+  saved: Pick<SavedDocument, "url" | "etag">,
+) {
   const existing = await absentOr(() => model.transport.read(saved.url, (dataset) => dataset));
   if (!existing) return;
   try {

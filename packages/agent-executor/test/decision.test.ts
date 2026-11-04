@@ -528,7 +528,7 @@ it("property: for all 4^4 halt/resume/file control sequences no send begins whil
       );
     }
   }
-});
+}, 30_000); // 1,024 sends: well under a second alone, but over 5 s in a full-workspace CI gate.
 
 it("a changed wire media type invalidates an earlier approval even with identical bytes", async () => {
   const h = harness();

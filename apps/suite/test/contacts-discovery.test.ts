@@ -147,7 +147,8 @@ describe("Type Index and vCard model adapters", () => {
         name: "Vera Card",
         emails: ["mailto:vera@example.org"],
         phones: ["tel:+44123"],
-        note: "Note\nOrganization: Example — Team",
+        note: "Note\nOrganization: Team",
+        organization: "Example",
       },
     ]);
     const ids = await importVcards(
