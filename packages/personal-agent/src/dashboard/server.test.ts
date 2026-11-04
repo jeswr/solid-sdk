@@ -2,10 +2,10 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import type { Server } from "node:http";
 import { request } from "node:http";
-import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { freePort } from "../test-support/free-port.js";
 import type { Connection, Settings } from "./model.js";
 import { DENY_ALL } from "./model.js";
 import { createDashboardApp, type DashboardApp, listenDashboard } from "./server.js";
@@ -13,18 +13,6 @@ import { createDashboardApp, type DashboardApp, listenDashboard } from "./server
 // Synthetic fixtures only: invented accounts on example.* domains.
 const KEY = "ts-test-KEY-do-not-leak-0123456789";
 const NOW = new Date("2026-10-19T08:00:00Z");
-
-function freePort(): Promise<number> {
-  return new Promise((done, fail) => {
-    const s = createServer();
-    s.on("error", fail);
-    s.listen(0, "127.0.0.1", () => {
-      const address = s.address();
-      const port = typeof address === "object" && address ? address.port : 0;
-      s.close(() => done(port));
-    });
-  });
-}
 
 interface Res {
   status: number;
