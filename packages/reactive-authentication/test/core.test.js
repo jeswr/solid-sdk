@@ -329,6 +329,30 @@ test("a Blob body replays as it is: no buffering, so the size bound does not app
   assert.equal(seen[1].body, "<a> <b> <c> .");
 });
 
+test("a Blob body is captured when fetch is called: reusing one init for concurrent uploads keeps each file", async () => {
+  const seen = [];
+  const client = new ReactiveAuthenticationClient({
+    providers: [tokenProvider()],
+    boundary: boundaryFor("https://s.example/"),
+    fetch: async (request) => {
+      const body = await request.text();
+      seen.push({ url: request.url, body, auth: request.headers.get("authorization") });
+      return request.headers.has("authorization") ? new Response("ok") : unauthorized();
+    },
+  });
+  const init = { method: "PUT", body: new Blob(["first"]) };
+  const first = client.fetch("https://s.example/a", init);
+  init.body = new Blob(["second"]);
+  const second = client.fetch("https://s.example/b", init);
+  assert.deepEqual(
+    (await Promise.all([first, second])).map((r) => r.status),
+    [200, 200],
+  );
+  const sent = (url) => seen.filter((s) => s.url === url).map((s) => s.body);
+  assert.deepEqual(sent("https://s.example/a"), ["first", "first"]);
+  assert.deepEqual(sent("https://s.example/b"), ["second", "second"]);
+});
+
 /**
  * Runs `body` as in a runtime without request body streams: Firefox does not implement `Request.prototype.body`
  * (it reads `undefined`), while `blob()` and friends work. Restores the real getter afterwards.

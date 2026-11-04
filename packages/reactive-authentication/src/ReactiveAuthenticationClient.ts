@@ -97,6 +97,8 @@ export class ReactiveAuthenticationClient {
   }
 
   async fetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+    // Captured before any await: a caller may reuse one init object and swap its body for the next call.
+    const supplied = init?.body;
     const request = new Request(input, init);
 
     // Excluded URLs (neither allowed nor discovery candidates) can never be upgraded, so they and their
@@ -108,8 +110,8 @@ export class ReactiveAuthenticationClient {
     // A Blob or File passed as the body is immutable and readable again, so it replays as it is: no copy into
     // memory and no size limit (a File stays on disk). Other bodies are read once, so they are buffered.
     const body =
-      init?.body instanceof Blob
-        ? withContentType([init.body], request)
+      supplied instanceof Blob
+        ? withContentType([supplied], request)
         : await bufferBody(request, session.signal, this.#maxReplayBodyBytes);
     return await this.#run(new Attempt(request, body), { generation, signal: session.signal }, 0);
   }
