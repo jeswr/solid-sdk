@@ -117,6 +117,8 @@ export interface WorkbookService {
   create(input: CreateWorkbookInput): Promise<OpenedWorkbook>;
   /** Imports every CSV field as text into a one-sheet workbook (formulas are not executed). */
   createFromCsv(input: CreateFromCsvInput): Promise<OpenedWorkbook>;
+  /** Imports a browser-read Excel workbook, preserving supported formats and formulas. */
+  createFromXlsx(input: { title: string; data: Uint8Array }): Promise<OpenedWorkbook>;
   open(container: string): Promise<OpenedWorkbook>;
   /**
    * Writes `workbook.json` with If-Match `base.snapshotEtag` (a freshly read ETag

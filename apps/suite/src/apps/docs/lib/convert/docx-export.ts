@@ -22,6 +22,14 @@ import {
   WidthType,
 } from "docx";
 import { validLink } from "../editor/logic";
+import {
+  colourHex,
+  fontFamily,
+  fontSize,
+  indentLevel,
+  lineHeight,
+  paragraphSpace,
+} from "../editor/styles";
 import { wordListFormat } from "./docx-list-format";
 import { type QuoteAncestor, quoteStyleName } from "./docx-quotes";
 
@@ -50,6 +58,11 @@ function inline(node: JSONContent): ParagraphChild[] {
   const marks = new Set((node.marks ?? []).map((mark) => mark.type));
   const link = node.marks?.find((mark) => mark.type === "link");
   const href = validLink(String(link?.attrs?.href ?? ""));
+  const style = node.marks?.find((mark) => mark.type === "textStyle")?.attrs;
+  const family = fontFamily(style?.fontFamily);
+  const size = fontSize(style?.fontSize);
+  const color = colourHex(style?.color);
+  const fill = colourHex(style?.backgroundColor);
   const options: IRunOptions = {
     text: node.text ?? "",
     ...(marks.has("bold") ? { bold: true } : {}),
@@ -63,6 +76,17 @@ function inline(node: JSONContent): ParagraphChild[] {
       ? { style: "InlineCode", font: codeFont, shading: { fill: "F2F2F2" } }
       : {}),
     ...(href && !marks.has("code") ? { style: "Hyperlink" } : {}),
+    ...(family
+      ? {
+          font:
+            family === "var(--font-ui)"
+              ? "Onest"
+              : (family.split(",")[0] as string).replaceAll('"', ""),
+        }
+      : {}),
+    ...(size ? { size: Number.parseFloat(size) * 2 } : {}),
+    ...(color ? { color } : {}),
+    ...(fill ? { shading: { fill } } : {}),
   };
   const run = new TextRun(options);
   return hyperlink(href, [run]);
@@ -137,6 +161,10 @@ export async function toDocx(json: JSONContent, readImage: ReadExportImage): Pro
     // unavailable-image text, rules and blocks reached through a wrapper.
     const addParagraph = ({ heading, ...options }: IParagraphOptions) => {
       const level = Math.min(Math.max(0, depth), 8);
+      // A block's own indent adds to its quote indentation. Inside lists the indent is
+      // the nesting level, which import reads back; a block indent there is not kept.
+      const own = depth < 0 ? ((options.indent?.left as number | undefined) ?? 0) : 0;
+      const left = 720 * ((depth >= 0 ? level + 1 : 0) + quotes.length) + own;
       let style = options.style ?? heading ?? (quotes.length ? "Quote" : undefined);
       if (depth >= 0 && !marker.numbering && !marker.task) {
         if (style) {
@@ -156,9 +184,7 @@ export async function toDocx(json: JSONContent, readImage: ReadExportImage): Pro
           ...options,
           ...(style ? { style } : {}),
           ...(marker.numbering ? { numbering: { ...marker.numbering, level } } : {}),
-          ...(depth >= 0 || quotes.length
-            ? { indent: { left: 720 * ((depth >= 0 ? level + 1 : 0) + quotes.length) } }
-            : {}),
+          ...(left ? { indent: { left } } : {}),
           ...(quotes.length ? { border: { left: border(24), ...options.border } } : {}),
           children: [
             ...(marker.task ? [new TextRun({ text: marker.task, style: "TaskMarker" })] : []),
@@ -182,8 +208,30 @@ export async function toDocx(json: JSONContent, readImage: ReadExportImage): Pro
             right: AlignmentType.RIGHT,
             justify: AlignmentType.JUSTIFIED,
           }[String(node.attrs?.textAlign)];
+          const indent = indentLevel(node.attrs?.indent);
           addParagraph({
             ...(alignment ? { alignment } : {}),
+            spacing: {
+              ...(lineHeight(node.attrs?.lineHeight)
+                ? { line: Math.round(Number(node.attrs?.lineHeight) * 240) }
+                : {}),
+              ...(paragraphSpace(node.attrs?.spaceBefore)
+                ? { before: Number.parseFloat(node.attrs?.spaceBefore) * 20 }
+                : {}),
+              ...(paragraphSpace(node.attrs?.spaceAfter)
+                ? { after: Number.parseFloat(node.attrs?.spaceAfter) * 20 }
+                : {}),
+            },
+            ...(indent
+              ? {
+                  indent: { left: indent * 720 },
+                  // Word reads an indented paragraph after a list as the list's
+                  // continuation; a named style keeps it a separate paragraph.
+                  ...(node.type === "paragraph" && depth < 0 && !quotes.length
+                    ? { style: "Indented" }
+                    : {}),
+                }
+              : {}),
             ...(node.type === "heading"
               ? { heading: headings[Number(node.attrs?.level) - 1] ?? HeadingLevel.HEADING_3 }
               : {}),
@@ -333,6 +381,7 @@ export async function toDocx(json: JSONContent, readImage: ReadExportImage): Pro
           ? [{ id: "Quote", name: "Quote", run: { italics: true } }]
           : []),
         { id: "ListContinuation", name: "List Continuation" },
+        { id: "Indented", name: "Indented", basedOn: "Normal" },
         { id: "TaskChecked", name: "Task Checked" },
         { id: "TaskUnchecked", name: "Task Unchecked" },
         { id: "HorizontalRule", name: "Horizontal Rule" },

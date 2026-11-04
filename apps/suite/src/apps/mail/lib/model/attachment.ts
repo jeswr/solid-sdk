@@ -12,6 +12,12 @@ import {
 import { RDF, SCHEMA } from "./vocab.js";
 /** Metadata for extracted MIME parts. The subject is the stored binary URL. */
 export class Attachment extends TermWrapper {
+  get size(): number | undefined {
+    return OptionalFrom.subjectPredicate(this, `${SCHEMA}contentSize`, LiteralAs.number);
+  }
+  set size(value: number | undefined) {
+    OptionalAs.object(this, `${SCHEMA}contentSize`, value, LiteralFrom.integer);
+  }
   get types(): Set<string> {
     return SetFrom.subjectPredicate(this, `${RDF}type`, NamedNodeAs.string, NamedNodeFrom.string);
   }

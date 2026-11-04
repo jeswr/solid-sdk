@@ -10,6 +10,8 @@ describe("shell toast region", () => {
     "/docs",
     "/dev/components",
     "/money/budget",
+    "/mail/inbox",
+    "/chat/r/abc",
     "/home",
     "/home/media",
     "/permissions",
@@ -20,6 +22,7 @@ describe("shell toast region", () => {
     "/photos",
     "/settings",
     "/taskslist",
+    "/mailbox",
     "/homework",
     "/",
   ])("mounts the shell toaster on %s", (path) => expect(ownsToaster(path)).toBe(false));

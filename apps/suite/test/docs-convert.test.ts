@@ -439,7 +439,10 @@ describe("imports and Markdown", () => {
     const progress = vi.fn();
     const uploadImage = vi.fn(async () => "https://pod.test/docs/plan/assets/image.png");
     const result = await importDocx(Uint8Array.from(bytes).buffer, { uploadImage, progress });
-    expect(result.html).toContain("<h1>Plan</h1>");
+    expect(importHtml(result.html).json.content?.[0]).toMatchObject({
+      type: "heading",
+      content: [{ text: "Plan" }],
+    });
     expect(result.html).toContain("<ul>");
     expect(result.html).toContain("<table>");
     expect(result.html).toContain('src="https://pod.test/docs/plan/assets/image.png"');

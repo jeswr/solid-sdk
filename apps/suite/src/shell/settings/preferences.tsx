@@ -133,6 +133,8 @@ const OWN_TOASTER = [
   "/money",
   "/music",
   "/health",
+  "/mail",
+  "/chat",
   "/home",
   "/permissions",
   "/connect",
