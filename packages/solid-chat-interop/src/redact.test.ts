@@ -84,6 +84,21 @@ describe("redaction before persistence", () => {
     expect(result).toContain("\r\nAfter");
     expect(redactSecrets(result)).toBe(result);
   });
+  // AUTHORED-BY Claude Opus 5.5
+  it.each([
+    ["__sk-fixture-emphasis__", "fixture-emphasis"],
+    ["_ghp_fixtureEmphasis1_", "fixtureEmphasis1"],
+    ["__AKIA0000000000000000__", "AKIA0000000000000000"],
+    ["_eyJmaXh0dXJlIjp0cnVlfQ.eyJzdWIiOiJmaXh0dXJlIn0.ZmFrZXNpZw_", "ZmFrZXNpZw"],
+    ["_Authorization: Bearer FAKE_EMPHASIS_", "FAKE_EMPHASIS"],
+  ])("Markdown emphasis cannot hide credential %#", (input, secret) => {
+    const result = redactSecrets(`Before ${input} after`);
+    expect(result).not.toContain(secret);
+    expect(redactSecrets(result)).toBe(result);
+  });
+  it("keeps letter-adjacent lookalikes", () => {
+    expect(redactSecrets("a task-list and askew")).toBe("a task-list and askew");
+  });
   it("keeps ordinary text and all safe context outside a redaction", () => {
     expect(redactSecrets("Hello, world. Read src/main.ts")).toBe("Hello, world. Read src/main.ts");
     expect(redactSecrets("Before\nAuthorization: FAKE\nAfter")).toBe(
