@@ -19,8 +19,8 @@ export const PDF_PREVIEW_LIMIT = 25 * 1024 * 1024;
 type HandoffState = "idle" | "opening" | "too-large" | "no-viewer" | "failed";
 
 const MESSAGES: Record<Exclude<HandoffState, "idle" | "opening">, string> = {
-  "too-large": "Too large to preview; download it instead",
-  "no-viewer": "No PDF viewer is installed; download it instead",
+  "too-large": "Too large to preview; save it instead",
+  "no-viewer": "No PDF viewer is installed; save it instead",
   failed: "Can't preview this file",
 };
 
@@ -85,7 +85,8 @@ export function NativePdfHandoff({ item }: { item: DriveItem }) {
             </Button>
           ) : null}
           <Button onClick={() => void actions.download(item)}>
-            <Download aria-hidden="true" size={16} /> Download
+            {/* Drive's download opens the share sheet in the shells, which offers Save to Files. */}
+            <Download aria-hidden="true" size={16} /> Save or share
           </Button>
         </>
       )}

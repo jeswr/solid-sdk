@@ -61,9 +61,9 @@ it("hands the bounded bytes and name to the platform viewer", async () => {
 
 it("refuses a file over the cap from its listing size without reading it", async () => {
   const view = await mount(h(NativePdfHandoff, { item: item(PDF_PREVIEW_LIMIT + 1) }));
-  expect(view.host.textContent).toContain("Too large to preview; download it instead");
+  expect(view.host.textContent).toContain("Too large to preview; save it instead");
   expect(mocks.readLimited).not.toHaveBeenCalled();
-  await click(button(view.host, "Download"));
+  await click(button(view.host, "Save or share"));
   expect(mocks.download).toHaveBeenCalledWith(item(PDF_PREVIEW_LIMIT + 1));
 });
 
@@ -76,8 +76,8 @@ it("refuses when the bounded read stops at the cap", async () => {
 });
 
 it.each([
-  ["no-viewer", "No PDF viewer is installed; download it instead"],
-  ["too-large", "Too large to preview; download it instead"],
+  ["no-viewer", "No PDF viewer is installed; save it instead"],
+  ["too-large", "Too large to preview; save it instead"],
   ["not-pdf", "Can't preview this file"],
   [undefined, "Can't preview this file"],
 ])("explains a %s refusal and offers the download", async (code, message) => {
@@ -85,7 +85,7 @@ it.each([
   const view = await mount(h(NativePdfHandoff, { item: item(9) }));
   await click(button(view.host, "Open PDF"));
   expect(view.host.querySelector('[role="status"]')?.textContent).toBe(message);
-  expect(button(view.host, "Download")).toBeDefined();
+  expect(button(view.host, "Save or share")).toBeDefined();
 });
 
 it("reports a failed read", async () => {

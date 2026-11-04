@@ -24,6 +24,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { NATIVE_SAVE_LIMIT, saveNatively } from "@/lib/native/save-file";
 import { encodeRef } from "@/lib/refs";
 import { PUBLIC_SUITE_URL } from "../../../lib/urls";
 import { DriveAccessError } from "../lib/client/access";
@@ -502,6 +503,16 @@ export function useDriveActions() {
   const download = useCallback(
     async (item: DriveItem) => {
       try {
+        if (process.env.NEXT_PUBLIC_SUITE_TARGET === "native") {
+          // No blob: download in the shells: stage the file and open the share sheet instead.
+          const bounded = await client.readLimited(item.url, NATIVE_SAVE_LIMIT);
+          if (!bounded) {
+            toast.error("Too large to save on this device");
+            return;
+          }
+          await saveNatively(bounded, item.name, item.contentType);
+          return;
+        }
         const blob = await client.read(item.url);
         const href = URL.createObjectURL(blob);
         const anchor = document.createElement("a");
