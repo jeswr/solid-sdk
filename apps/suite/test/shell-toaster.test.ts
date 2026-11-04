@@ -12,6 +12,10 @@ describe("shell toast region", () => {
     "/money/budget",
     "/mail/inbox",
     "/chat/r/abc",
+    "/home",
+    "/home/media",
+    "/permissions",
+    "/connect",
   ])("defers to the app's own toaster on %s", (path) => expect(ownsToaster(path)).toBe(true));
   it.each([
     "/calendar",
@@ -19,6 +23,7 @@ describe("shell toast region", () => {
     "/settings",
     "/taskslist",
     "/mailbox",
+    "/homework",
     "/",
   ])("mounts the shell toaster on %s", (path) => expect(ownsToaster(path)).toBe(false));
 });

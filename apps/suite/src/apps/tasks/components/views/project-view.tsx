@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 "use client";
 import {
   Button,
@@ -11,6 +12,7 @@ import {
 import { Inbox, ListTodo } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect } from "react";
+import { useRoutePathname } from "@/lib/route-params";
 import { classifyError } from "../../lib/model/errors";
 import { projectGroups } from "../../lib/views/project-groups";
 import { focusAddTask } from "../../state/add-focus";
@@ -32,12 +34,18 @@ export function ProjectView({
   const tasks = useTasks();
   const { preferences } = useTasksPreferences();
   const pathname = usePathname();
+  // The sort key matches the menu, which keys views by the slash-free route.
+  const viewId = useRoutePathname();
   const params = useSearchParams();
   const router = useRouter();
   const url = inbox ? tasks.inboxUrl : projectUrl;
   const project = tasks.projects.find((project) => project.url === url);
   const load = url ? tasks.tasks[url] : undefined;
-  const title = inbox ? "Inbox" : (project?.tracker.title ?? "Project");
+  const title = inbox
+    ? "Inbox"
+    : (project?.tracker.title ??
+      preferences.sharedProjects.find((shared) => shared.url === url)?.title ??
+      "Project");
   useEffect(() => {
     if (project) void tasks.cache.loadTasks(project);
   }, [project, tasks.cache]);
@@ -61,7 +69,7 @@ export function ProjectView({
   const groups = projectGroups(
     tasks.views.filter((task) => task.projectUrl === url),
     project?.tracker.sections ?? [],
-    preferences.sort[pathname] ?? "manual",
+    preferences.sort[viewId] ?? "manual",
     preferences.showCompletedInProject,
   );
   const empty =
@@ -121,8 +129,7 @@ export function ProjectView({
       <BulkToolbar />
       {renderAsync({
         loading:
-          tasks.status === "loading" ||
-          (project && (!load || (load.status === "loading" && !load.items.length))) ? (
+          tasks.status === "loading" || load?.status === "loading" || (project && !load) ? (
             <LoadingSkeleton preset="list" count={8} />
           ) : undefined,
         error:
@@ -134,7 +141,10 @@ export function ProjectView({
               }}
             >
               {classifyError(load.error) === "forbidden" && (
-                <p>You no longer have access to {title}</p>
+                <>
+                  <p>You no longer have access to {title}</p>
+                  <p>Ask the owner to share this project</p>
+                </>
               )}
             </ProjectError>
           ) : !project && tasks.status === "ready" ? (

@@ -1,0 +1,7 @@
+@prefix agent: <https://jeswr.org/ns/agent#>.
+@prefix prov: <http://www.w3.org/ns/prov#>.
+
+<https://pod.example/agent/audit/chain.ttl> a agent:AuditChain, prov:Collection;
+    agent:seq 2;
+    agent:ledgerHash "sha-256:20b70b082f497c7a57bf4f54bac7803993b01d4d6441a41f1d6323d099768ebc";
+    prov:hadMember <https://pod.example/agent/audit/2.ttl#entry>.

@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 import { DataFactory, Store, Writer } from "n3";
 import { describe, expect, it } from "vitest";
 import { PodThing, safeIri } from "./vocab.js";
@@ -12,6 +13,32 @@ describe("safeIri (RDF/IRI injection guard — security review F-1)", () => {
 
   it("passes undefined through (optional property)", () => {
     expect(safeIri(undefined)).toBeUndefined();
+  });
+
+  it.each([
+    "null",
+    "true",
+    "false",
+    "0",
+    "42",
+    "{}",
+    '{"href":"https://example.org/invalid"}',
+    "[]",
+    '["https://example.org/invalid"]',
+  ])("drops non-string API URL %s through the typed setter without throwing", (json) => {
+    const value: unknown = JSON.parse(json);
+    const store = new Store();
+    const thing = new PodThing("https://pod.example/item#it", store, DataFactory);
+    thing.name = "Retained item";
+    thing.sourceUrl = "https://example.org/valid";
+
+    // API JSON can violate the declared type at runtime.
+    expect(() => {
+      thing.sourceUrl = value as string;
+    }).not.toThrow();
+    expect(thing.sourceUrl).toBeUndefined();
+    expect(thing.name).toBe("Retained item");
+    expect(store.size).toBe(1);
   });
 
   it("drops a value that would break out of the IRI and inject triples", () => {

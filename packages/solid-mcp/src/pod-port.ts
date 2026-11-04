@@ -16,6 +16,7 @@ import { fetchBoundedRdf } from "./bounded-rdf.js";
 import type { PodChild } from "./pod.js";
 import { hasPodFetchLimits, podOperationFetch } from "./pod-operation.js";
 import { handlesProfileRedirects } from "./profile-redirects.js";
+import { wacAclLink } from "./wac-link.js";
 
 /** Conditional mutation headers supported by a pod. */
 export interface PodConditions {
@@ -29,6 +30,17 @@ export interface PodConditions {
 export interface PodReadOptions {
   /** Accepted media types; omitted for the backend's default representation. */
   accept?: string;
+  /**
+   * `"error"` refuses any redirect without requesting its target. Ports that resolve
+   * aliases themselves must still report the resolved `url`, so callers can refuse it.
+   */
+  redirect?: "follow" | "error";
+}
+
+/** Server metadata for an exact resource, including a not-yet-created resource. */
+export interface PodHeadResult {
+  /** Absolute WAC ACL URL from a unique, unanchored server Link relation. */
+  acl?: string;
 }
 
 /** Raw resource bytes, media type and optional ETag. */
@@ -49,7 +61,7 @@ export interface PodReadResult {
 export type PodEntry = Pick<PodChild, "url" | "isContainer"> &
   Partial<Omit<PodChild, "url" | "isContainer">>;
 
-/** Protocol-neutral data seam; storage-client will supply another implementation in MCP-15. */
+/** Protocol-neutral data seam implemented by the fetch and storage-client adapters. */
 export interface PodPort {
   /** Absolute container URL delimiting this capability. */
   readonly root: string;
@@ -57,6 +69,8 @@ export interface PodPort {
   readonly webId: string;
   /** Read raw bytes. The configured WebID may be read for discovery, even when off-pod. */
   read(url: string, options?: PodReadOptions): Promise<PodReadResult>;
+  /** Inspect without following redirects; retain WAC discovery links on HTTP 404. */
+  head?(url: string): Promise<PodHeadResult>;
   /** List a container's immediate children. */
   list(container: string): Promise<PodEntry[]>;
   /** Write bytes with optional preconditions; reject redirects and disabled writes. */
@@ -82,9 +96,22 @@ export function asPodPort(source: PodSource): PodPort {
 const searchLimits = new WeakMap<PodPort, SolidMcpConfig["searchLimits"]>();
 const nativeReads = new WeakSet<PodPort["read"]>();
 
+/** @internal Retain operator caps without exposing a transport or widening a capability. */
+export function configurePodSearchLimits(
+  pod: PodPort,
+  limits: SolidMcpConfig["searchLimits"],
+): void {
+  searchLimits.set(pod, limits && { ...limits });
+}
+
 /** Internal: only native reads are known not to authorize against complete bodies. */
 export function isFetchPodRead(read: PodPort["read"]): boolean {
   return nativeReads.has(read);
+}
+
+/** @internal Register a built-in read that does not authorize against body content. */
+export function registerNativePodRead(read: PodPort["read"]): void {
+  nativeReads.add(read);
 }
 
 /** Type relations may share a Link header with quoted commas and other relations. */
@@ -119,6 +146,23 @@ export function createFetchPodPort(input: SolidMcpConfig): PodPort {
   const pod: PodPort = {
     root: config.podRoot,
     webId: config.webId ?? "",
+    async head(url) {
+      const target = requirePodScopedUrl(config, url);
+      const response = await podOperationFetch(config.fetch)(target, {
+        method: "HEAD",
+        redirect: "manual",
+        cache: "no-cache",
+      });
+      void response.body?.cancel().catch(() => {});
+      if ((!response.ok && response.status !== 404) || (response.url && response.url !== target))
+        throw new Error("WAC ACL discovery failed");
+      try {
+        return { acl: new URL(wacAclLink(response.headers.get("link") ?? ""), target).href };
+      } catch {
+        // ACP, absent, malformed or ambiguous WAC links cannot protect audit data.
+        return {};
+      }
+    },
     async read(url, options: PodReadOptions = {}) {
       // Only the operator-configured identity retains the legacy off-pod exception.
       // Tool/resource callers scope-check first, so clients cannot use it as an escape.
@@ -144,11 +188,20 @@ export function createFetchPodPort(input: SolidMcpConfig): PodPort {
       const response = await fetcher(target, {
         method: "GET",
         // Follow through the scoped loop, or the CLI's validated anonymous profile loop.
-        redirect: !offPodProfile || handlesProfileRedirects(config.fetch) ? "follow" : "manual",
+        // A caller that refuses redirects gets the first 3xx back and no second request.
+        redirect:
+          options.redirect === "error" || (offPodProfile && !handlesProfileRedirects(config.fetch))
+            ? "manual"
+            : "follow",
         // Generic reads preserve the server's default representation.
         headers: options.accept === undefined ? undefined : { accept: options.accept },
       });
       if (!response.ok) void response.body?.cancel().catch(() => {});
+      if (
+        options.redirect === "error" &&
+        (response.type === "opaqueredirect" || (response.status >= 300 && response.status < 400))
+      )
+        throw new Error(`redirect refused reading ${target} (HTTP ${response.status})`);
       if (response.status === 401 || response.status === 403) {
         throw new Error(
           `unauthenticated/forbidden (${response.status}) reading ${target} (HTTP ${response.status}) — supply an authenticated fetch (the Solid-MCP server holds no credentials of its own).`,
@@ -211,7 +264,7 @@ export function createFetchPodPort(input: SolidMcpConfig): PodPort {
     },
   };
 
-  searchLimits.set(pod, config.searchLimits && { ...config.searchLimits });
+  configurePodSearchLimits(pod, config.searchLimits);
   nativeReads.add(pod.read);
   return pod;
 
@@ -230,7 +283,7 @@ export function createFetchPodPort(input: SolidMcpConfig): PodPort {
     if (contentType !== undefined) headers.set("content-type", contentType);
     if (cond.ifMatch !== undefined) headers.set("if-match", cond.ifMatch);
     if (cond.ifNoneMatch !== undefined) headers.set("if-none-match", cond.ifNoneMatch);
-    const response = await config.fetch(target, {
+    const response = await podOperationFetch(config.fetch)(target, {
       method,
       headers,
       ...(body === undefined ? {} : { body: Buffer.from(body) }),

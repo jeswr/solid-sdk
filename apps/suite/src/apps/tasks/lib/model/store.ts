@@ -1,10 +1,20 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 
+import { Authorization } from "@solid/object";
 import { projectMoveData } from "../detail/task-data";
-import { ModelError } from "./errors";
+import { InboxAclRecoveryError, ModelError } from "./errors";
 import { RdfIO, type Resource, requireEtag } from "./io";
 import { TaskMove } from "./move";
-import { DataFactory, documentUrl, NS, node, requireTitle, Store, uniqueSlug } from "./rdf";
+import {
+  DataFactory,
+  documentUrl,
+  NS,
+  node,
+  requireProjectFolder,
+  requireTitle,
+  Store,
+  uniqueSlug,
+} from "./rdf";
 import { createTask, type TaskDetails, TaskItem, taskDetails, validateTask } from "./task";
 import { createTracker, TaskTracker } from "./tracker";
 import { type PrivateIndexAccess, TypeIndex } from "./type-index";
@@ -184,11 +194,22 @@ export class TaskStore {
       const path = url.replace(/\/$/, "");
       return path.slice(path.lastIndexOf("/") + 1).replace(/\.ttl$/, "");
     });
-    for (let attempt = 0; attempt < 100; attempt++) {
+    candidates: for (let attempt = 0; attempt < 100; attempt++) {
       const reservation = operation.reservation;
       const name = reservation?.name ?? (inbox ? "inbox" : uniqueSlug(title, used));
       const url = `${this.projects}${name}.ttl`;
       const stateStore = `${this.projects}${name}/`;
+      // Auxiliary documents can outlive a deleted project. Never adopt their old grants.
+      for (const resource of [url, stateStore]) {
+        const acl = await this.io.optional(`${resource}.acl`);
+        if (!acl) continue;
+        if (reservation) throw new ModelError(409, acl.url, acl.etag);
+        if (inbox) await this.repairInboxAcl(resource, acl);
+        else {
+          used.push(name);
+          continue candidates;
+        }
+      }
       await this.protectTasks(url);
       await this.protectTasks(stateStore);
       let intended = reservation;
@@ -243,6 +264,23 @@ export class TaskStore {
       };
     }
     throw new ModelError(409, this.projects);
+  }
+  private async repairInboxAcl(resource: string, acl: Resource): Promise<void> {
+    try {
+      await this.protectTasks(resource);
+    } catch (cause) {
+      throw new InboxAclRecoveryError(resource, cause);
+    }
+    const dataset = new Store();
+    const subject = `${acl.url}#owner`;
+    const rule = new Authorization(subject, dataset, DataFactory);
+    const namespace = "http://www.w3.org/ns/auth/acl#";
+    rule.type.add(`${namespace}Authorization`);
+    rule.agent.add(this.options.webId);
+    for (const mode of ["Read", "Write", "Control"]) rule.mode.add(namespace + mode);
+    node(subject, dataset).setIri(`${namespace}accessTo`, resource);
+    if (resource.endsWith("/")) node(subject, dataset).setIri(`${namespace}default`, resource);
+    await this.io.write(acl.url, dataset, { etag: acl.etag });
   }
   /** Change representation bytes so even content-based strong validators advance. */
   private async claimResource(
@@ -339,17 +377,25 @@ export class TaskStore {
     if (!task.isTask) throw new TypeError("Expected a wf:Task.");
     return { ...resource, task };
   }
-  /** Strict listings are mutation gates: no missing, unreadable or invalid task may be skipped. */
-  async listTasks(stateStore: string, { strict = false } = {}): Promise<StoredTask[]> {
+  /** Strict reads fail on missing/unreadable resources; membership cleanup can skip invalid tasks. */
+  async listTasks(
+    stateStore: string,
+    { strict = false, skipInvalid = false } = {},
+  ): Promise<StoredTask[]> {
     const tasks: StoredTask[] = [];
     for (const url of await this.io.list(stateStore, { strict })) {
       if (!isTaskMember(url, stateStore)) continue;
       const resource = strict ? await this.io.read(url) : await this.readListedResource(url);
       if (!resource) continue;
       if (strict) {
-        const data = taskDetails(resource.url, resource.dataset);
-        if (!data) throw new TypeError("Expected a wf:Task.");
-        validateTask(data);
+        try {
+          const data = taskDetails(resource.url, resource.dataset);
+          if (!data) throw new TypeError("Expected a wf:Task.");
+          validateTask(data);
+        } catch (error) {
+          if (skipInvalid) continue;
+          throw error;
+        }
       }
       const task = new TaskItem(`${resource.url}#it`, resource.dataset, DataFactory);
       if (task.isTask) tasks.push({ ...resource, task });
@@ -451,14 +497,19 @@ export class TaskStore {
   }
   /** Reserve the tracker before removing anything; the persisted marker permits recovery after a restart. */
   async deleteProject(project: StoredProject): Promise<void> {
+    const container = requireProjectFolder(project.url, project.tracker.stateStore, this.projects);
     const current = await this.io.optional(project.url);
-    if (!current) return;
+    if (!current) {
+      await this.removeAcl(container);
+      await this.removeAcl(project.url);
+      return;
+    }
     const pending = node(project.tracker.id, current.dataset).text(deletionState) === "pending";
     if (!pending && current.etag !== project.etag)
       throw new ModelError(412, project.url, current.etag);
-    const container = project.tracker.stateStore as string;
     const tracker = new TaskTracker(project.tracker.id, current.dataset, DataFactory);
     if (tracker.stateStore !== container) throw new ModelError(412, project.url, current.etag);
+    requireProjectFolder(project.url, tracker.stateStore, this.projects);
     const dataset = new Store([...current.dataset]);
     const marker = node(project.tracker.id, dataset);
     marker.setText(deletionState, "pending");
@@ -466,9 +517,17 @@ export class TaskStore {
     const reserved = await this.io.write(project.url, dataset, { etag: current.etag });
     for (const item of await this.listTasks(container))
       await this.removeIfPresent(item.url, item.etag);
+    // Auxiliary ACLs are listed by some pods; remove them before the folder DELETE.
+    await this.removeAcl(container);
     const resource = await this.io.optional(container);
     if (resource) await this.removeIfPresent(container, resource.etag);
+    // Removing an own ACL first falls back to the private projects container.
+    await this.removeAcl(project.url);
     await this.removeIfPresent(project.url, reserved.etag);
+  }
+  private async removeAcl(resource: string): Promise<void> {
+    const acl = await this.io.optional(`${resource}.acl`);
+    if (acl) await this.removeIfPresent(acl.url, acl.etag);
   }
   private async removeIfPresent(url: string, etag: string | null): Promise<void> {
     try {

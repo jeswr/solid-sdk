@@ -1,11 +1,20 @@
 // AUTHORED-BY Codex
 "use client";
-import { Button } from "@jeswr/suite-ui";
+import { Button, IconButton } from "@jeswr/suite-ui";
 import type { Editor } from "@tiptap/react";
+import { X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { focusDocument } from "../editor/focus";
 import { buildOutline, type OutlineHeading } from "../lib/outline";
-export function OutlinePane({ editor, revision }: { editor: Editor | null; revision: number }) {
+export function OutlinePane({
+  editor,
+  revision,
+  close,
+}: {
+  editor: Editor | null;
+  revision: number;
+  close?: () => void;
+}) {
   const [active, setActive] = useState("");
   const headings: OutlineHeading[] = [];
   const flatten = (items: readonly OutlineHeading[]) => {
@@ -44,7 +53,14 @@ export function OutlinePane({ editor, revision }: { editor: Editor | null; revis
   }, [editor, anchors, revision]);
   return (
     <div className="docs-outline">
-      <p className="docs-eyebrow">IN THIS DOCUMENT</p>
+      <div className="docs-outline-heading">
+        <p className="docs-eyebrow">DOCUMENT OUTLINE</p>
+        {close && (
+          <IconButton variant="ghost" label="Hide outline" onClick={close}>
+            <X aria-hidden="true" size={16} />
+          </IconButton>
+        )}
+      </div>
       <h2>Outline</h2>
       <nav aria-label="Document outline">
         {headings.length ? (

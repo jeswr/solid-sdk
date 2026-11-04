@@ -34,6 +34,7 @@ import {
   WholeWord,
 } from "lucide-react";
 import type { SlashItem } from "../lib/editor/logic";
+import { clearFormatting } from "./formatting";
 export interface EditorAction {
   label: string;
   icon: typeof Bold;
@@ -178,9 +179,7 @@ export function editorActions(
     action("Justify", AlignJustify, "Mod+Shift+J", () =>
       e.chain().focus().setTextAlign("justify").run(),
     ),
-    action("Clear formatting", RemoveFormatting, "Mod+\\", () =>
-      e.chain().focus().unsetAllMarks().clearNodes().run(),
-    ),
+    action("Clear formatting", RemoveFormatting, "Mod+\\", () => clearFormatting(e)),
     action(
       "Subscript",
       Subscript,

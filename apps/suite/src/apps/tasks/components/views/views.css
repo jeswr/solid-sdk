@@ -67,7 +67,8 @@
   color: var(--foreground-muted);
   font-size: var(--text-xs);
 }
-.tsk-week-controls > button {
+/* Outranks suite-ui's [data-slot="button"][data-size="sm"] min-height (the Today button). */
+.tsk-week-controls > button[data-slot="button"] {
   min-width: 44px;
   min-height: 44px;
 }
@@ -79,21 +80,42 @@
   padding: 4px;
   scroll-snap-type: x mandatory;
 }
+/* The letter and count overlay the button without taking its pointer events. */
+.tsk-day {
+  position: relative;
+  display: grid;
+  min-width: 44px;
+  color: var(--foreground);
+  font-size: var(--text-xs);
+  scroll-snap-align: start;
+}
+.tsk-day[data-today] {
+  color: var(--primary-soft-foreground);
+}
 .tsk-day-cell {
   display: grid;
-  justify-items: center;
-  gap: 4px;
+  place-items: center;
   min-width: 44px;
   min-height: 84px;
   padding: 8px 4px;
   border: 1px solid transparent;
   border-radius: var(--radius-md);
   background: transparent;
-  color: var(--foreground);
+  color: inherit;
   font: inherit;
-  font-size: var(--text-xs);
   cursor: pointer;
-  scroll-snap-align: start;
+}
+.tsk-day-letter,
+.tsk-day-count {
+  position: absolute;
+  inset-inline: 0;
+  justify-content: center;
+  text-align: center;
+  line-height: 16px;
+  pointer-events: none;
+}
+.tsk-day-letter {
+  top: 9px;
 }
 .tsk-day-cell:hover {
   background: var(--surface-2);
@@ -109,6 +131,7 @@
   font-size: var(--text-base);
 }
 .tsk-day-count {
+  bottom: 9px;
   display: flex;
   align-items: center;
   gap: 4px;

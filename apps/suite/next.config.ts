@@ -1,9 +1,20 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex
 import { resolve } from "node:path";
 import type { NextConfig } from "next";
 
+if (
+  process.env.NEXT_PUBLIC_DEV_FIXTURES === "1" &&
+  // `vercel build` sets VERCEL=1; the Pages deploy runs in the "pages" workflow.
+  (process.env.VERCEL === "1" || process.env.GITHUB_WORKFLOW === "pages")
+)
+  throw new Error("Demo fixtures must be disabled for deployment builds");
+
 const config: NextConfig = {
+  ...(process.env.NEXT_PUBLIC_SUITE_TARGET === "native"
+    ? ({ output: "export", trailingSlash: true, images: { unoptimized: true } } as const)
+    : {}),
   transpilePackages: ["@jeswr/suite-ui"],
   devIndicators: false,
   // Yjs must be a singleton across the app, TipTap, IndexedDB and the workspace provider.

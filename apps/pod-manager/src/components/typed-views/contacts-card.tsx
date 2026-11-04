@@ -9,6 +9,7 @@
  * subjects (the same remote-image/CSP consideration as elsewhere); they degrade
  * to initials via the shadcn `Avatar` fallback.
  */
+import { usePodMedia } from "@/components/use-pod-media";
 import { Mail, Phone, UserRound } from "lucide-react";
 import type { ContactCard, ContactsModel } from "@/lib/typed-views/contacts-view";
 import { safeLinkHref } from "@/lib/pod-scope";
@@ -34,6 +35,7 @@ export function ContactsCardList({ model }: { model: ContactsModel; url: string 
 }
 
 function ContactRow({ contact }: { contact: ContactCard }) {
+  const avatar = usePodMedia(contact.avatarUrl ? safeLinkHref(contact.avatarUrl) : undefined);
   // safeLinkHref permits mailto:; tel: is not in the safe set, so build it
   // directly from the stored, already-normalised tel: URI (no user-controlled
   // scheme — contacts.ts wrote it via toTel()).
@@ -45,7 +47,7 @@ function ContactRow({ contact }: { contact: ContactCard }) {
       <CardContent className="flex items-start gap-4 py-4">
         <Avatar size="lg">
           {contact.avatarUrl ? (
-            <AvatarImage src={contact.avatarUrl} alt="" />
+            <AvatarImage src={avatar} alt="" />
           ) : null}
           <AvatarFallback className="bg-accent text-accent-foreground">
             {contact.name.trim() ? (

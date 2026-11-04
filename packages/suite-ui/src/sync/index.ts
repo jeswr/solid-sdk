@@ -3,6 +3,9 @@ export {
   CapabilityGate,
   type CapabilityGateProps,
   CapabilityProvider,
+  OFFLINE_REASON,
+  OnlineGate,
+  type OnlineGateProps,
   useCapabilities,
   useRequiresOnline,
 } from "./capability-gate.js";

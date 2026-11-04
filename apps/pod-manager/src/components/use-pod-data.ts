@@ -25,11 +25,11 @@ export interface RevalidatableState<T> extends AsyncState<T> {
 }
 
 /** The uncached type-index discovery chain (profile → registrations). */
-async function loadCategorySummaries(webId: string): Promise<CategorySummary[]> {
+async function loadCategorySummaries(webId: string, podFetch: typeof fetch): Promise<CategorySummary[]> {
   // The profile carries the type-index links — fetch it (public read,
   // revalidated: a just-bootstrapped index link must not be cache-hidden).
-  const { dataset } = await freshRdf(webId);
-  const { locations } = await discoverRegistrations(webId, dataset);
+  const { dataset } = await freshRdf(webId, podFetch);
+  const { locations } = await discoverRegistrations(webId, dataset, podFetch);
   return summariseCategories(locations);
 }
 
@@ -39,14 +39,13 @@ async function loadCategorySummaries(webId: string): Promise<CategorySummary[]> 
  * Stale-while-revalidate (SWR): on re-mount the last-known categories render
  * INSTANTLY (Home/My-data no longer spin) while a background revalidation
  * refreshes them; the profile is watched so a type-index change invalidates the
- * cache. Production paths pass NO `fetch` to the data layer — the auth-patched
- * global runs (AGENTS.md §Reading data).
+ * cache. Pod requests use the session transport explicitly.
  */
 export function useCategorySummaries(): RevalidatableState<CategorySummary[]> {
-  const { webId } = useSession();
+  const { webId, podFetch } = useSession();
   const { data, error, loading, revalidating } = useSwrRead<CategorySummary[]>(
     "category-summaries",
-    loadCategorySummaries,
+    (id) => loadCategorySummaries(id, podFetch),
     // Watch the profile doc: a type-index link change there invalidates this.
     { topicUrl: webId },
   );
@@ -70,8 +69,7 @@ export function useCategorySummary(
  * List the items inside a category, with SWR caching keyed by the category id.
  * On re-mount the last-known items render INSTANTLY while a background
  * revalidation refreshes them; the category's container is watched so an
- * edit/add/delete elsewhere invalidates the cache. Production paths pass no
- * `fetch` (auth-patched global runs).
+ * edit/add/delete elsewhere invalidates the cache. Reads use the session transport.
  *
  * A `summary` with no data (or none at all) has nothing to list — those resolve
  * to `[]` synchronously without a fetch (and without a cache entry).
@@ -79,6 +77,7 @@ export function useCategorySummary(
 export function useCategoryItems(
   summary: CategorySummary | undefined,
 ): RevalidatableState<PodItem[]> & { reload: () => void } {
+  const { podFetch } = useSession();
   const hasData = Boolean(summary?.hasData);
   // A single-`instance` category has no container to watch (point resource).
   const topicUrl = summary?.locations.find((l) => l.container)?.container;
@@ -90,7 +89,7 @@ export function useCategoryItems(
   const { data, error, loading, revalidating, reload } = useSwrRead<PodItem[]>(
     key,
     // Only invoked when hasData (key non-empty) — list the live items.
-    () => (summary ? listCategoryItems(summary) : Promise.resolve([])),
+    () => (summary ? listCategoryItems(summary, podFetch) : Promise.resolve([])),
     { topicUrl },
   );
 

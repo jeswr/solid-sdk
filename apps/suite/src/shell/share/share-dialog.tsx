@@ -30,10 +30,7 @@ import {
   SheetDescription,
   SheetTitle,
   Toaster,
-  Tooltip,
-  TooltipContent,
   TooltipProvider,
-  TooltipTrigger,
   toast,
 } from "@jeswr/suite-ui";
 import { useEffect, useId, useRef, useState } from "react";
@@ -43,7 +40,7 @@ import {
   shareRoleOptions,
   shareSubtitle,
 } from "../lib/share-options";
-import { useSyncSnapshot } from "../sync/online";
+import { RequiresOnline, useNeedsConnection } from "../sync/requires-online";
 import styles from "./share.module.css";
 import {
   type ShareCapabilities,
@@ -65,6 +62,7 @@ export interface ShareDialogProps {
   caps: ShareCapabilities;
   suiteHref: string;
   contacts?: SharingPerson[];
+  onPeopleAdded?: (count: number) => void;
   useProfile?: (webId: string) => SharingProfile;
 }
 const emptyProfile = () => ({ loading: false });
@@ -117,12 +115,13 @@ function SharingContent({
   caps,
   suiteHref,
   onOpenChange,
+  onPeopleAdded,
   contacts = [],
   useProfile = emptyProfile,
   mobile,
 }: ShareDialogProps & { mobile: boolean }) {
   const id = useId();
-  const online = useSyncSnapshot().online;
+  const online = !useNeedsConnection().disabled;
   const [state, setState] = useState<SharingState>();
   const [error, setError] = useState("");
   const [attempt, setAttempt] = useState(0);
@@ -143,6 +142,14 @@ function SharingContent({
   const toasts = useRef<(string | number)[]>([]);
   const current = useRef(state);
   current.current = state;
+  // Focus an element once the save that removed the focused control has rendered (and its
+  // controls are enabled again). An effect runs after the commit, so it never races it.
+  const [focusAfterSave, setFocusAfterSave] = useState("");
+  useEffect(() => {
+    if (!focusAfterSave || saving) return;
+    document.getElementById(focusAfterSave)?.focus();
+    setFocusAfterSave("");
+  }, [focusAfterSave, saving]);
   // biome-ignore lint/correctness/useExhaustiveDependencies: A retry explicitly reloads the same resource.
   useEffect(() => {
     alive.current = true;
@@ -175,6 +182,7 @@ function SharingContent({
   }, [adapter, url, attempt]);
   const readOnly = !online || state?.readOnly || !state?.canManage;
   const disabled = !!readOnly || !!saving;
+  const warning = state?.warning ? new ShareError(state.warning).message : "";
   const roles = shareRoleOptions(kind, caps, !!state?.canManage, adapter.supportsCommenter);
   const generalAllowed = generalAccessOptions(caps).some(
     (option) => option.value === state?.general.mode && !option.disabled,
@@ -284,6 +292,7 @@ function SharingContent({
         }
       },
       () => {
+        if (added.length) onPeopleAdded?.(added.length);
         if (notify && caps.notifyAgents && adapter.notify)
           void adapter.notify(url, added, message || undefined).catch(() => {
             if (active())
@@ -308,7 +317,7 @@ function SharingContent({
           </Description>
         </div>
       </header>
-      {error && <p role="alert">{error}</p>}
+      {(error || warning) && <p role="alert">{error || warning}</p>}
       {!state ? (
         error ? (
           <Button variant="outline" onClick={() => setAttempt((value) => value + 1)}>
@@ -371,9 +380,11 @@ function SharingContent({
                   )}
                 </>
               )}
-              <Button disabled={disabled || !selected.length} onClick={() => void add()}>
-                Add
-              </Button>
+              <RequiresOnline>
+                <Button disabled={disabled || !selected.length} onClick={() => void add()}>
+                  Add
+                </Button>
+              </RequiresOnline>
               {saving === "add" && <span role="status">Saving access…</span>}
             </fieldset>
           </section>
@@ -458,19 +469,21 @@ function SharingContent({
                           <Button
                             variant="link"
                             disabled={disabled}
-                            onClick={(event) => {
-                              const button = event.currentTarget;
-                              void act(person.webId, () =>
-                                adapter.setPerson(url, person.webId, person.role as ShareRole, {}),
-                              ).then(() =>
-                                // On success this button unmounts (and the dialog's focus trap
-                                // would park focus on the dialog); keep focus in the row.
-                                requestAnimationFrame(() => {
-                                  if (button.isConnected) return;
-                                  document.getElementById(`${id}-expiry-${person.webId}`)?.focus();
-                                }),
-                              );
-                            }}
+                            onClick={() =>
+                              void act(
+                                person.webId,
+                                () =>
+                                  adapter.setPerson(
+                                    url,
+                                    person.webId,
+                                    person.role as ShareRole,
+                                    {},
+                                  ),
+                                // On success this button unmounts and the dialog's focus trap
+                                // would park focus on the dialog: keep focus in the row.
+                                () => setFocusAfterSave(`${id}-expiry-${person.webId}`),
+                              )
+                            }
                           >
                             Remove end date
                             <span className="suite-sr-only">

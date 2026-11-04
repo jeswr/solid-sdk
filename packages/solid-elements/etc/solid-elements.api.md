@@ -7,8 +7,7 @@
 import { CSSResult } from 'lit';
 import { LitElement } from 'lit';
 import { PropertyValues } from 'lit';
-import { TemplateResult } from 'lit-html';
-import { TemplateResult as TemplateResult_2 } from 'lit';
+import { TemplateResult } from 'lit';
 
 // @public
 export function applyResolvedTheme(resolved: ResolvedTheme): void;
@@ -265,6 +264,11 @@ export class JeswrLoginPanel extends LitElement {
             type: StringConstructor;
             attribute: string;
         };
+        webIdLabel: {
+            type: StringConstructor;
+            attribute: string;
+            reflect: boolean;
+        };
         autoRestore: {
             attribute: string;
             reflect: boolean;
@@ -291,10 +295,11 @@ export class JeswrLoginPanel extends LitElement {
     };
     get publicFetch(): typeof fetch;
     // (undocumented)
-    render(): TemplateResult_2<1>;
+    render(): TemplateResult<1>;
     // (undocumented)
     static styles: CSSResult[];
     get webId(): string | null;
+    webIdLabel: string;
     // (undocumented)
     protected willUpdate(changed: Map<PropertyKey, unknown>): void;
 }

@@ -403,6 +403,7 @@ describe("Sparse and bounded account snapshots", () => {
     await client.threads(account, inbox);
     expect(new MailClient(client.store.fetch, root.slice(0, -1)).storageUrl).toBe(root);
   });
+  // Builds 5,000+ summaries in the demo pod; slow CI runners take over 30 s.
   it("evaluates only the newest 5,000 message summaries", async () => {
     const { client, inbox } = setup();
     const loaded = await client.store.load(documentOf(inbox), true);
@@ -419,7 +420,7 @@ describe("Sparse and bounded account snapshots", () => {
     await client.store.save(loaded);
     expect(await client.search(account, "subject:outside-bound")).toEqual([]);
     expect(await client.search(account, "subject:inside-bound")).toEqual([]); // No conversation relation invented.
-  });
+  }, 120_000);
   it("preserves final unterminated MIME bytes, and mboxrd prefixes split at each position", async () => {
     const { client } = setup();
     const body =

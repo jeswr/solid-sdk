@@ -3,7 +3,8 @@
   "extends": "./tsconfig.json",
   "compilerOptions": {
     "noEmit": true,
-    "rootDir": "."
+    // Exercise the legacy parser source without requiring sibling build output.
+    "rootDir": ".."
   },
   "include": ["src/**/*.ts", "test/**/*.ts", "vitest.config.ts"]
 }

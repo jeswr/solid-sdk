@@ -33,6 +33,7 @@ import { useTaskListFocus } from "../state/list-focus";
 import { useTasksShortcuts } from "../state/shortcuts";
 import { useTasks } from "../state/tasks-context";
 import { reopenTask, rescheduleTasks } from "../state/view-actions";
+import { AssigneeAvatar } from "./assignee-avatar";
 import { useTaskDrag } from "./dnd/use-task-drag";
 import { MoveMenuItems, moveDown, moveUp, useTaskMoves } from "./move-menu";
 import { RowProperties } from "./row-properties";
@@ -133,7 +134,8 @@ export function TaskRow({
       labels.length ||
       (showProject && task.projectTitle) ||
       task.completedAt ||
-      task.derivedFrom,
+      task.derivedFrom ||
+      task.assignee,
   );
   const selectedTasks = () => {
     if (!focus?.selection.size) return [];
@@ -295,7 +297,8 @@ export function TaskRow({
                 type="button"
                 className="tsk-due"
                 disabled={pending || completing}
-                aria-label={`Reschedule '${task.title}'`}
+                // The accessible name must contain the visible due text (WCAG 2.5.3).
+                aria-label={`${formatDue(task, now)}, reschedule '${task.title}'`}
                 onClick={() => setRescheduleOpen(true)}
                 data-overdue={isOverdue(task, now) || undefined}
               >
@@ -350,6 +353,7 @@ export function TaskRow({
               </span>
             )}
             {showProject && task.projectTitle && <span>{task.projectTitle}</span>}
+            <AssigneeAvatar task={task} />
           </div>
         )}
       </td>

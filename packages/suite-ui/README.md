@@ -400,5 +400,8 @@ Provide capabilities with `<CapabilityProvider capabilities={capabilities}>`.
 Missing capabilities are unsupported. Gate children must be controls that forward native
 `disabled` and `aria-disabled` props; fragments and multiple controls are supported.
 `useRequiresOnline(online, "change sharing")` returns `{ disabled, reason }` for controls that
-need a connection. Pass the current online value explicitly. `ConflictDialog` calls `onChoose`
+need a connection. Pass the current online value explicitly. `<OnlineGate online={online}>`
+wraps such controls: transparent while online; offline it disables them and explains why in a
+keyboard- and pointer-reachable tooltip (default `OFFLINE_REASON`, "You're offline. This needs a
+connection."). Its trigger is a span, so it stays focusable inside a disabled fieldset. `ConflictDialog` calls `onChoose`
 with `mine`, `theirs` or `both`; the caller applies the choice and controls when it closes.

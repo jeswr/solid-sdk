@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 "use client";
 import {
   Button,
@@ -30,8 +31,9 @@ import {
   Upload,
 } from "lucide-react";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { useId, useState } from "react";
+import { useRoutePathname } from "@/lib/route-params";
 import { mailErrorMessage } from "../lib/client";
 import { useAccounts, useFolders, useMail } from "../state/mail-context";
 import { MailAsync } from "./async";
@@ -49,7 +51,7 @@ export function MailSidebar() {
   const folders = useFolders();
   const accounts = useAccounts();
   const { account, setAccount, client, invalidate } = useMail();
-  const pathname = usePathname();
+  const pathname = useRoutePathname();
   const router = useRouter();
   const reasonId = useId();
   const titleId = useId();

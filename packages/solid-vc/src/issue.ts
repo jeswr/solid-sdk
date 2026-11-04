@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 //
 // The high-level issue/sign API. `issue()` lowers a Credential to its claim graph,
@@ -5,7 +6,6 @@
 // the signed VerifiableCredential (data model + the embedded proof). Suite-agnostic
 // via the ProofSuite seam; the bundled DataIntegritySuite is the default.
 
-import { randomUUID } from "node:crypto";
 import {
   buildAgentAuthorizationCredential,
   buildBoundAgentAuthorizationCredential,
@@ -58,7 +58,7 @@ export async function issue(input: IssueInput): Promise<VerifiableCredential> {
   // whitespace-only id that JSON-LD would read as a present relative `@id`.
   const credential: Credential = normalizeCredentialSubjects({
     ...input.credential,
-    id: input.credential.id ?? `urn:uuid:${randomUUID()}`,
+    id: input.credential.id ?? `urn:uuid:${globalThis.crypto.randomUUID()}`,
     validFrom: input.credential.validFrom ?? created.toISOString(),
   });
 

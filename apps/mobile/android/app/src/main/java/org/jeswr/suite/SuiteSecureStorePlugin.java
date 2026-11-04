@@ -1,3 +1,4 @@
+// AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY GPT-5.6 Codex
 // AUTHORED-BY Codex GPT-6
 package org.jeswr.suite;
@@ -34,7 +35,7 @@ public class SuiteSecureStorePlugin extends Plugin {
     private SecureStore store() throws Exception {
         if (destroyed) throw new SecureStoreException("unavailable");
         if (store == null) {
-            String origin = bridge.getServerUrl();
+            String origin = NavigationPolicy.appUrl(bridge.getServerUrl(), bridge.getLocalUrl());
             if (NavigationPolicy.origin(origin) == null) throw new SecureStoreException("unavailable");
             String namespace = SecureStoreValidation.namespace(origin);
             crypto = new SecureStoreCipher(new SecureStoreKeys(getContext(), namespace));

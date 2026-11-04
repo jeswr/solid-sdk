@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   ensurePrivateIndexAccess,
   ensurePrivateTasksAccess,
+  supportsTasksSharing,
 } from "../../src/apps/tasks/state/access";
 
 const storageUrl = "https://alice.demo.pod/";
@@ -108,4 +109,10 @@ describe("demo-only owner access verification", () => {
       ),
     ).toBe(false);
   });
+});
+
+it("uses the privacy verifier's session support check for Share entry points", () => {
+  expect(supportsTasksSharing({ mode: "demo" })).toBe(true);
+  expect(supportsTasksSharing({ mode: "extension" })).toBe(false);
+  expect(supportsTasksSharing({ mode: "real" })).toBe(false);
 });

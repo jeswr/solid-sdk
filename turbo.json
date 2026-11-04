@@ -18,6 +18,8 @@
     "//#lint:root": {
       "cache": false
     },
-    "//#test:root": {}
+    "//#test:root": {
+      "dependsOn": ["@jeswr/guide-examples#test"]
+    }
   }
 }

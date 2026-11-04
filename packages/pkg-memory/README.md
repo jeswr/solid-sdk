@@ -1,5 +1,6 @@
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 <!-- AUTHORED-BY Codex GPT-6 -->
+<!-- AUTHORED-BY Claude Opus 5.5 -->
 
 # @jeswr/pkg-memory
 
@@ -31,11 +32,32 @@ const parsed = await parseNanopublications(trig);
 ```
 
 `createFactAssertion` supports `address`, `email`, `phone`, `preference`,
-`condition`, `allergy`, `medication`, and `relationship`. Use its discriminated
+`condition`, `allergy`, `medication`, `relationship`, and `paymentCard`. Use its discriminated
 `Fact` type for the value fields. Residence, clinical, product and role identifiers
 are explicit entity IRIs. Nested preferences, codes and dose schedules use blank
 nodes, canonically skolemized on build. Temporal bounds retain their declared
 `date`, `dateTime`, `gYearMonth`, or `gYear` precision.
+
+`paymentCard` records a blank-node `schema:PaymentCard` that the owner
+`schema:owns`, with `schema:brand`, the last four digits as a
+`schema:PropertyValue` (`propertyID` "last4"), `schema:validThrough` as an
+`xsd:gYearMonth` and an optional `schema:address`. It has no field for a full
+card number, a security code or a card id, and refuses any extra key. A billing
+address IRI may have no query or fragment and at most four digits in all, counted
+after percent-decoding and NFKC normalisation. That leaves room for a house
+number but not a useful share of a card number; it also refuses UUID and IP
+address IRIs, so mint a slug for the address entity or leave it out. One fact
+cannot reveal more than its last four digits; splitting a number across many
+facts or other templates is outside what this template can check. Each field is read once, so a getter or proxy cannot
+change a value after it is checked.
+
+`findCardNumbers` and `containsCardNumber` expose the detector. It flags every
+Luhn-valid window of 12 to 19 digits that does not start with 0, in linear time.
+Digits can be any Unicode decimal digit or a character that NFKC folds to one
+(circled, superscript, parenthesised or full-stop digits). Groups can be split
+by whitespace, any punctuation, invisible format characters, combining marks or
+`+ = ~ |`. Percent-decode IRIs before scanning them. Ideographic numerals are not
+covered.
 
 The batch contract follows `np_builder.py` (snake-case source fields). Claims can
 supply a default-graph RDF/JS dataset or a Turtle assertion body using the reference
@@ -166,10 +188,26 @@ supported. Owner-only WAC ACLs are written before creating
 containers and data. Existing shared ancestor containers and their ACLs are
 preserved; replacement is limited to the store's own `mcp/` ACL and the dedicated
 ACLs of nanopub, policy and lock resources. Each nanopub's owner-only ACL is established
-conditionally before writing its private bytes, replacing any orphan resource ACL
-that would override the container default. The adapter must support the spec's
-`.acl` convention; ACL failures stop the operation. Existing ACL replacement needs
-a strong ETag.
+conditionally before writing its private bytes, replacing an orphan resource ACL
+only when it is proven dedicated to that target. The optional `PodPort.head(url)`
+capability must return `{ acl }` from a unique, unanchored server-advertised WAC
+Link, including on HTTP 404. Every protected container, policy, lock and nanopub
+uses that pod-scoped URL; no `.acl` path is guessed. Missing or unsafe discovery,
+ACP, and existing ACLs with shared, unscoped, malformed or unsupported rules fail
+closed with `Memory protection unavailable`. All scope values, including legacy
+`acl:defaultForNew`, must name only the target; unrelated grants are never dropped.
+Existing ACL replacement requires a strong read ETag and `If-Match`; absent ACLs
+use `If-None-Match: *`. ACL read/write failures stop the operation.
+
+`new NanopubStore(pod, { allowAclUrl })` and
+`discoverWacAcl(pod, target, { allowAclUrl })` accept an optional predicate for
+the caller's protected ACL area. A false result or thrown error refuses discovery
+before reading or writing the advertised ACL, with no guessed fallback. Store
+operations return `Memory protection unavailable`; direct discovery returns
+`WAC protection unavailable`. Callers exposing generic pod tools must use this
+option to keep every accepted ACL inside their generic-tool exclusion boundary.
+solid-mcp derives that boundary from this store's layout (`private/pkg/`) and
+refuses ACLs advertised elsewhere in the pod, including `permissions/`.
 
 An empty `/private/pkg/mcp/.write-lock`, created with `If-None-Match: *` after
 container protection, coordinates puts across store instances and processes.
@@ -224,7 +262,10 @@ returning a policy for authorization. Restrictions are never silently discarded.
 
 For offline storage tests, `@jeswr/pkg-memory/testing` exports
 `createMemoryPodPort({ root, webId })` with byte copies, ETags, and conditional
-write/delete behavior.
+write/delete behavior. This generic port advertises no access-control model.
+Storage fixtures must explicitly add WAC metadata, for example
+`{ ...port, async head(target) { return { acl: target + ".acl" }; } }` for a
+test server that actually associates those ACL URLs with its resources.
 
 New typed facts use `https://jeswr.org/ns/sectors/health#` and
 `https://jeswr.org/ns/core#`. Parsing, hashing and reserializing supplied assertion

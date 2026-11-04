@@ -44,6 +44,8 @@ It never treats a policy denial as permission to transmit.
 
 - `refuse-all`: missing/invalid mandate, expired or future validity, wrong agent.
 - `prohibited`: a matching prohibition in any set, before any permit or indeterminate result.
+  A prohibition also matches a request for a broader action that covers it (a `write` request
+  matches an `append` prohibition).
 - `confirm-required`: with-approval permission, missing context, outstanding duty,
   unsupported vocabulary, engine failure, or no matching rule.
 - `permit`: autonomous permission after every preceding check passes.
@@ -60,6 +62,12 @@ Typed decimal values must retain their decimal identity through the evaluator's 
 conversion; insignificant zeros and exponent formatting do not change that identity.
 Date-time operands must have millisecond precision (additional trailing zeros are accepted).
 Values that would lose precision require confirmation, including in prohibitions and duties.
+A set-valued request operand requires confirmation under an `isAnyOf` permission, duty or obligation
+constraint (one allowed value cannot carry others through an allowlist) and under an `isNoneOf`
+prohibition constraint (one listed value cannot switch the prohibition off). Under an `isAllOf`
+permission, duty or obligation constraint it requires confirmation when it holds a value the
+constraint does not list (`isAllOf` alone accepts any superset). Targets and actions match exactly; the
+executor must canonicalise target IRIs before evaluation.
 Typed float values also require confirmation whenever binary32 rounding changes their value.
 
 `issueApproval({ id, approves, termsDigest, expires, decision }, p256Key, now)` produces
@@ -71,10 +79,29 @@ WebID assertionMethod, the canonical graph signature, proposal, digest, expiry a
 in that order. Verification material inside the statement is never trusted. Digest
 comparison hashes both inputs to fixed-size arrays before constant-work comparison.
 
-**Native browser issuance remains blocked by an upstream dependency:** the workspace
-`solid-vc` Data Integrity hashing implementation imports `node:crypto`. P-256 issuance and
-non-extractable keys are exercised in Node 24 tests; a browser build needs that dependency
-to expose browser-compatible hashing. This lane does not replace its crypto implementation.
+Browser callers import `@jeswr/agent-mandate/approval` and `@jeswr/agent-mandate/control`.
+These entry points use WebCrypto and the browser-compatible `solid-vc` build, and accept
+non-extractable P-256 private keys. The general entry point also exports the Node mandate
+verifier, whose upstream adapter uses Node's module loader.
+
+`issueControlStatement({ id, kind, attributedTo, createdAt, expires, target?, binding?,
+bindingState? }, p256Key, now)` signs a TriG control statement using the existing
+agent-model vocabulary and RDF mapping (including `prov:wasAttributedTo`, `dct:created`
+and typed date-time literals). The record's `type` discriminator is implicit in RDF;
+`proof` is produced by the signer. `verifyControlStatement(document, { id, ownerWebId,
+webIdKeyResolver, now })` checks the suite/purpose, authoritative P-256 assertion key,
+complete graph signature, exact owner attribution and expiry, and returns either
+`{ valid: true, statement }` or `{ valid: false, reason }`. Failures are `proof-type`,
+`key`, `signature`, `attribution`, `expired` or `malformed`. SetBindingState requires
+binding and bindingState; DispatchNow, RevokeMandate and Forget require a target.
+Control claims are decoded through agent-model's strict RDF mapping, including literal
+datatypes, language tags, and cardinalities. Approval claims retain their issued mapping:
+`approves` is an IRI; `termsDigest`, `expires`, and `decision` are `xsd:string` literals
+without language tags. Both verification and unsigned readers enforce these term shapes.
+
+`readApprovalClaims(document, id)` and `readControlClaims(document, id)` return unsigned
+claims or `undefined` for malformed input. They are **display only, never authority**:
+they perform no verification and may return expired or tampered claims.
 
 The optional Node adapter is isolated at `@jeswr/agent-mandate/sparq`:
 `sparqPolicyEngine({ binary, timeoutMs? })`. It uses the pilot `sparq-policy-decide/1`

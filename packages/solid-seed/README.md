@@ -44,9 +44,23 @@ The main entry contains no Node built-ins.
 
 - `create` uses `If-None-Match: *` and treats existing state as an error.
 - `ensure` skips an existing primary resource but creates or rewrites its requested ACL so access
-  policy converges. For an expander group it first requires every primary resource and requested
+  policy converges, as long as that only narrows access: it refuses to grant more than the
+  existing Turtle ACL already does (or anything beyond the owner when there is none), because it
+  did not write the existing content. Use `replace` to publish it. The existing ACL counts as
+  narrower only when it holds every desired statement and the authorizations it shares with the
+  desired ACL carry nothing but grant statements (`rdf:type`, `acl:accessTo`, `acl:default`,
+  `acl:agent`, `acl:agentClass`, `acl:agentGroup`, `acl:mode`); a restriction such as `acl:origin`
+  would be lost, so it refuses. The rewrite is conditional (`If-Match`) on the ETag it checked;
+  a server that sends no ETag gets an unconditional rewrite, and one that sends only weak ETags
+  always answers 412, so the rewrite fails closed. In a group, every member is checked before any
+  ACL is written, so a broadening is refused before any change. For an expander group it first requires every primary resource and requested
   ACL sidecar to exist or none to exist; partial groups fail before writes.
-- `replace` unconditionally rewrites every selected resource and ACL.
+- `replace` rewrites every selected resource and ACL whatever their current content, except that
+  it will not broaden the ACL of an existing container (and rewrites that ACL with `If-Match` on
+  the ETag it checked, so a server with only weak ETags answers 412 and the seed fails closed): its `acl:default` reaches children this run did not
+  write. Delete the container first, or grant that access by hand. Grants on a container this run
+  created apply only once a Turtle read of it lists no members, since a 201 alone does not prove it
+  new.
 
 One `ResourceExpander` is called once per run and becomes a stable `group-<layout-index>` unit.
 Because LDP has no multi-resource transaction, a mid-group failure rejects with `SeedError`. Its
@@ -74,3 +88,33 @@ An `access` entry creates a sibling `.acl` resource. Every such ACL always grant
 read, write, and control, then adds the requested public or named-agent rules. ACL RDF is built
 with `@solid/object`'s `Authorization` wrapper and serialized with `n3.Writer`; there are no Turtle
 string templates.
+
+A resource with an `access` entry is written so that the seeder never puts content it has not just
+written under broader grants than it already had: an empty placeholder is created (or the existing resource
+found), an owner-only ACL is written, then the data, and only then the ACL with the requested grants.
+A replacement therefore never exposes the superseded content to the new grants (and an existing
+container's grants may only narrow, since `acl:default` reaches its other children). Before writing any
+ACL the seeder requires the server to advertise it at `<resource>.acl` with `Link: rel="acl"`; a
+server that uses another location (ACP `.acr`) or none fails the seed rather than storing an ACL
+that grants nothing. If a later step fails, a failed replacement keeps the owner-only ACL, and a
+resource this run created is deleted while its ACL still protects it; the ACL is then deleted only
+once the resource is confirmed gone (a successful DELETE or 404). If the resource cannot be removed,
+the ACL is kept and the error says so. A 202 Accepted counts as neither a completed write nor a
+completed delete, so no ACL transition advances on one; a write that was only accepted leaves the
+created resource and its owner-only ACL in place, because deleting the resource would also delete
+its ACL on a conforming server while the write may still land. The final grant over a created
+container is written with `If-Match` on the ETag of the owner-only ACL this run wrote, so an ACL
+changed in between fails the seed (a server that returns no strong ETag gets an unconditional
+write). A container's description is skipped when the server answers
+409 to a PUT on an existing container, as CSS does (CSS also ignores a container body on creation).
+Only a 201 to the placeholder PUT counts as this run creating the resource, and on a container
+CSS answers 409 rather than 412 to that conditional PUT, which counts as existing. A process that
+dies between placeholder and data leaves the empty placeholder under the owner-only ACL, which
+`ensure` cannot tell from real data (nor will it broaden that ACL); re-run with `replace` after a
+crash or a failed replacement.
+
+`baseUrl` must be an origin (`https://pod.example`), not a path-based pod. Paths cannot target
+auxiliary resources (`.acl`, `.acr`, `.meta`) or percent-encode an unreserved character, `/`, `\` or `%`
+(servers such as CSS decode `/x.%61cl` to `/x.acl`, and a double encoding like `%2561` depends on how often the server decodes); this includes `%7E`, so write `~` as is. Every request is sent with
+`redirect: "error"`, so an `authFetch` wrapper must pass `init.redirect` through; error details read
+at most 4 KiB of a response.

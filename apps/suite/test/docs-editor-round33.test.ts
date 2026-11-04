@@ -53,6 +53,19 @@ vi.mock("@/components/interim-shell/suite-frame", () => ({
 
 import { DocumentEditor } from "../src/apps/docs/components/document-editor";
 
+const resizeObservers: { target: Element | undefined; callback: ResizeObserverCallback }[] = [];
+/** Report a toolbar width, as a browser's first ResizeObserver callback does. */
+async function measureToolbar(width: number) {
+  await act(async () => {
+    for (const observer of resizeObservers)
+      if (observer.target?.matches('[role="toolbar"]'))
+        observer.callback(
+          [{ contentRect: { width } } as ResizeObserverEntry],
+          observer as unknown as ResizeObserver,
+        );
+  });
+}
+
 beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   vi.stubGlobal("ClipboardEvent", Event);
@@ -63,10 +76,17 @@ beforeEach(() => {
       disconnect() {}
     },
   );
+  resizeObservers.length = 0;
   vi.stubGlobal(
     "ResizeObserver",
     class {
-      observe() {}
+      target: Element | undefined;
+      constructor(readonly callback: ResizeObserverCallback) {
+        resizeObservers.push(this);
+      }
+      observe(target: Element) {
+        this.target = target;
+      }
       unobserve() {}
       disconnect() {}
     },
@@ -93,6 +113,8 @@ async function mountEditor(
   readOnly = false,
 ) {
   const session = {
+    displayName: "Alice",
+    webId: "https://pod.test/profile#me",
     storageUrl: "https://pod.test/",
     fetch: fetchImpl,
   } as unknown as PodSession;
@@ -454,6 +476,37 @@ it("round45 view-only document bodies are keyboard focusable for outline navigat
       ),
     );
     expect(document.querySelector('[aria-label="Link"]')).toBeNull();
+    // View only has no toolbar toggle: hiding the outline lands in the document.
+    const hide = view.host.querySelector<HTMLButtonElement>(
+      '.docs-outline [aria-label="Hide outline"]',
+    );
+    await act(async () => {
+      hide?.focus();
+      hide?.click();
+    });
+    expect(view.host.querySelector('[aria-label="Document outline"]')).toBeNull();
+    await vi.waitFor(() => expect(document.activeElement).toBe(view.body));
+  } finally {
+    await view.close();
+  }
+});
+
+it("moves focus to the toolbar's outline toggle when the outline pane is hidden", async () => {
+  const view = await mountEditor({
+    type: "doc",
+    content: [{ type: "heading", attrs: { level: 1 }, content: [{ type: "text", text: "Plan" }] }],
+  });
+  try {
+    const hide = view.host.querySelector<HTMLButtonElement>(
+      '.docs-outline [aria-label="Hide outline"]',
+    );
+    await act(async () => {
+      hide?.focus();
+      hide?.click();
+    });
+    expect(view.host.querySelector('[aria-label="Document outline"]')).toBeNull();
+    expect(document.activeElement?.getAttribute("aria-label")).toBe("Show outline");
+    expect(document.activeElement?.closest('[role="toolbar"]')).not.toBeNull();
   } finally {
     await view.close();
   }
@@ -479,7 +532,7 @@ it("round39 leaving a document cancels all pending File menu prints before anoth
     for (let attempt = 0; attempt < 2; attempt++) {
       await act(async () => {
         view.host
-          .querySelector<HTMLButtonElement>('[aria-label="File menu"]')
+          .querySelector<HTMLButtonElement>("[data-docs-menu-trigger]")
           ?.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, button: 0 }));
       });
       const download = Array.from(document.querySelectorAll<HTMLElement>('[role="menuitem"]')).find(
@@ -566,6 +619,8 @@ it.each([
 ])("round33 empty-caret %s stored marks immediately update toolbar feedback", async (label) => {
   const view = await mountEditor();
   try {
+    // The toolbar shows text-style buttons once it has measured room for them.
+    await measureToolbar(1600);
     const button = view.host.querySelector<HTMLButtonElement>(
       `[role="toolbar"] [aria-label="${label}"]`,
     ) as HTMLButtonElement;
@@ -738,7 +793,7 @@ it("round36 the dynamic Alt text menu action preserves its control's focus", asy
 it("round36 cancelling menu-opened Import restores the File menu trigger", async () => {
   const view = await mountEditor();
   try {
-    const trigger = view.host.querySelector('[aria-label="File menu"]') as HTMLElement;
+    const trigger = view.host.querySelector("[data-docs-menu-trigger]") as HTMLElement;
     await menuItem(trigger, "Import to replace…");
     await vi.waitFor(() =>
       expect(document.activeElement?.closest('[role="dialog"]')).not.toBeNull(),
@@ -761,10 +816,15 @@ it.each([
   const view = await mountEditor();
   try {
     await menuItem(
-      view.host.querySelector('[aria-label="File menu"]') as HTMLElement,
+      view.host.querySelector("[data-docs-menu-trigger]") as HTMLElement,
       "Import to replace…",
     );
-    const input = document.querySelector('[role="dialog"] input[type="file"]') as HTMLInputElement;
+    // Menu commands run once the closed menu has restored focus to its trigger.
+    const input = await vi.waitFor(() => {
+      const found = document.querySelector('[role="dialog"] input[type="file"]');
+      expect(found).not.toBeNull();
+      return found as HTMLInputElement;
+    });
     const source =
       completion === "no warnings"
         ? "Replacement"
@@ -817,14 +877,19 @@ it("round37 editor Undo opens the restored document instead of a reused original
   });
   try {
     await menuItem(
-      view.host.querySelector('[aria-label="File menu"]') as HTMLElement,
+      view.host.querySelector("[data-docs-menu-trigger]") as HTMLElement,
       "Move to trash",
     );
-    const confirm = Array.from(
-      document.querySelectorAll<HTMLButtonElement>('[role="alertdialog"] button'),
-    ).find((button) => button.textContent === "Move to trash");
-    expect(confirm).toBeDefined();
-    await act(async () => confirm?.click());
+    // The confirmation opens once the menu has closed and returned focus, which can take
+    // more than one frame on a loaded runner.
+    const confirm = await vi.waitFor(() => {
+      const button = Array.from(
+        document.querySelectorAll<HTMLButtonElement>('[role="alertdialog"] button'),
+      ).find((candidate) => candidate.textContent === "Move to trash");
+      expect(button).toBeDefined();
+      return button as HTMLButtonElement;
+    });
+    await act(async () => confirm.click());
     await vi.waitFor(() => expect(mocks.toast).toHaveBeenCalled());
     await act(async () => mocks.toast.mock.calls.at(-1)?.[1].action.onClick());
     const { encodeRef } = await import("../src/lib/refs");

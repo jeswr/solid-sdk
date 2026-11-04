@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 "use client";
 import {
   AlertDialog,
@@ -31,9 +32,10 @@ import {
   Tag,
 } from "lucide-react";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { type ReactNode, useRef, useState } from "react";
 import { encodeRef } from "@/lib/refs";
+import { useRoutePathname } from "@/lib/route-params";
 import { dueDate, isOverdue, localDay } from "../lib/format/due";
 import type { StoredProject } from "../lib/model/store";
 import { unionLabels } from "../lib/model/tracker";
@@ -42,6 +44,7 @@ import { useNow } from "../state/clock";
 import { useTasksPreferences } from "../state/preferences";
 import { useTasks } from "../state/tasks-context";
 import { useDropTarget } from "./dnd/use-task-drag";
+import { ShareProject } from "./share-project";
 
 /** A sidebar entry that accepts dropped rows: the task moves to that project (06-tasks §4.4). */
 function ProjectDropItem({
@@ -71,8 +74,9 @@ function ProjectRow({
   last: boolean;
 }) {
   const tasks = useTasks();
-  const path = usePathname();
+  const path = useRoutePathname();
   const router = useRouter();
+  const [sharing, setSharing] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [confirm, setConfirm] = useState(false);
   const renameRoot = useRef<HTMLDivElement>(null);
@@ -129,6 +133,11 @@ function ProjectRow({
           >
             Rename
           </DropdownMenuItem>
+          {tasks.sharingAvailable && (
+            <DropdownMenuItem disabled={!project.etag} onSelect={() => setSharing(true)}>
+              Share
+            </DropdownMenuItem>
+          )}
           <DropdownMenuItem
             disabled={first || !project.etag}
             onSelect={() => {
@@ -160,6 +169,7 @@ function ProjectRow({
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
+      {sharing && <ShareProject project={project} onClose={() => setSharing(false)} />}
       <AlertDialog open={confirm} onOpenChange={setConfirm}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -189,7 +199,7 @@ export function TasksSidebar() {
   const router = useRouter();
   const tasks = useTasks();
   const { preferences, dispatch } = useTasksPreferences();
-  const path = usePathname();
+  const path = useRoutePathname();
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
   const field = useRef<HTMLInputElement>(null);
@@ -202,7 +212,13 @@ export function TasksSidebar() {
   const overdue = dueToday.some((task) => isOverdue(task, now));
   const inboxCount = open.filter((task) => task.projectUrl === tasks.inboxUrl).length;
   const labels = unionLabels(tasks.projects.map((project) => project.tracker));
-  const projects = tasks.projects.filter((project) => project.url !== tasks.inboxUrl);
+  const shared = preferences.sharedProjects.filter(
+    (project) => !tasks.cache.isOwnProject(project.url),
+  );
+  const sharedUrls = new Set(shared.map((project) => project.url));
+  const projects = tasks.projects.filter(
+    (project) => project.url !== tasks.inboxUrl && !sharedUrls.has(project.url),
+  );
   const link = (
     href: string,
     title: string,
@@ -329,6 +345,50 @@ export function TasksSidebar() {
             />
           ))}
         </ul>
+      )}
+      {shared.length > 0 && (
+        <>
+          <h2 className="tsk-nav-heading">Shared with me</h2>
+          <ul className="tsk-nav-list">
+            {shared.map((project) => {
+              const href = `/tasks/p/${encodeRef(project.url)}`;
+              const title =
+                tasks.projects.find((loaded) => loaded.url === project.url)?.tracker.title ??
+                project.title;
+              return (
+                <li key={project.url} className="tsk-project-row">
+                  <span className="tsk-project-dot" aria-hidden="true" />
+                  <Link href={href} aria-current={path === href ? "page" : undefined}>
+                    {title}
+                  </Link>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <IconButton
+                        className="tsk-project-actions"
+                        label={`Project actions for ${title}`}
+                        variant="ghost"
+                      >
+                        <Ellipsis size={16} aria-hidden="true" />
+                      </IconButton>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent>
+                      <DropdownMenuItem
+                        onSelect={() => {
+                          tasks.cache.forgetSharedProject(project.url);
+                          dispatch({ type: "removeSharedProject", url: project.url });
+                          if (path === href || path === `${href}/board`)
+                            router.push("/tasks/inbox");
+                        }}
+                      >
+                        Remove from Shared with me
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </li>
+              );
+            })}
+          </ul>
+        </>
       )}
       <div className="tsk-sidebar-footer">
         {creating ? (

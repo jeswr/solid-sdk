@@ -3,18 +3,28 @@ name: solid-mcp
 description: Use when implementing Solid MCP tools, portable pod data access, or stdio server integration.
 ---
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 
 # Solid MCP
 
 Read README.md and the W9 `specs/mcp/DESIGN.md` in the planning repository.
-All server/tool data access uses PodPort; createFetchPodPort retains the guarded
-fetch implementation until MCP-15 supplies storage-client. Do not create sdk-core
+All server/tool data access uses PodPort. createStoragePodPort discovers Solid or LWS
+through storage-client; createFetchPodPort retains the guarded legacy implementation.
+Storage discovery may use an explicitly injected anonymous same-origin transport outside
+the pod root; never send pod credentials there. Propagate discovery failures. LWS exact
+create-only writes are unsupported because Slug is only a hint; refuse before mutation. Do not create sdk-core
 packages in this package. The legacy fetch configuration remains supported.
 
 Register tools through createPodToolRegistry/registerPodTools. Each entry owns its
 name, Zod schema (the SDK emits JSON Schema), handler and readOnly flag. Keep the
 solid_* aliases for v0.2, with the same schema, result and write enforcement as their
 pod_list/pod_read/pod_write/search names. No new tools belong to MCP-01.
+Shared-context tools (decisions/0004) live in context-tools.ts and register beside the pod
+tools. context_read takes no arguments and reads only the fixed SHARED_CONTEXT_PATH; keep
+model input away from the URL, and keep writes to owner-approved proposals. It reads below
+the server's configured root (a sub-container server looks under that sub-container), refuses
+redirects/aliases (PodReadOptions.redirect "error"; no second request), and redacts
+Luhn-valid card numbers before returning text.
 
 The server and fetch adapter default to read-only independently. Scope-check tool
 and resource URLs even with injected PodPorts. The fetch adapter permits only the
@@ -22,6 +32,22 @@ operator-configured WebID outside the pod, for best-effort Type Index discovery;
 never let client-selected tool URLs use this exception. Refuse off-pod profile redirects
 and drop discovered off-pod URLs.
 Guard read redirects; refuse mutation redirects, root mutations and root aliases.
+Generic PodOutput access must refuse the personal-data prefix derived from
+NanopubStore's layout (`private/pkg/`, including policy, locks, audit and local
+ACLs). Audit must derive its container from the same layout. Deny generic reads,
+writes and deletes with `Personal data requires a purpose-limited tool`; never
+echo rejected URLs. Refuse ancestor mutations too. Filter protected listing/search
+candidates, Type Index hints, container projections and MCP resource enumeration.
+Check redirects and final aliases, slashless containers, case variants, repeated
+percent encoding and normalized dot segments at the shared output/operation
+boundary. Only memoryContext and audit may opt into internal personal access;
+all personal disclosure retains purpose checks and verified sensitive-read audits.
+Apply the same generic boundary to the configured WebID's profile document when
+it lies inside the pod: refuse reads/writes/deletes with the fixed personal-data
+diagnostic and omit it from listings, search and resource enumeration. Preserve
+internal storage-root, Type Index and issuer discovery, and Contact-authorized
+`profile_get`. Off-pod WebIDs add no in-pod profile restriction. Type Index profile
+discovery may bypass only the profile restriction; it must still exclude memory.
 Preserve ETags and conditional mutation headers. Use PodReadOptions.accept for RDF/profile
 reads; generic byte reads must retain the backend default representation.
 
@@ -29,3 +55,52 @@ Use fetch-rdf and typed wrappers for RDF reads, rdf-serialize for serialization.
 Tests use fake fetch and portable pods only. Run lint, build, typecheck and test;
 exercise canonical tools and aliases, read-only enforcement and SSRF regressions.
 The stdio CLI must keep stdout exclusively for MCP messages.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+Memory tools use `NanopubStore` through the current PodPort and PodOutput. Trusted
+`clientInfo.clientId` is an absolute IRI; tool input must never select deletion
+authority. Model and optional conversation metadata belong in publication info;
+assertion attribution is always the owner. Quoted unhedged facts are explicit,
+hedged facts are hedged, other facts inferred; embedded solid-memory notes are
+always Mentioned and uncategorized. Never infer a permissive category from prose.
+Recall requires a closed purpose and defaults to definitely plus Current. Reuse
+`purposeFilter` per call and preserve edited policies. Recall must never create a
+missing policy, including on a writable server. Retraction is append-only; deletion
+requires this client's pubinfo attribution and a strong conditional ETag. Private pkg-memory is bundled
+without leaking its imports into public declarations or mirror manifests.
+
+Personal reads (`profile_get`, `address_get`, `health_query`) require the same
+trusted client identity, closed purpose and existing policy. Profile reads are
+confined to the configured in-pod WebID and project only Contact fields. Address
+and health reads use definitely-true Current owner assertions; address `at` is
+an additional inclusive validFrom/validThrough filter, retaining calendar
+granularity and exact datetime microseconds. Reject ambiguous temporal bounds.
+Check all candidate categories before content filters. Never disclose special
+data, including through recall, unless its monthly private PROV audit append
+succeeds and is verified. Audit uses the current PodPort and its optional HEAD
+metadata to discover a unique server-advertised WAC `rel="acl"` URL for each
+protected target, including on 404. Require a pod-scoped ACL URL and write the
+owner-only WAC authorization there; never guess a `.acl` URL. Additionally require
+the ACL itself to lie inside the protected memory area derived from NanopubStore's
+layout, using the same prefixes as the generic guard. Refuse other in-pod ACL
+locations without fallback, using `Audit protection unavailable`. Missing or unsafe
+WAC links, ACP-only storage and custom ports
+without HEAD metadata fail closed with `Audit protection unavailable`, withholding
+the sensitive read. Do not add ACP support. Preserve strong conditional ETags and
+bounded retries. A read-only server must withhold results that require auditing.
+Keep shared internal helpers stripped from declarations so private pkg-memory
+types remain bundled.
+
+Memory writes forward the current port's HEAD capability into `NanopubStore`.
+Require unique server-advertised, pod-scoped WAC ACLs for every protected container,
+policy, lock and nanopub, including on 404. Missing discovery and ACP fail closed
+before private content with `Memory protection unavailable`; never guess `.acl`.
+Pass the same protected-area ACL predicate via pkg-memory's `WacDiscoveryOptions`
+to both memory and audit discovery, including newly protected ancestors. Reject
+ACLs outside that area before reading or writing them, without falling back.
+Both memory and audit reuse pkg-memory's `validateDedicatedWacAcl` checks before
+replacing an existing ACL. All accessTo/default/defaultForNew scopes must name only
+the target, with no unscoped, malformed or unknown rules; otherwise leave the ACL
+untouched and return the fixed protection diagnostic. Read existing ACLs with strong
+ETags and mutate with `If-Match` / `If-None-Match: *`. Test ports explicitly advertise
+WAC metadata via `test/wac-memory-pod.ts`.

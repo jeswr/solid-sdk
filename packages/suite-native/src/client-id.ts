@@ -1,5 +1,7 @@
 // AUTHORED-BY Claude Opus 5.5
 
+import { parseRedirect } from "./auth-session.js";
+
 /** The suite apps' private-use redirect URI (RFC 8252 §7.1, reverse domain of jeswr.org). */
 export const MOBILE_REDIRECT_URI = "org.jeswr.suite:/oauth/callback";
 
@@ -50,7 +52,8 @@ export function mobileClientIdDocument(options: MobileClientIdOptions): ClientId
     client_name: options.clientName ?? "Solid Suite",
     client_uri: `${base}/`,
     application_type: "native",
-    redirect_uris: [options.redirectUri ?? MOBILE_REDIRECT_URI],
+    // Only a private-use scheme redirect the native driver would also accept.
+    redirect_uris: [parseRedirect(options.redirectUri ?? MOBILE_REDIRECT_URI).href],
     scope: "openid webid offline_access",
     grant_types: ["authorization_code", "refresh_token"],
     response_types: ["code"],
@@ -59,7 +62,10 @@ export function mobileClientIdDocument(options: MobileClientIdOptions): ClientId
   };
   if (options.logoPath !== undefined) {
     if (!options.logoPath.startsWith("/")) throw new TypeError("logoPath must start with /");
-    document.logo_uri = new URL(options.logoPath, base).href;
+    const logo = new URL(options.logoPath, base);
+    // `//host/x` and `/\host/x` are network-path references to another origin.
+    if (logo.origin !== base) throw new TypeError("logoPath must stay on the suite origin");
+    document.logo_uri = logo.href;
   }
   return document;
 }

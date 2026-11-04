@@ -30,6 +30,7 @@ import { humanise } from "../../lib/model/recurrence";
 import type { Reminder } from "../../lib/model/reminders";
 import type { StoredProject, StoredTask } from "../../lib/model/store";
 import { type PriorityLevel, priorityValue, type TaskView } from "../../lib/views/types";
+import { offerNotificationPermission } from "../../state/reminders";
 import { useTasks } from "../../state/tasks-context";
 
 export function localDate(date: Date): string {
@@ -275,8 +276,17 @@ function LabelsField({
     </div>
   );
 }
+function memberName(webId: string) {
+  let displayName = webId;
+  try {
+    displayName = new URL(webId).hostname;
+  } catch {
+    /* Keep foreign IRIs renderable. */
+  }
+  return displayName;
+}
 function useMemberProfile(webId: string) {
-  return { displayName: new URL(webId).hostname, loading: false };
+  return { displayName: memberName(webId), loading: false };
 }
 
 function AssigneeField({
@@ -315,6 +325,11 @@ function AssigneeField({
             });
           }}
         />
+        {view.assignee && view.assignee !== tasks.webId && (
+          <p className="su-muted">
+            {memberName(view.assignee)} will see this when they open the project
+          </p>
+        )}
         {error && <p role="alert">{error}</p>}
         {members.includes(tasks.webId) && (
           <Button
@@ -376,7 +391,7 @@ export function TaskProperties({
           reminder.offset
         ] ?? reminder.offset);
   const addReminder = (reminder: Reminder) => {
-    void tasks.updateTask(stored, (task) => {
+    const saving = tasks.updateTask(stored, (task) => {
       if (!task.dueDate) return;
       if (
         task.reminders.some((entry) =>
@@ -387,6 +402,9 @@ export function TaskProperties({
       )
         return;
       task.reminders = [...task.reminders, reminder];
+    });
+    void saving.then((saved) => {
+      if (saved?.task.reminders.length) offerNotificationPermission();
     });
   };
   return (

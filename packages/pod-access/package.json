@@ -1,5 +1,5 @@
 {
-  "$comment": "AUTHORED-BY Codex GPT-6.1-Sol",
+  "$comment": "AUTHORED-BY Codex GPT-6.1-Sol; AUTHORED-BY Codex GPT-6",
   "name": "@jeswr/pod-access",
   "version": "0.1.0",
   "private": true,
@@ -15,6 +15,14 @@
     "./testing": {
       "types": "./dist/testing.d.ts",
       "default": "./dist/testing.js"
+    },
+    "./notify": {
+      "types": "./dist/notify.d.ts",
+      "default": "./dist/notify.js"
+    },
+    "./requests-solid": {
+      "types": "./dist/requests-solid/index.d.ts",
+      "default": "./dist/requests-solid/index.js"
     },
     "./roles": {
       "types": "./dist/roles/index.d.ts",
@@ -38,16 +46,24 @@
   "license": "MIT",
   "devDependencies": {
     "@biomejs/biome": "^2.5.1",
+    "@types/node": "^25.9.2",
     "typescript": "^6.0.3",
     "vitest": "^4.1.9",
     "@types/n3": "1.26.1",
     "@vitest/coverage-v8": "^4.1.9"
   },
   "dependencies": {
+    "@jeswr/fetch-rdf": "workspace:*",
+    "@jeswr/guarded-fetch": "workspace:*",
+    "@jeswr/rdf-serialize": "workspace:*",
+    "@jeswr/solid-odrl": "workspace:*",
+    "@jeswr/storage-capabilities": "workspace:*",
+    "@jeswr/storage-client": "workspace:*",
+    "@jeswr/suite-vocab": "workspace:*",
     "@rdfjs/types": "2.0.1",
     "@rdfjs/wrapper": "0.34.0",
     "@solid/object": "0.6.0",
     "n3": "2.0.3",
-    "@jeswr/fetch-rdf": "workspace:*"
+    "solid-agent-notify": "workspace:*"
   }
 }

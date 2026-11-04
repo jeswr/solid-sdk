@@ -475,3 +475,287 @@
   outline: 2px solid var(--app-contacts);
   outline-offset: 2px;
 }
+/* AUTHORED-BY Claude Opus 5.5 */
+.con-duplicates {
+  max-width: 960px;
+  margin: 0 auto;
+}
+.con-dup-count,
+.con-dup-intro,
+.con-dup-reason,
+.con-dup-meta {
+  color: var(--muted-foreground);
+  font-size: 13px;
+}
+.con-dup-intro {
+  margin: 0 0 20px;
+  max-width: 64ch;
+}
+.con-dup-groups {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 16px;
+}
+.con-dup-group {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  padding: 16px 20px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.con-dup-group h2 {
+  font-size: 17px;
+  font-weight: 600;
+  margin: 0 0 4px;
+}
+.con-dup-group h2:focus-visible,
+.con-dup-review h3:focus-visible,
+.con-dup-empty h2:focus-visible {
+  outline: 2px solid var(--app-contacts);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+.con-dup-reason {
+  margin: 0 0 12px;
+}
+.con-dup-people {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+.con-dup-people .con-name {
+  color: var(--foreground);
+  text-decoration: none;
+}
+.con-dup-people .con-name:hover {
+  text-decoration: underline;
+}
+.con-dup-meta {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.con-dup-group .con-form-actions {
+  margin: 16px 0 0;
+}
+.con-dup-review {
+  border-top: 1px solid var(--border);
+  margin-top: 16px;
+  padding-top: 16px;
+  display: grid;
+  gap: 20px;
+}
+.con-dup-review h3 {
+  font-size: 15px;
+  font-weight: 600;
+  margin: 0;
+}
+.con-dup-choice {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+.con-dup-legend {
+  font-size: 14px;
+  font-weight: 500;
+}
+.con-dup-option {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  min-width: 0;
+}
+.con-dup-option:has([data-state="checked"]) {
+  border-color: var(--app-contacts);
+  background: var(--app-contacts-soft);
+}
+.con-dup-option [data-slot="radio-group-item"] {
+  border-color: var(--muted-foreground);
+}
+.con-dup-option [data-slot="radio-group-item"][data-state="checked"] {
+  border-color: var(--app-contacts);
+}
+.con-dup-option [data-slot="radio-group-indicator"] svg {
+  fill: var(--app-contacts);
+  color: var(--app-contacts);
+}
+.con-dup-option > span {
+  min-width: 0;
+  white-space: pre-wrap;
+}
+.con-dup-option .con-dup-meta {
+  white-space: normal;
+}
+.con-dup-summary {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding: 12px 16px;
+  border-radius: 8px;
+  background: var(--app-contacts-soft);
+  font-size: 14px;
+}
+.con-dup-summary > div {
+  display: grid;
+  grid-template-columns: minmax(96px, 160px) minmax(0, 1fr);
+  gap: 12px;
+}
+.con-dup-summary dt {
+  font-weight: 500;
+}
+.con-dup-summary dd {
+  margin: 0;
+  min-width: 0;
+  white-space: pre-wrap;
+}
+.con-dup-summary ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.con-dup-review .con-form-actions {
+  margin: 0;
+}
+.con-dup-warning {
+  border: 1px solid var(--warning);
+  border-left-width: 4px;
+  border-radius: 8px;
+  padding: 12px 16px;
+  font-size: 14px;
+  display: grid;
+  gap: 6px;
+}
+.con-dup-warning p,
+.con-dup-warning ul {
+  margin: 0;
+}
+.con-dup-warning ul {
+  padding-left: 20px;
+}
+.con-dup-warning-title {
+  font-weight: 600;
+}
+.con-dup-empty {
+  text-align: center;
+  padding: 48px 16px;
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+}
+.con-dup-empty h2 {
+  font-size: 18px;
+  font-weight: 600;
+  margin: 0;
+}
+.con-dup-empty p {
+  margin: 0;
+  color: var(--muted-foreground);
+}
+@media (max-width: 639px) {
+  .con-dup-group {
+    padding: 12px;
+  }
+  .con-dup-summary > div {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 2px;
+  }
+}
+.con-duplicates :focus-visible {
+  outline: 2px solid var(--app-contacts);
+  outline-offset: 2px;
+}
+/* AUTHORED-BY Claude Opus 5.5 — app-managed Trash */
+.con-trash {
+  max-width: 960px;
+  margin: 0 auto;
+}
+.con-trash .con-list-heading {
+  align-items: center;
+}
+.con-trash-count,
+.con-trash-intro,
+.con-trash-meta {
+  color: var(--muted-foreground);
+  font-size: 13px;
+}
+.con-trash-empty-action {
+  margin-left: auto;
+}
+.con-trash-intro {
+  margin: 0 0 4px;
+}
+.con-trash-status {
+  min-height: 20px;
+  margin: 0 0 8px;
+  font-size: 13px;
+}
+.con-trash-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+}
+.con-trash-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  min-width: 0;
+}
+.con-trash-item + .con-trash-item {
+  border-top: 1px solid var(--border);
+}
+.con-trash-item .con-person-text {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.con-trash-item h2 {
+  font-size: 15px;
+  font-weight: 600;
+  margin: 0;
+}
+.con-trash-meta {
+  margin: 2px 0 0;
+}
+.con-trash-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+.con-trash-icon {
+  color: var(--muted-foreground);
+}
+.con-trash :focus-visible,
+.con-dup-empty h2:focus-visible {
+  outline: 2px solid var(--app-contacts);
+  outline-offset: 2px;
+}
+@media (max-width: 639px) {
+  .con-trash-item {
+    flex-wrap: wrap;
+    padding: 12px;
+  }
+  .con-trash-item .con-person-text {
+    flex-basis: calc(100% - 64px);
+  }
+  .con-trash-actions {
+    flex-basis: 100%;
+    justify-content: flex-start;
+  }
+}
