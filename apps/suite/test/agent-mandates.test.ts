@@ -256,7 +256,8 @@ describe("plain-language mandate rules", () => {
       "Daily limit: US$12.50",
     );
     // An unsigned currency is shown as unusable, because the executor refuses under it.
-    const unsigned = await describeMandate({ ...m, currency: undefined }, [], "GBP", NOW);
+    const { currency: _signed, ...withoutCurrency } = m;
+    const unsigned = await describeMandate(withoutCurrency, [], "GBP", NOW);
     expect(unsigned.some((line) => line.includes("no signed currency"))).toBe(true);
     expect(unsigned.some((line) => line.startsWith("Daily limit:"))).toBe(false);
   });
