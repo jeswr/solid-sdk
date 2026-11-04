@@ -392,7 +392,8 @@ async function put(
  * run wrote for it. A failed write does not prove nothing was stored, and an ACL
  * removed first would leave stored data under the inherited (possibly broader)
  * ACL, so the resource goes first while its ACL still protects it, and the ACL is
- * removed only once the resource is confirmed gone. Returns the error to throw:
+ * removed only once the resource is confirmed gone. After a write that was only
+ * accepted (202), nothing is removed. Returns the error to throw:
  * the original one, or one that also reports a removal that could not be confirmed.
  */
 async function removeCreated(
@@ -412,18 +413,20 @@ async function removeCreated(
       return error instanceof Error ? error.message : String(error);
     }
   };
+  // A write that was only accepted (202) may still land after any cleanup, and a
+  // server that deletes a resource's ACL with it (as the Solid Protocol requires)
+  // would leave that late write under the inherited ACL. Completion is unknown, so
+  // delete nothing: keep the resource and its owner-only ACL.
+  if (aclAttempted && original instanceof HttpFailure && original.status === 202) {
+    return new Error(
+      `${original.message}; the accepted write may still land, so ${url} and its ACL were left in place`,
+      { cause: original },
+    );
+  }
   const failure = await gone(url);
   if (failure !== undefined) {
     return new Error(
       `${original instanceof Error ? original.message : String(original)}; could not remove ${url} (${failure}), so its ACL was left in place`,
-      { cause: original },
-    );
-  }
-  // A write that was only accepted (202) may still land after the DELETE, and
-  // would then sit under the inherited ACL: keep this one in place.
-  if (aclAttempted && original instanceof HttpFailure && original.status === 202) {
-    return new Error(
-      `${original.message}; removed ${url}, but the accepted write may still land, so its ACL was left in place`,
       { cause: original },
     );
   }

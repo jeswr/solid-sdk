@@ -100,7 +100,9 @@ that grants nothing. If a later step fails, a failed replacement keeps the owner
 resource this run created is deleted while its ACL still protects it; the ACL is then deleted only
 once the resource is confirmed gone (a successful DELETE or 404). If the resource cannot be removed,
 the ACL is kept and the error says so. A 202 Accepted counts as neither a completed write nor a
-completed delete, so no ACL transition advances on one. The final grant over a created
+completed delete, so no ACL transition advances on one; a write that was only accepted leaves the
+created resource and its owner-only ACL in place, because deleting the resource would also delete
+its ACL on a conforming server while the write may still land. The final grant over a created
 container is written with `If-Match` on the ETag of the owner-only ACL this run wrote, so an ACL
 changed in between fails the seed (a server that returns no strong ETag gets an unconditional
 write). A container's description is skipped when the server answers

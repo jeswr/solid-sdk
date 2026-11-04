@@ -776,6 +776,38 @@ describe("access-controlled resources: the ACL lands before any data", () => {
     expect(grantsPublicRead(pod.resources.get(`${Secret}.acl`)?.body, `${Secret}.acl`)).toBe(false);
   });
 
+  it("cleanup after an accepted (202) write deletes nothing, so a server that drops the ACL with its resource cannot unprotect it", async () => {
+    const pod = new MemoryPod("https://pod.example");
+    // Deleting a resource also deletes its ACL, as the Solid Protocol requires.
+    pod.deleteAclWithResource = true;
+    const inner = pod.authFetch;
+    let puts = 0;
+    const deletes: string[] = [];
+    let late: (() => Promise<Response>) | undefined;
+    const target = {
+      webid: pod.webid,
+      baseUrl: pod.baseUrl,
+      authFetch: (async (input, init) => {
+        if (init?.method === "PUT" && String(input) === Secret && ++puts === 2) {
+          late = () => inner(input, init);
+          return new Response(null, { status: 202 });
+        }
+        if (init?.method === "DELETE") deletes.push(String(input));
+        return inner(input, init);
+      }) as typeof fetch,
+    };
+    const layout = access(pod, "private data", true);
+    const error = await seedPods({
+      layout: { pods: [{ ...layout.pods[0], account: { target } } as PodLayout["pods"][number]] },
+    }).catch((caught: unknown) => caught);
+    expect(String((error as SeedError).cause)).toMatch(/accepted write may still land/);
+    expect(deletes).toEqual([]);
+    await late?.();
+    expect(pod.resources.get(Secret)?.body).toBe("private data");
+    expect(pod.resources.has(`${Secret}.acl`)).toBe(true);
+    expect(grantsPublicRead(pod.resources.get(`${Secret}.acl`)?.body, `${Secret}.acl`)).toBe(false);
+  });
+
   it("an accepted (202) cleanup DELETE keeps the ACL", async () => {
     const pod = new MemoryPod("https://pod.example");
     pod.failNextPut("/public/secret", 500, 1, true);
