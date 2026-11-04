@@ -16,6 +16,7 @@ import { useEffect, useId, useState } from "react";
 import type { DriveItem } from "../lib/client/client";
 import {
   applySharing,
+  CONTENTS_DIFFER,
   loadSharing,
   SharingConflictError,
   SharingRefreshError,
@@ -188,6 +189,11 @@ export function ShareDialog({
               <p className="su-muted" role="status">
                 {snapshot.readOnly ??
                   "You can view access. Only an owner with Control can change sharing."}
+              </p>
+            )}
+            {snapshot.contentsDiffer && (
+              <p className="su-muted" role="note">
+                {CONTENTS_DIFFER}
               </p>
             )}
             <p className="su-muted" id={lockId}>

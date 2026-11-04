@@ -27,6 +27,13 @@ import {
   toSharingState,
 } from "../src/apps/drive/lib/sharing/adapter";
 import { SharingError } from "../src/apps/drive/lib/sharing/rdf";
+import {
+  recordAccess,
+  UNMAPPED,
+  UNSUPPORTED_SYSTEM,
+  verifyAccess,
+} from "../src/apps/drive/lib/sharing/verify";
+import { accessSummary } from "../src/apps/drive/state/access";
 import { createDemoPod } from "../src/lib/demo-pod/pod";
 import {
   ACL,
@@ -562,17 +569,17 @@ it("fails closed on ESS-shaped ACRs, which the SDK cannot read even when told it
   // The real ESS shape: the SDK refuses non-canonical (query) access URLs for any implementation.
   const real = await ess(`${FILE}?ext=acr`);
   await expect(loadSharing(real.session, FILE)).rejects.toMatchObject({
-    message: "This item's access document is outside your pod, so its sharing can't be shown.",
+    message: "This pod's access system isn't supported for sharing yet.",
     cause: { code: "scope" },
   });
   await expect(
     readGrants(FILE, { fetch: real.fetch, root: ROOT, kind: "resource", implementation: "ess" }),
   ).rejects.toMatchObject({ code: "scope" });
   // ESS modes behind a canonical ACR URL: the SDK's default CSS dialect rejects acp:* modes
-  // (an unclassified TypeError, so the dialog shows its generic load failure).
+  // (an unclassified TypeError); the recorded ACR shows it is ESS, not a transient failure.
   const modes = await ess(`${FILE}.acr`);
   await expect(loadSharing(modes.session, FILE)).rejects.toMatchObject({
-    message: "Couldn't load sharing. Try again.",
+    message: "This pod's access system isn't supported for sharing yet.",
     cause: { message: "Unknown access mode" },
   });
   for (const { fetch } of [real, modes])
@@ -594,7 +601,11 @@ it("keeps folder sharing read-only because SDK writes would not reach descendant
   authorization(doc, ALICE, ["Read", "Write", "Control"]).default = folder;
   await writeDoc(env, doc);
   const snapshot = await loadSharing(env.session, folder);
-  expect(snapshot).toMatchObject({ canManage: false, readOnly: FOLDER_READ_ONLY });
+  expect(snapshot).toMatchObject({
+    canManage: false,
+    readOnly: FOLDER_READ_ONLY,
+    contentsDiffer: false,
+  });
   expect(snapshot.state.people.map((p) => [p.webId, p.role])).toEqual([[ALICE, "owner"]]);
   env.fetch.mockClear();
   await expect(
@@ -700,6 +711,9 @@ it("maps every SDK role error to the dialog's error copy", async () => {
     "Couldn't save sharing. Permissions were not saved. Try again.",
   );
   expect(saveError(new Error("boom"), true)).toBeInstanceOf(SharingRefreshError);
+  // A redirected PUT response is refused after the write may have landed: outcome unknown.
+  expect(saveError(errors.scope, true)).toMatchObject({ committed: false, cause: errors.scope });
+  expect(saveError(errors.scope, true)).toBeInstanceOf(SharingRefreshError);
   expect(saveError(new Error("boom"), false).message).toBe(
     "Couldn't save sharing. Permissions were not saved. Try again.",
   );
@@ -710,4 +724,142 @@ it("maps every SDK role error to the dialog's error copy", async () => {
   const own = new SharingError("own");
   expect(loadError(own)).toBe(own);
   expect(saveError(errors.scope, false).cause).toBe(errors.scope);
+});
+
+// Review round 1 (#282): grants the role projection cannot map are never silently dropped.
+it.each([
+  ["anonymous Read+Append", PUBLIC, ["Read", "Append"]],
+  ["Write without Read", BOB, ["Write"]],
+  ["Control without Write", CAROL, ["Read", "Control"]],
+] as const)("fails closed on %s that the SDK role projection drops", async (_, who, modes) => {
+  const env = await setup();
+  authorization(env.doc, who, [...modes]);
+  await writeDoc(env);
+  // The SDK omits the principal entirely, which would read as "Restricted" / "Only you".
+  const sdk = await readGrants(FILE, { fetch: env.session.fetch, root: ROOT, kind: "resource" });
+  expect(sdk.grants.map((g) => (g.agent.type === "webid" ? g.agent.id : g.agent.type))).toEqual([
+    ALICE,
+  ]);
+  await expect(env.load()).rejects.toThrow(UNMAPPED);
+});
+
+it("fails closed on unmappable access inherited from the parent folder", async () => {
+  const env = await setup("wac", true);
+  authorization(env.doc, PUBLIC, ["Read", "Append"]);
+  await writeDoc(env);
+  await expect(env.load()).rejects.toThrow(UNMAPPED);
+});
+
+// Review round 1 (#282): a folder label must not say private while its contents are shared.
+it.each([
+  ["a person", BOB],
+  ["the public", PUBLIC],
+] as const)("flags a folder whose default-only rules share its contents with %s", async (_, who) => {
+  const env = await setup();
+  const folder = `${FOLDER}drop/`;
+  await env.pod.fetch(folder, { method: "PUT" });
+  const doc = document("wac", false, folder);
+  authorization(doc, ALICE, ["Read", "Write", "Control"]).default = folder;
+  const rule = authorization(doc, who, ["Read"]);
+  properties(rule).values(`${ACL}accessTo`).clear();
+  rule.default = folder;
+  await writeDoc(env, doc);
+  const snapshot = await loadSharing(env.session, folder);
+  expect(snapshot.state).toMatchObject({ people: [{ webId: ALICE }], link: "none" });
+  expect(snapshot.contentsDiffer).toBe(true);
+  expect(accessSummary(snapshot, ALICE)).toBe("Access unknown");
+  expect(accessSummary({ ...snapshot, contentsDiffer: false }, ALICE)).toBe("Only you");
+  // A file inside inherits that access, and its own dialog shows it.
+  await env.pod.fetch(`${folder}upload.txt`, { method: "PUT", body: "x" });
+  const child = await loadSharing(env.session, `${folder}upload.txt`);
+  expect(accessSummary(child, ALICE)).not.toBe("Only you");
+});
+
+it("flags an ACP folder whose member access differs from its own", async () => {
+  const env = await setup("acp");
+  const folder = `${FOLDER}drop/`;
+  await env.pod.fetch(folder, { method: "PUT" });
+  const doc = document("acp", false, folder);
+  policy(doc, ALICE, ["Read", "Write", "Control"]);
+  await writeDoc(env, doc);
+  expect((await loadSharing(env.session, folder)).contentsDiffer).toBe(true);
+  const both = document("acp", false, folder);
+  policy(both, ALICE, ["Read", "Write", "Control"]);
+  const members = document("acp", true, folder);
+  policy(members, ALICE, ["Read", "Write", "Control"], folder);
+  for (const quad of [...members.dataset]) both.dataset.add(quad);
+  await writeDoc(env, both);
+  expect((await loadSharing(env.session, folder)).contentsDiffer).toBe(false);
+});
+
+it("does not flag a folder that inherits all of its access", async () => {
+  const env = await setup("wac", true);
+  const folder = `${FOLDER}nested/`;
+  await env.pod.fetch(folder, { method: "PUT" });
+  expect((await loadSharing(env.session, folder)).contentsDiffer).toBe(false);
+});
+
+it("verifies the recorded access documents and fails closed on anything it cannot account for", async () => {
+  const grant = (id: string, role: Role): RoleGrant => ({
+    agent: { type: "webid", id },
+    role,
+    inherited: false,
+    source: `${FILE}.acl`,
+  });
+  const own = document("wac");
+  authorization(own, ALICE, ["Read", "Write", "Control"]);
+  authorization(own, BOB, ["Read"]);
+  const capture = { resource: FILE, url: `${FILE}.acl`, dataset: own.dataset };
+  const ok = [grant(ALICE, "manager"), grant(BOB, "viewer")];
+  await expect(verifyAccess(FILE, "resource", async () => [capture], ok)).resolves.toEqual({
+    contentsDiffer: false,
+  });
+  const refuse = (documents: () => Promise<never[] | (typeof capture)[]>, grants = ok) =>
+    expect(verifyAccess(FILE, "resource", documents, grants)).rejects.toThrow(UNMAPPED);
+  // A role the raw modes do not support, or a principal the documents do not grant.
+  await refuse(async () => [capture], [grant(ALICE, "manager"), grant(BOB, "editor")]);
+  await refuse(async () => [capture], [grant(ALICE, "manager"), grant(CAROL, "viewer")]);
+  // Raw modes that map to no role never match a projected role, even when the counts agree.
+  const writeOnly = document("wac");
+  authorization(writeOnly, ALICE, ["Read", "Write", "Control"]);
+  authorization(writeOnly, BOB, ["Write"]);
+  await refuse(async () => [{ ...capture, dataset: writeOnly.dataset }]);
+  // A document attributed to a resource that cannot govern the target.
+  await refuse(async () => [{ ...capture, resource: `${ROOT}elsewhere/` }]);
+  // Conditional WAC grants and ACP denials.
+  const conditional = document("wac");
+  authorization(conditional, ALICE, ["Read"]).origin.add("https://app.example.org");
+  await refuse(async () => [{ ...capture, dataset: conditional.dataset }]);
+  const denied = document("acp");
+  policy(denied, BOB, []).deny.add(`${ACL}Read`);
+  await refuse(async () => [{ ...capture, url: `${FILE}.acr`, dataset: denied.dataset }], []);
+  // Reader and parse failures fail closed with the same message.
+  const cause = new TypeError("unreadable");
+  await expect(
+    verifyAccess(FILE, "resource", () => Promise.reject(cause), ok),
+  ).rejects.toMatchObject({ message: UNMAPPED, cause });
+});
+
+it("records responses for any fetch call shape without consuming them", async () => {
+  const fetch = vi.fn<typeof globalThis.fetch>(
+    async () => new Response("<a> <b> <c> .", { headers: { "content-type": "text/turtle" } }),
+  );
+  const recorder = recordAccess(fetch);
+  expect(await (await recorder.fetch(`${FILE}.acl`)).text()).toBe("<a> <b> <c> .");
+  expect((await recorder.documents(FILE)).map((d) => [d.resource, d.dataset.size])).toEqual([
+    [FILE, 1],
+  ]);
+});
+
+it("names an unsupported access system only for ESS shapes, and falls back when unreadable", async () => {
+  const env = await setup();
+  // The access document fails with a non-RDF body: the generic retry message, not ESS.
+  const broken: typeof globalThis.fetch = async (url, init) =>
+    url === `${FILE}.acl`
+      ? new Response("<html>", { status: 500, headers: { "content-type": "text/html" } })
+      : env.session.fetch(url, init);
+  await expect(loadSharing({ ...env.session, fetch: broken }, FILE)).rejects.toThrow(
+    "Couldn't load sharing. Try again.",
+  );
+  expect(UNSUPPORTED_SYSTEM).toBe("This pod's access system isn't supported for sharing yet.");
 });

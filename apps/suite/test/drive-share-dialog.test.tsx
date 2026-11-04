@@ -18,6 +18,7 @@ import userEvent from "../../../packages/suite-ui/node_modules/@testing-library/
 import { ShareDialog } from "../src/apps/drive/components/share-dialog";
 import {
   applySharing,
+  CONTENTS_DIFFER,
   FOLDER_READ_ONLY,
   loadSharing,
   SharingConflictError,
@@ -57,7 +58,7 @@ const state: SharingState = {
 function snapshot(next = state, canManage = true): SharingSnapshot {
   // The SDK token is opaque; the mocked adapter never inspects it.
   const grants = { url: FILE, grants: [], version: "test" } as unknown as GrantSnapshot;
-  return { resource: FILE, grants, state: next, canManage };
+  return { resource: FILE, grants, state: next, canManage, contentsDiffer: false };
 }
 const session: SharingSession = { fetch, webId: ALICE, storageUrl: "https://example.org/" };
 const onClose = vi.fn();
@@ -237,6 +238,18 @@ it("shows an owner why folder sharing is read-only", async () => {
   expect(screen.getByRole("group", { name: "Add people" }).hasAttribute("disabled")).toBe(true);
   expect((screen.getByRole("button", { name: "Done" }) as HTMLButtonElement).disabled).toBe(false);
   expect(apply).not.toHaveBeenCalled();
+});
+
+it("notes when a folder's contents are shared differently from the folder", async () => {
+  load.mockResolvedValue({
+    ...snapshot(state, false),
+    readOnly: FOLDER_READ_ONLY,
+    contentsDiffer: true,
+  });
+  show();
+  await ready();
+  expect(screen.getByText(CONTENTS_DIFFER).getAttribute("role")).toBe("note");
+  expect(CONTENTS_DIFFER).toMatch(/inside are shared differently/);
 });
 
 it("reloads and displays the exact conflict message without retrying a save", async () => {

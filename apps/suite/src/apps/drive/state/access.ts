@@ -2,7 +2,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { loadSharing } from "../lib/sharing/adapter";
+import { loadSharing, type SharingSnapshot } from "../lib/sharing/adapter";
 import type { SharingState } from "../lib/sharing/types";
 import { useDrive } from "./drive-context";
 import { useResourceVersion } from "./resource";
@@ -13,6 +13,13 @@ export function sharingSummary(state: SharingState, webId: string): string {
   const others = state.people.filter((person) => person.webId !== webId);
   if (others.length) return `People you've shared with: ${others.length}`;
   return state.people.length ? "Only you" : "No one";
+}
+/** A folder whose contents are shared differently has no single summary; never imply privacy. */
+export function accessSummary(
+  snapshot: Pick<SharingSnapshot, "state" | "contentsDiffer">,
+  webId: string,
+): string {
+  return snapshot.contentsDiffer ? "Access unknown" : sharingSummary(snapshot.state, webId);
 }
 
 /** Recheck effective access on selection or invalidation, hiding superseded results. */
@@ -33,7 +40,7 @@ export function useAccessLabel(url: string | undefined): string {
     if (!url) return;
     let live = true;
     void loadSharing({ fetch: http, storageUrl, webId }, url)
-      .then(({ state }) => {
+      .then((snapshot) => {
         if (live)
           setResult({
             url,
@@ -41,7 +48,7 @@ export function useAccessLabel(url: string | undefined): string {
             storageUrl,
             webId,
             version,
-            label: sharingSummary(state, webId),
+            label: accessSummary(snapshot, webId),
           });
       })
       .catch(() => {

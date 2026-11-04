@@ -6,6 +6,7 @@
 import {
   type GrantSnapshot,
   isRoleError,
+  type ResourceKind,
   type Role,
   type RoleError,
   type RoleGrant,
@@ -16,6 +17,13 @@ import {
 import { safeHttpIri } from "@jeswr/rdf-serialize";
 import { SharingError } from "./rdf";
 import type { AccessOrigin, SharingRole, SharingSelection, SharingState } from "./types";
+import {
+  type AccessCapture,
+  recordAccess,
+  UNSUPPORTED_SYSTEM,
+  usesEssModes,
+  verifyAccess,
+} from "./verify";
 
 export interface SharingSession {
   readonly fetch: typeof globalThis.fetch;
@@ -30,6 +38,8 @@ export interface SharingSnapshot {
   readonly canManage: boolean;
   /** Why an owner still cannot change sharing from this dialog. */
   readonly readOnly?: string;
+  /** A folder whose contents' effective access differs from the folder's own access. */
+  readonly contentsDiffer: boolean;
 }
 
 const CONFLICT_RELOADED =
@@ -62,6 +72,8 @@ export class SharingRefreshError extends Error {
 // Decision: folders stay read-only in the dialog until the SDK can write member access.
 export const FOLDER_READ_ONLY =
   "Folder sharing is read-only for now. Changes here would not reach the files and folders inside, so this dialog only shows who can access the folder itself. To change access to a file, share that file.";
+export const CONTENTS_DIFFER =
+  "Files and folders inside are shared differently from this folder. Open an item's sharing to see who can access it.";
 const NOT_SAVED = "Permissions were not saved.";
 const LOAD_MESSAGES: Partial<Record<RoleError["code"], string>> = {
   unsupported: "This item's sharing uses access rules that this dialog can't show.",
@@ -76,20 +88,35 @@ const SAVE_MESSAGES: Partial<Record<RoleError["code"], string>> = {
   "comments-container-required": `Commenter is not available for this item yet. ${NOT_SAVED}`,
 };
 
-/** Map an SDK load failure to the dialog's error copy; app refusals pass through. */
-export function loadError(error: unknown): SharingError {
+/**
+ * Map an SDK load failure to the dialog's error copy; app refusals pass through. Inrupt ESS
+ * shapes (a query-string ACR URL, or acp:* modes in a document the SDK could not read) are
+ * named as an unsupported access system rather than an off-pod document or a transient error.
+ */
+export function loadError(error: unknown, documents: readonly AccessCapture[] = []): SharingError {
   if (error instanceof SharingError) return error;
-  const message = isRoleError(error) ? LOAD_MESSAGES[error.code] : undefined;
+  const ess = isRoleError(error)
+    ? error.code === "scope" && error.url.includes("?")
+    : usesEssModes(documents);
+  const message = ess
+    ? UNSUPPORTED_SYSTEM
+    : isRoleError(error)
+      ? LOAD_MESSAGES[error.code]
+      : undefined;
   return new SharingError(message ?? "Couldn't load sharing. Try again.", { cause: error });
 }
-/** Map an SDK save failure. An unclassified failure after the PUT began has an unknown outcome. */
+/**
+ * Map an SDK save failure. Once the PUT began, an unclassified failure or a refused
+ * (redirected) response leaves the outcome unknown; a non-success status is a refusal.
+ */
 export function saveError(error: unknown, writing: boolean): Error {
+  if (writing && (!isRoleError(error) || error.code === "scope"))
+    return new SharingRefreshError(error, false);
   if (isRoleError(error))
     return new SharingError(
       SAVE_MESSAGES[error.code] ?? `Couldn't save sharing. ${NOT_SAVED} Try again.`,
       { cause: error },
     );
-  if (writing) return new SharingRefreshError(error, false);
   return new SharingError(`Couldn't save sharing. ${NOT_SAVED} Try again.`, { cause: error });
 }
 
@@ -110,12 +137,11 @@ const RANK: readonly SharingRole[] = ["viewer", "commenter", "editor", "owner"];
 // (WAC/ACP), and the ACP Link relation only selects ACP (this suite's CSS-dialect fixtures
 // use it too). A wrong "ess" guess on a CSS-dialect server could write management in a
 // vocabulary that server does not enforce.
+function kind(resource: string): ResourceKind {
+  return resource.endsWith("/") ? "folder" : "resource";
+}
 function options(session: SharingSession, resource: string): RolesOptions {
-  return {
-    fetch: session.fetch,
-    root: session.storageUrl,
-    kind: resource.endsWith("/") ? "folder" : "resource",
-  };
+  return { fetch: session.fetch, root: session.storageUrl, kind: kind(resource) };
 }
 function origin(rows: readonly RoleGrant[]): AccessOrigin {
   return {
@@ -160,18 +186,29 @@ export function toSharingState(grants: readonly RoleGrant[]): SharingState {
   };
 }
 
-/** Read current access through the SDK role layer, bounded to the selected storage. */
+/**
+ * Read current access through the SDK role layer, bounded to the selected storage. The access
+ * documents the SDK read are re-checked by `verifyAccess`, so access the role projection
+ * dropped fails closed instead of being shown as narrower than it is.
+ */
 export async function loadSharing(
   session: SharingSession,
   resource: string,
 ): Promise<SharingSnapshot> {
+  const recorder = recordAccess(session.fetch);
   let grants: GrantSnapshot;
   try {
-    grants = await readGrants(resource, options(session, resource));
+    grants = await readGrants(resource, options({ ...session, fetch: recorder.fetch }, resource));
   } catch (error) {
-    throw loadError(error);
+    throw loadError(error, await recorder.documents(resource).catch(() => []));
   }
   const state = toSharingState(grants.grants);
+  const { contentsDiffer } = await verifyAccess(
+    resource,
+    kind(resource),
+    () => recorder.documents(resource),
+    grants.grants,
+  );
   const owner = state.people.some((p) => p.webId === session.webId && p.role === "owner");
   const folder = resource.endsWith("/");
   return {
@@ -180,6 +217,7 @@ export async function loadSharing(
     state,
     canManage: owner && !folder,
     ...(owner && folder ? { readOnly: FOLDER_READ_ONLY } : {}),
+    contentsDiffer,
   };
 }
 
