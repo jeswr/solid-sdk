@@ -58,6 +58,7 @@ function Snapshot() {
 beforeEach(() => {
   vi.useFakeTimers();
   localStorage.clear();
+  sessionStorage.clear();
   fixture.state = "online";
   fixture.account.active.id = "one";
   fixture.settings.preferences.offline = true;
@@ -151,6 +152,28 @@ it("never copies the open page into the next account's history after a switch or
     { href: "/drive/my", title: "Drive · Solid Suite" },
   ]);
   expect(fixture.remember).toHaveBeenCalledWith("/drive/my");
+});
+
+it("still skips the previous account's page when sign-in returns the new account to it", async () => {
+  document.title = "Salary review · Docs · Solid Suite";
+  fixture.pathname = "/docs/d/salary";
+  const first = render(h(OfflineProvider, { children: h(Snapshot) }));
+  await tick();
+  // "Add another account" leaves the suite layout for /signin, then comes back to the same page.
+  first.unmount();
+  fixture.account.active.id = "two";
+  fixture.remember.mockClear();
+  render(h(OfflineProvider, { children: h(Snapshot) }));
+  await tick();
+  expect(localStorage.getItem("suite.recent.v1.two")).toBeNull();
+  expect(fixture.remember).not.toHaveBeenCalled();
+});
+
+it("starts fresh when this tab's last-seen record is malformed", async () => {
+  sessionStorage.setItem("suite.recent.last-seen.v1", '{"accountId":1}');
+  render(h(OfflineProvider, { children: h(Snapshot) }));
+  await tick();
+  expect(JSON.parse(localStorage.getItem("suite.recent.v1.one") ?? "[]")).toHaveLength(1);
 });
 
 function Named({ title }: { title: string }) {

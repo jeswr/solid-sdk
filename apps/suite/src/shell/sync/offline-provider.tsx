@@ -173,6 +173,34 @@ export function useOutbox(): OutboxBinding {
   };
 }
 
+interface LastSeen {
+  accountId: string;
+  pathname: string;
+}
+const LAST_SEEN_KEY = "suite.recent.last-seen.v1";
+function readLastSeen(): LastSeen {
+  try {
+    const value: unknown = JSON.parse(sessionStorage.getItem(LAST_SEEN_KEY) ?? "null");
+    if (
+      value &&
+      typeof value === "object" &&
+      typeof (value as LastSeen).accountId === "string" &&
+      typeof (value as LastSeen).pathname === "string"
+    )
+      return { accountId: (value as LastSeen).accountId, pathname: (value as LastSeen).pathname };
+  } catch {
+    /* Unavailable or malformed: start fresh. */
+  }
+  return { accountId: "", pathname: "" };
+}
+function writeLastSeen(value: LastSeen) {
+  try {
+    sessionStorage.setItem(LAST_SEEN_KEY, JSON.stringify(value));
+  } catch {
+    /* Session storage may be unavailable. */
+  }
+}
+
 function OfflineEffects({ pageTitle, outbox }: { pageTitle?: string; outbox: Outbox | null }) {
   const { active, status } = useAccounts();
   const { preferences, update, ready } = useAllPreferences();
@@ -180,7 +208,7 @@ function OfflineEffects({ pageTitle, outbox }: { pageTitle?: string; outbox: Out
   const pathname = usePathname();
   const hinted = useRef("");
   // The page each account was last seen on, and a page opened under another account.
-  const lastSeen = useRef({ accountId: "", pathname: "" });
+  const lastSeen = useRef<LastSeen | null>(null);
   const inherited = useRef<string | null>(null);
   const accountId = active?.id ?? "";
   useEffect(() => {
@@ -212,11 +240,15 @@ function OfflineEffects({ pageTitle, outbox }: { pageTitle?: string; outbox: Out
     if (status !== "ready" || !accountId || !ready) return;
     // After an account switch or sign-out the open page belongs to the previous account:
     // never copy it (or its title, which can name a document) into the new account's list.
+    // Sign-in lives outside the suite layout, so this tab's last page survives in session storage:
+    // "Add another account" and sign-out return the new account to the previous one's page.
+    lastSeen.current ??= readLastSeen();
     const previous = lastSeen.current;
     if (previous.accountId && previous.accountId !== accountId && previous.pathname === pathname)
       inherited.current = pathname;
     else if (inherited.current !== pathname) inherited.current = null;
     lastSeen.current = { accountId, pathname };
+    writeLastSeen(lastSeen.current);
     if (!preferences.offline) {
       try {
         clearRecentItems(localStorage, accountId);
