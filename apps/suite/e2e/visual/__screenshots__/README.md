@@ -1,8 +1,9 @@
 <!-- AUTHORED-BY Claude Opus 5.5 -->
 # DS-13 visual baselines
 
-One folder per Playwright project (`375-light` … `1280-dark`), written by
-`e2e/visual/components.visual.spec.ts` through `playwright.visual.config.ts`.
+Baselines for the two corner projects, `375-light` and `1280-dark`, written by
+`e2e/visual/components.visual.spec.ts` through `playwright.visual.config.ts`. The other four
+width and theme projects run the same pages for the axe check only (all six would be ~48 MB).
 
 These PNGs are **Linux-container renders** (headless Chromium from the Playwright 1.61
 build, the suite's self-hosted fonts, `en-GB`, UTC, a fixed clock). Font rasterisation differs

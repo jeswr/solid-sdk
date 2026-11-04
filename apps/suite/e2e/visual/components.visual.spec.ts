@@ -9,6 +9,9 @@ import { fixtureNames } from "../../src/app/dev/components/fixture-names";
 
 // Fixtures that show relative times ("2 minutes ago", "tomorrow 5pm") read this clock.
 const FIXED_NOW = new Date("2026-10-26T10:00:00Z");
+// Baselines are kept for the two corner projects only (about 16 MB rather than 48 MB);
+// axe still runs at every width and theme.
+const BASELINED = new Set(["375-light", "1280-dark"]);
 
 // Routes with their own page under src/app/dev/components (the catalog index links them).
 const standaloneRoutes = [
@@ -304,11 +307,15 @@ const interactions: Shot[] = [
       path: "global-search",
       act: async (page) => {
         await choose(page, "Fixture state", state);
-        if (state === "empty") {
-          await page.getByPlaceholder("Search your storage").fill("project");
-          await expect(page.getByRole("listbox").or(page.getByText(/No results/))).toBeVisible();
-        }
-        return main(page);
+        if (state !== "empty") return main(page);
+        // Narrow widths put the search field in a sheet behind the Search button.
+        const inline = page.getByPlaceholder("Search your storage");
+        const opened = !(await inline.isVisible());
+        if (opened) await page.getByRole("button", { name: "Search", exact: true }).click();
+        const scope = opened ? page.getByRole("dialog") : main(page);
+        await scope.getByPlaceholder("Search your storage").fill("project");
+        await expect(scope.getByRole("listbox").or(scope.getByText(/No results/))).toBeVisible();
+        return scope;
       },
     }),
   ),
@@ -413,6 +420,8 @@ async function prepare(page: Page, path: string) {
 // is a description; axe's label-in-name heuristic counts every descendant text node.
 const compositeCells = new Set(["data-table", "file-grid"]);
 async function accessible(page: Page, path: string) {
+  // Radix slider thumbs get aria-valuenow once they register after hydration.
+  await expect(page.locator('[role="slider"]:not([aria-valuenow])')).toHaveCount(0);
   const builder = new AxeBuilder({ page });
   if (compositeCells.has(path)) builder.disableRules(["label-content-name-mismatch"]);
   const { violations } = await builder.analyze();
@@ -424,21 +433,24 @@ async function accessible(page: Page, path: string) {
 
 test.describe("fixture pages", () => {
   for (const path of pageRoutes)
-    test(path || "index", async ({ page }) => {
+    test(path || "index", async ({ page }, info) => {
       await prepare(page, path);
       const name = `${path || "index"}.png`;
-      if (chrome.has(path)) await expect(page).toHaveScreenshot(name, { fullPage: true });
-      else await expect(main(page)).toHaveScreenshot(name);
+      const baselined = BASELINED.has(info.project.name);
+      if (baselined && chrome.has(path))
+        await expect(page).toHaveScreenshot(name, { fullPage: true });
+      else if (baselined) await expect(main(page)).toHaveScreenshot(name);
       await accessible(page, path);
     });
 });
 
 test.describe("fixture states", () => {
   for (const shot of interactions)
-    test(shot.name, async ({ page }) => {
+    test(shot.name, async ({ page }, info) => {
       await prepare(page, shot.path);
       const target = await shot.act(page);
-      await expect(target ?? page).toHaveScreenshot(`${shot.name}.png`);
+      if (BASELINED.has(info.project.name))
+        await expect(target ?? page).toHaveScreenshot(`${shot.name}.png`);
       await accessible(page, shot.path);
     });
 });
