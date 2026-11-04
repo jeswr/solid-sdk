@@ -15,13 +15,18 @@ Read [README.md](./README.md) and `src/types.ts` for the implemented API; do not
 published 0.1.x package or copy its providers into applications. This workspace package remains
 private and experimental pending conformance.
 
+`@jeswr/pod-auth/node` also exports `createNodeOidcClient` for server-side brokers (mcp-oauth's
+pod sessions). It delegates split server authorization to reactive-authentication. Its sensitive
+state and original private JWK envelope belong only in an encrypted server vault with callback consume,
+refresh CAS and durable retirement. Signing keys are imported non-extractable; browser key storage is unchanged.
+
 ## Quick reference
 
 | Entry point | Use |
 | --- | --- |
 | `@jeswr/pod-auth` | `createPodAuth`, credential-bounded fetch, UI hooks and session lifecycle |
 | `@jeswr/pod-auth/react` | Optional `PodAuthProvider` / `usePodAuth` lifecycle mirror |
-| `@jeswr/pod-auth/node` | `forClientCredentials` and `forCid` agent factories |
+| `@jeswr/pod-auth/node` | `forClientCredentials` and `forCid` agent factories; `createNodeOidcClient` for server brokers |
 | `@jeswr/pod-auth/testing` | Node-only mock OP, mock LWS AS and memory store |
 | `@jeswr/pod-auth/directory` | Provider metadata, WebID/provider address resolution and recent providers |
 

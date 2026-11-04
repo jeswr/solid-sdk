@@ -117,6 +117,32 @@ explicitly opts in. A pod on the issuer origin stays allowed through `podRoot`.
 `computeAllowedOrigins` keeps its separate default of including the issuer origin. See the
 [proactive API behavior report](./etc/proactive-fetch.api.md) for the helper's contract.
 
+After an asynchronous profile read, bind origin enrichment to the identity captured before
+the read:
+
+```ts
+const expectedWebId = auth.webId;
+if (expectedWebId) {
+  const storageOrigins = await readStorageOrigins(expectedWebId);
+  const covered = auth.reArmAllowedOrigins(storageOrigins, { expectedWebId });
+}
+```
+
+`reArmAllowedOrigins(origins, options?)` widens only the live session, without a token grant.
+Every entry must be HTTPS (or HTTP loopback with `allowInsecureLoopback`). Any invalid entry,
+missing session, or `expectedWebId` mismatch returns `false` and leaves the boundary unchanged.
+Successful calls return `true` and add all origins. Omitting `expectedWebId` targets the session
+live at call time; the next login/restore resets additions.
+
+`rememberAccount(webId, displayName?, avatarUrl?)` merges credential-free display metadata into
+the recent-accounts list. An invalid WebID makes the call a no-op: WebIDs must be absolute HTTPS
+URLs, or HTTP loopback URLs with `allowInsecureLoopback`. The exported
+`MAX_DISPLAY_NAME_LENGTH` is 256 Unicode code points; newly stored display labels, including
+WebID fallback labels, are truncated without splitting surrogate pairs. The full WebID stays
+intact. Avatars must be absolute HTTP(S) URLs; other schemes and relative URLs are dropped.
+Omitted names/avatars preserve existing metadata, and an unsafe avatar does not replace a
+previously stored safe one. Storage failures are non-fatal.
+
 ## Links
 
 - [Source](https://github.com/jeswr/solid-auth-core)

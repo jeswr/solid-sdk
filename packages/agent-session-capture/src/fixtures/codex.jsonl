@@ -1,0 +1,11 @@
+{"timestamp":"2026-10-25T12:00:00.000Z","type":"session_meta","payload":{"id":"codex-fixture-session","timestamp":"2026-10-25T12:00:00.000Z","cwd":"/fixture-project","originator":"codex_cli_rs","cli_version":"0.100.0","source":"cli","model_provider":"openai"}}
+{"timestamp":"2026-10-25T12:00:00.000Z","type":"turn_context","payload":{"cwd":"/fixture-project","approval_policy":"never","sandbox_policy":{"type":"workspace-write"},"model":"fixture-model"}}
+{"timestamp":"2026-10-25T12:00:00.000Z","type":"event_msg","payload":{"type":"user_message","message":"DROP_DUPLICATE_USER"}}
+{"timestamp":"2026-10-25T12:00:00.000Z","type":"response_item","payload":{"type":"message","id":"user-1","role":"user","content":[{"type":"input_text","text":"Inspect this project. [REDACTED TOKEN]"},{"type":"input_image","image_url":"DROP_IMAGE"}]}}
+{"timestamp":"2026-10-25T12:00:01.000Z","type":"response_item","payload":{"type":"reasoning","summary":[{"type":"summary_text","text":"DROP_REASONING"}],"encrypted_content":"DROP_ENCRYPTED"}}
+{"timestamp":"2026-10-25T12:00:01.000Z","type":"response_item","payload":{"type":"function_call","name":"exec_command","arguments":"DROP_ARGUMENT","call_id":"call_fixture_1"}}
+{"timestamp":"2026-10-25T12:00:02.000Z","type":"response_item","payload":{"type":"function_call_output","call_id":"call_fixture_1","output":"DROP_OUTPUT"}}
+{"timestamp":"2026-10-25T12:00:03.000Z","type":"response_item","payload":{"type":"custom_tool_call","name":"apply_patch","input":"DROP_PATCH","call_id":"call_fixture_2"}}
+{"timestamp":"2026-10-25T12:00:03.000Z","type":"response_item","payload":{"type":"custom_tool_call_output","call_id":"call_fixture_2","output":"DROP_PATCH_OUTPUT"}}
+{"timestamp":"2026-10-25T12:00:04.000Z","type":"response_item","payload":{"type":"message","id":"assistant-1","role":"assistant","phase":"final_answer","content":[{"type":"output_text","text":"The project looks good."}]}}
+{"timestamp":"2026-10-25T12:00:04.000Z","type":"event_msg","payload":{"type":"agent_message","message":"DROP_DUPLICATE_ASSISTANT"}}
