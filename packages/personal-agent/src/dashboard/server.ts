@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 /**
  * The owner dashboard's local web server (loopback only).
  *
@@ -18,7 +19,7 @@
  *    read-only calendar availability reads of the deterministic actions, and only when the
  *    OPERATOR started the server with provider access (`--provider-config`); action execution
  *    (local agent state) is not available here at all.
- * The TypeSafe key (if any) comes from the server's environment and is never returned.
+ * Hosted pilot triage is retired; this dashboard runs deterministic local rules only.
  */
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
@@ -41,7 +42,6 @@ import {
   URGENCY_DESCRIPTIONS,
 } from "../triage/taxonomy.js";
 import { triageSample } from "../triage/triage.js";
-import { TYPESAFE_ENDPOINT, typeSafeFromEnv } from "../triage/typesafe.js";
 import { summariseAgent } from "./agents.js";
 import {
   CAPABILITIES,
@@ -102,9 +102,9 @@ export interface DashboardOptions {
    * `serve --now`). It never dates history or judges how fresh an observation is.
    */
   schedulingNow?: () => Date;
-  /** Server environment for the optional TypeSafe adapter (TYPESAFE_API_KEY, TYPESAFE_MODEL). */
+  /** Environment used by action providers; hosted pilot triage is retired. */
   env?: NodeJS.ProcessEnv;
-  /** Injected HTTP client for the hosted classifier (tests). */
+  /** Legacy injection seam retained for compatibility; hosted triage no longer uses it. */
   fetchImpl?: typeof fetch;
   /**
    * Provider access for the deterministic actions (operator configuration: live helper config,
@@ -249,8 +249,11 @@ export function createDashboardApp(opts: DashboardOptions): DashboardApp {
   const log = opts.log ?? (() => undefined);
   const store = new SettingsStore(opts.stateDir, now);
   store.init();
-  const hosted = typeSafeFromEnv(opts.env ?? {}, opts.fetchImpl ?? fetch);
-  if (hosted.problem) log(`dashboard: hosted triage not configured: ${hosted.problem}`);
+  const hosted = {
+    configured: false,
+    model: "disabled",
+    problem: "Hosted pilot triage was retired in A-011. Use agent-model-gateway.",
+  };
   const allowedHosts = new Set([`127.0.0.1:${opts.port}`, `localhost:${opts.port}`]);
   const allowedOrigins = new Set([...allowedHosts].map((h) => `http://${h}`));
   const sessions = new Map<string, { csrf: string; expiresAt: number }>();
@@ -661,8 +664,8 @@ export function createDashboardApp(opts: DashboardOptions): DashboardApp {
     res.json({
       revision: s.revision,
       hosted: {
-        provider: "TypeSafe",
-        endpoint: TYPESAFE_ENDPOINT,
+        provider: "disabled",
+        endpoint: null,
         configured: hosted.configured,
         model: hosted.model,
         enabled: s.triage.hostedEnabled,
@@ -688,7 +691,7 @@ export function createDashboardApp(opts: DashboardOptions): DashboardApp {
     const next = writeWith(
       body.baseRevision,
       body.hostedEnabled ? "Turned hosted triage on" : "Turned hosted triage off",
-      "TypeSafe triage for samples you explicitly confirm",
+      "Legacy hosted triage setting (provider retired)",
       (d) => {
         d.triage.hostedEnabled = body.hostedEnabled;
       },
@@ -714,36 +717,9 @@ export function createDashboardApp(opts: DashboardOptions): DashboardApp {
             `Triage is not allowed for “${account.label}”: ${permission.why}`,
           );
       }
-      let decision: { allowed: boolean; why: string } = { allowed: false, why: "not requested" };
-      if (body.useHosted) {
-        decision = !hosted.classifier
-          ? { allowed: false, why: "No TypeSafe key is configured on this machine." }
-          : !s.triage.hostedEnabled
-            ? { allowed: false, why: "Hosted triage is turned off." }
-            : !body.consent
-              ? { allowed: false, why: "You did not confirm sending this sample to TypeSafe." }
-              : account
-                ? (() => {
-                    const e = effectiveCapability(account, "hostedTriage", {
-                      policy: s.workflowPolicy,
-                      hostedEnabled: s.triage.hostedEnabled,
-                      hostedKeyConfigured: hosted.configured,
-                    });
-                    return { allowed: e.allowed, why: e.summary };
-                  })()
-                : {
-                    allowed: true,
-                    why: "Synthetic sandbox sample, sent with your confirmation.",
-                  };
-      }
-      const result = await triageSample(
-        body.sample,
-        body.useHosted && hosted.classifier
-          ? { classifier: hosted.classifier, allowed: decision.allowed, why: decision.why }
-          : undefined,
-      );
-      if (body.useHosted && !hosted.classifier && result.route === "suggestion")
-        result.hosted = { status: "not-allowed", detail: decision.why };
+      const result = await triageSample(body.sample);
+      if (body.useHosted && result.route === "suggestion")
+        result.hosted = { status: "not-allowed", detail: hosted.problem };
       res.json(result);
     } catch (error) {
       next(error);

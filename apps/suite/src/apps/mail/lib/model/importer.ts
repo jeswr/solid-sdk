@@ -4,6 +4,7 @@ import { mailtos as addresses, SYSTEM_FOLDERS } from "@jeswr/pod-connectors/mail
 import { DataFactory, Store } from "n3";
 import PostalMime, { decodeWords } from "postal-mime";
 import { Attachment } from "./attachment.js";
+import { MailContact } from "./client-support.js";
 import { mailBodyText } from "./htmlText.js";
 import type { MailStore } from "./io.js";
 import { MailboxDataset } from "./mailbox.js";
@@ -14,6 +15,7 @@ import { SCHEMA } from "./vocab.js";
 export async function* splitMbox(
   source: AsyncIterable<Uint8Array>,
   maxMessageBytes = 25 * 1024 * 1024,
+  onOversized?: (error: RangeError) => void,
 ): AsyncGenerator<Uint8Array> {
   if (!Number.isSafeInteger(maxMessageBytes) || maxMessageBytes < 1)
     throw new TypeError("Invalid message limit");
@@ -23,12 +25,27 @@ export async function* splitMbox(
   let used = 0;
   let size = 0;
   let started = false;
+  let oversized = false;
+  function exceed(): void {
+    if (oversized) return;
+    const error = new RangeError("Mail message exceeds import limit");
+    if (!onOversized) throw error;
+    oversized = true;
+    blocks = [];
+    block = new Uint8Array(0);
+    used = size = 0;
+    onOversized(error);
+  }
   let mode: "prefix" | "content" | "separator" = "prefix";
   const marker = [70, 114, 111, 109, 32]; // From (including its trailing space)
   let matched = 0;
   let quotes = 0;
   function append(byte: number, count = 1): void {
-    if (size + count > maxMessageBytes) throw new RangeError("Mail message exceeds import limit");
+    if (oversized) return;
+    if (size + count > maxMessageBytes) {
+      exceed();
+      return;
+    }
     while (count > 0) {
       if (used === block.length) {
         block = new Uint8Array(Math.min(64 * 1024, maxMessageBytes - size));
@@ -68,18 +85,17 @@ export async function* splitMbox(
         if (!started) throw new TypeError("Expected mbox From separator");
         quotes++;
         // One quote may be removed once the complete From marker is known.
-        if (size + quotes - 1 > maxMessageBytes)
-          throw new RangeError("Mail message exceeds import limit");
+        if (size + quotes - 1 > maxMessageBytes) exceed();
       } else if (byte === marker[matched]) {
         matched++;
-        if (quotes && size + quotes - 1 + matched > maxMessageBytes)
-          throw new RangeError("Mail message exceeds import limit");
+        if (quotes && size + quotes - 1 + matched > maxMessageBytes) exceed();
         if (matched === marker.length) {
           if (quotes) {
             flushPrefix(true);
             mode = "content";
           } else {
-            if (started && size) yield bytes();
+            if (started && size && !oversized) yield bytes();
+            oversized = false;
             started = true;
             blocks = [];
             block = new Uint8Array(0);
@@ -101,7 +117,7 @@ export async function* splitMbox(
     if (!started) throw new TypeError("Expected mbox From separator");
     flushPrefix(false);
   }
-  if (size) yield bytes();
+  if (size && !oversized) yield bytes();
 }
 
 export interface ImportedMail {
@@ -147,6 +163,13 @@ export async function parseEmail(
     const date = new Date(email.date);
     if (!Number.isFinite(date.getTime())) throw new TypeError("Invalid message date");
     message.dateSent = date;
+  }
+  for (const entry of [email.from, ...(email.to ?? []), ...(email.cc ?? [])]) {
+    if (!entry) continue;
+    for (const contact of entry.group ?? [entry]) {
+      const iri = addresses([contact])[0];
+      if (iri && contact.name) new MailContact(iri, mailbox, DataFactory).name = contact.name;
+    }
   }
   message.encoding = url.replace(/\.ttl$/, ".eml");
   message.partOfThread = `${mailDocument(root, "threads", threadId)}#it`;
@@ -194,6 +217,7 @@ export async function parseEmail(
     metadata.types.add(`${SCHEMA}MediaObject`);
     metadata.name = a.name;
     metadata.contentType = a.contentType;
+    metadata.size = a.content.byteLength;
   }
   return {
     mailbox,
@@ -213,10 +237,18 @@ export async function* importMbox(
   storage: string,
   account: string,
   mintId: () => string,
+  options: { onError?: (error: unknown) => void } = {},
 ): AsyncGenerator<ImportedMail> {
   const threads = new Map<string, string>();
-  for await (const raw of splitMbox(source)) {
-    const item = await parseEmail(raw, storage, account, mintId());
+  for await (const raw of splitMbox(source, 25 * 1024 * 1024, options.onError)) {
+    let item: ImportedMail;
+    try {
+      item = await parseEmail(raw, storage, account, mintId());
+    } catch (error) {
+      if (!options.onError) throw error;
+      options.onError(error);
+      continue;
+    }
     const message = item.mailbox.message(item.message);
     const parent = message.inReplyTo;
     if (item.references.length > 0) {

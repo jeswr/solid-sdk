@@ -1,6 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { parseSuiteEnv, SuiteEnvError } from "../src/shell/lib/env";
+import { parseSuiteEnv, SuiteEnvError, testCapsSource } from "../src/shell/lib/env";
 
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -82,9 +82,24 @@ describe("shell environment", () => {
     expect(suiteEnv()).toBe(first);
     expect(first.NEXT_PUBLIC_SUITE_DEMO).toBe(false);
   });
+  it("honours capability overrides only in an end-to-end run (SUITE_E2E=1)", async () => {
+    const caps = '{"accessRequests":true}';
+    expect(testCapsSource({ SUITE_TEST_CAPS: caps })).toBeUndefined();
+    expect(testCapsSource({ SUITE_E2E: "0", SUITE_TEST_CAPS: caps })).toBeUndefined();
+    expect(testCapsSource({ SUITE_E2E: "true", SUITE_TEST_CAPS: caps })).toBeUndefined();
+    expect(testCapsSource({ SUITE_E2E: "1", SUITE_TEST_CAPS: caps })).toBe(caps);
+    vi.stubEnv("SUITE_TEST_CAPS", caps);
+    const first = await import("../src/shell/lib/env");
+    expect(first.suiteEnv().SUITE_TEST_CAPS).toEqual({});
+    vi.resetModules();
+    vi.stubEnv("SUITE_E2E", "1");
+    const second = await import("../src/shell/lib/env");
+    expect(second.suiteEnv().SUITE_TEST_CAPS).toEqual({ accessRequests: true });
+  });
   it("warns once and defaults invalid fields without dropping valid ones", async () => {
     vi.stubEnv("NEXT_PUBLIC_SUITE_IDP", "secret-invalid-value");
     vi.stubEnv("NEXT_PUBLIC_SUITE_IDP_NAME", "Example");
+    vi.stubEnv("SUITE_E2E", "1");
     vi.stubEnv("SUITE_TEST_CAPS", '{"unexpected":true}');
     const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
     const { suiteEnv } = await import("../src/shell/lib/env");

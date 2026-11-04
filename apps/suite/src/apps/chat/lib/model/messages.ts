@@ -140,6 +140,7 @@ export function tombstoneMessage(
     `${NS.SIOC}content`,
     `${NS.DCT}title`,
     `${NS.WF}assignee`,
+    `${NS.WF}dateDue`,
   ]) {
     result.deleteMatches(DataFactory.namedNode(subject), DataFactory.namedNode(predicate));
   }

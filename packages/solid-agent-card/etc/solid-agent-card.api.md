@@ -20,6 +20,15 @@ export interface AgentCard {
         readonly agentDescription?: string;
         readonly protocolSources?: readonly string[];
     };
+    readonly capabilities?: {
+        readonly extensions: readonly {
+            readonly uri: string;
+            readonly required: false;
+            readonly params: {
+                readonly bindings: readonly { type: "channel-capability"; id: string; channel: string; binding: string; carriage: string; structuredPayload: boolean; endToEndEncrypted: boolean; deliveryReceipts: boolean; historyWindow: string; maxMessageBytes: number; sendSupported: boolean; costPerMessage: number; rateLimit: { perRecipient: number; perDay: number; }; credentialState: "error" | "none" | "setup-required" | "connected" | "disabled"; lastIngest?: string | undefined; }[];
+            };
+        }[];
+    };
     // (undocumented)
     readonly description?: string;
     // (undocumented)
@@ -66,6 +75,7 @@ export function agentDescriptionsUrl(origin: string): string;
 
 // @public
 export interface AgentDescriptor {
+    readonly bindings?: readonly { type: "channel-capability"; id: string; channel: string; binding: string; carriage: string; structuredPayload: boolean; endToEndEncrypted: boolean; deliveryReceipts: boolean; historyWindow: string; maxMessageBytes: number; sendSupported: boolean; costPerMessage: number; rateLimit: { perRecipient: number; perDay: number; }; credentialState: "error" | "none" | "setup-required" | "connected" | "disabled"; lastIngest?: string | undefined; }[];
     readonly description?: string;
     readonly did?: string;
     readonly id: string;
@@ -128,6 +138,9 @@ export const ANP_CONTEXT_URL: "https://w3id.org/agent-description/v1";
 export const ANP_INLINE_CONTEXT: Readonly<Record<string, unknown>>;
 
 // @public
+export const BINDINGS_EXTENSION_URI: "https://jeswr.org/ns/agent#bindings";
+
+// @public
 export function buildAgentPointer(webId: string, agent: string, predicates?: PointerPredicate | readonly PointerPredicate[]): AgentPointerDocument;
 
 // @public
@@ -169,6 +182,9 @@ export type SecuritySchemeType = (typeof SECURITY_SCHEME_TYPES)[number];
 export function serialize(quads: readonly Quad[], format?: string): Promise<string>;
 
 // @public
+export const SUPPORTS_BINDING: "https://jeswr.org/ns/agent#supportsBinding";
+
+// @public
 export const VALID_SECURITY_SCHEME_TYPES: ReadonlySet<string>;
 
 // @public
@@ -180,7 +196,7 @@ export interface VerificationIssue {
 }
 
 // @public
-export type VerificationIssueCode = "no-agent-description" | "multiple-agent-descriptions" | "subject-mismatch" | "missing-name" | "missing-url" | "invalid-url" | "invalid-owner" | "skill-missing-id" | "skill-missing-name" | "duplicate-skill-id" | "invalid-security-scheme" | "invalid-protocol-source" | "owner-mismatch" | "fetch-failed" | "parse-failed";
+export type VerificationIssueCode = "no-agent-description" | "multiple-agent-descriptions" | "subject-mismatch" | "missing-name" | "missing-url" | "invalid-url" | "invalid-owner" | "skill-missing-id" | "skill-missing-name" | "duplicate-skill-id" | "invalid-security-scheme" | "invalid-protocol-source" | "invalid-binding" | "owner-mismatch" | "fetch-failed" | "parse-failed";
 
 // @public
 export interface VerificationResult {

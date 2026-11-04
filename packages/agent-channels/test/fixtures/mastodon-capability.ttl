@@ -1,0 +1,22 @@
+# AUTHORED-BY Codex GPT-6.1-Sol
+@prefix agent: <https://jeswr.org/ns/agent#>.
+@prefix as: <https://www.w3.org/ns/activitystreams#>.
+@prefix prov: <http://www.w3.org/ns/prov#>.
+@prefix schema: <https://schema.org/>.
+
+<urn:agent:binding:mastodon> a agent:ChannelCapability;
+    agent:channel "mastodon";
+    agent:binding "mastodon";
+    agent:carriage "mastodon-footer/0.1";
+    agent:structuredPayload false;
+    agent:endToEndEncrypted false;
+    agent:federated true;
+    agent:deliveryReceipts false;
+    agent:historyWindow "P0D"^^<http://www.w3.org/2001/XMLSchema#duration>;
+    agent:maxMessageBytes 256;
+    agent:sendSupported true;
+    agent:costPerMessage "0"^^<http://www.w3.org/2001/XMLSchema#decimal>;
+    agent:rateLimit <urn:agent:node:9b6cb39cdb8be6fd99d0a2329104a37e>;
+    agent:credentialState "connected".
+<urn:agent:node:9b6cb39cdb8be6fd99d0a2329104a37e> agent:perRecipient 0;
+    agent:perDay 0.

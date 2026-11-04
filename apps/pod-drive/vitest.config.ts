@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vitest/config";
@@ -15,7 +16,7 @@ export default defineConfig({
     environment: "node",
     // Loaded once before the suite: @testing-library/jest-dom matchers
     // (toBeInTheDocument, …) + automatic React cleanup between tests.
-    setupFiles: ["./test/setup-dom.ts"],
+    setupFiles: ["./test/storage-setup.ts", "./test/setup-dom.ts"],
     coverage: {
       provider: "v8",
       reporter: ["text", "json-summary", "html"],
