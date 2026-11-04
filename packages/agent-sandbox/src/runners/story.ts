@@ -105,10 +105,7 @@ const decisionOf = (sandbox: Sandbox, result: CallResult) =>
   sandbox.record.entries()[result.entry]?.decision;
 
 /** Give or take back a grant (a delegation) mid-story. */
-export function applyGrantStep(
-  world: World,
-  step: Exclude<StoryStep, { kind: "call" }>,
-): void {
+export function applyGrantStep(world: World, step: Exclude<StoryStep, { kind: "call" }>): void {
   const id = step.kind === "grant" ? step.grant.id : step.grant;
   const others = world.grants().filter((g) => g.id !== id);
   world.setGrants(step.kind === "grant" ? [...others, step.grant] : others);
