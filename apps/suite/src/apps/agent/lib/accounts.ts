@@ -1,8 +1,9 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 import { type Account, foldBindingControls } from "@jeswr/agent-model";
-import type { PodSession } from "../../../lib/session/pod-session";
 import { type AgentClient, createAgentClient, isLoaded, type Row, type Unreadable } from "./client";
+import type { ProfileSession } from "./profile";
 import { type DisplayControl, loadedRecords, readAccounts, readControl } from "./readers";
 import { createAgentSigner } from "./sign";
 import { createAgentVerifier } from "./verify";
@@ -76,7 +77,7 @@ export function overlayAccountControls(
 
 export async function readAccountSettings(
   client: AgentClient,
-  session: Pick<PodSession, "fetch" | "webId">,
+  session: ProfileSession,
   now = Date.now(),
 ): Promise<Row<Account>[]> {
   const [accounts, controls] = await Promise.all([
@@ -107,12 +108,12 @@ export interface AccountPatch {
 /** Read through HTTP caches, including the listing and the owner's verification keys. */
 export async function persistAccountPatch(
   client: AgentClient,
-  session: Pick<PodSession, "fetch" | "webId">,
+  session: ProfileSession,
   id: string,
   patch: AccountPatch,
   now = () => new Date(),
 ): Promise<AccountSettings> {
-  const freshIo: typeof session.fetch = (input, init) =>
+  const freshIo: ProfileSession["fetch"] = (input, init) =>
     session.fetch(input, { ...init, cache: "no-store" });
   const fresh = createAgentClient({
     fetch: freshIo,

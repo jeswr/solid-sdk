@@ -1,12 +1,14 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 import { fromRdf, type PodRecord, type RecordType, recordFromTurtle } from "@jeswr/agent-model";
 import { parseRdf } from "@jeswr/fetch-rdf";
 import { assertWithinPodScope, createPodScopedFetch } from "@jeswr/guarded-fetch";
 import { parseContainerMembers } from "@jeswr/ldp-container";
+import { STATUS_LIST_ACCEPT } from "@jeswr/solid-vc";
 import { Store } from "n3";
 import type { PodSession } from "../../../lib/session/pod-session";
 import { agentPaths } from "./paths";
-import { readRdfDocument } from "./rdf";
+import { readRdfDocument, STATUS_LIST_TYPES } from "./rdf";
 import type { Verification } from "./verify";
 
 export interface Loaded<T> {
@@ -43,13 +45,14 @@ export function createAgentClient(options: {
   const scoped = createPodScopedFetch(options.storage, { fetch: options.fetch, maxRedirects: 0 });
   const check = (url: string) =>
     assertWithinPodScope(workspace, assertWithinPodScope(options.storage, url));
-  const document = async (url: string) => {
-    const response = await scoped(check(url), {
-      headers: { accept: "text/turtle, application/trig" },
-      cache: "no-store",
-    });
+  const document = async (
+    url: string,
+    accept = "text/turtle, application/trig",
+    allowed?: readonly string[],
+  ) => {
+    const response = await scoped(check(url), { headers: { accept }, cache: "no-store" });
     if (!response.ok) throw new AgentReadError(response.status);
-    return readRdfDocument(response);
+    return readRdfDocument(response, allowed);
   };
   const graph = async (url: string) => {
     const doc = await document(url);
@@ -74,6 +77,8 @@ export function createAgentClient(options: {
     workspace,
     paths: agentPaths(workspace),
     graph,
+    /** A status list as stored (TriG, Turtle or JSON-LD), negotiated as the status resolver does. */
+    statusDocument: (url: string) => document(url, STATUS_LIST_ACCEPT, STATUS_LIST_TYPES),
     async list(container: string) {
       try {
         const doc = await graph(container);

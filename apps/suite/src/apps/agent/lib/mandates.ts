@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 import type { Mandate } from "@jeswr/agent-mandate";
 import { issueMandate, mandateCredential, mandateToTurtle } from "@jeswr/agent-mandate/issue";
 import { createVcMandateVerifier, parseMandateCredential } from "@jeswr/agent-mandate/verify";
@@ -14,17 +15,17 @@ import {
   DataIntegritySuite,
   digestQuads,
   issue,
-  parseStatusListCredential,
+  parseStatusListBody,
   readStatusBit,
   statusListCredentialToTurtle,
   type VerifiableCredential,
   verifyCredential,
   withStatusBit,
 } from "@jeswr/solid-vc";
-import type { PodSession } from "../../../lib/session/pod-session";
 import { type AgentClient, AgentReadError, ConflictError, isLoaded, type Row } from "./client";
 import { withApprovalKey } from "./keys";
 import { AGENT, metadataNode, RDF } from "./paths";
+import { type ProfileSession, profileReader } from "./profile";
 import { loadedRecords, readControl, readMandateCurrent } from "./readers";
 import { createAgentSigner } from "./sign";
 import { createAgentVerifier } from "./verify";
@@ -44,7 +45,8 @@ export {
   testsTemplate,
 } from "./mandate-rules";
 
-type Session = Pick<PodSession, "fetch" | "webId">;
+/** Private reads use the credentialed fetch; the owner's public profile uses {@link profileReader}. */
+type Session = ProfileSession;
 
 /** The agent's own introduction (descriptors/agent.ttl), never inferred from the owner's identity. */
 export async function readAgentIdentity(client: AgentClient): Promise<string | undefined> {
@@ -78,7 +80,7 @@ function resolverOptions(client: AgentClient, session: Session, now: Date) {
     fetch: session.fetch,
     maxRedirects: 0,
   });
-  const keys = createWebIdKeyResolver({ fetch: session.fetch });
+  const keys = createWebIdKeyResolver({ fetch: profileReader(session) });
   return {
     keys,
     status: createBitstringStatusResolver({
@@ -89,14 +91,6 @@ function resolverOptions(client: AgentClient, session: Session, now: Date) {
       trustedStatusIssuers: [session.webId],
     }),
   };
-}
-async function optionalGraph(client: AgentClient, url: string) {
-  try {
-    return await client.graph(url);
-  } catch (e) {
-    if (e instanceof AgentReadError && e.status === 404) return undefined;
-    throw e;
-  }
 }
 async function currentCredential(client: AgentClient) {
   const reference = (await readMandateCurrent(client))[0];
@@ -176,10 +170,16 @@ export async function readMandateCredentials(
   );
 }
 async function readStatus(client: AgentClient, session: Session, now: Date) {
-  const doc = await optionalGraph(client, client.paths.mandatesStatus);
-  if (!doc) return undefined;
-  const vc = await parseStatusListCredential(doc.text);
-  const keys = createWebIdKeyResolver({ fetch: session.fetch });
+  let doc: Awaited<ReturnType<AgentClient["statusDocument"]>>;
+  try {
+    doc = await client.statusDocument(client.paths.mandatesStatus);
+  } catch (e) {
+    if (e instanceof AgentReadError && e.status === 404) return undefined;
+    throw e;
+  }
+  // The same negotiation and strict parse as verification, so a JSON-LD list renews and revokes.
+  const vc = await parseStatusListBody(doc.text, client.paths.mandatesStatus, "revocation");
+  const keys = createWebIdKeyResolver({ fetch: profileReader(session) });
   if (
     !vc ||
     vc.id !== client.paths.mandatesStatus ||
@@ -429,7 +429,7 @@ export async function mandateHistory(
       return { ...control, verification };
     }),
   );
-  const keys = createWebIdKeyResolver({ fetch: session.fetch });
+  const keys = createWebIdKeyResolver({ fetch: profileReader(session) });
   return Promise.all(
     credentials.map(async (row): Promise<MandateHistory> => {
       if (!isLoaded(row)) return { id: row.url, status: "unreadable", key: "Couldn't be checked" };
