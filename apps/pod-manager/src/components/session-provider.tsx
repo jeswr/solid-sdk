@@ -213,11 +213,19 @@ export function SessionProvider({
       // Read the live operation epoch to invalidate all work started before unmount.
       // eslint-disable-next-line react-hooks/exhaustive-deps
       ++generation.current;
-      const hadLogin = activeLogin.current !== null;
+      const running = activeLogin.current;
       activeLogin.current = null;
+      // An attempt that already holds a session is dropped; otherwise pod-auth abandons it,
+      // discarding any grant it still obtains, and stored sessions stay.
+      if (running !== null && established.current === running)
+        void coreRef.current?.logout().catch(() => {});
+      else if (running !== null) {
+        // A login that resolves before it sees the abort is dropped when it lands (dropCancelled).
+        cancelled.current = running;
+        loginAbort.current?.abort(new DOMException("Sign-in was cancelled", "AbortError"));
+      }
       popup.cancel();
       for (const stop of stops) stop();
-      if (hadLogin) void coreRef.current?.logout().catch(() => {});
       if (runtime?.popupHolder.current === popup) runtime.popupHolder.current = null;
     };
   }, [suppliedAuth, attempt, accounts, publish, reset, store]);
@@ -295,7 +303,8 @@ export function SessionProvider({
       runLogin({ kind, key: input }, async () => {
         const target = await resolveLoginTarget(input, {
           fetch: publicFetch,
-          signal: AbortSignal.timeout(15_000),
+          // Cancel stops the lookup too, so sign-in reopens without waiting for its timeout.
+          signal: AbortSignal.any([loginAbort.current!.signal, AbortSignal.timeout(15_000)]),
           allowInsecureLoopback: allowInsecureLoopback(),
         });
         return target.kind === "webid" ? { webId: target.webId } : { issuer: target.issuer };

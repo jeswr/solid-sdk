@@ -157,6 +157,29 @@ describe("shared Pod auth session", () => {
     expect(session.recentProviders).toEqual([ISSUER]);
     expect(JSON.parse(localStorage.getItem("pod-auth.recentProviders.v1")!)).toEqual([ISSUER]);
   });
+  it("cancel also stops the address lookup, so sign-in reopens before its timeout", async () => {
+    vi.mocked(resolveLoginTarget).mockImplementationOnce(
+      (_input, options) =>
+        new Promise((_resolve, reject) =>
+          options?.signal?.addEventListener("abort", () => reject(options.signal?.reason), {
+            once: true,
+          }),
+        ),
+    );
+    await mount();
+    let result!: Promise<void>;
+    await act(async () => {
+      result = session.loginWithAddress(WEB_ID);
+    });
+    await act(async () => {
+      session.cancelLogin();
+      await result;
+    });
+    expect(vi.mocked(resolveLoginTarget).mock.calls[0][1]?.signal?.aborted).toBe(true);
+    expect(auth.login).not.toHaveBeenCalled();
+    expect(session.ready).toBe(true);
+    expect(session.error).toBe("Sign-in was cancelled.");
+  });
   it("offers remembered accounts when restore fails, without treating a public profile as authentication", async () => {
     auth.restore.mockRejectedValue(new Error("private details"));
     auth.remembered.mockResolvedValue([{ webId: WEB_ID, issuer: ISSUER }]);
@@ -459,11 +482,15 @@ describe("shared Pod auth session", () => {
     });
     await act(async () => root.unmount());
     expect(popup.closed).toBe(true);
-    expect(auth.logout).toHaveBeenCalledOnce();
+    // No grant yet: pod-auth abandons the attempt and stored sessions stay.
+    expect(auth.login.mock.calls[0]?.[1]?.signal?.aborted).toBe(true);
+    expect(auth.logout).not.toHaveBeenCalled();
     await act(async () => {
+      // A login that resolved before it saw the abort is dropped once it lands.
       pending.resolve(identity);
       await result;
     });
+    expect(auth.logout).toHaveBeenCalledOnce();
     expect(publicFetch).not.toHaveBeenCalled();
   });
 });
