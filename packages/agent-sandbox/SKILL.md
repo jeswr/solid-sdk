@@ -21,7 +21,7 @@ Rules for changes:
   purposes in `context(args)`, never from free text the agent chose.
 - Read permissions in data policies use `read`, not `use`: in solid-odrl `use` also covers
   `distribute`, which would let a read permission authorise sending.
-- An approved call is checked again before it runs; keep that re-check.
+- An approved call is checked again before it runs, and refused if what it would do changed since it was held; keep both.
 - New scenarios go in src/world/scenarios.ts with an expectation per step, and must pass in
   `test/stories.test.ts` under policy and hybrid modes.
 

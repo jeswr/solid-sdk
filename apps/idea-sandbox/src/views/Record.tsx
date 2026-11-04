@@ -3,12 +3,11 @@ import { DecisionRecord, type RecordEntry } from "@jeswr/agent-sandbox";
 import { useState } from "react";
 import type { Shared } from "../App.js";
 import { Chip, Section } from "../components.js";
-import { currentSession } from "./Stories.js";
 
 const short = (hash: string) => hash.replace("sha-256:", "").slice(0, 12);
 
-export function Record(_: { shared: Shared }) {
-  const session = currentSession();
+export function Record({ shared }: { shared: Shared }) {
+  const { session } = shared;
   const [tampered, setTampered] = useState<readonly RecordEntry[]>();
   const entries = session?.sandbox.record.entries() ?? [];
   const shown = tampered ?? entries;

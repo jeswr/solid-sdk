@@ -72,3 +72,19 @@ describe("second pass", () => {
     ).toBeTruthy();
   });
 });
+
+describe("merge-gate fixes", () => {
+  it("a story in progress survives a visit to another tab", async () => {
+    render(<App />);
+    fireEvent.click(screen.getByText("A planted instruction"));
+    fireEvent.click(screen.getByRole("button", { name: "Play all" }));
+    await waitFor(() => expect(screen.getAllByText("Stop").length).toBeGreaterThan(0));
+    const before = document.querySelectorAll(".timeline > li").length;
+    expect(before).toBeGreaterThan(2);
+    await openTab("rules");
+    expect(screen.queryAllByText("Stop")).toHaveLength(0);
+    await openTab("stories");
+    expect(screen.getAllByText("Stop").length).toBeGreaterThan(0);
+    expect(document.querySelectorAll(".timeline > li").length).toBe(before);
+  });
+});

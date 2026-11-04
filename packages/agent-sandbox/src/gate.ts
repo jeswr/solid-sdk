@@ -113,6 +113,9 @@ export interface Sandbox {
   readonly record: DecisionRecord;
   mode(): EnforcementMode;
   setMode(mode: EnforcementMode): void;
+  /** The model the "llm" and "hybrid" modes use; replaceable mid-session (undefined disconnects it). */
+  judge(): JudgeModel | undefined;
+  setJudge(judge: JudgeModel | undefined): void;
 }
 
 const ODRL_NS = "http://www.w3.org/ns/odrl/2/";
@@ -139,17 +142,30 @@ const strictest = (outcomes: readonly Outcome[]): Outcome =>
   outcomes.reduce<Outcome>((a, b) => (STRICTNESS[b] > STRICTNESS[a] ? b : a), "permit");
 
 /** The mandate with run-time grants folded in. */
-export function effectiveMandate(mandate: Mandate, grants: readonly Grant[]): Mandate {
+export function effectiveMandate(
+  mandate: Mandate,
+  grants: readonly Grant[],
+  askFirst: GlobalRules["askFirst"] = [],
+): Mandate {
   const add = (kind: Grant["kind"]) => grants.filter((g) => g.kind === kind).map((g) => g.rule);
+  const own = [...(mandate.autonomous.permissions ?? []), ...add("autonomous")];
+  // A rule that could cover an ask-first action moves to approval, whatever granted it.
+  const mustAsk = (r: Rule) =>
+    askFirst.some(
+      (x) =>
+        (r.target === undefined || r.target === x.target) &&
+        (actionCovers(r.action, x.action) || actionCovers(x.action, r.action)),
+    );
   return {
     ...mandate,
-    autonomous: {
-      ...mandate.autonomous,
-      permissions: [...(mandate.autonomous.permissions ?? []), ...add("autonomous")],
-    },
+    autonomous: { ...mandate.autonomous, permissions: own.filter((r) => !mustAsk(r)) },
     withApproval: {
       ...mandate.withApproval,
-      permissions: [...(mandate.withApproval.permissions ?? []), ...add("withApproval")],
+      permissions: [
+        ...(mandate.withApproval.permissions ?? []),
+        ...add("withApproval"),
+        ...own.filter(mustAsk),
+      ],
     },
   };
 }
@@ -163,14 +179,21 @@ export function createSandbox(options: SandboxOptions): Sandbox {
   const directory = options.directory;
   const unlisted = options.unlisted ?? "stop";
   let mode: EnforcementMode = options.mode ?? "policy";
+  let currentJudge: JudgeModel | undefined = options.judge;
   const record = new DecisionRecord();
+  // Keyed by record AND policy: a record re-read under different rules keeps both, so no
+  // restriction acquired earlier can be replaced by a later, looser copy.
   const labels = new Map<string, DataLabel>();
+  const labelKey = (l: DataLabel) => `${l.id}\u0000${JSON.stringify(l.policy)}`;
   const obligations: Obligation[] = [];
   const commitments: Commitment[] = [];
   const held = new Map<string, HeldCall & { readonly spec: ToolSpec; readonly ctx: CallContext }>();
   let heldCounter = 0;
 
-  const currentMandate = () => effectiveMandate(options.rules().mandate, options.grants?.() ?? []);
+  const currentMandate = () => {
+    const rules = options.rules();
+    return effectiveMandate(rules.mandate, options.grants?.() ?? [], rules.askFirst);
+  };
 
   function visibility(
     spec: ToolSpec,
@@ -319,7 +342,7 @@ export function createSandbox(options: SandboxOptions): Sandbox {
     const recipients = ctx.recipients ?? [];
     if (recipients.length === 0) return { steps, obligations: owed };
     const involved = new Map(labels);
-    for (const label of ctx.uses ?? []) involved.set(label.id, label);
+    for (const label of ctx.uses ?? []) involved.set(labelKey(label), label);
     for (const label of involved.values()) {
       for (const recipient of recipients) {
         const attributes: Record<string, string> = {
@@ -447,7 +470,7 @@ export function createSandbox(options: SandboxOptions): Sandbox {
     ctx: CallContext,
     mandate: Mandate,
   ): Promise<StepResult> {
-    const judge = options.judge;
+    const judge = currentJudge;
     if (!judge)
       return {
         step: "judge",
@@ -486,7 +509,7 @@ export function createSandbox(options: SandboxOptions): Sandbox {
   async function classifyPurpose(
     ctx: CallContext,
   ): Promise<{ purpose?: string; step?: StepResult }> {
-    const judge = options.judge;
+    const judge = currentJudge;
     if (!judge || !ctx.content) return {};
     const purposes = options.purposes ?? {};
     const list = Object.entries(purposes);
@@ -625,6 +648,17 @@ export function createSandbox(options: SandboxOptions): Sandbox {
     };
   }
 
+  /** What a call would do, as far as the rules can see it (for binding approvals). */
+  const effectsOf = (ctx: CallContext) =>
+    JSON.stringify([
+      [...(ctx.recipients ?? [])].sort(),
+      ctx.amount ?? null,
+      ctx.region ?? null,
+      ctx.purpose ?? null,
+      (ctx.uses ?? []).map((l) => [l.id, l.policy]),
+      ctx.content ?? null,
+    ]);
+
   function lookup(call: ToolCall): { spec?: ToolSpec; ctx?: CallContext; error?: string } {
     const spec = options.tools.find((t) => t.name === call.tool);
     if (!spec) return { error: `There is no tool called "${call.tool}".` };
@@ -661,7 +695,7 @@ export function createSandbox(options: SandboxOptions): Sandbox {
       decision,
       result,
       rulesDigest: rulesDigest(currentMandate()),
-      labels: [...labels.keys()],
+      labels: [...new Set([...labels.values()].map((l) => l.id))],
       ...extra,
     });
   }
@@ -674,6 +708,18 @@ export function createSandbox(options: SandboxOptions): Sandbox {
     decision: GateDecision,
     approvedFrom?: number,
   ): Promise<CallResult> {
+    // Count a send or payment against the limits before it is attempted, and keep the count if it
+    // fails: a failed call may still have reached the recipient or moved the money.
+    if (spec.kind === "send" || spec.kind === "pay") {
+      const at = clock();
+      for (const recipient of ctx.recipients?.length ? ctx.recipients : [spec.system])
+        commitments.push({
+          at,
+          kind: spec.kind,
+          recipient,
+          ...(ctx.amount !== undefined && { amount: ctx.amount }),
+        });
+    }
     let output: ToolOutput;
     try {
       output = await spec.run(call.args);
@@ -702,7 +748,7 @@ export function createSandbox(options: SandboxOptions): Sandbox {
       );
       if (check.decision === "permit" || mode === "off") {
         released.push(item.content);
-        labels.set(item.label.id, item.label);
+        labels.set(labelKey(item.label), item.label);
       } else
         withheld.push({
           step: "data-read",
@@ -712,14 +758,6 @@ export function createSandbox(options: SandboxOptions): Sandbox {
           about: item.label.id,
         });
     }
-    if (spec.kind === "send" || spec.kind === "pay")
-      for (const recipient of ctx.recipients?.length ? ctx.recipients : [spec.system])
-        commitments.push({
-          at: now,
-          kind: spec.kind,
-          recipient,
-          ...(ctx.amount !== undefined && { amount: ctx.amount }),
-        });
     for (const o of decision.obligations) obligations.push({ ...o });
     // Refused outright only when nothing at all is left to return.
     const allWithheld =
@@ -789,7 +827,27 @@ export function createSandbox(options: SandboxOptions): Sandbox {
     const h = held.get(id);
     if (!h) throw new Error(`No held call ${id}`);
     held.delete(id);
-    const decision = await decideSpec(h.spec, h.call.args, h.ctx, true);
+    // Derive the call's effects again from the systems as they are now. If they differ from what
+    // the person was shown (other recipients, amount, region, purpose or records), the approval
+    // does not carry over.
+    const fresh = lookup(h.call);
+    const changed =
+      !fresh.ctx || fresh.error || effectsOf(fresh.ctx) !== effectsOf(h.ctx)
+        ? (fresh.error ?? "What the call would do has changed since it was held.")
+        : undefined;
+    if (changed || !fresh.ctx) {
+      const explanation = `Approved by ${by}, but not run: ${changed}`;
+      const decision: GateDecision = {
+        outcome: "stop",
+        steps: [{ step: "approval", outcome: "stop", reason: "approval-stale", explanation }],
+        obligations: [],
+        summary: explanation,
+      };
+      const entry = append(h.call, decision, "stopped", { settles: h.entry });
+      return { status: "stopped", message: decision.summary, entry: entry.seq };
+    }
+    const ctx = fresh.ctx;
+    const decision = await decideSpec(h.spec, h.call.args, ctx, true);
     const stamped: GateDecision = {
       ...decision,
       steps: [
@@ -810,7 +868,7 @@ export function createSandbox(options: SandboxOptions): Sandbox {
         entry: entry.seq,
       };
     }
-    return run(h.spec, h.call, h.ctx, stamped, h.entry);
+    return run(h.spec, h.call, ctx, stamped, h.entry);
   }
 
   function decline(id: string, by: string): CallResult {
@@ -859,6 +917,10 @@ export function createSandbox(options: SandboxOptions): Sandbox {
     mode: () => mode,
     setMode(m) {
       mode = m;
+    },
+    judge: () => currentJudge,
+    setJudge(j) {
+      currentJudge = j;
     },
   };
 }

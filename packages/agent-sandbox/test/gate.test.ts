@@ -1,18 +1,23 @@
 // AUTHORED-BY Claude Opus 5.5
 import { describe, expect, it } from "vitest";
+import type { OdrlPolicy } from "../src/gate.js";
 import {
   createSandbox,
   createWorldSandbox,
+  DEMO_START,
   DecisionRecord,
   type JudgeModel,
+  type ToolSpec,
 } from "../src/index.js";
 import { runCode } from "../src/runners/code.js";
 import {
   AGENT_ID,
   ANDREW_DELEGATION,
   createWorld,
+  DEFAULT_SETTINGS,
   PURPOSE,
   scenario,
+  staffOnlyPolicy,
   supportMandate,
 } from "../src/world/index.js";
 
@@ -452,5 +457,128 @@ describe("ask a person for one action", () => {
       /approval/,
     );
     await client.close();
+  });
+});
+
+describe("merge-gate fixes", () => {
+  /** The demo world with some tools swapped, so a test can change what they do mid-session. */
+  function worldWith(swap: Record<string, (t: ToolSpec) => ToolSpec>, story = care) {
+    const world = createWorld(() => DEMO_START);
+    world.setSettings({ ...DEFAULT_SETTINGS, ...story.settings });
+    const tools = world.tools.map((t) => swap[t.name]?.(t) ?? t);
+    const sandbox = createSandbox({
+      tools,
+      rules: world.rules,
+      grants: world.grants,
+      directory: world.directory,
+      agent: world.agent,
+      purpose: story.purpose,
+      clock: () => DEMO_START,
+    });
+    return { world, sandbox };
+  }
+
+  it("an approval is bound to what the call would do when it was held", async () => {
+    let account = "GB12HFBK40516211223344";
+    const { sandbox, world } = worldWith({
+      payments_refund: (t) => ({
+        ...t,
+        context: (args) => ({ ...t.context?.(args), recipients: [`urn:hf:account:${account}`] }),
+      }),
+    });
+    const held = await sandbox.call({
+      tool: "payments_refund",
+      args: { customer: "c-1003", amount: 250 },
+    });
+    expect(held.status).toBe("held");
+    account = "GB98HFBK40516299887766";
+    const r = await sandbox.approve(held.status === "held" ? held.approval : "", "Priya");
+    expect(r.status === "stopped" && r.message).toMatch(/has changed since it was held/);
+    expect(world.state.refunds).toHaveLength(0);
+    expect(sandbox.record.entries().at(-1)?.decision.steps[0]).toMatchObject({
+      step: "approval",
+      reason: "approval-stale",
+    });
+  });
+
+  it("reading a record again under a looser policy does not drop the stricter one", async () => {
+    const id = "https://harbourfinch.example/systems/db#orders";
+    let policy: OdrlPolicy = staffOnlyPolicy(id);
+    const { sandbox } = worldWith({
+      db_query: (t) => ({
+        ...t,
+        run: () => ({
+          items: [
+            {
+              label: { id, title: "Orders", source: t.system, category: "Internal", policy },
+              content: "rows",
+            },
+          ],
+        }),
+      }),
+    });
+    const send = {
+      tool: "email_send",
+      args: { to: ["maria.lopez@example.org"], subject: "s", body: "Your order" },
+    };
+    expect((await sandbox.decide(send)).outcome).toBe("permit");
+    await sandbox.call({ tool: "db_query", args: { sql: "SELECT 1" } });
+    expect((await sandbox.decide(send)).outcome).toBe("stop");
+    policy = { id: `${id}-open`, permissions: [{ type: "permission", action: "use" }] };
+    await sandbox.call({ tool: "db_query", args: { sql: "SELECT 1" } });
+    expect(sandbox.labels()).toHaveLength(2);
+    expect((await sandbox.decide(send)).outcome).toBe("stop");
+  });
+
+  it("asking a person for an action still applies when a delegation grants it", async () => {
+    const { sandbox, world } = createWorldSandbox(scenario("acting-for-andrew"));
+    world.setGrants([ANDREW_DELEGATION]);
+    const call = {
+      tool: "email_send",
+      args: { to: ["ollie.grant@northwind-logistics.example"], subject: "s", body: "b" },
+    };
+    expect((await sandbox.decide(call)).outcome).toBe("permit");
+    const { target, action } = ANDREW_DELEGATION.rule;
+    world.setSettings({
+      ...world.settings(),
+      reviewActions: [{ system: target ?? "", action }],
+    });
+    expect((await sandbox.decide(call)).outcome).toBe("review");
+  });
+
+  it("a send that fails still counts against the limits", async () => {
+    let fail = true;
+    const { sandbox, world } = worldWith({
+      email_send: (t) => ({
+        ...t,
+        run: (args) => {
+          if (fail) throw new Error("connection reset after sending");
+          return t.run(args);
+        },
+      }),
+    });
+    const call = {
+      tool: "email_send",
+      args: { to: ["priya.shah@harbourfinch.example"], subject: "s", body: "hello" },
+    };
+    expect((await sandbox.call(call)).status).toBe("failed");
+    fail = false;
+    expect((await sandbox.call(call)).status).toBe("stopped");
+    expect(world.state.outbox).toHaveLength(0);
+  });
+
+  it("the judge can be replaced mid-session", async () => {
+    const { sandbox } = createWorldSandbox(care, { mode: "llm" });
+    const call = {
+      tool: "email_send",
+      args: { to: ["priya.shah@harbourfinch.example"], subject: "s", body: "hello" },
+    };
+    expect((await sandbox.decide(call)).steps[0]?.reason).toBe("judge:unavailable");
+    sandbox.setJudge({
+      name: "Later judge",
+      complete: async () => '{"outcome": "permit", "reason": "fine"}',
+    });
+    expect(sandbox.judge()?.name).toBe("Later judge");
+    expect((await sandbox.decide(call)).steps[0]?.reason).toBe("judge:Later judge");
   });
 });

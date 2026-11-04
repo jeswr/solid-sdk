@@ -189,4 +189,9 @@ export interface JudgeModel {
 export interface GlobalRules {
   readonly mandate: Mandate;
   readonly currency: string;
+  /**
+   * Actions on systems that always need a person's approval. Applied after run-time grants are
+   * added, so a delegation cannot lift them.
+   */
+  readonly askFirst?: readonly { readonly target: string; readonly action: string }[];
 }

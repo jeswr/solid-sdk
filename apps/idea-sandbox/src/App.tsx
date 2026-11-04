@@ -1,8 +1,14 @@
 // AUTHORED-BY Claude Opus 5.5
 import { type EnforcementMode, type JudgeModel, standInJudge } from "@jeswr/agent-sandbox";
-import { DEFAULT_SETTINGS, type RuleSettings, SCENARIOS } from "@jeswr/agent-sandbox/world";
-import { useEffect, useMemo, useState } from "react";
+import {
+  DEFAULT_SETTINGS,
+  scenario as findScenario,
+  type RuleSettings,
+  SCENARIOS,
+} from "@jeswr/agent-sandbox/world";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { claudeJudge, loadKey, saveKey } from "./claude.js";
+import { Session } from "./session.js";
 import { CodeBox } from "./views/CodeBox.js";
 import { Compare } from "./views/Compare.js";
 import { Record } from "./views/Record.js";
@@ -52,6 +58,38 @@ export interface Shared {
   /** Claude when a key is set, else the labelled keyword stand-in. */
   readonly judge: JudgeModel;
   readonly judgeIsModel: boolean;
+  /** The live play-through of the chosen story. It outlives tab changes. */
+  readonly session: Session;
+  /** Start the chosen story again from the beginning. */
+  restart(): void;
+}
+
+/**
+ * The live session for the chosen story, held above the tabs so leaving Stories keeps its
+ * progress. A new one starts only when the story changes or on restart; rules, mode and judge
+ * changes apply to the running one.
+ */
+function useSession(
+  storyId: string,
+  mode: EnforcementMode,
+  settings: RuleSettings,
+  judge: JudgeModel,
+) {
+  const [generation, setGeneration] = useState(0);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a new session starts only on story change or restart.
+  const session = useMemo(
+    () => new Session(findScenario(storyId), mode, settings, judge),
+    [storyId, generation],
+  );
+  useEffect(() => session.world.setSettings(settings), [session, settings]);
+  useEffect(() => session.sandbox.setMode(mode), [session, mode]);
+  useEffect(() => session.sandbox.setJudge(judge), [session, judge]);
+  useSyncExternalStore(
+    (l) => session.subscribe(l),
+    () =>
+      `${session.items.length}:${session.position}:${session.busy}:${session.items.filter((i) => i.kind === "call" && i.settled).length}`,
+  );
+  return { session, restart: () => setGeneration((g) => g + 1) };
 }
 
 function initialTab(): Tab {
@@ -66,6 +104,7 @@ export function App() {
   const [storyId, setStoryId] = useState<string>(SCENARIOS[0]?.id ?? "");
   const [apiKey, setKey] = useState(loadKey);
   const judge = useMemo(() => (apiKey ? claudeJudge(apiKey) : standInJudge), [apiKey]);
+  const { session, restart } = useSession(storyId, mode, settings, judge);
 
   useEffect(() => {
     const onHash = () => setTab(initialTab());
@@ -87,6 +126,8 @@ export function App() {
     },
     judge,
     judgeIsModel: Boolean(apiKey),
+    session,
+    restart,
   };
 
   return (

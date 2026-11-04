@@ -32,7 +32,9 @@ This package is `securityCritical` and private (not mirror-published).
    region.
 4. **Limits**, counted per recipient (a channel counts as one).
 5. **Record**, then run, hold for a person (`held()`, `approve()`, `decline()`), or stop. An
-   approved call is checked again before it runs.
+   approved call is checked again before it runs, and only if what it would do (recipients,
+   amount, region, purpose, records sent) is unchanged since it was held. Sends and payments
+   count against the limits before they are attempted, and still count if they fail.
 
 ## Who decides
 
@@ -45,6 +47,7 @@ This package is `securityCritical` and private (not mirror-published).
 | `llm`    | A model reading the rules as text (`JudgeModel`).                                       |
 | `hybrid` | The rules, after a model classifies what a message is really for (its purpose). A model can only make the answer stricter. |
 
+`sandbox.setMode()` and `sandbox.setJudge()` change the mode and the model mid-session.
 `standInJudge` is a keyword stand-in for tests and offline demos. It is not a model.
 
 ## Entry points
@@ -94,6 +97,7 @@ MCP server; each decision is printed to stderr.
 - Calls are decided one at a time per sandbox, so limits hold under concurrent calls; the
   record is in memory and not signed, so it shows tampering only to someone holding an
   independent copy of the fingerprints.
+- A record read twice under different policies keeps both, and both apply onward.
 - Duties are reported as `obligations()` but not enforced or tracked to completion.
 - The demo uses unsigned mandates; production use goes through `agent-mandate`'s signed
   credential and verifier.

@@ -1,37 +1,14 @@
 // AUTHORED-BY Claude Opus 5.5
 import { nameOf } from "@jeswr/agent-sandbox";
-import { DIRECTORY, scenario as findScenario, SCENARIOS } from "@jeswr/agent-sandbox/world";
-import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { DIRECTORY, SCENARIOS } from "@jeswr/agent-sandbox/world";
+import { useState } from "react";
 import { ModePicker, type Shared } from "../App.js";
 import { AGENT_MODELS, claudeAgent } from "../claude.js";
 import { Chip, Json, OUTCOME_LABEL, OUTCOME_TEXT, outcomeOfResult, Steps } from "../components.js";
-import { Session, type TimelineItem } from "../session.js";
-
-/** The live session for the chosen story; rebuilt when the story changes or on restart. */
-export function useSession(shared: Shared) {
-  const [generation, setGeneration] = useState(0);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: a new session starts only on story change or restart.
-  const session = useMemo(
-    () => new Session(findScenario(shared.storyId), shared.mode, shared.settings, shared.judge),
-    [shared.storyId, generation],
-  );
-  useEffect(() => session.world.setSettings(shared.settings), [session, shared.settings]);
-  useEffect(() => session.sandbox.setMode(shared.mode), [session, shared.mode]);
-  useSyncExternalStore(
-    (l) => session.subscribe(l),
-    () =>
-      `${session.items.length}:${session.position}:${session.busy}:${session.items.filter((i) => i.kind === "call" && i.settled).length}`,
-  );
-  return { session, restart: () => setGeneration((g) => g + 1) };
-}
-
-let sharedSession: Session | undefined;
-/** The most recent session (the audit log view reads it). */
-export const currentSession = () => sharedSession;
+import type { Session, TimelineItem } from "../session.js";
 
 export function Stories({ shared }: { shared: Shared }) {
-  const { session, restart } = useSession(shared);
-  sharedSession = session;
+  const { session, restart } = shared;
   const story = session.scenario;
   return (
     <div className="stories">

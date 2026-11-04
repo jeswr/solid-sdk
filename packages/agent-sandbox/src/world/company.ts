@@ -1094,7 +1094,11 @@ export function createWorld(clock: () => number = () => Date.parse("2026-11-04T0
     state,
     agent: AGENT_ID,
     purposes: PURPOSES,
-    rules: () => ({ mandate: supportMandate(settings), currency: "GBP" }),
+    rules: () => ({
+      mandate: supportMandate(settings),
+      currency: "GBP",
+      askFirst: (settings.reviewActions ?? []).map((x) => ({ target: x.system, action: x.action })),
+    }),
     grants: () => grants,
     setGrants(next) {
       grants = next;
