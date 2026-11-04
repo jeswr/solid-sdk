@@ -42,7 +42,8 @@ app before. It does not assume you know Solid or RDF.
 | Shared sign-in screen | `@jeswr/suite-ui/sign-in` (`SignInCard`), `@jeswr/pod-auth/directory` | Ready |
 | Sharing, roles, access requests | `@jeswr/pod-access` | Works; roles and the access-request inbox are Solid only (the inbox WAC only) |
 | React data hooks | `@jeswr/suite-sdk` | **Not ready yet**: only `useNotify()` exists |
-| Type Index, preferences, trash, versions | various | In progress |
+| Type Index | `@jeswr/pod-type-index` | Works; on Solid the WebID profile must be in the storage |
+| Preferences, trash, versions | various | In progress |
 
 ## For coding agents
 

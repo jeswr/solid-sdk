@@ -23,6 +23,7 @@
     "@jeswr/pod-access": "workspace:*",
     "@jeswr/pod-auth": "workspace:*",
     "@jeswr/pod-notifications": "workspace:*",
+    "@jeswr/pod-type-index": "workspace:*",
     "@jeswr/rdf-serialize": "workspace:*",
     "@jeswr/solid-bookmark": "workspace:*",
     "@jeswr/storage-capabilities": "workspace:*",

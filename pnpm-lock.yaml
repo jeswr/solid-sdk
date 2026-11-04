@@ -6018,6 +6018,9 @@ importers:
       '@jeswr/pod-notifications':
         specifier: workspace:*
         version: link:../../packages/pod-notifications
+      '@jeswr/pod-type-index':
+        specifier: workspace:*
+        version: link:../../packages/pod-type-index
       '@jeswr/rdf-serialize':
         specifier: workspace:*
         version: link:../../packages/rdf-serialize
