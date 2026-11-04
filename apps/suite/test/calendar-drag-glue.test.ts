@@ -84,6 +84,21 @@ describe("dayPinned", () => {
     expect(dayPinned(base, at("2026-11-02T11:30:00Z"), "UTC")).toBe(false);
     expect(dayPinned(base, at("2026-11-02T11:30:00Z"), "Pacific/Auckland")).toBe(true);
   });
+  it("pins month-day and month rules, and compares all-day dates directly", () => {
+    const monthly: CalendarEvent = {
+      name: "Rent",
+      start: "2026-11-02",
+      recurrence: { frequency: "MONTHLY", byMonthDay: [2] },
+    };
+    expect(dayPinned(monthly, { ...monthly, start: "2026-11-03" }, "UTC")).toBe(true);
+    expect(dayPinned(monthly, monthly, "UTC")).toBe(false);
+    const yearly: CalendarEvent = {
+      ...monthly,
+      recurrence: { frequency: "YEARLY", byMonth: [11] },
+    };
+    expect(dayPinned(yearly, { ...yearly, start: "2026-11-03" }, "UTC")).toBe(true);
+    expect(dayPinned({ ...monthly, recurrence: undefined }, monthly, "UTC")).toBe(false);
+  });
 });
 describe("sameTiming", () => {
   it("compares timed, all-day and open-ended timings", () => {
