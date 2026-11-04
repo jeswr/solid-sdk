@@ -8,7 +8,7 @@
 import { expect, type BrowserContext, type Page } from "@playwright/test";
 
 // Keep in sync with CSS_PORT in playwright.config.ts and e2e/global-setup.ts.
-export const WEBID = "http://localhost:3099/alice/profile/card#me";
+export const WEBID = `http://localhost:${process.env.E2E_CSS_PORT ?? "3099"}/alice/profile/card#me`;
 export const EMAIL = "alice@example.com";
 export const PASSWORD = "test-password-123";
 
@@ -84,18 +84,14 @@ export async function completeCssLogin(
   await authorize.first().click({ timeout: 20_000 }).catch(() => {});
 }
 
-/**
- * A fresh visitor (no recent accounts) lands on the "create a pod" view; the
- * pod-address sign-in form is one tap behind "Already have a pod? Sign in".
- * Reveal it so the URL input is present.
- */
+/** Open the shared card's WebID form, including after an account was remembered. */
 export async function revealSignInForm(page: Page): Promise<void> {
   await page.goto("/");
-  const urlInput = page.locator('input[type="url"]');
-  if (!(await urlInput.isVisible().catch(() => false))) {
-    await page.getByRole("button", { name: /^sign in$/i }).first().click();
-  }
-  await urlInput.waitFor({ state: "visible" });
+  const input = page.getByRole("textbox", { name: "WebID", exact: true });
+  const another = page.getByRole("button", { name: "Use another account", exact: true });
+  await expect(input.or(another)).toBeVisible();
+  if (await another.isVisible()) await another.click();
+  await expect(input).toBeEditable();
 }
 
 /** Full login flow from the app's login screen (assumes `page` is on it). */
@@ -107,9 +103,9 @@ export async function loginThroughPopup(
   password: string,
 ): Promise<void> {
   await revealSignInForm(page);
-  await page.fill('input[type="url"]', webId);
+  await page.getByRole("textbox", { name: "WebID", exact: true }).fill(webId);
   const nextPage = bufferPages(context);
-  await page.getByRole("button", { name: /^sign in$/i }).click();
+  await page.getByRole("button", { name: "Continue", exact: true }).click();
   const popup = await waitForLoginPopup(nextPage);
   await completeCssLogin(popup, email, password);
 }
@@ -117,9 +113,9 @@ export async function loginThroughPopup(
 /** Full golden login: WebID entry → OIDC popup → authenticated Home. */
 export async function loginAsAlice(page: Page, context: BrowserContext): Promise<void> {
   await revealSignInForm(page);
-  await page.fill('input[type="url"]', WEBID);
+  await page.getByRole("textbox", { name: "WebID", exact: true }).fill(WEBID);
   const nextPage = bufferPages(context);
-  await page.getByRole("button", { name: /^sign in$/i }).click();
+  await page.getByRole("button", { name: "Continue", exact: true }).click();
   const popup = await waitForLoginPopup(nextPage);
   await completeCssLogin(popup, EMAIL, PASSWORD);
   await expect(page.getByRole("heading", { name: /welcome back/i })).toBeVisible({

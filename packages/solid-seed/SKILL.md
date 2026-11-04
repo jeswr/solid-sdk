@@ -12,7 +12,8 @@ harness or server package into application code that defines a layout.
 
 ## Layout rules
 
-- Paths are pod-root-relative and begin with `/`; never target `.acl` directly.
+- Paths are pod-root-relative and begin with `/`; never target `.acl`, `.acr` or `.meta`, and
+  never percent-encode an unreserved character, `/`, `\` or `%`. `baseUrl` is an origin, not a path-based pod.
 - Prefer `{ instance }` for generated RDF, `{ dataset }` for caller-owned RDF/JS data, and
   `{ body }` only for already-issued artifacts such as JSON-LD VCs.
 - Assign one generated instance to one resource per pod. Cross-instance references are rebased
@@ -26,7 +27,14 @@ harness or server package into application code that defines a layout.
 
 Use `create` for fresh e2e pods, `ensure` for long-lived development pods, and `replace` for a
 deliberate deterministic rewrite. `ensure` leaves an existing primary resource unchanged but
-creates or rewrites its requested ACL so policy converges. It treats expander groups as all-or-none:
+creates or rewrites its requested ACL so policy converges, but only to narrow access: it never
+grants more than the existing ACL does over content it did not write (use `replace` for that), and
+`replace` never broadens an existing container's ACL, whose `acl:default` reaches other children.
+"Narrower" means the existing ACL already holds every desired statement and the authorizations it
+shares carry only grant predicates; a restriction such as `acl:origin` makes it refuse. These ACL
+rewrites are conditional on the checked ETag (`If-Match`), so a server that sends only weak ETags
+answers 412 and the seed fails closed. Grants on a container this run created apply only after a
+Turtle listing (status 200) shows no `ldp:contains` member. `ensure` treats expander groups as all-or-none:
 if every primary resource and requested ACL sidecar exists, primary resources skip while ACLs
 converge; if none exists, the whole group is created; a partial set errors. `create` also preflights
 the group and keeps `If-None-Match: *` on every actual write.
@@ -39,7 +47,9 @@ the group output is one consistency unit.
 ## Access control and tests
 
 Specify access through `AccessSpec`; never emit `.acl` Turtle yourself. The package uses
-`@solid/object` wrappers and always preserves owner read/write/control. Test pure behavior with an
+`@solid/object` wrappers and always preserves owner read/write/control. Access needs a WAC server
+that advertises `<resource>.acl` via `Link: rel="acl"`; an owner-only ACL is written before the data and
+the requested grants only after it, and anything else fails closed. Test pure behavior with an
 injected Fetch implementation, and keep one integration suite against the selected Solid server
 outside the browser-safe core. Assert content types, conditional headers, read-back bytes, group
 manifest states, and typed ACL authorization values.

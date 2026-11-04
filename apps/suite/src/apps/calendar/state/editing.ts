@@ -8,10 +8,12 @@ import {
   fromWallClock,
   importICal,
   type RecurrenceRule,
+  type StoredItem,
   wallClock,
 } from "../lib/model";
 import { asDate, validateEvent } from "../lib/model/validation";
 import { EventQuickAddError, parseEventQuickAdd } from "../lib/quickadd";
+import type { EventWrite } from "./repository";
 import type { CalendarInfo } from "./view";
 
 export function eventDocument(
@@ -183,6 +185,129 @@ export function planSeriesEdit(
               .map(shift),
           }
         : undefined,
+    },
+  };
+}
+// AUTHORED-BY Claude Opus 5.5
+/** The event mutation surface (`useEventMutations`) that series saves need. */
+export interface SeriesMutations {
+  resolve(url: string, etag: string | null, requireConfirmation?: boolean): Promise<string>;
+  create(url: string, data: CalendarEvent, requireConfirmation?: boolean): Promise<void>;
+  update(
+    url: string,
+    data: CalendarEvent,
+    etag: string,
+    requireConfirmation?: boolean,
+  ): Promise<void>;
+  delete(url: string, etag: string, requireConfirmation?: boolean): Promise<void>;
+  /** Display a write without sending it; returns the function that removes the preview. */
+  preview?(write: EventWrite): () => void;
+}
+/** A confirmed replacement created by an unfinished compound save; removed on failure/retry. */
+export interface SeriesReplacement {
+  current: { url: string; etag: string | null } | undefined;
+}
+export async function removeReplacement(
+  mutations: SeriesMutations,
+  replacement: SeriesReplacement,
+): Promise<void> {
+  const pending = replacement.current;
+  if (!pending) return;
+  await mutations.delete(pending.url, pending.etag ?? "", true);
+  replacement.current = undefined;
+}
+/**
+ * Persist a `planSeriesEdit` plan (shared by the editor and drag-and-drop): any replacement
+ * is confirmed before the original changes, and compound saves require confirmed prerequisites.
+ */
+export async function applySeriesPlan({
+  plan,
+  source,
+  mode,
+  target,
+  mutations,
+  replacement,
+  newId = () => crypto.randomUUID(),
+}: {
+  plan: SeriesPlan;
+  source: StoredItem<CalendarEvent>;
+  mode: SeriesMode;
+  target: CalendarInfo;
+  mutations: SeriesMutations;
+  replacement: SeriesReplacement;
+  newId?: () => string;
+}): Promise<void> {
+  // Finish a failed compensation before retrying, so a retry cannot duplicate replacements.
+  await removeReplacement(mutations, replacement);
+  const create = async (event: CalendarEvent, compound: boolean) => {
+    const url = new URL(`${newId()}.ttl`, target.container).href;
+    await mutations.create(url, { ...event, uid: newId() }, compound);
+    if (compound) {
+      replacement.current = { url, etag: null };
+      replacement.current.etag = await mutations.resolve(url, null);
+    }
+  };
+  const moving =
+    source.url &&
+    plan.original &&
+    plan.original.inCalendar !== source.data.inCalendar &&
+    mode === "all";
+  const compound = Boolean(plan.created || moving);
+  // Compound operations require confirmed prerequisites; ordinary edits can stay queued offline.
+  const etag = source.url ? await mutations.resolve(source.url, source.etag, compound) : "";
+  // The replacement is written before the series changes; preview the series change at once
+  // so the old occurrence doesn't sit beside its replacement while that write confirms.
+  const release =
+    compound && source.url
+      ? mutations.preview?.(
+          plan.original && !moving
+            ? { kind: "update", url: source.url, data: plan.original, etag }
+            : { kind: "delete", url: source.url, etag },
+        )
+      : undefined;
+  try {
+    if (moving && plan.original) await create(plan.original, true);
+    else if (plan.created) await create(plan.created, true);
+    if (source.url) {
+      if (plan.original && !moving)
+        await mutations.update(source.url, plan.original, etag, compound);
+      else await mutations.delete(source.url, etag, compound);
+    } else if (plan.original) await create(plan.original, false);
+  } catch (failure) {
+    // Compensate before the preview goes, so the old occurrence never shows beside a
+    // replacement; if that delete fails, `replacement` keeps it for the caller to retry.
+    await removeReplacement(mutations, replacement).catch(() => undefined);
+    throw failure;
+  } finally {
+    release?.();
+  }
+  replacement.current = undefined;
+}
+/** The latest local intent for an event: its item, null once deleted, undefined if none. */
+export function localEventItem(
+  url: string,
+  writes: readonly EventWrite[],
+): StoredItem<CalendarEvent> | null | undefined {
+  const local = [...writes].reverse().find((w) => w.url === url);
+  if (!local) return undefined;
+  if (local.kind === "delete") return null;
+  return {
+    url,
+    etag: local.confirmation?.etag ?? (local.kind === "update" ? local.etag : null),
+    data: local.data,
+  };
+}
+/** Fill a stored event's calendar from the container that holds it. */
+export function withSourceCalendar(
+  item: StoredItem<CalendarEvent>,
+  calendars: readonly CalendarInfo[],
+): StoredItem<CalendarEvent> {
+  const source = calendars.find((c) => podScopedUrl(c.container, item.url, { allowRoot: false }));
+  return {
+    ...item,
+    data: {
+      ...item.data,
+      inCalendar: item.data.inCalendar ?? (source ? `${source.url}#it` : undefined),
     },
   };
 }

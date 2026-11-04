@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 import { issueApproval } from "@jeswr/agent-mandate/approval";
 import {
   digestOf,
@@ -230,6 +231,59 @@ describe("agent paths and discovery", () => {
       seed: [await meta("profile/card", () => {})],
     });
     await expect(discoverWorkspace(noStorage.fetch, DEMO_WEBID)).rejects.toThrow("Choose");
+  });
+  it("reads a separately hosted WebID profile only through the public fetch", async () => {
+    const webId = "https://id.example/alice/card#me";
+    const external = await meta("profile/card", (_, store) => {
+      const node = metadataNode(store, webId);
+      node.setIri("http://www.w3.org/ns/pim/space#storage", DEMO_ROOT);
+      node.setIri(`${SOLID}privateTypeIndex`, `${DEMO_ROOT}settings/privateTypeIndex.ttl`);
+    });
+    const pod = createDemoPod({ root: DEMO_ROOT, seed: await buildDemoSeed(NOW) });
+    const io = vi.fn(pod.fetch);
+    const publicIo = vi.fn(async (input: RequestInfo | URL) =>
+      String(input) === "https://id.example/alice/card"
+        ? new Response(String(external.body), { headers: { "content-type": "text/turtle" } })
+        : new Response(null, { status: 404 }),
+    );
+    expect(await discoverWorkspace(io, webId, DEMO_ROOT, publicIo)).toBe(BASE);
+    expect(publicIo).toHaveBeenCalledTimes(1);
+    expect(io).toHaveBeenCalled();
+    // The credentialed fetch never leaves the selected storage.
+    expect(io.mock.calls.every(([url]) => String(url).startsWith(DEMO_ROOT))).toBe(true);
+    // Without a public fetch, an off-storage profile is refused before any request.
+    io.mockClear();
+    await expect(discoverWorkspace(io, webId, DEMO_ROOT)).rejects.toThrow();
+    expect(io).not.toHaveBeenCalled();
+    // The profile still has to list the selected storage, which must come from the grant.
+    await expect(discoverWorkspace(io, webId, "https://other.example/", publicIo)).rejects.toThrow(
+      "Choose",
+    );
+    await expect(discoverWorkspace(io, webId, undefined, publicIo)).rejects.toThrow("Choose");
+    // A public profile cannot point private reads off the storage.
+    for (const predicate of [
+      `${SOLID}privateTypeIndex`,
+      "http://www.w3.org/ns/pim/space#preferencesFile",
+    ]) {
+      const poisoned = await meta("profile/card", (_, store) => {
+        const node = metadataNode(store, webId);
+        node.setIri("http://www.w3.org/ns/pim/space#storage", DEMO_ROOT);
+        node.setIri(predicate, "https://id.example/alice/private.ttl");
+      });
+      const poisonedIo = vi.fn(
+        async () =>
+          new Response(String(poisoned.body), { headers: { "content-type": "text/turtle" } }),
+      );
+      io.mockClear();
+      await expect(discoverWorkspace(io, webId, DEMO_ROOT, poisonedIo)).rejects.toThrow();
+      expect(io).not.toHaveBeenCalled();
+      expect(poisonedIo).toHaveBeenCalledTimes(1);
+    }
+    // An in-storage profile keeps the credentialed read even when a public fetch exists.
+    io.mockClear();
+    publicIo.mockClear();
+    expect(await discoverWorkspace(io, DEMO_WEBID, DEMO_ROOT, publicIo)).toBe(BASE);
+    expect(publicIo).not.toHaveBeenCalled();
   });
   it("refuses off-pod instances before returning a workspace", async () => {
     const seed = await buildDemoSeed(NOW);

@@ -311,9 +311,14 @@ for (const density of ["comfortable", "compact"] as const) {
   test(`radio-group: ${density} arrow selection`, async ({ page }, info) => {
     await page.goto("/dev/components/radio-group");
     const region = page.getByRole("region", { name: `${density} fixtures`, exact: true });
-    await region.getByRole("radio", { name: "Comfortable", exact: true }).focus();
-    await page.keyboard.press("ArrowDown");
-    await expect(region.getByRole("radio", { name: "Compact", exact: true })).toBeChecked();
+    const compact = region.getByRole("radio", { name: "Compact", exact: true });
+    // Radix wires arrow selection in an effect after hydration; a key pressed before then is
+    // ignored, so repeat the user's gesture until the group is interactive.
+    await expect(async () => {
+      await region.getByRole("radio", { name: "Comfortable", exact: true }).focus();
+      await page.keyboard.press("ArrowDown");
+      await expect(compact).toBeChecked({ timeout: 500 });
+    }).toPass({ timeout: 10000 });
     await capture(page, info, `radio-group-${density}-compact`);
     await reflow(page);
   });

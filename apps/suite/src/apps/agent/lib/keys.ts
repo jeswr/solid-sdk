@@ -1,9 +1,10 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 import { parseRdf } from "@jeswr/fetch-rdf";
 import { serialize } from "@jeswr/rdf-serialize";
 import { createWebIdKeyResolver, type KeyPair, publishVerificationMethod } from "@jeswr/solid-vc";
 import { Store } from "n3";
-import type { PodSession } from "../../../lib/session/pod-session";
+import { type ProfileSession, profileReader } from "./profile";
 
 const PREFERENCE = "agent.approvalKey";
 export type KeyStatus = "none" | "ready" | "unavailable";
@@ -78,10 +79,7 @@ async function activeKey(owner: string, store: ApprovalKeyStore): Promise<KeyPai
   return key?.verificationMethod === id ? key : undefined;
 }
 
-export async function publishApprovalKey(
-  session: Pick<PodSession, "fetch" | "webId">,
-  key: KeyPair,
-) {
+export async function publishApprovalKey(session: ProfileSession, key: KeyPair) {
   const profile = new URL(session.webId);
   profile.hash = "";
   const publication = await publishVerificationMethod({
@@ -114,7 +112,7 @@ export async function publishApprovalKey(
     if (put.status === 412) continue;
     if (!put.ok) throw new Error("Couldn't update your account profile. Try again.");
     // A fresh resolver re-reads and confirms assertionMethod AND the key's controller binding.
-    const resolver = createWebIdKeyResolver({ fetch: session.fetch });
+    const resolver = createWebIdKeyResolver({ fetch: profileReader(session) });
     if (!(await resolver.isControlledBy(key.verificationMethod, session.webId)))
       throw new Error("Your account profile hasn't confirmed this key. Try again.");
     return;
@@ -123,20 +121,22 @@ export async function publishApprovalKey(
 }
 
 export async function approvalKeyStatus(
-  session: Pick<PodSession, "fetch" | "webId">,
+  session: ProfileSession,
   store = new ApprovalKeyStore(),
 ): Promise<KeyStatus> {
   const id = localStorage.getItem(PREFERENCE);
   if (!id) return "none";
   const key = await activeKey(session.webId, store);
   if (!key) return "unavailable";
-  const resolver = createWebIdKeyResolver({ fetch: session.fetch });
+  const resolver = createWebIdKeyResolver({ fetch: profileReader(session) });
   return (await resolver.isControlledBy(id, session.webId)) ? "ready" : "unavailable";
 }
-export async function setupApprovalKey(
-  session: Pick<PodSession, "fetch" | "webId">,
-  store = new ApprovalKeyStore(),
-) {
+export async function setupApprovalKey(session: ProfileSession, store = new ApprovalKeyStore()) {
+  // Publishing writes the profile, which needs a credential the storage grant doesn't cover.
+  if (profileReader(session) !== session.fetch)
+    throw new Error(
+      "Your profile is outside the storage you shared, so this device can't add its approval key there.",
+    );
   const key = await store.generate(session.webId);
   try {
     await publishApprovalKey(session, key);
@@ -149,14 +149,14 @@ export async function setupApprovalKey(
 }
 /** Signing always rechecks device storage and the current profile, including after a restore. */
 export async function withApprovalKey<T>(
-  session: Pick<PodSession, "fetch" | "webId">,
+  session: ProfileSession,
   sign: (key: KeyPair) => Promise<T>,
 ): Promise<T> {
   const store = new ApprovalKeyStore();
   const key = await activeKey(session.webId, store);
   if (
     !key ||
-    !(await createWebIdKeyResolver({ fetch: session.fetch }).isControlledBy(
+    !(await createWebIdKeyResolver({ fetch: profileReader(session) }).isControlledBy(
       key.verificationMethod,
       session.webId,
     ))

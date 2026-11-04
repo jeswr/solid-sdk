@@ -1,10 +1,7 @@
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 //
-// Client entry. Wraps the app in the SessionProvider (the one auth seam) and
-// mounts into #root. There is NO SSR/prerender here — this is a pure static SPA —
-// and the reactive-auth runtime is still loaded via a dynamic import inside the
-// provider so the bundle has no top-level reactive-auth evaluation.
+// Client entry: the session provider lazily creates one shared pod-auth core.
 import { ThemeProvider } from "@jeswr/app-shell";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";

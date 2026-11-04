@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 import { afterEach, beforeEach, expect, it, onTestFinished, vi } from "vitest";
 import { createDemoPod } from "../src/lib/demo-pod/pod";
 import { buildDemoSeed, DEMO_ROOT, DEMO_WEBID } from "../src/lib/demo-pod/seed";
@@ -1123,6 +1124,99 @@ it("loads the series master for editing an occurrence and detaches just that occ
   expect(events.filter((e) => e.data.name === "Changed once")).toHaveLength(1);
   expect(events.filter((e) => e.data.name === "Team stand-up")).toHaveLength(2);
 });
+it("keeps the loaded calendar on screen when a refresh finds the pod unreachable", async () => {
+  const account = mocks.session as PodSession;
+  let failure: Error | undefined;
+  mocks.session = {
+    ...account,
+    fetch: async (input, init) => {
+      if (failure) throw failure;
+      // Personal already fails, so its warning stays rather than keeping stale events.
+      return String(input) === `${DEMO_ROOT}calendar/personal/`
+        ? new Response(null, { status: 500 })
+        : account.fetch(input, init);
+    },
+  };
+  mocks.date = "2026-10-28";
+  const mounted = await mount(screen());
+  await settle();
+  const before = buttons(mounted.host, "Team stand-up").length;
+  expect(before).toBeGreaterThan(0);
+  const refresh = async () => {
+    // A pod notification (e.g. a late write from another tab) asks every range to reload.
+    await act(() => notify?.(`${DEMO_ROOT}calendar/work/stand-up.ttl`));
+    await settle();
+    await settle();
+    expect(buttons(mounted.host, "Team stand-up")).toHaveLength(before);
+    expect(mounted.host.textContent).not.toContain("Can't reach your storage");
+    expect(mounted.host.textContent).toContain("Could not load events from Personal");
+  };
+  failure = new TypeError("Failed to fetch");
+  await refresh();
+  // Offline, any failure counts as unreachable.
+  failure = new Error("connection reset");
+  Object.defineProperty(window.navigator, "onLine", { value: false, configurable: true });
+  onTestFinished(() => {
+    Object.defineProperty(window.navigator, "onLine", { value: true, configurable: true });
+  });
+  await refresh();
+});
+it("hides a detached occurrence at once while its replacement write is still confirming", async () => {
+  const account = mocks.session as PodSession;
+  const url = `${DEMO_ROOT}calendar/work/stand-up.ttl`;
+  const gates: { resolve: (status: number) => void }[] = [];
+  mocks.session = {
+    ...account,
+    fetch: async (input, init) => {
+      if (init?.method === "PUT" && String(input) !== url) {
+        const gate = deferred<number>();
+        gates.push(gate);
+        const status = await gate.promise;
+        if (status !== 201) return new Response(null, { status });
+      }
+      return account.fetch(input, init);
+    },
+  };
+  mocks.path = `/calendar/e/${encodeRef(url)}`;
+  mocks.extra = { occurrence: "2026-10-28T09:30:00.000Z", return: "/calendar/week?d=2026-10-28" };
+  const mounted = await mount(
+    h(CalendarApp, { children: h(CalendarEditorRoute, { eventRef: encodeRef(url) }) }),
+  );
+  await settle();
+  const background = mounted.host.querySelector(".cal-editor-background") as HTMLElement;
+  const before = buttons(background, "Team stand-up").length;
+  expect(before).toBeGreaterThan(0);
+  const editor = document.querySelector(".cal-editor-page") as HTMLElement;
+  const save = async (title: string) => {
+    await changeField(editor.querySelector('[aria-label="Title"]') as HTMLInputElement, title);
+    await act(() =>
+      editor
+        .querySelector("form")
+        ?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
+    );
+    await click(
+      [...document.querySelectorAll(".cal-series-dialog button")].find(
+        (b) => b.textContent === "This event",
+      ) as HTMLElement,
+    );
+    await settle();
+  };
+  // A failed replacement write restores the occurrence.
+  await save("Not saved");
+  expect(gates).toHaveLength(1);
+  expect(buttons(background, "Team stand-up")).toHaveLength(before - 1);
+  await act(async () => gates[0]?.resolve(500));
+  await settle();
+  expect(buttons(background, "Team stand-up")).toHaveLength(before);
+  // A slow replacement write never shows both the occurrence and its replacement.
+  await save("Changed once");
+  expect(gates).toHaveLength(2);
+  expect(buttons(background, "Team stand-up")).toHaveLength(before - 1);
+  await act(async () => gates[1]?.resolve(201));
+  await settle();
+  await settle();
+  expect(buttons(background, "Team stand-up")).toHaveLength(before - 1);
+});
 it("retains offline intents and replays them on online, while rejecting invalid ETags", async () => {
   const account = mocks.session as PodSession;
   let offline = true;
@@ -1219,9 +1313,8 @@ it("does not write before discovery has identified the user's calendars", async 
   });
 });
 it("parses and saves a quick-create title through the existing mutations", async () => {
-  // "tomorrow" is relative to the wall clock; pin it to the seed's NOW.
-  vi.useFakeTimers({ toFake: ["Date"] });
-  vi.setSystemTime(NOW);
+  // "tomorrow" is relative to the clock: pin it to the day before the asserted date.
+  vi.useFakeTimers({ toFake: ["Date"], now: new Date("2026-11-01T12:00:00Z") });
   onTestFinished(() => {
     vi.useRealTimers();
   });

@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 "use client";
 import {
   Button,
@@ -14,11 +15,11 @@ import {
   Toaster,
   UploadDock,
 } from "@jeswr/suite-ui";
-import { Album, HardDrive, Heart, Images, Trash2, Upload } from "lucide-react";
+import { Album, FolderInput, HardDrive, Heart, Images, Trash2, Upload } from "lucide-react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
 import { createContext, type ReactNode, useContext, useEffect, useRef, useState } from "react";
 import { SuiteFrame } from "@/components/interim-shell/suite-frame";
+import { useRoutePathname } from "@/lib/route-params";
 import { PodSessionProvider, usePodSessionState } from "@/lib/session/pod-session";
 import { PhotosProvider, usePhotos } from "../state/photos-context";
 
@@ -28,7 +29,7 @@ export function useRequestUpload() {
 }
 function Chrome({ children }: { children: ReactNode }) {
   const photos = usePhotos();
-  const pathname = usePathname();
+  const pathname = useRoutePathname();
   const picker = useRef<HTMLInputElement>(null);
   const folderPicker = useRef<HTMLInputElement>(null);
   const [strip, setStrip] = useState(true);
@@ -53,6 +54,9 @@ function Chrome({ children }: { children: ReactNode }) {
           <DropdownMenuItem onSelect={request}>Upload files</DropdownMenuItem>
           <DropdownMenuItem onSelect={() => folderPicker.current?.click()}>
             Upload folder
+          </DropdownMenuItem>
+          <DropdownMenuItem asChild>
+            <Link href="/photos/import">Import from Google Takeout</Link>
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuCheckboxItem
@@ -83,6 +87,7 @@ function Chrome({ children }: { children: ReactNode }) {
     },
     { href: "/photos/trash", name: "Trash", icon: Trash2, count: photos.trash.length },
     { href: "/photos/storage", name: "Storage", icon: HardDrive, count: undefined },
+    { href: "/photos/import", name: "Import", icon: FolderInput, count: undefined },
   ];
   return (
     <UploadContext value={request}>
@@ -194,6 +199,14 @@ function SessionGate({ children }: { children: ReactNode }) {
   const session = usePodSessionState();
   if (session.status === "loading")
     return <LoadingSkeleton preset="grid" label="Opening Photos…" />;
+  // Native builds start signed out until native sign-in lands.
+  if (session.status === "signed-out")
+    return (
+      <div className="pho-page">
+        <h1>Photos</h1>
+        <p role="status">Sign in to open your Photos</p>
+      </div>
+    );
   if (session.status === "error")
     return (
       <div className="pho-page">

@@ -2,7 +2,7 @@
   "name": "@jeswr/agent-memory",
   "version": "0.1.0",
   "private": true,
-  "description": "Personal knowledge graph memory hooks (experimental scaffold).",
+  "description": "Approval-gated personal knowledge graph memory and scoped recall.",
   "type": "module",
   "license": "MIT",
   "x-authored-by": "Codex GPT-6.1-Sol",
@@ -31,5 +31,19 @@
     "typecheck": "pnpm -w exec tsc -p packages/agent-memory/tsconfig.json --noEmit && pnpm -w exec tsc -p packages/agent-memory/tsconfig.test.json",
     "lint": "pnpm -w exec biome check packages/agent-memory",
     "test": "pnpm -w exec vitest run --root packages/agent-memory"
+  },
+  "dependencies": {
+    "@jeswr/agent-mandate": "workspace:*",
+    "@jeswr/pkg-memory": "workspace:*",
+    "@jeswr/rdf-engine": "workspace:*",
+    "@jeswr/storage-client": "workspace:*",
+    "n3": "^2.0.3",
+    "yaml": "^2.9.1"
+  },
+  "devDependencies": {
+    "@types/n3": "^1.26.1",
+    "@solid/community-server": "7.2.0",
+    "componentsjs": "5.5.1",
+    "@jeswr/guarded-fetch": "workspace:*"
   }
 }

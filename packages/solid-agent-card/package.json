@@ -15,6 +15,7 @@
   "files": [
     "dist",
     "docs",
+    "scripts/render-card.mjs",
     "README.md"
   ],
   "scripts": {
@@ -28,6 +29,7 @@
     "lint:fix": "biome check --write src test scripts",
     "test": "npm run build:deps && vitest run",
     "test:coverage": "npm run build:deps && vitest run --coverage",
+    "render:card": "node scripts/render-card.mjs",
     "prepare": "npm run build"
   },
   "keywords": [
@@ -54,6 +56,9 @@
   },
   "homepage": "https://github.com/jeswr/solid-agent-card#readme",
   "dependencies": {
+    "@jeswr/agent-model": "workspace:*",
+    "@jeswr/fetch-rdf": "workspace:*",
+    "@jeswr/ldp-container": "workspace:*",
     "@jeswr/rdf-serialize": "workspace:*",
     "@rdfjs/wrapper": "^0.34.0",
     "content-type": "^1.0.5",
@@ -62,7 +67,6 @@
   },
   "devDependencies": {
     "@biomejs/biome": "^2.0.0",
-    "@jeswr/fetch-rdf": "workspace:*",
     "@microsoft/api-extractor": "^7.58.9",
     "@rdfjs/types": "^2.0.1",
     "@types/n3": "^1.16.0",
@@ -77,5 +81,13 @@
   },
   "publishConfig": {
     "access": "public"
+  },
+  "mirrorPublish": {
+    "inlined": [
+      "@jeswr/agent-model",
+      "@jeswr/fetch-rdf",
+      "@jeswr/ldp-container",
+      "@jeswr/rdf-serialize"
+    ]
   }
 }

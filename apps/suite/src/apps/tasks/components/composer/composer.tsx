@@ -53,6 +53,7 @@ import {
   removeChip,
 } from "../../lib/compose/quick-add";
 import type { StoredProject, StoredTask } from "../../lib/model/store";
+import { offerNotificationPermission } from "../../state/reminders";
 import { useTasks } from "../../state/tasks-context";
 import { DueControl } from "./due-control";
 
@@ -280,6 +281,7 @@ export function Composer({
     try {
       prepared.save ??= prepareSave(prepared.draft, undefined, () => void saveDraft(prepared));
       const saved = await prepared.save?.();
+      if (saved && prepared.draft.reminders.length) offerNotificationPermission();
       if (saved && revision.current === prepared.revision) {
         revision.current++;
         preparedSave.current = undefined;
@@ -320,6 +322,8 @@ export function Composer({
       }
       setBatch(undefined);
       setNow(new Date());
+      if (pending.entries.some((entry) => entry.result.reminders.length))
+        offerNotificationPermission();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Couldn't add tasks");
       setPasteFailed(true);

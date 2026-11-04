@@ -7,6 +7,7 @@ import { expect, it, vi } from "vitest";
 import { applyUpdate, Doc, encodeStateAsUpdate } from "yjs";
 import { baseExtensions, editorExtensions } from "../src/apps/docs/editor/extensions";
 import { exportMarkdown, importMarkdown } from "../src/apps/docs/lib/convert/markdown";
+import { exportedMarks } from "./helpers/docs-markdown-omissions";
 import { markdownText, markdownWhitespace } from "./helpers/docs-markdown-text";
 
 function makeEditor(doc = new Doc()) {
@@ -154,7 +155,7 @@ it("preserves italics on ef when bold and highlight end inside an italic run", (
 });
 
 it("round trips random overlapping ranges of every schema mark with edge spaces", () => {
-  const types = Object.keys(getSchema(baseExtensions(vi.fn())).marks);
+  const types = exportedMarks(getSchema(baseExtensions(vi.fn())));
   const { editor, destroy } = makeEditor();
   const sample = fc
     .tuple(

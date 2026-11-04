@@ -5,7 +5,7 @@ import { type DatasetCore, fetchRdf } from "@jeswr/fetch-rdf";
 import { DataFactory } from "n3";
 import { boundedRead } from "./bounded-read";
 import type { SolidExtensionApi, SolidExtensionGrant } from "./extension-session";
-import type { ExtensionPodSession } from "./pod-session";
+import type { ExtensionPodSession } from "./types";
 
 export const STORAGE_CLASS = "http://www.w3.org/ns/pim/space#Storage";
 const NAME_PREDICATES = ["http://xmlns.com/foaf/0.1/name", "http://www.w3.org/2006/vcard/ns#fn"];

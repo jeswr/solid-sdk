@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 "use client";
 import {
   AppRail,
@@ -14,9 +15,10 @@ import {
   type ShellFrameProps,
   type ShellPreferences,
 } from "@jeswr/suite-ui/shell";
-import { OfflinePill, SyncSheet } from "@jeswr/suite-ui/sync";
-import { usePathname, useRouter } from "next/navigation";
+import { OfflinePill } from "@jeswr/suite-ui/sync";
+import { useRouter } from "next/navigation";
 import { type ReactNode, Suspense, useEffect, useState } from "react";
+import { useRoutePathname } from "@/lib/route-params";
 import { AccountMenu } from "./account/account-menu";
 import { useSuiteEnvironment } from "./environment";
 import { parseRailPreferences } from "./lib/preferences";
@@ -29,7 +31,9 @@ import { useAccounts } from "./session/accounts-provider";
 import { SessionGuard } from "./session/session-guard";
 import { GlobalShortcuts } from "./shortcuts/global-shortcuts";
 import { ShortcutsProvider, useShortcutSettings } from "./shortcuts/provider";
+import { useRecentTitle } from "./sync/offline-provider";
 import { useSyncSnapshot } from "./sync/online";
+import { ShellSyncSheet } from "./sync/shell-sync-sheet";
 
 export interface SuiteShellProps {
   app: AppSlug;
@@ -53,7 +57,8 @@ function Frame({
   searchSource,
   children,
 }: SuiteShellProps) {
-  const pathname = usePathname();
+  // The registry compares slash-free routes; the native export adds a trailing slash.
+  const pathname = useRoutePathname();
   const router = useRouter();
   const shellSource = useShellSearchSource();
   const sync = useSyncSnapshot();
@@ -62,6 +67,11 @@ function Frame({
   const { characterKeys } = useShortcutSettings();
   const env = useSuiteEnvironment();
   const app = appRegistry.find((item) => item.slug === slug);
+  const title = app ? `${pageTitle} · ${app.name} · Solid Suite` : undefined;
+  useEffect(() => {
+    if (title) document.title = title;
+  }, [title]);
+  useRecentTitle(title);
   const [preferences, setPreferences] = useState<ShellPreferences>(defaultShellPreferences);
   const [rail, setRail] = useState<RailPreferences>(() => parseRailPreferences(null));
   useEffect(() => {
@@ -144,14 +154,7 @@ function Frame({
       >
         {children}
       </ShellFrame>
-      <SyncSheet
-        open={syncOpen}
-        onOpenChange={setSyncOpen}
-        snapshot={sync}
-        onRetryAll={() => {}}
-        onRetry={() => {}}
-        onResolve={() => {}}
-      />
+      <ShellSyncSheet open={syncOpen} onOpenChange={setSyncOpen} />
     </RailPreferencesProvider>
   );
 }

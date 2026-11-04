@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "request": {
+    "method": "GET",
+    "url": "http://localhost:46617/conformance-5b1905a4-4edd-484a-83f5-39e9bf5a71f7/meta-links/note.txt.meta",
+    "headers": [["accept", "text/turtle, application/ld+json;q=0.9"]],
+    "body": null
+  },
+  "response": {
+    "url": "http://localhost:46617/conformance-5b1905a4-4edd-484a-83f5-39e9bf5a71f7/meta-links/note.txt.meta",
+    "status": 200,
+    "statusText": "OK",
+    "headers": [
+      ["accept-patch", "text/n3, application/sparql-update"],
+      ["accept-ranges", "bytes"],
+      ["access-control-allow-credentials", "true"],
+      ["access-control-allow-origin", "*"],
+      [
+        "access-control-expose-headers",
+        "Accept-Patch,Accept-Post,Accept-Put,Allow,Content-Range,ETag,Last-Modified,Link,Location,Updates-Via,WAC-Allow,Www-Authenticate"
+      ],
+      ["allow", "OPTIONS, HEAD, GET, PATCH"],
+      ["connection", "keep-alive"],
+      ["content-type", "text/turtle"],
+      ["date", "Sun, 01 Nov 2026 00:00:09 GMT"],
+      ["keep-alive", "timeout=5"],
+      [
+        "link",
+        "<http://www.w3.org/ns/ldp#Resource>; rel=\"type\", <urn:npm:solid:community-server:meta:DescriptionResource>; rel=\"type\", <http://localhost:46617/.notifications/StreamingHTTPChannel2023/http%3A%2F%2Flocalhost%3A46617%2Fconformance-5b1905a4-4edd-484a-83f5-39e9bf5a71f7%2Fmeta-links%2Fnote.txt.meta>; rel=\"http://www.w3.org/ns/solid/terms#updatesViaStreamingHttp2023\", <http://localhost:46617/conformance-5b1905a4-4edd-484a-83f5-39e9bf5a71f7/.well-known/solid>; rel=\"http://www.w3.org/ns/solid/terms#storageDescription\""
+      ],
+      ["transfer-encoding", "chunked"],
+      ["vary", "Accept,Authorization,Origin"],
+      ["wac-allow", "user=\"append control read write\""],
+      ["x-powered-by", "Community Solid Server"]
+    ],
+    "body": "QHByZWZpeCBkYzogPGh0dHA6Ly9wdXJsLm9yZy9kYy90ZXJtcy8+LgpAcHJlZml4IGxkcDogPGh0dHA6Ly93d3cudzMub3JnL25zL2xkcCM+LgpAcHJlZml4IHBvc2l4OiA8aHR0cDovL3d3dy53My5vcmcvbnMvcG9zaXgvc3RhdCM+LgpAcHJlZml4IHhzZDogPGh0dHA6Ly93d3cudzMub3JnLzIwMDEvWE1MU2NoZW1hIz4uCgo8bm90ZS50eHQ+IGEgbGRwOlJlc291cmNlOwogICAgZGM6bW9kaWZpZWQgIjIwMjYtMTEtMDFUMDA6MDA6MDguNzc5WiJeXnhzZDpkYXRlVGltZTsKICAgIDxodHRwOi8vd3d3LnczLm9yZy9ucy9tYS1vbnQjZm9ybWF0PiAidGV4dC9wbGFpbiI7CiAgICBwb3NpeDptdGltZSAxNzkzNDkxMjA4OwogICAgcG9zaXg6c2l6ZSAxMS4K",
+    "redirected": false
+  }
+}

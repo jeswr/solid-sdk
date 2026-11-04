@@ -80,8 +80,11 @@ it("resolves an ECDSA-signed RDF status list, including a revoked bit, and check
         resolveKey: keyResolver(key),
         isControlledBy: () => controlled,
         fetch: async (_url, init) => {
-          // Prefer stored RDF over generic expanded JSON-LD conversions by pod servers.
-          expect(new Headers(init?.headers).get("accept")?.split(",")[0]).toBe("application/trig");
+          // Every supported type at equal weight, so a pod server serves the list as stored.
+          const accept = new Headers(init?.headers).get("accept") ?? "";
+          expect(accept.split(",")[0]).toBe("application/trig");
+          expect(accept).toContain("application/ld+json");
+          expect(accept).not.toContain(";q=");
           return new Response(document, { headers: { "content-type": "application/trig" } });
         },
       });

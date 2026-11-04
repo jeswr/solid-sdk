@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 "use client";
 import { Button, ErrorState, LoadingSkeleton, Toaster } from "@jeswr/suite-ui";
 import {
@@ -17,9 +18,9 @@ import {
   Syringe,
 } from "lucide-react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
 import { createContext, type ReactNode, useContext, useState } from "react";
 import { SuiteFrame } from "@/components/interim-shell/suite-frame";
+import { useRoutePathname } from "@/lib/route-params";
 import { PodSessionProvider, usePodSessionState } from "@/lib/session/pod-session";
 import { CATALOGUE, type MetricId } from "../lib/data/metrics";
 import { HealthProvider, useHealth } from "../state/health-context";
@@ -31,7 +32,7 @@ export function useMeasurement() {
 }
 const icons = [Footprints, HeartPulse, Moon, Scale, Activity];
 function Sidebar() {
-  const pathname = usePathname();
+  const pathname = useRoutePathname();
   const { session } = useHealth();
   const links = [
     { href: "/health", label: "Summary", icon: LayoutDashboard },
@@ -139,6 +140,14 @@ function SessionGate({ children }: { children: ReactNode }) {
       <div className="hlt-page">
         <h1>Opening Health</h1>
         <LoadingSkeleton preset="grid" />
+      </div>
+    );
+  // Native builds start signed out until native sign-in lands.
+  if (state.status === "signed-out")
+    return (
+      <div className="hlt-page">
+        <h1>Health</h1>
+        <p role="status">Sign in to open your Health</p>
       </div>
     );
   if (state.status === "error")
