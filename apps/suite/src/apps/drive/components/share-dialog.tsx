@@ -16,12 +16,14 @@ import { useEffect, useId, useState } from "react";
 import type { DriveItem } from "../lib/client/client";
 import {
   applySharing,
+  CONTENTS_DIFFER,
   loadSharing,
   SharingConflictError,
+  SharingIncompleteError,
   SharingRefreshError,
   type SharingSession,
   type SharingSnapshot,
-} from "../lib/sharing/apply";
+} from "../lib/sharing/adapter";
 import type { SharingRole, SharingSelection, SharingState } from "../lib/sharing/types";
 
 const profile = () => ({ loading: false });
@@ -129,11 +131,19 @@ export function ShareDialog({
       onSaved();
     } catch (reason) {
       if (reason instanceof SharingConflictError) setSnapshot(reason.snapshot);
+      // Part of the selection may be stored: show the reloaded access, never "saved".
+      if (reason instanceof SharingIncompleteError) {
+        setSnapshot(reason.snapshot);
+        setPeople([]);
+        setQuery("");
+        setAnnouncement("Sharing not saved as chosen");
+        onSaved();
+      }
       if (reason instanceof SharingRefreshError) {
         setSnapshot(undefined);
         setPeople([]);
         setQuery("");
-        setAnnouncement(reason.committed ? "Sharing saved" : "Sharing outcome unknown");
+        setAnnouncement(reason.committed ? "Sharing not confirmed" : "Sharing outcome unknown");
         onSaved();
       }
       setError(reason instanceof Error ? reason.message : "Couldn't save sharing");
@@ -186,7 +196,13 @@ export function ShareDialog({
           <div className="su-stack" aria-busy={saving}>
             {!snapshot.canManage && (
               <p className="su-muted" role="status">
-                You can view access. Only an owner with Control can change sharing.
+                {snapshot.readOnly ??
+                  "You can view access. Only an owner with Control can change sharing."}
+              </p>
+            )}
+            {snapshot.contentsDiffer && (
+              <p className="su-muted" role="note">
+                {CONTENTS_DIFFER}
               </p>
             )}
             <p className="su-muted" id={lockId}>

@@ -58,6 +58,10 @@ describe("page-lifetime pod-auth core", () => {
     await expect(
       options.ui.chooseIssuer?.(["https://one.example/", "https://two.example/"]),
     ).rejects.toBeInstanceOf(AmbiguousIssuerError);
+    // The listed issuers travel with the error so the card can offer them.
+    await expect(
+      options.ui.chooseIssuer?.(["https://one.example/", "https://two.example/"]),
+    ).rejects.toMatchObject({ issuers: ["https://one.example/", "https://two.example/"] });
   });
 
   it("delegates the complete callback URL and abort signal to the current holder", async () => {

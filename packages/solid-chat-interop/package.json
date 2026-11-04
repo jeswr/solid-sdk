@@ -4,6 +4,7 @@
   "description": "Chat/conversation interop reconciler \u2014 maps between ActivityStreams 2.0 (the suite's canonical chat write model), SolidOS meeting:LongChat (the installed-base read), and an external-schema adapter seam (LibreChat as proof). Pure-RDF, non-server-touching, typed accessors only.",
   "type": "module",
   "license": "MIT",
+  "securityCritical": true,
   "author": "Jesse Wright",
   "repository": {
     "type": "git",
@@ -68,7 +69,9 @@
     "@rdfjs/types": "^2.0.1"
   },
   "mirrorPublish": {
-    "inlined": ["@jeswr/suite-vocab"]
+    "inlined": [
+      "@jeswr/suite-vocab"
+    ]
   },
   "devDependencies": {
     "@biomejs/biome": "^2.0.0",

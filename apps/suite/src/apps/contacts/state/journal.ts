@@ -13,6 +13,8 @@ export interface Intent {
   destinations: string[];
   person?: SavedDocument;
   source?: SavedDocument;
+  /** Delete only: the trash copy, created before anything is unlinked or deleted. */
+  trash?: SavedDocument;
   /** Merge only: each duplicate's pre-merge RDF and the labels it must leave. */
   duplicates?: MergeDuplicate[];
   /** Merge only: the reviewed choices, so only an identical request resumes this record. */

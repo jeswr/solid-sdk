@@ -116,6 +116,7 @@ describe("MCP chat tools over the scoped fetch port", () => {
     "chat_save",
     "chat_list",
     "chat_get",
+    "chat_export",
   ])("%s projects only authorized resource descriptions", async (name) => {
     const fixture = fakePod();
     const config = { fetch: fixture.fetch, podRoot: ROOT, webId: OWNER, readOnly: false };
@@ -147,7 +148,7 @@ describe("MCP chat tools over the scoped fetch port", () => {
       const args = (conversationId: string) =>
         name === "chat_list" ? { provider: "claude" } : { ...input, conversationId };
       const denied = await client.callTool({ name, arguments: args("sensitive-record") });
-      if (name === "chat_get") expect(denied.isError).toBe(true);
+      if (name === "chat_get" || name === "chat_export") expect(denied.isError).toBe(true);
       else expect(denied.isError).toBeFalsy();
       expect(JSON.stringify(denied)).not.toContain(deniedUrl);
       expect(JSON.stringify(denied)).not.toContain("sensitive-record");
@@ -226,6 +227,50 @@ describe("MCP chat tools over the scoped fetch port", () => {
       const tools = (await client.listTools()).tools;
       expect(tools.find((t) => t.name === "chat_save")?.annotations?.readOnlyHint).toBe(false);
       expect(tools.find((t) => t.name === "chat_get")?.annotations?.readOnlyHint).toBe(true);
+    } finally {
+      await client.close();
+    }
+  });
+
+  // AUTHORED-BY Claude Opus 5.5
+  it("stores chat_save input redacted, even when the caller did not redact", async () => {
+    const pod = fakePod();
+    const client = await connect({
+      fetch: pod.fetch,
+      podRoot: ROOT,
+      webId: OWNER,
+      readOnly: false,
+    });
+    const token = "sk-fixture-mcp-token";
+    try {
+      const saved = await client.callTool({
+        name: "chat_save",
+        arguments: {
+          ...input,
+          title: `Key ${token}`,
+          messages: [{ id: "m1", role: "user", text: `My key is ${token}`, createdAt: DAY1 }],
+        },
+      });
+      expect(saved.isError).toBeFalsy();
+      for (const resource of pod.resources.values()) expect(resource.body).not.toContain(token);
+      const got = json(
+        await client.callTool({
+          name: "chat_get",
+          arguments: { provider: "claude", conversationId: input.conversationId },
+        }),
+      );
+      expect(got.title).toBe("Key [REDACTED TOKEN]");
+      expect(got.messages[0].text).toBe("My key is [REDACTED TOKEN]");
+      const exported = json(
+        await client.callTool({
+          name: "chat_export",
+          arguments: { provider: "claude", conversationId: input.conversationId },
+        }),
+      );
+      expect(exported.url).toBe(`${ROOT}private/chats/claude/session-1/`);
+      expect(exported.markdown).toContain("# Key \\[REDACTED TOKEN\\]");
+      expect(exported.markdown).toContain("```\nMy key is [REDACTED TOKEN]\n```");
+      expect(exported.markdown).not.toContain(token);
     } finally {
       await client.close();
     }

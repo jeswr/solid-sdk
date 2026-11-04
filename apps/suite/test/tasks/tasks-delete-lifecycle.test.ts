@@ -13,7 +13,8 @@ import { Pod, storage, webId } from "./pod";
 vi.mock("@jeswr/suite-ui", () => ({
   toast: { success: vi.fn(), error: vi.fn(), dismiss: vi.fn() },
 }));
-vi.mock("../../src/apps/tasks/state/access", () => ({
+vi.mock("../../src/apps/tasks/state/access", async (original) => ({
+  ...(await original<Record<string, unknown>>()),
   ensurePrivateTasksAccess: async () => true,
   ensurePrivateIndexAccess: async () => true,
 }));
