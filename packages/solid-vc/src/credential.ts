@@ -611,42 +611,44 @@ async function refuseNonFragmentRelativeIris(content: string, contentType: strin
     );
   };
   const sentinel = `https://${randomUUID()}.invalid/policy`;
-  const based = [
+  // Base-free first, so a syntax error reports without the sentinel in it.
+  const unbased = [
     ...(
       (await parseRdf(content, contentType, {
-        baseIRI: sentinel,
         documentLoader: credentialDocumentLoader,
       })) as unknown as DatasetCore
     ).match(),
   ] as Quad[];
-  let unbased: Quad[];
+  let based: Quad[];
   try {
-    unbased = [
+    based = [
       ...(
         (await parseRdf(content, contentType, {
+          baseIRI: sentinel,
           documentLoader: credentialDocumentLoader,
         })) as unknown as DatasetCore
       ).match(),
     ] as Quad[];
   } catch {
-    // Content that parses against a base but not without one has relative IRIs
-    // the base-free reading cannot represent.
     return refuse();
   }
+  if (based.some((q) => q.subject.termType === "Quad" || q.object.termType === "Quad")) {
+    throw new Error("@jeswr/solid-vc: refusing to bind policyContent with RDF 1.2 triple terms");
+  }
+  // A fragment reference is resolved as the verifier resolves it (`new URL`, which
+  // percent-encodes), so a `#` IRI whose resolution is not plain concatenation
+  // (`#ré`) is refused rather than bound into a credential no verifier accepts.
   const resolve = (iri: string): string => {
     if (isAbsoluteIri(iri)) return iri;
-    return iri.startsWith("#") ? `${sentinel}${iri}` : refuse();
+    if (!iri.startsWith("#") || new URL(iri, sentinel).href !== `${sentinel}${iri}`) refuse();
+    return `${sentinel}${iri}`;
   };
   const term = <T extends Quad[keyof Quad & ("subject" | "predicate" | "object" | "graph")]>(
     t: T,
   ): T => {
     if (t.termType === "NamedNode") return DataFactory.namedNode(resolve(t.value)) as unknown as T;
-    if (t.termType === "Literal" && t.language === "") {
-      return DataFactory.literal(
-        t.value,
-        DataFactory.namedNode(resolve(t.datatype.value)),
-      ) as unknown as T;
-    }
+    // The verifier does not resolve datatypes, so only absolute ones are bound.
+    if (t.termType === "Literal" && !isAbsoluteIri(t.datatype.value)) refuse();
     return t;
   };
   const resolved = unbased.map(

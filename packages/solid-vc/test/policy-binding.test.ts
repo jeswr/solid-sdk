@@ -185,6 +185,20 @@ describe("buildBoundAgentAuthorizationCredential (issuance-side binding)", () =>
     }
   });
 
+  it("FAILS CLOSED on a fragment reference the verifier would resolve differently, or a fragment datatype", async () => {
+    const cases = [
+      POLICY_TTL.replace(`<${POLICY_IRI}>`, "<#r\u00e9>"),
+      POLICY_TTL.replace("] .\n", '] ; <http://example.org/p> "x"^^<#t> .\n'),
+    ];
+    for (const content of cases) {
+      expect(content).not.toBe(POLICY_TTL);
+      await expect(
+        buildBoundAgentAuthorizationCredential({ ...AUTH, policyContent: content }),
+        content,
+      ).rejects.toThrow(/relative IRI other than a fragment reference/);
+    }
+  });
+
   it("FAILS CLOSED on JSON-LD whose fragment-reference triples the base-free digest drops", async () => {
     const jsonld = (target: string) =>
       JSON.stringify({
