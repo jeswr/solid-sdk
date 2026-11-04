@@ -47,7 +47,7 @@ export function ContactsProvider({ children }: { children: ReactNode }) {
       (message) => toast.error(message, { duration: Infinity }),
       browserIntentStorage,
       (token) =>
-        toast("Contact deleted", {
+        toast("Contact moved to Trash", {
           duration: 8000,
           action: {
             label: "Undo",
