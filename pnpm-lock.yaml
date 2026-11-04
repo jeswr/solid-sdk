@@ -2398,6 +2398,9 @@ importers:
       '@jeswr/solid-task-model':
         specifier: workspace:*
         version: link:../../packages/solid-task-model
+      '@jeswr/suite-native':
+        specifier: workspace:*
+        version: link:../../packages/suite-native
       '@jeswr/suite-ui':
         specifier: workspace:*
         version: link:../../packages/suite-ui

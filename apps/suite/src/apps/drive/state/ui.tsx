@@ -24,6 +24,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { NATIVE_SAVE_LIMIT, saveNatively } from "@/lib/native/save-file";
 import { encodeRef } from "@/lib/refs";
 import { PUBLIC_SUITE_URL } from "../../../lib/urls";
 import { DriveAccessError } from "../lib/client/access";
@@ -450,6 +451,9 @@ async function refreshAfter<T>(
   }
 }
 
+/** Shared by every useDriveActions caller: the native share-out cache serves one save at a time. */
+let nativeSaveInFlight = false;
+
 export function useDriveActions() {
   const { openDialog, setDetailsItems } = useDriveUi();
   const retargetDetails = useCallback(
@@ -502,6 +506,25 @@ export function useDriveActions() {
   const download = useCallback(
     async (item: DriveItem) => {
       try {
+        if (process.env.NEXT_PUBLIC_SUITE_TARGET === "native") {
+          // No blob: download in the shells: stage the file and open the share sheet instead.
+          // One save at a time: a second staging could evict the file the open sheet points at.
+          if (nativeSaveInFlight) return;
+          nativeSaveInFlight = true;
+          const progress = toast.loading(`Preparing ${item.name}…`);
+          try {
+            const bounded = await client.readLimited(item.url, NATIVE_SAVE_LIMIT);
+            if (!bounded) {
+              toast.error("Too large to save on this device");
+              return;
+            }
+            await saveNatively(bounded, item.name, item.contentType);
+          } finally {
+            toast.dismiss(progress);
+            nativeSaveInFlight = false;
+          }
+          return;
+        }
         const blob = await client.read(item.url);
         const href = URL.createObjectURL(blob);
         const anchor = document.createElement("a");

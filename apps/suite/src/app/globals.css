@@ -55,6 +55,14 @@ a {
 .skip-link:focus {
   clip-path: none;
 }
+/* AUTHORED-BY Claude Opus 5.5: the native startup check's update screen (MOB-P3 E6). */
+.native-update {
+  display: grid;
+  gap: var(--space-3);
+  max-width: 32rem;
+  margin: 0 auto;
+  padding: var(--space-6) var(--space-4);
+}
 h1,
 h2,
 h3,
