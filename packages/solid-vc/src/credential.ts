@@ -609,7 +609,7 @@ async function refuseNonFragmentRelativeIris(content: string, contentType: strin
         "reference (#…) — the content digest does not fix its meaning",
     );
   };
-  const sentinel = `https://${randomUUID()}.invalid/policy`;
+  const sentinel = `https://${globalThis.crypto.randomUUID()}.invalid/policy`;
   // Base-free first, so a syntax error reports without the sentinel in it.
   const unbased = [
     ...(
