@@ -263,7 +263,6 @@ const ADDRESS_FIELDS = ["street", "locality", "region", "postalCode", "country"]
 
 /** Mirror the postal library's size limits so a pasted blob cannot bloat the contact document. */
 function validateAddresses(addresses: readonly ContactAddress[]): void {
-  if (addresses.length > MAX_ADDRESSES) throw new TypeError("Too many addresses.");
   for (const address of addresses) {
     if (address.kind !== undefined && address.kind !== "home" && address.kind !== "work")
       throw new TypeError("Invalid address type.");
@@ -295,20 +294,24 @@ function addressKey(addresses: readonly ContactAddress[]): string {
 /**
  * Rewrite only the address nodes that changed: an unchanged address keeps its node and any
  * extra RDF on it, and nodes the reader cannot show are never touched. Limits apply only to
- * a changed list, so a contact another app wrote past them stays editable.
+ * what a save adds, so addresses another app wrote past them never block an edit or merge.
  */
 function reconcileAddresses(contact: Contact, addresses: readonly ContactAddress[]): void {
   const entries = contact.addressEntries;
   if (addressKey(entries.map(({ address }) => address)) === addressKey(addresses)) return;
-  validateAddresses(addresses);
   const pending = addresses.filter((address) => addressKey([address]) !== "[]");
-  const writer = new Contact(contact.id, contact.dataset, contactFactory);
+  const removed: Term[] = [];
   for (const { node, address } of entries) {
     const key = addressKey([address]);
     const index = pending.findIndex((wanted) => addressKey([wanted]) === key);
-    if (index === -1) writer.removeAddress(node);
+    if (index === -1) removed.push(node);
     else pending.splice(index, 1);
   }
+  validateAddresses(pending);
+  if (pending.length && entries.length - removed.length + pending.length > MAX_ADDRESSES)
+    throw new TypeError("Too many addresses.");
+  const writer = new Contact(contact.id, contact.dataset, contactFactory);
+  for (const node of removed) writer.removeAddress(node);
   for (const address of pending) writer.addAddress(address);
 }
 
