@@ -166,6 +166,8 @@ describe("plain-English rules", () => {
     const text = describeMandate(supportMandate(), DIRECTORY);
     expect(text.onItsOwn).toContain("May read the customer records (CRM).");
     expect(text.never).toContain("May never delete the production database.");
+    // An untargeted agent action drops its dangling "with".
+    expect(text.never).toContain("May never sign agreements.");
     expect(text.limits).toEqual([
       "Send at most 5 messages a day; then it stops.",
       "Contact any one person at most 1 time in 24 hours; then it stops.",

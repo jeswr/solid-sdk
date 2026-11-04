@@ -226,6 +226,10 @@ export interface RuleSettings {
   readonly customerEmailsNeedApproval: boolean;
   readonly hrAccess: boolean;
   readonly analyticsAccess: boolean;
+  /** Systems switched off entirely (the whole MCP adapter is locked). */
+  readonly lockedSystems: readonly string[];
+  /** Single actions switched off on a system (locks every tool that performs them). */
+  readonly lockedActions: readonly { readonly system: string; readonly action: string }[];
 }
 
 export const DEFAULT_SETTINGS: RuleSettings = {
@@ -235,7 +239,11 @@ export const DEFAULT_SETTINGS: RuleSettings = {
   customerEmailsNeedApproval: false,
   hrAccess: true,
   analyticsAccess: true,
+  lockedSystems: [],
+  lockedActions: [],
 };
+
+const AGENT_ACTIONS = ["SendMessage", "Transfer", "Sign", "BookAppointment"].map((a) => `${AGENT}${a}`);
 
 /** The support agent's mandate, built from the page's settings. */
 export function supportMandate(
@@ -300,6 +308,13 @@ export function supportMandate(
       { type: "prohibition", action: "modify", target: SYSTEM.db },
       { type: "prohibition", action: "delete", target: SYSTEM.db },
       { type: "prohibition", action: `${AGENT}Sign` },
+      // A locked system: every data action (odrl:use covers them) and every agent action.
+      ...settings.lockedSystems.flatMap((target) =>
+        ["use", ...AGENT_ACTIONS].map((action): Rule => ({ type: "prohibition", action, target })),
+      ),
+      ...settings.lockedActions.map(
+        ({ system, action }): Rule => ({ type: "prohibition", action, target: system }),
+      ),
     ],
     limits: [
       limit("sendsPerDay", settings.sendsPerDay, "hard"),

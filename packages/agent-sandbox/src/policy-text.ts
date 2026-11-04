@@ -89,7 +89,9 @@ export function ruleWords(rule: Rule, directory: Directory): string {
   const duties = (rule.duties ?? [])
     .map((d) => ` and must then ${dutyWords(d, directory)}`)
     .join("");
-  return `${actionWords(rule.action)}${target}${constraints}${duties}`;
+  // Without a target, "sign agreements with" reads as "sign agreements".
+  const verb = rule.target ? actionWords(rule.action) : actionWords(rule.action).replace(/ with$/, "");
+  return `${verb}${target}${constraints}${duties}`;
 }
 
 /** Render a duty ("inform the owner of the record"). */

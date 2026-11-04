@@ -286,3 +286,17 @@ describe("model-judged modes", () => {
     }
   });
 });
+
+describe("MCP lockdown settings", () => {
+  it("a locked system hides every tool on it; a locked action hides the tools that perform it", async () => {
+    const { sandbox, world } = createWorldSandbox(scenario("production-database"));
+    expect(sandbox.tools().map((t) => t.name)).toContain("db_query");
+    world.setSettings({ ...world.settings(), lockedSystems: ["https://harbourfinch.example/systems/production-db", "https://harbourfinch.example/systems/email"] });
+    const names = sandbox.tools().map((t) => t.name);
+    expect(names.filter((n) => n.startsWith("db_") || n.startsWith("email_"))).toEqual([]);
+    expect((await sandbox.call({ tool: "db_query", args: { sql: "SELECT 1" } })).status).toBe("stopped");
+    world.setSettings({ ...world.settings(), lockedSystems: [], lockedActions: [{ system: "https://harbourfinch.example/systems/payments", action: "https://jeswr.org/ns/agent#Transfer" }] });
+    expect(sandbox.catalogue().find((e) => e.tool.name === "payments_refund")?.visible).toBe(false);
+    expect(sandbox.tools().map((t) => t.name)).toContain("db_query");
+  });
+});
