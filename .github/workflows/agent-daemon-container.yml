@@ -1,0 +1,60 @@
+# AUTHORED-BY Codex GPT-6.1-Sol
+# AUTHORED-BY Codex GPT-6
+name: agent-daemon-container
+on:
+  pull_request:
+    paths:
+      - 'apps/agent-daemon/**'
+      - 'packages/**'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - 'package.json'
+      - '.npmrc'
+      - '.gitignore'
+      - 'turbo.json'
+      - 'tsconfig.base.json'
+      - '.github/workflows/agent-daemon-container.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  container-css:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build production image
+        run: docker build -f apps/agent-daemon/Containerfile -t agent-daemon:check .
+      - name: Validate the shipped production tree on distroless Node 24
+        run: |
+          docker run --rm --network none --cap-drop ALL --security-opt no-new-privileges agent-daemon:check \
+            --input-type=module --eval '
+              import assert from "node:assert/strict";
+              import { readdirSync } from "node:fs";
+              const daemon = await import("./dist/index.js");
+              assert.equal(typeof daemon.runConfiguredCloud, "function");
+              const installed = readdirSync("node_modules/.pnpm");
+              for (const name of ["vitest", "typescript", "@solid+community-server"]) {
+                assert.ok(!installed.some((entry) => entry.startsWith(`${name}@`)), name);
+              }
+            '
+      - name: Refuse unconfigured production startup
+        run: |
+          if docker run --rm --network none agent-daemon:check; then
+            echo 'Unconfigured cloud host unexpectedly started'
+            exit 1
+          fi
+      - name: Build CSS test image
+        run: docker build -f apps/agent-daemon/Containerfile --target css-test -t agent-daemon:css .
+      - name: Run A-012 CSS flow and cloud regressions on distroless Node 24
+        run: docker run --rm --network none --cap-drop ALL --security-opt no-new-privileges agent-daemon:css
+  bicep:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile dev deployment locally (no Azure authentication)
+        run: |
+          curl --fail --silent --show-error --location https://github.com/Azure/bicep/releases/download/v0.47.16/bicep-linux-x64 -o "$RUNNER_TEMP/bicep"
+          chmod +x "$RUNNER_TEMP/bicep"
+          "$RUNNER_TEMP/bicep" build apps/agent-daemon/deploy/gitops/dev.bicep --outfile "$RUNNER_TEMP/agent-daemon-dev.json"
+          node apps/agent-daemon/test/check-cloud-template.mjs "$RUNNER_TEMP/agent-daemon-dev.json"

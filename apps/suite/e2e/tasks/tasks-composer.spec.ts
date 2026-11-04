@@ -276,6 +276,11 @@ test("sidebar and shell create keep the current view; a small paste saves withou
   await page.getByRole("button", { name: "Labels", exact: true }).click();
   await page.getByRole("textbox", { name: "New label", exact: true }).fill("shopping");
   await page.getByRole("button", { name: "Create label", exact: true }).click();
+  // At 375 the bottom-sheet composer flips the popover above its trigger, over the input, so
+  // dismiss it from the keyboard rather than by clicking through it.
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("textbox", { name: "New label", exact: true })).toBeHidden();
+  await expect(page.getByRole("dialog", { name: "Add task", exact: true })).toBeVisible();
   await input.click();
   await expect(page.getByRole("button", { name: "Remove @shopping", exact: true })).toBeVisible();
   await input.press("Enter");

@@ -65,18 +65,42 @@ export const DEFAULT_SHARE_LIMITS: Readonly<ShareLimits> = Object.freeze({
 
 const BATCH_ID = /^[A-Za-z0-9-]{1,64}$/;
 const MIME = /^[a-z0-9][a-z0-9!#$&^_.+-]*\/[a-z0-9][a-z0-9!#$&^_.+-]*$/i;
-// biome-ignore lint/suspicious/noControlCharactersInRegex: stripping control characters is the point
-const UNSAFE_NAME = /[\u0000-\u001f\u007f/\\]/g;
+const UNSAFE_NAME =
+  // biome-ignore lint/suspicious/noControlCharactersInRegex: stripping control characters is the point
+  /[\u0000-\u001f\u007f-\u009f/\\%?#:*"<>|\u200e\u200f\u202a-\u202e\u2066-\u2069]/g;
+/**
+ * Types a browser runs when it renders them (HTML, SVG, XML with stylesheets,
+ * script). The sending app declares the type, so an "invoice.pdf" could arrive as
+ * text/html and run in the pod's or the suite's origin once saved or opened.
+ */
+const ACTIVE_MIME = /html|xml|svg|xsl|javascript|ecmascript/;
+/** The longest name, in UTF-8 bytes, that every target filesystem accepts. */
+const MAX_NAME_BYTES = 255;
 
 const invalid = (why: string) => new InvalidShareError(`Invalid share: ${why}`);
 
-/** Reduces an untrusted file name to one safe path segment. */
+/**
+ * Reduces an untrusted file name to one safe path segment: no separators, no
+ * characters a URL reads as syntax (`%`, `?`, `#`, `:`), no controls or bidi
+ * overrides, no leading dots, and at most 255 UTF-8 bytes without splitting a
+ * character.
+ */
 export function sanitiseFileName(raw: unknown): string {
-  const cleaned = (typeof raw === "string" ? raw : "")
+  const replaced = (typeof raw === "string" ? raw : "")
     .replace(UNSAFE_NAME, "_")
     .replace(/^[.\s]+/, "")
-    .trim()
-    .slice(0, 255);
+    .trim();
+  let cleaned = "";
+  let bytes = 0;
+  const encoder = new TextEncoder();
+  for (const char of replaced) {
+    // A lone surrogate encodes as U+FFFD (3 bytes); keep the replacement instead.
+    const safe = char.length === 1 && /[\uD800-\uDFFF]/.test(char) ? "\uFFFD" : char;
+    bytes += encoder.encode(safe).length;
+    if (bytes > MAX_NAME_BYTES) break;
+    cleaned += safe;
+  }
+  cleaned = cleaned.trim();
   return cleaned === "" ? "shared-file" : cleaned;
 }
 
@@ -107,10 +131,11 @@ function item(raw: unknown, limits: ShareLimits): ShareItem {
         throw invalid("file size must be a non-negative integer");
       }
       if (size > limits.maxFileBytes) throw invalid("file is too large");
-      const mimeType =
+      const declared =
         typeof value.mimeType === "string" && MIME.test(value.mimeType)
           ? value.mimeType.toLowerCase()
           : "application/octet-stream";
+      const mimeType = ACTIVE_MIME.test(declared) ? "application/octet-stream" : declared;
       return { kind: "file", name: sanitiseFileName(value.name), mimeType, size };
     }
     case "url": {

@@ -157,12 +157,15 @@ const rowFor = (page: Page, title: string) =>
   page
     .locator("[data-tsk-row]")
     .filter({ has: page.getByRole("link", { name: title, exact: true }) });
+// `has` is matched inside each card, so it must not repeat the scope's own selector.
 const cardFor = (scope: Page | Locator, title: string) =>
-  scope.locator(".tsk-card").filter({ has: scope.getByRole("link", { name: title, exact: true }) });
+  scope.locator(".tsk-card").filter({
+    has: ("page" in scope ? scope.page() : scope).getByRole("link", { name: title, exact: true }),
+  });
 const toastFor = (page: Page, message: string) =>
   page.locator("[data-sonner-toast]").filter({ hasText: message });
 const dndLive = (page: Page) => page.locator('[id^="DndLiveRegion"]');
-const layout = (page: Page) => page.getByRole("group", { name: "Project layout" });
+const layout = (page: Page) => page.getByRole("radiogroup", { name: "Project layout" });
 
 /**
  * Drag a row by its gutter handle with the mouse. On a narrow page the gutter sits off-screen,
@@ -266,7 +269,12 @@ test("scenario 5: sections, drag into a section, the board, Move to section and 
     .getByRole("button", { name: "Actions for 'Pay rent'", exact: true })
     .click();
   await page.getByRole("menuitem", { name: "Move to section…", exact: true }).click();
-  await page.getByRole("menuitemradio", { name: "Done", exact: true }).click();
+  const doneItem = page.getByRole("menuitemradio", { name: "Done", exact: true });
+  if ((page.viewportSize()?.width ?? 0) >= 1280) await doneItem.click();
+  // Below 1280 the submenu opens partly outside the viewport, nested in the scrollable parent
+  // menu (it is not portalled), so a pointer can't reach it reliably. Choose the section from
+  // the keyboard there, the menu's other supported input.
+  else await doneItem.press("Enter");
   await expect(
     cardFor(page.getByRole("region", { name: "Done", exact: true }), "Pay rent"),
   ).toBeVisible();

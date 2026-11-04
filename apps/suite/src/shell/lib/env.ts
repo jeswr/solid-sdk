@@ -64,6 +64,17 @@ export function parseSuiteEnv(record: Record<string, unknown>): SuiteEnv {
   return result.data;
 }
 
+/**
+ * Capability overrides are a test hook: they are honoured only in an end-to-end run, which sets
+ * SUITE_E2E=1 alongside them, so a stray SUITE_TEST_CAPS on a real deployment changes nothing.
+ */
+export function testCapsSource(env: {
+  SUITE_E2E?: string | undefined;
+  SUITE_TEST_CAPS?: string | undefined;
+}): string | undefined {
+  return env.SUITE_E2E === "1" ? env.SUITE_TEST_CAPS : undefined;
+}
+
 let cached: SuiteEnv | undefined;
 /** Next replaces only literal public env references. Invalid fields fall back independently. */
 export function suiteEnv(): SuiteEnv {
@@ -75,7 +86,10 @@ export function suiteEnv(): SuiteEnv {
     NEXT_PUBLIC_SHOW_BACKLOG_APPS: process.env.NEXT_PUBLIC_SHOW_BACKLOG_APPS,
     NEXT_PUBLIC_SUITE_DEMO: process.env.NEXT_PUBLIC_SUITE_DEMO,
     NEXT_PUBLIC_SUITE_KNOWN_PROVIDERS: process.env.NEXT_PUBLIC_SUITE_KNOWN_PROVIDERS,
-    SUITE_TEST_CAPS: process.env.SUITE_TEST_CAPS,
+    SUITE_TEST_CAPS: testCapsSource({
+      SUITE_E2E: process.env.SUITE_E2E,
+      SUITE_TEST_CAPS: process.env.SUITE_TEST_CAPS,
+    }),
   };
   const result = suiteEnvSchema.safeParse(record);
   if (!result.success) {

@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import type { ReasonCode } from "@jeswr/agent-model";
 import type { ChannelCapability } from "./capability.js";
 import type { InboundRawMessage } from "./channel.js";
@@ -46,7 +47,8 @@ export interface ChannelBinding<Raw = unknown> {
       wire: Wire,
       proposal: RenderableProposal,
     ): Promise<{ ok: true } | { ok: false; reason: ReasonCode }>;
-    /** Transmit. Throws ProviderRejectedError when the provider definitively refused. */
+    /** Transmit. ProviderRejectedError is a definitive provider/gate refusal;
+     * SendNotDispatchedError retains the cause of any local pre-dispatch failure. */
     transmit(wire: Wire, io: TransmissionIo): Promise<ProviderSendResult>;
     /** Positive-evidence lookup for an uncertain send (§4.3). */
     lookup?(wire: Wire): Promise<ProviderLookupResult>;

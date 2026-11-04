@@ -1,0 +1,32 @@
+{
+  "notification": {
+    "id": "500",
+    "type": "mention",
+    "created_at": "2026-10-26T11:30:00.000Z",
+    "account": { "id": "10", "acct": "alice@remote.example", "display_name": "Alice" },
+    "status": {
+      "id": "400",
+      "created_at": "2026-10-26T11:29:00.000Z",
+      "in_reply_to_id": "399",
+      "visibility": "direct",
+      "content": "<p>Hello &amp; welcome<br />Next line</p>",
+      "spoiler_text": "",
+      "account": { "id": "10", "acct": "alice@remote.example", "display_name": "Alice" }
+    }
+  },
+  "conversation": {
+    "id": "42",
+    "unread": true,
+    "accounts": [{ "id": "10", "acct": "alice@remote.example" }],
+    "last_status": {
+      "id": "401",
+      "created_at": "2026-10-26T11:31:00.000Z",
+      "in_reply_to_id": "400",
+      "visibility": "direct",
+      "content": "<p>Private conversation</p>",
+      "spoiler_text": "Context",
+      "account": { "id": "10", "acct": "alice@remote.example", "display_name": "Alice" }
+    }
+  },
+  "accepted": { "id": "600", "visibility": "direct" }
+}

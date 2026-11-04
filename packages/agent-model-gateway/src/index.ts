@@ -1,3 +1,10 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-// Reserved scaffold surface; no runtime capability is implemented.
-export {};
+export { createGateway } from "./gateway.js";
+export { ORIGINS } from "./transport.js";
+export {
+  type Gateway,
+  GatewayError,
+  type GatewayOptions,
+  type ModelCall,
+  type ProposerContext,
+} from "./types.js";

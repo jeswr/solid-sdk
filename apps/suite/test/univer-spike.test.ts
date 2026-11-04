@@ -92,6 +92,20 @@ describe("CSV fields", () => {
 });
 
 describe("workbook conversions", () => {
+  it("preserves freeze and merge state through the real engine's save/load cycle", () => {
+    const snapshot = fixture();
+    const sheet = firstSheet(snapshot);
+    sheet.freeze = { startRow: 1, startColumn: -1, ySplit: 1, xSplit: 0 };
+    sheet.mergeData = [{ startRow: 2, endRow: 2, startColumn: 0, endColumn: 1 }];
+    const saved = loadWorkbook(snapshot);
+    expect(firstSheet(saved)).toMatchObject({ freeze: sheet.freeze, mergeData: sheet.mergeData });
+    const reloaded = loadWorkbook(saved);
+    expect(firstSheet(reloaded)).toMatchObject({
+      freeze: sheet.freeze,
+      mergeData: sheet.mergeData,
+    });
+  });
+
   it("round-trips multiple sheets in declared order and preserves lexical text", () => {
     const snapshot = fixture();
     expect(snapshot.sheetOrder).toEqual(["people", "notes"]);
