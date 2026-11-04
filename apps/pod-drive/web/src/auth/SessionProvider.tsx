@@ -239,7 +239,8 @@ export function SessionProvider({
       activeLogin.current = attempt;
       setPending(action);
       setError(null);
-      setIssuerChoice(undefined);
+      // A pick from the listed providers keeps that list on screen while it runs.
+      setIssuerChoice(choice);
       let hint: LoginHint | undefined;
       const current = () =>
         mounted.current && generation.current === started && activeLogin.current === attempt;
@@ -248,6 +249,7 @@ export function SessionProvider({
         if (!current()) return;
         const loggedIn = await core.login(hint);
         if (!current()) return;
+        setIssuerChoice(undefined);
         store.remember(loggedIn.issuer);
         setRecentProviders(store.list());
         setIdentity(loggedIn);

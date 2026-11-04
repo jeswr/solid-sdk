@@ -295,10 +295,15 @@ describe("Drive shared authentication", () => {
     // A failed choice keeps the list, so the person can pick again.
     expect(await screen.findByRole("alert")).toHaveTextContent("Sign-in was cancelled.");
     expect(session.issuerChoice?.issuers).toEqual([ISSUER, other]);
+    const pick = deferred<Identity>();
+    fake.auth.login.mockReturnValueOnce(pick.promise);
     fireEvent.click(screen.getByRole("button", { name: "Home provider" }));
     await waitFor(() =>
       expect(fake.auth.login).toHaveBeenLastCalledWith({ webId: WEB_ID, issuer: ISSUER }),
     );
+    // While the pick runs, the card keeps the listed providers instead of remounting.
+    expect(session.issuerChoice?.issuers).toEqual([ISSUER, other]);
+    await act(async () => pick.resolve(identity));
     await waitFor(() => expect(session.issuerChoice).toBeUndefined());
   });
 
