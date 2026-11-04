@@ -35,7 +35,7 @@ describe("page-lifetime pod-auth core", () => {
     const fetch = globalThis.fetch;
     const core = {};
     factory.create.mockReturnValue(core);
-    const options = await coreAt("https://drive.example");
+    const options = await coreAt("https://docs.example");
     const module = await import("./pod-auth");
     const first = module.getPodAuth();
     expect(module.getPodAuth()).toBe(first);
@@ -43,8 +43,8 @@ describe("page-lifetime pod-auth core", () => {
     expect(factory.create).toHaveBeenCalledTimes(1);
     expect(factory.register).toHaveBeenCalledTimes(1);
     expect(options).toMatchObject({
-      clientId: "https://drive.example/solid-sdk/pod-docs/clientid.jsonld",
-      redirectUri: "https://drive.example/solid-sdk/pod-docs/callback.html",
+      clientId: "https://docs.example/solid-sdk/pod-docs/clientid.jsonld",
+      redirectUri: "https://docs.example/solid-sdk/pod-docs/callback.html",
       allowInsecureLoopback: false,
     });
     expect(options).not.toHaveProperty("boundary");
@@ -53,7 +53,7 @@ describe("page-lifetime pod-auth core", () => {
   });
 
   it("rejects multiple issuers with the shared typed error, without choosing silently", async () => {
-    const options = await coreAt("https://drive.example");
+    const options = await coreAt("https://docs.example");
     const { AmbiguousIssuerError } = await import("@jeswr/pod-auth");
     await expect(
       options.ui.chooseIssuer?.(["https://one.example/", "https://two.example/"]),
@@ -65,10 +65,10 @@ describe("page-lifetime pod-auth core", () => {
   });
 
   it("delegates the complete callback URL and abort signal to the current holder", async () => {
-    const options = await coreAt("https://drive.example");
+    const options = await coreAt("https://docs.example");
     const { authFlowHolder } = await import("./auth-flow-holder");
     const callback =
-      "https://drive.example/callback.html?code=code&state=state&iss=https%3A%2F%2Fprovider.example%2F";
+      "https://docs.example/callback.html?code=code&state=state&iss=https%3A%2F%2Fprovider.example%2F";
     const current = vi.fn(async () => callback);
     authFlowHolder.current = current;
     const url = new URL("https://provider.example/authorize");
@@ -83,7 +83,7 @@ describe("page-lifetime pod-auth core", () => {
     ["http://127.0.0.1:5173", true],
     ["http://127.25.0.4:5173", true],
     ["http://[::1]:5173", true],
-    ["https://drive.example", false],
+    ["https://docs.example", false],
     ["https://localhost.attacker.example", false],
     ["http://192.168.1.5", false],
     ["http://128.0.0.1", false],

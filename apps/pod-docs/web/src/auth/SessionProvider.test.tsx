@@ -454,7 +454,7 @@ describe("Pod Docs shared authentication", () => {
     });
     expect(screen.getByRole("note")).toHaveTextContent(
       // pod-auth grants credentials only inside the profile's pim:storage, never this fallback.
-      "Your profile advertises no pim:storage; using your WebID origin",
+      "Your profile doesn't list a storage address, so Docs can only show public documents",
     );
   });
 

@@ -75,8 +75,8 @@ export function App() {
       </header>
       {session.podRootIsFallback ? (
         <p className="app-note" role="note">
-          Your profile advertises no <code>pim:storage</code>; using your WebID origin (
-          <code>{session.podRoot}</code>) as the pod root.
+          Your profile doesn't list a storage address, so Docs can only show public documents at{" "}
+          {session.podRoot}.
         </p>
       ) : null}
       <main className="app-main">
