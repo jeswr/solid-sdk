@@ -1,7 +1,12 @@
 // AUTHORED-BY Claude Opus 5.5
-import { Store } from "n3";
+import { DataFactory, Store } from "n3";
 import { describe, expect, it, vi } from "vitest";
-import type { ContactData, ContactGroupData, Snapshot } from "../src/apps/contacts/lib/model";
+import {
+  Contact,
+  type ContactData,
+  type ContactGroupData,
+  type Snapshot,
+} from "../src/apps/contacts/lib/model";
 import { ensureReplaced, openDocument, saveDocument } from "../src/apps/contacts/lib/model/intent";
 import { ContactsWriteError } from "../src/apps/contacts/lib/model/transport";
 import {
@@ -746,6 +751,21 @@ describe("review follow-ups", () => {
     );
     expect(crowded.addresses).toHaveLength(17);
     expect(crowded.addresses).not.toContainEqual({ region: "new" });
+    // A primary's over-long address (written elsewhere) does not stop a copy's address merging.
+    const longPrimary = await openDocument({
+      url: `${ROOT}contacts/people/long.ttl`,
+      etag: '"1"',
+      turtle: `${VCARD_PREFIX} <#this> a vcard:Individual; vcard:fn "Long";
+        vcard:hasAddress [ vcard:locality "${"x".repeat(300)}" ] .`,
+    });
+    const withLyon = mergeContactData(
+      longPrimary.data,
+      [{ name: "Copy", addresses: [{ locality: "Lyon" }] }],
+      {},
+    );
+    expect(
+      new Contact(id(longPrimary), mergedDocument(longPrimary, withLyon), DataFactory).addresses,
+    ).toHaveLength(2);
     // The primary's own repeated addresses are left as they are.
     const twice = [{ locality: "Same" }, { locality: "Same" }];
     expect(mergeContactData({ name: "P", addresses: twice }, [], {}).addresses).toEqual(twice);

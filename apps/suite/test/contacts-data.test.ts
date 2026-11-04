@@ -432,6 +432,20 @@ describe("postal addresses through the app mapping", () => {
     expect(() =>
       applyContact(crowded, { ...contactData(crowded), addresses: [...many, { locality: "x" }] }),
     ).toThrow("Too many addresses.");
+    // Removing one of seventeen adds nothing, so it is allowed.
+    applyContact(crowded, { ...contactData(crowded), addresses: many.slice(1) });
+    expect(crowded.addresses).toHaveLength(16);
+    // An over-long address already stored does not block adding a valid one beside it.
+    const long = new Contact(
+      `${ALICE}#this`,
+      buildPerson(ALICE, { name: "A", addresses: [{ locality: "x".repeat(300) }] }),
+      DataFactory,
+    );
+    applyContact(long, {
+      ...contactData(long),
+      addresses: [...(contactData(long).addresses ?? []), { locality: "Lyon" }],
+    });
+    expect(long.addresses).toHaveLength(2);
     const write = (addresses: ContactAddress[]) => () =>
       applyContact(new Contact(`${ALICE}#this`, new Store(), DataFactory), {
         name: "A",
