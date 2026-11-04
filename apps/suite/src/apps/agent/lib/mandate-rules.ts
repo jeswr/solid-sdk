@@ -218,7 +218,10 @@ export async function describeMandate(
   for (const l of m.limits) {
     if (l.leftOperand === `${AGENT}spendPerDay`)
       rules.push(
-        `Daily limit: ${new Intl.NumberFormat("en-GB", { style: "currency", currency }).format(l.rightOperand)}`,
+        m.currency
+          ? `Daily limit: ${new Intl.NumberFormat("en-GB", { style: "currency", currency }).format(l.rightOperand)}`
+          : // The executor can't count spend without a signed currency, so it refuses these actions.
+            "Daily spend limit has no signed currency, so your agent won't act under it. Save these permissions again to fix this.",
       );
     if (l.leftOperand === `${AGENT}sendsPerDay`) rules.push(`Daily send limit: ${l.rightOperand}`);
     if (l.leftOperand === `${AGENT}perRecipientPerDay`)

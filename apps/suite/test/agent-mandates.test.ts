@@ -244,14 +244,21 @@ describe("plain-language mandate rules", () => {
         limitConstraint(`${AGENT}perRecipientPerDay`, 3, "hard"),
         limitConstraint(`${AGENT}spendPerWeek`, 20, "soft"),
       ],
+      currency: "GBP",
     };
-    const lines = await describeMandate(m, [], "GBP", NOW);
+    const lines = await describeMandate(m, [], "USD", NOW);
     expect(lines).toContain("Asks you first: another action");
     expect(lines).toContain("Asks you first: send messages");
     expect(lines).toContain("Daily limit: £12.50");
     expect(lines).toContain("Daily send limit: 10");
     expect(lines).toContain("Contact the same person at most 3 times a day");
-    expect(await describeMandate(m, [], "USD", NOW)).toContain("Daily limit: US$12.50");
+    expect(await describeMandate({ ...m, currency: "USD" }, [], "GBP", NOW)).toContain(
+      "Daily limit: US$12.50",
+    );
+    // An unsigned currency is shown as unusable, because the executor refuses under it.
+    const unsigned = await describeMandate({ ...m, currency: undefined }, [], "GBP", NOW);
+    expect(unsigned.some((line) => line.includes("no signed currency"))).toBe(true);
+    expect(unsigned.some((line) => line.startsWith("Daily limit:"))).toBe(false);
   });
   it("keeps the tests-between-own-accounts template canonically equal to defaultMandate", async () => {
     const input = { ...options(), recipientHashes: [HASH, OTHER_HASH] };
@@ -663,12 +670,22 @@ describe("signed mandate activation and revocation", () => {
       (await client.graph(client.paths.mandatesStatus)).text,
     );
     if (!signed) throw new Error("Missing signed status");
-    await replace(
-      client,
-      client.paths.mandatesStatus,
-      JSON.stringify(signed),
-      "application/ld+json",
-    );
+    const putStatus = async (body: unknown) =>
+      client.replace(
+        client.paths.mandatesStatus,
+        JSON.stringify(body),
+        (await client.statusDocument(client.paths.mandatesStatus)).etag as string,
+        "application/ld+json",
+      );
+    // A JSON-LD list that fails the strict parse or the signature never reaches an update.
+    for (const bad of [
+      { ...signed, id: at("mandates/other.ttl") },
+      { ...signed, validUntil: "2027-06-01T00:00:00Z" },
+    ]) {
+      await putStatus(bad);
+      await expect(revokeMandate(client, session, NOW)).rejects.toThrow("permission status");
+    }
+    await putStatus(signed);
     await expectSameMandate(await loadVerifiedMandate(client, session, NOW), first);
     const next = new Date(NOW.getTime() + 1000);
     const second = { ...mandate(at("mandates/json-second.trig")), validFrom: next.toISOString() };
