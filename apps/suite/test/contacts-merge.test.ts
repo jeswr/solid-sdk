@@ -723,6 +723,22 @@ describe("review follow-ups", () => {
     expect(capped.addresses).toHaveLength(16);
     expect(mergeLosses(mergedDocument(primary, capped), id(primary), many)).toEqual(["address"]);
     expect(mergeContactData({ name: "No address" }, [], {})).not.toHaveProperty("addresses");
+    // Extra values, a second kind, language tags and invalid addresses are named as losses.
+    const odd = await openDocument({
+      url: `${ROOT}contacts/people/ann-odd.ttl`,
+      etag: '"1"',
+      turtle: `${VCARD_PREFIX} <#this> a vcard:Individual; vcard:fn "Ann";
+        vcard:hasAddress [ a vcard:Home, vcard:Work; vcard:locality "Nice", "Nizza" ],
+          [ vcard:region "Ile"@fr ], [ vcard:locality "${"x".repeat(300)}" ] .`,
+    });
+    const oddMerged = mergeContactData(primary.data, [odd.data], {});
+    expect(oddMerged.addresses).toHaveLength(3);
+    expect(mergeLosses(mergedDocument(primary, oddMerged), id(primary), odd)).toEqual([
+      "Home label on address",
+      "address",
+      "locality on address",
+      "region on address",
+    ]);
     const crowded = mergeContactData(
       { name: "Crowded", addresses: Array.from({ length: 17 }, (_, i) => ({ region: `${i}` })) },
       [{ name: "Copy", addresses: [{ region: "new" }] }],
@@ -730,6 +746,9 @@ describe("review follow-ups", () => {
     );
     expect(crowded.addresses).toHaveLength(17);
     expect(crowded.addresses).not.toContainEqual({ region: "new" });
+    // The primary's own repeated addresses are left as they are.
+    const twice = [{ locality: "Same" }, { locality: "Same" }];
+    expect(mergeContactData({ name: "P", addresses: twice }, [], {}).addresses).toEqual(twice);
   });
 
   it("only claims what each merge failure outcome guarantees", () => {
