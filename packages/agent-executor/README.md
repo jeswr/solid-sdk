@@ -1,16 +1,169 @@
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 
 # @jeswr/agent-executor
 
-> Experimental — AI-agent-generated. Scaffold only; no runtime capabilities are implemented.
+> Experimental, security-critical, private workspace package. No live provider adapters.
 
-Single action enforcement point, reserved for the agent layer (DESIGN §2.1, A-003 / sst-z1d).
+The deterministic action enforcement point (DESIGN §4.1, A-009 / sst-0al).
+`createExecutor(options)` accepts trusted proposal/outbox, approval, mandate, policy,
+control, clock, transmission-store, send-token and audit adapters, plus a registry of
+channel **send halves**. It imports no model SDK or channel ingest implementation.
 
-The root and `./testing` exports are empty modules. 
+`transmit(proposalId)` runs the nine-step gate: local/verified halt, exact rendered-wire
+integrity, expiry, current verified mandate and policy, exact verified approval when
+required, committed limits, durable idempotency, provider outcome and conversation event.
+Actor-writable proposal state never grants permission or controls idempotency. Dry-run
+is the default; both the executor and binding must explicitly enable effects.
+Dry runs record a `ready(dry-run)` evaluation and leave the proposal queued. They do not
+call the send binding, reserve a commitment or consume a provider attempt.
 
-No credentials, network requests, policy decisions, or transmissions are available.
-Implementation belongs to the later agent tasks. New packages remain private per ADR-001 D5.
+`runOutboxOnce()` processes the trusted outbox queue. The daemon must call
+`onControlOrMandateChange()` on **every** notification or polling-detected change in
+control statements or mandate/status. It re-evaluates every queued item without sending.
+The daemon must also call `onApprovalChange()` on **every** detected approval-store change,
+including new denials, removed approvals and availability changes. Both hooks immediately
+invalidate in-flight authority snapshots across executors sharing the transmission store,
+before waiting for persistence or queue locks; notifications must reach the hook before
+credentials are released.
+Every later attempt evaluates again. Halt, policy and proposal checks also run after
+lookup and before handing over send credentials, closing asynchronous revocation races.
 
-Run `pnpm run lint`, `pnpm run build`, `pnpm run typecheck`, and `pnpm run test` here.
+## Trust and adapter requirements
 
-Tests enforce 100% coverage in every metric; empty modules have no executable branches yet.
+- `ApprovalStore.findVerified(context)` must use `agent-mandate.verifyApproval` (or an
+  equivalent verified adapter) against the supplied owner WebID, proposal, terms digest
+  and clock. It must never return parsed-but-unverified approvals. The executor also
+  checks proposal/digest/expiry/decision on every authorization path and gives a verified
+  denial precedence over autonomous permission as well as positive approvals. A positive
+  approval is required only when policy demands it. An unavailable approval store queues
+  the action as `awaiting-approval(approval-unavailable)` until denials can be checked.
+- `ControlStore.listVerified(ownerWebId)` must return only owner-proof-verified controls.
+  Future, expired and wrong-owner records are ignored. An active Halt wins timestamp
+  ties; a later verified Resume clears it only when the local HALT file is absent.
+  Unreadable controls or HALT state fail closed. `createHaltFileCheck(io, path)` checks
+  the real file on every pass, including dangling symlinks; only ENOENT means absent.
+- `ProposalStore` writes executor-owned outbox dispositions and idempotently upserts local
+  `TransmissionSettlement` conversation events through `emitTransmission()`, keyed by
+  proposal + status. Apply these events with `agent-model.transition`; they record delivery
+  in `state.transmissions` without changing agreement performance outcomes or phase.
+  Events carry the durable per-proposal `sequence`; replay ignores older sequences even
+  when status upserts reorder events or timestamps coincide. Legacy events count as sequence zero.
+  Protocol `receipt` messages remain reserved for performance referencing the active agreement.
+  `queued()` must enumerate all pending and unresolved
+  items, including those waiting for approval or control/mandate re-evaluation.
+  Send/event/audit persistence errors propagate; an audit failure never authorizes a send.
+- `proposalTermsDigest(entry)` defines approval identity. Build the wire first, set
+  `wireDigest`, then set `proposal.intent.termsDigest` using this helper before approval.
+  It covers the complete intent except the digest itself, proposal id, preview, expiry,
+  signed carrier, account, wire digest and media type. Changing any term invalidates old approvals.
+  `proposalApprovalTerms(entry)` returns the body-free preimage shared with agent-audit:
+  action, target, binding, account ID, recipient hashes, wire digest, purpose and a
+  `proposalDigest` committing all the private fields above. `proposalTermsDigest` is
+  exactly `digestOf(proposalApprovalTerms(entry))`. Approvals made with the earlier
+  full-object digest must be reissued; they fail closed under this commitment.
+- The binding's `send.validate(wire, { renderable, intent, account })` must verify that
+  every intent term (including recipient, operation, parameters, purpose and amount) and
+  the sending account describe the signed carrier and actual destination. It runs before
+  policy or accounting. A channel's renderable-only validator needs a trusted adapter
+  implementing these additional checks. Bindings are trusted code, created only from
+  their `/send` exports.
+  The executor supplies a send-only TokenProvider projection; wrong-account requests,
+  wrong-scope/empty grants and grants resolved after revocation fail closed.
+  It also supplies `io.assertAuthority()`, a required synchronous check of the shared
+  invalidation revision and the latest credential-time authority deadlines. Every
+  binding must thread it through the request-local `beforeDispatch` hook, after all
+  asynchronous checks including both DNS/destination preflights and body buffering,
+  immediately before underlying fetch or direct delivery, without an intervening await. Invalidated authority
+  throws a typed pre-delivery refusal and settles as `not-sent`; unresolved resends
+  retain prior uncertainty. Invalidation after a request was issued cannot erase
+  its acknowledgement or justify claiming non-delivery.
+- `AuditSink` is system-only and must retain historical transmission accounting records.
+  Entries contain identifiers/digests, authorization references and outcomes, never
+  proposal bodies, provider error text or tokens. `drain()` waits for late settlement
+  writes and exposes any background audit/persistence failure.
+
+## Durable transmission and recovery
+
+One executor-owned record per proposal: `attempting → sent | not-sent | uncertain`.
+`TransmissionStore.exclusive` serializes decisions, accounting and claims across all
+users of that store. `put` must atomically replace and **fsync before resolving**.
+The provider is called only after the durable attempt and audit writes succeed.
+The daemon must also hold a single-writer process lease throughout provider calls;
+a short transaction lock cannot fence another live process's pending request.
+
+`createFileTransmissionStore({ io, directory, exclusive })` implements atomic local
+replacement, file fsync and directory fsync using an injected `fs/promises`-compatible
+filesystem. Supply a private daemon directory and the store-wide lock. Files are created
+0600, new directories 0700. Corrupt/unreadable storage never becomes empty history.
+It stores transmission metadata and committed amounts, with no bodies or credentials.
+The separate `./testing` export provides explicit in-memory, non-durable seams only.
+Records carry a monotonic per-proposal write `sequence`, persisted with every claim and
+settlement. Reconciliation preserves positive delivery, then orders by attempt number,
+settlement precedence and sequence; timestamps are only a legacy fallback. Missing legacy
+sequences count as zero. Trusted operator updates must also advance the sequence.
+
+After a crash, `attempting` is unresolved. Only positive exact-wire `lookup()` evidence
+can reconcile it as sent; a search miss cannot authorize a retry. `finalAbsence: true`
+permits a retry only if the binding guarantees the old operation did not execute and
+cannot later complete. Identical unresolved resend is allowed exclusively for binding
+id `a2a` with `idempotentResend: true` and receiver deduplication. All paths are bounded
+at **three provider attempts**. Rejected A2A resends retain the earlier uncertainty.
+Positive lookup can still reconcile delivery after all three attempts, including for A2A;
+the cap prevents further transmissions.
+Rejected sends emit non-final `not-sent` transmission settlements while explicit retries remain
+available. At the three-attempt bound, a definitive non-send emits final `not-sent`;
+successful sends emit final `sent`, and unresolved sends remain non-final `uncertain`.
+This finality concerns delivery only: sending does not establish completed agreement performance.
+
+The executor recognizes the channel's actual `ProviderRejectedError` and
+`SendNotDispatchedError` classes through `@jeswr/agent-channels/provider/send`, including
+subclasses, as explicit rejected outcomes. `SendNotDispatchedError` preserves the cause
+of a local failure before any effectful send dispatch, including expiry during approval
+or DNS, credential/approval errors and destination refusals. Matrix room-state reads
+are preflight; malformed provider responses after send dispatch remain uncertain.
+Names and message strings alone never prove non-delivery. Such a pre-delivery refusal
+releases a new attempt's commitment and permits
+an explicitly requested, freshly authorized retry within the attempt bound. Provider
+text is discarded. Other thrown errors remain uncertain; a refusal of an unresolved
+A2A resend cannot release the original commitment. Late typed refusals obey the same rules.
+
+Acknowledgements and positive lookups accept bounded provider reference shapes:
+Gmail IDs, Graph object IDs (up to 2048 characters, including base64 punctuation),
+Graph's deterministic `<awp-…@awp-pilot.invalid>` Message-ID, Matrix `$…` event IDs
+(up to 255 printable ASCII characters), numeric Discord/Mastodon IDs and existing
+direct/synthetic references. Whitespace, controls and unsupported shapes remain uncertain.
+
+Timeouts do not cancel the original call. Pending requests remain guarded across
+executor instances sharing a store, and late outcomes are persisted. Positive delivery
+evidence cannot be downgraded by a late rejection. `sent` history in either the local
+store or audit ledger prevents another send, including after local-store compaction.
+An operator may resolve an uncertain record through the trusted store; an ordinary
+approval or a forged proposal state is not evidence of non-delivery.
+
+## Accounting
+
+Limits use the union of outbox transmission records and ledger history, deduplicated by
+proposal id. Attempting, uncertain and sent obligations count their **committed** amounts;
+not-sent obligations are released. Retries replace their own reservation. Conflicting or
+corrupt accounting records fail closed. Checks and new reservations share the claim lock. Amounts are summed as exact decimal
+JSON-number values, so binary floating-point rounding cannot erase a commitment. A retry
+after a definitive non-send reserves against its new commitment time.
+
+Per-recipient contact rate uses rolling 24 hours; global sends/day and spending/day,
+week and month use UTC calendar boundaries (week starts Monday). Hard breaches refuse;
+soft breaches requeue as `confirm-required` with a reason. A normal action approval does
+not bypass a breached cap: usage or the owner's signed mandate must change first.
+
+The stacked A-008 mandate API currently exports daily/weekly spend operands but lacks
+`spendPerMonth` and a signed currency field. The executor understands the monthly operand
+and `AccountingMandate.currency` only when supplied by a verifier that authenticates
+those fields. Existing VC verification does not emit these extensions. A spend limit
+without an authenticated matching currency fails closed; mixed-currency obligations
+require confirmation/refusal according to the signed limit's soft/hard setting. No FX
+conversion or guessed currency is used, and this lane does not alter agent-mandate.
+
+Run the package's lint, dependency-first build, typecheck and test scripts, and root gates.
+Tests enforce 100% per-file branches/functions/lines/statements, exercise real fsync and
+process death, and exhaustively check 256 halt/resume/file control sequences. They use
+synthetic identities and injected provider transports only.

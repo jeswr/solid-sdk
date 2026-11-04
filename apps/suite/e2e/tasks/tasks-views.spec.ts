@@ -162,6 +162,7 @@ test("long Upcoming, Inbox and project lists scroll within the viewport frame", 
           title: `${project.tracker.title} task ${index}`,
           state: "open",
           allDay: "2026-11-02",
+          dueDate: new Date("2026-11-02T00:00:00Z"),
           rank: index,
         });
       }
@@ -198,6 +199,7 @@ test("scenario 2: overdue count, Reschedule all, and all-day-first Today orderin
         title: "Yesterday all day",
         state: "open",
         allDay: "2026-11-01",
+        dueDate: new Date("2026-11-01T00:00:00Z"),
       })
     ).url;
     await store.createTask(inbox, {

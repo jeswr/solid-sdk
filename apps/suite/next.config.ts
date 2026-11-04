@@ -1,9 +1,13 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex
 import { resolve } from "node:path";
 import type { NextConfig } from "next";
 
 const config: NextConfig = {
+  ...(process.env.NEXT_PUBLIC_SUITE_TARGET === "native"
+    ? ({ output: "export", trailingSlash: true, images: { unoptimized: true } } as const)
+    : {}),
   transpilePackages: ["@jeswr/suite-ui"],
   devIndicators: false,
   // Yjs must be a singleton across the app, TipTap, IndexedDB and the workspace provider.

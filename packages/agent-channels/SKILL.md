@@ -3,6 +3,7 @@ name: agent-channels
 description: Use when working on the channel bindings and carriage profiles surface in @jeswr/agent-channels.
 ---
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 
 # @jeswr/agent-channels
 
@@ -20,6 +21,26 @@ exclusively in channel send subpaths, importable only by agent-executor and chan
 tests. The guard permits only testing.ts's direct/send factory re-export for
 test composition. Read credentials come only from TokenProvider.read; send
 credentials come only from TokenProvider.send. Sending defaults to dry-run.
+Every send must thread the executor's required synchronous io.assertAuthority()
+through the scoped fetch call's request-local beforeDispatch hook. Transport factories
+must run it after all awaits, including both outer and inner DNS/destination checks
+and body buffering, immediately before underlying dispatch with no intervening await.
+Recheck signed-message freshness there too. Direct delivery fences its local effect.
+Wrap every local failure before effectful send dispatch in SendNotDispatchedError,
+retaining the original cause and error type. Preserve ProviderRejectedError identity.
+A read-only Matrix room-state preflight is not a send dispatch; errors after an actual
+send dispatch retain their provider/uncertain meaning. Read-only ingest needs no fence.
+Credential release alone is not continuing send authority.
+Matrix transmit's room-state preflight also uses only the executor's io.tokens.send;
+the construction-time read provider is exclusively for lookup. Refuse encrypted or
+unreadable rooms. Export typed provider refusals through ./provider/send so the executor
+can preserve definitive non-delivery without importing any reader.
+Exception: the read-only GitHub binding (A-033) delegates authentication entirely
+to `gh auth` and never consumes a TokenProvider. Keep its executable, host, GET
+method and endpoint families fixed; invoke with an argument array and no shell.
+Never follow notification URLs or expose child-process stdout/stderr in errors.
+The daemon binds each reader's opaque account to a fixed active gh auth context.
+There is no GitHub send half; the descriptor must keep sendSupported false.
 The direct verifier is injected, local and pure; parsing never verifies signatures.
 Reuse agent-model's capability record mapping rather than minting duplicate terms.
 Only agent-model-gateway may

@@ -1,0 +1,41 @@
+{
+  "authoredBy": "Codex GPT-6.1-Sol",
+  "message": {
+    "profile": "https://agent.example/profile",
+    "configuration": "https://agent.example/config",
+    "id": "urn:example:message:propose",
+    "conversation": "urn:example:conversation:1",
+    "kind": "propose",
+    "from": {
+      "actor": "https://sender.example/agent"
+    },
+    "to": {
+      "actor": "https://receiver.example/agent"
+    },
+    "createdAt": "2026-10-26T11:00:00Z",
+    "expiresAt": "2026-10-26T13:00:00Z",
+    "body": {
+      "operation": {
+        "id": "urn:example:operation:meeting",
+        "version": "1"
+      },
+      "round": 1,
+      "terms": {
+        "candidates": [
+          {
+            "start": "2026-11-01T10:00:00Z",
+            "end": "2026-11-01T10:30:00Z"
+          }
+        ],
+        "topic": "Synthetic fixture meeting"
+      },
+      "termsDigest": "sha-256:6d1e447bb3dcdc46c7b0d5680df7c1a2503eb98c52ac7b40e6f47c9212560b28"
+    }
+  },
+  "compactJws": "eyJhbGciOiJFZERTQSJ9.eyJib2R5Ijp7Im9wZXJhdGlvbiI6eyJpZCI6InVybjpleGFtcGxlOm9wZXJhdGlvbjptZWV0aW5nIiwidmVyc2lvbiI6IjEifSwicm91bmQiOjEsInRlcm1zIjp7ImNhbmRpZGF0ZXMiOlt7ImVuZCI6IjIwMjYtMTEtMDFUMTA6MzA6MDBaIiwic3RhcnQiOiIyMDI2LTExLTAxVDEwOjAwOjAwWiJ9XSwidG9waWMiOiJTeW50aGV0aWMgZml4dHVyZSBtZWV0aW5nIn0sInRlcm1zRGlnZXN0Ijoic2hhLTI1Njo2ZDFlNDQ3YmIzZGNkYzQ2YzdiMGQ1NjgwZGY3YzFhMjUwM2ViOThjNTJhYzdiNDBlNmY0N2M5MjEyNTYwYjI4In0sImNvbmZpZ3VyYXRpb24iOiJodHRwczovL2FnZW50LmV4YW1wbGUvY29uZmlnIiwiY29udmVyc2F0aW9uIjoidXJuOmV4YW1wbGU6Y29udmVyc2F0aW9uOjEiLCJjcmVhdGVkQXQiOiIyMDI2LTEwLTI2VDExOjAwOjAwWiIsImV4cGlyZXNBdCI6IjIwMjYtMTAtMjZUMTM6MDA6MDBaIiwiZnJvbSI6eyJhY3RvciI6Imh0dHBzOi8vc2VuZGVyLmV4YW1wbGUvYWdlbnQifSwiaWQiOiJ1cm46ZXhhbXBsZTptZXNzYWdlOnByb3Bvc2UiLCJraW5kIjoicHJvcG9zZSIsInByb2ZpbGUiOiJodHRwczovL2FnZW50LmV4YW1wbGUvcHJvZmlsZSIsInRvIjp7ImFjdG9yIjoiaHR0cHM6Ly9yZWNlaXZlci5leGFtcGxlL2FnZW50In19.6gntbACnPNz4rHrMH_P49jS7bksakgkcMJRnPdDhNSsomoEWdqdWpLAWj-YBqTU3_1XqanGqnPhe06wqGZgZDQ",
+  "publicKey": {
+    "kty": "OKP",
+    "crv": "Ed25519",
+    "x": "iojj3XQJ8ZX9UtstPLpdcspnCb8dlBIb83SIAbQPb1w"
+  }
+}

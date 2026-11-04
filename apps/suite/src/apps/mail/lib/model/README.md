@@ -18,7 +18,10 @@ Network/parser errors retain their original cause. After any conflict or partial
 Inline JSON-LD contexts are supported; remote contexts and `@import` are rejected before parsing
 because the RDF parser cannot apply the scoped transport to its context loader.
 
-`loadFolders`, `loadThreads` and `loadThread` return hook-free data. Pure `folderCounts`,
+`loadFolders`, `loadThreads` and `loadThread` return hook-free data. Only a missing
+folders container is treated as empty; missing referenced resources surface errors.
+Folder counts retain message totals/unread counts and add `unreadThreads`, counting
+conversations with any unread member, including replies outside that folder. Pure `folderCounts`,
 `pageThreads` and `threadMessages` also work on cached snapshots. Folder paging loads every
 referenced message in the candidate threads, including replies in other folders, before sorting.
 Paging is stable over the loaded snapshot; it does not imply server paging.
@@ -36,6 +39,8 @@ otherwise contains a readable HTML-to-text fallback. HTML must be sanitised befo
 HTML-derived bodies that exceed the shared scanner's visible-text or input-scan limit append
 `HTML_TEXT_TRUNCATION_NOTICE` on its own paragraph; `parseEmail` and `importMbox` expose
 `bodyTruncated: true` on those per-message results. Full HTML and raw source remain available.
+Decoded From/To/Cc display names are retained as typed address metadata, and attachment
+metadata includes the decoded byte size.
 Generated identifiers use reversible tilde escaping, avoiding encoded path delimiters while
 retaining original Message-IDs and folder titles as metadata. System folders use reserved
 `folders/system:<id>.ttl` documents (for example `system:inbox`); custom label keys retain their
@@ -43,7 +48,10 @@ case and escape colons, so even a custom `system:inbox` label stays distinct. Ar
 mutations use the same reserved system documents.
 The splitter accumulates fixed blocks of at most 64 KiB and classifies separator/quote prefixes
 across chunk boundaries without buffering whole lines. Each message is bounded to 25 MiB;
-MIME is buffered per message, never per mailbox. `mintId` supplies IDs
+MIME is buffered per message, never per mailbox. `splitMbox` accepts an optional
+oversize callback to discard one oversized message and resume at the next separator.
+`importMbox` accepts `{ onError }` as its fifth argument for per-message MIME/size
+recovery while retaining ancestry; both keep fail-fast behaviour by default. `mintId` supplies IDs
 for mail lacking Message-ID. Subject similarity alone never merges threads. References is
 preferred for out-of-order mail; In-Reply-To-only chains resolve through previously seen mail.
 ZIP extraction belongs to the file connector.

@@ -1,0 +1,19 @@
+{
+  "first": {
+    "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#Collection(message)",
+    "@odata.nextLink": "https://graph.microsoft.com/v1.0/me/mailfolders('AQMk%2Binbox%2F%3D%3D')/messages/delta?$skiptoken=page2",
+    "value": [
+      { "id": "AAMk+one/==" },
+      { "id": "AAMk+one/==" },
+      { "id": "AAMk-deleted==", "@removed": { "reason": "deleted" } }
+    ]
+  },
+  "last": {
+    "@odata.deltaLink": "https://graph.microsoft.com/v1.0/me/mailfolders/AQMk%2Binbox%2F%3D%3D/messages/delta?$deltatoken=delta1",
+    "value": [{ "id": "AAMk-two==" }]
+  },
+  "empty": {
+    "@odata.deltaLink": "https://graph.microsoft.com/v1.0/me/mailfolders/AQMk%2Binbox%2F%3D%3D/messages/delta?$deltatoken=delta1",
+    "value": []
+  }
+}

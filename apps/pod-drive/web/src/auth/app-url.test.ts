@@ -5,7 +5,7 @@ import { appUrl } from "./app-url";
 afterEach(() => vi.unstubAllEnvs());
 
 describe("app URLs", () => {
-  it("keeps identity and both login returns under the Pages app base", () => {
+  it("keeps identity and the popup return under the Pages app base", () => {
     vi.stubEnv("BASE_URL", "/solid-sdk/pod-drive/");
     const base = "https://jeswr.github.io/solid-sdk/pod-drive/";
     expect(appUrl("clientid.jsonld", "https://jeswr.github.io")).toBe(`${base}clientid.jsonld`);

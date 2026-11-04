@@ -40,6 +40,7 @@ export interface GuardOptions {
     readonly allowedContentTypes?: readonly string[];
     readonly allowLoopback?: boolean;
     readonly allowUnresolvedHosts?: boolean;
+    readonly beforeDispatch?: () => void;
     readonly dnsLookup?: DnsLookup | null;
     readonly enforcePortGate?: boolean;
     readonly fetch?: typeof globalThis.fetch;

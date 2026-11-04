@@ -1,3 +1,4 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-/** Reserved public entry point for @jeswr/pod-notifications; implementation follows T-001. */
-export {};
+/** Storage-scoped notification subscriptions and ADR-005 contracts. */
+export { createNotifications } from "./client.js";
+export type * from "./types.js";

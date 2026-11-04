@@ -111,7 +111,12 @@ async function stage(
       throw new TypeError("Invalid staged file URI");
     }
     const uri = new URL(committed.uri);
-    const path = decodeURIComponent(uri.pathname);
+    let path: string;
+    try {
+      path = decodeURIComponent(uri.pathname);
+    } catch {
+      throw new TypeError("Invalid staged file URI");
+    }
     const segments = path.split("/");
     const name = segments.pop();
     if (
@@ -120,7 +125,8 @@ async function stage(
       uri.hash ||
       !name ||
       sanitiseFileName(name) !== name ||
-      !segments.join("/").endsWith(`/share-out/${stagingId}`)
+      !/\/(?:cache|tmp)$/.test(segments.slice(0, -2).join("/")) ||
+      segments.slice(-2).join("/") !== `share-out/${stagingId}`
     ) {
       throw new TypeError("Invalid staged file URI");
     }

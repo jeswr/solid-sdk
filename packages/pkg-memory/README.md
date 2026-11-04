@@ -1,5 +1,6 @@
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 <!-- AUTHORED-BY Codex GPT-6 -->
+<!-- AUTHORED-BY Claude Opus 5.5 -->
 
 # @jeswr/pkg-memory
 
@@ -31,11 +32,32 @@ const parsed = await parseNanopublications(trig);
 ```
 
 `createFactAssertion` supports `address`, `email`, `phone`, `preference`,
-`condition`, `allergy`, `medication`, and `relationship`. Use its discriminated
+`condition`, `allergy`, `medication`, `relationship`, and `paymentCard`. Use its discriminated
 `Fact` type for the value fields. Residence, clinical, product and role identifiers
 are explicit entity IRIs. Nested preferences, codes and dose schedules use blank
 nodes, canonically skolemized on build. Temporal bounds retain their declared
 `date`, `dateTime`, `gYearMonth`, or `gYear` precision.
+
+`paymentCard` records a blank-node `schema:PaymentCard` that the owner
+`schema:owns`, with `schema:brand`, the last four digits as a
+`schema:PropertyValue` (`propertyID` "last4"), `schema:validThrough` as an
+`xsd:gYearMonth` and an optional `schema:address`. It has no field for a full
+card number, a security code or a card id, and refuses any extra key. A billing
+address IRI may have no query or fragment and at most four digits in all, counted
+after percent-decoding and NFKC normalisation. That leaves room for a house
+number but not a useful share of a card number; it also refuses UUID and IP
+address IRIs, so mint a slug for the address entity or leave it out. One fact
+cannot reveal more than its last four digits; splitting a number across many
+facts or other templates is outside what this template can check. Each field is read once, so a getter or proxy cannot
+change a value after it is checked.
+
+`findCardNumbers` and `containsCardNumber` expose the detector. It flags every
+Luhn-valid window of 12 to 19 digits that does not start with 0, in linear time.
+Digits can be any Unicode decimal digit or a character that NFKC folds to one
+(circled, superscript, parenthesised or full-stop digits). Groups can be split
+by whitespace, any punctuation, invisible format characters, combining marks or
+`+ = ~ |`. Percent-decode IRIs before scanning them. Ideographic numerals are not
+covered.
 
 The batch contract follows `np_builder.py` (snake-case source fields). Claims can
 supply a default-graph RDF/JS dataset or a Turtle assertion body using the reference

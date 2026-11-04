@@ -144,7 +144,10 @@ export function classifyDeterministic(nl: string): StructuredIntentDraft | undef
   if (text.length === 0) {
     return undefined;
   }
-  const action = matchVerb(text);
+  // Verbs and modes are read from the prose only, never from inside an IRI
+  // (`…/write-ups/…`, `…/control#me`).
+  const prose = maskIris(text);
+  const action = matchVerb(prose);
   if (action === undefined) {
     return undefined;
   }
@@ -170,7 +173,7 @@ export function classifyDeterministic(nl: string): StructuredIntentDraft | undef
     if (recipient !== undefined) {
       draft.recipient = recipient;
     }
-    const modes = extractModes(text);
+    const modes = extractModes(prose);
     if (modes.length > 0) {
       draft.modes = modes;
     }
@@ -276,14 +279,20 @@ function extractIri(text: string): string | undefined {
   return match[0].replace(/[.,;:!?)]+$/, "");
 }
 
-/** All http(s) IRIs in the text (in order). */
-function allIris(text: string): string[] {
-  const out: string[] = [];
-  const re = /https?:\/\/[^\s<>"'`]+/g;
-  let m: RegExpExecArray | null = re.exec(text);
-  while (m !== null) {
-    out.push(m[0].replace(/[.,;:!?)]+$/, ""));
-    m = re.exec(text);
+/** Every http(s) IRI in the text, in order, with where its match starts and ends. */
+function iriSpans(text: string): Array<{ start: number; end: number; iri: string }> {
+  return [...text.matchAll(/https?:\/\/[^\s<>"'`]+/g)].map((m) => ({
+    start: m.index,
+    end: m.index + m[0].length,
+    iri: m[0].replace(/[.,;:!?)]+$/, ""),
+  }));
+}
+
+/** The text with every IRI blanked to U+0001 (neither a letter, a word char nor space). */
+function maskIris(text: string): string {
+  let out = text;
+  for (const { start, end } of iriSpans(text)) {
+    out = out.slice(0, start) + "\u0001".repeat(end - start) + out.slice(end);
   }
   return out;
 }
@@ -299,27 +308,31 @@ function allIris(text: string): string[] {
  * Returns `undefined` if no IRI distinguishable from the target is present.
  */
 function extractRecipient(text: string, target: string | undefined): string | undefined {
-  // 1. `with` / `recipient` markers are unambiguous recipient markers.
-  const withMarker = text.match(/\b(?:with|recipient[:=])\s*(https?:\/\/[^\s<>"'`]+)/i);
-  if (withMarker?.[1]) {
-    const iri = withMarker[1].replace(/[.,;:!?)]+$/, "");
-    if (iri !== target) {
-      return iri;
+  // Markers are matched in the prose only, so a `recipient=` inside an IRI's
+  // query string is not a marker.
+  const spans = iriSpans(text);
+  const prose = maskIris(text);
+  const marked = (marker: RegExp): string | undefined => {
+    for (const m of prose.matchAll(marker)) {
+      const at = m.index + m[0].length;
+      const iri = spans.find((span) => span.start === at)?.iri;
+      if (iri !== undefined && iri !== target) {
+        return iri;
+      }
     }
-  }
+    return undefined;
+  };
+  // 1. `with` / `recipient` markers are unambiguous recipient markers.
   // 2. A `to <iri>` marker, only when it points at something other than the target
   //    (in "share access to <resource> with <recipient>" the `to` points at the
   //    resource, so we skip it; in "grant access to <recipient>" it is the
   //    recipient).
-  const toMarker = text.match(/\bto\s*(https?:\/\/[^\s<>"'`]+)/i);
-  if (toMarker?.[1]) {
-    const iri = toMarker[1].replace(/[.,;:!?)]+$/, "");
-    if (iri !== target) {
-      return iri;
-    }
-  }
   // 3. The first IRI distinct from the target.
-  return allIris(text).find((i) => i !== target);
+  return (
+    marked(/\b(?:with|recipient[:=])\s*/gi) ??
+    marked(/\bto\s*/gi) ??
+    spans.map((span) => span.iri).find((i) => i !== target)
+  );
 }
 
 /** The ACL modes mentioned in a grant phrase (`read`, `write`, `append`, `control`). */
