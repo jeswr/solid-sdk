@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import AxeBuilder from "@axe-core/playwright";
@@ -145,6 +146,8 @@ test("CardDAV explains its offline requirement without disabling file import", a
 }) => {
   await open(page);
   await sidebar(page, "Import");
+  // Go offline only once the client navigation has loaded, or the route itself fails to load.
+  await expect(page.getByRole("heading", { name: "Choose a source", exact: true })).toBeVisible();
   await context.setOffline(true);
   await expect(
     page.getByRole("button", { name: "From a CardDAV server", exact: true }),

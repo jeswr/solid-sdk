@@ -167,7 +167,7 @@ export function TaskDetail({
               className="tsk-detail-breadcrumb"
               variant="ghost"
               size="sm"
-              aria-label="Move task"
+              aria-label={`${view.projectTitle} › ${section?.name ?? "No section"}, move task`}
             >
               {view.projectTitle} › {section?.name ?? "No section"}
             </Button>

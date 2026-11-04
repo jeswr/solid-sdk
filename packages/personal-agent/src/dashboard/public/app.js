@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // Agent dashboard (browser side). Plain ES module, no dependencies, served from this machine.
 // Every value from the server is rendered as TEXT (DOM nodes and textContent) — never as HTML —
 // so labels, notes and identifiers cannot inject markup or script. No inline handlers, no eval.
@@ -2134,7 +2135,6 @@ const EXAMPLES = [
 async function viewTriage(root) {
   const d = await api("GET", "/triage");
   state.revision = d.revision;
-  const hosted = d.hosted;
   put(
     root,
     h("h1", { tabindex: "-1" }, "Message triage"),
@@ -2163,144 +2163,22 @@ async function viewTriage(root) {
         h(
           "li",
           {},
-          "Hosted triage (TypeSafe) runs only when all of these hold: a key is configured on this machine, you turned it on here, you confirm each sample, and, for an account, you allowed it on the Connections page. If it fails or is unsure, you are asked.",
+          "Hosted pilot triage has been retired. Local rules suggest labels and ask when uncertain.",
         ),
       ),
     ),
   );
 
   // Hosted settings
-  const toggle = h("input", { type: "checkbox", checked: hosted.enabled });
-  const save = h("button", { type: "submit", class: "primary" }, "Save");
   put(
     root,
     h(
       "section",
       { class: "panel", "aria-labelledby": "tr-hosted" },
-      h("h2", { id: "tr-hosted" }, "Hosted triage (TypeSafe)"),
-      facts([
-        [
-          "Key on this machine",
-          hosted.configured ? badge("Configured", "info") : badge("Not configured", ""),
-        ],
-        ["Turned on here", hosted.enabled ? "Yes" : "No"],
-        ["Model", h("span", { class: "mono" }, hosted.model)],
-        ["Sent to", h("span", { class: "mono" }, hosted.endpoint)],
-      ]),
-      hosted.problem ? message("error", hosted.problem) : null,
-      h("h3", {}, "What is sent when you use it"),
-      h(
-        "p",
-        {},
-        "For each sample you confirm, its sender, subject and body, with the category descriptions, are sent over HTTPS to TypeSafe. Nothing is sent otherwise: no inbox is read, and no message is sent automatically. TypeSafe states that requests are not used for training. Check its data processing terms and your account's retention settings before turning this on.",
-      ),
-      h(
-        "ul",
-        { class: "plain" },
-        h(
-          "li",
-          {},
-          h(
-            "a",
-            {
-              href: "https://typesafe.ai/legal/data-processing",
-              rel: "noreferrer",
-              target: "_blank",
-            },
-            "TypeSafe data processing terms (opens in a new tab)",
-          ),
-        ),
-        h(
-          "li",
-          {},
-          h(
-            "a",
-            {
-              href: "https://typesafe.ai/legal/privacy-policy",
-              rel: "noreferrer",
-              target: "_blank",
-            },
-            "TypeSafe privacy policy (opens in a new tab)",
-          ),
-        ),
-      ),
-      h(
-        "form",
-        {
-          events: {
-            submit: (e) => {
-              e.preventDefault();
-              busy(save, async () => {
-                const r = await api("PUT", "/triage", {
-                  baseRevision: state.revision,
-                  hostedEnabled: toggle.checked,
-                });
-                await route();
-                notify(
-                  "ok",
-                  `Hosted triage is ${r.enabled ? "on" : "off"}. Settings revision ${r.revision}.`,
-                );
-              });
-            },
-          },
-        },
-        check(
-          "Turn on hosted triage",
-          toggle,
-          hosted.configured
-            ? "Samples are still sent only when you confirm each one."
-            : "It stays unavailable until a key is configured on this machine.",
-        ),
-        h("div", { class: "actions" }, save),
-      ),
-      h(
-        "details",
-        { open: !hosted.configured },
-        h("summary", {}, "Setting up a TypeSafe key"),
-        h(
-          "ol",
-          { class: "plain" },
-          h(
-            "li",
-            {},
-            "Create an account at ",
-            h(
-              "a",
-              { href: "https://console.typesafe.ai", rel: "noreferrer", target: "_blank" },
-              "the TypeSafe console (opens in a new tab)",
-            ),
-            ". Use only this official address.",
-          ),
-          h("li", {}, "Create an API key there and keep it in your own secret store."),
-          h(
-            "li",
-            {},
-            "Start the dashboard with the key in its environment, without typing the key into the command itself (so it stays out of shell history), for example: ",
-            h(
-              "code",
-              {},
-              "read -rs TYPESAFE_API_KEY && export TYPESAFE_API_KEY && npm run dashboard",
-            ),
-            ".",
-          ),
-          h(
-            "li",
-            {},
-            "Optionally pin a model version with ",
-            h("code", {}, "TYPESAFE_MODEL=jev-1.13.0"),
-            ". Only pinned versions are accepted.",
-          ),
-          h(
-            "li",
-            {},
-            "Restart the dashboard, turn hosted triage on here, and try a synthetic sample.",
-          ),
-        ),
-        h(
-          "p",
-          { class: "small" },
-          "Never paste the key into this page or into a chat. The dashboard never shows, stores or logs it.",
-        ),
+      h("h2", { id: "tr-hosted" }, "Hosted triage retired"),
+      message(
+        "info",
+        "This pilot now uses local rules only. No sample is sent to a hosted provider.",
       ),
     ),
   );
@@ -2329,13 +2207,6 @@ async function viewTriage(root) {
     d.accounts.map((a) => h("option", { value: a.id }, a.label)),
   );
   const synthetic = h("input", { type: "checkbox", required: true });
-  const hostedAvailable = hosted.configured && hosted.enabled;
-  const useHosted = h("input", { type: "checkbox", disabled: !hostedAvailable });
-  const consent = h("input", { type: "checkbox", disabled: true });
-  useHosted.addEventListener("change", () => {
-    consent.disabled = !useHosted.checked;
-    if (!useHosted.checked) consent.checked = false;
-  });
   const result = h("div", { "aria-live": "polite" });
   const run = h("button", { type: "submit", class: "primary" }, "Suggest triage");
   put(
@@ -2364,8 +2235,8 @@ async function viewTriage(root) {
                   },
                   synthetic: synthetic.checked === true ? true : undefined,
                   ...(account.value ? { accountId: account.value } : {}),
-                  useHosted: useHosted.checked,
-                  consent: consent.checked,
+                  useHosted: false,
+                  consent: false,
                 });
                 renderTriageResult(result, r);
               });
@@ -2381,16 +2252,6 @@ async function viewTriage(root) {
           "Linking a sample to an account applies that account's restrictions (included, read and triage, plus hosted permission for hosted triage). Without an account the sample is a synthetic sandbox.",
         ),
         check("This sample is made up (not a real message)", synthetic),
-        check(
-          "Use hosted triage (TypeSafe)",
-          useHosted,
-          hostedAvailable
-            ? undefined
-            : hosted.configured
-              ? "Turn hosted triage on above first."
-              : "Not available: no key is configured on this machine.",
-        ),
-        check("Send this sample to TypeSafe", consent, "Your confirmation for this sample only."),
         h("div", { class: "actions" }, run),
       ),
       result,

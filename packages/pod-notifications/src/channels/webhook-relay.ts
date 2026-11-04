@@ -1,3 +1,8 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-/** Reserved channels/webhook-relay entry point for @jeswr/pod-notifications; implementation follows T-001. */
-export {};
+import { createPushChannel, type PushChannelOptions } from "./push.js";
+
+export type { PushChannelOptions } from "./push.js";
+/** Batch LWS webhook topics into a registered relay inbox and receive its SSE stream. */
+export function createWebhookRelayChannel(options: PushChannelOptions) {
+  return createPushChannel(options, "lws", "webhook-relay");
+}

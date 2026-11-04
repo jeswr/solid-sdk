@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 //
 // Vite config for the Pod Drive static host shell. It bundles the LOCAL
@@ -62,7 +63,8 @@ export default defineConfig({
       { find: "@jeswr/pod-drive", replacement: podDriveSrc("index.ts") },
       { find: "@jeswr/fetch-rdf", replacement: hostModule("@jeswr/fetch-rdf") },
       { find: "@jeswr/suite-vocab", replacement: hostModule("@jeswr/suite-vocab") },
-      { find: "@solid/object", replacement: hostModule("@solid/object") },
+      // Leave SDK subpaths to package exports (a directory alias would hide them).
+      { find: /^@solid\/object$/, replacement: hostModule("@solid/object") },
       { find: "@rdfjs/wrapper", replacement: hostModule("@rdfjs/wrapper") },
       { find: "n3", replacement: hostModule("n3") },
       // The library declares React as an OPTIONAL peer dep; bundling its source

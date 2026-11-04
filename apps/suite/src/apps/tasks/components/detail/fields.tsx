@@ -30,6 +30,7 @@ import { humanise } from "../../lib/model/recurrence";
 import type { Reminder } from "../../lib/model/reminders";
 import type { StoredProject, StoredTask } from "../../lib/model/store";
 import { type PriorityLevel, priorityValue, type TaskView } from "../../lib/views/types";
+import { offerNotificationPermission } from "../../state/reminders";
 import { useTasks } from "../../state/tasks-context";
 
 export function localDate(date: Date): string {
@@ -376,7 +377,7 @@ export function TaskProperties({
           reminder.offset
         ] ?? reminder.offset);
   const addReminder = (reminder: Reminder) => {
-    void tasks.updateTask(stored, (task) => {
+    const saving = tasks.updateTask(stored, (task) => {
       if (!task.dueDate) return;
       if (
         task.reminders.some((entry) =>
@@ -387,6 +388,9 @@ export function TaskProperties({
       )
         return;
       task.reminders = [...task.reminders, reminder];
+    });
+    void saving.then((saved) => {
+      if (saved?.task.reminders.length) offerNotificationPermission();
     });
   };
   return (

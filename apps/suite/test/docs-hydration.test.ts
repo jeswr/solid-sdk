@@ -96,7 +96,12 @@ it("hydrates the Docs editor across a minute boundary without changing its initi
   window.matchMedia = globalThis.matchMedia;
   const now = vi.spyOn(Date, "now").mockReturnValue(Date.parse("2026-10-26T12:00:59Z"));
   const doc = new Doc();
-  const session = { storageUrl: "https://pod.test/", fetch: vi.fn() } as unknown as PodSession;
+  const session = {
+    displayName: "Alice",
+    webId: "https://pod.test/profile#me",
+    storageUrl: "https://pod.test/",
+    fetch: vi.fn(),
+  } as unknown as PodSession;
   mocks.runtime = {
     doc,
     session,
@@ -144,7 +149,12 @@ it.each([
   ["failed", "Couldn't save on this device"],
 ])("round27 offline and trash banners report the actual local %s state", (localState, message) => {
   const doc = new Doc();
-  const session = { storageUrl: "https://pod.test/", fetch: vi.fn() } as unknown as PodSession;
+  const session = {
+    displayName: "Alice",
+    webId: "https://pod.test/profile#me",
+    storageUrl: "https://pod.test/",
+    fetch: vi.fn(),
+  } as unknown as PodSession;
   mocks.runtime = {
     doc,
     session,
@@ -189,7 +199,12 @@ it.each([
   }));
   window.matchMedia = globalThis.matchMedia;
   const doc = new Doc();
-  const session = { storageUrl: "https://pod.test/", fetch: vi.fn() } as unknown as PodSession;
+  const session = {
+    displayName: "Alice",
+    webId: "https://pod.test/profile#me",
+    storageUrl: "https://pod.test/",
+    fetch: vi.fn(),
+  } as unknown as PodSession;
   mocks.runtime = {
     doc,
     session,
@@ -238,7 +253,12 @@ it.each([
 });
 it("links the separate copy containing edits from a retired log", () => {
   const doc = new Doc();
-  const session = { storageUrl: "https://pod.test/", fetch: vi.fn() } as unknown as PodSession;
+  const session = {
+    displayName: "Alice",
+    webId: "https://pod.test/profile#me",
+    storageUrl: "https://pod.test/",
+    fetch: vi.fn(),
+  } as unknown as PodSession;
   mocks.runtime = {
     doc,
     session,

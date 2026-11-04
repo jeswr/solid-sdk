@@ -20,8 +20,8 @@ Coverage measures all non-test TypeScript under `src/`; `securityCritical` remai
 unless every coverage metric reaches 100% and thresholds enforce it.
 
 The colocated `LOCAL-HANDOFF.md` and `docs/` describe the imported implementation. Agent design
-and extraction sequencing remain with the program design; keep `src/triage/typesafe.ts`
-until A-011. Do not run it against a provider.
+and extraction sequencing remain with the program design; A-011 removed `src/triage/typesafe.ts` and disabled hosted pilot triage.
+Use agent-model-gateway for model calls; never run live providers as verification.
 
 `mirrorPublish.inlined` is empty because tsc preserves runtime imports and declarations.
 Every workspace dependency needs an explicit mirror SHA when publishing is authorized.

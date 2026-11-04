@@ -26,6 +26,7 @@ export function DownloadMenu({
         <DropdownMenuItem onSelect={() => download("md")} aria-describedby="docs-markdown-notes">
           Markdown (.md)
         </DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => download("html")}>Web page (.html)</DropdownMenuItem>
         <p id="docs-markdown-notes" className="docs-menu-help">
           {MARKDOWN_NOTES}
         </p>

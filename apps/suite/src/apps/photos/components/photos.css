@@ -746,3 +746,128 @@
     display: block;
   }
 }
+
+/* AUTHORED-BY Claude Opus 5.5: Google Takeout import */
+.pho-takeout-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  max-width: 720px;
+  padding: var(--space-6);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+.pho-takeout-card h2,
+.pho-takeout-card h3,
+.pho-takeout-card p {
+  margin: 0;
+}
+.pho-takeout-card h2 {
+  font-size: var(--text-lg);
+}
+.pho-takeout-card h3 {
+  font-size: var(--text-base);
+}
+.pho-takeout-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+  color: var(--primary);
+}
+.pho-takeout-steps,
+.pho-takeout-notes {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding-left: var(--space-5);
+  color: var(--foreground-muted);
+}
+.pho-takeout-steps a {
+  color: var(--primary);
+}
+.pho-takeout-option {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 44px;
+}
+.pho-takeout-option input {
+  width: 20px;
+  height: 20px;
+  accent-color: var(--primary);
+}
+.pho-takeout-pick {
+  display: grid;
+  gap: var(--space-2);
+}
+.pho-takeout-pick label {
+  font-weight: 600;
+}
+.pho-takeout-pick input {
+  max-width: 100%;
+  min-height: 44px;
+}
+.pho-takeout-panel {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+}
+.pho-takeout-panel dl {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+}
+.pho-takeout-panel dl div {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+.pho-takeout-panel dd {
+  margin: 0;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.pho-takeout-panel progress {
+  width: 100%;
+  accent-color: var(--primary);
+}
+.pho-takeout-count {
+  margin: 0;
+  color: var(--foreground-muted);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+}
+.pho-takeout-unreadable {
+  font-size: var(--text-sm);
+}
+.pho-takeout-unreadable summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.pho-takeout-unreadable ul {
+  margin: var(--space-2) 0 0;
+  padding-inline-start: var(--space-5);
+  color: var(--foreground-muted);
+  overflow-wrap: anywhere;
+}
+.pho-takeout-error {
+  color: var(--destructive);
+}
+.pho-takeout-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+.pho-takeout-note {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  gap: var(--space-2);
+  color: var(--foreground-muted);
+  font-size: var(--text-sm);
+}

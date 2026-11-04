@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 import { parseRdf, RdfFetchError } from "@jeswr/fetch-rdf";
 import { serialize } from "@jeswr/rdf-serialize";
 import { Contact, type ContactData, ContactGroup } from "@jeswr/solid-task-model/contacts";
@@ -50,6 +51,18 @@ export async function ensurePerson(model: ContactsModel, saved: SavedDocument) {
   }
   await model.transport.commit([{ url: saved.url, dataset: expected.dataset, etag: null }]);
   return expected;
+}
+
+/**
+ * Replace an existing person only from the reviewed revision. A replay adopts an identical
+ * document; a concurrent edit or deletion is a conflict, so nothing later in the merge runs.
+ */
+export async function ensureReplaced(model: ContactsModel, saved: SavedDocument) {
+  const expected = await openDocument(saved);
+  const existing = await absentOr(() => model.loadContact(saved.url));
+  if (!existing) throw new ContactsWriteError(412, saved.url, null);
+  if (isomorphic([...existing.dataset], [...expected.dataset])) return;
+  await model.transport.commit([replacement({ ...existing, etag: saved.etag }, expected.dataset)]);
 }
 
 /** Absence is success even when the DELETE response was lost. Preserve concurrent edits. */
