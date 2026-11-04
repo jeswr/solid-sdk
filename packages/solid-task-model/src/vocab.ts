@@ -188,6 +188,21 @@ export const VCARD_HOME = vcard("Home");
 export const VCARD_CELL = vcard("Cell");
 /** `rdf:type vcard:WebId` — the kind stamped on a structured `vcard:url` WebID node (standard W3C vCard). */
 export const VCARD_WEB_ID = vcard("WebId");
+// AUTHORED-BY Claude Opus 5.5
+/** `vcard:hasAddress` — a postal address node (standard W3C vCard; SolidOS's address form). */
+export const VCARD_HAS_ADDRESS = vcard("hasAddress");
+/** `vcard:street-address` — the street lines of an address node, newline-joined. */
+export const VCARD_STREET_ADDRESS = vcard("street-address");
+/** `vcard:locality` — the city/town of an address node. */
+export const VCARD_LOCALITY = vcard("locality");
+/** `vcard:region` — the state/province/county of an address node. */
+export const VCARD_REGION = vcard("region");
+/** `vcard:postal-code` — the postal/ZIP code of an address node. */
+export const VCARD_POSTAL_CODE = vcard("postal-code");
+/** `vcard:country-name` — the country of an address node, as written. */
+export const VCARD_COUNTRY_NAME = vcard("country-name");
+/** `rdf:type vcard:Work` — the "work" kind stamped on a structured node (standard W3C vCard). */
+export const VCARD_WORK = vcard("Work");
 
 /** Prefix map for an n3 Writer that serialises this model (pretty Turtle output). */
 export const PREFIXES = {

@@ -44,7 +44,7 @@
  */
 
 import { escapeIri, isHttpIri as isRdfHttpIri } from "@jeswr/rdf-serialize";
-import type { DatasetCore, Term } from "@rdfjs/types";
+import type { BlankNode, DatasetCore, NamedNode, Term } from "@rdfjs/types";
 import {
   BlankNodeFrom,
   LiteralAs,
@@ -66,9 +66,11 @@ import {
   rdf,
   VCARD_ADDRESS_BOOK,
   VCARD_CELL,
+  VCARD_COUNTRY_NAME,
   VCARD_FN,
   VCARD_GROUP,
   VCARD_GROUP_INDEX,
+  VCARD_HAS_ADDRESS,
   VCARD_HAS_EMAIL,
   VCARD_HAS_MEMBER,
   VCARD_HAS_TELEPHONE,
@@ -77,12 +79,17 @@ import {
   VCARD_IN_ADDRESS_BOOK,
   VCARD_INCLUDES_GROUP,
   VCARD_INDIVIDUAL,
+  VCARD_LOCALITY,
   VCARD_NAME_EMAIL_INDEX,
   VCARD_NOTE,
   VCARD_ORGANIZATION_NAME,
+  VCARD_POSTAL_CODE,
+  VCARD_REGION,
+  VCARD_STREET_ADDRESS,
   VCARD_URL,
   VCARD_VALUE,
   VCARD_WEB_ID,
+  VCARD_WORK,
 } from "./vocab.js";
 
 /**
@@ -155,9 +162,38 @@ export interface ContactData {
    * it losslessly, instead of folding it into the free-text {@link note}.
    */
   organization?: string;
+  /**
+   * `vcard:hasAddress` — the contact's postal addresses, each a structured node with
+   * `vcard:street-address` / `locality` / `region` / `postal-code` / `country-name`
+   * literals (the SolidOS address form).
+   */
+  addresses?: ContactAddress[];
   /** `dct:created` (DC Terms) — when the person document was created. */
   created?: Date;
 }
+
+// AUTHORED-BY Claude Opus 5.5
+/**
+ * One postal address of a contact. Every field is optional text; `street` holds the
+ * street lines joined with `\n` (one `vcard:street-address` literal, as SolidOS writes
+ * it). `kind` is the node's `vcard:Home` / `vcard:Work` type, when it has one.
+ */
+export interface ContactAddress {
+  kind?: "home" | "work";
+  street?: string;
+  locality?: string;
+  region?: string;
+  postalCode?: string;
+  country?: string;
+}
+
+const ADDRESS_FIELDS = [
+  ["street", VCARD_STREET_ADDRESS],
+  ["locality", VCARD_LOCALITY],
+  ["region", VCARD_REGION],
+  ["postalCode", VCARD_POSTAL_CODE],
+  ["country", VCARD_COUNTRY_NAME],
+] as const;
 
 /**
  * A contact group (a `vcard:Group`) as a plain, serialisable object — a named set
@@ -459,6 +495,92 @@ export class Contact extends TermWrapper {
   }
 
   /**
+   * The contact's postal addresses, read from structured `vcard:hasAddress` nodes
+   * (blank or named). Only string literals are read; a node with no address fields is
+   * skipped. Untrusted pod data, so nothing here is treated as markup or a link.
+   */
+  get addresses(): ContactAddress[] {
+    return this.addressEntries.map(({ address }) => address);
+  }
+
+  /**
+   * The readable addresses with the node each was read from, so a caller can rewrite only
+   * the nodes that changed and leave other RDF on unchanged nodes alone.
+   */
+  get addressEntries(): { node: BlankNode | NamedNode; address: ContactAddress }[] {
+    const out: { node: BlankNode | NamedNode; address: ContactAddress }[] = [];
+    const p = this.factory.namedNode(VCARD_HAS_ADDRESS);
+    for (const q of this.dataset.match(this as unknown as Term, p)) {
+      if (q.object.termType !== "BlankNode" && q.object.termType !== "NamedNode") continue;
+      const node = new TermWrapper(q.object, this.dataset, this.factory);
+      const address: ContactAddress = {};
+      for (const [field, predicate] of ADDRESS_FIELDS) {
+        // Literal objects only: an IRI where text belongs is malformed data, not an address.
+        for (const value of node.dataset.match(q.object, this.factory.namedNode(predicate))) {
+          if (value.object.termType === "Literal" && value.object.value) {
+            address[field] = value.object.value;
+            break;
+          }
+        }
+      }
+      if (!ADDRESS_FIELDS.some(([field]) => address[field] !== undefined)) continue;
+      const types = SetFrom.subjectPredicate(
+        node,
+        rdf("type"),
+        NamedNodeAs.string,
+        NamedNodeFrom.string,
+      );
+      if (types.has(VCARD_WORK)) address.kind = "work";
+      else if (types.has(VCARD_HOME)) address.kind = "home";
+      out.push({ node: q.object, address });
+    }
+    return out;
+  }
+
+  /**
+   * Replace the contact's addresses. Removes every prior `vcard:hasAddress` link (and its
+   * node, see removeAddress), then adds each non-empty address.
+   */
+  setAddresses(addresses: readonly ContactAddress[]): void {
+    const p = this.factory.namedNode(VCARD_HAS_ADDRESS);
+    for (const q of [...this.dataset.match(this as unknown as Term, p)])
+      this.removeAddress(q.object);
+    for (const address of addresses) this.addAddress(address);
+  }
+
+  /**
+   * Remove one `vcard:hasAddress` link. Unlike the other structured fields, the reader also
+   * accepts named address nodes, so the node's own statements go too (blank or named),
+   * unless something else in the document still points at it.
+   */
+  removeAddress(node: Term): void {
+    const p = this.factory.namedNode(VCARD_HAS_ADDRESS);
+    for (const q of [...this.dataset.match(this as unknown as Term, p, node)])
+      this.dataset.delete(q);
+    if (node.termType !== "BlankNode" && node.termType !== "NamedNode") return;
+    if (node.equals(this as unknown as Term) || this.dataset.match(null, null, node).size) return;
+    for (const inner of [...this.dataset.match(node)]) this.dataset.delete(inner);
+  }
+
+  /** Add one address as a new blank node with its kind and trimmed, non-empty field literals. */
+  addAddress(address: ContactAddress): void {
+    if (!ADDRESS_FIELDS.some(([field]) => address[field]?.trim())) return;
+    const bnode = this.factory.blankNode();
+    SetFrom.subjectPredicate(this, VCARD_HAS_ADDRESS, blankNodeLabel, BlankNodeFrom.string).add(
+      bnode.value,
+    );
+    const child = new TermWrapper(bnode, this.dataset, this.factory);
+    if (address.kind)
+      SetFrom.subjectPredicate(child, rdf("type"), NamedNodeAs.string, NamedNodeFrom.string).add(
+        address.kind === "work" ? VCARD_WORK : VCARD_HOME,
+      );
+    for (const [field, predicate] of ADDRESS_FIELDS) {
+      const value = address[field]?.trim();
+      if (value) OptionalAs.object(child, predicate, value, LiteralFrom.string);
+    }
+  }
+
+  /**
    * The contact's WebID, read from the structured `vcard:url [ a vcard:WebId;
    * vcard:value <webid> ]` form. Explicit WebId nodes take precedence over generic
    * URLs, including an empty node recording a cleared selection. Without explicit
@@ -674,6 +796,8 @@ export function parsePerson(personDocUrl: string, dataset: DatasetCore): Contact
   if (person.webId !== undefined) data.webId = person.webId;
   if (person.note !== undefined) data.note = person.note;
   if (person.organization !== undefined) data.organization = person.organization;
+  const addresses = person.addresses;
+  if (addresses.length > 0) data.addresses = addresses;
   if (person.created !== undefined) data.created = person.created;
   return data;
 }
@@ -701,6 +825,7 @@ export function buildPerson(personDocUrl: string, data: ContactData): Store {
   person.setWebId(data.webId);
   person.note = data.note || undefined;
   person.organization = data.organization || undefined;
+  person.setAddresses(data.addresses ?? []);
   person.created = data.created ?? new Date();
   return store;
 }
