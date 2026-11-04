@@ -84,3 +84,23 @@ test("adds, edits and removes postal addresses, shown formatted on the card", as
   await expect(detail.getByRole("heading", { name: "Postal Person", exact: true })).toBeVisible();
   await expect(detail.getByRole("link", { name: /^Map / })).toHaveCount(0);
 });
+
+test("a seventeenth address is refused with a focused, announced error", async ({ page }) => {
+  await newContact(page);
+  await box(page, "Full name").fill("Crowded Person");
+  const add = page.getByRole("button", { name: "Add address", exact: true });
+  for (let i = 0; i < 17; i++) await add.click();
+  for (let i = 0; i < 17; i++)
+    await page.getByRole("textbox", { name: "City", exact: true }).nth(i).fill(`Town ${i}`);
+  await page.getByRole("button", { name: "Save contact", exact: true }).click();
+  await expect(page.getByRole("alert").filter({ hasText: "at most 16" })).toHaveText(
+    "A contact can have at most 16 addresses.",
+  );
+  await expect(add).toBeFocused();
+  await page.getByRole("button", { name: "Remove address 17", exact: true }).click();
+  await page.getByRole("button", { name: "Save contact", exact: true }).click();
+  const detail = page.getByRole("region", { name: "Contact details", exact: true });
+  await expect(detail.getByRole("link", { name: /^Map address for Crowded Person/ })).toHaveCount(
+    16,
+  );
+});

@@ -8,7 +8,6 @@
 // /`credentialToJsonLd` serialise; `credentialFromRdf`/`parseCredential` read it
 // back. All RDF reads/writes go through src/wrappers.ts.
 
-import { randomUUID } from "node:crypto";
 import { parseRdf } from "@jeswr/fetch-rdf";
 import type { DatasetCore, Quad } from "@rdfjs/types";
 import { credentialDocumentLoader } from "./context-loader.js";
@@ -358,7 +357,7 @@ function writeCredentialStatus(
  * is a pure projection of exactly what the caller supplied.
  */
 export function credentialToRdf(credential: Credential): Quad[] {
-  const id = credential.id ?? `urn:uuid:${randomUUID()}`;
+  const id = credential.id ?? `urn:uuid:${globalThis.crypto.randomUUID()}`;
   const subject = iriRef(id);
   const b = new GraphBuilder();
   b.addType(subject, VC_CREDENTIAL);
@@ -441,7 +440,7 @@ export function credentialToJsonLd(credential: Credential): Record<string, unkno
   // agree on the issuer IRI BYTE-FOR-BYTE; the guard only rejects the values the
   // RDF path would refuse.
   requireObjectIri(credential.issuer, "issuer");
-  const id = credential.id ?? `urn:uuid:${randomUUID()}`;
+  const id = credential.id ?? `urn:uuid:${globalThis.crypto.randomUUID()}`;
   const types = ["VerifiableCredential", ...(credential.type ?? [])];
   const doc: Record<string, unknown> = {
     "@context": LEGACY_SVC_INLINE_CONTEXT,

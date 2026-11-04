@@ -31,7 +31,6 @@
 // recomputed `digestMultibase` against the signed one — no decode step, no
 // partial acceptance.
 
-import { createHash } from "node:crypto";
 import { parseRdf } from "@jeswr/fetch-rdf";
 import type { DatasetCore, Quad } from "@rdfjs/types";
 import { canonicalNQuads } from "./canonicalize.js";
@@ -56,7 +55,9 @@ function sha256Multihash(digest: Uint8Array): string {
  */
 export async function digestQuads(quads: readonly Quad[]): Promise<string> {
   const canonical = await canonicalNQuads(quads);
-  const digest = new Uint8Array(createHash("sha256").update(canonical, "utf8").digest());
+  const digest = new Uint8Array(
+    await globalThis.crypto.subtle.digest("SHA-256", new TextEncoder().encode(canonical)),
+  );
   return sha256Multihash(digest);
 }
 

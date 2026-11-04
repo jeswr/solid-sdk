@@ -5,6 +5,7 @@ import {
   contactFormData,
   contactFormDefaults,
   contactFormSchema,
+  contactFormSchemaFor,
   emptyAddress,
   secureContactUrl,
 } from "../src/apps/contacts/lib/form-schema";
@@ -161,10 +162,17 @@ describe("contact form validation and normalization", () => {
         "A contact can have at most 16 addresses.",
       ]);
     if (!long.success)
-      expect(long.error.issues.map((issue) => issue.message)).toEqual([
-        "This address is too long.",
-        "This address is too long.",
+      expect(long.error.issues.map((issue) => [issue.path.join("."), issue.message])).toEqual([
+        ["addresses.0.street", "This address is too long."],
+        ["addresses.0.locality", "This address is too long."],
       ]);
+    // Addresses loaded past the limits pass while unchanged (padding aside), and fail once edited.
+    const loaded = Array.from({ length: 17 }, () => ({ ...blank, locality: "x".repeat(300) }));
+    const schema = contactFormSchemaFor(loaded);
+    const padded = loaded.map((row) => ({ ...row, locality: ` ${row.locality} ` }));
+    expect(schema.safeParse({ ...defaults, addresses: padded }).success).toBe(true);
+    expect(contactFormData({ ...defaults, addresses: loaded }, schema).addresses).toHaveLength(17);
+    expect(schema.safeParse({ ...defaults, addresses: loaded.slice(1) }).success).toBe(false);
   });
   it("requires a name, valid email, a parsed international phone without extension and a secure WebID", () => {
     const invalid = contactFormSchema.safeParse({
