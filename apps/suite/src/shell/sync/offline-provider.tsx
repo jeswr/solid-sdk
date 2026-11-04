@@ -244,7 +244,8 @@ function OfflineEffects({ pageTitle, outbox }: { pageTitle?: string; outbox: Out
     // never copy it (or its title, which can name a document) into the new account's list.
     // Sign-in lives outside the suite layout, so this tab's last page survives in session storage:
     // "Add another account" and sign-out return the new account to the previous one's page.
-    const previous = (lastSeen.current ??= readLastSeen());
+    lastSeen.current ??= readLastSeen();
+    const previous = lastSeen.current;
     // Kept until the user navigates, so a reload on that page still skips it.
     const inherited =
       previous.accountId && previous.accountId !== accountId && previous.pathname === pathname
