@@ -15,6 +15,7 @@ const packages = [
   "pod-auth",
   "pod-notifications",
   "pod-access",
+  "pod-type-index",
   "solid-bookmark",
   "fetch-rdf",
   "rdf-serialize",

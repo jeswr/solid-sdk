@@ -41,6 +41,7 @@ The human-readable version of this skill is the developer guide in
 | Parse RDF from a response | `@jeswr/fetch-rdf` | [fetch-rdf](../../packages/fetch-rdf/SKILL.md) |
 | Serialise RDF | `@jeswr/rdf-serialize` | [rdf-serialize](../../packages/rdf-serialize/SKILL.md) |
 | Typed RDF accessors | `@solid/object`, `@rdfjs/wrapper` | [solid-object](../solid-object/SKILL.md) |
+| Find and register where data lives (Type Index) | `@jeswr/pod-type-index` | [pod-type-index](../../packages/pod-type-index/SKILL.md) |
 | Suite vocabulary IRIs | `@jeswr/suite-vocab` | [suite-vocab](../../packages/suite-vocab/SKILL.md) |
 | Domain models | `@jeswr/solid-bookmark`, `@jeswr/solid-task-model`, … | each package README |
 | Collaborative documents (Solid only today) | `@jeswr/y-solid` (Yjs) | [y-solid](../../packages/y-solid/SKILL.md) |
@@ -101,8 +102,11 @@ In Node (bots, importers, MCP servers), replace `createPodAuth` with `forClientC
 
 ## Store app data
 
-- Pick a container per collection. Create it once, store its returned URL (preferences, or the
-  Type Index once `@jeswr/pod-type-index` lands), and pass that URL back on the next start.
+- Pick a container per collection and create it once. On Solid, register its returned URL in the
+  Type Index (`createTypeIndex` from `@jeswr/pod-type-index`) and `find` it on the next start;
+  the profile must be in the storage, and "private" is unlisted, not access-controlled. On LWS,
+  keep the container URL in app settings and spread `register`'s hint into every
+  `storage.create`.
 - Create a resource before writing RDF that names it: on LWS the server picks the URL, and a
   subject such as `<url>#it` needs that URL. Then read it back (content and ETag in one request),
   check it is still empty, and write with that ETag.
@@ -183,8 +187,8 @@ feature check, until the package ships it.
   service adapter.
 - **Offline outbox.** `solid-offline` caches reads; queued offline writes are planned. Await
   `offline.logout()` yourself on logout.
-- **Type Index client**, multi-account switching, preferences store, trash and versions are in
-  progress. Check the package list in `suite.json` before assuming they exist.
+- Multi-account switching, a preferences store, trash and versions are in progress. Check the
+  package list in `suite.json` before assuming they exist.
 
 ## Pitfalls
 
