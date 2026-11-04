@@ -6,6 +6,7 @@ import { StorageFailure } from "./kv.js";
 import { secureUrl, validateOptions } from "./options.js";
 import { AmbiguousIssuerError, createProviders } from "./providers.js";
 import { decideSilentRestore } from "./session-restore.js";
+import type { ActiveAccount } from "./sessions.js";
 import type {
   AuthEvent,
   AuthEventType,
@@ -23,6 +24,7 @@ export type {
   Identity,
   KvStore,
   LoginHint,
+  LoginOptions,
   PodAuth,
   PodAuthOptions,
 } from "./types.js";
@@ -37,7 +39,7 @@ export function createPodAuth(options: PodAuthOptions): PodAuth {
   let loggingOut: Promise<void> | undefined;
   let epoch = 0;
   let mode: "login" | "restore" = "login";
-  let pending: { key: string; promise: Promise<Identity> } | undefined;
+  let pending: { key: string; promise: Promise<Identity>; cancellable: boolean } | undefined;
   const listeners = new Map<AuthEventType, Set<(event: AuthEvent) => void>>();
   const snapshot = () =>
     current === null ? null : { ...current, storages: [...current.storages] };
@@ -111,6 +113,27 @@ export function createPodAuth(options: PodAuthOptions): PodAuth {
     session,
   });
   let observedFence = providers.fence.signal;
+  /**
+   * Discards an abandoned login's grant and puts back the remembered account it replaced; a session it
+   * already announced ends with a logout event.
+   */
+  const discard = async (started: number, before: ActiveAccount | null) => {
+    if (started !== epoch) return; // a logout already cleared everything
+    ++epoch;
+    const announced = current !== null;
+    current = null;
+    try {
+      await providers.abandon();
+      const after = await providers.persistence.active();
+      if (JSON.stringify(after) !== JSON.stringify(before)) {
+        if (before === null) await providers.persistence.forgetPointer();
+        else await providers.persistence.remember(before);
+      }
+    } finally {
+      observedFence = providers.fence.signal;
+      if (announced) emit("logout");
+    }
+  };
   const readIdentity = async () => {
     const started = epoch;
     await providers.fence.generation();
@@ -185,7 +208,9 @@ export function createPodAuth(options: PodAuthOptions): PodAuth {
       loggingOut = promise;
       return promise;
     },
-    login: (hint) => {
+    login: (hint, loginOptions) => {
+      const abort = loginOptions?.signal;
+      if (abort?.aborted) return Promise.reject(abort.reason);
       if (loggingOut || restoring)
         return Promise.reject(new Error("Authentication is in progress"));
       let selected: LoginHint;
@@ -200,8 +225,9 @@ export function createPodAuth(options: PodAuthOptions): PodAuth {
         return Promise.reject(error);
       }
       const key = JSON.stringify(selected);
+      // A cancellable attempt is never shared: one caller's abort must not cancel another's login.
       if (pending)
-        return pending.key === key
+        return pending.key === key && abort === undefined && !pending.cancellable
           ? pending.promise
           : Promise.reject(new Error("Another login is in progress"));
       const started = epoch;
@@ -216,14 +242,36 @@ export function createPodAuth(options: PodAuthOptions): PodAuth {
             throw new Error("Account changes require logout");
           return existing;
         }
+        const before = abort === undefined ? null : await providers.persistence.active();
         // Keep preflight cancellation even if provider startup observes a newer generation.
-        await providers.login(selected, providers.fence.signal);
+        const signal =
+          abort === undefined
+            ? providers.fence.signal
+            : AbortSignal.any([providers.fence.signal, abort]);
+        try {
+          await providers.login(selected, signal);
+        } catch (error) {
+          // The provider may have stored a grant before it observed the abort.
+          if (abort?.aborted) await discard(started, before);
+          throw error;
+        }
+        if (abort?.aborted) {
+          await discard(started, before);
+          throw abort.reason;
+        }
         return snapshot()!;
       })().finally(() => {
         pending = undefined;
       });
-      pending = { key, promise };
-      return promise;
+      pending = { key, promise, cancellable: abort !== undefined };
+      if (abort === undefined) return promise;
+      // The caller is released at once; the attempt keeps `pending` until it has wound down.
+      promise.catch(() => undefined);
+      return new Promise<Identity>((resolve, reject) => {
+        const onAbort = () => reject(abort.reason);
+        abort.addEventListener("abort", onAbort, { once: true });
+        promise.then(resolve, reject).finally(() => abort.removeEventListener("abort", onAbort));
+      });
     },
     on: (event, handler) => {
       let handlers = listeners.get(event);

@@ -677,6 +677,16 @@ export function createProviders(
       authorizationServers.clear();
       if (failures.length > 0) throw new AggregateError(failures, "Logout cleanup failed");
     },
+    /** Drops what an abandoned login may have obtained, without touching other stored accounts. */
+    abandon: async () => {
+      boundary.clear();
+      hint = {};
+      restoredContext = undefined;
+      loginContext = undefined;
+      sessionRequest = undefined;
+      selections.clear();
+      await solidProvider.forget();
+    },
     login: async (value: LoginHint, signal: AbortSignal) => {
       restoredContext = undefined;
       loginContext = undefined;

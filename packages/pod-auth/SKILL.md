@@ -44,6 +44,10 @@ const response = await auth.fetch('https://pod.example/alice/private');
 const identity = await auth.identity();
 ```
 
+For a cancel button, pass `auth.login(hint, { signal })`. Aborting rejects the call at once, aborts
+`ui.getCode`, and discards a grant that lands later; never call `logout()` to cancel, since it purges
+every stored session. A new `login()` is refused until the abandoned attempt has wound down.
+
 Pass `auth.fetch` to [storage-client](../storage-client/SKILL.md),
 [storage-capabilities](../storage-capabilities/SKILL.md) and
 [pod-notifications](../pod-notifications/SKILL.md). Read the
@@ -92,7 +96,8 @@ first; storage failures are harmless. Providers use monograms by default; host-s
   origin, for server APIs outside the pod folder; they share that storage's grant and stay out of
   `Identity.storages`. Use it only for endpoints of the server that hosts the storage.
 - `auth.fetch` buffers bodies for replay after a 401; bodies over `maxReplayBodyBytes` (default
-  16 MiB) reject after being read. Apps that upload large files raise it explicitly. Node agents
+  16 MiB) reject after being read. A `Blob`/`File` body is replayed as it is and never buffered,
+  so upload files as a `File` instead of raising the limit. Node agents
   (`forClientCredentials`, `forCid`) keep the default.
   Do not trust an origin merely because it hosts the issuer/WebID or returned a 401. Excluded or
   public resources must not prompt; unverified 401s remain 401s.

@@ -30,7 +30,10 @@ unsubscribe();
 ```
 
 `ui.getCode` returns the complete callback URL, including its `state`, `code` and `iss` parameters.
-The UI hook owns popup/redirect cleanup and must honor its abort signal. Protocol validation, PKCE,
+The UI hook owns popup/redirect cleanup and must honor its abort signal. To let the user cancel a
+sign-in, pass `auth.login(hint, { signal })`: on abort the call rejects at once, the popup's signal
+aborts, and a grant that arrives afterwards is discarded (the remembered account it replaced is put
+back). A new `login()` is refused until the abandoned attempt has wound down. Protocol validation, PKCE,
 DPoP proofs, refresh machinery and discovery stay in the protocol engine. A missing issuer chooser
 throws `AmbiguousIssuerError` when a profile lists several issuers; a chooser must return a listed URL.
 Explicit WebID and issuer hints must agree with the profile and the authenticated identity.
@@ -57,7 +60,8 @@ root stays a storage with its own grant.
 
 `auth.fetch` buffers request bodies so it can replay them after a 401. Bodies larger than
 `maxReplayBodyBytes` (default 16 MiB) reject; the size is checked after the body is read, so it
-limits requests, not peak memory. Raise it for large uploads.
+limits requests, not peak memory. A `Blob` or `File` passed as the body is replayed as it is,
+without buffering, so pass uploads as a `File` rather than raising the limit.
 
 Credential roots come exclusively from `boundary.roots` (including explicit application/user grants)
 or the authenticated WebID profile's `pim:storage` statements about that exact WebID. Automatic roots

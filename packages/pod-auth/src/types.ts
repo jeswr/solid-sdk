@@ -71,10 +71,22 @@ export interface AuthEvent {
   url?: string;
 }
 
+/** Options for one {@link PodAuth.login} call. */
+export interface LoginOptions {
+  /** Abandons the attempt; see {@link PodAuth.login}. */
+  signal?: AbortSignal;
+}
+
 /** Suite authentication and credential-free session lifecycle. */
 export interface PodAuth {
   fetch: typeof fetch;
-  login(hint?: LoginHint): Promise<Identity>;
+  /**
+   * Interactive login. `options.signal` abandons this attempt: the promise rejects with the abort reason at
+   * once, the attempt's own requests (including the authorization popup) are cancelled, and a grant that
+   * lands after the abort is discarded rather than kept. A new login is refused until the abandoned attempt
+   * has finished. Agents ignore the signal once started.
+   */
+  login(hint?: LoginHint, options?: LoginOptions): Promise<Identity>;
   /** Restore the remembered account; never requests interactive authorization. */
   restore(): Promise<Identity | null>;
   /** Revoke when advertised, purge local credentials, and emit logout even if revocation fails. */
