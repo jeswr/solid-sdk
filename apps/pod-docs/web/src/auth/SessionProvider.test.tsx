@@ -288,7 +288,9 @@ describe("Pod Docs shared authentication", () => {
     mount(fake);
     await ready();
     submitAddress(WEB_ID);
-    expect(await screen.findByText(`Choose the provider for ${new URL(WEB_ID).host}`)).toBeVisible();
+    expect(
+      await screen.findByText(`Choose the provider for ${new URL(WEB_ID).host}`),
+    ).toBeVisible();
     expect(session.issuerChoice).toEqual({ webId: WEB_ID, issuers: [ISSUER, other] });
     expect(screen.getByRole("button", { name: "Home provider" })).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "other.example" }));
