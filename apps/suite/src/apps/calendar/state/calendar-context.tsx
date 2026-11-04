@@ -19,6 +19,7 @@ import { type CalendarEvent, expandEvent, validateEvent } from "../lib/model";
 import { eventDocument } from "./editing";
 import { createEventOutbox } from "./outbox";
 import {
+  compareOccurrences,
   createCalendar,
   discoverCalendars,
   type EventWrite,
@@ -320,9 +321,7 @@ function keepUnreachable(previous: RangeResult, next: RangeResult): RangeResult 
     events: [
       ...next.events,
       ...previous.events.filter((event) => failed.has(event.calendar.url)),
-    ].sort(
-      (a, b) => +new Date(a.data.start) - +new Date(b.data.start) || a.url.localeCompare(b.url),
-    ),
+    ].sort(compareOccurrences),
     warnings: next.warnings.filter((warning) => !failed.has(warning.calendarUrl)),
   };
 }
@@ -406,12 +405,7 @@ export function useEventsInRange(
         })),
       (error: unknown) => {
         cache.delete(key);
-        if (live)
-          setSnapshot((current) =>
-            current.key === key && current.state.status === "ready" && unreachable(error)
-              ? current
-              : { key, state: { status: "error", error } },
-          );
+        if (live) setSnapshot({ key, state: { status: "error", error } });
       },
     );
     return () => {
