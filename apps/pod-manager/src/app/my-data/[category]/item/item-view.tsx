@@ -190,6 +190,7 @@ function DeleteItemButton({
   name: string;
   categoryId: string;
 }) {
+  const { podFetch } = useSession();
   const router = useRouter();
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -197,7 +198,7 @@ function DeleteItemButton({
   async function doDelete() {
     setBusy(true);
     try {
-      await deleteResource(url);
+      await deleteResource(url, podFetch);
       toast.success(`Deleted “${name}”.`, {
         description: "It's been removed from your pod.",
       });

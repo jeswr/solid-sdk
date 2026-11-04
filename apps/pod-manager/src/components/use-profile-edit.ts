@@ -12,7 +12,7 @@ import type { AsyncState } from "@/components/use-pod-data";
 
 /**
  * Load the signed-in user's editable profile fields + the card's ETag.
- * Production paths pass NO `fetch` (the auth-patched global runs). Re-loads on
+ * Pod requests use the session transport explicitly.
  * login. The returned `etag` is fed back into {@link saveProfile} for the
  * conditional write.
  */
@@ -20,7 +20,7 @@ export function useEditableProfile(): AsyncState<{
   profile: EditableProfile;
   etag: string | null;
 }> & { reload: () => void } {
-  const { webId, status } = useSession();
+  const { webId, status, podFetch } = useSession();
   const [state, setState] = useState<
     AsyncState<{ profile: EditableProfile; etag: string | null }>
   >({ loading: true });
@@ -34,7 +34,7 @@ export function useEditableProfile(): AsyncState<{
     }
     let cancelled = false;
     setState({ loading: true });
-    fetchEditableProfile(webId)
+    fetchEditableProfile(webId, podFetch)
       .then(({ profile, etag }) => {
         if (!cancelled) setState({ loading: false, data: { profile, etag } });
       })
@@ -46,7 +46,7 @@ export function useEditableProfile(): AsyncState<{
     return () => {
       cancelled = true;
     };
-  }, [webId, status, nonce]);
+  }, [webId, status, nonce, podFetch]);
 
   return { ...state, reload };
 }

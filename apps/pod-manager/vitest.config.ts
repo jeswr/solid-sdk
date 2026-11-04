@@ -7,9 +7,10 @@ import { fileURLToPath } from "node:url";
 // browser — keep the two runners fully separate so `vitest run` never tries
 // to execute a `*.spec.ts` e2e file.
 export default defineConfig({
+  oxc: { jsx: { runtime: "automatic" } },
   test: {
     environment: "node",
-    include: ["src/lib/**/*.test.ts", "scripts/**/*.test.mjs"],
+    include: ["src/**/*.test.{ts,tsx}", "scripts/**/*.test.mjs"],
     exclude: ["e2e/**", "node_modules/**"],
   },
   resolve: {

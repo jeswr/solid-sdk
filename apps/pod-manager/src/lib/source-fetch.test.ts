@@ -3,13 +3,13 @@ import { createSourceAuth } from "@jeswr/pod-connectors";
 import { exchangeCodeForToken } from "@jeswr/pod-connectors/oauth";
 import { afterEach, expect, it, vi } from "vitest";
 
-// Capture the source transport before installing the real auth manager's patch.
+// Source APIs stay on their pristine transport alongside the shared core.
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.resetModules();
 });
 
-it("keeps source API and token requests free of Pod Authorization and DPoP after patching", async () => {
+it("keeps source API and token requests free of Pod Authorization and DPoP alongside pod-auth", async () => {
   const seen: Request[] = [];
   const platformFetch = vi.fn<typeof fetch>(async (input, init) => {
     const request = new Request(input, init);
@@ -18,17 +18,14 @@ it("keeps source API and token requests free of Pod Authorization and DPoP after
     return new Response(null, { status: request.headers.has("dpop") ? 200 : 401 });
   });
   vi.stubGlobal("fetch", platformFetch);
-  const { sourceFetch } = await import("./source-fetch");
-  const upgrade = vi.fn(async (request: Request) => {
-    const headers = new Headers(request.headers);
-    headers.set("authorization", "DPoP pod-token");
-    headers.set("dpop", "pod-proof");
-    return new Request(request, { headers });
+  const { sourceFetch, publicFetch } = await import("./source-fetch");
+  const { createPodAuth } = await import("@jeswr/pod-auth");
+  const auth = createPodAuth({
+    clientId: "https://app.test/clientid.jsonld", redirectUri: "https://app.test/callback.html",
+    ui: { getWebId: async () => { throw new Error("No gesture"); }, getCode: async () => { throw new Error("No gesture"); } },
   });
-  vi.stubGlobal("HTMLElement", class {});
-  const { ReactiveFetchManager } = await import("@solid/reactive-authentication");
-  const manager = new ReactiveFetchManager([{ matches: async () => true, upgrade }]);
-  manager.registerGlobally();
+  expect(await auth.restore()).toBeNull();
+  expect(globalThis.fetch).toBe(platformFetch);
 
   const oauth = {
     clientId: "public-client",
@@ -46,13 +43,16 @@ it("keeps source API and token requests free of Pod Authorization and DPoP after
     import: async () => ({}),
   }, token, sourceFetch);
   expect((await source.fetch("https://source.test/items")).status).toBe(401);
-  expect(upgrade).not.toHaveBeenCalled();
   expect(seen.map((request) => request.headers.get("authorization"))).toEqual([null, "Bearer source-token"]);
   expect(seen.every((request) => !request.headers.has("dpop"))).toBe(true);
 
-  // Prove the patched transport would upgrade that same challenge with Pod credentials.
-  expect((await manager.fetch("https://pod.test/private")).status).toBe(200);
-  expect(upgrade).toHaveBeenCalledOnce();
-  expect(seen.at(-1)?.headers.get("authorization")).toBe("DPoP pod-token");
-  expect(seen.at(-1)?.headers.get("dpop")).toBe("pod-proof");
+  await publicFetch("https://public.example/profile", { credentials: "include" });
+  expect(seen.at(-1)?.credentials).toBe("omit");
+
+  // Out-of-bound requests remain anonymous, and neither creation nor logout patches global fetch.
+  expect((await auth.fetch("https://pod.test/private")).status).toBe(401);
+  expect(seen.at(-1)?.headers.has("authorization")).toBe(false);
+  expect(seen.at(-1)?.headers.has("dpop")).toBe(false);
+  await auth.logout();
+  expect(globalThis.fetch).toBe(platformFetch);
 });

@@ -139,7 +139,7 @@ function ChatView({ containerUrl }: { containerUrl: string }) {
 }
 
 function StartChat() {
-  const { webId, activeStorage } = useSession();
+  const { webId, activeStorage, podFetch } = useSession();
   const router = useRouter();
   const [name, setName] = useState("");
   const [contacts, setContacts] = useState<string[]>([]);
@@ -167,7 +167,7 @@ function StartChat() {
           type: "Invite",
           summary: `${name.trim()} — chat invite`,
           object: container,
-        }),
+        }, podFetch),
       ),
     );
     setCreating(false);
