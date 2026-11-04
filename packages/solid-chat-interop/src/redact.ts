@@ -1,4 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+import { sanitizeText } from "./iri.js";
+
 /**
  * Remove common credential forms before persistence or upload. No diagnostics contain input.
  *
@@ -9,7 +11,9 @@
  */
 export function redactSecrets(text: string): string {
   return (
-    text
+    // Remove control characters first (tab and line breaks stay): one inside a credential
+    // would defeat the patterns below and later be stripped by the serializer.
+    sanitizeText(text)
       // Include an unfinished PEM block: a truncated transcript must not leak its body.
       .replace(
         /-----BEGIN (?:[A-Z0-9]+ )*PRIVATE KEY-----[\s\S]*?(?:-----END (?:[A-Z0-9]+ )*PRIVATE KEY-----|$)/g,

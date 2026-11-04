@@ -52,6 +52,16 @@ truth. Every account, and every assistant connected to the MCP server, reads fro
 6. **Full-text search across archives** relies on generic search over titles. A bounded per-conversation
    index (title, first-message snippet, dates) would make `chat_list` filtering cheap.
 
+## Known limits of the first slice
+
+- Message IDs for ID-less input are now derived from the redacted text. A conversation saved through
+  MCP `chat_save` before this change, without message IDs and with text a rule rewrites, gets a second,
+  redacted copy of those messages on replay. Writes are create-only, so the old unredacted message and
+  title stay in the pod (only `chat_export` re-redacts them). Bead sst-5ax.39 covers re-redacting or
+  purging those legacy records. Capture paths always pass source IDs and are unaffected.
+- Two ID-less messages with the same role and timestamp that differ only in a redacted secret derive
+  the same ID, so the second is skipped as a replay.
+
 ## Security
 
 Archives are treated as secrets. Containers are owner-only and never shared by default. Agents reach them

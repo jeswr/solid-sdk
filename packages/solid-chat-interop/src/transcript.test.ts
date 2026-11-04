@@ -68,6 +68,22 @@ describe("renderTranscript", () => {
     expect(out).toContain("[REDACTED TOKEN]");
   });
 
+  it.each([
+    { provider: "other" },
+    { conversationId: "a`b" },
+    { messages: [{ role: "user\n# x", text: "t", createdAt: DAY1 }] },
+  ])("rejects unvalidated library input %#", (override) => {
+    expect(() =>
+      renderTranscript({
+        provider: "claude",
+        conversationId: "c",
+        title: "T",
+        messages: [],
+        ...override,
+      } as Parameters<typeof renderTranscript>[0]),
+    ).toThrow(TypeError);
+  });
+
   it("names untitled conversations", () => {
     expect(
       renderTranscript({ provider: "claude", conversationId: "c", title: " ", messages: [] }),

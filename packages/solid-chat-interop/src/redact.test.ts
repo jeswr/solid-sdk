@@ -67,6 +67,23 @@ describe("redaction before persistence", () => {
     }
     expect(redactSecrets(`TOKEN=a\\ b${newline}Safe`)).toBe(`[REDACTED ENV]${newline}Safe`);
   });
+  // AUTHORED-BY Claude Opus 5.5
+  it.each([
+    ["gh\u0000p_fixtureControlToken1", "fixtureControlToken1"],
+    ["sk\u007F-fixture-control", "fixture-control"],
+    ["Authoriz\u0001ation: Bearer FAKE_CONTROL", "FAKE_CONTROL"],
+    [
+      "-----BEGIN PRIVATE\u0000 KEY-----\nFAKE_CONTROL_KEY\n-----END PRIVATE KEY-----",
+      "FAKE_CONTROL_KEY",
+    ],
+    ["\u009Fsk-fixture-c1", "fixture-c1"],
+  ])("a control character cannot split credential %#", (input, secret) => {
+    const result = redactSecrets(`Before\t${input}\r\nAfter`);
+    expect(result).not.toContain(secret);
+    expect(result).toMatch(/^Before\t.*\[REDACTED/);
+    expect(result).toContain("\r\nAfter");
+    expect(redactSecrets(result)).toBe(result);
+  });
   it("keeps ordinary text and all safe context outside a redaction", () => {
     expect(redactSecrets("Hello, world. Read src/main.ts")).toBe("Hello, world. Read src/main.ts");
     expect(redactSecrets("Before\nAuthorization: FAKE\nAfter")).toBe(

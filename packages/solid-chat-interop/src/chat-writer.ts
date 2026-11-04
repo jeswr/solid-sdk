@@ -201,7 +201,9 @@ export class ChatWriter {
         // Redact before deriving the ID, so no stored value or name depends on a secret.
         const normalized = {
           ...message,
-          text: redactSecrets(message.text),
+          // Strip control characters first: one inside a credential would defeat the pattern
+          // and then be removed by the AS2 serializer, storing the plaintext secret.
+          text: redactSecrets(sanitizeText(message.text)),
           createdAt: timestamp(message.createdAt),
         };
         const id = await messageId(normalized);
@@ -225,7 +227,7 @@ export class ChatWriter {
     const room = new ChatDoc(`${url}_conversation.ttl#it`, metadata, DataFactory);
     room.types.add(AS_COLLECTION);
     room.identifier = conversation.conversationId;
-    room.title = sanitizeText(redactSecrets(conversation.title));
+    room.title = redactSecrets(sanitizeText(conversation.title));
     const roomTurtle = await storeToTurtle(metadata);
     for (const container of [this.base, `${this.base}${conversation.provider}/`, url]) {
       const containerStore = new Store();
