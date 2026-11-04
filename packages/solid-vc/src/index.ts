@@ -110,8 +110,10 @@ export {
   bitstringStatusListEntry,
   buildBitstringStatusListCredential,
   createBitstringStatusResolver,
+  parseStatusListBody,
   readStatusBit,
   resolveBitstringStatus,
+  STATUS_LIST_ACCEPT,
   statusListBitsOf,
   withStatusBit,
 } from "./status.js";

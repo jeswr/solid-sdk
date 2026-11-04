@@ -313,6 +313,9 @@ export function parseAndValidateCredential(body: string, contentType?: string): 
 export function parseCredentialRdf(body: string, contentType?: string): Promise<DatasetCore>;
 
 // @public
+export function parseStatusListBody(body: string, url: string, statusPurpose: string): Promise<VerifiableCredential | undefined>;
+
+// @public
 export function parseStatusListCredential(document: string): Promise<VerifiableCredential | undefined>;
 
 // @public
@@ -470,6 +473,9 @@ export const STATUS_BITSTRING_LIST: "https://www.w3.org/ns/credentials/status#Bi
 
 // @public
 export const STATUS_ENCODED_LIST: "https://www.w3.org/ns/credentials/status#encodedList";
+
+// @public
+export const STATUS_LIST_ACCEPT = "application/trig, text/turtle, application/vc+ld+json, application/ld+json, application/json";
 
 // @public
 export const STATUS_LIST_CREDENTIAL: "https://www.w3.org/ns/credentials/status#statusListCredential";

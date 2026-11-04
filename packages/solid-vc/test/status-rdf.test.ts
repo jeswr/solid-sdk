@@ -7,6 +7,8 @@ import { DataIntegritySuite } from "../src/proof.js";
 import {
   buildBitstringStatusListCredential,
   createBitstringStatusResolver,
+  parseStatusListBody,
+  STATUS_LIST_ACCEPT,
   withStatusBit,
 } from "../src/status.js";
 import { parseStatusListCredential, statusListCredentialToTurtle } from "../src/status-rdf.js";
@@ -139,4 +141,21 @@ it("rejects even correctly signed unknown claims in RDF transport", async () => 
   expect(
     await parseStatusListCredential(await statusListCredentialToTurtle(extra)),
   ).toBeUndefined();
+});
+
+// AUTHORED-BY Claude Opus 5.5
+it("parses a status-list body as the resolver does, from JSON-LD or TriG, and refuses the rest", async () => {
+  const { signed, document } = await fixture();
+  const fromRdf = await parseStatusListBody(document, URL, "revocation");
+  const fromJson = await parseStatusListBody(JSON.stringify(signed), URL, "revocation");
+  expect(fromRdf?.id).toBe(URL);
+  expect(fromJson).toEqual(fromRdf);
+  for (const [body, url, purpose] of [
+    ["", URL, "revocation"],
+    ["not a list", URL, "revocation"],
+    [document, URL, "suspension"],
+    [document, "https://alice.example/other.ttl", "revocation"],
+  ] as const)
+    expect(await parseStatusListBody(body, url, purpose)).toBeUndefined();
+  expect(STATUS_LIST_ACCEPT).not.toContain(";q=");
 });
