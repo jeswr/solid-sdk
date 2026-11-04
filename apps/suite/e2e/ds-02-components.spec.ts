@@ -324,6 +324,8 @@ for (const density of ["comfortable", "compact"] as const) {
   });
   test(`toggle-group: ${density} arrow selection`, async ({ page }, info) => {
     await page.goto("/dev/components/toggle-group");
+    // Keys pressed before hydration are dropped; the fixture layout marks the page once hydrated.
+    await expect(page.locator("html[data-fixtures-hydrated]")).toHaveCount(1);
     const region = page.getByRole("region", { name: `${density} fixtures`, exact: true });
     await region.getByRole("radio", { name: "List" }).focus();
     await page.keyboard.press("ArrowRight");
@@ -408,7 +410,8 @@ test("scroll-area: keyboard scrolling", async ({ page }, info) => {
   await page.goto("/dev/components/scroll-area");
   const viewport = page
     .getByRole("region", { name: "comfortable fixtures", exact: true })
-    .locator('[data-slot="scroll-area-viewport"]');
+    .locator('[data-slot="scroll-area-viewport"]')
+    .first();
   await viewport.focus();
   await page.keyboard.press("End");
   await expect.poll(() => viewport.evaluate((el) => el.scrollTop)).toBeGreaterThan(0);

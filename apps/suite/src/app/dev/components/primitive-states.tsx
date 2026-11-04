@@ -381,8 +381,9 @@ export function PrimitiveStates({ name }: { name: string }) {
     case "scroll-area":
       return (
         <States title="Horizontal">
+          {/* Inline-size containment keeps the nowrap row from widening the page at 320px. */}
           <Ui.ScrollArea
-            className="w-full max-w-72 rounded-lg border whitespace-nowrap"
+            className="w-full max-w-72 rounded-lg border whitespace-nowrap [contain:inline-size]"
             role="region"
             aria-label="Albums"
           >

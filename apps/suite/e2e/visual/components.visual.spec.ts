@@ -73,9 +73,11 @@ const region = (page: Page) =>
 const button = (page: Page, name: string, within?: Locator) =>
   (within ?? page).getByRole("button", { name, exact: true }).first();
 async function open(page: Page, trigger: Locator, role: Parameters<Page["getByRole"]>[0]) {
-  await trigger.click();
   const target = page.getByRole(role).last();
-  await expect(target).toBeVisible();
+  await expect(async () => {
+    if (!(await target.isVisible())) await trigger.click();
+    await expect(target).toBeVisible({ timeout: 1_000 });
+  }).toPass();
   return target;
 }
 async function choose(page: Page, label: string, value: string) {
@@ -308,9 +310,8 @@ const interactions: Shot[] = [
       act: async (page) => {
         await choose(page, "Fixture state", state);
         if (state !== "empty") return main(page);
-        // Narrow widths put the search field in a sheet behind the Search button.
-        const inline = page.getByPlaceholder("Search your storage");
-        const opened = !(await inline.isVisible());
+        // GlobalSearch swaps to its Search sheet below 768px (its matchMedia breakpoint).
+        const opened = (page.viewportSize()?.width ?? 1280) < 768;
         if (opened) await page.getByRole("button", { name: "Search", exact: true }).click();
         const scope = opened ? page.getByRole("dialog") : main(page);
         await scope.getByPlaceholder("Search your storage").fill("project");
@@ -414,6 +415,8 @@ async function prepare(page: Page, path: string) {
   await page.clock.setFixedTime(FIXED_NOW);
   await page.goto(`/dev/components${path ? `/${path}` : ""}`);
   await expect(page.getByRole("heading", { level: 1 }).first()).toBeVisible();
+  // Interactions before hydration are dropped and media-query layouts are still server-rendered.
+  await expect(page.locator("html[data-fixtures-hydrated]")).toHaveCount(1);
   await page.evaluate(() => document.fonts.ready);
 }
 // As in ds-06: a collection card's accessible name is its visible file name and its metadata
