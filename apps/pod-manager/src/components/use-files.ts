@@ -38,14 +38,14 @@ export function useFilesScope(): {
  * manual `reload`, and live invalidation via Solid notifications (best-effort —
  * a server without notifications just keeps fetch-on-mount + reload).
  *
- * Production paths pass NO `fetch` to the data layer — the auth-patched global
+ * Pod requests use the session transport explicitly.
  * runs (AGENTS.md §Reading data). Re-lists whenever the container or session
  * changes.
  */
 export function useFolder(
   container: string | undefined,
 ): AsyncState<PodItem[]> & { reload: () => void } {
-  const { status } = useSession();
+  const { status, podFetch } = useSession();
   const [state, setState] = useState<AsyncState<PodItem[]>>({ loading: true });
   const [nonce, setNonce] = useState(0);
   const reload = useCallback(() => setNonce((n) => n + 1), []);
@@ -57,7 +57,7 @@ export function useFolder(
     }
     let cancelled = false;
     setState({ loading: true });
-    listFolder(container)
+    listFolder(container, podFetch)
       .then((items) => {
         if (!cancelled) setState({ loading: false, data: items });
       })
@@ -72,7 +72,7 @@ export function useFolder(
     return () => {
       cancelled = true;
     };
-  }, [container, status, nonce]);
+  }, [container, status, nonce, podFetch]);
 
   // Live-refresh the listing when the container changes on the server.
   useResourceNotifications(

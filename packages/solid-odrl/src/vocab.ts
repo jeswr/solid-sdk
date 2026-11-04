@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+// AUTHORED-BY Codex GPT-6.1-Sol
 //
 // Term IRIs + constants for the ODRL usage-control surface (M3 of the
 // agentic-Solid roadmap). This is the single source of the string IRIs the typed
@@ -477,6 +478,8 @@ export const ODRL_IS_ANY_OF = `${ODRL}isAnyOf` as const;
 export const ODRL_IS_ALL_OF = `${ODRL}isAllOf` as const;
 /** `odrl:isNoneOf` — the request value is none of a set. */
 export const ODRL_IS_NONE_OF = `${ODRL}isNoneOf` as const;
+/** `odrl:isPartOf` — the recipient is a member of a PartyCollection. */
+export const ODRL_IS_PART_OF = `${ODRL}isPartOf` as const;
 
 /** The closed set of constraint operator short names the evaluator handles. */
 export const OPERATORS = [
@@ -489,6 +492,7 @@ export const OPERATORS = [
   "isAnyOf",
   "isAllOf",
   "isNoneOf",
+  "isPartOf",
 ] as const;
 /** A constraint operator short name. */
 export type OperatorName = (typeof OPERATORS)[number];
@@ -503,6 +507,7 @@ export const OPERATOR_IRI: Readonly<Record<OperatorName, string>> = {
   isAnyOf: ODRL_IS_ANY_OF,
   isAllOf: ODRL_IS_ALL_OF,
   isNoneOf: ODRL_IS_NONE_OF,
+  isPartOf: ODRL_IS_PART_OF,
 };
 /** Reverse: operator IRI → short name. */
 export const IRI_TO_OPERATOR: Readonly<Record<string, OperatorName>> = Object.fromEntries(

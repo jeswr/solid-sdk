@@ -23,6 +23,7 @@ export type {
   Identity,
   KvStore,
   LoginHint,
+  LoginOptions,
   PodAuth,
   PodAuthOptions,
 } from "./types.js";
@@ -37,7 +38,7 @@ export function createPodAuth(options: PodAuthOptions): PodAuth {
   let loggingOut: Promise<void> | undefined;
   let epoch = 0;
   let mode: "login" | "restore" = "login";
-  let pending: { key: string; promise: Promise<Identity> } | undefined;
+  let pending: { key: string; promise: Promise<Identity>; cancellable: boolean } | undefined;
   const listeners = new Map<AuthEventType, Set<(event: AuthEvent) => void>>();
   const snapshot = () =>
     current === null ? null : { ...current, storages: [...current.storages] };
@@ -111,6 +112,15 @@ export function createPodAuth(options: PodAuthOptions): PodAuth {
     session,
   });
   let observedFence = providers.fence.signal;
+  /**
+   * Ends a session an abandoned login may hold. A logout since the attempt began already superseded the
+   * fence, so the attempt cannot commit, and a second purge could remove another tab's newer session.
+   * A logout failure (such as failed revocation) leaves local state cleared; the caller sees the abort.
+   */
+  const discard = async (started: number) => {
+    if (started !== epoch) return;
+    await api.logout().catch(() => undefined);
+  };
   const readIdentity = async () => {
     const started = epoch;
     await providers.fence.generation();
@@ -120,7 +130,7 @@ export function createPodAuth(options: PodAuthOptions): PodAuth {
     }
     return started === epoch ? snapshot() : null;
   };
-  return {
+  const api: PodAuth = {
     fetch: providers.manager.fetch as typeof fetch,
     identity: readIdentity,
     remembered: async () => {
@@ -185,7 +195,9 @@ export function createPodAuth(options: PodAuthOptions): PodAuth {
       loggingOut = promise;
       return promise;
     },
-    login: (hint) => {
+    login: (hint, loginOptions) => {
+      const abort = loginOptions?.signal;
+      if (abort?.aborted) return Promise.reject(abort.reason);
       if (loggingOut || restoring)
         return Promise.reject(new Error("Authentication is in progress"));
       let selected: LoginHint;
@@ -200,8 +212,9 @@ export function createPodAuth(options: PodAuthOptions): PodAuth {
         return Promise.reject(error);
       }
       const key = JSON.stringify(selected);
+      // A cancellable attempt is never shared: one caller's abort must not cancel another's login.
       if (pending)
-        return pending.key === key
+        return pending.key === key && abort === undefined && !pending.cancellable
           ? pending.promise
           : Promise.reject(new Error("Another login is in progress"));
       const started = epoch;
@@ -217,12 +230,29 @@ export function createPodAuth(options: PodAuthOptions): PodAuth {
           return existing;
         }
         // Keep preflight cancellation even if provider startup observes a newer generation.
-        await providers.login(selected, providers.fence.signal);
+        const signal =
+          abort === undefined
+            ? providers.fence.signal
+            : AbortSignal.any([providers.fence.signal, abort]);
+        let granted = false;
+        try {
+          await providers.login(selected, signal, () => {
+            granted = true;
+          });
+        } catch (error) {
+          // A grant obtained before the abort was observed must not outlive the abandoned attempt.
+          if (abort?.aborted && granted) await discard(started);
+          throw error;
+        }
+        if (abort?.aborted) {
+          await discard(started);
+          throw abort.reason;
+        }
         return snapshot()!;
       })().finally(() => {
         pending = undefined;
       });
-      pending = { key, promise };
+      pending = { key, promise, cancellable: abort !== undefined };
       return promise;
     },
     on: (event, handler) => {
@@ -237,4 +267,5 @@ export function createPodAuth(options: PodAuthOptions): PodAuth {
       };
     },
   };
+  return api;
 }

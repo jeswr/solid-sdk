@@ -85,12 +85,18 @@ describe.each([
       const { tools } = await client.listTools();
       const names = tools.map((t) => t.name).sort();
       expect(names).toEqual([
+        "address_get",
         ...(mode === "legacy config + aliases" ? ["chat_get", "chat_list", "chat_save"] : []),
         "context_read",
         "fetch",
+        "health_query",
+        "memory_forget",
+        "memory_recall",
+        "memory_remember",
         "pod_list",
         "pod_read",
         "pod_write",
+        "profile_get",
         "search",
         "solid_list",
         "solid_read",

@@ -1,7 +1,8 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { AmbiguousIssuerError, createPodAuth, type PodAuth } from "@jeswr/pod-auth";
+import { createPodAuth, type PodAuth } from "@jeswr/pod-auth";
 import { appUrl } from "./app-url";
 import { getCodeThroughHolder } from "./auth-flow-holder";
+import { IssuerChoiceRequiredError } from "./issuer-choice";
 
 // Capture before any authentication initializes. Public reads never use auth.fetch.
 const pristineFetch = globalThis.fetch.bind(globalThis);
@@ -46,8 +47,9 @@ export function getPodAuth(): Promise<PodAuth> {
         getWebId: async () => {
           throw new Error("Choose an account or sign-in address first");
         },
-        chooseIssuer: async () => {
-          throw new AmbiguousIssuerError();
+        chooseIssuer: async (issuers) => {
+          // The card lists them; the chosen one comes back as an explicit login hint.
+          throw new IssuerChoiceRequiredError(issuers);
         },
       },
     });

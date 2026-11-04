@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6
 /**
@@ -10,6 +11,7 @@
 import { NS } from "@jeswr/suite-vocab";
 import type { Quad } from "@rdfjs/types";
 import { DataFactory, Writer } from "n3";
+import { buildAgentSeed, demoApprovalVerificationMethod } from "../../apps/agent/lib/seed";
 import { HILLS_PNG, REPORT_PDF, SUNSET_PNG } from "./binaries";
 import type { DemoSeedFile } from "./pod";
 import { seedContacts } from "./seed-contacts";
@@ -26,8 +28,9 @@ const ACL = "http://www.w3.org/ns/auth/acl#";
 const VCARD = "http://www.w3.org/2006/vcard/ns#";
 const LDP = "http://www.w3.org/ns/ldp#";
 
-export const DEMO_ROOT = "https://alice.demo.pod/";
-export const DEMO_WEBID = `${DEMO_ROOT}profile/card#me`;
+import { DEMO_ROOT, DEMO_WEBID } from "./constants";
+
+export { DEMO_ROOT, DEMO_WEBID };
 export const DEMO_NAME = "Alice Wilder";
 export const DRIVE_ROOT_CLASS = `${NS.POD_DRIVE}DriveRoot`;
 
@@ -59,6 +62,7 @@ export async function buildDemoSeed(
   const root = namedNode(DEMO_ROOT);
   const profile = await turtle(
     [
+      ...(await demoApprovalVerificationMethod()).quads,
       quad(me, RDF_TYPE, namedNode(`${FOAF}Person`)),
       quad(me, namedNode(`${FOAF}name`), literal(DEMO_NAME)),
       quad(me, namedNode(`${PIM}storage`), root),
@@ -76,6 +80,21 @@ export async function buildDemoSeed(
     [
       quad(index, RDF_TYPE, namedNode(`${SOLID}TypeIndex`)),
       quad(index, RDF_TYPE, namedNode(`${SOLID}UnlistedDocument`)),
+      quad(
+        namedNode(`${index.value}#agent-workspace`),
+        RDF_TYPE,
+        namedNode(`${SOLID}TypeRegistration`),
+      ),
+      quad(
+        namedNode(`${index.value}#agent-workspace`),
+        namedNode(`${SOLID}forClass`),
+        namedNode("https://jeswr.org/ns/agent#AgentWorkspace"),
+      ),
+      quad(
+        namedNode(`${index.value}#agent-workspace`),
+        namedNode(`${SOLID}instance`),
+        namedNode(`${DEMO_ROOT}agent/`),
+      ),
     ],
     { solid: SOLID },
   );
@@ -113,6 +132,7 @@ export async function buildDemoSeed(
   const files: DemoSeedFile[] = [
     ...(await buildHomeSeed(now)),
     ...(await seedPermissions(DEMO_ROOT, DEMO_WEBID, now)),
+    ...(await buildAgentSeed(now)),
     { path: "profile/card", body: profile, contentType: "text/turtle", modified: now - 40 * DAY },
     {
       path: "settings/privateTypeIndex.ttl",

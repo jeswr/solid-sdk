@@ -15,13 +15,18 @@ Read [README.md](./README.md) and `src/types.ts` for the implemented API; do not
 published 0.1.x package or copy its providers into applications. This workspace package remains
 private and experimental pending conformance.
 
+`@jeswr/pod-auth/node` also exports `createNodeOidcClient` for server-side brokers (mcp-oauth's
+pod sessions). It delegates split server authorization to reactive-authentication. Its sensitive
+state and original private JWK envelope belong only in an encrypted server vault with callback consume,
+refresh CAS and durable retirement. Signing keys are imported non-extractable; browser key storage is unchanged.
+
 ## Quick reference
 
 | Entry point | Use |
 | --- | --- |
 | `@jeswr/pod-auth` | `createPodAuth`, credential-bounded fetch, UI hooks and session lifecycle |
 | `@jeswr/pod-auth/react` | Optional `PodAuthProvider` / `usePodAuth` lifecycle mirror |
-| `@jeswr/pod-auth/node` | `forClientCredentials` and `forCid` agent factories |
+| `@jeswr/pod-auth/node` | `forClientCredentials` and `forCid` agent factories; `createNodeOidcClient` for server brokers |
 | `@jeswr/pod-auth/testing` | Node-only mock OP, mock LWS AS and memory store |
 | `@jeswr/pod-auth/directory` | Provider metadata, WebID/provider address resolution and recent providers |
 
@@ -43,6 +48,11 @@ await auth.login({ webId: 'https://id.example/alice#me' });
 const response = await auth.fetch('https://pod.example/alice/private');
 const identity = await auth.identity();
 ```
+
+For a cancel button, pass `auth.login(hint, { signal })`. Aborting aborts `ui.getCode` and the
+attempt's requests; the call rejects once the attempt has wound down. Stored sessions stay unless a
+grant had already arrived, which pod-auth then discards with a full `logout()`. Don't call `logout()`
+yourself to cancel, since it purges every stored session.
 
 Pass `auth.fetch` to [storage-client](../storage-client/SKILL.md),
 [storage-capabilities](../storage-capabilities/SKILL.md) and
@@ -98,7 +108,8 @@ first; storage failures are harmless. Providers use monograms by default; host-s
   origin, for server APIs outside the pod folder; they share that storage's grant and stay out of
   `Identity.storages`. Use it only for endpoints of the server that hosts the storage.
 - `auth.fetch` buffers bodies for replay after a 401; bodies over `maxReplayBodyBytes` (default
-  16 MiB) reject after being read. Apps that upload large files raise it explicitly. Node agents
+  16 MiB) reject after being read. A `Blob`/`File` body is replayed as it is and never buffered,
+  so upload files as a `File` instead of raising the limit. Node agents
   (`forClientCredentials`, `forCid`) keep the default.
   Do not trust an origin merely because it hosts the issuer/WebID or returned a 401. Excluded or
   public resources must not prompt; unverified 401s remain 401s.

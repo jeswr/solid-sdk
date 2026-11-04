@@ -196,7 +196,7 @@ it("audits a real in-memory CSS pod anonymously: intact, forged, out-of-scope, r
   const bits = createStatusBitstring();
   setStatusBit(bits, 1, true);
   const status = await issue({
-    credential: buildBitstringStatusListCredential({
+    credential: await buildBitstringStatusListCredential({
       id: f.statusId,
       issuer: f.owner,
       statusPurpose: "revocation",

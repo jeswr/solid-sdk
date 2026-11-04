@@ -10,6 +10,7 @@
  * identity claim, not a user-editable profile field — we show it but never
  * write it.
  */
+import { usePodMedia } from "@/components/use-pod-media";
 import { useEffect, useMemo, useState } from "react";
 import { Globe, IdCard, Loader2, Save, UserRound } from "lucide-react";
 import { toast } from "sonner";
@@ -33,10 +34,11 @@ function initials(name: string): string {
 }
 
 export default function ProfilePage() {
-  const { webId } = useSession();
+  const { webId, podFetch } = useSession();
   const { data, loading, error, reload } = useEditableProfile();
 
   const [form, setForm] = useState<EditableProfile>({ name: "" });
+  const avatar = usePodMedia(form?.photo || undefined);
   const [etag, setEtag] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -66,7 +68,7 @@ export default function ProfilePage() {
     }
     setSaving(true);
     try {
-      const { etag: next } = await saveProfile({ webId, edit: form, etag });
+      const { etag: next } = await saveProfile({ webId, edit: form, etag, fetchImpl: podFetch });
       setEtag(next);
       toast.success("Profile saved", { description: "This is how others see you." });
     } catch (err) {
@@ -218,7 +220,7 @@ export default function ProfilePage() {
               <CardContent className="flex flex-col items-center gap-3 text-center">
                 <Avatar size="lg" className="size-20">
                   {photoValid ? (
-                    <AvatarImage src={form.photo} alt="" />
+                    <AvatarImage src={avatar} alt="" />
                   ) : null}
                   <AvatarFallback className="text-lg">
                     {initials(previewName)}

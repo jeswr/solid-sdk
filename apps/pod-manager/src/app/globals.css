@@ -2,9 +2,14 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
+/* AUTHORED-BY Codex GPT-6.1-Sol — compile the shared card's utility classes. */
+@source "../../../../packages/suite-ui/dist";
+
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
+  --color-surface: var(--card);
+  --color-surface-2: var(--muted);
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-sans);

@@ -44,6 +44,9 @@ The human-readable version of this skill is the developer guide in
 | Find and register where data lives (Type Index) | `@jeswr/pod-type-index` | [pod-type-index](../../packages/pod-type-index/SKILL.md) |
 | Suite vocabulary IRIs | `@jeswr/suite-vocab` | [suite-vocab](../../packages/suite-vocab/SKILL.md) |
 | Domain models | `@jeswr/solid-bookmark`, `@jeswr/solid-task-model`, … | each package README |
+| Share dialog with roles; access-request inbox (Solid) | `@jeswr/pod-access/roles`, `/requests-solid` | [pod-access](../../packages/pod-access/SKILL.md), [guide ch. 7](../../docs/guide/07-sharing.md) |
+| Add, list or revoke one item's own rules (Solid and LWS) | `@jeswr/pod-access` (`createAccessClient`) | [pod-access](../../packages/pod-access/SKILL.md) |
+| Tell someone you shared or assigned something | `@jeswr/pod-access/notify`, `useNotify()` in `@jeswr/suite-sdk` | [pod-access](../../packages/pod-access/SKILL.md) |
 | Collaborative documents (Solid only today) | `@jeswr/y-solid` (Yjs) | [y-solid](../../packages/y-solid/SKILL.md) |
 | Offline cache | `solid-offline` | [solid-offline](../../packages/solid-offline/SKILL.md), [patterns](../solid-offline-patterns/SKILL.md) |
 | Sign-in screen (`SignInCard`) | `@jeswr/suite-ui/sign-in` | [suite-ui README](../../packages/suite-ui/README.md#shared-sign-in-card) |
@@ -179,10 +182,9 @@ Every storage failure is a `StorageError` with a `code`; invalid arguments (such
 Do not invent these APIs or rebuild them inside an app. Leave the control out, or keep it behind a
 feature check, until the package ships it.
 
-- **Sharing.** `@jeswr/pod-access` has the WAC/ACP translation core only; there is no `share()` or
-  grant API. Show who-has-access as unavailable rather than writing `.acl` files by hand.
-- **React data hooks.** The `@jeswr/suite-sdk` React facade (session, resources, subscriptions) is
-  planned; until then apps keep a small context of their own over the three clients above.
+- **React data hooks.** `@jeswr/suite-sdk` has only `useNotify()`. Its session, resource and
+  subscription hooks are planned; until then apps keep a small context of their own over the three
+  clients above.
 - **Collaboration on LWS.** `@jeswr/y-solid` persistence is Solid-only and has no real-time
   service adapter.
 - **Offline outbox.** `solid-offline` caches reads; queued offline writes are planned. Await
@@ -201,3 +203,8 @@ feature check, until the package ships it.
   profile, never a server's own claim. Apps tied to known pods set `boundary.roots` with
   `automatic: false`, or filter every root with `boundary.eligible`.
 - Notifications can be missed while offline. Reconcile by re-listing after reconnecting.
+- Never write `.acl` or `.acr` documents from an app; use `@jeswr/pod-access`. Pass `acpDialect`
+  (`createAccessClient`) and `implementation` (`/roles`, default CSS) only from the app's own
+  knowledge of the server, never from pod data. Show sharing as unavailable when a call fails with
+  `unsupported`. `access.grants()` lists only an item's own rules; use `readGrants` from `/roles`
+  for who has access. Sharing does not notify anyone by itself.

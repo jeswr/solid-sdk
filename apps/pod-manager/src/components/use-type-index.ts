@@ -13,11 +13,11 @@ import type { AsyncState } from "@/components/use-pod-data";
 
 /**
  * Load the signed-in user's full type-index management view (public + private
- * registrations). Production paths pass NO `fetch` (auth-patched global runs).
+ * registrations). Pod requests use the session transport explicitly.
  * Re-loads on login + on demand (`reload`).
  */
 export function useTypeIndex(): AsyncState<ManagedTypeIndex> & { reload: () => void } {
-  const { webId, status } = useSession();
+  const { webId, status, podFetch } = useSession();
   const [state, setState] = useState<AsyncState<ManagedTypeIndex>>({ loading: true });
   const [nonce, setNonce] = useState(0);
   const reload = useCallback(() => setNonce((n) => n + 1), []);
@@ -30,8 +30,8 @@ export function useTypeIndex(): AsyncState<ManagedTypeIndex> & { reload: () => v
     let cancelled = false;
     setState({ loading: true });
     (async () => {
-      const { dataset } = await freshRdf(profileDocUrl(webId));
-      const view = await listAllRegistrations(webId, dataset);
+      const { dataset } = await freshRdf(profileDocUrl(webId), podFetch);
+      const view = await listAllRegistrations(webId, dataset, podFetch);
       if (!cancelled) setState({ loading: false, data: view });
     })().catch((e: unknown) => {
       if (!cancelled) {
@@ -41,7 +41,7 @@ export function useTypeIndex(): AsyncState<ManagedTypeIndex> & { reload: () => v
     return () => {
       cancelled = true;
     };
-  }, [webId, status, nonce]);
+  }, [webId, status, nonce, podFetch]);
 
   return { ...state, reload };
 }
