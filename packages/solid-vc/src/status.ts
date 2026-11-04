@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Fable 5
+// AUTHORED-BY Claude Opus 5.5
 //
 // W3C Bitstring Status List v1.0 — credential revocation / suspension status
 // (runtime Phase-1 G2; the successor to StatusList2021).
@@ -74,9 +75,13 @@ const DEFAULT_MAX_BODY_BYTES = 32 * 1024 * 1024;
  */
 const MAX_STATUS_ENTRIES = 8;
 
-/** The content types we ask a status-list host for. */
+/**
+ * The content types we ask a status-list host for, all at equal weight: a Solid server then serves
+ * the list as stored (TriG/Turtle written by a pod app, or JSON-LD) instead of converting it. A
+ * ranked header made CSS convert a stored JSON-LD list into an empty TriG body.
+ */
 const STATUS_ACCEPT =
-  "application/trig, text/turtle;q=0.9, application/vc+ld+json;q=0.8, application/ld+json;q=0.7, application/json;q=0.6";
+  "application/trig, text/turtle, application/vc+ld+json, application/ld+json, application/json";
 
 // --- issue side --------------------------------------------------------------
 
