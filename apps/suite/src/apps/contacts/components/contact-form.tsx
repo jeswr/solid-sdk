@@ -34,6 +34,7 @@ import {
   contactFormData,
   contactFormDefaults,
   contactFormSchema,
+  emptyAddress,
 } from "../lib/form-schema";
 import { duplicateContacts } from "../lib/import-export";
 import type { ContactData, Snapshot } from "../lib/model";
@@ -98,6 +99,19 @@ function ContactDraft({
   const formElement = useRef<HTMLFormElement>(null);
   const emails = useFieldArray({ control: form.control, name: "emails" });
   const phones = useFieldArray({ control: form.control, name: "phones" });
+  const addresses = useFieldArray({ control: form.control, name: "addresses" });
+  // AUTHORED-BY Claude Opus 5.5
+  const addressList = useRef<HTMLDivElement>(null);
+  const removeAddress = (index: number) => {
+    const groups = addressList.current?.querySelectorAll<HTMLFieldSetElement>(":scope > fieldset");
+    // Focus the next surviving address (or the previous one, else Add address) by its DOM node.
+    const target =
+      groups?.[index + 1]?.querySelector<HTMLElement>("select") ??
+      groups?.[index - 1]?.querySelector<HTMLElement>("select") ??
+      addressList.current?.parentElement?.querySelector<HTMLButtonElement>(":scope > button");
+    addresses.remove(index);
+    target?.focus();
+  };
   const focusInvalid = () => {
     // Appended rows register last, so RHF's registration order differs from the DOM.
     const fields = formElement.current?.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>(
@@ -159,9 +173,16 @@ function ContactDraft({
     return () => removeEventListener("beforeunload", unload);
   }, [dirty]);
   const input = (
-    name: "name" | "organization" | "webId" | `emails.${number}.value` | `phones.${number}.value`,
+    name:
+      | "name"
+      | "organization"
+      | "webId"
+      | `emails.${number}.value`
+      | `phones.${number}.value`
+      | `addresses.${number}.${"locality" | "region" | "postalCode" | "country"}`,
     label: string,
     type = "text",
+    autoComplete?: string,
   ) => {
     const error = form.getFieldState(name, form.formState).error;
     const fieldId = `con-${name}`;
@@ -171,6 +192,7 @@ function ContactDraft({
         <Input
           id={fieldId}
           type={type}
+          autoComplete={autoComplete}
           {...form.register(name)}
           aria-required={name === "name"}
           aria-invalid={!!error}
@@ -205,6 +227,7 @@ function ContactDraft({
                 "organization",
                 "emails",
                 "phones",
+                "addresses",
                 "webId",
                 "note",
               ] as const) {
@@ -219,6 +242,7 @@ function ContactDraft({
                 emails: data.emails,
                 phones: data.phones,
               };
+              if (data.addresses.length) created.addresses = data.addresses;
               if (data.organization !== undefined) created.organization = data.organization;
               if (data.note !== undefined) created.note = data.note;
               if (data.webId !== undefined) created.webId = data.webId;
@@ -314,6 +338,78 @@ function ContactDraft({
             >
               <Plus size={16} aria-hidden="true" />
               Add phone
+            </Button>
+          </fieldset>
+          <fieldset>
+            <legend>Addresses</legend>
+            <div ref={addressList} className="con-address-list">
+              {addresses.fields.map((field, index) => {
+                const n = index + 1;
+                const street = `addresses.${index}.street` as const;
+                const streetError = form.getFieldState(street, form.formState).error;
+                return (
+                  <fieldset key={field.id} className="con-address">
+                    <legend className="sr-only">Address {n}</legend>
+                    <div className="con-point-row">
+                      <div className="con-field">
+                        <label htmlFor={`con-addresses.${index}.kind`}>Address {n} type</label>
+                        <select
+                          id={`con-addresses.${index}.kind`}
+                          className="con-select"
+                          {...form.register(`addresses.${index}.kind`)}
+                        >
+                          <option value="">Other</option>
+                          <option value="home">Home</option>
+                          <option value="work">Work</option>
+                        </select>
+                      </div>
+                      <IconButton
+                        label={`Remove address ${n}`}
+                        type="button"
+                        variant="ghost"
+                        onClick={() => removeAddress(index)}
+                      >
+                        <X aria-hidden="true" size={16} />
+                      </IconButton>
+                    </div>
+                    <div className="con-field">
+                      <label htmlFor={`con-${street}`}>Street</label>
+                      <Textarea
+                        id={`con-${street}`}
+                        rows={2}
+                        autoComplete="street-address"
+                        {...form.register(street)}
+                        aria-invalid={!!streetError}
+                        aria-describedby={streetError ? `con-${street}-error` : undefined}
+                      />
+                      {streetError && (
+                        <p id={`con-${street}-error`} role="alert" className="con-field-error">
+                          {streetError.message}
+                        </p>
+                      )}
+                    </div>
+                    <div className="con-address-grid">
+                      {input(`addresses.${index}.locality`, "City", "text", "address-level2")}
+                      {input(
+                        `addresses.${index}.region`,
+                        "State or region",
+                        "text",
+                        "address-level1",
+                      )}
+                      {input(`addresses.${index}.postalCode`, "Postal code", "text", "postal-code")}
+                      {input(`addresses.${index}.country`, "Country", "text", "country-name")}
+                    </div>
+                  </fieldset>
+                );
+              })}
+            </div>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => addresses.append(emptyAddress(), { shouldFocus: true })}
+            >
+              <Plus size={16} aria-hidden="true" />
+              Add address
             </Button>
           </fieldset>
           {input("webId", "WebID", "url")}

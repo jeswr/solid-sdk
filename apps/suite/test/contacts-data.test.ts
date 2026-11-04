@@ -21,7 +21,7 @@ import {
   sortedSections,
   validateContact,
 } from "../src/apps/contacts/lib/model";
-import { applyContact } from "../src/apps/contacts/lib/model/data";
+import { applyContact, VCARD } from "../src/apps/contacts/lib/model/data";
 import { ALICE, BOOK, FRIENDS, fixture, parse, ROOT, VCARD_PREFIX } from "./contacts-support";
 
 describe("contacts pure data", () => {
@@ -354,4 +354,66 @@ test("keeps newly minted contact nodes separate from parsed blank nodes", async 
   } finally {
     mint.mockRestore();
   }
+});
+
+// AUTHORED-BY Claude Opus 5.5
+describe("postal addresses through the app mapping", () => {
+  const Shape = `${VCARD_PREFIX}
+      <#this> a vcard:Individual; vcard:fn "Alice"; vcard:hasAddress _:home .
+      _:home a vcard:Home; vcard:street-address "1 Way"; vcard:locality "Paris";
+        <https://example.org/geo> "48.8,2.3" .`;
+
+  test("contactData reads addresses and an unchanged save keeps the original node", async () => {
+    const dataset = await parse(Shape, ALICE);
+    const contact = new Contact(`${ALICE}#this`, dataset, DataFactory);
+    const data = contactData(contact);
+    expect(data.addresses).toEqual([{ kind: "home", street: "1 Way", locality: "Paris" }]);
+    const original = [...dataset];
+    // Padding that the shared reader would trim away is not a change either.
+    applyContact(contact, {
+      ...data,
+      name: "Alicia",
+      addresses: [{ kind: "home", street: " 1 Way ", locality: "Paris" }],
+    });
+    for (const quad of original)
+      if (quad.predicate.value !== `${VCARD}fn`) expect(dataset.has(quad)).toBe(true);
+  });
+
+  test("an edited address replaces the node; clearing removes it", async () => {
+    const dataset = await parse(Shape, ALICE);
+    const contact = new Contact(`${ALICE}#this`, dataset, DataFactory);
+    applyContact(contact, {
+      name: "Alice",
+      addresses: [{ kind: "work", locality: "Lyon" }, { postalCode: "12345" }],
+    });
+    expect(contact.addresses).toEqual(
+      expect.arrayContaining([{ kind: "work", locality: "Lyon" }, { postalCode: "12345" }]),
+    );
+    expect(dataset.match(null, DataFactory.namedNode("https://example.org/geo")).size).toBe(0);
+    applyContact(contact, { name: "Alice" });
+    expect(contact.addresses).toEqual([]);
+    expect(contactData(contact).addresses).toBeUndefined();
+    expect(dataset.match(null, DataFactory.namedNode(`${VCARD}locality`)).size).toBe(0);
+  });
+
+  test("validation bounds address count, kind and size", () => {
+    expect(() =>
+      validateContact({
+        name: "A",
+        addresses: Array.from({ length: 17 }, () => ({ locality: "x" })),
+      }),
+    ).toThrow("Too many addresses.");
+    expect(() =>
+      validateContact({ name: "A", addresses: [{ kind: "other" as "home", locality: "x" }] }),
+    ).toThrow("Invalid address type.");
+    expect(() =>
+      validateContact({ name: "A", addresses: [{ locality: "x".repeat(257) }] }),
+    ).toThrow("Invalid address.");
+    expect(() =>
+      validateContact({ name: "A", addresses: [{ locality: 1 as unknown as string }] }),
+    ).toThrow("Invalid address.");
+    expect(() =>
+      validateContact({ name: "A", addresses: [{ kind: "work", street: "y".repeat(2048) }] }),
+    ).not.toThrow();
+  });
 });
