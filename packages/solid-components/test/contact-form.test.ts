@@ -8,15 +8,27 @@ import {
   serializePerson,
 } from "@jeswr/solid-task-model/contacts";
 import { DataFactory, Store } from "n3";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { JeswrContactForm } from "../src/components/contact-form.js";
 
 const URL = "https://pod.example/contacts/alice.ttl";
 const HOSTILE_ORGANIZATION = '<img src=x onerror=alert(1)><script>alert(2)</script> & "Corp"';
 
-afterEach(() => {
+// shacl-form's 200 ms initialization debounce outlives the test; finish it while jsdom
+// still provides document (same pattern as shacl-form-edit.test.ts).
+beforeEach(() => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+});
+
+afterEach(async () => {
   document.body.innerHTML = "";
-  vi.restoreAllMocks();
+  try {
+    await vi.runAllTimersAsync();
+    expect(vi.getTimerCount()).toBe(0);
+  } finally {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  }
 });
 
 async function mountContactForm(organization: string | undefined) {
