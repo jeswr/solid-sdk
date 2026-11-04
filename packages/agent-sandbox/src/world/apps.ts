@@ -612,9 +612,11 @@ export function createAppsWorld(): AppsWorld {
     env: (clock) => ({
       commitments,
       ruleHistory: (id) => {
-        let h = ruleHistories.get(id);
-        if (!h) ruleHistories.set(id, (h = []));
-        return h;
+        const known = ruleHistories.get(id);
+        if (known) return known;
+        const fresh: Commitment[] = [];
+        ruleHistories.set(id, fresh);
+        return fresh;
       },
       tools,
       purposes: AUTOMATION_PURPOSES,
