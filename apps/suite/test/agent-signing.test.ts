@@ -141,6 +141,38 @@ describe("device approval keys", () => {
       expect(approvals.find((a) => a.id === approval.id)?.createdAt).toBe(now.toISOString());
     }
   });
+  it("reads an off-storage profile only through the public fetch for keys and verification", async () => {
+    const { session, client } = await fixture();
+    await setupApprovalKey(session);
+    const approval = await createAgentSigner(session, client, () => now).signApproval(
+      proposal,
+      "approve",
+    );
+    // The extension grants credentials only for the chosen storage, which here excludes the profile.
+    const credentialed = vi.fn(async (input: RequestInfo | URL) => {
+      throw new Error(`credentialed read of ${String(input)}`);
+    });
+    const external = {
+      webId: DEMO_WEBID,
+      storageUrl: "https://storage.example/",
+      fetch: credentialed as unknown as typeof session.fetch,
+      publicFetch: vi.fn(session.fetch),
+    };
+    expect(await approvalKeyStatus(external)).toBe("ready");
+    expect(await withApprovalKey(external, async (key) => key.verificationMethod)).toBe(
+      localStorage.getItem(PREF),
+    );
+    const doc = await client.graph(approval.id);
+    expect(
+      await createAgentVerifier(external, () => now).verifyApproval(doc.text, {
+        id: approval.id,
+        approves: proposal.id,
+        termsDigest: proposal.intent.termsDigest,
+      }),
+    ).toBe("verified");
+    expect(credentialed).not.toHaveBeenCalled();
+    expect(external.publicFetch).toHaveBeenCalled();
+  });
   it.each([
     "PUT",
     "readback",
