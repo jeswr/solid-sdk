@@ -243,7 +243,9 @@ export const DEFAULT_SETTINGS: RuleSettings = {
   lockedActions: [],
 };
 
-const AGENT_ACTIONS = ["SendMessage", "Transfer", "Sign", "BookAppointment"].map((a) => `${AGENT}${a}`);
+const AGENT_ACTIONS = ["SendMessage", "Transfer", "Sign", "BookAppointment"].map(
+  (a) => `${AGENT}${a}`,
+);
 
 /** The support agent's mandate, built from the page's settings. */
 export function supportMandate(
@@ -423,6 +425,24 @@ export function transactionsPolicy(customer: Customer): OdrlPolicy {
 }
 
 /** A sickness note: special-category health data, for HR only. */
+/** Internal records: readable by the agent, shared only with Harbour & Finch staff. */
+export function staffOnlyPolicy(target: string): OdrlPolicy {
+  return {
+    id: `${target}-policy`,
+    assigner: OWNER,
+    permissions: [
+      { type: "permission", action: "read" },
+      {
+        type: "permission",
+        action: "distribute",
+        constraints: [
+          { leftOperand: "recipient", operator: "isPartOf", rightOperand: GROUP.staff },
+        ],
+      },
+    ],
+  };
+}
+
 export const SICKNESS_POLICY: OdrlPolicy = {
   id: `${HF}hr/absence/sam-patel-2026-10#policy`,
   assigner: OWNER,
@@ -536,7 +556,7 @@ const addresses = (args: Args, key: string): string[] => {
   const list = typeof v === "string" ? [v] : Array.isArray(v) ? v : [];
   if (list.length === 0 || list.some((x) => typeof x !== "string" || !/^[^@\s]+@[^@\s]+$/.test(x)))
     throw new Error(`"${key}" must be one or more email addresses`);
-  return (list as string[]).map((x) => `mailto:${x.toLowerCase()}`);
+  return [...new Set((list as string[]).map((x) => `mailto:${x.toLowerCase()}`))];
 };
 
 function customerByRef(ref: string): Customer {
@@ -562,9 +582,9 @@ const regionOf = (party: string): string | undefined => {
     party.endsWith("@example.com")
   )
     return REGION.uk;
-  if (party.endsWith("harbourfinch.example") || party.endsWith("northwind-logistics.example"))
+  if (party.endsWith("@harbourfinch.example") || party.endsWith("@northwind-logistics.example"))
     return REGION.uk;
-  if (party.endsWith("datahub.example")) return REGION.us;
+  if (party.endsWith("@datahub.example")) return REGION.us;
   return undefined;
 };
 
@@ -618,9 +638,9 @@ export function createWorld(clock: () => number = () => Date.parse("2026-11-04T0
       kind: "read",
       inputSchema: { type: "object", properties: { overdueOnly: { type: "boolean" } } },
       run: (args) => ({
+        // References only: names and contact details come from each customer's own record.
         content: CUSTOMERS.filter((x) => !args.overdueOnly || x.overdue > 0).map((x) => ({
           ref: x.id.split("/").pop() ?? x.id,
-          name: x.name,
           overdueInvoices: x.overdue,
         })),
       }),
@@ -775,8 +795,17 @@ export function createWorld(clock: () => number = () => Date.parse("2026-11-04T0
       run: (args) => {
         if (!/sam/i.test(str(args, "employee"))) return { content: "No recent absence." };
         return {
-          content: "Sam Patel was absent from 20 to 22 October 2026 (3 working days).",
           items: [
+            {
+              label: {
+                id: `${HF}hr/absence/sam-patel-2026-10#dates`,
+                title: "Sam Patel's absence dates",
+                source: SYSTEM.hr,
+                category: "Staff record",
+                policy: staffOnlyPolicy(`${HF}hr/absence/sam-patel-2026-10#dates`),
+              },
+              content: "Sam Patel was absent from 20 to 22 October 2026 (3 working days).",
+            },
             {
               label: {
                 id: `${HF}hr/absence/sam-patel-2026-10`,
@@ -931,7 +960,20 @@ export function createWorld(clock: () => number = () => Date.parse("2026-11-04T0
           throw new Error("only SELECT queries are read-only");
         return {};
       },
-      run: () => ({ content: state.dbRows as unknown as Json }),
+      run: () => ({
+        items: [
+          {
+            label: {
+              id: `${SYSTEM.db}#orders`,
+              title: "Production order data",
+              source: SYSTEM.db,
+              category: "Business data",
+              policy: staffOnlyPolicy(`${SYSTEM.db}#orders`),
+            },
+            content: state.dbRows as unknown as Json,
+          },
+        ],
+      }),
     },
     {
       name: "db_execute",

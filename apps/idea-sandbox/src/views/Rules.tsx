@@ -146,7 +146,7 @@ export function Rules({ shared }: { shared: Shared }) {
 
       <Section
         title="Rules attached to the data"
-        intro="Each record carries its owner's rules. The agent cannot read a record its rules forbid, and once it has read one, those rules apply to everything it sends afterwards, wherever it sends it."
+        intro="Each record carries its owner's rules. The agent cannot read a record its rules forbid, and once it has read one, those rules apply to every message or upload it sends to a person or outside service afterwards."
       >
         <div className="grid">
           {DATA_RULES.map((d) => (

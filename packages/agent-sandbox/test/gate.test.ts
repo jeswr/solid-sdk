@@ -6,6 +6,7 @@ import {
   DecisionRecord,
   type JudgeModel,
 } from "../src/index.js";
+import { runCode } from "../src/runners/code.js";
 import {
   AGENT_ID,
   ANDREW_DELEGATION,
@@ -291,12 +292,132 @@ describe("MCP lockdown settings", () => {
   it("a locked system hides every tool on it; a locked action hides the tools that perform it", async () => {
     const { sandbox, world } = createWorldSandbox(scenario("production-database"));
     expect(sandbox.tools().map((t) => t.name)).toContain("db_query");
-    world.setSettings({ ...world.settings(), lockedSystems: ["https://harbourfinch.example/systems/production-db", "https://harbourfinch.example/systems/email"] });
+    world.setSettings({
+      ...world.settings(),
+      lockedSystems: [
+        "https://harbourfinch.example/systems/production-db",
+        "https://harbourfinch.example/systems/email",
+      ],
+    });
     const names = sandbox.tools().map((t) => t.name);
     expect(names.filter((n) => n.startsWith("db_") || n.startsWith("email_"))).toEqual([]);
-    expect((await sandbox.call({ tool: "db_query", args: { sql: "SELECT 1" } })).status).toBe("stopped");
-    world.setSettings({ ...world.settings(), lockedSystems: [], lockedActions: [{ system: "https://harbourfinch.example/systems/payments", action: "https://jeswr.org/ns/agent#Transfer" }] });
+    expect((await sandbox.call({ tool: "db_query", args: { sql: "SELECT 1" } })).status).toBe(
+      "stopped",
+    );
+    world.setSettings({
+      ...world.settings(),
+      lockedSystems: [],
+      lockedActions: [
+        {
+          system: "https://harbourfinch.example/systems/payments",
+          action: "https://jeswr.org/ns/agent#Transfer",
+        },
+      ],
+    });
     expect(sandbox.catalogue().find((e) => e.tool.name === "payments_refund")?.visible).toBe(false);
     expect(sandbox.tools().map((t) => t.name)).toContain("db_query");
+  });
+});
+
+describe("review fixes", () => {
+  const judge = (answer: string): JudgeModel => ({
+    name: "Test judge",
+    complete: async () => answer,
+  });
+  const staff = [
+    "priya.shah",
+    "tom.reid",
+    "dana.okafor",
+    "lee.chen",
+    "andrew.hill",
+    "sam.patel",
+    "privacy",
+  ];
+
+  it("calls made together are decided one at a time, so limits hold", async () => {
+    const { sandbox, world } = createWorldSandbox(care);
+    const sends = staff.map((local) =>
+      sandbox.call({
+        tool: "email_send",
+        args: { to: [`${local}@harbourfinch.example`], subject: "s", body: "hello" },
+      }),
+    );
+    const results = await Promise.all(sends);
+    expect(results.filter((r) => r.status === "done")).toHaveLength(5);
+    expect(world.state.outbox).toHaveLength(5);
+    expect(DecisionRecord.verify(sandbox.record.entries())).toBeUndefined();
+  });
+
+  it("the code box cap counts calls when they start", async () => {
+    const { sandbox, world } = createWorldSandbox(care);
+    const run = await runCode(
+      sandbox,
+      `const r = await Promise.all(${JSON.stringify(staff)}.map((n) =>
+         tools.email_send({ to: [n + "@harbourfinch.example"], subject: "s", body: "hi" })));
+       log(r.map((x) => x.status).join(","), typeof __call, typeof globalThis.__call);`,
+      { maxCalls: 3 },
+    );
+    expect(world.state.outbox).toHaveLength(3);
+    expect(sandbox.record.entries()).toHaveLength(3);
+    expect(run.logs[0]).toBe("done,done,done,refused,refused,refused,refused undefined undefined");
+  });
+
+  it("hybrid: the model's purpose can only make the answer stricter", async () => {
+    const call = {
+      tool: "email_send",
+      args: { to: ["maria.lopez@example.org"], subject: "s", body: "About your order" },
+    };
+    const story = scenario("production-database");
+    const policy = await createWorldSandbox(story).sandbox.decide(call);
+    for (const answer of [
+      `{"purpose": "${PURPOSE.customerCare}"}`,
+      '{"purpose": "constructor"}',
+      '{"purpose": "toString"}',
+    ]) {
+      const { sandbox } = createWorldSandbox(story, { mode: "hybrid", judge: judge(answer) });
+      expect((await sandbox.decide(call)).outcome).toBe(policy.outcome);
+    }
+    expect(policy.outcome).not.toBe("permit");
+  });
+
+  it("a recipient named twice counts once and gets one copy", async () => {
+    const { sandbox, world } = createWorldSandbox(care);
+    const r = await sandbox.call({
+      tool: "email_send",
+      args: {
+        to: ["priya.shah@harbourfinch.example", "PRIYA.SHAH@harbourfinch.example"],
+        subject: "s",
+        body: "hello",
+      },
+    });
+    expect(r.status).toBe("done");
+    expect(world.state.outbox.at(-1)?.to).toHaveLength(1);
+    const again = await sandbox.call({
+      tool: "email_send",
+      args: { to: ["priya.shah@harbourfinch.example"], subject: "s", body: "again" },
+    });
+    expect(again.status).toBe("stopped");
+  });
+
+  it("absence dates and query results carry staff-only rules onward", async () => {
+    const { sandbox } = createWorldSandbox(scenario("sickness-note"));
+    await sandbox.call({ tool: "hr_get_absence", args: { employee: "Sam Patel" } });
+    const out = await sandbox.call({
+      tool: "insights_upload",
+      args: { data: "Sam Patel off 20-22 Oct", question: "trend?" },
+    });
+    expect(out.status).toBe("stopped");
+    const db = createWorldSandbox(scenario("production-database")).sandbox;
+    await db.call({ tool: "db_query", args: { sql: "SELECT * FROM orders" } });
+    expect(db.labels().map((l) => l.title)).toEqual(["Production order data"]);
+  });
+
+  it("an outside domain that merely ends like ours is not placed in the UK", async () => {
+    const { sandbox } = createWorldSandbox(care);
+    const d = await sandbox.decide({
+      tool: "email_send",
+      args: { to: ["x@evilharbourfinch.example"], subject: "s", body: "hi" },
+    });
+    expect(d.outcome).not.toBe("permit");
   });
 });

@@ -56,7 +56,8 @@ describe("stories under the policy gate", () => {
     expect(read?.status).toBe("done");
     expect(read?.status === "done" && read.withheld).toBe(1);
     expect(JSON.stringify(read)).not.toMatch(/Migraine/);
-    expect(run.sandbox.labels()).toHaveLength(0);
+    // Only the dates' staff-only label travels on; the note's never does.
+    expect(run.sandbox.labels().map((l) => l.title)).toEqual(["Sam Patel's absence dates"]);
   });
 
   it("the code box story: gated calls, missing tools, no network", async () => {
@@ -64,7 +65,7 @@ describe("stories under the policy gate", () => {
     expect(run.code?.ok).toBe(true);
     expect(run.code?.logs).toEqual(
       expect.arrayContaining([
-        "Maria Lopez: done",
+        "c-1001: done",
         expect.stringMatching(/^backup: stopped/),
         "delete tool available: false",
         expect.stringMatching(/fetch.*not defined/),

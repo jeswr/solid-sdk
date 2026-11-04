@@ -482,7 +482,7 @@ export function createSandbox(options: SandboxOptions): Sandbox {
       const json = JSON.parse(raw.slice(raw.indexOf("{"), raw.lastIndexOf("}") + 1)) as {
         purpose?: unknown;
       };
-      if (typeof json.purpose === "string" && json.purpose in purposes)
+      if (typeof json.purpose === "string" && Object.hasOwn(purposes, json.purpose))
         return {
           purpose: json.purpose,
           step: {
@@ -551,15 +551,24 @@ export function createSandbox(options: SandboxOptions): Sandbox {
     approved = false,
   ): Promise<GateDecision> {
     const mandate = currentMandate();
-    let purpose = ctx.purpose ?? options.purpose;
+    const stated = ctx.purpose ?? options.purpose;
     const extra: StepResult[] = [];
+    let pac = await policyDecision(spec, ctx, stated, mandate, approved);
+    let pacOutcome = strictest(pac.steps.map((s) => s.outcome));
     if (mode === "hybrid") {
+      // The model's reading of the purpose can only make the answer stricter: the rules are
+      // checked under both the stated and the classified purpose, and the stricter answer wins.
       const classified = await classifyPurpose(ctx);
-      if (classified.purpose) purpose = classified.purpose;
-      if (classified.step) extra.push(classified.step);
+      if (classified.purpose && classified.purpose !== stated) {
+        const alt = await policyDecision(spec, ctx, classified.purpose, mandate, approved);
+        const altOutcome = strictest(alt.steps.map((s) => s.outcome));
+        if (strictest([pacOutcome, altOutcome]) !== pacOutcome) {
+          pac = alt;
+          pacOutcome = altOutcome;
+          if (classified.step) extra.push(classified.step);
+        }
+      }
     }
-    const pac = await policyDecision(spec, ctx, purpose, mandate, approved);
-    const pacOutcome = strictest(pac.steps.map((s) => s.outcome));
     if (mode === "off")
       return {
         outcome: "permit",
@@ -572,14 +581,16 @@ export function createSandbox(options: SandboxOptions): Sandbox {
             : `No guardrails: it went ahead, but the rules would have said ${pacOutcome === "stop" ? "stop" : "ask a person"}: ${summarise(pacOutcome, pac.steps)}`,
       };
     if (mode === "llm") {
-      const judged = approved
-        ? {
-            step: "approval" as const,
-            outcome: "permit" as const,
-            reason: "approved",
-            explanation: "A person approved it.",
-          }
-        : await judgeStep(spec, args, ctx, mandate);
+      // An approved call is judged again: a person's approval answers "ask a person", not "stop".
+      const fresh = await judgeStep(spec, args, ctx, mandate);
+      const judged =
+        approved && fresh.outcome === "review"
+          ? {
+              ...fresh,
+              outcome: "permit" as const,
+              explanation: `${fresh.explanation} A person approved it.`,
+            }
+          : fresh;
       return {
         outcome: judged.outcome,
         steps: [judged, ...pac.steps],
@@ -601,7 +612,12 @@ export function createSandbox(options: SandboxOptions): Sandbox {
     const spec = options.tools.find((t) => t.name === call.tool);
     if (!spec) return { error: `There is no tool called "${call.tool}".` };
     try {
-      return { spec, ctx: spec.context?.(call.args) ?? {} };
+      const ctx = spec.context?.(call.args) ?? {};
+      // Each recipient counts once, however often the call names them.
+      return {
+        spec,
+        ctx: ctx.recipients ? { ...ctx, recipients: [...new Set(ctx.recipients)] } : ctx,
+      };
     } catch (e) {
       return { spec, error: `The call's details are not valid: ${(e as Error).message}` };
     }
@@ -716,6 +732,15 @@ export function createSandbox(options: SandboxOptions): Sandbox {
     return { status: "done", content, withheld: withheld.length, entry: entry.seq };
   }
 
+  // One call at a time: limits are checked before a call runs and counted after it, so calls made
+  // together (Promise.all in generated code, parallel MCP requests) must not interleave.
+  let queue: Promise<unknown> = Promise.resolve();
+  function serial<T>(task: () => Promise<T>): Promise<T> {
+    const next = queue.then(task, task);
+    queue = next.catch(() => undefined);
+    return next;
+  }
+
   async function call(c: ToolCall): Promise<CallResult> {
     const { spec, ctx, error } = lookup(c);
     if (!spec || !ctx || error) {
@@ -801,7 +826,7 @@ export function createSandbox(options: SandboxOptions): Sandbox {
         .filter((e) => e.visible || mode === "off" || mode === "llm")
         .map((e) => e.tool),
     catalogue,
-    call,
+    call: (c) => serial(() => call(c)),
     async decide(c) {
       const { spec, ctx, error } = lookup(c);
       if (!spec || !ctx || error)
@@ -809,7 +834,7 @@ export function createSandbox(options: SandboxOptions): Sandbox {
       return decideSpec(spec, c.args, ctx);
     },
     held: () => [...held.values()].map(({ spec: _s, ctx: _c, ...h }) => h),
-    approve,
+    approve: (id, by) => serial(() => approve(id, by)),
     decline,
     labels: () => [...labels.values()],
     obligations: () => obligations,

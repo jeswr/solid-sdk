@@ -17,7 +17,8 @@ export function createMcpProxy(
   info = { name: "agent-sandbox", version: "0.1.0" },
 ): Server {
   const server = new Server(info, {
-    capabilities: { tools: { listChanged: true } },
+    // No listChanged: the list is computed per request, and every call is gated regardless.
+    capabilities: { tools: {} },
     instructions:
       "Every tool call is checked against the organisation's rules before it runs. A call may be stopped, held for a person's approval, or return with records withheld.",
   });

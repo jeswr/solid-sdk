@@ -90,7 +90,9 @@ export function ruleWords(rule: Rule, directory: Directory): string {
     .map((d) => ` and must then ${dutyWords(d, directory)}`)
     .join("");
   // Without a target, "sign agreements with" reads as "sign agreements".
-  const verb = rule.target ? actionWords(rule.action) : actionWords(rule.action).replace(/ with$/, "");
+  const verb = rule.target
+    ? actionWords(rule.action)
+    : actionWords(rule.action).replace(/ with$/, "");
   return `${verb}${target}${constraints}${duties}`;
 }
 

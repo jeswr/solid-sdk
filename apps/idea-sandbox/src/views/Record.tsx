@@ -17,7 +17,7 @@ export function Record(_: { shared: Shared }) {
     <div className="page">
       <Section
         title="Audit log"
-        intro="Every decision is written to a log before anything runs: what was asked, what was decided and why, and a fingerprint of the rules in force. Each entry includes the fingerprint (SHA-256) of the one before, so changing any past entry breaks every fingerprint after it. The agent can add to the log but cannot quietly rewrite it."
+        intro="Every decision is written to a log before anything runs: what was asked, what was decided and why, and a fingerprint of the rules in force. Each entry includes the fingerprint (SHA-256) of the one before, so changing any past entry breaks every fingerprint after it. The agent can add to the log but has no way to change it. In this demo the log lives in your browser; a real deployment would also sign it or keep a copy elsewhere, so that whoever holds the log cannot rewrite it unnoticed either."
       >
         {!session || entries.length === 0 ? (
           <div className="card">

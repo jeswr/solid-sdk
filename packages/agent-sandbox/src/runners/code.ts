@@ -60,6 +60,7 @@ export async function runCode(
   const maxCalls = options.maxCalls ?? 50;
   const logs: string[] = [];
   const calls: CodeCall[] = [];
+  let started = 0;
   const names = sandbox
     .tools()
     .map((t) => t.name)
@@ -111,12 +112,16 @@ export async function runCode(
         } catch {
           args = undefined;
         }
-        if (calls.length >= maxCalls) {
+        // A call that arrives after the script was stopped never reaches the sandbox.
+        if (finished) return;
+        // Count a call when it starts, so calls made together cannot overshoot the cap.
+        if (started >= maxCalls) {
           const result = {
             status: "refused" as const,
             message: `The code box allows at most ${maxCalls} tool calls.`,
           };
-          calls.push({ tool: name, args: null, result });
+          // Log the first refusal only, so a flood of calls cannot grow the host's log.
+          if (started++ === maxCalls) calls.push({ tool: name, args: null, result });
           return settle(result);
         }
         if (typeof args !== "object" || args === null || Array.isArray(args)) {
@@ -127,6 +132,7 @@ export async function runCode(
           calls.push({ tool: name, args: null, result });
           return settle(result);
         }
+        started += 1;
         options.onCall?.();
         const result = await sandbox.call({ tool: name, args: args as Args });
         calls.push({ tool: name, args: args as Json, result });
@@ -139,7 +145,8 @@ export async function runCode(
   callFn.dispose();
 
   // The only bridge: a frozen `tools` object of the tools the agent may see.
-  const prelude = `globalThis.tools = Object.freeze(Object.fromEntries(${JSON.stringify(names)}.map((n) => [n, async (a) => JSON.parse(await __call(n, JSON.stringify(a === undefined ? {} : a)))])));`;
+  // The raw bridge is captured in a closure and removed, so code reaches only the listed tools.
+  const prelude = `(() => { const call = globalThis.__call; delete globalThis.__call; globalThis.tools = Object.freeze(Object.fromEntries(${JSON.stringify(names)}.map((n) => [n, async (a) => JSON.parse(await call(n, JSON.stringify(a === undefined ? {} : a)))]))); })();`;
   const body = `(async () => {\n${code}\n})()`;
 
   let error: string | undefined;

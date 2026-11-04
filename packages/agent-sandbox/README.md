@@ -11,8 +11,8 @@ through one gate that checks three kinds of rule:
   profile), plus run-time grants such as a colleague's delegation.
 - **Rules attached to the data**: each record carries its owner's ODRL policy
   (evaluated by [`@jeswr/solid-odrl`](../solid-odrl)). The agent cannot read a record its
-  policy forbids, and once it has read one, that policy applies to everything it sends
-  afterwards, wherever it sends it.
+  policy forbids, and once it has read one, that policy applies to every message or upload
+  it sends to a person or outside service afterwards.
 - **Limits**: messages a day, contacts per person per day, money a day. A hard limit stops; a
   soft limit asks a person.
 
@@ -86,6 +86,14 @@ MCP server; each decision is printed to stderr.
   mandate's `limits` use the agent-mandate profile.
 - `solid-odrl` does not yet evaluate `odrl:and`/`odrl:or` constraint groups, so policies here
   avoid them.
+- The onward check covers calls with recipients (messages, uploads, posts). Writes back into
+  the organisation's own systems (a ticket update, a database change) and payments are not
+  checked against the labels the session carries.
+- Tools wrapped from another MCP server with `upstreamTools` return unlabelled content, so
+  nothing they read constrains later sends.
+- Calls are decided one at a time per sandbox, so limits hold under concurrent calls; the
+  record is in memory and not signed, so it shows tampering only to someone holding an
+  independent copy of the fingerprints.
 - Duties are reported as `obligations()` but not enforced or tracked to completion.
 - The demo uses unsigned mandates; production use goes through `agent-mandate`'s signed
   credential and verifier.

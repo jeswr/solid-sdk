@@ -278,9 +278,11 @@ describe("helpers", () => {
     expect(await tool("hr_get_absence").run({ employee: "Priya" })).toEqual({
       content: "No recent absence.",
     });
+    // References only: no names leave the list unlabelled.
     expect(await tool("crm_find_customers").run({})).toMatchObject({
-      content: expect.arrayContaining([expect.objectContaining({ name: "Aisha Khan" })]),
+      content: expect.arrayContaining([{ ref: "c-1004", overdueInvoices: expect.any(Number) }]),
     });
+    expect(JSON.stringify(await tool("crm_find_customers").run({}))).not.toMatch(/Aisha/);
     expect(await tool("tickets_update").run({ ticket: "T-482", status: "closed" })).toEqual({
       content: "Ticket T-482 is now closed.",
     });
