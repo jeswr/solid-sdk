@@ -11,6 +11,8 @@ const FILE = `${STORAGE}drive/report.txt`;
 const mocks = vi.hoisted(() => ({
   saveNatively: vi.fn<(blob: Blob, name: string, contentType?: string) => Promise<boolean>>(),
   toastError: vi.fn(),
+  toastLoading: vi.fn(() => "progress"),
+  toastDismiss: vi.fn(),
 }));
 vi.mock("../src/apps/docs/lib/model/type-index", () => ({
   discoverProfileRegistrations: vi.fn(async () => []),
@@ -35,8 +37,8 @@ vi.mock("@jeswr/suite-ui", async (original) => ({
   ...(await original<Record<string, unknown>>()),
   Toaster: () => null,
   toast: Object.assign(vi.fn(), {
-    loading: vi.fn(),
-    dismiss: vi.fn(),
+    loading: mocks.toastLoading,
+    dismiss: mocks.toastDismiss,
     success: vi.fn(),
     error: mocks.toastError,
   }),
@@ -84,6 +86,7 @@ afterEach(() => {
   vi.restoreAllMocks();
   mocks.saveNatively.mockReset();
   mocks.toastError.mockReset();
+  mocks.toastDismiss.mockReset();
 });
 
 it("saves through the share sheet in the native shell, never a blob: anchor", async () => {
@@ -101,6 +104,35 @@ it("saves through the share sheet in the native shell, never a blob: anchor", as
   expect(contentType).toContain("text/plain");
   expect(objectUrl).not.toHaveBeenCalled();
   expect(mocks.toastError).not.toHaveBeenCalled();
+  expect(mocks.toastDismiss).toHaveBeenCalledWith("progress");
+});
+
+it("shows no error when the share sheet is dismissed", async () => {
+  vi.stubEnv("NEXT_PUBLIC_SUITE_TARGET", "native");
+  mocks.saveNatively.mockResolvedValue(false);
+  const item = await setup();
+  await act(() => actions.download(item));
+  expect(mocks.toastError).not.toHaveBeenCalled();
+});
+
+it("ignores a second tap while a save is still being prepared", async () => {
+  vi.stubEnv("NEXT_PUBLIC_SUITE_TARGET", "native");
+  let finish!: (completed: boolean) => void;
+  mocks.saveNatively.mockReturnValue(
+    new Promise<boolean>((resolve) => {
+      finish = resolve;
+    }),
+  );
+  const item = await setup();
+  const first = actions.download(item);
+  await vi.waitFor(() => expect(mocks.saveNatively).toHaveBeenCalledOnce());
+  await act(() => actions.download(item));
+  expect(mocks.saveNatively).toHaveBeenCalledOnce();
+  finish(true);
+  await act(() => first);
+  mocks.saveNatively.mockResolvedValue(true);
+  await act(() => actions.download(item));
+  expect(mocks.saveNatively).toHaveBeenCalledTimes(2);
 });
 
 it("refuses a file over the native save limit without staging it", async () => {
