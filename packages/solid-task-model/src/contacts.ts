@@ -44,7 +44,7 @@
  */
 
 import { escapeIri, isHttpIri as isRdfHttpIri } from "@jeswr/rdf-serialize";
-import type { DatasetCore, Term } from "@rdfjs/types";
+import type { BlankNode, DatasetCore, NamedNode, Term } from "@rdfjs/types";
 import {
   BlankNodeFrom,
   LiteralAs,
@@ -500,7 +500,15 @@ export class Contact extends TermWrapper {
    * skipped. Untrusted pod data, so nothing here is treated as markup or a link.
    */
   get addresses(): ContactAddress[] {
-    const out: ContactAddress[] = [];
+    return this.addressEntries.map(({ address }) => address);
+  }
+
+  /**
+   * The readable addresses with the node each was read from, so a caller can rewrite only
+   * the nodes that changed and leave other RDF on unchanged nodes alone.
+   */
+  get addressEntries(): { node: BlankNode | NamedNode; address: ContactAddress }[] {
+    const out: { node: BlankNode | NamedNode; address: ContactAddress }[] = [];
     const p = this.factory.namedNode(VCARD_HAS_ADDRESS);
     for (const q of this.dataset.match(this as unknown as Term, p)) {
       if (q.object.termType !== "BlankNode" && q.object.termType !== "NamedNode") continue;
@@ -524,43 +532,51 @@ export class Contact extends TermWrapper {
       );
       if (types.has(VCARD_WORK)) address.kind = "work";
       else if (types.has(VCARD_HOME)) address.kind = "home";
-      out.push(address);
+      out.push({ node: q.object, address });
     }
     return out;
   }
 
   /**
-   * Replace the contact's addresses. Clears any prior `vcard:hasAddress` links and their
-   * no-longer-referenced address nodes, then writes each non-empty address as a new blank node carrying
-   * its kind and the non-empty field literals.
+   * Replace the contact's addresses. Removes every prior `vcard:hasAddress` link (and its
+   * node, see removeAddress), then adds each non-empty address.
    */
   setAddresses(addresses: readonly ContactAddress[]): void {
-    // Unlike the other structured fields, the reader also accepts named address nodes, so
-    // drop their statements too, unless something else in the document still points at them.
     const p = this.factory.namedNode(VCARD_HAS_ADDRESS);
-    for (const q of [...this.dataset.match(this as unknown as Term, p)]) {
+    for (const q of [...this.dataset.match(this as unknown as Term, p)])
+      this.removeAddress(q.object);
+    for (const address of addresses) this.addAddress(address);
+  }
+
+  /**
+   * Remove one `vcard:hasAddress` link. Unlike the other structured fields, the reader also
+   * accepts named address nodes, so the node's own statements go too (blank or named),
+   * unless something else in the document still points at it.
+   */
+  removeAddress(node: Term): void {
+    const p = this.factory.namedNode(VCARD_HAS_ADDRESS);
+    for (const q of [...this.dataset.match(this as unknown as Term, p, node)])
       this.dataset.delete(q);
-      const node = q.object;
-      if (node.termType !== "BlankNode" && node.termType !== "NamedNode") continue;
-      if (node.equals(this as unknown as Term) || this.dataset.match(null, null, node).size)
-        continue;
-      for (const inner of [...this.dataset.match(node)]) this.dataset.delete(inner);
-    }
-    for (const address of addresses) {
-      if (!ADDRESS_FIELDS.some(([field]) => address[field]?.trim())) continue;
-      const bnode = this.factory.blankNode();
-      SetFrom.subjectPredicate(this, VCARD_HAS_ADDRESS, blankNodeLabel, BlankNodeFrom.string).add(
-        bnode.value,
+    if (node.termType !== "BlankNode" && node.termType !== "NamedNode") return;
+    if (node.equals(this as unknown as Term) || this.dataset.match(null, null, node).size) return;
+    for (const inner of [...this.dataset.match(node)]) this.dataset.delete(inner);
+  }
+
+  /** Add one address as a new blank node with its kind and trimmed, non-empty field literals. */
+  addAddress(address: ContactAddress): void {
+    if (!ADDRESS_FIELDS.some(([field]) => address[field]?.trim())) return;
+    const bnode = this.factory.blankNode();
+    SetFrom.subjectPredicate(this, VCARD_HAS_ADDRESS, blankNodeLabel, BlankNodeFrom.string).add(
+      bnode.value,
+    );
+    const child = new TermWrapper(bnode, this.dataset, this.factory);
+    if (address.kind)
+      SetFrom.subjectPredicate(child, rdf("type"), NamedNodeAs.string, NamedNodeFrom.string).add(
+        address.kind === "work" ? VCARD_WORK : VCARD_HOME,
       );
-      const child = new TermWrapper(bnode, this.dataset, this.factory);
-      if (address.kind)
-        SetFrom.subjectPredicate(child, rdf("type"), NamedNodeAs.string, NamedNodeFrom.string).add(
-          address.kind === "work" ? VCARD_WORK : VCARD_HOME,
-        );
-      for (const [field, predicate] of ADDRESS_FIELDS) {
-        const value = address[field]?.trim();
-        if (value) OptionalAs.object(child, predicate, value, LiteralFrom.string);
-      }
+    for (const [field, predicate] of ADDRESS_FIELDS) {
+      const value = address[field]?.trim();
+      if (value) OptionalAs.object(child, predicate, value, LiteralFrom.string);
     }
   }
 

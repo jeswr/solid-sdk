@@ -2,6 +2,7 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
 import { parseRdf } from "@jeswr/fetch-rdf";
 import { createRdfEngine } from "@jeswr/rdf-engine/node";
+import type { Term } from "@rdfjs/types";
 import { DataFactory, Parser, Store } from "n3";
 import { afterAll, describe, expect, it } from "vitest";
 import {
@@ -828,5 +829,56 @@ describe("addresses (vcard:hasAddress) — structured postal addresses", () => {
     expect((await parsePersonTtl(PERSON, turtle, "text/turtle"))?.addresses).toEqual([
       { kind: "home", street: "1 Way\nUnit 2", country: "Wales" },
     ]);
+  });
+});
+
+// AUTHORED-BY Claude Opus 5.5
+describe("address entries, addAddress and removeAddress", () => {
+  it("exposes each readable address with its node and edits one node at a time", () => {
+    const store = parseStore(
+      `@prefix vcard: <http://www.w3.org/2006/vcard/ns#>.
+       <#this> a vcard:Individual; vcard:fn "E"; vcard:hasAddress _:a, _:b, _:empty, "text".
+       _:a a vcard:Home; vcard:locality "Keep"; <https://example.org/geo> "1,2".
+       _:b vcard:locality "Drop".
+       _:empty <https://example.org/note> "no fields".`,
+      PERSON,
+    );
+    const person = new Contact(personSubject(PERSON), store, DataFactory);
+    const entries = person.addressEntries;
+    expect(entries.map((e) => e.address)).toEqual([
+      { kind: "home", locality: "Keep" },
+      { locality: "Drop" },
+    ]);
+    person.removeAddress(entries[1]?.node as Term);
+    person.addAddress({ kind: "work", region: " R " });
+    person.addAddress({ street: "  " });
+    expect(person.addresses).toEqual([
+      { kind: "home", locality: "Keep" },
+      { kind: "work", region: "R" },
+    ]);
+    // The untouched node keeps its extra RDF; the unreadable node and literal are left alone.
+    expect(
+      store.getQuads(null, DataFactory.namedNode("https://example.org/geo"), null, null),
+    ).toHaveLength(1);
+    expect(
+      store.getQuads(null, DataFactory.namedNode("https://example.org/note"), null, null),
+    ).toHaveLength(1);
+    expect(
+      store.getQuads(
+        null,
+        DataFactory.namedNode(vcard("locality")),
+        DataFactory.literal("Drop"),
+        null,
+      ),
+    ).toHaveLength(0);
+    person.removeAddress(DataFactory.literal("text"));
+    expect(
+      store.getQuads(
+        null,
+        DataFactory.namedNode(vcard("hasAddress")),
+        DataFactory.literal("text"),
+        null,
+      ),
+    ).toHaveLength(0);
   });
 });
