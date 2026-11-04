@@ -1,7 +1,12 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 import { afterEach, describe, expect, test, vi } from "vitest";
-import { AmbiguousIssuerError, createPodAuth, type PodAuthOptions } from "./index.js";
+import {
+  AmbiguousIssuerError,
+  createPodAuth,
+  IssuerNotAuthorizedError,
+  type PodAuthOptions,
+} from "./index.js";
 import * as node from "./node.js";
 import { createMemoryStore, createMockOp } from "./testing.js";
 
@@ -134,7 +139,8 @@ test.each([
     expect((await auth.identity())?.issuer).toBe(op.issuer);
   }
   expect(options.ui.getWebId).not.toHaveBeenCalled();
-  expect(op.stats.tokens).toBe(2);
+  // The login grant covers the first verified root; only a distinct static root needs another.
+  expect(op.stats.tokens).toBe(boundaryKind === "automatic" ? 1 : 2);
   expect(op.stats.accepted).toBe(4);
 });
 
@@ -300,7 +306,9 @@ test("selected account must match authenticated claims and issuer profile trust"
   );
   expect(await f.auth.identity()).toBeNull();
   const untrusted = fixture({ issuers: ["https://evil.example/"] });
-  await expect(untrusted.auth.login({ issuer: untrusted.op.issuer })).rejects.toThrow("issuer");
+  await expect(untrusted.auth.login({ issuer: untrusted.op.issuer })).rejects.toBeInstanceOf(
+    IssuerNotAuthorizedError,
+  );
   expect(await untrusted.auth.identity()).toBeNull();
 });
 
@@ -501,4 +509,251 @@ describe("option validation", () => {
     vi.stubGlobal("location", { origin: "https://app.example" });
     expect(() => createPodAuth(f.options)).not.toThrow();
   });
+});
+
+test("automatic boundary: one interactive authorization covers login and the first private reads, before and after restore", async () => {
+  const op = createMockOp({ requireInteraction: true, refreshTokens: true });
+  vi.stubGlobal("fetch", op.fetch);
+  const getCode = vi.fn(op.getCode);
+  const options: PodAuthOptions = {
+    clientId: op.clientId,
+    redirectUri: op.redirectUri,
+    storage: { sessions: createMemoryStore(), caches: createMemoryStore() },
+    ui: { getWebId: vi.fn(async () => op.webId!), getCode },
+  };
+  for (const hint of [{ webId: op.webId! }, { issuer: op.issuer }]) {
+    const auth = createPodAuth(options);
+    await auth.logout();
+    getCode.mockClear();
+    const before = op.stats.authorizations;
+    expect((await auth.login(hint)).storages).toEqual([op.root]);
+    expect(getCode).toHaveBeenCalledTimes(1);
+    // The grant made before storage discovery must cover the discovered storage root.
+    expect(await (await auth.fetch(op.root + "private?x=1")).text()).toBe("protected Solid");
+    expect(await (await auth.fetch(op.root + "private?x=2")).text()).toBe("protected Solid");
+    expect(getCode).toHaveBeenCalledTimes(1);
+    expect(op.stats.authorizations - before).toBe(1);
+
+    const reloaded = createPodAuth(options);
+    expect((await reloaded.restore())?.webId).toBe(op.webId);
+    expect(await (await reloaded.fetch(op.root + "private?x=3")).text()).toBe("protected Solid");
+    expect(getCode).toHaveBeenCalledTimes(1);
+    expect(op.stats.authorizations - before).toBe(1);
+  }
+});
+
+test("storage endpoints on a verified storage origin share its grant; other paths and origins get nothing", async () => {
+  const op = createMockOp({
+    requireInteraction: true,
+    protectedUrls: ["https://pod.example/account/domains", "https://pod.example/.notifications/"],
+  });
+  vi.stubGlobal("fetch", op.fetch);
+  const getCode = vi.fn(op.getCode);
+  const auth = createPodAuth({
+    clientId: op.clientId,
+    redirectUri: op.redirectUri,
+    boundary: { storageEndpoints: ["/account/domains", "/.notifications/"] },
+    ui: { getWebId: vi.fn(async () => op.webId!), getCode },
+  });
+  await auth.login({ webId: op.webId! });
+  expect(await (await auth.fetch("https://pod.example/account/domains")).text()).toBe(
+    "protected Solid",
+  );
+  expect(await (await auth.fetch("https://pod.example/.notifications/ws/")).text()).toBe(
+    "protected Solid",
+  );
+  expect(await (await auth.fetch(op.root + "private")).text()).toBe("protected Solid");
+  expect(getCode).toHaveBeenCalledTimes(1);
+  expect(op.stats.tokens).toBe(1);
+  const accepted = op.stats.accepted;
+  // Exact paths stay exact, and nothing is granted on another origin or before discovery.
+  expect((await auth.fetch("https://pod.example/account/domains-evil")).status).toBe(401);
+  expect((await auth.fetch("https://pod.example/account/domains/x")).status).toBe(401);
+  expect((await auth.fetch("https://other.example/account/domains")).status).toBe(401);
+  expect(op.stats.accepted).toBe(accepted);
+  expect(
+    op.requests.filter(
+      (r) => r.headers.has("authorization") && !r.url.startsWith("https://pod.example/"),
+    ),
+  ).toEqual([]);
+  await auth.logout();
+  expect((await auth.fetch("https://pod.example/account/domains")).status).toBe(401);
+});
+
+test.each([
+  "account/domains",
+  "//evil.example/x",
+  "/a/../b",
+  "/a?x",
+  "/a#x",
+  "/a\\b",
+  "/a b",
+  "@evil.example/",
+  "/a@b",
+])("storageEndpoints rejects %s", (path) => {
+  expect(() =>
+    createPodAuth({
+      clientId: "https://app.example/clientid.jsonld",
+      redirectUri: "https://app.example/callback",
+      boundary: { storageEndpoints: [path] },
+      ui: { getWebId: async () => "", getCode: async () => "" },
+    }),
+  ).toThrow("storageEndpoints");
+});
+
+test("a storage endpoint maps to the first storage on its origin, and eligible() still filters it", async () => {
+  const second = "https://pod.example/alice-work/";
+  const op = createMockOp({
+    storages: ["https://pod.example/alice/", second],
+    protectedUrls: ["https://pod.example/account/domains", "https://pod.example/blocked"],
+  });
+  vi.stubGlobal("fetch", op.fetch);
+  const auth = createPodAuth({
+    clientId: op.clientId,
+    redirectUri: op.redirectUri,
+    boundary: {
+      storageEndpoints: ["/account/domains", "/blocked"],
+      eligible: (url) => url.pathname !== "/blocked",
+    },
+    ui: { getWebId: vi.fn(async () => op.webId!), getCode: vi.fn(op.getCode) },
+  });
+  expect((await auth.login({ webId: op.webId! })).storages).toEqual([op.root, second]);
+  expect((await auth.fetch("https://pod.example/account/domains")).status).toBe(200);
+  expect((await auth.fetch("https://pod.example/blocked")).status).toBe(401);
+  expect(op.stats.tokens).toBe(1);
+});
+
+test("a verified storage that matches an endpoint path stays a storage, and option mutation adds nothing", async () => {
+  const api = "https://pod.example/api/";
+  const op = createMockOp({
+    storages: ["https://pod.example/alice/", api],
+    protectedUrls: ["https://pod.example/later"],
+  });
+  vi.stubGlobal("fetch", op.fetch);
+  const storageEndpoints = ["/api/", "/fixed/"];
+  const auth = createPodAuth({
+    clientId: op.clientId,
+    redirectUri: op.redirectUri,
+    boundary: { roots: ["https://pod.example/fixed/"], storageEndpoints },
+    ui: { getWebId: vi.fn(async () => op.webId!), getCode: vi.fn(op.getCode) },
+  });
+  storageEndpoints.push("/later");
+  expect((await auth.login({ webId: op.webId! })).storages).toEqual([
+    "https://pod.example/fixed/",
+    op.root,
+    api,
+  ]);
+  expect((await auth.fetch("https://pod.example/later")).status).toBe(401);
+});
+
+test("maxReplayBodyBytes bounds the buffered request body and is validated", async () => {
+  const { op, options } = fixture();
+  const auth = createPodAuth({ ...options, maxReplayBodyBytes: 2 });
+  await auth.login({ webId: op.webId });
+  await expect(auth.fetch(op.root + "upload", { method: "PUT", body: "abc" })).rejects.toThrow(
+    "exceeds 2 bytes",
+  );
+  expect((await auth.fetch(op.root + "upload", { method: "PUT", body: "ab" })).status).toBe(200);
+  for (const value of [-1, 1.5, Number.NaN, "1" as unknown as number])
+    expect(() => createPodAuth({ ...options, maxReplayBodyBytes: value })).toThrow(
+      "maxReplayBodyBytes",
+    );
+});
+
+test("storageEndpoints must be an array", () => {
+  expect(() =>
+    createPodAuth({
+      clientId: "https://app.example/clientid.jsonld",
+      redirectUri: "https://app.example/callback",
+      boundary: { storageEndpoints: "/account" as unknown as string[] },
+      ui: { getWebId: async () => "", getCode: async () => "" },
+    }),
+  ).toThrow("storageEndpoints");
+});
+
+test("storage endpoints are read once: a getter cannot swap in another origin after validation", () => {
+  let reads = 0;
+  const boundary = {
+    get storageEndpoints() {
+      reads++;
+      return reads === 1 ? ["/account/domains"] : ["@evil.example/"];
+    },
+  };
+  expect(() =>
+    createPodAuth({
+      clientId: "https://app.example/clientid.jsonld",
+      redirectUri: "https://app.example/callback",
+      boundary,
+      ui: { getWebId: async () => "", getCode: async () => "" },
+    }),
+  ).toThrow("storageEndpoints");
+});
+
+test("an endpoint inside another verified storage uses that storage's grant", async () => {
+  const op = createMockOp({
+    storages: ["https://pod.example/alice/", "https://pod.example/", "https://pod.example/svc/"],
+    protectedUrls: ["https://pod.example/.notifications/", "https://pod.example/svc/hook"],
+  });
+  vi.stubGlobal("fetch", op.fetch);
+  const auth = createPodAuth({
+    clientId: op.clientId,
+    redirectUri: op.redirectUri,
+    boundary: { storageEndpoints: ["/.notifications/", "/svc/hook"] },
+    ui: { getWebId: vi.fn(async () => op.webId!), getCode: vi.fn(op.getCode) },
+  });
+  expect((await auth.login({ webId: op.webId! })).storages).toEqual([
+    op.root,
+    "https://pod.example/",
+    "https://pod.example/svc/",
+  ]);
+  expect(op.stats.tokens).toBe(1);
+  expect((await auth.fetch("https://pod.example/.notifications/ws")).status).toBe(200);
+  // The root storage's context, not alice's login grant.
+  expect(op.stats.tokens).toBe(2);
+  // The innermost containing storage wins.
+  expect((await auth.fetch("https://pod.example/svc/hook")).status).toBe(200);
+  expect(op.stats.tokens).toBe(3);
+});
+
+test("an endpoint inside a fixed root uses that root's grant", async () => {
+  const op = createMockOp({ protectedUrls: ["https://pod.example/.notifications/"] });
+  vi.stubGlobal("fetch", op.fetch);
+  const auth = createPodAuth({
+    clientId: op.clientId,
+    redirectUri: op.redirectUri,
+    boundary: { roots: ["https://pod.example/"], storageEndpoints: ["/.notifications/"] },
+    ui: { getWebId: vi.fn(async () => op.webId!), getCode: vi.fn(op.getCode) },
+  });
+  await auth.login({ webId: op.webId! });
+  expect(op.stats.tokens).toBe(1);
+  expect((await auth.fetch("https://pod.example/.notifications/ws")).status).toBe(200);
+  expect(op.stats.tokens).toBe(1);
+});
+
+test("core CID mode honours maxReplayBodyBytes", async () => {
+  const op = createMockOp();
+  vi.stubGlobal("fetch", op.fetch);
+  const key = (await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, false, [
+    "sign",
+    "verify",
+  ])) as CryptoKeyPair;
+  const auth = createPodAuth({
+    clientId: op.clientId,
+    redirectUri: op.redirectUri,
+    boundary: { roots: [op.root] },
+    maxReplayBodyBytes: 2,
+    ui: { getWebId: async () => op.webId!, getCode: op.getCode },
+    lws: {
+      subject: {
+        cid: {
+          documentUrl: "https://agent.example/id",
+          keyId: "https://agent.example/id#key",
+          privateKey: key.privateKey,
+        },
+      },
+    },
+  });
+  await expect(auth.fetch(op.root + "upload", { method: "PUT", body: "abc" })).rejects.toThrow(
+    "exceeds 2 bytes",
+  );
 });

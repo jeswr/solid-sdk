@@ -17,11 +17,12 @@ import {
   turnIntoTask,
 } from "./messages";
 import { dayPage, dayUrl, joinedRoomsUrl, roomContainer, roomIndex } from "./paths";
-import { NS, serializeChat } from "./rdf";
+import { ChatNode, NS, serializeChat } from "./rdf";
 import {
   buildRoom,
   buildRoomAcl,
   joinRoom,
+  leaveRoom,
   type RoomInput,
   readJoinedRooms,
   readRoom,
@@ -94,7 +95,7 @@ async function optionalChat(
     return { url, dataset: new Store(), etag: null };
   }
 }
-async function ensureContainer(
+export async function ensureContainer(
   fetch: typeof globalThis.fetch,
   base: string,
   url: string,
@@ -168,6 +169,18 @@ async function optionalCondition(
     if (!(error instanceof RdfFetchError && error.status === 404)) throw error;
     return { document: { url, dataset: new Store(), etag: null }, condition: { ifNoneMatch: "*" } };
   }
+}
+export async function removeJoinedRoom(
+  fetch: typeof globalThis.fetch,
+  storage: string,
+  room: string,
+): Promise<void> {
+  const base = `${roomContainer(storage)}chat/`;
+  const url = joinedRoomsUrl(storage);
+  const current = await optionalCondition(fetch, base, url);
+  const dataset = leaveRoom(url, current.document.dataset, room);
+  if (dataset.size === current.document.dataset.size) return;
+  await saveChat(fetch, base, url, dataset, current.condition);
 }
 /** Inserts only the new subject into existing days; never replaces other participants' statements. */
 export async function sendMessage(
@@ -254,8 +267,13 @@ export function saveMessageTask(
   actor: string,
   task: MessageTask,
   at: Date,
+  due?: Date,
 ) {
-  return mutate(fetch, room, subject, (dataset) => turnIntoTask(dataset, subject, actor, task, at));
+  return mutate(fetch, room, subject, (dataset) => {
+    const result = turnIntoTask(dataset, subject, actor, task, at);
+    if (due) new ChatNode(subject, result, DataFactory).setDate(`${NS.WF}dateDue`, due);
+    return result;
+  });
 }
 /** Creates a new container, its advertised WAC ACL, then its descriptor. Never overwrites a room. */
 export async function createRoom(
@@ -263,13 +281,18 @@ export async function createRoom(
   storage: string,
   slug: string,
   input: RoomInput,
+  { resume = false }: { resume?: boolean } = {},
 ): Promise<ChatDocument> {
   const base = roomContainer(storage);
   const room = `${base}chat/rooms/${segment(slug)}/`;
   const dataset = buildRoom(room, input);
   await ensureContainer(fetch, base, `${base}chat/`);
   await ensureContainer(fetch, base, `${base}chat/rooms/`);
-  const response = checked(
+  // `resume` finishes a room in the caller's own storage whose creation was interrupted after
+  // the container was claimed: existing container, ACL or index are kept, never overwritten.
+  const tolerated = (response: Response) =>
+    resume && response.status === 412 ? response : checked(response);
+  const response = tolerated(
     await scoped(fetch, base)(room, {
       method: "PUT",
       headers: {
@@ -280,7 +303,7 @@ export async function createRoom(
       body: "",
     }),
   );
-  let aclRef = aclLink(response.headers.get("link"));
+  let aclRef = response.ok ? aclLink(response.headers.get("link")) : undefined;
   if (!aclRef) {
     // Solid advertises auxiliary resources on HEAD/GET; PUT may omit Link.
     const discovery = checked(await scoped(fetch, base)(room, { method: "HEAD" }));
@@ -288,10 +311,25 @@ export async function createRoom(
   }
   if (!aclRef) throw new ChatModelError("invalid-input");
   const aclUrl = assertWithinPodScope(base, new URL(aclRef, room).href);
-  await saveChat(fetch, base, aclUrl, buildRoomAcl(room, aclUrl, input.creator, input.members), {
-    ifNoneMatch: "*",
-  });
+  const create = async (target: string, data: Store) => {
+    try {
+      return await saveChat(fetch, base, target, data, { ifNoneMatch: "*" });
+    } catch (error) {
+      if (resume && error instanceof ChatIoError && error.status === 412) return null;
+      throw error;
+    }
+  };
   const url = roomIndex(room);
-  const etag = await saveChat(fetch, base, url, dataset, { ifNoneMatch: "*" });
+  if (resume) {
+    // An existing index decides what the room is; never touch its ACL on the caller's behalf.
+    try {
+      return await loadChat(fetch, base, url);
+    } catch (error) {
+      if (!(error instanceof RdfFetchError && error.status === 404)) throw error;
+    }
+  }
+  await create(aclUrl, buildRoomAcl(room, aclUrl, input.creator, input.members));
+  const etag = await create(url, dataset);
+  if (etag === null && resume) return loadChat(fetch, base, url);
   return { url, dataset, etag };
 }

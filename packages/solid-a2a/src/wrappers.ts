@@ -25,7 +25,7 @@ import {
   type TermWrapper as TermWrapperType,
 } from "@rdfjs/wrapper";
 import { DataFactory, Store } from "n3";
-import { escapeIri, requireIri } from "./iri.js";
+import { escapeIri, requireIri, safeIri } from "./iri.js";
 import {
   A2A_ACTION,
   A2A_INTENT,
@@ -34,7 +34,7 @@ import {
   A2A_PARAM_VALUE,
   A2A_PARAMETER,
   A2A_PARAMETER_CLASS,
-  ACTION_TYPE_IRI,
+  actionTypeIriOf,
   type IntentAction,
   IRI_TO_ACTION,
   legacyA2aIri,
@@ -141,6 +141,27 @@ export function firstIri(terms: ReadonlySet<TermWrapperType>): string | undefine
   return undefined;
 }
 
+/**
+ * The single value of an at-most-one IRI field: `undefined` when absent, `null`
+ * when it holds several values, a non-IRI, or an IRI that is not absolute and
+ * safely emittable (so the read path never returns what the write path refuses).
+ */
+export function soleIri(terms: ReadonlySet<TermWrapperType>): string | undefined | null {
+  if (terms.size === 0) return undefined;
+  if (terms.size > 1) return null;
+  const [term] = terms;
+  if (term?.termType !== "NamedNode" || safeIri(term.value) !== term.value) return null;
+  return term.value;
+}
+
+/** The single Literal of an at-most-one literal field (`null` when ambiguous). */
+export function soleLiteral(terms: ReadonlySet<TermWrapperType>): string | undefined | null {
+  if (terms.size === 0) return undefined;
+  if (terms.size > 1) return null;
+  const [term] = terms;
+  return term?.termType === "Literal" ? term.value : null;
+}
+
 /** The first Literal value in a term set, or `undefined`. */
 export function firstLiteral(terms: ReadonlySet<TermWrapperType>): string | undefined {
   for (const term of terms) {
@@ -151,17 +172,19 @@ export function firstLiteral(terms: ReadonlySet<TermWrapperType>): string | unde
   return undefined;
 }
 
-/** Map an action node's rdf:type term set to the intent action kind, if known. */
+/**
+ * Map an action node's rdf:type term set to the intent action kind. Undefined
+ * when no known kind is present, or when the types name more than one kind: the
+ * shapes check one kind while the projection would pick another by triple order.
+ */
 export function actionKindOf(action: ActionNode): IntentAction | undefined {
+  const kinds = new Set<IntentAction>();
   for (const type of action.types) {
-    if (type.termType === "NamedNode") {
-      const kind = IRI_TO_ACTION[type.value];
-      if (kind !== undefined) {
-        return kind;
-      }
+    if (type.termType === "NamedNode" && Object.hasOwn(IRI_TO_ACTION, type.value)) {
+      kinds.add(IRI_TO_ACTION[type.value] as IntentAction);
     }
   }
-  return undefined;
+  return kinds.size === 1 ? [...kinds][0] : undefined;
 }
 
 // --- the write path (intentToRdf / buildShapeForIntent / buildProtocolDocument) -
@@ -283,7 +306,7 @@ export class IntentBuilder {
 
   /** Map an intent action kind to its RDF action-type IRI. */
   static actionTypeIri(action: IntentAction): string {
-    return legacyA2aIri(ACTION_TYPE_IRI[action]);
+    return legacyA2aIri(actionTypeIriOf(action));
   }
 
   /** The accumulated quads. */

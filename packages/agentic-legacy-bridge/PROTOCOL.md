@@ -1,6 +1,7 @@
 # The legacy-bridge wire protocol
 
 <!-- AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate. -->
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 
 How an agentic reply advertises itself over a legacy channel and how two bridge-capable parties
 negotiate off email onto a better channel. This is the concrete, documented form of
@@ -31,12 +32,27 @@ message arrived) and need not be listed.
 
 ## 2. Detecting a bridge-capable counterparty
 
-`detectBridgeCapability({ headers, jsonLd })` returns `{ capable, channels, podCopyUrl? }`. A
+`detectBridgeCapability({ headers, jsonLd, jsonLdBlocks?, textBody?, footer? })` returns
+`{ capable, channels, podCopyUrl?, carriage? }`. A
 counterparty is **capable** if an inbound message shows any bridge marker:
 
-- an `X-Agentic-Reply` header (a safe http(s) pod-copy URL), or
+- an `X-Agentic-Reply` header (a safe http(s) pod-copy URL, or the email marker `1`), or
 - an `X-Agentic-Channels` header, or
-- an inline JSON-LD block whose `type` includes `AgenticReply`.
+- an inline JSON-LD block whose `type` includes `AgenticReply`, or
+- a bounded `agent:SignedMessage` envelope with the exact renamed inline context,
+  carried as a parsed `jsonLd` object or one of the first sixteen `jsonLdBlocks`, or
+- the agent-card URL from the configured single-line footer in `textBody` (defaults
+  to agent-channels' `AGENT_FOOTER`; the footer's spec URL alone is insufficient).
+
+Modern email/footer markers add `carriage`, the highest observed hint in the order
+`rdf ≻ a2a ≻ email-mime ≻ footer-url-only`. Advertised `X-Agentic-Channels` values
+participate in this rank. The legacy `channels` negotiation vocabulary and its
+email floor remain compatible. The marker `1` is never a `podCopyUrl`. Header
+names are case-insensitive with the first occurrence winning. Footer lookalikes,
+extra paths, queries and fragments do not match the configured card URL.
+
+These are unverified discovery hints. Detection makes no network requests and
+does not establish identity, authorize a send or automatically upgrade a channel.
 
 `channels` is the advertised set intersected with the known vocabulary, always including `email` as
 the floor, returned in preference order. Everything is parsed from what an inbound message *already

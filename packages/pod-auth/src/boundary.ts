@@ -10,7 +10,7 @@ import {
 } from "@jeswr/reactive-authentication";
 import { NamedNodeAs, NamedNodeFrom, SetFrom, TermWrapper } from "@rdfjs/wrapper";
 import { DataFactory, Parser, Store } from "n3";
-import { isLoopback, secureUrl } from "./options.js";
+import { isLoopback, secureUrl, storageEndpointPaths } from "./options.js";
 import type { PodAuthOptions } from "./types.js";
 
 const PIM = "http://www.w3.org/ns/pim/space#";
@@ -30,7 +30,12 @@ export function createBoundary(
     );
   };
   const fixed = new CredentialBoundary(options.boundary?.roots, { allowInsecureHttp: insecure });
+  // Read and validated once here, so later mutation (or a getter) cannot add or swap grants.
+  const storageEndpoints = storageEndpointPaths(options.boundary?.storageEndpoints);
+  const automaticRoots = options.boundary?.automatic !== false;
   let automatic = new CredentialBoundary([], { allowInsecureHttp: insecure });
+  // Configured server endpoints on a verified storage's origin, mapped to that storage root.
+  let endpoints = new Map<string, string>();
   let learnedWebId: string | undefined;
   let learnedSignal: AbortSignal | undefined;
   let epoch = 0;
@@ -39,6 +44,7 @@ export function createBoundary(
     learnedSignal?.removeEventListener("abort", clear);
     learnedSignal = undefined;
     automatic = new CredentialBoundary([], { allowInsecureHttp: insecure });
+    endpoints = new Map();
     learnedWebId = undefined;
   };
   const roots = () => [...new Set([...fixed.entries, ...automatic.entries])];
@@ -115,6 +121,8 @@ export function createBoundary(
   };
   return {
     roots,
+    /** Credential roots that are storages, without the configured server endpoints. */
+    storages: () => roots().filter((root) => !endpoints.has(root)),
     allows,
     // No response-driven discovery, including ancestor HEADs or self-asserted pim:Storage types.
     isCandidate: (_url: string | URL) => false,
@@ -130,7 +138,7 @@ export function createBoundary(
       },
     } satisfies HttpOptions,
     learn: async (webId: string | undefined, signal: AbortSignal, lifetime = signal) => {
-      if (options.boundary?.automatic === false) return;
+      if (!automaticRoots) return;
       if (webId === undefined) {
         clear();
         return;
@@ -159,11 +167,34 @@ export function createBoundary(
         if (next.allows(storage) && !storage.endsWith("/"))
           for (const root of await descriptionRoots(storage, signal)) add(next, root);
       }
+      const nextEndpoints = new Map<string, string>();
+      const verified = [...next.entries];
+      for (const root of verified)
+        for (const path of storageEndpoints) {
+          // Built on the storage's own origin; validation rejected "//", "@", "..", "?" and "#".
+          const endpoint = new URL(path, root).href;
+          // A verified storage or fixed root keeps its own identity and grant; it is never an alias.
+          if (
+            nextEndpoints.has(endpoint) ||
+            verified.includes(endpoint) ||
+            fixed.entries.includes(endpoint)
+          )
+            continue;
+          add(next, endpoint);
+          // Use the grant of the root (verified or fixed) that contains the endpoint, else the
+          // first verified storage on its origin.
+          const owner =
+            [...verified, ...fixed.entries]
+              .filter((storage) => storage.endsWith("/") && isWithin(new URL(endpoint), storage))
+              .sort((a, b) => b.length - a.length)[0] ?? root;
+          if (next.entries.includes(endpoint)) nextEndpoints.set(endpoint, owner);
+        }
       signal.throwIfAborted();
       lifetime.throwIfAborted();
       if (started !== epoch) throw new Error("Credential boundary changed during discovery");
       learnedSignal?.removeEventListener("abort", clear);
       automatic = next;
+      endpoints = nextEndpoints;
       learnedWebId = webId;
       learnedSignal = lifetime;
       lifetime.addEventListener("abort", clear, { once: true });
@@ -172,15 +203,15 @@ export function createBoundary(
     contextKey: async (request: Request) => {
       const url = new URL(request.url);
       url.hash = "";
-      return (
-        roots()
-          .filter((r) =>
-            r.endsWith("/")
-              ? isWithin(url, r)
-              : new URL(r).origin === url.origin && new URL(r).pathname === url.pathname,
-          )
-          .sort((a, b) => b.length - a.length)[0] ?? url.href
-      );
+      const best = roots()
+        .filter((r) =>
+          r.endsWith("/")
+            ? isWithin(url, r)
+            : new URL(r).origin === url.origin && new URL(r).pathname === url.pathname,
+        )
+        .sort((a, b) => b.length - a.length)[0];
+      // A storage endpoint uses its storage's grant rather than a separate authorization.
+      return best === undefined ? url.href : (endpoints.get(best) ?? best);
     },
   };
 }

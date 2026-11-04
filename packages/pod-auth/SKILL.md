@@ -28,6 +28,7 @@ refresh CAS and durable retirement. Signing keys are imported non-extractable; b
 | `@jeswr/pod-auth/react` | Optional `PodAuthProvider` / `usePodAuth` lifecycle mirror |
 | `@jeswr/pod-auth/node` | `forClientCredentials` and `forCid` agent factories; `createNodeOidcClient` for server brokers |
 | `@jeswr/pod-auth/testing` | Node-only mock OP, mock LWS AS and memory store |
+| `@jeswr/pod-auth/directory` | Provider metadata, WebID/provider address resolution and recent providers |
 
 ```ts
 import { createPodAuth, type PodAuthOptions } from '@jeswr/pod-auth';
@@ -60,13 +61,44 @@ Same-hint concurrent login is single-flight; different hints reject while login 
 before switching accounts. `identity()` reads claims only; it never refreshes, contacts an issuer or
 returns credentials. Public profile reads are not proof of authentication.
 
+Use the pure `./directory` entry point for shared sign-in address handling. `KNOWN_PROVIDERS` is deeply
+frozen; `providersFromConfig` returns copies from comma-separated HTTPS URLs or a fallback directory.
+`classifyLoginInput` checks URL shape without network; `resolveLoginTarget` tries both interpretations
+using only the supplied pristine public fetch, honors abort, and caps responses at 1 MiB. It throws
+`InvalidLoginAddressError` (a `TypeError`) for invalid URLs or `NotALoginAddressError` for failed probes.
+
+```ts
+import { resolveLoginTarget } from '@jeswr/pod-auth/directory';
+const target = await resolveLoginTarget(address, { fetch: publicFetch });
+const hint = target.kind === 'webid'
+  ? { webId: target.webId }
+  : { issuer: target.issuer };
+await auth.login(hint);
+```
+
+`createRecentProvidersStore(storage)` keeps at most five public HTTPS issuers, deduped and most recent
+first; storage failures are harmless. Providers use monograms by default; host-supplied `label` and
+`iconUrl` are opt-in. Re-verify default provider and sign-up addresses live before release.
+
 ## Preserve the credential boundary
 
 - Use the unbound `auth.fetch` throughout the SDK. Preserve global fetch; never call `registerGlobally`.
   Construct auth after installing the intended pristine transport in tests. Protocol discovery,
   registration, token and refresh HTTP must never recurse through a credential-attaching wrapper.
+- Keep the engine's `verifyWebId: true`: before storing a Solid session or reporting its identity,
+  it requires the returned WebID's profile to list the issuer as `solid:oidcIssuer`, compared with
+  `sameIssuer`, through the non-reactive protocol transport. An unlisted issuer throws the engine's
+  `IssuerNotAuthorizedError` (`webId`, `issuer`), re-exported unchanged by pod-auth and propagated from
+  `login()`. Profile fetch and parse failures keep their existing errors. Issuer-only login reads the
+  profile once; WebID hints retain discovery and claim-equality checks. Do not duplicate the engine check.
 - Credentials attach only within configured static roots or authenticated WebID-profile storage roots.
   `boundary.automatic: false` selects static-only behavior. `boundary.eligible` restricts both kinds.
+  `boundary.storageEndpoints` names exact (or trailing-`/` prefix) paths on each verified storage's
+  origin, for server APIs outside the pod folder; they share that storage's grant and stay out of
+  `Identity.storages`. Use it only for endpoints of the server that hosts the storage.
+- `auth.fetch` buffers bodies for replay after a 401; bodies over `maxReplayBodyBytes` (default
+  16 MiB) reject after being read. Apps that upload large files raise it explicitly. Node agents
+  (`forClientCredentials`, `forCid`) keep the default.
   Do not trust an origin merely because it hosts the issuer/WebID or returned a 401. Excluded or
   public resources must not prompt; unverified 401s remain 401s.
 - Automatic roots load on login/restore from `pim:storage` assertions naming the exact authenticated

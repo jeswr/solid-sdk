@@ -13,7 +13,9 @@ import { DataFactory, Writer } from "n3";
 import { HILLS_PNG, REPORT_PDF, SUNSET_PNG } from "./binaries";
 import type { DemoSeedFile } from "./pod";
 import { seedContacts } from "./seed-contacts";
+import { buildHomeSeed } from "./seed-home";
 import { seedPermissions } from "./seed-permissions";
+import { DEMO_INBOX, seedRequests } from "./seed-requests";
 
 const { namedNode, literal, quad } = DataFactory;
 const RDF_TYPE = namedNode("http://www.w3.org/1999/02/22-rdf-syntax-ns#type");
@@ -22,6 +24,7 @@ const PIM = "http://www.w3.org/ns/pim/space#";
 const SOLID = "http://www.w3.org/ns/solid/terms#";
 const ACL = "http://www.w3.org/ns/auth/acl#";
 const VCARD = "http://www.w3.org/2006/vcard/ns#";
+const LDP = "http://www.w3.org/ns/ldp#";
 
 export const DEMO_ROOT = "https://alice.demo.pod/";
 export const DEMO_WEBID = `${DEMO_ROOT}profile/card#me`;
@@ -59,13 +62,14 @@ export async function buildDemoSeed(
       quad(me, RDF_TYPE, namedNode(`${FOAF}Person`)),
       quad(me, namedNode(`${FOAF}name`), literal(DEMO_NAME)),
       quad(me, namedNode(`${PIM}storage`), root),
+      quad(me, namedNode(`${LDP}inbox`), namedNode(`${DEMO_ROOT}${DEMO_INBOX}`)),
       quad(
         me,
         namedNode(`${SOLID}privateTypeIndex`),
         namedNode(`${DEMO_ROOT}settings/privateTypeIndex.ttl`),
       ),
     ],
-    { foaf: FOAF, pim: PIM, solid: SOLID },
+    { foaf: FOAF, pim: PIM, solid: SOLID, ldp: LDP },
   );
   const index = namedNode(`${DEMO_ROOT}settings/privateTypeIndex.ttl`);
   const typeIndex = await turtle(
@@ -107,6 +111,7 @@ export async function buildDemoSeed(
     "",
   ].join("\n");
   const files: DemoSeedFile[] = [
+    ...(await buildHomeSeed(now)),
     ...(await seedPermissions(DEMO_ROOT, DEMO_WEBID, now)),
     { path: "profile/card", body: profile, contentType: "text/turtle", modified: now - 40 * DAY },
     {
@@ -144,7 +149,10 @@ export async function buildDemoSeed(
     { path: "drive/data.ttl", body: contact, contentType: "text/turtle", modified: now - 12 * DAY },
     { path: "drive/Archive/", body: "", contentType: "text/turtle", modified: now - 30 * DAY },
   ];
-  if (options.calendar === false) return seedContacts(files, now);
-  const { seedCalendar } = await import("./seed-calendar");
-  return seedContacts(await seedCalendar(files, now), now);
+  const seeded = async () => {
+    if (options.calendar === false) return seedContacts(files, now);
+    const { seedCalendar } = await import("./seed-calendar");
+    return seedContacts(await seedCalendar(files, now), now);
+  };
+  return seedRequests(await seeded(), DEMO_ROOT, DEMO_WEBID, now);
 }

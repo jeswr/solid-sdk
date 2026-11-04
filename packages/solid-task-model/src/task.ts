@@ -328,33 +328,99 @@ export function taskSubject(resourceUrl: string): string {
  */
 export function parseTask(resourceUrl: string, dataset: DatasetCore): TaskData | undefined {
   const doc = new Task(taskSubject(resourceUrl), dataset, DataFactory);
-  if (!doc.isTask) return undefined;
+  if (!tryRead(() => doc.isTask)) return undefined;
 
-  // title + state are the two always-present fields; every other field is copied
-  // through only when the accessor returned a value (setIfDefined), so the result
-  // omits absent fields exactly as before.
-  const data: TaskData = { title: doc.title ?? "", state: doc.state };
-  setIfDefined(data, "description", doc.description);
-  setIfDefined(data, "created", doc.created);
-  setIfDefined(data, "modified", doc.modified);
-  setIfDefined(data, "endedAt", doc.endedAt);
-  setIfDefined(data, "creator", doc.creator);
-  setIfDefined(data, "assignee", doc.assignee);
-  setIfDefined(data, "project", doc.project);
-  setIfDefined(data, "dueDate", doc.dueDate);
-  setIfDefined(data, "priority", doc.priority);
-  setIfDefined(data, "rank", doc.rank);
-  setIfDefined(data, "parent", doc.parent);
-  setIfDefined(data, "duplicateOf", doc.duplicateOf);
-  setIfDefined(data, "clonedFrom", doc.clonedFrom);
+  // Pod data is untrusted. Every read is guarded so a malformed value (a literal where
+  // an IRI belongs, a wrong datatype) drops that value instead of aborting the parse.
+  // IRI-valued fields are read object by object and keep only absolute http(s) IRIs, so
+  // a `javascript:` or `data:` IRI never reaches a consumer; a single-valued field takes
+  // the first such IRI, so a bad value ahead of a good one does not hide it. Accepted IRIs are returned exactly as stored
+  // (not canonicalised), so foreign data round-trips and IRI comparisons still match.
+  const data: TaskData = {
+    title: tryRead(() => doc.title) ?? "",
+    state: tryRead(() => doc.state) ?? "open",
+  };
+  setIfDefined(
+    data,
+    "description",
+    tryRead(() => doc.description),
+  );
+  setIfDefined(data, "created", validDate(tryRead(() => doc.created)));
+  setIfDefined(data, "modified", validDate(tryRead(() => doc.modified)));
+  setIfDefined(data, "endedAt", validDate(tryRead(() => doc.endedAt)));
+  setIfDefined(data, "creator", httpObjects(doc, dct("creator"))[0]);
+  setIfDefined(data, "assignee", httpObjects(doc, wf("assignee"))[0]);
+  setIfDefined(data, "project", httpObjects(doc, wf("tracker"))[0]);
+  setIfDefined(data, "dueDate", validDate(tryRead(() => doc.dueDate)));
+  setIfDefined(
+    data,
+    "priority",
+    tryRead(() => doc.priority),
+  );
+  setIfDefined(data, "rank", finite(tryRead(() => doc.rank)));
+  setIfDefined(data, "parent", httpObjects(doc, dct("isPartOf"))[0]);
+  setIfDefined(data, "duplicateOf", httpObjects(doc, dct("isReplacedBy"))[0]);
+  setIfDefined(data, "clonedFrom", httpObjects(doc, prov("wasDerivedFrom"))[0]);
 
-  // The two set-valued relations are omitted when empty (their absence vs an
-  // empty array is observable to consumers, so this is kept explicit).
-  const blockedBy = [...doc.blockedBy];
-  const relatesTo = [...doc.relatesTo];
+  // The two set-valued relations keep every http(s) member and are omitted when empty (absence vs an empty array is
+  // observable to consumers, so this is kept explicit).
+  const blockedBy = httpObjects(doc, dct("requires"));
+  const relatesTo = httpObjects(doc, dct("relation"));
   if (blockedBy.length > 0) data.blockedBy = blockedBy;
   if (relatesTo.length > 0) data.relatesTo = relatesTo;
   return data;
+}
+
+/** Run an untrusted read, returning `undefined` on any throw. */
+function tryRead<T>(read: () => T | undefined): T | undefined {
+  try {
+    return read();
+  } catch {
+    return undefined;
+  }
+}
+
+/** A valid `Date`, else `undefined` (a malformed literal reads as `Invalid Date`). */
+function validDate(value: Date | undefined): Date | undefined {
+  return value instanceof Date && !Number.isNaN(value.getTime()) ? value : undefined;
+}
+
+/** A finite number, else `undefined`. */
+function finite(value: number | undefined): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+/** Characters that cannot appear in an IRI (RFC 3987 excludes them; Turtle forbids them). */
+const NON_IRI_CHARS = /[\s<>"{}|\\^`]/;
+
+/**
+ * `value` unchanged when it is an absolute http(s) URL written with `//` and free of
+ * characters an IRI cannot contain, else `undefined`. The extra checks stop a value such
+ * as `https:foo` or one holding whitespace from passing because WHATWG URL parsing
+ * repairs it.
+ */
+function httpScheme(value: string): string | undefined {
+  if (!/^https?:\/\//i.test(value) || NON_IRI_CHARS.test(value)) return undefined;
+  try {
+    const { protocol } = new URL(value);
+    return protocol === "http:" || protocol === "https:" ? value : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** The distinct http(s) NamedNode objects of `predicate` on `doc`, as stored. */
+function httpObjects(doc: Task, predicate: string): string[] {
+  const out = new Set<string>();
+  const matches = tryRead(() => [
+    ...doc.dataset.match(doc.factory.namedNode(doc.value), doc.factory.namedNode(predicate), null),
+  ]);
+  for (const quad of matches ?? []) {
+    if (quad.object.termType !== "NamedNode") continue;
+    const iri = httpScheme(quad.object.value);
+    if (iri !== undefined) out.add(iri);
+  }
+  return [...out];
 }
 
 /**
