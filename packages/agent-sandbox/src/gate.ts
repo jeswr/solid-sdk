@@ -118,6 +118,14 @@ export interface Sandbox {
   setJudge(judge: JudgeModel | undefined): void;
 }
 
+function deepFreeze<T>(value: T): T {
+  if (value && typeof value === "object" && !Object.isFrozen(value)) {
+    Object.freeze(value);
+    for (const v of Object.values(value)) deepFreeze(v);
+  }
+  return value;
+}
+
 const ODRL_NS = "http://www.w3.org/ns/odrl/2/";
 const shortAction = (a: string) => (a.startsWith(ODRL_NS) ? a.slice(ODRL_NS.length) : a);
 const isOdrlAction = (a: string): a is OdrlActionName =>
@@ -659,6 +667,9 @@ export function createSandbox(options: SandboxOptions): Sandbox {
       ctx.content ?? null,
     ]);
 
+  /** An owned, immutable copy, so later changes to the source cannot alter what was checked. */
+  const snapshot = <T>(value: T): T => deepFreeze(structuredClone(value));
+
   function lookup(call: ToolCall): { spec?: ToolSpec; ctx?: CallContext; error?: string } {
     const spec = options.tools.find((t) => t.name === call.tool);
     if (!spec) return { error: `There is no tool called "${call.tool}".` };
@@ -667,7 +678,7 @@ export function createSandbox(options: SandboxOptions): Sandbox {
       // Each recipient counts once, however often the call names them.
       return {
         spec,
-        ctx: ctx.recipients ? { ...ctx, recipients: [...new Set(ctx.recipients)] } : ctx,
+        ctx: snapshot(ctx.recipients ? { ...ctx, recipients: [...new Set(ctx.recipients)] } : ctx),
       };
     } catch (e) {
       return { spec, error: `The call's details are not valid: ${(e as Error).message}` };
@@ -708,21 +719,45 @@ export function createSandbox(options: SandboxOptions): Sandbox {
     decision: GateDecision,
     approvedFrom?: number,
   ): Promise<CallResult> {
+    // From here to dispatch nothing awaits, so no other call can run in between. Derive the
+    // effects once more and dispatch only if they are still exactly the ones decided on (the
+    // decision may have awaited a model or a person while the systems changed).
+    const now0 = lookup(call);
+    if (!now0.ctx || now0.error || effectsOf(now0.ctx) !== effectsOf(ctx)) {
+      const explanation = `Not run: ${now0.error ?? "what the call would do changed while it was being decided."}`;
+      const stale: GateDecision = {
+        outcome: "stop",
+        steps: [
+          ...decision.steps,
+          { step: "dispatch", outcome: "stop", reason: "effects-changed", explanation },
+        ],
+        obligations: [],
+        summary: explanation,
+      };
+      const entry = append(call, stale, "stopped", {
+        ...(approvedFrom !== undefined && { settles: approvedFrom }),
+      });
+      return { status: "stopped", message: explanation, entry: entry.seq };
+    }
     // Count a send or payment against the limits before it is attempted, and keep the count if it
     // fails: a failed call may still have reached the recipient or moved the money.
     if (spec.kind === "send" || spec.kind === "pay") {
       const at = clock();
       for (const recipient of ctx.recipients?.length ? ctx.recipients : [spec.system])
-        commitments.push({
-          at,
-          kind: spec.kind,
-          recipient,
-          ...(ctx.amount !== undefined && { amount: ctx.amount }),
-        });
+        commitments.push(
+          Object.freeze({
+            at,
+            kind: spec.kind,
+            recipient,
+            ...(ctx.amount !== undefined && {
+              amount: Object.freeze({ value: ctx.amount.value, currency: ctx.amount.currency }),
+            }),
+          }),
+        );
     }
     let output: ToolOutput;
     try {
-      output = await spec.run(call.args);
+      output = await spec.run(call.args, ctx);
     } catch (e) {
       const entry = append(call, decision, "failed", { note: (e as Error).message });
       return {
@@ -748,7 +783,8 @@ export function createSandbox(options: SandboxOptions): Sandbox {
       );
       if (check.decision === "permit" || mode === "off") {
         released.push(item.content);
-        labels.set(labelKey(item.label), item.label);
+        const owned = snapshot(item.label);
+        labels.set(labelKey(owned), owned);
       } else
         withheld.push({
           step: "data-read",
@@ -846,7 +882,8 @@ export function createSandbox(options: SandboxOptions): Sandbox {
       const entry = append(h.call, decision, "stopped", { settles: h.entry });
       return { status: "stopped", message: decision.summary, entry: entry.seq };
     }
-    const ctx = fresh.ctx;
+    // Decide and run on the effects the person was shown; run() checks them once more at dispatch.
+    const ctx = h.ctx;
     const decision = await decideSpec(h.spec, h.call.args, ctx, true);
     const stamped: GateDecision = {
       ...decision,

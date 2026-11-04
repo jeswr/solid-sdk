@@ -35,6 +35,7 @@ const STEP_NAMES: Record<StepResult["step"], string> = {
   limits: "Limits",
   judge: "AI model",
   approval: "A person",
+  dispatch: "Unchanged when it ran?",
 };
 
 /** The gate's reasoning, step by step. */

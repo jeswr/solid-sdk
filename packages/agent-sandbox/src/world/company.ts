@@ -888,10 +888,11 @@ export function createWorld(clock: () => number = () => Date.parse("2026-11-04T0
           content: "Standard reminder: you have overdue invoices.",
         };
       },
-      run: (args) => {
+      run: (args, effects) => {
         const x = customerByRef(str(args, "customer"));
+        // Send to the address the gate checked, not one looked up again.
         state.outbox.push({
-          to: [x.email.slice(7)],
+          to: (effects.recipients ?? []).map((r) => r.slice(7)),
           subject: "Reminder: overdue invoices",
           body: `Dear ${x.name}, you have ${x.overdue} overdue invoice(s).`,
           at: now(),
@@ -948,12 +949,13 @@ export function createWorld(clock: () => number = () => Date.parse("2026-11-04T0
           amount: { value: amount, currency: "GBP" },
         };
       },
-      run: (args) => {
+      run: (args, effects) => {
         const x = customerByRef(str(args, "customer"));
-        const to =
-          typeof args.toAccount === "string" && args.toAccount ? args.toAccount : x.account;
-        state.refunds.push({ customer: x.name, amount: num(args, "amount"), to });
-        return { content: `Refunded £${num(args, "amount")} to ${x.name}.` };
+        // Pay the account and amount the gate checked, not ones looked up again.
+        const to = effects.recipients?.[0] ?? "";
+        const amount = effects.amount?.value ?? 0;
+        state.refunds.push({ customer: x.name, amount, to });
+        return { content: `Refunded £${amount} to ${x.name}.` };
       },
     },
     {

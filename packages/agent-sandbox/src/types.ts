@@ -97,8 +97,12 @@ export interface ToolSpec {
   readonly inputSchema: InputSchema;
   /** Derive the trusted call context from the arguments. Throwing refuses the call. */
   context?(args: Args): CallContext;
-  /** Perform the call (only ever invoked after the gate permits it). */
-  run(args: Args): Promise<ToolOutput> | ToolOutput;
+  /**
+   * Perform the call (only ever invoked after the gate permits it). `effects` is the frozen
+   * context the gate checked; a tool that resolves a target (an account, an address) from its
+   * own state acts on the one in `effects`, so what runs is exactly what was decided.
+   */
+  run(args: Args, effects: CallContext): Promise<ToolOutput> | ToolOutput;
 }
 
 /** A grant layered onto the mandate at run time (e.g. a delegation credential), revocable. */
@@ -126,7 +130,8 @@ export interface StepResult {
     | "data-send"
     | "limits"
     | "judge"
-    | "approval";
+    | "approval"
+    | "dispatch";
   readonly outcome: Outcome;
   /** Stable machine reason ("prohibition", "limit:sendsPerDay", "data:deny"). */
   readonly reason: string;

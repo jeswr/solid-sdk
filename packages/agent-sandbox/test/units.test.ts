@@ -275,25 +275,25 @@ describe("helpers", () => {
     );
     expect(() => tool("crm_get_customer").context?.({ customer: "c-9999" })).toThrow(/no customer/);
     expect(() => tool("db_query").context?.({ sql: "DROP TABLE orders" })).toThrow(/read-only/);
-    expect(await tool("hr_get_absence").run({ employee: "Priya" })).toEqual({
+    expect(await tool("hr_get_absence").run({ employee: "Priya" }, {})).toEqual({
       content: "No recent absence.",
     });
     // References only: no names leave the list unlabelled.
-    expect(await tool("crm_find_customers").run({})).toMatchObject({
+    expect(await tool("crm_find_customers").run({}, {})).toMatchObject({
       content: expect.arrayContaining([{ ref: "c-1004", overdueInvoices: expect.any(Number) }]),
     });
-    expect(JSON.stringify(await tool("crm_find_customers").run({}))).not.toMatch(/Aisha/);
-    expect(await tool("tickets_update").run({ ticket: "T-482", status: "closed" })).toEqual({
+    expect(JSON.stringify(await tool("crm_find_customers").run({}, {}))).not.toMatch(/Aisha/);
+    expect(await tool("tickets_update").run({ ticket: "T-482", status: "closed" }, {})).toEqual({
       content: "Ticket T-482 is now closed.",
     });
     await expect(async () =>
-      tool("tickets_update").run({ ticket: "T-1", status: "x" }),
+      tool("tickets_update").run({ ticket: "T-1", status: "x" }, {}),
     ).rejects.toThrow(/no such ticket/);
-    expect(await tool("db_execute").run({ sql: "UPDATE x" })).toEqual({ content: "Executed." });
-    expect(await tool("db_delete_rows").run({ table: "orders", where: "1=1" })).toEqual({
+    expect(await tool("db_execute").run({ sql: "UPDATE x" }, {})).toEqual({ content: "Executed." });
+    expect(await tool("db_delete_rows").run({ table: "orders", where: "1=1" }, {})).toEqual({
       content: "Deleted 3 rows.",
     });
-    expect(await tool("marketing_send_campaign").run({ segment: "a", message: "m" })).toEqual({
+    expect(await tool("marketing_send_campaign").run({ segment: "a", message: "m" }, {})).toEqual({
       content: "Campaign sent.",
     });
     expect(tool("marketing_send_campaign").context?.({ segment: "a", message: "m" })).toMatchObject(

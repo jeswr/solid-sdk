@@ -33,7 +33,9 @@ This package is `securityCritical` and private (not mirror-published).
 4. **Limits**, counted per recipient (a channel counts as one).
 5. **Record**, then run, hold for a person (`held()`, `approve()`, `decline()`), or stop. An
    approved call is checked again before it runs, and only if what it would do (recipients,
-   amount, region, purpose, records sent) is unchanged since it was held. Sends and payments
+   amount, region, purpose, records sent) is unchanged since it was held. Every call is checked
+   once more at dispatch, with nothing in between, and `run` receives the frozen effects that
+   were decided on, so a tool pays or writes to exactly the target the gate checked. Sends and payments
    count against the limits before they are attempted, and still count if they fail.
 
 ## Who decides
@@ -63,7 +65,7 @@ This package is `securityCritical` and private (not mirror-published).
 import { createSandbox } from "@jeswr/agent-sandbox";
 
 const sandbox = createSandbox({
-  tools,                      // ToolSpec[]: system, action, context(args), run(args)
+  tools,                      // ToolSpec[]: system, action, context(args), run(args, effects)
   rules: () => ({ mandate, currency: "GBP" }),
   directory,                  // names for IRIs, and group membership
   agent: "https://example.org/agents/assist#me",

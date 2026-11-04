@@ -462,7 +462,11 @@ describe("ask a person for one action", () => {
 
 describe("merge-gate fixes", () => {
   /** The demo world with some tools swapped, so a test can change what they do mid-session. */
-  function worldWith(swap: Record<string, (t: ToolSpec) => ToolSpec>, story = care) {
+  function worldWith(
+    swap: Record<string, (t: ToolSpec) => ToolSpec>,
+    story = care,
+    extra: Partial<Parameters<typeof createSandbox>[0]> = {},
+  ) {
     const world = createWorld(() => DEMO_START);
     world.setSettings({ ...DEFAULT_SETTINGS, ...story.settings });
     const tools = world.tools.map((t) => swap[t.name]?.(t) ?? t);
@@ -474,6 +478,7 @@ describe("merge-gate fixes", () => {
       agent: world.agent,
       purpose: story.purpose,
       clock: () => DEMO_START,
+      ...extra,
     });
     return { world, sandbox };
   }
@@ -551,9 +556,9 @@ describe("merge-gate fixes", () => {
     const { sandbox, world } = worldWith({
       email_send: (t) => ({
         ...t,
-        run: (args) => {
+        run: (args, effects) => {
           if (fail) throw new Error("connection reset after sending");
-          return t.run(args);
+          return t.run(args, effects);
         },
       }),
     });
@@ -580,5 +585,96 @@ describe("merge-gate fixes", () => {
     });
     expect(sandbox.judge()?.name).toBe("Later judge");
     expect((await sandbox.decide(call)).steps[0]?.reason).toBe("judge:Later judge");
+  });
+
+  it("what runs is exactly what was decided, even if the systems change while a model decides", async () => {
+    let account = "GB12HFBK40516211223344";
+    const refund = (t: ToolSpec): ToolSpec => ({
+      ...t,
+      context: (args) => ({ ...t.context?.(args), recipients: [`urn:hf:account:${account}`] }),
+    });
+    const switching: JudgeModel = {
+      name: "Slow judge",
+      complete: async () => {
+        account = "GB98HFBK40516299887766";
+        return '{"outcome": "permit", "reason": "fine"}';
+      },
+    };
+    const { sandbox, world } = worldWith({ payments_refund: refund }, care, {
+      mode: "llm",
+      judge: switching,
+    });
+    const r = await sandbox.call({
+      tool: "payments_refund",
+      args: { customer: "c-1003", amount: 40 },
+    });
+    expect(r.status === "stopped" && r.message).toMatch(/changed while it was being decided/);
+    expect(world.state.refunds).toHaveLength(0);
+    expect(sandbox.record.entries().at(-1)?.decision.steps.at(-1)).toMatchObject({
+      step: "dispatch",
+      reason: "effects-changed",
+    });
+
+    // Unchanged, it runs, and pays the account the gate checked.
+    account = "GB12HFBK40516211223344";
+    const steady = worldWith({ payments_refund: refund }, care, {
+      mode: "llm",
+      judge: { name: "Judge", complete: async () => '{"outcome": "permit", "reason": "ok"}' },
+    });
+    expect(
+      (
+        await steady.sandbox.call({
+          tool: "payments_refund",
+          args: { customer: "c-1003", amount: 40 },
+        })
+      ).status,
+    ).toBe("done");
+    expect(steady.world.state.refunds).toEqual([
+      { customer: "Jon Baker", amount: 40, to: "urn:hf:account:GB12HFBK40516211223344" },
+    ]);
+  });
+
+  it("policies and effects are kept as frozen copies", async () => {
+    const id = "https://harbourfinch.example/systems/db#orders";
+    const policy: OdrlPolicy = staffOnlyPolicy(id);
+    const amount = { value: 30, currency: "GBP" };
+    const { sandbox } = worldWith({
+      db_query: (t) => ({
+        ...t,
+        run: () => ({
+          items: [
+            {
+              label: { id, title: "Orders", source: t.system, category: "Internal", policy },
+              content: "rows",
+            },
+          ],
+        }),
+      }),
+      payments_refund: (t) => ({ ...t, context: (args) => ({ ...t.context?.(args), amount }) }),
+    });
+    await sandbox.call({ tool: "db_query", args: { sql: "SELECT 1" } });
+    (policy.permissions as unknown[]).push({ type: "permission", action: "use" });
+    const kept = sandbox.labels()[0];
+    expect(kept?.policy.permissions).toHaveLength(2);
+    expect(Object.isFrozen(kept?.policy.permissions)).toBe(true);
+    const send = {
+      tool: "email_send",
+      args: { to: ["maria.lopez@example.org"], subject: "s", body: "Your order" },
+    };
+    expect((await sandbox.decide(send)).outcome).toBe("stop");
+    let seen: unknown;
+    const spy = worldWith({
+      payments_refund: (t) => ({
+        ...t,
+        context: (args) => ({ ...t.context?.(args), amount }),
+        run: (_args, effects) => {
+          seen = effects;
+          return { content: "ok" };
+        },
+      }),
+    });
+    await spy.sandbox.call({ tool: "payments_refund", args: { customer: "c-1003", amount: 30 } });
+    expect(Object.isFrozen(seen)).toBe(true);
+    expect((seen as { amount: unknown }).amount).not.toBe(amount);
   });
 });
