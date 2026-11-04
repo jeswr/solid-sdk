@@ -342,6 +342,11 @@ function ContactDraft({
           </fieldset>
           <fieldset>
             <legend>Addresses</legend>
+            {errors.addresses?.root?.message && (
+              <p id="con-addresses-error" role="alert" className="con-field-error">
+                {errors.addresses.root.message}
+              </p>
+            )}
             <div ref={addressList} className="con-address-list">
               {addresses.fields.map((field, index) => {
                 const n = index + 1;

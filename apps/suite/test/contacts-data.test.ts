@@ -2,6 +2,7 @@
 // AUTHORED-BY Codex GPT-6
 import { DataFactory, Store } from "n3";
 import { describe, expect, test, vi } from "vitest";
+import type { ContactAddress } from "../src/apps/contacts/lib/model";
 import {
   buildAddressBook,
   buildGroup,
@@ -396,24 +397,49 @@ describe("postal addresses through the app mapping", () => {
     expect(dataset.match(null, DataFactory.namedNode(`${VCARD}locality`)).size).toBe(0);
   });
 
-  test("validation bounds address count, kind and size", () => {
+  test("changing one address keeps the other's node; limits apply only to a changed list", async () => {
+    const dataset = await parse(
+      `${Shape}
+      <#this> vcard:hasAddress [ a vcard:Work; vcard:locality "Lyon" ], _:hidden .
+      _:hidden <https://example.org/note> "unreadable" .`,
+      ALICE,
+    );
+    const contact = new Contact(`${ALICE}#this`, dataset, DataFactory);
+    const data = contactData(contact);
+    applyContact(contact, {
+      ...data,
+      addresses: [
+        { kind: "home", street: "1 Way", locality: "Paris" },
+        { kind: "work", locality: "Lille" },
+      ],
+    });
+    expect(contact.addresses).toEqual([
+      { kind: "home", street: "1 Way", locality: "Paris" },
+      { kind: "work", locality: "Lille" },
+    ]);
+    expect(dataset.match(null, DataFactory.namedNode("https://example.org/geo")).size).toBe(1);
+    expect(dataset.match(null, DataFactory.namedNode("https://example.org/note")).size).toBe(1);
+    expect(dataset.match(null, null, DataFactory.literal("Lyon")).size).toBe(0);
+
+    // Seventeen addresses written elsewhere stay editable while the list is unchanged.
+    const many = Array.from({ length: 17 }, (_, i) => ({ postalCode: String(i) }));
+    const crowded = new Contact(
+      `${ALICE}#this`,
+      buildPerson(ALICE, { name: "A", addresses: many }),
+      DataFactory,
+    );
+    expect(() => applyContact(crowded, { ...contactData(crowded), note: "ok" })).not.toThrow();
     expect(() =>
-      validateContact({
-        name: "A",
-        addresses: Array.from({ length: 17 }, () => ({ locality: "x" })),
-      }),
+      applyContact(crowded, { ...contactData(crowded), addresses: [...many, { locality: "x" }] }),
     ).toThrow("Too many addresses.");
-    expect(() =>
-      validateContact({ name: "A", addresses: [{ kind: "other" as "home", locality: "x" }] }),
-    ).toThrow("Invalid address type.");
-    expect(() =>
-      validateContact({ name: "A", addresses: [{ locality: "x".repeat(257) }] }),
-    ).toThrow("Invalid address.");
-    expect(() =>
-      validateContact({ name: "A", addresses: [{ locality: 1 as unknown as string }] }),
-    ).toThrow("Invalid address.");
-    expect(() =>
-      validateContact({ name: "A", addresses: [{ kind: "work", street: "y".repeat(2048) }] }),
-    ).not.toThrow();
+    const write = (addresses: ContactAddress[]) => () =>
+      applyContact(new Contact(`${ALICE}#this`, new Store(), DataFactory), {
+        name: "A",
+        addresses,
+      });
+    expect(write([{ kind: "other" as "home", locality: "x" }])).toThrow("Invalid address type.");
+    expect(write([{ locality: "x".repeat(257) }])).toThrow("Invalid address.");
+    expect(write([{ locality: 1 as unknown as string }])).toThrow("Invalid address.");
+    expect(write([{ kind: "work", street: "y".repeat(2048) }])).not.toThrow();
   });
 });

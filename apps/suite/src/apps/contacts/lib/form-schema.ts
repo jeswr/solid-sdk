@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { z } from "zod";
 import type { ContactAddress, ContactData } from "./model";
+import { MAX_ADDRESSES } from "./model/data";
 import { normalisePhoneNumber, parsePhoneNumber } from "./phone";
 import { MAX_ADDRESS_COMPONENT_LENGTH, MAX_STREET_LINES } from "./postal/types";
 
@@ -71,19 +72,21 @@ export const contactFormSchema = z.object({
     }),
   ),
   phones: z.array(z.object({ value: phone })),
-  addresses: z.array(
-    z.object({
-      kind: z.enum(["", "home", "work"]),
-      street: z
-        .string()
-        .trim()
-        .max(MAX_STREET_LINES * MAX_ADDRESS_COMPONENT_LENGTH, tooLong),
-      locality: addressPart,
-      region: addressPart,
-      postalCode: addressPart,
-      country: addressPart,
-    }),
-  ),
+  addresses: z
+    .array(
+      z.object({
+        kind: z.enum(["", "home", "work"]),
+        street: z
+          .string()
+          .trim()
+          .max(MAX_STREET_LINES * MAX_ADDRESS_COMPONENT_LENGTH, tooLong),
+        locality: addressPart,
+        region: addressPart,
+        postalCode: addressPart,
+        country: addressPart,
+      }),
+    )
+    .max(MAX_ADDRESSES, `A contact can have at most ${MAX_ADDRESSES} addresses.`),
   webId: z
     .string()
     .trim()

@@ -143,7 +143,6 @@ export function validateContact(data: ContactData): void {
     if (!/^(?:tel:)?\+?\d[\d(). -]*$/.test(phone)) throw new TypeError("Invalid phone.");
   }
   if (data.webId !== undefined) contactIdentifier(data.webId);
-  validateAddresses(data.addresses ?? []);
   if (data.created !== undefined && !Number.isFinite(data.created.getTime())) {
     throw new TypeError("Invalid creation date.");
   }
@@ -287,16 +286,30 @@ function addressKey(addresses: readonly ContactAddress[]): string {
     addresses
       .map((address) => [
         address.kind ?? "",
-        ...ADDRESS_FIELDS.map((field) => address[field]?.trim() ?? ""),
+        ...ADDRESS_FIELDS.map((field) => String(address[field] ?? "").trim()),
       ])
       .filter((row) => row.slice(1).some(Boolean)),
   );
 }
 
-/** Rewrite addresses only when they change, so untouched pod nodes (and their extra RDF) survive. */
+/**
+ * Rewrite only the address nodes that changed: an unchanged address keeps its node and any
+ * extra RDF on it, and nodes the reader cannot show are never touched. Limits apply only to
+ * a changed list, so a contact another app wrote past them stays editable.
+ */
 function reconcileAddresses(contact: Contact, addresses: readonly ContactAddress[]): void {
-  if (addressKey(contact.addresses) === addressKey(addresses)) return;
-  new Contact(contact.id, contact.dataset, contactFactory).setAddresses(addresses);
+  const entries = contact.addressEntries;
+  if (addressKey(entries.map(({ address }) => address)) === addressKey(addresses)) return;
+  validateAddresses(addresses);
+  const pending = addresses.filter((address) => addressKey([address]) !== "[]");
+  const writer = new Contact(contact.id, contact.dataset, contactFactory);
+  for (const { node, address } of entries) {
+    const key = addressKey([address]);
+    const index = pending.findIndex((wanted) => addressKey([wanted]) === key);
+    if (index === -1) writer.removeAddress(node);
+    else pending.splice(index, 1);
+  }
+  for (const address of pending) writer.addAddress(address);
 }
 
 export function applyContact(contact: Contact, data: ContactData): void {

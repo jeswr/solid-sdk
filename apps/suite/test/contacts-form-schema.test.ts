@@ -151,6 +151,15 @@ describe("contact form validation and normalization", () => {
       addresses: [{ ...blank, locality: "x".repeat(257), street: "y".repeat(2049) }],
     });
     expect(long.success).toBe(false);
+    const crowded = contactFormSchema.safeParse({
+      ...defaults,
+      addresses: Array.from({ length: 17 }, () => blank),
+    });
+    expect(crowded.success).toBe(false);
+    if (!crowded.success)
+      expect(crowded.error.issues.map((issue) => issue.message)).toEqual([
+        "A contact can have at most 16 addresses.",
+      ]);
     if (!long.success)
       expect(long.error.issues.map((issue) => issue.message)).toEqual([
         "This address is too long.",
