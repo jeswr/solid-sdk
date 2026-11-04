@@ -23,6 +23,10 @@
     "./testing": {
       "types": "./dist/testing.d.ts",
       "default": "./dist/testing.js"
+    },
+    "./directory": {
+      "types": "./dist/directory.d.ts",
+      "default": "./dist/directory.js"
     }
   },
   "files": [

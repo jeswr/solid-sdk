@@ -45,6 +45,23 @@ export type Fact =
       };
     }
   | {
+      /**
+       * A payment card on file, without its number: brand, last four digits, expiry month and
+       * an optional billing-address entity. There is deliberately no field for a full card
+       * number (PAN) or security code, and the card node is a blank node, so no caller-chosen
+       * identifier can carry one.
+       */
+      template: "paymentCard";
+      value: {
+        brand: PaymentCardBrand;
+        last4: string;
+        /** Expiry month, as `gYearMonth` (for example `2027-09`). */
+        expires: TemporalValue;
+        /** Billing-address entity IRI: no query or fragment, at most four digits in all. */
+        billingAddress?: string;
+      };
+    }
+  | {
       template: "relationship";
       value: {
         id: string;
@@ -54,6 +71,89 @@ export type Fact =
         endDate?: TemporalValue;
       };
     };
+
+/** Card networks a payment-card fact may name. */
+export const PAYMENT_CARD_BRANDS = Object.freeze([
+  "visa",
+  "mastercard",
+  "amex",
+  "discover",
+  "diners",
+  "jcb",
+  "unionpay",
+  "maestro",
+  "other",
+] as const);
+/** A card network name from {@link PAYMENT_CARD_BRANDS}. */
+export type PaymentCardBrand = (typeof PAYMENT_CARD_BRANDS)[number];
+/** Private copy, so validation never depends on the exported array. */
+const CARD_BRANDS: ReadonlySet<string> = new Set(PAYMENT_CARD_BRANDS);
+const CARD_KEYS = new Set(["brand", "last4", "expires", "billingAddress"]);
+
+interface PaymentCardSnapshot {
+  brand: PaymentCardBrand;
+  last4: string;
+  expires: { value: string; datatype: "gYearMonth" };
+  billingAddress: string | undefined;
+}
+
+/** An own property's value; inherited (possibly polluted) properties read as absent. */
+function own(record: Record<string, unknown>, key: string): unknown {
+  return Object.hasOwn(record, key) ? record[key] : undefined;
+}
+
+/**
+ * Read each field exactly once into a plain snapshot and check that, so a getter or proxy
+ * cannot pass validation and then return a card number when the RDF is written.
+ */
+function paymentCardSnapshot(value: unknown): PaymentCardSnapshot | undefined {
+  if (typeof value !== "object" || value === null) return undefined;
+  const card = value as Record<string, unknown>;
+  if (Object.keys(card).some((key) => !CARD_KEYS.has(key))) return undefined;
+  const brand = own(card, "brand");
+  const last4 = own(card, "last4");
+  const expires = own(card, "expires");
+  const billingAddress = own(card, "billingAddress");
+  if (typeof brand !== "string" || !CARD_BRANDS.has(brand)) return undefined;
+  if (typeof last4 !== "string" || !/^[0-9]{4}$/.test(last4)) return undefined;
+  if (typeof expires !== "object" || expires === null) return undefined;
+  const bound = expires as Record<string, unknown>;
+  if (Object.keys(bound).some((key) => key !== "value" && key !== "datatype")) return undefined;
+  const month = own(bound, "value");
+  const datatype = own(bound, "datatype");
+  if (datatype !== "gYearMonth" || typeof month !== "string" || !/^\d{4}-\d\d$/.test(month))
+    return undefined;
+  if (billingAddress !== undefined && !safeBillingAddress(billingAddress)) return undefined;
+  return {
+    brand: brand as PaymentCardBrand,
+    last4,
+    expires: { value: month, datatype },
+    // Always an own property, so an absent address can never come from a polluted prototype.
+    billingAddress: billingAddress as string | undefined,
+  };
+}
+
+/**
+ * A billing-address IRI may not hide card data: no query or fragment, and at most four digits
+ * in all (any Unicode number form) once percent-decoded and NFKC-normalised. That leaves room
+ * for a house or flat number, not a useful share of a card number.
+ */
+function safeBillingAddress(value: unknown): boolean {
+  if (typeof value !== "string" || /[?#]/.test(value)) return false;
+  let text = value;
+  for (let round = 0; round < 4; round += 1) {
+    let decoded: string;
+    try {
+      decoded = decodeURIComponent(text);
+    } catch {
+      return false;
+    }
+    if (decoded === text) break;
+    text = decoded;
+  }
+  if (/[%?#]/.test(text)) return false;
+  return (text.normalize("NFKC").match(/\p{N}/gu)?.length ?? 0) <= 4;
+}
 
 function temporal(node: RdfNode, predicate: string, bound: TemporalValue): void {
   const patterns = {
@@ -175,6 +275,24 @@ export function createFactAssertion(about: string, fact: Fact): Store {
           schedule.text(`${NS.schema}frequency`, v.dose.frequency);
       }
       period(statement, v);
+      break;
+    }
+    case "paymentCard": {
+      const v = paymentCardSnapshot(fact.value);
+      if (!v) throw new Error("Invalid payment card");
+      const node = df.blankNode();
+      person.add(`${NS.schema}owns`, node);
+      const card = new RdfNode(node, store)
+        .link(type, `${NS.schema}PaymentCard`)
+        .text(`${NS.schema}brand`, v.brand);
+      const last4 = df.blankNode();
+      card.add(`${NS.schema}identifier`, last4);
+      new RdfNode(last4, store)
+        .link(type, `${NS.schema}PropertyValue`)
+        .text(`${NS.schema}propertyID`, "last4")
+        .text(`${NS.schema}value`, v.last4);
+      temporal(card, `${NS.schema}validThrough`, v.expires);
+      if (v.billingAddress !== undefined) card.link(`${NS.schema}address`, v.billingAddress);
       break;
     }
     case "relationship": {

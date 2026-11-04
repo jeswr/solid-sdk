@@ -113,13 +113,8 @@ function FixtureContent({
   }, [state]);
   return (
     <main id="main-content" className="fixture-page min-w-0" tabIndex={-1}>
-      <h1>
-        {component === "global-search"
-          ? "Global search"
-          : component === "command-palette"
-            ? "Command palette"
-            : "Keyboard shortcuts"}
-      </h1>
+      {/* Fixture pages are titled by their route name, like the catalog's pages. */}
+      <h1>{component}</h1>
       <a href="/dev/components">All component fixtures</a>
       <GlobalShortcuts
         onOpenPalette={() => setPalette((value) => !value)}

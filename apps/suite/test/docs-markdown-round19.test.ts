@@ -6,6 +6,7 @@ import { expect, it, vi } from "vitest";
 import { applyUpdate, Doc, encodeStateAsUpdate } from "yjs";
 import { baseExtensions, editorExtensions } from "../src/apps/docs/editor/extensions";
 import { exportMarkdown, importMarkdown } from "../src/apps/docs/lib/convert/markdown";
+import { BLOCK_STYLE_DEFAULTS } from "./helpers/docs-block-defaults";
 
 const schema = getSchema(baseExtensions(vi.fn()));
 
@@ -216,6 +217,6 @@ it("recognizes a front matter closing delimiter at EOF", () => {
 
 it.each(["", " \n"])("imports empty Markdown into an editable paragraph: %j", (source) => {
   expect(importMarkdown(source, "empty.md").json.content).toEqual([
-    { type: "paragraph", attrs: { textAlign: null } },
+    { type: "paragraph", attrs: { textAlign: null, ...BLOCK_STYLE_DEFAULTS } },
   ]);
 });

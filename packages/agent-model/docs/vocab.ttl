@@ -233,6 +233,8 @@ agent:effectKey rdfs:comment "Idempotency key of the effect.";
     rdfs:label "effectKey".
 agent:endToEndEncrypted rdfs:comment "Whether channel content has end-to-end encryption.";
     rdfs:label "endToEndEncrypted".
+agent:federated rdfs:comment "Whether channel messages can be relayed between independently operated servers.";
+    rdfs:label "federated".
 agent:entryHash rdfs:comment "SHA-256 digest sealing the entry (over seq, time, previous hash and record).";
     rdfs:label "entryHash".
 agent:evaluatedActor rdfs:comment "The software actor whose representation was assessed.";

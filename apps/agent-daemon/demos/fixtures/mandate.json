@@ -1,0 +1,30 @@
+{
+  "fixtureAuthoredBy": "Codex GPT-6.1-Sol",
+  "fixtureOnly": "Synthetic verified-store seam; not a credential or production authority",
+  "id": "urn:d2:mandate",
+  "issuer": "urn:d2:owner",
+  "subject": "urn:d2:agent",
+  "validFrom": "2026-11-01T00:00:00.000Z",
+  "validUntil": "2026-11-02T00:00:00.000Z",
+  "currency": "GBP",
+  "autonomous": {
+    "id": "urn:d2:autonomous",
+    "permissions": [{ "type": "permission", "action": "https://jeswr.org/ns/agent#SendMessage" }]
+  },
+  "withApproval": { "id": "urn:d2:with-approval", "permissions": [] },
+  "prohibitions": [
+    {
+      "id": "urn:d2:rule:no-transfer",
+      "type": "prohibition",
+      "action": "https://jeswr.org/ns/agent#Transfer"
+    }
+  ],
+  "limits": [
+    {
+      "leftOperand": "https://jeswr.org/ns/agent#spendPerDay",
+      "operator": "lteq",
+      "rightOperand": 30,
+      "enforcement": "soft"
+    }
+  ]
+}
