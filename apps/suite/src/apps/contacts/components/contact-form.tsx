@@ -28,12 +28,12 @@ import { Plus, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { type FieldPath, useFieldArray, useForm } from "react-hook-form";
+import { type FieldErrors, type FieldPath, useFieldArray, useForm } from "react-hook-form";
 import {
   type ContactFormValues,
   contactFormData,
   contactFormDefaults,
-  contactFormSchema,
+  contactFormSchemaFor,
   emptyAddress,
 } from "../lib/form-schema";
 import { duplicateContacts } from "../lib/import-export";
@@ -91,15 +91,20 @@ function ContactDraft({
   const initialLabels = useRef(
     id ? contactLabels(id, state.data.groups).map((group) => `${group.url}#this`) : [],
   ).current;
+  const defaults = useRef(contactFormDefaults(person?.data, initialLabels)).current;
+  // Unchanged addresses skip the limits, so contacts other apps wrote stay editable.
+  const schema = useRef(contactFormSchemaFor(defaults.addresses)).current;
   const form = useForm<ContactFormValues>({
-    resolver: zodResolver(contactFormSchema),
-    defaultValues: contactFormDefaults(person?.data, initialLabels),
+    resolver: zodResolver(schema),
+    defaultValues: defaults,
     shouldFocusError: false,
   });
   const formElement = useRef<HTMLFormElement>(null);
   const emails = useFieldArray({ control: form.control, name: "emails" });
   const phones = useFieldArray({ control: form.control, name: "phones" });
   const addresses = useFieldArray({ control: form.control, name: "addresses" });
+  const addressListError = () =>
+    form.formState.errors.addresses?.root?.message ?? form.formState.errors.addresses?.message;
   // AUTHORED-BY Claude Opus 5.5
   const addressList = useRef<HTMLDivElement>(null);
   const removeAddress = (index: number) => {
@@ -112,7 +117,7 @@ function ContactDraft({
     addresses.remove(index);
     target?.focus();
   };
-  const focusInvalid = () => {
+  const focusInvalid = (invalid: FieldErrors<ContactFormValues>) => {
     // Appended rows register last, so RHF's registration order differs from the DOM.
     const fields = formElement.current?.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>(
       "input[name], textarea[name]",
@@ -120,9 +125,14 @@ function ContactDraft({
     for (const field of fields ?? []) {
       if (form.getFieldState(field.name as FieldPath<ContactFormValues>).invalid) {
         field.focus();
-        break;
+        return;
       }
     }
+    // A list-level address error (too many) has no input of its own: focus Add address.
+    if (invalid.addresses?.root?.message ?? invalid.addresses?.message)
+      addressList.current?.parentElement
+        ?.querySelector<HTMLButtonElement>(":scope > button")
+        ?.focus();
   };
   const removePoint = (
     remove: (index: number) => void,
@@ -148,7 +158,7 @@ function ContactDraft({
   const dirty = form.formState.isDirty;
   const errors = form.formState.errors;
   const values = form.watch();
-  const validation = contactFormSchema.safeParse(values);
+  const validation = schema.safeParse(values);
   const errorCount =
     form.formState.submitCount && !validation.success ? validation.error.issues.length : 0;
   const cancel = () => {
@@ -216,7 +226,7 @@ function ContactDraft({
           onSubmit={form.handleSubmit((values) => {
             if (submitting.current) return;
             submitting.current = true;
-            const data = contactFormData(values);
+            const data = contactFormData(values, schema);
             const url = person?.url ?? new URL(`people/${crypto.randomUUID()}.ttl`, bookUrl).href;
             const contactId = `${url}#this`;
             // Publish immediately, then leave persistence and rollback with the shared controller.
@@ -340,11 +350,11 @@ function ContactDraft({
               Add phone
             </Button>
           </fieldset>
-          <fieldset>
+          <fieldset aria-describedby={addressListError() ? "con-addresses-error" : undefined}>
             <legend>Addresses</legend>
-            {errors.addresses?.root?.message && (
+            {addressListError() && (
               <p id="con-addresses-error" role="alert" className="con-field-error">
-                {errors.addresses.root.message}
+                {addressListError()}
               </p>
             )}
             <div ref={addressList} className="con-address-list">

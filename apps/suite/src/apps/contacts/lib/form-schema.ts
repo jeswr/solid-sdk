@@ -29,7 +29,6 @@ const phone = z
   }, "Enter an international phone number, such as +1 202 555 0123, without an extension.");
 // AUTHORED-BY Claude Opus 5.5
 const tooLong = "This address is too long.";
-const addressPart = z.string().trim().max(MAX_ADDRESS_COMPONENT_LENGTH, tooLong);
 export const ADDRESS_PARTS = ["street", "locality", "region", "postalCode", "country"] as const;
 export type AddressFormValues = {
   kind: "" | "home" | "work";
@@ -57,7 +56,42 @@ function addressData(address: AddressFormValues): ContactAddress | undefined {
   if (address.kind) data.kind = address.kind;
   return data;
 }
-export const contactFormSchema = z.object({
+const addressRow = z.object({
+  kind: z.enum(["", "home", "work"]),
+  street: z.string().trim(),
+  locality: z.string().trim(),
+  region: z.string().trim(),
+  postalCode: z.string().trim(),
+  country: z.string().trim(),
+});
+const rowsKey = (rows: readonly AddressFormValues[]) =>
+  JSON.stringify(rows.map((row) => [row.kind, ...ADDRESS_PARTS.map((part) => row[part].trim())]));
+/**
+ * Limits apply once the addresses change: a contact another app wrote past them stays
+ * editable (its other fields) without first having to delete address data.
+ */
+function addressList(initial: readonly AddressFormValues[] | undefined) {
+  const unchanged = initial && rowsKey(initial);
+  return z.array(addressRow).superRefine((rows, ctx) => {
+    if (rowsKey(rows) === unchanged) return;
+    if (rows.length > MAX_ADDRESSES)
+      ctx.addIssue({
+        code: "custom",
+        message: `A contact can have at most ${MAX_ADDRESSES} addresses.`,
+      });
+    rows.forEach((row, index) => {
+      for (const part of ADDRESS_PARTS) {
+        const limit =
+          part === "street"
+            ? MAX_STREET_LINES * MAX_ADDRESS_COMPONENT_LENGTH
+            : MAX_ADDRESS_COMPONENT_LENGTH;
+        if (row[part].length > limit)
+          ctx.addIssue({ code: "custom", path: [index, part], message: tooLong });
+      }
+    });
+  });
+}
+const contactFormBase = z.object({
   name: z.string().trim().min(1, "Enter a full name."),
   organization: z.string().trim(),
   emails: z.array(
@@ -72,21 +106,6 @@ export const contactFormSchema = z.object({
     }),
   ),
   phones: z.array(z.object({ value: phone })),
-  addresses: z
-    .array(
-      z.object({
-        kind: z.enum(["", "home", "work"]),
-        street: z
-          .string()
-          .trim()
-          .max(MAX_STREET_LINES * MAX_ADDRESS_COMPONENT_LENGTH, tooLong),
-        locality: addressPart,
-        region: addressPart,
-        postalCode: addressPart,
-        country: addressPart,
-      }),
-    )
-    .max(MAX_ADDRESSES, `A contact can have at most ${MAX_ADDRESSES} addresses.`),
   webId: z
     .string()
     .trim()
@@ -96,7 +115,13 @@ export const contactFormSchema = z.object({
     ),
   note: z.string().trim(),
   labels: z.array(z.string()),
+  addresses: z.array(addressRow),
 });
+/** The form's schema; pass the contact's loaded addresses so unchanged ones skip the limits. */
+export function contactFormSchemaFor(initial?: readonly AddressFormValues[]) {
+  return contactFormBase.extend({ addresses: addressList(initial) });
+}
+export const contactFormSchema = contactFormSchemaFor();
 export type ContactFormValues = z.infer<typeof contactFormSchema>;
 export function contactFormDefaults(
   data: ContactData = { name: "" },
@@ -125,8 +150,8 @@ export function contactFormDefaults(
   };
 }
 /** Explicit undefined clears optional fields through ContactPatch. */
-export function contactFormData(values: ContactFormValues) {
-  const clean = contactFormSchema.parse(values);
+export function contactFormData(values: ContactFormValues, schema = contactFormSchema) {
+  const clean = schema.parse(values);
   return {
     name: clean.name,
     organization: clean.organization || undefined,

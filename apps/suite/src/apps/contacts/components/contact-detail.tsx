@@ -168,7 +168,7 @@ export function ContactDetail({ contactRef, onClose }: { contactRef: string; onC
                       href={`https://www.openstreetmap.org/search?query=${encodeURIComponent(text.replaceAll("\n", ", "))}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      aria-label={`Map ${kind.toLowerCase()} address for ${person.data.name}: ${text.replaceAll("\n", ", ")} (opens in a new tab)`}
+                      aria-label={`Map ${address.kind ? `${address.kind} ` : ""}address for ${person.data.name}: ${text.replaceAll("\n", ", ")} (opens in a new tab)`}
                     >
                       <MapPin size={18} aria-hidden="true" />
                       <span>
