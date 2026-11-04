@@ -592,6 +592,37 @@ export function buildAgentAuthorizationCredential(auth: AgentAuthorization): Cre
 }
 
 /**
+ * Refuse policy content with a relative IRI other than a fragment reference
+ * (`#x`). The digest is over the BASE-FREE graph, which merges relative forms
+ * (`.#x` reads as `#x`, `./x` and `../x` both as `/x`), so for any other form a
+ * presenter could swap in one with a different meaning under the same digest.
+ * The content is read against a fresh sentinel base: every IRI it resolves
+ * under that base must be the base plus a fragment.
+ */
+async function refuseNonFragmentRelativeIris(content: string, contentType: string): Promise<void> {
+  const origin = `https://${randomUUID()}.invalid`;
+  const sentinel = `${origin}/policy`;
+  const dataset = (await parseRdf(content, contentType, {
+    baseIRI: sentinel,
+    documentLoader: credentialDocumentLoader,
+  })) as unknown as DatasetCore;
+  for (const quad of dataset.match()) {
+    for (const term of [quad.subject, quad.predicate, quad.object, quad.graph]) {
+      if (
+        term.termType === "NamedNode" &&
+        term.value.startsWith(origin) &&
+        !term.value.startsWith(`${sentinel}#`)
+      ) {
+        throw new Error(
+          "@jeswr/solid-vc: refusing to bind policyContent with a relative IRI other than a fragment " +
+            "reference (#…) — the content digest does not fix its meaning",
+        );
+      }
+    }
+  }
+}
+
+/**
  * Build a POLICY-CONTENT-BOUND `AgentAuthorizationCredential` (the G1 binding):
  * like {@link buildAgentAuthorizationCredential}, but the exact ODRL
  * Agreement/policy content is cryptographically bound into the (to-be-signed)
@@ -625,6 +656,7 @@ export async function buildBoundAgentAuthorizationCredential(
     );
   }
   const contentType = auth.policyContentType ?? "text/turtle";
+  await refuseNonFragmentRelativeIris(auth.policyContent, contentType);
   const digestMultibase = await digestRdfContent(auth.policyContent, contentType);
   const { policyContent: _c, policyContentType: _ct, ...bare } = auth;
   const credential = buildAgentAuthorizationCredential(bare);

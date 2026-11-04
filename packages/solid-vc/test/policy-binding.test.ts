@@ -146,6 +146,30 @@ describe("buildBoundAgentAuthorizationCredential (issuance-side binding)", () =>
     ).rejects.toThrow(/EMPTY RDF graph/);
   });
 
+  it("binds content whose relative IRIs are fragment references (#…)", async () => {
+    const content = POLICY_TTL.replace(`<${POLICY_IRI}>`, "<#agreement>");
+    const credential = await buildBoundAgentAuthorizationCredential({
+      ...AUTH,
+      policyContent: content,
+    });
+    expect(credential.relatedResource?.[0]?.digestMultibase).toBe(await digestRdfContent(content));
+  });
+
+  it("FAILS CLOSED on a relative IRI that is not a fragment reference, whose meaning the digest does not fix", async () => {
+    const fragment = POLICY_TTL.replace(`<${POLICY_IRI}>`, "<#agreement>");
+    // A base-free parse reads `.#agreement` as `#agreement`, so the digest cannot
+    // tell the signer's form from a presenter's `#agreement`.
+    const dotted = POLICY_TTL.replace(`<${POLICY_IRI}>`, "<.#agreement>");
+    expect(await digestRdfContent(dotted)).toBe(await digestRdfContent(fragment));
+    for (const ref of [".#agreement", "?#agreement", "./agreement", "../agreement", "?q", ""]) {
+      const content = POLICY_TTL.replace("<https://alice.example/notes/>", `<${ref}>`);
+      await expect(
+        buildBoundAgentAuthorizationCredential({ ...AUTH, policyContent: content }),
+        ref,
+      ).rejects.toThrow(/relative IRI other than a fragment reference/);
+    }
+  });
+
   it("the SYNC builder refuses policyContent rather than silently dropping the binding", () => {
     expect(() => buildAgentAuthorizationCredential({ ...AUTH, policyContent: POLICY_TTL })).toThrow(
       /cannot bind policyContent/,

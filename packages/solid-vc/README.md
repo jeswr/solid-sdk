@@ -71,7 +71,9 @@ Check `result.verified` and `result.errors`; verification failures are structure
 generic boolean with no explanation.
 
 A policy IRI alone does not bind mutable policy content. For authorization that depends on policy
-contents, pass `policyContent` when issuing and `presentedResources` when verifying.
+contents, pass `policyContent` when issuing and `presentedResources` when verifying. The digest is
+over the base-free graph, which merges relative forms (`.#x` reads as `#x`), so issuing refuses
+policy content whose relative IRIs are anything but fragment references (`<#x>`).
 
 ## Key API
 
