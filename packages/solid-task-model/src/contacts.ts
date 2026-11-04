@@ -530,12 +530,22 @@ export class Contact extends TermWrapper {
   }
 
   /**
-   * Replace the contact's addresses. Clears any prior `vcard:hasAddress` (and its
-   * blank nodes), then writes each non-empty address as a new blank node carrying
+   * Replace the contact's addresses. Clears any prior `vcard:hasAddress` links and their
+   * no-longer-referenced address nodes, then writes each non-empty address as a new blank node carrying
    * its kind and the non-empty field literals.
    */
   setAddresses(addresses: readonly ContactAddress[]): void {
-    this.clearStructured(VCARD_HAS_ADDRESS);
+    // Unlike the other structured fields, the reader also accepts named address nodes, so
+    // drop their statements too, unless something else in the document still points at them.
+    const p = this.factory.namedNode(VCARD_HAS_ADDRESS);
+    for (const q of [...this.dataset.match(this as unknown as Term, p)]) {
+      this.dataset.delete(q);
+      const node = q.object;
+      if (node.termType !== "BlankNode" && node.termType !== "NamedNode") continue;
+      if (node.equals(this as unknown as Term) || this.dataset.match(null, null, node).size)
+        continue;
+      for (const inner of [...this.dataset.match(node)]) this.dataset.delete(inner);
+    }
     for (const address of addresses) {
       if (!ADDRESS_FIELDS.some(([field]) => address[field]?.trim())) continue;
       const bnode = this.factory.blankNode();

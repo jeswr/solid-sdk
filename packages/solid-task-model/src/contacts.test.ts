@@ -796,4 +796,37 @@ describe("addresses (vcard:hasAddress) — structured postal addresses", () => {
     person.setAddresses([]);
     expect(parsePerson(PERSON, store)?.addresses).toBeUndefined();
   });
+
+  it("drops replaced named address nodes unless another statement still references them", () => {
+    const store = parseStore(
+      `@prefix vcard: <http://www.w3.org/2006/vcard/ns#>.
+       <#this> a vcard:Individual; vcard:fn "N"; vcard:hasAddress <#home>, <#shared>, <#this>.
+       <#home> a vcard:Home; vcard:locality "Gone".
+       <#shared> vcard:locality "Kept".
+       <#other> vcard:hasAddress <#shared>.`,
+      PERSON,
+    );
+    const person = new Contact(personSubject(PERSON), store, DataFactory);
+    person.setAddresses([{ locality: "New" }]);
+    expect(person.addresses).toEqual([{ locality: "New" }]);
+    const localities = store
+      .getQuads(null, DataFactory.namedNode(vcard("locality")), null, null)
+      .map((q) => q.object.value);
+    expect(localities.sort()).toEqual(["Kept", "New"]);
+    expect(store.getQuads(DataFactory.namedNode(`${PERSON}#home`), null, null, null)).toHaveLength(
+      0,
+    );
+    // A self-reference never deletes the contact's own statements.
+    expect(person.name).toBe("N");
+  });
+
+  it("round-trips addresses through Turtle serialization", async () => {
+    const turtle = await serializePerson(PERSON, {
+      name: "T",
+      addresses: [{ kind: "home", street: "1 Way\nUnit 2", country: "Wales" }],
+    });
+    expect((await parsePersonTtl(PERSON, turtle, "text/turtle"))?.addresses).toEqual([
+      { kind: "home", street: "1 Way\nUnit 2", country: "Wales" },
+    ]);
+  });
 });
