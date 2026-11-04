@@ -86,7 +86,9 @@ describe.each([
       const names = tools.map((t) => t.name).sort();
       expect(names).toEqual([
         "address_get",
-        ...(mode === "legacy config + aliases" ? ["chat_get", "chat_list", "chat_save"] : []),
+        ...(mode === "legacy config + aliases"
+          ? ["chat_export", "chat_get", "chat_list", "chat_save"]
+          : []),
         "context_read",
         "fetch",
         "health_query",
