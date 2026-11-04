@@ -4,7 +4,10 @@
 
 Status: proposed (2026-11-02). Scope: use cases 1 and 2 of the MCP personal-data brief, in which Jesse
 wants all his AI conversation history in his pod (1), synced across his accounts (2). Use cases 3 and 4
-(shared context, personal knowledge graph) are a separate design.
+(shared context, personal knowledge graph) are in decision 0004.
+
+The first slice (gaps 1 and 3 below) landed with this note: `ChatWriter` redacts every title and
+message, and `solid-mcp` has a `chat_export` tool.
 
 ## Decision
 
@@ -14,7 +17,7 @@ coding-agent hooks, export imports and MCP `chat_save`. "Sync" means the pod is 
 truth. Every account, and every assistant connected to the MCP server, reads from it through the
 `chat_*` tools. We don't write back into vendor accounts, which have no import API.
 
-## What already exists (in PR #212)
+## What already exists (merged in PR #212)
 
 | Need | Where | Notes |
 | --- | --- | --- |
@@ -26,7 +29,7 @@ truth. Every account, and every assistant connected to the MCP server, reads fro
 
 ## Gaps
 
-1. **Redaction is per channel, not per writer.** The capture CLI redacts, but MCP `chat_save` stores text
+1. **Done in the first slice.** **Redaction is per channel, not per writer.** The capture CLI redacts, but MCP `chat_save` stores text
    verbatim. Move `redactSecrets` down into `solid-chat-interop` (its second user) and apply it in
    `ChatWriter` to titles and message text, so every channel redacts. Re-redaction is a fixpoint, so
    already-redacted input is unchanged and message ids stay stable. Known cost: the shell and `.env`
@@ -39,7 +42,7 @@ truth. Every account, and every assistant connected to the MCP server, reads fro
    `prov:generatedAtTime` and the source channel (`hook`, `export`, `mcp`). It also needs a merge rule: the
    same provider and source id from two accounts stays two resources, scoped by an opaque per-account
    salt.
-3. **No way to hand a conversation to another account.** Add `chat_get` output, or a `chat_export` tool,
+3. **Done in the first slice (`chat_export`).** **No way to hand a conversation to another account.** Add `chat_get` output, or a `chat_export` tool,
    rendered as a Markdown transcript that a user or assistant can paste into another account to
    continue the conversation.
 4. **Provider list is closed** (`claude`, `chatgpt`, `codex`). Add `gemini` and a generic `other` with a
