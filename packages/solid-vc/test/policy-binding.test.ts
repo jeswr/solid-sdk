@@ -170,6 +170,45 @@ describe("buildBoundAgentAuthorizationCredential (issuance-side binding)", () =>
     }
   });
 
+  it("FAILS CLOSED on a network-path reference or a relative datatype IRI", async () => {
+    const cases = [
+      POLICY_TTL.replace("<https://alice.example/notes/>", "<//alice.example/notes/>"),
+      POLICY_TTL.replace("] .\n", '] ; <http://example.org/p> "x"^^<.#t> .\n'),
+      POLICY_TTL.replace("] .\n", '] ; <http://example.org/p> "x"^^<../t> .\n'),
+    ];
+    for (const content of cases) {
+      expect(content).not.toBe(POLICY_TTL);
+      await expect(
+        buildBoundAgentAuthorizationCredential({ ...AUTH, policyContent: content }),
+        content,
+      ).rejects.toThrow(/relative IRI other than a fragment reference/);
+    }
+  });
+
+  it("FAILS CLOSED on JSON-LD whose fragment-reference triples the base-free digest drops", async () => {
+    const jsonld = (target: string) =>
+      JSON.stringify({
+        "@context": { odrl: "http://www.w3.org/ns/odrl/2/" },
+        "@id": POLICY_IRI,
+        "@type": "odrl:Agreement",
+        "odrl:permission": {
+          "odrl:action": { "@id": "odrl:read" },
+          "odrl:target": { "@id": target },
+        },
+      });
+    // The base-free parse drops the relative target, so the digest does not cover it.
+    expect(await digestRdfContent(jsonld("#everything"), "application/ld+json")).toBe(
+      await digestRdfContent(jsonld("#notes"), "application/ld+json"),
+    );
+    await expect(
+      buildBoundAgentAuthorizationCredential({
+        ...AUTH,
+        policyContent: jsonld("#notes"),
+        policyContentType: "application/ld+json",
+      }),
+    ).rejects.toThrow(/relative IRI other than a fragment reference/);
+  });
+
   it("the SYNC builder refuses policyContent rather than silently dropping the binding", () => {
     expect(() => buildAgentAuthorizationCredential({ ...AUTH, policyContent: POLICY_TTL })).toThrow(
       /cannot bind policyContent/,

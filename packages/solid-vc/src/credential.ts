@@ -11,8 +11,9 @@
 import { randomUUID } from "node:crypto";
 import { parseRdf } from "@jeswr/fetch-rdf";
 import type { DatasetCore, Quad } from "@rdfjs/types";
+import { DataFactory } from "n3";
 import { credentialDocumentLoader } from "./context-loader.js";
-import { digestRdfContent } from "./digest.js";
+import { digestQuads, digestRdfContent } from "./digest.js";
 import { isAbsoluteIri, requireObjectIri, safeObjectIri } from "./iri.js";
 import { serialize } from "./serialize.js";
 import type {
@@ -594,32 +595,73 @@ export function buildAgentAuthorizationCredential(auth: AgentAuthorization): Cre
 /**
  * Refuse policy content with a relative IRI other than a fragment reference
  * (`#x`). The digest is over the BASE-FREE graph, which merges relative forms
- * (`.#x` reads as `#x`, `./x` and `../x` both as `/x`), so for any other form a
- * presenter could swap in one with a different meaning under the same digest.
- * The content is read against a fresh sentinel base: every IRI it resolves
- * under that base must be the base plus a fragment.
+ * (`.#x` reads as `#x`, `./x` and `../x` both as `/x`) and, in JSON-LD, drops
+ * relative-IRI triples, so for any other form a presenter could swap in one with
+ * a different meaning under the same digest. Two checks, both over every IRI
+ * including literal datatypes:
+ *  - each base-free IRI is absolute or a fragment reference;
+ *  - the base-free graph, with each `#x` read against a fresh sentinel base, is
+ *    exactly the graph read against that base (nothing merged or dropped).
  */
 async function refuseNonFragmentRelativeIris(content: string, contentType: string): Promise<void> {
-  const origin = `https://${randomUUID()}.invalid`;
-  const sentinel = `${origin}/policy`;
-  const dataset = (await parseRdf(content, contentType, {
-    baseIRI: sentinel,
-    documentLoader: credentialDocumentLoader,
-  })) as unknown as DatasetCore;
-  for (const quad of dataset.match()) {
-    for (const term of [quad.subject, quad.predicate, quad.object, quad.graph]) {
-      if (
-        term.termType === "NamedNode" &&
-        term.value.startsWith(origin) &&
-        !term.value.startsWith(`${sentinel}#`)
-      ) {
-        throw new Error(
-          "@jeswr/solid-vc: refusing to bind policyContent with a relative IRI other than a fragment " +
-            "reference (#…) — the content digest does not fix its meaning",
-        );
-      }
-    }
+  const refuse = (): never => {
+    throw new Error(
+      "@jeswr/solid-vc: refusing to bind policyContent with a relative IRI other than a fragment " +
+        "reference (#…) — the content digest does not fix its meaning",
+    );
+  };
+  const sentinel = `https://${randomUUID()}.invalid/policy`;
+  const based = [
+    ...(
+      (await parseRdf(content, contentType, {
+        baseIRI: sentinel,
+        documentLoader: credentialDocumentLoader,
+      })) as unknown as DatasetCore
+    ).match(),
+  ] as Quad[];
+  let unbased: Quad[];
+  try {
+    unbased = [
+      ...(
+        (await parseRdf(content, contentType, {
+          documentLoader: credentialDocumentLoader,
+        })) as unknown as DatasetCore
+      ).match(),
+    ] as Quad[];
+  } catch {
+    // Content that parses against a base but not without one has relative IRIs
+    // the base-free reading cannot represent.
+    return refuse();
   }
+  const resolve = (iri: string): string => {
+    if (isAbsoluteIri(iri)) return iri;
+    return iri.startsWith("#") ? `${sentinel}${iri}` : refuse();
+  };
+  const term = <T extends Quad[keyof Quad & ("subject" | "predicate" | "object" | "graph")]>(
+    t: T,
+  ): T => {
+    if (t.termType === "NamedNode") return DataFactory.namedNode(resolve(t.value)) as unknown as T;
+    if (t.termType === "Literal" && t.language === "") {
+      return DataFactory.literal(
+        t.value,
+        DataFactory.namedNode(resolve(t.datatype.value)),
+      ) as unknown as T;
+    }
+    return t;
+  };
+  const resolved = unbased.map(
+    (q) =>
+      DataFactory.quad(term(q.subject), term(q.predicate), term(q.object), term(q.graph)) as Quad,
+  );
+  let same: boolean;
+  try {
+    same = (await digestQuads(resolved)) === (await digestQuads(based));
+  } catch {
+    // N3 can emit an incomplete term for some base-free relative forms (`?#x` as
+    // an object), which the canonicalizer cannot serialise.
+    same = false;
+  }
+  if (!same) refuse();
 }
 
 /**
