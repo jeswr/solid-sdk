@@ -82,26 +82,31 @@ you give it the providers and accounts to show, and it calls you back with what 
 Load `@jeswr/suite-ui/styles/sign-in.css` after the suite-ui token, theme, density and component
 styles.
 
-Map the card's callbacks to `auth.login`, and pass `pending` and `error` back while a sign-in runs:
+Map the card's callbacks to `auth.login`, and pass `pending` and `error` back while a sign-in runs.
+`@jeswr/pod-auth/directory` supplies a list of known providers, works out whether the text in the
+WebID field is a WebID or a provider's address, and remembers the providers someone used:
 
 ```ts
-import type { PodAuth } from '@jeswr/pod-auth';
-import type { SignInCardProps, SignInProvider } from '@jeswr/suite-ui/sign-in';
+import { IssuerNotAuthorizedError, type PodAuth } from '@jeswr/pod-auth';
+import {
+  createRecentProvidersStore,
+  KNOWN_PROVIDERS,
+  resolveLoginTarget,
+} from '@jeswr/pod-auth/directory';
+import type { SignInCardProps } from '@jeswr/suite-ui/sign-in';
 
 declare const auth: PodAuth;
 declare function render(props: SignInCardProps): void; // Draw <SignInCard {...props} />.
 declare function enterApp(): void;
 
-// Home provider first. Only list providers you have tested against.
-const providers: SignInProvider[] = [
-  { id: 'home', name: 'Example Pods', issuer: 'https://login.pods.example/' },
-  { id: 'community', name: 'Solid Community', issuer: 'https://solidcommunity.net/' },
-];
+const recentProviders = createRecentProvidersStore(globalThis.localStorage);
 const remembered = await auth.remembered();
 
 function show(pending: SignInCardProps['pending'], error: string | null = null) {
   render({
-    providers,
+    // Or your own list, home provider first. Check each provider works before you ship.
+    providers: [...KNOWN_PROVIDERS],
+    recentProviders: recentProviders.list(),
     // remembered() holds at most one account today (the last one used).
     recentAccounts: remembered.map((account) => ({
       webId: account.webId,
@@ -112,23 +117,41 @@ function show(pending: SignInCardProps['pending'], error: string | null = null) 
     error,
     onAccount: (account) => {
       const issuer = remembered.find((entry) => entry.webId === account.webId)?.issuer;
-      run({ kind: 'account', key: account.webId }, { webId: account.webId, issuer });
+      run({ kind: 'account', key: account.webId }, async () => ({ webId: account.webId, issuer }));
     },
-    onWebId: (input) => run({ kind: 'webid', key: input }, { webId: input }),
+    // The field accepts a WebID or a provider's address. Resolve it with plain, public fetch.
+    onWebId: (input) =>
+      run({ kind: 'webid', key: input }, async () => {
+        const target = await resolveLoginTarget(input, { fetch: globalThis.fetch });
+        return target.kind === 'webid' ? { webId: target.webId } : { issuer: target.issuer };
+      }),
     onProvider: (provider) =>
-      run({ kind: 'provider', key: provider.id }, { issuer: provider.issuer }),
-    onCustomProvider: (input) => run({ kind: 'custom', key: input }, { issuer: input }),
+      run({ kind: 'provider', key: provider.id }, async () => ({ issuer: provider.issuer })),
+    onCustomProvider: (input) =>
+      run({ kind: 'custom', key: input }, async () => ({ issuer: input })),
   });
 }
 
 type Pending = NonNullable<SignInCardProps['pending']>;
+type Hint = { webId?: string; issuer?: string };
 
-function run(pending: Pending, hint: { webId?: string; issuer?: string }) {
+function run(pending: Pending, hint: () => Promise<Hint>) {
   show(pending);
-  auth.login(hint).then(
-    () => enterApp(), // Signed in.
-    () => show(null, 'Sign-in did not finish. Please try again.'),
-  );
+  hint()
+    .then((value) => auth.login(value).then(() => value.issuer))
+    .then(
+      (issuer) => {
+        if (issuer !== undefined) recentProviders.remember(issuer);
+        enterApp();
+      },
+      (error: unknown) =>
+        show(
+          null,
+          error instanceof IssuerNotAuthorizedError
+            ? "That provider can't sign in as this WebID. Try another."
+            : 'Sign-in did not finish. Please check the address and try again.',
+        ),
+    );
 }
 
 show(null);
@@ -142,13 +165,11 @@ provider's brand colour and logo when the suite knows it, and a monogram otherwi
 (a six-digit `#rrggbb`) or `iconUrl` to override. The
 [suite-ui README](../../packages/suite-ui/README.md#shared-sign-in-card) lists every prop.
 
-**Not ready yet.** The WebID field passes whatever the user typed to `onWebId`, which may be a
-provider's address rather than a WebID. `@jeswr/pod-auth/directory` (in review) adds a helper that
-tells the two apart and a list of known providers. Until it lands, treat the input as a WebID.
-
-Signing in through a provider already fails when the WebID profile does not name that provider.
-The same pull request (in review) gives that failure a named error, `IssuerNotAuthorizedError`, so
-you can explain it to the user.
+`resolveLoginTarget` throws `InvalidLoginAddressError` for text that is not a URL and
+`NotALoginAddressError` when the address is neither a WebID nor a provider. Signing in through a
+provider fails with `IssuerNotAuthorizedError` when the signed-in WebID's profile does not list that
+provider. Pass
+plain `fetch` to `resolveLoginTarget`, never `auth.fetch`: it reads public documents only.
 
 ## Restore the session on start-up
 

@@ -46,6 +46,7 @@ The human-readable version of this skill is the developer guide in
 | Collaborative documents (Solid only today) | `@jeswr/y-solid` (Yjs) | [y-solid](../../packages/y-solid/SKILL.md) |
 | Offline cache | `solid-offline` | [solid-offline](../../packages/solid-offline/SKILL.md), [patterns](../solid-offline-patterns/SKILL.md) |
 | Sign-in screen (`SignInCard`) | `@jeswr/suite-ui/sign-in` | [suite-ui README](../../packages/suite-ui/README.md#shared-sign-in-card) |
+| Known providers, WebID-or-provider input | `@jeswr/pod-auth/directory` | [pod-auth](../../packages/pod-auth/SKILL.md) |
 | React chrome, theming, account menu | `@jeswr/app-shell` | [app-shell](../../packages/app-shell/SKILL.md) |
 | Framework-free web components | `@jeswr/solid-elements` | [solid-elements](../../packages/solid-elements/SKILL.md) |
 | Local SPARQL, SHACL | `@jeswr/rdf-engine` (lazy WASM) | [rdf-engine](../../packages/rdf-engine/SKILL.md) |
@@ -178,9 +179,6 @@ feature check, until the package ships it.
   grant API. Show who-has-access as unavailable rather than writing `.acl` files by hand.
 - **React data hooks.** The `@jeswr/suite-sdk` React facade (session, resources, subscriptions) is
   planned; until then apps keep a small context of their own over the three clients above.
-- **Provider directory.** `@jeswr/pod-auth/directory` (known providers, a WebID-or-provider
-  input helper) and a named `IssuerNotAuthorizedError` are in review. Until they land, treat
-  `SignInCard`'s WebID input as a WebID.
 - **Collaboration on LWS.** `@jeswr/y-solid` persistence is Solid-only and has no real-time
   service adapter.
 - **Offline outbox.** `solid-offline` caches reads; queued offline writes are planned. Await
