@@ -29,12 +29,16 @@ const subscribe = (listener: () => void) => {
     listeners.delete(listener);
   };
 };
+/**
+ * The signed-in account's Shared with me list. When storage cannot be read, the in-memory list
+ * stands in, but only while it belongs to the same account.
+ */
 function readShared(): TasksPreferences["sharedProjects"] {
   if (!identity) return [];
   try {
     return parseSharedProjects(window.localStorage.getItem(sharedProjectsKey(identity)));
   } catch {
-    return [];
+    return snapshot.sharedOwner === identity ? snapshot.sharedProjects : [];
   }
 }
 /**

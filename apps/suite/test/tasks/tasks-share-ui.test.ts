@@ -463,3 +463,43 @@ it("keeps Shared with me per WebID and never shows another account's list", asyn
   );
   expect(seen?.preferences.sharedProjects).toEqual([]);
 });
+
+it("keeps this account's Shared with me in memory when storage is unavailable", async () => {
+  const project = { url: "https://bob.example/projects/home.ttl", title: "Bob's Home" };
+  const storage = Object.getPrototypeOf(window.localStorage) as Storage;
+  const fail = () => {
+    throw new DOMException("Storage is disabled", "SecurityError");
+  };
+  const getItem = vi.spyOn(storage, "getItem").mockImplementation(fail);
+  const setItem = vi.spyOn(storage, "setItem").mockImplementation(fail);
+  try {
+    let first: ReturnType<typeof useTasksPreferences> | undefined;
+    let second: ReturnType<typeof useTasksPreferences> | undefined;
+    function First() {
+      first = useTasksPreferences();
+      return null;
+    }
+    function Second() {
+      second = useTasksPreferences();
+      return null;
+    }
+    await mount(h(First));
+    await act(() => first?.dispatch({ type: "sharedProject", ...project }));
+    expect(first?.preferences.sharedProjects).toEqual([project]);
+    // Another consumer mounting re-reads storage; the failed read keeps the in-memory list.
+    await mount(h(Second));
+    expect(first?.preferences.sharedProjects).toEqual([project]);
+    expect(second?.preferences.sharedProjects).toEqual([project]);
+    expect(second?.preferences.sharedOwner).toBe(webId);
+    // A different account never inherits it, even with storage unreadable.
+    const carol = "https://carol.example/profile#me";
+    await act(() => setPreferencesIdentity(carol));
+    expect(second?.preferences.sharedProjects).toEqual([]);
+    await act(() => window.dispatchEvent(new window.StorageEvent("storage", { key: null })));
+    expect(second?.preferences.sharedProjects).toEqual([]);
+    expect(second?.preferences.sharedOwner).toBe(carol);
+  } finally {
+    getItem.mockRestore();
+    setItem.mockRestore();
+  }
+});
