@@ -1,0 +1,197 @@
+/* AUTHORED-BY Codex GPT-6.1-Sol */
+.agent-app {
+  color: var(--foreground);
+  height: 100%;
+}
+.agent-app .agent-page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-6);
+  max-width: 100%;
+}
+.agent-app h1 {
+  font-size: var(--text-2xl);
+  font-weight: 600;
+}
+.agent-app h2 {
+  font-size: var(--text-lg);
+  font-weight: 600;
+}
+.agent-app h3 {
+  font-size: var(--text-base);
+  font-weight: 600;
+}
+.agent-app.agent-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  padding: var(--space-4);
+}
+.agent-app nav ul,
+.agent-app .agent-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: var(--space-3);
+}
+.agent-app code,
+.agent-app dd,
+.agent-app a,
+.agent-app [data-slot="badge"] {
+  overflow-wrap: anywhere;
+  min-width: 0;
+  white-space: normal;
+}
+.agent-app nav a {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border-radius: var(--radius-lg);
+  text-decoration: none;
+}
+.agent-app nav a[aria-current="page"] {
+  background: var(--primary-soft);
+  color: var(--primary-soft-foreground);
+}
+.agent-app .agent-status {
+  display: grid;
+  gap: var(--space-1);
+}
+.agent-app .agent-status small,
+.agent-app .agent-demo {
+  color: var(--foreground-muted);
+  font-size: var(--text-sm);
+}
+.agent-app .agent-demo {
+  margin-top: auto;
+}
+.agent-app .agent-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+  background: var(--surface);
+}
+.agent-app .agent-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+  gap: var(--space-4);
+}
+.agent-app .agent-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+.agent-app .agent-banner {
+  padding: var(--space-3);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+.agent-app .agent-chat {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(0, 3fr);
+  gap: var(--space-6);
+}
+.agent-app .agent-chat > * {
+  min-width: 0;
+}
+.agent-app .agent-turns li {
+  background: var(--surface-2);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+}
+.agent-app .agent-turns li[data-role="owner"] {
+  background: var(--primary-soft);
+  color: var(--primary-soft-foreground);
+}
+.agent-app .agent-composer {
+  display: grid;
+  gap: var(--space-3);
+  margin-top: var(--space-6);
+}
+.agent-app textarea {
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+}
+.agent-app .agent-plaintext,
+.agent-app pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.agent-app pre {
+  padding: var(--space-4);
+  background: var(--surface-2);
+  border-radius: var(--radius-md);
+}
+.agent-app details {
+  border-top: 1px solid var(--border);
+  padding-top: var(--space-3);
+}
+.agent-app summary {
+  cursor: pointer;
+  font-weight: 500;
+}
+.agent-app dt {
+  font-weight: 500;
+}
+.agent-app dd {
+  margin: 0 0 var(--space-2);
+}
+.agent-app .agent-restrictions {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--space-2);
+}
+.agent-app .agent-disabled {
+  display: inline-flex;
+  cursor: help;
+}
+.agent-app a:focus-visible,
+.agent-app summary:focus-visible,
+.agent-app .agent-disabled:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+.agent-app.agent-detail-sheet {
+  height: auto;
+  max-height: 90dvh;
+  overflow-y: auto;
+  padding: var(--space-6);
+}
+@media (max-width: 767px) {
+  .agent-app .agent-page {
+    padding: var(--space-4);
+  }
+  .agent-app .agent-chat {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.agent-app .agent-channel-link {
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md, 0.5rem);
+  color: var(--foreground-muted);
+  text-decoration: none;
+}
+.agent-app .agent-channel-link[aria-current="page"] {
+  background: var(--primary-soft);
+  color: var(--primary-soft-foreground);
+  font-weight: 600;
+}
+.agent-app .agent-channel-link:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+.agent-app input:focus-visible,
+.agent-app button:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}

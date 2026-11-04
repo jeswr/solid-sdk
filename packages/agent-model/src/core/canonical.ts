@@ -1,3 +1,4 @@
+// AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 /**
@@ -8,8 +9,10 @@
  * approval or decision can refer to what was actually reviewed. It is NOT a signature and
  * says nothing about who produced the content.
  */
-// biome-ignore lint/style/useNodejsImportProtocol: agent imports allow only bare package names or relative paths
-import { createHash, randomUUID } from "crypto";
+// Pure-JS SHA-256 keeps these synchronous digests usable in browsers (suite agent app)
+// as well as Node; Web Crypto's digest is async and node:crypto is not bundleable.
+import { sha256 } from "@noble/hashes/sha2.js";
+import { bytesToHex, utf8ToBytes } from "@noble/hashes/utils.js";
 
 export type Digest = `sha-256:${string}`;
 
@@ -64,17 +67,17 @@ export function canonicalJson(value: unknown): string {
 
 /** `sha-256:<hex>` over the RFC 8785 canonical form of `value`. */
 export function digestOf(value: unknown): Digest {
-  return `sha-256:${createHash("sha256").update(canonicalJson(value), "utf8").digest("hex")}`;
+  return `sha-256:${bytesToHex(sha256(utf8ToBytes(canonicalJson(value))))}`;
 }
 
 /** `sha-256:<hex>` over raw bytes/text (for wire envelopes and raw provider input). */
 export function digestBytes(bytes: string | Uint8Array): Digest {
-  return `sha-256:${createHash("sha256").update(bytes).digest("hex")}`;
+  return `sha-256:${bytesToHex(sha256(typeof bytes === "string" ? utf8ToBytes(bytes) : bytes))}`;
 }
 
 /** A fresh `urn:uuid:` identifier. */
 export function newUrn(): string {
-  return `urn:uuid:${randomUUID()}`;
+  return `urn:uuid:${crypto.randomUUID()}`;
 }
 
 /**
