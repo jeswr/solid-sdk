@@ -682,7 +682,8 @@ test("restore reloads profile storages after automatic boundary mappings are los
   const restored = f.load();
   expect((await restored.restore())?.webId).toBe(f.op.webId);
   expect((await restored.fetch(f.op.root + "different")).status).toBe(200);
-  expect(f.op.stats.authorizations).toBe(2);
+  // The login grant moved to the discovered root, so the private read needed no second one.
+  expect(f.op.stats.authorizations).toBe(1);
   expect(f.op.stats.refreshes).toBe(1);
 });
 
@@ -699,7 +700,7 @@ test.each([
     await first.login();
     expect((await first.fetch(`${f.op.root}private`)).status).toBe(200);
   } else await first.login({ webId: f.op.webId });
-  expect(chooseIssuer).toHaveBeenCalledTimes(automatic ? 2 : 1);
+  expect(chooseIssuer).toHaveBeenCalledTimes(1);
   const [credentialKey] = f.record();
   const pointer = () =>
     [...f.values.entries()].find(([key]) => JSON.parse(key)[1] === "active")?.[1];
@@ -721,9 +722,9 @@ test.each([
     selected: { issuer: f.op.issuer },
   });
   expect(f.op.stats.refreshes).toBe(1);
-  expect(f.op.stats.authorizations).toBe(automatic ? 2 : 1);
-  expect(chooseIssuer).toHaveBeenCalledTimes(automatic ? 2 : 1);
-  expect(f.options.ui.getWebId).toHaveBeenCalledTimes(automatic ? 2 : 0);
+  expect(f.op.stats.authorizations).toBe(1);
+  expect(chooseIssuer).toHaveBeenCalledTimes(1);
+  expect(f.options.ui.getWebId).toHaveBeenCalledTimes(automatic ? 1 : 0);
   expect((await restored.fetch(`${f.op.root}private`)).status).toBe(200);
   await expect(f.load().restore()).resolves.toMatchObject({ webId: f.op.webId });
   expect(f.op.stats.refreshes).toBe(2);

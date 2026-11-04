@@ -46,6 +46,7 @@ const children: Record<string, readonly string[]> = {
   image: [],
 };
 const marks = new Set([
+  "textStyle",
   "bold",
   "italic",
   "underline",

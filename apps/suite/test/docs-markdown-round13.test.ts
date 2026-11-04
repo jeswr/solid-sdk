@@ -4,13 +4,14 @@ import type { JSONContent } from "@tiptap/react";
 import fc from "fast-check";
 import { expect, it } from "vitest";
 import { exportMarkdown, importMarkdown } from "../src/apps/docs/lib/convert/markdown";
+import { BLOCK_STYLE_DEFAULTS } from "./helpers/docs-block-defaults";
 import { markdownText } from "./helpers/docs-markdown-text";
 
 const paragraphs = (values: string[]): JSONContent => ({
   type: "doc",
   content: values.map((text) => ({
     type: "paragraph",
-    attrs: { textAlign: null },
+    attrs: { textAlign: null, ...BLOCK_STYLE_DEFAULTS },
     content: [{ type: "text", text }],
   })),
 });
@@ -50,7 +51,7 @@ it.each([
     content: [
       {
         type: "paragraph",
-        attrs: { textAlign: null },
+        attrs: { textAlign: null, ...BLOCK_STYLE_DEFAULTS },
         content: [{ type: "text", text: value, marks: [{ type: "code" }] }],
       },
     ],

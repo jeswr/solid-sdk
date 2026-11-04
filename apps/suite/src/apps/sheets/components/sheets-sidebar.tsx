@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useRef } from "react";
 import { encodeRef } from "@/lib/refs";
+import { XlsxImportError } from "../lib/xlsx/common";
 import { useWorkbookService } from "../state/service";
 
 export const workbookHref = (container: string) => `/sheets/s/${encodeRef(container)}`;
@@ -23,27 +24,44 @@ export function SheetsSidebar() {
       </Button>
       <Button variant="outline" onClick={() => input.current?.click()}>
         <Upload aria-hidden="true" size={18} />
-        Import CSV
+        Import file
       </Button>
       <input
         className="sr-only"
         tabIndex={-1}
         ref={input}
         type="file"
-        accept=".csv,text/csv"
-        aria-label="Import CSV file"
+        accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        aria-label="Import file"
         onChange={async (event) => {
           const file = event.currentTarget.files?.[0];
           event.currentTarget.value = "";
           if (!file) return;
+          const excel =
+            /\.xlsx$/i.test(file.name) ||
+            file.type === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
           try {
-            const opened = await service.createFromCsv({
-              title: file.name.replace(/\.csv$/i, ""),
-              csv: await file.text(),
-            });
+            if (/\.xlsm$/i.test(file.name))
+              throw new Error("Macro-enabled Excel files are not supported");
+            const opened = excel
+              ? await service.createFromXlsx({
+                  title: file.name.replace(/\.xlsx$/i, ""),
+                  data: new Uint8Array(await file.arrayBuffer()),
+                })
+              : await service.createFromCsv({
+                  title: file.name.replace(/\.csv$/i, ""),
+                  csv: await file.text(),
+                });
             router.push(workbookHref(opened.container));
-          } catch {
-            toast.error("Couldn't import this CSV");
+          } catch (error) {
+            // An Excel file's own problem (too large, macros, 1904 dates) says what's wrong.
+            toast.error(
+              error instanceof XlsxImportError
+                ? error.message
+                : excel || /\.xlsm$/i.test(file.name)
+                  ? "Couldn't import this Excel file"
+                  : "Couldn't import this CSV",
+            );
           }
         }}
       />

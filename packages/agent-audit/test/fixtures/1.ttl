@@ -1,0 +1,13 @@
+@prefix agent: <https://jeswr.org/ns/agent#>.
+@prefix prov: <http://www.w3.org/ns/prov#>.
+
+<https://pod.example/agent/audit/1.ttl> a prov:Activity;
+    prov:generated <https://pod.example/agent/audit/1.ttl#entry>, <urn:event:1>;
+    agent:seq 1;
+    prov:startedAtTime "2026-10-26T12:00:00.000Z"^^<http://www.w3.org/2001/XMLSchema#dateTime>;
+    agent:ledgerHash "sha-256:3bdb84d63578773ddad0c678871efb1afbfcf0580526a80cb03e4ae77cc48fb2";
+    agent:prevHash "sha-256:genesis";
+    agent:record "{\"agent\":\"https://pod.example/agent#me\",\"id\":\"urn:event:1\",\"owner\":\"https://pod.example/profile#me\",\"type\":\"ingest\"}"^^<http://www.w3.org/1999/02/22-rdf-syntax-ns#JSON>;
+    prov:wasAssociatedWith <https://pod.example/agent#me>.
+<https://pod.example/agent/audit/1.ttl#entry> a prov:Entity;
+    prov:wasAttributedTo <https://pod.example/profile#me>.

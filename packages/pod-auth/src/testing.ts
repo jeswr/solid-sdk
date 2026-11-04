@@ -154,6 +154,8 @@ export function createMockOp(
     issuers?: string[];
     storages?: string[];
     requireInteraction?: boolean;
+    /** Further DPoP-protected URLs outside the pod root (a trailing "/" covers descendants). */
+    protectedUrls?: string[];
     omitAzp?: boolean;
     refreshTokens?: boolean;
     revocation?: boolean;
@@ -454,7 +456,10 @@ export function createMockOp(
           ? lwsLink
           : "";
 
-    if (url.href.startsWith(root)) {
+    const extra = options.protectedUrls?.some((u) =>
+      u.endsWith("/") ? url.href.startsWith(u) : url.href.split("?")[0] === u,
+    );
+    if (url.href.startsWith(root) || extra) {
       const authorization = request.headers.get("authorization");
       if (lws && authorization === "Bearer lws-access") {
         stats.accepted++;

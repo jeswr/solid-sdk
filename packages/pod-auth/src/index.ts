@@ -15,6 +15,7 @@ import type {
   PodAuthOptions,
 } from "./types.js";
 
+export { IssuerNotAuthorizedError } from "@jeswr/reactive-authentication";
 export type {
   AuthEvent,
   AuthEventType,
@@ -101,7 +102,7 @@ export function createPodAuth(options: PodAuthOptions): PodAuth {
       subject: claims.subject,
       clientId: claims.clientId ?? null,
       protocol,
-      storages: [...providers.boundary.roots()],
+      storages: providers.boundary.storages(),
     };
     if (first) emit(mode);
   };

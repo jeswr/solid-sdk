@@ -26,7 +26,8 @@ function makeSession(webId: string) {
       avatarUrl: undefined,
     },
     logout: vi.fn(),
-    autologinPending: false,
+    ready: true,
+    fetch: globalThis.fetch,
     restoringSession: false,
   };
 }

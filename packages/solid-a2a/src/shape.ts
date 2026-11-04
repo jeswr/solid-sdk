@@ -15,7 +15,7 @@ import {
   A2A_ACTION,
   A2A_INTENT,
   A2A_MODE,
-  ACTION_TYPE_IRI,
+  actionTypeIriOf,
   type IntentAction,
   LEGACY_A2A_NS,
   legacyA2aIri,
@@ -88,7 +88,7 @@ export function buildShapeForIntent(action: IntentAction, options: BuildShapeOpt
   const typeProp = b.linkBlankNode(actionNodeShape, SH_PROPERTY);
   b.addIri(typeProp, RDF_TYPE, SH_PROPERTY_SHAPE);
   b.addIri(typeProp, SH_PATH, RDF_TYPE);
-  b.addIri(typeProp, SH_HAS_VALUE, legacyA2aIri(ACTION_TYPE_IRI[action]));
+  b.addIri(typeProp, SH_HAS_VALUE, legacyA2aIri(actionTypeIriOf(action)));
   b.addLiteral(typeProp, SH_MIN_COUNT, "1", XSD_INTEGER);
 
   // The target IRI on the action node (schema:object, or schema:target for list),

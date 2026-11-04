@@ -11,7 +11,18 @@ export interface PodAuthOptions {
   clientId: string | { dynamicRegistration: true };
   redirectUri: string;
   /** Explicit grants plus WebID-profile roots loaded on login/restore; server hints never grant access. */
-  boundary?: { roots?: string[]; automatic?: boolean; eligible?: (url: URL) => boolean };
+  boundary?: {
+    roots?: string[];
+    automatic?: boolean;
+    eligible?: (url: URL) => boolean;
+    /**
+     * Absolute paths (e.g. "/account/domains") on the origin of each storage discovered from the
+     * WebID profile that receive that storage's credentials and share its credential context, for
+     * server APIs outside the pod folder. A path ending in "/" covers its descendants; any other
+     * path matches exactly. Applies only to automatic (profile) roots.
+     */
+    storageEndpoints?: string[];
+  };
   storage?: { sessions: KvStore; caches: KvStore };
   ui: {
     getWebId(): Promise<string>;
@@ -22,6 +33,11 @@ export interface PodAuthOptions {
   lws?: { subject: "oidc-id-token" | { cid: CidSubject } };
   allowInsecureLoopback?: boolean;
   clock?: () => number;
+  /**
+   * Largest request body `auth.fetch` buffers so it can replay a request after a 401 challenge
+   * (default 16 MiB). Raise it for apps that upload large files; larger bodies reject.
+   */
+  maxReplayBodyBytes?: number;
 }
 
 /** Existing CID identity and its caller-owned signing key; no key is generated implicitly. */

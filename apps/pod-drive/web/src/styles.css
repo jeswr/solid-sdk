@@ -12,7 +12,12 @@
    scan). The path is relative to THIS file. */
 @import "tailwindcss";
 @import "@jeswr/app-shell/styles.css";
+@import "@jeswr/suite-ui/styles/tokens.css";
+@import "@jeswr/suite-ui/styles/theme.css";
+@import "@jeswr/suite-ui/styles/density.css";
+@import "@jeswr/suite-ui/styles/components.css";
 @source "../node_modules/@jeswr/app-shell/dist";
+@source "../node_modules/@jeswr/suite-ui/dist";
 
 /* The host chrome below predates the shared tokens and uses its own variable
    names (--bg/--ink/…). Map them onto the app-shell OKLCH tokens so the WHOLE
@@ -26,9 +31,8 @@
    `--muted-foreground`), so the host token mapping below also drives the element. */
 :root {
   --bg: var(--background);
-  --surface: var(--card);
   --ink: var(--foreground);
-  --muted: var(--muted-foreground);
+  --host-muted: var(--muted-foreground);
   /* The host's "accent" is its action/brand colour (filled buttons + links), which
      is the app-shell `--primary` token. pod-drive keeps these under their OWN names
      (`--action` / `--action-ink`) rather than re-aliasing app-shell's public
@@ -93,59 +97,27 @@ a {
   font-size: 1.5rem;
 }
 .login-sub {
-  color: var(--muted);
+  color: var(--host-muted);
   margin: 0 0 1.25rem;
   font-size: 0.95rem;
 }
-.login-form {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
+.login-sign-in {
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
 }
-.login-form label {
-  font-weight: 600;
-  font-size: 0.85rem;
-}
-.login-form input {
-  padding: 0.6rem 0.7rem;
+.login-retry {
+  min-height: 44px;
+  padding: 0 1.5rem;
   border: 1px solid var(--border);
-  border-radius: 0.5rem;
-  font-size: 0.95rem;
+  border-radius: 999px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
 }
-.login-error {
-  color: var(--danger);
-  font-size: 0.9rem;
-  margin-top: 0.75rem;
-}
-.login-hint {
-  color: var(--muted);
-  font-size: 0.85rem;
-  margin-top: 1rem;
-}
-
-/* Host filled-button look — the ONLY two filled host buttons are the login submit
-   (`.login-form button`) and the file-browser error/retry (`.pod-drive-error
-   button`); every other host button (breadcrumb, folder-link) is explicitly
-   transparent below. We KEEP this HOST-SCOPED to those host-owned containers rather
-   than relaxing to a bare global `button {…}` element rule.
-
-   CSS-ISOLATION (#80 / solid-elements adoption #115, D-parity rollout #67/#68/#70):
-   app-shell `5a7484d` made the shell SELF-ISOLATING — its controls carry
-   `data-app-shell-control` + an UNLAYERED reset that re-asserts their COLOUR/border/
-   fill (via shell-private `--as-*` tokens), so a host's bare `button { background }`
-   no longer leaks the host fill onto them. BUT that reset DELIBERATELY does NOT lock
-   the BOX MODEL (padding / border-radius / font-size / width / height — see the
-   package's reset.css: "The BOX MODEL … is NOT touched … an app's aggressive element
-   reset that also relayouts every button is out of scope"). A bare unlayered
-   `button { padding; border-radius; font-size }` would therefore still out-rank the
-   shell controls' LAYERED Tailwind sizing utilities and distort the ghost header trio
-   (ThemeToggle / AccountMenu), the FeedbackButton trigger, AND the dialog's portaled
-   controls — none of which live under a host class. So pod-drive KEEPS the safer
-   host-scope (the strictly-safer form vs. the bare global `button {}` some siblings
-   adopted). The filled colour is the host `--action` token (= app-shell `--primary`),
-   not the soft app-shell `--accent` hover tint. css-isolation.test.tsx pins this
-   contract so a future app-shell bump can't regress it silently. */
-.login-form button,
 .pod-drive-error button {
   cursor: pointer;
   border: none;
@@ -155,7 +127,6 @@ a {
   background: var(--action);
   color: var(--action-ink);
 }
-.login-form button:disabled,
 .pod-drive-error button:disabled {
   opacity: 0.55;
   cursor: not-allowed;
@@ -223,7 +194,7 @@ a {
 }
 .pod-drive-breadcrumb li:not(:last-child)::after {
   content: "/";
-  color: var(--muted);
+  color: var(--host-muted);
   margin-left: 0.35rem;
 }
 .pod-drive-breadcrumb button {
@@ -235,12 +206,12 @@ a {
   cursor: pointer;
 }
 .pod-drive-breadcrumb [aria-current="page"] {
-  color: var(--muted);
+  color: var(--host-muted);
 }
 
 .pod-drive-loading,
 .pod-drive-empty {
-  color: var(--muted);
+  color: var(--host-muted);
 }
 .pod-drive-error {
   color: var(--danger);

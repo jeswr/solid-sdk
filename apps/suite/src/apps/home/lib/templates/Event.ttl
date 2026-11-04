@@ -1,0 +1,7 @@
+# AUTHORED-BY Codex GPT-6
+@prefix schema: <https://schema.org/> .
+@prefix vcard: <http://www.w3.org/2006/vcard/ns#> .
+@prefix dct: <http://purl.org/dc/terms/> .
+@prefix bookmark: <http://www.w3.org/2002/01/bookmark#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+<#it> a <https://schema.org/Event> ; schema:name "" ; schema:startDate "2000-01-01T12:00:00Z"^^xsd:dateTime ; schema:endDate "2000-01-01T13:00:00Z"^^xsd:dateTime ; schema:location "" ; schema:description "" .
