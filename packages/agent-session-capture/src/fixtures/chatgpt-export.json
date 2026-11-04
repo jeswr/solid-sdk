@@ -1,0 +1,53 @@
+[
+  {
+    "id": "chatgpt-fixture-conversation",
+    "title": "Fixture conversation [REDACTED TOKEN]",
+    "create_time": 1792929600,
+    "mapping": {
+      "answer": {
+        "message": {
+          "id": "answer",
+          "author": { "role": "assistant" },
+          "recipient": "all",
+          "create_time": 1792929601,
+          "content": { "content_type": "text", "parts": ["A fixture answer."] }
+        }
+      },
+      "question": {
+        "message": {
+          "id": "question",
+          "author": { "role": "user" },
+          "create_time": 1792929600,
+          "content": {
+            "content_type": "multimodal_text",
+            "parts": [
+              "A fixture question.",
+              { "type": "text", "text": "More text." },
+              { "type": "image_asset_pointer", "asset_pointer": "DROP_IMAGE" }
+            ]
+          }
+        }
+      },
+      "system": {
+        "message": { "author": { "role": "system" }, "content": { "parts": ["DROP_SYSTEM"] } }
+      },
+      "tool": {
+        "message": { "author": { "role": "tool" }, "content": { "parts": ["DROP_TOOL_OUTPUT"] } }
+      },
+      "tool-call": {
+        "message": {
+          "author": { "role": "assistant" },
+          "recipient": "python",
+          "content": { "content_type": "text", "parts": ["DROP_TOOL_ARGUMENTS"] }
+        }
+      },
+      "thinking": {
+        "message": {
+          "author": { "role": "assistant" },
+          "channel": "analysis",
+          "content": { "parts": ["DROP_THINKING"] }
+        }
+      }
+    }
+  }
+]

@@ -66,3 +66,19 @@ export class ModelError extends Error {
     return classifyError(this);
   }
 }
+
+export class ProjectMembersSyncError extends Error {
+  constructor(cause: unknown) {
+    super("Access was saved, but the project's member list wasn't updated.", { cause });
+    this.name = "ProjectMembersSyncError";
+  }
+}
+
+export class InboxAclRecoveryError extends ModelError {
+  constructor(url: string, cause: unknown) {
+    super(403, url, null, { cause });
+    this.name = "InboxAclRecoveryError";
+    this.message =
+      "Can't restore private access to your Inbox. Check its permissions and try again.";
+  }
+}

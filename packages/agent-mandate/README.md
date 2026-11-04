@@ -79,10 +79,29 @@ WebID assertionMethod, the canonical graph signature, proposal, digest, expiry a
 in that order. Verification material inside the statement is never trusted. Digest
 comparison hashes both inputs to fixed-size arrays before constant-work comparison.
 
-**Native browser issuance remains blocked by an upstream dependency:** the workspace
-`solid-vc` Data Integrity hashing implementation imports `node:crypto`. P-256 issuance and
-non-extractable keys are exercised in Node 24 tests; a browser build needs that dependency
-to expose browser-compatible hashing. This lane does not replace its crypto implementation.
+Browser callers import `@jeswr/agent-mandate/approval` and `@jeswr/agent-mandate/control`.
+These entry points use WebCrypto and the browser-compatible `solid-vc` build, and accept
+non-extractable P-256 private keys. The general entry point also exports the Node mandate
+verifier, whose upstream adapter uses Node's module loader.
+
+`issueControlStatement({ id, kind, attributedTo, createdAt, expires, target?, binding?,
+bindingState? }, p256Key, now)` signs a TriG control statement using the existing
+agent-model vocabulary and RDF mapping (including `prov:wasAttributedTo`, `dct:created`
+and typed date-time literals). The record's `type` discriminator is implicit in RDF;
+`proof` is produced by the signer. `verifyControlStatement(document, { id, ownerWebId,
+webIdKeyResolver, now })` checks the suite/purpose, authoritative P-256 assertion key,
+complete graph signature, exact owner attribution and expiry, and returns either
+`{ valid: true, statement }` or `{ valid: false, reason }`. Failures are `proof-type`,
+`key`, `signature`, `attribution`, `expired` or `malformed`. SetBindingState requires
+binding and bindingState; DispatchNow, RevokeMandate and Forget require a target.
+Control claims are decoded through agent-model's strict RDF mapping, including literal
+datatypes, language tags, and cardinalities. Approval claims retain their issued mapping:
+`approves` is an IRI; `termsDigest`, `expires`, and `decision` are `xsd:string` literals
+without language tags. Both verification and unsigned readers enforce these term shapes.
+
+`readApprovalClaims(document, id)` and `readControlClaims(document, id)` return unsigned
+claims or `undefined` for malformed input. They are **display only, never authority**:
+they perform no verification and may return expired or tampered claims.
 
 The optional Node adapter is isolated at `@jeswr/agent-mandate/sparq`:
 `sparqPolicyEngine({ binary, timeoutMs? })`. It uses the pilot `sparq-policy-decide/1`

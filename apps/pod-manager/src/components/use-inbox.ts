@@ -3,8 +3,8 @@
 
 /**
  * Inbox hook — binds the user's OWN LDN inbox to the active session, lists the
- * notifications, and exposes mark-read / dismiss. Production paths pass NO
- * `fetch` (the auth-patched global runs). Re-lists on login / storage switch and
+ * notifications, and exposes mark-read / dismiss through the session transport.
+ * Re-lists on login / storage switch and
  * on live notifications (wired by the page via `useResourceNotifications`).
  */
 import { useCallback, useEffect, useState } from "react";
@@ -21,7 +21,7 @@ export interface UseInbox extends AsyncState<InboxNotification[]> {
 }
 
 export function useInbox(): UseInbox {
-  const { webId, activeStorage, status } = useSession();
+  const { webId, activeStorage, status, podFetch } = useSession();
   const [state, setState] = useState<AsyncState<InboxNotification[]>>({ loading: true });
   const [inbox, setInbox] = useState<Inbox | undefined>(undefined);
   const [inboxUrl, setInboxUrl] = useState<string | undefined>(undefined);
@@ -44,7 +44,7 @@ export function useInbox(): UseInbox {
     setDiscovered(false);
     setState({ loading: true }); // avoid showing the previous pod's inbox during a switch
     (async () => {
-      const box = await inboxFor({ webId, activeStorage });
+      const box = await inboxFor({ webId, activeStorage, fetchImpl: podFetch });
       if (cancelled) return;
       setInbox(box);
       setInboxUrl(box?.inboxUrl);
@@ -59,7 +59,7 @@ export function useInbox(): UseInbox {
     return () => {
       cancelled = true;
     };
-  }, [webId, activeStorage, status]);
+  }, [webId, activeStorage, status, podFetch]);
 
   // Listing: re-list whenever the discovered inbox changes or `reload` fires.
   useEffect(() => {

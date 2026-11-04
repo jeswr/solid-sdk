@@ -2,6 +2,8 @@
 // AUTHORED-BY Codex GPT-6
 
 import * as entry0 from "@jeswr/agent-mandate";
+import * as approval from "@jeswr/agent-mandate/approval";
+import * as control from "@jeswr/agent-mandate/control";
 import * as entry2 from "@jeswr/agent-mandate/sparq";
 import * as entry1 from "@jeswr/agent-mandate/testing";
 // biome-ignore lint/style/useNodejsImportProtocol: agent imports allow only bare package names or relative paths
@@ -14,6 +16,8 @@ const manifest = JSON.parse(readFileSync(new URL("../package.json", import.meta.
 const modules: Record<string, object> = {
   ".": entry0,
   "./testing": entry1,
+  "./approval": approval,
+  "./control": control,
   "./sparq": entry2,
 };
 const entries = Object.entries(manifest.exports) as [string, { types: string; default: string }][];

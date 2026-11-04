@@ -1,5 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+
+import { parseRdf } from "@jeswr/fetch-rdf";
 import { safeHttpIri, serialize } from "@jeswr/rdf-serialize";
 import { type OdrlPolicy, policyToTurtle } from "@jeswr/solid-odrl";
 import type { DatasetCore, Term } from "@rdfjs/types";
@@ -17,6 +19,7 @@ import { type PodConditions, type PodPort, podStatus } from "./pod-port.js";
 import { readMemoryPolicy } from "./policy.js";
 import { createDefaultPolicy } from "./purpose.js";
 import { dateTime, graph, NS, putGraph, RdfNode, ReferenceStore as Store } from "./rdf.js";
+import { discoverWacAcl, validateDedicatedWacAcl, type WacDiscoveryOptions } from "./wac.js";
 
 const encode = (body: string) => new TextEncoder().encode(body);
 const decode = (body: Uint8Array) => new TextDecoder("utf-8", { fatal: true }).decode(body);
@@ -38,7 +41,10 @@ export class NanopubStore {
   private readonly owner: string;
   private initialized?: Promise<void>;
 
-  constructor(private readonly pod: PodPort) {
+  constructor(
+    private readonly pod: PodPort,
+    private readonly options: WacDiscoveryOptions = {},
+  ) {
     const root = new URL(pod.root);
     const owner = safeHttpIri(pod.webId);
     if (
@@ -81,7 +87,7 @@ export class NanopubStore {
     // An orphan resource ACL overrides container inheritance. Protect the mutex
     // before acquisition, including across instances and processes.
     const lockUrl = `${this.container}.write-lock`;
-    await this.protectResource(lockUrl, false, await this.readOptional(`${lockUrl}.acl`));
+    await this.protectResource(lockUrl, false);
     const lock = await this.pod.write(lockUrl, new Uint8Array(), "application/octet-stream", {
       ifNoneMatch: "*",
     });
@@ -245,11 +251,7 @@ export class NanopubStore {
     const policy = createDefaultPolicy(this.policyUrl, this.owner);
     const bytes = encode(await policyToTurtle(policy));
     await this.initialize();
-    await this.protectResource(
-      this.policyUrl,
-      false,
-      await this.readOptional(`${this.policyUrl}.acl`),
-    );
+    await this.protectResource(this.policyUrl, false);
     try {
       await this.pod.write(this.policyUrl, bytes, "text/turtle", { ifNoneMatch: "*" });
       return policy;
@@ -272,7 +274,7 @@ export class NanopubStore {
   }
   private condition(existing: { etag?: string } | undefined): PodConditions {
     if (!existing) return { ifNoneMatch: "*" };
-    if (!existing.etag || existing.etag.startsWith("W/"))
+    if (!existing.etag || !/^"[^"\r\n]*"(?![\s\S])/.test(existing.etag))
       throw new Error("A strong ETag is required to replace a resource");
     return { ifMatch: existing.etag };
   }
@@ -289,9 +291,9 @@ export class NanopubStore {
       const existing = await this.readOptional(container);
       // Ancestors are shared with other applications; only this store's subtree is ours.
       if (container !== this.container && existing) continue;
-      const existingAcl = await this.readOptional(`${container}.acl`);
-      if (container === this.container || !existingAcl)
-        await this.protectResource(container, true, existingAcl);
+      const protection = await this.readAcl(container);
+      if (container === this.container || !protection.existing)
+        await this.protectResource(container, true, protection);
       // CSS can create the container implicitly when its ACL is written.
       if (!existing && !(await this.readOptional(container))) {
         const description = new Store();
@@ -305,28 +307,46 @@ export class NanopubStore {
       }
     }
   }
+  private async readAcl(url: string) {
+    let aclUrl: string;
+    try {
+      aclUrl = await discoverWacAcl(this.pod, url, this.options);
+    } catch {
+      throw new Error("Memory protection unavailable");
+    }
+    return { aclUrl, existing: await this.readOptional(aclUrl) };
+  }
   private async protectResource(
     url: string,
     inherit: boolean,
-    existing: { etag?: string } | undefined,
+    protection?: Awaited<ReturnType<NanopubStore["readAcl"]>>,
   ) {
+    const { aclUrl, existing } = protection ?? (await this.readAcl(url));
+    const condition = this.condition(existing);
+    if (existing) {
+      try {
+        if (existing.contentType.split(";")[0]?.trim().toLowerCase() !== "text/turtle")
+          throw new Error();
+        validateDedicatedWacAcl(
+          await parseRdf(decode(existing.body), "text/turtle", { baseIRI: aclUrl }),
+          url,
+        );
+      } catch {
+        throw new Error("Memory protection unavailable");
+      }
+    }
     const dataset = new Store();
-    const authorization = new RdfNode(`${url}.acl#owner`, dataset)
+    const authorization = new RdfNode(`${aclUrl}#owner`, dataset)
       .link(`${NS.rdf}type`, `${acl}Authorization`)
       .link(`${acl}agent`, this.owner)
       .link(`${acl}accessTo`, url);
     if (inherit) authorization.link(`${acl}default`, url);
     for (const mode of ["Read", "Write", "Control"]) authorization.link(`${acl}mode`, acl + mode);
-    await this.pod.write(
-      `${url}.acl`,
-      encode(await serialize([...dataset])),
-      "text/turtle",
-      this.condition(existing),
-    );
+    await this.pod.write(aclUrl, encode(await serialize([...dataset])), "text/turtle", condition);
   }
   private async writeNanopub(url: string, bytes: Uint8Array): Promise<void> {
     // A resource ACL overrides the container default, including orphan ACLs.
-    await this.protectResource(url, false, await this.readOptional(`${url}.acl`));
+    await this.protectResource(url, false);
     try {
       await this.pod.write(url, bytes, "application/trig", { ifNoneMatch: "*" });
     } catch (error) {

@@ -13,6 +13,7 @@
  * - no consent wall — declining writes nothing and returns to the app cleanly;
  * - the persistent assurance that everything is revocable in Connected apps.
  */
+import { useSession } from "@/components/session-provider";
 import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -21,7 +22,7 @@ import { toast } from "sonner";
 import { categoryIcon } from "@/components/category-icon";
 import { EmptyState, ErrorState } from "@/components/states";
 import {
-  permissionsBackend,
+  usePermissionsBackend,
   useConnectedApps,
 } from "@/components/use-permissions";
 import { categoryById, CATEGORIES, type DataCategory } from "@/lib/categories";
@@ -47,6 +48,8 @@ export default function GrantPage() {
 }
 
 function GrantScreen() {
+  const { podFetch } = useSession();
+  const permissionsBackend = usePermissionsBackend();
   const params = useSearchParams();
   const router = useRouter();
   const { ctx, data: apps, loading, error, reload, getFreshModel } =
@@ -66,13 +69,13 @@ function GrantScreen() {
   useEffect(() => {
     if (!clientId) return;
     let cancelled = false;
-    fetchAppIdentity(clientId).then((id) => {
+    fetchAppIdentity(clientId, podFetch).then((id) => {
       if (!cancelled) setIdentity(id);
     });
     return () => {
       cancelled = true;
     };
-  }, [clientId]);
+  }, [clientId, podFetch]);
 
   if (!clientId) {
     return (

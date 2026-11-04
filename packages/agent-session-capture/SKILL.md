@@ -6,13 +6,46 @@ description: Use when implementing or consuming @jeswr/agent-session-capture in 
 
 # @jeswr/agent-session-capture
 
-Claude Code and Codex session capture into the pod (MCP-13 and MCP-16).
+Claude Code and Codex session capture into the pod (MCP-13), plus ChatGPT/Claude.ai
+export imports (MCP-16). Read the planning
+repository's `specs/mcp/DESIGN.md` §6 and the assigned task before changing behavior.
+Keep the package private, ESM, Node >=24, and securityCritical. Document public
+exports with TSDoc.
 
-This is an MCP-01 scaffold. Read `specs/mcp/DESIGN.md` in the Solid suite planning
-repository and the assigned task before adding a public API. Keep the package private,
-ESM, Node >=24, and securityCritical. Document all public exports with TSDoc.
+Use `runExportImport` for explicit `chatgpt-export <zip|json>` and
+`claude-export <json>` commands. It returns 0/1 with no secret-bearing errors,
+outside the hook watchdog. Reuse MCP config/auth, ChatWriter and private sequence
+assignments; retries are create-only and no raw export snapshots are queued.
+Redact titles and text. Bound input bytes, conversation/message/part counts and
+ZIP decompression independently; never extract archive paths to disk. Refuse
+unsafe paths, links, encryption, ZIP64 and duplicate root conversations.json.
 
-Use injected seams and recorded fixtures; never use real accounts or credentials.
-Use the workspace RDF and guarded-fetch helpers. Add testing fakes under `./testing`
-as behavior is implemented. Require 100% branch coverage for implemented security paths.
-Run lint, build, typecheck and test through pnpm before committing.
+Use `runCapture` for the hook boundary; it is silent, always resolves to zero,
+and caps its processing/request budget at ten seconds. The CLI starts an independent
+watchdog before dynamic SDK loading. Keep stdout/stderr free of transcripts, paths,
+remote bodies and credentials, including on startup/auth failures.
+
+The JSONL parsers retain text and tool names only. Drop arguments, results, reasoning,
+images and duplicate Codex event mirrors. Redact before queueing and again on replay.
+Keep opaque stable IDs and never use raw session IDs as paths. Reuse ChatWriter for
+AS2, owner-only ACL-first writes and create-only idempotence. Reuse MCP-12's config
+loader and DPoP fetch; do not duplicate auth or weaken config permissions/read-only
+checks. The default HTTP transport is guarded-fetch/node with DNS pinning; explicit
+operator loopback configuration is the only loopback allowance.
+
+`.solid-capture-ignore` is a presence marker. Check invoking/hook/transcript project
+locations and both lexical/real parent chains. Fail closed on unsafe paths or lookup
+errors. Recheck opt-out before replay; never replay across pod-root or WebID changes.
+Queue snapshots atomically in private directories/files; never queue auth credentials
+or raw transcript rows. Preserve queued snapshots after incomplete uploads or deadline.
+Queue the current Claude transcript before network I/O to preserve PreCompact data;
+replay Codex's backlog before scanning rollouts so discovery cannot starve uploads.
+
+The repo's agent-layer guard requires bare Node builtin imports (with the existing
+Biome import-protocol suppression convention), literal module specifiers, and no
+references to global fetch. Use the shared guarded transport and typed injected seams.
+
+Use injected services and the reduced redacted JSONL fixtures; no real accounts or
+credentials. Keep reusable fakes under `./testing`. Require 100% branch coverage for
+implemented security paths. Run lint, dependency-first build, typecheck and tests
+through pnpm before committing.

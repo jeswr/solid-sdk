@@ -113,7 +113,7 @@ export async function seedWalkthrough(options: {
       const bits = createStatusBitstring();
       if (revoked) setStatusBit(bits, 1, true);
       const credential = await issue({
-        credential: buildBitstringStatusListCredential({
+        credential: await buildBitstringStatusListCredential({
           id: statusId,
           issuer: owner,
           statusPurpose: "revocation",

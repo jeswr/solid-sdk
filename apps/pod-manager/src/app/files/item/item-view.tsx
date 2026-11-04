@@ -11,6 +11,7 @@
  * SECURITY (SEC-1): only resources inside the user's own pods are fetched; a
  * cross-pod `?url=` is rejected, never requested with the user's token.
  */
+import { useSession } from "@/components/session-provider";
 import { Suspense, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -197,11 +198,12 @@ function TabButton({
 }
 
 function DownloadButton({ url, name }: { url: string; name: string }) {
+  const { podFetch } = useSession();
   const [busy, setBusy] = useState(false);
   async function download() {
     setBusy(true);
     try {
-      const { blob } = await readBytes(url);
+      const { blob } = await readBytes(url, podFetch);
       const objectUrl = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = objectUrl;
@@ -237,6 +239,7 @@ function DeleteButton({
   name: string;
   parent: string;
 }) {
+  const { podFetch } = useSession();
   const router = useRouter();
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -244,7 +247,7 @@ function DeleteButton({
   async function doDelete() {
     setBusy(true);
     try {
-      await deleteEntry(url);
+      await deleteEntry(url, podFetch);
       toast.success(`Deleted “${name}”.`);
       router.push(`/files?url=${encodeURIComponent(asContainerUrl(parent))}`);
     } catch (e) {
