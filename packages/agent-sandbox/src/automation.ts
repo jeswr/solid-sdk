@@ -12,7 +12,13 @@
  * free ODRL by the model.
  */
 import { AGENT, type Constraint, type Limit, type Mandate, type Rule } from "@jeswr/agent-mandate";
-import { type CallLock, createSandbox, type Sandbox, type SandboxOptions } from "./gate.js";
+import {
+  actionCovers,
+  type CallLock,
+  createSandbox,
+  type Sandbox,
+  type SandboxOptions,
+} from "./gate.js";
 import type { Commitment } from "./limits.js";
 import type { AgentEvent, AgentModel, ModelToolCall, ModelTurn } from "./runners/agent.js";
 import { agentSystemPrompt, runAgent } from "./runners/agent.js";
@@ -161,17 +167,24 @@ const audienceKey = (to: Audience | undefined) =>
  */
 function siblingProblems(rule: AutomationRule, tools: readonly ToolSpec[]): string[] {
   const problems: string[] = [];
-  const first = new Map<string, Allowance>();
+  const listed: { a: Allowance; spec: ToolSpec }[] = [];
   for (const a of rule.policy.allow) {
     const spec = tools.find((t) => t.name === a.tool);
     if (!spec) continue;
-    const key = `${spec.action}\u0000${spec.system}`;
-    const other = first.get(key);
-    if (!other) first.set(key, a);
-    else if (audienceKey(other.to) !== audienceKey(a.to) || !other.approval !== !a.approval)
-      problems.push(
-        `"${other.tool}" and "${a.tool}" do the same kind of thing in the same system, so they must have the same recipients and approval.`,
-      );
+    // Overlapping, not only equal: a permission for one action also covers the actions it
+    // includes (ODRL "use" covers "read"), so either tool's permission could authorise the other.
+    // Overlap is not transitive, so compare with every earlier tool, not just the first match.
+    const overlapping = listed.filter(
+      (x) =>
+        x.spec.system === spec.system &&
+        (actionCovers(x.spec.action, spec.action) || actionCovers(spec.action, x.spec.action)),
+    );
+    listed.push({ a, spec });
+    for (const other of overlapping)
+      if (audienceKey(other.a.to) !== audienceKey(a.to) || !other.a.approval !== !a.approval)
+        problems.push(
+          `"${other.a.tool}" and "${a.tool}" do overlapping things in the same system, so they must have the same recipients and approval.`,
+        );
   }
   return problems;
 }
