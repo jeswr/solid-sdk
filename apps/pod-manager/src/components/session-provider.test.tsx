@@ -285,8 +285,8 @@ describe("shared Pod auth session", () => {
     expect(auth.logout).not.toHaveBeenCalled();
     expect(session.recentAccounts.map((account) => account.webId)).toEqual([WEB_ID]);
   });
-  it("cancel aborts the login inside pod-auth and reopens sign-in without waiting for it", async () => {
-    // pod-auth rejects an aborted login at once, whatever the abandoned attempt is still doing.
+  it("cancel aborts the login inside pod-auth and reopens sign-in once that login rejects", async () => {
+    // The abort cancels pod-auth's popup and requests, so the aborted login rejects promptly.
     let signal: AbortSignal | undefined;
     auth.login.mockImplementation(
       (_hint, options) =>

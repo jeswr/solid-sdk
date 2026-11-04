@@ -276,8 +276,9 @@ export function SessionProvider({
         }
       } finally {
         if (loginAbort.current === abort) loginAbort.current = null;
-        // A cancel before any session existed reopens sign-in at once: pod-auth rejects the aborted
-        // login immediately and discards anything the abandoned attempt still obtains.
+        // A cancel before any session existed reopens sign-in once the aborted login rejects. The
+        // abort cancels the popup and the attempt's requests, so that is prompt, and pod-auth
+        // discards (with a logout) any grant the abandoned attempt already obtained.
         if (cancelled.current === token && established.current !== token && mounted.current)
           setReady(true);
         if (activeLogin.current === token) {
@@ -351,8 +352,8 @@ export function SessionProvider({
     reset();
     setPending(null);
     setError("Sign-in was cancelled.");
-    // Sign-in stays closed until the aborted login has rejected (pod-auth does so at once) or the
-    // session it already made has been dropped.
+    // Sign-in stays closed until the aborted login has rejected or the session it already made has
+    // been dropped.
     setReady(false);
     if (established.current === token && coreRef.current) void dropCancelled(coreRef.current);
   }, [reset, dropCancelled]);
