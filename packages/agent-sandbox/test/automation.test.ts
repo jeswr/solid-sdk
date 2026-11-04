@@ -541,6 +541,23 @@ describe("review fixes", () => {
       policy: { ...rule.policy, allow: [{ tool: "jira_use" }, { tool: "jira_peek" }] },
     };
     expect(validateRule(agreed, { ...env, tools })).toEqual([]);
+    // Overlap is not transitive: read and modify do not overlap, but use covers both, so use
+    // is checked against each of them, not only the first.
+    const three = [
+      { ...base, name: "jira_peek", action: "read" },
+      { ...base, name: "jira_edit", action: "modify" },
+      { ...base, name: "jira_use", action: "use" },
+    ];
+    const chain: AutomationRule = {
+      ...rule,
+      policy: {
+        ...rule.policy,
+        allow: [{ tool: "jira_peek" }, { tool: "jira_edit", approval: true }, { tool: "jira_use" }],
+      },
+    };
+    expect(validateRule(chain, { ...env, tools: three })).toEqual([
+      '"jira_edit" and "jira_use" do overlapping things in the same system, so they must have the same recipients and approval.',
+    ]);
   });
 
   it("an invalid rule never runs, and a sending tool without recipients never compiles", async () => {

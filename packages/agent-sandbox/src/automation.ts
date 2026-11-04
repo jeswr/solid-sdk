@@ -173,19 +173,18 @@ function siblingProblems(rule: AutomationRule, tools: readonly ToolSpec[]): stri
     if (!spec) continue;
     // Overlapping, not only equal: a permission for one action also covers the actions it
     // includes (ODRL "use" covers "read"), so either tool's permission could authorise the other.
-    const other = listed.find(
+    // Overlap is not transitive, so compare with every earlier tool, not just the first match.
+    const overlapping = listed.filter(
       (x) =>
         x.spec.system === spec.system &&
         (actionCovers(x.spec.action, spec.action) || actionCovers(spec.action, x.spec.action)),
     );
     listed.push({ a, spec });
-    if (
-      other &&
-      (audienceKey(other.a.to) !== audienceKey(a.to) || !other.a.approval !== !a.approval)
-    )
-      problems.push(
-        `"${other.a.tool}" and "${a.tool}" do overlapping things in the same system, so they must have the same recipients and approval.`,
-      );
+    for (const other of overlapping)
+      if (audienceKey(other.a.to) !== audienceKey(a.to) || !other.a.approval !== !a.approval)
+        problems.push(
+          `"${other.a.tool}" and "${a.tool}" do overlapping things in the same system, so they must have the same recipients and approval.`,
+        );
   }
   return problems;
 }
