@@ -3,6 +3,7 @@
 // tool call is a request the gate decides before anything runs.
 import type { Mandate, Rule } from "@jeswr/agent-mandate";
 import type { OdrlPolicy } from "@jeswr/solid-odrl";
+import type { Commitment } from "./limits.js";
 
 /** JSON values that cross the sandbox boundary (tool arguments and results). */
 export type Json =
@@ -199,4 +200,29 @@ export interface GlobalRules {
    * added, so a delegation cannot lift them.
    */
   readonly askFirst?: readonly { readonly target: string; readonly action: string }[];
+  /**
+   * Further mandates that must ALSO allow every call, such as an automation rule's own,
+   * narrower policy. Each is checked like the main mandate (catalogue, rules, limits) and the
+   * strictest answer wins, so one can only narrow what the others allow.
+   */
+  readonly also?: readonly ScopedMandate[];
+}
+
+/** A named mandate that narrows the main one (for example, one automation rule's policy). */
+export interface ScopedMandate {
+  /** Shown before each of its reasons, e.g. "Automation rule \"Meeting replies\"". */
+  readonly name: string;
+  readonly mandate: Mandate;
+  /**
+   * The only tools (by name) usable under this mandate. Any other tool is hidden and refused,
+   * even one with the same action and system as a listed tool, so permissions written per
+   * action and system cannot leak from one tool to its neighbour.
+   */
+  readonly tools?: readonly string[];
+  /**
+   * The sends and payments made under this mandate so far, for its own limits. Shared across
+   * runs (and appended to by the sandbox) so a daily limit holds for the whole day, not one run.
+   * Without it, the sandbox's own history is used.
+   */
+  readonly history?: Commitment[];
 }

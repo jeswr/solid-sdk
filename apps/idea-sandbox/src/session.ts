@@ -102,7 +102,7 @@ export class Session {
         this.items.push({
           kind: "notice",
           id: this.#id++,
-          text: `${step.note}. ${step.grant.description}`,
+          text: step.grant.description,
           tone: "grant",
         });
       } else if (step.kind === "revoke") {

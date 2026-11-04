@@ -39,11 +39,29 @@ import type {
   JudgeModel,
   Obligation,
   Outcome,
+  ScopedMandate,
   StepResult,
   ToolCall,
   ToolOutput,
   ToolSpec,
 } from "./types.js";
+
+/** Runs tasks one at a time, in the order they were queued. */
+export interface CallLock {
+  run<T>(task: () => Promise<T>): Promise<T>;
+}
+
+/** A lock to share between sandboxes whose limits count the same sends. */
+export function createLock(): CallLock {
+  let queue: Promise<unknown> = Promise.resolve();
+  return {
+    run<T>(task: () => Promise<T>): Promise<T> {
+      const next = queue.then(task, task);
+      queue = next.catch(() => undefined);
+      return next;
+    },
+  };
+}
 
 /** Options for {@link createSandbox}. */
 export interface SandboxOptions {
@@ -66,6 +84,18 @@ export interface SandboxOptions {
    * "review" (ask a person, agent-mandate's own default).
    */
   readonly unlisted?: "stop" | "review";
+  /**
+   * Sends and payments already made, shared with other sandboxes for the same agent (for
+   * example every run of an automation), so daily limits count across runs. The sandbox
+   * appends to it.
+   */
+  readonly commitments?: Commitment[];
+  /**
+   * The lock calls and approvals run under. Sandboxes that share `commitments` or a narrowing
+   * mandate's `history` must share one lock too, or two runs could both pass a limit before
+   * either counts its send. Defaults to a lock of the sandbox's own.
+   */
+  readonly lock?: CallLock;
   /** The model used by the "llm" and "hybrid" modes. */
   readonly judge?: JudgeModel;
   /** Purposes the hybrid classifier may choose from (IRI -> name); defaults to the directory's. */
@@ -194,7 +224,7 @@ export function createSandbox(options: SandboxOptions): Sandbox {
   const labels = new Map<string, DataLabel>();
   const labelKey = (l: DataLabel) => `${l.id}\u0000${JSON.stringify(l.policy)}`;
   const obligations: Obligation[] = [];
-  const commitments: Commitment[] = [];
+  const commitments: Commitment[] = options.commitments ?? [];
   const held = new Map<string, HeldCall & { readonly spec: ToolSpec; readonly ctx: CallContext }>();
   let heldCounter = 0;
 
@@ -206,6 +236,8 @@ export function createSandbox(options: SandboxOptions): Sandbox {
   function visibility(
     spec: ToolSpec,
     mandate: Mandate,
+    /** A narrowing mandate: what it does not list is hidden, whatever `unlisted` says. */
+    scoped = false,
   ): { visible: boolean; approval: boolean; reason: string } {
     const banned = mandate.prohibitions.find(
       (r) =>
@@ -234,7 +266,7 @@ export function createSandbox(options: SandboxOptions): Sandbox {
         approval: true,
         reason: `Offered, but each use needs a person's approval: the agent may ${ruleWords(asked, directory)}.`,
       };
-    if (unlisted === "review")
+    if (unlisted === "review" && !scoped)
       return {
         visible: true,
         approval: true,
@@ -247,13 +279,42 @@ export function createSandbox(options: SandboxOptions): Sandbox {
     };
   }
 
+  /**
+   * A tool's visibility under a narrowing mandate. When it names its tools, any other tool is
+   * hidden, even one that shares an action and a system with a listed tool.
+   */
+  function scopedVisibility(spec: ToolSpec, extra: ScopedMandate) {
+    if (extra.tools && !extra.tools.includes(spec.name))
+      return {
+        visible: false,
+        approval: false,
+        reason: `Hidden: it does not list the tool "${spec.title}".`,
+      };
+    return visibility(spec, extra.mandate, true);
+  }
+
+  /** The tool's visibility under the main mandate and every narrowing one (strictest wins). */
+  function combinedVisibility(spec: ToolSpec, mandate: Mandate) {
+    const main = visibility(spec, mandate);
+    let out = main;
+    for (const extra of options.rules().also ?? []) {
+      const v = scopedVisibility(spec, extra);
+      if (!v.visible && out.visible)
+        out = { ...v, reason: `${v.reason.replace(/^Hidden: /, `Hidden by ${extra.name}: `)}` };
+      else if (v.visible && v.approval && out.visible && !out.approval)
+        out = { ...v, reason: `${v.reason} (${extra.name})` };
+    }
+    return out;
+  }
+
   function catalogue(): CatalogueEntry[] {
     const mandate = currentMandate();
-    return options.tools.map((tool) => ({ tool, ...visibility(tool, mandate) }));
+    return options.tools.map((tool) => ({ tool, ...combinedVisibility(tool, mandate) }));
   }
 
   function rulesDigest(mandate: Mandate): string {
-    return digestOf(JSON.parse(JSON.stringify(mandate)));
+    const also = options.rules().also ?? [];
+    return digestOf(JSON.parse(JSON.stringify(also.length ? { mandate, also } : mandate)) as Json);
   }
 
   /** Step 2: the global mandate, once per recipient (or once if there is none). */
@@ -263,6 +324,7 @@ export function createSandbox(options: SandboxOptions): Sandbox {
     purpose: string,
     mandate: Mandate,
     at: string,
+    scoped = false,
   ): Promise<StepResult[]> {
     const recipients = ctx.recipients?.length ? ctx.recipients : [undefined];
     const steps: StepResult[] = [];
@@ -315,7 +377,7 @@ export function createSandbox(options: SandboxOptions): Sandbox {
           break;
         default: {
           const noRule = result.reason === "no-matching-rule";
-          const outcome: Outcome = noRule && unlisted === "stop" ? "stop" : "review";
+          const outcome: Outcome = noRule && (scoped || unlisted === "stop") ? "stop" : "review";
           steps.push({
             step: "global",
             outcome,
@@ -395,13 +457,19 @@ export function createSandbox(options: SandboxOptions): Sandbox {
     return { steps, obligations: owed };
   }
 
-  function limitsStep(spec: ToolSpec, ctx: CallContext, now: number): StepResult[] {
+  function limitsStep(
+    spec: ToolSpec,
+    ctx: CallContext,
+    now: number,
+    mandate: Mandate = options.rules().mandate,
+    history: readonly Commitment[] = commitments,
+  ): StepResult[] {
     if (spec.kind !== "send" && spec.kind !== "pay") return [];
-    const { mandate, currency } = options.rules();
+    const { currency } = options.rules();
     const breaches = checkLimits(
       mandate.limits,
       currency,
-      commitments,
+      history,
       {
         kind: spec.kind,
         recipients: ctx.recipients?.length ? ctx.recipients : [spec.system],
@@ -488,7 +556,13 @@ export function createSandbox(options: SandboxOptions): Sandbox {
       };
     const system =
       'You enforce an organisation\'s rules on an AI agent. Read the rules and the proposed action, then answer with JSON only: {"outcome": "permit" | "review" | "stop", "reason": "<one sentence>"}. Use review when a person should decide.';
-    const prompt = `${policyText(mandate)}\n\nThe task's purpose: ${nameOf(directory, options.purpose)}.\nProposed action: ${spec.title} (${spec.description}).\nRecipients: ${joinNames((ctx.recipients ?? []).map((r) => nameOf(directory, r))) || "none"}.\nArguments: ${JSON.stringify(args)}`;
+    const narrowing = (options.rules().also ?? [])
+      .map(
+        (x) =>
+          `\n\nThese rules ALSO apply (${x.name}); the action must satisfy both:\n${policyText(x.mandate)}${x.tools ? `\nOnly these tools may be used: ${x.tools.join(", ")}.` : ""}`,
+      )
+      .join("");
+    const prompt = `${policyText(mandate)}${narrowing}\n\nThe task's purpose: ${nameOf(directory, options.purpose)}.\nProposed action: ${spec.title} (${spec.description}).\nRecipients: ${joinNames((ctx.recipients ?? []).map((r) => nameOf(directory, r))) || "none"}.\nArguments: ${JSON.stringify(args)}`;
     try {
       const raw = await judge.complete(system, prompt);
       const json = JSON.parse(raw.slice(raw.indexOf("{"), raw.lastIndexOf("}") + 1)) as {
@@ -569,6 +643,25 @@ export function createSandbox(options: SandboxOptions): Sandbox {
     const send = dataSendStep(spec.kind === "read" || spec.kind === "pay" ? {} : ctx, purpose, now);
     steps.push(...send.steps);
     steps.push(...limitsStep(spec, ctx, nowMs));
+    // Each narrowing mandate (an automation rule's own policy) must allow the call too.
+    for (const extra of options.rules().also ?? []) {
+      const tag = (x: StepResult): StepResult => ({
+        ...x,
+        explanation: `${extra.name}: ${x.explanation}`,
+        reason: `also:${x.reason}`,
+      });
+      const v = scopedVisibility(spec, extra);
+      steps.push(
+        tag({
+          step: "catalogue",
+          outcome: v.visible ? "permit" : "stop",
+          reason: v.visible ? "listed" : "hidden",
+          explanation: v.reason,
+        }),
+      );
+      steps.push(...(await globalStep(spec, ctx, purpose, extra.mandate, at, true)).map(tag));
+      steps.push(...limitsStep(spec, ctx, nowMs, extra.mandate, extra.history).map(tag));
+    }
     if (approved)
       return {
         steps: steps.map((s) =>
@@ -639,12 +732,16 @@ export function createSandbox(options: SandboxOptions): Sandbox {
               explanation: `${fresh.explanation} A person approved it.`,
             }
           : fresh;
+      // A narrowing mandate (an automation rule's own) still binds: the judge may only make the
+      // answer stricter than it. (Approved review steps are already permits in pac.)
+      const bound = pac.steps.filter((s) => s.reason.startsWith("also:"));
+      const outcome = strictest([judged.outcome, ...bound.map((s) => s.outcome)]);
       return {
-        outcome: judged.outcome,
+        outcome,
         steps: [judged, ...pac.steps],
-        obligations: judged.outcome === "permit" ? pac.obligations : [],
+        obligations: outcome === "permit" ? pac.obligations : [],
         shadow: pacOutcome,
-        summary: judged.explanation,
+        summary: outcome === judged.outcome ? judged.explanation : summarise(outcome, bound),
       };
     }
     const steps = [...extra, ...pac.steps];
@@ -743,17 +840,22 @@ export function createSandbox(options: SandboxOptions): Sandbox {
     // fails: a failed call may still have reached the recipient or moved the money.
     if (spec.kind === "send" || spec.kind === "pay") {
       const at = clock();
-      for (const recipient of ctx.recipients?.length ? ctx.recipients : [spec.system])
-        commitments.push(
-          Object.freeze({
-            at,
-            kind: spec.kind,
-            recipient,
-            ...(ctx.amount !== undefined && {
-              amount: Object.freeze({ value: ctx.amount.value, currency: ctx.amount.currency }),
-            }),
+      // Every history that limits this call counts it: the sandbox's own (possibly shared with
+      // other runs) and each narrowing mandate's.
+      const histories = new Set<Commitment[]>([commitments]);
+      for (const extra of options.rules().also ?? [])
+        if (extra.history) histories.add(extra.history);
+      for (const recipient of ctx.recipients?.length ? ctx.recipients : [spec.system]) {
+        const one = Object.freeze({
+          at,
+          kind: spec.kind,
+          recipient,
+          ...(ctx.amount !== undefined && {
+            amount: Object.freeze({ value: ctx.amount.value, currency: ctx.amount.currency }),
           }),
-        );
+        });
+        for (const h of histories) h.push(one);
+      }
     }
     let output: ToolOutput;
     try {
@@ -824,13 +926,10 @@ export function createSandbox(options: SandboxOptions): Sandbox {
   }
 
   // One call at a time: limits are checked before a call runs and counted after it, so calls made
-  // together (Promise.all in generated code, parallel MCP requests) must not interleave.
-  let queue: Promise<unknown> = Promise.resolve();
-  function serial<T>(task: () => Promise<T>): Promise<T> {
-    const next = queue.then(task, task);
-    queue = next.catch(() => undefined);
-    return next;
-  }
+  // together (Promise.all in generated code, parallel MCP requests, or other sandboxes sharing
+  // the same histories and lock) must not interleave.
+  const lock = options.lock ?? createLock();
+  const serial = <T>(task: () => Promise<T>): Promise<T> => lock.run(task);
 
   async function call(c: ToolCall): Promise<CallResult> {
     const { spec, ctx, error } = lookup(c);
@@ -935,7 +1034,13 @@ export function createSandbox(options: SandboxOptions): Sandbox {
     // catalogue, is the control being compared in "llm" mode).
     tools: () =>
       catalogue()
-        .filter((e) => e.visible || mode === "off" || mode === "llm")
+        .filter(
+          (e) =>
+            e.visible ||
+            mode === "off" ||
+            (mode === "llm" &&
+              (options.rules().also ?? []).every((x) => scopedVisibility(e.tool, x).visible)),
+        )
         .map((e) => e.tool),
     catalogue,
     call: (c) => serial(() => call(c)),

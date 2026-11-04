@@ -145,3 +145,126 @@ export function claudeAgent(apiKey: string, model: string): AgentModel {
     },
   };
 }
+
+/** The model that drafts automation rules. */
+export const DRAFT_MODEL = "claude-sonnet-5-5";
+
+/** What Claude is told about the organisation when drafting a rule. */
+export interface DraftContext {
+  readonly tools: readonly ToolSpec[];
+  readonly apps: Readonly<Record<string, string>>;
+  readonly purposes: Readonly<Record<string, string>>;
+  readonly icons: readonly string[];
+}
+
+/** The shape Claude fills in (the server checks it again with validateRule). */
+function draftSchema(context: DraftContext) {
+  return {
+    type: "object",
+    properties: {
+      title: { type: "string", description: "Short name, sentence case, under 40 characters." },
+      icon: { type: "string", enum: context.icons },
+      summary: { type: "string", description: "What it does, one plain sentence." },
+      trigger: {
+        type: "object",
+        properties: {
+          kind: { type: "string", enum: ["email", "schedule", "manual"] },
+          match: { type: "string", description: "For email: which emails, in plain words." },
+          keywords: { type: "array", items: { type: "string" } },
+          every: { type: "string", enum: ["hour", "day", "week"] },
+        },
+        required: ["kind"],
+      },
+      runner: {
+        type: "object",
+        properties: {
+          kind: { type: "string", enum: ["code", "llm"] },
+          source: { type: "string" },
+          instructions: { type: "string" },
+        },
+        required: ["kind"],
+      },
+      rationale: { type: "string", description: "One sentence: why code or a model." },
+      policy: {
+        type: "object",
+        properties: {
+          purpose: { type: "string", enum: Object.keys(context.purposes) },
+          allow: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                tool: { type: "string", enum: context.tools.map((t) => t.name) },
+                to: {
+                  description:
+                    'Only for tools that send: "sender" (whoever wrote the email that started the run), "staff", "anyone", or a list of email addresses.',
+                  anyOf: [
+                    { type: "string", enum: ["sender", "staff", "anyone"] },
+                    { type: "array", items: { type: "string" } },
+                  ],
+                },
+                approval: { type: "boolean" },
+              },
+              required: ["tool"],
+            },
+          },
+          sendsPerDay: { type: "integer", minimum: 1, maximum: 200 },
+        },
+        required: ["purpose", "allow"],
+      },
+    },
+    required: ["title", "icon", "summary", "trigger", "runner", "rationale", "policy"],
+  };
+}
+
+function draftSystem(context: DraftContext): string {
+  const tools = context.tools
+    .map(
+      (t) =>
+        `- ${t.name} (${context.apps[t.system] ?? t.system}, ${t.kind}): ${t.description} Arguments: ${JSON.stringify(t.inputSchema.properties ?? {})}`,
+    )
+    .join("\n");
+  return [
+    "You turn a person's description of a process into an automation rule for Harbour & Finch, a fictional company in a demonstration. Call propose_automation exactly once.",
+    'The rule runs inside a policy sandbox. Its policy is checked on top of the organisation\'s own rules, so keep it as narrow as the process allows: list only the tools it needs; for tools that send, say who may receive (prefer "sender" for replies); ask for approval where a person would want to check first; set a sensible daily limit.',
+    "Choose code when the steps are the same every time (no judgement needed), and llm when the steps depend on reading and understanding content.",
+    "Code runs in a sandboxed JavaScript box with top-level await. In scope: `event` ({kind:'email', message:{id, from, fromName, subject, body}} or {kind:'schedule', at} or {kind:'manual'}), `tools.<name>(args)` which returns {status:'done', content} or {status:'held'|'stopped'|'failed', message}, and `log(text)` for a one-line note shown to people. Read results from content; list tools return {records:[...]} in content.",
+    "LLM instructions are standing instructions for a model that is given the event and the allowed tools.",
+    `The connected tools:\n${tools}`,
+  ].join("\n\n");
+}
+
+/** Ask Claude to draft a rule. Returns the raw draft fields (checked by the caller). */
+export async function claudeDraftRule(
+  apiKey: string,
+  request: string,
+  context: DraftContext,
+  problems?: readonly string[],
+): Promise<Record<string, unknown>> {
+  const messages = [
+    {
+      role: "user",
+      content: problems?.length
+        ? `${request}\n\nYour previous draft had these problems; fix them:\n- ${problems.join("\n- ")}`
+        : request,
+    },
+  ];
+  const res = await createMessage(apiKey, {
+    model: DRAFT_MODEL,
+    max_tokens: 8000,
+    system: draftSystem(context),
+    tools: [
+      {
+        name: "propose_automation",
+        description: "Propose the automation rule.",
+        input_schema: draftSchema(context),
+      },
+    ],
+    tool_choice: { type: "tool", name: "propose_automation" },
+    messages,
+  });
+  const use = res.content.find((b) => b.type === "tool_use");
+  if (!use || typeof use.input !== "object" || use.input === null)
+    throw new Error("Claude did not propose a rule.");
+  return use.input as Record<string, unknown>;
+}

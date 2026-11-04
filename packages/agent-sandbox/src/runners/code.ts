@@ -31,6 +31,10 @@ export interface CodeOptions {
   readonly maxCalls?: number;
   /** Called before each tool call (e.g. to move a demo clock on). */
   readonly onCall?: () => void;
+  /** Called with each line the script logs, in order. */
+  readonly onLog?: (line: string) => void;
+  /** Called with each tool call once it has its result, in order. */
+  readonly onResult?: (call: CodeCall) => void;
 }
 
 /** One tool call the script made. */
@@ -76,15 +80,20 @@ export async function runCode(
   const ctx = runtime.newContext();
   const pending = new Set<QuickJSDeferredPromise>();
   let finished = false;
+  const record = (call: CodeCall) => {
+    calls.push(call);
+    options.onResult?.(call);
+  };
 
   const logFn = ctx.newFunction("log", (...handles: QuickJSHandle[]) => {
-    if (logs.length < 200)
-      logs.push(
-        handles
-          .map((h) => String(ctx.dump(h)))
-          .join(" ")
-          .slice(0, 2000),
-      );
+    if (logs.length < 200) {
+      const line = handles
+        .map((h) => String(ctx.dump(h)))
+        .join(" ")
+        .slice(0, 2000);
+      logs.push(line);
+      options.onLog?.(line);
+    }
   });
   ctx.setProp(ctx.global, "log", logFn);
   logFn.dispose();
@@ -121,7 +130,7 @@ export async function runCode(
             message: `The code box allows at most ${maxCalls} tool calls.`,
           };
           // Log the first refusal only, so a flood of calls cannot grow the host's log.
-          if (started++ === maxCalls) calls.push({ tool: name, args: null, result });
+          if (started++ === maxCalls) record({ tool: name, args: null, result });
           return settle(result);
         }
         if (typeof args !== "object" || args === null || Array.isArray(args)) {
@@ -129,13 +138,13 @@ export async function runCode(
             status: "refused" as const,
             message: "Tool arguments must be an object.",
           };
-          calls.push({ tool: name, args: null, result });
+          record({ tool: name, args: null, result });
           return settle(result);
         }
         started += 1;
         options.onCall?.();
         const result = await sandbox.call({ tool: name, args: args as Args });
-        calls.push({ tool: name, args: args as Json, result });
+        record({ tool: name, args: args as Json, result });
         settle(result);
       })();
       return deferred.handle;

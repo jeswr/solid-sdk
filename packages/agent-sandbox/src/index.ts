@@ -5,10 +5,33 @@
  * call an agent, its generated code, or an MCP client makes. The demo world lives at
  * `@jeswr/agent-sandbox/world`, the QuickJS code box at `./code` and the MCP adapter at `./mcp`.
  */
+export {
+  type Allowance,
+  type Audience,
+  type AutomationEvent,
+  type AutomationRule,
+  type AutomationRun,
+  eventText,
+  type RuleContext,
+  type RulePolicy,
+  type RunEnvironment,
+  type Runner,
+  ruleMandate,
+  ruleTools,
+  runAutomation,
+  scriptedModel,
+  senderOf,
+  singleAddress,
+  type Trigger,
+  validateRule,
+  wants,
+} from "./automation.js";
 export { type Directory, groupResolver, joinNames, nameOf, shortName } from "./directory.js";
 export {
   actionCovers,
+  type CallLock,
   type CatalogueEntry,
+  createLock,
   createSandbox,
   effectiveMandate,
   type HeldCall,
