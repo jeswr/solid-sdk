@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6
 import type { Mandate } from "@jeswr/agent-mandate";
 import { defaultMandate, limitConstraint } from "@jeswr/agent-mandate/issue";
@@ -130,6 +131,8 @@ export function buildEditorMandate(
   if (v.transfer) rules.push({ type: "permission", action: `${AGENT}Transfer`, constraints });
   return {
     ...base,
+    // Signed with the agreement: the executor counts spend limits only in an authenticated currency.
+    currency: v.currency,
     validUntil: new Date(`${v.until}T23:59:59.999Z`).toISOString(),
     autonomous: {
       ...base.autonomous,
@@ -171,9 +174,10 @@ export function buildEditorMandate(
 export async function describeMandate(
   m: Mandate,
   accounts: readonly Account[] = [],
-  currency = "GBP",
+  fallbackCurrency = "GBP",
   now = new Date(),
 ): Promise<string[]> {
+  const currency = m.currency ?? fallbackCurrency;
   const rules: string[] = [];
   const own = accounts.filter((account) => account.channelHandleHash).slice(0, 32);
   const bindings = [...new Set(own.map(accountBinding))];
@@ -214,7 +218,10 @@ export async function describeMandate(
   for (const l of m.limits) {
     if (l.leftOperand === `${AGENT}spendPerDay`)
       rules.push(
-        `Daily limit: ${new Intl.NumberFormat("en-GB", { style: "currency", currency }).format(l.rightOperand)}`,
+        m.currency
+          ? `Daily limit: ${new Intl.NumberFormat("en-GB", { style: "currency", currency }).format(l.rightOperand)}`
+          : // The executor can't count spend without a signed currency, so it refuses these actions.
+            "Daily spend limit has no signed currency, so your agent won't act under it. Save these permissions again to fix this.",
       );
     if (l.leftOperand === `${AGENT}sendsPerDay`) rules.push(`Daily send limit: ${l.rightOperand}`);
     if (l.leftOperand === `${AGENT}perRecipientPerDay`)

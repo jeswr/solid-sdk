@@ -619,3 +619,66 @@ it("preserves registry HMAC hashes verbatim with or without the optional sha256 
     expect(built.withApproval.permissions?.[0]?.constraints?.[0]?.rightOperand).toEqual([hash]);
   }
 });
+// AUTHORED-BY Claude Opus 5.5
+it("signs the spend-limit currency into the agreement and returns it from every verification path", async () => {
+  const m = {
+    ...mandate(),
+    limits: [limitConstraint(`${AGENT}spendPerDay`, 0, "hard")],
+    currency: "GBP",
+  };
+  const vc = await issueMandate(m, key, { statusListCredential: STATUS, statusListIndex: "3" });
+  const verified = await createVcMandateVerifier({ ...options, read: async () => vc }).load();
+  expect(verified?.currency).toBe("GBP");
+  const parsed = await parseMandateCredential(await mandateToTurtle(vc));
+  if (!parsed) throw new Error("Expected the TriG mandate to parse");
+  expect(await digestQuads(credentialToRdf(parsed))).toBe(await digestQuads(credentialToRdf(vc)));
+  expect(
+    (await createVcMandateVerifier({ ...options, read: async () => parsed }).load())?.currency,
+  ).toBe("GBP");
+  // Without a signed currency the verified mandate carries none (spend limits then fail closed).
+  expect("currency" in ((await createVcMandateVerifier(options).load()) ?? {})).toBe(false);
+  // A changed currency breaks the signature; a malformed one is never issued.
+  const agreement = (vc.credentialSubject as Record<string, JsonValue>)[`${AGENT}agreement`];
+  const tampered = {
+    ...vc,
+    credentialSubject: {
+      ...(vc.credentialSubject as Record<string, JsonValue>),
+      [`${AGENT}agreement`]: {
+        ...(agreement as Record<string, JsonValue>),
+        "https://schema.org/currency": "USD",
+      },
+    },
+  } as VerifiableCredential;
+  expect(await createVcMandateVerifier({ ...options, read: async () => tampered }).load()).toBe(
+    undefined,
+  );
+  // A malformed code signed by other software is refused on both entry paths.
+  const unsigned = mandateCredential(
+    { ...m, currency: undefined },
+    { statusListCredential: STATUS, statusListIndex: "4" },
+  );
+  const lower = await issue({
+    credential: {
+      ...unsigned,
+      credentialSubject: {
+        ...(unsigned.credentialSubject as Record<string, JsonValue>),
+        [`${AGENT}agreement`]: {
+          ...((unsigned.credentialSubject as Record<string, JsonValue>)[
+            `${AGENT}agreement`
+          ] as Record<string, JsonValue>),
+          "https://schema.org/currency": "gbp",
+        },
+      },
+    },
+    key,
+    options: { created: new Date(m.validFrom) },
+  });
+  expect(await createVcMandateVerifier({ ...options, read: async () => lower }).load()).toBe(
+    undefined,
+  );
+  expect(await parseMandateCredential(await mandateToTurtle(lower))).toBeUndefined();
+  for (const currency of ["gbp", "POUND", ""])
+    expect(() =>
+      mandateCredential({ ...m, currency }, { statusListCredential: STATUS, statusListIndex: "0" }),
+    ).toThrow("ISO 4217");
+});

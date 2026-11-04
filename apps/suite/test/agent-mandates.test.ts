@@ -244,14 +244,22 @@ describe("plain-language mandate rules", () => {
         limitConstraint(`${AGENT}perRecipientPerDay`, 3, "hard"),
         limitConstraint(`${AGENT}spendPerWeek`, 20, "soft"),
       ],
+      currency: "GBP",
     };
-    const lines = await describeMandate(m, [], "GBP", NOW);
+    const lines = await describeMandate(m, [], "USD", NOW);
     expect(lines).toContain("Asks you first: another action");
     expect(lines).toContain("Asks you first: send messages");
     expect(lines).toContain("Daily limit: £12.50");
     expect(lines).toContain("Daily send limit: 10");
     expect(lines).toContain("Contact the same person at most 3 times a day");
-    expect(await describeMandate(m, [], "USD", NOW)).toContain("Daily limit: US$12.50");
+    expect(await describeMandate({ ...m, currency: "USD" }, [], "GBP", NOW)).toContain(
+      "Daily limit: US$12.50",
+    );
+    // An unsigned currency is shown as unusable, because the executor refuses under it.
+    const { currency: _signed, ...withoutCurrency } = m;
+    const unsigned = await describeMandate(withoutCurrency, [], "GBP", NOW);
+    expect(unsigned.some((line) => line.includes("no signed currency"))).toBe(true);
+    expect(unsigned.some((line) => line.startsWith("Daily limit:"))).toBe(false);
   });
   it("keeps the tests-between-own-accounts template canonically equal to defaultMandate", async () => {
     const input = { ...options(), recipientHashes: [HASH, OTHER_HASH] };
@@ -653,6 +661,89 @@ describe("signed mandate activation and revocation", () => {
     expect(history.find((r) => r.id === second.id)?.status).toBe("revoked");
     expect(history.find((r) => r.id === third.id)?.status).toBe("active");
     expect(nextStatusIndex(loadedRecords(await readMandateCredentials(client)))).toBe(4);
+  });
+  // AUTHORED-BY Claude Opus 5.5
+  it("renews and revokes over a JSON-LD status list exactly as verification reads it", async () => {
+    const { client, session } = await fixture();
+    const first = mandate(at("mandates/json-first.trig"));
+    await activateMandate(client, session, first, NOW);
+    const signed = await parseStatusListCredential(
+      (await client.graph(client.paths.mandatesStatus)).text,
+    );
+    if (!signed) throw new Error("Missing signed status");
+    const putStatus = async (body: unknown) =>
+      client.replace(
+        client.paths.mandatesStatus,
+        JSON.stringify(body),
+        (await client.statusDocument(client.paths.mandatesStatus)).etag as string,
+        "application/ld+json",
+      );
+    // A JSON-LD list that fails the strict parse or the signature never reaches an update.
+    for (const bad of [
+      { ...signed, id: at("mandates/other.ttl") },
+      { ...signed, validUntil: "2027-06-01T00:00:00Z" },
+    ]) {
+      await putStatus(bad);
+      await expect(revokeMandate(client, session, NOW)).rejects.toThrow("permission status");
+    }
+    await putStatus(signed);
+    await expectSameMandate(await loadVerifiedMandate(client, session, NOW), first);
+    const next = new Date(NOW.getTime() + 1000);
+    const second = { ...mandate(at("mandates/json-second.trig")), validFrom: next.toISOString() };
+    expect(statusIndex(await activateMandate(client, session, second, next))).toBe(1);
+    await revokeMandate(client, session, next);
+    expect(await loadVerifiedMandate(client, session, next)).toBeUndefined();
+    expect(await mandateHistory(client, session, next)).toMatchObject([
+      { id: second.id, status: "revoked" },
+      { id: first.id, status: "replaced" },
+    ]);
+  });
+  it("signs the editor's currency so the executor can count its spend limits", async () => {
+    const { client, session } = await fixture();
+    const agent = await readAgentIdentity(client);
+    if (!agent) throw new Error("Missing fixture agent");
+    const built = {
+      ...buildEditorMandate(values({ Remember: "auto" }), options()),
+      id: at("mandates/editor.trig"),
+      subject: agent,
+      validFrom: NOW.toISOString(),
+    };
+    expect(built.currency).toBe("GBP");
+    expect(built.limits.map((l) => l.leftOperand)).toContain(`${AGENT}spendPerDay`);
+    await activateMandate(client, session, built, NOW);
+    expect((await loadVerifiedMandate(client, session, NOW))?.currency).toBe("GBP");
+  });
+  it("reads an off-storage owner profile only through the public fetch for mandates", async () => {
+    const { client, session, pod } = await fixture();
+    const first = mandate(at("mandates/public-first.trig"));
+    await activateMandate(client, session, first, NOW);
+    const profile = OWNER.split("#")[0] as string;
+    const profileReads: string[] = [];
+    const external = {
+      webId: OWNER,
+      storageUrl: BASE,
+      // The extension's credentials cover only the granted storage.
+      fetch: (async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = input instanceof Request ? input.url : String(input);
+        if (url.startsWith(profile)) {
+          profileReads.push(url);
+          throw new Error("outside the granted storage");
+        }
+        return pod.fetch(input, init);
+      }) as typeof pod.fetch,
+      publicFetch: vi.fn(pod.fetch),
+    };
+    await expectSameMandate(await loadVerifiedMandate(client, external, NOW), first);
+    const next = new Date(NOW.getTime() + 1000);
+    const second = { ...mandate(at("mandates/public-second.trig")), validFrom: next.toISOString() };
+    await activateMandate(client, external, second, next);
+    await revokeMandate(client, external, next);
+    expect(await mandateHistory(client, external, next)).toMatchObject([
+      { id: second.id, status: "revoked" },
+      { id: first.id, status: "replaced" },
+    ]);
+    expect(profileReads).toEqual([]);
+    expect(external.publicFetch).toHaveBeenCalled();
   });
   it("retains a verified revocation in history after its delivery window expires and a newer mandate replaces it", async () => {
     const { client, session } = await fixture();

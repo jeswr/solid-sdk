@@ -15,7 +15,9 @@ and prohibitions on Transfer, Sign and appointments costing more than zero. Hash
 form `<64 lowercase hex characters>` or `sha256:<64 lowercase hex characters>`; callers supply the salt and calculate hashes.
 `limitConstraint(operand, value, enforcement)` builds the spendPerDay, spendPerWeek,
 perRecipientPerDay and sendsPerDay ODRL vocabulary with `hard` or `soft` enforcement.
-Actual accounting and enforcement belong to agent-executor.
+Actual accounting and enforcement belong to agent-executor. Set `mandate.currency` (an ISO 4217
+code, signed into the agreement as `schema:currency`) whenever the mandate has spend limits: the
+executor refuses any action under a spend limit whose currency it cannot authenticate.
 
 `issueMandate(mandate, ed25519Key, { statusListCredential, statusListIndex })` creates a
 `solid-vc` AgentAuthorizationCredential with an embedded ODRL Agreement and
