@@ -478,35 +478,38 @@ test("an aborted login rejects at once; a signal that never fires leaves login u
   expect((await auth.identity())?.webId).toBe(f.op.webId);
 });
 
-test("abandoning a login while the popup is open releases the caller at once and discards a late grant", async () => {
+test("abandoning a login while the popup is open leaves stored sessions alone", async () => {
   const f = fixture();
-  const ready = Promise.withResolvers<void>(),
-    release = Promise.withResolvers<void>();
+  const ready = Promise.withResolvers<void>();
   const signals: AbortSignal[] = [];
-  f.options.ui.getCode = async (url, signal) => {
+  f.options.ui.getCode = async (_url, signal) => {
     signals.push(signal);
     ready.resolve();
-    await release.promise;
-    return f.op.getCode(url, signal);
+    return await new Promise<string>((_resolve, reject) =>
+      signal.addEventListener("abort", () => reject(signal.reason), { once: true }),
+    );
   };
   const auth = f.load();
-  const loginEvent = vi.fn();
-  auth.on("login", loginEvent);
+  const stored = structuredClone([...f.values.entries()]);
+  const logout = vi.spyOn(auth, "logout");
+  const logoutEvent = vi.fn();
+  auth.on("logout", logoutEvent);
   const controller = new AbortController();
   const attempt = auth.login(undefined, { signal: controller.signal });
+  // A cancellable attempt is shared with nobody.
+  await expect(auth.login()).rejects.toThrow("Another login is in progress");
   await ready.promise;
   controller.abort(new Error("cancelled"));
   await expect(attempt).rejects.toThrow("cancelled");
   expect(signals[0]?.aborted).toBe(true);
-  // The abandoned attempt still holds the login slot, shared with nobody.
-  await expect(auth.login()).rejects.toThrow("Another login is in progress");
-  release.resolve();
-  const next = await vi.waitFor(() => auth.login());
-  expect(next.webId).toBe(f.op.webId);
-  expect(loginEvent).toHaveBeenCalledTimes(1);
+  // No grant existed, so nothing is purged or fenced: storage is exactly as before.
+  expect(logout).not.toHaveBeenCalled();
+  expect(logoutEvent).not.toHaveBeenCalled();
+  expect([...f.values.entries()]).toEqual(stored);
+  expect(await auth.identity()).toBeNull();
 });
 
-test("a grant announced after the abort is discarded: logout event, no identity, previous pointer back", async () => {
+test("a grant that lands before the abort is seen is discarded with a full logout", async () => {
   const f = fixture();
   const auth = f.load();
   const controller = new AbortController();
@@ -517,31 +520,48 @@ test("a grant announced after the abort is discarded: logout event, no identity,
   });
   auth.on("logout", () => events.push("logout"));
   await expect(auth.login(undefined, { signal: controller.signal })).rejects.toThrow("cancelled");
-  await vi.waitFor(() => expect(events).toEqual(["login", "logout"]));
+  expect(events).toEqual(["login", "logout"]);
   expect(await auth.identity()).toBeNull();
   expect(await auth.remembered()).toEqual([]);
   expect(f.record()).toBeUndefined();
+  await expect(auth.login()).resolves.toMatchObject({ webId: f.op.webId });
+});
 
-  // With an account already remembered, abandoning a login puts that pointer back.
-  const g = fixture();
-  const first = g.load();
-  await first.login();
-  const remembered = await first.remembered();
-  const active = [...g.values.keys()].find((key) => JSON.parse(key)[1] === "active")!;
-  // A distinct earlier pointer, so the abandoned login's own pointer write is visible.
-  const earlier = { ...g.values.get(active), requestUrl: "https://elsewhere.example/" };
-  g.values.set(active, earlier);
-  const second = g.load();
-  const abort = new AbortController();
-  let replaced: unknown;
-  second.on("login", () => {
-    replaced = structuredClone(g.values.get(active));
-    abort.abort(new Error("cancelled"));
+test("an abort seen after the token exchange discards the grant even when the attempt fails", async () => {
+  const f = fixture();
+  const controller = new AbortController();
+  const fetch = globalThis.fetch;
+  vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+    const response = await fetch(input, init);
+    if (new Request(input, init).url === "https://op.example/token")
+      controller.abort(new Error("cancelled"));
+    return response;
   });
-  await expect(second.login(undefined, { signal: abort.signal })).rejects.toThrow("cancelled");
-  expect(replaced).not.toEqual(earlier);
-  await vi.waitFor(() => expect(g.values.get(active)).toEqual(earlier));
-  expect(await second.remembered()).toEqual(remembered);
+  const auth = f.load();
+  const logoutEvent = vi.fn();
+  auth.on("logout", logoutEvent);
+  await expect(auth.login(undefined, { signal: controller.signal })).rejects.toThrow();
+  expect(await auth.identity()).toBeNull();
+  expect(await auth.remembered()).toEqual([]);
+  expect(f.record()).toBeUndefined();
+});
+
+test("an abort seen after the grant is stored discards it even though the attempt then fails", async () => {
+  const f = fixture();
+  const controller = new AbortController();
+  const write = f.sessions.setItem.getMockImplementation()!;
+  f.sessions.setItem.mockImplementation(async (key: string, value: {}) => {
+    await write(key, value);
+    // The refresh record is the grant; abort only once it is stored.
+    if (typeof value === "object" && "refreshToken" in value)
+      controller.abort(new Error("cancelled"));
+  });
+  const auth = f.load();
+  const logout = vi.spyOn(auth, "logout");
+  await expect(auth.login(undefined, { signal: controller.signal })).rejects.toThrow("cancelled");
+  expect(logout).toHaveBeenCalledOnce();
+  expect(await auth.identity()).toBeNull();
+  expect(f.record()).toBeUndefined();
 });
 
 test("an abort after logout leaves cleanup to logout", async () => {
@@ -562,10 +582,10 @@ test("an abort after logout leaves cleanup to logout", async () => {
   await ready.promise;
   await auth.logout();
   controller.abort(new Error("cancelled"));
-  await expect(attempt).rejects.toThrow();
   release.resolve();
-  await vi.waitFor(() => auth.login());
+  await expect(attempt).rejects.toThrow();
   expect(logoutEvent).toHaveBeenCalledTimes(1);
+  await expect(auth.login()).resolves.toMatchObject({ webId: f.op.webId });
 });
 
 test.each([

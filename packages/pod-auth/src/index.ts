@@ -6,7 +6,6 @@ import { StorageFailure } from "./kv.js";
 import { secureUrl, validateOptions } from "./options.js";
 import { AmbiguousIssuerError, createProviders } from "./providers.js";
 import { decideSilentRestore } from "./session-restore.js";
-import type { ActiveAccount } from "./sessions.js";
 import type {
   AuthEvent,
   AuthEventType,
@@ -113,27 +112,6 @@ export function createPodAuth(options: PodAuthOptions): PodAuth {
     session,
   });
   let observedFence = providers.fence.signal;
-  /**
-   * Discards an abandoned login's grant and puts back the remembered account it replaced; a session it
-   * already announced ends with a logout event.
-   */
-  const discard = async (started: number, before: ActiveAccount | null) => {
-    if (started !== epoch) return; // a logout already cleared everything
-    ++epoch;
-    const announced = current !== null;
-    current = null;
-    try {
-      await providers.abandon();
-      const after = await providers.persistence.active();
-      if (JSON.stringify(after) !== JSON.stringify(before)) {
-        if (before === null) await providers.persistence.forgetPointer();
-        else await providers.persistence.remember(before);
-      }
-    } finally {
-      observedFence = providers.fence.signal;
-      if (announced) emit("logout");
-    }
-  };
   const readIdentity = async () => {
     const started = epoch;
     await providers.fence.generation();
@@ -143,7 +121,7 @@ export function createPodAuth(options: PodAuthOptions): PodAuth {
     }
     return started === epoch ? snapshot() : null;
   };
-  return {
+  const api: PodAuth = {
     fetch: providers.manager.fetch as typeof fetch,
     identity: readIdentity,
     remembered: async () => {
@@ -242,21 +220,23 @@ export function createPodAuth(options: PodAuthOptions): PodAuth {
             throw new Error("Account changes require logout");
           return existing;
         }
-        const before = abort === undefined ? null : await providers.persistence.active();
         // Keep preflight cancellation even if provider startup observes a newer generation.
         const signal =
           abort === undefined
             ? providers.fence.signal
             : AbortSignal.any([providers.fence.signal, abort]);
+        let granted = false;
         try {
-          await providers.login(selected, signal);
+          await providers.login(selected, signal, () => {
+            granted = true;
+          });
         } catch (error) {
-          // The provider may have stored a grant before it observed the abort.
-          if (abort?.aborted) await discard(started, before);
+          // A grant obtained before the abort was observed must not outlive the abandoned attempt.
+          if (abort?.aborted && granted) await api.logout();
           throw error;
         }
         if (abort?.aborted) {
-          await discard(started, before);
+          await api.logout();
           throw abort.reason;
         }
         return snapshot()!;
@@ -264,14 +244,7 @@ export function createPodAuth(options: PodAuthOptions): PodAuth {
         pending = undefined;
       });
       pending = { key, promise, cancellable: abort !== undefined };
-      if (abort === undefined) return promise;
-      // The caller is released at once; the attempt keeps `pending` until it has wound down.
-      promise.catch(() => undefined);
-      return new Promise<Identity>((resolve, reject) => {
-        const onAbort = () => reject(abort.reason);
-        abort.addEventListener("abort", onAbort, { once: true });
-        promise.then(resolve, reject).finally(() => abort.removeEventListener("abort", onAbort));
-      });
+      return promise;
     },
     on: (event, handler) => {
       let handlers = listeners.get(event);
@@ -285,4 +258,5 @@ export function createPodAuth(options: PodAuthOptions): PodAuth {
       };
     },
   };
+  return api;
 }

@@ -44,9 +44,10 @@ const response = await auth.fetch('https://pod.example/alice/private');
 const identity = await auth.identity();
 ```
 
-For a cancel button, pass `auth.login(hint, { signal })`. Aborting rejects the call at once, aborts
-`ui.getCode`, and discards a grant that lands later; never call `logout()` to cancel, since it purges
-every stored session. A new `login()` is refused until the abandoned attempt has wound down.
+For a cancel button, pass `auth.login(hint, { signal })`. Aborting aborts `ui.getCode` and the
+attempt's requests; the call rejects once the attempt has wound down. Stored sessions stay unless a
+grant had already arrived, which pod-auth then discards with a full `logout()`. Don't call `logout()`
+yourself to cancel, since it purges every stored session.
 
 Pass `auth.fetch` to [storage-client](../storage-client/SKILL.md),
 [storage-capabilities](../storage-capabilities/SKILL.md) and

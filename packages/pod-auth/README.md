@@ -31,9 +31,9 @@ unsubscribe();
 
 `ui.getCode` returns the complete callback URL, including its `state`, `code` and `iss` parameters.
 The UI hook owns popup/redirect cleanup and must honor its abort signal. To let the user cancel a
-sign-in, pass `auth.login(hint, { signal })`: on abort the call rejects at once, the popup's signal
-aborts, and a grant that arrives afterwards is discarded (the remembered account it replaced is put
-back). A new `login()` is refused until the abandoned attempt has wound down. Protocol validation, PKCE,
+sign-in, pass `auth.login(hint, { signal })`: on abort the popup's signal and the attempt's requests
+abort, and the call rejects once the attempt has wound down, with stored sessions left alone. If a
+grant had already arrived when the abort was seen, pod-auth discards it with a full `logout()` first. Protocol validation, PKCE,
 DPoP proofs, refresh machinery and discovery stay in the protocol engine. A missing issuer chooser
 throws `AmbiguousIssuerError` when a profile lists several issuers; a chooser must return a listed URL.
 Explicit WebID and issuer hints must agree with the profile and the authenticated identity.

@@ -410,11 +410,15 @@ export function createProviders(
       ? new ClientIdClientProvider(new URL(options.clientId), http)
       : new DynamicRegistrationClientProvider(http),
   );
+  /** Told when a running login hands an authorization code on to the token exchange. */
+  let codeRedeemed: (() => void) | undefined;
   const codeProvider: CodeProvider = {
     getCode: async (url, signal) => {
       secureUrl(url.href, insecure, "authorization endpoint");
       const value = await options.ui.getCode(url, signal);
       signal.throwIfAborted();
+      // From here a grant may be stored even if the exchange then observes an abort.
+      codeRedeemed?.();
       return {
         value,
         [Symbol.dispose]() {
@@ -677,42 +681,46 @@ export function createProviders(
       authorizationServers.clear();
       if (failures.length > 0) throw new AggregateError(failures, "Logout cleanup failed");
     },
-    /** Drops what an abandoned login may have obtained, without touching other stored accounts. */
-    abandon: async () => {
-      boundary.clear();
-      hint = {};
-      restoredContext = undefined;
-      loginContext = undefined;
-      sessionRequest = undefined;
-      selections.clear();
-      await solidProvider.forget();
-    },
-    login: async (value: LoginHint, signal: AbortSignal) => {
-      restoredContext = undefined;
-      loginContext = undefined;
-      hint = value;
-      selections.clear();
-      // A synthetic upgrade obtains a session without sending credentials to a login hint's URL.
-      const generation = await fence.generation();
-      // Only a login made before any root was known is keyed to the callback URL.
-      const bootstrap = boundary.roots().length === 0;
-      const request = new Request(boundary.roots()[0] ?? options.redirectUri, {
-        signal: AbortSignal.any([signal, fence.signalFor(generation)]),
-      });
-      request.signal.throwIfAborted();
-      const selected = await selectionFor(request);
-      const context = await contextFor(request, selected);
-      await solidProvider.upgrade(request);
-      const claims = await solidProvider.identity(request);
-      if (claims === undefined) throw new Error("Login did not establish an identity");
-      await hooks.session(request, claims, "solid-oidc", selected);
-      // hooks.session loaded the verified roots; only the first inherits the login grant.
-      const root = boundary.roots()[0];
-      if (bootstrap && root !== undefined)
-        loginContext = { selected, context, root: await boundary.contextKey(new Request(root)) };
-      // Later requests keep the account login selected instead of asking for a WebID again.
-      hint = selected;
-      sessionRequest = request;
+    /**
+     * `granted` runs once a grant may exist (an authorization code went to the token exchange, or the
+     * upgrade completed), so an abandoned login knows it must discard one.
+     */
+    login: async (value: LoginHint, signal: AbortSignal, granted: () => void = () => {}) => {
+      codeRedeemed = granted;
+      try {
+        await loginAttempt(value, signal, granted);
+      } finally {
+        // Logins are serialized by the caller, so this attempt owns the hook until it ends.
+        codeRedeemed = undefined;
+      }
     },
   };
+  async function loginAttempt(value: LoginHint, signal: AbortSignal, granted: () => void) {
+    restoredContext = undefined;
+    loginContext = undefined;
+    hint = value;
+    selections.clear();
+    // A synthetic upgrade obtains a session without sending credentials to a login hint's URL.
+    const generation = await fence.generation();
+    // Only a login made before any root was known is keyed to the callback URL.
+    const bootstrap = boundary.roots().length === 0;
+    const request = new Request(boundary.roots()[0] ?? options.redirectUri, {
+      signal: AbortSignal.any([signal, fence.signalFor(generation)]),
+    });
+    request.signal.throwIfAborted();
+    const selected = await selectionFor(request);
+    const context = await contextFor(request, selected);
+    await solidProvider.upgrade(request);
+    granted();
+    const claims = await solidProvider.identity(request);
+    if (claims === undefined) throw new Error("Login did not establish an identity");
+    await hooks.session(request, claims, "solid-oidc", selected);
+    // hooks.session loaded the verified roots; only the first inherits the login grant.
+    const root = boundary.roots()[0];
+    if (bootstrap && root !== undefined)
+      loginContext = { selected, context, root: await boundary.contextKey(new Request(root)) };
+    // Later requests keep the account login selected instead of asking for a WebID again.
+    hint = selected;
+    sessionRequest = request;
+  }
 }

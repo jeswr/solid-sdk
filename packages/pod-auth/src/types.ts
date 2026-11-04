@@ -81,10 +81,10 @@ export interface LoginOptions {
 export interface PodAuth {
   fetch: typeof fetch;
   /**
-   * Interactive login. `options.signal` abandons this attempt: the promise rejects with the abort reason at
-   * once, the attempt's own requests (including the authorization popup) are cancelled, and a grant that
-   * lands after the abort is discarded rather than kept. A new login is refused until the abandoned attempt
-   * has finished. Agents ignore the signal once started.
+   * Interactive login. `options.signal` abandons this attempt: its requests and the authorization popup are
+   * cancelled and the promise rejects with the abort reason once the attempt has wound down, leaving stored
+   * sessions alone. If a grant had already been obtained when the abort was seen, it is discarded with a full
+   * {@link PodAuth.logout} first. Agents ignore the signal once started.
    */
   login(hint?: LoginHint, options?: LoginOptions): Promise<Identity>;
   /** Restore the remembered account; never requests interactive authorization. */
