@@ -163,14 +163,25 @@ it("still skips the previous account's page when sign-in returns the new account
   first.unmount();
   fixture.account.active.id = "two";
   fixture.remember.mockClear();
-  render(h(OfflineProvider, { children: h(Snapshot) }));
+  const second = render(h(OfflineProvider, { children: h(Snapshot) }));
+  await tick();
+  expect(localStorage.getItem("suite.recent.v1.two")).toBeNull();
+  // A reload on that page still skips it; navigating elsewhere ends the skip.
+  second.unmount();
+  const third = render(h(OfflineProvider, { children: h(Snapshot) }));
   await tick();
   expect(localStorage.getItem("suite.recent.v1.two")).toBeNull();
   expect(fixture.remember).not.toHaveBeenCalled();
+  fixture.pathname = "/drive/my";
+  third.rerender(h(OfflineProvider, { children: h(Snapshot) }));
+  await tick();
+  expect(JSON.parse(localStorage.getItem("suite.recent.v1.two") ?? "[]")).toMatchObject([
+    { href: "/drive/my" },
+  ]);
 });
 
 it("starts fresh when this tab's last-seen record is malformed", async () => {
-  sessionStorage.setItem("suite.recent.last-seen.v1", '{"accountId":1}');
+  sessionStorage.setItem("suite.recent.last-seen.v2", '{"accountId":1}');
   render(h(OfflineProvider, { children: h(Snapshot) }));
   await tick();
   expect(JSON.parse(localStorage.getItem("suite.recent.v1.one") ?? "[]")).toHaveLength(1);

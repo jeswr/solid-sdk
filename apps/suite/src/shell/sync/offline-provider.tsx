@@ -173,25 +173,28 @@ export function useOutbox(): OutboxBinding {
   };
 }
 
+/** This tab's last suite page, and a page it opened under another account (never recorded). */
 interface LastSeen {
   accountId: string;
   pathname: string;
+  inherited: string | null;
 }
-const LAST_SEEN_KEY = "suite.recent.last-seen.v1";
+const LAST_SEEN_KEY = "suite.recent.last-seen.v2";
+const FRESH: LastSeen = { accountId: "", pathname: "", inherited: null };
 function readLastSeen(): LastSeen {
   try {
-    const value: unknown = JSON.parse(sessionStorage.getItem(LAST_SEEN_KEY) ?? "null");
+    const value = JSON.parse(sessionStorage.getItem(LAST_SEEN_KEY) ?? "null") as Partial<LastSeen>;
     if (
       value &&
-      typeof value === "object" &&
-      typeof (value as LastSeen).accountId === "string" &&
-      typeof (value as LastSeen).pathname === "string"
+      typeof value.accountId === "string" &&
+      typeof value.pathname === "string" &&
+      (value.inherited === null || typeof value.inherited === "string")
     )
-      return { accountId: (value as LastSeen).accountId, pathname: (value as LastSeen).pathname };
+      return { accountId: value.accountId, pathname: value.pathname, inherited: value.inherited };
   } catch {
     /* Unavailable or malformed: start fresh. */
   }
-  return { accountId: "", pathname: "" };
+  return FRESH;
 }
 function writeLastSeen(value: LastSeen) {
   try {
@@ -209,7 +212,6 @@ function OfflineEffects({ pageTitle, outbox }: { pageTitle?: string; outbox: Out
   const hinted = useRef("");
   // The page each account was last seen on, and a page opened under another account.
   const lastSeen = useRef<LastSeen | null>(null);
-  const inherited = useRef<string | null>(null);
   const accountId = active?.id ?? "";
   useEffect(() => {
     probeAccount = active ? { kind: active.kind, storageUrl: active.storageUrl } : null;
@@ -242,12 +244,15 @@ function OfflineEffects({ pageTitle, outbox }: { pageTitle?: string; outbox: Out
     // never copy it (or its title, which can name a document) into the new account's list.
     // Sign-in lives outside the suite layout, so this tab's last page survives in session storage:
     // "Add another account" and sign-out return the new account to the previous one's page.
-    lastSeen.current ??= readLastSeen();
-    const previous = lastSeen.current;
-    if (previous.accountId && previous.accountId !== accountId && previous.pathname === pathname)
-      inherited.current = pathname;
-    else if (inherited.current !== pathname) inherited.current = null;
-    lastSeen.current = { accountId, pathname };
+    const previous = (lastSeen.current ??= readLastSeen());
+    // Kept until the user navigates, so a reload on that page still skips it.
+    const inherited =
+      previous.accountId && previous.accountId !== accountId && previous.pathname === pathname
+        ? pathname
+        : previous.inherited === pathname
+          ? pathname
+          : null;
+    lastSeen.current = { accountId, pathname, inherited };
     writeLastSeen(lastSeen.current);
     if (!preferences.offline) {
       try {
@@ -257,7 +262,7 @@ function OfflineEffects({ pageTitle, outbox }: { pageTitle?: string; outbox: Out
       }
       return;
     }
-    if (inherited.current === pathname || !isRecordablePath(pathname)) return;
+    if (inherited === pathname || !isRecordablePath(pathname)) return;
     // Next may apply a route's title after its pathname changes, including streamed metadata.
     let recordedTitle: string | undefined;
     const record = () => {
