@@ -47,3 +47,28 @@ describe("IDEA sandbox app", () => {
     expect(await screen.findByText(/13 of 17 tools offered/)).toBeTruthy();
   });
 });
+
+describe("second pass", () => {
+  it("asking a person for one action marks it and moves it to ask in the Claude Code settings", async () => {
+    render(<App />);
+    await openTab("systems");
+    const radios = screen.getAllByRole("radio", { name: "Ask a person" });
+    const refund = radios.find((r) => r.getAttribute("name") === "choice-payments_refund");
+    if (!refund) throw new Error("no refund choice");
+    fireEvent.click(refund);
+    await waitFor(() => expect(screen.getAllByText("Ask first").length).toBeGreaterThan(0));
+    const managed = screen.getByText(/allowManagedMcpServersOnly/).textContent ?? "";
+    const settings = JSON.parse(managed) as { permissions: { ask: string[]; deny: string[] } };
+    expect(settings.permissions.ask).toContain("mcp__harbour-finch__payments_refund");
+    expect(settings.permissions.deny).toContain("mcp__harbour-finch__db_delete_rows");
+  });
+
+  it("tries every refused action by every route", async () => {
+    render(<App />);
+    await openTab("compare");
+    fireEvent.click(screen.getByRole("button", { name: "Try every route" }));
+    expect(
+      await screen.findByText(/No route behaves differently/, {}, { timeout: 20_000 }),
+    ).toBeTruthy();
+  });
+});

@@ -1,9 +1,17 @@
 // AUTHORED-BY Claude Opus 5.5
-import { compareModes, type EnforcementMode, type Score } from "@jeswr/agent-sandbox";
+import {
+  checkPaths,
+  compareModes,
+  ENFORCEMENT_PATHS,
+  type EnforcementMode,
+  type EnforcementPath,
+  type PathCheck,
+  type Score,
+} from "@jeswr/agent-sandbox";
 import { SCENARIOS } from "@jeswr/agent-sandbox/world";
 import { useState } from "react";
 import { MODES, type Shared } from "../App.js";
-import { Section } from "../components.js";
+import { Chip, Section } from "../components.js";
 
 const STORIES = SCENARIOS.filter((s) => !s.code);
 
@@ -101,6 +109,84 @@ export function Compare({ shared }: { shared: Shared }) {
           </div>
         )}
       </Section>
+      <Routes />
     </div>
+  );
+}
+
+const ROUTE_LABEL: Record<EnforcementPath, string> = {
+  direct: "Tool call",
+  code: "Code it wrote",
+  mcp: "MCP client",
+};
+
+/** Every refused or held action, tried again by each route an agent has to the systems. */
+function Routes() {
+  const [checks, setChecks] = useState<PathCheck[]>();
+  const [busy, setBusy] = useState(false);
+  const titleOf = (id: string) => STORIES.find((s) => s.id === id)?.title ?? id;
+  async function run() {
+    setBusy(true);
+    try {
+      setChecks(await checkPaths(STORIES));
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <Section
+      title="Is there a way round?"
+      intro="An agent can reach the same systems by more than one route: an ordinary tool call, code it writes and runs, or an MCP client. Every action the stories want stopped or held is tried again by each route, with the rules as code deciding. Each route must give the same answer."
+    >
+      <div className="card">
+        <div className="controls">
+          <button type="button" className="primary" disabled={busy} onClick={run}>
+            {busy ? "Trying every route…" : "Try every route"}
+          </button>
+        </div>
+        {checks && (
+          <>
+            <p>
+              {checks.filter((c) => c.holds).length} of {checks.length} actions gave the same answer
+              by every route, and none of those got through.
+            </p>
+            <table className="scores">
+              <thead>
+                <tr>
+                  <th scope="col">Story and action</th>
+                  {ENFORCEMENT_PATHS.map((p) => (
+                    <th key={p} scope="col">
+                      {ROUTE_LABEL[p]}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {checks.map((c) => (
+                  <tr key={`${c.scenario}-${c.step}`}>
+                    <th scope="row">
+                      {c.step}
+                      <span className="hint"> ({titleOf(c.scenario)})</span>
+                    </th>
+                    {ENFORCEMENT_PATHS.map((p) => (
+                      <td key={p}>
+                        <Chip outcome={c.outcomes[p]} />
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <p className="hint">
+              {checks.every((c) => new Set(Object.values(c.outcomes)).size === 1)
+                ? "No route behaves differently from the others."
+                : "Some routes gave different answers: that is a way round the rules."}{" "}
+              Where every route says "Allowed", the rules themselves let the action through (the
+              sales pitch in a support email, which only rules plus AI catch).
+            </p>
+          </>
+        )}
+      </div>
+    </Section>
   );
 }
