@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "request": {
+    "method": "PUT",
+    "url": "http://sparq-solid.example/",
+    "headers": [
+      ["content-type", "text/turtle"],
+      ["if-none-match", "*"],
+      ["link", "<http://www.w3.org/ns/ldp#BasicContainer>; rel=\"type\""]
+    ],
+    "body": ""
+  },
+  "response": {
+    "url": "http://sparq-solid.example/",
+    "status": 201,
+    "statusText": "",
+    "headers": [
+      ["content-length", "0"],
+      ["etag", "\"0-14695981039346656037\""],
+      ["location", "http://sparq-solid.example/"],
+      ["vary", "Origin"]
+    ],
+    "body": "",
+    "redirected": false
+  }
+}

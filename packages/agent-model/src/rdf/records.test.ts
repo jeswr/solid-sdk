@@ -17,6 +17,17 @@ import { fromRdf, RECORD_MAPPINGS, recordFromTurtle, recordToTurtle, toRdf } fro
 import { RdfResource } from "./resource.js";
 
 const string = fc.string({ maxLength: 80 });
+
+it("round-trips optional capability descriptions using dcterms:description", async () => {
+  const capability = {
+    ...exampleRecords["channel-capability"],
+    description: "Bot DMs only; personal user DMs are unavailable.",
+  };
+  const turtle = await recordToTurtle(capability);
+  expect(turtle).toContain("http://purl.org/dc/terms/description");
+  expect(await recordFromTurtle(turtle, capability.id)).toEqual(capability);
+  expect(podRecordSchema.safeParse({ ...capability, description: 42 }).success).toBe(false);
+});
 const nonempty = fc.string({ minLength: 1, maxLength: 60 });
 const iri = fc.uuid().map((id) => `https://record.example/${id}#it`);
 const timestamp = fc.constantFrom("2026-10-26T00:00:00Z", "2026-10-26T01:00:00.120+01:00");
@@ -61,8 +72,10 @@ const variations: Record<RecordType, fc.Arbitrary<unknown>> = {
     channel: nonempty,
     binding: nonempty,
     carriage: nonempty,
+    description: optional(string),
     structuredPayload: fc.boolean(),
     endToEndEncrypted: fc.boolean(),
+    federated: optional(fc.boolean()),
     deliveryReceipts: fc.boolean(),
     maxMessageBytes: fc.nat(),
     sendSupported: fc.boolean(),
@@ -636,4 +649,15 @@ it("documents every canonical term and every emitted minted term", async () => {
       }
     }
   }
+});
+
+it("preserves optional federation capability booleans without changing existing descriptors", async () => {
+  const original = exampleRecords["channel-capability"];
+  expect(fromRdf(toRdf(original), original.id)).not.toHaveProperty("federated");
+  for (const federated of [true, false]) {
+    const record = { ...original, federated };
+    expect(await recordFromTurtle(await recordToTurtle(record), record.id)).toEqual(record);
+  }
+  for (const federated of ["true", 1, null])
+    expect(podRecordSchema.safeParse({ ...original, federated }).success).toBe(false);
 });

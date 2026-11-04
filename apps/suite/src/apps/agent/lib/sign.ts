@@ -1,13 +1,14 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 import { issueApproval } from "@jeswr/agent-mandate/approval";
 import { type ControlStatementClaims, issueControlStatement } from "@jeswr/agent-mandate/control";
 import type { ActionProposal } from "@jeswr/agent-model";
-import type { PodSession } from "../../../lib/session/pod-session";
 import type { AgentClient } from "./client";
 import { withApprovalKey } from "./keys";
+import type { ProfileSession } from "./profile";
 
 export function createAgentSigner(
-  session: Pick<PodSession, "fetch" | "webId">,
+  session: ProfileSession,
   client: AgentClient,
   now = () => new Date(),
 ) {

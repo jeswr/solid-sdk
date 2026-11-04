@@ -19,6 +19,18 @@ const secondDemoAccount = {
   webId: "https://example.org/rowan/profile#me",
   storageUrl: "https://example.org/rowan/",
 };
+const pendingOutbox = JSON.stringify({
+  pending: [
+    {
+      id: "unsent",
+      label: "Rename a file",
+      where: "My Drive",
+      queuedAt: "2026-11-01T12:00:00Z",
+      state: "pending",
+    },
+  ],
+  conflicts: [],
+});
 
 async function accessible(page: Page) {
   const result = await new AxeBuilder({ page }).analyze();
@@ -149,6 +161,11 @@ test("switching remembered accounts keeps search and shows the active name and t
 
 test("sign out of all accounts returns to welcome", async ({ page }) => {
   await page.goto("/search");
+  await page.evaluate((outbox) => {
+    localStorage.setItem("suite.recent.v1.test-second-demo", "[]");
+    localStorage.setItem("suite.recent.v1.removed-account", "[]");
+    localStorage.setItem("suite.outbox.v1.test-second-demo", outbox);
+  }, pendingOutbox);
   const dialog = await menu(page);
   await dialog.getByRole("button", { name: "Sign out of all accounts", exact: true }).click();
   await expect(page).toHaveURL(/\/welcome$/);
@@ -157,6 +174,33 @@ test("sign out of all accounts returns to welcome", async ({ page }) => {
       () => JSON.parse(localStorage.getItem("suite.accounts.v1") ?? "{}").accounts,
     ),
   ).toEqual([]);
+  expect(
+    await page.evaluate(() =>
+      Object.keys(localStorage).filter((key) => key.startsWith("suite.recent.v1.")),
+    ),
+  ).toEqual([]);
+  expect(await page.evaluate(() => localStorage.getItem("suite.outbox.v1.test-second-demo"))).toBe(
+    pendingOutbox,
+  );
+});
+
+test("signing out one account clears its history and keeps unsent changes", async ({ page }) => {
+  await page.goto("/search");
+  await page.evaluate((outbox) => {
+    localStorage.setItem("suite.recent.v1.demo", "[]");
+    localStorage.setItem("suite.recent.v1.test-second-demo", "[]");
+    localStorage.setItem("suite.outbox.v1.demo", outbox);
+  }, pendingOutbox);
+  const dialog = await menu(page);
+  await dialog.getByRole("button", { name: "Sign out", exact: true }).click();
+  await expect(trigger(page, secondDemoAccount.name)).toBeVisible();
+  expect(await page.evaluate(() => localStorage.getItem("suite.recent.v1.demo"))).toBeNull();
+  expect(
+    await page.evaluate(() => localStorage.getItem("suite.recent.v1.test-second-demo")),
+  ).not.toBeNull();
+  expect(await page.evaluate(() => localStorage.getItem("suite.outbox.v1.demo"))).toBe(
+    pendingOutbox,
+  );
 });
 
 test("appearance autosaves and restores theme, density, font and motion after reload", async ({
@@ -289,7 +333,9 @@ test("shortcuts remain searchable with the single-key switch", async ({ page }) 
 
 test("clearing saved copies requires confirmation and preserves other data", async ({ page }) => {
   await page.goto("/settings/offline");
-  await page.evaluate(async () => {
+  await page.evaluate(async (outbox) => {
+    localStorage.setItem("suite.recent.v1.test-second-demo", "[]");
+    localStorage.setItem("suite.outbox.v1.test-second-demo", outbox);
     await caches.open("suite-test-copy");
     await caches.open("other-test-copy");
     await new Promise<void>((resolve, reject) => {
@@ -300,7 +346,7 @@ test("clearing saved copies requires confirmation and preserves other data", asy
       };
       request.onerror = () => reject(request.error);
     });
-  });
+  }, pendingOutbox);
   await page.getByRole("button", { name: "Clear saved copies", exact: true }).click();
   const confirm = page.getByRole("alertdialog");
   await expect(confirm).toContainText("Your original files stay in your storage");
@@ -310,7 +356,17 @@ test("clearing saved copies requires confirmation and preserves other data", asy
   await page.getByRole("button", { name: "Clear saved copies", exact: true }).click();
   await confirm.getByRole("button", { name: "Clear saved copies", exact: true }).click();
   await expect(page.getByRole("status").filter({ hasText: "Saved copies cleared" })).toBeVisible();
-  expect(await page.evaluate(() => caches.keys())).toEqual(["other-test-copy"]);
+  expect(
+    (await page.evaluate(() => caches.keys())).filter((name) => !name.startsWith("app-shell-")),
+  ).toEqual(["other-test-copy"]);
+  expect(
+    await page.evaluate(() =>
+      Object.keys(localStorage).filter((key) => key.startsWith("suite.recent.v1.")),
+    ),
+  ).toEqual([]);
+  expect(await page.evaluate(() => localStorage.getItem("suite.outbox.v1.test-second-demo"))).toBe(
+    pendingOutbox,
+  );
   expect(
     await page.evaluate(async () =>
       (await indexedDB.databases()).some(({ name }) => name === "suite-test-copies"),

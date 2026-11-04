@@ -1,0 +1,142 @@
+# AUTHORED-BY Claude Opus 5.5
+#
+# Generation INPUT (SHACL profile, L2) for @jeswr/solid-scheduling's generated model.
+#
+# The Task, RecurrenceRule and Calendar NodeShapes of this package's published
+# scheduling.shacl.ttl, with sh:path, nodeKind, datatype, cardinality and severity kept.
+# sh:name, sh:message and comments are dropped because they do not drive codegen.
+# The sched:Reminder shape is left out: a task carries any number of reminder nodes
+# (#reminder0, #reminder1, ...) and a composite link projects exactly one child, so
+# reminders stay hand-written in src/task.ts. A reproduce test regenerates from these
+# inputs and diffs the committed src/generated to guard drift.
+#
+# Differences from scheduling.shacl.ttl, each because the generator's closed admission
+# or composite links need it:
+#   - sched:frequency's sh:pattern "^(DAILY|WEEKLY|MONTHLY|YEARLY)$" is expressed as the
+#     equivalent closed sh:in enum (only ^https?://, ^https:// and \S patterns are admitted).
+#   - sched:recurrence gains sh:class sched:RecurrenceRule so it projects as a composite
+#     link to the rule node (the published profile only says sh:nodeKind sh:IRI). Builds
+#     already type the rule node sched:RecurrenceRule.
+# The published scheduling.shacl.ttl is unchanged and still validated by src/shape.test.ts.
+#
+# The sector profile (solid-federation-vocab sectors/scheduling) differs further: it uses
+# the re-minted https://jeswr.org/ns/ namespace, sh:or date/dateTime unions, and
+# dcterms:title on sched:Calendar. Reconciling the package with the sector is a normative
+# call tracked on the Phase S bead (sst-ild.7.5).
+@prefix schsh: <https://w3id.org/jeswr/sectors/scheduling/shapes#> .
+@prefix sched: <https://w3id.org/jeswr/sectors/scheduling#> .
+@prefix sh:    <http://www.w3.org/ns/shacl#> .
+@prefix xsd:   <http://www.w3.org/2001/XMLSchema#> .
+
+schsh:TaskShape
+    a sh:NodeShape ;
+    sh:targetClass sched:Task ;
+    sh:property [
+        sh:path sched:summary ;
+        sh:datatype xsd:string ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:severity sh:Violation ;
+    ] ;
+    sh:property [
+        sh:path sched:description ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+        sh:severity sh:Info ;
+    ] ;
+    sh:property [
+        sh:path sched:startTime ;
+        sh:datatype xsd:dateTime ;
+        sh:maxCount 1 ;
+        sh:severity sh:Info ;
+    ] ;
+    sh:property [
+        sh:path sched:dueTime ;
+        sh:datatype xsd:dateTime ;
+        sh:maxCount 1 ;
+        sh:severity sh:Info ;
+    ] ;
+    sh:property [
+        sh:path sched:completed ;
+        sh:datatype xsd:boolean ;
+        sh:maxCount 1 ;
+        sh:severity sh:Info ;
+    ] ;
+    sh:property [
+        sh:path sched:completedAt ;
+        sh:datatype xsd:dateTime ;
+        sh:maxCount 1 ;
+        sh:severity sh:Info ;
+    ] ;
+    sh:property [
+        sh:path sched:organizer ;
+        sh:nodeKind sh:IRI ;
+        sh:maxCount 1 ;
+        sh:severity sh:Info ;
+    ] ;
+    sh:property [
+        sh:path sched:inCalendar ;
+        sh:nodeKind sh:IRI ;
+        sh:maxCount 1 ;
+        sh:severity sh:Info ;
+    ] ;
+    sh:property [
+        sh:path sched:recurrence ;
+        sh:nodeKind sh:IRI ;
+        sh:class sched:RecurrenceRule ;
+        sh:maxCount 1 ;
+        sh:severity sh:Info ;
+    ] .
+
+schsh:RecurrenceRuleShape
+    a sh:NodeShape ;
+    sh:targetClass sched:RecurrenceRule ;
+    sh:property [
+        sh:path sched:frequency ;
+        sh:datatype xsd:string ;
+        sh:in ( "DAILY" "WEEKLY" "MONTHLY" "YEARLY" ) ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:severity sh:Violation ;
+    ] ;
+    sh:property [
+        sh:path sched:interval ;
+        sh:datatype xsd:positiveInteger ;
+        sh:maxCount 1 ;
+        sh:severity sh:Info ;
+    ] ;
+    sh:property [
+        sh:path sched:count ;
+        sh:datatype xsd:positiveInteger ;
+        sh:maxCount 1 ;
+        sh:severity sh:Info ;
+    ] ;
+    sh:property [
+        sh:path sched:until ;
+        sh:datatype xsd:dateTime ;
+        sh:maxCount 1 ;
+        sh:severity sh:Info ;
+    ] .
+
+schsh:CalendarShape
+    a sh:NodeShape ;
+    sh:targetClass sched:Calendar ;
+    sh:property [
+        sh:path sched:summary ;
+        sh:datatype xsd:string ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:severity sh:Violation ;
+    ] ;
+    sh:property [
+        sh:path sched:description ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+        sh:severity sh:Info ;
+    ] ;
+    sh:property [
+        sh:path sched:organizer ;
+        sh:nodeKind sh:IRI ;
+        sh:maxCount 1 ;
+        sh:severity sh:Info ;
+    ] .

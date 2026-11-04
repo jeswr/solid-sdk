@@ -12,11 +12,12 @@
 // independently-checkable keystone of the accountability stack: neither
 // `@jeswr/solid-vc` nor `@jeswr/solid-odrl` owns the composition alone, by design.
 //
-// PURITY CONTRACT (load-bearing): this package does ZERO I/O and ZERO RDF
-// parsing. All network enters through the INJECTED seams —
-// {@link VerifyAuthorityOptions.resolveKey} / `isControlledBy` / `resolveStatus`
-// — and all RDF/crypto mechanics live in the composed packages (`solid-vc`
-// verifies credentials + digests; `solid-odrl` walks the delegation chain).
+// PURITY CONTRACT (load-bearing): this package does ZERO I/O. All network enters
+// through the INJECTED seams — {@link VerifyAuthorityOptions.resolveKey} /
+// `isControlledBy` / `resolveStatus` — and all RDF/crypto mechanics live in the
+// composed packages (`solid-vc` verifies credentials + digests; `solid-odrl`
+// parses the signed policy content and walks the delegation chain). The only RDF
+// this package reads is the presented policy content, through those packages.
 // A second, independent implementation reproduces exactly this composition.
 //
 // It composes, IN ORDER and FAIL-CLOSED, as TWO PASSES over the ordered chain:
@@ -36,7 +37,12 @@
 //              Plus the G1 policy-content digest gate (`verifyRelatedResources`
 //              over `policyContents`): the presented raw policy document must
 //              match the credential's SIGNED `relatedResource` digest,
-//              fail-closed (a digest failure → a `POLICY_INTEGRITY` deny).
+//              fail-closed (a digest failure → a `POLICY_INTEGRITY` deny). The
+//              policy Phase D evaluates is the one PARSED from that signed
+//              content, and only when its projection re-serialises to exactly
+//              the signed graph; the presenter's object is never evaluated for a
+//              content-bound hop. A hop without content denies unless the caller
+//              opts in with `allowProvisionalPolicy`.
 //   Phase C  — status ∪ revocation, fail-closed: each hop credential's W3C
 //              Bitstring Status List entry is resolved through solid-vc's
 //              `resolveStatus` seam — a set bit → `REVOKED`/`SUSPENDED`; an
@@ -54,19 +60,35 @@
 // which permits `w` the requested action — forbidding the fail-open of skipping the
 // leaf-assignee check (the roborev round-1 finding this design was hardened against).
 
+import { parseRdf } from "@jeswr/fetch-rdf";
 import type {
   ActiveDuty,
   DelegatedEvaluationResult,
+  OdrlConstraint,
   OdrlPolicy,
   RequestContext,
 } from "@jeswr/solid-odrl";
-import { evaluateDelegated } from "@jeswr/solid-odrl";
+import {
+  DEFAULT_MAX_CHAIN_LENGTH,
+  evaluate,
+  evaluateDelegated,
+  ODRL_ACTIONS,
+  parsePolicy,
+  policyToRdf,
+} from "@jeswr/solid-odrl";
 import type {
   PresentedResourceContent,
   VerifiableCredential,
   VerifyCredentialOptions,
 } from "@jeswr/solid-vc";
-import { SVC, verifyCredential, verifyRelatedResources } from "@jeswr/solid-vc";
+import {
+  digestQuads,
+  digestRdfContent,
+  SVC,
+  verifyCredential,
+  verifyRelatedResources,
+} from "@jeswr/solid-vc";
+import { DataFactory, type Quad } from "n3";
 import {
   PHASE_A_CODES,
   STATUS_GATE_CODES,
@@ -112,10 +134,19 @@ export interface BoundAuthorization {
  * (`verifyRelatedResources`) recomputes its RDFC-1.0 canonical digest and
  * compares it against the credential's SIGNED
  * `relatedResource` `digestMultibase`, fail-closed (`POLICY_INTEGRITY` deny on a
- * missing digest or a mismatch). When every hop's content is presented and passes,
- * the permit's `policyIntegrityProvisional` is `false`; a hop presented WITHOUT
- * content falls back to the trusted-by-location reading and keeps the honest
- * provisional marker.
+ * missing digest or a mismatch). The verifier then parses the policy from that
+ * content and evaluates THAT policy: the presented {@link OdrlPolicy} object for a
+ * content-bound hop only places the hop in the chain (its id and
+ * `delegatedUnder` must agree with the signed content). The parsed policy must
+ * re-serialise to exactly the signed graph, so signed statements the evaluator
+ * cannot represent deny rather than being dropped. Content must be Turtle,
+ * N-Triples/N-Quads/TriG, or JSON-LD with an inline context.
+ *
+ * When every hop's content is presented and passes, the permit's
+ * `policyIntegrityProvisional` is `false`. A hop presented WITHOUT content denies
+ * with `POLICY_INTEGRITY` unless {@link VerifyAuthorityOptions.allowProvisionalPolicy}
+ * is set, in which case Phase D evaluates the presenter's object for that hop and
+ * the permit carries the provisional marker.
  */
 export interface PresentedChain {
   readonly credentials: readonly VerifiableCredential[];
@@ -130,7 +161,10 @@ export interface VerifyAuthorityOptions {
   readonly request: RequestContext;
   /** The trusted root principal for the target — the resource owner for the primary chain. */
   readonly rootPrincipal: string;
-  /** The single evaluation instant across all phases (the note's one-instant rule). */
+  /**
+   * The single evaluation instant across all phases (the note's one-instant rule).
+   * Must be a valid `Date`; anything else denies with `INVALID_OPTIONS`.
+   */
   readonly now: Date;
   /**
    * Resolve a `verificationMethod` IRI to a public `CryptoKey` — the INJECTED key
@@ -142,15 +176,25 @@ export interface VerifyAuthorityOptions {
   /**
    * The issuer↔key controller check — the INJECTED controller seam: pass the SAME
    * `createWebIdKeyResolver()` instance's `isControlledBy` for the fail-closed
-   * two-directional document resolution. When omitted, solid-vc falls back to
-   * its documented prefix heuristic — acceptable only for closed test setups.
+   * two-directional document resolution. Required: solid-vc's fallback prefix
+   * heuristic lets a co-tenant on the issuer's origin pass a key as the issuer's,
+   * so a missing seam denies with `INVALID_OPTIONS`.
    */
-  readonly isControlledBy?: VerifyCredentialOptions["isControlledBy"];
+  readonly isControlledBy: NonNullable<VerifyCredentialOptions["isControlledBy"]>;
+  /**
+   * Accept a hop presented WITHOUT its raw policy content
+   * ({@link PresentedChain.policyContents}), evaluating the presenter's policy
+   * object for it. Off by default: such a hop denies with `POLICY_INTEGRITY`,
+   * because nothing ties the object to what the issuer signed. When set, a permit
+   * that rests on such a hop carries `policyIntegrityProvisional: true`.
+   */
+  readonly allowProvisionalPolicy?: boolean;
   /**
    * Phase C, the POLICY-level revocation input: policy IRIs revoked via the
    * delegation profile's `odrld:Revocation` (e.g. published in a trace's
    * `revocations.ttl`). Distinct from — and consulted IN ADDITION TO — the
-   * credential-level Bitstring status gate (`resolveStatus`).
+   * credential-level Bitstring status gate (`resolveStatus`). A single string or a
+   * `Set` is read as a list; any other non-array value denies.
    */
   readonly revoked?: readonly string[];
   /**
@@ -177,7 +221,11 @@ export interface VerifyAuthorityOptions {
   readonly statusUnreachable?: boolean;
   /** Gate the permit on the AGGREGATE chain duties being discharged (Phase D). */
   readonly requireDuties?: boolean;
-  /** Absolute chain-length cap (Phase D structural guard). */
+  /**
+   * Absolute chain-length cap (default 8), applied to the presented policies and
+   * credentials before any key is resolved, and again in Phase D. Must be a
+   * positive integer.
+   */
   readonly maxChainLength?: number;
   /** The AUTHENTICATED acting WebID on the wire (D9 identity composition). */
   readonly actor?: string;
@@ -446,6 +494,436 @@ function deny(
   };
 }
 
+/** The validated, normalised options the phases read. */
+interface CheckedOptions {
+  readonly revoked: readonly string[];
+  readonly maxChainLength: number;
+  /** A private copy of `now`, so a seam cannot move the one evaluation instant. */
+  readonly now: Date;
+}
+
+/**
+ * Validate the caller's options before any phase runs. Each check closes a
+ * fail-open: an Invalid Date makes every validity-window comparison false, a
+ * missing `isControlledBy` falls back to solid-vc's prefix heuristic, a bare
+ * string `revoked` becomes a set of characters, and a NaN cap never trips.
+ */
+function checkOptions(
+  chain: PresentedChain,
+  options: VerifyAuthorityOptions,
+): CheckedOptions | VerifyAuthorityResult {
+  const invalid = (reason: string) => deny("assembly", "INVALID_OPTIONS", reason);
+  // Read the internal time value rather than trust instanceof, so a Date from
+  // another realm is accepted; getTime throws on anything without that slot (a
+  // spoofed Symbol.toStringTag included), which is refused below as NaN.
+  let nowMs = Number.NaN;
+  try {
+    nowMs = Date.prototype.getTime.call(options.now);
+  } catch {
+    // not a Date
+  }
+  if (!Number.isFinite(nowMs)) {
+    return invalid("`now` is not a valid Date — refusing to evaluate validity windows.");
+  }
+  if (typeof options.resolveKey !== "function") {
+    return invalid("No resolveKey seam was supplied.");
+  }
+  if (typeof options.isControlledBy !== "function") {
+    return invalid(
+      "No isControlledBy seam was supplied — refusing solid-vc's prefix heuristic for key control.",
+    );
+  }
+  const maxChainLength = options.maxChainLength ?? DEFAULT_MAX_CHAIN_LENGTH;
+  if (!Number.isSafeInteger(maxChainLength) || maxChainLength < 1) {
+    return invalid("maxChainLength must be a positive integer.");
+  }
+  const rawRevoked: unknown = options.revoked ?? [];
+  const revoked =
+    typeof rawRevoked === "string"
+      ? [rawRevoked]
+      : rawRevoked instanceof Set
+        ? [...rawRevoked]
+        : rawRevoked;
+  if (!Array.isArray(revoked) || !revoked.every((r) => typeof r === "string")) {
+    return invalid("revoked must be a policy IRI or a list of policy IRIs.");
+  }
+  if (!Array.isArray(chain.credentials) || !Array.isArray(chain.policies)) {
+    return deny("assembly", "CHAIN_MALFORMED", "The presented chain is not a list of hops.");
+  }
+  if (chain.policies.length > maxChainLength || chain.credentials.length > maxChainLength) {
+    return deny(
+      "assembly",
+      "CHAIN_MALFORMED",
+      `The presented chain exceeds the maximum length ${maxChainLength}.`,
+    );
+  }
+  return { revoked, maxChainLength, now: new Date(nowMs) };
+}
+
+/** The http(s) document a policy IRI names (its fragment removed), else undefined. */
+function policyDocumentUrl(policyId: string): string | undefined {
+  try {
+    const url = new URL(policyId);
+    if (url.protocol !== "https:" && url.protocol !== "http:") return undefined;
+    url.hash = "";
+    return url.href;
+  } catch {
+    return undefined;
+  }
+}
+
+/** An IRI with a scheme. */
+const ABSOLUTE_IRI = /^[A-Za-z][A-Za-z0-9+.-]*:/;
+
+/** Whether a base-free quad holds a relative IRI that is not `#fragment`. */
+function hasNonFragmentRelativeIri(quad: Quad): boolean {
+  return [quad.subject, quad.predicate, quad.object, quad.graph].some(
+    (t) => t.termType === "NamedNode" && !ABSOLUTE_IRI.test(t.value) && !t.value.startsWith("#"),
+  );
+}
+
+/** `quad` with each relative IRI resolved against `base` (left as is without one). */
+function resolveQuad(quad: Quad, base: string | undefined): Quad {
+  const term = <T extends Quad[keyof Quad & ("subject" | "predicate" | "object" | "graph")]>(
+    t: T,
+  ): T =>
+    t.termType === "NamedNode" && base !== undefined && !ABSOLUTE_IRI.test(t.value)
+      ? (DataFactory.namedNode(new URL(t.value, base).href) as T)
+      : t;
+  return DataFactory.quad(
+    term(quad.subject),
+    term(quad.predicate),
+    term(quad.object),
+    term(quad.graph),
+  ) as Quad;
+}
+
+/** An XSD dateTime that names its timezone; a bare local time depends on the host TZ. */
+const ZONED_DATE_TIME =
+  /^(-?\d{4,})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d+)?(?:Z|[+-](\d{2}):(\d{2}))$/;
+
+/**
+ * A zoned XSD dateTime whose fields are in range (`Date.parse` would roll
+ * `02-30` forward) and that `Date.parse` reads.
+ */
+function zonedDateTime(value: unknown): boolean {
+  if (typeof value !== "string") return false;
+  const m = ZONED_DATE_TIME.exec(value);
+  if (m === null) return false;
+  const [year, month, day, hour, minute, second, tzHour, tzMinute] = m
+    .slice(1)
+    .map((x) => (x === undefined ? 0 : Number(x))) as number[] as [
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+  ];
+  const monthDays = new Date(Date.UTC(2000, month, 0)).getUTCDate();
+  const leapFeb = month === 2 && day === 29 && new Date(Date.UTC(year, 1, 29)).getUTCDate() !== 29;
+  return (
+    month >= 1 &&
+    month <= 12 &&
+    day >= 1 &&
+    day <= monthDays &&
+    !leapFeb &&
+    (hour < 24 || (hour === 24 && minute === 0 && second === 0)) &&
+    minute <= 59 &&
+    second <= 59 &&
+    tzMinute <= 59 &&
+    (tzHour < 14 || (tzHour === 14 && tzMinute === 0)) &&
+    Number.isFinite(Date.parse(value))
+  );
+}
+
+/**
+ * A zoned dateTime the evaluator compares without loss: `Date.parse` keeps
+ * milliseconds and drops any further digit, so `…00.0001Z` would equal
+ * `…00.0002Z` and a prohibition on one instant could miss the other. Digits past
+ * the third are allowed only when they are zeros.
+ */
+function exactInstant(value: unknown): boolean {
+  if (!zonedDateTime(value)) return false;
+  const fraction = /\.(\d+)/.exec((value as string).slice(19))?.[1];
+  return fraction === undefined || /^\d{0,3}0*$/.test(fraction);
+}
+
+/**
+ * A validity bound that is absent, or a zoned dateTime the credential check can
+ * compare without loss (a sub-millisecond `validFrom` would open early).
+ */
+function validBound(value: unknown): boolean {
+  return value === undefined || exactInstant(value);
+}
+
+const XSD_DATE_TIME = "http://www.w3.org/2001/XMLSchema#dateTime";
+const XSD_DATE = "http://www.w3.org/2001/XMLSchema#date";
+
+/** solid-odrl compares a constraint as instants when this holds (else lexically). */
+function temporal(c: OdrlConstraint): boolean {
+  return c.leftOperand === "dateTime" || c.datatype === XSD_DATE_TIME || c.datatype === XSD_DATE;
+}
+
+/** An XSD date, optionally zoned; `Date.parse` reads a bare date as UTC midnight. */
+const XSD_DATE_LEXICAL = /^(-?\d{4,})-(\d{2})-(\d{2})(Z|[+-]\d{2}:\d{2})?$/;
+
+/**
+ * Operators under which a whole-day `xsd:date` bound read as its UTC midnight
+ * keeps its meaning: `lt` (before the day) and `gteq` (from the day on). Under
+ * any other operator the evaluator would compare one instant where a day is
+ * meant (`eq 2026-08-01` would match only midnight), so the bound denies.
+ */
+const DATE_BOUND_OPERATORS: ReadonlySet<string> = new Set(["lt", "gteq"]);
+
+/**
+ * A right operand the evaluator compares as an instant and that means what it
+ * says: a zoned dateTime, or a date under `xsd:date` with `lt` or `gteq`.
+ * Anything else falls back to a lexical comparison or a midnight reading.
+ */
+function temporalOperand(value: unknown, c: OdrlConstraint): boolean {
+  if (exactInstant(value)) return true;
+  if (c.datatype !== XSD_DATE || typeof value !== "string") return false;
+  if (!DATE_BOUND_OPERATORS.has(c.operator)) return false;
+  const m = XSD_DATE_LEXICAL.exec(value);
+  // `Date.parse` reads a bare or `Z` date but not one with an offset, which the
+  // evaluator would then compare as text.
+  return (
+    m !== null &&
+    (m[4] === undefined || m[4] === "Z") &&
+    zonedDateTime(`${m[1]}-${m[2]}-${m[3]}T00:00:00Z`) &&
+    Number.isFinite(Date.parse(value))
+  );
+}
+
+/** solid-odrl's own number test: a finite number, or a non-blank string that reads as one. */
+function numeric(value: unknown): boolean {
+  if (typeof value === "number") return Number.isFinite(value);
+  return typeof value === "string" && value.trim() !== "" && Number.isFinite(Number(value));
+}
+
+/** Operators the evaluator applies as an ordering (numeric, temporal or else lexical). */
+const ORDERING_OPERATORS: ReadonlySet<string> = new Set(["gt", "gteq", "lt", "lteq"]);
+
+/** The right operands of a constraint, as a list. */
+function rightOperands(c: OdrlConstraint): readonly unknown[] {
+  return Array.isArray(c.rightOperand) ? c.rightOperand : [c.rightOperand];
+}
+
+/**
+ * A constraint the evaluator compares as numbers: any right operand reads as a
+ * number. A request value that does not would be compared as text.
+ */
+function numericConstraint(c: OdrlConstraint): boolean {
+  return !temporal(c) && rightOperands(c).some(numeric);
+}
+
+/**
+ * The left operands solid-odrl compares as instants anywhere in the chain. A
+ * request value for one must be a zoned dateTime: anything else (a number, a
+ * boolean, an unzoned or unparseable string) would leave a temporal constraint
+ * unsatisfied, or compared lexically, and a prohibition on it would not fire.
+ */
+function temporalOperands(chain: readonly OdrlPolicy[]): ReadonlySet<string> {
+  const operands = new Set<string>(["dateTime"]);
+  for (const policy of chain) {
+    for (const c of allConstraints(policy)) if (temporal(c)) operands.add(c.leftOperand);
+  }
+  return operands;
+}
+
+/**
+ * The left operands the chain compares as numbers. A request value for one must
+ * read as a number: `""`, `" "` or `"1,000"` would compare as text and could slip
+ * past a `count gt 100` prohibition.
+ */
+function numericOperands(chain: readonly OdrlPolicy[]): ReadonlySet<string> {
+  const operands = new Set<string>();
+  for (const policy of chain) {
+    for (const c of allConstraints(policy)) if (numericConstraint(c)) operands.add(c.leftOperand);
+  }
+  return operands;
+}
+
+/**
+ * The first constraint in the chain the evaluator would compare as text where an
+ * order or instant is meant: a temporal constraint with a right operand that is
+ * not an instant, or an ordering operator whose operands are neither instants nor
+ * numbers (an `xsd:duration` such as `PT1H` sorts after `P1D`).
+ */
+function lexicalConstraint(chain: readonly OdrlPolicy[]): OdrlConstraint | undefined {
+  for (const policy of chain) {
+    for (const c of allConstraints(policy)) {
+      const rights = rightOperands(c);
+      if (temporal(c)) {
+        if (!rights.every((r) => temporalOperand(r, c))) return c;
+      } else if (ORDERING_OPERATORS.has(c.operator) && !rights.every(numeric)) {
+        return c;
+      }
+    }
+  }
+  return undefined;
+}
+
+/**
+ * A chain prohibition the request might trigger whose constraints name an operand
+ * the request does not supply. solid-odrl treats a missing operand as unsatisfied,
+ * so the prohibition would not fire: a request could escape it by leaving the
+ * operand out. Mirrors each read `evaluateDelegated` makes of each policy, with
+ * the same agent, action and injected depth:
+ *  - every edge: the parent, for `grantUse` by the child's assigner, with the
+ *    true remaining depth injected as `delegationDepth`;
+ *  - every ancestor: the requested action by its delegate, and by the requester;
+ *  - the leaf: the requested action by the requester.
+ * The caller's own `delegationDepth` is stripped, as the evaluator strips it. In
+ * each read, a prohibition with an unsupplied operand is probed with only those
+ * constraints removed (its assignee, target and every resolved constraint still
+ * apply). Returns the policy holding one that would match.
+ */
+function unresolvedProhibition(
+  chain: readonly OdrlPolicy[],
+  request: RequestContext,
+  now: Date,
+): OdrlPolicy | undefined {
+  // A single policy keeps its own conflict strategy: under `perm` a matching
+  // permission overrides any prohibition, supplied operand or not.
+  if (chain.length === 1 && chain[0]?.conflict === "perm") return undefined;
+  const { delegationDepth: _ignored, ...attributes } = request.attributes ?? {};
+  const reads: Array<[OdrlPolicy, RequestContext]> = [];
+  for (const [i, policy] of chain.entries()) {
+    const child = chain[i + 1];
+    if (child !== undefined) {
+      reads.push([
+        policy,
+        {
+          agent: child.assigner as string,
+          action: "grantUse",
+          ...(request.target !== undefined && { target: request.target }),
+          attributes: { ...attributes, delegationDepth: chain.length - (i + 1) },
+        },
+      ]);
+      reads.push([policy, { ...request, agent: child.assigner as string, attributes }]);
+    }
+    reads.push([policy, { ...request, attributes }]);
+  }
+  for (const [policy, read] of reads) {
+    const supplied = read.attributes ?? {};
+    // Resolved exactly when the evaluator compares it: a non-boolean value is
+    // present (or `dateTime`, which falls back to `now`), and a temporal
+    // comparison reads both sides as instants.
+    const resolved = (c: OdrlConstraint) => {
+      const value = Object.hasOwn(supplied, c.leftOperand)
+        ? supplied[c.leftOperand]
+        : c.leftOperand === "dateTime"
+          ? now.toISOString()
+          : undefined;
+      if (value === undefined || typeof value === "boolean") return false;
+      if (temporal(c)) return Number.isFinite(Date.parse(String(value)));
+      return !numericConstraint(c) || numeric(value);
+    };
+    const suspects = (policy.prohibitions ?? [])
+      .filter((r) => (r.constraints ?? []).some((c) => !resolved(c)))
+      .map((r) => ({ ...r, constraints: (r.constraints ?? []).filter(resolved) }));
+    if (suspects.length === 0) continue;
+    const probe: OdrlPolicy = {
+      ...policy,
+      permissions: [],
+      obligations: [],
+      prohibitions: suspects,
+    };
+    if (evaluate(probe, read, { now }).matchedProhibitions.length > 0) return policy;
+  }
+  return undefined;
+}
+
+/** Operators that compare against ONE right operand (the evaluator reads only the first). */
+const SCALAR_OPERATORS: ReadonlySet<string> = new Set(["eq", "neq", "gt", "gteq", "lt", "lteq"]);
+
+/**
+ * Every constraint a policy carries: on its rules, its permissions' duties, and its
+ * obligations.
+ */
+function allConstraints(policy: OdrlPolicy): readonly OdrlConstraint[] {
+  const rules = [...(policy.permissions ?? []), ...(policy.prohibitions ?? [])];
+  const duties = [...rules.flatMap((r) => r.duties ?? []), ...(policy.obligations ?? [])];
+  return [...rules, ...duties].flatMap((x) => x.constraints ?? []);
+}
+
+/**
+ * The policy a content-bound hop is evaluated as: the one parsed from the SIGNED
+ * content (already digest-checked by the caller), never the presenter's object.
+ * Returns a reason string when the content cannot stand in for the hop:
+ *  - it holds no well-formed policy, or a policy with another id;
+ *  - its `delegatedUnder` differs from the hop's (the chain was assembled from
+ *    the presented objects, so the position must agree with the signature);
+ *  - the parsed policy does not re-serialise to exactly the signed graph — the
+ *    projection dropped something (an unknown action, operand or operator), and
+ *    evaluating it would weaken what the issuer signed.
+ */
+async function contentBoundPolicy(
+  hop: OdrlPolicy,
+  presented: PresentedResourceContent,
+): Promise<OdrlPolicy | string> {
+  try {
+    const contentType = presented.contentType ?? "text/turtle";
+    // Resolve relative IRIs (`<#policy>`) against the policy document, as a
+    // consumer fetching it would. The digest binds the BASE-FREE graph, so the
+    // evaluated graph must be exactly that graph with its relative IRIs resolved:
+    // a JSON-LD parser drops relative-IRI triples when it has no base, and they
+    // would otherwise reappear (unsigned) in a based parse.
+    const baseIRI = policyDocumentUrl(hop.id);
+    const dataset = await parseRdf(presented.content, contentType, {
+      ...(baseIRI !== undefined && { baseIRI }),
+    });
+    const unbased = await parseRdf(presented.content, contentType);
+    const unbasedQuads = [...unbased.match()] as Quad[];
+    // A base-free parse merges relative forms (`./x`, `../x` and `?/x` all read
+    // as `/x`), so the signed graph cannot tell them apart. Only a fragment
+    // reference (`#x`) has one meaning against the document; refuse the rest.
+    if (unbasedQuads.some(hasNonFragmentRelativeIri)) {
+      return "the signed content uses a relative IRI other than a fragment reference (#…), whose meaning the signature does not fix";
+    }
+    const [signedDigest, unbasedDigest, resolvedDigest, basedDigest] = await Promise.all([
+      digestRdfContent(presented.content, contentType),
+      digestQuads(unbasedQuads),
+      digestQuads(unbasedQuads.map((q) => resolveQuad(q, baseIRI))),
+      digestQuads([...dataset.match()] as Quad[]),
+    ]);
+    if (signedDigest !== unbasedDigest || resolvedDigest !== basedDigest) {
+      return "the policy graph read against its document differs from the signed graph";
+    }
+    const parsed = await parsePolicy(dataset);
+    if (parsed === undefined) return "the signed content holds no well-formed ODRL policy";
+    if (parsed.id !== hop.id) {
+      return `the signed content's policy is <${parsed.id}>, not <${hop.id}>`;
+    }
+    if (parsed.delegatedUnder !== hop.delegatedUnder) {
+      return "the signed content places the policy at a different chain position (odrld:delegatedUnder)";
+    }
+    // An RDF graph has no value order, but the evaluator compares a scalar
+    // operator against the FIRST right operand only — so with several values the
+    // presenter's triple order would pick the one that counts.
+    if (
+      allConstraints(parsed).some(
+        (c) =>
+          SCALAR_OPERATORS.has(c.operator) &&
+          Array.isArray(c.rightOperand) &&
+          c.rightOperand.length !== 1,
+      )
+    ) {
+      return "a scalar constraint operator carries several right operands, whose order the signed graph does not fix";
+    }
+    if (basedDigest !== (await digestQuads(policyToRdf(parsed)))) {
+      return "the signed content carries statements the evaluator cannot represent — refusing to evaluate a weaker policy than was signed";
+    }
+    return parsed;
+  } catch (e) {
+    return `the signed content could not be read as a policy (${e instanceof Error ? e.message : String(e)})`;
+  }
+}
+
 // --- the composed verifier -------------------------------------------------
 
 /**
@@ -458,14 +936,17 @@ export async function verifyAgentAuthority(
   chain: PresentedChain,
   options: VerifyAuthorityOptions,
 ): Promise<VerifyAuthorityResult> {
-  const { request, rootPrincipal, now, resolveKey } = options;
+  const checked = checkOptions(chain, options);
+  if ("authorized" in checked) return checked;
+  const { request, rootPrincipal, resolveKey, isControlledBy } = options;
+  const { now } = checked;
 
   // --- assembly ------------------------------------------------------------
   const assembled = assembleChain(chain.policies);
   if ("error" in assembled) {
     return deny("assembly", "CHAIN_MALFORMED", `Chain assembly failed: ${assembled.error}`);
   }
-  const ordered = assembled.ordered;
+  let ordered: readonly OdrlPolicy[] = assembled.ordered;
   const chainIds = ordered.map((p) => p.id);
 
   // Map each hop policy to its binding credential (svc:policy ≡ policy.id).
@@ -553,10 +1034,18 @@ export async function verifyAgentAuthority(
     const b = bound.get(hop.id)!;
     const phaseARes = await verifyCredential(b.vc, {
       resolveKey,
-      ...(options.isControlledBy !== undefined && { isControlledBy: options.isControlledBy }),
+      isControlledBy,
       expectedProofPurpose: "assertionMethod",
       now,
     });
+    if (phaseARes.verified && !(validBound(b.vc.validFrom) && validBound(b.vc.validUntil))) {
+      return deny(
+        "A",
+        "MALFORMED",
+        `Phase A (credential verification) failed for hop <${hop.id}>: a validity bound is not a dateTime with a timezone and at most millisecond precision.`,
+        chainIds,
+      );
+    }
     if (!phaseARes.verified) {
       const detail = phaseARes.errors.map((e) => e.message).join("; ");
       const phaseAError = phaseARes.errors.find((e) =>
@@ -574,11 +1063,32 @@ export async function verifyAgentAuthority(
   }
 
   // --- Pass 2: reached only once EVERY hop has passed Phase A above. Per hop,
-  // in order: subject-issuer anchor → G1 digest gate → G2 status gate.
+  // in order: subject-issuer anchor → G1 digest gate (+ the signed policy that
+  // replaces the presented object) → G2 status gate.
+  const signedPolicies = new Map<string, OdrlPolicy>();
   for (const hop of ordered) {
     // biome-ignore lint/style/noNonNullAssertion: every hop bound (checked above)
     const b = bound.get(hop.id)!;
-    const presented: PresentedResourceContent | undefined = contents[hop.id];
+    // Snapshot the content once: the digest gate, the parse and the round-trip
+    // must all read the same bytes (an accessor could otherwise change them).
+    const raw: PresentedResourceContent | undefined = Object.hasOwn(contents, hop.id)
+      ? contents[hop.id]
+      : undefined;
+    if (raw !== undefined && (typeof raw !== "object" || raw === null)) {
+      return deny(
+        "B",
+        "POLICY_INTEGRITY",
+        `The content presented for chain hop <${hop.id}> is not a content object.`,
+        chainIds,
+      );
+    }
+    const presented: PresentedResourceContent | undefined =
+      raw === undefined
+        ? undefined
+        : Object.freeze({
+            content: raw.content,
+            ...(raw.contentType !== undefined && { contentType: raw.contentType }),
+          });
 
     // SECURITY (delegation-trust anchor) — runs BEFORE the digest/status gates
     // below, for this hop. Each hop's self-asserted `credentialSubject.id`,
@@ -621,6 +1131,18 @@ export async function verifyAgentAuthority(
           chainIds,
         );
       }
+      // The digest binds the CONTENT; evaluate the policy that content states,
+      // never a presenter-supplied object beside it.
+      const signedPolicy = await contentBoundPolicy(hop, presented);
+      if (typeof signedPolicy === "string") {
+        return deny(
+          "B",
+          "POLICY_INTEGRITY",
+          `Policy-content binding failed for <${hop.id}>: ${signedPolicy}.`,
+          chainIds,
+        );
+      }
+      signedPolicies.set(hop.id, signedPolicy);
     }
 
     // G2 status gate (Phase C — status ∪ revocation, fail-closed). A credential
@@ -641,7 +1163,7 @@ export async function verifyAgentAuthority(
       // call is deterministic and can only newly fail on the status gate).
       const statusRes = await verifyCredential(b.vc, {
         resolveKey,
-        ...(options.isControlledBy !== undefined && { isControlledBy: options.isControlledBy }),
+        isControlledBy,
         resolveStatus: options.resolveStatus,
         expectedProofPurpose: "assertionMethod",
         now,
@@ -666,7 +1188,9 @@ export async function verifyAgentAuthority(
   }
   // The permit is fully content-bound (non-provisional) only when EVERY hop's raw
   // policy content was presented — and therefore digest-checked above, fail-closed.
-  const allContentBound = ordered.every((p) => contents[p.id] !== undefined);
+  const allContentBound = ordered.every((p) => signedPolicies.has(p.id));
+  // From here on every phase reads the SIGNED policy for each content-bound hop.
+  ordered = ordered.map((p) => signedPolicies.get(p.id) ?? p);
 
   // --- Phase B: cross-binding (root/assigner/linkage) -----------------------
   // The subject↔issuer anchor + the G1/G2 gates already ran per hop above; here
@@ -689,8 +1213,8 @@ export async function verifyAgentAuthority(
     // biome-ignore lint/style/noNonNullAssertion: every hop bound
     const b = bound.get(hop.id)!;
     // The hop's credential must be issued by (and self-assert a subject of) the
-    // hop's assigner (the delegator). solid-vc already tied issuer ≡ subject.id;
-    // here we tie both to the ODRL assigner.
+    // hop's assigner (the delegator). Pass 2 above already tied issuer ≡
+    // subject.id; here we tie both to the ODRL assigner.
     if (hop.assigner !== undefined && b.auth.principal !== hop.assigner) {
       return deny(
         "B",
@@ -764,23 +1288,113 @@ export async function verifyAgentAuthority(
       chainIds,
     );
   }
-  const revoked = new Set(options.revoked ?? []);
+  const revoked = new Set(checked.revoked);
   for (const p of ordered) {
     if (revoked.has(p.id)) {
       return deny("C", "REVOKED", `Chain policy <${p.id}> has been revoked.`, chainIds);
     }
   }
 
+  // --- G1 completeness: a hop with no signed content -----------------------
+  // Checked after B and C so their codes keep precedence; before D because the
+  // evaluator would otherwise read a presenter-chosen policy.
+  const unbound = ordered.find((p) => !signedPolicies.has(p.id));
+  if (unbound !== undefined && options.allowProvisionalPolicy !== true) {
+    return deny(
+      "B",
+      "POLICY_INTEGRITY",
+      `Chain hop <${unbound.id}> was presented without its signed policy content — nothing ties the presented policy to what the issuer signed (set allowProvisionalPolicy to accept it as provisional).`,
+      chainIds,
+    );
+  }
+
   // --- Phase D: the delegation-profile chain walk --------------------------
   // Pin the requesting agent to the LEAF ASSIGNEE (D9): legal accountability
   // attaches to the party the leaf agreement names, not to whoever authenticated.
+  // An action outside the ODRL vocabulary (or a prototype key) has no implication
+  // entry; deny it here rather than let the evaluator throw.
+  if (
+    typeof request.action !== "string" ||
+    !(ODRL_ACTIONS as readonly string[]).includes(request.action)
+  ) {
+    return deny(
+      "D",
+      "POLICY_DENIED",
+      `Phase D denied: the requested action ${JSON.stringify(String(request.action))} is not an ODRL action.`,
+      chainIds,
+    );
+  }
+  // solid-odrl reads only the first element of a multi-valued attribute under a
+  // scalar operator and lets one element decide a set operator, so a value set
+  // could ride an `eq` permission or switch off an `isNoneOf` prohibition. The
+  // verifier takes single-valued attributes only.
+  // A malformed scalar (an object, NaN, a dateTime that does not parse) could
+  // throw inside the evaluator; refuse it here as a denial.
+  // A value for an operand the chain compares as an instant must be a zoned
+  // dateTime, whatever its JavaScript type.
+  // A value for an operand the chain compares as numbers must read as one, and an
+  // operand compared both ways cannot be supplied consistently.
+  const instants = temporalOperands(ordered);
+  const numbers = numericOperands(ordered);
+  const malformed = Object.entries(request.attributes ?? {}).find(([key, v]) =>
+    key === "delegationDepth"
+      ? false
+      : instants.has(key)
+        ? !exactInstant(v) || numbers.has(key)
+        : numbers.has(key)
+          ? !numeric(v)
+          : Array.isArray(v) ||
+            !(
+              typeof v === "boolean" ||
+              (typeof v === "number" && Number.isFinite(v)) ||
+              typeof v === "string"
+            ),
+  );
+  if (malformed !== undefined) {
+    return deny(
+      "D",
+      "POLICY_DENIED",
+      `Phase D denied: the request attribute ${JSON.stringify(malformed[0])} is not a single well-formed value.`,
+      chainIds,
+    );
+  }
+  // A signed bound the evaluator would compare as text (an unzoned or unparseable
+  // instant, or an ordering over durations or names) cannot be applied as written.
+  const lexical = lexicalConstraint(ordered);
+  if (lexical !== undefined) {
+    return deny(
+      "D",
+      "POLICY_DENIED",
+      `Phase D denied: a ${JSON.stringify(lexical.leftOperand)} constraint would compare its operands as text (not as instants or numbers).`,
+      chainIds,
+    );
+  }
   const primaryRequest: RequestContext = { ...request, agent: leafAssignee };
-  const decision = evaluateDelegated(ordered, primaryRequest, {
-    now,
-    revoked: [...revoked],
-    ...(options.requireDuties !== undefined && { requireDuties: options.requireDuties }),
-    ...(options.maxChainLength !== undefined && { maxChainLength: options.maxChainLength }),
-  });
+  const unresolved = unresolvedProhibition(ordered, primaryRequest, now);
+  if (unresolved !== undefined) {
+    return deny(
+      "D",
+      "POLICY_DENIED",
+      `Phase D denied: a prohibition in <${unresolved.id}> may apply, but the request does not supply every operand it constrains.`,
+      chainIds,
+    );
+  }
+  let decision: DelegatedEvaluationResult;
+  try {
+    decision = evaluateDelegated(ordered, primaryRequest, {
+      now,
+      revoked: [...revoked],
+      ...(options.requireDuties !== undefined && { requireDuties: options.requireDuties }),
+      maxChainLength: checked.maxChainLength,
+    });
+  } catch (e) {
+    return deny(
+      "D",
+      "POLICY_DENIED",
+      `Phase D denied: the evaluator failed (${e instanceof Error ? e.message : String(e)}).`,
+      chainIds,
+    );
+  }
   if (decision.decision !== "permit") {
     return deny("D", "POLICY_DENIED", `Phase D denied: ${decision.reason}`, chainIds, {
       decision,
@@ -812,14 +1426,17 @@ export async function verifyAgentAuthority(
       requireLeafAssignee: options.actor,
       now,
       resolveKey,
-      ...(options.isControlledBy !== undefined && { isControlledBy: options.isControlledBy }),
+      isControlledBy,
       ...(options.resolveStatus !== undefined && { resolveStatus: options.resolveStatus }),
-      ...(options.revoked !== undefined && { revoked: options.revoked }),
+      revoked: checked.revoked,
+      ...(options.allowProvisionalPolicy !== undefined && {
+        allowProvisionalPolicy: options.allowProvisionalPolicy,
+      }),
       ...(options.statusUnreachable !== undefined && {
         statusUnreachable: options.statusUnreachable,
       }),
       ...(options.requireDuties !== undefined && { requireDuties: options.requireDuties }),
-      ...(options.maxChainLength !== undefined && { maxChainLength: options.maxChainLength }),
+      maxChainLength: checked.maxChainLength,
       // the actor of chain₂ is its own leaf assignee (w authenticates as itself)
     });
     if (!actorResult.authorized) {
@@ -832,18 +1449,6 @@ export async function verifyAgentAuthority(
           decision,
           actorResult,
         },
-      );
-    }
-    // The second chain must actually authorize the ACTOR (its leaf assignee ≡ w).
-    // verifyAgentAuthority already pins Phase D to chain₂'s leaf assignee; confirm
-    // that leaf assignee is the actor so the chain proves `w`, not a third party.
-    if (actorResult.decision === undefined) {
-      return deny(
-        "composition",
-        "IDENTITY_COMPOSITION_FAILED",
-        "The second chain produced no Phase-D decision.",
-        chainIds,
-        { decision },
       );
     }
   }

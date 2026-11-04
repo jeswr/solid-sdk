@@ -41,8 +41,10 @@ vi.mock("@/components/interim-shell/suite-frame", () => ({
 vi.mock("../src/apps/docs/hooks/use-document", () => ({
   useDocument: () => ({ runtime: view.runtime, error: null }),
 }));
-vi.mock("../src/apps/docs/components/file-menu", () => ({
-  FileMenu: ({ print }: { print: () => void }) =>
+// The menu bar's File > Print item calls this same print callback.
+vi.mock("../src/apps/docs/components/editor-menubar", async (original) => ({
+  ...(await original<Record<string, unknown>>()),
+  EditorMenubar: ({ print }: { print: () => void }) =>
     createElement("button", { type: "button", onClick: print }, "Print document"),
 }));
 vi.mock("@tiptap/react", async (original) => ({

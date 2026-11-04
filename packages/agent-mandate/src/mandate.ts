@@ -220,6 +220,9 @@ export function createVcMandateVerifier(options: VcMandateOptions): MandateVerif
                 : { status: "revoked", reason: "Mandate status could not be confirmed clear" };
             },
             requireLeafAssignee: subject,
+            // The binding policy is synthesised here, not presented content; the
+            // whole signed credential graph is digest-checked below instead.
+            allowProvisionalPolicy: true,
           },
         );
         // Phase D is intentionally left to PolicyEngine. Reaching D proves A/B/C passed.

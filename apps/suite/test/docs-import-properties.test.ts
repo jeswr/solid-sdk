@@ -14,8 +14,16 @@ import { importMarkdown } from "../src/apps/docs/lib/convert/markdown";
 import { importHtml, importPlainText, normaliseImport } from "../src/apps/docs/lib/convert/schema";
 import { DOCX_FORMATTING_WARNING } from "../src/apps/docs/lib/convert/skipped";
 import { wordCount } from "../src/apps/docs/lib/editor/logic";
+import { documentRgb } from "../src/apps/docs/lib/editor/styles";
 import type { PodSession } from "../src/lib/session/pod-session";
 import { legacyDocx } from "./helpers/docs-legacy-docx";
+
+const TEXT_STYLE = {
+  color: documentRgb([192, 0, 0]),
+  backgroundColor: documentRgb([255, 230, 120]),
+  fontFamily: "Georgia, serif",
+  fontSize: "14pt",
+};
 
 const session = { fetch: vi.fn() } as unknown as PodSession;
 const schema = getSchema(baseExtensions(session.fetch));
@@ -151,6 +159,8 @@ it("DOCX round trips generated documents covering every editor node and mark typ
                       {
                         type,
                         ...(type === "link" ? { attrs: { href: "https://example.org/" } } : {}),
+                        // An attribute-free textStyle is not a document state (the editor removes it).
+                        ...(type === "textStyle" ? { attrs: TEXT_STYLE } : {}),
                       },
                     ],
                   },

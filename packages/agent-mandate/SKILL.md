@@ -22,7 +22,10 @@ a verification method prefix heuristic or use a key supplied inside the document
 
 Only a mandate that passes integrity, owner/agent binding, validity and confirmed-clear status
 may reach PolicyEngine. Undefined means refuse-all. Expired/future/wrong-agent mandates refuse
-all authority. Any prohibition wins in every set. Missing context, unknown vocabulary, duties,
+all authority. Any prohibition wins in every set, including against a broader requested action
+that covers the prohibited one. A set-valued operand under an isAnyOf permission constraint (or an isAllOf one with an
+unlisted value),
+missing context, unknown vocabulary, duties,
 engine failure and no matching rule require confirmation. A permit in withApproval still
 requires a separate verified approval. Accounting and transmissions belong to agent-executor.
 

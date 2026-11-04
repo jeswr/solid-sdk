@@ -1,18 +1,20 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 import type { ContactsModel } from "../lib/model/book";
 import { registerAddressBook } from "../lib/model/discovery";
 import {
   absentOr,
   ensureDeleted,
   ensurePerson,
+  ensureReplaced,
   membership,
   openDocument,
   personLink,
   type SavedDocument,
 } from "../lib/model/intent";
 import { ContactsWriteError, PartialWriteError } from "../lib/model/transport";
-import type { Intent, IntentJournal } from "./journal";
+import type { Intent, IntentJournal, MergeDuplicate } from "./journal";
 import { ensureBook, ensurePrivateIndex } from "./recovery";
 
 export interface DeleteToken {
@@ -32,7 +34,9 @@ export function newIntent(
   kind: Intent["kind"],
   bookUrl: string,
   destination: string,
-  details: Partial<Pick<Intent, "person" | "source" | "labels" | "destinations">> = {},
+  details: Partial<
+    Pick<Intent, "person" | "source" | "labels" | "destinations" | "duplicates" | "selection">
+  > = {},
 ): Intent {
   return {
     id: crypto.randomUUID(),
@@ -71,9 +75,32 @@ export class IntentRunner {
           // Keep the surviving document even when its links cannot safely be repaired.
         }
       }
+      if (intent.kind === "merge") {
+        try {
+          await this.relinkDuplicates(intent);
+        } catch {
+          // As above: a surviving duplicate document is never deleted after a conflict.
+        }
+      }
       // Never clean up a created destination or retry a stale source DELETE after a conflict.
       journal.remove(intent);
       throw new IntentConflictError(cause);
+    }
+  }
+  /** A conflicting merge stops before deleting a duplicate; restore links it already lost. */
+  private async relinkDuplicates(intent: Intent): Promise<void> {
+    // A failing step is still recorded as attempting: its effect may have landed.
+    const touched = new Set([...intent.completed, intent.attempting]);
+    for (const duplicate of intent.duplicates as MergeDuplicate[]) {
+      const url = duplicate.person.url;
+      const surviving = await absentOr(() => this.model.loadContact(url));
+      if (!surviving) continue;
+      if (touched.has(`unlink:${url}`))
+        await personLink(this.model, intent.bookUrl, surviving, true);
+      for (const label of duplicate.labels) {
+        if (touched.has(`remove:${url}:${label}`))
+          await membership(this.model, intent.bookUrl, label, `${url}#this`, true);
+      }
     }
   }
   private async replay(journal: IntentJournal, intent: Intent): Promise<void> {
@@ -144,6 +171,25 @@ export class IntentRunner {
                 await step(label, () => membership(this.model, intent.bookUrl, label, id, false));
               await step("index", () => personLink(this.model, intent.bookUrl, person, false));
               await step("delete", () => ensureDeleted(this.model, saved));
+            }
+          } else if (intent.kind === "merge") {
+            // Merged primary first, then its labels, then each duplicate's labels, index and RDF.
+            await step("person", () => ensureReplaced(this.model, saved));
+            await step("index", () => personLink(this.model, intent.bookUrl, person, true));
+            for (const label of intent.labels)
+              await step(`add:${label}`, () =>
+                membership(this.model, intent.bookUrl, label, id, true),
+              );
+            for (const duplicate of intent.duplicates as MergeDuplicate[]) {
+              const url = duplicate.person.url;
+              for (const label of duplicate.labels)
+                await step(`remove:${url}:${label}`, () =>
+                  membership(this.model, intent.bookUrl, label, `${url}#this`, false),
+                );
+              await step(`unlink:${url}`, async () =>
+                personLink(this.model, intent.bookUrl, await openDocument(duplicate.person), false),
+              );
+              await step(`delete:${url}`, () => ensureDeleted(this.model, duplicate.person));
             }
           } else {
             await step("person", () => ensurePerson(this.model, saved));

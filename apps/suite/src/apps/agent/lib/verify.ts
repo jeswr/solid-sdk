@@ -1,18 +1,16 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 import { verifyApproval } from "@jeswr/agent-mandate/approval";
 import { verifyControlStatement } from "@jeswr/agent-mandate/control";
 import { createWebIdKeyResolver } from "@jeswr/solid-vc";
-import type { PodSession } from "../../../lib/session/pod-session";
+import { type ProfileSession, profileReader } from "./profile";
 
 export type Verification = "verified" | "unchecked" | { invalid: string };
-export function createAgentVerifier(
-  session: Pick<PodSession, "fetch" | "webId">,
-  now = () => new Date(),
-) {
+export function createAgentVerifier(session: ProfileSession, now = () => new Date()) {
   // Each call gets a fresh profile snapshot, so key revocations cannot live in a UI cache.
   const options = () => ({
     ownerWebId: session.webId,
-    webIdKeyResolver: createWebIdKeyResolver({ fetch: session.fetch }),
+    webIdKeyResolver: createWebIdKeyResolver({ fetch: profileReader(session) }),
     now,
   });
   return {

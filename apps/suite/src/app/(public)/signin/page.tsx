@@ -23,6 +23,11 @@ import { RECENT_PROVIDERS_KEY, recentProviders } from "@/shell/lib/preferences";
 import { hintForField, rememberedIssuer } from "@/shell/lib/sign-in-hint";
 import { DemoButton } from "@/shell/public/demo-button";
 import { PodExplainer } from "@/shell/public/pod-explainer";
+import {
+  SIGNUP_UNAVAILABLE_NOTE,
+  SIGNUP_UNAVAILABLE_PARAM,
+  useRegistration,
+} from "@/shell/registration/use-registration";
 import { useAccounts } from "@/shell/session/accounts-provider";
 import { SignInError, type SignInHint } from "@/shell/session/types";
 
@@ -44,6 +49,7 @@ function SignIn() {
   const params = useSearchParams();
   const next = params.get("next");
   const adding = params.get("add") === "1" && active;
+  const registration = useRegistration();
   const [recent, setRecent] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState<Pending>(null);
@@ -107,6 +113,11 @@ function SignIn() {
           Adding another account — you stay signed in as {active.name}.
         </p>
       )}
+      {params.get(SIGNUP_UNAVAILABLE_PARAM) === "unavailable" && (
+        <p role="status" className="shell-public-note">
+          {SIGNUP_UNAVAILABLE_NOTE}
+        </p>
+      )}
       <SignInCard
         title="Sign in to Solid Suite"
         subtitle="Use your Account ID, or choose where your account lives."
@@ -146,7 +157,7 @@ function SignIn() {
             )}
             <DemoButton next={next} />
             <p className="shell-public-footer">
-              {env.SUITE_TEST_CAPS.selfRegistration === true && (
+              {registration.available && (
                 <>
                   <span>
                     New here? <a href="/signup">Create an account</a>

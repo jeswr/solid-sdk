@@ -17,9 +17,10 @@ import { createAgentVerifier } from "../lib/verify";
 import { AgentControl } from "./agent-control";
 
 export function useDaemonStatus() {
-  const { session } = useAgentWorkspace();
+  const { session, client } = useAgentWorkspace();
   const now = useAgentClock();
-  const query = useAgentQuery(session.storageUrl, async (c) => ({
+  // Keyed on the control container: the workspace poller refreshes exactly this key.
+  const query = useAgentQuery(client.paths.control, async (c) => ({
     heartbeat: await readHeartbeat(c),
     controls: await readControl(c, createAgentVerifier(session)),
   }));

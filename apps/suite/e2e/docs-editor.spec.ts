@@ -59,6 +59,15 @@ test("creates, saves, reloads and formats a document accessibly", async ({ page 
   const title = page.getByRole("textbox", { name: "Document title", exact: true });
   await title.fill("Launch plan");
   await title.press("Enter");
+  const menus = page.getByRole("menubar", { name: "Document menus" });
+  for (const name of ["File", "Edit", "View", "Insert", "Format", "Tools", "Help"])
+    await expect(menus.getByRole("menuitem", { name, exact: true })).toBeVisible();
+  await menus.getByRole("menuitem", { name: "File", exact: true }).focus();
+  await page.keyboard.press("ArrowRight");
+  await expect(menus.getByRole("menuitem", { name: "Edit", exact: true })).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("menuitem", { name: /^Undo/ })).toBeVisible();
+  await page.keyboard.press("Escape");
   const body = page.getByRole("textbox", { name: "Document body", exact: true });
   await body.pressSequentially("A clear plan for the launch.");
   await body.press("Enter");
@@ -90,6 +99,13 @@ test("creates, saves, reloads and formats a document accessibly", async ({ page 
   await expect(
     body.getByRole("checkbox", { name: "Prepare the release", exact: true }),
   ).toBeVisible();
+  const item = body.locator("li[data-checked]").first();
+  const positions = await item.evaluate((element) => {
+    const checkbox = element.querySelector("input")?.getBoundingClientRect();
+    const text = element.querySelector("p")?.getBoundingClientRect();
+    return { checkboxTop: checkbox?.top ?? 0, textTop: text?.top ?? 0 };
+  });
+  expect(Math.abs(positions.checkboxTop - positions.textTop)).toBeLessThan(16);
   await body.press("Enter");
   await body.press("Enter");
   await body.pressSequentially("/");

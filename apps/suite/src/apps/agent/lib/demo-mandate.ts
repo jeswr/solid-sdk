@@ -16,7 +16,7 @@ import {
   publishVerificationMethod,
   statusListCredentialToTurtle,
 } from "@jeswr/solid-vc";
-import type { DemoSeedFile } from "../../../lib/demo-pod/pod";
+import type { DemoSeedFile } from "./seed";
 
 const ROOT = "https://alice.demo.pod/";
 const OWNER = `${ROOT}profile/card#me`;

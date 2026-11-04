@@ -125,7 +125,7 @@ function PollList() {
 }
 
 function NewPoll({ onCreated }: { onCreated: () => void }) {
-  const { webId } = useSession();
+  const { webId, podFetch } = useSession();
   const store = useStore<Poll>(scheduleStore);
   const router = useRouter();
   const [name, setName] = useState("");
@@ -173,7 +173,7 @@ function NewPoll({ onCreated }: { onCreated: () => void }) {
             type: "Invite",
             summary: `${name.trim()} — please RSVP`,
             object: url,
-          }),
+          }, podFetch),
         ),
       );
       toast.success("Poll created");
@@ -239,7 +239,7 @@ function NewPoll({ onCreated }: { onCreated: () => void }) {
 }
 
 function PollDetail({ pollUrl }: { pollUrl: string }) {
-  const { webId, activeStorage, profile } = useSession();
+  const { webId, activeStorage, profile, podFetch } = useSession();
   const store = useStore<Poll>(scheduleStore);
 
   // Is this poll in one of the user's OWN pods (organiser view) or someone
@@ -265,7 +265,7 @@ function PollDetail({ pollUrl }: { pollUrl: string }) {
     if (isOrganiser) return;
     let cancelled = false;
     setForeign({ loading: true });
-    readPollAt(pollUrl)
+    readPollAt(pollUrl, podFetch)
       .then((p) => {
         if (!cancelled) setForeign({ loading: false, data: p });
       })
@@ -275,7 +275,7 @@ function PollDetail({ pollUrl }: { pollUrl: string }) {
     return () => {
       cancelled = true;
     };
-  }, [isOrganiser, pollUrl, foreignNonce]);
+  }, [isOrganiser, pollUrl, foreignNonce, podFetch]);
 
   const [saving, setSaving] = useState(false);
   // The invitee's own just-submitted RSVPs, shown optimistically (the organiser's
@@ -301,7 +301,7 @@ function PollDetail({ pollUrl }: { pollUrl: string }) {
       .slice()
       .sort((a, b) => (a.published ?? "").localeCompare(b.published ?? ""))
       .map((n) => ({ actor: n.actor, object: n.object, content: n.content }));
-    aggregatePollRsvps(basePoll, pollUrl, offers)
+    aggregatePollRsvps(basePoll, pollUrl, offers, podFetch)
       .then((rsvps) => {
         if (!cancelled) setAggregated(rsvps);
       })
@@ -311,7 +311,7 @@ function PollDetail({ pollUrl }: { pollUrl: string }) {
     return () => {
       cancelled = true;
     };
-  }, [isOrganiser, basePoll, pollUrl, inbox.data]);
+  }, [isOrganiser, basePoll, pollUrl, inbox.data, podFetch]);
 
   // The poll as displayed: base + organiser-aggregated (organiser) or base +
   // optimistic own response (invitee), so the UI reflects the action taken.
@@ -367,7 +367,7 @@ function PollDetail({ pollUrl }: { pollUrl: string }) {
           option,
           response,
           pollName: poll.name,
-        });
+        }, podFetch);
         // Reflect the invitee's own response locally (the organiser's poll we
         // read won't show it — the organiser aggregates it on their side).
         setMyOptimistic((prev) => [

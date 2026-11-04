@@ -1,8 +1,11 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 import { describe, expect, it } from "vitest";
 import {
   CONNECTORS,
   connectorForUrl,
+  identitiesIn,
   type ProvenanceContext,
   provenanceOf,
 } from "../../src/apps/home/lib/model/provenance";
@@ -39,7 +42,7 @@ describe("Home §5.3 provenance", () => {
   ])("rule 2: resolves %s app and person names", async (predicate) => {
     for (const [iri, kind, label] of [
       [app, "app", "MyHealth"],
-      [person, "source", "Bob"],
+      [person, "person", "Bob"],
     ]) {
       const dataset = await rdf(`<#it> prov:${predicate} <${iri}> .`);
       expect(provenanceOf(dataset, subject, `${STORAGE}integrations/spotify/`, context)).toEqual({
@@ -60,8 +63,8 @@ describe("Home §5.3 provenance", () => {
       label: "GitHub",
     });
     expect(provenanceOf(dataset, subject, `${STORAGE}integrations/unknown/`, context)).toEqual({
-      kind: "you",
-      label: "Added by you",
+      kind: "app",
+      label: "another app",
     });
   });
 
@@ -79,6 +82,121 @@ describe("Home §5.3 provenance", () => {
       });
     }
     expect(provenanceOf(dataset, subject, STORAGE)).toEqual({ kind: "you", label: "Added by you" });
+  });
+
+  it("keeps self attribution while refusing identifier-shaped identity names", async () => {
+    const self = await rdf(`<#it> prov:wasAttributedTo <${WEB_ID}> .`);
+    expect(provenanceOf(self, subject, STORAGE, context)).toEqual({
+      kind: "you",
+      label: "Added by you",
+    });
+    const other = await rdf(`<#it> prov:wasAttributedTo <${app}> .`);
+    expect(
+      provenanceOf(other, subject, STORAGE, {
+        ...context,
+        identities: new Map([[app, { kind: "app", label: "https://app.example/client.jsonld" }]]),
+      }),
+    ).toEqual({ kind: "app", label: "another app" });
+  });
+
+  // AUTHORED-BY Claude Opus 5.5 — finding 7
+  it("labels a person's WebID with that profile's name, never as another app", async () => {
+    const named = await rdf(
+      `<#it> prov:wasAttributedTo <${person}> . <${person}> a <http://xmlns.com/foaf/0.1/Person>; <http://xmlns.com/foaf/0.1/name> "Bob Jones" .`,
+    );
+    const identities = identitiesIn(named, subject);
+    expect(identities.get(person)).toEqual({ kind: "person", label: "Bob Jones" });
+    expect(provenanceOf(named, subject, STORAGE, { ...context, identities })).toEqual({
+      kind: "person",
+      label: "Bob Jones",
+    });
+    // Without identities (the item page before this fix) the same item read as an app.
+    const unnamed = await rdf(
+      `<#it> prov:wasAttributedTo <${person}> . <${person}> a <http://xmlns.com/foaf/0.1/Person> .`,
+    );
+    expect(provenanceOf(unnamed, subject, STORAGE, { userWebId: WEB_ID })).toEqual({
+      kind: "person",
+      label: "another person",
+    });
+  });
+
+  // AUTHORED-BY Claude Opus 5.5 — fix round 4 (finding 6)
+  it("calls an unnamed, untyped WebID someone else: its shape doesn't prove a person", async () => {
+    for (const agent of [person, "https://agents.example/a#me"]) {
+      const bare = await rdf(`<#it> prov:wasAttributedTo <${agent}> .`);
+      expect(provenanceOf(bare, subject, STORAGE, { userWebId: WEB_ID })).toEqual({
+        kind: "other",
+        label: "someone else",
+      });
+    }
+    // A fragment on a non-web identifier (no WebID can be dereferenced) is not a WebID.
+    for (const agent of ["urn:example:agent#me", "did:example:123#key-1"]) {
+      const opaque = await rdf(`<#it> prov:wasAttributedTo <${agent}> .`);
+      expect(provenanceOf(opaque, subject, STORAGE, { userWebId: WEB_ID })).toEqual({
+        kind: "app",
+        label: "another app",
+      });
+    }
+    // A known name still wins.
+    const bare = await rdf(`<#it> prov:wasAttributedTo <${person}> .`);
+    expect(provenanceOf(bare, subject, STORAGE, context)).toEqual({ kind: "person", label: "Bob" });
+    // Typed as a person in the loaded data, with or without a fragment.
+    for (const [agent, type] of [
+      ["https://bob.example/profile", "http://xmlns.com/foaf/0.1/Person"],
+      ["https://bob.example/profile#me", "https://schema.org/Person"],
+    ]) {
+      const typed = await rdf(`<#it> prov:wasAttributedTo <${agent}> . <${agent}> a <${type}> .`);
+      expect(provenanceOf(typed, subject, STORAGE, { userWebId: WEB_ID })).toEqual({
+        kind: "person",
+        label: "another person",
+      });
+    }
+  });
+
+  it("labels a WebID typed as software or an AI agent as another app", async () => {
+    const agent = "https://agents.example/a#me";
+    for (const type of [
+      "http://www.w3.org/ns/prov#SoftwareAgent",
+      "https://schema.org/SoftwareApplication",
+      "http://schema.org/SoftwareApplication",
+      "https://www.w3.org/ns/activitystreams#Application",
+      "https://www.w3.org/ns/activitystreams#Service",
+    ]) {
+      const dataset = await rdf(`<#it> prov:wasAttributedTo <${agent}> . <${agent}> a <${type}> .`);
+      expect(provenanceOf(dataset, subject, STORAGE, { userWebId: WEB_ID })).toEqual({
+        kind: "app",
+        label: "another app",
+      });
+    }
+    // A typed person among the attributions still reads as a person.
+    const mixed = await rdf(
+      `<#it> prov:wasAttributedTo <${agent}>, <${person}> . <${person}> a <http://xmlns.com/foaf/0.1/Person> .`,
+    );
+    expect(provenanceOf(mixed, subject, STORAGE, { userWebId: WEB_ID }).label).toBe(
+      "another person",
+    );
+  });
+
+  it("keeps apps, software agents and generating activities as another app", async () => {
+    for (const triples of [
+      `<#it> prov:wasAttributedTo <${app}> .`,
+      `<#it> prov:wasAttributedTo <https://app.example/id#app> . <https://app.example/id#app> a prov:SoftwareAgent .`,
+      `<#it> prov:wasGeneratedBy <https://app.example/runs#1> .`,
+    ]) {
+      const dataset = await rdf(triples);
+      expect(provenanceOf(dataset, subject, STORAGE, { userWebId: WEB_ID })).toEqual({
+        kind: "app",
+        label: "another app",
+      });
+    }
+    // An identity resolved as an app but nameless is not relabelled as a person.
+    const appWebId = "https://app.example/id#app";
+    const nameless = await rdf(`<#it> prov:wasAttributedTo <${appWebId}> .`);
+    expect(
+      provenanceOf(nameless, subject, STORAGE, {
+        identities: new Map([[appWebId, { kind: "app", label: "" }]]),
+      }),
+    ).toEqual({ kind: "app", label: "another app" });
   });
 
   it("ports all connector host patterns and protects host boundaries", () => {

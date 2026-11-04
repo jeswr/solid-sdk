@@ -7,6 +7,7 @@
  * special-use TLDs, not the provider's own namespace), then POSTs the claim;
  * success lands on the detail page, which is the DNS setup screen.
  */
+import { useSession } from "@/components/session-provider";
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -32,6 +33,7 @@ import {
 export default function AddDomainPage() {
   // The list state doubles as the feature/session probe: a disabled server or
   // an expired session surfaces here before the user types anything.
+  const { podFetch } = useSession();
   const { base, podRoot, data, loading, error, reload } = useDomains();
   // Only to offer the buy path as the alternative where the server sells domains.
   const { available: purchasable } = usePurchaseFeature(base, data !== undefined);
@@ -54,7 +56,7 @@ export default function AddDomainPage() {
     if (!validation.ok || !base || !podRoot) return;
     setSubmitting(true);
     try {
-      const binding = await claimDomain(base, { domain: validation.domain, podRoot });
+      const binding = await claimDomain(base, { domain: validation.domain, podRoot }, podFetch);
       // The detail page is the setup screen (TXT + routing records, Check now).
       router.replace(`/settings/domains/domain?name=${encodeURIComponent(binding.domain)}`);
     } catch (e: unknown) {

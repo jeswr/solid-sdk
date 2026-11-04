@@ -14,6 +14,7 @@
  * `music-view.ts` header and docs §6 Q4). Remote image loading is the same
  * privacy/CSP consideration as profile avatars.
  */
+import { usePodMedia } from "@/components/use-pod-media";
 import { Clock, Music } from "lucide-react";
 import type { MusicModel, MusicTrack } from "@/lib/typed-views/music-view";
 import { humanizeDuration } from "@/lib/typed-views/music-view";
@@ -40,7 +41,7 @@ export function MusicCardList({ model }: { model: MusicModel; url: string }) {
 function MusicRow({ track }: { track: MusicTrack }) {
   // Only ever load an http(s) cover-art IRI (privacy/CSP); anything else falls
   // back to the icon. No adapter writes art today, so this is normally null.
-  const artHref = track.imageUrl ? safeLinkHref(track.imageUrl) : undefined;
+  const artHref = usePodMedia(track.imageUrl ? safeLinkHref(track.imageUrl) : undefined);
   const duration = humanizeDuration(track.duration);
 
   return (
