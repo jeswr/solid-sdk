@@ -57,7 +57,8 @@ describe("browser auth singleton", () => {
     await expect(config.ui.chooseIssuer!(["https://a.example/"])).rejects.toBeInstanceOf(
       AmbiguousIssuerError,
     );
-    expect(config.maxReplayBodyBytes).toBe(1024 * 1024 * 1024);
+    // Uploads pass the File itself, which pod-auth replays without buffering; other bodies keep the default.
+    expect(config.maxReplayBodyBytes).toBeUndefined();
     await expect(
       config.ui.getCode(
         new URL("https://provider.example/authorize"),

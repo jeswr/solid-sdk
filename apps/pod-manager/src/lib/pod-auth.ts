@@ -11,8 +11,6 @@ export { publicFetch } from "./source-fetch";
 /** The mounted provider owns the gesture-opened popup, including StrictMode replay. */
 export const popupHolder: { current: PopupLoginController | null } = { current: null };
 let singleton: PodAuth | undefined;
-/** Uploads are replayed after a 401 challenge, so their buffer must hold a whole file. */
-export const MAX_UPLOAD_BYTES = 1024 * 1024 * 1024;
 export const STORAGE_ENDPOINTS = ["/account/domains", "/account/domains/", "/.notifications/"];
 
 /** Imported dynamically by the session provider, never evaluated during SSR. */
@@ -25,7 +23,6 @@ export function getPodAuth(): PodAuth {
       : new URL("/clientid.jsonld", location.origin).href,
     redirectUri: new URL("/callback.html", location.origin).href,
     allowInsecureLoopback: loopback,
-    maxReplayBodyBytes: MAX_UPLOAD_BYTES,
     // Pod-server APIs outside the pod folder: custom domains and the notifications service.
     boundary: { storageEndpoints: STORAGE_ENDPOINTS },
     ui: {

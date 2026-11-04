@@ -123,7 +123,7 @@ describe("shared Pod auth session", () => {
       expect(auth.login).not.toHaveBeenCalled();
       await result;
     });
-    expect(auth.login).toHaveBeenCalledExactlyOnceWith(hint);
+    expect(auth.login).toHaveBeenCalledExactlyOnceWith(hint, { signal: expect.any(AbortSignal) });
     expect(session.webId).toBe(WEB_ID);
     expect(session.status).toBe("logged-in");
     expect(popup.close).toHaveBeenCalledOnce();
@@ -285,6 +285,32 @@ describe("shared Pod auth session", () => {
     expect(auth.logout).not.toHaveBeenCalled();
     expect(session.recentAccounts.map((account) => account.webId)).toEqual([WEB_ID]);
   });
+  it("cancel aborts the login inside pod-auth and reopens sign-in without waiting for it", async () => {
+    // pod-auth rejects an aborted login at once, whatever the abandoned attempt is still doing.
+    let signal: AbortSignal | undefined;
+    auth.login.mockImplementation(
+      (_hint, options) =>
+        new Promise((_resolve, reject) => {
+          signal = options?.signal;
+          signal?.addEventListener("abort", () => reject(signal?.reason), { once: true });
+        }),
+    );
+    await mount();
+    let result!: Promise<void>;
+    await act(async () => {
+      result = session.loginWithIssuer(ISSUER);
+    });
+    expect(signal?.aborted).toBe(false);
+    await act(async () => {
+      session.cancelLogin();
+      await result;
+    });
+    expect(signal?.aborted).toBe(true);
+    expect(session.ready).toBe(true);
+    expect(session.status).toBe("logged-out");
+    expect(session.error).toBe("Sign-in was cancelled.");
+    expect(auth.logout).not.toHaveBeenCalled();
+  });
   it("offers a WebID's several providers and keeps the WebID when one is chosen", async () => {
     const other = "https://other.example/";
     auth.login.mockRejectedValueOnce(new IssuerChoiceRequiredError([ISSUER, other]));
@@ -295,16 +321,16 @@ describe("shared Pod auth session", () => {
     // A cancelled choice keeps the list for another try.
     auth.login.mockRejectedValueOnce(new DOMException("closed", "AbortError"));
     await act(async () => session.loginWithIssuer(other));
-    expect(auth.login).toHaveBeenLastCalledWith({ webId: WEB_ID, issuer: other });
+    expect(auth.login).toHaveBeenLastCalledWith({ webId: WEB_ID, issuer: other }, { signal: expect.any(AbortSignal) });
     expect(session.issuerChoice?.webId).toBe(WEB_ID);
     await act(async () => session.loginWithIssuer(ISSUER));
-    expect(auth.login).toHaveBeenLastCalledWith({ webId: WEB_ID, issuer: ISSUER });
+    expect(auth.login).toHaveBeenLastCalledWith({ webId: WEB_ID, issuer: ISSUER }, { signal: expect.any(AbortSignal) });
     expect(session.status).toBe("logged-in");
     expect(session.issuerChoice).toBeUndefined();
     // An issuer outside the list is an ordinary provider login without the WebID.
     await act(async () => session.logout());
     await act(async () => session.loginWithIssuer(other));
-    expect(auth.login).toHaveBeenLastCalledWith({ issuer: other });
+    expect(auth.login).toHaveBeenLastCalledWith({ issuer: other }, { signal: expect.any(AbortSignal) });
   });
   it("cancel during profile loading drops the session the provider already granted", async () => {
     const profile = deferred<Response>();
@@ -421,7 +447,7 @@ describe("shared Pod auth session", () => {
     expect(auth.login).not.toHaveBeenCalled();
     expect(window.open).not.toHaveBeenCalled();
     await act(async () => session.loginWithAccount(WEB_ID));
-    expect(auth.login).toHaveBeenCalledWith({ webId: WEB_ID });
+    expect(auth.login).toHaveBeenCalledWith({ webId: WEB_ID }, { signal: expect.any(AbortSignal) });
   });
   it("removes subscriptions and closes a pending popup on unmount", async () => {
     const pending = deferred<typeof identity>();
