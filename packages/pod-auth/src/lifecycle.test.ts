@@ -532,9 +532,10 @@ test("an abort seen after the token exchange discards the grant even when the at
   const controller = new AbortController();
   const fetch = globalThis.fetch;
   vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+    // Reading the URL must not consume the request body.
+    const url = input instanceof Request ? input.url : String(input);
     const response = await fetch(input, init);
-    if (new Request(input, init).url === "https://op.example/token")
-      controller.abort(new Error("cancelled"));
+    if (url === "https://op.example/token") controller.abort(new Error("cancelled"));
     return response;
   });
   const auth = f.load();
@@ -556,9 +557,69 @@ test("an abort seen after the grant is stored discards it even though the attemp
     if (typeof value === "object" && "refreshToken" in value)
       controller.abort(new Error("cancelled"));
   });
+  // Revocation failing during the discard still clears local state, and the caller sees the abort.
+  f.op.failRevocation(true);
   const auth = f.load();
   const logout = vi.spyOn(auth, "logout");
   await expect(auth.login(undefined, { signal: controller.signal })).rejects.toThrow("cancelled");
+  expect(logout).toHaveBeenCalledOnce();
+  expect(await auth.identity()).toBeNull();
+  expect(f.record()).toBeUndefined();
+});
+
+test("an abort while the app picks a WebID or an issuer settles the login without waiting for the hook", async () => {
+  const f = fixture();
+  const picker = vi.fn(() => new Promise<string>(() => {}));
+  f.options.ui.getWebId = picker;
+  const auth = f.load();
+  const controller = new AbortController();
+  const attempt = auth.login(undefined, { signal: controller.signal });
+  await vi.waitFor(() => expect(picker).toHaveBeenCalledOnce());
+  controller.abort(new Error("cancelled"));
+  await expect(attempt).rejects.toThrow("cancelled");
+
+  // A WebID returned after the abort is dropped, so the next login asks again.
+  const late = new AbortController();
+  picker.mockImplementationOnce(async () => {
+    late.abort(new Error("cancelled"));
+    return f.op.webId!;
+  });
+  await expect(auth.login(undefined, { signal: late.signal })).rejects.toThrow("cancelled");
+  picker.mockImplementationOnce(async () => f.op.webId!);
+  await expect(auth.login()).resolves.toMatchObject({ webId: f.op.webId });
+  expect(picker).toHaveBeenCalledTimes(3);
+
+  const g = fixture({ issuers: ["https://op.example/", "https://other.example/"] });
+  const chooser = vi.fn(() => new Promise<string>(() => {}));
+  g.options.ui.chooseIssuer = chooser;
+  const second = g.load();
+  const choice = new AbortController();
+  const choosing = second.login({ webId: g.op.webId! }, { signal: choice.signal });
+  await vi.waitFor(() => expect(chooser).toHaveBeenCalledOnce());
+  choice.abort(new Error("cancelled"));
+  await expect(choosing).rejects.toThrow("cancelled");
+});
+
+test("an abort after a logout during the token exchange does not purge a second time", async () => {
+  const f = fixture();
+  const controller = new AbortController();
+  const fetch = globalThis.fetch;
+  let auth!: ReturnType<typeof f.load>;
+  let loggingOut: Promise<void> | undefined;
+  vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+    // Reading the URL must not consume the request body.
+    const url = input instanceof Request ? input.url : String(input);
+    const response = await fetch(input, init);
+    if (url === "https://op.example/token" && loggingOut === undefined) {
+      loggingOut = auth.logout();
+      controller.abort(new Error("cancelled"));
+    }
+    return response;
+  });
+  auth = f.load();
+  const logout = vi.spyOn(auth, "logout");
+  await expect(auth.login(undefined, { signal: controller.signal })).rejects.toThrow();
+  await loggingOut;
   expect(logout).toHaveBeenCalledOnce();
   expect(await auth.identity()).toBeNull();
   expect(f.record()).toBeUndefined();

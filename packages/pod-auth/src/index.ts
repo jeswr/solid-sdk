@@ -112,6 +112,15 @@ export function createPodAuth(options: PodAuthOptions): PodAuth {
     session,
   });
   let observedFence = providers.fence.signal;
+  /**
+   * Ends a session an abandoned login may hold. A logout since the attempt began already superseded the
+   * fence, so the attempt cannot commit, and a second purge could remove another tab's newer session.
+   * A logout failure (such as failed revocation) leaves local state cleared; the caller sees the abort.
+   */
+  const discard = async (started: number) => {
+    if (started !== epoch) return;
+    await api.logout().catch(() => undefined);
+  };
   const readIdentity = async () => {
     const started = epoch;
     await providers.fence.generation();
@@ -232,11 +241,11 @@ export function createPodAuth(options: PodAuthOptions): PodAuth {
           });
         } catch (error) {
           // A grant obtained before the abort was observed must not outlive the abandoned attempt.
-          if (abort?.aborted && granted) await api.logout();
+          if (abort?.aborted && granted) await discard(started);
           throw error;
         }
         if (abort?.aborted) {
-          await api.logout();
+          await discard(started);
           throw abort.reason;
         }
         return snapshot()!;

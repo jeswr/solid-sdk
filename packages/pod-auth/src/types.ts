@@ -84,7 +84,9 @@ export interface PodAuth {
    * Interactive login. `options.signal` abandons this attempt: its requests and the authorization popup are
    * cancelled and the promise rejects with the abort reason once the attempt has wound down, leaving stored
    * sessions alone. If a grant had already been obtained when the abort was seen, it is discarded with a full
-   * {@link PodAuth.logout} first. Agents ignore the signal once started.
+   * {@link PodAuth.logout} first. `ui.getWebId` and `ui.chooseIssuer` are raced against the signal, and their
+   * late answers are dropped. A stored session that the attempt only renewed is kept, as it existed before.
+   * Agents ignore the signal once started.
    */
   login(hint?: LoginHint, options?: LoginOptions): Promise<Identity>;
   /** Restore the remembered account; never requests interactive authorization. */
