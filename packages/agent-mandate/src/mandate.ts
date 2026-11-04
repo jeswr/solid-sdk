@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6
 import { readBoundAuthorization, verifyAgentAuthority } from "@jeswr/agent-authz-verifier";
 import {
@@ -17,9 +18,11 @@ import {
 import { Store } from "n3";
 import {
   bindingPolicy,
+  decodeCurrency,
   decodeLimit,
   decodePolicy,
   decodeProhibitions,
+  encodeCurrency,
   encodeLimit,
   encodePolicy,
   encodeProhibitions,
@@ -127,6 +130,7 @@ export function mandateCredential(
       [`${AGENT}withApproval`]: encodePolicy(m.withApproval),
       [`${ODRL}prohibition`]: encodeProhibitions(m.prohibitions),
       [`${ODRL}constraint`]: m.limits.map(encodeLimit),
+      ...encodeCurrency(m.currency),
     },
   };
   return { ...credential, credentialSubject: subject };
@@ -240,6 +244,7 @@ export function createVcMandateVerifier(options: VcMandateOptions): MandateVerif
           withApproval: decodePolicy(root.one(`${AGENT}withApproval`)),
           prohibitions: decodeProhibitions(root),
           limits,
+          ...decodeCurrency(root),
         };
         // Every entry path must preserve the entire signed claim graph, including restrictions.
         // Decoding a known subset must never erase a signed field before evaluation.
