@@ -14,12 +14,15 @@ public class SuiteFilesPlugin: CAPPlugin, CAPBridgedPlugin, QLPreviewControllerD
     public let pluginMethods: [CAPPluginMethod] = [
         CAPPluginMethod(name: "pdfBegin", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "pdfChunk", returnType: CAPPluginReturnPromise),
-        CAPPluginMethod(name: "pdfOpen", returnType: CAPPluginReturnPromise)
+        CAPPluginMethod(name: "pdfOpen", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "pdfClear", returnType: CAPPluginReturnPromise)
     ]
     private let queue = DispatchQueue(label: "org.jeswr.suite.pdf-preview")
     private var cachedStore: PdfPreviewStore?
     /// The file the open viewer shows (main thread only).
     private var showing: URL?
+    /// The viewer this plugin presented, dismissed by pdfClear (main thread only).
+    private weak var viewer: QLPreviewController?
 
     private func store() throws -> PdfPreviewStore {
         if let store = cachedStore { return store }
@@ -93,8 +96,39 @@ public class SuiteFilesPlugin: CAPPlugin, CAPBridgedPlugin, QLPreviewControllerD
         viewer.dataSource = self
         viewer.delegate = self
         showing = file
+        self.viewer = viewer
         presenter.present(viewer, animated: true)
         call.resolve()
+    }
+
+    /// Sign-out or account switch (sst-8wx.18): drops any transfer, deletes every preview file and
+    /// closes QuickLook, so the next account never sees them. The store work runs on the serial
+    /// queue first, so a pdfOpen that finished earlier has already queued its presentation on the
+    /// main thread ahead of the close below; one that comes later finds its handle gone.
+    @objc func pdfClear(_ call: CAPPluginCall) {
+        queue.async {
+            let cleared = (try? self.store().clear()) != nil
+            DispatchQueue.main.async {
+                self.showing = nil
+                let viewer = self.viewer
+                self.viewer = nil
+                self.close(viewer)
+                if cleared { call.resolve() } else { call.reject("Cannot clear PDF previews", "failed") }
+            }
+        }
+    }
+
+    /// Dismisses from the presenter, which also closes a share sheet QuickLook has open, and waits
+    /// for a presentation still animating in (UIKit ignores a dismiss during one).
+    private func close(_ viewer: QLPreviewController?) {
+        guard let viewer = viewer else { return }
+        if viewer.isBeingPresented, let coordinator = viewer.transitionCoordinator {
+            coordinator.animate(alongsideTransition: nil) { _ in
+                viewer.presentingViewController?.dismiss(animated: false)
+            }
+        } else {
+            viewer.presentingViewController?.dismiss(animated: false)
+        }
     }
 
     private func topViewController() -> UIViewController? {

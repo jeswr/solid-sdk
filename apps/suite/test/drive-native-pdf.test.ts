@@ -1,6 +1,6 @@
 // AUTHORED-BY Claude Opus 5.5
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { click, h, mount } from "./drive-ui-dom";
+import { act, click, h, mount } from "./drive-ui-dom";
 
 const mocks = vi.hoisted(() => ({
   readLimited: vi.fn<(url: string, limit: number) => Promise<Blob | undefined>>(),
@@ -21,6 +21,7 @@ vi.mock("@jeswr/suite-native/capacitor", () => ({ filesPlugin: mocks.plugin }));
 vi.mock("@jeswr/suite-native", () => ({ openPdf: mocks.openPdf }));
 
 import { NativePdfHandoff, PDF_PREVIEW_LIMIT } from "../src/apps/drive/components/native-pdf";
+import { bumpAccountEpoch } from "../src/lib/native/account-epoch";
 
 const item = (size?: number) => ({
   url: "https://pod.example/drive/report.pdf",
@@ -155,4 +156,27 @@ it("stops after the read when the preview went away during it", async () => {
   finish(pdf);
   await new Promise((resolve) => setTimeout(resolve, 0));
   expect(mocks.openPdf).not.toHaveBeenCalled();
+});
+
+it("stops the transfer when the account changes, before the read's late result reaches the viewer", async () => {
+  let finish!: (blob: Blob) => void;
+  mocks.readLimited.mockReturnValue(
+    new Promise<Blob>((resolve) => {
+      finish = resolve;
+    }),
+  );
+  const view = await mount(h(NativePdfHandoff, { item: item(9) }));
+  await click(button(view.host, "Open PDF"));
+  await act(() => bumpAccountEpoch());
+  finish(pdf);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(mocks.openPdf).not.toHaveBeenCalled();
+});
+
+it("keeps the transfer when the same account re-renders", async () => {
+  mocks.openPdf.mockReturnValue(new Promise<void>(() => undefined));
+  const view = await mount(h(NativePdfHandoff, { item: item(9) }));
+  await click(button(view.host, "Open PDF"));
+  await view.render(h(NativePdfHandoff, { item: item(9) }));
+  expect(mocks.openPdf.mock.calls[0]?.[3]?.aborted).toBe(false);
 });

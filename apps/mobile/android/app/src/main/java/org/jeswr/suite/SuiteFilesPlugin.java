@@ -110,6 +110,20 @@ public class SuiteFilesPlugin extends Plugin {
     }
 
     /**
+     * Sign-out or account switch (sst-8wx.18): drops any transfer and deletes every preview file,
+     * so the next account never sees them. An external viewer keeps only what it already read.
+     */
+    @PluginMethod
+    public void pdfClear(PluginCall call) {
+        try {
+            store().clear();
+            call.resolve();
+        } catch (IOException | RuntimeException e) {
+            call.reject("Cannot clear PDF previews", "failed");
+        }
+    }
+
+    /**
      * Discards the live preview named by {@code handle}: an unfinished transfer, or with
      * {@code finished} also a finished file no viewer took. Other handles change nothing.
      */
