@@ -20,46 +20,39 @@ const EMAIL = "alice@example.com";
 const PASSWORD = "test-password-123";
 
 test.describe("Login surface", () => {
-  test("leads with the value prop and a create-a-pod path — THIS server first", async ({ page }) => {
-    await page.goto("/");
-    await expect(
-      page.getByRole("heading", { name: /one home for all your personal data/i }),
-    ).toBeVisible();
-    // New users get provider choices to create a pod, no jargon wall.
-    await expect(page.getByRole("heading", { name: /create your free pod/i })).toBeVisible();
-    // The HOME provider (this server) leads the list, before external hosts.
-    const createList = page.getByRole("list").filter({
-      has: page.getByRole("link", { name: /solidcommunity\.net/i }),
-    });
-    await expect(createList.getByText(/this server/i)).toBeVisible();
-    const first = createList.getByRole("listitem").first();
-    await expect(first.getByText(/this server/i)).toBeVisible();
-    await expect(page.getByRole("link", { name: /solidcommunity\.net/i })).toBeVisible();
+  test("shows the shared sign-in card with the home provider first", async ({ page }) => {
+    await revealSignInForm(page);
+    await expect(page.getByRole("heading", { name: "Sign in", exact: true })).toBeVisible();
+    await expect(page.getByText("to continue to Pod Manager", { exact: true })).toBeVisible();
+    const picker = page.getByRole("list", { name: "Providers", exact: true });
+    // The button text includes the monogram; its accessible name is the provider name alone.
+    await expect(picker.getByRole("button").first()).toHaveAccessibleName("Local provider");
+    await expect(picker.getByRole("button", { name: "solidcommunity.net", exact: true })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Get a pod", exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "What is a WebID?", exact: true })).toBeVisible();
   });
 
-  test("reveals the sign-in surface on request: provider picker + smart input", async ({ page }) => {
+  test("expands another provider inline", async ({ page }) => {
     await revealSignInForm(page);
-    await expect(page.getByLabel(/your pod address/i)).toBeVisible();
-    // First-party provider picker, home provider leading.
-    const picker = page.getByRole("list", { name: /pod providers/i });
-    await expect(picker.getByRole("listitem").first().getByText(/this server/i)).toBeVisible();
-    await expect(picker.getByRole("button", { name: /solidcommunity\.net/i })).toBeVisible();
+    await page.getByRole("button", { name: "Other provider", exact: true }).click();
+    // A URL input with a recent-providers datalist is a combobox, so select it by label.
+    await expect(page.getByLabel("Provider address", { exact: true })).toBeEditable();
   });
 
   test("rejects a malformed pod address without navigating away", async ({ page }) => {
     await revealSignInForm(page);
-    await page.fill('input[type="url"]', "not-a-valid-url");
-    await page.getByRole("button", { name: /^sign in$/i }).click();
-    // Native URL validation or the app's own error — either way we stay put.
-    await expect(page.locator('input[type="url"]')).toBeVisible();
+    await page.getByRole("textbox", { name: "WebID", exact: true }).fill("not-a-valid-url");
+    await page.getByRole("button", { name: "Continue", exact: true }).click();
+    await expect(page.getByRole("region", { name: "Sign in", exact: true }).getByRole("alert")).toContainText("That address isn't a WebID");
+    await expect(page.getByRole("textbox", { name: "WebID", exact: true })).toBeVisible();
   });
 
   test("surfaces an unreachable / non-Solid address with a clear error", async ({ page }) => {
     await revealSignInForm(page);
-    await page.fill('input[type="url"]', "https://nonexistent.invalid/profile/card#me");
-    await page.getByRole("button", { name: /^sign in$/i }).click();
+    await page.getByRole("textbox", { name: "WebID", exact: true }).fill("https://nonexistent.invalid/profile/card#me");
+    await page.getByRole("button", { name: "Continue", exact: true }).click();
     // Scope to the form's own error (Next injects its own role="alert" route announcer).
-    await expect(page.locator("#webid-error")).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByRole("region", { name: "Sign in", exact: true }).getByRole("alert")).toBeVisible({ timeout: 20_000 });
   });
 });
 
@@ -69,10 +62,10 @@ test.describe("Login with a bare issuer (no WebID)", () => {
 
     // A brand-new user has no WebID to type: the provider's address alone
     // must work (the WebID comes back in the ID token's webid claim).
-    await page.fill('input[type="url"]', CSS_ORIGIN);
+    await page.getByRole("textbox", { name: "WebID", exact: true }).fill(CSS_ORIGIN);
 
     const nextPage = bufferPages(context);
-    await page.getByRole("button", { name: /^sign in$/i }).click();
+    await page.getByRole("button", { name: "Continue", exact: true }).click();
 
     const popup = await waitForLoginPopup(nextPage);
     await completeCssLogin(popup, EMAIL, PASSWORD);
@@ -96,11 +89,11 @@ test.describe("Golden path: login → My data", () => {
     });
     expect(probe.status()).toBe(401);
 
-    await page.fill('input[type="url"]', WEBID);
+    await page.getByRole("textbox", { name: "WebID", exact: true }).fill(WEBID);
 
     // Subscribe BEFORE clicking (see bufferPages docs in helpers.ts).
     const nextPage = bufferPages(context);
-    await page.getByRole("button", { name: /^sign in$/i }).click();
+    await page.getByRole("button", { name: "Continue", exact: true }).click();
 
     const popup = await waitForLoginPopup(nextPage);
     await completeCssLogin(popup, EMAIL, PASSWORD);
@@ -129,9 +122,9 @@ test.describe("Golden path: login → My data", () => {
     // windows — the brief popup/tab a returning user used to see is gone,
     // because restore is now a token-endpoint fetch (refresh_token grant).
     await revealSignInForm(page);
-    await page.fill('input[type="url"]', WEBID);
+    await page.getByRole("textbox", { name: "WebID", exact: true }).fill(WEBID);
     const firstLoginPages = bufferPages(context);
-    await page.getByRole("button", { name: /^sign in$/i }).click();
+    await page.getByRole("button", { name: "Continue", exact: true }).click();
     const popup = await waitForLoginPopup(firstLoginPages);
     await completeCssLogin(popup, EMAIL, PASSWORD);
     await expect(page.getByRole("heading", { name: /welcome back/i })).toBeVisible({

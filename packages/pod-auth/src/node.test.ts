@@ -137,6 +137,9 @@ test.each([
 test("Node CID factory resolves an existing identity and cached-token rejection invalidates the provider", async () => {
   const f = await cidFixture();
   const auth = await forCid({ ...f.cid, boundary: [f.as.root], clock: () => 7 });
+  const cancelled = new AbortController();
+  cancelled.abort(new Error("cancelled"));
+  await expect(auth.login(undefined, { signal: cancelled.signal })).rejects.toThrow("cancelled");
   const event = vi.fn();
   auth.on("challenge", event);
   await auth.fetch(f.as.root + "private");

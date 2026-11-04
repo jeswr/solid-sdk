@@ -41,7 +41,8 @@ export function createAgentAuth(policy: AgentPolicy, config: AgentConfiguration)
     identity: async () => snapshot(),
     remembered: async () => [],
     restore: async () => snapshot(),
-    login: (hint) => {
+    login: (hint, loginOptions) => {
+      if (loginOptions?.signal?.aborted) return Promise.reject(loginOptions.signal.reason);
       if (loggingOut) return Promise.reject(new Error("Logout is in progress"));
       // Client credentials are opaque; never infer a human WebID from an access token.
       if (

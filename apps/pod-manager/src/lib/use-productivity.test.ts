@@ -115,7 +115,7 @@ describe("productivity stores with a redirected WebID", () => {
       }
       return pod.fetch(input, init);
     });
-    vi.stubGlobal("fetch", podFetch);
+    vi.stubGlobal("fetch", vi.fn(() => { throw new Error("Pod I/O used global fetch"); }));
     vi.mocked(useSession).mockReturnValue({
       status: "logged-in",
       webId: TEST_WEBID,
@@ -124,10 +124,11 @@ describe("productivity stores with a redirected WebID", () => {
       sourceFetch: pod.fetch,
       podFetch,
       recentAccounts: [],
-      login: vi.fn(),
+      pending: null, error: null, ready: true, startupFailed: false, recentProviders: [],
+      retry: vi.fn(), loginWithAddress: vi.fn(), loginWithAccount: vi.fn(),
       loginWithIssuer: vi.fn(),
       cancelLogin: vi.fn(),
-      logout: vi.fn(),
+      logout: vi.fn(async () => {}),
       setActiveStorage: vi.fn(),
     });
   });

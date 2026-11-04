@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Fable 5
 //
 // Bitstring Status List (runtime Phase-1 G2) — SECURITY-CRITICAL revocation
@@ -66,7 +67,7 @@ async function signedList(
     readonly validUntil?: string;
   },
 ): Promise<VerifiableCredential> {
-  const unsigned = buildBitstringStatusListCredential({
+  const unsigned = await buildBitstringStatusListCredential({
     id: overrides?.id ?? LIST_URL,
     issuer: overrides?.issuer ?? ISSUER,
     statusPurpose: overrides?.statusPurpose ?? "revocation",
@@ -138,12 +139,12 @@ describe("bitstring encode/decode", () => {
     expect(getStatusBit(bits, 0)).toBe(false);
   });
 
-  it("round-trips boundary indices 0 and 131071 through encode/decode", () => {
+  it("round-trips boundary indices 0 and 131071 through encode/decode", async () => {
     const bits = createStatusBitstring();
     setStatusBit(bits, 0, true);
     setStatusBit(bits, MIN_STATUS_LIST_LENGTH - 1, true);
     setStatusBit(bits, INDEX, true);
-    const decoded = decodeStatusList(encodeStatusList(bits));
+    const decoded = await decodeStatusList(await encodeStatusList(bits));
     expect(decoded).toEqual(bits);
     expect(getStatusBit(decoded, 0)).toBe(true);
     expect(getStatusBit(decoded, MIN_STATUS_LIST_LENGTH - 1)).toBe(true);
@@ -159,33 +160,33 @@ describe("bitstring encode/decode", () => {
     expect(() => setStatusBit(bits, MIN_STATUS_LIST_LENGTH, true)).toThrow(RangeError);
   });
 
-  it("encodes with the multibase base64url prefix `u`", () => {
-    const encoded = encodeStatusList(createStatusBitstring());
+  it("encodes with the multibase base64url prefix `u`", async () => {
+    const encoded = await encodeStatusList(createStatusBitstring());
     expect(encoded.startsWith("u")).toBe(true);
     expect(encoded).toMatch(/^u[A-Za-z0-9_-]+$/);
   });
 
-  it("fail-closed decode: wrong prefix, bad alphabet, non-gzip, undersize", () => {
-    const good = encodeStatusList(createStatusBitstring());
-    expect(() => decodeStatusList(`z${good.slice(1)}`)).toThrow(BitstringDecodeError);
-    expect(() => decodeStatusList("u!!!not-base64url!!!")).toThrow(BitstringDecodeError);
-    expect(() =>
+  it("fail-closed decode: wrong prefix, bad alphabet, non-gzip, undersize", async () => {
+    const good = await encodeStatusList(createStatusBitstring());
+    await expect(decodeStatusList(`z${good.slice(1)}`)).rejects.toThrow(BitstringDecodeError);
+    await expect(decodeStatusList("u!!!not-base64url!!!")).rejects.toThrow(BitstringDecodeError);
+    await expect(
       decodeStatusList(`u${Buffer.from("plainly not gzip").toString("base64url")}`),
-    ).toThrow(BitstringDecodeError);
+    ).rejects.toThrow(BitstringDecodeError);
     // valid gzip, but expands below the spec's 16KB minimum
     const tiny = `u${Buffer.from(gzipSync(new Uint8Array(16))).toString("base64url")}`;
-    expect(() => decodeStatusList(tiny)).toThrow(/below the spec/);
-    expect(() => decodeStatusList("")).toThrow(BitstringDecodeError);
-    expect(() => decodeStatusList("u")).toThrow(BitstringDecodeError);
+    await expect(decodeStatusList(tiny)).rejects.toThrow(/below the spec/);
+    await expect(decodeStatusList("")).rejects.toThrow(BitstringDecodeError);
+    await expect(decodeStatusList("u")).rejects.toThrow(BitstringDecodeError);
   });
 
-  it("zip-bomb guard: an expansion over maxDecodedBytes is refused", () => {
+  it("zip-bomb guard: an expansion over maxDecodedBytes is refused", async () => {
     const big = new Uint8Array(64 * 1024); // 64KB expanded
-    const encoded = encodeStatusList(big);
-    expect(() => decodeStatusList(encoded, { maxDecodedBytes: 32 * 1024 })).toThrow(
+    const encoded = await encodeStatusList(big);
+    await expect(decodeStatusList(encoded, { maxDecodedBytes: 32 * 1024 })).rejects.toThrow(
       BitstringDecodeError,
     );
-    expect(decodeStatusList(encoded, { maxDecodedBytes: 64 * 1024 }).length).toBe(64 * 1024);
+    expect(await decodeStatusList(encoded, { maxDecodedBytes: 64 * 1024 })).toHaveLength(64 * 1024);
   });
 });
 
@@ -240,13 +241,13 @@ describe("issue side — entry + list credential builders", () => {
   it("withStatusBit flips one bit immutably and drops any stale proof", async () => {
     const key = await issuerKey();
     const list = await signedList(key);
-    expect(readStatusBit(list, INDEX)).toBe(false);
-    const revokedList = withStatusBit(list, INDEX, true);
-    expect(readStatusBit(revokedList, INDEX)).toBe(true);
-    expect(readStatusBit(list, INDEX)).toBe(false); // original untouched
+    expect(await readStatusBit(list, INDEX)).toBe(false);
+    const revokedList = await withStatusBit(list, INDEX, true);
+    expect(await readStatusBit(revokedList, INDEX)).toBe(true);
+    expect(await readStatusBit(list, INDEX)).toBe(false); // original untouched
     expect((revokedList as VerifiableCredential).proof).toBeUndefined();
-    const reinstated = withStatusBit(revokedList, INDEX, false);
-    expect(readStatusBit(reinstated, INDEX)).toBe(false);
+    const reinstated = await withStatusBit(revokedList, INDEX, false);
+    expect(await readStatusBit(reinstated, INDEX)).toBe(false);
   });
 
   it("lowers credentialStatus into the SIGNED RDF graph and round-trips it", async () => {
@@ -465,7 +466,7 @@ describe("Phase C — every unconfirmable status FAILS CLOSED as STATUS_UNREACHA
       ...list,
       credentialSubject: {
         ...(list.credentialSubject as Record<string, unknown>),
-        encodedList: encodeStatusList(bits),
+        encodedList: await encodeStatusList(bits),
       },
     };
     await expectUnreachable(vc, key, fetchServing(LIST_URL, tampered));

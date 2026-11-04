@@ -11,6 +11,7 @@
  * `safeLinkHref` here (http(s) only) before it becomes an `<img>`; a missing or
  * unsafe asset falls back to an image-placeholder icon.
  */
+import { usePodMedia } from "@/components/use-pod-media";
 import { ImageIcon } from "lucide-react";
 import type { Photo, PhotoModel } from "@/lib/typed-views/photo-view";
 import { safeLinkHref } from "@/lib/pod-scope";
@@ -34,7 +35,7 @@ export function PhotoGrid({ model }: { model: PhotoModel; url: string }) {
 function PhotoTile({ photo }: { photo: Photo }) {
   // Only ever load an http(s) asset IRI (privacy/CSP); anything else falls back
   // to the placeholder icon.
-  const src = photo.contentUrl ? safeLinkHref(photo.contentUrl) : undefined;
+  const src = usePodMedia(photo.contentUrl ? safeLinkHref(photo.contentUrl) : undefined);
 
   return (
     <Card className="overflow-hidden py-0">

@@ -16,19 +16,19 @@ import type { AsyncState } from "@/components/use-pod-data";
 /**
  * Load the user's pickable people — saved contacts (that carry a WebID) merged
  * with their `foaf:knows` friends — as a sorted, de-duplicated option list for
- * the people-picker. Production paths pass NO `fetch` (the auth-patched global
+ * the people-picker. Pod requests use the session transport explicitly.
  * runs). Re-loads on login / storage switch.
  */
 export function usePeople(): AsyncState<PersonOption[]> & { reload: () => void } {
-  const { webId, activeStorage, status } = useSession();
+  const { webId, activeStorage, status, podFetch } = useSession();
   const [state, setState] = useState<AsyncState<PersonOption[]>>({ loading: true });
   const [nonce, setNonce] = useState(0);
   const reload = useCallback(() => setNonce((n) => n + 1), []);
 
   const store = useMemo(() => {
     if (status !== "logged-in" || !webId || !activeStorage) return undefined;
-    return contactsStore({ podRoot: activeStorage, webId });
-  }, [status, webId, activeStorage]);
+    return contactsStore({ podRoot: activeStorage, webId, fetchImpl: podFetch });
+  }, [status, webId, activeStorage, podFetch]);
 
   useEffect(() => {
     if (!store || !webId) {
@@ -44,7 +44,7 @@ export function usePeople(): AsyncState<PersonOption[]> & { reload: () => void }
         store.list().catch(() => []),
         (async () => {
           try {
-            const { dataset } = await freshRdf(profileDocUrl(webId));
+            const { dataset } = await freshRdf(profileDocUrl(webId), podFetch);
             return readKnows(webId, dataset);
           } catch {
             return [] as string[];
@@ -65,7 +65,7 @@ export function usePeople(): AsyncState<PersonOption[]> & { reload: () => void }
     return () => {
       cancelled = true;
     };
-  }, [store, webId, nonce]);
+  }, [store, webId, nonce, podFetch]);
 
   return { ...state, reload };
 }

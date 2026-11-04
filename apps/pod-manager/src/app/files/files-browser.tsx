@@ -15,6 +15,7 @@
  * whatever URL it requests, so we ONLY ever browse/fetch inside the user's own
  * pods — a `?url=` outside scope is rejected, never fetched.
  */
+import { useSession } from "@/components/session-provider";
 import { Suspense, useCallback, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -68,6 +69,7 @@ function FilesScreen() {
 }
 
 function FolderContents({ current, root }: { current: string; root: string }) {
+  const { podFetch } = useSession();
   const { data, loading, error, reload } = useFolder(current);
   const crumbs = breadcrumbs(current, root);
   const [dragging, setDragging] = useState(false);
@@ -77,7 +79,7 @@ function FolderContents({ current, root }: { current: string; root: string }) {
     async (files: File[]) => {
       if (files.length === 0) return;
       setDropUploading(true);
-      const result = await uploadMany(current, files);
+      const result = await uploadMany(current, files, podFetch);
       setDropUploading(false);
       if (result.uploaded > 0) {
         toast.success(
@@ -91,7 +93,7 @@ function FolderContents({ current, root }: { current: string; root: string }) {
         });
       }
     },
-    [current, reload],
+    [current, reload, podFetch],
   );
 
   return (

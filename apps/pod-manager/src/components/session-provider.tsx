@@ -1,31 +1,10 @@
-"use client";
 // AUTHORED-BY Codex GPT-6.1-Sol
+"use client";
 
-/**
- * The Solid session bridge for React. `@solid/reactive-authentication` has no
- * session object: it patches `globalThis.fetch` and upgrades on `401`. This
- * provider owns that single patch and the LOGIN POPUP LIFECYCLE (first-party —
- * the library's `<authorization-code-flow>` web component is gone; see
- * `src/lib/popup-login.ts` for the rules), and exposes a small reactive
- * session for the UI.
- *
- * Login model (first-party UI): the user picks a provider, or enters EITHER a
- * WebID OR a bare issuer URL in one smart input (`src/lib/login-input.ts`).
- * The popup is opened SYNCHRONOUSLY in the click handler (user activation) —
- * UNLESS the provider's synchronous probe says a cached session or refresh
- * token completes the login with fetches alone (`openPopupUnlessRenewable`),
- * in which case no window opens at all. When one does open, the protocol
- * layer (`WebIdDPoPTokenProvider` — the vendored PR #11–#14
- * token+refresh logic) navigates it straight to the INTERACTIVE authorize URL
- * (explicit logins skip the doomed `prompt=none` hop; recent-account clicks
- * and background 401 re-auth keep silent-first, retrying interactively in the
- * same window). Issuer-first logins learn the WebID from the ID token's
- * `webid` claim. Access tokens stay in memory; reload restores the DPoP-bound
- * refresh credential and validates the authenticated profile.
- *
- * The auth library is dynamically imported so it never evaluates during SSR
- * (AGENTS.md §Mounting in Next.js).
- */
+import type { Identity, LoginHint, PodAuth } from "@jeswr/pod-auth";
+import { createRecentProvidersStore, resolveLoginTarget } from "@jeswr/pod-auth/directory";
+import { sameIssuer } from "@jeswr/reactive-authentication";
+import type { SignInCardProps, SignInRecentAccount } from "@jeswr/suite-ui/sign-in";
 import {
   createContext,
   useCallback,
@@ -35,362 +14,406 @@ import {
   useRef,
   useState,
 } from "react";
-import { RecentAccounts, type RecentAccount } from "@/lib/login-ux";
-import { openPopupUnlessRenewable, PopupLoginController } from "@/lib/popup-login";
-import type { WebIdDPoPTokenProvider } from "@/lib/webid-token-provider";
-import {
-  IndexedDbSessionStore,
-  indexedDbAvailable,
-  type SessionStore,
-} from "@/lib/session-persistence";
-import type { PodProfile } from "@/lib/profile";
-import { SessionOperations } from "@/lib/session-operations";
-import { sourceFetch } from "@/lib/source-fetch";
+import { toast } from "sonner";
+import { allowInsecureLoopback } from "@/lib/auth-environment";
+import { PopupLoginController } from "@/lib/popup-login";
+import { fetchProfile, type PodProfile } from "@/lib/profile";
+import { consumeSuggestedAccount, IssuerChoiceRequiredError, signInError } from "@/lib/sign-in";
+import { publicFetch, sourceFetch } from "@/lib/source-fetch";
 import { readCache } from "@/lib/swr-cache";
 import { IssueAssignmentAnnouncer } from "@/lib/issues";
-import { toast } from "sonner";
-
-export { NoWebIdFromProviderError } from "@/lib/session-operations";
 
 type Status = "loading" | "logged-out" | "authenticating" | "logged-in";
-
+type Pending = SignInCardProps["pending"];
 export interface Session {
-  /** Separate source and Pod transports for connector imports. */
   sourceFetch: typeof fetch;
   podFetch: typeof fetch;
   status: Status;
   webId?: string;
-  /** Assignment de-duplication survives route changes and ends with this login. */
-  issueAssignments?: IssueAssignmentAnnouncer;
   profile?: PodProfile;
-  /** The storage the user is browsing (chosen when several exist). */
   activeStorage?: string;
-  recentAccounts: RecentAccount[];
-  /**
-   * Begin login for a WebID OR a bare issuer URL (one smart input). Call
-   * DIRECTLY from the click/submit handler — when a popup is needed it opens
-   * synchronously at the top so the user activation is never lost; when the
-   * issuer is known up front (`opts.issuer`) and a cached session or refresh
-   * token suffices, no popup opens at all. Resolves once
-   * authenticated; throws on failure ({@link AmbiguousIssuerError} when the
-   * WebID advertises several issuers and `opts.issuer` was not given).
-   *
-   * Interactive-first by default: an explicit sign-in has (almost always) no
-   * IdP session, so the popup navigates straight to the login page instead of
-   * bouncing through a doomed `prompt=none` attempt. `opts.silentFirst` keeps
-   * the silent attempt for one-click surfaces where a live IdP session is
-   * likely (the recent-account chips) — silent success there means zero typing.
-   */
-  login(input: string, opts?: { issuer?: string; silentFirst?: boolean }): Promise<void>;
-  /**
-   * Begin login against a KNOWN issuer (provider picker / "Get started" with
-   * the home provider — works for a fresh human with no WebID). Call directly
-   * from the click handler, like {@link login}.
-   */
+  issueAssignments?: IssueAssignmentAnnouncer;
+  recentAccounts: SignInRecentAccount[];
+  recentProviders: string[];
+  pending: Pending;
+  error: string | null;
+  ready: boolean;
+  startupFailed: boolean;
+  retry(): void;
+  loginWithAddress(input: string, kind?: "webid" | "custom"): Promise<void>;
+  /** Set when the WebID lists several providers; loginWithIssuer then keeps that WebID. */
+  issuerChoice?: { webId: string; issuers: readonly string[] };
   loginWithIssuer(issuer: string): Promise<void>;
-  /** Cancel an in-flight login: closes the popup, rejects the pending flow. */
+  loginWithAccount(webId: string): Promise<void>;
   cancelLogin(): void;
-  /** Log out: clears session state. Keeps the recent-accounts memory. */
-  logout(): void;
-  /** Pick which storage to browse when the profile advertises several. */
+  logout(): Promise<void>;
   setActiveStorage(storage: string): void;
 }
-
 const SessionContext = createContext<Session | null>(null);
 
-const ACTIVE_WEBID_KEY = "solid-pod-manager:active-webid";
-
-/** A blocked-popup recovery: `resume` re-opens under a fresh user gesture. */
-interface BlockedPopup {
-  resume: () => void;
-  cancel: () => void;
-}
-
-export function SessionProvider({ children }: { children: React.ReactNode }) {
-  const registeredRef = useRef(false);
-  const podTransportRef = useRef<typeof fetch | null>(null);
-  // Validated session identity for the provider's 401 issuer resolution.
-  const pendingWebIdRef = useRef<string>(undefined);
-  // Shared ownership for login, reload restore and logout.
-  const operationsRef = useRef<SessionOperations | null>(null);
-  // The one popup controller — created lazily on the client, shared between
-  // the click handlers (synchronous open) and the token provider (getCode).
-  const controllerRef = useRef<PopupLoginController>(null);
-  // Resolves to the token provider once the auth module is wired up.
-  const providerReadyRef = useRef<Promise<WebIdDPoPTokenProvider>>(null);
-  const podFetch = useCallback<typeof fetch>(async (input, init) => {
-    await providerReadyRef.current;
-    if (!podTransportRef.current) throw new Error("Pod transport is not initialized");
-    return podTransportRef.current(input, init);
-  }, []);
-  // The SAME provider, synchronously reachable once ready — the click handlers
-  // consult its canRenewWithoutInteraction probe BEFORE deciding to open a
-  // popup, and a click handler cannot await (the user activation would be
-  // spent). Null until the auth module loads; the probe then says "open".
-  const providerSyncRef = useRef<WebIdDPoPTokenProvider>(null);
-  const [status, setStatus] = useState<Status>("loading");
-  const [webId, setWebId] = useState<string>();
-  const [profile, setProfile] = useState<PodProfile>();
-  const [activeStorage, setActive] = useState<string>();
-  const [recentAccounts, setRecentAccounts] = useState<RecentAccount[]>([]);
-  const [blockedPopup, setBlockedPopup] = useState<BlockedPopup | null>(null);
-
-  /** The popup controller (client-only; created on first use). */
-  const getController = useCallback((): PopupLoginController => {
-    controllerRef.current ??= new PopupLoginController({
-      // callback.html is same-origin with the app — the ONLY origin whose
-      // postMessage may end a flow.
-      expectedOrigin: location.origin,
-      onBlocked: (resume, cancel) =>
-        setBlockedPopup({
-          resume: () => {
-            setBlockedPopup(null);
-            resume();
-          },
-          cancel: () => {
-            setBlockedPopup(null);
-            cancel();
-          },
-        }),
-    });
-    return controllerRef.current;
-  }, []);
-
-  const getOperations = useCallback(() => {
-    operationsRef.current ??= new SessionOperations({
-      provider: async () => providerReadyRef.current,
-      currentProvider: () => providerSyncRef.current,
-      openPopup: (issuer, expectedWebId) => openPopupUnlessRenewable(
-        getController(), providerSyncRef.current, issuer, expectedWebId,
-      ),
-      closePopup: () => getController().closeIfOpen(),
-      authenticating: () => setStatus("authenticating"),
-      seedIdentity: (id) => { pendingWebIdRef.current = id; },
-      publish: (id, p, issuer, remember) => {
-        setWebId((prev) => {
-          if (prev && prev !== id) readCache.clearWebId(prev);
-          return id;
-        });
-        setProfile(p);
-        setActive(p.storages[0]);
-        setStatus("logged-in");
-        if (remember) {
-          const accounts = new RecentAccounts();
-          accounts.remember({ webId: id, displayName: p.displayName, avatarUrl: p.avatarUrl, issuer, storage: p.storages[0] });
-          setRecentAccounts(accounts.list());
-        }
-        if (typeof localStorage !== "undefined") localStorage.setItem(ACTIVE_WEBID_KEY, id);
-      },
-      failed: () => {
-        getController().closeIfOpen();
-        setBlockedPopup(null);
-        setStatus("logged-out");
-      },
-      loggedOut: () => {
-        readCache.clearAll();
-        setWebId(undefined);
-        setProfile(undefined);
-        setActive(undefined);
-        setStatus("logged-out");
-        setBlockedPopup(null);
-        pendingWebIdRef.current = undefined;
-        getController().cancel();
-        try { localStorage.removeItem(ACTIVE_WEBID_KEY); } catch { /* Storage may be unavailable. */ }
-      },
-    });
-    return operationsRef.current;
-  }, [getController]);
-
-  // Register the reactive fetch manager once.
-  useEffect(() => {
-    if (registeredRef.current) return;
-    registeredRef.current = true;
-
-    providerReadyRef.current = (async () => {
-      const [{ ReactiveFetchManager }, { WebIdDPoPTokenProvider }] =
-        await Promise.all([
-          import("@solid/reactive-authentication"),
-          import("@/lib/webid-token-provider"),
-        ]);
-
-      const controller = getController();
-      const callbackUri = new URL("/callback.html", location.href).toString();
-
-      // The published Client Identifier Document — served from /clientid.jsonld.
-      // Locally the IdP is CSS, which dereferences localhost client-ids; in
-      // production both app and IdP are HTTPS so it resolves there too
-      // (solid-client-id skill).
-      const clientId = new URL("/clientid.jsonld", location.href).toString();
-
-      // Durable DPoP-bound refresh-token session (IndexedDB, origin-scoped) —
-      // lets a returning user restore via a refresh grant (a fetch) instead of
-      // the prompt=none authorization probe that flashes a window. Absent in
-      // SSR / locked-down environments; the provider then stays in-memory only.
-      const sessionStore: SessionStore | undefined = indexedDbAvailable()
-        ? new IndexedDbSessionStore()
-        : undefined;
-
-      const provider = new WebIdDPoPTokenProvider(
-        callbackUri,
-        // The app-owned popup drives the user through the authorization
-        // endpoint (silent first, interactive retry in the same window).
-        (uri, signal) => controller.getCode(uri, signal),
-        // Issuer resolution is available only after validated login or restore.
-        async () => {
-          const id = pendingWebIdRef.current;
-          if (!id) throw new Error("No WebID provided for login");
-          return id;
-        },
-        {
-          clientId,
-          allowInsecureLoopback: true, // local CSS over HTTP; remote stays HTTPS-strict
-          sessionStore,
-          // Keep the cached session continuously fresh in the BACKGROUND so a
-          // long import or an idle→active session never hits an expired token
-          // mid-flow. Visibility-gated (no churn in a hidden tab); torn down on
-          // unmount; stops (no popup) on a dead refresh token. The lazy
-          // renew-on-401 path remains the fallback. (Dom visibility lifecycle is
-          // the default in a browser.)
-          proactiveRefresh: true,
-        },
-      );
-
-      const manager = new ReactiveFetchManager([provider]);
-      podTransportRef.current = manager.fetch;
-      manager.registerGlobally();
-      providerSyncRef.current = provider;
-      return provider;
-    })();
-
-    const accounts = new RecentAccounts();
-    const remembered = accounts.list();
-    setRecentAccounts(remembered);
-    const last = typeof localStorage !== "undefined" ? localStorage.getItem(ACTIVE_WEBID_KEY) : null;
-    if (last) {
-      void getOperations().restore(last, remembered.find((a) => a.webId === last)?.issuer).catch(() => {});
-    } else {
-      setStatus("logged-out");
+/** The removed provider's refresh tokens and keys must never survive migration. */
+export function clearLegacyCredentials(): void {
+  try {
+    globalThis.indexedDB?.deleteDatabase("solid-pod-manager:sessions");
+  } catch {
+    /* Unavailable storage. */
+  }
+  for (const key of ["solid-pod-manager:active-webid", "solid:recent-accounts"]) {
+    try {
+      localStorage.removeItem(key);
+    } catch {
+      /* Unavailable storage. */
     }
-
-    return () => {
-      operationsRef.current?.invalidate();
-      // Tear down proactive-refresh timers + the visibility listeners on
-      // unmount so nothing leaks (no orphaned intervals, no token churn) after
-      // this provider is discarded. Fire-and-forget; teardown is idempotent.
-      void providerReadyRef.current?.then((p) => p?.teardown()).catch(() => {});
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const login = useCallback(
-    (input: string, opts?: { issuer?: string; silentFirst?: boolean }) => getOperations().login(input, opts),
-    [getOperations],
-  );
-
-  const loginWithIssuer = useCallback(
-    (issuer: string) => getOperations().loginWithIssuer(issuer),
-    [getOperations],
-  );
-
-  const cancelLogin = useCallback(() => {
-    setBlockedPopup(null);
-    getController().cancel();
-  }, [getController]);
-
-  const logout = useCallback(() => {
-    void getOperations().logout().catch(() => {});
-  }, [getOperations]);
-
-  const setActiveStorage = useCallback((storage: string) => setActive(storage), []);
-
-  const issueAssignments = useMemo(
-    () => status === "logged-in" && webId
-      ? new IssueAssignmentAnnouncer({
-          actorWebId: webId,
-          onError: (message) => { toast.error(message); },
-        })
-      : undefined,
-    [status, webId],
-  );
-
-  const session = useMemo<Session>(
-    () => ({
-      sourceFetch,
-      podFetch,
-      status,
-      webId,
-      issueAssignments,
-      profile,
-      activeStorage,
-      recentAccounts,
-      login,
-      loginWithIssuer,
-      cancelLogin,
-      logout,
-      setActiveStorage,
-    }),
-    [
-      podFetch,
-      status,
-      webId,
-      issueAssignments,
-      profile,
-      activeStorage,
-      recentAccounts,
-      login,
-      loginWithIssuer,
-      cancelLogin,
-      logout,
-      setActiveStorage,
-    ],
-  );
-
-  return (
-    <SessionContext.Provider value={session}>
-      {children}
-      {/* Blocked-popup recovery: a background re-auth needed a popup but the
-          browser blocked window.open (no user activation). The button click
-          IS the fresh activation `resume()` re-opens under. */}
-      {blockedPopup && (
-        <div
-          role="alertdialog"
-          aria-modal="true"
-          aria-labelledby="popup-blocked-title"
-          className="fixed inset-0 z-50 grid place-items-center bg-foreground/40 p-4"
-        >
-          <div className="w-full max-w-sm rounded-2xl border border-border bg-card p-6 shadow-lg">
-            <h2 id="popup-blocked-title" className="text-base font-semibold">
-              Continue signing in
-            </h2>
-            <p className="mt-2 text-sm text-muted-foreground">
-              Your provider needs a sign-in window, but the browser blocked it.
-            </p>
-            <div className="mt-4 flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={blockedPopup.cancel}
-                className="rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-accent/50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={blockedPopup.resume}
-                className="rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-              >
-                Open sign-in window
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </SessionContext.Provider>
-  );
+  }
+}
+function recentProvidersStore() {
+  try {
+    return createRecentProvidersStore(localStorage);
+  } catch {
+    return createRecentProvidersStore(undefined);
+  }
 }
 
-/** Access the Solid session. Must be used under {@link SessionProvider}. */
+/** React owns presentation and popup gestures; pod-auth owns all session credentials. */
+export function SessionProvider({
+  children,
+  auth: suppliedAuth,
+}: {
+  children: React.ReactNode;
+  auth?: PodAuth;
+}) {
+  const coreRef = useRef<PodAuth | null>(null);
+  const restoreRef = useRef<{ core: PodAuth; promise: Promise<Identity | null> } | null>(null);
+  const controller = useRef<PopupLoginController | null>(null);
+  const mounted = useRef(false);
+  const generation = useRef(0);
+  const cancelled = useRef<symbol | null>(null);
+  // The attempt whose login already produced a pod-auth session (cancel must then drop it).
+  const established = useRef<symbol | null>(null);
+  const activeLogin = useRef<symbol | null>(null);
+  /** Abandons the running login inside pod-auth, which discards any grant that lands later. */
+  const loginAbort = useRef<AbortController | null>(null);
+  const suggested = useRef<string | undefined>(undefined);
+  const cleaned = useRef(false);
+  const accountIssuers = useRef(new Map<string, string>());
+  const [attempt, setAttempt] = useState(0);
+  const [startupFailed, setStartupFailed] = useState(false);
+  const [core, setCore] = useState<PodAuth | null>(null);
+  const [status, setStatus] = useState<Status>("loading");
+  const [profile, setProfile] = useState<PodProfile>();
+  const [activeStorage, setActiveStorage] = useState<string>();
+  const [recentAccounts, setRecentAccounts] = useState<SignInRecentAccount[]>([]);
+  const [recentProviders, setRecentProviders] = useState<string[]>([]);
+  const [pending, setPending] = useState<Pending>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [issuerChoice, setIssuerChoice] = useState<Session["issuerChoice"]>();
+  const [ready, setReady] = useState(false);
+  const store = useMemo(recentProvidersStore, []);
+
+  const reset = useCallback(() => {
+    readCache.clearAll();
+    setProfile(undefined);
+    setActiveStorage(undefined);
+    setPending(null);
+    setStatus("logged-out");
+  }, []);
+  const accounts = useCallback(async (auth: PodAuth, current: () => boolean) => {
+    const remembered = await auth.remembered();
+    if (!current()) return;
+    accountIssuers.current.clear();
+    for (const account of remembered) accountIssuers.current.set(account.webId, account.issuer);
+    const rows: SignInRecentAccount[] = remembered.map((a) => ({
+      webId: a.webId,
+      name: a.displayName,
+      photoUrl: a.avatar,
+    }));
+    if (suggested.current && !rows.some((a) => a.webId === suggested.current))
+      rows.push({ webId: suggested.current });
+    setRecentAccounts(rows);
+  }, []);
+  const publish = useCallback(async (identity: Identity, current: () => boolean) => {
+    if (!identity.webId) throw new Error("No WebID returned");
+    const webId = identity.webId;
+    const loaded = await fetchProfile(webId, publicFetch).catch(
+      (): PodProfile => ({
+        webId,
+        profileDocumentUrl: webId.split("#")[0],
+        displayName: webId,
+        storages: [...identity.storages],
+        issuers: [identity.issuer],
+      }),
+    );
+    if (!current()) return;
+    // Storage authority comes from the core's verified identity, even if public profile metadata changes.
+    setProfile({ ...loaded, storages: [...identity.storages] });
+    setActiveStorage(identity.storages[0]);
+    setStatus("logged-in");
+  }, []);
+
+  useEffect(() => {
+    mounted.current = true;
+    let disposed = false;
+    const started = generation.current;
+    const current = () => !disposed && generation.current === started;
+    const stops: (() => void)[] = [];
+    let runtime: typeof import("@/lib/pod-auth") | undefined;
+    controller.current ??= new PopupLoginController({ expectedOrigin: location.origin });
+    const popup = controller.current;
+    if (!cleaned.current) {
+      cleaned.current = true;
+      clearLegacyCredentials();
+      suggested.current = consumeSuggestedAccount();
+    }
+    setRecentProviders(store.list());
+    void (async () => {
+      if (!suppliedAuth) runtime = await import("@/lib/pod-auth");
+      if (disposed) return;
+      if (runtime) runtime.popupHolder.current = popup;
+      const auth = suppliedAuth ?? runtime!.getPodAuth();
+      coreRef.current = auth;
+      setCore(auth);
+      for (const type of ["logout", "expired"] as const)
+        stops.push(
+          auth.on(type, () => {
+            if (disposed) return;
+            ++generation.current;
+            activeLogin.current = null;
+            popup.cancel();
+            reset();
+            const epoch = generation.current;
+            void accounts(auth, () => !disposed && generation.current === epoch).catch(() => {});
+          }),
+        );
+      if (restoreRef.current?.core !== auth)
+        restoreRef.current = { core: auth, promise: auth.restore() };
+      let restored: Identity | null = null;
+      try {
+        restored = await restoreRef.current.promise;
+      } catch {
+        if (current()) setError("We couldn't restore your last session. Sign in again.");
+      }
+      if (!current()) {
+        if (!disposed) setReady(true);
+        return;
+      }
+      if (restored) await publish(restored, current);
+      else setStatus("logged-out");
+      await accounts(auth, current);
+      if (current()) setReady(true);
+    })().catch(() => {
+      if (!current()) return;
+      reset();
+      setError("We couldn't start sign-in. Try again.");
+      setStartupFailed(true);
+      setStatus("logged-out");
+    });
+    return () => {
+      disposed = true;
+      mounted.current = false;
+      // Read the live operation epoch to invalidate all work started before unmount.
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+      ++generation.current;
+      const running = activeLogin.current;
+      activeLogin.current = null;
+      // An attempt that already holds a session is dropped; otherwise pod-auth abandons it,
+      // discarding any grant it still obtains, and stored sessions stay.
+      if (running !== null && established.current === running)
+        void coreRef.current?.logout().catch(() => {});
+      else if (running !== null) {
+        // A login that resolves before it sees the abort is dropped when it lands (dropCancelled).
+        cancelled.current = running;
+        loginAbort.current?.abort(new DOMException("Sign-in was cancelled", "AbortError"));
+      }
+      popup.cancel();
+      for (const stop of stops) stop();
+      if (runtime?.popupHolder.current === popup) runtime.popupHolder.current = null;
+    };
+  }, [suppliedAuth, attempt, accounts, publish, reset, store]);
+
+  const dropCancelled = useCallback(async (auth: PodAuth) => {
+    // Runs even after unmount: the core outlives the provider and would restore this session.
+    await auth.logout().catch(() => {});
+    if (mounted.current) setReady(true);
+  }, []);
+  const runLogin = useCallback(
+    async (
+      action: NonNullable<Pending>,
+      target: () => Promise<LoginHint>,
+      choice?: Session["issuerChoice"],
+    ) => {
+      const auth = coreRef.current;
+      if (!auth || !ready || activeLogin.current) return;
+      const token = Symbol();
+      const epoch = ++generation.current;
+      activeLogin.current = token;
+      const abort = new AbortController();
+      loginAbort.current = abort;
+      const current = () =>
+        mounted.current && generation.current === epoch && activeLogin.current === token;
+      setPending(action);
+      setStatus("authenticating");
+      setError(null);
+      setIssuerChoice(undefined);
+      let hint: LoginHint | undefined;
+      try {
+        // Before the first await: the click's activation is still live.
+        controller.current!.open();
+        hint = await target();
+        if (!current()) return;
+        const identity = await auth.login(hint, { signal: abort.signal });
+        established.current = token;
+        if (!current()) {
+          // Cancelled while the provider answered: drop the session before sign-in reopens.
+          if (cancelled.current === token) await dropCancelled(auth);
+          return;
+        }
+        controller.current!.closeIfOpen();
+        await publish(identity, current);
+        if (!current()) return;
+        store.remember(identity.issuer);
+        setRecentProviders(store.list());
+        await accounts(auth, current);
+      } catch (failure) {
+        if (current()) {
+          reset();
+          setError(signInError(failure));
+          // Offer the WebID's own providers and keep the WebID; a failed choice keeps the list.
+          if (failure instanceof IssuerChoiceRequiredError && hint?.webId)
+            setIssuerChoice({ webId: hint.webId, issuers: failure.issuers });
+          else if (choice) setIssuerChoice(choice);
+        }
+      } finally {
+        if (loginAbort.current === abort) loginAbort.current = null;
+        // A cancel before any session existed reopens sign-in once the aborted login rejects. The
+        // abort cancels the popup and the attempt's requests, so that is prompt, and pod-auth
+        // discards (with a logout) any grant the abandoned attempt already obtained.
+        if (cancelled.current === token && established.current !== token && mounted.current)
+          setReady(true);
+        if (activeLogin.current === token) {
+          activeLogin.current = null;
+          controller.current?.closeIfOpen();
+          if (mounted.current) setPending(null);
+        }
+      }
+    },
+    [ready, publish, accounts, reset, store, dropCancelled],
+  );
+  const loginWithAddress = useCallback(
+    (input: string, kind: "webid" | "custom" = "webid") =>
+      runLogin({ kind, key: input }, async () => {
+        const target = await resolveLoginTarget(input, {
+          fetch: publicFetch,
+          // Cancel stops the lookup too, so sign-in reopens without waiting for its timeout.
+          signal: AbortSignal.any([loginAbort.current!.signal, AbortSignal.timeout(15_000)]),
+          allowInsecureLoopback: allowInsecureLoopback(),
+        });
+        return target.kind === "webid" ? { webId: target.webId } : { issuer: target.issuer };
+      }),
+    [runLogin],
+  );
+  const loginWithIssuer = useCallback(
+    (issuer: string) => {
+      const choice = issuerChoice?.issuers.some((listed) => sameIssuer(listed, issuer))
+        ? issuerChoice
+        : undefined;
+      return runLogin(
+        { kind: "provider", key: issuer },
+        async () => (choice ? { webId: choice.webId, issuer } : { issuer }),
+        choice,
+      );
+    },
+    [runLogin, issuerChoice],
+  );
+  const loginWithAccount = useCallback(
+    (webId: string) =>
+      runLogin({ kind: "account", key: webId }, async () => {
+        const issuer = accountIssuers.current.get(webId);
+        return issuer ? { webId, issuer } : { webId };
+      }),
+    [runLogin],
+  );
+  const logout = useCallback(async () => {
+    ++generation.current;
+    activeLogin.current = null;
+    controller.current?.cancel();
+    reset();
+    setError(null);
+    setIssuerChoice(undefined);
+    setReady(false);
+    try {
+      await coreRef.current?.logout();
+    } catch {
+      if (mounted.current) setError("We couldn't sign you out. Try again.");
+    } finally {
+      if (mounted.current) setReady(true);
+    }
+  }, [reset]);
+  const cancelLogin = useCallback(() => {
+    // Abandon only this attempt: remembered accounts and their stored sessions stay, unless this
+    // attempt already signed in, in which case that new session is dropped at once.
+    const token = activeLogin.current;
+    if (!token) return;
+    cancelled.current = token;
+    ++generation.current;
+    activeLogin.current = null;
+    loginAbort.current?.abort(new DOMException("Sign-in was cancelled", "AbortError"));
+    controller.current?.cancel();
+    reset();
+    setPending(null);
+    setError("Sign-in was cancelled.");
+    // Sign-in stays closed until the aborted login has rejected or the session it already made has
+    // been dropped.
+    setReady(false);
+    if (established.current === token && coreRef.current) void dropCancelled(coreRef.current);
+  }, [reset, dropCancelled]);
+  const retry = useCallback(() => {
+    restoreRef.current = null;
+    setStartupFailed(false);
+    setError(null);
+    setReady(false);
+    setStatus("loading");
+    setAttempt((value) => value + 1);
+  }, []);
+  const webId = profile?.webId;
+  const issueAssignments = useMemo(
+    () =>
+      status === "logged-in" && webId
+        ? new IssueAssignmentAnnouncer({
+            actorWebId: webId,
+            fetchImpl: core?.fetch ?? publicFetch,
+            onError: (message) => toast.error(message),
+          })
+        : undefined,
+    [status, webId, core],
+  );
+  const session: Session = {
+    sourceFetch,
+    podFetch: core?.fetch ?? publicFetch,
+    status,
+    webId,
+    profile,
+    activeStorage,
+    issueAssignments,
+    recentAccounts,
+    recentProviders,
+    pending,
+    error,
+    issuerChoice,
+    ready,
+    startupFailed,
+    retry,
+    loginWithAddress,
+    loginWithIssuer,
+    loginWithAccount,
+    cancelLogin,
+    logout,
+    setActiveStorage,
+  };
+  return <SessionContext.Provider value={session}>{children}</SessionContext.Provider>;
+}
+
 export function useSession(): Session {
-  const ctx = useContext(SessionContext);
-  if (!ctx) throw new Error("useSession must be used within <SessionProvider>");
-  return ctx;
+  const session = useContext(SessionContext);
+  if (!session) throw new Error("useSession must be used within <SessionProvider>");
+  return session;
 }

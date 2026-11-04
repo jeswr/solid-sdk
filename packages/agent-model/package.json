@@ -91,7 +91,8 @@
     "@rdfjs/wrapper": "^0.34.0",
     "canonicalize": "^1.0.8",
     "n3": "^2.1.0",
-    "zod": "^4.4.3"
+    "zod": "^4.4.3",
+    "@noble/hashes": "2.4.0"
   },
   "devDependencies": {
     "@rdfjs/types": "^2.0.1",

@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, type ReactNode } from "react";
-import { Download, ExternalLink, FileQuestion } from "lucide-react";
+import { Download, FileQuestion } from "lucide-react";
 import type { LoadedResource } from "@/components/use-resource";
 import { selectTypedView, viewMetaFor } from "@/components/typed-views/registry";
 import { RdfViewer } from "@/components/typed-views/rdf-table";
@@ -47,7 +47,7 @@ export function ResourceViewer({
         <figure className="overflow-hidden rounded-2xl border border-border bg-card">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src={resource.url}
+            src={resource.objectUrl}
             alt={`Preview of ${new URL(resource.url).pathname.split("/").pop() ?? "image"}`}
             className="mx-auto max-h-[70vh] w-auto"
           />
@@ -58,7 +58,7 @@ export function ResourceViewer({
     case "pdf":
       return (
         <object
-          data={resource.url}
+          data={resource.objectUrl}
           type="application/pdf"
           className="h-[70vh] w-full rounded-2xl border border-border"
           aria-label="PDF preview"
@@ -67,9 +67,9 @@ export function ResourceViewer({
         </object>
       );
     case "audio":
-      return <audio controls src={resource.url} className="w-full" />;
+      return <audio controls src={resource.objectUrl} className="w-full" />;
     case "video":
-      return <video controls src={resource.url} className="w-full rounded-2xl" />;
+      return <video controls src={resource.objectUrl} className="w-full rounded-2xl" />;
     default:
       return <GenericFallback resource={resource} />;
   }
@@ -182,13 +182,7 @@ function GenericFallback({ resource }: { resource: LoadedResource }) {
         </span>
         <div className="flex flex-wrap gap-2">
           <Button variant="outline" asChild>
-            <a href={resource.url} target="_blank" rel="noopener noreferrer">
-              <ExternalLink className="size-4" aria-hidden="true" />
-              Open
-            </a>
-          </Button>
-          <Button variant="outline" asChild>
-            <a href={resource.url} download>
+            <a href={resource.objectUrl} download={new URL(resource.url).pathname.split("/").pop() || "download"}>
               <Download className="size-4" aria-hidden="true" />
               Download
             </a>
