@@ -701,7 +701,7 @@ it("executes and audits daemon proposal evidence using the same signed approval"
   });
   await put(mandateId, await mandateToTurtle(vc), "application/trig");
   const status = await issue({
-    credential: buildBitstringStatusListCredential({
+    credential: await buildBitstringStatusListCredential({
       id: statusId,
       issuer: OWNER,
       statusPurpose: "revocation",
