@@ -20,6 +20,7 @@
   "devDependencies": {
     "@biomejs/biome": "^2.5.1",
     "@jeswr/fetch-rdf": "workspace:*",
+    "@jeswr/pod-access": "workspace:*",
     "@jeswr/pod-auth": "workspace:*",
     "@jeswr/pod-notifications": "workspace:*",
     "@jeswr/rdf-serialize": "workspace:*",
