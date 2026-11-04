@@ -5,8 +5,14 @@
 // are enforced by the same gate as the stories.
 import { AGENT, type Constraint, type Mandate, type Rule } from "@jeswr/agent-mandate";
 import type { OdrlPolicy } from "@jeswr/solid-odrl";
-import type { AutomationEvent, AutomationRule, RunEnvironment } from "../automation.js";
+import {
+  type AutomationEvent,
+  type AutomationRule,
+  type RunEnvironment,
+  singleAddress,
+} from "../automation.js";
 import type { Directory } from "../directory.js";
+import type { Commitment } from "../limits.js";
 import type { ModelTurn } from "../runners/agent.js";
 import type { Args, DataLabel, GlobalRules, ToolSpec } from "../types.js";
 import {
@@ -314,6 +320,9 @@ export function createAppsWorld(): AppsWorld {
     slack: [],
   };
   let nextIssue = 101;
+  // Sends by every automation, and by each rule, so daily limits hold across runs.
+  const commitments: Commitment[] = [];
+  const ruleHistories = new Map<string, Commitment[]>();
   const message = (id: string): InboxEmail => {
     const m = state.inbox.find((x) => x.id === id);
     if (!m) throw new Error(`no email "${id}"`);
@@ -372,9 +381,12 @@ export function createAppsWorld(): AppsWorld {
       },
       context: (args) => {
         const m = message(str(args, "message"));
-        const region = regionOf(m.from);
+        // Exactly one sender address, normalised, or the reply is refused.
+        const from = singleAddress(m.from);
+        if (!from) throw new Error(`"${m.from}" is not one email address`);
+        const region = regionOf(from);
         return {
-          recipients: [`mailto:${m.from}`],
+          recipients: [`mailto:${from}`],
           ...(region && { region }),
           content: str(args, "body"),
         };
@@ -598,6 +610,12 @@ export function createAppsWorld(): AppsWorld {
       return { kind: "email", message: email };
     },
     env: (clock) => ({
+      commitments,
+      ruleHistory: (id) => {
+        let h = ruleHistories.get(id);
+        if (!h) ruleHistories.set(id, (h = []));
+        return h;
+      },
       tools,
       purposes: AUTOMATION_PURPOSES,
       staff: directory.groups[GROUP.staff] ?? [],

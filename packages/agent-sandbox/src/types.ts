@@ -3,6 +3,7 @@
 // tool call is a request the gate decides before anything runs.
 import type { Mandate, Rule } from "@jeswr/agent-mandate";
 import type { OdrlPolicy } from "@jeswr/solid-odrl";
+import type { Commitment } from "./limits.js";
 
 /** JSON values that cross the sandbox boundary (tool arguments and results). */
 export type Json =
@@ -212,4 +213,10 @@ export interface ScopedMandate {
   /** Shown before each of its reasons, e.g. "Automation rule \"Meeting replies\"". */
   readonly name: string;
   readonly mandate: Mandate;
+  /**
+   * The sends and payments made under this mandate so far, for its own limits. Shared across
+   * runs (and appended to by the sandbox) so a daily limit holds for the whole day, not one run.
+   * Without it, the sandbox's own history is used.
+   */
+  readonly history?: Commitment[];
 }

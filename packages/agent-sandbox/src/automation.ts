@@ -13,6 +13,7 @@
  */
 import { AGENT, type Constraint, type Limit, type Mandate, type Rule } from "@jeswr/agent-mandate";
 import { createSandbox, type Sandbox, type SandboxOptions } from "./gate.js";
+import type { Commitment } from "./limits.js";
 import type { AgentEvent, AgentModel, ModelToolCall, ModelTurn } from "./runners/agent.js";
 import { agentSystemPrompt, runAgent } from "./runners/agent.js";
 import { runCode } from "./runners/code.js";
@@ -114,7 +115,7 @@ export function validateRule(rule: AutomationRule, context: RuleContext): string
   const problems: string[] = [];
   const names = new Set(context.tools.map((t) => t.name));
   if (!rule.title.trim()) problems.push("The rule has no title.");
-  if (!(rule.policy.purpose in context.purposes))
+  if (!Object.hasOwn(context.purposes, rule.policy.purpose))
     problems.push(`"${rule.policy.purpose}" is not one of the organisation's purposes.`);
   if (rule.policy.allow.length === 0) problems.push("The rule may not use any tool.");
   const seen = new Set<string>();
@@ -127,8 +128,10 @@ export function validateRule(rule: AutomationRule, context: RuleContext): string
       problems.push(`"${a.tool}" sends messages, so the rule must say who it may send to.`);
     if (a.to !== undefined && spec && spec.kind !== "send")
       problems.push(`"${a.tool}" does not send messages, so it cannot have recipients.`);
-    if (Array.isArray(a.to) && (a.to.length === 0 || a.to.some((x) => typeof x !== "string")))
-      problems.push(`"${a.tool}" names its recipients wrongly.`);
+    if (a.to !== undefined && !audienceIsValid(a.to))
+      problems.push(
+        `"${a.tool}" names its recipients wrongly: use "sender", "staff", "anyone" or a list of mailto: addresses.`,
+      );
     if (a.to === "sender" && rule.trigger.kind !== "email")
       problems.push(
         `"${a.tool}" may only reply to the sender, but this rule is not started by an email.`,
@@ -152,9 +155,27 @@ export function ruleTools(rule: AutomationRule, tools: readonly ToolSpec[]): Too
   return tools.filter((t) => allowed.has(t.name));
 }
 
-/** The sender of the event that started a run, as a party IRI. */
+/** Whether a recipient list is one the policy vocabulary allows. */
+function audienceIsValid(to: unknown): to is Audience {
+  if (to === "sender" || to === "staff" || to === "anyone") return true;
+  return (
+    Array.isArray(to) &&
+    to.length > 0 &&
+    to.every((x) => typeof x === "string" && /^mailto:[^@\s,;<>]+@[^@\s,;<>]+$/.test(x))
+  );
+}
+
+/** One email address, lowercased, or undefined if the text is not exactly one address. */
+export function singleAddress(text: string): string | undefined {
+  const bare = text.trim().replace(/^mailto:/i, "");
+  return /^[^@\s,;<>"']+@[^@\s,;<>"']+$/.test(bare) ? bare.toLowerCase() : undefined;
+}
+
+/** The sender of the event that started a run, as a party IRI (none if it is not one address). */
 export function senderOf(event: AutomationEvent): string | undefined {
-  return event.kind === "email" ? `mailto:${event.message.from.toLowerCase()}` : undefined;
+  if (event.kind !== "email") return undefined;
+  const one = singleAddress(event.message.from);
+  return one ? `mailto:${one}` : undefined;
 }
 
 const c = (leftOperand: string, operator: string, rightOperand: unknown): Constraint =>
@@ -176,10 +197,19 @@ export function ruleMandate(
   for (const a of rule.policy.allow) {
     const spec = context.tools.find((t) => t.name === a.tool);
     if (!spec) continue;
+    if (a.to !== undefined && !audienceIsValid(a.to))
+      throw new Error(`"${a.tool}" names its recipients wrongly`);
     const constraints: Constraint[] = [c("purpose", "eq", rule.policy.purpose)];
     if (a.to === "sender") constraints.push(c("recipient", "isAnyOf", sender ? [sender] : []));
     else if (a.to === "staff") constraints.push(c("recipient", "isAnyOf", [...context.staff]));
-    else if (Array.isArray(a.to)) constraints.push(c("recipient", "isAnyOf", [...a.to]));
+    else if (Array.isArray(a.to))
+      constraints.push(
+        c(
+          "recipient",
+          "isAnyOf",
+          a.to.map((x) => x.toLowerCase()),
+        ),
+      );
     const r: Rule = { type: "permission", action: spec.action, target: spec.system, constraints };
     (a.approval ? ask : own).push(r);
   }
@@ -261,6 +291,10 @@ export interface RunEnvironment extends RuleContext {
   readonly judge?: SandboxOptions["judge"];
   /** The organisation's name, for the model's instructions. */
   readonly company?: string;
+  /** Sends already made by any automation (so the organisation's daily limits span runs). */
+  readonly commitments?: Commitment[];
+  /** Sends already made by one rule (so its own daily limit spans runs). */
+  readonly ruleHistory?: (ruleId: string) => Commitment[];
 }
 
 /**
@@ -282,6 +316,7 @@ export async function runAutomation(
   const narrowing = {
     name: `Automation rule "${rule.title}"`,
     mandate: ruleMandate(rule, env, { agent: env.agent, event, at }),
+    ...(env.ruleHistory && { history: env.ruleHistory(rule.id) }),
   };
   const sandbox = createSandbox({
     // Every connected tool is present, but the rule's own mandate hides and refuses what it
@@ -296,6 +331,7 @@ export async function runAutomation(
     purpose: rule.policy.purpose,
     purposes: env.purposes,
     clock: env.clock,
+    ...(env.commitments && { commitments: env.commitments }),
     ...(env.mode && { mode: env.mode }),
     ...(env.judge && { judge: env.judge }),
   });

@@ -66,6 +66,12 @@ export interface SandboxOptions {
    * "review" (ask a person, agent-mandate's own default).
    */
   readonly unlisted?: "stop" | "review";
+  /**
+   * Sends and payments already made, shared with other sandboxes for the same agent (for
+   * example every run of an automation), so daily limits count across runs. The sandbox
+   * appends to it.
+   */
+  readonly commitments?: Commitment[];
   /** The model used by the "llm" and "hybrid" modes. */
   readonly judge?: JudgeModel;
   /** Purposes the hybrid classifier may choose from (IRI -> name); defaults to the directory's. */
@@ -194,7 +200,7 @@ export function createSandbox(options: SandboxOptions): Sandbox {
   const labels = new Map<string, DataLabel>();
   const labelKey = (l: DataLabel) => `${l.id}\u0000${JSON.stringify(l.policy)}`;
   const obligations: Obligation[] = [];
-  const commitments: Commitment[] = [];
+  const commitments: Commitment[] = options.commitments ?? [];
   const held = new Map<string, HeldCall & { readonly spec: ToolSpec; readonly ctx: CallContext }>();
   let heldCounter = 0;
 
@@ -206,6 +212,8 @@ export function createSandbox(options: SandboxOptions): Sandbox {
   function visibility(
     spec: ToolSpec,
     mandate: Mandate,
+    /** A narrowing mandate: what it does not list is hidden, whatever `unlisted` says. */
+    scoped = false,
   ): { visible: boolean; approval: boolean; reason: string } {
     const banned = mandate.prohibitions.find(
       (r) =>
@@ -234,7 +242,7 @@ export function createSandbox(options: SandboxOptions): Sandbox {
         approval: true,
         reason: `Offered, but each use needs a person's approval: the agent may ${ruleWords(asked, directory)}.`,
       };
-    if (unlisted === "review")
+    if (unlisted === "review" && !scoped)
       return {
         visible: true,
         approval: true,
@@ -252,7 +260,7 @@ export function createSandbox(options: SandboxOptions): Sandbox {
     const main = visibility(spec, mandate);
     let out = main;
     for (const extra of options.rules().also ?? []) {
-      const v = visibility(spec, extra.mandate);
+      const v = visibility(spec, extra.mandate, true);
       if (!v.visible && out.visible)
         out = { ...v, reason: `${v.reason.replace(/^Hidden: /, `Hidden by ${extra.name}: `)}` };
       else if (v.visible && v.approval && out.visible && !out.approval)
@@ -278,6 +286,7 @@ export function createSandbox(options: SandboxOptions): Sandbox {
     purpose: string,
     mandate: Mandate,
     at: string,
+    scoped = false,
   ): Promise<StepResult[]> {
     const recipients = ctx.recipients?.length ? ctx.recipients : [undefined];
     const steps: StepResult[] = [];
@@ -330,7 +339,7 @@ export function createSandbox(options: SandboxOptions): Sandbox {
           break;
         default: {
           const noRule = result.reason === "no-matching-rule";
-          const outcome: Outcome = noRule && unlisted === "stop" ? "stop" : "review";
+          const outcome: Outcome = noRule && (scoped || unlisted === "stop") ? "stop" : "review";
           steps.push({
             step: "global",
             outcome,
@@ -415,13 +424,14 @@ export function createSandbox(options: SandboxOptions): Sandbox {
     ctx: CallContext,
     now: number,
     mandate: Mandate = options.rules().mandate,
+    history: readonly Commitment[] = commitments,
   ): StepResult[] {
     if (spec.kind !== "send" && spec.kind !== "pay") return [];
     const { currency } = options.rules();
     const breaches = checkLimits(
       mandate.limits,
       currency,
-      commitments,
+      history,
       {
         kind: spec.kind,
         recipients: ctx.recipients?.length ? ctx.recipients : [spec.system],
@@ -508,7 +518,13 @@ export function createSandbox(options: SandboxOptions): Sandbox {
       };
     const system =
       'You enforce an organisation\'s rules on an AI agent. Read the rules and the proposed action, then answer with JSON only: {"outcome": "permit" | "review" | "stop", "reason": "<one sentence>"}. Use review when a person should decide.';
-    const prompt = `${policyText(mandate)}\n\nThe task's purpose: ${nameOf(directory, options.purpose)}.\nProposed action: ${spec.title} (${spec.description}).\nRecipients: ${joinNames((ctx.recipients ?? []).map((r) => nameOf(directory, r))) || "none"}.\nArguments: ${JSON.stringify(args)}`;
+    const narrowing = (options.rules().also ?? [])
+      .map(
+        (x) =>
+          `\n\nThese rules ALSO apply (${x.name}); the action must satisfy both:\n${policyText(x.mandate)}`,
+      )
+      .join("");
+    const prompt = `${policyText(mandate)}${narrowing}\n\nThe task's purpose: ${nameOf(directory, options.purpose)}.\nProposed action: ${spec.title} (${spec.description}).\nRecipients: ${joinNames((ctx.recipients ?? []).map((r) => nameOf(directory, r))) || "none"}.\nArguments: ${JSON.stringify(args)}`;
     try {
       const raw = await judge.complete(system, prompt);
       const json = JSON.parse(raw.slice(raw.indexOf("{"), raw.lastIndexOf("}") + 1)) as {
@@ -596,7 +612,7 @@ export function createSandbox(options: SandboxOptions): Sandbox {
         explanation: `${extra.name}: ${x.explanation}`,
         reason: `also:${x.reason}`,
       });
-      const v = visibility(spec, extra.mandate);
+      const v = visibility(spec, extra.mandate, true);
       steps.push(
         tag({
           step: "catalogue",
@@ -605,8 +621,8 @@ export function createSandbox(options: SandboxOptions): Sandbox {
           explanation: v.reason,
         }),
       );
-      steps.push(...(await globalStep(spec, ctx, purpose, extra.mandate, at)).map(tag));
-      steps.push(...limitsStep(spec, ctx, nowMs, extra.mandate).map(tag));
+      steps.push(...(await globalStep(spec, ctx, purpose, extra.mandate, at, true)).map(tag));
+      steps.push(...limitsStep(spec, ctx, nowMs, extra.mandate, extra.history).map(tag));
     }
     if (approved)
       return {
@@ -678,12 +694,16 @@ export function createSandbox(options: SandboxOptions): Sandbox {
               explanation: `${fresh.explanation} A person approved it.`,
             }
           : fresh;
+      // A narrowing mandate (an automation rule's own) still binds: the judge may only make the
+      // answer stricter than it. (Approved review steps are already permits in pac.)
+      const bound = pac.steps.filter((s) => s.reason.startsWith("also:"));
+      const outcome = strictest([judged.outcome, ...bound.map((s) => s.outcome)]);
       return {
-        outcome: judged.outcome,
+        outcome,
         steps: [judged, ...pac.steps],
-        obligations: judged.outcome === "permit" ? pac.obligations : [],
+        obligations: outcome === "permit" ? pac.obligations : [],
         shadow: pacOutcome,
-        summary: judged.explanation,
+        summary: outcome === judged.outcome ? judged.explanation : summarise(outcome, bound),
       };
     }
     const steps = [...extra, ...pac.steps];
@@ -782,17 +802,22 @@ export function createSandbox(options: SandboxOptions): Sandbox {
     // fails: a failed call may still have reached the recipient or moved the money.
     if (spec.kind === "send" || spec.kind === "pay") {
       const at = clock();
-      for (const recipient of ctx.recipients?.length ? ctx.recipients : [spec.system])
-        commitments.push(
-          Object.freeze({
-            at,
-            kind: spec.kind,
-            recipient,
-            ...(ctx.amount !== undefined && {
-              amount: Object.freeze({ value: ctx.amount.value, currency: ctx.amount.currency }),
-            }),
+      // Every history that limits this call counts it: the sandbox's own (possibly shared with
+      // other runs) and each narrowing mandate's.
+      const histories = new Set<Commitment[]>([commitments]);
+      for (const extra of options.rules().also ?? [])
+        if (extra.history) histories.add(extra.history);
+      for (const recipient of ctx.recipients?.length ? ctx.recipients : [spec.system]) {
+        const one = Object.freeze({
+          at,
+          kind: spec.kind,
+          recipient,
+          ...(ctx.amount !== undefined && {
+            amount: Object.freeze({ value: ctx.amount.value, currency: ctx.amount.currency }),
           }),
-        );
+        });
+        for (const h of histories) h.push(one);
+      }
     }
     let output: ToolOutput;
     try {
@@ -974,7 +999,15 @@ export function createSandbox(options: SandboxOptions): Sandbox {
     // catalogue, is the control being compared in "llm" mode).
     tools: () =>
       catalogue()
-        .filter((e) => e.visible || mode === "off" || mode === "llm")
+        .filter(
+          (e) =>
+            e.visible ||
+            mode === "off" ||
+            (mode === "llm" &&
+              (options.rules().also ?? []).every(
+                (x) => visibility(e.tool, x.mandate, true).visible,
+              )),
+        )
         .map((e) => e.tool),
     catalogue,
     call: (c) => serial(() => call(c)),

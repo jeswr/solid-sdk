@@ -2,12 +2,15 @@
 import { describe, expect, it } from "vitest";
 import {
   type AutomationRule,
+  createSandbox,
   DEMO_START,
   describeMandate,
   ruleMandate,
   ruleTools,
   runAutomation,
   scriptedModel,
+  senderOf,
+  singleAddress,
   validateRule,
   wants,
 } from "../src/index.js";
@@ -305,5 +308,127 @@ describe("the simulated apps", () => {
 
   it("the stand-in scripts cover non-email events", () => {
     for (const ex of AUTOMATION_EXAMPLES) expect(ex.script?.({ kind: "manual" }) ?? []).toEqual([]);
+  });
+});
+
+describe("review fixes", () => {
+  const meeting = () => example("meeting-replies").rule;
+  const ask = (id: string, from: string) => ({
+    id,
+    from,
+    fromName: "Someone",
+    subject: "Can we meet?",
+    body: "Could we meet next week?",
+  });
+
+  it("daily limits count across runs, for the rule and for the organisation", async () => {
+    const { world, env, tick } = setup();
+    const rule: AutomationRule = { ...meeting(), policy: { ...meeting().policy, sendsPerDay: 1 } };
+    const at = { ...env, clock: () => tick() };
+    await runAutomation(rule, world.receive(ask("x1", "a@example.org")), at);
+    await runAutomation(rule, world.receive(ask("x2", "b@example.org")), at);
+    expect(world.state.sent.map((s) => s.to)).toEqual(["a@example.org"]);
+    // The organisation's three-a-day per person also spans runs and rules.
+    const roomy: AutomationRule = {
+      ...meeting(),
+      id: "roomy",
+      policy: { ...meeting().policy, sendsPerDay: 200 },
+    };
+    for (let i = 0; i < 5; i++)
+      await runAutomation(roomy, world.receive(ask(`y${i}`, "c@example.org")), at);
+    expect(world.state.sent.filter((s) => s.to === "c@example.org")).toHaveLength(3);
+  });
+
+  it("recipients must be one of the vocabulary's forms, or the rule is invalid and cannot run", () => {
+    const { env } = setup();
+    for (const to of [
+      "everyone",
+      "Sender",
+      null,
+      {},
+      ["reporter@newsdesk.example"],
+      ["mailto:a@b.c, d@e.f"],
+    ]) {
+      const rule = {
+        ...meeting(),
+        policy: { ...meeting().policy, allow: [{ tool: "gmail_reply", to }] },
+      } as unknown as AutomationRule;
+      expect(validateRule(rule, env).join(" ")).toMatch(/recipients wrongly/);
+      expect(() =>
+        ruleMandate(rule, env, {
+          agent: AUTOMATION_AGENT,
+          event: { kind: "manual" },
+          at: "2026-11-04T09:00:00Z",
+        }),
+      ).toThrow(/recipients wrongly/);
+    }
+    const proto = { ...meeting(), policy: { ...meeting().policy, purpose: "constructor" } };
+    expect(validateRule(proto, env).join(" ")).toMatch(/not one of the organisation's purposes/);
+  });
+
+  it("in AI-judge mode the rule's own policy still binds, whatever the judge says", async () => {
+    const { world, env } = setup();
+    const ex = example("support-to-jira");
+    const event = world.receive(email("m-203"));
+    const yes = { name: "yes", complete: async () => '{"outcome":"permit","reason":"fine"}' };
+    let prompt = "";
+    const judge = {
+      name: "yes",
+      complete: async (_s: string, p: string) => {
+        prompt = p;
+        return yes.complete();
+      },
+    };
+    const out = await runAutomation(
+      ex.rule,
+      event,
+      { ...env, mode: "llm", judge },
+      {
+        ...(ex.script && { model: scriptedModel("Stand-in", ex.script(event)) }),
+      },
+    );
+    expect(world.state.sent.map((s) => s.to)).toEqual(["jon.baker@example.com"]);
+    expect(prompt).toMatch(/ALSO apply \(Automation rule/);
+    expect(out.sandbox.tools().map((t) => t.name)).not.toContain("slack_post");
+  });
+
+  it("a sender must be exactly one address; case does not matter", async () => {
+    expect(singleAddress("Nadia.Price@Example.org")).toBe("nadia.price@example.org");
+    expect(singleAddress("mailto:a@b.c")).toBe("a@b.c");
+    expect(singleAddress("victim@example.org, attacker@evil.example")).toBeUndefined();
+    expect(senderOf({ kind: "manual" })).toBeUndefined();
+    const { world, env } = setup();
+    await runAutomation(meeting(), world.receive(ask("z1", "Nadia.Price@Example.org")), env);
+    await runAutomation(
+      meeting(),
+      world.receive(ask("z2", "victim@example.org, attacker@evil.example")),
+      env,
+    );
+    expect(world.state.sent.map((s) => s.to)).toEqual(["nadia.price@example.org"]);
+  });
+
+  it("a narrowing mandate stops what it does not list, even when unlisted calls go to a person", async () => {
+    const { world, env } = setup();
+    const rule = meeting();
+    const narrowing = {
+      name: "Rule",
+      mandate: ruleMandate(rule, env, {
+        agent: AUTOMATION_AGENT,
+        event: { kind: "manual" },
+        at: "2026-11-04T09:00:00Z",
+      }),
+    };
+    const sandbox = createSandbox({
+      tools: env.tools,
+      rules: () => ({ ...world.rules(), also: [narrowing] }),
+      directory: env.directory,
+      agent: AUTOMATION_AGENT,
+      purpose: rule.policy.purpose,
+      unlisted: "review",
+      clock: () => DEMO_START,
+    });
+    const r = await sandbox.call({ tool: "slack_post", args: { message: "hi" } });
+    expect(r.status).toBe("stopped");
+    expect(sandbox.catalogue().find((e) => e.tool.name === "slack_post")?.visible).toBe(false);
   });
 });

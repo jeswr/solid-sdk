@@ -95,10 +95,57 @@ describe("the mortgage tools refuse bad input", () => {
       (await p.call({ tool: "lender_send", args: { documents: ["income"], message: "" } })).status,
     ).toBe("stopped");
     expect((await p.call({ tool: "pod_read", args: { record: "diary" } })).status).toBe("failed");
-    const accept = await p.call({ tool: "offer_accept", args: {} });
-    expect(accept.status).toBe("held");
-    if (accept.status !== "held") return;
-    expect((await p.approve(accept.approval, "Alex")).status).toBe("failed");
+    // No offer yet: nothing to accept.
+    expect((await p.call({ tool: "offer_accept", args: {} })).status).toBe("stopped");
+  });
+
+  it("an approval accepts exactly the offer it was asked about, not a newer one", async () => {
+    const world = createMortgageWorld();
+    const u = world.sandboxes.underwriter;
+    const first = await u.call({
+      tool: "offer_issue",
+      args: { amount: 310000, rate: 4.1, years: 25 },
+    });
+    if (first.status !== "held") throw new Error("expected held");
+    await u.approve(first.approval, "Ruth");
+    const accept = await world.sandboxes.personal.call({ tool: "offer_accept", args: {} });
+    if (accept.status !== "held") throw new Error("expected held");
+    const worse = await u.call({
+      tool: "offer_issue",
+      args: { amount: 310000, rate: 9.9, years: 40 },
+    });
+    if (worse.status !== "held") throw new Error("expected held");
+    await u.approve(worse.approval, "Ruth");
+    const out = await world.sandboxes.personal.approve(accept.approval, "Alex");
+    expect(out.status).toBe("stopped");
+    expect(world.state.offers.map((o) => o.accepted)).toEqual([false, false]);
+  });
+
+  it("a fresh assistant session still cannot pass Alex's data to the insurer", async () => {
+    const world = createMortgageWorld();
+    await runMortgageStep(world, MORTGAGE_STORY.steps[0] as MortgageStep);
+    await runMortgageStep(world, MORTGAGE_STORY.steps[2] as MortgageStep);
+    const r = await world.sandboxes.assistant.call({
+      tool: "partner_share",
+      args: { note: "Alex earns £5,200 a month." },
+    });
+    expect(r.status).toBe("stopped");
+    expect(world.state.partnerShares).toEqual([]);
+  });
+
+  it("an offer that changed under the approval is not accepted", async () => {
+    const world = createMortgageWorld();
+    const u = world.sandboxes.underwriter;
+    const first = await u.call({ tool: "offer_issue", args: { amount: 1, rate: 1, years: 1 } });
+    if (first.status !== "held") throw new Error("expected held");
+    await u.approve(first.approval, "Ruth");
+    const accept = await world.sandboxes.personal.call({ tool: "offer_accept", args: {} });
+    if (accept.status !== "held") throw new Error("expected held");
+    const offer = world.state.offers[0];
+    if (offer) offer.rate = 2;
+    expect((await world.sandboxes.personal.approve(accept.approval, "Alex")).status).toBe(
+      "stopped",
+    );
   });
 
   it("an offer with missing numbers records zeros, and a step reports its decision", async () => {

@@ -21,6 +21,7 @@ export {
   runAutomation,
   scriptedModel,
   senderOf,
+  singleAddress,
   type Trigger,
   validateRule,
   wants,

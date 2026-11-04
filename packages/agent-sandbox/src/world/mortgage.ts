@@ -370,10 +370,33 @@ function mortgageTools(state: MortgageState): Record<MortgageAgent, ToolSpec[]> 
         action: `${AGENT}Sign`,
         kind: "send",
         inputSchema: { type: "object", properties: { offer: { type: "number" } } },
-        context: () => ({ recipients: [P.assistant] }),
-        run: () => {
-          const offer = state.offers[state.offers.length - 1];
+        // The offer is fixed when the call is decided, so an approval accepts exactly the offer
+        // the person saw (a later, different offer changes the effects and is re-checked).
+        context: () => {
+          const index = state.offers.length - 1;
+          const offer = state.offers[index];
           if (!offer) throw new Error("there is no offer to accept");
+          const { amount, rate, years } = offer;
+          return {
+            recipients: [P.assistant],
+            content: JSON.stringify({ index, amount, rate, years }),
+          };
+        },
+        run: (_args, effects) => {
+          const want = JSON.parse(effects.content ?? "{}") as {
+            index: number;
+            amount: number;
+            rate: number;
+            years: number;
+          };
+          const offer = state.offers[want.index];
+          if (
+            !offer ||
+            offer.amount !== want.amount ||
+            offer.rate !== want.rate ||
+            offer.years !== want.years
+          )
+            throw new Error("the offer is not the one that was approved");
           offer.accepted = true;
           return { content: "Offer accepted." };
         },
@@ -429,10 +452,12 @@ function mortgageTools(state: MortgageState): Record<MortgageAgent, ToolSpec[]> 
           properties: { note: { type: "string" } },
           required: ["note"],
         },
+        // The note may quote anything Northgate holds, so everything Alex sent travels with it.
         context: (args) => ({
           recipients: [P.homecover],
           purpose: MORTGAGE_PURPOSE.marketing,
           content: str(args, "note"),
+          uses: state.received.map((k) => podLabel(record(k))),
         }),
         run: (args) => {
           state.partnerShares.push(str(args, "note"));
