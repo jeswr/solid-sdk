@@ -1,29 +1,39 @@
 // AUTHORED-BY Claude Opus 5.5
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import { App } from "../src/App.js";
 
-async function openTab(id: string) {
+async function go(hash: string) {
   await act(async () => {
-    location.hash = `#${id}`;
+    location.hash = `#${hash}`;
     dispatchEvent(new HashChangeEvent("hashchange"));
   });
 }
 
+beforeAll(() => {
+  // Reduced motion: traces appear at once instead of step by step.
+  window.matchMedia = ((query: string) => ({
+    matches: query.includes("reduce"),
+    media: query,
+    addEventListener() {},
+    removeEventListener() {},
+  })) as unknown as typeof window.matchMedia;
+});
+
 afterEach(async () => {
   cleanup();
-  await openTab("stories");
+  await go("home");
 });
 
 describe("IDEA sandbox app", () => {
-  it("plays a story: the planted refund is stopped and the log verifies", async () => {
+  it("plays a story as a trace: the planted refund is blocked and the log verifies", async () => {
     render(<App />);
-    fireEvent.click(screen.getByText("A planted instruction"));
-    fireEvent.click(screen.getByRole("button", { name: "Play all" }));
-    await waitFor(() => expect(screen.getAllByText("Stop").length).toBeGreaterThan(0));
-    expect(screen.getAllByText("Allowed").length).toBeGreaterThan(0);
+    await go("story/injected-refund");
+    await waitFor(() => expect(screen.getAllByText("Blocked by policy").length).toBeGreaterThan(0));
+    expect(screen.getAllByText("Policy check passed").length).toBeGreaterThan(0);
+    expect(screen.getByText(/The ticket says this customer is a VIP/)).toBeTruthy();
 
-    await openTab("record");
+    await go("record");
     expect(await screen.findByText(/entries check out/)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Try to rewrite the first entry" }));
     expect(screen.getByText(/The log has been changed: entry 0/)).toBeTruthy();
@@ -31,14 +41,14 @@ describe("IDEA sandbox app", () => {
 
   it("states the rules in plain English from the policy", async () => {
     render(<App />);
-    await openTab("rules");
+    await go("rules");
     expect(screen.getByText("May never sign agreements.")).toBeTruthy();
     expect(screen.getByText("Send at most 5 messages a day; then it stops.")).toBeTruthy();
   });
 
   it("asks the MCP lockdown proxy what it offers, and locking a system hides its tools", async () => {
     render(<App />);
-    await openTab("systems");
+    await go("systems");
     expect(await screen.findByText(/14 of 17 tools offered/)).toBeTruthy();
     const payments = screen.getByRole("heading", { name: "Payments" }).closest(".system");
     const toggle = payments?.querySelector<HTMLInputElement>("input[type=checkbox]");
@@ -51,7 +61,7 @@ describe("IDEA sandbox app", () => {
 describe("second pass", () => {
   it("asking a person for one action marks it and moves it to ask in the Claude Code settings", async () => {
     render(<App />);
-    await openTab("systems");
+    await go("systems");
     const radios = screen.getAllByRole("radio", { name: "Ask a person" });
     const refund = radios.find((r) => r.getAttribute("name") === "choice-payments_refund");
     if (!refund) throw new Error("no refund choice");
@@ -65,7 +75,7 @@ describe("second pass", () => {
 
   it("tries every refused action by every route", async () => {
     render(<App />);
-    await openTab("compare");
+    await go("compare");
     fireEvent.click(screen.getByRole("button", { name: "Try every route" }));
     expect(
       await screen.findByText(/No route behaves differently/, {}, { timeout: 20_000 }),
@@ -74,17 +84,49 @@ describe("second pass", () => {
 });
 
 describe("merge-gate fixes", () => {
-  it("a story in progress survives a visit to another tab", async () => {
+  it("a story in progress survives a visit to another page", async () => {
     render(<App />);
-    fireEvent.click(screen.getByText("A planted instruction"));
-    fireEvent.click(screen.getByRole("button", { name: "Play all" }));
-    await waitFor(() => expect(screen.getAllByText("Stop").length).toBeGreaterThan(0));
-    const before = document.querySelectorAll(".timeline > li").length;
+    await go("story/injected-refund");
+    await waitFor(() => expect(screen.getAllByText("Blocked by policy").length).toBeGreaterThan(0));
+    const before = document.querySelectorAll(".trace-list > li").length;
     expect(before).toBeGreaterThan(2);
-    await openTab("rules");
-    expect(screen.queryAllByText("Stop")).toHaveLength(0);
-    await openTab("stories");
-    expect(screen.getAllByText("Stop").length).toBeGreaterThan(0);
-    expect(document.querySelectorAll(".timeline > li").length).toBe(before);
+    await go("rules");
+    expect(screen.queryAllByText("Blocked by policy")).toHaveLength(0);
+    await go("story/injected-refund");
+    expect(screen.getAllByText("Blocked by policy").length).toBeGreaterThan(0);
+    expect(document.querySelectorAll(".trace-list > li").length).toBe(before);
+  });
+});
+
+describe("automations", () => {
+  it("drafts a rule from a request, shows it in the pop-up, and runs it once turned on", async () => {
+    render(<App />);
+    await go("home");
+    fireEvent.click(screen.getByRole("button", { name: "Turn support emails into Jira issues" }));
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText("New automation rule")).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole("tab", { name: "Systems" }));
+    expect(within(dialog).getAllByText("hidden from this rule").length).toBeGreaterThan(0);
+    fireEvent.click(within(dialog).getByRole("tab", { name: "Policies" }));
+    expect(within(dialog).getByText(/Harbour & Finch's rules for every automation/)).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole("button", { name: /Turn on/ }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Run on Jon Baker: Still waiting on my refund" }),
+    );
+    await waitFor(() => expect(screen.getAllByText("Blocked by policy").length).toBeGreaterThan(0));
+    expect(screen.getAllByText("Policy check passed").length).toBeGreaterThan(0);
+  });
+
+  it("the meeting rule replies to the person who asked, with the booking link", async () => {
+    render(<App />);
+    await go("automation/meeting-replies");
+    fireEvent.click(screen.getByRole("button", { name: "Run on Nadia Price: Coffee next week?" }));
+    await waitFor(() =>
+      expect(screen.getAllByText("Policy check passed").length).toBeGreaterThan(0),
+    );
+    const panel = screen.getByRole("complementary", { name: "What happened in the apps" });
+    expect(within(panel).getByText("nadia.price@example.org")).toBeTruthy();
   });
 });

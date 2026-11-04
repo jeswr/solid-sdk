@@ -1,179 +1,110 @@
 // AUTHORED-BY Claude Opus 5.5
-import { nameOf } from "@jeswr/agent-sandbox";
-import { DIRECTORY, SCENARIOS } from "@jeswr/agent-sandbox/world";
-import { useState } from "react";
+// A story, played as the agent's live trace: what it is thinking, each action it tries, and
+// the policy check that passes, holds or blocks it.
+import { type Args, nameOf } from "@jeswr/agent-sandbox";
+import { DIRECTORY } from "@jeswr/agent-sandbox/world";
+import { Bot, Lightbulb, Play, RotateCcw, UserRound } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import { ModePicker, type Shared } from "../App.js";
 import { AGENT_MODELS, claudeAgent } from "../claude.js";
-import { Chip, Json, OUTCOME_LABEL, OUTCOME_TEXT, outcomeOfResult, Steps } from "../components.js";
-import type { Session, TimelineItem } from "../session.js";
+import { STORY_ICONS } from "../icons.js";
+import type { Session } from "../session.js";
+import { THOUGHTS } from "../thoughts.js";
+import { revealIsInstant, Trace, type TraceItem, useReveal } from "../trace.js";
+
+const APPROVER = "Priya Shah (support lead)";
+
+/** The session's timeline as a trace, with the agent's thinking before each action. */
+export function storyTrace(session: Session): TraceItem[] {
+  const out: TraceItem[] = [
+    { kind: "user", id: "task", text: session.scenario.task, who: session.scenario.askedBy },
+  ];
+  for (const item of session.items) {
+    if (item.kind === "notice") out.push({ ...item, id: `n${item.id}` });
+    else if (item.kind === "say") out.push({ kind: "say", id: `s${item.id}`, text: item.text });
+    else {
+      const thought = THOUGHTS[item.note];
+      if (thought || item.note !== "The live model's own choice")
+        out.push({ kind: "thinking", id: `t${item.id}`, text: thought ?? item.note });
+      const tool = session.sandbox.catalogue().find((e) => e.tool.name === item.tool)?.tool;
+      out.push({
+        kind: "call",
+        id: `c${item.id}`,
+        toolName: item.tool,
+        args: item.args as Args,
+        result: item.result,
+        ...(tool && { tool }),
+        ...(item.decision && { decision: item.decision }),
+        ...(item.expect && { expect: item.expect }),
+        ...(item.why && { why: item.why }),
+        ...(item.verdict && { verdict: item.verdict }),
+        ...(item.settled && { settled: item.settled }),
+        ...(item.result.status === "held" &&
+          !item.settled && {
+            answer: (approved: boolean) => void session.answer(item, approved, APPROVER),
+          }),
+      });
+    }
+  }
+  return out;
+}
 
 export function Stories({ shared }: { shared: Shared }) {
   const { session, restart } = shared;
   const story = session.scenario;
+  const StoryIcon = STORY_ICONS[story.id] ?? Bot;
+  // Start playing as soon as the story opens.
+  useEffect(() => {
+    if (session.position === 0 && !session.busy && session.items.length === 0)
+      void session.playAll(revealIsInstant() ? 0 : 2000);
+  }, [session]);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: rebuilt whenever the session changes.
+  const items = useMemo(() => storyTrace(session), [session, session.items.length, shared.version]);
+  const { shown, total } = useReveal(items, false);
+  const finished = session.done && !session.busy && shown >= total;
   return (
-    <div className="stories">
-      <aside className="story-list" aria-label="Stories">
-        <h2>Stories</h2>
-        {SCENARIOS.filter((s) => !s.code).map((s) => (
-          <button
-            type="button"
-            key={s.id}
-            className={s.id === story.id ? "story active" : "story"}
-            onClick={() => shared.setStoryId(s.id)}
-          >
-            <span className="story-title">{s.title}</span>
-            <span className="hint">{s.summary}</span>
-          </button>
-        ))}
-        <p className="hint">The code box story is under "Code box".</p>
-      </aside>
-
+    <div className="story-page">
       <div className="story-main">
-        <div className="task card">
-          <div className="task-head">
-            <span className="eyebrow">Task from {story.askedBy}</span>
-            <span className="purpose">Purpose: {nameOf(DIRECTORY, story.purpose)}</span>
+        <header className="page-head">
+          <span className="page-icon">
+            <StoryIcon size={22} aria-hidden="true" />
+          </span>
+          <div className="page-title">
+            <h1>{story.title}</h1>
+            <p className="hint">
+              <UserRound size={13} aria-hidden="true" /> Asked by {story.askedBy} · for{" "}
+              {nameOf(DIRECTORY, story.purpose)}
+            </p>
           </div>
-          <p className="task-text">“{story.task}”</p>
-          <div className="controls">
-            <button
-              type="button"
-              className="primary"
-              disabled={session.busy || session.done}
-              onClick={() => session.step()}
-            >
-              {session.position === 0 ? "Start" : "Next step"}
-            </button>
-            <button
-              type="button"
-              disabled={session.busy || session.done}
-              onClick={() => session.playAll()}
-            >
-              Play all
-            </button>
-            <button type="button" disabled={session.busy} onClick={restart}>
-              Start again
-            </button>
-            <span className="hint">
-              Step {Math.min(session.position, story.steps.length)} of {story.steps.length}
-            </span>
-          </div>
-          <ModePicker shared={shared} compact />
+          <button type="button" disabled={session.busy} onClick={restart}>
+            {session.items.length === 0 ? (
+              <>
+                <Play size={15} aria-hidden="true" /> Play
+              </>
+            ) : (
+              <>
+                <RotateCcw size={15} aria-hidden="true" /> Play again
+              </>
+            )}
+          </button>
+        </header>
+        <ModePicker shared={shared} compact />
+        <div className="timeline" aria-live="polite">
+          <Trace items={items} busy={session.busy} />
         </div>
-
-        <ol className="timeline" aria-live="polite">
-          {session.items.map((item) => (
-            <Row key={item.id} item={item} session={session} />
-          ))}
-        </ol>
-
-        {session.done && (
-          <div className="lesson card">
-            <span className="eyebrow">What this shows</span>
-            <p>{story.lesson}</p>
+        {finished && (
+          <div className="lesson">
+            <Lightbulb size={18} aria-hidden="true" />
+            <div>
+              <span className="eyebrow">What this shows</span>
+              <p>{story.lesson}</p>
+            </div>
           </div>
         )}
-
         <LiveAi shared={shared} session={session} />
       </div>
-
       <WorldPanel session={session} />
     </div>
-  );
-}
-
-function Row({ item, session }: { item: TimelineItem; session: Session }) {
-  if (item.kind === "notice")
-    return (
-      <li className={`notice notice-${item.tone}`}>
-        <span aria-hidden="true">
-          {item.tone === "grant" ? "🔑" : item.tone === "revoke" ? "↩" : "ℹ"}
-        </span>{" "}
-        {item.text}
-      </li>
-    );
-  if (item.kind === "say")
-    return (
-      <li className="say">
-        <span className="eyebrow">The agent says</span>
-        <p>{item.text}</p>
-      </li>
-    );
-  const outcome = outcomeOfResult(item.result);
-  const tool = session.sandbox.catalogue().find((e) => e.tool.name === item.tool)?.tool;
-  const shadow = item.decision?.shadow;
-  return (
-    <li className={`call call-${outcome}`}>
-      <div className="call-head">
-        <div>
-          <span className="eyebrow">The agent tries to</span>
-          <p className="call-note">{item.note}</p>
-          <p className="call-tool">
-            <code>{item.tool}</code> {tool && <span className="hint">({tool.title})</span>}
-          </p>
-        </div>
-        <div className="call-outcome">
-          <Chip outcome={outcome} />
-          {shadow && shadow !== outcome && (
-            <span className="shadow">
-              Rules as code would say: <Chip outcome={shadow} />
-            </span>
-          )}
-        </div>
-      </div>
-      <p className="summary">
-        <strong>{OUTCOME_TEXT[outcome]}.</strong>{" "}
-        {item.result.status === "done" ? (item.decision?.summary ?? "") : item.result.message}
-      </p>
-      {item.expect && (
-        <p className={`expect expect-${item.verdict}`}>
-          {item.verdict === "right"
-            ? "✓ What Harbour & Finch wants."
-            : `✕ Harbour & Finch wants “${OUTCOME_LABEL[item.expect]}”.`}{" "}
-          <span className="hint">{item.why}</span>
-        </p>
-      )}
-      {item.result.status === "held" && !item.settled && (
-        <div className="approval">
-          <span>Priya Shah (support lead) is asked to decide:</span>
-          <button
-            type="button"
-            className="primary"
-            onClick={() => session.answer(item, true, "Priya Shah (support lead)")}
-          >
-            Approve
-          </button>
-          <button
-            type="button"
-            onClick={() => session.answer(item, false, "Priya Shah (support lead)")}
-          >
-            Decline
-          </button>
-        </div>
-      )}
-      {item.settled && (
-        <p className="settled">
-          {item.settled.approved ? "Approved" : "Declined"} by {item.settled.by}.{" "}
-          {item.settled.result.status === "done"
-            ? "It then went ahead."
-            : item.settled.result.status === "stopped" && item.settled.approved
-              ? item.settled.result.message
-              : ""}
-        </p>
-      )}
-      <details>
-        <summary>Why? See every check</summary>
-        {item.decision && <Steps decision={item.decision} />}
-        <span className="eyebrow">What the agent asked for</span>
-        <Json value={item.args} />
-        {item.result.status === "done" && (
-          <>
-            <span className="eyebrow">What the agent got back</span>
-            <Json value={item.result.content} />
-          </>
-        )}
-      </details>
-    </li>
   );
 }
 
@@ -272,7 +203,6 @@ function WorldPanel({ session }: { session: Session }) {
 }
 
 function LiveAi({ shared, session }: { shared: Shared; session: Session }) {
-  const [draft, setDraft] = useState("");
   const [model, setModel] = useState<string>(AGENT_MODELS[0].id);
   return (
     <details className="live card">
@@ -280,17 +210,8 @@ function LiveAi({ shared, session }: { shared: Shared; session: Session }) {
         <strong>Live AI</strong>{" "}
         <span className="hint">Give this task to Claude instead of the script.</span>
       </summary>
-      <p className="hint">
-        Use your own Anthropic API key. It is kept only in this browser tab and sent only to
-        api.anthropic.com. With a key, the "AI judge" and "Rules + AI" modes also use Claude (Haiku
-        5.5) instead of the keyword stand-in.
-      </p>
       {shared.apiKey ? (
         <div className="controls">
-          <span>Key added.</span>
-          <button type="button" onClick={() => shared.setApiKey("")}>
-            Remove key
-          </button>
           <label>
             Model{" "}
             <select value={model} onChange={(e) => setModel(e.target.value)}>
@@ -311,26 +232,13 @@ function LiveAi({ shared, session }: { shared: Shared; session: Session }) {
           </button>
         </div>
       ) : (
-        <form
-          className="controls"
-          onSubmit={(e) => {
-            e.preventDefault();
-            shared.setApiKey(draft.trim());
-            setDraft("");
-          }}
-        >
-          <input
-            type="password"
-            autoComplete="off"
-            placeholder="sk-ant-…"
-            aria-label="Anthropic API key"
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-          />
-          <button type="submit" disabled={!draft.trim()}>
-            Use key
-          </button>
-        </form>
+        <p className="hint">
+          Add your own Anthropic API key in{" "}
+          <button type="button" className="text-button" onClick={shared.openSettings}>
+            Settings
+          </button>{" "}
+          to run this task with Claude.
+        </p>
       )}
     </details>
   );
