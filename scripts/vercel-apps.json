@@ -133,14 +133,5 @@
     "originEnv": "APP_ORIGIN",
     "vercelIgnore": "node ../../scripts/vercel-ignore-build.mjs @jeswr/app-pod-migrator",
     "gitDeploymentEnabled": false
-  },
-  {
-    "project": "solid-idea-sandbox",
-    "rootDirectory": "apps/idea-sandbox",
-    "package": "@jeswr/app-idea-sandbox",
-    "framework": "vite",
-    "clientIdDocument": false,
-    "vercelIgnore": "node ../../scripts/vercel-ignore-build.mjs @jeswr/app-idea-sandbox",
-    "gitDeploymentEnabled": false
   }
 ]
