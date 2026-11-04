@@ -12,6 +12,7 @@ import {
   singleAddress,
 } from "../automation.js";
 import type { Directory } from "../directory.js";
+import { createLock } from "../gate.js";
 import type { Commitment } from "../limits.js";
 import type { ModelTurn } from "../runners/agent.js";
 import type { Args, DataLabel, GlobalRules, ToolSpec } from "../types.js";
@@ -323,6 +324,8 @@ export function createAppsWorld(): AppsWorld {
   // Sends by every automation, and by each rule, so daily limits hold across runs.
   const commitments: Commitment[] = [];
   const ruleHistories = new Map<string, Commitment[]>();
+  // One lock for every run, because they share those histories.
+  const lock = createLock();
   const message = (id: string): InboxEmail => {
     const m = state.inbox.find((x) => x.id === id);
     if (!m) throw new Error(`no email "${id}"`);
@@ -611,6 +614,7 @@ export function createAppsWorld(): AppsWorld {
     },
     env: (clock) => ({
       commitments,
+      lock,
       ruleHistory: (id) => {
         const known = ruleHistories.get(id);
         if (known) return known;

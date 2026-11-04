@@ -2,6 +2,9 @@
 import { describe, expect, it } from "vitest";
 import {
   type AutomationRule,
+  type CallLock,
+  type Commitment,
+  createLock,
   createSandbox,
   DEMO_START,
   describeMandate,
@@ -23,6 +26,8 @@ import {
   createAppsWorld,
   SAMPLE_EMAILS,
 } from "../src/world/index.js";
+
+const DEMO_ISO = new Date(DEMO_START).toISOString();
 
 const example = (id: string) => {
   const ex = AUTOMATION_EXAMPLES.find((e) => e.rule.id === id);
@@ -430,5 +435,147 @@ describe("review fixes", () => {
     const r = await sandbox.call({ tool: "slack_post", args: { message: "hi" } });
     expect(r.status).toBe("stopped");
     expect(sandbox.catalogue().find((e) => e.tool.name === "slack_post")?.visible).toBe(false);
+  });
+
+  it("a rule's tools keep their identity: a neighbour with the same action and system stays out", async () => {
+    const { world, env } = setup();
+    const event = world.receive(ask("t1", "nadia@example.org"));
+    // gmail_send shares gmail_reply's action and system, and the address is the sender's own.
+    const model = scriptedModel("Stand-in", [
+      {
+        text: "",
+        calls: [
+          {
+            id: "a",
+            tool: "gmail_send",
+            args: { to: "nadia@example.org", subject: "Hi", body: "Book here." },
+          },
+        ],
+      },
+      { text: "Done.", calls: [] },
+    ]);
+    const llm = { ...meeting(), runner: { kind: "llm" as const, instructions: "Reply." } };
+    const out = await runAutomation(llm, event, env, { model });
+    expect(out.sandbox.tools().map((t) => t.name)).toEqual(["gmail_reply"]);
+    const call = out.events.find((e) => e.kind === "call");
+    expect(call?.kind === "call" && call.result.status).toBe("stopped");
+    expect(world.state.sent).toEqual([]);
+    const entry = out.sandbox.catalogue().find((e) => e.tool.name === "gmail_send");
+    expect(entry?.reason).toMatch(/Hidden by Automation rule .*does not list/);
+    // The same holds when an AI judge decides instead of the policy.
+    const judged = await runAutomation(
+      llm,
+      event,
+      { ...env, mode: "llm", judge: { name: "yes", complete: async () => '{"outcome":"permit"}' } },
+      { model },
+    );
+    expect(judged.sandbox.tools().map((t) => t.name)).toEqual(["gmail_reply"]);
+    expect(world.state.sent).toEqual([]);
+  });
+
+  it("tools that share an action and system must be allowed on the same terms", async () => {
+    const { world, env } = setup();
+    const mixed: AutomationRule = {
+      ...meeting(),
+      policy: {
+        ...meeting().policy,
+        allow: [
+          { tool: "gmail_reply", to: "sender" },
+          { tool: "gmail_send", to: "staff" },
+        ],
+      },
+    };
+    expect(validateRule(mixed, env).join(" ")).toMatch(/same recipients and approval/);
+    expect(() =>
+      ruleMandate(mixed, env, { agent: AUTOMATION_AGENT, event: { kind: "manual" }, at: "x" }),
+    ).toThrow(/same recipients and approval/);
+    const asked: AutomationRule = {
+      ...mixed,
+      policy: {
+        ...mixed.policy,
+        allow: [
+          { tool: "gmail_reply", to: "sender" },
+          { tool: "gmail_send", to: "sender", approval: true },
+        ],
+      },
+    };
+    expect(validateRule(asked, env).join(" ")).toMatch(/same recipients and approval/);
+    const same: AutomationRule = {
+      ...mixed,
+      policy: {
+        ...mixed.policy,
+        allow: [
+          { tool: "gmail_reply", to: "sender" },
+          { tool: "gmail_send", to: "sender" },
+        ],
+      },
+    };
+    expect(validateRule(same, env)).toEqual([]);
+    await expect(
+      runAutomation(mixed, world.receive(ask("t2", "a@example.org")), env),
+    ).rejects.toThrow(/cannot run/);
+  });
+
+  it("an invalid rule never runs, and a sending tool without recipients never compiles", async () => {
+    const { world, env } = setup();
+    const open = {
+      ...meeting(),
+      policy: { ...meeting().policy, allow: [{ tool: "gmail_reply" }] },
+    } as AutomationRule;
+    await expect(
+      runAutomation(open, world.receive(ask("t3", "a@example.org")), env),
+    ).rejects.toThrow(/must say who it may send to/);
+    expect(() =>
+      ruleMandate(open, env, { agent: AUTOMATION_AGENT, event: { kind: "manual" }, at: "x" }),
+    ).toThrow(/must say who it may send to/);
+    expect(world.state.sent).toEqual([]);
+  });
+
+  it("sandboxes that share a history and a lock never both pass a limit", async () => {
+    const { world, env } = setup();
+    const rule: AutomationRule = { ...meeting(), policy: { ...meeting().policy, sendsPerDay: 1 } };
+    const history: Commitment[] = [];
+    const commitments: Commitment[] = [];
+    const sandboxFor = (id: string, from: string, lock?: CallLock) => {
+      const event = world.receive(ask(id, from));
+      const narrowing = {
+        name: "Rule",
+        mandate: ruleMandate(rule, env, { agent: AUTOMATION_AGENT, event, at: DEMO_ISO }),
+        tools: ["gmail_reply"],
+        history,
+      };
+      return createSandbox({
+        tools: env.tools,
+        rules: () => ({ ...world.rules(), also: [narrowing] }),
+        directory: env.directory,
+        agent: AUTOMATION_AGENT,
+        purpose: rule.policy.purpose,
+        clock: () => DEMO_START,
+        commitments,
+        ...(lock && { lock }),
+      });
+    };
+    const reply = (id: string) => ({
+      tool: "gmail_reply",
+      args: { message: id, body: "Book here." },
+    });
+    // Without a shared lock, both runs check the limit before either counts its send.
+    const a = sandboxFor("q1", "q1@example.org");
+    const b = sandboxFor("q2", "q2@example.org");
+    const raced = await Promise.all([a.call(reply("q1")), b.call(reply("q2"))]);
+    expect(raced.map((r) => r.status)).toEqual(["done", "done"]);
+    // With one, the second waits, sees the first send, and stops.
+    history.length = 0;
+    commitments.length = 0;
+    const lock = createLock();
+    const c = sandboxFor("q3", "q3@example.org", lock);
+    const d = sandboxFor("q4", "q4@example.org", lock);
+    const locked = await Promise.all([c.call(reply("q3")), d.call(reply("q4"))]);
+    expect(locked.map((r) => r.status)).toEqual(["done", "stopped"]);
+  });
+
+  it("every run in the apps world shares one lock", () => {
+    const { world } = setup();
+    expect(world.env(() => DEMO_START).lock).toBe(world.env(() => DEMO_START).lock);
   });
 });

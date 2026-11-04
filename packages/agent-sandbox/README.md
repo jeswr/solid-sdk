@@ -85,7 +85,17 @@ closed vocabulary: the tools it may use, who a sending tool may reach (`"sender"
 catalogue. `runAutomation` runs one event in a fresh sandbox whose rules are the organisation's
 mandate plus `ruleMandate(rule)` in `GlobalRules.also`, so every call must satisfy both and a
 rule can only narrow what the organisation allows. `"sender"` is bound to whoever sent the
-email that started the run.
+email that started the run. `runAutomation` validates the rule again before it runs and throws
+if it is invalid. The rule's mandate names its tools (`ScopedMandate.tools`), so a tool that
+shares an action and system with a listed one (Gmail's send beside its reply) stays hidden and
+refused; two listed tools that share both must have the same recipients and approval. Runs that
+share limit histories must share one `createLock()` (`RunEnvironment.lock`), or two runs started
+together could both pass a daily limit.
+
+In the mortgage world, agents exchange structured messages with no free text. Records travel
+inside a message as labelled items carrying the owner's policy, and the receiving agent takes
+them in only through `application_read`, so the gate checks each label on the way in and the
+sandbox carries it into later sends.
 
 ## MCP lockdown proxy
 

@@ -273,11 +273,28 @@ const podLabel = (r: PodRecord): DataLabel => {
   };
 };
 
+/**
+ * A message between two agents. There is no free text: the world writes `text` from the
+ * structured fields, and any records travel as labelled items carrying their owner's policy, so
+ * the receiving agent can only take them in through a gated read (`application_read`).
+ */
+export interface MortgageMessage {
+  readonly from: MortgageAgent;
+  /** The receiving agent's IRI. */
+  readonly to: string;
+  readonly kind: "application" | "request" | "referral";
+  readonly text: string;
+  /** The records enclosed, each with the label (and policy) the sender's gate checked. */
+  readonly items: readonly DataItem[];
+  /** The records asked for (requests only). */
+  readonly wanted?: readonly PodRecord["key"][];
+}
+
 /** What happened between the two organisations. */
 export interface MortgageState {
   /** Records Northgate has received from Alex's agent. */
   readonly received: PodRecord["key"][];
-  readonly messages: { from: MortgageAgent; to: string; text: string }[];
+  readonly messages: MortgageMessage[];
   readonly partnerShares: string[];
   readonly offers: { amount: number; rate: number; years: number; accepted: boolean }[];
   readonly creditChecks: number;
@@ -299,23 +316,54 @@ const keys = (args: Args): PodRecord["key"][] => {
 };
 const record = (key: PodRecord["key"]): PodRecord =>
   POD_RECORDS.find((x) => x.key === key) as PodRecord;
+const titles = (ks: readonly PodRecord["key"][]) => ks.map((k) => record(k).title).join(", ");
+const keyOf = (label: DataLabel): PodRecord["key"] | undefined =>
+  POD_RECORDS.find((r) => `${POD}records/${r.key}` === label.id)?.key;
+/** A frozen copy of a label, so a message keeps the policy it was sent under. */
+const frozen = (l: DataLabel): DataLabel => structuredClone(l);
+/** The offer terms, checked: whole pounds, a rate and a term that make sense. */
+function terms(args: Args): { amount: number; rate: number; years: number } {
+  const { amount, rate, years } = args;
+  if (typeof amount !== "number" || !Number.isInteger(amount) || amount <= 0)
+    throw new Error(`"amount" must be a whole number of pounds`);
+  if (typeof rate !== "number" || !Number.isFinite(rate) || rate <= 0 || rate >= 100)
+    throw new Error(`"rate" must be a percentage`);
+  if (typeof years !== "number" || !Number.isInteger(years) || years < 1 || years > 40)
+    throw new Error(`"years" must be from 1 to 40`);
+  return { amount, rate, years };
+}
 
 /** The three agents' tools over one shared state. */
 function mortgageTools(state: MortgageState): Record<MortgageAgent, ToolSpec[]> {
-  const applicationRead: ToolSpec = {
+  /** Every record enclosed in the messages to one agent, once each, with the label it came with. */
+  const inbox = (to: string): DataItem[] => {
+    const seen = new Map<string, DataItem>();
+    for (const m of state.messages)
+      if (m.to === to)
+        for (const item of m.items)
+          if (!seen.has(item.label.id))
+            seen.set(item.label.id, { label: frozen(item.label), content: item.content });
+    return [...seen.values()];
+  };
+  /** The gated receive: an agent takes in what was sent to it, and the gate checks each label. */
+  const applicationRead = (to: string): ToolSpec => ({
     name: "application_read",
     title: "Open the application",
-    description: "Read the documents Alex's agent has sent with the application.",
+    description: "Read the documents sent to this agent with the application.",
     system: S.portal,
     action: "read",
     kind: "read",
     inputSchema: { type: "object", properties: {} },
-    run: () => ({
-      items: state.received.map(
-        (k): DataItem => ({ label: podLabel(record(k)), content: { ...record(k).content } }),
-      ),
-    }),
-  };
+    run: () => ({ items: inbox(to) }),
+  });
+  /** Enclose the records whose labels the gate checked for this send (and only those). */
+  const enclose = (uses: readonly DataLabel[] | undefined, from: string): DataItem[] =>
+    (uses ?? []).map((label) => {
+      const item = inbox(from).find((i) => i.label.id === label.id);
+      const key = keyOf(label);
+      const content = item?.content ?? (key ? { ...record(key).content } : {});
+      return { label: frozen(label), content };
+    });
   return {
     personal: [
       {
@@ -339,26 +387,33 @@ function mortgageTools(state: MortgageState): Record<MortgageAgent, ToolSpec[]> 
       {
         name: "lender_send",
         title: "Send documents to Northgate",
-        description: "Send records from Alex's pod to Northgate's assistant, with a message.",
+        description: "Send records from Alex's pod to Northgate's assistant.",
         system: S.portal,
         action: `${AGENT}SendMessage`,
         kind: "send",
         inputSchema: {
           type: "object",
-          properties: {
-            documents: { type: "array", items: { type: "string" } },
-            message: { type: "string" },
-          },
-          required: ["documents", "message"],
+          properties: { documents: { type: "array", items: { type: "string" } } },
+          required: ["documents"],
         },
         context: (args) => ({
           recipients: [P.assistant],
-          content: str(args, "message"),
+          content: `Documents: ${titles(keys(args))}`,
           uses: keys(args).map((k) => podLabel(record(k))),
         }),
-        run: (args) => {
-          for (const k of keys(args)) if (!state.received.includes(k)) state.received.push(k);
-          state.messages.push({ from: "personal", to: P.assistant, text: str(args, "message") });
+        run: (_args, effects) => {
+          const items = enclose(effects.uses, P.personal);
+          for (const i of items) {
+            const k = keyOf(i.label);
+            if (k && !state.received.includes(k)) state.received.push(k);
+          }
+          state.messages.push({
+            from: "personal",
+            to: P.assistant,
+            kind: "application",
+            text: `Alex's agent sent: ${items.map((i) => i.label.title).join(", ")}.`,
+            items,
+          });
           return { content: "Sent to Northgate." };
         },
       },
@@ -403,40 +458,59 @@ function mortgageTools(state: MortgageState): Record<MortgageAgent, ToolSpec[]> 
       },
     ],
     assistant: [
-      applicationRead,
+      applicationRead(P.assistant),
       {
         name: "request_documents",
         title: "Ask Alex's agent for documents",
-        description: "Ask the applicant's agent for more documents.",
+        description: "Ask the applicant's agent for more documents, by kind.",
         system: S.portal,
         action: `${AGENT}SendMessage`,
         kind: "send",
         inputSchema: {
           type: "object",
-          properties: { message: { type: "string" } },
-          required: ["message"],
+          properties: { documents: { type: "array", items: { type: "string" } } },
+          required: ["documents"],
         },
-        context: (args) => ({ recipients: [P.personal], content: str(args, "message") }),
+        context: (args) => ({
+          recipients: [P.personal],
+          content: `Please send: ${titles(keys(args))}`,
+        }),
         run: (args) => {
-          state.messages.push({ from: "assistant", to: P.personal, text: str(args, "message") });
+          const wanted = keys(args);
+          state.messages.push({
+            from: "assistant",
+            to: P.personal,
+            kind: "request",
+            text: `Northgate asks for: ${titles(wanted)}.`,
+            items: [],
+            wanted,
+          });
           return { content: "Request sent." };
         },
       },
       {
         name: "underwriting_refer",
         title: "Refer to underwriting",
-        description: "Pass the application to Northgate's underwriting agent.",
+        description: "Pass the application, with everything Alex sent, to underwriting.",
         system: S.portal,
         action: `${AGENT}SendMessage`,
         kind: "send",
-        inputSchema: {
-          type: "object",
-          properties: { note: { type: "string" } },
-          required: ["note"],
-        },
-        context: (args) => ({ recipients: [P.underwriter], content: str(args, "note") }),
-        run: (args) => {
-          state.messages.push({ from: "assistant", to: P.underwriter, text: str(args, "note") });
+        inputSchema: { type: "object", properties: {} },
+        // The referral forwards Alex's records, so their own rules decide whether it may.
+        context: () => ({
+          recipients: [P.underwriter],
+          content: "Application referred to underwriting.",
+          uses: inbox(P.assistant).map((i) => i.label),
+        }),
+        run: (_args, effects) => {
+          const items = enclose(effects.uses, P.assistant);
+          state.messages.push({
+            from: "assistant",
+            to: P.underwriter,
+            kind: "referral",
+            text: `Referred with ${items.length} of Alex's records.`,
+            items,
+          });
           return { content: "Referred to underwriting." };
         },
       },
@@ -452,12 +526,13 @@ function mortgageTools(state: MortgageState): Record<MortgageAgent, ToolSpec[]> 
           properties: { note: { type: "string" } },
           required: ["note"],
         },
-        // The note may quote anything Northgate holds, so everything Alex sent travels with it.
+        // The note may quote anything the assistant was sent, so all of it travels with the note,
+        // under the labels it arrived with.
         context: (args) => ({
           recipients: [P.homecover],
           purpose: MORTGAGE_PURPOSE.marketing,
           content: str(args, "note"),
-          uses: state.received.map((k) => podLabel(record(k))),
+          uses: inbox(P.assistant).map((i) => i.label),
         }),
         run: (args) => {
           state.partnerShares.push(str(args, "note"));
@@ -466,7 +541,7 @@ function mortgageTools(state: MortgageState): Record<MortgageAgent, ToolSpec[]> 
       },
     ],
     underwriter: [
-      applicationRead,
+      applicationRead(P.underwriter),
       {
         name: "credit_check",
         title: "Run a credit check",
@@ -510,15 +585,11 @@ function mortgageTools(state: MortgageState): Record<MortgageAgent, ToolSpec[]> 
           },
           required: ["amount", "rate", "years"],
         },
-        context: () => ({ recipients: [P.personal] }),
-        run: (args) => {
-          const n = (k: string) => (typeof args[k] === "number" ? (args[k] as number) : 0);
-          state.offers.push({
-            amount: n("amount"),
-            rate: n("rate"),
-            years: n("years"),
-            accepted: false,
-          });
+        // The terms are part of the checked effects, so an approval binds exactly these terms.
+        context: (args) => ({ recipients: [P.personal], content: JSON.stringify(terms(args)) }),
+        run: (_args, effects) => {
+          const { amount, rate, years } = terms(JSON.parse(effects.content ?? "{}") as Args);
+          state.offers.push({ amount, rate, years, accepted: false });
           return { content: "Offer issued." };
         },
       },
@@ -629,11 +700,7 @@ export const MORTGAGE_STORY = {
       "personal",
       "I'll send both to Northgate with the application.",
       "lender_send",
-      {
-        documents: ["income", "identity"],
-        message:
-          "Mortgage application for 14 Mill Lane: £310,000 over 25 years. Payslips and passport attached.",
-      },
+      { documents: ["income", "identity"] },
       "permit",
       "Alex's records may go to Northgate for this application, and Alex is told.",
     ),
@@ -649,7 +716,7 @@ export const MORTGAGE_STORY = {
       "assistant",
       "Underwriting will want three months of bank statements.",
       "request_documents",
-      { message: "Thanks. Please send three months of bank statements." },
+      { documents: ["transactions"] },
       "permit",
       "Writing back to the applicant's agent is allowed.",
     ),
@@ -665,7 +732,7 @@ export const MORTGAGE_STORY = {
       "personal",
       "Sending the statements.",
       "lender_send",
-      { documents: ["transactions"], message: "Bank statements for August to October attached." },
+      { documents: ["transactions"] },
       "permit",
       "Allowed by Alex's rules, and Alex is told.",
     ),
@@ -691,11 +758,9 @@ export const MORTGAGE_STORY = {
       "assistant",
       "Then I'll just pass the application to underwriting.",
       "underwriting_refer",
-      {
-        note: "Application from Alex Morgan, £310,000 over 25 years. Payslips, passport and statements on file.",
-      },
+      {},
       "permit",
-      "Inside Northgate, for the mortgage: allowed.",
+      "Inside Northgate, for the mortgage, and Alex's rules let the records go to underwriting.",
     ),
     call(
       "underwriter",

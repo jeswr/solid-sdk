@@ -29,7 +29,9 @@ export {
 export { type Directory, groupResolver, joinNames, nameOf, shortName } from "./directory.js";
 export {
   actionCovers,
+  type CallLock,
   type CatalogueEntry,
+  createLock,
   createSandbox,
   effectiveMandate,
   type HeldCall,

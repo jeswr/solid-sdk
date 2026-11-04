@@ -4,22 +4,20 @@
 import type { EnforcementMode, JudgeModel } from "@jeswr/agent-sandbox";
 import { APP, type InboxEmail } from "@jeswr/agent-sandbox/world";
 import { FileText, Inbox, Mail, Play, Send } from "lucide-react";
-import { useState, useSyncExternalStore } from "react";
-import { type Automation, emailEvent, runOnce, tryEmails, whenText } from "../automations.js";
+import { useSyncExternalStore } from "react";
+import {
+  type Automation,
+  type AutomationRunView,
+  emailEvent,
+  runOnce,
+  tryEmails,
+  whenText,
+} from "../automations.js";
 import { AGENT_MODELS, claudeAgent } from "../claude.js";
 import { Toggle } from "../components.js";
 import { useAutomations } from "../context.js";
 import { Icon, SystemBadge } from "../icons.js";
 import { Trace, type TraceItem } from "../trace.js";
-
-interface Run {
-  readonly id: number;
-  readonly label: string;
-  items: readonly TraceItem[];
-  busy: boolean;
-}
-
-let runIds = 0;
 
 export function AutomationView({
   id,
@@ -34,7 +32,6 @@ export function AutomationView({
 }) {
   const api = useAutomations();
   const automation = api.find(id);
-  const [runs, setRuns] = useState<Run[]>([]);
   useSyncExternalStore(
     (l) => api.apps.subscribe(l),
     () => api.apps.version,
@@ -48,13 +45,14 @@ export function AutomationView({
       </div>
     );
   const { rule } = automation;
+  // Runs live in the session, keyed by automation, so they survive leaving this page.
+  const runs = api.apps.runs(id);
   const busy = runs.some((r) => r.busy);
 
   async function start(label: string, event: Parameters<typeof runOnce>[2]) {
-    const run: Run = { id: runIds++, label, items: [], busy: true };
-    setRuns((rs) => [run, ...rs]);
-    const update = (patch: Partial<Run>) =>
-      setRuns((rs) => rs.map((r) => (r.id === run.id ? { ...r, ...patch } : r)));
+    const runId = api.apps.addRun(id, label);
+    const update = (patch: Partial<AutomationRunView>) =>
+      api.apps.updateRun(id, runId, () => patch);
     try {
       await runOnce(api.apps, automation as Automation, event, {
         ...(apiKey &&
@@ -66,11 +64,11 @@ export function AutomationView({
     } catch (e) {
       const notice: TraceItem = {
         kind: "notice",
-        id: `err${run.id}`,
+        id: `err${runId}`,
         text: (e as Error).message,
         tone: "error",
       };
-      setRuns((rs) => rs.map((r) => (r.id === run.id ? { ...r, items: [...r.items, notice] } : r)));
+      api.apps.updateRun(id, runId, (r) => ({ items: [...r.items, notice] }));
     } finally {
       update({ busy: false });
     }

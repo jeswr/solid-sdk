@@ -214,6 +214,12 @@ export interface ScopedMandate {
   readonly name: string;
   readonly mandate: Mandate;
   /**
+   * The only tools (by name) usable under this mandate. Any other tool is hidden and refused,
+   * even one with the same action and system as a listed tool, so permissions written per
+   * action and system cannot leak from one tool to its neighbour.
+   */
+  readonly tools?: readonly string[];
+  /**
    * The sends and payments made under this mandate so far, for its own limits. Shared across
    * runs (and appended to by the sandbox) so a daily limit holds for the whole day, not one run.
    * Without it, the sandbox's own history is used.

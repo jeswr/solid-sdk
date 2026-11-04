@@ -78,22 +78,22 @@ describe("the mortgage story", () => {
     const world = createMortgageWorld();
     const r = await world.sandboxes.personal.call({
       tool: "lender_send",
-      args: { documents: ["payslip-forged"], message: "hi" },
+      args: { documents: ["payslip-forged"] },
     });
     expect(r.status).toBe("stopped");
   });
 });
 
 describe("the mortgage tools refuse bad input", () => {
-  it("sends need documents and a message, records must exist, and offers must exist", async () => {
+  it("sends need documents, records must exist, and offers must exist", async () => {
     const world = createMortgageWorld();
     const p = world.sandboxes.personal;
-    expect(
-      (await p.call({ tool: "lender_send", args: { documents: [], message: "x" } })).status,
-    ).toBe("stopped");
-    expect(
-      (await p.call({ tool: "lender_send", args: { documents: ["income"], message: "" } })).status,
-    ).toBe("stopped");
+    expect((await p.call({ tool: "lender_send", args: { documents: [] } })).status).toBe("stopped");
+    expect((await p.call({ tool: "lender_send", args: {} })).status).toBe("stopped");
+    const a = world.sandboxes.assistant;
+    expect((await a.call({ tool: "request_documents", args: { documents: ["x"] } })).status).toBe(
+      "stopped",
+    );
     expect((await p.call({ tool: "pod_read", args: { record: "diary" } })).status).toBe("failed");
     // No offer yet: nothing to accept.
     expect((await p.call({ tool: "offer_accept", args: {} })).status).toBe("stopped");
@@ -148,18 +148,77 @@ describe("the mortgage tools refuse bad input", () => {
     );
   });
 
-  it("an offer with missing numbers records zeros, and a step reports its decision", async () => {
+  it("an offer with bad numbers is refused, and a step reports its decision", async () => {
     const world = createMortgageWorld();
     const out = await runMortgageStep(world, {
       kind: "call",
       agent: "underwriter",
       thought: "",
       call: { tool: "offer_issue", args: { amount: "lots", rate: 1, years: 1 } },
-      expect: "review",
+      expect: "stop",
       why: "",
     });
-    expect(out.decision?.outcome).toBe("review");
-    await runMortgageStep(world, { kind: "approve", agent: "underwriter", by: "Ruth", why: "" });
-    expect(world.state.offers[0]?.amount).toBe(0);
+    expect(out.decision?.outcome).toBe("stop");
+    expect(world.sandboxes.underwriter.held()).toEqual([]);
+    expect(world.state.offers).toEqual([]);
+  });
+
+  it("messages between agents carry no free text, and records travel with their labels", async () => {
+    const world = createMortgageWorld();
+    for (const step of MORTGAGE_STORY.steps.slice(0, 11)) await runMortgageStep(world, step);
+    const [application, request, , referral] = world.state.messages;
+    expect(application?.kind).toBe("application");
+    expect(application?.text).toBe(
+      "Alex's agent sent: Alex's payslips, Aug to Oct 2026, Alex's passport.",
+    );
+    expect(request).toMatchObject({ kind: "request", items: [], wanted: ["transactions"] });
+    // Each enclosed record keeps the owner's policy it was sent under.
+    for (const item of application?.items ?? [])
+      expect(JSON.stringify(item.label.policy)).toMatch(/purposes\/mortgage/);
+    expect(referral?.kind).toBe("referral");
+    expect(referral?.items.map((i) => i.label.id)).toEqual([
+      expect.stringMatching(/records\/income$/),
+      expect.stringMatching(/records\/identity$/),
+      expect.stringMatching(/records\/transactions$/),
+    ]);
+    // Underwriting reads only what was referred to it, and its sandbox now holds those labels.
+    const read = world.sandboxes.underwriter.labels().map((l) => l.id);
+    expect(read).toHaveLength(3);
+  });
+
+  it("an agent only takes in records sent to it", async () => {
+    const world = createMortgageWorld();
+    await runMortgageStep(world, MORTGAGE_STORY.steps[2] as MortgageStep);
+    const u = await world.sandboxes.underwriter.call({ tool: "application_read", args: {} });
+    expect(u.status === "done" && u.content).toEqual({ records: [], withheld: 0 });
+    await world.sandboxes.assistant.call({ tool: "application_read", args: {} });
+    expect(world.sandboxes.assistant.labels()).toHaveLength(2);
+  });
+
+  it("an offer is issued on the terms that were approved, which must make sense", async () => {
+    const world = createMortgageWorld();
+    const u = world.sandboxes.underwriter;
+    const args = { amount: 310000, rate: 4.1, years: 25 };
+    const held = await u.call({ tool: "offer_issue", args });
+    if (held.status !== "held") throw new Error("expected held");
+    // Terms changed after the approval was asked for: the approval does not carry over.
+    args.rate = 0.1;
+    expect((await u.approve(held.approval, "Ruth")).status).toBe("stopped");
+    expect(world.state.offers).toEqual([]);
+    const again = await u.call({
+      tool: "offer_issue",
+      args: { amount: 310000, rate: 4.1, years: 25 },
+    });
+    if (again.status !== "held") throw new Error("expected held");
+    expect((await u.approve(again.approval, "Ruth")).status).toBe("done");
+    expect(world.state.offers).toEqual([{ amount: 310000, rate: 4.1, years: 25, accepted: false }]);
+    for (const bad of [
+      { amount: -1, rate: 4, years: 25 },
+      { amount: 1.5, rate: 4, years: 25 },
+      { amount: 1, rate: 0, years: 25 },
+      { amount: 1, rate: 4, years: 99 },
+      { amount: "1", rate: 4, years: 25 },
+    ])
+      expect((await u.call({ tool: "offer_issue", args: bad })).status).toBe("stopped");
   });
 });

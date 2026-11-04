@@ -131,6 +131,26 @@ describe("automations", () => {
   });
 });
 
+describe("automation runs", () => {
+  it("each automation keeps its own runs, across a visit to another page", async () => {
+    render(<App />);
+    await go("automation/meeting-replies");
+    fireEvent.click(screen.getByRole("button", { name: "Run on Nadia Price: Coffee next week?" }));
+    const run = { name: /Nadia Price: Coffee next week\?/ };
+    await screen.findByRole("heading", run);
+    await go("rules");
+    await go("automation/meeting-replies");
+    expect(screen.getByRole("heading", run)).toBeTruthy();
+    // A different automation does not show this one's runs.
+    await go("home");
+    fireEvent.click(screen.getByRole("button", { name: "Turn support emails into Jira issues" }));
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: /Turn on/ }));
+    await screen.findByRole("button", { name: "Run on Jon Baker: Still waiting on my refund" });
+    expect(screen.queryByRole("heading", run)).toBeNull();
+  });
+});
+
 describe("the mortgage story", () => {
   it("plays three agents: the insurer share and the health record are blocked, offers wait for people", async () => {
     render(<App />);

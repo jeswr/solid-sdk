@@ -39,11 +39,29 @@ import type {
   JudgeModel,
   Obligation,
   Outcome,
+  ScopedMandate,
   StepResult,
   ToolCall,
   ToolOutput,
   ToolSpec,
 } from "./types.js";
+
+/** Runs tasks one at a time, in the order they were queued. */
+export interface CallLock {
+  run<T>(task: () => Promise<T>): Promise<T>;
+}
+
+/** A lock to share between sandboxes whose limits count the same sends. */
+export function createLock(): CallLock {
+  let queue: Promise<unknown> = Promise.resolve();
+  return {
+    run<T>(task: () => Promise<T>): Promise<T> {
+      const next = queue.then(task, task);
+      queue = next.catch(() => undefined);
+      return next;
+    },
+  };
+}
 
 /** Options for {@link createSandbox}. */
 export interface SandboxOptions {
@@ -72,6 +90,12 @@ export interface SandboxOptions {
    * appends to it.
    */
   readonly commitments?: Commitment[];
+  /**
+   * The lock calls and approvals run under. Sandboxes that share `commitments` or a narrowing
+   * mandate's `history` must share one lock too, or two runs could both pass a limit before
+   * either counts its send. Defaults to a lock of the sandbox's own.
+   */
+  readonly lock?: CallLock;
   /** The model used by the "llm" and "hybrid" modes. */
   readonly judge?: JudgeModel;
   /** Purposes the hybrid classifier may choose from (IRI -> name); defaults to the directory's. */
@@ -255,12 +279,26 @@ export function createSandbox(options: SandboxOptions): Sandbox {
     };
   }
 
+  /**
+   * A tool's visibility under a narrowing mandate. When it names its tools, any other tool is
+   * hidden, even one that shares an action and a system with a listed tool.
+   */
+  function scopedVisibility(spec: ToolSpec, extra: ScopedMandate) {
+    if (extra.tools && !extra.tools.includes(spec.name))
+      return {
+        visible: false,
+        approval: false,
+        reason: `Hidden: it does not list the tool "${spec.title}".`,
+      };
+    return visibility(spec, extra.mandate, true);
+  }
+
   /** The tool's visibility under the main mandate and every narrowing one (strictest wins). */
   function combinedVisibility(spec: ToolSpec, mandate: Mandate) {
     const main = visibility(spec, mandate);
     let out = main;
     for (const extra of options.rules().also ?? []) {
-      const v = visibility(spec, extra.mandate, true);
+      const v = scopedVisibility(spec, extra);
       if (!v.visible && out.visible)
         out = { ...v, reason: `${v.reason.replace(/^Hidden: /, `Hidden by ${extra.name}: `)}` };
       else if (v.visible && v.approval && out.visible && !out.approval)
@@ -521,7 +559,7 @@ export function createSandbox(options: SandboxOptions): Sandbox {
     const narrowing = (options.rules().also ?? [])
       .map(
         (x) =>
-          `\n\nThese rules ALSO apply (${x.name}); the action must satisfy both:\n${policyText(x.mandate)}`,
+          `\n\nThese rules ALSO apply (${x.name}); the action must satisfy both:\n${policyText(x.mandate)}${x.tools ? `\nOnly these tools may be used: ${x.tools.join(", ")}.` : ""}`,
       )
       .join("");
     const prompt = `${policyText(mandate)}${narrowing}\n\nThe task's purpose: ${nameOf(directory, options.purpose)}.\nProposed action: ${spec.title} (${spec.description}).\nRecipients: ${joinNames((ctx.recipients ?? []).map((r) => nameOf(directory, r))) || "none"}.\nArguments: ${JSON.stringify(args)}`;
@@ -612,7 +650,7 @@ export function createSandbox(options: SandboxOptions): Sandbox {
         explanation: `${extra.name}: ${x.explanation}`,
         reason: `also:${x.reason}`,
       });
-      const v = visibility(spec, extra.mandate, true);
+      const v = scopedVisibility(spec, extra);
       steps.push(
         tag({
           step: "catalogue",
@@ -888,13 +926,10 @@ export function createSandbox(options: SandboxOptions): Sandbox {
   }
 
   // One call at a time: limits are checked before a call runs and counted after it, so calls made
-  // together (Promise.all in generated code, parallel MCP requests) must not interleave.
-  let queue: Promise<unknown> = Promise.resolve();
-  function serial<T>(task: () => Promise<T>): Promise<T> {
-    const next = queue.then(task, task);
-    queue = next.catch(() => undefined);
-    return next;
-  }
+  // together (Promise.all in generated code, parallel MCP requests, or other sandboxes sharing
+  // the same histories and lock) must not interleave.
+  const lock = options.lock ?? createLock();
+  const serial = <T>(task: () => Promise<T>): Promise<T> => lock.run(task);
 
   async function call(c: ToolCall): Promise<CallResult> {
     const { spec, ctx, error } = lookup(c);
@@ -1004,9 +1039,7 @@ export function createSandbox(options: SandboxOptions): Sandbox {
             e.visible ||
             mode === "off" ||
             (mode === "llm" &&
-              (options.rules().also ?? []).every(
-                (x) => visibility(e.tool, x.mandate, true).visible,
-              )),
+              (options.rules().also ?? []).every((x) => scopedVisibility(e.tool, x).visible)),
         )
         .map((e) => e.tool),
     catalogue,

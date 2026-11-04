@@ -64,6 +64,38 @@ export class AppsSession {
     this.version++;
     for (const l of this.#listeners) l();
   }
+  // Each automation's runs, newest first, kept here (not in the page) so they and their
+  // pending approvals survive moving between pages.
+  #runs = new Map<string, readonly AutomationRunView[]>();
+  #runIds = 0;
+  runs(automation: string): readonly AutomationRunView[] {
+    return this.#runs.get(automation) ?? [];
+  }
+  addRun(automation: string, label: string): number {
+    const id = this.#runIds++;
+    this.#runs.set(automation, [{ id, label, items: [], busy: true }, ...this.runs(automation)]);
+    this.changed();
+    return id;
+  }
+  updateRun(
+    automation: string,
+    id: number,
+    patch: (run: AutomationRunView) => Partial<AutomationRunView>,
+  ) {
+    this.#runs.set(
+      automation,
+      this.runs(automation).map((r) => (r.id === id ? { ...r, ...patch(r) } : r)),
+    );
+    this.changed();
+  }
+}
+
+/** One run of an automation, as the page shows it. */
+export interface AutomationRunView {
+  readonly id: number;
+  readonly label: string;
+  readonly items: readonly TraceItem[];
+  readonly busy: boolean;
 }
 
 /** A drafted rule, or why there is none. */

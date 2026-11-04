@@ -12,12 +12,12 @@
  * free ODRL by the model.
  */
 import { AGENT, type Constraint, type Limit, type Mandate, type Rule } from "@jeswr/agent-mandate";
-import { createSandbox, type Sandbox, type SandboxOptions } from "./gate.js";
+import { type CallLock, createSandbox, type Sandbox, type SandboxOptions } from "./gate.js";
 import type { Commitment } from "./limits.js";
 import type { AgentEvent, AgentModel, ModelToolCall, ModelTurn } from "./runners/agent.js";
 import { agentSystemPrompt, runAgent } from "./runners/agent.js";
 import { runCode } from "./runners/code.js";
-import type { GlobalRules, ToolSpec } from "./types.js";
+import type { GlobalRules, ScopedMandate, ToolSpec } from "./types.js";
 
 /** When a rule runs. */
 export type Trigger =
@@ -137,6 +137,7 @@ export function validateRule(rule: AutomationRule, context: RuleContext): string
         `"${a.tool}" may only reply to the sender, but this rule is not started by an email.`,
       );
   }
+  problems.push(...siblingProblems(rule, context.tools));
   const s = rule.policy.sendsPerDay;
   if (s !== undefined && (!Number.isInteger(s) || s < 1 || s > MAX_SENDS))
     problems.push(`The daily message limit must be a whole number from 1 to ${MAX_SENDS}.`);
@@ -146,6 +147,32 @@ export function validateRule(rule: AutomationRule, context: RuleContext): string
     problems.push("The rule's instructions are empty.");
   if (rule.trigger.kind === "email" && !rule.trigger.match.trim())
     problems.push("The rule does not say which emails start it.");
+  return problems;
+}
+
+/** A recipient list in one canonical form, for comparing two allowances. */
+const audienceKey = (to: Audience | undefined) =>
+  Array.isArray(to) ? JSON.stringify([...to].map((x) => x.toLowerCase()).sort()) : String(to);
+
+/**
+ * The policy is written per action and system, so two listed tools that share both (say,
+ * "reply" and "send" in Gmail) must be allowed on the same terms; otherwise the looser one's
+ * permission would cover the other.
+ */
+function siblingProblems(rule: AutomationRule, tools: readonly ToolSpec[]): string[] {
+  const problems: string[] = [];
+  const first = new Map<string, Allowance>();
+  for (const a of rule.policy.allow) {
+    const spec = tools.find((t) => t.name === a.tool);
+    if (!spec) continue;
+    const key = `${spec.action}\u0000${spec.system}`;
+    const other = first.get(key);
+    if (!other) first.set(key, a);
+    else if (audienceKey(other.to) !== audienceKey(a.to) || !other.approval !== !a.approval)
+      problems.push(
+        `"${other.tool}" and "${a.tool}" do the same kind of thing in the same system, so they must have the same recipients and approval.`,
+      );
+  }
   return problems;
 }
 
@@ -194,11 +221,16 @@ export function ruleMandate(
   const sender = senderOf(run.event);
   const own: Rule[] = [];
   const ask: Rule[] = [];
+  const siblings = siblingProblems(rule, context.tools);
+  if (siblings.length) throw new Error(siblings[0]);
   for (const a of rule.policy.allow) {
     const spec = context.tools.find((t) => t.name === a.tool);
     if (!spec) continue;
     if (a.to !== undefined && !audienceIsValid(a.to))
       throw new Error(`"${a.tool}" names its recipients wrongly`);
+    // A sending tool with no recipients would compile to "anyone": refuse instead.
+    if (spec.kind === "send" && a.to === undefined)
+      throw new Error(`"${a.tool}" sends messages, so the rule must say who it may send to`);
     const constraints: Constraint[] = [c("purpose", "eq", rule.policy.purpose)];
     if (a.to === "sender") constraints.push(c("recipient", "isAnyOf", sender ? [sender] : []));
     else if (a.to === "staff") constraints.push(c("recipient", "isAnyOf", [...context.staff]));
@@ -295,6 +327,11 @@ export interface RunEnvironment extends RuleContext {
   readonly commitments?: Commitment[];
   /** Sends already made by one rule (so its own daily limit spans runs). */
   readonly ruleHistory?: (ruleId: string) => Commitment[];
+  /**
+   * The lock every run's calls go through. Runs share their histories, so they must share this
+   * too, or two runs could each pass a daily limit before either counts its send.
+   */
+  readonly lock?: CallLock;
 }
 
 /**
@@ -312,10 +349,15 @@ export async function runAutomation(
     readonly onSandbox?: (sandbox: Sandbox) => void;
   } = {},
 ): Promise<AutomationRun> {
+  // Whoever drafted the rule, it is checked again here, where it is about to run.
+  const problems = validateRule(rule, env);
+  if (problems.length)
+    throw new Error(`The rule "${rule.title}" cannot run: ${problems.join(" ")}`);
   const at = new Date(env.clock()).toISOString();
-  const narrowing = {
+  const narrowing: ScopedMandate = {
     name: `Automation rule "${rule.title}"`,
     mandate: ruleMandate(rule, env, { agent: env.agent, event, at }),
+    tools: rule.policy.allow.map((a) => a.tool),
     ...(env.ruleHistory && { history: env.ruleHistory(rule.id) }),
   };
   const sandbox = createSandbox({
@@ -332,6 +374,7 @@ export async function runAutomation(
     purposes: env.purposes,
     clock: env.clock,
     ...(env.commitments && { commitments: env.commitments }),
+    ...(env.lock && { lock: env.lock }),
     ...(env.mode && { mode: env.mode }),
     ...(env.judge && { judge: env.judge }),
   });
