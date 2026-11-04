@@ -46,6 +46,9 @@ importers:
       '@jeswr/fetch-rdf':
         specifier: workspace:*
         version: link:../../packages/fetch-rdf
+      '@jeswr/pod-access':
+        specifier: workspace:*
+        version: link:../../packages/pod-access
       '@jeswr/solid-elements':
         specifier: workspace:*
         version: link:../../packages/solid-elements
@@ -135,7 +138,72 @@ importers:
         specifier: 4.1.10
         version: 4.1.10(@opentelemetry/api@1.10.0)(@types/node@22.19.3)(@vitest/coverage-v8@4.1.10)(jsdom@26.1.0)(vite@7.3.5(@types/node@22.19.3)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.51.2)(yaml@2.9.1))
 
-  apps/agent-daemon: {}
+  apps/agent-daemon:
+    dependencies:
+      '@jeswr/agent-audit':
+        specifier: workspace:*
+        version: link:../../packages/agent-audit
+      '@jeswr/agent-channels':
+        specifier: workspace:*
+        version: link:../../packages/agent-channels
+      '@jeswr/agent-credentials':
+        specifier: workspace:*
+        version: link:../../packages/agent-credentials
+      '@jeswr/agent-executor':
+        specifier: workspace:*
+        version: link:../../packages/agent-executor
+      '@jeswr/agent-model':
+        specifier: workspace:*
+        version: link:../../packages/agent-model
+      '@jeswr/agent-model-gateway':
+        specifier: workspace:*
+        version: link:../../packages/agent-model-gateway
+      '@jeswr/agentic-legacy-bridge':
+        specifier: workspace:*
+        version: link:../../packages/agentic-legacy-bridge
+      '@jeswr/fetch-rdf':
+        specifier: workspace:*
+        version: link:../../packages/fetch-rdf
+      '@jeswr/pod-auth':
+        specifier: workspace:*
+        version: link:../../packages/pod-auth
+      '@jeswr/pod-notifications':
+        specifier: workspace:*
+        version: link:../../packages/pod-notifications
+      '@jeswr/rdf-serialize':
+        specifier: workspace:*
+        version: link:../../packages/rdf-serialize
+      '@jeswr/storage-client':
+        specifier: workspace:*
+        version: link:../../packages/storage-client
+      '@rdfjs/wrapper':
+        specifier: ^0.34.0
+        version: 0.34.0
+      n3:
+        specifier: ^2.1.0
+        version: 2.1.1
+      zod:
+        specifier: ^4.4.3
+        version: 4.4.3
+    devDependencies:
+      '@jeswr/agent-mandate':
+        specifier: workspace:*
+        version: link:../../packages/agent-mandate
+      '@jeswr/guarded-fetch':
+        specifier: workspace:*
+        version: link:../../packages/guarded-fetch
+      '@jeswr/solid-vc':
+        specifier: workspace:*
+        version: link:../../packages/solid-vc
+      '@solid/community-server':
+        specifier: 7.2.0
+        version: 7.2.0(jiti@2.7.0)
+      '@types/n3':
+        specifier: ^1.26.1
+        version: 1.26.1
+      componentsjs:
+        specifier: 5.5.1
+        version: 5.5.1
 
   apps/app-store: {}
 
@@ -268,6 +336,9 @@ importers:
       '@jeswr/solid-health-diary':
         specifier: workspace:*
         version: link:../../packages/solid-health-diary
+      '@jeswr/solid-offline':
+        specifier: workspace:*
+        version: link:../../packages/solid-offline
       '@jeswr/solid-session-restore':
         specifier: workspace:*
         version: link:../../packages/solid-session-restore
@@ -304,9 +375,6 @@ importers:
       react-dom:
         specifier: 19.1.0
         version: 19.1.0(react@19.1.0)
-      solid-offline:
-        specifier: workspace:*
-        version: link:../../packages/solid-offline
       ulid:
         specifier: ^3.0.0
         version: 3.0.2
@@ -651,6 +719,15 @@ importers:
         specifier: ^4.1.9
         version: 4.1.10(@opentelemetry/api@1.10.0)(@types/node@25.9.5)(@vitest/coverage-v8@4.1.10)(jsdom@29.1.1(@noble/hashes@2.4.0))(vite@8.1.4(@types/node@25.9.5)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1))
 
+  apps/notification-relay:
+    dependencies:
+      '@jeswr/guarded-fetch':
+        specifier: workspace:*
+        version: link:../../packages/guarded-fetch
+      jose:
+        specifier: ^6.2.3
+        version: 6.2.14
+
   apps/pod-chat:
     dependencies:
       '@jeswr/fetch-rdf':
@@ -832,6 +909,15 @@ importers:
       '@jeswr/fetch-rdf':
         specifier: workspace:*
         version: link:../../packages/fetch-rdf
+      '@jeswr/guarded-fetch':
+        specifier: workspace:*
+        version: link:../../packages/guarded-fetch
+      '@jeswr/pod-access':
+        specifier: workspace:*
+        version: link:../../packages/pod-access
+      '@jeswr/storage-client':
+        specifier: workspace:*
+        version: link:../../packages/storage-client
       '@jeswr/suite-vocab':
         specifier: workspace:*
         version: link:../../packages/suite-vocab
@@ -902,12 +988,21 @@ importers:
       '@jeswr/fetch-rdf':
         specifier: workspace:*
         version: link:../../../packages/fetch-rdf
+      '@jeswr/guarded-fetch':
+        specifier: workspace:*
+        version: link:../../../packages/guarded-fetch
+      '@jeswr/pod-access':
+        specifier: workspace:*
+        version: link:../../../packages/pod-access
       '@jeswr/solid-elements':
         specifier: workspace:*
         version: link:../../../packages/solid-elements
       '@jeswr/solid-session-restore':
         specifier: workspace:*
         version: link:../../../packages/solid-session-restore
+      '@jeswr/storage-client':
+        specifier: workspace:*
+        version: link:../../../packages/storage-client
       '@jeswr/suite-vocab':
         specifier: workspace:*
         version: link:../../../packages/suite-vocab
@@ -1008,9 +1103,12 @@ importers:
 
   apps/pod-drive:
     dependencies:
-      '@jeswr/fetch-rdf':
+      '@jeswr/pod-access':
         specifier: workspace:*
-        version: link:../../packages/fetch-rdf
+        version: link:../../packages/pod-access
+      '@jeswr/storage-client':
+        specifier: workspace:*
+        version: link:../../packages/storage-client
       '@jeswr/suite-vocab':
         specifier: workspace:*
         version: link:../../packages/suite-vocab
@@ -1078,12 +1176,24 @@ importers:
       '@jeswr/fetch-rdf':
         specifier: workspace:*
         version: link:../../../packages/fetch-rdf
+      '@jeswr/pod-access':
+        specifier: workspace:*
+        version: link:../../../packages/pod-access
+      '@jeswr/pod-auth':
+        specifier: workspace:*
+        version: link:../../../packages/pod-auth
+      '@jeswr/reactive-authentication':
+        specifier: workspace:*
+        version: link:../../../packages/reactive-authentication
       '@jeswr/solid-elements':
         specifier: workspace:*
         version: link:../../../packages/solid-elements
-      '@jeswr/solid-session-restore':
+      '@jeswr/storage-client':
         specifier: workspace:*
-        version: link:../../../packages/solid-session-restore
+        version: link:../../../packages/storage-client
+      '@jeswr/suite-ui':
+        specifier: workspace:*
+        version: link:../../../packages/suite-ui
       '@jeswr/suite-vocab':
         specifier: workspace:*
         version: link:../../../packages/suite-vocab
@@ -1102,12 +1212,6 @@ importers:
       '@solid/object':
         specifier: ^0.6.0
         version: 0.6.0
-      '@solid/reactive-authentication':
-        specifier: ^0.1.3
-        version: 0.1.5
-      dpop:
-        specifier: ^2.1.1
-        version: 2.1.1
       lit:
         specifier: ^3.3.1
         version: 3.3.3
@@ -1117,9 +1221,6 @@ importers:
       n3:
         specifier: ^2.0.3
         version: 2.1.1
-      oauth4webapi:
-        specifier: ^3.8.6
-        version: 3.8.6
       react:
         specifier: ^19.2.0
         version: 19.2.7
@@ -2314,7 +2415,7 @@ importers:
         version: 0.6.0
       '@tiptap/extension-collaboration':
         specifier: 3.31.4
-        version: 3.31.4(@tiptap/core@3.31.4(@tiptap/pm@3.31.4))(@tiptap/pm@3.31.4)(@tiptap/y-tiptap@3.0.10(prosemirror-model@1.25.12)(prosemirror-state@1.4.4)(prosemirror-view@1.42.8)(y-protocols@1.0.7(yjs@13.6.27))(yjs@13.6.27))(yjs@13.6.27)
+        version: 3.31.4(@tiptap/core@3.31.4(@tiptap/pm@3.31.4))(@tiptap/pm@3.31.4)(@tiptap/y-tiptap@3.0.10(prosemirror-model@1.25.12)(prosemirror-state@1.4.4)(prosemirror-view@1.42.9)(y-protocols@1.0.7(yjs@13.6.27))(yjs@13.6.27))(yjs@13.6.27)
       '@tiptap/extension-highlight':
         specifier: 3.31.4
         version: 3.31.4(@tiptap/core@3.31.4(@tiptap/pm@3.31.4))
@@ -2336,6 +2437,9 @@ importers:
       '@tiptap/extension-text-align':
         specifier: 3.31.4
         version: 3.31.4(@tiptap/core@3.31.4(@tiptap/pm@3.31.4))
+      '@tiptap/extension-text-style':
+        specifier: 3.31.4
+        version: 3.31.4(@tiptap/core@3.31.4(@tiptap/pm@3.31.4))
       '@tiptap/extensions':
         specifier: 3.31.4
         version: 3.31.4(@tiptap/core@3.31.4(@tiptap/pm@3.31.4))(@tiptap/pm@3.31.4)
@@ -2353,11 +2457,17 @@ importers:
         version: 3.31.4
       '@tiptap/y-tiptap':
         specifier: 3.0.10
-        version: 3.0.10(prosemirror-model@1.25.12)(prosemirror-state@1.4.4)(prosemirror-view@1.42.8)(y-protocols@1.0.7(yjs@13.6.27))(yjs@13.6.27)
+        version: 3.0.10(prosemirror-model@1.25.12)(prosemirror-state@1.4.4)(prosemirror-view@1.42.9)(y-protocols@1.0.7(yjs@13.6.27))(yjs@13.6.27)
       '@univerjs/core':
         specifier: 1.2.0
         version: 1.2.0(react@19.2.7)(rxjs@7.8.2)
+      '@univerjs/preset-sheets-conditional-formatting':
+        specifier: 1.2.0
+        version: 1.2.0(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(rxjs@7.8.2)
       '@univerjs/preset-sheets-core':
+        specifier: 1.2.0
+        version: 1.2.0(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(rxjs@7.8.2)
+      '@univerjs/preset-sheets-data-validation':
         specifier: 1.2.0
         version: 1.2.0(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(rxjs@7.8.2)
       '@univerjs/presets':
@@ -2375,6 +2485,9 @@ importers:
       exifr:
         specifier: ^7.1.3
         version: 7.1.3
+      fflate:
+        specifier: 0.8.3
+        version: 0.8.3
       jsonld-streaming-serializer:
         specifier: ^4.0.0
         version: 4.0.0
@@ -2486,16 +2599,59 @@ importers:
         version: 4.1.10(@opentelemetry/api@1.10.0)(@types/node@25.9.5)(@vitest/coverage-v8@4.1.10)(jsdom@29.1.1(@noble/hashes@2.4.0))(vite@8.1.4(@types/node@25.9.5)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1))
 
   packages/agent-audit:
+    dependencies:
+      '@jeswr/agent-mandate':
+        specifier: workspace:*
+        version: link:../agent-mandate
+      '@jeswr/agent-model':
+        specifier: workspace:*
+        version: link:../agent-model
+      '@jeswr/fetch-rdf':
+        specifier: workspace:*
+        version: link:../fetch-rdf
+      '@jeswr/guarded-fetch':
+        specifier: workspace:*
+        version: link:../guarded-fetch
+      '@jeswr/solid-vc':
+        specifier: workspace:*
+        version: link:../solid-vc
+      '@rdfjs/wrapper':
+        specifier: ^0.34.0
+        version: 0.34.0
+      n3:
+        specifier: ^2.1.0
+        version: 2.1.1
+      zod:
+        specifier: ^4.4.3
+        version: 4.4.3
     devDependencies:
+      '@jeswr/agent-executor':
+        specifier: workspace:*
+        version: link:../agent-executor
+      '@rdfjs/types':
+        specifier: ^2.0.1
+        version: 2.0.1
+      '@solid/community-server':
+        specifier: 7.2.0
+        version: 7.2.0(jiti@2.7.0)
+      '@types/n3':
+        specifier: ^1.26.1
+        version: 1.26.1
       '@vitest/coverage-v8':
         specifier: ^4.1.10
         version: 4.1.10(vitest@4.1.10)
+      componentsjs:
+        specifier: 5.5.1
+        version: 5.5.1
 
   packages/agent-authz-verifier:
     dependencies:
+      '@jeswr/fetch-rdf':
+        specifier: workspace:*
+        version: link:../fetch-rdf
       '@jeswr/solid-odrl':
-        specifier: github:jeswr/solid-odrl#db97922d82f2ec016b7ef705827cf85429458668
-        version: https://codeload.github.com/jeswr/solid-odrl/tar.gz/db97922d82f2ec016b7ef705827cf85429458668
+        specifier: workspace:*
+        version: link:../solid-odrl
       '@jeswr/solid-vc':
         specifier: workspace:*
         version: link:../solid-vc
@@ -2524,6 +2680,9 @@ importers:
       '@biomejs/biome':
         specifier: ^2.0.0
         version: 2.5.3
+      '@types/n3':
+        specifier: ^1.26.1
+        version: 1.26.1
       '@types/node':
         specifier: ^22.0.0
         version: 22.20.1
@@ -2545,18 +2704,41 @@ importers:
       '@jeswr/guarded-fetch':
         specifier: workspace:*
         version: link:../guarded-fetch
+      '@jeswr/matrix-chat-to-pod':
+        specifier: workspace:*
+        version: link:../matrix-chat-to-pod
+      '@matrix-org/matrix-sdk-crypto-nodejs':
+        specifier: 0.6.6
+        version: 0.6.6
     devDependencies:
       '@vitest/coverage-v8':
         specifier: ^4.1.10
         version: 4.1.10(vitest@4.1.10)
 
   packages/agent-credentials:
+    dependencies:
+      jose:
+        specifier: ^6.2.3
+        version: 6.2.14
+      zod:
+        specifier: ^4.4.3
+        version: 4.4.3
     devDependencies:
       '@vitest/coverage-v8':
         specifier: ^4.1.10
         version: 4.1.10(vitest@4.1.10)
 
   packages/agent-executor:
+    dependencies:
+      '@jeswr/agent-channels':
+        specifier: workspace:*
+        version: link:../agent-channels
+      '@jeswr/agent-mandate':
+        specifier: workspace:*
+        version: link:../agent-mandate
+      '@jeswr/agent-model':
+        specifier: workspace:*
+        version: link:../agent-model
     devDependencies:
       '@vitest/coverage-v8':
         specifier: ^4.1.10
@@ -2596,7 +2778,39 @@ importers:
         specifier: ^4.1.10
         version: 4.1.10(vitest@4.1.10)
 
-  packages/agent-memory: {}
+  packages/agent-memory:
+    dependencies:
+      '@jeswr/agent-mandate':
+        specifier: workspace:*
+        version: link:../agent-mandate
+      '@jeswr/pkg-memory':
+        specifier: workspace:*
+        version: link:../pkg-memory
+      '@jeswr/rdf-engine':
+        specifier: workspace:*
+        version: link:../rdf-engine
+      '@jeswr/storage-client':
+        specifier: workspace:*
+        version: link:../storage-client
+      n3:
+        specifier: ^2.0.3
+        version: 2.1.1
+      yaml:
+        specifier: ^2.9.1
+        version: 2.9.1
+    devDependencies:
+      '@jeswr/guarded-fetch':
+        specifier: workspace:*
+        version: link:../guarded-fetch
+      '@solid/community-server':
+        specifier: 7.2.0
+        version: 7.2.0(jiti@2.7.0)
+      '@types/n3':
+        specifier: ^1.26.1
+        version: 1.26.1
+      componentsjs:
+        specifier: 5.5.1
+        version: 5.5.1
 
   packages/agent-model:
     dependencies:
@@ -2648,6 +2862,31 @@ importers:
         version: 4.1.10(@opentelemetry/api@1.10.0)(@types/node@25.9.5)(@vitest/coverage-v8@4.1.10)(jsdom@29.1.1(@noble/hashes@2.4.0))(vite@8.1.4(@types/node@25.9.5)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1))
 
   packages/agent-model-gateway:
+    dependencies:
+      '@anthropic-ai/claude-agent-sdk':
+        specifier: ^0.3.280
+        version: 0.3.310(@anthropic-ai/sdk@1.3.0(zod@4.4.3))(@modelcontextprotocol/sdk@1.29.0(zod@4.4.3))(zod@4.4.3)
+      '@jeswr/agent-channels':
+        specifier: workspace:*
+        version: link:../agent-channels
+      '@jeswr/agent-credentials':
+        specifier: workspace:*
+        version: link:../agent-credentials
+      '@jeswr/agent-model':
+        specifier: workspace:*
+        version: link:../agent-model
+      '@jeswr/agentic-legacy-bridge':
+        specifier: workspace:*
+        version: link:../agentic-legacy-bridge
+      '@jeswr/guarded-fetch':
+        specifier: workspace:*
+        version: link:../guarded-fetch
+      '@jeswr/solid-mcp':
+        specifier: workspace:*
+        version: link:../solid-mcp
+      zod:
+        specifier: ^4.4.3
+        version: 4.4.3
     devDependencies:
       '@vitest/coverage-v8':
         specifier: ^4.1.10
@@ -2685,7 +2924,7 @@ importers:
         version: 6.0.3
       vitest:
         specifier: ^4.1.9
-        version: 4.1.10(@opentelemetry/api@1.10.0)(@types/node@26.6.5)(@vitest/coverage-v8@4.1.10)(jsdom@29.1.1(@noble/hashes@2.4.0))(vite@8.1.4(@types/node@26.6.5)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1))
+        version: 4.1.10(@opentelemetry/api@1.10.0)(@types/node@26.6.6)(@vitest/coverage-v8@4.1.10)(jsdom@29.1.1(@noble/hashes@2.4.0))(vite@8.1.4(@types/node@26.6.6)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1))
 
   packages/agentic-legacy-bridge:
     dependencies:
@@ -3196,7 +3435,7 @@ importers:
         version: 6.0.3
       vitest:
         specifier: ^4.1.9
-        version: 4.1.10(@opentelemetry/api@1.10.0)(@types/node@26.6.5)(@vitest/coverage-v8@4.1.10)(jsdom@29.1.1(@noble/hashes@2.4.0))(vite@8.1.4(@types/node@26.6.5)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1))
+        version: 4.1.10(@opentelemetry/api@1.10.0)(@types/node@26.6.6)(@vitest/coverage-v8@4.1.10)(jsdom@29.1.1(@noble/hashes@2.4.0))(vite@8.1.4(@types/node@26.6.6)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1))
 
   packages/matrix-chat-to-pod:
     dependencies:
@@ -3500,13 +3739,31 @@ importers:
         version: 6.0.3
       vitest:
         specifier: ^4.1.9
-        version: 4.1.10(@opentelemetry/api@1.10.0)(@types/node@26.6.5)(@vitest/coverage-v8@4.1.10)(jsdom@29.1.1(@noble/hashes@2.4.0))(vite@8.1.4(@types/node@26.6.5)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1))
+        version: 4.1.10(@opentelemetry/api@1.10.0)(@types/node@26.6.6)(@vitest/coverage-v8@4.1.10)(jsdom@29.1.1(@noble/hashes@2.4.0))(vite@8.1.4(@types/node@26.6.6)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1))
 
   packages/pod-access:
     dependencies:
       '@jeswr/fetch-rdf':
         specifier: workspace:*
         version: link:../fetch-rdf
+      '@jeswr/guarded-fetch':
+        specifier: workspace:*
+        version: link:../guarded-fetch
+      '@jeswr/rdf-serialize':
+        specifier: workspace:*
+        version: link:../rdf-serialize
+      '@jeswr/solid-odrl':
+        specifier: workspace:*
+        version: link:../solid-odrl
+      '@jeswr/storage-capabilities':
+        specifier: workspace:*
+        version: link:../storage-capabilities
+      '@jeswr/storage-client':
+        specifier: workspace:*
+        version: link:../storage-client
+      '@jeswr/suite-vocab':
+        specifier: workspace:*
+        version: link:../suite-vocab
       '@rdfjs/types':
         specifier: 2.0.1
         version: 2.0.1
@@ -3519,6 +3776,9 @@ importers:
       n3:
         specifier: 2.0.3
         version: 2.0.3
+      solid-agent-notify:
+        specifier: workspace:*
+        version: link:../solid-agent-notify
     devDependencies:
       '@biomejs/biome':
         specifier: ^2.5.1
@@ -3526,6 +3786,9 @@ importers:
       '@types/n3':
         specifier: 1.26.1
         version: 1.26.1
+      '@types/node':
+        specifier: ^25.9.2
+        version: 25.9.5
       '@vitest/coverage-v8':
         specifier: ^4.1.9
         version: 4.1.10(vitest@4.1.10)
@@ -3534,19 +3797,47 @@ importers:
         version: 6.0.3
       vitest:
         specifier: ^4.1.9
-        version: 4.1.10(@opentelemetry/api@1.10.0)(@types/node@26.6.5)(@vitest/coverage-v8@4.1.10)(jsdom@29.1.1(@noble/hashes@2.4.0))(vite@8.1.4(@types/node@26.6.5)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1))
+        version: 4.1.10(@opentelemetry/api@1.10.0)(@types/node@25.9.5)(@vitest/coverage-v8@4.1.10)(jsdom@29.1.1(@noble/hashes@2.4.0))(vite@8.1.4(@types/node@25.9.5)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1))
 
   packages/pod-auth:
+    dependencies:
+      '@jeswr/reactive-authentication':
+        specifier: workspace:*
+        version: link:../reactive-authentication
+      '@rdfjs/wrapper':
+        specifier: ^0.34
+        version: 0.34.0
+      n3:
+        specifier: ^2
+        version: 2.1.1
     devDependencies:
       '@biomejs/biome':
         specifier: ^2.5.1
         version: 2.5.3
+      '@types/n3':
+        specifier: ^1
+        version: 1.26.1
+      '@types/react':
+        specifier: ^19.0.0
+        version: 19.2.17
+      '@types/react-dom':
+        specifier: ^19.0.0
+        version: 19.2.3(@types/react@19.2.17)
+      jsdom:
+        specifier: ^26.1.0
+        version: 26.1.0
+      react:
+        specifier: ^19.2.0
+        version: 19.2.7
+      react-dom:
+        specifier: ^19.2.0
+        version: 19.2.7(react@19.2.7)
       typescript:
         specifier: ^6.0.3
         version: 6.0.3
       vitest:
         specifier: ^4.1.9
-        version: 4.1.10(@opentelemetry/api@1.10.0)(@types/node@26.6.5)(@vitest/coverage-v8@4.1.10)(jsdom@29.1.1(@noble/hashes@2.4.0))(vite@8.1.4(@types/node@26.6.5)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1))
+        version: 4.1.10(@opentelemetry/api@1.10.0)(@types/node@26.6.6)(@vitest/coverage-v8@4.1.10)(jsdom@26.1.0)(vite@8.1.4(@types/node@26.6.6)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1))
 
   packages/pod-connectors:
     dependencies:
@@ -3598,9 +3889,13 @@ importers:
         version: 6.0.3
       vitest:
         specifier: ^4.1.9
-        version: 4.1.10(@opentelemetry/api@1.10.0)(@types/node@26.6.5)(@vitest/coverage-v8@4.1.10)(jsdom@29.1.1(@noble/hashes@2.4.0))(vite@8.1.4(@types/node@26.6.5)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1))
+        version: 4.1.10(@opentelemetry/api@1.10.0)(@types/node@26.6.6)(@vitest/coverage-v8@4.1.10)(jsdom@29.1.1(@noble/hashes@2.4.0))(vite@8.1.4(@types/node@26.6.6)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1))
 
   packages/pod-notifications:
+    dependencies:
+      '@jeswr/storage-client':
+        specifier: workspace:*
+        version: link:../storage-client
     devDependencies:
       '@biomejs/biome':
         specifier: ^2.5.1
@@ -3610,7 +3905,38 @@ importers:
         version: 6.0.3
       vitest:
         specifier: ^4.1.9
-        version: 4.1.10(@opentelemetry/api@1.10.0)(@types/node@26.6.5)(@vitest/coverage-v8@4.1.10)(jsdom@29.1.1(@noble/hashes@2.4.0))(vite@8.1.4(@types/node@26.6.5)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1))
+        version: 4.1.10(@opentelemetry/api@1.10.0)(@types/node@26.6.6)(@vitest/coverage-v8@4.1.10)(jsdom@29.1.1(@noble/hashes@2.4.0))(vite@8.1.4(@types/node@26.6.6)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1))
+
+  packages/pod-type-index:
+    dependencies:
+      '@jeswr/storage-capabilities':
+        specifier: workspace:*
+        version: link:../storage-capabilities
+      '@jeswr/storage-client':
+        specifier: workspace:*
+        version: link:../storage-client
+      '@jeswr/suite-vocab':
+        specifier: workspace:*
+        version: link:../suite-vocab
+      '@rdfjs/wrapper':
+        specifier: ^0.34.0
+        version: 0.34.0
+      n3:
+        specifier: ^2.0.3
+        version: 2.1.1
+    devDependencies:
+      '@biomejs/biome':
+        specifier: ^2.5.1
+        version: 2.5.3
+      '@types/n3':
+        specifier: ^1.16.0
+        version: 1.26.1
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: ^4.1.9
+        version: 4.1.10(@opentelemetry/api@1.10.0)(@types/node@26.6.6)(@vitest/coverage-v8@4.1.10)(jsdom@29.1.1(@noble/hashes@2.4.0))(vite@8.1.4(@types/node@26.6.6)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1))
 
   packages/rdf-engine:
     dependencies:
@@ -3638,7 +3964,7 @@ importers:
         version: 6.0.3
       vitest:
         specifier: ^4.1.9
-        version: 4.1.10(@opentelemetry/api@1.10.0)(@types/node@26.6.5)(@vitest/coverage-v8@4.1.10)(jsdom@29.1.1(@noble/hashes@2.4.0))(vite@8.1.4(@types/node@26.6.5)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1))
+        version: 4.1.10(@opentelemetry/api@1.10.0)(@types/node@26.6.6)(@vitest/coverage-v8@4.1.10)(jsdom@29.1.1(@noble/hashes@2.4.0))(vite@8.1.4(@types/node@26.6.6)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1))
 
   packages/rdf-serialize:
     dependencies:
@@ -3779,6 +4105,9 @@ importers:
       '@jeswr/guarded-fetch':
         specifier: workspace:*
         version: link:../guarded-fetch
+      '@jeswr/storage-client':
+        specifier: workspace:*
+        version: link:../storage-client
       '@solid/object':
         specifier: ^0.6.0
         version: 0.6.0
@@ -3865,6 +4194,15 @@ importers:
 
   packages/solid-agent-card:
     dependencies:
+      '@jeswr/agent-model':
+        specifier: workspace:*
+        version: link:../agent-model
+      '@jeswr/fetch-rdf':
+        specifier: workspace:*
+        version: link:../fetch-rdf
+      '@jeswr/ldp-container':
+        specifier: workspace:*
+        version: link:../ldp-container
       '@jeswr/rdf-serialize':
         specifier: workspace:*
         version: link:../rdf-serialize
@@ -3884,9 +4222,6 @@ importers:
       '@biomejs/biome':
         specifier: ^2.0.0
         version: 2.5.3
-      '@jeswr/fetch-rdf':
-        specifier: workspace:*
-        version: link:../fetch-rdf
       '@microsoft/api-extractor':
         specifier: ^7.58.9
         version: 7.58.9(@types/node@22.20.1)
@@ -4732,6 +5067,12 @@ importers:
 
   packages/solid-offline:
     dependencies:
+      '@jeswr/pod-notifications':
+        specifier: workspace:*
+        version: link:../pod-notifications
+      '@jeswr/storage-client':
+        specifier: workspace:*
+        version: link:../storage-client
       n3:
         specifier: ^1.21.0
         version: 1.26.0
@@ -4934,7 +5275,7 @@ importers:
         version: 6.0.3
       vitest:
         specifier: ^4.1.9
-        version: 4.1.10(@opentelemetry/api@1.10.0)(@types/node@26.6.5)(@vitest/coverage-v8@4.1.10)(jsdom@29.1.1(@noble/hashes@2.4.0))(vite@8.1.4(@types/node@26.6.5)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1))
+        version: 4.1.10(@opentelemetry/api@1.10.0)(@types/node@26.6.6)(@vitest/coverage-v8@4.1.10)(jsdom@29.1.1(@noble/hashes@2.4.0))(vite@8.1.4(@types/node@26.6.6)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1))
 
   packages/solid-session-restore:
     dependencies:
@@ -5211,7 +5552,7 @@ importers:
         version: 6.0.3
       vitest:
         specifier: ^4.1.9
-        version: 4.1.10(@opentelemetry/api@1.10.0)(@types/node@26.6.5)(@vitest/coverage-v8@4.1.10)(jsdom@29.1.1(@noble/hashes@2.4.0))(vite@8.1.4(@types/node@26.6.5)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1))
+        version: 4.1.10(@opentelemetry/api@1.10.0)(@types/node@26.6.6)(@vitest/coverage-v8@4.1.10)(jsdom@29.1.1(@noble/hashes@2.4.0))(vite@8.1.4(@types/node@26.6.6)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1))
 
   packages/storage-client:
     dependencies:
@@ -5251,7 +5592,7 @@ importers:
         version: 6.0.3
       vitest:
         specifier: ^4.1.9
-        version: 4.1.10(@opentelemetry/api@1.10.0)(@types/node@26.6.5)(@vitest/coverage-v8@4.1.10)(jsdom@29.1.1(@noble/hashes@2.4.0))(vite@8.1.4(@types/node@26.6.5)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1))
+        version: 4.1.10(@opentelemetry/api@1.10.0)(@types/node@26.6.6)(@vitest/coverage-v8@4.1.10)(jsdom@29.1.1(@noble/hashes@2.4.0))(vite@8.1.4(@types/node@26.6.6)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1))
 
   packages/suite-native:
     dependencies:
@@ -5270,7 +5611,44 @@ importers:
         version: 6.0.3
       vitest:
         specifier: ^4.1.9
-        version: 4.1.10(@opentelemetry/api@1.10.0)(@types/node@26.6.5)(@vitest/coverage-v8@4.1.10)(jsdom@29.1.1(@noble/hashes@2.4.0))(vite@8.1.4(@types/node@26.6.5)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1))
+        version: 4.1.10(@opentelemetry/api@1.10.0)(@types/node@26.6.6)(@vitest/coverage-v8@4.1.10)(jsdom@29.1.1(@noble/hashes@2.4.0))(vite@8.1.4(@types/node@26.6.6)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1))
+
+  packages/suite-sdk:
+    dependencies:
+      '@jeswr/pod-access':
+        specifier: workspace:*
+        version: link:../pod-access
+      '@jeswr/pod-auth':
+        specifier: workspace:*
+        version: link:../pod-auth
+    devDependencies:
+      '@biomejs/biome':
+        specifier: ^2.5.1
+        version: 2.5.3
+      '@types/node':
+        specifier: ^25.9.2
+        version: 25.9.5
+      '@types/react':
+        specifier: ^19.0.0
+        version: 19.2.17
+      '@types/react-dom':
+        specifier: ^19.0.0
+        version: 19.2.3(@types/react@19.2.17)
+      jsdom:
+        specifier: ^26.1.0
+        version: 26.1.0
+      react:
+        specifier: ^19.2.0
+        version: 19.2.7
+      react-dom:
+        specifier: ^19.2.0
+        version: 19.2.7(react@19.2.7)
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: ^4.1.9
+        version: 4.1.10(@opentelemetry/api@1.10.0)(@types/node@25.9.5)(@vitest/coverage-v8@4.1.10)(jsdom@26.1.0)(vite@8.1.4(@types/node@25.9.5)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1))
 
   packages/suite-ui:
     dependencies:
@@ -5419,7 +5797,7 @@ importers:
         version: 6.0.3
       vitest:
         specifier: ^4.1.9
-        version: 4.1.10(@opentelemetry/api@1.10.0)(@types/node@26.6.5)(@vitest/coverage-v8@4.1.10)(jsdom@29.1.1(@noble/hashes@2.4.0))(vite@8.1.4(@types/node@26.6.5)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1))
+        version: 4.1.10(@opentelemetry/api@1.10.0)(@types/node@26.6.6)(@vitest/coverage-v8@4.1.10)(jsdom@29.1.1(@noble/hashes@2.4.0))(vite@8.1.4(@types/node@26.6.6)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1))
 
   packages/unstorage-solid:
     dependencies:
@@ -5429,6 +5807,12 @@ importers:
       '@jeswr/ldp-container':
         specifier: workspace:*
         version: link:../ldp-container
+      '@jeswr/pod-notifications':
+        specifier: workspace:*
+        version: link:../pod-notifications
+      '@jeswr/storage-client':
+        specifier: workspace:*
+        version: link:../storage-client
       '@rdfjs/types':
         specifier: ^2.0.1
         version: 2.0.1
@@ -5541,16 +5925,41 @@ importers:
         version: 4.1.10(@opentelemetry/api@1.10.0)(@types/node@25.9.5)(@vitest/coverage-v8@4.1.10)(jsdom@29.1.1(@noble/hashes@2.4.0))(vite@8.1.4(@types/node@25.9.5)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1))
 
   tools/storage-conformance:
+    dependencies:
+      '@jeswr/fetch-rdf':
+        specifier: workspace:*
+        version: link:../../packages/fetch-rdf
+      '@jeswr/pod-auth':
+        specifier: workspace:*
+        version: link:../../packages/pod-auth
+      '@jeswr/storage-capabilities':
+        specifier: workspace:*
+        version: link:../../packages/storage-capabilities
+      '@jeswr/storage-client':
+        specifier: workspace:*
+        version: link:../../packages/storage-client
+      '@solid/community-server':
+        specifier: 7.2.0
+        version: 7.2.0(jiti@2.7.0)
+      '@sparq-org/solid-server':
+        specifier: 0.1.6
+        version: 0.1.6
     devDependencies:
       '@biomejs/biome':
         specifier: ^2.5.1
         version: 2.5.3
+      '@types/node':
+        specifier: ^25.9.2
+        version: 25.9.5
+      '@vitest/coverage-v8':
+        specifier: ^4.1.9
+        version: 4.1.10(vitest@4.1.10)
       typescript:
         specifier: ^6.0.3
         version: 6.0.3
       vitest:
         specifier: ^4.1.9
-        version: 4.1.10(@opentelemetry/api@1.10.0)(@types/node@26.6.5)(@vitest/coverage-v8@4.1.10)(jsdom@29.1.1(@noble/hashes@2.4.0))(vite@8.1.4(@types/node@26.6.5)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1))
+        version: 4.1.10(@opentelemetry/api@1.10.0)(@types/node@25.9.5)(@vitest/coverage-v8@4.1.10)(jsdom@29.1.1(@noble/hashes@2.4.0))(vite@8.1.4(@types/node@25.9.5)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1))
 
 packages:
 
@@ -8664,16 +9073,6 @@ packages:
   '@jeswr/prefixcc@1.2.1':
     resolution: {integrity: sha512-kBBXbqsaeh3Irp416h/RbelqJgIOp6X/OJJlYmLyr/9qlBYKTKSCuEv5/xjZ0Yf8Yec+QFRYBaOQ2JkMBSH7KA==}
 
-  '@jeswr/rdf-serialize@https://codeload.github.com/jeswr/rdf-serialize/tar.gz/ef3dd85636b868ea336a45f79c0446ade0982e7b':
-    resolution: {tarball: https://codeload.github.com/jeswr/rdf-serialize/tar.gz/ef3dd85636b868ea336a45f79c0446ade0982e7b}
-    version: 0.1.0
-    engines: {node: '>=24'}
-
-  '@jeswr/solid-odrl@https://codeload.github.com/jeswr/solid-odrl/tar.gz/db97922d82f2ec016b7ef705827cf85429458668':
-    resolution: {tarball: https://codeload.github.com/jeswr/solid-odrl/tar.gz/db97922d82f2ec016b7ef705827cf85429458668}
-    version: 0.1.0
-    engines: {node: '>=24'}
-
   '@jeswr/solid-server@file:packages/solid-pod-guard/vendor/jeswr-solid-server-0.1.0.tgz':
     resolution: {integrity: sha512-cMh1ckDWspn8GqHJWhL1obqCNBa8x52fNUIrQfd3Z1LYNVLE5coN51NJymFyLXteEoc2stexlz8s5bQsCM6O+A==, tarball: file:packages/solid-pod-guard/vendor/jeswr-solid-server-0.1.0.tgz}
     version: 0.1.0
@@ -8753,6 +9152,10 @@ packages:
 
   '@loaderkit/resolve@1.0.6':
     resolution: {integrity: sha512-G8FdIoF5CypfwmD9rl8BXod5HDn8JqB0CCNBXDTaRZ+yRYhARrrSToX1zg1zy9jX3zLqigsELwhT4gNtkdQAUg==}
+
+  '@matrix-org/matrix-sdk-crypto-nodejs@0.6.6':
+    resolution: {integrity: sha512-JlYSjq9Sm/0QoUXfk6C7JppsOG0ESY8BHEIaQgjQ8iQ0GkhvJrhPZbMJmd77/Bgeahd1GENf8896nauf4ximzQ==}
+    engines: {node: '>= 24'}
 
   '@microsoft/api-extractor-model@7.33.8':
     resolution: {integrity: sha512-aIcoQggPyer3B6Ze3usz0YWC/oBwUHfRH5ETUsr+oT2BRA6SfTJl7IKPcPZkX4UR+PohowzW4uMxsvjrn8vm+w==}
@@ -10590,6 +10993,9 @@ packages:
   '@solid/access-token-verifier@2.1.1':
     resolution: {integrity: sha512-dGvu4xk3P74xl6XYsULWBY8F/fNCoi/EK07Iv3RT+0vDA21+3VEKk72sWmki0W59qJRTRDQZXkCOyo4b5Hd7zA==}
 
+  '@solid/access-token-verifier@2.1.2':
+    resolution: {integrity: sha512-QSFcH0fgLmoQG9eFptTzgKbgi+DaanvYxla/xVSn70dQMAZOPmJ1xUHD2W1tN70RKs6ay5zi8AyZZAWDvz16HA==}
+
   '@solid/community-server@7.2.0':
     resolution: {integrity: sha512-rPC5NTMwao5AMG4iZoXazbkG9gUb7FGvLVVAYQXmjufUmFvu/pgCJR6VOXv5eg8iGuvH8CSnepa0JbMS6zpKGw==}
     engines: {node: '>=18.0'}
@@ -10615,6 +11021,16 @@ packages:
 
   '@solidlab/policy-engine@0.0.2':
     resolution: {integrity: sha512-kWWNMXwxIVOTkgCOa5EEiO5um98cJZ0hREu6LKe3O/7O0BZ5XkeYfsZWuHbtgwXR+vblkRkQ7EBQffkNAjT/JA==}
+
+  '@sparq-org/solid-server@0.1.6':
+    resolution: {integrity: sha512-BwXsyX6QrlxRbVwoGociCFpLbhj7/myJmpJBaeS2ylGIcU9a2QZOz/3Tdh5FbSpkNHKziiS/ZmabxgjH9DNw0g==}
+    engines: {node: '>=18'}
+    hasBin: true
+    peerDependencies:
+      fastify: ^5.12.5
+    peerDependenciesMeta:
+      fastify:
+        optional: true
 
   '@sparq-org/sparq@0.1.5':
     resolution: {integrity: sha512-YJ3awKa3OuNHJ7p5SpKoDch9uVyKP64YHEP8Bq6mt712rpjV2Xq6SlK2smOyzw9HA+bVOOl/InxYy48x6JWu5w==}
@@ -11026,6 +11442,11 @@ packages:
     peerDependencies:
       '@tiptap/core': 3.31.4
 
+  '@tiptap/extension-text-style@3.31.4':
+    resolution: {integrity: sha512-djeemliEWmqs3cJrUyMG+17HbjHyf6D/0NkIHl/RkVHYOCX1AYMZ7r+XLefApSNBCAx/aFh1hJzaMlnGbnTaAw==}
+    peerDependencies:
+      '@tiptap/core': 3.31.4
+
   '@tiptap/extension-text@3.31.4':
     resolution: {integrity: sha512-WL2ZRpFksgQcXJN05/UQH09YCH9LlhdLrSEcviASvEH/aAfsKiJlDrouN8PET+YAWK/F5xFc5/Q1z0xj+I23jw==}
     peerDependencies:
@@ -11409,8 +11830,8 @@ packages:
   '@types/node@26.1.1':
     resolution: {integrity: sha512-nxAkRSVkN1Y0JC1W8ky/fTfkGsMmcrRsbx+3XoZE+rMOX71kLYTV7fLXpqud1GpbpP5TuffXFqfX7fH2GgZREw==}
 
-  '@types/node@26.6.5':
-    resolution: {integrity: sha512-uMzsv9stDdofIZBx4UGh4Z9ZgXnGC9seRDscilBcTHAeOFk67MZg/k9bWVfO+bk4qZmG+l52hRnLwUiH2LnJTg==}
+  '@types/node@26.6.6':
+    resolution: {integrity: sha512-MzQj+8Kx3XI40OmUAE6Qoh58ZMNstNNMwn2nfd3qWsfe7nDNSqJNzes4njhz6AHwrSHOffSLwXU6yb474Q4aog==}
 
   '@types/nodemailer@6.4.24':
     resolution: {integrity: sha512-Ww4u0rT9wQNXh4JiQaIwx3QWdcOFXzOjQA2zc+jtFYNmQiT4mIUqcDin51bDFdkzKubFnQCZNK7FIHlPKQ/q9w==}
@@ -11797,6 +12218,11 @@ packages:
     peerDependencies:
       rxjs: '>=7.0.0'
 
+  '@univerjs/data-validation@1.2.0':
+    resolution: {integrity: sha512-9b8O1HFWYkugL8s/jTfkCRHEVVZaegGPnqaRdy1sbi8UnnsnUzSZuJi+1G+8YqjNtJGp+wNrMyqKavwsLxWIpA==}
+    peerDependencies:
+      rxjs: '>=7.0.0'
+
   '@univerjs/design@1.2.0':
     resolution: {integrity: sha512-9tQOuvZHARNqcWmuL8odXq3RhgpzP9NwZgd5F1RuPkqZs5WREiWkIP+b270tsRKoKcu15HbF/wvm62pFm4mPSg==}
     peerDependencies:
@@ -11840,8 +12266,22 @@ packages:
     peerDependencies:
       rxjs: '>=7.0.0'
 
+  '@univerjs/preset-sheets-conditional-formatting@1.2.0':
+    resolution: {integrity: sha512-ST3WHUj7cixwqfA3QU+DV+ORnldIt3fCAXk2j/K7xqOGw5PdTZ0oASifjlde7WPTa16lPQ0+FJPFjEiQ2WgRPw==}
+    peerDependencies:
+      react: ^16.9.0 || ^17.0.0 || ^18.0.0 || ^19.0.0 || ^19.0.0-rc
+      react-dom: ^16.9.0 || ^17.0.0 || ^18.0.0 || ^19.0.0 || ^19.0.0-rc
+      rxjs: '>=7.0.0'
+
   '@univerjs/preset-sheets-core@1.2.0':
     resolution: {integrity: sha512-Bpo7SVE1UrX4QwDVGxCmLBVwTJL8RfQqLCC2C5qTe4lLZUFwnH71Q8/d4m7oSqxJGLNOG9kZIDVxnvBepcCDqg==}
+    peerDependencies:
+      react: ^16.9.0 || ^17.0.0 || ^18.0.0 || ^19.0.0 || ^19.0.0-rc
+      react-dom: ^16.9.0 || ^17.0.0 || ^18.0.0 || ^19.0.0 || ^19.0.0-rc
+      rxjs: '>=7.0.0'
+
+  '@univerjs/preset-sheets-data-validation@1.2.0':
+    resolution: {integrity: sha512-sye9PAGMf/IVHXKFWpXl8R1hTtXvE5Mmo5jtFwyMjvs5vGWan8rbXKVXIOgi8IV0bnWgwCUkzE9dPjtevOCjZg==}
     peerDependencies:
       react: ^16.9.0 || ^17.0.0 || ^18.0.0 || ^19.0.0 || ^19.0.0-rc
       react-dom: ^16.9.0 || ^17.0.0 || ^18.0.0 || ^19.0.0 || ^19.0.0-rc
@@ -11855,6 +12295,28 @@ packages:
 
   '@univerjs/rpc@1.2.0':
     resolution: {integrity: sha512-jWa+Uv3vHyyEQGcg3BVe/XwLVGtll1EQ1UyKU5Wv3KdpwML88nYdxH8l+zvnknwSTy8y2LBLema9ZsDd+NPw/g==}
+    peerDependencies:
+      rxjs: '>=7.0.0'
+
+  '@univerjs/sheets-conditional-formatting-ui@1.2.0':
+    resolution: {integrity: sha512-HuIk7cjIul1ud6bpKTbsYyUmcdOBIPCZmi7pJUdJp4YKaVymHOKPC70M2f6venzpghR8l/UWXnxCyYldSimSoA==}
+    peerDependencies:
+      react: ^16.9.0 || ^17.0.0 || ^18.0.0 || ^19.0.0 || ^19.0.0-rc
+      rxjs: '>=7.0.0'
+
+  '@univerjs/sheets-conditional-formatting@1.2.0':
+    resolution: {integrity: sha512-fJ+IdI/4yWDZHAIXF909jW9zExauy/xxgln9FuRC3jgblKndGjiyb2L+VVpagjbSwy1lrgrQKi5NElv2s9KJxA==}
+    peerDependencies:
+      rxjs: '>=7.0.0'
+
+  '@univerjs/sheets-data-validation-ui@1.2.0':
+    resolution: {integrity: sha512-CARBlxmFJL0lBfDVyjU9KRsUKUEdW4cKMBJ70wz5h15fF/xr9ILVQ+tQPMJjL8yzs5GlyYrYVZ49+Ld09wTCbg==}
+    peerDependencies:
+      react: ^16.9.0 || ^17.0.0 || ^18.0.0 || ^19.0.0 || ^19.0.0-rc
+      rxjs: '>=7.0.0'
+
+  '@univerjs/sheets-data-validation@1.2.0':
+    resolution: {integrity: sha512-8E0KJZgSRhNTRprq6v3i7qgI3dMJHNU0z2hlPLgiRD2B4ft7zzguMTycZwxobEqftf9R5EBVddzktFgHyZCFBw==}
     peerDependencies:
       rxjs: '>=7.0.0'
 
@@ -15633,6 +16095,11 @@ packages:
     resolution: {integrity: sha512-tB/a0shZL5UZWSwsoeyqfTszONTt4k2YS0tuQioMOD180+MbombYVgzDUYHlx+gejYK6rgf08n/2Df99WY0Sxg==}
     engines: {node: '>=10.0.0'}
 
+  node-downloader-helper@2.1.11:
+    resolution: {integrity: sha512-882fH2C9AWdiPCwz/2beq5t8FGMZK9Dx8TJUOIxzMCbvG7XUKM5BuJwN5f0NKo4SCQK6jR4p2TPm54mYGdGchQ==}
+    engines: {node: '>=14.18'}
+    hasBin: true
+
   node-emoji@2.2.0:
     resolution: {integrity: sha512-Z3lTE9pLaJF47NyMhd4ww1yFTAP8YhYI8SleJiHzM46Fgpm5cnNzSl9XfzFNqbaz+VlJrIj3fXQ4DeN1Rjm6cw==}
     engines: {node: '>=18'}
@@ -16123,8 +16590,8 @@ packages:
   property-information@7.2.0:
     resolution: {integrity: sha512-IAtzIB6sUiWaJYrX9smp3V46pBGbBeLFRGdh25kg1334VcBlD8HzhPeNIWQH9zhGmo2itIe25EHt9dQP7G5hmg==}
 
-  prosemirror-changeset@2.4.4:
-    resolution: {integrity: sha512-Gyuz9jYdrAeA9I7AholyOes9KUmv/lEwsC5O9s5xF5VB3EgTPsXMGUxz4+H1B+wKVPdZbvRcg1Cp3x8qX+8ofA==}
+  prosemirror-changeset@2.4.5:
+    resolution: {integrity: sha512-hv3Qhsn5GyoferiBqL8euGvj3Y8Z+2Ef75NnPLChr5DTWArpPAjK6F96Yc0iM7SBYNDPQbQaA+xEtAR8NuWo9A==}
 
   prosemirror-commands@1.7.2:
     resolution: {integrity: sha512-q6Q6szxqdu9Xd6EcdKsqXghu5nQdZTpB4Q9yd04WRc7/jt763e/rT60Owh0L1GYY+T46o5rD+9lEN36dZS43tw==}
@@ -16147,8 +16614,8 @@ packages:
   prosemirror-model@1.25.12:
     resolution: {integrity: sha512-Ue2gTmXMa7EhpLNhC7J+h4+ykD8ha12K6rrZFFKKJHBForfIStw5gJ6Zrf1mqqAa9NmpmEB4wp9bKmA4eUVjWg==}
 
-  prosemirror-schema-list@1.5.1:
-    resolution: {integrity: sha512-927lFx/uwyQaGwJxLWCZRkjXG0p48KpMj6ueoYiu4JX05GGuGcgzAy62dfiV8eFZftgyBUvLx76RsMe20fJl+Q==}
+  prosemirror-schema-list@1.6.0:
+    resolution: {integrity: sha512-G1srDtan+VqWn+qpmWFj/6j0YsZ5zMU+ZIlGVIW41a5JF2jAI3jzfMRWmSABmEH2Qoq1PmAG/o2mucMMdLOsLg==}
 
   prosemirror-state@1.4.4:
     resolution: {integrity: sha512-6jiYHH2CIGbCfnxdHbXZ12gySFY/fz/ulZE333G6bPqIZ4F+TXo9ifiR86nAHpWnfoNjOb3o5ESi7J8Uz1jXHw==}
@@ -16159,8 +16626,8 @@ packages:
   prosemirror-transform@1.12.4:
     resolution: {integrity: sha512-2/WuPum3pn+O/Vi2vzpi8210ICUe2kIPXdLYjQ09Pv5DtT5bcKWMJhAKPBwvpPjpp5iOYUVwVEr0gOM1BY1Mgw==}
 
-  prosemirror-view@1.42.8:
-    resolution: {integrity: sha512-ftDZjCs9AjAekXmCfJRn2U3IdlRCl0Yc4tZT1/jJWCsz4DiSifEBXtWmpJpw/4f1Rg328uAUQ+u2lCJ0+AVZkw==}
+  prosemirror-view@1.42.9:
+    resolution: {integrity: sha512-bKbfzeKZOu2H2JQU2TaJmYu6EBcor3VnGIR4jR31cbEt1ztUnfUB6bKGV1+fJzOJdrVWR+tRU0208zM3oQx4wA==}
 
   protobufjs@7.6.5:
     resolution: {integrity: sha512-/FPD0nUc9jH6rfFjji9IBqOz4pcSE3CsT1m7Ep6Mdb0LxSUMj8hgl6GomOvZzpNpAqqGaXA0P3VSrZLFzIhQrw==}
@@ -24953,20 +25420,6 @@ snapshots:
     transitivePeerDependencies:
       - encoding
 
-  '@jeswr/rdf-serialize@https://codeload.github.com/jeswr/rdf-serialize/tar.gz/ef3dd85636b868ea336a45f79c0446ade0982e7b':
-    dependencies:
-      '@rdfjs/types': 2.0.1
-      n3: 2.1.1
-
-  '@jeswr/solid-odrl@https://codeload.github.com/jeswr/solid-odrl/tar.gz/db97922d82f2ec016b7ef705827cf85429458668':
-    dependencies:
-      '@jeswr/rdf-serialize': https://codeload.github.com/jeswr/rdf-serialize/tar.gz/ef3dd85636b868ea336a45f79c0446ade0982e7b
-      '@rdfjs/wrapper': 0.34.0
-      '@solid/object': 0.6.0
-      content-type: 1.0.5
-      jsonld-streaming-parser: 5.0.1
-      n3: 2.1.1
-
   '@jeswr/solid-server@file:packages/solid-pod-guard/vendor/jeswr-solid-server-0.1.0.tgz':
     dependencies:
       '@solid/access-token-verifier': 2.1.1
@@ -25069,6 +25522,13 @@ snapshots:
   '@loaderkit/resolve@1.0.6':
     dependencies:
       '@braidai/lang': 1.1.2
+
+  '@matrix-org/matrix-sdk-crypto-nodejs@0.6.6':
+    dependencies:
+      https-proxy-agent: 7.0.6
+      node-downloader-helper: 2.1.11
+    transitivePeerDependencies:
+      - supports-color
 
   '@microsoft/api-extractor-model@7.33.8(@types/node@20.19.43)':
     dependencies:
@@ -27086,6 +27546,16 @@ snapshots:
     transitivePeerDependencies:
       - encoding
 
+  '@solid/access-token-verifier@2.1.2':
+    dependencies:
+      jose: 5.10.0
+      lru-cache: 6.0.0
+      n3: 1.26.0
+      node-fetch: 2.7.0
+      ts-guards: 0.5.1
+    transitivePeerDependencies:
+      - encoding
+
   '@solid/community-server@7.2.0(jiti@2.7.0)':
     dependencies:
       '@comunica/context-entries': 2.10.0
@@ -27269,6 +27739,12 @@ snapshots:
       global-logger-factory: 1.0.0
       n3: 1.26.0
       rdf-vocabulary: 1.0.1
+    transitivePeerDependencies:
+      - encoding
+
+  '@sparq-org/solid-server@0.1.6':
+    dependencies:
+      '@solid/access-token-verifier': 2.1.2
     transitivePeerDependencies:
       - encoding
 
@@ -27539,11 +28015,11 @@ snapshots:
     dependencies:
       '@tiptap/core': 3.31.4(@tiptap/pm@3.31.4)
 
-  '@tiptap/extension-collaboration@3.31.4(@tiptap/core@3.31.4(@tiptap/pm@3.31.4))(@tiptap/pm@3.31.4)(@tiptap/y-tiptap@3.0.10(prosemirror-model@1.25.12)(prosemirror-state@1.4.4)(prosemirror-view@1.42.8)(y-protocols@1.0.7(yjs@13.6.27))(yjs@13.6.27))(yjs@13.6.27)':
+  '@tiptap/extension-collaboration@3.31.4(@tiptap/core@3.31.4(@tiptap/pm@3.31.4))(@tiptap/pm@3.31.4)(@tiptap/y-tiptap@3.0.10(prosemirror-model@1.25.12)(prosemirror-state@1.4.4)(prosemirror-view@1.42.9)(y-protocols@1.0.7(yjs@13.6.27))(yjs@13.6.27))(yjs@13.6.27)':
     dependencies:
       '@tiptap/core': 3.31.4(@tiptap/pm@3.31.4)
       '@tiptap/pm': 3.31.4
-      '@tiptap/y-tiptap': 3.0.10(prosemirror-model@1.25.12)(prosemirror-state@1.4.4)(prosemirror-view@1.42.8)(y-protocols@1.0.7(yjs@13.6.27))(yjs@13.6.27)
+      '@tiptap/y-tiptap': 3.0.10(prosemirror-model@1.25.12)(prosemirror-state@1.4.4)(prosemirror-view@1.42.9)(y-protocols@1.0.7(yjs@13.6.27))(yjs@13.6.27)
       yjs: 13.6.27
 
   '@tiptap/extension-document@3.31.4(@tiptap/core@3.31.4(@tiptap/pm@3.31.4))':
@@ -27640,6 +28116,10 @@ snapshots:
     dependencies:
       '@tiptap/core': 3.31.4(@tiptap/pm@3.31.4)
 
+  '@tiptap/extension-text-style@3.31.4(@tiptap/core@3.31.4(@tiptap/pm@3.31.4))':
+    dependencies:
+      '@tiptap/core': 3.31.4(@tiptap/pm@3.31.4)
+
   '@tiptap/extension-text@3.31.4(@tiptap/core@3.31.4(@tiptap/pm@3.31.4))':
     dependencies:
       '@tiptap/core': 3.31.4(@tiptap/pm@3.31.4)
@@ -27661,7 +28141,7 @@ snapshots:
 
   '@tiptap/pm@3.31.4':
     dependencies:
-      prosemirror-changeset: 2.4.4
+      prosemirror-changeset: 2.4.5
       prosemirror-commands: 1.7.2
       prosemirror-dropcursor: 1.8.4
       prosemirror-gapcursor: 1.4.1
@@ -27669,11 +28149,11 @@ snapshots:
       prosemirror-inputrules: 1.5.1
       prosemirror-keymap: 1.2.3
       prosemirror-model: 1.25.12
-      prosemirror-schema-list: 1.5.1
+      prosemirror-schema-list: 1.6.0
       prosemirror-state: 1.4.4
       prosemirror-tables: 1.8.5
       prosemirror-transform: 1.12.4
-      prosemirror-view: 1.42.8
+      prosemirror-view: 1.42.9
 
   '@tiptap/react@3.31.4(@floating-ui/dom@1.8.0)(@tiptap/core@3.31.4(@tiptap/pm@3.31.4))(@tiptap/pm@3.31.4)(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)':
     dependencies:
@@ -27719,13 +28199,13 @@ snapshots:
       '@tiptap/extensions': 3.31.4(@tiptap/core@3.31.4(@tiptap/pm@3.31.4))(@tiptap/pm@3.31.4)
       '@tiptap/pm': 3.31.4
 
-  '@tiptap/y-tiptap@3.0.10(prosemirror-model@1.25.12)(prosemirror-state@1.4.4)(prosemirror-view@1.42.8)(y-protocols@1.0.7(yjs@13.6.27))(yjs@13.6.27)':
+  '@tiptap/y-tiptap@3.0.10(prosemirror-model@1.25.12)(prosemirror-state@1.4.4)(prosemirror-view@1.42.9)(y-protocols@1.0.7(yjs@13.6.27))(yjs@13.6.27)':
     dependencies:
       lib0: 0.2.117
       prosemirror-model: 1.25.12
       prosemirror-state: 1.4.4
       prosemirror-transform: 1.12.4
-      prosemirror-view: 1.42.8
+      prosemirror-view: 1.42.9
       y-protocols: 1.0.7(yjs@13.6.27)
       yjs: 13.6.27
 
@@ -28119,7 +28599,7 @@ snapshots:
     dependencies:
       undici-types: 8.3.0
 
-  '@types/node@26.6.5':
+  '@types/node@26.6.6':
     dependencies:
       undici-types: 8.9.0
 
@@ -28543,6 +29023,13 @@ snapshots:
     transitivePeerDependencies:
       - react
 
+  '@univerjs/data-validation@1.2.0(react@19.2.7)(rxjs@7.8.2)':
+    dependencies:
+      '@univerjs/core': 1.2.0(react@19.2.7)(rxjs@7.8.2)
+      rxjs: 7.8.2
+    transitivePeerDependencies:
+      - react
+
   '@univerjs/design@1.2.0(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)':
     dependencies:
       '@radix-ui/react-dialog': 1.3.1(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
@@ -28628,6 +29115,17 @@ snapshots:
     transitivePeerDependencies:
       - react
 
+  '@univerjs/preset-sheets-conditional-formatting@1.2.0(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(rxjs@7.8.2)':
+    dependencies:
+      '@univerjs/sheets-conditional-formatting': 1.2.0(react@19.2.7)(rxjs@7.8.2)
+      '@univerjs/sheets-conditional-formatting-ui': 1.2.0(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(rxjs@7.8.2)
+      react: 19.2.7
+      react-dom: 19.2.7(react@19.2.7)
+      rxjs: 7.8.2
+    transitivePeerDependencies:
+      - '@types/react'
+      - '@types/react-dom'
+
   '@univerjs/preset-sheets-core@1.2.0(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(rxjs@7.8.2)':
     dependencies:
       '@univerjs/design': 1.2.0(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
@@ -28644,6 +29142,18 @@ snapshots:
       '@univerjs/sheets-numfmt-ui': 1.2.0(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(rxjs@7.8.2)
       '@univerjs/sheets-ui': 1.2.0(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(rxjs@7.8.2)
       '@univerjs/ui': 1.2.0(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(rxjs@7.8.2)
+      react: 19.2.7
+      react-dom: 19.2.7(react@19.2.7)
+      rxjs: 7.8.2
+    transitivePeerDependencies:
+      - '@types/react'
+      - '@types/react-dom'
+
+  '@univerjs/preset-sheets-data-validation@1.2.0(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(rxjs@7.8.2)':
+    dependencies:
+      '@univerjs/data-validation': 1.2.0(react@19.2.7)(rxjs@7.8.2)
+      '@univerjs/sheets-data-validation': 1.2.0(react@19.2.7)(rxjs@7.8.2)
+      '@univerjs/sheets-data-validation-ui': 1.2.0(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(rxjs@7.8.2)
       react: 19.2.7
       react-dom: 19.2.7(react@19.2.7)
       rxjs: 7.8.2
@@ -28673,6 +29183,69 @@ snapshots:
   '@univerjs/rpc@1.2.0(react@19.2.7)(rxjs@7.8.2)':
     dependencies:
       '@univerjs/core': 1.2.0(react@19.2.7)(rxjs@7.8.2)
+      rxjs: 7.8.2
+    transitivePeerDependencies:
+      - react
+
+  '@univerjs/sheets-conditional-formatting-ui@1.2.0(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(rxjs@7.8.2)':
+    dependencies:
+      '@univerjs/core': 1.2.0(react@19.2.7)(rxjs@7.8.2)
+      '@univerjs/design': 1.2.0(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+      '@univerjs/engine-formula': 1.2.0(react@19.2.7)(rxjs@7.8.2)
+      '@univerjs/engine-render': 1.2.0(react@19.2.7)(rxjs@7.8.2)
+      '@univerjs/icons': 1.46.0(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+      '@univerjs/sheets': 1.2.0(react@19.2.7)(rxjs@7.8.2)
+      '@univerjs/sheets-conditional-formatting': 1.2.0(react@19.2.7)(rxjs@7.8.2)
+      '@univerjs/sheets-formula': 1.2.0(react@19.2.7)(rxjs@7.8.2)
+      '@univerjs/sheets-formula-ui': 1.2.0(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(rxjs@7.8.2)
+      '@univerjs/sheets-ui': 1.2.0(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(rxjs@7.8.2)
+      '@univerjs/ui': 1.2.0(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(rxjs@7.8.2)
+      react: 19.2.7
+      rxjs: 7.8.2
+    transitivePeerDependencies:
+      - '@types/react'
+      - '@types/react-dom'
+      - react-dom
+
+  '@univerjs/sheets-conditional-formatting@1.2.0(react@19.2.7)(rxjs@7.8.2)':
+    dependencies:
+      '@univerjs/core': 1.2.0(react@19.2.7)(rxjs@7.8.2)
+      '@univerjs/engine-formula': 1.2.0(react@19.2.7)(rxjs@7.8.2)
+      '@univerjs/engine-render': 1.2.0(react@19.2.7)(rxjs@7.8.2)
+      '@univerjs/sheets': 1.2.0(react@19.2.7)(rxjs@7.8.2)
+      rxjs: 7.8.2
+    transitivePeerDependencies:
+      - react
+
+  '@univerjs/sheets-data-validation-ui@1.2.0(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(rxjs@7.8.2)':
+    dependencies:
+      '@univerjs/core': 1.2.0(react@19.2.7)(rxjs@7.8.2)
+      '@univerjs/data-validation': 1.2.0(react@19.2.7)(rxjs@7.8.2)
+      '@univerjs/design': 1.2.0(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+      '@univerjs/engine-formula': 1.2.0(react@19.2.7)(rxjs@7.8.2)
+      '@univerjs/engine-render': 1.2.0(react@19.2.7)(rxjs@7.8.2)
+      '@univerjs/icons': 1.46.0(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+      '@univerjs/sheets': 1.2.0(react@19.2.7)(rxjs@7.8.2)
+      '@univerjs/sheets-data-validation': 1.2.0(react@19.2.7)(rxjs@7.8.2)
+      '@univerjs/sheets-formula-ui': 1.2.0(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(rxjs@7.8.2)
+      '@univerjs/sheets-numfmt': 1.2.0(react@19.2.7)(rxjs@7.8.2)
+      '@univerjs/sheets-ui': 1.2.0(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(rxjs@7.8.2)
+      '@univerjs/ui': 1.2.0(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(rxjs@7.8.2)
+      react: 19.2.7
+      rxjs: 7.8.2
+    transitivePeerDependencies:
+      - '@types/react'
+      - '@types/react-dom'
+      - react-dom
+
+  '@univerjs/sheets-data-validation@1.2.0(react@19.2.7)(rxjs@7.8.2)':
+    dependencies:
+      '@univerjs/core': 1.2.0(react@19.2.7)(rxjs@7.8.2)
+      '@univerjs/data-validation': 1.2.0(react@19.2.7)(rxjs@7.8.2)
+      '@univerjs/engine-formula': 1.2.0(react@19.2.7)(rxjs@7.8.2)
+      '@univerjs/protocol': 1.2.0
+      '@univerjs/sheets': 1.2.0(react@19.2.7)(rxjs@7.8.2)
+      '@univerjs/sheets-formula': 1.2.0(react@19.2.7)(rxjs@7.8.2)
       rxjs: 7.8.2
     transitivePeerDependencies:
       - react
@@ -29144,13 +29717,13 @@ snapshots:
     optionalDependencies:
       vite: 8.1.4(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1)
 
-  '@vitest/mocker@4.1.10(vite@8.1.4(@types/node@26.6.5)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1))':
+  '@vitest/mocker@4.1.10(vite@8.1.4(@types/node@26.6.6)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1))':
     dependencies:
       '@vitest/spy': 4.1.10
       estree-walker: 3.0.3
       magic-string: 0.30.21
     optionalDependencies:
-      vite: 8.1.4(@types/node@26.6.5)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1)
+      vite: 8.1.4(@types/node@26.6.6)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1)
 
   '@vitest/pretty-format@2.1.9':
     dependencies:
@@ -30383,7 +30956,7 @@ snapshots:
 
   docx@9.14.0:
     dependencies:
-      '@types/node': 26.6.5
+      '@types/node': 26.6.6
       hash.js: 1.1.7
       jszip: 3.10.2
       nanoid: 6.0.2
@@ -30768,7 +31341,7 @@ snapshots:
       eslint: 9.39.5(jiti@2.7.0)
       eslint-import-resolver-node: 0.3.10
       eslint-import-resolver-typescript: 3.10.1(eslint-plugin-import@2.32.0(eslint@9.39.5(jiti@2.7.0)))(eslint@9.39.5(jiti@2.7.0))
-      eslint-plugin-import: 2.32.0(eslint-import-resolver-typescript@3.10.1(eslint-plugin-import@2.32.0(eslint@9.39.5(jiti@2.7.0)))(eslint@9.39.5(jiti@2.7.0)))(eslint@9.39.5(jiti@2.7.0))
+      eslint-plugin-import: 2.32.0(eslint-import-resolver-typescript@3.10.1)(eslint@9.39.5(jiti@2.7.0))
       eslint-plugin-jsx-a11y: 6.10.2(eslint@9.39.5(jiti@2.7.0))
       eslint-plugin-react: 7.37.5(eslint@9.39.5(jiti@2.7.0))
       eslint-plugin-react-hooks: 7.1.1(eslint@9.39.5(jiti@2.7.0))
@@ -30801,7 +31374,7 @@ snapshots:
       tinyglobby: 0.2.17
       unrs-resolver: 1.12.2
     optionalDependencies:
-      eslint-plugin-import: 2.32.0(eslint-import-resolver-typescript@3.10.1(eslint-plugin-import@2.32.0(eslint@9.39.5(jiti@2.7.0)))(eslint@9.39.5(jiti@2.7.0)))(eslint@9.39.5(jiti@2.7.0))
+      eslint-plugin-import: 2.32.0(eslint-import-resolver-typescript@3.10.1)(eslint@9.39.5(jiti@2.7.0))
     transitivePeerDependencies:
       - supports-color
 
@@ -30820,7 +31393,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  eslint-module-utils@2.14.0(@typescript-eslint/parser@8.63.0(eslint@9.39.5(jiti@2.7.0))(typescript@5.9.3))(eslint-import-resolver-node@0.3.10)(eslint-import-resolver-typescript@3.10.1)(eslint@9.39.5(jiti@2.7.0)):
+  eslint-module-utils@2.14.0(@typescript-eslint/parser@8.63.0(eslint@9.39.5(jiti@2.7.0))(typescript@5.9.3))(eslint-import-resolver-node@0.3.10)(eslint-import-resolver-typescript@3.10.1(eslint-plugin-import@2.32.0)(eslint@9.39.5(jiti@2.7.0)))(eslint@9.39.5(jiti@2.7.0)):
     dependencies:
       debug: 3.2.7
     optionalDependencies:
@@ -30852,7 +31425,7 @@ snapshots:
       doctrine: 2.1.0
       eslint: 9.39.5(jiti@2.7.0)
       eslint-import-resolver-node: 0.3.10
-      eslint-module-utils: 2.14.0(@typescript-eslint/parser@8.63.0(eslint@9.39.5(jiti@2.7.0))(typescript@5.9.3))(eslint-import-resolver-node@0.3.10)(eslint-import-resolver-typescript@3.10.1)(eslint@9.39.5(jiti@2.7.0))
+      eslint-module-utils: 2.14.0(@typescript-eslint/parser@8.63.0(eslint@9.39.5(jiti@2.7.0))(typescript@5.9.3))(eslint-import-resolver-node@0.3.10)(eslint-import-resolver-typescript@3.10.1(eslint-plugin-import@2.32.0)(eslint@9.39.5(jiti@2.7.0)))(eslint@9.39.5(jiti@2.7.0))
       hasown: 2.0.4
       is-core-module: 2.16.2
       is-glob: 4.0.3
@@ -30870,7 +31443,7 @@ snapshots:
       - eslint-import-resolver-webpack
       - supports-color
 
-  eslint-plugin-import@2.32.0(eslint-import-resolver-typescript@3.10.1(eslint-plugin-import@2.32.0(eslint@9.39.5(jiti@2.7.0)))(eslint@9.39.5(jiti@2.7.0)))(eslint@9.39.5(jiti@2.7.0)):
+  eslint-plugin-import@2.32.0(eslint-import-resolver-typescript@3.10.1)(eslint@9.39.5(jiti@2.7.0)):
     dependencies:
       '@rtsao/scc': 1.1.0
       array-includes: 3.1.9
@@ -33308,6 +33881,8 @@ snapshots:
     dependencies:
       tweetnacl: 1.0.3
 
+  node-downloader-helper@2.1.11: {}
+
   node-emoji@2.2.0:
     dependencies:
       '@sindresorhus/is': 4.6.0
@@ -33824,7 +34399,7 @@ snapshots:
 
   property-information@7.2.0: {}
 
-  prosemirror-changeset@2.4.4:
+  prosemirror-changeset@2.4.5:
     dependencies:
       prosemirror-transform: 1.12.4
 
@@ -33838,20 +34413,20 @@ snapshots:
     dependencies:
       prosemirror-state: 1.4.4
       prosemirror-transform: 1.12.4
-      prosemirror-view: 1.42.8
+      prosemirror-view: 1.42.9
 
   prosemirror-gapcursor@1.4.1:
     dependencies:
       prosemirror-keymap: 1.2.3
       prosemirror-model: 1.25.12
       prosemirror-state: 1.4.4
-      prosemirror-view: 1.42.8
+      prosemirror-view: 1.42.9
 
   prosemirror-history@1.5.1:
     dependencies:
       prosemirror-state: 1.4.4
       prosemirror-transform: 1.12.4
-      prosemirror-view: 1.42.8
+      prosemirror-view: 1.42.9
       rope-sequence: 1.3.4
 
   prosemirror-inputrules@1.5.1:
@@ -33868,7 +34443,7 @@ snapshots:
     dependencies:
       orderedmap: 2.1.1
 
-  prosemirror-schema-list@1.5.1:
+  prosemirror-schema-list@1.6.0:
     dependencies:
       prosemirror-model: 1.25.12
       prosemirror-state: 1.4.4
@@ -33878,7 +34453,7 @@ snapshots:
     dependencies:
       prosemirror-model: 1.25.12
       prosemirror-transform: 1.12.4
-      prosemirror-view: 1.42.8
+      prosemirror-view: 1.42.9
 
   prosemirror-tables@1.8.5:
     dependencies:
@@ -33886,13 +34461,13 @@ snapshots:
       prosemirror-model: 1.25.12
       prosemirror-state: 1.4.4
       prosemirror-transform: 1.12.4
-      prosemirror-view: 1.42.8
+      prosemirror-view: 1.42.9
 
   prosemirror-transform@1.12.4:
     dependencies:
       prosemirror-model: 1.25.12
 
-  prosemirror-view@1.42.8:
+  prosemirror-view@1.42.9:
     dependencies:
       prosemirror-model: 1.25.12
       prosemirror-state: 1.4.4
@@ -36459,7 +37034,7 @@ snapshots:
       terser: 5.51.2
       yaml: 2.9.1
 
-  vite@8.1.4(@types/node@26.6.5)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1):
+  vite@8.1.4(@types/node@26.6.6)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1):
     dependencies:
       lightningcss: 1.32.0
       picomatch: 4.0.5
@@ -36467,7 +37042,7 @@ snapshots:
       rolldown: 1.1.5
       tinyglobby: 0.2.17
     optionalDependencies:
-      '@types/node': 26.6.5
+      '@types/node': 26.6.6
       esbuild: 0.28.1
       fsevents: 2.3.3
       jiti: 2.7.0
@@ -37029,6 +37604,36 @@ snapshots:
     transitivePeerDependencies:
       - msw
 
+  vitest@4.1.10(@opentelemetry/api@1.10.0)(@types/node@26.1.1)(@vitest/coverage-v8@4.1.10)(jsdom@26.1.0)(vite@8.1.4(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1)):
+    dependencies:
+      '@vitest/expect': 4.1.10
+      '@vitest/mocker': 4.1.10(vite@8.1.4(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1))
+      '@vitest/pretty-format': 4.1.10
+      '@vitest/runner': 4.1.10
+      '@vitest/snapshot': 4.1.10
+      '@vitest/spy': 4.1.10
+      '@vitest/utils': 4.1.10
+      es-module-lexer: 2.3.0
+      expect-type: 1.4.0
+      magic-string: 0.30.21
+      obug: 2.1.3
+      pathe: 2.0.3
+      picomatch: 4.0.5
+      std-env: 4.2.0
+      tinybench: 2.9.0
+      tinyexec: 1.2.4
+      tinyglobby: 0.2.17
+      tinyrainbow: 3.1.0
+      vite: 8.1.4(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1)
+      why-is-node-running: 2.3.0
+    optionalDependencies:
+      '@opentelemetry/api': 1.10.0
+      '@types/node': 26.1.1
+      '@vitest/coverage-v8': 4.1.10(vitest@4.1.10)
+      jsdom: 26.1.0
+    transitivePeerDependencies:
+      - msw
+
   vitest@4.1.10(@opentelemetry/api@1.10.0)(@types/node@26.1.1)(@vitest/coverage-v8@4.1.10)(jsdom@29.1.1(@noble/hashes@2.4.0))(vite@8.1.4(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1)):
     dependencies:
       '@vitest/expect': 4.1.10
@@ -37059,10 +37664,10 @@ snapshots:
     transitivePeerDependencies:
       - msw
 
-  vitest@4.1.10(@opentelemetry/api@1.10.0)(@types/node@26.6.5)(@vitest/coverage-v8@4.1.10)(jsdom@29.1.1(@noble/hashes@2.4.0))(vite@8.1.4(@types/node@26.6.5)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1)):
+  vitest@4.1.10(@opentelemetry/api@1.10.0)(@types/node@26.6.6)(@vitest/coverage-v8@4.1.10)(jsdom@26.1.0)(vite@8.1.4(@types/node@26.6.6)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1)):
     dependencies:
       '@vitest/expect': 4.1.10
-      '@vitest/mocker': 4.1.10(vite@8.1.4(@types/node@26.6.5)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1))
+      '@vitest/mocker': 4.1.10(vite@8.1.4(@types/node@26.6.6)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1))
       '@vitest/pretty-format': 4.1.10
       '@vitest/runner': 4.1.10
       '@vitest/snapshot': 4.1.10
@@ -37079,11 +37684,41 @@ snapshots:
       tinyexec: 1.2.4
       tinyglobby: 0.2.17
       tinyrainbow: 3.1.0
-      vite: 8.1.4(@types/node@26.6.5)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1)
+      vite: 8.1.4(@types/node@26.6.6)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1)
       why-is-node-running: 2.3.0
     optionalDependencies:
       '@opentelemetry/api': 1.10.0
-      '@types/node': 26.6.5
+      '@types/node': 26.6.6
+      '@vitest/coverage-v8': 4.1.10(vitest@4.1.10)
+      jsdom: 26.1.0
+    transitivePeerDependencies:
+      - msw
+
+  vitest@4.1.10(@opentelemetry/api@1.10.0)(@types/node@26.6.6)(@vitest/coverage-v8@4.1.10)(jsdom@29.1.1(@noble/hashes@2.4.0))(vite@8.1.4(@types/node@26.6.6)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1)):
+    dependencies:
+      '@vitest/expect': 4.1.10
+      '@vitest/mocker': 4.1.10(vite@8.1.4(@types/node@26.6.6)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1))
+      '@vitest/pretty-format': 4.1.10
+      '@vitest/runner': 4.1.10
+      '@vitest/snapshot': 4.1.10
+      '@vitest/spy': 4.1.10
+      '@vitest/utils': 4.1.10
+      es-module-lexer: 2.3.0
+      expect-type: 1.4.0
+      magic-string: 0.30.21
+      obug: 2.1.3
+      pathe: 2.0.3
+      picomatch: 4.0.5
+      std-env: 4.2.0
+      tinybench: 2.9.0
+      tinyexec: 1.2.4
+      tinyglobby: 0.2.17
+      tinyrainbow: 3.1.0
+      vite: 8.1.4(@types/node@26.6.6)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1)
+      why-is-node-running: 2.3.0
+    optionalDependencies:
+      '@opentelemetry/api': 1.10.0
+      '@types/node': 26.6.6
       '@vitest/coverage-v8': 4.1.10(vitest@4.1.10)
       jsdom: 29.1.1(@noble/hashes@2.4.0)
     transitivePeerDependencies:

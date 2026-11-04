@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import assert from "node:assert/strict";
 import { createMemoryStore } from "@key-value-kit/storage/memory";
 import { decodeJwt, jwtVerify } from "jose";
@@ -299,7 +300,11 @@ test("LWS exchanges retain outstanding invalidation contexts after history evict
       audience: "https://pod.example/",
     });
     assert.equal(payload.sub, "https://agent.example/id");
-    return Response.json({ access_token: `lws-${++issued}`, token_type: "Bearer" });
+    return Response.json({
+      access_token: `lws-${++issued}`,
+      token_type: "Bearer",
+      expires_in: 300,
+    });
   });
   const provider = new LwsTokenProvider(source);
   const challenges = (i) => ({

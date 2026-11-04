@@ -252,3 +252,23 @@ export const LEGACY_A2A_INLINE_CONTEXT: Readonly<Record<string, unknown>> = {
 export const PROTOCOL_HASH_ALGORITHM = "sha256" as const;
 /** The prefix a {@link PROTOCOL_HASH_ALGORITHM} hash string carries (`sha256:`). */
 export const PROTOCOL_HASH_PREFIX = "sha256:" as const;
+
+/**
+ * The action-type IRI for an intent action kind. Throws a `TypeError` for a value
+ * that is not one (an `Intent` may come from a peer's JSON): an inherited key such
+ * as `constructor` must never index the table.
+ */
+export function actionTypeIriOf(action: unknown): string {
+  if (typeof action !== "string" || !Object.hasOwn(ACTION_TYPE_IRI, action)) {
+    throw new TypeError(`@jeswr/solid-a2a: unknown intent action ${JSON.stringify(action)}`);
+  }
+  return ACTION_TYPE_IRI[action as IntentAction];
+}
+
+/** The acl: IRI for an ACL mode name; throws a `TypeError` for anything else. */
+export function aclModeIriOf(mode: unknown): string {
+  if (typeof mode !== "string" || !Object.hasOwn(ACL_MODE_IRI, mode)) {
+    throw new TypeError(`@jeswr/solid-a2a: unknown ACL mode ${JSON.stringify(mode)}`);
+  }
+  return ACL_MODE_IRI[mode as AclMode];
+}

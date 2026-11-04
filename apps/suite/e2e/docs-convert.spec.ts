@@ -11,7 +11,7 @@ async function audit(page: Page) {
   ).toEqual([]);
 }
 async function downloadMenu(page: Page) {
-  await page.getByRole("button", { name: "File menu", exact: true }).click();
+  await page.getByRole("menuitem", { name: "File", exact: true }).click();
   const trigger = page.getByRole("menuitem", { name: "Download", exact: true });
   // Keyboard opens the submenu reliably on touch and desktop project sizes.
   await trigger.focus();
@@ -119,7 +119,7 @@ test("Markdown round trips structure and front matter and exports unsynced local
   expect(md).toContain("- [x] Ready");
   expect(md).toContain("Local unsynced words");
   await context.setOffline(false);
-  await page.getByRole("button", { name: "File menu", exact: true }).click();
+  await page.getByRole("menuitem", { name: "File", exact: true }).click();
   await page.getByRole("menuitem", { name: "Import to replace…", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "Import to replace document", exact: true });
   await audit(page);
@@ -164,5 +164,61 @@ test("Print / Save as PDF offers help and the print stylesheet hides the shell",
   }));
   expect(widths.page).toBeCloseTo(widths.parent ?? 0, 0);
   await page.emulateMedia({ media: "screen" });
+  await audit(page);
+});
+
+test("Georgia 14pt red text persists across reload and downloads as native Word formatting", async ({
+  page,
+}) => {
+  await page.goto("/docs/new");
+  const title = page.getByRole("textbox", { name: "Document title", exact: true });
+  await title.fill("Styled document");
+  await title.press("Enter");
+  const body = page.getByRole("textbox", { name: "Document body", exact: true });
+  await body.fill("Portable styled words");
+  await body.press("Control+a");
+  const font = page.getByRole("combobox", { name: "Font family", exact: true });
+  if (await font.isVisible()) await font.selectOption({ label: "Georgia" });
+  else {
+    await page.getByRole("button", { name: "More formatting", exact: true }).click();
+    const family = page.getByRole("menuitem", { name: "Font family", exact: true });
+    await family.focus();
+    await family.press("ArrowRight");
+    await page.getByRole("menuitem", { name: "Georgia", exact: true }).click();
+  }
+  const size = page.getByRole("spinbutton", { name: "Font size in points", exact: true });
+  if (await size.isVisible()) {
+    await size.fill("14");
+    await size.press("Enter");
+  } else {
+    await page.getByRole("button", { name: "More formatting", exact: true }).click();
+    const sizes = page.getByRole("menuitem", { name: "Font size", exact: true });
+    await sizes.focus();
+    await sizes.press("ArrowRight");
+    await page.getByRole("menuitem", { name: "14 pt", exact: true }).click();
+  }
+  const colour = page.getByRole("button", { name: "Text colour", exact: true });
+  if (await colour.isVisible()) await colour.click();
+  else {
+    await page.getByRole("button", { name: "More formatting", exact: true }).click();
+    await page.getByRole("menuitem", { name: "Text colour", exact: true }).click();
+  }
+  await page.getByRole("gridcell", { name: "Red", exact: true }).click();
+  await expect(page.getByRole("status").filter({ hasText: "Saved to your pod" })).toBeVisible({
+    timeout: 15_000,
+  });
+  await expect(page).toHaveURL(/\/docs\/d\//);
+  await page.reload();
+  const run = body.locator("span").filter({ hasText: "Portable styled words" }).first();
+  await expect(run).toHaveCSS("font-family", "Georgia, serif");
+  await expect(run).toHaveCSS("font-size", "18.6667px");
+  await expect(run).toHaveCSS("color", `rgb${"("}192, 0, 0)`);
+  const result = await readDownload(page, "Microsoft Word (.docx)");
+  const zip = await openArrayBuffer(Uint8Array.from(result.bytes).buffer);
+  const xml = await zip.read("word/document.xml", "utf-8");
+  for (const property of ['w:ascii="Georgia"', 'w:sz w:val="28"', 'w:color w:val="C00000"'])
+    expect(xml).toContain(property);
+  const html = await readDownload(page, "Web page (.html)");
+  expect(html.bytes.toString("utf-8")).toContain("font-family: Georgia, serif");
   await audit(page);
 });

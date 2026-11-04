@@ -19,6 +19,7 @@ import { type CalendarEvent, expandEvent, validateEvent } from "../lib/model";
 import { eventDocument } from "./editing";
 import { createEventOutbox } from "./outbox";
 import {
+  compareOccurrences,
   createCalendar,
   discoverCalendars,
   type EventWrite,
@@ -59,6 +60,8 @@ interface CalendarContextValue {
   writes: EventWrite[];
   syncStatus: string;
   mutate: (write: EventWrite, requireConfirmation?: boolean) => Promise<void>;
+  /** Show a write's result without sending it; the returned function removes the preview. */
+  preview: (write: EventWrite) => () => void;
   resolveEventEtag: (
     url: string,
     etag: string | null,
@@ -86,6 +89,11 @@ function SessionCalendarProvider({
   const cache = useMemo(() => new Map<string, Promise<RangeResult>>(), []);
   const [writes, setWrites] = useState<EventWrite[]>([]);
   const [queuedWrites, setQueuedWrites] = useState<EventWrite[]>([]);
+  const [previews, setPreviews] = useState<EventWrite[]>([]);
+  const preview = useCallback((write: EventWrite) => {
+    setPreviews((current) => [...current, write]);
+    return () => setPreviews((current) => current.filter((item) => item !== write));
+  }, []);
   const [syncStatus, setSyncStatus] = useState("");
   const calendarRef = useRef(calendars);
   calendarRef.current = calendars;
@@ -136,7 +144,11 @@ function SessionCalendarProvider({
     let live = true;
     discoverCalendars(session).then(
       (result) => live && setCalendars({ status: "ready", ...result }),
-      (error: unknown) => live && setCalendars({ status: "error", error }),
+      (error: unknown) =>
+        live &&
+        setCalendars((current) =>
+          current.status === "ready" && unreachable(error) ? current : { status: "error", error },
+        ),
     );
     return () => {
       live = false;
@@ -246,7 +258,11 @@ function SessionCalendarProvider({
     },
     [selected, closeEvent],
   );
-  const visibleWrites = useMemo(() => [...writes, ...queuedWrites], [writes, queuedWrites]);
+  // Previews go first so real writes for the same event take precedence once they exist.
+  const visibleWrites = useMemo(
+    () => [...previews, ...writes, ...queuedWrites],
+    [previews, writes, queuedWrites],
+  );
   return (
     <Context
       value={{
@@ -260,6 +276,7 @@ function SessionCalendarProvider({
         writes: visibleWrites,
         syncStatus,
         mutate: outbox.save,
+        preview,
         resolveEventEtag: outbox.resolve,
         create,
         selected,
@@ -274,8 +291,44 @@ function SessionCalendarProvider({
     </Context>
   );
 }
+/**
+ * A refresh that fails because the pod is unreachable (offline) keeps what is already on
+ * screen; queued writes still show through the overlay and sync once the network returns.
+ */
+function unreachable(error: unknown): boolean {
+  if (typeof navigator !== "undefined" && !navigator.onLine) return true;
+  // fetch() rejects with a TypeError on network failure; RDF loaders wrap it as the cause.
+  for (let cause = error, depth = 0; cause && depth < 4; depth++) {
+    if (cause instanceof TypeError) return true;
+    cause = (cause as { cause?: unknown }).cause;
+  }
+  return false;
+}
+/** On a refresh, a calendar the pod couldn't serve keeps its loaded events instead of emptying. */
+function keepUnreachable(previous: RangeResult, next: RangeResult): RangeResult {
+  const failed = new Set(
+    next.warnings
+      .filter(
+        (warning) =>
+          unreachable(warning.error) &&
+          !previous.warnings.some((old) => old.calendarUrl === warning.calendarUrl),
+      )
+      .map((warning) => warning.calendarUrl),
+  );
+  if (!failed.size) return next;
+  return {
+    ...next,
+    events: [
+      ...next.events,
+      ...previous.events.filter((event) => failed.has(event.calendar.url)),
+    ].sort(compareOccurrences),
+    warnings: next.warnings.filter((warning) => !failed.has(warning.calendarUrl)),
+  };
+}
+
 export function CalendarProvider({ children }: { children: ReactNode }) {
   const state = usePodSessionState();
+  if (state.status === "signed-out") return <p role="status">Sign in to open your Calendar</p>;
   if (state.status === "loading") return <LoadingSkeleton preset="grid" label="Opening Calendar" />;
   if (state.status === "error")
     return <ErrorState error="unreachable" actions={{ retry: () => location.reload() }} />;
@@ -339,7 +392,17 @@ export function useEventsInRange(
       cache.set(key, request);
     }
     request.then(
-      (result) => live && setSnapshot({ key, state: { status: "ready", ...result } }),
+      (result) =>
+        live &&
+        setSnapshot((current) => ({
+          key,
+          state: {
+            status: "ready",
+            ...(current.key === key && current.state.status === "ready"
+              ? keepUnreachable(current.state, result)
+              : result),
+          },
+        })),
       (error: unknown) => {
         cache.delete(key);
         if (live) setSnapshot({ key, state: { status: "error", error } });
@@ -394,10 +457,11 @@ export function useEventsInRange(
   return { ...state, reload };
 }
 export function useEventMutations() {
-  const { mutate, resolveEventEtag } = useCalendarState();
+  const { mutate, preview, resolveEventEtag } = useCalendarState();
   return useMemo(
     () => ({
       resolve: resolveEventEtag,
+      preview,
       create: (url: string, data: CalendarEvent, requireConfirmation?: boolean) =>
         mutate({ kind: "create", url, data }, requireConfirmation),
       update: (url: string, data: CalendarEvent, etag: string, requireConfirmation?: boolean) =>
@@ -405,7 +469,7 @@ export function useEventMutations() {
       delete: (url: string, etag: string, requireConfirmation?: boolean) =>
         mutate({ kind: "delete", url, etag }, requireConfirmation),
     }),
-    [mutate, resolveEventEtag],
+    [mutate, preview, resolveEventEtag],
   );
 }
 export type { CalendarInfo, CalendarView };
