@@ -720,7 +720,7 @@ export function GET(request) {
   it("checks the actual manifest independent of the invoking directory", () => {
     const result = runNode([guard], { cwd: tmpdir() });
     expect(result.status).toBe(0);
-    expect(result.stdout).toContain("16 deployments checked");
+    expect(result.stdout).toContain("15 deployments checked");
     expect(result.stderr).toBe("");
   });
 });
@@ -733,12 +733,6 @@ describe("Vite app Vercel routes", () => {
       const vite = readFileSync(join(checkout, app.rootDirectory, "vite.config.ts"), "utf8");
       if (app.rootDirectory === "apps/access-manager") {
         expect(vite).not.toMatch(/\bbase\s*:/);
-        return;
-      }
-      if (app.rootDirectory === "apps/idea-sandbox") {
-        expect(vite).toContain(
-          "basePath(process.env.CLIENT_BASE_PATH || process.env.APP_BASE_PATH)",
-        );
         return;
       }
       if (app.rootDirectory === "apps/pod-migrator") {
