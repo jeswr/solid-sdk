@@ -1,9 +1,10 @@
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 
 import { readFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { Fragment } from "react";
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, expect, it, onTestFinished, vi } from "vitest";
 import { act, click, deferred, h, key, mount } from "./drive-ui-dom";
 import { must } from "./money/helpers";
 
@@ -935,6 +936,12 @@ it.each([
 });
 
 it("routes initialization Retry through the resumable sample writer", async () => {
+  // The sample spans the 90 days before "now" and adds extra rows on the 1st and 12th, so its
+  // size depends on the date; pin it (main went red on 10 Nov with 64 rows).
+  vi.useFakeTimers({ toFake: ["Date"], now: new Date("2026-11-01T12:00:00Z") });
+  onTestFinished(() => {
+    vi.useRealTimers();
+  });
   const pod = createDemoPod({ root: "https://retry-sample.example/", latency: 0 });
   let fail = true;
   const session: PodSession = {
