@@ -692,18 +692,16 @@ export function TrashView() {
                       })}
                     </td>
                     <td className="drv-cell-menu">
-                      {menu.map((action) =>
-                        action === "separator" ? null : (
-                          <IconButton
-                            key={action.id}
-                            label={`${action.label}: ${entry.name}`}
-                            variant="ghost"
-                            onClick={action.onSelect}
-                          >
-                            <action.icon aria-hidden="true" size={16} />
-                          </IconButton>
-                        ),
-                      )}
+                      {menu.map((action) => (
+                        <IconButton
+                          key={action.id}
+                          label={`${action.label}: ${entry.name}`}
+                          variant="ghost"
+                          onClick={action.onSelect}
+                        >
+                          <action.icon aria-hidden="true" size={16} />
+                        </IconButton>
+                      ))}
                     </td>
                   </tr>
                 );

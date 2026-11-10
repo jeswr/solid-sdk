@@ -81,7 +81,7 @@ import { useDriveListingFocus } from "../state/listing-focus";
 import { OwnerLabel } from "../state/ownership";
 import { errorMessage, focusDriveListing, useDriveActions, useDriveUi } from "../state/ui";
 import { ItemIcon } from "./item-icon";
-import { ContextEntries, DropdownEntries, useItemMenu } from "./item-menu";
+import { ContextEntries, DropdownEntries, type MenuItemEntry, useItemMenu } from "./item-menu";
 import { ProtectionBanner } from "./protection-banner";
 
 export type BrowserItem = DriveItem & { readonly folder?: string; readonly openedAt?: Date };
@@ -1075,8 +1075,10 @@ function SelectionBar({
     (entry) => entry === "separator" || entry.id !== "open",
   );
   const primary = entries.filter(
-    (entry) =>
-      entry !== "separator" && ["share", "download", "move", "star", "trash"].includes(entry.id),
+    (entry): entry is MenuItemEntry =>
+      entry !== "separator" &&
+      !("submenu" in entry) &&
+      ["share", "download", "move", "star", "trash"].includes(entry.id),
   );
   return (
     <div
@@ -1093,19 +1095,17 @@ function SelectionBar({
         {selected.length} selected
       </span>
       <div className="drv-toolbar-end">
-        {primary.map((entry) =>
-          entry === "separator" ? null : (
-            <IconButton
-              key={entry.id}
-              label={entry.label}
-              variant="ghost"
-              disabled={entry.disabled ?? false}
-              onClick={entry.onSelect}
-            >
-              <entry.icon aria-hidden="true" size={18} />
-            </IconButton>
-          ),
-        )}
+        {primary.map((entry) => (
+          <IconButton
+            key={entry.id}
+            label={entry.label}
+            variant="ghost"
+            disabled={entry.disabled ?? false}
+            onClick={entry.onSelect}
+          >
+            <entry.icon aria-hidden="true" size={18} />
+          </IconButton>
+        ))}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <IconButton label="More actions" variant="ghost">

@@ -44,10 +44,10 @@ function Probe({ items }: { items: DriveItem[] }) {
   ui = useDriveUi();
   const menu = useItemMenu(useDriveActions(), items.slice(0, 1), items);
   details = menu.flatMap((entry) =>
-    entry !== "separator" && entry.id === "details" ? [entry.onSelect] : [],
+    entry !== "separator" && "onSelect" in entry && entry.id === "details" ? [entry.onSelect] : [],
   )[0];
   share = menu.flatMap((entry) =>
-    entry !== "separator" && entry.id === "share" ? [entry.onSelect] : [],
+    entry !== "separator" && "onSelect" in entry && entry.id === "share" ? [entry.onSelect] : [],
   )[0];
   return ui.detailsOpen ? h(DetailsPane, { onClose: () => ui.setDetailsOpen(false) }) : null;
 }
