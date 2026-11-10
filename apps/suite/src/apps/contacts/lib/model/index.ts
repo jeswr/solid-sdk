@@ -5,6 +5,7 @@ export {
   buildGroup,
   buildPerson,
   Contact,
+  type ContactAddress,
   ContactBook,
   type ContactData,
   ContactGroup,

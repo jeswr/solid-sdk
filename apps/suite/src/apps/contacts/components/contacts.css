@@ -384,6 +384,49 @@
 .con-point-row .con-field {
   flex: 1;
 }
+/* AUTHORED-BY Claude Opus 5.5 */
+.con-address-list {
+  display: grid;
+  gap: 16px;
+}
+.con-form .con-address {
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+}
+.con-form .con-address:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+.con-address-grid {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr));
+}
+.con-select {
+  height: 36px;
+  border: 1px solid var(--input);
+  border-radius: 6px;
+  background: var(--background);
+  color: var(--foreground);
+  padding: 0 8px;
+  font: inherit;
+}
+.con-select:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+.con-contact-points a:has(.con-address-text) {
+  align-items: flex-start;
+}
+.con-address-kind {
+  display: block;
+  color: var(--muted-foreground);
+  font-size: 13px;
+}
+.con-address-text {
+  display: block;
+  white-space: pre-line;
+}
 .con-form-actions {
   display: flex;
   flex-wrap: wrap;
