@@ -12,10 +12,13 @@
 - `useGroups()` returns group snapshots. Group IDs and contact IDs include `#this`.
 - `useContactMutations()` returns the controller. `create(data)` resolves to the new contact ID;
   `update(id, patch)` preserves omitted fields and clears optional fields explicitly set to
-  `undefined`. `delete(id)` removes the contact and memberships and returns a serialized
+  `undefined`. `delete(id)` moves the contact to the trash (below) and returns a serialized
   `DeleteToken` captured inside the write queue, after earlier edits settle. `undo(token)`
-  restores that confirmed RDF and its memberships. `restore(snapshot, labelIds)`
-  re-creates its original document and surviving memberships.
+  restores it from the trash (or, for a token journaled before trash existed, re-creates that
+  confirmed RDF and its memberships). `restore(snapshot, labelIds)` re-creates its original
+  document and surviving memberships.
+- Trash: `data.trash` lists trashed contacts newest first (`data.trashIncomplete` when some could
+  not be read). `restoreTrash(url)`, `purge(urls)` (delete for ever) and `emptyTrash()`.
 - Labels use `createLabel(name)`, `renameLabel(id, name)`, `deleteLabel(id)` and
   `setLabel(contactId, labelId, add)`. `migrate()` returns `{ moved, failed }`.
 - `useStarred()` supplies the WebID-scoped `stars` set and `toggle(id)`.
@@ -62,6 +65,28 @@ creation date and unchosen name/organisation/note/WebID by design, and also cont
 other properties (addresses, birthdays, other apps' RDF) and other subjects. `mergeLosses` finds the
 latter, like migration's lossless check, and the review lists them before the merge. There is no
 Undo; the review asks for confirmation instead.
+
+## Trash
+
+The app always uses its own trash: the suite session exposes no storage capability API yet, so
+there is no `caps.trash` to defer to (07-parity-backlog, "Capability behaviour"). When one exists,
+`delete` should use the storage's trash instead. Each trashed contact is one document in
+`<book container>/.trash/` (`lib/model/trash.ts`): the person's RDF unchanged, still about its
+original IRIs, plus a `prov:Entity` record about the trash document itself with
+`prov:wasDerivedFrom` (original document), `prov:invalidatedAtTime`, `prov:wasAttributedTo` and
+one `dct:isPartOf` per former label — the PROV-O / Dublin Core terms Drive's trash index uses.
+
+A delete is a journaled `delete` intent with a `trash` copy: the copy is created first
+(`If-None-Match: *`, adopting only an identical document on replay), then labels, index entry and
+person are removed as before. If the person survives a failure, the rollback also discards the
+copy while it is unchanged. A restore is a journaled `restore` intent whose `source` is the trash
+document: it re-creates the person at its original URL (`If-None-Match: *`; an occupied URL is a
+conflict and keeps the trash copy), relinks the index and the labels that still exist, then
+deletes the trash document (`If-Match`). Delete for ever and Empty trash are single conditional
+DELETEs, so they need no journal. Every load lists the container and purges items older than 30
+days; a failed purge keeps the item listed and retries next load. Trash read failures never block
+the address book. Trashed contacts are absent from the people index, so they never appear in the
+list, search, labels or duplicates.
 
 Book creation resumes completed empty indexes. A missing private Type Index is created and linked
 through preferences using conditional writes; unreadable documents are never treated as missing.

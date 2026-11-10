@@ -121,12 +121,16 @@ async function vercelOk(path, options) {
   return result.body;
 }
 
-// Idempotent: only projects that are still linked are touched.
+// Idempotent: only projects that are still linked are touched. A Pages-only app with no
+// Vercel project (404) has no Git link to remove.
 async function ensureUnlinked(root) {
   const apps = JSON.parse(readFileSync(join(root, "scripts/vercel-apps.json"), "utf8"));
   for (const { project } of apps) {
     const path = `/v9/projects/${encodeURIComponent(project)}`;
-    const details = await vercelOk(path);
+    const result = await vercel(path);
+    if (result.status === 404) continue;
+    if (!result.ok) throw new Error(`Vercel GET ${path} returned HTTP ${result.status}`);
+    const details = result.body;
     if (!details?.link) continue;
     await vercelOk(`${path}/link`, { method: "DELETE" });
     console.log(`${project}: disconnected from Git`);

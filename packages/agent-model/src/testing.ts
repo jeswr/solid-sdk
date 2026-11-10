@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 /** Synthetic pod fixtures for consumers; no credentials, handles or network operations. */
 import type { PodRecord, RecordType } from "./records.js";
 
@@ -107,6 +108,8 @@ export const exampleRecords = {
     type: "control-statement",
     id: id("control"),
     kind: "SetBindingState",
+    target: id("account"),
+    restrictions: { read: true },
     binding: "direct",
     bindingState: "disabled",
     attributedTo: "https://owner.example/#me",

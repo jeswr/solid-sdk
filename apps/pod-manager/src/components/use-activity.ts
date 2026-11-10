@@ -9,15 +9,15 @@ import type { AsyncState } from "@/components/use-pod-data";
 
 /**
  * The "recently changed in your pod" feed: discover categories, list each one
- * that has data, then flatten to the newest-first entries. Production paths pass
- * NO `fetch` (auth-patched global runs). Re-runs when the active WebID changes.
+ * that has data, then flatten to the newest-first entries. Uses the session
+ * transport explicitly and re-runs when the active WebID changes.
  *
  * @param limit - max entries to return (Home shows a few, Activity shows more).
  */
 export function useRecentActivity(limit = 8): AsyncState<ActivityEntry[]> & {
   reload: () => void;
 } {
-  const { status } = useSession();
+  const { status, podFetch } = useSession();
   const summaries = useCategorySummaries();
   const [state, setState] = useState<AsyncState<ActivityEntry[]>>({ loading: true });
   const [nonce, setNonce] = useState(0);
@@ -47,7 +47,7 @@ export function useRecentActivity(limit = 8): AsyncState<ActivityEntry[]> & {
       const settled = await Promise.allSettled(
         withData.map(async (s): Promise<CategoryItems> => ({
           category: s.category,
-          items: await listCategoryItems(s),
+          items: await listCategoryItems(s, podFetch),
         })),
       );
       const perCategory = settled
@@ -67,7 +67,7 @@ export function useRecentActivity(limit = 8): AsyncState<ActivityEntry[]> & {
     };
     // summaries.data identity changes each load; gate on its serialised shape.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [status, summaries.loading, summaries.error, nonce, limit]);
+  }, [status, summaries.loading, summaries.error, nonce, limit, podFetch]);
 
   return { ...state, reload };
 }

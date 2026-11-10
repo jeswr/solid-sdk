@@ -1,11 +1,11 @@
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex GPT-6.1-Sol
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import { requirePodScopedUrl } from "./auth.js";
 import { fetchDocument } from "./fetch.js";
-import { podOutputError } from "./output.js";
+import { createMemoryTools, type MemoryClientInfo } from "./memory-tools.js";
+import { createPersonalTools } from "./personal-tools.js";
 import {
   listContainer,
   RDF_MEDIA_TYPES,
@@ -15,64 +15,16 @@ import {
   writeResource,
 } from "./pod.js";
 import type { PodPort } from "./pod-port.js";
+import { defineTool, type PodTool, toolText } from "./tool.js";
 
-/** A registered tool, including its schema, read-only annotation and guarded handler. */
-export interface PodTool {
-  /** Canonical MCP tool name. */
-  name: string;
-  /** Compatibility names retained for the 0.2 release. */
-  aliases: readonly string[];
-  /** Human-readable tool title. */
-  title: string;
-  /** Tool behavior and restrictions. */
-  description: string;
-  /** Zod object schema, emitted as JSON Schema by the MCP SDK. */
-  inputSchema: z.ZodObject;
-  /** Whether the handler is non-mutating. */
-  readOnly: boolean;
-  /** Validate and execute, returning tool errors instead of throwing. */
-  handler(input: unknown): Promise<CallToolResult>;
-}
-
-/** A plain-text tool result. */
-export function toolText(text: string): CallToolResult {
-  return { content: [{ type: "text", text }] };
-}
-
-function toolError(error: unknown): CallToolResult {
-  return {
-    isError: true,
-    content: [{ type: "text", text: podOutputError(error).message }],
-  };
-}
-
-/** Wrap a handler with schema validation, read-only enforcement and sanitised errors. */
-export function defineTool<Shape extends z.ZodRawShape>(
-  definition: Omit<PodTool, "inputSchema" | "handler"> & {
-    inputSchema: z.ZodObject<Shape>;
-    handler(input: z.output<z.ZodObject<Shape>>): Promise<CallToolResult>;
-  },
-  readOnly: boolean,
-): PodTool {
-  return {
-    ...definition,
-    async handler(input) {
-      if (!definition.readOnly && readOnly) {
-        return toolError(
-          "write disabled: server is read-only (set readOnly:false to enable writes).",
-        );
-      }
-      try {
-        return await definition.handler(definition.inputSchema.parse(input));
-      } catch (error) {
-        return toolError(error);
-      }
-    },
-  };
-}
+export type { PodTool } from "./tool.js";
 
 /** Build pod tools and ChatGPT search/fetch; legacy search retains its array response. */
-export function createPodToolRegistry(pod: PodPort, readOnly = true): readonly PodTool[] {
+export function createPodToolRegistry(
+  pod: PodPort,
+  readOnly = true,
+  clientInfo?: MemoryClientInfo,
+): readonly PodTool[] {
   return [
     defineTool(
       {
@@ -81,7 +33,7 @@ export function createPodToolRegistry(pod: PodPort, readOnly = true): readonly P
         title: "Search the Solid pod",
         readOnly: true,
         description:
-          "Search by resource name, URL, or RDF literals, including memory notes and chat titles. Returns {results:[{id,title,url}]} within bounded depth, resources, and time.",
+          "Search by resource name, URL, or RDF literals, including chat titles. Personal memory and audit storage is excluded. Returns {results:[{id,title,url}]} within bounded depth, resources, and time.",
         inputSchema: z.object({ query: z.string().describe("Case-insensitive search term.") }),
         async handler({ query }) {
           const matches = await search(pod, query);
@@ -181,6 +133,8 @@ export function createPodToolRegistry(pod: PodPort, readOnly = true): readonly P
       },
       readOnly,
     ),
+    ...createMemoryTools(pod, readOnly, clientInfo),
+    ...createPersonalTools(pod, readOnly, clientInfo),
   ];
 }
 

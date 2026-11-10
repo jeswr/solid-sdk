@@ -485,8 +485,12 @@ describe("Contacts rendered behavior with the existing Drive DOM harness", () =>
     await settle(() =>
       expect(view.host.querySelector(".con-list-heading")?.textContent).toContain("39 contacts"),
     );
-    await settle(() => expect(toast).toHaveBeenCalledWith("Contact deleted", expect.anything()));
-    const options = vi.mocked(toast).mock.calls.find((call) => call[0] === "Contact deleted")?.[1];
+    await settle(() =>
+      expect(toast).toHaveBeenCalledWith("Contact moved to Trash", expect.anything()),
+    );
+    const options = vi
+      .mocked(toast)
+      .mock.calls.find((call) => call[0] === "Contact moved to Trash")?.[1];
     const undo = options?.action;
     if (!undo || typeof undo !== "object" || !("onClick" in undo))
       throw new Error("Missing Undo action");

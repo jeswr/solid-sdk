@@ -6,11 +6,13 @@ import {
   createBitstringStatusResolver,
   createStatusBitstring,
   credentialToRdf,
+  DataIntegritySuite,
   digestQuads,
   issue,
   type JsonValue,
   type KeyPair,
   setStatusBit,
+  statusListCredentialToTurtle,
   type VerifiableCredential,
 } from "@jeswr/solid-vc";
 import { beforeAll, expect, it } from "vitest";
@@ -27,6 +29,7 @@ import { evaluateIntent } from "../src/policy.js";
 import { AGENT, LIMIT_OPERANDS, ODRL } from "../src/types.js";
 import {
   ACTOR,
+  approvalKey,
   clock,
   edKey,
   ID,
@@ -528,4 +531,154 @@ it("verifies actual signed bitstring status lists and refuses revoked or unreada
     fetch: async () => new Response("unreadable", { status: 503 }),
   });
   expect(await createVcMandateVerifier({ ...options, resolveStatus }).load()).toBeUndefined();
+});
+
+it("issues and verifies non-extractable P-256 mandates and rejects revocation through an ECDSA status list", async () => {
+  const p256 = await approvalKey();
+  expect(p256.privateKey.extractable).toBe(false);
+  const signed = await issueMandate(
+    mandate(),
+    p256,
+    {
+      statusListCredential: STATUS,
+      statusListIndex: "0",
+    },
+    { cryptosuite: "ecdsa-rdfc-2019" },
+  );
+  const parsed = await parseMandateCredential(await mandateToTurtle(signed));
+  expect(parsed).toBeDefined();
+  const resolver = await profileResolver(p256);
+  for (const revoked of [false, true]) {
+    const bits = createStatusBitstring();
+    setStatusBit(bits, 0, revoked);
+    const list = await issue({
+      credential: await buildBitstringStatusListCredential({
+        id: STATUS,
+        issuer: OWNER,
+        statusPurpose: "revocation",
+        bits,
+        validFrom: NOW.toISOString(),
+        validUntil: "2026-11-25T00:00:00Z",
+      }),
+      key: p256,
+      suite: new DataIntegritySuite("ecdsa-rdfc-2019"),
+      options: { created: NOW },
+    });
+    for (const transport of [JSON.stringify(list), await statusListCredentialToTurtle(list)]) {
+      const resolveStatus = createBitstringStatusResolver({
+        ...resolver,
+        now: NOW,
+        fetch: async () => new Response(transport),
+      });
+      for (const read of [async () => signed, async () => parsed]) {
+        const loaded = await createVcMandateVerifier({
+          ...options,
+          read,
+          webIdKeyResolver: resolver,
+          resolveStatus,
+        }).load();
+        if (revoked) expect(loaded).toBeUndefined();
+        else {
+          expect(loaded?.id).toBe(ID);
+          expect((await evaluateIntent(loaded, intent())).decision).toBe("confirm-required");
+        }
+      }
+    }
+  }
+});
+it("rejects a third cryptosuite and more than one proof", async () => {
+  const proof = Array.isArray(credential.proof) ? credential.proof[0] : credential.proof;
+  for (const proofs of [[{ ...proof, cryptosuite: "third-suite" }], [proof, proof], [undefined]]) {
+    const vc = { ...credential, proof: proofs } as VerifiableCredential;
+    expect(
+      await createVcMandateVerifier({ ...options, read: async () => vc }).load(),
+    ).toBeUndefined();
+  }
+});
+it("permits remembering only when the owner explicitly grants that action", async () => {
+  const m = mandate();
+  const action = `${AGENT}Remember`;
+  expect((await evaluateIntent(m, intent({ action }))).decision).toBe("confirm-required");
+  expect(
+    await evaluateIntent(
+      { ...m, autonomous: { ...m.autonomous, permissions: [{ type: "permission", action }] } },
+      intent({ action }),
+    ),
+  ).toEqual({ decision: "permit", reason: "autonomous" });
+});
+
+it("preserves registry HMAC hashes verbatim with or without the optional sha256 prefix", () => {
+  for (const hash of ["a".repeat(64), `sha256:${"a".repeat(64)}`]) {
+    const built = defaultMandate({
+      id: ID,
+      ownerWebId: OWNER,
+      agentWebId: ACTOR,
+      recipientHashes: [hash],
+      now: NOW,
+    });
+    expect(built.withApproval.permissions?.[0]?.constraints?.[0]?.rightOperand).toEqual([hash]);
+  }
+});
+// AUTHORED-BY Claude Opus 5.5
+it("signs the spend-limit currency into the agreement and returns it from every verification path", async () => {
+  const m = {
+    ...mandate(),
+    limits: [limitConstraint(`${AGENT}spendPerDay`, 0, "hard")],
+    currency: "GBP",
+  };
+  const vc = await issueMandate(m, key, { statusListCredential: STATUS, statusListIndex: "3" });
+  const verified = await createVcMandateVerifier({ ...options, read: async () => vc }).load();
+  expect(verified?.currency).toBe("GBP");
+  const parsed = await parseMandateCredential(await mandateToTurtle(vc));
+  if (!parsed) throw new Error("Expected the TriG mandate to parse");
+  expect(await digestQuads(credentialToRdf(parsed))).toBe(await digestQuads(credentialToRdf(vc)));
+  expect(
+    (await createVcMandateVerifier({ ...options, read: async () => parsed }).load())?.currency,
+  ).toBe("GBP");
+  // Without a signed currency the verified mandate carries none (spend limits then fail closed).
+  expect("currency" in ((await createVcMandateVerifier(options).load()) ?? {})).toBe(false);
+  // A changed currency breaks the signature; a malformed one is never issued.
+  const agreement = (vc.credentialSubject as Record<string, JsonValue>)[`${AGENT}agreement`];
+  const tampered = {
+    ...vc,
+    credentialSubject: {
+      ...(vc.credentialSubject as Record<string, JsonValue>),
+      [`${AGENT}agreement`]: {
+        ...(agreement as Record<string, JsonValue>),
+        "https://schema.org/currency": "USD",
+      },
+    },
+  } as VerifiableCredential;
+  expect(await createVcMandateVerifier({ ...options, read: async () => tampered }).load()).toBe(
+    undefined,
+  );
+  // A malformed code signed by other software is refused on both entry paths.
+  const unsigned = mandateCredential(
+    { ...m, currency: undefined },
+    { statusListCredential: STATUS, statusListIndex: "4" },
+  );
+  const lower = await issue({
+    credential: {
+      ...unsigned,
+      credentialSubject: {
+        ...(unsigned.credentialSubject as Record<string, JsonValue>),
+        [`${AGENT}agreement`]: {
+          ...((unsigned.credentialSubject as Record<string, JsonValue>)[
+            `${AGENT}agreement`
+          ] as Record<string, JsonValue>),
+          "https://schema.org/currency": "gbp",
+        },
+      },
+    },
+    key,
+    options: { created: new Date(m.validFrom) },
+  });
+  expect(await createVcMandateVerifier({ ...options, read: async () => lower }).load()).toBe(
+    undefined,
+  );
+  expect(await parseMandateCredential(await mandateToTurtle(lower))).toBeUndefined();
+  for (const currency of ["gbp", "POUND", ""])
+    expect(() =>
+      mandateCredential({ ...m, currency }, { statusListCredential: STATUS, statusListIndex: "0" }),
+    ).toThrow("ISO 4217");
 });

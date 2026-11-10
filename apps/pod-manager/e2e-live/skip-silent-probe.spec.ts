@@ -95,9 +95,8 @@ test("explicit sign-in: popup hop trace to the IdP login page", async ({
   });
 
   await page.goto(APP);
-  await page.getByRole("button", { name: "Sign in" }).click();
-  await page.fill("#webid", WEBID);
-  await page.getByRole("button", { name: "Sign in" }).click();
+  await page.getByRole("textbox", { name: "WebID", exact: true }).fill(WEBID);
+  await page.getByRole("button", { name: "Continue", exact: true }).click();
 
   // Wait for the IdP's interactive login form to be on screen in the popup.
   let loginPage = null;

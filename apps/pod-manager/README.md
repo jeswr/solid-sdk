@@ -1,5 +1,20 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
+## Sign-in
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+Pod Manager uses `@jeswr/pod-auth` and the shared `SignInCard`. Choose a remembered account,
+enter a WebID or provider address, or pick a provider. `NEXT_PUBLIC_HOME_IDP` and
+`NEXT_PUBLIC_HOME_IDP_NAME` configure the first provider; `NEXT_PUBLIC_KNOWN_PROVIDERS` optionally
+supplies a comma-separated provider list. Existing `?webid=` and `#autologin/` links suggest an
+account and require a click.
+
+The core owns refresh-based restore and logout. Every Pod operation receives `auth.fetch`
+explicitly; global fetch stays public. Source imports keep a separate pristine transport.
+The HTTPS `/clientid.jsonld` route registers `/callback.html`. Dynamic registration and HTTP
+are allowed only in development on loopback, so use `pnpm dev` for local HTTP sign-in.
+Old app-local credentials are cleared on first startup after migration.
+
 ## Integrations (Connect sources)
 
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->

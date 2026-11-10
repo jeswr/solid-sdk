@@ -67,14 +67,14 @@ async function driveLoop(page: Page, context: BrowserContext, label: string, max
   const deadline = Date.now() + maxMs;
   while (Date.now() < deadline) {
     // success?
-    const active = await page.evaluate(() => localStorage.getItem("solid-pod-manager:active-webid")).catch(() => null);
+    const active = await page.getByRole("heading", { name: /welcome back/i }).isVisible().catch(() => false);
     const status = await page.evaluate(() => (document.querySelector('[role="alert"]') as HTMLElement)?.innerText ?? null).catch(() => null);
     if (status && !seen.has("err:" + status)) {
       seen.add("err:" + status);
       hop("app-error", `${label}: ${status}`);
     }
     if (active) {
-      hop("logged-in", `${label}: active-webid=${active}`);
+      hop("logged-in", `${label}: authenticated Home is visible`);
       return true;
     }
 
@@ -170,10 +170,8 @@ test("first login, reload restore, authenticated read", async ({ browser }) => {
   hop("phase", "1: first login (clean context)");
   await page.goto(APP);
   hop("page", "landing loaded");
-  await page.getByRole("button", { name: "Sign in" }).click();
-  hop("user-click", "toggle 'Already have a pod? Sign in'");
-  await page.fill("#webid", WEBID);
-  await page.getByRole("button", { name: "Sign in" }).click();
+  await page.getByRole("textbox", { name: "WebID", exact: true }).fill(WEBID);
+  await page.getByRole("button", { name: "Continue", exact: true }).click();
   hop("user-click", "submitted WebID + Sign in");
 
   const ok = await driveLoop(page, context, "phase1");
@@ -186,7 +184,7 @@ test("first login, reload restore, authenticated read", async ({ browser }) => {
   await page.evaluate(() => (window as any).__diag && ((window as any).__diag.opens = []));
   await page.reload();
   // restore is silent (public profile read). Wait for the session to settle.
-  await page.waitForFunction(() => localStorage.getItem("solid-pod-manager:active-webid"), null, { timeout: 20_000 }).catch(() => {});
+  await expect(page.getByRole("heading", { name: /welcome back/i })).toBeVisible({ timeout: 20_000 });
   await page.waitForTimeout(3_000);
   await dumpOpens(page, "phase2-reload");
   hop("page", `after reload, app shows: ${(await page.locator("h1, h2").first().innerText().catch(() => "?")).trim()}`);

@@ -2,13 +2,15 @@
 import type { PodSession } from "@/lib/session/pod-session";
 
 type AccessSession = Pick<PodSession, "fetch" | "storageUrl" | "webId"> & { mode: string };
+export const supportsTasksSharing = (session: Pick<AccessSession, "mode">): boolean =>
+  session.mode === "demo";
 /** Real sessions wait for pod-access (SDK-APP-04); an unverified policy fails closed. */
 export async function ensurePrivateTasksAccess(
   session: AccessSession,
   target: string,
   owner: string,
 ): Promise<boolean> {
-  if (session.mode !== "demo" || owner !== session.webId) return false;
+  if (!supportsTasksSharing(session) || owner !== session.webId) return false;
   try {
     const root = new URL(session.storageUrl);
     let url = new URL(target);

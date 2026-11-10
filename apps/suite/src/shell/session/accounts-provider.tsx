@@ -20,6 +20,7 @@ import {
   serializeAccounts,
 } from "../lib/accounts-store";
 import { suiteEnv } from "../lib/env";
+import { clearRecentItems } from "../lib/recent-items";
 import { DemoBackend, demoAccount } from "./demo-backend";
 import { SolidBackend } from "./solid-backend";
 import {
@@ -168,6 +169,12 @@ export function AccountsProvider({
     if (!account) return;
     const backend = sessions.current.get(id) ?? backends.find((item) => item.kind === account.kind);
     sessions.current.delete(id);
+    try {
+      clearRecentItems(localStorage, id);
+    } catch {
+      /* Browser storage may be blocked. */
+    }
+    // Keep pending outbox items: signing out must not discard unsent changes.
     dispatch({ type: "remove", id });
     await backend?.signOut(account);
   };
@@ -178,6 +185,11 @@ export function AccountsProvider({
       backend: sessions.current.get(account.id) ?? backends.find((b) => b.kind === account.kind),
     }));
     sessions.current.clear();
+    try {
+      clearRecentItems(localStorage);
+    } catch {
+      /* Browser storage may be blocked. */
+    }
     dispatch({ type: "clear" });
     const results = await Promise.allSettled(
       previous.map(({ account, backend }) => backend?.signOut(account)),

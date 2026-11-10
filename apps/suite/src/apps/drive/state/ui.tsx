@@ -55,8 +55,8 @@ import {
   trashItems,
 } from "../lib/operations/operations";
 import type { TrashEntry } from "../lib/operations/trash-index";
-import { loadSharing } from "../lib/sharing/apply";
-import { sharingSummary } from "./access";
+import { loadSharing } from "../lib/sharing/adapter";
+import { accessSummary } from "./access";
 import { useDrive } from "./drive-context";
 import { pruneDeleted } from "./prefs";
 import { moveWithValidator } from "./undo";
@@ -545,7 +545,7 @@ export function useDriveActions() {
       try {
         await navigator.clipboard.writeText(link);
         const description = await loadSharing(session, item.url).then(
-          ({ state }) => sharingSummary(state, session.webId),
+          (snapshot) => accessSummary(snapshot, session.webId),
           () => "Access unknown",
         );
         toast("Link copied", { description });

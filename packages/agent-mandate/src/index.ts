@@ -1,6 +1,19 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 /** Signed mandate and approval APIs. The optional Node binary adapter is exported at ./sparq. */
-export { type Approval, type ApprovalResult, issueApproval, verifyApproval } from "./approval.js";
+export {
+  type Approval,
+  type ApprovalResult,
+  issueApproval,
+  readApprovalClaims,
+  verifyApproval,
+} from "./approval.js";
+export {
+  type ControlStatementClaims,
+  type ControlStatementResult,
+  issueControlStatement,
+  readControlClaims,
+  verifyControlStatement,
+} from "./control.js";
 export { mandateToTurtle, parseMandateCredential } from "./document.js";
 export { createLegacyMandateVerifier, type LegacyPinnedKey } from "./legacy.js";
 export {
@@ -8,6 +21,7 @@ export {
   defaultMandate,
   issueMandate,
   limitConstraint,
+  mandateCredential,
   type VcMandateOptions,
 } from "./mandate.js";
 export { evaluateIntent, solidOdrlEngine } from "./policy.js";

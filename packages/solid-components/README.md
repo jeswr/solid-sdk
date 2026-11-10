@@ -42,6 +42,60 @@ document.body.append(view);
 `solid-view` reads `rdf:type`, chooses a registered viewer, and forwards the fetch seam. Set
 `classIri` when the class is already known and the initial type probe should be skipped.
 
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+## Request access after a denied read
+
+Both the core and `./react` entries export `canRequestAccess`,
+`requestAccessAfterDenial`, and `RequestAccessUnavailableError`. An app can render
+its own button after catching a `DataController` read error:
+
+```ts
+import {
+  AccessDeniedError,
+  canRequestAccess,
+  requestAccessAfterDenial,
+} from "@jeswr/solid-components";
+
+function showReadError(error: unknown, container: HTMLElement) {
+  if (!(error instanceof AccessDeniedError) || !canRequestAccess()) return;
+  const button = document.createElement("button");
+  button.textContent = "Request access";
+  const message = document.createElement("p");
+  button.addEventListener("click", async () => {
+    button.disabled = true;
+    try {
+      const { granted } = await requestAccessAfterDenial(error, {
+        classes: ["https://schema.org/Person"],
+        modes: ["read"],
+        purpose: "Display contacts",
+        duration: "P30D",
+      });
+      message.textContent = granted ? "Access granted; you may retry the read." : "Access denied.";
+    } catch {
+      message.textContent = "Could not request access.";
+    } finally {
+      button.disabled = false;
+    }
+  });
+  container.append(button, message);
+}
+```
+
+The helper requires non-empty arrays of absolute HTTP(S) class IRIs and supported
+modes, rejecting invalid entries before calling the extension. Supported modes
+are `read`, `append`, `write` (case-insensitive, surrounding whitespace allowed),
+or their exact `http://www.w3.org/ns/auth/acl#Read`, `#Append`, `#Write` IRIs.
+Use short modes with the current extension: its parser does not yet accept the
+full IRIs. `Control` and compact `acl:Read` forms are unsupported.
+
+The request object, including optional purpose/duration, is forwarded unchanged.
+The extension validates expiry; supply an ISO-8601 duration such as `P30D` for its
+current bounded-grant policy. `{ ok, granted }` contains booleans: `granted` is
+true only for `ok: true` with non-empty grants, including partial approvals. This
+does not prove the original resource is readable. The caller controls any retry;
+the helper never reads data or calls login. Extension rejections propagate, and
+a missing callable capability rejects with `RequestAccessUnavailableError`.
+
 ## Key API
 
 - Reads: `DataController`, conditional `read`, `listContainer`, and four typed error classes.

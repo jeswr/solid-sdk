@@ -2,7 +2,7 @@
   "name": "@jeswr/app-mcp-server",
   "version": "0.1.0",
   "private": true,
-  "description": "Node composition scaffold for the W9 Solid MCP server.",
+  "description": "Node and Vercel composition for the W9 Solid MCP server.",
   "type": "module",
   "engines": {
     "node": ">=24"
@@ -12,9 +12,22 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "biome check .",
     "test": "vitest run",
+    "test:e2e": "vitest run test/css.e2e.test.ts",
     "start": "node dist/index.js"
   },
+  "dependencies": {
+    "@jeswr/fetch-rdf": "workspace:*",
+    "@jeswr/guarded-fetch": "workspace:*",
+    "@jeswr/mcp-oauth": "workspace:*",
+    "@jeswr/solid-mcp": "workspace:*",
+    "@solid/object": "^0.6.0",
+    "n3": "^2.1.1",
+    "@jeswr/pod-auth": "workspace:*"
+  },
   "devDependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@solid/community-server": "8.0.0-alpha.3",
+    "@types/n3": "^1.26.1",
     "@biomejs/biome": "^2.5.1",
     "typescript": "^6.0.3",
     "vitest": "^4.1.9",

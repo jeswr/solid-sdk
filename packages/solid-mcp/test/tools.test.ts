@@ -46,6 +46,12 @@ describe("tool registry over a fetch-free portable pod", () => {
       { name: "pod_read", aliases: ["solid_read"], readOnly: true },
       { name: "solid_search", aliases: [], readOnly: true },
       { name: "pod_write", aliases: ["solid_write"], readOnly: false },
+      { name: "memory_remember", aliases: [], readOnly: false },
+      { name: "memory_recall", aliases: [], readOnly: true },
+      { name: "memory_forget", aliases: [], readOnly: false },
+      { name: "profile_get", aliases: [], readOnly: true },
+      { name: "address_get", aliases: [], readOnly: true },
+      { name: "health_query", aliases: [], readOnly: true },
     ]);
     for (const tool of tools) expect(tool.inputSchema.toJSONSchema().type).toBe("object");
   });
