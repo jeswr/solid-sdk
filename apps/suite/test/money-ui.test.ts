@@ -961,7 +961,10 @@ it("routes initialization Retry through the resumable sample writer", async () =
   await act(() => money.refresh());
   expect(money.status).toBe("ready");
   expect(money.accounts).toHaveLength(2);
-  expect(money.transactions.length).toBeGreaterThan(65);
+  // The sample spans the 90 days before today, so its size depends on the date: 12 weekly
+  // batches of 4, plus 4 rows for each 1st and 2 for each 12th in the window. Any 90-day window
+  // holds at least two of each, so 60 is the floor (64 on 10 Nov 2026, when > 65 failed).
+  expect(money.transactions.length).toBeGreaterThanOrEqual(60);
   expect(pod.has(storeOf(session).resolve(".sample-complete"))).toBe(true);
 });
 
