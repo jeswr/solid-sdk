@@ -4,8 +4,8 @@
 /**
  * /signin (02-suite-shell §8.1) on the suite-ui SignInCard: Account ID first,
  * then provider buttons (home provider first), another provider, and the
- * accounts used on this device. Until pod-auth's provider directory lands,
- * input is mapped to a WebID hint when it names a document, else an issuer.
+ * accounts used on this device. The backend resolves addresses through pod-auth
+ * while preserving whether the person entered a WebID or a provider.
  */
 import { Button } from "@jeswr/suite-ui";
 import {
@@ -15,7 +15,7 @@ import {
   type SignInRecentAccount,
 } from "@jeswr/suite-ui/sign-in";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useSolidExtension } from "@/lib/session/extension-session";
 import { useSuiteEnvironment } from "@/shell/environment";
 import { safeNext } from "@/shell/lib/next";
@@ -53,6 +53,8 @@ function SignIn() {
   const [recent, setRecent] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState<Pending>(null);
+  const attempt = useRef<AbortController | null>(null);
+  useEffect(() => () => attempt.current?.abort(), []);
   useEffect(() => {
     try {
       setRecent(recentProviders(localStorage.getItem(RECENT_PROVIDERS_KEY)));
@@ -89,18 +91,22 @@ function SignIn() {
     }
   };
   const submit = async (hint: SignInHint, state: NonNullable<Pending>) => {
+    if (attempt.current) return;
+    const controller = new AbortController();
+    attempt.current = controller;
     setPending(state);
     setError(null);
     try {
-      await signIn(hint);
+      await signIn(hint, { signal: controller.signal });
+      const issuer = rememberedIssuer(hint);
+      if (issuer) remember(issuer);
       router.replace(safeNext(next));
     } catch (cause) {
       if (cause instanceof SignInError) {
         setError(cause.message);
-        const issuer = rememberedIssuer(hint);
-        if (cause.code === "unavailable" && issuer) remember(issuer);
       } else setError("We couldn't sign you in. Please try again.");
     } finally {
+      attempt.current = null;
       setPending(null);
     }
   };
@@ -126,6 +132,7 @@ function SignIn() {
         recentAccounts={recentAccounts}
         pending={pending}
         error={error}
+        onCancel={() => attempt.current?.abort()}
         onWebId={(input) =>
           void submit(hintForField("webid", input), { kind: "webid", key: input })
         }

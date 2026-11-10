@@ -1,15 +1,8 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import AxeBuilder from "@axe-core/playwright";
-import {
-  type BrowserContext,
-  test as base,
-  expect,
-  type Locator,
-  type Page,
-} from "@playwright/test";
+import { test as base, expect, type Locator, type Page } from "@playwright/test";
 
 export type AccountName = "alice" | "bob";
-type StorageState = Awaited<ReturnType<BrowserContext["storageState"]>>;
 type SignInOptions = { method?: "provider" | "webid"; keyboardOnly?: boolean };
 
 export function cssAccount(name: AccountName) {
@@ -124,6 +117,17 @@ export async function signIn(page: Page, name: AccountName, options: SignInOptio
       }),
   ]);
   const [login] = await Promise.all([form, submit()]);
+  // Observe the actual provider redirect, including for popups that close immediately
+  // after posting their callback. Do not replace it with injected shell/session state.
+  const appOrigin = new URL(page.url()).origin;
+  const callback = login.waitForRequest((request) => {
+    const url = new URL(request.url());
+    return (
+      request.isNavigationRequest() &&
+      url.origin === appOrigin &&
+      url.pathname === "/auth/callback.html"
+    );
+  });
   await typeInto(login, login.locator("#email"), account.email, keyboardOnly);
   await typeInto(login, login.locator("#password"), account.password, keyboardOnly);
   await activate(login, login.getByRole("button", { name: "Log in", exact: true }), keyboardOnly);
@@ -133,6 +137,9 @@ export async function signIn(page: Page, name: AccountName, options: SignInOptio
     page.waitForURL(/\/home\/?$/).then(() => false),
   ]);
   if (needsConsent) await activate(login, authorize, keyboardOnly);
+  const returned = new URL((await callback).url());
+  expect(returned.searchParams.has("code")).toBe(true);
+  expect(returned.searchParams.has("state")).toBe(true);
   await expect(page).toHaveURL(/\/home\/?$/);
   await expect(
     page
@@ -143,37 +150,13 @@ export async function signIn(page: Page, name: AccountName, options: SignInOptio
 
 export const signedOutTest = base;
 
-export const test = base.extend<
-  { account: AccountName },
-  { workerStorageState: (account: AccountName) => Promise<StorageState> }
->({
+// Playwright's JSON storage state cannot round-trip the non-extractable CryptoKeys in
+// pod-auth's IndexedDB. Sign in in each test's own context; reloads retain the real keys.
+export const test = base.extend<{ account: AccountName }>({
   account: ["alice", { option: true }],
-  workerStorageState: [
-    async ({ browser }, use, worker) => {
-      const states = new Map<AccountName, StorageState>();
-      await use(async (account) => {
-        const saved = states.get(account);
-        if (saved) return saved;
-        const context = await browser.newContext({
-          baseURL: worker.project.use.baseURL ?? "http://127.0.0.1:3210",
-          viewport: worker.project.use.viewport ?? { width: 1280, height: 900 },
-          colorScheme: worker.project.use.colorScheme ?? "light",
-          reducedMotion: "reduce",
-        });
-        try {
-          await signIn(await context.newPage(), account);
-          const state = await context.storageState({ indexedDB: true });
-          states.set(account, state);
-          return state;
-        } finally {
-          await context.close();
-        }
-      });
-    },
-    { scope: "worker" },
-  ],
-  storageState: async ({ account, workerStorageState }, use) => {
-    await use(await workerStorageState(account));
+  page: async ({ page, account }, use) => {
+    await signIn(page, account);
+    await use(page);
   },
 });
 

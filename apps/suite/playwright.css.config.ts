@@ -1,8 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-// Opt-in local CSS harness; build separately before running (capabilities are build-time):
-//   SUITE_E2E=1 SUITE_TEST_CAPS='{}' NEXT_PUBLIC_DEV_FIXTURES= npx next build --webpack
+// Opt-in local CSS harness. Loopback HTTP auth requires a development build:
 //   SUITE_TEST_CAPS='{}' pnpm test:e2e:css
-// Use the same SUITE_TEST_CAPS for both commands. This suite is not wired into CI.
+// This suite is not wired into CI.
 import { createServer } from "node:net";
 import { defineConfig } from "@playwright/test";
 import base from "./playwright.config";
@@ -46,7 +45,7 @@ export default defineConfig({
       gracefulShutdown: { signal: "SIGTERM", timeout: 10000 },
     },
     {
-      command: `next start --hostname 127.0.0.1 -p ${port}`,
+      command: `next dev --webpack --hostname 127.0.0.1 -p ${port}`,
       env: {
         NEXT_PUBLIC_DEV_FIXTURES: "",
         SUITE_E2E: "1",

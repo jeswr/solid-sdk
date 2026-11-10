@@ -28,6 +28,7 @@ import {
   type SessionStatus,
   SignInError,
   type SignInHint,
+  type SignInOptions,
   type SuiteAccount,
 } from "./types";
 
@@ -35,13 +36,17 @@ export interface AccountsContextValue {
   status: SessionStatus;
   active: SuiteAccount | null;
   accounts: SuiteAccount[];
-  signIn(hint: SignInHint): Promise<SuiteAccount>;
+  signIn(hint: SignInHint, options?: SignInOptions): Promise<SuiteAccount>;
   signInDemo(): Promise<SuiteAccount>;
   /** Sign in through a specific backend (e.g. "extension"); rejects when none is registered. */
-  signInWith(kind: SuiteAccount["kind"], hint: SignInHint): Promise<SuiteAccount>;
+  signInWith(
+    kind: SuiteAccount["kind"],
+    hint: SignInHint,
+    options?: SignInOptions,
+  ): Promise<SuiteAccount>;
   /** Backend kinds available in this deployment. */
   backendKinds: readonly SuiteAccount["kind"][];
-  add(hint: SignInHint): Promise<SuiteAccount>;
+  add(hint: SignInHint, options?: SignInOptions): Promise<SuiteAccount>;
   switchTo(id: string): void;
   signOut(id?: string): Promise<void>;
   signOutAll(): Promise<void>;
@@ -147,13 +152,17 @@ export function AccountsProvider({
     };
   }, [backends, changeStatus, publish]);
 
-  const signInWith = async (kind: SuiteAccount["kind"], hint: SignInHint) => {
+  const signInWith = async (
+    kind: SuiteAccount["kind"],
+    hint: SignInHint,
+    options?: SignInOptions,
+  ) => {
     const revision = generation.current;
     const attempt = ++signInAttempt.current;
     const backend = backends.find((item) => item.kind === kind);
     if (!backend || (kind === "demo" && !suiteEnv().NEXT_PUBLIC_SUITE_DEMO))
       throw new SignInError("unavailable");
-    const account = await backend.signIn(hint);
+    const account = await backend.signIn(hint, options);
     if (revision !== generation.current || attempt !== signInAttempt.current)
       throw new Error("The account changed while signing in. Please try again.");
     ++generation.current;
@@ -161,7 +170,7 @@ export function AccountsProvider({
     dispatch({ type: "remember", account });
     return account;
   };
-  const signIn = (hint: SignInHint) => signInWith("solid", hint);
+  const signIn = (hint: SignInHint, options?: SignInOptions) => signInWith("solid", hint, options);
   const signInDemo = () => signInWith("demo", { webId: demoAccount.webId });
   const signOut = async (id = current.current.activeId ?? "") => {
     ++generation.current;

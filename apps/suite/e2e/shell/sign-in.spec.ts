@@ -37,7 +37,9 @@ test("signed-out entry shows welcome, sign-in links and an optional demo", async
   await screenshot(page, "welcome", info.project.name);
 });
 
-test("different-account validation and the provider preview seam", async ({ page }, info) => {
+test("different-account validation and unavailable production loopback auth", async ({
+  page,
+}, info) => {
   await page.goto("/signin");
   const address = page.getByRole("textbox", { name: "WebID", exact: true });
   await expect(address).toBeVisible();
@@ -53,22 +55,23 @@ test("different-account validation and the provider preview seam", async ({ page
   await address.fill("https://example.org/profile/card#me");
   await address.press("Enter");
   await expect(page.getByRole("alert").filter({ hasText: /\S/ })).toHaveText(
-    "Signing in with a Solid provider isn't switched on in this preview yet.",
+    "We couldn't sign you in. Please try again.",
   );
   const remembered = () =>
     page.evaluate(() => JSON.parse(localStorage.getItem("suite.recentProviders.v1") ?? "[]"));
   // A WebID is never remembered as a provider.
   expect(await remembered()).toEqual([]);
   await accessible(page);
-  // The provider field keeps its intent, even for a provider that lives under a path.
+  // The production HTTP loopback harness cannot authenticate. Real OAuth runs in shell-css
+  // with a development server; failed addresses must never become remembered providers.
   await page.getByRole("button", { name: "Other provider", exact: true }).click();
   const provider = page.getByRole("combobox", { name: "Provider address" });
   await provider.fill("https://login.example.org/realms/solid");
   await provider.press("Enter");
   await expect(page.getByRole("alert").filter({ hasText: /\S/ })).toHaveText(
-    "Signing in with a Solid provider isn't switched on in this preview yet.",
+    "We couldn't sign you in. Please try again.",
   );
-  expect(await remembered()).toEqual(["https://login.example.org/realms/solid"]);
+  expect(await remembered()).toEqual([]);
   await accessible(page);
   // Provider buttons: the known community providers, each a real button.
   await expect(page.getByRole("list", { name: "Providers" }).getByRole("button")).not.toHaveCount(
@@ -164,9 +167,7 @@ test("expired sessions keep content inert until reauthentication or signout", as
   // The hidden, inert page still owns its one h1 while the dialog has its own h2.
   await accessible(page);
   await dialog.getByRole("button", { name: "Sign in again" }).click();
-  await expect(dialog.getByRole("alert")).toHaveText(
-    "Signing in with a Solid provider isn't switched on in this preview yet.",
-  );
+  await expect(dialog.getByRole("alert")).toHaveText("We couldn't sign you in. Please try again.");
   await dialog.getByRole("button", { name: "Sign out", exact: true }).click();
   await expect(page).toHaveURL(/\/signin\?next=%2Fsearch$/);
   await accessible(page);
