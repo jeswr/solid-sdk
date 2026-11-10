@@ -69,6 +69,8 @@ export function chooseViewer(
   }
 
   if (RDF_TYPES.has(mediaType)) return { kind: "rdf", mediaType, embeddable: true };
+  // SVG is a document that can carry script, so it is download-only like HTML.
+  if (mediaType === "image/svg+xml") return { kind: "generic", mediaType, embeddable: false };
   if (mediaType.startsWith("image/")) return { kind: "image", mediaType, embeddable: true };
   if (mediaType === "application/pdf") return { kind: "pdf", mediaType, embeddable: true };
   if (mediaType.startsWith("audio/")) return { kind: "audio", mediaType, embeddable: true };
@@ -133,4 +135,19 @@ export function viewerKindLabel(kind: ViewerKind): string {
     default:
       return "File";
   }
+}
+
+/** Raster images, audio, video and PDF are the only types a pod blob may keep on the app origin. */
+const INERT_BLOB_TYPE =
+  /^(?:image\/(?:png|jpeg|gif|webp|avif|bmp|x-icon|vnd\.microsoft\.icon)|audio\/[\w.+-]+|video\/[\w.+-]+|application\/pdf)$/u;
+
+/**
+ * A blob: URL inherits the app's origin, so opening one in a new tab must never
+ * run pod content as a document there (an SVG or HTML file could read the
+ * session's keys). Any other type is rewrapped as a download-only octet stream.
+ */
+export function inertBlob(blob: Blob): Blob {
+  return INERT_BLOB_TYPE.test(normaliseMediaType(blob.type))
+    ? blob
+    : new Blob([blob], { type: "application/octet-stream" });
 }

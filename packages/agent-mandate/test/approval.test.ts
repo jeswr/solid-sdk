@@ -2,10 +2,16 @@
 // AUTHORED-BY Codex GPT-6
 
 import { parseRdf } from "@jeswr/fetch-rdf";
-import type { KeyPair, WebIdKeyResolver } from "@jeswr/solid-vc";
+import { DataIntegritySuite, type KeyPair, type WebIdKeyResolver } from "@jeswr/solid-vc";
+import { DataFactory, type Store } from "n3";
 import { beforeAll, expect, it } from "vitest";
-import { type Approval, issueApproval, verifyApproval } from "../src/approval.js";
-import { node, readProof, SEC, trig } from "../src/rdf.js";
+import {
+  type Approval,
+  issueApproval,
+  readApprovalClaims,
+  verifyApproval,
+} from "../src/approval.js";
+import { Node, node, RDF_TYPE, readProof, SEC, trig, writeProof } from "../src/rdf.js";
 import {
   alterProofGraph,
   alterProofOptions,
@@ -38,6 +44,58 @@ const options = () => ({
   termsDigest: a.termsDigest,
   webIdKeyResolver: resolver,
   now: clock,
+});
+async function signedChange(change: (claims: Store) => void): Promise<string> {
+  const doc = await issueApproval(a, key, NOW);
+  const { claims } = readProof(await parseRdf(doc, "application/trig"), a.id);
+  change(claims);
+  const proof = await new DataIntegritySuite("ecdsa-rdfc-2019").sign([...claims], {
+    key,
+    proofPurpose: "assertionMethod",
+    created: NOW,
+  });
+  writeProof(claims, a.id, proof);
+  return trig(claims);
+}
+it.each([
+  ["expires", a.expires, "en"],
+  ["expires", a.expires, DataFactory.namedNode("http://www.w3.org/2001/XMLSchema#dateTime")],
+  ["termsDigest", a.termsDigest, "en"],
+  ["termsDigest", a.termsDigest, DataFactory.namedNode("http://www.w3.org/2001/XMLSchema#token")],
+  ["decision", a.decision, "en"],
+  ["decision", a.decision, DataFactory.namedNode("http://www.w3.org/2001/XMLSchema#integer")],
+  ["approves", a.approves, "en"],
+  ["approves", a.approves, DataFactory.namedNode("http://www.w3.org/2001/XMLSchema#anyURI")],
+] as const)("rejects signed approval literal with invalid datatype/language: %s %#", async (field, value, datatype) => {
+  const doc = await signedChange((claims) => {
+    const predicate = `https://jeswr.org/ns/agent#${field}`;
+    claims.removeQuads([...claims].filter((q) => q.predicate.value === predicate));
+    const subject = node(claims, a.id);
+    subject.setValue(
+      predicate,
+      new Node(DataFactory.literal(value, datatype), claims, subject.factory),
+    );
+  });
+  expect(await verifyExportedRdf(doc, a.id, key.publicKey)).toBe(true);
+  expect(await verifyApproval(doc, options())).toEqual({ valid: false, reason: "malformed" });
+  expect(await readApprovalClaims(doc, a.id)).toBeUndefined();
+});
+it("rejects a signed IRI in place of an approval string literal", async () => {
+  const doc = await signedChange((claims) => {
+    const predicate = "https://jeswr.org/ns/agent#termsDigest";
+    claims.removeQuads([...claims].filter((q) => q.predicate.value === predicate));
+    node(claims, a.id).setIri(predicate, "urn:terms");
+  });
+  expect(await verifyApproval(doc, options())).toEqual({ valid: false, reason: "malformed" });
+  expect(await readApprovalClaims(doc, a.id)).toBeUndefined();
+});
+it("rejects a signed record of the wrong approval type", async () => {
+  const doc = await signedChange((claims) => {
+    claims.removeQuads([...claims].filter((q) => q.predicate.value === RDF_TYPE));
+    node(claims, a.id).setIri(RDF_TYPE, "https://jeswr.org/ns/agent#ControlStatement");
+  });
+  expect(await verifyApproval(doc, options())).toEqual({ valid: false, reason: "proposal" });
+  expect(await readApprovalClaims(doc, a.id)).toBeUndefined();
 });
 it.each(
   INVALID_INSTANTS,
@@ -221,4 +279,31 @@ it("rejects malformed RDF and duplicate claims", async () => {
       },
     }),
   ).toEqual({ valid: false, reason: "malformed" });
+});
+
+it("reads unsigned approval claims for display only, even when expired or tampered", async () => {
+  for (const decision of ["approve", "deny"] as const) {
+    const approval = { ...a, decision, expires: "2020-01-01T00:00:00Z" };
+    const doc = await issueApproval(approval, key, NOW);
+    expect(await readApprovalClaims(doc, a.id)).toEqual(approval);
+    const changed = doc.replace(a.termsDigest, "unverified display terms");
+    expect(await readApprovalClaims(changed, a.id)).toEqual({
+      ...approval,
+      termsDigest: "unverified display terms",
+    });
+    expect(await verifyApproval(changed, options())).toEqual({ valid: false, reason: "signature" });
+  }
+});
+it("refuses malformed or ambiguous approval display claims", async () => {
+  const doc = await issueApproval(a, key, NOW);
+  for (const changed of [
+    "garbage",
+    doc.replace("agent#Approval", "agent#ControlStatement"),
+    doc.replace('"approve"', '"maybe"'),
+  ])
+    expect(await readApprovalClaims(changed, a.id)).toBeUndefined();
+  expect(await readApprovalClaims(doc, "urn:missing")).toBeUndefined();
+  const store = await parseRdf(doc, "application/trig");
+  node(store, a.id).setText("https://jeswr.org/ns/agent#termsDigest", "duplicate");
+  expect(await readApprovalClaims(await trig(store), a.id)).toBeUndefined();
 });

@@ -8,7 +8,7 @@ import {
   sign,
   verify,
 } from "node:crypto";
-import { accessTokenHash } from "@jeswr/solid-dpop";
+
 import { expect } from "vitest";
 
 export const POD_ISSUER = "https://issuer.example/";
@@ -46,6 +46,7 @@ export function podIssuer() {
     expiresIn: 600 as number | undefined,
     idNonce: undefined as string | undefined,
     idSubject: "alice",
+    idAuthorizedParty: undefined as string | undefined,
     idIssuer: POD_ISSUER,
     tokenError: false,
     tokenNonce: false,
@@ -66,6 +67,7 @@ export function podIssuer() {
       iss: controls.idIssuer,
       aud: POD_CLIENT,
       sub: controls.idSubject,
+      ...(controls.idAuthorizedParty === undefined ? {} : { azp: controls.idAuthorizedParty }),
       webid: webId,
       iat: now,
       exp: now + 600,
@@ -100,7 +102,7 @@ export function podIssuer() {
     expect(seenJti.has(payload.jti)).toBe(false);
     seenJti.add(payload.jti);
     if (accessToken === undefined) expect(payload.ath).toBeUndefined();
-    else expect(payload.ath).toBe(accessTokenHash(accessToken));
+    else expect(payload.ath).toBe(hash(accessToken));
     const { crv, kty, x, y } = header.jwk;
     return { payload, jkt: hash(JSON.stringify({ crv, kty, x, y })) };
   };

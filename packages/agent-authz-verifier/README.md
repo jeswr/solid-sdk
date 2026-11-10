@@ -29,7 +29,7 @@ as the delegation walk reads it (the same agent, action and injected `delegation
 only the constraints whose operand is missing, so a prohibition assigned to someone else or out of
 depth range does not deny. A single policy under the `perm` conflict strategy keeps its own
 semantics: a matching permission overrides its prohibitions. A credential validity bound that is not a dateTime with a
-timezone denies in Phase A. Signed policy content is parsed with its relative IRIs resolved against
+timezone (or is finer than milliseconds) denies in Phase A. Signed policy content is parsed with its relative IRIs resolved against
 the policy document (the policy IRI without its fragment). The credential's `svc:action` and `svc:target` claims are read
 but not enforced; the bound policy decides scope.
 

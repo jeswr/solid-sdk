@@ -1,10 +1,13 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 import type { OdrlConstraint, OdrlPolicy, OdrlRule } from "@jeswr/solid-odrl";
 
 /** Agent vocabulary fixed by DESIGN J1. */
 export const AGENT = "https://jeswr.org/ns/agent#";
 /** ODRL vocabulary. */
 export const ODRL = "http://www.w3.org/ns/odrl/2/";
+/** schema.org currency (ISO 4217) of the agreement's spend limits; signed with the agreement. */
+export const SCHEMA_CURRENCY = "https://schema.org/currency";
 /** Supported accounting operands; accounting itself belongs to agent-executor. */
 export const LIMIT_OPERANDS = [
   "spendPerDay",
@@ -43,6 +46,8 @@ export interface Mandate {
   readonly withApproval: Policy;
   readonly prohibitions: readonly Rule[];
   readonly limits: readonly Limit[];
+  /** ISO 4217 code that spend limits are counted in. Signed; absent means spend limits fail closed. */
+  readonly currency?: string;
 }
 /** A loader must verify provenance before returning any mandate. Undefined means refuse-all. */
 export interface MandateVerifier {

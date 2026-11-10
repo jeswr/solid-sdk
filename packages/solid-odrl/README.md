@@ -1,5 +1,6 @@
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 <!-- AUTHORED-BY Codex GPT-5 -->
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 
 # @jeswr/solid-odrl
 
@@ -57,6 +58,63 @@ rules, conflicts, and outstanding duties.
 
 For enforcement, treat `"notApplicable"` as a default deny. Duties are advisory unless evaluation
 uses `{ requireDuties: true }`; enable it when outstanding duties must block access.
+
+## Recipient collection membership
+
+Use standard ODRL 2.2 `odrl:isPartOf` (`http://www.w3.org/ns/odrl/2/isPartOf`)
+with the `recipient` left operand and a single `odrl:PartyCollection` IRI as the
+right operand. The caller supplies trusted membership through
+`EvaluateOptions.resolvePartyCollection`; the evaluator never fetches collections.
+
+```ts
+import { evaluate, type OdrlPolicy } from "@jeswr/solid-odrl";
+
+const organisation = "https://alice.example/parties/organisation";
+const bob = "https://bob.example/profile/card#me";
+const policy: OdrlPolicy = {
+  id: "https://alice.example/policies/share-with-organisation",
+  permissions: [{
+    type: "permission",
+    action: "distribute",
+    constraints: [{
+      leftOperand: "recipient",
+      operator: "isPartOf",
+      rightOperand: organisation,
+    }],
+  }],
+};
+const members: ReadonlySet<string> = new Set([bob]);
+const result = evaluate(policy, {
+  action: "distribute",
+  attributes: { recipient: bob },
+}, {
+  resolvePartyCollection: (iri) => iri === organisation ? members : undefined,
+});
+// result.decision === "permit"
+```
+
+Membership uses exact IRI strings, including non-HTTP absolute IRIs. Non-members,
+missing/non-IRI/array recipients, missing resolvers, unknown collections (`undefined`),
+and resolver errors leave the constraint unsatisfied. A constrained permission then
+does not match; if no other rule matches, the result is `"notApplicable"` (default deny).
+A prohibition with a satisfied membership constraint denies under the default
+conflict strategy. Unavailable membership evidence is indeterminate: if a
+prohibition otherwise could apply, evaluation returns `"deny"` before conflict
+resolution, including with `conflict: "perm"`. Only confirmed nonmembership or
+another unsatisfied constraint rules out that prohibition. Its action, target,
+and assignee must still apply to the request. Indeterminate prohibitions are not
+reported as matched rules; the decision reason explains the denial.
+Other left operands, array right operands, and literal
+datatypes are unsupported for `isPartOf`; policy serializers reject malformed forms.
+Collection RDF type declarations are not required inside the policy; the resolver
+identifies the referenced PartyCollection and its members.
+
+The resolver option also applies to `matchingPermissions`, the optional fourth
+argument of `constraintSatisfied(constraint, request, now, options)`, duty constraints,
+`evaluateDelegated`, and `recordEvaluation`. Supply a stable membership snapshot throughout evaluation
+and recording. When calling `decisionRecord` or `decisionRecordJsonLd` separately,
+pass the same `resolvePartyCollection` in their input so anonymous deciding rules
+are attributed correctly. Records preserve the `isPartOf` constraint and collection IRI.
 
 ## Key API
 

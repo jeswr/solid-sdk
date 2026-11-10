@@ -668,10 +668,41 @@ importers:
         version: 4.1.10(@opentelemetry/api@1.10.0)(@types/node@20.19.43)(@vitest/coverage-v8@4.1.10)(jsdom@26.1.0)(vite@8.1.4(@types/node@20.19.43)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1))
 
   apps/mcp-server:
+    dependencies:
+      '@jeswr/fetch-rdf':
+        specifier: workspace:*
+        version: link:../../packages/fetch-rdf
+      '@jeswr/guarded-fetch':
+        specifier: workspace:*
+        version: link:../../packages/guarded-fetch
+      '@jeswr/mcp-oauth':
+        specifier: workspace:*
+        version: link:../../packages/mcp-oauth
+      '@jeswr/pod-auth':
+        specifier: workspace:*
+        version: link:../../packages/pod-auth
+      '@jeswr/solid-mcp':
+        specifier: workspace:*
+        version: link:../../packages/solid-mcp
+      '@solid/object':
+        specifier: ^0.6.0
+        version: 0.6.0
+      n3:
+        specifier: ^2.1.1
+        version: 2.1.1
     devDependencies:
       '@biomejs/biome':
         specifier: ^2.5.1
         version: 2.5.3
+      '@modelcontextprotocol/sdk':
+        specifier: ^1.29.0
+        version: 1.29.0(zod@4.4.3)
+      '@solid/community-server':
+        specifier: 8.0.0-alpha.3
+        version: 8.0.0-alpha.3(jiti@2.7.0)
+      '@types/n3':
+        specifier: ^1.26.1
+        version: 1.26.1
       '@types/node':
         specifier: ^25.9.2
         version: 25.9.5
@@ -1640,9 +1671,15 @@ importers:
       '@jeswr/fetch-rdf':
         specifier: workspace:*
         version: link:../../packages/fetch-rdf
+      '@jeswr/pod-auth':
+        specifier: workspace:*
+        version: link:../../packages/pod-auth
       '@jeswr/pod-connectors':
         specifier: workspace:*
         version: link:../../packages/pod-connectors
+      '@jeswr/reactive-authentication':
+        specifier: workspace:*
+        version: link:../../packages/reactive-authentication
       '@jeswr/suite-ui':
         specifier: workspace:*
         version: link:../../packages/suite-ui
@@ -1652,16 +1689,10 @@ importers:
       '@solid/object':
         specifier: ^0.6.0
         version: 0.6.0
-      '@solid/reactive-authentication':
-        specifier: file:vendor/solid-reactive-authentication-0.1.3-pr11-14.tgz
-        version: file:apps/pod-manager/vendor/solid-reactive-authentication-0.1.3-pr11-14.tgz
       class-variance-authority:
         specifier: ^0.7.1
         version: 0.7.1
       clsx:
-        specifier: ^2.1.1
-        version: 2.1.1
-      dpop:
         specifier: ^2.1.1
         version: 2.1.1
       lucide-react:
@@ -1676,9 +1707,6 @@ importers:
       next-themes:
         specifier: ^0.4.6
         version: 0.4.6(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
-      oauth4webapi:
-        specifier: ^3.8.6
-        version: 3.8.6
       radix-ui:
         specifier: ^1.5.0
         version: 1.6.2(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
@@ -1728,6 +1756,9 @@ importers:
       '@types/react-dom':
         specifier: 19.2.3
         version: 19.2.3(@types/react@19.2.17)
+      dpop:
+        specifier: ^2.1.1
+        version: 2.1.1
       eslint:
         specifier: ^9
         version: 9.39.5(jiti@2.7.0)
@@ -1737,6 +1768,12 @@ importers:
       jose:
         specifier: ^6.2.3
         version: 6.2.3
+      jsdom:
+        specifier: ^26.1.0
+        version: 26.1.0
+      oauth4webapi:
+        specifier: ^3.8.6
+        version: 3.8.6
       tailwindcss:
         specifier: ^4
         version: 4.3.1
@@ -1745,7 +1782,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: ^4.1.8
-        version: 4.1.10(@opentelemetry/api@1.10.0)(@types/node@20.19.43)(@vitest/coverage-v8@4.1.10)(jsdom@29.1.1(@noble/hashes@2.4.0))(vite@8.1.4(@types/node@20.19.43)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1))
+        version: 4.1.10(@opentelemetry/api@1.10.0)(@types/node@20.19.43)(@vitest/coverage-v8@4.1.10)(jsdom@26.1.0)(vite@8.1.4(@types/node@20.19.43)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1))
 
   apps/pod-migrator:
     dependencies:
@@ -2374,12 +2411,21 @@ importers:
       '@hookform/resolvers':
         specifier: 5.4.0
         version: 5.4.0(react-hook-form@7.81.0(react@19.2.7))
+      '@jeswr/agent-mandate':
+        specifier: workspace:*
+        version: link:../../packages/agent-mandate
+      '@jeswr/agent-model':
+        specifier: workspace:*
+        version: link:../../packages/agent-model
       '@jeswr/fetch-rdf':
         specifier: workspace:*
         version: link:../../packages/fetch-rdf
       '@jeswr/guarded-fetch':
         specifier: workspace:*
         version: link:../../packages/guarded-fetch
+      '@jeswr/ldp-container':
+        specifier: workspace:*
+        version: link:../../packages/ldp-container
       '@jeswr/pod-access':
         specifier: workspace:*
         version: link:../../packages/pod-access
@@ -2398,6 +2444,9 @@ importers:
       '@jeswr/solid-task-model':
         specifier: workspace:*
         version: link:../../packages/solid-task-model
+      '@jeswr/solid-vc':
+        specifier: workspace:*
+        version: link:../../packages/solid-vc
       '@jeswr/suite-native':
         specifier: workspace:*
         version: link:../../packages/suite-native
@@ -2752,6 +2801,9 @@ importers:
       '@jeswr/agent-authz-verifier':
         specifier: workspace:*
         version: link:../agent-authz-verifier
+      '@jeswr/agent-model':
+        specifier: workspace:*
+        version: link:../agent-model
       '@jeswr/fetch-rdf':
         specifier: workspace:*
         version: link:../fetch-rdf
@@ -2780,6 +2832,9 @@ importers:
       '@vitest/coverage-v8':
         specifier: ^4.1.10
         version: 4.1.10(vitest@4.1.10)
+      esbuild:
+        specifier: ^0.28.1
+        version: 0.28.1
 
   packages/agent-memory:
     dependencies:
@@ -2823,6 +2878,9 @@ importers:
       '@jeswr/rdf-serialize':
         specifier: workspace:*
         version: link:../rdf-serialize
+      '@noble/hashes':
+        specifier: 2.4.0
+        version: 2.4.0
       '@rdfjs/wrapper':
         specifier: ^0.34.0
         version: 0.34.0
@@ -2868,7 +2926,7 @@ importers:
     dependencies:
       '@anthropic-ai/claude-agent-sdk':
         specifier: ^0.3.280
-        version: 0.3.310(@anthropic-ai/sdk@1.3.0(zod@4.4.3))(@modelcontextprotocol/sdk@1.29.0(zod@4.4.3))(zod@4.4.3)
+        version: 0.3.310(@anthropic-ai/sdk@1.4.0(zod@4.4.3))(@modelcontextprotocol/sdk@1.29.0(zod@4.4.3))(zod@4.4.3)
       '@jeswr/agent-channels':
         specifier: workspace:*
         version: link:../agent-channels
@@ -2915,10 +2973,23 @@ importers:
         version: 1.26.1
 
   packages/agent-session-capture:
+    dependencies:
+      '@jeswr/guarded-fetch':
+        specifier: workspace:*
+        version: link:../guarded-fetch
+      '@jeswr/solid-chat-interop':
+        specifier: workspace:*
+        version: link:../solid-chat-interop
+      '@jeswr/solid-mcp':
+        specifier: workspace:*
+        version: link:../solid-mcp
     devDependencies:
       '@biomejs/biome':
         specifier: ^2.5.1
         version: 2.5.3
+      '@types/node':
+        specifier: ^26.1.1
+        version: 26.6.6
       '@vitest/coverage-v8':
         specifier: ^4.1.10
         version: 4.1.10(vitest@4.1.10)
@@ -3485,21 +3556,15 @@ importers:
       '@jeswr/guarded-fetch':
         specifier: workspace:*
         version: link:../guarded-fetch
-      '@jeswr/solid-dpop':
+      '@jeswr/pod-auth':
         specifier: workspace:*
-        version: link:../solid-dpop
-      '@jeswr/solid-openid-client':
-        specifier: workspace:*
-        version: link:../solid-openid-client
+        version: link:../pod-auth
       '@rdfjs/wrapper':
         specifier: ^0.34.0
         version: 0.34.0
       n3:
         specifier: ^2.1.1
         version: 2.1.1
-      openid-client:
-        specifier: ^6.8.4
-        version: 6.8.4
     devDependencies:
       '@biomejs/biome':
         specifier: ^2.5.1
@@ -3675,7 +3740,7 @@ importers:
     devDependencies:
       '@anthropic-ai/claude-agent-sdk':
         specifier: ^0.3.201
-        version: 0.3.310(@anthropic-ai/sdk@1.3.0(zod@4.4.3))(@modelcontextprotocol/sdk@1.29.0(zod@4.4.3))(zod@4.4.3)
+        version: 0.3.310(@anthropic-ai/sdk@1.4.0(zod@4.4.3))(@modelcontextprotocol/sdk@1.29.0(zod@4.4.3))(zod@4.4.3)
       '@biomejs/biome':
         specifier: ^2.5.1
         version: 2.5.3
@@ -3850,6 +3915,9 @@ importers:
       '@jeswr/guarded-fetch':
         specifier: workspace:*
         version: link:../guarded-fetch
+      '@jeswr/rdf-serialize':
+        specifier: workspace:*
+        version: link:../rdf-serialize
       '@jeswr/solid-dpop':
         specifier: workspace:*
         version: link:../solid-dpop
@@ -4911,6 +4979,9 @@ importers:
       '@jeswr/mcp-oauth':
         specifier: workspace:*
         version: link:../mcp-oauth
+      '@jeswr/pkg-memory':
+        specifier: workspace:*
+        version: link:../pkg-memory
       '@jeswr/rdf-serialize':
         specifier: workspace:*
         version: link:../rdf-serialize
@@ -4920,6 +4991,12 @@ importers:
       '@jeswr/solid-dpop':
         specifier: workspace:*
         version: link:../solid-dpop
+      '@jeswr/solid-memory':
+        specifier: workspace:*
+        version: link:../solid-memory
+      '@jeswr/storage-client':
+        specifier: workspace:*
+        version: link:../storage-client
       '@modelcontextprotocol/sdk':
         specifier: ^1.29.0
         version: 1.29.0(zod@4.4.3)
@@ -5927,6 +6004,54 @@ importers:
         specifier: ^4.1.9
         version: 4.1.10(@opentelemetry/api@1.10.0)(@types/node@25.9.5)(@vitest/coverage-v8@4.1.10)(jsdom@29.1.1(@noble/hashes@2.4.0))(vite@8.1.4(@types/node@25.9.5)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1))
 
+  tools/guide-examples:
+    devDependencies:
+      '@biomejs/biome':
+        specifier: ^2.5.1
+        version: 2.5.3
+      '@jeswr/fetch-rdf':
+        specifier: workspace:*
+        version: link:../../packages/fetch-rdf
+      '@jeswr/pod-access':
+        specifier: workspace:*
+        version: link:../../packages/pod-access
+      '@jeswr/pod-auth':
+        specifier: workspace:*
+        version: link:../../packages/pod-auth
+      '@jeswr/pod-notifications':
+        specifier: workspace:*
+        version: link:../../packages/pod-notifications
+      '@jeswr/pod-type-index':
+        specifier: workspace:*
+        version: link:../../packages/pod-type-index
+      '@jeswr/rdf-serialize':
+        specifier: workspace:*
+        version: link:../../packages/rdf-serialize
+      '@jeswr/solid-bookmark':
+        specifier: workspace:*
+        version: link:../../packages/solid-bookmark
+      '@jeswr/storage-capabilities':
+        specifier: workspace:*
+        version: link:../../packages/storage-capabilities
+      '@jeswr/storage-client':
+        specifier: workspace:*
+        version: link:../../packages/storage-client
+      '@jeswr/suite-ui':
+        specifier: workspace:*
+        version: link:../../packages/suite-ui
+      '@jeswr/suite-vocab':
+        specifier: workspace:*
+        version: link:../../packages/suite-vocab
+      '@types/node':
+        specifier: ^25.9.2
+        version: 25.9.5
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: ^4.1.9
+        version: 4.1.10(@opentelemetry/api@1.10.0)(@types/node@25.9.5)(@vitest/coverage-v8@4.1.10)(jsdom@29.1.1(@noble/hashes@2.4.0))(vite@8.1.4(@types/node@25.9.5)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1))
+
   tools/storage-conformance:
     dependencies:
       '@jeswr/fetch-rdf':
@@ -6056,8 +6181,8 @@ packages:
       '@modelcontextprotocol/sdk': ^1.29.0
       zod: ^4.0.0
 
-  '@anthropic-ai/sdk@1.3.0':
-    resolution: {integrity: sha512-k7z9BlLLPxfZH+ov7dS6EnaN/wiZeV8YNT1LZfrpAHIy7oY7pHr4UzirF9f2OlHtFEnRBOX+AZQ91Y5fK+TPTw==}
+  '@anthropic-ai/sdk@1.4.0':
+    resolution: {integrity: sha512-tyuibnhQL57kLOx5oomY4Ld7jOVOPNC5v3IiyRtR3l+Friv66tI4VbuZYF2NMel/T0WMuQMBFOMKDBUbUh8gPA==}
     hasBin: true
     peerDependencies:
       zod: ^3.25.0 || ^4.0.0
@@ -11015,11 +11140,6 @@ packages:
 
   '@solid/reactive-authentication@0.1.5':
     resolution: {integrity: sha512-GGIB5ughd3FHmKUzpMkaOKGlISi7OjNj0KXuABEjv7zMd29IQbJdrLYNtztwOx0QLTLCeGD2bsKGI6n6u1Ue7Q==}
-    engines: {node: '>=24.0.0'}
-
-  '@solid/reactive-authentication@file:apps/pod-manager/vendor/solid-reactive-authentication-0.1.3-pr11-14.tgz':
-    resolution: {integrity: sha512-KbFKQ92tttHiv9sSVrs/JypycGs5fGsUvLfhltF0cH9zf2nQwYwOqHaWZX5k1rHL1wPxxvwUaa/wrH9OXUCluQ==, tarball: file:apps/pod-manager/vendor/solid-reactive-authentication-0.1.3-pr11-14.tgz}
-    version: 0.1.3
     engines: {node: '>=24.0.0'}
 
   '@solidlab/policy-engine@0.0.2':
@@ -18822,9 +18942,9 @@ snapshots:
   '@anthropic-ai/claude-agent-sdk-win32-x64@0.3.310':
     optional: true
 
-  '@anthropic-ai/claude-agent-sdk@0.3.310(@anthropic-ai/sdk@1.3.0(zod@4.4.3))(@modelcontextprotocol/sdk@1.29.0(zod@4.4.3))(zod@4.4.3)':
+  '@anthropic-ai/claude-agent-sdk@0.3.310(@anthropic-ai/sdk@1.4.0(zod@4.4.3))(@modelcontextprotocol/sdk@1.29.0(zod@4.4.3))(zod@4.4.3)':
     dependencies:
-      '@anthropic-ai/sdk': 1.3.0(zod@4.4.3)
+      '@anthropic-ai/sdk': 1.4.0(zod@4.4.3)
       '@modelcontextprotocol/sdk': 1.29.0(zod@4.4.3)
       zod: 4.4.3
     optionalDependencies:
@@ -18837,7 +18957,7 @@ snapshots:
       '@anthropic-ai/claude-agent-sdk-win32-arm64': 0.3.310
       '@anthropic-ai/claude-agent-sdk-win32-x64': 0.3.310
 
-  '@anthropic-ai/sdk@1.3.0(zod@4.4.3)':
+  '@anthropic-ai/sdk@1.4.0(zod@4.4.3)':
     dependencies:
       '@opentelemetry/api': 1.10.0
       json-schema-to-ts: 3.1.1
@@ -27642,7 +27762,7 @@ snapshots:
       '@comunica/query-sparql': 5.3.0
       '@isaacs/ttlcache': 1.4.1
       '@rdfjs/types': 2.0.1
-      '@solid/access-token-verifier': 2.1.1
+      '@solid/access-token-verifier': 2.1.2
       '@solidlab/policy-engine': 0.0.2
       '@types/async-lock': 1.4.2
       '@types/bcryptjs': 2.4.6
@@ -27725,11 +27845,6 @@ snapshots:
       '@rdfjs/wrapper': 0.34.0
       dpop: 2.1.1
       n3: 2.1.1
-      oauth4webapi: 3.8.6
-
-  '@solid/reactive-authentication@file:apps/pod-manager/vendor/solid-reactive-authentication-0.1.3-pr11-14.tgz':
-    dependencies:
-      dpop: 2.1.1
       oauth4webapi: 3.8.6
 
   '@solidlab/policy-engine@0.0.2':
@@ -31344,7 +31459,7 @@ snapshots:
       eslint: 9.39.5(jiti@2.7.0)
       eslint-import-resolver-node: 0.3.10
       eslint-import-resolver-typescript: 3.10.1(eslint-plugin-import@2.32.0(eslint@9.39.5(jiti@2.7.0)))(eslint@9.39.5(jiti@2.7.0))
-      eslint-plugin-import: 2.32.0(eslint-import-resolver-typescript@3.10.1)(eslint@9.39.5(jiti@2.7.0))
+      eslint-plugin-import: 2.32.0(eslint-import-resolver-typescript@3.10.1(eslint-plugin-import@2.32.0(eslint@9.39.5(jiti@2.7.0)))(eslint@9.39.5(jiti@2.7.0)))(eslint@9.39.5(jiti@2.7.0))
       eslint-plugin-jsx-a11y: 6.10.2(eslint@9.39.5(jiti@2.7.0))
       eslint-plugin-react: 7.37.5(eslint@9.39.5(jiti@2.7.0))
       eslint-plugin-react-hooks: 7.1.1(eslint@9.39.5(jiti@2.7.0))
@@ -31377,7 +31492,7 @@ snapshots:
       tinyglobby: 0.2.17
       unrs-resolver: 1.12.2
     optionalDependencies:
-      eslint-plugin-import: 2.32.0(eslint-import-resolver-typescript@3.10.1)(eslint@9.39.5(jiti@2.7.0))
+      eslint-plugin-import: 2.32.0(eslint-import-resolver-typescript@3.10.1(eslint-plugin-import@2.32.0(eslint@9.39.5(jiti@2.7.0)))(eslint@9.39.5(jiti@2.7.0)))(eslint@9.39.5(jiti@2.7.0))
     transitivePeerDependencies:
       - supports-color
 
@@ -31396,7 +31511,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  eslint-module-utils@2.14.0(@typescript-eslint/parser@8.63.0(eslint@9.39.5(jiti@2.7.0))(typescript@5.9.3))(eslint-import-resolver-node@0.3.10)(eslint-import-resolver-typescript@3.10.1(eslint-plugin-import@2.32.0)(eslint@9.39.5(jiti@2.7.0)))(eslint@9.39.5(jiti@2.7.0)):
+  eslint-module-utils@2.14.0(@typescript-eslint/parser@8.63.0(eslint@9.39.5(jiti@2.7.0))(typescript@5.9.3))(eslint-import-resolver-node@0.3.10)(eslint-import-resolver-typescript@3.10.1)(eslint@9.39.5(jiti@2.7.0)):
     dependencies:
       debug: 3.2.7
     optionalDependencies:
@@ -31428,7 +31543,7 @@ snapshots:
       doctrine: 2.1.0
       eslint: 9.39.5(jiti@2.7.0)
       eslint-import-resolver-node: 0.3.10
-      eslint-module-utils: 2.14.0(@typescript-eslint/parser@8.63.0(eslint@9.39.5(jiti@2.7.0))(typescript@5.9.3))(eslint-import-resolver-node@0.3.10)(eslint-import-resolver-typescript@3.10.1(eslint-plugin-import@2.32.0)(eslint@9.39.5(jiti@2.7.0)))(eslint@9.39.5(jiti@2.7.0))
+      eslint-module-utils: 2.14.0(@typescript-eslint/parser@8.63.0(eslint@9.39.5(jiti@2.7.0))(typescript@5.9.3))(eslint-import-resolver-node@0.3.10)(eslint-import-resolver-typescript@3.10.1)(eslint@9.39.5(jiti@2.7.0))
       hasown: 2.0.4
       is-core-module: 2.16.2
       is-glob: 4.0.3
@@ -31446,7 +31561,7 @@ snapshots:
       - eslint-import-resolver-webpack
       - supports-color
 
-  eslint-plugin-import@2.32.0(eslint-import-resolver-typescript@3.10.1)(eslint@9.39.5(jiti@2.7.0)):
+  eslint-plugin-import@2.32.0(eslint-import-resolver-typescript@3.10.1(eslint-plugin-import@2.32.0(eslint@9.39.5(jiti@2.7.0)))(eslint@9.39.5(jiti@2.7.0)))(eslint@9.39.5(jiti@2.7.0)):
     dependencies:
       '@rtsao/scc': 1.1.0
       array-includes: 3.1.9
@@ -37604,36 +37719,6 @@ snapshots:
       '@types/node': 25.9.5
       '@vitest/coverage-v8': 4.1.10(vitest@4.1.10)
       jsdom: 29.1.1(@noble/hashes@2.4.0)
-    transitivePeerDependencies:
-      - msw
-
-  vitest@4.1.10(@opentelemetry/api@1.10.0)(@types/node@26.1.1)(@vitest/coverage-v8@4.1.10)(jsdom@26.1.0)(vite@8.1.4(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1)):
-    dependencies:
-      '@vitest/expect': 4.1.10
-      '@vitest/mocker': 4.1.10(vite@8.1.4(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1))
-      '@vitest/pretty-format': 4.1.10
-      '@vitest/runner': 4.1.10
-      '@vitest/snapshot': 4.1.10
-      '@vitest/spy': 4.1.10
-      '@vitest/utils': 4.1.10
-      es-module-lexer: 2.3.0
-      expect-type: 1.4.0
-      magic-string: 0.30.21
-      obug: 2.1.3
-      pathe: 2.0.3
-      picomatch: 4.0.5
-      std-env: 4.2.0
-      tinybench: 2.9.0
-      tinyexec: 1.2.4
-      tinyglobby: 0.2.17
-      tinyrainbow: 3.1.0
-      vite: 8.1.4(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1)
-      why-is-node-running: 2.3.0
-    optionalDependencies:
-      '@opentelemetry/api': 1.10.0
-      '@types/node': 26.1.1
-      '@vitest/coverage-v8': 4.1.10(vitest@4.1.10)
-      jsdom: 26.1.0
     transitivePeerDependencies:
       - msw
 

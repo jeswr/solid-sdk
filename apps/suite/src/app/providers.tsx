@@ -9,6 +9,7 @@ import { NotificationsProvider } from "@/shell/notifications/provider";
 import { ShellSearchProvider } from "@/shell/search/search-context";
 import { AccountsProvider } from "@/shell/session/accounts-provider";
 import { AppearanceEffect, PreferencesProvider } from "@/shell/settings/preferences";
+import { ServiceWorkerRegistration } from "@/shell/sync/service-worker";
 
 function ThemeAttribute() {
   const { theme } = useTheme();
@@ -27,6 +28,7 @@ export function Providers({
   return (
     <ThemeProvider attribute="class" defaultTheme="system" enableSystem enableColorScheme>
       <ThemeAttribute />
+      <ServiceWorkerRegistration />
       <SuiteEnvironmentContext.Provider value={environment}>
         <AccountsProvider {...accountFixtureProps()}>
           <PreferencesProvider>

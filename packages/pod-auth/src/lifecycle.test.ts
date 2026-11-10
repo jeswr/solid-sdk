@@ -462,6 +462,193 @@ test("logout cancels pending UI and prevents a late login from publishing state"
   expect(f.record()).toBeUndefined();
 });
 
+test("an aborted login rejects at once; a signal that never fires leaves login unchanged", async () => {
+  const f = fixture();
+  const auth = f.load();
+  const cancelled = new AbortController();
+  cancelled.abort(new Error("cancelled"));
+  await expect(auth.login(undefined, { signal: cancelled.signal })).rejects.toThrow("cancelled");
+  expect(f.op.stats.authorizations).toBe(0);
+  const idle = new AbortController();
+  await expect(auth.login(undefined, { signal: idle.signal })).resolves.toMatchObject({
+    webId: f.op.webId,
+  });
+  // A finished cancellable login removes its listener; a later abort changes nothing.
+  idle.abort();
+  expect((await auth.identity())?.webId).toBe(f.op.webId);
+});
+
+test("abandoning a login while the popup is open leaves stored sessions alone", async () => {
+  const f = fixture();
+  const ready = Promise.withResolvers<void>();
+  const signals: AbortSignal[] = [];
+  f.options.ui.getCode = async (_url, signal) => {
+    signals.push(signal);
+    ready.resolve();
+    return await new Promise<string>((_resolve, reject) =>
+      signal.addEventListener("abort", () => reject(signal.reason), { once: true }),
+    );
+  };
+  const auth = f.load();
+  const stored = structuredClone([...f.values.entries()]);
+  const logout = vi.spyOn(auth, "logout");
+  const logoutEvent = vi.fn();
+  auth.on("logout", logoutEvent);
+  const controller = new AbortController();
+  const attempt = auth.login(undefined, { signal: controller.signal });
+  // A cancellable attempt is shared with nobody.
+  await expect(auth.login()).rejects.toThrow("Another login is in progress");
+  await ready.promise;
+  controller.abort(new Error("cancelled"));
+  await expect(attempt).rejects.toThrow("cancelled");
+  expect(signals[0]?.aborted).toBe(true);
+  // No grant existed, so nothing is purged or fenced: storage is exactly as before.
+  expect(logout).not.toHaveBeenCalled();
+  expect(logoutEvent).not.toHaveBeenCalled();
+  expect([...f.values.entries()]).toEqual(stored);
+  expect(await auth.identity()).toBeNull();
+});
+
+test("a grant that lands before the abort is seen is discarded with a full logout", async () => {
+  const f = fixture();
+  const auth = f.load();
+  const controller = new AbortController();
+  const events: string[] = [];
+  auth.on("login", () => {
+    events.push("login");
+    controller.abort(new Error("cancelled"));
+  });
+  auth.on("logout", () => events.push("logout"));
+  await expect(auth.login(undefined, { signal: controller.signal })).rejects.toThrow("cancelled");
+  expect(events).toEqual(["login", "logout"]);
+  expect(await auth.identity()).toBeNull();
+  expect(await auth.remembered()).toEqual([]);
+  expect(f.record()).toBeUndefined();
+  await expect(auth.login()).resolves.toMatchObject({ webId: f.op.webId });
+});
+
+test("an abort seen after the token exchange discards the grant even when the attempt fails", async () => {
+  const f = fixture();
+  const controller = new AbortController();
+  const fetch = globalThis.fetch;
+  vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+    // Reading the URL must not consume the request body.
+    const url = input instanceof Request ? input.url : String(input);
+    const response = await fetch(input, init);
+    if (url === "https://op.example/token") controller.abort(new Error("cancelled"));
+    return response;
+  });
+  const auth = f.load();
+  const logoutEvent = vi.fn();
+  auth.on("logout", logoutEvent);
+  await expect(auth.login(undefined, { signal: controller.signal })).rejects.toThrow();
+  expect(await auth.identity()).toBeNull();
+  expect(await auth.remembered()).toEqual([]);
+  expect(f.record()).toBeUndefined();
+});
+
+test("an abort seen after the grant is stored discards it even though the attempt then fails", async () => {
+  const f = fixture();
+  const controller = new AbortController();
+  const write = f.sessions.setItem.getMockImplementation()!;
+  f.sessions.setItem.mockImplementation(async (key: string, value: {}) => {
+    await write(key, value);
+    // The refresh record is the grant; abort only once it is stored.
+    if (typeof value === "object" && "refreshToken" in value)
+      controller.abort(new Error("cancelled"));
+  });
+  // Revocation failing during the discard still clears local state, and the caller sees the abort.
+  f.op.failRevocation(true);
+  const auth = f.load();
+  const logout = vi.spyOn(auth, "logout");
+  await expect(auth.login(undefined, { signal: controller.signal })).rejects.toThrow("cancelled");
+  expect(logout).toHaveBeenCalledOnce();
+  expect(await auth.identity()).toBeNull();
+  expect(f.record()).toBeUndefined();
+});
+
+test("an abort while the app picks a WebID or an issuer settles the login without waiting for the hook", async () => {
+  const f = fixture();
+  const picker = vi.fn(() => new Promise<string>(() => {}));
+  f.options.ui.getWebId = picker;
+  const auth = f.load();
+  const controller = new AbortController();
+  const attempt = auth.login(undefined, { signal: controller.signal });
+  await vi.waitFor(() => expect(picker).toHaveBeenCalledOnce());
+  controller.abort(new Error("cancelled"));
+  await expect(attempt).rejects.toThrow("cancelled");
+
+  // A WebID returned after the abort is dropped, so the next login asks again.
+  const late = new AbortController();
+  picker.mockImplementationOnce(async () => {
+    late.abort(new Error("cancelled"));
+    return f.op.webId!;
+  });
+  await expect(auth.login(undefined, { signal: late.signal })).rejects.toThrow("cancelled");
+  picker.mockImplementationOnce(async () => f.op.webId!);
+  await expect(auth.login()).resolves.toMatchObject({ webId: f.op.webId });
+  expect(picker).toHaveBeenCalledTimes(3);
+
+  const g = fixture({ issuers: ["https://op.example/", "https://other.example/"] });
+  const chooser = vi.fn(() => new Promise<string>(() => {}));
+  g.options.ui.chooseIssuer = chooser;
+  const second = g.load();
+  const choice = new AbortController();
+  const choosing = second.login({ webId: g.op.webId! }, { signal: choice.signal });
+  await vi.waitFor(() => expect(chooser).toHaveBeenCalledOnce());
+  choice.abort(new Error("cancelled"));
+  await expect(choosing).rejects.toThrow("cancelled");
+});
+
+test("an abort after a logout during the token exchange does not purge a second time", async () => {
+  const f = fixture();
+  const controller = new AbortController();
+  const fetch = globalThis.fetch;
+  let auth!: ReturnType<typeof f.load>;
+  let loggingOut: Promise<void> | undefined;
+  vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+    // Reading the URL must not consume the request body.
+    const url = input instanceof Request ? input.url : String(input);
+    const response = await fetch(input, init);
+    if (url === "https://op.example/token" && loggingOut === undefined) {
+      loggingOut = auth.logout();
+      controller.abort(new Error("cancelled"));
+    }
+    return response;
+  });
+  auth = f.load();
+  const logout = vi.spyOn(auth, "logout");
+  await expect(auth.login(undefined, { signal: controller.signal })).rejects.toThrow();
+  await loggingOut;
+  expect(logout).toHaveBeenCalledOnce();
+  expect(await auth.identity()).toBeNull();
+  expect(f.record()).toBeUndefined();
+});
+
+test("an abort after logout leaves cleanup to logout", async () => {
+  const f = fixture();
+  const ready = Promise.withResolvers<void>(),
+    release = Promise.withResolvers<void>();
+  f.options.ui.getCode = async (...args) => {
+    ready.resolve();
+    await release.promise;
+    return f.op.getCode(...args);
+  };
+  const auth = f.load();
+  const logoutEvent = vi.fn();
+  auth.on("logout", logoutEvent);
+  const controller = new AbortController();
+  const attempt = auth.login(undefined, { signal: controller.signal });
+  attempt.catch(() => undefined);
+  await ready.promise;
+  await auth.logout();
+  controller.abort(new Error("cancelled"));
+  release.resolve();
+  await expect(attempt).rejects.toThrow();
+  expect(logoutEvent).toHaveBeenCalledTimes(1);
+  await expect(auth.login()).resolves.toMatchObject({ webId: f.op.webId });
+});
+
 test.each([
   false,
   true,

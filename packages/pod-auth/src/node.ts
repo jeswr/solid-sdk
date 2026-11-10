@@ -6,6 +6,8 @@ import type { CidSubject, PodAuth } from "./types.js";
 /** Static credential roots for an in-memory Node agent. */
 export interface AgentOptions {
   boundary: string[];
+  /** Trusted pristine transport; captured without changing global fetch. */
+  fetch?: typeof fetch;
   allowInsecureLoopback?: boolean;
   clock?: () => number;
 }
@@ -23,6 +25,8 @@ export interface CidAgentOptions extends AgentOptions, CidSubject {
 function policy(options: AgentOptions) {
   if (!Array.isArray(options.boundary) || options.boundary.length === 0)
     throw new TypeError("Agent boundary requires at least one root");
+  if (options.fetch !== undefined && typeof options.fetch !== "function")
+    throw new TypeError("fetch must be a function");
   if (options.clock !== undefined && typeof options.clock !== "function")
     throw new TypeError("clock must be a function");
   if (options.allowInsecureLoopback === true && process.env.NODE_ENV === "production")
@@ -30,6 +34,7 @@ function policy(options: AgentOptions) {
   for (const root of options.boundary)
     secureUrl(root, options.allowInsecureLoopback === true, "boundary root");
   return {
+    ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
     boundary: { roots: [...options.boundary], automatic: false },
     ...(options.allowInsecureLoopback === undefined
       ? {}
@@ -73,4 +78,13 @@ export async function forCid(options: CidAgentOptions): Promise<PodAuth> {
   return auth;
 }
 
+// Split worker-safe OIDC protocol; encrypted persistence and CAS belong to the broker.
+export {
+  createServerOidcClient as createNodeOidcClient,
+  exportServerDpopKey,
+  importServerDpopKey,
+  SERVER_MAX_REPLAY_BODY_BYTES,
+  type ServerAuthorizationState,
+  type ServerOidcClient,
+} from "@jeswr/reactive-authentication";
 export type { Identity, PodAuth } from "./types.js";

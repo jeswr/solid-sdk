@@ -11,6 +11,7 @@
  * target); this toolbar exposes the click-to-pick equivalent and shares the
  * same `uploadMany` helper for progress.
  */
+import { useSession } from "@/components/session-provider";
 import { useRef, useState } from "react";
 import { FolderPlus, FilePlus, Upload, Loader2 } from "lucide-react";
 import { toast } from "sonner";
@@ -56,6 +57,7 @@ export function FileToolbar({
   container: string;
   onChange: () => void;
 }) {
+  const { podFetch } = useSession();
   const [dialog, setDialog] = useState<"folder" | "file" | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
@@ -63,7 +65,7 @@ export function FileToolbar({
   async function handlePicked(files: FileList | null) {
     if (!files || files.length === 0) return;
     setUploading(true);
-    const result = await uploadMany(container, Array.from(files));
+    const result = await uploadMany(container, Array.from(files), podFetch);
     setUploading(false);
     if (result.uploaded > 0) {
       toast.success(
@@ -137,12 +139,13 @@ export function FileToolbar({
 export async function uploadMany(
   container: string,
   files: File[],
+  podFetch: typeof fetch,
 ): Promise<{ uploaded: number; failed: string[] }> {
   let uploaded = 0;
   const failed: string[] = [];
   for (const file of files) {
     try {
-      await uploadFile(container, file);
+      await uploadFile(container, file, { fetchImpl: podFetch });
       uploaded += 1;
     } catch {
       failed.push(file.name);
@@ -162,13 +165,14 @@ function NewFolderDialog({
   onOpenChange: (open: boolean) => void;
   onCreated: () => void;
 }) {
+  const { podFetch } = useSession();
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
 
   async function create() {
     setBusy(true);
     try {
-      await createContainer(childContainerUrl(container, name));
+      await createContainer(childContainerUrl(container, name), podFetch);
       toast.success(`Created folder “${name}”.`);
       onCreated();
       onOpenChange(false);
@@ -231,6 +235,7 @@ function NewFileDialog({
   onOpenChange: (open: boolean) => void;
   onCreated: () => void;
 }) {
+  const { podFetch } = useSession();
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -241,7 +246,7 @@ function NewFileDialog({
       // for a hand-authored RDF resource); the source editor opens it next.
       const url = childResourceUrl(container, name, "ttl");
       const contentType = guessContentType(url) ?? "text/turtle";
-      await writeRaw(url, "", { contentType, createOnly: true });
+      await writeRaw(url, "", { contentType, createOnly: true, fetchImpl: podFetch });
       toast.success(`Created “${name}”.`, {
         description: "Open it to add content in the source editor.",
       });

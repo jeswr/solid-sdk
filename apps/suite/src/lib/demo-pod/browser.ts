@@ -1,5 +1,6 @@
 // AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 /**
  * Browser demo storage. Requests arriving together share a snapshot commit,
@@ -78,6 +79,13 @@ function commit(
 
 let current: Promise<DemoPod> | undefined;
 let dispose: (() => void) | undefined;
+
+declare global {
+  interface Window {
+    // biome-ignore lint/style/useNamingConvention: dev fixture hook shared with Playwright
+    __suiteDemoPod?: DemoPod;
+  }
+}
 
 /** The tab's stable demo pod facade (created on first use). */
 /** The demo pod behaves like a remote server: unreachable while the browser is offline. */
@@ -231,6 +239,19 @@ export function getDemoPod(): Promise<DemoPod> {
       },
     });
   })();
+  // Fixture capability is compiled out of ordinary builds. It uses the same durable
+  // facade and notifications as the app, including conditional writes.
+  // This exposes only the in-browser demo pod (same-origin IndexedDB, which any
+  // same-origin script can already read and write). It never exposes a real pod
+  // session's fetch or tokens.
+  if (
+    process.env.NEXT_PUBLIC_DEV_FIXTURES === "1" &&
+    typeof window !== "undefined" &&
+    ["127.0.0.1", "localhost", "[::1]"].includes(window.location.hostname)
+  )
+    void current.then((pod) => {
+      window.__suiteDemoPod = pod;
+    });
   return current;
 }
 

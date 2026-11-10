@@ -7,6 +7,7 @@
  * A SolidOS capability: see what's registered, add a registration, remove one.
  * Read + write go through `type-index-manage` (read-modify-write, conditional).
  */
+import { useSession } from "@/components/session-provider";
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { ChevronRight, Loader2, ListTree, Lock, Plus, Trash2, Globe2 } from "lucide-react";
@@ -45,13 +46,14 @@ function classTail(iri: string): string {
 }
 
 export default function TypeIndexPage() {
+  const { podFetch } = useSession();
   const { data, loading, error, reload } = useTypeIndex();
   const [busy, setBusy] = useState<string | null>(null);
 
   async function onRemove(reg: ManagedRegistration) {
     setBusy(reg.subject);
     try {
-      await removeRegistration({ indexUrl: reg.indexUrl, subject: reg.subject });
+      await removeRegistration({ indexUrl: reg.indexUrl, subject: reg.subject, fetchImpl: podFetch });
       toast.success("Registration removed");
       reload();
     } catch {
@@ -248,6 +250,7 @@ function IndexGroup({
 }
 
 function AddRegistration({ indexUrl, onAdded }: { indexUrl: string; onAdded: () => void }) {
+  const { podFetch } = useSession();
   const [open, setOpen] = useState(false);
   const [forClass, setForClass] = useState("");
   const [target, setTarget] = useState("");
@@ -267,6 +270,7 @@ function AddRegistration({ indexUrl, onAdded }: { indexUrl: string; onAdded: () 
     setSaving(true);
     try {
       const res = await addRegistration({
+        fetchImpl: podFetch,
         indexUrl,
         registration:
           kind === "container"

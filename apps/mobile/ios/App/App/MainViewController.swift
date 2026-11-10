@@ -39,6 +39,14 @@ class MainViewController: CAPBridgeViewController {
         guard let bridge = bridge as? CapacitorBridge else {
             fatalError("Capacitor bridge is not a CapacitorBridge")
         }
+        #if !DEBUG
+        // MOBILE_DEBUG=1 writes webContentsDebuggingEnabled into capacitor.config.json and the
+        // bridge has already applied it. A Release build is never inspectable, whatever config was
+        // bundled (sst-8wx.17).
+        if #available(iOS 16.4, *) {
+            webView?.isInspectable = false
+        }
+        #endif
         bridge.registerPluginInstance(SuiteNavigationPlugin())
         bridge.registerPluginInstance(SuiteAuthSessionPlugin())
         bridge.registerPluginInstance(SuitePushPlugin())

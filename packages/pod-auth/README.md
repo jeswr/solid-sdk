@@ -30,7 +30,10 @@ unsubscribe();
 ```
 
 `ui.getCode` returns the complete callback URL, including its `state`, `code` and `iss` parameters.
-The UI hook owns popup/redirect cleanup and must honor its abort signal. Protocol validation, PKCE,
+The UI hook owns popup/redirect cleanup and must honor its abort signal. To let the user cancel a
+sign-in, pass `auth.login(hint, { signal })`: on abort the popup's signal and the attempt's requests
+abort, and the call rejects once the attempt has wound down, with stored sessions left alone. If a
+grant had already arrived when the abort was seen, pod-auth discards it with a full `logout()` first. Protocol validation, PKCE,
 DPoP proofs, refresh machinery and discovery stay in the protocol engine. A missing issuer chooser
 throws `AmbiguousIssuerError` when a profile lists several issuers; a chooser must return a listed URL.
 Explicit WebID and issuer hints must agree with the profile and the authenticated identity.
@@ -57,7 +60,8 @@ root stays a storage with its own grant.
 
 `auth.fetch` buffers request bodies so it can replay them after a 401. Bodies larger than
 `maxReplayBodyBytes` (default 16 MiB) reject; the size is checked after the body is read, so it
-limits requests, not peak memory. Raise it for large uploads.
+limits requests, not peak memory. A `Blob` or `File` passed as the body is replayed as it is,
+without buffering, so pass uploads as a `File` rather than raising the limit.
 
 Credential roots come exclusively from `boundary.roots` (including explicit application/user grants)
 or the authenticated WebID profile's `pim:storage` statements about that exact WebID. Automatic roots
@@ -224,6 +228,18 @@ const agent = await forCid({
   boundary: ['https://storage.example/agent/'],
 });
 ```
+
+Node factories accept an optional trusted `fetch`, captured at construction without changing
+`globalThis.fetch`. Protocol endpoint and loopback checks still apply on every hop.
+
+The same Node entry exports `createNodeOidcClient`, `ServerAuthorizationState`,
+`exportServerDpopKey`, `importServerDpopKey` and `SERVER_MAX_REPLAY_BODY_BYTES` for trusted
+server login brokers. This split callback protocol delegates to reactive-authentication's
+server OIDC client, with S256, state, nonce, ID-token signatures and bounded DPoP nonce retries.
+Its caller must encrypt pending state and the private JWK envelope, consume callbacks once,
+claim refresh ownership atomically, persist rotation before use, and scope every resource fetch.
+The envelope retains the original private JWK for JSON-only encrypted server vaults; signing
+keys are imported as non-extractable. Browser persistence continues to store CryptoKeys only.
 
 Both factories establish an identity before returning. Client credentials use a DPoP grant and report
 the configured client identifier as the subject, with no inferred WebID. CID mode signs short-lived,
