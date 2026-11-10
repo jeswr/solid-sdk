@@ -27,7 +27,7 @@ import {
 
 const actions = new Set<string>([
   ...ODRL_ACTIONS,
-  ...["SendMessage", "Transfer", "Sign", "BookAppointment"].map((x) => `${AGENT}${x}`),
+  ...["SendMessage", "Transfer", "Sign", "BookAppointment", "Remember"].map((x) => `${AGENT}${x}`),
 ]);
 const operands = new Set<string>([
   ...LEFT_OPERANDS,

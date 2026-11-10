@@ -12,14 +12,19 @@ Every read, key resolution, revocation check, process invocation and clock is ex
 `defaultMandate({ id, ownerWebId, agentWebId, recipientHashes, now })` builds the 30-day v1
 mandate: empty autonomous permissions, Gmail sends to salted account hashes with approval,
 and prohibitions on Transfer, Sign and appointments costing more than zero. Hashes have the
-form `sha256:<64 lowercase hex characters>`; callers supply the salt and calculate hashes.
+form `<64 lowercase hex characters>` or `sha256:<64 lowercase hex characters>`; callers supply the salt and calculate hashes.
 `limitConstraint(operand, value, enforcement)` builds the spendPerDay, spendPerWeek,
 perRecipientPerDay and sendsPerDay ODRL vocabulary with `hard` or `soft` enforcement.
-Actual accounting and enforcement belong to agent-executor.
+Actual accounting and enforcement belong to agent-executor. Set `mandate.currency` (an ISO 4217
+code, signed into the agreement as `schema:currency`) whenever the mandate has spend limits: the
+executor refuses any action under a spend limit whose currency it cannot authenticate.
 
 `issueMandate(mandate, ed25519Key, { statusListCredential, statusListIndex })` creates a
 `solid-vc` AgentAuthorizationCredential with an embedded ODRL Agreement and
-`eddsa-rdfc-2022` proof. The complete policy graph is signed. Use `mandateToTurtle` (the
+`eddsa-rdfc-2022` proof by default. A fourth options argument `{ cryptosuite: "ecdsa-rdfc-2019" }`
+signs with the browser owner's non-extractable P-256 key. The verifier accepts exactly one proof
+using either of these two suites; every other suite is rejected. `mandateCredential(m, status)`
+builds the unsigned claim graph for previews. The complete policy graph is signed. Use `mandateToTurtle` (the
 historical export name) to serialize TriG and `parseMandateCredential` to read it. Serve
 the document as `application/trig`, for example at a `.trig` URL. Each proof lives in a
 named graph with a `sec:multibase` signature literal, matching the standard Data Integrity
@@ -32,8 +37,9 @@ Inject `solid-vc`'s `createWebIdKeyResolver` with a scoped fetch, and its
 `createBitstringStatusResolver` with a scoped fetch and the same key-control seams.
 The status-list URL must end in `/agent/mandates/status.ttl`. Missing, unreadable,
 revoked or otherwise unconfirmed status refuses all authority. The upstream bitstring
-resolver reads a signed JSON/JSON-LD status-list credential, even at this `.ttl` URL;
-its fetch seam can adapt the storage representation. Mandate transport uses TriG.
+resolver reads a signed JSON/JSON-LD or TriG status-list credential at this `.ttl` URL.
+Use `solid-vc`'s `statusListCredentialToTurtle` / `parseStatusListCredential` for lossless
+TriG transport. Parsing is structural; signature and issuer checks remain mandatory.
 
 The verifier uses `agent-authz-verifier` for credential integrity, owner/agent cross-binding,
 and revocation. Its empty Agreement projection deliberately delegates Phase D to the
@@ -79,13 +85,15 @@ WebID assertionMethod, the canonical graph signature, proposal, digest, expiry a
 in that order. Verification material inside the statement is never trusted. Digest
 comparison hashes both inputs to fixed-size arrays before constant-work comparison.
 
-Browser callers import `@jeswr/agent-mandate/approval` and `@jeswr/agent-mandate/control`.
-These entry points use WebCrypto and the browser-compatible `solid-vc` build, and accept
-non-extractable P-256 private keys. The general entry point also exports the Node mandate
-verifier, whose upstream adapter uses Node's module loader.
+Browser callers import `@jeswr/agent-mandate/approval`, `@jeswr/agent-mandate/control`,
+`@jeswr/agent-mandate/issue` and `@jeswr/agent-mandate/verify`. The latter two expose
+mandate composition/signing and verification/policy evaluation without expanding the UI layer allowlist.
+These entry points and `src/mandate.ts` bundle for browsers, use WebCrypto and the browser-compatible
+`solid-vc` build, and accept non-extractable P-256 private keys. The optional `./sparq`
+adapter remains Node-only.
 
 `issueControlStatement({ id, kind, attributedTo, createdAt, expires, target?, binding?,
-bindingState? }, p256Key, now)` signs a TriG control statement using the existing
+bindingState?, restrictions? }, p256Key, now)` signs a TriG control statement using the existing
 agent-model vocabulary and RDF mapping (including `prov:wasAttributedTo`, `dct:created`
 and typed date-time literals). The record's `type` discriminator is implicit in RDF;
 `proof` is produced by the signer. `verifyControlStatement(document, { id, ownerWebId,
@@ -93,7 +101,9 @@ webIdKeyResolver, now })` checks the suite/purpose, authoritative P-256 assertio
 complete graph signature, exact owner attribution and expiry, and returns either
 `{ valid: true, statement }` or `{ valid: false, reason }`. Failures are `proof-type`,
 `key`, `signature`, `attribution`, `expired` or `malformed`. SetBindingState requires
-binding and bindingState; DispatchNow, RevokeMandate and Forget require a target.
+target, binding, and either bindingState or restrictions. Restriction-only changes omit
+bindingState so a concurrent disconnect remains effective. Restrictions carry one or more optional typed booleans
+(read, triage, draft and send); only supplied fields change, and are forbidden for every other control kind. DispatchNow, RevokeMandate and Forget require a target.
 Control claims are decoded through agent-model's strict RDF mapping, including literal
 datatypes, language tags, and cardinalities. Approval claims retain their issued mapping:
 `approves` is an IRI; `termsDigest`, `expires`, and `decision` are `xsd:string` literals

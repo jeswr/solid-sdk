@@ -128,23 +128,38 @@ const variations: Record<RecordType, fc.Arbitrary<unknown>> = {
     validUntil: timestamp,
     proof: optional(json),
   }),
-  "control-statement": fc.record({
-    kind: fc.constantFrom(
-      "Halt",
-      "Resume",
-      "SetBindingState",
-      "DispatchNow",
-      "RevokeMandate",
-      "Forget",
-    ),
-    target: iri,
-    binding: nonempty,
-    bindingState: state,
-    attributedTo: iri,
-    createdAt: timestamp,
-    expires: timestamp,
-    proof: optional(json),
-  }),
+  "control-statement": fc
+    .record({
+      kind: fc.constantFrom(
+        "Halt",
+        "Resume",
+        "SetBindingState",
+        "DispatchNow",
+        "RevokeMandate",
+        "Forget",
+      ),
+      target: iri,
+      binding: nonempty,
+      bindingState: state,
+      restrictions: optional(
+        fc
+          .record({
+            read: optional(fc.boolean()),
+            triage: optional(fc.boolean()),
+            draft: optional(fc.boolean()),
+            send: optional(fc.boolean()),
+          })
+          .filter((value) => Object.values(value).some((field) => field !== undefined)),
+      ),
+      attributedTo: iri,
+      createdAt: timestamp,
+      expires: timestamp,
+      proof: optional(json),
+    })
+    .map((record) => ({
+      ...record,
+      restrictions: record.kind === "SetBindingState" ? record.restrictions : undefined,
+    })),
   transmission: fc.record({
     proposal: iri,
     status: fc.constantFrom("attempting", "sent", "not-sent", "uncertain", "refused"),
@@ -192,6 +207,7 @@ describe("DESIGN §2.4 pod record round trips", () => {
       exampleRecords["channel-capability"],
       exampleRecords["action-proposal"],
       exampleRecords["conversation-turn"],
+      exampleRecords["control-statement"],
     ]) {
       const text = await recordToTurtle(record);
       const graph = toRdf(record);
@@ -501,7 +517,10 @@ describe("malformed and ambiguous records fail closed", () => {
   it("refuses incomplete controls and corrupt ordered collections", () => {
     const control = exampleRecords["control-statement"];
     expect(() => toRdf({ ...control, binding: undefined })).toThrow(/requires/);
-    expect(() => toRdf({ ...control, kind: "DispatchNow", target: undefined })).toThrow(/target/);
+    expect(() => toRdf({ ...control, target: undefined })).toThrow(/target/);
+    expect(() =>
+      toRdf({ ...control, kind: "DispatchNow", target: undefined, restrictions: undefined }),
+    ).toThrow(/target/);
     const turn = exampleRecords["conversation-turn"];
     const { node, store } = nodeFor(turn);
     const seqId = node.read(agent("refersToProposal"), "iri");
@@ -510,6 +529,61 @@ describe("malformed and ambiguous records fail closed", () => {
     const child = new RdfResource(String(seqId), store, DataFactory);
     child.write(agent("length"), "integer", 513);
     expect(() => fromRdf(store, turn.id)).toThrow(/length/);
+  });
+  it("round trips the single-field binding-control golden fixture without filling absent fields", async () => {
+    const control = exampleRecords["control-statement"];
+    const { bindingState: _, ...expected } = control;
+    const golden = readFileSync(
+      new URL("../../test/fixtures/set-binding-read.ttl", import.meta.url),
+      "utf8",
+    );
+    expect(await recordFromTurtle(golden, control.id)).toEqual(expected);
+    expect(await recordToTurtle(expected)).toBe(golden.replace(/^# AUTHORED-BY Codex GPT-6\n/, ""));
+  });
+  it("keeps binding restrictions optional, typed, account-targeted and exclusive to SetBindingState", async () => {
+    const control = exampleRecords["control-statement"];
+    const restrictionsOnly = { ...control, bindingState: undefined };
+    expect(fromRdf(toRdf(restrictionsOnly), control.id)).toEqual(
+      expect.objectContaining({ restrictions: control.restrictions }),
+    );
+    expect(fromRdf(toRdf(restrictionsOnly), control.id)).not.toHaveProperty("bindingState");
+    expect(() => toRdf({ ...control, bindingState: undefined, restrictions: undefined })).toThrow(
+      /state or restrictions/,
+    );
+    const unsigned = { ...control, restrictions: undefined };
+    expect(fromRdf(toRdf(unsigned), control.id)).not.toHaveProperty("restrictions");
+    const dataset = toRdf(control);
+    const root = new RdfResource(control.id, dataset, DataFactory);
+    expect(root.read(agent("target"), "iri")).toBe(exampleRecords.account.id);
+    const restrictionId = root.read(agent("restrictions"), "iri");
+    const restriction = new RdfResource(String(restrictionId), dataset, DataFactory);
+    for (const [field, expected] of Object.entries(control.restrictions ?? {})) {
+      const literal = [
+        ...dataset.match(restriction.subjectTerm, DataFactory.namedNode(agent(field))),
+      ][0]?.object;
+      expect(literal).toMatchObject({
+        termType: "Literal",
+        value: String(expected),
+        datatype: { value: "http://www.w3.org/2001/XMLSchema#boolean" },
+      });
+    }
+    for (const kind of ["Halt", "Resume", "DispatchNow", "RevokeMandate", "Forget"] as const) {
+      expect(() => toRdf({ ...control, kind })).toThrow(/only with SetBindingState/);
+      const store = new Store([...dataset]);
+      store.deleteMatches(root.subjectTerm, DataFactory.namedNode(agent("controlKind")));
+      new RdfResource(control.id, store, DataFactory).write(
+        agent("controlKind"),
+        "iri",
+        agent(kind),
+      );
+      expect(() => fromRdf(store, control.id)).toThrow(/only with SetBindingState/);
+    }
+    for (const restrictions of [
+      {},
+      { ...control.restrictions, send: "true" },
+      { ...control.restrictions, other: false },
+    ])
+      expect(() => podRecordSchema.parse({ ...control, restrictions })).toThrow();
   });
   it("enforces the reader's aggregate byte limit when serializing individually valid values", async () => {
     const turn = {

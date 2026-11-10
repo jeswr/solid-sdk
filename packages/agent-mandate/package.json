@@ -28,6 +28,14 @@
       "types": "./dist/control.d.ts",
       "default": "./dist/control.js"
     },
+    "./issue": {
+      "types": "./dist/issue.d.ts",
+      "default": "./dist/issue.js"
+    },
+    "./verify": {
+      "types": "./dist/verify.d.ts",
+      "default": "./dist/verify.js"
+    },
     "./sparq": {
       "types": "./dist/sparq.d.ts",
       "default": "./dist/sparq.js"

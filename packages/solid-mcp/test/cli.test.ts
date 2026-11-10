@@ -158,6 +158,12 @@ describe("stdio executable", () => {
         arguments: { provider: conversation.provider, conversationId: conversation.conversationId },
       });
       expect(JSON.parse(text(chat))).toEqual({ ...conversation, url });
+      const exported = await callTool({
+        name: "chat_export",
+        arguments: { provider: conversation.provider, conversationId: conversation.conversationId },
+      });
+      expect(JSON.parse(text(exported))).toMatchObject({ url });
+      expect(JSON.parse(text(exported)).markdown).toContain(conversation.messages[0]?.text);
       const context = await callTool({ name: "context_read", arguments: {} });
       expect(JSON.parse(text(context))).toEqual({
         status: "ok",

@@ -236,7 +236,8 @@ test("fails closed when replay-protection capacity is exhausted", async () => {
   expect(
     (await f.deliver({ ...event, n: 10_001 }, { created: ((epoch + 300_001) / 1000) | 0 })).status,
   ).toBe(202);
-}, 30_000);
+  // 10,001 signed deliveries: about 9 s alone, but over 30 s in a full-workspace CI gate.
+}, 120_000);
 
 test("routes requests and enforces explicit CORS policy", async () => {
   const f = await setup();

@@ -5,6 +5,7 @@ import {
   CHAT_ROLES,
   type ChatPodPort,
   ChatWriter,
+  renderTranscript,
 } from "@jeswr/solid-chat-interop";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
@@ -216,6 +217,27 @@ export function registerChatTools(
       try {
         const conversation = await writer().get(provider, conversationId);
         return await result((await new PodOutput(pod).resource(conversation)) ?? {});
+      } catch (e) {
+        return error(e);
+      }
+    },
+  );
+  // AUTHORED-BY Claude Opus 5.5
+  server.registerTool(
+    "chat_export",
+    {
+      description:
+        "Export a saved conversation as a redacted Markdown transcript to continue it in another account.",
+      inputSchema: { provider, conversationId: id },
+      annotations: { readOnlyHint: true, openWorldHint: true },
+    },
+    async ({ provider, conversationId }) => {
+      try {
+        const conversation = await writer().get(provider, conversationId);
+        const permitted = await new PodOutput(pod).resource(conversation);
+        return await result(
+          permitted ? { url: permitted.url, markdown: renderTranscript(permitted) } : {},
+        );
       } catch (e) {
         return error(e);
       }
