@@ -5,8 +5,8 @@ import { defineConfig } from "@playwright/test";
 const port = Number(process.env.SUITE_E2E_PORT ?? 3210);
 export default defineConfig({
   testDir: "./e2e",
-  // DS-13 screenshot baselines run only through playwright.visual.config.ts (`pnpm test:visual`).
-  testIgnore: "**/visual/**",
+  // Visual baselines and live-CSS scenarios have separate, opt-in configs and stay out of CI.
+  testIgnore: ["**/visual/**", "**/shell-css/**"],
   outputDir: "../../artifacts/playwright/DS-01",
   fullyParallel: true,
   workers: 2,
