@@ -65,8 +65,8 @@ export interface DocumentBrowserProps
   /** The pod owner's WebID — needed by the data layer for type-index discovery. */
   webId: string;
   /**
-   * The authenticated fetch for pod reads. Omit to use the ambient global fetch
-   * (patched by @solid/reactive-authentication in a real session). The
+   * The authenticated fetch for pod reads (a host passes its session's
+   * `auth.fetch`). Omit it and reads use the unauthenticated global fetch. The
    * injectable auth seam — unit tests pass a stub here.
    */
   fetch?: typeof fetch;

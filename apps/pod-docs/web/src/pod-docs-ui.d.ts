@@ -18,8 +18,8 @@ declare module "@jeswr/pod-docs/ui" {
     /** The pod owner's WebID — needed for type-index container discovery. */
     webId: string;
     /**
-     * The authenticated fetch for pod reads. Omit to use the ambient global
-     * fetch (patched by @solid/reactive-authentication in a real session).
+     * The authenticated fetch for pod reads. Pod Docs explicitly passes auth.fetch.
+     * Omit only when a host intentionally wants the ambient public fetch.
      */
     fetch?: typeof fetch;
     /** Development only: explicitly allow HTTP loopback identity metadata. */
