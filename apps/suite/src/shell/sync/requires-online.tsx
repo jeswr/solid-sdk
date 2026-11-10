@@ -12,7 +12,7 @@
  */
 import { OFFLINE_REASON, OnlineGate } from "@jeswr/suite-ui/sync";
 import type { ReactNode } from "react";
-import { useConnectionState } from "./offline-provider";
+import { useConnectionState } from "./connection-state";
 
 export function useNeedsConnection(): { disabled: boolean; reason: string } {
   return { disabled: useConnectionState() !== "online", reason: OFFLINE_REASON };

@@ -39,6 +39,7 @@ import { unconfirmedIdentityMessage } from "../lib/client/commit";
 import { DriveDeletePendingError } from "../lib/client/deletion";
 import { isOwnStorage } from "../lib/client/ownership";
 import { DriveOperationInProgressError } from "../lib/client/source-operations";
+import { docsHref, isDocsDocument } from "../lib/open-with/docs";
 import {
   childUrl,
   copyItem,
@@ -484,6 +485,11 @@ export function useDriveActions() {
         router.push(hrefFor(item));
         return;
       }
+      // Docs documents open in the Docs editor, not the generic preview.
+      if (isDocsDocument(item, session.storageUrl)) {
+        router.push(docsHref(item.url));
+        return;
+      }
       if (setPreview && process.env.NEXT_PUBLIC_SUITE_TARGET !== "native") {
         const files = (siblings ?? [item]).filter((entry) => entry.kind === "file");
         setPreview({
@@ -496,7 +502,7 @@ export function useDriveActions() {
         });
       } else router.push(hrefFor(item));
     },
-    [router],
+    [router, session.storageUrl],
   );
 
   const download = useCallback(
