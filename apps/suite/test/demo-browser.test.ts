@@ -4,7 +4,7 @@ import { createRequire } from "node:module";
 import { afterEach, expect, it, vi } from "vitest";
 import { Doc } from "yjs";
 import { deleteDocument, restoreDocument } from "../src/apps/docs/editor/operations";
-import { applySharing, loadSharing } from "../src/apps/drive/lib/sharing/apply";
+import { applySharing, loadSharing } from "../src/apps/drive/lib/sharing/adapter";
 import { createDemoPod } from "../src/lib/demo-pod/pod";
 import { buildDemoSeed, DEMO_ROOT, DEMO_WEBID } from "../src/lib/demo-pod/seed";
 import type { PodSession } from "../src/lib/session/pod-session";

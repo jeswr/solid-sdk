@@ -432,7 +432,12 @@ describe("signed approvals and controls", () => {
     ).toBe("verified");
     const halt = await signer.signControl("Halt");
     expect(Date.parse(halt.expires) - now.getTime()).toBe(365 * 86400000);
-    await signer.signControl("SetBindingState", { binding: "direct", bindingState: "disabled" });
+    await signer.signControl("SetBindingState", {
+      target: `${client.paths.accounts}direct.ttl`,
+      binding: "direct",
+      bindingState: "disabled",
+      restrictions: { read: true, triage: false, draft: false, send: false },
+    });
     const controls = loadedRecords(
       await readControl(
         client,
@@ -501,7 +506,8 @@ describe("signed approvals and controls", () => {
         [...graph].filter(
           (q) =>
             q.graph.termType === "DefaultGraph" &&
-            q.predicate.value !== "https://w3id.org/security#proof",
+            q.predicate.value !== "https://w3id.org/security#proof" &&
+            q.predicate.value !== "http://purl.org/dc/terms/created",
         ),
       ),
       "application/trig",

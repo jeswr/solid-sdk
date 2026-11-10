@@ -10,7 +10,8 @@ Read README.md and agent DESIGN D3 / §4.2 before changing this security-critica
 The public interfaces are in src/types.ts, src/mandate.ts, src/approval.ts and src/control.ts;
 ./testing contains explicit in-memory fakes. The optional Node-only sparq binary adapter is ./sparq.
 
-Use `issueMandate` with Ed25519 and a mandatory revocation status entry. Policies are embedded
+Use `issueMandate` with Ed25519 (default) or explicit `ecdsa-rdfc-2019` for a non-extractable
+browser P-256 key, and a mandatory revocation status entry. Policies are embedded
 in the signed credential graph. `mandateToTurtle` (historical name) / `parseMandateCredential`
 transport the package-issued dataset losslessly as TriG (`application/trig`). Approvals use
 the same transport. Proofs occupy named graphs and proofValue is a sec:multibase literal,
@@ -32,7 +33,7 @@ Approval checks are ordered: exact ecdsa-rdfc-2019 suite / assertion purpose; We
 and P-256 key; RDFC signature; proposal IRI; constant-work digest comparison; expiry using the
 injected clock; approve/deny decision. Keep non-extractable key support. Browser signing uses
 the ./approval and ./control subpaths with solid-vc's WebCrypto hashing and browser bundle.
-The general entry point includes the Node mandate verifier.
+`src/mandate.ts` must also bundle for browsers without Node builtins. Only `./sparq` is Node-only.
 Control statements use the agent-model vocabulary and require the same suite/key/signature
 checks, then exact owner attribution and expiry. Claim readers are display only, never
 authority. Do not implement alternate crypto here.

@@ -48,6 +48,14 @@ Status-list compression is asynchronous. Await `encodeStatusList`, `decodeStatus
 For example, `const bits = await decodeStatusList(await encodeStatusList(createStatusBitstring()))`.
 Concatenated GZIP members and trailing bytes are rejected by the platform decoder.
 
+`statusListCredentialToTurtle(vc)` serializes a single-proof status-list credential as
+`application/trig`, preserving its named Data Integrity proof graph. Its structural inverse,
+`parseStatusListCredential(document)`, rejects ambiguous or lossy graphs and returns the
+credential or `undefined`; always verify the result before trusting its bits.
+`createBitstringStatusResolver` accepts this RDF transport alongside existing JSON/JSON-LD,
+including lists signed by a non-extractable P-256 owner key with `ecdsa-rdfc-2019`.
+Status signature, issuer-control, URL, validity and decoded-size checks apply to both formats.
+
 ## Minimal usage
 
 ```ts

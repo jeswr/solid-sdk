@@ -49,6 +49,8 @@ const outdir = join(root, "dist");
  */
 const EXTERNAL = [
   "@jeswr/solid-chat-interop",
+  "@jeswr/solid-memory",
+  // Private pkg-memory and its policy evaluator are bundled.
   "@jeswr/rdf-serialize",
   "@jeswr/solid-dpop",
   "@modelcontextprotocol/sdk",

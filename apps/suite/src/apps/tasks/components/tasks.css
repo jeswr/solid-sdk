@@ -613,3 +613,9 @@ button.tsk-due:hover {
 .tsk-row-body {
   padding-inline: 0;
 }
+
+.tsk-assignee-avatar {
+  width: 20px;
+  height: 20px;
+  font-size: var(--text-xs);
+}
