@@ -196,6 +196,32 @@ it("moves visible list focus with arrow keys and isolates genuinely malformed ap
   await view.unmount();
 });
 
+it("keeps the approvals list mounted, with focus, across workspace clock ticks", async () => {
+  vi.useFakeTimers({ toFake: ["Date", "setInterval", "clearInterval"] });
+  vi.setSystemTime(NOW);
+  const f = await fixture();
+  const view = await mount(f.tree(h(ApprovalsScreen)));
+  await until(() => view.host.querySelectorAll("[data-agent-approval-link]").length === 3);
+  const first = view.host.querySelector<HTMLAnchorElement>("[data-agent-approval-link]");
+  if (!first) throw new Error("Missing review link");
+  first.focus();
+  let skeletons = 0;
+  const observer = new MutationObserver(() => {
+    if (view.host.querySelector('[aria-label="Loading agent records"]')) skeletons++;
+  });
+  observer.observe(view.host, { childList: true, subtree: true });
+  for (let tick = 0; tick < 3; tick++) {
+    await act(() => vi.advanceTimersByTime(5000));
+    await until(() => view.host.querySelectorAll("[data-agent-approval-link]").length === 3);
+  }
+  observer.disconnect();
+  expect(skeletons).toBe(0);
+  expect(first.isConnected).toBe(true);
+  expect(document.activeElement).toBe(first);
+  await view.unmount();
+  vi.useRealTimers();
+});
+
 it("ticks status every five seconds, refreshes on visibility and accepts a newly notified heartbeat", async () => {
   vi.useFakeTimers({ toFake: ["Date", "setInterval", "clearInterval"] });
   vi.setSystemTime(NOW);
@@ -294,8 +320,16 @@ it("keeps Stopped after 500 unsigned Resumes alongside a verified unexpired Halt
   const { exampleRecords } = await import("@jeswr/agent-model/testing");
   await f.pod.fetch(`${BASE}control/resume.ttl`, { method: "DELETE" });
   const templateId = "urn:test:unsigned-resume";
+  // Halt and Resume are global: binding fields belong to SetBindingState only.
+  const {
+    restrictions: _restrictions,
+    target: _target,
+    binding: _binding,
+    bindingState: _bindingState,
+    ...control
+  } = exampleRecords["control-statement"];
   const resume = await recordToTurtle({
-    ...exampleRecords["control-statement"],
+    ...control,
     id: templateId,
     kind: "Resume",
     attributedTo: DEMO_WEBID,
@@ -316,7 +350,7 @@ it("keeps Stopped after 500 unsigned Resumes alongside a verified unexpired Halt
     headers: { "content-type": "application/trig" },
     body: await issueControlStatement(
       {
-        ...exampleRecords["control-statement"],
+        ...control,
         id: halt,
         kind: "Halt",
         attributedTo: DEMO_WEBID,

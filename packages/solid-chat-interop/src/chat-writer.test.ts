@@ -6,6 +6,7 @@ import { DataFactory, Store } from "n3";
 import { describe, expect, it } from "vitest";
 import { type ChatConversation, type ChatPodPort, ChatWriter } from "./chat-writer.js";
 import { parseAs2, storeToTurtle } from "./reconcile.js";
+import { redactSecrets } from "./redact.js";
 
 const ROOT = "https://alice.example/pod/";
 const OWNER = `${ROOT}profile/card#me`;
@@ -131,6 +132,47 @@ describe("ChatWriter", () => {
         })
       ).saved,
     ).toBe(0);
+  });
+
+  // AUTHORED-BY Claude Opus 5.5
+  it("redacts credentials in titles and messages from every caller before any write", async () => {
+    const token = "ghp_fixtureWriterToken123";
+    const pem = "-----BEGIN PRIVATE KEY-----\nFAKE_WRITER_KEY\n-----END PRIVATE KEY-----";
+    const raw = conversation({
+      title: `Deploy with ${token}`,
+      messages: [
+        { role: "user", text: `Use ${token}\n${pem}\nthanks`, createdAt: DAY1 },
+        {
+          id: "msg-2",
+          role: "assistant",
+          text: "Authorization: Bearer FAKE_BEARER",
+          createdAt: DAY2,
+        },
+      ],
+    });
+    const pod = new MemoryPod();
+    const writer = new ChatWriter(pod);
+    expect((await writer.save(raw)).saved).toBe(2);
+    for (const write of pod.writes)
+      for (const secret of [token, "FAKE_WRITER_KEY", "FAKE_BEARER"]) {
+        expect(decoder.decode(write.body)).not.toContain(secret);
+        expect(write.url).not.toContain(secret);
+      }
+    const got = await writer.get("claude", "thread-1");
+    expect(got.title).toBe("Deploy with [REDACTED TOKEN]");
+    expect(got.messages.map((m) => m.text)).toEqual([
+      "Use [REDACTED TOKEN]\n[REDACTED PRIVATE KEY]\nthanks",
+      "[REDACTED AUTHORIZATION]",
+    ]);
+    // Input a capture caller already redacted maps to the same derived ID, so it is a replay.
+    const preRedacted = new ChatWriter(pod);
+    expect(
+      await preRedacted.save({
+        ...raw,
+        title: redactSecrets(raw.title),
+        messages: raw.messages.map((m) => ({ ...m, text: redactSecrets(m.text) })),
+      }),
+    ).toMatchObject({ saved: 0, skipped: 2 });
   });
 
   it("writes only owner ACLs before containers and content", async () => {

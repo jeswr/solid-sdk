@@ -1,7 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
-import { type ControlStatement, fromRdf } from "@jeswr/agent-model";
-import { agent, DCT, PROV, XSD } from "@jeswr/agent-model/vocab";
+import { type ControlStatement, fromRdf, toRdf } from "@jeswr/agent-model";
+import { DCT } from "@jeswr/agent-model/vocab";
 import { parseRdf } from "@jeswr/fetch-rdf";
 import {
   type DataIntegrityProof,
@@ -9,18 +9,9 @@ import {
   type KeyPair,
   type WebIdKeyResolver,
 } from "@jeswr/solid-vc";
-import { DataFactory, Store } from "n3";
+import { Store } from "n3";
 import { validInstant } from "./instant.js";
-import {
-  matchesProofConfiguration,
-  Node,
-  node,
-  RDF_TYPE,
-  readProof,
-  SEC,
-  trig,
-  writeProof,
-} from "./rdf.js";
+import { matchesProofConfiguration, RDF_TYPE, readProof, SEC, trig, writeProof } from "./rdf.js";
 
 /** Unsigned agent-model control fields; the record discriminator is implicit in RDF. */
 export type ControlStatementClaims = Omit<ControlStatement, "proof" | "type">;
@@ -51,27 +42,9 @@ export async function issueControlStatement(
     (key.privateKey.algorithm as { name: string; namedCurve: string }).namedCurve !== "P-256"
   )
     throw new Error("Expected P-256 control key");
-  const store = new Store();
-  const a = node(store, statement.id);
-  a.setIri(RDF_TYPE, agent("ControlStatement"));
-  a.setIri(agent("controlKind"), agent(statement.kind));
-  a.setIri(`${PROV}wasAttributedTo`, statement.attributedTo);
-  for (const [predicate, value] of [
-    [`${DCT}created`, statement.createdAt],
-    [agent("expires"), statement.expires],
-  ] as const)
-    a.setValue(
-      predicate,
-      new Node(
-        DataFactory.literal(value, DataFactory.namedNode(`${XSD}dateTime`)),
-        store,
-        a.factory,
-      ),
-    );
-  if (statement.target !== undefined) a.setIri(agent("target"), statement.target);
-  if (statement.binding !== undefined) a.setText(agent("binding"), statement.binding);
-  if (statement.bindingState !== undefined)
-    a.setText(agent("bindingState"), statement.bindingState);
+  // Only the claims are signed: drop any proof a caller's record object still carries.
+  const { proof: _proof, ...claims } = statement as ControlStatementClaims & { proof?: unknown };
+  const store = new Store([...toRdf({ ...claims, type: "control-statement" })]);
   controlClaims(store, statement.id);
   const proof = await new DataIntegritySuite("ecdsa-rdfc-2019").sign([...store], {
     key,

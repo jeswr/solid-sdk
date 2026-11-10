@@ -4,8 +4,10 @@
 import * as entry0 from "@jeswr/agent-mandate";
 import * as approval from "@jeswr/agent-mandate/approval";
 import * as control from "@jeswr/agent-mandate/control";
+import * as mandateIssue from "@jeswr/agent-mandate/issue";
 import * as entry2 from "@jeswr/agent-mandate/sparq";
 import * as entry1 from "@jeswr/agent-mandate/testing";
+import * as mandateVerify from "@jeswr/agent-mandate/verify";
 // biome-ignore lint/style/useNodejsImportProtocol: agent imports allow only bare package names or relative paths
 import { existsSync, readFileSync } from "fs";
 // biome-ignore lint/style/useNodejsImportProtocol: agent imports allow only bare package names or relative paths
@@ -18,6 +20,8 @@ const modules: Record<string, object> = {
   "./testing": entry1,
   "./approval": approval,
   "./control": control,
+  "./issue": mandateIssue,
+  "./verify": mandateVerify,
   "./sparq": entry2,
 };
 const entries = Object.entries(manifest.exports) as [string, { types: string; default: string }][];
