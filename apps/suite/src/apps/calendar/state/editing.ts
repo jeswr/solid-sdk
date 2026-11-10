@@ -192,6 +192,14 @@ export function planSeriesEdit(
 // AUTHORED-BY Claude Opus 5.5
 /** The event mutation surface (`useEventMutations`) that series saves need. */
 export interface SeriesMutations {
+  /** A durable compound writer; false falls back to in-memory compensation. */
+  compound?:
+    | ((
+        created: Extract<EventWrite, { kind: "create" }>,
+        original: Exclude<EventWrite, { kind: "create" }>,
+        replacement: SeriesReplacement,
+      ) => Promise<boolean>)
+    | undefined;
   resolve(url: string, etag: string | null, requireConfirmation?: boolean): Promise<string>;
   create(url: string, data: CalendarEvent, requireConfirmation?: boolean): Promise<void>;
   update(
@@ -206,7 +214,7 @@ export interface SeriesMutations {
 }
 /** A confirmed replacement created by an unfinished compound save; removed on failure/retry. */
 export interface SeriesReplacement {
-  current: { url: string; etag: string | null } | undefined;
+  current: { url: string; etag: string | null; durable?: boolean } | undefined;
 }
 export async function removeReplacement(
   mutations: SeriesMutations,
@@ -214,7 +222,7 @@ export async function removeReplacement(
 ): Promise<void> {
   const pending = replacement.current;
   if (!pending) return;
-  await mutations.delete(pending.url, pending.etag ?? "", true);
+  if (!pending.durable) await mutations.delete(pending.url, pending.etag ?? "", true);
   replacement.current = undefined;
 }
 /**
@@ -266,6 +274,29 @@ export async function applySeriesPlan({
             : { kind: "delete", url: source.url, etag },
         )
       : undefined;
+  const createdData = moving ? plan.original : plan.created;
+  if (createdData && source.url && mutations.compound) {
+    try {
+      const handled = await mutations.compound(
+        {
+          kind: "create",
+          url: new URL(`${newId()}.ttl`, target.container).href,
+          data: { ...createdData, uid: newId() },
+        },
+        plan.original && !moving
+          ? { kind: "update", url: source.url, data: plan.original, etag }
+          : { kind: "delete", url: source.url, etag },
+        replacement,
+      );
+      if (handled) {
+        release?.();
+        return;
+      }
+    } catch (error) {
+      release?.();
+      throw error;
+    }
+  }
   try {
     if (moving && plan.original) await create(plan.original, true);
     else if (plan.created) await create(plan.created, true);
