@@ -1,8 +1,11 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+
+import { evaluateIntent } from "@jeswr/agent-mandate";
 import { type ActionProposal, digestOf, type PodRecord, recordToTurtle } from "@jeswr/agent-model";
 import { exampleRecords } from "@jeswr/agent-model/testing";
 import type { Page } from "@playwright/test";
 import { createAgentClient } from "../../src/apps/agent/lib/client";
+import { loadVerifiedMandate, proposalIntent } from "../../src/apps/agent/lib/mandates";
 import {
   type DisplayApproval,
   loadedRecords,
@@ -70,7 +73,7 @@ export function daemonDouble(page: Page) {
         proposal: proposal.id,
         termsDigest: proposal.intent.termsDigest,
         transmission: `${client.paths.outbox}${proposal.id.split("/").at(-1)}`,
-        mandate: `${client.paths.mandates}demo-credential.ttl`,
+        mandate: `${client.paths.mandates}demo-credential.trig`,
         ...(approval ? { approval } : {}),
       },
     };
@@ -99,7 +102,7 @@ export function daemonDouble(page: Page) {
       proposal: proposal.id,
       status,
       wireDigest: digestOf(proposal.renderedPreview),
-      underMandate: `${client.paths.mandates}demo-credential.ttl`,
+      underMandate: `${client.paths.mandates}demo-credential.trig`,
       ...(approval ? { underApproval: approval.id } : {}),
       ...(status === "sent" ? { externalId: `fake-${crypto.randomUUID()}` } : {}),
       startedAt: now,
@@ -144,6 +147,11 @@ export function daemonDouble(page: Page) {
       const halted =
         agentStatus({ controls, now: Date.now(), owner: DEMO_WEBID }).state === "stopped";
       if (halted) return outcome(proposal, "halted");
+      const mandate = await loadVerifiedMandate(client, { fetch, webId: DEMO_WEBID });
+      if (!mandate) return outcome(proposal, "mandate-invalid");
+      const decision = await evaluateIntent(mandate, proposalIntent(proposal, mandate.subject));
+      if (decision.decision === "prohibited" || decision.decision === "refuse-all")
+        return outcome(proposal, decision.decision);
       const approvals = loadedRecords(await readApprovals(client, verifier)).filter(
         (a) => a.approves === proposal.id && a.verification === "verified",
       );
@@ -158,7 +166,7 @@ export function daemonDouble(page: Page) {
               : !current && approvals.length
                 ? "terms-digest-mismatch"
                 : undefined;
-      if (!refusal && !current) return "awaiting-approval";
+      if (!refusal && !current && decision.decision !== "permit") return "awaiting-approval";
       return outcome(proposal, refusal, current);
     },
   };

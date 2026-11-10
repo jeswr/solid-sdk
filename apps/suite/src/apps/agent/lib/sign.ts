@@ -32,7 +32,10 @@ export function createAgentSigner(
     },
     async signControl(
       kind: ControlStatementClaims["kind"],
-      fields: Pick<ControlStatementClaims, "target" | "binding" | "bindingState"> = {},
+      fields: Pick<
+        ControlStatementClaims,
+        "target" | "binding" | "bindingState" | "restrictions"
+      > = {},
     ) {
       const at = now();
       const id = `${client.paths.control}${at.getTime()}-${kind}-${crypto.randomUUID()}.trig`;

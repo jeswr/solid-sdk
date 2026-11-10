@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6
 import {
   ACTION_IRI,
@@ -12,7 +13,15 @@ import {
 } from "@jeswr/solid-odrl";
 import type { JsonValue } from "@jeswr/solid-vc";
 import { type Node, RDF_TYPE } from "./rdf.js";
-import { AGENT, type Constraint, type Limit, ODRL, type Policy, type Rule } from "./types.js";
+import {
+  AGENT,
+  type Constraint,
+  type Limit,
+  ODRL,
+  type Policy,
+  type Rule,
+  SCHEMA_CURRENCY,
+} from "./types.js";
 
 const uri = (value: string): string => (value.includes(":") ? value : `${ODRL}${value}`);
 const local = (value: string): string =>
@@ -102,6 +111,19 @@ export function encodePolicy(p: Policy): JsonValue {
   };
 }
 /** Lower root prohibitions into ordinary ODRL prohibition rules. */
+const CURRENCY = /^[A-Z]{3}$/;
+/** The agreement's signed currency claim, if any; a malformed code is refused, never dropped. */
+export function encodeCurrency(currency: string | undefined): Record<string, JsonValue> {
+  if (currency === undefined) return {};
+  if (!CURRENCY.test(currency)) throw new Error("Expected an ISO 4217 currency code");
+  return { [SCHEMA_CURRENCY]: currency };
+}
+export function decodeCurrency(n: Node): { currency?: string } {
+  if (n.values(SCHEMA_CURRENCY).length === 0) return {};
+  const currency = n.text(SCHEMA_CURRENCY);
+  if (!CURRENCY.test(currency)) throw new Error("Invalid currency");
+  return { currency };
+}
 export const encodeProhibitions = (rules: readonly Rule[]): JsonValue[] => rules.map(encodeRule);
 /** Encode an executor limit as an ODRL constraint plus agent:enforcement. */
 export function encodeLimit(c: Limit): JsonValue {

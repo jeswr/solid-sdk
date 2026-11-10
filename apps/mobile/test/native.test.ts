@@ -438,6 +438,44 @@ describe("iOS project", () => {
   });
 });
 
+describe("release builds ignore the debug opt-in", () => {
+  // MOBILE_DEBUG=1 turns on webContentsDebuggingEnabled in the generated config; native code
+  // switches inspection back off unless the build itself is a debug build (sst-8wx.17).
+  test("Android disables WebView debugging unless the app is debuggable", () => {
+    const activity = read("android/app/src/main/java/org/jeswr/suite/MainActivity.java");
+    const load = activity.slice(activity.indexOf("protected void load()"));
+    const guard =
+      "if ((getApplicationInfo().flags & ApplicationInfo.FLAG_DEBUGGABLE) == 0) {\n" +
+      "            WebView.setWebContentsDebuggingEnabled(false);\n        }";
+    expect(load).toContain(guard);
+    // After Capacitor applies the config, and before any early return.
+    expect(load.indexOf("super.load();")).toBeLessThan(load.indexOf(guard));
+    expect(load.indexOf(guard)).toBeLessThan(load.indexOf("usesProxyInjection()"));
+  });
+
+  test("iOS Release builds are never inspectable", () => {
+    const controller = read("ios/App/App/MainViewController.swift");
+    const didLoad = controller.slice(controller.indexOf("func capacitorDidLoad()"));
+    expect(didLoad).toMatch(
+      /#if !DEBUG\n(?:\s*\/\/.*\n)*\s*if #available\(iOS 16\.4, \*\) \{\n\s*webView\?\.isInspectable = false\n\s*\}\n\s*#endif/,
+    );
+    expect(didLoad.indexOf("#if !DEBUG")).toBeLessThan(didLoad.indexOf("registerPluginInstance"));
+    // DEBUG is defined for the Debug configurations only, in either flag spelling, and no Release
+    // configuration inherits settings from an xcconfig this test cannot see.
+    const project = read("ios/App/App.xcodeproj/project.pbxproj");
+    const release = [
+      ...project.matchAll(/\{\n\t\t\tisa = XCBuildConfiguration;[\s\S]*?name = (\w+);/g),
+    ]
+      .filter((m) => m[1] === "Release")
+      .map((m) => m[0]);
+    expect(release.length).toBeGreaterThan(0);
+    for (const config of release)
+      expect(config).not.toMatch(
+        /SWIFT_ACTIVE_COMPILATION_CONDITIONS[^;]*DEBUG|-D\W*DEBUG\b|\bDEBUG=1|baseConfigurationReference/,
+      );
+  });
+});
+
 describe("Android project", () => {
   const manifest = read("android/app/src/main/AndroidManifest.xml");
   const debugManifest = read("android/app/src/debug/AndroidManifest.xml");

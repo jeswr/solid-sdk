@@ -36,11 +36,9 @@ for (const [route, heading, item] of routes) {
       );
       await expect(page.getByRole("button", { name: "Approve", exact: true })).toBeEnabled();
       await expect(page.getByRole("button", { name: "Deny", exact: true })).toBeEnabled();
-      await page.locator('[title="Available once you can edit permissions"]').first().focus();
-      await expect(page.getByRole("tooltip")).toContainText(
-        "Available once you can edit permissions",
-      );
-      await page.keyboard.press("Escape");
+      await expect(
+        page.getByRole("button", { name: "Approve and allow similar for 7 days", exact: true }),
+      ).toBeEnabled();
     }
     if (route === "chat/c/welcome") {
       await expect(page.getByRole("textbox", { name: "Message your agent" })).toBeDisabled();

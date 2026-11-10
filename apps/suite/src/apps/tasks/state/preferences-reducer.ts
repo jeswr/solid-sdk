@@ -1,6 +1,12 @@
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
+import { isSharedTrackerUrl } from "../lib/model/rdf";
 import type { SortMode } from "../lib/views/project-groups";
 export interface TasksPreferences {
+  /** Projects shared with `sharedOwner`; stored per WebID, never in the browser-wide record. */
+  sharedProjects: { url: string; title: string }[];
+  /** The WebID `sharedProjects` belongs to; undefined while signed out. */
+  sharedOwner?: string | undefined;
   viewMode: Record<string, "list" | "board">;
   sort: Record<string, SortMode>;
   collapsedSections: string[];
@@ -9,6 +15,7 @@ export interface TasksPreferences {
   weekStart: "monday" | "sunday" | "locale";
 }
 export const defaultPreferences: TasksPreferences = {
+  sharedProjects: [],
   viewMode: {},
   sort: {},
   collapsedSections: [],
@@ -17,6 +24,8 @@ export const defaultPreferences: TasksPreferences = {
   weekStart: "locale",
 };
 export type PreferenceAction =
+  | { type: "sharedProject"; url: string; title: string }
+  | { type: "removeSharedProject"; url: string }
   | { type: "sort"; viewId: string; value: SortMode }
   | { type: "viewMode"; viewId: string; value: "list" | "board" }
   | { type: "collapse"; sectionId: string }
@@ -28,6 +37,23 @@ export function preferencesReducer(
   action: PreferenceAction,
 ): TasksPreferences {
   switch (action.type) {
+    case "sharedProject": {
+      if (!validSharedProject(action)) return state;
+      const previous = state.sharedProjects.find((project) => project.url === action.url);
+      if (previous?.title === action.title) return state;
+      return {
+        ...state,
+        sharedProjects: [
+          ...state.sharedProjects.filter((project) => project.url !== action.url),
+          { url: action.url, title: action.title },
+        ],
+      };
+    }
+    case "removeSharedProject":
+      return {
+        ...state,
+        sharedProjects: state.sharedProjects.filter((project) => project.url !== action.url),
+      };
     case "sort":
       return { ...state, sort: { ...state.sort, [action.viewId]: action.value } };
     case "viewMode":
@@ -66,6 +92,8 @@ export function parsePreferences(raw: string | null): TasksPreferences {
         ? (data.sidebar as Record<string, unknown>)
         : {};
     return {
+      // Shared projects are per account (parseSharedProjects); a browser-wide list is ignored.
+      sharedProjects: [],
       viewMode: entries(data.viewMode, ["list", "board"]),
       sort: entries(data.sort, ["manual", "due", "priority", "name"]),
       collapsedSections: Array.isArray(data.collapsedSections)
@@ -82,4 +110,29 @@ export function parsePreferences(raw: string | null): TasksPreferences {
   } catch {
     return defaultPreferences;
   }
+}
+
+/** One account's Shared with me list, as stored under its own key. */
+export function parseSharedProjects(raw: string | null): TasksPreferences["sharedProjects"] {
+  try {
+    const value: unknown = JSON.parse(raw ?? "null");
+    if (!Array.isArray(value)) return [];
+    return [
+      ...new Map(
+        value
+          .filter(validSharedProject)
+          .map((project) => [project.url, { url: project.url, title: project.title }]),
+      ).values(),
+    ];
+  } catch {
+    return [];
+  }
+}
+
+function validSharedProject(value: unknown): value is { url: string; title: string } {
+  if (!value || typeof value !== "object") return false;
+  const project = value as Record<string, unknown>;
+  if (typeof project.url !== "string" || typeof project.title !== "string" || !project.title.trim())
+    return false;
+  return isSharedTrackerUrl(project.url);
 }

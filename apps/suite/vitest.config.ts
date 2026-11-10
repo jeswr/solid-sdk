@@ -29,6 +29,8 @@ export default defineConfig({
         "src/shell/search/local-source.ts",
         "src/shell/registration/{demo-backend,types}.ts",
         "src/apps/tasks/lib/model/**/*.ts",
+        "src/apps/tasks/lib/share/**/*.ts",
+        "src/apps/tasks/state/preferences-reducer.ts",
         "src/apps/tasks/lib/detail/**/*.ts",
         "src/apps/tasks/lib/views/**/*.ts",
         "src/apps/tasks/lib/format/**/*.ts",

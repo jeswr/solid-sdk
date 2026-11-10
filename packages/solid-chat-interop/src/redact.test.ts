@@ -67,6 +67,38 @@ describe("redaction before persistence", () => {
     }
     expect(redactSecrets(`TOKEN=a\\ b${newline}Safe`)).toBe(`[REDACTED ENV]${newline}Safe`);
   });
+  // AUTHORED-BY Claude Opus 5.5
+  it.each([
+    ["gh\u0000p_fixtureControlToken1", "fixtureControlToken1"],
+    ["sk\u007F-fixture-control", "fixture-control"],
+    ["Authoriz\u0001ation: Bearer FAKE_CONTROL", "FAKE_CONTROL"],
+    [
+      "-----BEGIN PRIVATE\u0000 KEY-----\nFAKE_CONTROL_KEY\n-----END PRIVATE KEY-----",
+      "FAKE_CONTROL_KEY",
+    ],
+    ["\u009Fsk-fixture-c1", "fixture-c1"],
+  ])("a control character cannot split credential %#", (input, secret) => {
+    const result = redactSecrets(`Before\t${input}\r\nAfter`);
+    expect(result).not.toContain(secret);
+    expect(result).toMatch(/^Before\t.*\[REDACTED/);
+    expect(result).toContain("\r\nAfter");
+    expect(redactSecrets(result)).toBe(result);
+  });
+  // AUTHORED-BY Claude Opus 5.5
+  it.each([
+    ["__sk-fixture-emphasis__", "fixture-emphasis"],
+    ["_ghp_fixtureEmphasis1_", "fixtureEmphasis1"],
+    ["__AKIA0000000000000000__", "AKIA0000000000000000"],
+    ["_eyJmaXh0dXJlIjp0cnVlfQ.eyJzdWIiOiJmaXh0dXJlIn0.ZmFrZXNpZw_", "ZmFrZXNpZw"],
+    ["_Authorization: Bearer FAKE_EMPHASIS_", "FAKE_EMPHASIS"],
+  ])("Markdown emphasis cannot hide credential %#", (input, secret) => {
+    const result = redactSecrets(`Before ${input} after`);
+    expect(result).not.toContain(secret);
+    expect(redactSecrets(result)).toBe(result);
+  });
+  it("keeps letter-adjacent lookalikes", () => {
+    expect(redactSecrets("a task-list and askew")).toBe("a task-list and askew");
+  });
   it("keeps ordinary text and all safe context outside a redaction", () => {
     expect(redactSecrets("Hello, world. Read src/main.ts")).toBe("Hello, world. Read src/main.ts");
     expect(redactSecrets("Before\nAuthorization: FAKE\nAfter")).toBe(
