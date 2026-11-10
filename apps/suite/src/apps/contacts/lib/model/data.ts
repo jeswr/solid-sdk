@@ -262,7 +262,7 @@ export const MAX_ADDRESSES = 16;
 const ADDRESS_FIELDS = ["street", "locality", "region", "postalCode", "country"] as const;
 
 /** Mirror the postal library's size limits so a pasted blob cannot bloat the contact document. */
-function validateAddresses(addresses: readonly ContactAddress[]): void {
+export function validateAddresses(addresses: readonly ContactAddress[]): void {
   for (const address of addresses) {
     if (address.kind !== undefined && address.kind !== "home" && address.kind !== "work")
       throw new TypeError("Invalid address type.");
@@ -280,7 +280,7 @@ function validateAddresses(addresses: readonly ContactAddress[]): void {
 }
 
 /** Compare as the shared reader would see the result: trimmed, empties dropped. */
-function addressKey(addresses: readonly ContactAddress[]): string {
+export function addressKey(addresses: readonly ContactAddress[]): string {
   return JSON.stringify(
     addresses
       .map((address) => [
