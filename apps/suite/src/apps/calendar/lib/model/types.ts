@@ -29,6 +29,8 @@ export interface CalendarEvent {
   name: string;
   start: CalendarDate;
   end?: CalendarDate | undefined;
+  /** IANA zone for wall-clock recurrence; absent events use the caller's zone. */
+  timeZone?: string | undefined;
   location?: string | undefined;
   description?: string | undefined;
   inCalendar?: string | undefined;
