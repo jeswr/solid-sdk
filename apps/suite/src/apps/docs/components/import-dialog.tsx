@@ -101,8 +101,8 @@ export function ImportDialog({
               ? "Your document is ready. These unsupported items were skipped."
               : "Your document is ready."
             : replace
-              ? "Import a DOCX or Markdown file to replace this document's contents. You can undo the replacement."
-              : "Upload a DOCX or Markdown file (50 MB maximum) to create a document."}
+              ? "Import a DOCX, HTML, Markdown or plain text file to replace this document's contents. You can undo the replacement."
+              : "Upload a DOCX, HTML, Markdown or plain text file (50 MB maximum) to create a document."}
         </DialogDescription>
         {result ? (
           <>
@@ -123,7 +123,7 @@ export function ImportDialog({
             <Input
               id={id}
               type="file"
-              accept=".docx,.md,.markdown"
+              accept=".docx,.html,.htm,.md,.markdown,.txt"
               disabled={busy}
               aria-describedby={`${id}-error`}
               onChange={(event: React.ChangeEvent<HTMLInputElement>) => {

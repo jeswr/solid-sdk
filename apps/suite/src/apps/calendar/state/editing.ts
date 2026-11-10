@@ -114,6 +114,7 @@ export function planSeriesEdit(
   const rule = master.recurrence;
   if (!rule) return { original: edited };
   validateEvent(master);
+  timeZone = master.timeZone ?? timeZone;
   const at = asDate(occurrence);
   // Civil dates have no UTC offset. Interpret them in the target timed zone on conversion.
   const floating = (date: CalendarDate) =>

@@ -26,6 +26,7 @@ export default defineConfig({
       include: [
         "src/apps/agent/lib/**/*.ts",
         "src/shell/lib/**/*.ts",
+        "src/shell/sync/connection-state.ts",
         "src/shell/search/local-source.ts",
         "src/shell/registration/{demo-backend,types}.ts",
         "src/apps/tasks/lib/model/**/*.ts",
@@ -157,6 +158,8 @@ export default defineConfig({
         "src/apps/drive/lib/client/**/*.ts",
         "src/apps/drive/lib/operations/**/*.ts",
         "src/apps/drive/lib/view/**/*.ts",
+        "src/apps/drive/lib/open-with/**/*.ts",
+        "src/apps/drive/state/open-with-docs.ts",
         "src/apps/mail/lib/address/**/*.ts",
         "src/apps/music/lib/data/**/*.ts",
         "src/apps/health/lib/data/**/*.ts",
