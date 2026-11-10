@@ -11,6 +11,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run --coverage",
     "test:e2e": "pnpm --filter @jeswr/suite-ui run build && playwright test",
+    "test:visual": "pnpm --filter @jeswr/suite-ui run build && playwright test -c playwright.visual.config.ts",
+    "test:visual:update": "pnpm --filter @jeswr/suite-ui run build && playwright test -c playwright.visual.config.ts --update-snapshots",
     "measure:univer": "node test/univer-spike.measure.mjs",
     "test:mime": "vitest run test/mime.test.ts --coverage",
     "test:coverage": "vitest run --coverage",
