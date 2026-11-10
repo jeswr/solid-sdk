@@ -329,6 +329,8 @@ for (const density of ["comfortable", "compact"] as const) {
     const region = page.getByRole("region", { name: `${density} fixtures`, exact: true });
     await region.getByRole("radio", { name: "List" }).focus();
     await page.keyboard.press("ArrowRight");
+    // Radix roving focus moves on a timeout; Space before then toggles List off instead.
+    await expect(region.getByRole("radio", { name: "Grid" })).toBeFocused();
     await page.keyboard.press("Space");
     await expect(region.getByRole("radio", { name: "Grid" })).toBeChecked();
     await capture(page, info, `toggle-group-${density}-grid`);
