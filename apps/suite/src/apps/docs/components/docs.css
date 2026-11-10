@@ -854,13 +854,6 @@
   .docs-menubar > button {
     padding-inline: 7px;
   }
-  .docs-share span {
-    display: none;
-  }
-  .docs-share[data-slot] {
-    width: 36px;
-    padding-inline: 0;
-  }
   .docs-save span {
     position: absolute;
     width: 1px;

@@ -15,7 +15,7 @@ import {
 } from "@jeswr/suite-ui";
 import { EditorContent, useEditor } from "@tiptap/react";
 import { BubbleMenu } from "@tiptap/react/menus";
-import { ArrowLeft, ImagePlus, Share2, Star } from "lucide-react";
+import { ArrowLeft, ImagePlus, Star } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -34,6 +34,7 @@ import { printDocument } from "../editor/print-document";
 import { podScopedFetch } from "../editor/private-image";
 import { useDialogFocus } from "../hooks/use-dialog-focus";
 import { useDocument } from "../hooks/use-document";
+import { useDocumentSharing } from "../hooks/use-document-sharing";
 import { useNow } from "../hooks/use-now";
 import { useStarred } from "../hooks/use-starred";
 import {
@@ -46,7 +47,7 @@ import {
   validateImage,
   wordCount,
 } from "../lib/editor/logic";
-import { DocsError, DocsSidebar, DocumentSkeleton, Hint } from "./common";
+import { DocsError, DocsSidebar, DocumentSkeleton } from "./common";
 import { DeleteDialog } from "./delete-dialog";
 import { EditorMenubar } from "./editor-menubar";
 import { CountPopover, LinkPopover } from "./editor-popovers";
@@ -114,6 +115,13 @@ function HydratedEditor({ runtime }: { runtime: DocumentPersistence }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const userEdited = useRef(false);
   const [title, setTitle] = useState(runtime.title);
+  const sharing = useDocumentSharing(
+    runtime.session,
+    runtime.stored?.url,
+    title,
+    runtime.online,
+    runtime.readOnly,
+  );
   const [revision, setRevision] = useState(0);
   const [, updateSelection] = useState(0);
   const [mac, setMac] = useState(false);
@@ -442,12 +450,7 @@ function HydratedEditor({ runtime }: { runtime: DocumentPersistence }) {
                 Why?
               </Button>
             )}
-            <Hint text="Sharing arrives with sign-in">
-              <Button disabled className="docs-share" aria-label="Share">
-                <Share2 aria-hidden="true" />
-                <span>Share</span>
-              </Button>
-            </Hint>
+            {sharing.button}
             <div
               className="docs-account"
               role="img"
@@ -489,6 +492,8 @@ function HydratedEditor({ runtime }: { runtime: DocumentPersistence }) {
             importFile={() => setImporting(true)}
             draft={!runtime.stored}
             readOnly={runtime.readOnly}
+            share={sharing.open}
+            shareDisabledReason={sharing.disabledReason}
             copy={() =>
               void act(async () => {
                 await runtime.flush();
@@ -510,6 +515,7 @@ function HydratedEditor({ runtime }: { runtime: DocumentPersistence }) {
             help={() => setHelp(true)}
           />
         )}
+        {sharing.dialog}
         {importing && editor && (
           <ImportDialog
             replace
