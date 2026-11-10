@@ -13,7 +13,7 @@ import {
   Kbd,
   toast,
 } from "@jeswr/suite-ui";
-import { EditorContent, useEditor } from "@tiptap/react";
+import { useEditor } from "@tiptap/react";
 import { BubbleMenu } from "@tiptap/react/menus";
 import { ArrowLeft, ImagePlus, Star } from "lucide-react";
 import Link from "next/link";
@@ -47,6 +47,7 @@ import {
   validateImage,
   wordCount,
 } from "../lib/editor/logic";
+import { versionDisabledReason } from "../lib/editor/versions";
 import { DocsError, DocsSidebar, DocumentSkeleton } from "./common";
 import { DeleteDialog } from "./delete-dialog";
 import { EditorMenubar } from "./editor-menubar";
@@ -57,11 +58,11 @@ import { ImageUpload } from "./image-upload";
 import { ImportDialog } from "./import-dialog";
 import { InlineTitle } from "./inline-title";
 import { OutlinePane } from "./outline-pane";
-import { PageCanvas } from "./page-canvas";
 import { SaveIndicator } from "./save-indicator";
 import { SlashMenu, type SlashPosition } from "./slash-menu";
 import { TableActions } from "./table-actions";
 import { trashDocumentWithUndo } from "./trash-actions";
+import { VersionHistory } from "./version-history";
 export function DocumentEditor({
   session,
   resource,
@@ -110,6 +111,10 @@ function HydratedEditor({ runtime }: { runtime: DocumentPersistence }) {
   const printed = useRef(false);
   const printAbort = useRef<AbortController | null>(null);
   const [importing, setImporting] = useState(false);
+  const [history, setHistory] = useState(false);
+  const [namingVersion, setNamingVersion] = useState(false);
+  const closeHistory = useCallback(() => setHistory(false), []);
+  const closeNamingVersion = useCallback(() => setNamingVersion(false), []);
   const titleRef = useRef<HTMLInputElement>(null);
   const topRef = useRef<HTMLAnchorElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -267,6 +272,15 @@ function HydratedEditor({ runtime }: { runtime: DocumentPersistence }) {
   useEffect(() => {
     const outsideKeys = (event: KeyboardEvent) => {
       if (
+        (event.ctrlKey || event.metaKey) &&
+        event.altKey &&
+        event.shiftKey &&
+        event.code === "KeyH"
+      ) {
+        event.preventDefault();
+        setHistory(true);
+      }
+      if (
         event.key === "[" &&
         !(event.target as HTMLElement).closest("input,textarea,select,[contenteditable=true]")
       ) {
@@ -324,6 +338,14 @@ function HydratedEditor({ runtime }: { runtime: DocumentPersistence }) {
     }
   };
   handlers.current.key = (event) => {
+    if (history) {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        closeHistory();
+        return true;
+      }
+      return false;
+    }
     const action = editorShortcut(
       event.key,
       event.ctrlKey || event.metaKey,
@@ -403,7 +425,7 @@ function HydratedEditor({ runtime }: { runtime: DocumentPersistence }) {
             </span>
             <InlineTitle
               title={title}
-              readOnly={runtime.readOnly}
+              readOnly={runtime.readOnly || history}
               inputRef={titleRef}
               stage={(value) => {
                 setTitle(value);
@@ -491,7 +513,14 @@ function HydratedEditor({ runtime }: { runtime: DocumentPersistence }) {
             print={print}
             importFile={() => setImporting(true)}
             draft={!runtime.stored}
-            readOnly={runtime.readOnly}
+            readOnly={runtime.readOnly || history}
+            showHistory={() => setHistory(true)}
+            nameVersion={() => setNamingVersion(true)}
+            versionReason={versionDisabledReason(
+              !!runtime.stored,
+              runtime.readOnly,
+              runtime.online,
+            )}
             share={sharing.open}
             shareDisabledReason={sharing.disabledReason}
             copy={() =>
@@ -546,7 +575,7 @@ function HydratedEditor({ runtime }: { runtime: DocumentPersistence }) {
         {runtime.readOnly && (
           <p className="docs-view-only">View only — ask the owner for edit access</p>
         )}
-        {editor && !runtime.readOnly && (
+        {editor && !runtime.readOnly && !history && (
           <EditorToolbar
             editor={editor}
             actions={actions}
@@ -559,7 +588,7 @@ function HydratedEditor({ runtime }: { runtime: DocumentPersistence }) {
             toggleOutline={() => setOutline((value) => !value)}
           />
         )}
-        {find && editor && (
+        {find && editor && !history && (
           <FindBar
             editor={editor}
             revision={revision}
@@ -568,7 +597,7 @@ function HydratedEditor({ runtime }: { runtime: DocumentPersistence }) {
           />
         )}
         <div className="docs-writing-area">
-          {outline && (
+          {outline && !history && (
             <aside className="docs-outline-pane" aria-label="Document outline pane">
               <OutlinePane
                 editor={editor}
@@ -584,11 +613,22 @@ function HydratedEditor({ runtime }: { runtime: DocumentPersistence }) {
               />
             </aside>
           )}
-          <PageCanvas zoom={zoom} title={title}>
-            {editor ? <EditorContent editor={editor} /> : <DocumentSkeleton message="Syncing…" />}
-          </PageCanvas>
+          {editor ? (
+            <VersionHistory
+              runtime={runtime}
+              editor={editor}
+              title={title}
+              zoom={zoom}
+              open={history}
+              close={closeHistory}
+              naming={namingVersion}
+              closeNaming={closeNamingVersion}
+            />
+          ) : (
+            <DocumentSkeleton message="Syncing…" />
+          )}
         </div>
-        {editor && !runtime.readOnly && (
+        {editor && !runtime.readOnly && !history && (
           <BubbleMenu
             editor={editor}
             updateDelay={160}
@@ -615,7 +655,7 @@ function HydratedEditor({ runtime }: { runtime: DocumentPersistence }) {
             </div>
           </BubbleMenu>
         )}
-        {slash && editor && (
+        {slash && editor && !history && (
           <SlashMenu
             editor={editor}
             position={slash}

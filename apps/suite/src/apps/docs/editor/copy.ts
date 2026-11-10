@@ -3,12 +3,14 @@
 import { RdfFetchError } from "@jeswr/fetch-rdf";
 import { createPodScopedFetch } from "@jeswr/guarded-fetch";
 import { SolidPersistence } from "@jeswr/y-solid";
+import { SetFrom, TermAs, TermFrom, TermWrapper } from "@rdfjs/wrapper";
 import { generateHTML, getSchema, type JSONContent } from "@tiptap/react";
 import {
   prosemirrorJSONToYDoc,
   prosemirrorToYXmlFragment,
   yDocToProsemirrorJSON,
 } from "@tiptap/y-tiptap";
+import { DataFactory, Store } from "n3";
 import { applyUpdate, Doc, encodeStateAsUpdate } from "yjs";
 import type { PodSession } from "@/lib/session/pod-session";
 import { trashIndexFrom } from "../../drive/lib/operations/trash-index";
@@ -21,8 +23,10 @@ import {
   parseDocument,
   readRdf,
   type StoredDocument,
+  serializeTurtle,
 } from "../lib/model";
 import { DocumentReplacedError, sameIncarnation } from "../lib/model/incarnation";
+import { type DocumentVersion, DocumentVersionStore } from "../lib/model/versions";
 import { baseExtensions } from "./extensions";
 import { loadDocumentContent } from "./persistence";
 import { DocumentUpdateStore } from "./update-store";
@@ -101,12 +105,76 @@ export async function copyDocument(
     });
   }
   visit(captured);
+  let trash: Promise<string | undefined> | undefined;
+  const sourceVersions = docContainerUrls(stored.url).versions;
+  let historyContainer: string | undefined = sourceVersions;
+  if (options.recovery) {
+    let active: StoredDocument | undefined;
+    try {
+      active = await store.read(stored.url);
+    } catch (error) {
+      if (!(error instanceof RdfFetchError && [403, 404, 410].includes(error.status ?? 0)))
+        throw error;
+    }
+    if (!active || !sameIncarnation(stored, active)) {
+      // A replacement at the old slug owns a different history. Prefer the
+      // retired incarnation's reciprocal trash record, just as for its assets.
+      trash = trashedAssets(stored, session);
+      const assets = await trash;
+      historyContainer = assets ? new URL("../versions/", assets).href : undefined;
+    }
+  }
+  const historical: { version: DocumentVersion; json: JSONContent }[] = [];
+  if (historyContainer) {
+    const physical = historyContainer;
+    const historyHttp: typeof fetch = async (input, init) => {
+      const url = String(input);
+      if (physical !== sourceVersions && isDirectChild(url, physical) && url.endsWith(".ttl")) {
+        // Archived metadata retains its original subject and binary links. Rebase
+        // only the in-memory read, leaving Drive's archived payload untouched.
+        const { dataset } = await readRdf(url, session.fetch);
+        const relocated = new Store();
+        const relocate = (iri: string) =>
+          iri.startsWith(sourceVersions) ? physical + iri.slice(sourceVersions.length) : iri;
+        for (const quad of dataset) {
+          const subject =
+            quad.subject.termType === "NamedNode"
+              ? DataFactory.namedNode(relocate(quad.subject.value))
+              : quad.subject;
+          const object =
+            quad.object.termType === "NamedNode"
+              ? DataFactory.namedNode(relocate(quad.object.value))
+              : quad.object;
+          SetFrom.subjectPredicate(
+            new TermWrapper(subject, relocated, DataFactory),
+            quad.predicate.value,
+            TermAs.term,
+            TermFrom.itself,
+          ).add(object);
+        }
+        return new Response(await serializeTurtle(relocated), {
+          headers: { "content-type": "text/turtle" },
+        });
+      }
+      return session.fetch(input, init);
+    };
+    const history = new DocumentVersionStore(physical, historyHttp);
+    for (const version of await history.list()) {
+      const snapshot = await history.load(version, stored.data.instanceId as string);
+      try {
+        const json = yDocToProsemirrorJSON(snapshot) as JSONContent;
+        visit(json);
+        historical.push({ version, json });
+      } finally {
+        snapshot.destroy();
+      }
+    }
+  }
   const remap = (mapping: ReadonlyMap<string, string>) => {
     const json = structuredClone(captured);
     visit(json, mapping);
     return relocateAttributes(json, (iri) => mapping.get(iri) || iri);
   };
-  let trash: Promise<string | undefined> | undefined;
   let merged: JSONContent | undefined;
   const recoveryFetch = createPodScopedFetch(session.storageUrl, { fetch: session.fetch });
   return store.makeCopy(stored, {
@@ -199,6 +267,24 @@ export async function copyDocument(
           seed.destroy();
         }
         await provider.persistFullState();
+        const versionStore = new DocumentVersionStore(docContainerUrls(url).versions, fetchImpl);
+        for (const { version, json } of historical) {
+          const content = structuredClone(json);
+          visit(content, mapping);
+          const relocated = relocateAttributes(content, (iri) => mapping.get(iri) || iri);
+          const snapshot = prosemirrorJSONToYDoc(getSchema(extensions), relocated);
+          try {
+            snapshot.getMap("document").set("instanceId", instanceId);
+            await versionStore.create(snapshot, {
+              kind: version.kind,
+              ...(version.name ? { name: version.name } : {}),
+              ...(version.creator ? { creator: version.creator } : {}),
+              now: new Date(version.created),
+            });
+          } finally {
+            snapshot.destroy();
+          }
+        }
         if (options.recovery) merged = yDocToProsemirrorJSON(doc) as JSONContent;
       } finally {
         provider.destroy();
