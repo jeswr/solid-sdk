@@ -60,6 +60,7 @@ interface CalendarContextValue {
   writes: EventWrite[];
   syncStatus: string;
   mutate: (write: EventWrite, requireConfirmation?: boolean) => Promise<void>;
+  compound: ReturnType<typeof createEventOutbox>["compound"];
   /** Show a write's result without sending it; the returned function removes the preview. */
   preview: (write: EventWrite) => () => void;
   resolveEventEtag: (
@@ -204,6 +205,7 @@ function SessionCalendarProvider({
           eventDocument(write.url, session.storageUrl, current.calendars);
           if (write.kind !== "delete") validateEvent(write.data);
         },
+        { ...session, warn: (message) => toast.error(message) },
       ),
     [session, mutate],
   );
@@ -276,6 +278,7 @@ function SessionCalendarProvider({
         writes: visibleWrites,
         syncStatus,
         mutate: outbox.save,
+        compound: outbox.compound,
         preview,
         resolveEventEtag: outbox.resolve,
         create,
@@ -457,10 +460,11 @@ export function useEventsInRange(
   return { ...state, reload };
 }
 export function useEventMutations() {
-  const { mutate, preview, resolveEventEtag } = useCalendarState();
+  const { mutate, compound, preview, resolveEventEtag } = useCalendarState();
   return useMemo(
     () => ({
       resolve: resolveEventEtag,
+      compound,
       preview,
       create: (url: string, data: CalendarEvent, requireConfirmation?: boolean) =>
         mutate({ kind: "create", url, data }, requireConfirmation),
@@ -469,7 +473,7 @@ export function useEventMutations() {
       delete: (url: string, etag: string, requireConfirmation?: boolean) =>
         mutate({ kind: "delete", url, etag }, requireConfirmation),
     }),
-    [mutate, preview, resolveEventEtag],
+    [mutate, compound, preview, resolveEventEtag],
   );
 }
 export type { CalendarInfo, CalendarView };

@@ -371,3 +371,82 @@ describe("local event sources", () => {
     expect(withSourceCalendar(set, [work]).data.inCalendar).toBe(`${home.url}#it`);
   });
 });
+
+it("leaves journal-owned cleanup to the durable writer", async () => {
+  const { value, calls } = mutations();
+  const replacement: SeriesReplacement = { current: { url, etag: '"copy"', durable: true } };
+  await removeReplacement(value, replacement);
+  expect(calls).toEqual([]);
+  expect(replacement.current).toBeUndefined();
+});
+it.each([
+  "this",
+  "following",
+  "all",
+] as const)("hands the full %s compound plan to the durable writer", async (mode) => {
+  const edited = {
+    ...series,
+    name: "Edited",
+    inCalendar: mode === "all" ? `${home.url}#it` : series.inCalendar,
+  };
+  const plan = planSeriesEdit(series, series.start, edited, mode, zone);
+  const release = vi.fn();
+  const compound = vi.fn(async () => true);
+  const { value, calls } = mutations({ compound, preview: () => release });
+  await applySeriesPlan({
+    plan,
+    source,
+    mode,
+    target: home,
+    mutations: value,
+    replacement: { current: undefined },
+    newId: counter(),
+  });
+  expect(compound).toHaveBeenCalledWith(
+    {
+      kind: "create",
+      url: `${home.container}id-1.ttl`,
+      data: { ...(mode === "all" ? plan.original : plan.created), uid: "id-2" },
+    },
+    mode === "this"
+      ? { kind: "update", url, etag: '"e1"', data: plan.original }
+      : { kind: "delete", url, etag: '"e1"' },
+    { current: undefined },
+  );
+  expect(calls.map(([name]) => name)).toEqual(["resolve"]);
+  expect(release).toHaveBeenCalledOnce();
+});
+it.each([
+  true,
+  false,
+])("releases the preview after a durable writer failure (preview: %s)", async (preview) => {
+  const release = vi.fn();
+  const failure = Error("durable failure");
+  const { value } = mutations({
+    compound: async () => {
+      throw failure;
+    },
+    ...(preview ? { preview: () => release } : {}),
+  });
+  await expect(
+    applySeriesPlan({
+      plan: { created: series, original: series },
+      source,
+      mode: "this",
+      target: work,
+      mutations: value,
+      replacement: { current: undefined },
+    }),
+  ).rejects.toBe(failure);
+  expect(release).toHaveBeenCalledTimes(preview ? 1 : 0);
+});
+it("accepts durable success without a preview", async () => {
+  await applySeriesPlan({
+    plan: { created: series, original: null },
+    source,
+    mode: "following",
+    target: work,
+    mutations: mutations({ compound: async () => true }).value,
+    replacement: { current: undefined },
+  });
+});

@@ -9,7 +9,7 @@ import { act, click, deferred, h, key, mount } from "./drive-ui-dom";
 
 const mocks = vi.hoisted(() => ({
   session: undefined as PodSession | undefined,
-  status: "ready" as "ready" | "loading" | "error",
+  status: "ready" as "ready" | "loading" | "error" | "signed-out",
   path: "/calendar/week",
   date: "2026-11-01",
   query: "",
@@ -20,9 +20,11 @@ vi.mock("@/lib/session/pod-session", () => ({
   usePodSessionState: () =>
     mocks.status === "ready"
       ? { status: "ready", session: mocks.session }
-      : mocks.status === "loading"
-        ? { status: "loading" }
-        : { status: "error", error: new Error("storage") },
+      : mocks.status === "signed-out"
+        ? { status: "signed-out" }
+        : mocks.status === "loading"
+          ? { status: "loading" }
+          : { status: "error", error: new Error("storage") },
   PodSessionProvider: ({ children }: { children: unknown }) => children,
 }));
 vi.mock(
@@ -1821,4 +1823,52 @@ it.each([
     "Still my draft",
   );
   expect(form.querySelector('[role="alert"]')?.textContent).toContain("500");
+});
+
+it("recovers a journaled series edit when the account provider starts", async () => {
+  const { SeriesJournal } = await import("../src/apps/calendar/state/intents");
+  const account = mocks.session as PodSession;
+  const io = calendarIO(account.fetch, account.storageUrl);
+  const source = (await io.loadEvent(`${DEMO_ROOT}calendar/work/stand-up.ttl`))!;
+  const replacementUrl = `${DEMO_ROOT}calendar/work/recovered.ttl`;
+  const replacement = {
+    ...source.data,
+    uid: "recovery-copy",
+    recurrence: undefined,
+    name: "Recovered meeting",
+  };
+  const replacementEtag = await io.saveEvent(replacementUrl, replacement, { create: true });
+  const original = {
+    ...source.data,
+    recurrence: { ...source.data.recurrence!, exceptDate: [source.data.start] },
+  };
+  const journal = new SeriesJournal(account.webId, localStorage);
+  journal.put({
+    created: { kind: "create", url: replacementUrl, data: replacement },
+    original: { kind: "update", url: source.url, etag: source.etag as string, data: original },
+    replacementEtag,
+  });
+  const mounted = await mount(screen());
+  await vi.waitFor(async () => expect(journal.list()).toEqual([]));
+  expect((await io.loadEvent(source.url))?.data.recurrence?.exceptDate).toEqual([
+    source.data.start,
+  ]);
+  expect((await io.loadEvent(replacementUrl))?.data.name).toBe("Recovered meeting");
+  await mounted.unmount();
+  const writes: string[] = [];
+  mocks.session = {
+    ...account,
+    fetch: (input, init) => {
+      if (init?.method === "PUT" || init?.method === "DELETE") writes.push(String(input));
+      return account.fetch(input, init);
+    },
+  };
+  await mount(screen());
+  await settle();
+  expect(writes).toEqual([]);
+});
+it("asks a signed-out account to sign in before starting calendar recovery", async () => {
+  mocks.status = "signed-out";
+  const mounted = await mount(h(CalendarProvider, { children: null }));
+  expect(mounted.host.textContent).toContain("Sign in to open your Calendar");
 });
