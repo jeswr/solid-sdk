@@ -241,4 +241,4 @@ it("runs the unchanged packaged binary for help and offline JSON/CSV exports", a
   const csv = await exec(process.execPath, [...args, "--format", "csv"]);
   expect(csv.stdout).toBe(taskStatsCsv(aggregateTaskStats(ledger.entries(), "paper-1")));
   expect(csv.stderr).toBe("");
-});
+}, 30_000); // Spawns the packaged binary three times: quick alone, but over 5 s in a full-workspace CI gate.

@@ -19,7 +19,9 @@ import {
   type RequestContext,
 } from "@jeswr/solid-odrl";
 import {
+  buildAgentAuthorizationCredential,
   digestRdfContent,
+  issue,
   issueAgentAuthorization,
   type VerifiableCredential,
 } from "@jeswr/solid-vc";
@@ -336,25 +338,42 @@ describe("Phase D input guards", () => {
 });
 
 describe("signed-content reading is order- and accessor-independent", () => {
-  /** Issue the institute credential over `content` and verify with it presented. */
+  const grant = {
+    principal: CAST.inst,
+    agent: CAST.agentR,
+    action: "read",
+    target: CAST.records,
+    policy: CAST.instituteInternalId,
+    validFrom: VALID_FROM,
+    validUntil: VALID_UNTIL,
+  } as const;
+
+  /**
+   * Issue the institute credential over `content` and verify with it presented.
+   * `unguarded` signs the digest directly, as an issuer other than solid-vc's
+   * `issueAgentAuthorization` (which refuses non-fragment relative IRIs) might.
+   */
   async function verifySigned(
     content: string,
     presented: PresentedChain["policyContents"],
     request: RequestContext = readRequest(),
+    unguarded = false,
   ): Promise<VerifyAuthorityResult> {
-    const vc = await issueAgentAuthorization(
-      {
-        principal: CAST.inst,
-        agent: CAST.agentR,
-        action: "read",
-        target: CAST.records,
-        policy: CAST.instituteInternalId,
-        policyContent: content,
-        validFrom: VALID_FROM,
-        validUntil: VALID_UNTIL,
-      },
-      base.keys.inst,
-    );
+    const vc = unguarded
+      ? await issue({
+          credential: {
+            ...buildAgentAuthorizationCredential(grant),
+            relatedResource: [
+              {
+                id: CAST.instituteInternalId,
+                digestMultibase: await digestRdfContent(content),
+                mediaType: "text/turtle",
+              },
+            ],
+          },
+          key: base.keys.inst,
+        })
+      : await issueAgentAuthorization({ ...grant, policyContent: content }, base.keys.inst);
     return verifyInternal(internalChain({ credentials: [vc], policyContents: presented }), {
       request,
     });
@@ -380,10 +399,15 @@ describe("signed-content reading is order- and accessor-independent", () => {
     const swapped = absolute.replaceAll(`<${reports}>`, "<../reports/>");
     expect(signedForm).not.toBe(absolute);
     expect(await digestRdfContent(swapped)).toBe(await digestRdfContent(signedForm));
+    // solid-vc will not sign this form; another issuer might.
+    await expect(verifySigned(signedForm, {})).rejects.toThrow(
+      /relative IRI other than a fragment/,
+    );
     const r = await verifySigned(
       signedForm,
       { [CAST.instituteInternalId]: { content: swapped } },
       readRequest("https://institute.example/reports/"),
+      true,
     );
     expect(r.authorized).toBe(false);
     expect(r.code).toBe("POLICY_INTEGRITY");
