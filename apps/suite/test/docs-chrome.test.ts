@@ -148,6 +148,8 @@ function props(editor: Editor, overrides: Partial<EditorMenubarProps> = {}): Edi
     print: vi.fn(),
     download: vi.fn(),
     help: vi.fn(),
+    share: vi.fn(),
+    shareDisabledReason: undefined,
     ...overrides,
   };
 }
@@ -700,6 +702,25 @@ it("keeps the default page height where ResizeObserver is unavailable", () => {
   expect(scale.style.getPropertyValue("--docs-page-height")).toBe("1056px");
   expect(view.container.querySelector("h1")?.textContent).toBe("Untitled document");
   view.unmount();
+});
+
+it("disables File > Share for read-only documents with an accessible explanation", async () => {
+  const options = props(create(), { readOnly: true });
+  render(h(EditorMenubar, options));
+  await openMenu("File");
+  const share = menuitem("Share…");
+  expect(share.getAttribute("aria-disabled")).toBe("true");
+  const description = document.getElementById(share.getAttribute("aria-describedby") ?? "");
+  expect(description?.textContent).toBe("Read-only documents cannot be shared.");
+  expect(description?.classList.contains("su-sr-only")).toBe(true);
+  fireEvent.click(share);
+  expect(options.share).not.toHaveBeenCalled();
+});
+
+it("keeps one provenance marker on the shared dialog styles", () => {
+  const css = readFileSync(resolve(process.cwd(), "src/app/globals.css"), "utf8");
+  const sharingStyles = css.slice(css.indexOf("/* AUTHORED-BY Codex GPT-6.1: Drive and Docs"));
+  expect(sharingStyles.match(/AUTHORED-BY/g)).toHaveLength(1);
 });
 
 it("keeps checklist checkboxes on the same flex row as their text, including node views without data-type", () => {

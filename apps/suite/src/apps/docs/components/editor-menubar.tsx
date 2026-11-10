@@ -15,7 +15,7 @@ import {
 } from "@jeswr/suite-ui";
 import type { Editor } from "@tiptap/react";
 import Link from "next/link";
-import { type ReactNode, useRef, useState } from "react";
+import { type ReactNode, useId, useRef, useState } from "react";
 import type { EditorAction } from "../editor/actions";
 import { clipboardAction } from "../editor/clipboard";
 import type { DownloadFormat } from "../editor/export-document";
@@ -88,6 +88,8 @@ export interface EditorMenubarProps {
   print: () => void;
   download: (format: DownloadFormat) => void;
   help: () => void;
+  share: () => void;
+  shareDisabledReason: string | undefined;
 }
 
 /**
@@ -103,6 +105,9 @@ export function openMenuAfter(current: string | null, label: string, expanded: b
 /** Radix owns menu/submenu navigation and typeahead; this adds menubar traversal. */
 export function EditorMenubar(props: EditorMenubarProps) {
   const { editor, actions, mac, readOnly } = props;
+  const shareReasonId = useId();
+  const shareDisabledReason =
+    props.shareDisabledReason ?? (readOnly ? "Read-only documents cannot be shared." : undefined);
   const [open, setOpen] = useState<string | null>(null);
   const [tab, setTab] = useState(0);
   const root = useRef<HTMLDivElement>(null);
@@ -159,6 +164,19 @@ export function EditorMenubar(props: EditorMenubarProps) {
           <Link href="/docs">Open</Link>
         </DropdownMenuItem>
         {item("Make a copy", props.copy, "", props.draft)}
+        <DropdownMenuItem
+          disabled={!!shareDisabledReason}
+          title={shareDisabledReason}
+          aria-describedby={shareDisabledReason ? shareReasonId : undefined}
+          onSelect={choose(props.share)}
+        >
+          Share…
+        </DropdownMenuItem>
+        {shareDisabledReason && (
+          <span id={shareReasonId} className="su-sr-only">
+            {shareDisabledReason}
+          </span>
+        )}
         <DropdownMenuSeparator />
         <DownloadMenu download={props.download} print={props.print} />
         {item("Import to replace…", props.importFile)}
