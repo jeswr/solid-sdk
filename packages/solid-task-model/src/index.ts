@@ -21,6 +21,7 @@ export {
   buildPeopleIndex,
   buildPerson,
   Contact,
+  type ContactAddress,
   ContactBook,
   type ContactData,
   ContactGroup,
