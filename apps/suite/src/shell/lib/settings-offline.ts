@@ -1,4 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+import { clearRecentItems } from "./recent-items";
+
 /**
  * Databases that hold the only copy of their data, not a saved copy of storage. App-local
  * notifications (read and dismissed state, device-only events) live here.
@@ -9,13 +11,16 @@ const KEPT_DATABASES = ["suite-notifications-"];
 export async function clearSavedCopies({
   cacheStorage,
   databaseFactory,
+  storage,
   blockedTimeoutMs = 5000,
 }: {
   cacheStorage?: Pick<CacheStorage, "keys" | "delete">;
   databaseFactory?: Pick<IDBFactory, "databases" | "deleteDatabase">;
+  storage?: Pick<Storage, "length" | "key" | "removeItem">;
   /** "blocked" only means another connection must close first; give it this long. */
   blockedTimeoutMs?: number;
 }): Promise<void> {
+  if (storage) clearRecentItems(storage);
   if (cacheStorage) {
     const names = await cacheStorage.keys();
     await Promise.all(

@@ -57,43 +57,68 @@ Tests use fictional `example.org` identities and typed writers. The app's normal
 command enforces 100% statements, branches, functions and lines for every `.ts` file here,
 including the barrel and type declarations in the coverage include glob.
 
-<!-- AUTHORED-BY Codex -->
+<!-- AUTHORED-BY Claude Opus 5.5 -->
 
-## Drive persistence adapter
+## Drive share dialog adapter (SDK role layer)
 
-`apply.ts` adds `loadSharing(session, resource)` and `applySharing(session, snapshot,
-selection)`. The session supplies authenticated fetch, the selected storage root and
-signed-in WebID. Reads use advertised endpoints and stay inside that storage. WAC
-resolves the nearest ACL (including legacy `defaultForNew`); ACP loads the own ACR
-and ancestors. Unsupported graphs still fail closed through `readSharing`.
+`readSharing`/`diffSharing` above remain the offline WAC projection used by the shell
+`WacSharingAdapter`. Drive's share dialog and its access labels (Details, the upload dialogs
+and the copy-link toast) no longer use them: `adapter.ts` routes every read and write through
+`@jeswr/pod-access/roles`.
 
-Before creating an own WAC ACL, the adapter copies every effective inherited grant,
-including Control, and retains child defaults when the resource is a folder.
-Changes preserve other principals, targets, defaults and metadata. Ancestors are
-never written. Sources and discovery are revalidated, and PUT uses the captured
-strong ETag or `If-None-Match: *`. A 412 produces `SharingConflictError` with a fresh
-snapshot and the message “Sharing changed elsewhere, review and try again”. Existing
-owners and inherited rows remain immutable; a non-owner cannot save changes.
+`loadSharing(session, resource)` calls `readGrants` with the session's fetch and
+`root: storageUrl`, and maps the SDK grants to the dialog's `SharingState`
+(`manager` is shown as Owner; public Viewer/Editor is link access). Groups, apps,
+authenticated-agent grants and anonymous Commenter/Manager fail closed. The SDK owns
+discovery, scope and redirect refusal, WAC/ACP parsing, the inherited-ACL copy
+(materialized with provenance), the owner-lockout guard and the conditional PUT.
 
-A changed WAC folder grant applies to both the folder and inheriting descendants:
-`accessTo`, `default`, and legacy `defaultForNew` scopes for that folder are edited
-together. If a folder's own permissions differ from its effective defaults, projection
-and diff planning reject the configuration explicitly; the dialog cannot summarize two
-different scopes with one control. Write and redundant Append compare as equivalent.
-ACP folder changes likewise set the selected principal's final permissions in both
-`accessControl` and `memberAccessControl`, including new grants and descendant-only
-modes. Unchanged principals and unrelated targets retain their grants. ACP discovery also checks the
-access document's type Link header and RDF type, including empty ACRs advertised
-through `rel="acl"` at arbitrary URLs. A missing own ACR remains a conditional-create
-destination when inherited policies permit management.
+`readGrants` silently drops principals whose modes map to no role (public Read+Append, Write
+without Read, Control without Write) and reads a folder's own rules without its member rules.
+`verify.ts` therefore records the access documents the SDK fetched (`recordAccess` wraps the
+fetch; each GET is attributed to the HEAD before it, and its copy is drained concurrently up
+to the SDK's 1 MiB cap so it never stalls the SDK's own bounded reader) and re-reads them with the SDK's neutral
+`readWac`/`readAcp`. `loadSharing` fails closed (`UNMAPPED`) unless every principal with
+effective access appears at the role its raw modes map to and nobody else does; denials,
+conditional rules, misattributed documents and reader failures fail the same way. For a
+folder, `contentsDiffer` reports member access that differs from the folder's own; the
+dialog notes it (`CONTENTS_DIFFER`) and `accessSummary` labels such a folder "Access unknown".
 
-If PUT succeeds but reloading fails, `SharingRefreshError` carries `committed: true`
-and the read failure as its cause. The dialog reports that sharing was saved, clears
-its stale controls, and offers Retry to reload access without repeating the write.
-If the PUT transport fails, the same error carries `committed: false`: the write outcome
-is unknown. The dialog clears stale controls and offers the same read-only Retry, without
-claiming the save succeeded. HTTP failures use sharing-specific instructions.
-All dismissal routes remain guarded while a save is pending so failures stay visible.
+`applySharing(session, snapshot, selection)` translates the full selection into SDK grants:
+unchanged principals keep their SDK rows verbatim, changed rows become explicit grants, and
+`setGrants` runs with `expected: snapshot.grants`, so a stale snapshot never overwrites newer
+access. App guards the SDK lacks stay here: owner-only saves, safe WebIDs, no duplicates,
+other owners and inherited rows are immutable. The caller's own owner row is left to the
+SDK's owner-lockout guard. Unchanged selections send no request.
 
-The Drive dialog uses Viewer and Editor. Commenter stays disabled until Drive has a
-separate comments resource; it never substitutes Append on the file for commenting.
+SDK gap: `setGrants` seeds a WAC ACL's rows copied from an inherited default
+(`materializedFrom`) before the caller's grants, so omitting such a principal never removes it.
+After the conditional `setGrants`, each removed person (and anonymous access, when restricted)
+also goes through `removeGrant`. `removeGrant` takes no expected snapshot, so each removal is
+bound app-side: a fresh verified read must equal the selection plus the removals still to come
+(otherwise the removals stop with `CHANGED_WHILE_SAVING`), and `pinFetch` refuses the removal
+if any access document's status or ETag differs from that read. The SDK's If-Match covers the
+gap between its own read and its PUT. The access is then reloaded and compared with the selection: a mismatch is `SharingIncompleteError` with the
+reloaded snapshot and the principals that did not change, and the dialog never announces
+"Sharing saved" unless the reloaded access matches.
+
+Errors: an SDK `conflict` (stale token, changed source or 412) becomes
+`SharingConflictError` with a freshly loaded snapshot, or none with a reload prompt when the
+re-read fails. Other `RoleError` codes map to fixed copy in `saveError`/`loadError`. An
+unclassified failure or a refused (redirected) response after the PUT began is
+`SharingRefreshError` with `committed: false`; a failed reload after an accepted write is
+`SharingRefreshError` with `committed: true`, announced as "Sharing not confirmed".
+
+Folders are read-only in the dialog for now: the SDK edits `acl:accessTo` /
+`acp:accessControl` only, so a folder grant would not reach its contents and a removal
+would leave descendant access in place. For an owner, every edit control is disabled and
+`FOLDER_READ_ONLY` explains why and points to sharing each file directly; `applySharing`
+refuses folder snapshots without a request. Commenter stays disabled until Drive has a
+separate comments resource.
+
+The ACP dialect is the SDK default (CSS: managers hold resource Control); no
+`implementation` is passed, so Inrupt ESS pods are not recognised as owned. They fail
+closed without writes, with `UNSUPPORTED_SYSTEM` copy: the SDK refuses ESS's query-string ACR
+URL (`?ext=acr`) for every implementation, and rejects acp:* modes under the CSS dialect. Passing `"ess"` needs both
+that SDK work and a trusted implementation signal, which the session does not provide;
+see the comment above `options` in `adapter.ts`.

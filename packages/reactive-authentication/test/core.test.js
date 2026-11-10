@@ -287,6 +287,72 @@ test("replay buffering honours abort for never-ending bodies and enforces its si
   );
 });
 
+test("a Blob body replays as it is: no buffering, so the size bound does not apply; the request's type wins", async () => {
+  const seen = [];
+  const provider = tokenProvider();
+  const client = new ReactiveAuthenticationClient({
+    providers: [provider],
+    boundary: boundaryFor("https://s.example/"),
+    fetch: async (request) => {
+      seen.push({
+        body: await request.text(),
+        type: request.headers.get("content-type"),
+        auth: request.headers.get("authorization"),
+      });
+      return seen.length === 1 ? unauthorized() : new Response("ok");
+    },
+    maxReplayBodyBytes: 4,
+  });
+  const file = new File(["sixteen bytes!!!"], "a.txt", { type: "text/plain" });
+  const response = await client.fetch("https://s.example/x", {
+    method: "PUT",
+    body: file,
+    headers: { "content-type": "application/octet-stream" },
+  });
+  assert.equal(response.status, 200);
+  assert.equal(provider.upgrades, 1);
+  assert.deepEqual(seen, [
+    { body: "sixteen bytes!!!", type: "application/octet-stream", auth: null },
+    { body: "sixteen bytes!!!", type: "application/octet-stream", auth: "Bearer t0k3n" },
+  ]);
+
+  seen.length = 0;
+  const typed = await client.fetch("https://s.example/y", {
+    method: "POST",
+    body: new Blob(["<a> <b> <c> ."], { type: "text/turtle" }),
+  });
+  assert.equal(typed.status, 200);
+  assert.deepEqual(
+    seen.map((s) => s.type),
+    ["text/turtle", "text/turtle"],
+  );
+  assert.equal(seen[1].body, "<a> <b> <c> .");
+});
+
+test("a Blob body is captured when fetch is called: reusing one init for concurrent uploads keeps each file", async () => {
+  const seen = [];
+  const client = new ReactiveAuthenticationClient({
+    providers: [tokenProvider()],
+    boundary: boundaryFor("https://s.example/"),
+    fetch: async (request) => {
+      const body = await request.text();
+      seen.push({ url: request.url, body, auth: request.headers.get("authorization") });
+      return request.headers.has("authorization") ? new Response("ok") : unauthorized();
+    },
+  });
+  const init = { method: "PUT", body: new Blob(["first"]) };
+  const first = client.fetch("https://s.example/a", init);
+  init.body = new Blob(["second"]);
+  const second = client.fetch("https://s.example/b", init);
+  assert.deepEqual(
+    (await Promise.all([first, second])).map((r) => r.status),
+    [200, 200],
+  );
+  const sent = (url) => seen.filter((s) => s.url === url).map((s) => s.body);
+  assert.deepEqual(sent("https://s.example/a"), ["first", "first"]);
+  assert.deepEqual(sent("https://s.example/b"), ["second", "second"]);
+});
+
 /**
  * Runs `body` as in a runtime without request body streams: Firefox does not implement `Request.prototype.body`
  * (it reads `undefined`), while `blob()` and friends work. Restores the real getter afterwards.

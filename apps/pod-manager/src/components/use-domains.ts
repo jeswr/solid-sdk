@@ -2,8 +2,7 @@
 
 /**
  * React bridge for the custom-domains data layer (`src/lib/domains.ts`).
- * Production paths pass NO `fetch` — the auth-patched global runs
- * (AGENTS.md §Reading data). The detail hook also drives the polite
+ * Pod requests use the session transport explicitly. The detail hook drives the
  * verify-polling loop while the binding is in a pollable state, the tab is
  * visible, and no manual check is in flight — 30 s for DNS convergence,
  * ~60 s for purchase phases (`pollIntervalMs` in the lib decides).
@@ -31,7 +30,7 @@ export interface DomainsListState extends AsyncState<DomainBinding[]> {
 
 /** The account's domain bindings, from the user's own pod server. */
 export function useDomains(): DomainsListState {
-  const { status, activeStorage } = useSession();
+  const { status, activeStorage, podFetch } = useSession();
   const [state, setState] = useState<AsyncState<DomainBinding[]>>({ loading: true });
   const [nonce, setNonce] = useState(0);
   const reload = useCallback(() => setNonce((n) => n + 1), []);
@@ -42,7 +41,7 @@ export function useDomains(): DomainsListState {
     if (status !== "logged-in" || !base) return;
     let cancelled = false;
     setState({ loading: true });
-    listDomains(base)
+    listDomains(base, podFetch)
       .then((domains) => {
         if (!cancelled) setState({ loading: false, data: domains });
       })
@@ -52,7 +51,7 @@ export function useDomains(): DomainsListState {
     return () => {
       cancelled = true;
     };
-  }, [status, base, nonce]);
+  }, [status, base, nonce, podFetch]);
 
   return { ...state, base, podRoot: activeStorage, reload };
 }
@@ -73,7 +72,7 @@ export interface DomainDetailState extends AsyncState<DomainBinding> {
  * to hammer a button.
  */
 export function useDomain(domain: string | undefined): DomainDetailState {
-  const { status, activeStorage } = useSession();
+  const { status, activeStorage, podFetch } = useSession();
   const [state, setState] = useState<AsyncState<DomainBinding>>({ loading: true });
   const [checking, setChecking] = useState(false);
   const [nonce, setNonce] = useState(0);
@@ -86,7 +85,7 @@ export function useDomain(domain: string | undefined): DomainDetailState {
     if (status !== "logged-in" || !base || !domain) return;
     let cancelled = false;
     setState({ loading: true });
-    getDomain(base, domain)
+    getDomain(base, domain, podFetch)
       .then((binding) => {
         if (!cancelled) setState({ loading: false, data: binding });
       })
@@ -96,21 +95,21 @@ export function useDomain(domain: string | undefined): DomainDetailState {
     return () => {
       cancelled = true;
     };
-  }, [status, base, domain, nonce]);
+  }, [status, base, domain, nonce, podFetch]);
 
   const checkNow = useCallback(async (): Promise<DomainBinding | undefined> => {
     if (!base || !domain || checkingRef.current) return undefined;
     checkingRef.current = true;
     setChecking(true);
     try {
-      const binding = await verifyDomain(base, domain);
+      const binding = await verifyDomain(base, domain, podFetch);
       setState({ loading: false, data: binding });
       return binding;
     } finally {
       checkingRef.current = false;
       setChecking(false);
     }
-  }, [base, domain]);
+  }, [base, domain, podFetch]);
 
   // Polite polling: only while pending, only while the tab is visible. The
   // cadence comes from the binding: ~60 s during purchase phases (each verify
@@ -141,7 +140,7 @@ export function usePurchaseFeature(
   base: string | undefined,
   enabled: boolean,
 ): { available: boolean | undefined } {
-  const { status } = useSession();
+  const { status, podFetch } = useSession();
   const [available, setAvailable] = useState<boolean | undefined>(undefined);
 
   useEffect(() => {
@@ -151,7 +150,7 @@ export function usePurchaseFeature(
     setAvailable(undefined);
     if (status !== "logged-in" || !base || !enabled) return;
     let cancelled = false;
-    detectPurchaseFeature(base)
+    detectPurchaseFeature(base, podFetch)
       .then((result) => {
         if (!cancelled) setAvailable(result);
       })
@@ -161,7 +160,7 @@ export function usePurchaseFeature(
     return () => {
       cancelled = true;
     };
-  }, [status, base, enabled]);
+  }, [status, base, enabled, podFetch]);
 
   return { available };
 }

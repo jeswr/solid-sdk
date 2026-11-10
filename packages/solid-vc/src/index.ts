@@ -110,11 +110,14 @@ export {
   bitstringStatusListEntry,
   buildBitstringStatusListCredential,
   createBitstringStatusResolver,
+  parseStatusListBody,
   readStatusBit,
   resolveBitstringStatus,
+  STATUS_LIST_ACCEPT,
   statusListBitsOf,
   withStatusBit,
 } from "./status.js";
+export { parseStatusListCredential, statusListCredentialToTurtle } from "./status-rdf.js";
 // --- types -----------------------------------------------------------------
 export type {
   AgentAuthorization,

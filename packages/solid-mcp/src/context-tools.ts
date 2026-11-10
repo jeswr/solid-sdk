@@ -10,7 +10,7 @@ import { requirePodScopedUrl } from "./auth.js";
 import { MAX_CONTENT_BYTES } from "./content.js";
 import { withPodReadLimits } from "./pod-operation.js";
 import type { PodPort, PodReadResult } from "./pod-port.js";
-import { defineTool, type PodTool, toolText } from "./tools.js";
+import { defineTool, type PodTool, toolText } from "./tool.js";
 
 /** Conventional location of the shared-context document, relative to the pod root. */
 export const SHARED_CONTEXT_PATH = "agent/context/shared-context.md";

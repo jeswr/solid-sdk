@@ -37,7 +37,9 @@ import type { CidSubject, Identity, KvStore, LoginHint, PodAuthOptions } from ".
 export type AgentPolicy = Pick<
   PodAuthOptions,
   "boundary" | "allowInsecureLoopback" | "clock" | "maxReplayBodyBytes"
->;
+> & {
+  fetch?: typeof fetch;
+};
 export type AgentConfiguration =
   | { kind: "cid"; cid: CidSubject }
   | { kind: "client-credentials"; issuer: string; clientId: string; clientSecret: string };
@@ -48,7 +50,7 @@ export function createAgentProviders(
   config: AgentConfiguration,
   hooks: { challenge(url: string): void; session(signal: AbortSignal): void },
 ) {
-  const transport = nonReactiveFetch();
+  const transport = policy.fetch ?? nonReactiveFetch();
   const http: HttpOptions = {
     allowInsecureRequests: policy.allowInsecureLoopback === true,
     fetch: (input, init) => {
@@ -323,7 +325,10 @@ export function createProviders(
           pending = (async () =>
             selected.webId !== undefined || selected.issuer !== undefined
               ? selected
-              : { webId: secureUrl(await options.ui.getWebId(), insecure, "WebID").href })();
+              : {
+                  webId: secureUrl(await untilAborted(options.ui.getWebId()), insecure, "WebID")
+                    .href,
+                })();
           selections.set(key, pending);
           pending.catch(() => selections.delete(key));
         }
@@ -364,7 +369,7 @@ export function createProviders(
           if (selected.issuer !== undefined) issuer = selected.issuer;
           else if (issuers.length === 1) issuer = issuers[0]!.href;
           else if (options.ui.chooseIssuer)
-            issuer = await options.ui.chooseIssuer(issuers.map((i) => i.href));
+            issuer = await untilAborted(options.ui.chooseIssuer(issuers.map((i) => i.href)));
           else throw new AmbiguousIssuerError();
           const result = secureUrl(issuer, insecure, "issuer");
           if (!issuers.some((i) => i.href === result.href))
@@ -410,11 +415,28 @@ export function createProviders(
       ? new ClientIdClientProvider(new URL(options.clientId), http)
       : new DynamicRegistrationClientProvider(http),
   );
+  /** Told when a running login hands an authorization code on to the token exchange. */
+  let codeRedeemed: (() => void) | undefined;
+  /** The running login's cancellation; UI hooks without a signal of their own are raced against it. */
+  let loginSignal: AbortSignal | undefined;
+  const untilAborted = <T>(work: Promise<T>): Promise<T> => {
+    const signal = loginSignal;
+    if (signal === undefined) return work;
+    work.catch(() => undefined); // an abort wins; the hook's late outcome is dropped
+    if (signal.aborted) return Promise.reject(signal.reason);
+    return new Promise<T>((resolve, reject) => {
+      const onAbort = () => reject(signal.reason);
+      signal.addEventListener("abort", onAbort, { once: true });
+      work.then(resolve, reject).finally(() => signal.removeEventListener("abort", onAbort));
+    });
+  };
   const codeProvider: CodeProvider = {
     getCode: async (url, signal) => {
       secureUrl(url.href, insecure, "authorization endpoint");
       const value = await options.ui.getCode(url, signal);
       signal.throwIfAborted();
+      // From here a grant may be stored even if the exchange then observes an abort.
+      codeRedeemed?.();
       return {
         value,
         [Symbol.dispose]() {
@@ -677,32 +699,60 @@ export function createProviders(
       authorizationServers.clear();
       if (failures.length > 0) throw new AggregateError(failures, "Logout cleanup failed");
     },
-    login: async (value: LoginHint, signal: AbortSignal) => {
-      restoredContext = undefined;
-      loginContext = undefined;
-      hint = value;
-      selections.clear();
-      // A synthetic upgrade obtains a session without sending credentials to a login hint's URL.
-      const generation = await fence.generation();
-      // Only a login made before any root was known is keyed to the callback URL.
-      const bootstrap = boundary.roots().length === 0;
-      const request = new Request(boundary.roots()[0] ?? options.redirectUri, {
-        signal: AbortSignal.any([signal, fence.signalFor(generation)]),
-      });
-      request.signal.throwIfAborted();
-      const selected = await selectionFor(request);
-      const context = await contextFor(request, selected);
-      await solidProvider.upgrade(request);
-      const claims = await solidProvider.identity(request);
-      if (claims === undefined) throw new Error("Login did not establish an identity");
-      await hooks.session(request, claims, "solid-oidc", selected);
-      // hooks.session loaded the verified roots; only the first inherits the login grant.
-      const root = boundary.roots()[0];
-      if (bootstrap && root !== undefined)
-        loginContext = { selected, context, root: await boundary.contextKey(new Request(root)) };
-      // Later requests keep the account login selected instead of asking for a WebID again.
-      hint = selected;
-      sessionRequest = request;
+    /**
+     * `granted` runs once a grant may exist (an authorization code went to the token exchange, or the
+     * upgrade completed), so an abandoned login knows it must discard one.
+     */
+    login: async (value: LoginHint, signal: AbortSignal, granted: () => void = () => {}) => {
+      let obtained = false;
+      const grant = () => {
+        obtained = true;
+        granted();
+      };
+      codeRedeemed = grant;
+      loginSignal = signal;
+      try {
+        await loginAttempt(value, signal, grant);
+      } catch (error) {
+        // Nothing was granted: forget the abandoned attempt's account choice (memory only).
+        if (signal.aborted && !obtained) {
+          hint = {};
+          selections.clear();
+        }
+        throw error;
+      } finally {
+        // Logins are serialized by the caller, so this attempt owns both hooks until it ends.
+        codeRedeemed = undefined;
+        loginSignal = undefined;
+      }
     },
   };
+  async function loginAttempt(value: LoginHint, signal: AbortSignal, granted: () => void) {
+    restoredContext = undefined;
+    loginContext = undefined;
+    hint = value;
+    selections.clear();
+    // A synthetic upgrade obtains a session without sending credentials to a login hint's URL.
+    const generation = await fence.generation();
+    // Only a login made before any root was known is keyed to the callback URL.
+    const bootstrap = boundary.roots().length === 0;
+    const request = new Request(boundary.roots()[0] ?? options.redirectUri, {
+      signal: AbortSignal.any([signal, fence.signalFor(generation)]),
+    });
+    request.signal.throwIfAborted();
+    const selected = await selectionFor(request);
+    const context = await contextFor(request, selected);
+    await solidProvider.upgrade(request);
+    granted();
+    const claims = await solidProvider.identity(request);
+    if (claims === undefined) throw new Error("Login did not establish an identity");
+    await hooks.session(request, claims, "solid-oidc", selected);
+    // hooks.session loaded the verified roots; only the first inherits the login grant.
+    const root = boundary.roots()[0];
+    if (bootstrap && root !== undefined)
+      loginContext = { selected, context, root: await boundary.contextKey(new Request(root)) };
+    // Later requests keep the account login selected instead of asking for a WebID again.
+    hint = selected;
+    sessionRequest = request;
+  }
 }

@@ -14,6 +14,7 @@
  * NEVER show DNS instructions: the server registers the domain and authors
  * the zone itself.
  */
+import { useSession } from "@/components/session-provider";
 import { Suspense, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -69,6 +70,7 @@ export default function DomainDetailPage() {
 }
 
 function DomainDetail() {
+  const { podFetch } = useSession();
   const name = useSearchParams().get("name") ?? undefined;
   const { data: binding, base, loading, error, checking, checkNow, reload } = useDomain(name);
   const router = useRouter();
@@ -99,7 +101,7 @@ function DomainDetail() {
     if (!base || !binding) return;
     setReleasing(true);
     try {
-      await releaseDomain(base, binding.domain);
+      await releaseDomain(base, binding.domain, podFetch);
       toast.success(done.title, { description: done.description });
       router.push("/settings/domains");
     } catch (e: unknown) {

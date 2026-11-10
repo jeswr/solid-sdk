@@ -146,6 +146,20 @@ describe("SyncSheet", () => {
     screen.getByRole("group").focus();
     expect((await screen.findByRole("tooltip")).textContent).toBe("Reconnect to retry");
     await user.keyboard("{Escape}");
+    rerender(
+      <SyncSheet
+        open
+        snapshot={{ ...snapshot, online: true, reconnecting: true }}
+        {...callbacks}
+        now={now}
+      />,
+    );
+    expect(screen.getByRole<HTMLButtonElement>("button", { name: "Retry all" }).disabled).toBe(
+      true,
+    );
+    expect(
+      screen.getByRole<HTMLButtonElement>("button", { name: "Retry Save notes" }).disabled,
+    ).toBe(true);
     rerender(<SyncSheet open snapshot={{ ...snapshot, online: true }} {...callbacks} now={now} />);
     expect(screen.getByRole<HTMLButtonElement>("button", { name: "Retry all" }).disabled).toBe(
       false,

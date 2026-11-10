@@ -85,7 +85,7 @@ export interface BitstringStatusOptions {
 export function buildAgentAuthorizationCredential(auth: AgentAuthorization): Credential_2;
 
 // @public
-export function buildBitstringStatusListCredential(input: BitstringStatusListCredentialInput): Credential_2;
+export function buildBitstringStatusListCredential(input: BitstringStatusListCredentialInput): Promise<Credential_2>;
 
 // @public
 export function buildBoundAgentAuthorizationCredential(auth: AgentAuthorization): Promise<Credential_2>;
@@ -230,7 +230,7 @@ export function decodeMultikey(publicKeyMultibase: string): Promise<DecodedMulti
 // @public
 export function decodeStatusList(encoded: string, options?: {
     readonly maxDecodedBytes?: number;
-}): Uint8Array;
+}): Promise<Uint8Array>;
 
 // @public
 export const DEFAULT_MAX_DECODED_BYTES: number;
@@ -248,7 +248,7 @@ export function digestRdfContent(content: string, contentType?: string): Promise
 export function encodeMultikey(publicKey: CryptoKey): Promise<string>;
 
 // @public
-export function encodeStatusList(bits: Uint8Array): string;
+export function encodeStatusList(bits: Uint8Array): Promise<string>;
 
 // @public
 export function exportPrivateJwk(key: KeyPair): Promise<JWK>;
@@ -311,6 +311,12 @@ export function parseAndValidateCredential(body: string, contentType?: string): 
 
 // @public
 export function parseCredentialRdf(body: string, contentType?: string): Promise<DatasetCore>;
+
+// @public
+export function parseStatusListBody(body: string, url: string, statusPurpose: string): Promise<VerifiableCredential | undefined>;
+
+// @public
+export function parseStatusListCredential(document: string): Promise<VerifiableCredential | undefined>;
 
 // @public
 export interface Presentation {
@@ -397,7 +403,7 @@ export interface PublishVerificationMethodInput {
 }
 
 // @public
-export function readStatusBit(credential: Credential_2, index: number): boolean;
+export function readStatusBit(credential: Credential_2, index: number): Promise<boolean>;
 
 // @public
 export function readValidCredential(dataset: DatasetCore): ValidCredentialResult;
@@ -469,6 +475,9 @@ export const STATUS_BITSTRING_LIST: "https://www.w3.org/ns/credentials/status#Bi
 export const STATUS_ENCODED_LIST: "https://www.w3.org/ns/credentials/status#encodedList";
 
 // @public
+export const STATUS_LIST_ACCEPT = "application/trig, text/turtle, application/vc+ld+json, application/ld+json, application/json";
+
+// @public
 export const STATUS_LIST_CREDENTIAL: "https://www.w3.org/ns/credentials/status#statusListCredential";
 
 // @public
@@ -480,7 +489,10 @@ export const STATUS_PURPOSE: "https://www.w3.org/ns/credentials/status#statusPur
 // @public
 export function statusListBitsOf(credential: Credential_2, options?: {
     readonly maxDecodedBytes?: number;
-}): Uint8Array;
+}): Promise<Uint8Array>;
+
+// @public
+export function statusListCredentialToTurtle(vc: VerifiableCredential): Promise<string>;
 
 // @public
 export type SuiteKeyType = "Ed25519" | "P-256";
@@ -588,7 +600,7 @@ export interface WebIdKeyResolver {
 }
 
 // @public
-export function withStatusBit(credential: Credential_2 | VerifiableCredential, index: number, value: boolean): Credential_2;
+export function withStatusBit(credential: Credential_2 | VerifiableCredential, index: number, value: boolean): Promise<Credential_2>;
 
 // @public
 export function wrapVc(dataset: DatasetCore): VcDataset;

@@ -99,6 +99,7 @@ function context(root, file, projects) {
       /^packages\/agent-channels\/(?:src|test)\//.test(path) &&
       /\.(?:test|spec)\.[cm]?[jt]sx?$/.test(path),
     test: testExemptPath(path),
+    uiData: /^apps\/suite\/src\/apps\/agent\/lib\//.test(path),
     ui: /^apps\/suite\/(?:src\/)?apps\/agent\//.test(path),
   };
 }
@@ -250,7 +251,23 @@ function importFailures(ctx, target, typeOnly = false, manifest = false) {
     )
       failures.push("gateway may import channel ingest types only");
     if (ctx.ui) {
-      const uiAllowed = new Set([agent("model"), agent("mandate"), agent("registry")]);
+      const uiAllowed = new Set([
+        agent("model"),
+        agent("mandate"),
+        agent("registry"),
+        "@jeswr/suite-ui",
+      ]);
+      // A-015 pod adapters and A-016's browser-safe signing/resolver live only
+      // in lib; components stay RDF-free.
+      if (ctx.uiData)
+        for (const dependency of [
+          "@jeswr/guarded-fetch",
+          "@jeswr/fetch-rdf",
+          "@jeswr/rdf-serialize",
+          "@jeswr/ldp-container",
+          "@jeswr/solid-vc",
+        ])
+          uiAllowed.add(dependency);
       if (
         (name.startsWith("@jeswr/") &&
           !uiAllowed.has(name) &&
@@ -261,9 +278,10 @@ function importFailures(ctx, target, typeOnly = false, manifest = false) {
       if (
         name === agent("mandate") &&
         !typeOnly &&
-        !/^@jeswr\/agent-mandate\/(?:issue|verify)(?:\/|$)/.test(target)
+        !/^@jeswr\/agent-mandate\/(?:issue|verify)(?:\/|$)/.test(target) &&
+        !(ctx.uiData && /^@jeswr\/agent-mandate\/(?:approval|control)(?:\/|$)/.test(target))
       )
-        failures.push("agent UI mandate values must use issue/verify subpaths");
+        failures.push("agent UI mandate values must use issue/verify or approval/control subpaths");
     }
   }
   return failures;

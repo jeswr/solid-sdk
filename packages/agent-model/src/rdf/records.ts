@@ -58,6 +58,7 @@ export const RECORD_MAPPINGS: Readonly<
         evidence: sequence("historicEvidence", "json"),
         identityConflicts: sequence("identityConflict", "json"),
       }),
+      // Missing predicates preserve earlier settings for controls; account fields remain required.
       restrictions: object("restrictions", {
         read: f("read", "boolean"),
         triage: f("triage", "boolean"),
@@ -178,6 +179,13 @@ export const RECORD_MAPPINGS: Readonly<
       target: ref("target"),
       binding: f("binding"),
       bindingState: f("bindingState"),
+      // Missing predicates preserve earlier settings for controls; account fields remain required.
+      restrictions: object("restrictions", {
+        read: f("read", "boolean"),
+        triage: f("triage", "boolean"),
+        draft: f("draft", "boolean"),
+        send: f("send", "boolean"),
+      }),
       proof,
     },
   },
@@ -329,7 +337,7 @@ export function fromRdf(dataset: DatasetCore, id: string): PodRecord {
 }
 const MAX_TURTLE_BYTES = 256 * 1024;
 function assertTurtleBounds(text: string): void {
-  if (Buffer.byteLength(text, "utf8") > MAX_TURTLE_BYTES)
+  if (new TextEncoder().encode(text).byteLength > MAX_TURTLE_BYTES)
     throw new Error("Turtle exceeds record bounds");
 }
 

@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { expect, it, vi } from "vitest";
 import { NanopubStore, purposeFilter } from "../src/index.js";
 import { createMemoryPodPort, exampleBuildOptions } from "../src/testing.js";
@@ -16,7 +17,12 @@ const permission = (restriction: string) => `
   ] .
 `;
 async function setup(body: string) {
-  const pod = createMemoryPodPort(identity);
+  const pod = {
+    ...createMemoryPodPort(identity),
+    async head(target: string) {
+      return { acl: `${target}.acl` };
+    },
+  };
   const store = new NanopubStore(pod);
   await pod.write(store.policyUrl, new TextEncoder().encode(preamble + body), "text/turtle", {});
   const before = await pod.read(store.policyUrl);
@@ -139,7 +145,12 @@ it("preserves numeric and temporal constraints", async () => {
 });
 
 it("validates a policy created concurrently before returning it", async () => {
-  const pod = createMemoryPodPort(identity);
+  const pod = {
+    ...createMemoryPodPort(identity),
+    async head(target: string) {
+      return { acl: `${target}.acl` };
+    },
+  };
   const store = new NanopubStore(pod);
   const originalWrite = pod.write;
   pod.write = async (url, body, type, cond) => {

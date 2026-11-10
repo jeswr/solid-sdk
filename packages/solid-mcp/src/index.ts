@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 /**
@@ -20,6 +21,10 @@ export {
   type SolidMcpConfig,
   writesEnabled,
 } from "./auth.js";
+// Shared by session capture; keep config, DPoP and WAC behavior identical to stdio.
+export { createChatPodPort } from "./chat-tools.js";
+export { type CliConfig, loadCliConfig } from "./cli-config.js";
+export { createCliFetch } from "./client-credentials.js";
 export {
   createContextToolRegistry,
   readSharedContext,
@@ -28,6 +33,7 @@ export {
   sharedContextUrl,
 } from "./context-tools.js";
 export { type FetchResult, fetchDocument } from "./fetch.js";
+export type { MemoryClientInfo } from "./memory-tools.js";
 export {
   listContainer,
   type PodChild,
@@ -44,10 +50,12 @@ export {
   createFetchPodPort,
   type PodConditions,
   type PodEntry,
+  type PodHeadResult,
   type PodPort,
   type PodReadOptions,
   type PodReadResult,
   type PodSource,
 } from "./pod-port.js";
 export { createSolidMcpServer, type SolidMcpServerConfig } from "./server.js";
+export { createStoragePodPort } from "./storage-pod-port.js";
 export { createPodToolRegistry, type PodTool, registerPodTools } from "./tools.js";

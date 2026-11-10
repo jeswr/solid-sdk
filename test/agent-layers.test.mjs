@@ -1162,3 +1162,45 @@ describe("agent capability references", () => {
     ).toEqual([]);
   });
 });
+
+// AUTHORED-BY Codex GPT-6.1-Sol
+it("allows the A-015 pod adapters only inside the agent data layer", () => {
+  for (const dependency of [
+    "@jeswr/guarded-fetch",
+    "@jeswr/fetch-rdf",
+    "@jeswr/rdf-serialize",
+    "@jeswr/ldp-container",
+    "@jeswr/solid-vc",
+  ]) {
+    expect(scan("apps/suite/src/apps/agent/lib/client.ts", `import "${dependency}";`)).toEqual([]);
+    for (const path of [
+      "apps/suite/src/apps/agent/components/list.tsx",
+      "apps/suite/src/apps/agent/lib-other/client.ts",
+      "apps/suite/src/apps/agent/lib.ts",
+    ])
+      expect(scan(path, `import "${dependency}";`).join("\n")).toContain("agent UI dependency");
+  }
+  expect(
+    scan("apps/suite/src/apps/agent/components/list.tsx", 'import "@jeswr/suite-ui";'),
+  ).toEqual([]);
+  expect(
+    scan("apps/suite/src/apps/agent/lib/client.ts", "const io = globalThis.fetch;").join("\n"),
+  ).toContain("forbidden agent identifier");
+});
+
+it("allows P0's browser-safe approval/control entry points and rejects the general mandate barrel", () => {
+  for (const entry of ["approval", "control"]) {
+    expect(
+      scan("apps/suite/src/apps/agent/lib/sign.ts", `import "@jeswr/agent-mandate/${entry}";`),
+    ).toEqual([]);
+    expect(
+      scan(
+        "apps/suite/src/apps/agent/components/list.tsx",
+        `import "@jeswr/agent-mandate/${entry}";`,
+      ).join("\n"),
+    ).toContain("issue/verify");
+  }
+  expect(
+    scan("apps/suite/src/apps/agent/lib/sign.ts", 'import "@jeswr/agent-mandate";').join("\n"),
+  ).toContain("issue/verify");
+});

@@ -29,6 +29,7 @@ import { TaskListFocus } from "../../state/list-focus";
 import { useTasksPreferences } from "../../state/preferences";
 import { useTasks } from "../../state/tasks-context";
 import { AddTaskRow } from "../add-task-row";
+import { AssigneeAvatar } from "../assignee-avatar";
 import { useTaskDrag } from "../dnd/use-task-drag";
 import { MoveMenuItems } from "../move-menu";
 import { TaskCheck, useCompleting } from "../task-check";
@@ -75,6 +76,7 @@ function BoardCard({
       {...drag.pointer}
       {...drag.touch}
     >
+      <AssigneeAvatar task={task} />
       <div className="tsk-card-top">
         {drag.handle && (
           <button
@@ -266,7 +268,10 @@ export function BoardView({ projectUrl }: { projectUrl: string }) {
   const { preferences } = useTasksPreferences();
   const project = tasks.projects.find((item) => item.url === projectUrl);
   const load = tasks.tasks[projectUrl];
-  const title = project?.tracker.title ?? "Project";
+  const title =
+    project?.tracker.title ??
+    preferences.sharedProjects.find((shared) => shared.url === projectUrl)?.title ??
+    "Project";
   useEffect(() => {
     if (project) void tasks.cache.loadTasks(project);
   }, [project, tasks.cache]);
@@ -314,7 +319,10 @@ export function BoardView({ projectUrl }: { projectUrl: string }) {
               }}
             >
               {classifyError(load.error) === "forbidden" && (
-                <p>You no longer have access to {title}</p>
+                <>
+                  <p>You no longer have access to {title}</p>
+                  <p>Ask the owner to share this project</p>
+                </>
               )}
             </ProjectError>
           ) : !project && tasks.status === "ready" ? (

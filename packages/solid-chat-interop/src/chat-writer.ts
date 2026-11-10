@@ -17,6 +17,7 @@ import { DataFactory, Store } from "n3";
 import { buildAs2Message, parseAs2Message } from "./as2.js";
 import { safeHttpIri, sanitizeText } from "./iri.js";
 import { storeToTurtle } from "./reconcile.js";
+import { redactSecrets } from "./redact.js";
 import { AS_COLLECTION, AS_NAME, DCT, RDF_TYPE } from "./vocab.js";
 
 /** Structural subset of DESIGN §3 PodPort; implementations enforce pod scope. */
@@ -197,7 +198,14 @@ export class ChatWriter {
     const messages = await Promise.all(
       conversation.messages.map(async (message) => {
         if (!CHAT_ROLES.includes(message.role)) throw new TypeError("Unsupported chat role");
-        const normalized = { ...message, createdAt: timestamp(message.createdAt) };
+        // Redact before deriving the ID, so no stored value or name depends on a secret.
+        const normalized = {
+          ...message,
+          // Strip control characters first: one inside a credential would defeat the pattern
+          // and then be removed by the AS2 serializer, storing the plaintext secret.
+          text: redactSecrets(sanitizeText(message.text)),
+          createdAt: timestamp(message.createdAt),
+        };
         const id = await messageId(normalized);
         const resource = `${url}m-${id}.ttl`;
         const subject = `${resource}#it`;
@@ -219,7 +227,7 @@ export class ChatWriter {
     const room = new ChatDoc(`${url}_conversation.ttl#it`, metadata, DataFactory);
     room.types.add(AS_COLLECTION);
     room.identifier = conversation.conversationId;
-    room.title = sanitizeText(conversation.title);
+    room.title = redactSecrets(sanitizeText(conversation.title));
     const roomTurtle = await storeToTurtle(metadata);
     for (const container of [this.base, `${this.base}${conversation.provider}/`, url]) {
       const containerStore = new Store();

@@ -1,4 +1,7 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
+// AUTHORED-BY Codex GPT-6.1-Sol
+import { parseRdf } from "@jeswr/fetch-rdf";
+import { parsePerson, serializePerson } from "@jeswr/solid-task-model/contacts";
 import { describe, expect, it } from "vitest";
 import { findComponents, parseComponents } from "../src/ical.js";
 import { vcardToContact, veventToEvent } from "../src/map.js";
@@ -151,12 +154,102 @@ describe("vcardToContact", () => {
     expect(data.emails).toEqual(["mailto:alice@example.com", "mailto:alice.personal@example.net"]);
     // phone normalised: punctuation stripped, leading + kept
     expect(data.phones).toEqual(["tel:+15551234567"]);
-    // ORG folded into note (ContactData has no org field)
-    expect(data.note).toContain("Met at the conference.");
-    expect(data.note).toContain("Organization: Example Corp — Engineering");
+    expect(data.organization).toBe("Example Corp");
+    expect(data.note).toBe("Met at the conference.\nOrganization: Engineering");
     // urn:uuid UID is NOT a WebID → no webId, but uid carried for slug
     expect(data.webId).toBeUndefined();
     expect(uid).toBe("urn:uuid:11111111-1111-1111-1111-111111111111");
+  });
+
+  it.each([
+    { raw: "Example Corp", organization: "Example Corp", note: undefined },
+    {
+      raw: String.raw`Example\; Corp\, Ltd`,
+      organization: "Example; Corp, Ltd",
+      note: undefined,
+    },
+    {
+      raw: "Example Corp;Engineering;Platform",
+      organization: "Example Corp",
+      note: "Organization: Engineering — Platform",
+    },
+    {
+      raw: String.raw`Example\; Corp\, Ltd;Research\; Development;Sales\, Europe`,
+      organization: "Example; Corp, Ltd",
+      note: "Organization: Research; Development — Sales, Europe",
+    },
+    {
+      raw: String.raw`Example\\;Engineering`,
+      organization: "Example\\",
+      note: "Organization: Engineering",
+    },
+    {
+      raw: String.raw`Example\\\; Corp;Engineering`,
+      organization: "Example\\; Corp",
+      note: "Organization: Engineering",
+    },
+    {
+      raw: String.raw`Example\nCorp;Line\Ntwo;Literal\\n`,
+      organization: "Example\nCorp",
+      note: "Organization: Line\ntwo — Literal\\n",
+    },
+    {
+      raw: " Example Corp ; ; Engineering ; ",
+      organization: "Example Corp",
+      note: "Organization: Engineering",
+    },
+    { raw: "Example Corp;;", organization: "Example Corp", note: undefined },
+    { raw: "Example\\", organization: "Example\\", note: undefined },
+    { raw: String.raw`Example\q`, organization: String.raw`Example\q`, note: undefined },
+    { raw: `Example${String.fromCharCode(0)} Corp`, organization: "Example Corp", note: undefined },
+    { raw: ";Engineering", organization: undefined, note: "Organization: Engineering" },
+    { raw: "", organization: undefined, note: undefined },
+    { raw: " ; ; ", organization: undefined, note: undefined },
+    { raw: undefined, organization: undefined, note: undefined },
+  ])("maps ORG components without confusing escaped separators: $raw", ({
+    raw,
+    organization,
+    note,
+  }) => {
+    const vcf = [
+      "BEGIN:VCARD",
+      "VERSION:4.0",
+      "FN:Alice",
+      ...(raw === undefined ? [] : [`ORG:${raw}`]),
+      "END:VCARD",
+    ].join("\r\n");
+    const { data } = vcardToContact(firstVcard(vcf));
+    expect(data.organization).toBe(organization);
+    expect(data.note).toBe(note);
+    if (organization === undefined) expect(data).not.toHaveProperty("organization");
+  });
+
+  it("preserves NOTE when ORG is absent and uses only the first ORG property", () => {
+    const withoutOrg = "BEGIN:VCARD\r\nFN:Alice\r\nNOTE:Existing note\r\nEND:VCARD";
+    expect(vcardToContact(firstVcard(withoutOrg)).data).toEqual({
+      name: "Alice",
+      note: "Existing note",
+    });
+    const repeatedOrg = withoutOrg.replace(
+      "END:VCARD",
+      "ORG:First\r\nORG:Second;Unit\r\nEND:VCARD",
+    );
+    expect(vcardToContact(firstVcard(repeatedOrg)).data).toEqual({
+      name: "Alice",
+      organization: "First",
+      note: "Existing note",
+    });
+  });
+
+  it("round-trips hostile ORG text as one organization literal without injecting RDF", async () => {
+    const organization =
+      'Example " . <https://evil.example/subject> <https://evil.example/p> "value';
+    const vcf = `BEGIN:VCARD\r\nFN:Alice\r\nORG:${organization}\r\nEND:VCARD`;
+    const { data } = vcardToContact(firstVcard(vcf));
+    const url = "https://pod.example/contacts/alice.ttl";
+    const graph = await parseRdf(await serializePerson(url, data), "text/turtle", { baseIRI: url });
+    expect(parsePerson(url, graph)?.organization).toBe(organization);
+    expect([...graph].some((q) => q.subject.value === "https://evil.example/subject")).toBe(false);
   });
 
   it("uses an http(s) UID as the WebID", () => {

@@ -56,7 +56,7 @@ export async function fixture(root = "https://pod.example/") {
   });
   pod.put(mandateId, await mandateToTurtle(vc), "application/trig");
   const status = await issue({
-    credential: buildBitstringStatusListCredential({
+    credential: await buildBitstringStatusListCredential({
       id: statusId,
       issuer: owner,
       statusPurpose: "revocation",
