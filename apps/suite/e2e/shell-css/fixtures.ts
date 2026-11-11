@@ -20,6 +20,8 @@ export function cssAccount(name: AccountName) {
 }
 
 export async function accessible(page: Page) {
+  // App routes can redirect again and mount their lazy frame after the URL changes.
+  await page.locator("h1").first().waitFor({ state: "visible" });
   const report = await new AxeBuilder({ page }).analyze();
   expect(
     report.violations.filter((issue) => issue.impact === "serious" || issue.impact === "critical"),
@@ -142,7 +144,11 @@ export async function signIn(page: Page, name: AccountName, options: SignInOptio
   const returned = new URL((await callback).url());
   expect(returned.searchParams.has("code")).toBe(true);
   expect(returned.searchParams.has("state")).toBe(true);
+  // The callback request precedes token exchange and loading the destination's modules.
+  // Wait for that navigation once, within the test budget, before asserting the result.
+  await page.waitForURL(/\/home\/?$/);
   await expect(page).toHaveURL(/\/home\/?$/);
+  await page.getByRole("heading", { level: 1, name: "Home", exact: true }).waitFor();
   await expect(
     page
       .getByRole("button", { name: `Account: ${account.name}`, exact: true })

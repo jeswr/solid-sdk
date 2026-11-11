@@ -83,7 +83,9 @@ test("different-account validation and unavailable production loopback auth", as
 test("pod explainer opens with the keyboard and returns focus", async ({ page }) => {
   await page.goto("/signin");
   const trigger = page.getByRole("button", { name: "What is a pod?" });
+  await expect(trigger).toBeEnabled();
   await trigger.focus();
+  await expect(trigger).toBeFocused();
   await page.keyboard.press("Enter");
   await expect(page.getByRole("dialog")).toBeVisible();
   await expect(page.getByRole("dialog")).toContainText(

@@ -29,6 +29,8 @@ async function demo(page: Page) {
   await page.getByRole("button", { name: "Try it with a demo pod" }).click();
   await expect(page).toHaveURL(/\/home$/);
   await page.goto("/search");
+  // A full navigation returns before account restoration mounts the interactive shell.
+  await page.getByRole("heading", { level: 1, name: "Search" }).click();
 }
 async function open(page: Page) {
   const mobile = (page.viewportSize()?.width ?? 1280) < 768;

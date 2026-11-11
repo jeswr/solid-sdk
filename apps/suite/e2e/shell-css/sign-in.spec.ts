@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { accessible, cssAccount, expect, signIn, signedOutTest as test } from "./fixtures";
 
 for (const keyboardOnly of [false, true]) {
@@ -8,6 +9,7 @@ for (const keyboardOnly of [false, true]) {
     await signIn(page, "alice", { keyboardOnly });
     await accessible(page);
     await page.reload();
+    await page.getByRole("heading", { level: 1, name: "Home", exact: true }).waitFor();
     await expect(page).toHaveURL(/\/home\/?$/);
     await expect(
       page
@@ -15,6 +17,17 @@ for (const keyboardOnly of [false, true]) {
         .filter({ visible: true }),
     ).toBeVisible();
     await expect(page.getByRole("alertdialog")).toHaveCount(0);
+    await accessible(page);
+    // A committed popup session must also resume if its opener reloads on /signin.
+    await page.goto("/signin");
+    await page.waitForURL(/\/home\/?$/);
+    await page.getByRole("heading", { level: 1, name: "Home", exact: true }).waitFor();
+    await expect(page).toHaveURL(/\/home\/?$/);
+    await expect(
+      page
+        .getByRole("button", { name: `Account: ${cssAccount("alice").name}`, exact: true })
+        .filter({ visible: true }),
+    ).toBeVisible();
     await accessible(page);
   });
 }

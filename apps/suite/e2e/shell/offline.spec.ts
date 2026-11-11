@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6
 import AxeBuilder from "@axe-core/playwright";
 import { expect, type Page, test } from "@playwright/test";
 
@@ -217,17 +218,24 @@ test("recent recording covers app routes, honours opt-out and only links saved p
 }) => {
   await signInDemo(page);
   await workerInControl(page);
-  for (const path of ["/drive/my", "/docs", "/tasks/today"]) {
+  for (const [path, title] of [
+    ["/drive/my", "Drive · Drive · Solid Suite"],
+    ["/docs", null],
+    ["/tasks/today", null],
+  ] as const) {
     await page.goto(path);
     await expect
       .poll(() =>
-        page.evaluate((href) => {
-          const items = JSON.parse(localStorage.getItem("suite.recent.v1.demo") ?? "[]");
-          return items.some(
-            (item: { href: string; title: string }) =>
-              item.href === href && item.title === document.title,
-          );
-        }, path),
+        page.evaluate(
+          ({ href, title }) => {
+            const items = JSON.parse(localStorage.getItem("suite.recent.v1.demo") ?? "[]");
+            return items.some(
+              (item: { href: string; title: string }) =>
+                item.href === href && item.title === (title ?? document.title),
+            );
+          },
+          { href: path, title },
+        ),
       )
       .toBe(true);
     await expect(page.locator('span.sr-only[role="status"]')).toHaveCount(1);

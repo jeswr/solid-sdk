@@ -7,6 +7,7 @@ for (const keyboardOnly of [false, true]) {
     page,
   }) => {
     await page.goto("/home");
+    await page.getByRole("heading", { level: 1, name: "Home", exact: true }).waitFor();
     const trigger = page
       .getByRole("button", {
         name: (page.viewportSize()?.width ?? 1280) < 768 ? "More apps" : "Apps",
@@ -32,15 +33,25 @@ for (const keyboardOnly of [false, true]) {
     await page.keyboard.press("Enter");
     await expect(page).toHaveURL(/\/drive(?:\/my)?\/?$/);
     await expect(launcher).toBeHidden();
+    await page.getByRole("heading", { level: 1, name: "Drive", exact: true }).waitFor();
     await accessible(page);
   });
 }
 
-test("scenario 4: Cmd/Ctrl+K opens the launcher with the current app marked", async ({ page }) => {
+test("scenario 4: Cmd/Ctrl+K then Open app opens the launcher with the current app marked", async ({
+  page,
+}) => {
   await page.goto("/home");
+  await page.getByRole("heading", { level: 1, name: "Home", exact: true }).waitFor();
   // A document load finishes before the DPoP-bound refresh restores the interactive shell.
   await expect(page.getByRole("button", { name: "Toggle sidebar", exact: true })).toBeVisible();
+  // Cmd/Ctrl+K opens the command palette; its "Open app…" command opens the launcher (§3).
   await page.keyboard.press("ControlOrMeta+k");
+  const palette = page.getByRole("dialog", { name: "Command palette" });
+  await expect(palette).toBeVisible();
+  await page.keyboard.type("Open app");
+  await page.keyboard.press("Enter");
+  await expect(palette).toBeHidden();
   const launcher = page.getByRole("dialog", { name: "Apps", exact: true });
   await expect(launcher).toBeVisible();
   await expect(launcher.getByRole("link", { name: "Home", exact: true })).toHaveAttribute(
@@ -53,5 +64,6 @@ test("scenario 4: Cmd/Ctrl+K opens the launcher with the current app marked", as
   await expect(launcher.getByRole("link", { name: "Drive", exact: true })).toBeFocused();
   await page.keyboard.press("Enter");
   await expect(page).toHaveURL(/\/drive(?:\/my)?\/?$/);
+  await page.getByRole("heading", { level: 1, name: "Drive", exact: true }).waitFor();
   await accessible(page);
 });

@@ -16,7 +16,7 @@ import {
   type SignInRecentAccount,
 } from "@jeswr/suite-ui/sign-in";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSolidExtension } from "@/lib/session/extension-session";
 import { preloadAppFrame } from "@/shell/app-frame-loaders";
 import { useSuiteEnvironment } from "@/shell/environment";
@@ -51,6 +51,17 @@ function SignIn() {
   const params = useSearchParams();
   const next = params.get("next");
   const adding = params.get("add") === "1" && active;
+  const redirecting = useRef(false);
+  const finishSignIn = useCallback(() => {
+    if (redirecting.current) return;
+    redirecting.current = true;
+    router.replace(safeNext(next));
+  }, [next, router]);
+  useEffect(() => {
+    // A reload (including dev Fast Refresh) can restore a committed popup grant after
+    // the submit handler has gone away. Session readiness owns the transition.
+    if (status === "ready" && active && !adding) finishSignIn();
+  }, [status, active, adding, finishSignIn]);
   useEffect(() => {
     // Keep the callback transition responsive while the provider owns the popup.
     router.prefetch(safeNext(next));
@@ -109,7 +120,7 @@ function SignIn() {
       await signIn(hint, { signal: controller.signal });
       const issuer = rememberedIssuer(hint);
       if (issuer) remember(issuer);
-      router.replace(safeNext(next));
+      finishSignIn();
     } catch (cause) {
       if (cause instanceof SignInError) {
         setError(cause.message);
@@ -167,7 +178,7 @@ function SignIn() {
                   onClick={async () => {
                     try {
                       await signInWith("extension", { webId: extension.webId ?? "" });
-                      router.replace(safeNext(next));
+                      finishSignIn();
                     } catch {
                       setError("The Solid browser extension didn't sign you in. Please try again.");
                     }
