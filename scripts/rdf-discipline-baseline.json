@@ -1,0 +1,83 @@
+{
+  "apps/access-manager/src/demo/fixtures.ts": {
+    "rdf-literal": 8
+  },
+  "apps/access-manager/src/demo/pod.ts": {
+    "rdf-literal": 2
+  },
+  "apps/access-manager/src/lib/acl.ts": {
+    "rdf-factory": 1
+  },
+  "apps/access-manager/src/lib/rdf.ts": {
+    "rdf-factory": 5
+  },
+  "apps/coeliac/src/lib/community/publish.ts": {
+    "rdf-factory": 1
+  },
+  "apps/coeliac/src/lib/community/share-rdf.ts": {
+    "rdf-factory": 6
+  },
+  "apps/coeliac/src/lib/pod/type-index.ts": {
+    "rdf-factory": 1
+  },
+  "apps/extension/src/background/core/class-resolution-budget.ts": {
+    "rdf-factory": 1
+  },
+  "apps/issues/scripts/dev.mjs": {
+    "rdf-literal": 1
+  },
+  "apps/issues/src/lib/announce.ts": {
+    "rdf-factory": 11
+  },
+  "apps/issues/src/lib/testing/fake-pod.ts": {
+    "rdf-literal": 2
+  },
+  "apps/pod-drive/src/type-index.ts": {
+    "rdf-factory": 4
+  },
+  "apps/pod-manager/scripts/dev.mjs": {
+    "rdf-literal": 1
+  },
+  "apps/pod-manager/scripts/domains-screenshots.mjs": {
+    "rdf-literal": 1
+  },
+  "apps/pod-manager/src/lib/forms/subject-edit.ts": {
+    "rdf-factory": 2
+  },
+  "apps/pod-manager/src/lib/resource-acl.ts": {
+    "rdf-factory": 2
+  },
+  "apps/pod-migrator/src/engine/executor.ts": {
+    "rdf-factory": 1
+  },
+  "apps/pod-migrator/src/engine/isomorphism.ts": {
+    "rdf-factory": 1
+  },
+  "apps/suite/src/apps/chat/lib/model/io.ts": {
+    "rdf-literal": 1
+  },
+  "apps/suite/src/apps/drive/lib/client/rdf.ts": {
+    "rdf-factory": 1
+  },
+  "apps/suite/src/apps/drive/lib/model/patch.ts": {
+    "rdf-factory": 2
+  },
+  "apps/suite/src/apps/home/lib/permissions/revoke.ts": {
+    "rdf-factory": 3
+  },
+  "apps/suite/src/apps/music/lib/model/io.ts": {
+    "rdf-factory": 1
+  },
+  "apps/suite/src/components/typed-view-fixtures.ts": {
+    "rdf-literal": 2
+  },
+  "apps/suite/src/lib/demo-pod/seed-requests.ts": {
+    "rdf-factory": 23
+  },
+  "apps/suite/src/lib/demo-pod/seed.ts": {
+    "rdf-factory": 21
+  },
+  "apps/suite/src/shell/share/wac-adapter.ts": {
+    "rdf-factory": 1
+  }
+}
