@@ -260,6 +260,12 @@ const ONTOS = [
     "col",
     "https://jeswr.org/ns/sectors/collectibles#",
   ],
+  [
+    "sectors/environment/environment.ttl",
+    "sectors/environment",
+    "envr",
+    "https://jeswr.org/ns/sectors/environment#",
+  ],
   ["sectors/equine/equine.ttl", "sectors/equine", "eq", "https://jeswr.org/ns/sectors/equine#"],
 ];
 
