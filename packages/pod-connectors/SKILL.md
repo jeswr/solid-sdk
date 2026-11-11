@@ -78,19 +78,22 @@ bank-specific rows inside the source-row budget. Use exact decimal strings/BigIn
 including signed Revolut Amount minus Fee; retain nonzero Fee as currency-bearing plain
 text through BankInvoice, omit zero fees. Validate the optional IANA timeZone; default
 to Europe/London for zone-free Revolut timestamps and use compatible gap/repeat handling.
-Known-bank dates reject invalid calendars; OFX retains xsd:dateTime at UTC midnight.
+Known-bank CSV dates reject invalid calendars; OFX retains its lenient date parser and xsd:dateTime at UTC midnight.
 Bank-specific SHA-256 IDs exclude filenames; HSBC uses a per-file identical-row occurrence
 index (overlapping exports rely on row order). Preserve balances in fallback identity and
-merge overlapping statements. Retire old-pattern account-free Invoice subjects and companion
-activities in the same ETag-guarded write, reporting removedLegacySubjects. Generic imports
-retain the old IDs, numeric policies and replacement semantics. Bank-specific CSV fields
+merge overlapping statements into per-account `finance/bank/<bank>-<account-slug>.ttl`
+documents, with SHA-256 account slugs derived from account keys. No migration or legacy-subject cleanup.
+Generic CSV and OFX retain the origin/main IDs, numeric/date policies, datatypes and
+replacement semantics in `finance/bank-transactions.ttl`; the two layouts never touch each other.
+Reject near-miss bank headers sharing three or more normalized names instead of generic
+fallback. All generic source rows, including skipped/malformed rows, consume the row budget. Bank-specific CSV fields
 are capped at 16 KiB characters, amounts at 64 digits, and the shared file/record/header/column
 caps still apply. Explicit format mismatches return bounded `unsupported` diagnostics;
 abort closes the reader before any new Pod I/O.
-The Invoice/TransactionRecord layout remains under `finance/bank-transactions.ttl` with
-supplementary BankAccount nodes. Suite Money reads a different vocabulary and storage-root
+The new bank-specific CSV Invoice/TransactionRecord layout has supplementary BankAccount
+nodes; generic CSV and OFX retain their original Invoice-only mapping. Suite Money reads a different vocabulary and storage-root
 `money/` tree: do not claim this connector is visible in Money or escape the connector writer
-boundary. The README records this integration gap and the legacy cleanup policy.
+boundary. The README records this integration gap and the separate bank document layouts.
 
 CON-14 adds the optional `PodWriter.writeBinary`/`remove` ports and `ctx.writeBinary`/`ctx.remove`
 for non-RDF resources and source deletions. Keep binaries inside the connector container, never send RDF through it, default

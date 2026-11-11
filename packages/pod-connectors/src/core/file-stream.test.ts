@@ -31,20 +31,25 @@ function chunksFile(text: string): ImportFile {
 }
 
 describe("bounded file readers", () => {
-  it("parses the shared CSV header once for many records", async () => {
+  it.each(["shared", "bank"])("parses the %s CSV header once for many records", async (path) => {
     const header = ' Date , Description , Amount ,"Synthetic, extra"';
     const records = Array.from({ length: 32 }, (_, i) => `2026-01-01,Item ${i},-${i + 1}`);
     const parse = vi.spyOn(csv, "parseCsv");
     try {
       const file = chunksFile(`${header}\r\n${records.join("\r\n")}`);
-      const rows = await collect(csvRows(file));
-      expect(rows).toHaveLength(records.length);
-      expect(rows[0]).toEqual({
-        Date: "2026-01-01",
-        Description: "Item 0",
-        Amount: "-1",
-        "Synthetic, extra": "",
-      });
+      if (path === "bank") {
+        const { report } = await fileImport(bankStatementsFileAdapter, file);
+        expect(report.written).toHaveLength(1);
+      } else {
+        const rows = await collect(csvRows(file));
+        expect(rows).toHaveLength(records.length);
+        expect(rows[0]).toEqual({
+          Date: "2026-01-01",
+          Description: "Item 0",
+          Amount: "-1",
+          "Synthetic, extra": "",
+        });
+      }
       expect(parse).toHaveBeenCalledExactlyOnceWith(header);
     } finally {
       parse.mockRestore();
@@ -58,9 +63,7 @@ describe("bounded file readers", () => {
   ])("rejects oversized headers before processing rows (%#)", async (header) => {
     const file = memoryFile("statement.csv", `${header}\n2026-01-01,Synthetic,-1`);
     await expect(collect(csvRows(file))).rejects.toThrow("CSV header exceeds");
-    await expect(fileImport(bankStatementsFileAdapter, file)).rejects.toThrow(
-      /CSV (header exceeds|column cap)/,
-    );
+    await expect(fileImport(bankStatementsFileAdapter, file)).rejects.toThrow("CSV header exceeds");
   });
 
   it("preserves header trimming, empty cells, duplicate columns and row padding", async () => {

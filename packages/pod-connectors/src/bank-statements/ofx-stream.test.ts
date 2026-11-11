@@ -24,8 +24,8 @@ describe("incremental OFX scanner", () => {
     expect(result).toEqual([
       { block: xfer, currency: "GBP", accountId: "source", bankId: "source-bank" },
       { block: SMALL, currency: "GBP", accountId: "source", bankId: "source-bank" },
-      { block: xfer, currency: "EUR", accountId: "source-card" },
-      { block: SMALL, currency: "EUR", accountId: "source-card" },
+      { block: xfer, currency: "GBP", accountId: "source-card" },
+      { block: SMALL, currency: "GBP", accountId: "source-card" },
     ]);
   });
 
@@ -36,20 +36,21 @@ describe("incremental OFX scanner", () => {
     const result = await Array.fromAsync(ofxTransactions(chunks(text, size), vi.fn()));
     expect(result).toEqual([
       { block: SMALL, currency: "GBP", bankId: "synthetic-bank", accountId: "synthetic-current" },
-      { block: SMALL, currency: "EUR", accountId: "synthetic-card" },
+      { block: SMALL, currency: "GBP", accountId: "synthetic-card" },
     ]);
   });
 
-  it("marks overlong metadata invalid even if a later currency is valid", async () => {
+  it("bounds account metadata without changing the original currency mapping", async () => {
     const text = `<STMTRS><BANKACCTFROM><ACCTID>${"x".repeat(257)}</BANKACCTFROM><CURDEF>GBP${SMALL}`;
     const result = await Array.fromAsync(ofxTransactions(chunks(text, 1), vi.fn()));
-    expect(result[0]?.currency).toBe("");
+    expect(result[0]?.currency).toBe("GBP");
+    expect(result[0]?.accountId).toBeUndefined();
     const { report } = await fileImport(
       bankStatementsFileAdapter,
       new File([text.replace("<STMTRS>", "<OFX><STMTRS>")], "a.ofx"),
     );
-    expect(report.written).toEqual([]);
-    expect(report.skipped).toBe(1);
+    expect(report.written).toHaveLength(1);
+    expect(report.skipped).toBeUndefined();
   });
   it("reads a transaction spread across thousands of chunks", async () => {
     const block = `${START}${"x".repeat(60 * 1024)}${END}`;
@@ -122,6 +123,6 @@ describe("incremental OFX scanner", () => {
     const text = `<OFX>${START}${"x".repeat(128 * 1024)}${END}${SMALL}</OFX>`;
     const { report } = await fileImport(bankStatementsFileAdapter, new File([text], "bank.ofx"));
     expect(report.skipped).toBe(1);
-    expect(report.state?.counts).toEqual({ documents: 1, items: 2, skipped: 1 });
+    expect(report.state?.counts).toEqual({ documents: 1, items: 1, skipped: 1 });
   });
 });

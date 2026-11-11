@@ -233,8 +233,10 @@ they must enforce their own streaming limits. Legacy Takeout JSON still has the 
 `./adapters/bank-statements` exports `bankStatementsFileAdapter` and
 `createBankStatementsFileAdapter(options)`. CSV detection uses normalized headers,
 never the filename: Revolut account statements, Monzo transaction exports and
-Starling GBP statements. Additional columns in the header are allowed. Known banks
-take precedence over the original generic CSV importer. Unmatched headers retain
+Starling GBP statements. Known bank headers must match exactly after normalization.
+A header sharing three or more normalized column names with a known bank is rejected
+with "looks like <bank> but the columns differ" if it does not match. Known banks
+take precedence over the original generic CSV importer. Other headers retain
 that importer's date/description/amount aliases, separate debit/credit support,
 lenient value/date parsing, row-index-derived IDs and snapshot replacement behavior.
 Generic imports do not infer currency or create account links. An explicit
@@ -260,12 +262,15 @@ const adapter = createBankStatementsFileAdapter({
 `accountLabel` distinguishes accounts absent from an export; keep it stable across
 overlapping imports. Revolut defaults to one account per Product/Currency. Monzo
 and Starling default to one account per bank/currency; provide labels when importing
-multiple accounts. OFX uses BANKID/ACCTID from BANKACCTFROM/CCACCTFROM outside
-transactions, otherwise the optional label; transfer destinations never change it.
+multiple accounts.
 
-CSV and OFX/QFX share `finance/bank-transactions.ttl` under the connector container,
-the existing `schema:Invoice`/`fin:TransactionRecord` mapping and Invoice Type Index
-registration. Typed `schema:BankAccount` nodes supplement bank-specific imports;
+Generic CSV and OFX/QFX retain `finance/bank-transactions.ttl` under the connector
+container, with their original IDs, datatypes and replacement snapshots. Revolut,
+HSBC UK, Monzo and Starling instead merge into per-account documents at
+`finance/bank/<bank>-<account-slug>.ttl`, where the account slug is the SHA-256 hash
+of the account key, never a raw account number. Both layouts use the existing
+`schema:Invoice`/`fin:TransactionRecord` mapping and Invoice Type Index registration.
+Imports in either layout leave the other layout untouched. Typed `schema:BankAccount` nodes supplement bank-specific imports;
 each such invoice has a `podmoney:account` link. Amounts remain signed decimal **strings** on
 `schema:totalPaymentDue`, with currency on `schema:priceCurrency`. Revolut's imported
 amount is `Amount - Fee` using exact decimal arithmetic, including negative fees
@@ -287,7 +292,7 @@ codes must be uppercase ISO 4217 codes supported by the runtime's ICU data
 (`Intl.supportedValuesOf('currency')`). Invalid bank-specific amounts,
 currencies, dates and rows count as skips.
 
-SHA-256 identifiers use account identity plus Monzo Transaction ID / OFX FITID
+Bank-specific CSV SHA-256 identifiers use account identity plus Monzo Transaction ID
 when available. Otherwise they hash posting date, description, canonical amount,
 currency and balance (when present). HSBC additionally includes a per-file
 occurrence index for identical (date, description, amount) rows, so repeated
@@ -295,20 +300,13 @@ purchases remain distinct and re-importing the same file stays idempotent.
 Overlapping exports of a day with identical HSBC rows rely on row order and
 consistent inclusion of those occurrences; partial overlaps cannot establish which
 identical purchase is which. Filenames never enter bank-specific keys.
-Merge writes preserve modern transactions absent from later/overlapping exports.
-On a bank-specific CSV or OFX write, old `txn-<slug>-<8-hex-hash>` (or hash-only)
-Invoice subjects without an account link and their companion activity subjects
-are retired in the same ETag-guarded PUT as the new records. The run report's
-`removedLegacySubjects` counts retired invoices. Re-import the complete historic
-statements when upgrading: legacy rows absent from the upload cannot be assigned
-to an account and are removed too. Generic imports retain their original IDs and
-snapshot behavior.
+Merge writes preserve older transactions absent from later/overlapping bank-specific
+exports. Generic CSV and OFX/QFX keep their original IDs and snapshot behavior.
 
-Bounds: 64 MiB declared/actual file bytes, 100,000 bank-specific source rows including skipped
+Bounds: 64 MiB declared/actual file bytes, 100,000 CSV source rows including skipped and malformed
 rows, 1,024 CSV columns, 64 KiB header characters, 4 MiB logical CSV records,
 16 KiB characters per bank-specific CSV field and 64 digits per bank-specific amount.
-Generic file imports retain their original 100,000-imported-row truncation policy.
-The shared OFX scanner caps transactions at 64 KiB bytes. Exceeding the bank-specific row/file cap fails before saving
+OFX/QFX retain the original imported-row limit and the shared scanner caps transactions at 64 KiB bytes. Exceeding the bank-specific row/file cap fails before saving
 transaction data; oversized/malformed records are skipped at safe boundaries.
 Unterminated quoted CSV fails. Formula prefixes remain inert literal data.
 Parsing and validation finish before the first data write, and cancellation closes

@@ -31,7 +31,7 @@ export interface Transaction {
   readonly description: string;
   readonly amount: string;
   readonly currency?: string;
-  readonly bank?: BankCsvFormat | "ofx";
+  readonly bank?: BankCsvFormat;
   readonly accountKey?: string;
   readonly accountLabel?: string;
   readonly sourceId?: string;
@@ -65,6 +65,8 @@ const HEADERS = {
     "category",
     "amount",
     "currency",
+    "local amount",
+    "local currency",
   ],
   starling: [
     "date",
@@ -80,10 +82,10 @@ const HEADERS = {
 const normaliseHeader = (value: string) => value.trim().replace(/\s+/g, " ").toLowerCase();
 
 export class UnrecognisedBankCsvError extends Error {
-  constructor(headers: readonly string[]) {
+  constructor(headers: readonly string[], bank?: keyof typeof HEADERS) {
     // Bounded diagnostics; JSON quoting keeps control characters inert too.
     super(
-      `Unrecognised CSV; detected headers: ${JSON.stringify(headers.slice(0, 32).map((h) => h.slice(0, 128)))}${headers.length > 32 || headers.some((h) => h.length > 128) ? " (header list truncated)" : ""}. Choose a supported bank export; headerless HSBC UK requires csvFormat: "hsbc-uk" and accountLabel.`,
+      `Unrecognised CSV; ${bank ? `looks like ${bank === "revolut" ? "Revolut" : bank === "monzo" ? "Monzo" : "Starling"} but the columns differ; ` : ""}detected headers: ${JSON.stringify(headers.slice(0, 32).map((h) => h.slice(0, 128)))}${headers.length > 32 || headers.some((h) => h.length > 128) ? " (header list truncated)" : ""}. Choose a supported bank export; headerless HSBC UK requires csvFormat: "hsbc-uk" and accountLabel.`,
     );
   }
 }
@@ -161,13 +163,14 @@ export class BankCsvParser {
       throw new RangeError("Bank row limit must be a nonnegative safe integer");
   }
   skippedRecord(): void {
-    if (!this.isGeneric) this.countRow();
+    this.countRow();
     this.skip();
   }
   get isGeneric(): boolean {
     return this.format === "generic";
   }
   private genericRecord(record: string): Transaction | undefined {
+    this.countRow();
     if (this.genericRows >= this.maxRows) return undefined;
     const cells = parseCsvRows(
       record,
@@ -184,8 +187,10 @@ export class BankCsvParser {
     return txn;
   }
   private countRow(): void {
-    if (++this.rows > Math.min(MAX_ROWS, this.maxRows))
-      throw new Error("Bank statement row cap exceeded; split the export");
+    // The synchronous generic helper keeps its historical result limit; every
+    // source row still consumes the hard budget, even after that result limit.
+    const cap = this.synchronous && this.isGeneric ? MAX_ROWS : Math.min(MAX_ROWS, this.maxRows);
+    if (++this.rows > cap) throw new Error("Bank statement row cap exceeded; split the export");
   }
   record(record: string): Transaction | undefined {
     if (this.isGeneric) return this.genericRecord(record);
@@ -203,8 +208,11 @@ export class BankCsvParser {
     }
     if (first) {
       const headers = cells.map(normaliseHeader);
-      const format = (Object.keys(HEADERS) as (keyof typeof HEADERS)[]).find((bank) =>
-        HEADERS[bank].every((header, i) => headers[i] === header),
+      const banks = Object.keys(HEADERS) as (keyof typeof HEADERS)[];
+      const format = banks.find(
+        (bank) =>
+          headers.length === HEADERS[bank].length &&
+          HEADERS[bank].every((header, i) => headers[i] === header),
       );
       if (
         format &&
@@ -215,6 +223,17 @@ export class BankCsvParser {
         this.format = format;
         this.headers = headers;
         return undefined;
+      }
+      if (!format) {
+        const names = new Set(headers);
+        const nearMiss = banks
+          .map((bank) => ({
+            bank,
+            shared: HEADERS[bank].filter((header) => names.has(header)).length,
+          }))
+          .sort((left, right) => right.shared - left.shared)
+          .find(({ shared }) => shared >= 3)?.bank;
+        if (nearMiss) throw new UnrecognisedBankCsvError(cells, nearMiss);
       }
       if (!format && !this.options.csvFormat) {
         // Headerless HSBC is never inferred. Other unmatched headers retain the
@@ -354,13 +373,11 @@ export function parseBankCsv(
 
 export function transactionKey(txn: Transaction): string {
   return JSON.stringify([
-    txn.accountKey ?? "ofx",
+    txn.accountKey,
     txn.sourceId
       ? ["id", txn.sourceId]
       : [
-          // OFX's source date remains day-granular even though RDF uses dateTime.
-          (txn.bank === "ofx" ? txn.postingTime?.slice(0, 10) : txn.postingTime) ??
-            txn.date?.toISOString(),
+          txn.postingTime ?? txn.date?.toISOString(),
           txn.description,
           amountKey(txn.amount),
           txn.currency ?? "",

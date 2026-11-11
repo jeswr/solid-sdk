@@ -16,28 +16,38 @@ export async function* ofxTransactions(
   let bytes = 0;
   let parts: string[] = [];
   let currency: string | undefined;
+  let currencyField: string | undefined;
+  let invalidCurrency = false;
   let accountId: string | undefined;
   let bankId: string | undefined;
-  let scalar: "CURDEF" | "ACCTID" | "BANKID" | undefined;
+  let scalar: "ACCTID" | "BANKID" | undefined;
   let scalarText = "";
   let invalidScalar = false;
-  let invalidContext = false;
   let accountFrom = false;
 
   function append(text: string): void {
+    // Preserve the original currency reader independently of account metadata.
+    if (currencyField !== undefined) {
+      const end = text.search(/[<\r\n]/);
+      const value = end < 0 ? text : text.slice(0, end);
+      if (currencyField.length + value.length <= 64) currencyField += value;
+      else invalidCurrency = true;
+      if (end >= 0) {
+        if (!invalidCurrency) currency = currencyField.trim() || undefined;
+        currencyField = undefined;
+      }
+    }
     if (scalar !== undefined) {
       const end = text.search(/[<\r\n]/);
       const value = end < 0 ? text : text.slice(0, end);
       if (scalarText.length + value.length <= 256) scalarText += value;
       else invalidScalar = true;
       if (end >= 0) {
-        const parsed = invalidScalar ? "" : scalarText.trim();
-        if (scalar === "CURDEF") currency = parsed;
-        else if (scalar === "ACCTID") accountId = parsed;
+        const parsed = invalidScalar ? undefined : scalarText.trim() || undefined;
+        if (scalar === "ACCTID") accountId = parsed;
         else bankId = parsed;
         scalar = undefined;
         scalarText = "";
-        invalidContext ||= invalidScalar;
       }
     }
     if (!active || oversized || !text) return;
@@ -76,28 +86,25 @@ export async function* ofxTransactions(
         if (active && !oversized)
           yield {
             block: parts.join(""),
-            currency: invalidContext ? "" : currency,
+            currency,
             ...(accountId === undefined ? {} : { accountId }),
             ...(bankId === undefined ? {} : { bankId }),
           };
         active = false;
         parts = [];
       } else if (delimiter === "<STMTRS>" || delimiter === "<CCSTMTRS>") {
-        currency = undefined;
         accountId = undefined;
         bankId = undefined;
-        invalidContext = false;
         accountFrom = false;
       } else if (delimiter === "<BANKACCTFROM>" || delimiter === "<CCACCTFROM>") {
         if (!active) accountFrom = true;
       } else if (delimiter === "</BANKACCTFROM>" || delimiter === "</CCACCTFROM>") {
         if (!active) accountFrom = false;
-      } else if (
-        !active &&
-        (delimiter === "<CURDEF>" ||
-          (accountFrom && (delimiter === "<ACCTID>" || delimiter === "<BANKID>")))
-      ) {
-        scalar = delimiter.slice(1, -1) as "CURDEF" | "ACCTID" | "BANKID";
+      } else if (delimiter === "<CURDEF>" && !currency) {
+        currencyField = "";
+        invalidCurrency = false;
+      } else if (!active && accountFrom && (delimiter === "<ACCTID>" || delimiter === "<BANKID>")) {
+        scalar = delimiter.slice(1, -1) as "ACCTID" | "BANKID";
         scalarText = "";
         invalidScalar = false;
       }

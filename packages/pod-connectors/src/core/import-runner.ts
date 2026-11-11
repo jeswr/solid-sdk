@@ -74,8 +74,6 @@ export interface ImportReport {
   skipped?: number;
   /** Unsupported export products or formats, grouped by product folder. */
   unsupported?: readonly string[];
-  /** Legacy bank invoices retired while upgrading the target document. */
-  removedLegacySubjects?: number;
   /** The type-index document used/created. */
   indexUrl: string;
 }

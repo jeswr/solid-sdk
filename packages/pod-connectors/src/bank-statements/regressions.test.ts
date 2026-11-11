@@ -1,8 +1,8 @@
 // AUTHORED-BY Codex GPT-6
 import { NS } from "@jeswr/suite-vocab";
-import { DataFactory, type Store } from "n3";
+import { DataFactory, Store } from "n3";
 import { describe, expect, it } from "vitest";
-import { fileImport, memoryFile, TEST_POD_ROOT } from "../core/testing.js";
+import { fileImport, type MemoryPod, memoryFile, TEST_POD_ROOT } from "../core/testing.js";
 import { CLASSES } from "../core/vocab.js";
 import { transactionKey } from "./csv.js";
 import {
@@ -12,6 +12,15 @@ import {
 } from "./file-adapter.js";
 import { HSBC, MONZO, OFX, REVOLUT, REVOLUT_HEADER, REVOLUT_ROWS } from "./fixtures.js";
 import { BANK, BankInvoice } from "./vocab.js";
+
+function bankDocuments(pod: MemoryPod): string[] {
+  return pod.urls().filter((url) => url.includes("/finance/bank/") && url.endsWith(".ttl"));
+}
+function bankDataset(pod: MemoryPod): Store {
+  const result = new Store();
+  for (const url of bankDocuments(pod)) for (const quad of pod.dataset(url)) result.add(quad);
+  return result;
+}
 
 const DOC = `${TEST_POD_ROOT}integrations/bank-statements/finance/bank-transactions.ttl`;
 function invoices(ds: Store): BankInvoice[] {
@@ -83,85 +92,62 @@ describe("generic CSV compatibility", () => {
   });
 });
 
-describe("bank upgrade safety", () => {
+describe("isolated bank account documents", () => {
   it.each([
-    REVOLUT,
-    OFX,
-  ])("retires legacy invoices and companion activities in one ETag-guarded PUT (%#)", async (text) => {
-    const legacyCsv =
-      text === OFX
-        ? "Date,Description,Amount\n2026-01-20,Synthetic groceries,-12.50"
-        : `Date,Description,Amount\n${parseBankCsv(text)
-            .map((txn) =>
-              [
-                txn.postingTime?.slice(0, 10),
-                `"${txn.description.replaceAll('"', '""')}"`,
-                txn.amount,
-              ].join(","),
-            )
-            .join("\n")}`;
-    const { pod } = await fileImport(
+    false,
+    true,
+  ])("keeps generic and Monzo imports isolated (generic first: %s)", async (genericFirst) => {
+    const imports = genericFirst ? [GENERIC, MONZO] : [MONZO, GENERIC];
+    const { pod, report: first } = await fileImport(
       bankStatementsFileAdapter,
-      memoryFile("legacy.csv", legacyCsv),
+      memoryFile("first.csv", imports[0] ?? ""),
     );
-    const legacy = invoices(pod.dataset(DOC)).map((row) => row.value);
-    const { pod: modern } = await fileImport(
+    const firstUrl = first.written[0]?.url ?? "";
+    const before = pod.get(firstUrl);
+    const firstTag = (await pod.fetch(firstUrl)).headers.get("etag");
+    const { report: second } = await fileImport(
       bankStatementsFileAdapter,
-      memoryFile("monzo.csv", MONZO),
-    );
-    const modernIds = invoices(modern.dataset(DOC)).map((row) => row.value);
-    await pod.fetch(DOC, { method: "PUT", body: `${pod.get(DOC)}\n${modern.get(DOC)}` });
-    const before = await pod.fetch(DOC);
-    const etag = before.headers.get("etag");
-    const fetchPod = pod.fetch;
-    let writes = 0;
-    pod.fetch = async (input, init) => {
-      if (input === DOC && init?.method === "PUT") {
-        writes++;
-        expect(new Headers(init.headers).get("if-match")).toBe(etag);
-        for (const id of legacy) expect(String(init.body)).not.toContain(id);
-      }
-      return fetchPod(input, init);
-    };
-    const { report } = await fileImport(
-      bankStatementsFileAdapter,
-      memoryFile("reimport.csv", text),
+      memoryFile("next.csv", imports[1] ?? ""),
       { pod },
     );
-    expect(writes).toBe(1);
-    expect(report.removedLegacySubjects).toBe(legacy.length);
-    const ds = pod.dataset(DOC);
-    expect(invoices(ds)).toHaveLength(text === OFX ? 2 : 4);
-    for (const id of legacy) {
-      expect(ds.countQuads(id, null, null, null)).toBe(0);
-      expect(ds.countQuads(`${id}-activity`, null, null, null)).toBe(0);
-    }
-    for (const id of modernIds) expect(invoices(ds).some((row) => row.value === id)).toBe(true);
-    expect(report.state?.counts.items).toBe(text === OFX ? 2 : 6);
-    pod.fetch = fetchPod;
-    const { report: again } = await fileImport(
-      bankStatementsFileAdapter,
-      memoryFile("again.csv", text),
-      { pod },
+    expect(pod.get(firstUrl)).toBe(before);
+    expect((await pod.fetch(firstUrl)).headers.get("etag")).toBe(firstTag);
+    expect(second.written[0]?.url).not.toBe(firstUrl);
+    expect(invoices(pod.dataset(DOC))).toHaveLength(3);
+    const [monzoUrl] = bankDocuments(pod);
+    expect(monzoUrl).toMatch(/\/finance\/bank\/monzo-[0-9a-f]{64}\.ttl$/);
+    expect(invoices(bankDataset(pod))).toHaveLength(1);
+    expect(pod.get(second.indexUrl)).toContain(
+      `${TEST_POD_ROOT}integrations/bank-statements/finance/bank/`,
     );
-    expect(again.removedLegacySubjects).toBeUndefined();
-    expect(invoices(pod.dataset(DOC))).toHaveLength(text === OFX ? 2 : 4);
+    expect(pod.get(second.indexUrl)).toContain(
+      `${TEST_POD_ROOT}integrations/bank-statements/finance/`,
+    );
   });
 
-  it("refuses a stale migration ETag without deleting or inserting any invoices", async () => {
-    const { pod } = await fileImport(bankStatementsFileAdapter, memoryFile("old.csv", GENERIC));
-    const legacy = pod.get(DOC);
-    const fetchPod = pod.fetch;
-    pod.fetch = async (input, init) => {
-      if (input === DOC && init?.method === "PUT") {
-        await fetchPod(DOC, { method: "PUT", body: legacy });
-      }
-      return fetchPod(input, init);
-    };
-    await expect(
-      fileImport(bankStatementsFileAdapter, memoryFile("new.csv", REVOLUT), { pod }),
-    ).rejects.toThrow();
-    expect(pod.get(DOC)).toBe(legacy);
+  it("uses hashed account keys in separate documents and preserves other accounts on overlap", async () => {
+    const label = "12345678";
+    const adapter = createBankStatementsFileAdapter({ accountLabel: label });
+    const { pod, report } = await fileImport(adapter, memoryFile("first.csv", MONZO));
+    const firstUrl = report.written[0]?.url ?? "";
+    expect(firstUrl).toMatch(/\/monzo-[0-9a-f]{64}\.ttl$/);
+    expect(firstUrl).not.toContain(label);
+    expect(invoices(pod.dataset(firstUrl))[0]?.value).toMatch(/#txn-[0-9a-f]{64}$/);
+    const other = createBankStatementsFileAdapter({ accountLabel: "Other account" });
+    const { report: otherReport } = await fileImport(other, memoryFile("second.csv", MONZO), {
+      pod,
+    });
+    const otherUrl = otherReport.written[0]?.url ?? "";
+    const before = pod.get(otherUrl);
+    const row = MONZO.split("\n")[1] ?? "";
+    await fileImport(
+      adapter,
+      memoryFile("overlap.csv", `${MONZO}\n${row.replace("synthetic-1", "synthetic-2")}`),
+      { pod },
+    );
+    expect(invoices(pod.dataset(firstUrl))).toHaveLength(2);
+    expect(pod.get(otherUrl)).toBe(before);
+    expect(pod.get(DOC)).toBeUndefined();
   });
 });
 
@@ -175,16 +161,16 @@ describe("bank row identity and values", () => {
     expect(parsed.map((txn) => txn.occurrence)).toEqual([0, 0, 1]);
     expect(new Set(parsed.map(transactionKey)).size).toBe(3);
     const { pod } = await fileImport(adapter, memoryFile("a.csv", text));
-    const ids = invoices(pod.dataset(DOC))
+    const ids = invoices(bankDataset(pod))
       .map((txn) => txn.value)
       .sort();
     expect(
-      invoices(pod.dataset(DOC)).filter((txn) => txn.name === "Identical purchase"),
+      invoices(bankDataset(pod)).filter((txn) => txn.name === "Identical purchase"),
     ).toHaveLength(2);
     await fileImport(adapter, new File([text], "renamed.csv"), { pod });
     await fileImport(adapter, memoryFile("overlap.csv", `${row}\n${row}`), { pod });
     expect(
-      invoices(pod.dataset(DOC))
+      invoices(bankDataset(pod))
         .map((txn) => txn.value)
         .sort(),
     ).toEqual(ids);
@@ -203,7 +189,7 @@ describe("bank row identity and values", () => {
       memoryFile("fees.csv", text),
     );
     expect(report.skipped).toBeUndefined();
-    const ds = pod.dataset(DOC);
+    const ds = bankDataset(pod);
     expect(invoices(ds)[0]?.totalPaymentDue).toBe(net);
     const fees = ds.getObjects(null, BANK.fee, null);
     expect(fees).toHaveLength(1);
@@ -222,8 +208,8 @@ describe("bank row identity and values", () => {
       memoryFile("zero.csv", `${REVOLUT_HEADER}\n${zero}`),
       { pod },
     );
-    expect(invoices(pod.dataset(DOC))).toHaveLength(1);
-    expect(pod.dataset(DOC).getObjects(null, BANK.fee, null)).toEqual([]);
+    expect(invoices(bankDataset(pod))).toHaveLength(1);
+    expect(bankDataset(pod).getObjects(null, BANK.fee, null)).toEqual([]);
   });
 
   it("preserves the OFX posting date as xsd:dateTime at UTC midnight", async () => {
@@ -250,7 +236,7 @@ describe("Revolut wall-clock time zones", () => {
     expect(parseBankCsv(text, 100, { timeZone })[0]?.postingTime).toBe(expected);
     const { pod, report } = await fileImport(adapter, memoryFile("zone.csv", text));
     expect(report.skipped).toBeUndefined();
-    expect(invoices(pod.dataset(DOC))[0]?.postingTime).toBe(expected);
+    expect(invoices(bankDataset(pod))[0]?.postingTime).toBe(expected);
   });
 
   it.each([

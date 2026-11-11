@@ -7,8 +7,6 @@ import { describe, expect, it, vi } from "vitest";
 import { amazonOrdersFileAdapter } from "../amazon-orders/file-adapter.js";
 import { appleHealthFileAdapter } from "../apple-health/file-adapter.js";
 import { bankStatementsFileAdapter } from "../bank-statements/file-adapter.js";
-import { REVOLUT_HEADER } from "../bank-statements/fixtures.js";
-import { BANK } from "../bank-statements/vocab.js";
 import { chatgptFileAdapter } from "../chatgpt/file-adapter.js";
 import { goodreadsFileAdapter } from "../goodreads/file-adapter.js";
 import { netflixFileAdapter } from "../netflix/file-adapter.js";
@@ -291,29 +289,15 @@ const fixtures: {
   {
     adapter: bankStatementsFileAdapter,
     name: "bank.csv",
-    items: 2,
-    text: `${REVOLUT_HEADER}\nCARD_PAYMENT,Current,2026-01-20 12:00:00,2026-01-20 12:00:00,Synthetic groceries,-12.50,0,GBP,COMPLETED,987.50`,
-    types: [
-      CLASSES.Invoice,
-      BANK.Account,
-      FEDERATION.TransactionRecord,
-      FEDERATION.Activity,
-      FEDERATION.Agent,
-    ],
+    text: "Date,Description,Amount\n2026-01-20,Synthetic groceries,-12.50",
+    types: [CLASSES.Invoice, FEDERATION.TransactionRecord, FEDERATION.Activity, FEDERATION.Agent],
     value: "-12.50",
   },
   {
     adapter: bankStatementsFileAdapter,
     name: "bank.ofx",
-    items: 2,
     text: "OFXHEADER:100\r\n<OFX><CURDEF>GBP\r\n<STMTTRN><DTPOSTED>20260120<TRNAMT>-12.50<NAME>Synthetic groceries</STMTTRN></OFX>",
-    types: [
-      CLASSES.Invoice,
-      BANK.Account,
-      FEDERATION.TransactionRecord,
-      FEDERATION.Activity,
-      FEDERATION.Agent,
-    ],
+    types: [CLASSES.Invoice, FEDERATION.TransactionRecord, FEDERATION.Activity, FEDERATION.Agent],
     value: "GBP",
   },
 ];
@@ -621,10 +605,7 @@ it.each([
     podRoot: TEST_POD_ROOT,
     fetch: pod.fetch,
   });
-  const file = streamedFile(
-    "bank.csv",
-    `${REVOLUT_HEADER}\nCARD_PAYMENT,Current,2026-01-01 12:00:00,2026-01-01 12:00:00,Synthetic entry,1,0,GBP,COMPLETED,1`,
-  );
+  const file = streamedFile("bank.csv", "Date,Description,Amount\n2026-01-01,Synthetic entry,1");
   await expect(
     runFileImport({ adapter: bankStatementsFileAdapter, file, podWriter: { ...writer, webId } }),
   ).rejects.toThrow("WebID");

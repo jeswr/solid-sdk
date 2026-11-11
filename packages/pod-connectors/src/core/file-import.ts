@@ -119,8 +119,6 @@ export interface FileImportAdapter {
 
 export interface FileImportOutcome extends Pick<ImportOutcome, "skipped"> {
   readonly unsupported?: readonly string[];
-  /** Legacy bank invoices retired in the same conditional write as their replacements. */
-  readonly removedLegacySubjects?: number;
 }
 
 export interface RunFileImportOptions extends ConnectorStateOptions {
@@ -220,7 +218,6 @@ export async function runFileImport(opts: RunFileImportOptions): Promise<ImportR
       skipped: skipped || undefined,
       state,
       unsupported: outcome?.unsupported,
-      removedLegacySubjects: outcome?.removedLegacySubjects,
     };
   } catch (error) {
     // Partial writes already link to this run. Record it when storage is available and the

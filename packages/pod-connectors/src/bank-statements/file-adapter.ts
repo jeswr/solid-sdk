@@ -10,7 +10,6 @@ import {
   MAX_ROWS,
 } from "../core/file-import.js";
 import { csvRecords, fileText } from "../core/file-stream.js";
-import { copyDataset, mergeItems } from "../core/incremental.js";
 import { recordFragment } from "../core/slug.js";
 import type { IntegrationMetadata } from "../core/types.js";
 import { CLASSES } from "../core/vocab.js";
@@ -23,7 +22,7 @@ import {
   validateBankOptions,
 } from "./csv.js";
 import { ofxTransactions } from "./ofx-stream.js";
-import { amountKey, bankDate, currencyCode, normaliseAmount } from "./values.js";
+import { amountKey } from "./values.js";
 import { BankAccount, BankInvoice } from "./vocab.js";
 import { vocabMap } from "./vocab-map.js";
 
@@ -66,32 +65,39 @@ export function createBankStatementsFileAdapter(
         throw new RangeError("Bank row limit must be a nonnegative safe integer");
       if (file.size > MAX_FILE_BYTES) throw new Error("Export exceeds the 64 MiB import limit");
       ctx.progress({ label: "Reading your statement…", done: 0, total: 1 });
-      const doc = ctx.resolve(SLUG);
-      const store = new Store();
+      const stores = new Map<string, Store>();
       let skipped = 0;
       let records = 0;
-      let generic = false;
+      let shared = false;
       const skip = () => {
         skipped++;
       };
       try {
         for await (const txn of streamBankTransactions(file, config, ctx, skip, () => {
-          generic = true;
+          shared = true;
         })) {
           ctx.signal?.throwIfAborted();
           // The scanner counts malformed/pending rows too; this also bounds OFX records.
           if (++records > Math.min(ctx.maxRows, MAX_ROWS))
             throw new Error("Bank statement row cap exceeded; split the export");
+          const accountSlug = txn.accountKey ? await digest(txn.accountKey) : undefined;
+          const slug = txn.bank ? `finance/bank/${txn.bank}-${accountSlug}.ttl` : SLUG;
+          const doc = ctx.resolve(slug);
+          let store = stores.get(slug);
+          if (!store) {
+            store = new Store();
+            stores.set(slug, store);
+          }
           const key = `${records - 1}|${txn.date?.toISOString() ?? ""}|${txn.amount}|${txn.description}`;
-          const identity = generic
-            ? recordFragment(txn.description || "transaction", key)
-            : await digest(transactionKey(txn));
+          const identity = txn.bank
+            ? await digest(transactionKey(txn))
+            : recordFragment(txn.description || "transaction", key);
           const inv = new BankInvoice(`${doc}#txn-${identity}`, store, DataFactory).mark();
-          inv.name = txn.description;
+          inv.name = txn.description || "Transaction";
           inv.totalPaymentDue = txn.amount;
-          inv.priceCurrency = txn.currency;
-          inv.postingTime = txn.postingTime;
-          if (generic) inv.dateCreated = txn.date;
+          if (txn.currency) inv.priceCurrency = txn.currency;
+          if (txn.bank) inv.postingTime = txn.postingTime;
+          else if (txn.date) inv.dateCreated = txn.date;
           inv.identifier = txn.sourceId;
           inv.fee =
             txn.fee !== undefined && amountKey(txn.fee) !== "0"
@@ -99,7 +105,7 @@ export function createBankStatementsFileAdapter(
               : undefined;
           if (txn.accountKey) {
             const account = new BankAccount(
-              `${doc}#account-${await digest(txn.accountKey)}`,
+              `${doc}#account-${accountSlug}`,
               store,
               DataFactory,
             ).mark();
@@ -112,47 +118,22 @@ export function createBankStatementsFileAdapter(
           return { unsupported: [error.message], skipped };
         throw error;
       }
-      let removedLegacySubjects = 0;
-      if (records || generic) {
+      // Generic CSV and OFX retain the original shared replacement snapshot,
+      // including an empty snapshot. New bank formats never access that document.
+      if (shared && !stores.has(SLUG)) stores.set(SLUG, new Store());
+      for (const [slug, dataset] of stores) {
         ctx.signal?.throwIfAborted();
         ctx.progress({ label: "Saving to your pod…", done: 1, total: 1 });
-        // A read retains the document's ETag. Retire legacy IDs and merge their
-        // replacements in one PUT so no intermediate duplicate state is visible.
-        const previous = generic ? undefined : copyDataset(await ctx.read(SLUG));
-        if (previous) {
-          for (const subject of previous.getSubjects(null, CLASSES.Invoice, null)) {
-            if (
-              subject.termType !== "NamedNode" ||
-              !subject.value.startsWith(`${doc}#txn-`) ||
-              !/^(?:[a-z0-9-]{1,48}-)?[0-9a-f]{8}$/.test(
-                subject.value.slice(`${doc}#txn-`.length),
-              ) ||
-              new BankInvoice(subject, previous, DataFactory).account !== undefined
-            )
-              continue;
-            previous.deleteMatches(subject);
-            previous.deleteMatches(DataFactory.namedNode(`${subject.value}-activity`));
-            removedLegacySubjects++;
-          }
-        }
-        const dataset = removedLegacySubjects ? mergeItems(previous, store) : store;
-        const carriedForward = removedLegacySubjects
-          ? dataset
-              .getSubjects(null, null, null)
-              .filter((subject) => store.countQuads(subject, null, null, null) === 0)
-              .map((subject) => subject.value)
-          : undefined;
         await ctx.write({
-          slug: SLUG,
+          slug,
           category: "finance",
           forClass: CLASSES.Invoice,
           dataset,
-          writeMode: generic || removedLegacySubjects ? "replace" : "merge",
-          carriedForward,
+          writeMode: slug === SLUG ? "replace" : "merge",
         });
       }
       // Return skipped even for pending-only statements (no fabricated empty snapshot).
-      return { skipped, removedLegacySubjects: removedLegacySubjects || undefined };
+      return { skipped };
     },
   };
 }
@@ -199,40 +180,14 @@ async function* streamBankTransactions(
       }
       return;
     }
+    onGeneric();
     let rows = 0;
-    const count = () => {
-      if (++rows > Math.min(ctx.maxRows, MAX_ROWS))
-        throw new Error("Bank statement row cap exceeded; split the export");
-    };
-    for await (const { block, currency, accountId, bankId } of ofxTransactions(chunks(), () => {
-      count();
-      skip();
-    })) {
+    for await (const { block, currency } of ofxTransactions(chunks(), skip)) {
       ctx.signal?.throwIfAborted();
-      count();
-      const txn = parseOfx(block, 1)[0];
-      const code = currency === undefined ? options.currency : currencyCode(currency);
-      if (
-        !txn ||
-        (currency !== undefined && !code) ||
-        (options.currency !== undefined && code !== options.currency)
-      ) {
-        skip();
-        continue;
+      for (const txn of parseOfx(block)) {
+        if (rows++ >= ctx.maxRows) return;
+        yield { ...txn, currency };
       }
-      yield {
-        ...txn,
-        bank: "ofx",
-        currency: code,
-        accountKey: JSON.stringify([
-          "ofx",
-          bankId ?? "",
-          accountId ?? "",
-          options.accountLabel?.trim() ?? "",
-          code ?? "",
-        ]),
-        accountLabel: options.accountLabel?.trim() ?? `OFX ${code ?? "account"}`,
-      };
     }
   } finally {
     await source.return(undefined);
@@ -240,40 +195,19 @@ async function* streamBankTransactions(
 }
 
 /** Parse the OFX/QFX `<STMTTRN>` blocks. */
-export function parseOfx(text: string, limit = MAX_ROWS): Transaction[] {
-  if (limit !== Number.POSITIVE_INFINITY && (!Number.isSafeInteger(limit) || limit < 0))
-    throw new RangeError("Bank row limit must be a nonnegative safe integer");
-  if (text.length > MAX_FILE_BYTES || new TextEncoder().encode(text).byteLength > MAX_FILE_BYTES)
-    throw new Error("OFX export exceeds the import limit");
+export function parseOfx(text: string, limit = Number.POSITIVE_INFINITY): Transaction[] {
   const out: Transaction[] = [];
-  const currencyRaw = tag(text, "CURDEF");
-  const currency = currencyRaw === undefined ? undefined : currencyCode(currencyRaw);
-  if (currencyRaw !== undefined && !currency) return out;
-  let start: number | undefined;
-  let records = 0;
-  // Scan delimiters once: repeated unmatched openings must not trigger regex backtracking.
-  for (const match of text.matchAll(/<STMTTRN>|<\/STMTTRN>/gi)) {
-    if (match[0].toUpperCase() === "<STMTTRN>") {
-      if (++records > MAX_ROWS)
-        throw new Error("Bank statement row cap exceeded; split the export");
-      start = match.index;
-      continue;
-    }
-    if (start === undefined) continue;
+  const blocks = text.match(/<STMTTRN>[\s\S]*?<\/STMTTRN>/gi) ?? [];
+  const currency = tag(text, "CURDEF");
+  for (const block of blocks) {
     if (out.length >= limit) break;
-    const block = text.slice(start, match.index + match[0].length);
-    start = undefined;
-    if (block.length > 64 * 1024) continue;
-    const amount = normaliseAmount(tag(block, "TRNAMT") ?? "");
-    const date = parseOfxDate(tag(block, "DTPOSTED"));
-    if (amount === undefined || !date) continue;
+    const amount = tag(block, "TRNAMT");
+    if (!amount) continue;
     const name = tag(block, "NAME") ?? tag(block, "MEMO") ?? "Transaction";
     out.push({
-      date,
-      postingTime: date.toISOString(),
+      date: parseOfxDate(tag(block, "DTPOSTED")),
       description: name,
-      sourceId: tag(block, "FITID"),
-      amount,
+      amount: amount.trim(),
       currency,
     });
   }
@@ -291,13 +225,30 @@ export function parseOfxDate(raw: string | undefined): Date | undefined {
   if (!raw) return undefined;
   const m = raw.trim().match(/^(\d{4})(\d{2})(\d{2})/);
   if (!m) return undefined;
-  const date = bankDate(`${m[1]}-${m[2]}-${m[3]}`);
-  return date === undefined ? undefined : new Date(date);
+  const d = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])));
+  return Number.isNaN(d.getTime()) ? undefined : d;
 }
 
-/** Compatibility helper: strict ISO or UK day/month/year; never guess US dates. */
+/** Parse ISO, `D/M/Y` or `M/D/Y` dates leniently. */
 export function parseFlexibleDate(raw: string | undefined): Date | undefined {
   if (!raw) return undefined;
-  const date = bankDate(raw) ?? bankDate(raw, true);
-  return date === undefined ? undefined : new Date(date);
+  const trimmed = raw.trim();
+  const iso = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) {
+    const d = new Date(`${iso[1]}-${iso[2]}-${iso[3]}T00:00:00Z`);
+    return Number.isNaN(d.getTime()) ? undefined : d;
+  }
+  const parts = trimmed.match(/^(\d{1,2})[/.](\d{1,2})[/.](\d{2,4})$/);
+  if (parts) {
+    let year = Number(parts[3]);
+    if (year < 100) year += 2000;
+    // Default D/M (most non-US banks); swap when only the second can be a month.
+    let day = Number(parts[1]);
+    let month = Number(parts[2]);
+    if (month > 12 && day <= 12) [day, month] = [month, day];
+    if (month < 1 || month > 12 || day < 1 || day > 31) return undefined;
+    const d = new Date(Date.UTC(year, month - 1, day));
+    return Number.isNaN(d.getTime()) ? undefined : d;
+  }
+  return undefined;
 }
