@@ -80,9 +80,7 @@
   padding: 4px;
   scroll-snap-type: x mandatory;
 }
-/* The letter and count overlay the button without taking its pointer events. */
 .tsk-day {
-  position: relative;
   display: grid;
   min-width: 44px;
   color: var(--foreground);
@@ -105,17 +103,10 @@
   font: inherit;
   cursor: pointer;
 }
-.tsk-day-letter,
-.tsk-day-count {
-  position: absolute;
-  inset-inline: 0;
-  justify-content: center;
-  text-align: center;
+.tsk-day-label {
+  display: grid;
+  justify-items: center;
   line-height: 16px;
-  pointer-events: none;
-}
-.tsk-day-letter {
-  top: 9px;
 }
 .tsk-day-cell:hover {
   background: var(--surface-2);
@@ -131,7 +122,6 @@
   font-size: var(--text-base);
 }
 .tsk-day-count {
-  bottom: 9px;
   display: flex;
   align-items: center;
   gap: 4px;

@@ -21,6 +21,7 @@ import { PodSessionProvider, usePodSessionState } from "@/lib/session/pod-sessio
 import { parseQuickAdd } from "../lib/compose/quick-add";
 import { classifyError } from "../lib/model/errors";
 import { replaceQuery } from "../lib/route/replace-query";
+import { savedFilters } from "../lib/views/filter-query";
 import { isEditing, openAddTask } from "../state/add-focus";
 import { useTasksPreferences } from "../state/preferences";
 import { useReminderScheduler } from "../state/reminders";
@@ -60,6 +61,9 @@ function TasksChrome({ children }: { children: ReactNode }) {
   const restoreFocus = useRef<HTMLElement | null>(null);
   const title =
     VIEW_NAMES[pathname] ??
+    savedFilters(
+      tasks.projects.find((project) => project.url === tasks.inboxUrl)?.tracker.savedViews ?? [],
+    ).find((filter) => pathname === `/tasks/filters/${filter.iri.split("#view-")[1]}`)?.name ??
     (typeof label === "string"
       ? `@${label}`
       : ref
