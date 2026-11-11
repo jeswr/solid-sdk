@@ -150,3 +150,27 @@ test("reads and edits a spreadsheet at 375 px without page overflow", async ({ p
   await expect(page.getByText("Saved to your pod", { exact: true })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });
+
+test("persists a cell comment and its workbook anchor across reload", async ({ page }) => {
+  await page.goto("/sheets/new");
+  await waitForEngine(page);
+  await page.evaluate(() => {
+    const engine = window.__sheetsEngine;
+    const sheetId = engine?.activeSheet().id;
+    if (sheetId) engine?.selectCell?.({ sheetId, cell: "B3", deleted: false });
+  });
+  await page.getByRole("button", { name: "Comment", exact: true }).click();
+  await page.getByLabel("Comment on B3").fill("Review this cell");
+  await page.getByRole("button", { name: "Send", exact: true }).click();
+  await expect(page.getByText("Comment sent.", { exact: true })).toBeVisible();
+  await expect(page.getByText("Review this cell", { exact: true })).toBeVisible();
+  await expect
+    .poll(() => page.evaluate(() => window.__sheetsEngine?.snapshot().commentAnchors))
+    .toMatchObject({ version: 1 });
+  await expect(page.getByText("Saved to your pod", { exact: true })).toBeVisible();
+  await page.reload();
+  await waitForEngine(page);
+  await page.getByRole("button", { name: /^Comments \(/ }).click();
+  await expect(page.getByText("Review this cell", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Sheet1!B3", exact: true })).toBeEnabled();
+});

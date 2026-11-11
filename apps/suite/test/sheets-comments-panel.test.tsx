@@ -12,6 +12,7 @@ import {
 } from "../../../packages/suite-ui/node_modules/@testing-library/react";
 import { writeRdf } from "../src/apps/docs/lib/model/rdf-io";
 import { CellComments, WorkbookComments } from "../src/apps/sheets/components/cell-comments";
+import { WorkbookCommentAnchors } from "../src/apps/sheets/lib/comments/anchors";
 import type { CellAnchor } from "../src/apps/sheets/lib/comments/selector";
 import { type CellComment, CellCommentStore } from "../src/apps/sheets/lib/comments/store";
 import type { SheetEngine } from "../src/apps/sheets/lib/contract";
@@ -49,18 +50,26 @@ beforeEach(async () => {
   store = new CellCommentStore(container, pod.fetch);
   unselect = vi.fn();
   unstructure = vi.fn();
+  const anchors = new WorkbookCommentAnchors({});
+  let changed: () => void = () => {};
+  structure = (edit) => {
+    anchors.shift(edit);
+    changed();
+  };
   engine = {
+    registerCommentAnchors: (values: Record<string, CellAnchor>) => anchors.register(values),
+    trackCommentDraft: (anchor: CellAnchor) => anchors.track(anchor),
+    onChange: (listener: () => void) => {
+      changed = listener;
+      return unstructure;
+    },
     selectedCell: () => anchor,
     selectCell: vi.fn(),
     onSelection: (listener: (anchor: CellAnchor | undefined) => void) => {
       select = listener;
       return unselect;
     },
-    onStructure: (listener: (edit: StructuralEdit) => void) => {
-      structure = listener;
-      return unstructure;
-    },
-    snapshot: () => ({ sheets: { stable: { name: "Renamed sheet" } } }),
+    snapshot: () => ({ sheets: { stable: { name: "Renamed sheet" } }, ...anchors.snapshot() }),
   } as unknown as SheetEngine;
   sessionState.current = {
     status: "ready",
@@ -154,17 +163,21 @@ it("shifts through row and column mutations, retains deleted cells and counts by
     structure({ sheet: "stable", axis: "column", kind: "delete", index: 2, count: 1 }),
   );
   await screen.findByText("Cell deleted");
-  expect((button("Renamed sheet!B5") as HTMLButtonElement).disabled).toBe(true);
+  expect((button("Renamed sheet!B3") as HTMLButtonElement).disabled).toBe(true);
   await act(async () => select({ ...anchor, sheetId: "other" }));
   expect(button("Comments (0 on this sheet)")).toBeTruthy();
 });
 it("allows append-only comments on view-only grids while disabling changes to existing comments", async () => {
   await seed();
-  vi.spyOn(store, "permissions").mockResolvedValue({ append: true, write: false });
+  store = new CellCommentStore(container, async (url, init) => {
+    const response = await pod.fetch(url, init);
+    response.headers.set("wac-allow", 'user="read append"');
+    return response;
+  });
   await mount();
   fireEvent.click(button("Comments (1 on this sheet)"));
-  expect((button("Edit") as HTMLButtonElement).disabled).toBe(true);
-  expect(button("Delete").title).toContain("Write access");
+  expect(screen.queryByRole("button", { name: "Edit" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "Delete" })).toBeNull();
   expect(button("Resolve").title).toContain("Write access");
   await add("Append allowed");
   fireEvent.click(screen.getAllByRole("button", { name: "Reply" })[0] as HTMLElement);
@@ -180,7 +193,7 @@ it("keeps comments readable without Append, with foreign authors and deleted she
   await mount(false);
   fireEvent.click(button("Comments (0 on this sheet)"));
   await screen.findByText("Other reply");
-  expect(screen.getAllByRole("button", { name: "Edit" })).toHaveLength(1);
+  expect(screen.queryByRole("button", { name: "Edit" })).toBeNull();
   expect((button("Comment") as HTMLButtonElement).disabled).toBe(true);
   expect(button("Comment").parentElement?.title).toContain("Append access");
   expect(button("Reply").title).toContain("Append access");
@@ -240,18 +253,13 @@ it("retains drafts after failures, rejects empty/double submissions and refreshe
     expect((button("Refresh comments") as HTMLButtonElement).disabled).toBe(false),
   );
 });
-it("reports load and structural failures and ignores late loads and mutations after unmount", async () => {
+it("reports load failures and permits retrying a failed load", async () => {
   const list = vi.spyOn(store, "list").mockRejectedValueOnce(new Error("Can't load"));
   const view = render(<CellComments store={store} engine={engine} webId={webId} local />);
   fireEvent.click(button("Comments (0 on this sheet)"));
   await screen.findByText("Can't load");
   fireEvent.click(button("Refresh comments"));
   await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
-  vi.spyOn(store, "shift").mockRejectedValueOnce(new Error("Conflict"));
-  await act(async () =>
-    structure({ sheet: "stable", axis: "row", kind: "insert", index: 1, count: 1 }),
-  );
-  await screen.findByText(/Couldn't move comment anchors/);
   let finish: (rows: []) => void = () => {};
   list.mockImplementationOnce(
     () =>
@@ -321,41 +329,98 @@ it("can reply with no grid selection, including rapid duplicate refreshes", asyn
   await act(async () => finish([]));
 });
 
-it("fences successful and failed actions plus failed anchor shifts after closing the workbook", async () => {
+it("isolates late successful and failed writes across store/account changes and does no post-unmount refresh", async () => {
+  await seed();
   for (const fail of [false, true]) {
+    const previous = store;
+    const list = vi.spyOn(previous, "list");
     const view = await mount();
     let finish: () => void = () => {};
-    vi.spyOn(store, "create").mockImplementationOnce(
+    vi.spyOn(previous, "create").mockImplementationOnce(
       () =>
         new Promise((resolve, reject) => {
-          finish = () => (fail ? reject(new Error("Late write")) : resolve(root));
+          finish = () => (fail ? reject(new Error("Old account write")) : resolve(root));
         }),
     );
     fireEvent.click(button("Comment"));
-    fireEvent.change(screen.getByRole("textbox"), { target: { value: "Pending" } });
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "Old draft" } });
     fireEvent.click(button("Send"));
-    await act(async () => {});
-    view.unmount();
+    const next = new CellCommentStore(container, pod.fetch);
+    view.rerender(
+      <CellComments store={next} engine={engine} webId="https://next.example/#me" local />,
+    );
+    await waitFor(() => expect((button("Comment") as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(button("Comment"));
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "New draft" } });
+    list.mockClear();
+    const register = vi.spyOn(engine, "registerCommentAnchors").mockClear();
     await act(async () => finish());
+    expect(list).not.toHaveBeenCalled();
+    expect(register).not.toHaveBeenCalled();
+    expect((screen.getByRole("textbox") as HTMLTextAreaElement).value).toBe("New draft");
+    expect(screen.queryByText("Comment sent.")).toBeNull();
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect((button("Send") as HTMLButtonElement).disabled).toBe(false);
+    view.unmount();
+    store = next;
   }
+  const list = vi.spyOn(store, "list");
   const view = await mount();
-  let fail: () => void = () => {};
-  vi.spyOn(store, "shift").mockImplementationOnce(
+  let finish: () => void = () => {};
+  vi.spyOn(store, "create").mockImplementationOnce(
     () =>
-      new Promise((_resolve, reject) => {
-        fail = () => reject(new Error("Late shift"));
+      new Promise((resolve) => {
+        finish = () => resolve(root);
       }),
   );
-  await act(async () =>
-    structure({ sheet: "stable", axis: "row", kind: "insert", index: 1, count: 1 }),
-  );
+  fireEvent.click(button("Comment"));
+  fireEvent.change(screen.getByRole("textbox"), { target: { value: "Pending" } });
+  fireEvent.click(button("Send"));
   view.unmount();
-  await act(async () => fail());
+  list.mockClear();
+  await act(async () => finish());
+  expect(list).not.toHaveBeenCalled();
+});
+
+it("isolates late loads and errors across WebID changes even when the store is reused", async () => {
+  await seed();
+  let finish: (rows: Awaited<ReturnType<CellCommentStore["list"]>>) => void = () => {};
+  const list = vi.spyOn(store, "list").mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  const view = render(<CellComments store={store} engine={engine} webId={webId} local />);
+  list.mockResolvedValueOnce([]);
+  view.rerender(
+    <CellComments store={store} engine={engine} webId="https://next.example/#me" local />,
+  );
+  await waitFor(() => expect(list).toHaveBeenCalledTimes(2));
+  fireEvent.click(button("Comments (0 on this sheet)"));
+  await act(async () => finish([{ root, replies: [] }]));
+  expect(screen.queryByText("Root")).toBeNull();
+  expect(button("Comments (0 on this sheet)")).toBeTruthy();
+  let reject: (error: Error) => void = () => {};
+  list.mockImplementationOnce(
+    () =>
+      new Promise((_resolve, fail) => {
+        reject = fail;
+      }),
+  );
+  fireEvent.focus(window);
+  list.mockResolvedValueOnce([]);
+  view.rerender(
+    <CellComments store={store} engine={engine} webId="https://third.example/#me" local />,
+  );
+  await act(async () => reject(new Error("Old account load")));
+  expect(screen.queryByRole("alert")).toBeNull();
 });
 
 it("falls back to credential-free global fetch for shared reads and refuses every mutation", async () => {
   await seed();
   const publicFetch = vi.fn(pod.fetch);
+  const permissions = vi.spyOn(CellCommentStore.prototype, "permissions");
   vi.stubGlobal("fetch", publicFetch);
   sessionState.current = {
     status: "ready",
@@ -367,7 +432,11 @@ it("falls back to credential-free global fetch for shared reads and refuses ever
   await act(async () =>
     structure({ sheet: "stable", axis: "row", kind: "insert", index: 1, count: 1 }),
   );
-  await screen.findByText(/This shared spreadsheet is view only/);
+  expect(screen.queryByRole("alert")).toBeNull();
+  const scoped = permissions.mock.contexts[0] as CellCommentStore;
+  await expect(scoped.create("Blocked", webId, anchor)).rejects.toThrow(
+    "This shared spreadsheet is view only.",
+  );
   expect(
     publicFetch.mock.calls.every(
       ([, init]) => !init?.method || ["GET", "HEAD"].includes(init.method),
@@ -384,4 +453,113 @@ it("exposes the Append permission tooltip when its wrapper receives keyboard foc
   await screen.findByText("Root");
   await act(async () => button("Comment").parentElement?.focus());
   expect((await screen.findByRole("tooltip")).textContent).toContain("Append access");
+});
+
+it("moves an open draft with its cell and prevents sending after that cell is deleted", async () => {
+  await mount();
+  fireEvent.click(button("Comment"));
+  fireEvent.change(screen.getByRole("textbox"), { target: { value: "Moved draft" } });
+  await act(async () =>
+    structure({ sheet: "stable", axis: "row", kind: "insert", index: 1, count: 1 }),
+  );
+  expect((screen.getByLabelText("Comment on B4") as HTMLTextAreaElement).value).toBe("Moved draft");
+  fireEvent.click(button("Send"));
+  await screen.findByText("Moved draft");
+  expect((await store.list())[0]?.root.anchor?.cell).toBe("B4");
+  await waitFor(() => expect((button("Comment") as HTMLButtonElement).disabled).toBe(false));
+  fireEvent.click(button("Comment"));
+  fireEvent.change(screen.getByRole("textbox"), { target: { value: "Deleted draft" } });
+  const create = vi.spyOn(store, "create");
+  await act(async () =>
+    structure({ sheet: "stable", axis: "column", kind: "delete", index: 2, count: 1 }),
+  );
+  expect(screen.getByRole("alert").textContent).toBe("Cell deleted");
+  expect((button("Send") as HTMLButtonElement).disabled).toBe(true);
+  fireEvent.submit(screen.getByRole("textbox").closest("form") as HTMLFormElement);
+  expect(create).not.toHaveBeenCalled();
+});
+
+it("clears a persisted draft before a failed refresh and retries only the refresh", async () => {
+  await mount();
+  const list = vi.spyOn(store, "list").mockRejectedValueOnce(new Error("Refresh failed"));
+  const create = vi.spyOn(store, "create");
+  fireEvent.click(button("Comment"));
+  fireEvent.change(screen.getByRole("textbox"), { target: { value: "Sent once" } });
+  fireEvent.click(button("Send"));
+  await screen.findByText("Refresh failed");
+  expect(screen.getByRole("status").textContent).toBe("Comment sent.");
+  expect(screen.queryByRole("textbox")).toBeNull();
+  expect(screen.queryByRole("button", { name: "Send" })).toBeNull();
+  fireEvent.click(button("Refresh comments"));
+  await screen.findByText("Sent once");
+  expect(create).toHaveBeenCalledTimes(1);
+  expect(list).toHaveBeenCalledTimes(2);
+  expect(await store.list()).toHaveLength(1);
+});
+
+it("uses each resource's Write hint for claimed authors, independently of container permissions", async () => {
+  await seed();
+  await store.reply(root, "Foreign creator", "https://other.example/#me");
+  const original = store;
+  store = new CellCommentStore(container, async (url, init) => {
+    const response = await pod.fetch(url, init);
+    if (String(url) === root.url)
+      response.headers.set("wac-allow", 'public="read write",user="read append"');
+    return response;
+  });
+  const view = await mount();
+  fireEvent.click(button("Comments (1 on this sheet)"));
+  await screen.findByText("Foreign creator");
+  expect(screen.queryByRole("button", { name: "Edit" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "Delete" })).toBeNull();
+  view.unmount();
+  store = original;
+  vi.spyOn(store, "permissions").mockResolvedValue({ append: false, write: false });
+  render(<CellComments store={store} engine={engine} webId={webId} local />);
+  fireEvent.click(button("Comments (0 on this sheet)"));
+  await screen.findByText("Root");
+  expect(screen.getAllByRole("button", { name: "Edit" })).toHaveLength(1);
+  fireEvent.click(button("Edit"));
+  expect((screen.getByRole("textbox") as HTMLTextAreaElement).value).toBe("Root");
+});
+
+it("uses creation selectors when an engine has no draft tracker and explains an offline edit", async () => {
+  delete engine.trackCommentDraft;
+  await mount();
+  await add("Legacy engine");
+  fireEvent.click(button("Edit"));
+  Object.defineProperty(navigator, "onLine", { configurable: true, value: false });
+  fireEvent.change(screen.getByLabelText("Edit comment"), { target: { value: "Offline edit" } });
+  expect(button("Send").title).toBe("Reconnect to comment.");
+  expect((button("Send") as HTMLButtonElement).disabled).toBe(true);
+  Object.defineProperty(navigator, "onLine", { configurable: true, value: true });
+});
+
+it("retains an in-flight draft through panel closure and registers its moved location after creation", async () => {
+  await mount();
+  const publish = store.create.bind(store);
+  let finish: () => void = () => {};
+  vi.spyOn(store, "create").mockImplementationOnce(
+    (text, actor, target) =>
+      new Promise((resolve) => {
+        finish = () => {
+          void publish(text, actor, target).then(resolve);
+        };
+      }),
+  );
+  fireEvent.click(button("Comment"));
+  fireEvent.change(screen.getByRole("textbox"), { target: { value: "In flight" } });
+  fireEvent.click(button("Send"));
+  fireEvent.keyDown(window, { key: "m", ctrlKey: true, altKey: true });
+  expect((screen.getByRole("textbox") as HTMLTextAreaElement).value).toBe("In flight");
+  fireEvent.click(button("Close comments"));
+  await act(async () =>
+    structure({ sheet: "stable", axis: "row", kind: "insert", index: 1, count: 1 }),
+  );
+  fireEvent.click(button("Comments (0 on this sheet)"));
+  expect(screen.getByLabelText("Comment on B4")).toBeTruthy();
+  await act(async () => finish());
+  await screen.findByText("In flight");
+  expect(button("Renamed sheet!B4")).toBeTruthy();
+  expect((await store.list())[0]?.root.anchor?.cell).toBe("B3");
 });

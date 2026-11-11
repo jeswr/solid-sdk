@@ -4,6 +4,7 @@ import { assertWithinPodScope } from "@jeswr/guarded-fetch";
 import { Button, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@jeswr/suite-ui";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { usePodSessionState } from "@/lib/session/pod-session";
+import { currentCommentAnchor, type DraftAnchor } from "../lib/comments/anchors";
 import type { CellAnchor } from "../lib/comments/selector";
 import {
   type CellComment,
@@ -92,22 +93,31 @@ export function CellComments({
   const [composer, setComposer] = useState<{
     kind: "add" | "reply" | "edit";
     anchor?: CellAnchor;
+    draft?: DraftAnchor | undefined;
     entry?: CellComment;
   }>();
   const [text, setText] = useState("");
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
-  const live = useRef(false);
-  const currentStore = useRef(store);
-  currentStore.current = store;
-  const isCurrent = () => live.current && currentStore.current === store;
-  const lock = useRef(false);
-  const queue = useRef(Promise.resolve());
+  // biome-ignore lint/correctness/useExhaustiveDependencies: each identity change starts a new asynchronous lifetime
+  const lifetime = useMemo(
+    () => ({ active: false, locked: false, revision: 0 }),
+    [store, webId, local, engine],
+  );
+  const currentLifetime = useRef(lifetime);
+  currentLifetime.current = lifetime;
+  const isCurrent = () => lifetime.active && currentLifetime.current === lifetime;
+  const [, redraw] = useState(0);
+  const [sent, setSent] = useState(false);
   const input = useRef<HTMLTextAreaElement>(null);
   const toggle = useRef<HTMLButtonElement>(null);
   const refresh = async () => {
+    const revision = ++lifetime.revision;
     const [rows, access] = await Promise.all([store.list(), store.permissions()]);
-    if (isCurrent()) {
+    if (isCurrent() && revision === lifetime.revision) {
+      engine?.registerCommentAnchors?.(
+        Object.fromEntries(rows.map(({ root }) => [root.url, root.anchor as CellAnchor])),
+      );
       setThreads(rows);
       setPermissions(local ? access : { append: false, write: false });
     }
@@ -115,7 +125,14 @@ export function CellComments({
   // Store identity fences account/navigation changes; controls refresh on demand too.
   // biome-ignore lint/correctness/useExhaustiveDependencies: refresh belongs to this store's lifetime
   useEffect(() => {
-    live.current = true;
+    lifetime.active = true;
+    setThreads([]);
+    setComposer(undefined);
+    setText("");
+    setError(undefined);
+    setSent(false);
+    setBusy(false);
+    setPermissions({ append: false, write: false });
     const load = () => {
       void refresh().catch((cause: Error) => {
         if (isCurrent()) setError(cause.message);
@@ -124,32 +141,21 @@ export function CellComments({
     load();
     window.addEventListener("focus", load);
     return () => {
-      live.current = false;
+      lifetime.active = false;
       window.removeEventListener("focus", load);
     };
-  }, [store, local]);
+  }, [lifetime]);
   // biome-ignore lint/correctness/useExhaustiveDependencies: event handlers belong to this engine/store lifetime
   useEffect(() => {
     setSelection(engine?.selectedCell?.());
     const unselect = engine?.onSelection?.(setSelection);
-    const unstructure = engine?.onStructure?.((edit) => {
-      queue.current = queue.current
-        .then(async () => {
-          await store.shift(edit);
-          await refresh();
-        })
-        .catch((cause: Error) => {
-          if (isCurrent())
-            setError(
-              `Couldn't move comment anchors: ${cause.message}. Reload comments before continuing.`,
-            );
-        });
-    });
+    const unchange = engine?.onChange(() => redraw((value) => value + 1));
     return () => {
       unselect?.();
-      unstructure?.();
+      unchange?.();
     };
-  }, [engine, store]);
+  }, [engine, lifetime]);
+  useEffect(() => () => composer?.draft?.dispose(), [composer]);
   useEffect(() => {
     if (composer) input.current?.focus();
   }, [composer]);
@@ -159,13 +165,26 @@ export function CellComments({
       ? "You need Append access to the comments container."
       : undefined;
   const start = (kind: "add" | "reply" | "edit", entry?: CellComment) => {
-    if (reason || (kind === "add" && !selection)) return;
+    if (lifetime.locked) return;
+    if (
+      (kind === "edit"
+        ? !navigator.onLine || !local || !entry?.writable || entry.creator !== webId
+        : reason) ||
+      (kind === "add" && !selection)
+    )
+      return;
     setOpen(true);
+    setSent(false);
     setText(kind === "edit" ? (entry as CellComment).text : "");
     setComposer({
       kind,
       ...(entry ? { entry } : {}),
-      ...(selection ? { anchor: { ...selection } } : {}),
+      ...(selection
+        ? {
+            anchor: { ...selection },
+            ...(kind === "add" ? { draft: engine?.trackCommentDraft?.(selection) } : {}),
+          }
+        : {}),
     });
   };
   // biome-ignore lint/correctness/useExhaustiveDependencies: update shortcut as selection/permission changes
@@ -179,29 +198,43 @@ export function CellComments({
     window.addEventListener("keydown", key);
     return () => window.removeEventListener("keydown", key);
   }, [selection, reason]);
-  const run = async (work: () => Promise<unknown>) => {
-    if (lock.current) return;
-    lock.current = true;
+  const run = async (work?: () => Promise<unknown>, markSent = false) => {
+    if (lifetime.locked) return;
+    lifetime.locked = true;
     setBusy(true);
     try {
-      await queue.current;
-      await work();
-      await refresh();
-      if (isCurrent()) {
+      if (work) {
+        await work();
+        if (!isCurrent()) return;
         setComposer(undefined);
         setText("");
-        setError(undefined);
+        setSent(markSent);
       }
+      setError(undefined);
+      await refresh();
     } catch (cause) {
       if (isCurrent())
         setError(cause instanceof Error ? cause.message : "Couldn't save this comment.");
     } finally {
-      lock.current = false;
+      lifetime.locked = false;
       if (isCurrent()) setBusy(false);
     }
   };
-  const count = threads.filter(({ root }) => root.anchor?.sheetId === selection?.sheetId).length;
-  const sheets = engine?.snapshot().sheets as Record<string, { name: string }> | undefined;
+  const snapshot = engine?.snapshot() ?? {};
+  const anchoredThreads = threads.map(({ root, replies }) => ({
+    root: { ...root, anchor: currentCommentAnchor(snapshot, root.url, root.anchor as CellAnchor) },
+    replies,
+  }));
+  const count = anchoredThreads.filter(
+    ({ root }) => root.anchor.sheetId === selection?.sheetId,
+  ).length;
+  const sheets = snapshot.sheets as Record<string, { name: string }> | undefined;
+  const composerAnchor = composer?.draft?.current() ?? composer?.anchor;
+  const draftDeleted =
+    composer?.kind === "add" &&
+    (composerAnchor?.deleted || !sheets?.[composerAnchor?.sheetId as string]);
+  const composerReason =
+    composer?.kind === "edit" ? (!navigator.onLine ? "Reconnect to comment." : undefined) : reason;
   return (
     <>
       <div className="sht-comment-tools" role="toolbar" aria-label="Cell comments">
@@ -211,7 +244,11 @@ export function CellComments({
             (!selection ? "Select a cell first." : "Comment on the selected cell (Ctrl+Alt+M)")
           }
         >
-          <Button variant="ghost" disabled={!!reason || !selection} onClick={() => start("add")}>
+          <Button
+            variant="ghost"
+            disabled={busy || !!reason || !selection}
+            onClick={() => start("add")}
+          >
             Comment
           </Button>
         </CommentHint>
@@ -227,19 +264,20 @@ export function CellComments({
               variant="ghost"
               onClick={() => {
                 setOpen(false);
-                setComposer(undefined);
+                if (!busy) setComposer(undefined);
                 toggle.current?.focus();
               }}
             >
               Close comments
             </Button>
           </div>
-          <Button variant="ghost" disabled={busy} onClick={() => void run(refresh)}>
+          <Button variant="ghost" disabled={busy} onClick={() => void run()}>
             Refresh comments
           </Button>
+          {sent && <p role="status">Comment sent.</p>}
           {error && <p role="alert">{error}</p>}
           <ul aria-label="Comment threads">
-            {threads.map(({ root, replies }) => {
+            {anchoredThreads.map(({ root, replies }) => {
               const anchor = root.anchor as CellAnchor;
               const deleted = anchor.deleted || !sheets?.[anchor.sheetId];
               const active =
@@ -253,26 +291,18 @@ export function CellComments({
                     {new Date(comment.created).toLocaleString()}
                   </time>
                   <p>{comment.text}</p>
-                  {comment.creator === webId && (
+                  {local && comment.creator === webId && comment.writable && (
                     <div className="sht-comment-tools">
                       <Button
                         variant="ghost"
-                        disabled={busy || !permissions.write}
-                        title={
-                          !permissions.write ? "You need Write access to edit comments." : undefined
-                        }
+                        disabled={busy}
                         onClick={() => start("edit", comment)}
                       >
                         Edit
                       </Button>
                       <Button
                         variant="ghost"
-                        disabled={busy || !permissions.write}
-                        title={
-                          !permissions.write
-                            ? "You need Write access to delete comments."
-                            : undefined
-                        }
+                        disabled={busy}
                         onClick={() => void run(() => store.delete(comment, webId))}
                       >
                         Delete
@@ -315,9 +345,9 @@ export function CellComments({
                     </CommentHint>
                     <Button
                       variant="ghost"
-                      disabled={busy || !permissions.write}
+                      disabled={busy || !local || !root.writable}
                       title={
-                        !permissions.write
+                        !local || !root.writable
                           ? "You need Write access to resolve comments."
                           : undefined
                       }
@@ -335,19 +365,34 @@ export function CellComments({
             <form
               onSubmit={(event) => {
                 event.preventDefault();
-                if (reason || !text.trim() || busy) return;
-                void run(() =>
-                  composer.kind === "add"
-                    ? store.create(text, webId, composer.anchor as CellAnchor)
-                    : composer.kind === "reply"
-                      ? store.reply(composer.entry as CellComment, text, webId)
-                      : store.edit(composer.entry as CellComment, text, webId),
+                if (composerReason || !text.trim() || busy || draftDeleted) return;
+                void run(
+                  async () =>
+                    composer.kind === "add"
+                      ? await (async () => {
+                          const created = await store.create(
+                            text,
+                            webId,
+                            (composer.draft?.current() ?? composer.anchor) as CellAnchor,
+                          );
+                          if (isCurrent()) {
+                            if (composer.draft) composer.draft.commit(created.url);
+                            else
+                              engine?.registerCommentAnchors?.({
+                                [created.url]: composer.anchor as CellAnchor,
+                              });
+                          }
+                        })()
+                      : composer.kind === "reply"
+                        ? store.reply(composer.entry as CellComment, text, webId)
+                        : store.edit(composer.entry as CellComment, text, webId),
+                  composer.kind !== "edit",
                 );
               }}
             >
               <label>
                 {composer.kind === "add"
-                  ? `Comment on ${composer.anchor?.cell}`
+                  ? `Comment on ${composerAnchor?.cell}`
                   : composer.kind === "reply"
                     ? "Reply text"
                     : "Edit comment"}
@@ -359,7 +404,12 @@ export function CellComments({
                   onChange={(event) => setText(event.target.value)}
                 />
               </label>
-              <Button type="submit" disabled={busy || !!reason || !text.trim()} title={reason}>
+              {draftDeleted && <p role="alert">Cell deleted</p>}
+              <Button
+                type="submit"
+                disabled={busy || !!composerReason || !text.trim() || !!draftDeleted}
+                title={composerReason}
+              >
                 Send
               </Button>
               <Button

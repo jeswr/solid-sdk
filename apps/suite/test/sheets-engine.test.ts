@@ -13,7 +13,7 @@ const mock = vi.hoisted(() => {
     options?: { fromChangeset?: boolean; fromFormula?: boolean };
   }) => void;
   const events = new Map<string, () => void>();
-  const selectionSubscription = { dispose: vi.fn() };
+  const selectionSubscription = { unsubscribe: vi.fn() };
   const sheetSubscription = { dispose: vi.fn() };
   const range = { getRow: () => 2, getColumn: () => 1 };
   const sheet = { getRange: vi.fn((cell: string) => cell), setActiveRange: vi.fn() };
@@ -54,7 +54,31 @@ const mock = vi.hoisted(() => {
       return _name === "selection" ? selectionSubscription : sheetSubscription;
     }),
   };
-  const univer = { dispose: vi.fn() };
+  const interceptor = {
+    interceptCommand: vi.fn(() => ({ dispose: vi.fn() })),
+    interceptAfterCommand: vi.fn(() => ({ dispose: vi.fn() })),
+  };
+  const commandService = { registerCommand: vi.fn(() => ({ dispose: vi.fn() })) };
+  const univer = {
+    dispose: vi.fn(),
+    // biome-ignore lint/style/useNamingConvention: Univer API
+    __getInjector: () => ({
+      get: (token: string) =>
+        token === "command-service"
+          ? commandService
+          : token === "selections"
+            ? {
+                // biome-ignore lint/style/useNamingConvention: Univer observable
+                selectionChanged$: {
+                  subscribe: (callback: () => void) => {
+                    events.set("selection", callback);
+                    return selectionSubscription;
+                  },
+                },
+              }
+            : interceptor,
+    }),
+  };
   return {
     api,
     workbook,
@@ -87,6 +111,14 @@ vi.mock("@univerjs/preset-sheets-conditional-formatting", () => ({
 }));
 vi.mock("@univerjs/preset-sheets-conditional-formatting/locales/en-US", () => ({
   default: { conditionalFormatting: "Conditional formatting" },
+}));
+vi.mock("@univerjs/core", async (original) => ({
+  ...(await original<typeof import("@univerjs/core")>()),
+  ICommandService: "command-service",
+}));
+vi.mock("@univerjs/sheets", () => ({
+  SheetInterceptorService: "sheet-interceptors",
+  SheetsSelectionsService: "selections",
 }));
 vi.mock("@univerjs/presets", () => ({
   CommandType: { MUTATION: 1 },
@@ -435,6 +467,49 @@ it("bridges cell selections and structural events without the comments preset", 
   expect(select).toHaveBeenCalledTimes(3);
   expect(structure).toHaveBeenCalledOnce();
   engine.dispose();
-  expect(mock.selectionSubscription.dispose).toHaveBeenCalledOnce();
+  expect(mock.selectionSubscription.unsubscribe).toHaveBeenCalledOnce();
   expect(mock.sheetSubscription.dispose).toHaveBeenCalledOnce();
+});
+
+it("ignores unrelated interceptor commands and missing structural checkpoints, and preserves registered addresses", async () => {
+  const engine = await mount();
+  // Access the exact interceptor registered by the adapter, without mocking its behavior.
+  const injector = mock.univer.__getInjector();
+  const interceptors = injector.get("sheet-interceptors") as {
+    interceptCommand: ReturnType<typeof vi.fn>;
+    interceptAfterCommand: ReturnType<typeof vi.fn>;
+  };
+  const before = interceptors.interceptCommand.mock.calls.at(-1)?.[0] as {
+    getMutations(command: { id: string }): unknown;
+  };
+  const after = interceptors.interceptAfterCommand.mock.calls.at(-1)?.[0] as typeof before;
+  expect(before.getMutations({ id: "sheet.command.format" })).toEqual({ redos: [], undos: [] });
+  expect(after.getMutations({ id: "sheet.command.format" })).toEqual({ redos: [], undos: [] });
+  expect(after.getMutations({ id: "sheet.command.remove-row" })).toEqual({ redos: [], undos: [] });
+  engine.registerCommentAnchors?.({ root: { sheetId: "data", cell: "B3", deleted: false } });
+  engine.registerCommentAnchors?.({ root: { sheetId: "data", cell: "Z9", deleted: false } });
+  expect(engine.snapshot().commentAnchors).toEqual({
+    version: 1,
+    anchors: { root: { sheetId: "data", cell: "B3" } },
+  });
+  engine.setReadOnly(true);
+  engine.registerCommentAnchors?.({ other: { sheetId: "data", cell: "C4", deleted: false } });
+  engine.dispose();
+});
+
+it("registers a persisted draft on view-only workbooks without scheduling a workbook write", async () => {
+  const engine = await mount();
+  const change = vi.fn();
+  engine.onChange(change);
+  engine.setReadOnly(true);
+  const draft = engine.trackCommentDraft?.({ sheetId: "data", cell: "B3", deleted: false });
+  draft?.commit("view-only-thread");
+  await Promise.resolve();
+  expect(engine.snapshot().commentAnchors).toEqual({
+    version: 1,
+    anchors: { "view-only-thread": { sheetId: "data", cell: "B3" } },
+  });
+  expect(change).not.toHaveBeenCalled();
+  draft?.dispose();
+  engine.dispose();
 });

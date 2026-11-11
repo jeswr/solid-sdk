@@ -129,7 +129,9 @@ it("round-trips threads, replies, TextualBody, dates and hostile plain text thro
   const node = new SheetResource(`${root.url}#body`, rdf, DataFactory);
   expect(node.iri(RDF_TYPE)).toBe(`${O}TextualBody`);
   expect(node.text(VALUE)).toBe(root.text);
-  expect(await store.list()).toEqual([{ root, replies: [reply] }]);
+  expect(await store.list()).toEqual([
+    { root: { ...root, writable: true }, replies: [{ ...reply, writable: true }] },
+  ]);
   await store.edit(reply, "Updated", other, now);
   let thread = (await store.list())[0];
   expect(thread?.replies[0]?.text).toBe("Updated");
@@ -176,30 +178,6 @@ it("enforces ownership, root reply targets, body bounds and concurrency validato
   await expect(
     store.delete({ ...root, url: "https://evil.example/comment.ttl" }, author),
   ).rejects.toThrow("location");
-});
-it("persists structural shifts, skips unrelated/unchanged/deleted anchors", async () => {
-  await store.create("Cell", author, { ...anchor, sheetId: "stable" }, now);
-  await store.create("Other", author, { ...anchor, sheetId: "other" }, now);
-  const edit = {
-    sheet: "stable",
-    axis: "row" as const,
-    kind: "insert" as const,
-    index: 4,
-    count: 1,
-  };
-  await store.shift(edit);
-  await store.shift({ ...edit, index: 2 }, now);
-  expect((await store.list()).find(({ root }) => root.text === "Cell")?.root.anchor?.cell).toBe(
-    "B4",
-  );
-  await store.shift({ ...edit, kind: "delete", count: 1 }, now);
-  await store.shift(edit);
-  expect((await store.list()).find(({ root }) => root.text === "Cell")?.root.anchor).toEqual({
-    ...anchor,
-    sheetId: "stable",
-    cell: "B4",
-    deleted: true,
-  });
 });
 it.each([
   ["type", (node: SheetResource) => node.setIri(RDF_TYPE, `${O}TextualBody`)],
@@ -300,7 +278,7 @@ it("rejects foreign reply targets and ignores external/nested/non-Turtle listing
       : pod.fetch(url, init),
   );
   const safe = new CellCommentStore(container, transport);
-  expect(await safe.list()).toEqual([{ root, replies: [] }]);
+  expect(await safe.list()).toEqual([{ root: { ...root, writable: true }, replies: [] }]);
   expect(transport.mock.calls.some(([url]) => String(url).includes("evil.example"))).toBe(false);
 });
 it("fails closed on permissions and reads inherited Append/Write hints", async () => {
@@ -368,4 +346,28 @@ it("treats missing permission headers as no comment access", async () => {
   expect(
     await new CellCommentStore(container, async () => new Response(null)).permissions(),
   ).toEqual({ append: false, write: false });
+});
+
+it("requires resource Write for a claimed matching creator even when the container grants Write", async () => {
+  const root = await store.create("Claimed owner", author, anchor);
+  // A third-party appender can supply this creator claim. It never substitutes for WAC.
+  for (const hint of [null, 'user="read append"', 'public="read write",user="read"']) {
+    const limited = new CellCommentStore(container, async (url, init) => {
+      const response = await pod.fetch(url, init);
+      if (String(url) === root.url) {
+        if (hint === null) response.headers.delete("wac-allow");
+        else response.headers.set("wac-allow", hint);
+      }
+      return response;
+    });
+    expect((await limited.permissions()).write).toBe(true);
+    expect((await limited.list())[0]?.root).toMatchObject({ creator: author, writable: false });
+    await expect(limited.edit(root, "Spoof", author)).rejects.toThrow("Write access");
+    await expect(limited.delete(root, author)).rejects.toThrow("Write access");
+    await expect(limited.resolve(root, true)).rejects.toThrow("Write access");
+  }
+  expect((await store.list())[0]?.root.text).toBe("Claimed owner");
+  await expect(store.create("Deleted", author, { ...anchor, deleted: true })).rejects.toThrow(
+    "Cell deleted",
+  );
 });

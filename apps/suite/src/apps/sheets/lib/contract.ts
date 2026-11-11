@@ -19,6 +19,7 @@
  * Both are interfaces so the UI can be exercised against fakes in unit tests.
  */
 
+import type { DraftAnchor } from "./comments/anchors";
 import type { CellAnchor } from "./comments/selector";
 import type { WorkbookMetadata } from "./model/rdf";
 import type { Snapshot } from "./model/snapshot";
@@ -182,6 +183,8 @@ export interface ActiveSheet {
 }
 
 export interface SheetEngine {
+  registerCommentAnchors?(anchors: Record<string, CellAnchor>): void;
+  trackCommentDraft?(anchor: CellAnchor): DraftAnchor;
   selectedCell?(): CellAnchor | undefined;
   selectCell?(anchor: CellAnchor): void;
   onSelection?(listener: (anchor: CellAnchor | undefined) => void): () => void;

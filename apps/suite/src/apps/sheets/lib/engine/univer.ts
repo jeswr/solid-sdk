@@ -1,5 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+
+import { ICommandService } from "@univerjs/core";
 import { UniverSheetsConditionalFormattingPreset } from "@univerjs/preset-sheets-conditional-formatting";
 import UniverPresetSheetsConditionalFormattingEnUS from "@univerjs/preset-sheets-conditional-formatting/locales/en-US";
 import { UniverSheetsCorePreset } from "@univerjs/preset-sheets-core";
@@ -13,6 +15,8 @@ import {
   LocaleType,
   mergeLocales,
 } from "@univerjs/presets";
+import { SheetInterceptorService, SheetsSelectionsService } from "@univerjs/sheets";
+import { type AnchorCheckpoint, WorkbookCommentAnchors } from "../comments/anchors";
 import { type CellAnchor, commentStructuralEdit } from "../comments/selector";
 import type { MountEngine, Snapshot } from "../contract";
 import { serializeSnapshot } from "../model/snapshot";
@@ -83,15 +87,16 @@ export const mountUniver: MountEngine = async (container, options) => {
   const selectionChanged = () => {
     for (const listener of selections) listener(selectedCell());
   };
-  const selectionSubscription = univerAPI.addEvent(
-    univerAPI.Event.SelectionChanged,
-    selectionChanged,
-  );
+  const injector = univer.__getInjector();
+  const selectionSubscription = injector
+    .get(SheetsSelectionsService)
+    .selectionChanged$.subscribe(selectionChanged);
   const sheetSubscription = univerAPI.addEvent(
     univerAPI.Event.ActiveSheetChanged,
     selectionChanged,
   );
   const listeners = new Set<() => void>();
+  const anchors = new WorkbookCommentAnchors(options.snapshot);
   let disposed = false;
   let loading = false;
   let queued = false;
@@ -107,6 +112,42 @@ export const mountUniver: MountEngine = async (container, options) => {
       for (const listener of listeners) listener();
     });
   };
+  const commands = injector.get(ICommandService);
+  const interceptors = injector.get(SheetInterceptorService);
+  const anchorMutation = "sheets.mutation.comment-anchors";
+  const anchorCommand = commands.registerCommand({
+    id: anchorMutation,
+    type: CommandType.MUTATION,
+    handler: (_accessor, params: { unitId: string; checkpoint: AnchorCheckpoint }) => {
+      anchors.restore(params.checkpoint);
+      return true;
+    },
+  });
+  // Capture by command identity, never infer undo from a later insertion's coordinates.
+  let beforeAnchors: AnchorCheckpoint | undefined;
+  const beforeStructure = interceptors.interceptCommand({
+    getMutations(command) {
+      if (/^sheet\.command\.(insert-row|insert-col|remove-row|remove-col)$/.test(command.id))
+        beforeAnchors = anchors.checkpoint();
+      return { redos: [], undos: [] };
+    },
+  });
+  const afterStructure = interceptors.interceptAfterCommand({
+    getMutations(command) {
+      if (
+        !/^sheet\.command\.(insert-row|insert-col|remove-row|remove-col)$/.test(command.id) ||
+        !beforeAnchors
+      )
+        return { redos: [], undos: [] };
+      const undo = beforeAnchors;
+      beforeAnchors = undefined;
+      const mutation = (checkpoint: AnchorCheckpoint) => ({
+        id: anchorMutation,
+        params: { unitId: workbook.getId(), checkpoint },
+      });
+      return { redos: [mutation(anchors.checkpoint())], undos: [mutation(undo)] };
+    },
+  });
   const subscription = univerAPI.addEvent(univerAPI.Event.CommandExecuted, (event) => {
     if (
       event.type !== CommandType.MUTATION ||
@@ -121,12 +162,17 @@ export const mountUniver: MountEngine = async (container, options) => {
     // Initial formula calculation belongs to loading, including its asynchronous results.
     if (event.options?.fromFormula && !editedSinceLoad) return;
     const edit = commentStructuralEdit(event.id, event.params);
-    if (edit) for (const listener of structures) listener(edit);
+    if (edit) {
+      anchors.shift(edit);
+      for (const listener of structures) listener(edit);
+    }
     editedSinceLoad = true;
     notify();
   });
   const snapshot = (): Snapshot => {
     const data: Snapshot = JSON.parse(JSON.stringify(workbook.save()));
+    delete data.commentAnchors;
+    Object.assign(data, anchors.snapshot());
     serializeSnapshot(data);
     return data;
   };
@@ -140,11 +186,27 @@ export const mountUniver: MountEngine = async (container, options) => {
       univerAPI.disposeUnit(workbook.getId());
       workbook = univerAPI.createWorkbook(data as Partial<IWorkbookData>);
       workbook.setEditable(!readOnly);
+      anchors.load(data);
+      beforeAnchors = undefined;
+      selectionChanged();
     } finally {
       loading = false;
     }
   };
   return {
+    registerCommentAnchors(values) {
+      if (anchors.register(values) && !readOnly) notify();
+    },
+    trackCommentDraft(anchor) {
+      const draft = anchors.track(anchor);
+      return {
+        ...draft,
+        commit(annotationId) {
+          draft.commit(annotationId);
+          if (!readOnly) notify();
+        },
+      };
+    },
     load,
     snapshot,
     selectedCell,
@@ -220,8 +282,11 @@ export const mountUniver: MountEngine = async (container, options) => {
       disposed = true;
       ++generation;
       subscription.dispose();
-      selectionSubscription.dispose();
+      selectionSubscription.unsubscribe();
       sheetSubscription.dispose();
+      beforeStructure.dispose();
+      afterStructure.dispose();
+      anchorCommand.dispose();
       selections.clear();
       structures.clear();
       listeners.clear();

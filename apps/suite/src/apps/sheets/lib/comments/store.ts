@@ -8,13 +8,7 @@ import { isDirectChild } from "../../../docs/lib/model/layout";
 import { deleteRdf, readRdf, writeRdf } from "../../../docs/lib/model/rdf-io";
 import { DCT, OA, PD, RDF_TYPE } from "../../../docs/lib/model/vocab";
 import { httpIri, SheetResource, workbookLayout } from "../model/rdf";
-import type { StructuralEdit } from "../refs/model";
-import {
-  type CellAnchor,
-  formatCellSelector,
-  parseCellSelector,
-  shiftCellAnchor,
-} from "./selector";
+import { type CellAnchor, formatCellSelector, parseCellSelector } from "./selector";
 
 const ANNOTATION = "http://www.w3.org/ns/oa#";
 const HAS_BODY = `${ANNOTATION}hasBody`;
@@ -28,6 +22,8 @@ export interface CellComment {
   url: string;
   etag: string | null;
   creator: string;
+  /** Resource-specific user Write hint; creator is only a claim. */
+  writable: boolean;
   created: string;
   modified: string;
   text: string;
@@ -44,6 +40,11 @@ export interface CommentPermissions {
   write: boolean;
 }
 
+function userModes(headers: Headers): string[] {
+  return (
+    /(?:^|,)\s*user\s*=\s*"([^"]*)"/i.exec(headers.get("wac-allow") ?? "")?.[1]?.split(/\s+/) ?? []
+  );
+}
 function body(text: string): string {
   if (!text.trim() || text.length > MAX_COMMENT_LENGTH)
     throw new Error("Enter a comment of 1–10,000 characters.");
@@ -84,7 +85,7 @@ export class CellCommentStore {
     url: string,
   ): Promise<{ dataset: Awaited<ReturnType<typeof readRdf>>["dataset"]; comment: CellComment }> {
     this.location(url);
-    const { dataset, etag } = await readRdf(url, this.http);
+    const { dataset, etag, headers } = await readRdf(url, this.http);
     const node = new SheetResource(url, dataset, DataFactory);
     const motivation = node.iri(OA.motivatedBy);
     const target = node.iri(OA.hasTarget);
@@ -125,6 +126,7 @@ export class CellCommentStore {
         url,
         etag,
         creator,
+        writable: userModes(headers).includes("write"),
         created: date(node, DCT.created),
         modified: date(node, DCT.modified),
         text,
@@ -141,11 +143,7 @@ export class CellCommentStore {
         method: "HEAD",
         cache: "no-store",
       });
-    const modes = response.ok
-      ? (/(?:^|,)\s*user\s*=\s*"([^"]*)"/i
-          .exec(response.headers.get("wac-allow") ?? "")?.[1]
-          ?.split(/\s+/) ?? [])
-      : [];
+    const modes = response.ok ? userModes(response.headers) : [];
     return {
       append: modes.includes("append") || modes.includes("write"),
       write: modes.includes("write"),
@@ -199,6 +197,7 @@ export class CellCommentStore {
     now = new Date(),
   ): Promise<CellComment> {
     formatCellSelector(anchor);
+    if (anchor.deleted) throw new Error("Cell deleted");
     return this.publish(text, creator, this.workbook, anchor, now);
   }
   async reply(
@@ -223,6 +222,7 @@ export class CellCommentStore {
       etag: null,
       text: body(text),
       creator: httpIri(creator),
+      writable: false,
       created: now.toISOString(),
       modified: now.toISOString(),
       target,
@@ -259,6 +259,7 @@ export class CellCommentStore {
   private own(comment: CellComment, actor: string) {
     if (comment.creator !== actor)
       throw new Error("You can only edit or delete your own comments.");
+    if (!comment.writable) throw new Error("You need Write access to this comment resource.");
   }
   private async update(
     entry: CellComment,
@@ -266,6 +267,7 @@ export class CellCommentStore {
     now: Date,
   ) {
     const { dataset, comment } = await this.read(entry.url);
+    if (!comment.writable) throw new Error("You need Write access to this comment resource.");
     change(new SheetResource(entry.url, dataset, DataFactory), comment);
     stamp(new SheetResource(entry.url, dataset, DataFactory), DCT.modified, now.toISOString());
     await writeRdf(entry.url, dataset, { fetchImpl: this.http, etag: entry.etag });
@@ -297,24 +299,5 @@ export class CellCommentStore {
     this.own((await this.read(entry.url)).comment, actor);
     // Keep others' replies; without a root they are hidden, as in Docs.
     await deleteRdf(entry.url, this.http, entry.etag);
-  }
-  async shift(edit: StructuralEdit, now = new Date()) {
-    for (const { root } of await this.list()) {
-      const anchor = root.anchor as CellAnchor;
-      const next = shiftCellAnchor(anchor, edit);
-      if (next === anchor || (next.cell === anchor.cell && next.deleted === anchor.deleted))
-        continue;
-      await this.update(
-        root,
-        (node) => {
-          new SheetResource(`${root.url}#cell`, node.dataset, DataFactory).setText(
-            VALUE,
-            formatCellSelector(next),
-          );
-          OptionalAs.object(node, DELETED, next.deleted, LiteralFrom.boolean);
-        },
-        now,
-      );
-    }
   }
 }
