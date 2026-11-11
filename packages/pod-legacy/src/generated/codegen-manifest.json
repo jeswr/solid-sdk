@@ -1,0 +1,22 @@
+{
+  "generator": {
+    "name": "@jeswr/federation-codegen",
+    "specVersion": "1"
+  },
+  "adapter": "owl-rdfs-v1",
+  "runtime": {
+    "name": "@jeswr/model-runtime",
+    "major": 0
+  },
+  "inputs": {
+    "ontology.ttl": "cf6d33f60aee0db496dfb3372b851018aafde3f0f94b8db237dade9b9abab5cb",
+    "shapes.shacl.ttl": "6a928c0fc16ccfe72c39d02f99eece1df5a79133d46ca787c434eb4d40b0730f",
+    "codegen.config.json": "6bea45f08b591ac2ace21f90c18b155da00699ae3aa8fb6d0b34e8dbd25ec67e"
+  },
+  "outputs": {
+    "model.d.ts": "06d2165a53a35f2af455da4796711a6ed051ca3bbad96caaafe0cf52cb9f57d7",
+    "model.js": "f095f9401965f6e0d1d0689a17a72b24471c1b71083c0e5c01cd4f8889376309",
+    "model.json": "e4f1a1bd38cc41dffb1e82e1966519a7977202463918bcb18a38ef02931a7525",
+    "shapes.ttl": "26ecb1ea3793d9780e4b65534894770ab8422caca29bb09c0d2264d8fbb2c90e"
+  }
+}

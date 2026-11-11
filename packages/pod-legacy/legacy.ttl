@@ -1,0 +1,20 @@
+# AUTHORED-BY Codex GPT-6.1-Sol
+@prefix legacy: <https://jeswr.org/ns/legacy#> .
+@prefix schema: <https://schema.org/> .
+@prefix dct: <http://purl.org/dc/terms/> .
+@prefix vcard: <http://www.w3.org/2006/vcard/ns#> .
+@prefix odrl: <http://www.w3.org/ns/odrl/2/> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+
+<https://jeswr.org/ns/legacy> a owl:Ontology ; rdfs:label "Digital legacy plans"@en ; rdfs:comment "Records intent only; never grants access."@en .
+legacy:LegacyPlan a owl:Class ; rdfs:label "LegacyPlan"@en ; rdfs:comment "A recorded LegacyPlan for owner review, without enforcement."@en .
+legacy:contact a owl:ObjectProperty ; rdfs:label "contactUrls"@en ; rdfs:comment "Recorded contactUrls of a legacy plan or contact."@en ; rdfs:domain legacy:LegacyPlan ; rdfs:range rdfs:Resource .
+legacy:inactivityMonths a owl:DatatypeProperty ; rdfs:label "inactivityMonths"@en ; rdfs:comment "Recorded inactivityMonths of a legacy plan or contact."@en ; rdfs:domain legacy:LegacyPlan ; rdfs:range xsd:integer .
+legacy:warningDays a owl:DatatypeProperty ; rdfs:label "warningDays"@en ; rdfs:comment "Recorded warningDays of a legacy plan or contact."@en ; rdfs:domain legacy:LegacyPlan ; rdfs:range xsd:integer .
+legacy:notifyMeBy a owl:DatatypeProperty ; rdfs:label "notifyMeBy"@en ; rdfs:comment "Recorded notifyMeBy of a legacy plan or contact."@en ; rdfs:domain legacy:LegacyPlan ; rdfs:range xsd:string .
+legacy:LegacyContact a owl:Class ; rdfs:label "LegacyContact"@en ; rdfs:comment "A recorded LegacyContact for owner review, without enforcement."@en .
+legacy:scope a owl:DatatypeProperty ; rdfs:label "scope"@en ; rdfs:comment "Recorded scope of a legacy plan or contact."@en ; rdfs:domain legacy:LegacyContact ; rdfs:range xsd:string .

@@ -8,6 +8,7 @@ import { NativePreviewCleanup } from "@/components/native-preview-cleanup";
 import { NativeShareLaunch } from "@/components/native-share-launch";
 import { accountFixtureProps } from "@/shell/account/test-backends";
 import { SuiteEnvironmentContext } from "@/shell/environment";
+import { LegacyProvider } from "@/shell/legacy/provider";
 import type { SuiteEnv } from "@/shell/lib/env";
 import { NotificationsProvider } from "@/shell/notifications/provider";
 import { ShellSearchProvider } from "@/shell/search/search-context";
@@ -46,7 +47,9 @@ export function Providers({
               <AppearanceEffect />
               <ShellSearchProvider>
                 <NotificationsProvider>
-                  <WalkthroughProvider>{children}</WalkthroughProvider>
+                  <LegacyProvider>
+                    <WalkthroughProvider>{children}</WalkthroughProvider>
+                  </LegacyProvider>
                 </NotificationsProvider>
               </ShellSearchProvider>
             </PreferencesProvider>
