@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { folderIriFromKey, MailClient } from "../src/apps/mail/lib/client";
 import { documentOf, MailError, sendDemoDraft } from "../src/apps/mail/lib/model";
 import { createDemoPod } from "../src/lib/demo-pod/pod";
+import { mailboxFixture } from "./fixtures/mail-mbox";
 
 const storage = "https://alice.demo.pod/";
 const me = `${storage}profile/card#me`;
@@ -31,7 +32,10 @@ describe("demo Send", () => {
     const draft = await client.draft(saved.iri);
     const threadBefore = await client.store.load(documentOf(draft.thread));
     fetch.mockClear();
-    expect(await sendDemoDraft(client.store, root, saved, now)).toBe(saved.iri);
+    expect(await sendDemoDraft(client.store, root, saved, now)).toEqual({
+      iri: saved.iri,
+      thread: draft.thread,
+    });
     const writes = fetch.mock.calls.filter(([, init]) => init?.method === "PUT");
     expect(writes).toHaveLength(4);
     expect(writes.map(([url]) => String(url))).toEqual([
@@ -53,7 +57,7 @@ describe("demo Send", () => {
     }
     const message = (await client.store.load(documentOf(saved.iri))).mailbox.message(saved.iri);
     expect(message.dateSent).toEqual(now);
-    expect(message.sender).toBeUndefined();
+    expect(message.sender).toBe(me);
     expect(message.folderIris.has(drafts)).toBe(false);
     expect(message.folderIris.has(sent)).toBe(true);
     expect(message.partOfThread).toBe(draft.thread);
@@ -66,7 +70,14 @@ describe("demo Send", () => {
     const page = await client.threads(account, sent);
     expect(page.items).toMatchObject([{ iri: draft.thread, latest: now, count: 1, unread: false }]);
     expect((await client.thread(draft.thread)).messages).toMatchObject([
-      { iri: saved.iri, draft: false, date: now, from: "Unknown sender", labels: [sent] },
+      {
+        iri: saved.iri,
+        draft: false,
+        demoSent: true,
+        date: now,
+        from: `me <${me}>`,
+        labels: [sent],
+      },
     ]);
     const counts = await client.folders(account);
     expect(counts.find((f) => f.key === "drafts")).toMatchObject({ total: 0, unread: 0 });
@@ -76,6 +87,10 @@ describe("demo Send", () => {
       unread: 0,
     });
     await expect(client.draft(saved.iri)).rejects.toMatchObject({ code: "not-found" });
+    await expect(client.sendDemo(saved.iri, saved.etag)).rejects.toMatchObject({
+      code: "not-found",
+    });
+    await client.binaryFetch(documentOf(drafts), { method: "DELETE" });
     await expect(client.sendDemo(saved.iri, saved.etag)).rejects.toMatchObject({
       code: "not-found",
     });
@@ -96,7 +111,10 @@ describe("demo Send", () => {
     await client.store.mutate(documentOf(draft.thread), (box) => {
       box.thread(draft.thread).created = created;
     });
-    expect(await client.sendDemo(saved.iri, loaded.etag)).toBe(saved.iri);
+    expect(await client.sendDemo(saved.iri, loaded.etag)).toEqual({
+      iri: saved.iri,
+      thread: draft.thread,
+    });
     const view = await client.thread(draft.thread);
     expect(view.messages[0]).toMatchObject({
       from: "alice@example.org",
@@ -123,10 +141,29 @@ describe("demo Send", () => {
     });
     await client.binaryFetch(documentOf(draft.thread), { method: "DELETE" });
     const latest = await client.draft(saved.iri);
-    await sendDemoDraft(client.store, root, latest, now);
+    expect(await sendDemoDraft(client.store, root, latest, now)).toEqual({
+      iri: saved.iri,
+      thread: draft.thread,
+    });
     const thread = await client.thread(draft.thread);
     expect(thread.subject).toBe("(No subject)");
     expect(thread.messages).toMatchObject([{ iri: saved.iri, text: "", draft: false }]);
+  });
+
+  it("does not identify imported Sent mail on a demo pod as demo-sent", async () => {
+    const { client, sent } = setup();
+    async function* source() {
+      yield new TextEncoder().encode(
+        mailboxFixture(1).replace("X-Gmail-Labels: Inbox", "X-Gmail-Labels: Sent"),
+      );
+    }
+    expect(await client.importMailbox(account, source())).toMatchObject({ messages: 1, failed: 0 });
+    const page = await client.threads(account, sent);
+    expect(page.items).toHaveLength(1);
+    const thread = await client.thread(page.items[0]?.iri ?? "");
+    expect(thread.messages).toMatchObject([
+      { draft: false, demoSent: false, labels: expect.arrayContaining([sent]) },
+    ]);
   });
 
   it.each([
@@ -147,6 +184,16 @@ describe("demo Send", () => {
     const { client, fetch, root, drafts } = setup();
     for (const iri of [`${root}messages/imported.ttl#it`, `${root}messages/draft-x.ttl#it`])
       await expect(client.sendDemo(iri, null)).rejects.toMatchObject({ code: "not-found" });
+    await expect(
+      client.sendDemo(`${root}messages/draft-00000000-0000-0000-0000-000000000000.ttl#it`, null),
+    ).rejects.toMatchObject({ code: "not-found" });
+    const blankIri = `${root}messages/draft-00000000-0000-0000-0000-000000000000.ttl#it`;
+    const blank = await client.store.load(documentOf(blankIri), true);
+    blank.mailbox.createFolder(`${blank.url}#folder`).title = "No message";
+    await client.store.save(blank);
+    await expect(client.sendDemo(blankIri, blank.etag)).rejects.toMatchObject({
+      code: "not-found",
+    });
     const empty = await client.saveDraft(account, { ...fields, to: [] });
     fetch.mockClear();
     await expect(client.sendDemo(empty.iri, empty.etag)).rejects.toThrow(/recipient/);
@@ -235,20 +282,52 @@ describe("demo Send", () => {
   });
 
   it.each([
-    412, 500,
-  ])("surfaces a Sent folder failure (%s) instead of claiming success", async (status) => {
+    ["sent", 412],
+    ["sent", 500],
+    ["drafts", 500],
+    ["thread", 500],
+  ] as const)("recovers a partial send after a %s write failure (%s)", async (phase, status) => {
     let armed = false;
-    const { client } = setup(
+    const { client, fetch, drafts, sent, root } = setup(
       (fetch) => async (url, init) =>
-        armed && init?.method === "PUT" && String(url).includes("system:sent")
+        armed &&
+        init?.method === "PUT" &&
+        String(url).includes(phase === "thread" ? "/threads/" : `system:${phase}`)
           ? new Response(null, { status })
           : fetch(url, init),
     );
     const saved = await client.saveDraft(account, fields);
+    const draft = await client.draft(saved.iri);
+    // Also recover a thread that failed its first creation, not just an existing draft thread.
+    if (phase === "thread")
+      await client.binaryFetch(documentOf(draft.thread), { method: "DELETE" });
     armed = true;
-    await expect(client.sendDemo(saved.iri, saved.etag)).rejects.toMatchObject({
+    await expect(sendDemoDraft(client.store, root, saved, now)).rejects.toMatchObject({
       code: status === 412 ? "conflict" : "http",
       status,
     });
+    expect(
+      (await client.store.load(documentOf(drafts))).mailbox
+        .folder(drafts)
+        .messageIris.has(saved.iri),
+    ).toBe(true);
+    const claimed = await client.store.load(documentOf(saved.iri));
+    expect(claimed.mailbox.message(saved.iri).folderIris.has(sent)).toBe(true);
+    armed = false;
+    fetch.mockClear();
+    expect(await client.sendDemo(saved.iri, saved.etag)).toEqual({
+      iri: saved.iri,
+      thread: draft.thread,
+    });
+    expect(
+      fetch.mock.calls.some(
+        ([url, init]) => String(url) === documentOf(saved.iri) && init?.method === "PUT",
+      ),
+    ).toBe(false);
+    expect((await client.threads(account, drafts)).total).toBe(0);
+    expect((await client.threads(account, sent)).total).toBe(1);
+    const thread = await client.thread(draft.thread);
+    expect(thread.messages).toMatchObject([{ iri: saved.iri, date: now, demoSent: true }]);
+    expect((await client.store.load(documentOf(saved.iri))).etag).toBe(claimed.etag);
   });
 });

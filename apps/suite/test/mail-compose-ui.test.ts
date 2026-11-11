@@ -4,7 +4,7 @@ import type AxeBuilder from "@axe-core/playwright";
 import type { ComponentProps, ReactNode } from "react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { MailClient } from "../src/apps/mail/lib/client";
-import { MailError, type SavedDraft } from "../src/apps/mail/lib/model";
+import { documentOf, MailError, type SavedDraft } from "../src/apps/mail/lib/model";
 import { createDemoPod } from "../src/lib/demo-pod/pod";
 import { encodeRef } from "../src/lib/refs";
 import { act, click, deferred, h, mount } from "./drive-ui-dom";
@@ -80,16 +80,14 @@ async function fill(host: HTMLElement, label: string, value: string) {
   });
 }
 async function shortcut(host: HTMLElement, modifier: "ctrlKey" | "metaKey") {
-  await act(() =>
-    host.querySelector("form")?.dispatchEvent(
-      new KeyboardEvent("keydown", {
-        key: "Enter",
-        [modifier]: true,
-        bubbles: true,
-        cancelable: true,
-      }),
-    ),
-  );
+  const event = new KeyboardEvent("keydown", {
+    key: "Enter",
+    [modifier]: true,
+    bubbles: true,
+    cancelable: true,
+  });
+  await act(() => (host.querySelector("form") ?? host).dispatchEvent(event));
+  return event;
 }
 async function editing() {
   const saved = await client.saveDraft("personal", fields);
@@ -106,7 +104,10 @@ it.each([
   mocks.mode = mode;
   const view = await mount(h("main", null, h(ComposePage)));
   expect(button(view.host, "Send").disabled).toBe(true);
-  await shortcut(view.host, "ctrlKey");
+  expect((await shortcut(view.host, "ctrlKey")).defaultPrevented).toBe(false);
+  expect(button(view.host, "Send").getAttribute("aria-keyshortcuts")).toBe(
+    "Control+Enter Meta+Enter",
+  );
   expect(mocks.toast).not.toHaveBeenCalled();
   await fill(view.host, "To", "Bob Example <bob@example.org>");
   expect(button(view.host, "Send").disabled).toBe(mode !== "demo");
@@ -126,7 +127,7 @@ it.each([
   await fill(view.host, "Cc", "cara@example.org");
   expect(button(view.host, "Send").disabled).toBe(mode !== "demo");
   if (mode !== "demo") {
-    await shortcut(view.host, "metaKey");
+    expect((await shortcut(view.host, "metaKey")).defaultPrevented).toBe(false);
     expect(mocks.router.push).not.toHaveBeenCalled();
   }
   const results = await axe.run(view.host, { rules: { "color-contrast": { enabled: false } } });
@@ -139,21 +140,30 @@ it("saves a new compose before sending, uses the new ETag, toasts with a View li
   const pending = deferred<SavedDraft>();
   const save = vi.spyOn(client, "saveDraft").mockReturnValue(pending.promise);
   const send = vi.spyOn(client, "sendDemo");
+  const read = vi.spyOn(client, "draft");
   const view = await mount(h(ComposePage));
   await fill(view.host, "To", "Bob <bob@example.org>");
   await fill(view.host, "Subject", fields.subject);
   await fill(view.host, "Message", fields.text);
-  await click(button(view.host, "Send"));
+  const trigger = button(view.host, "Send");
+  await act(() => trigger.focus());
+  await click(trigger);
   expect(save).toHaveBeenCalledWith("personal", fields, undefined);
   expect(send).not.toHaveBeenCalled();
-  expect(button(view.host, "Send").disabled).toBe(true);
-  expect(control(view.host, "Message").disabled).toBe(true);
-  await shortcut(view.host, "ctrlKey");
+  expect(trigger.disabled).toBe(false);
+  expect(trigger.getAttribute("aria-disabled")).toBe("true");
+  expect(document.activeElement).toBe(trigger);
+  for (const label of ["To", "Cc", "Subject", "Message"]) {
+    expect(control(view.host, label).readOnly).toBe(true);
+    expect(control(view.host, label).disabled).toBe(false);
+  }
+  expect((await shortcut(view.host, "ctrlKey")).defaultPrevented).toBe(false);
+  await click(trigger);
   expect(save).toHaveBeenCalledOnce();
   const saved = await persist("personal", fields);
-  const draft = await client.draft(saved.iri);
   await act(() => pending.resolve(saved));
   expect(send).toHaveBeenCalledExactlyOnceWith(saved.iri, saved.etag);
+  expect(read).not.toHaveBeenCalled();
   expect(mocks.router.replace).not.toHaveBeenCalled();
   expect(mocks.router.push).toHaveBeenCalledWith("/mail/sent");
   expect(mocks.toast).toHaveBeenCalledWith(
@@ -162,8 +172,10 @@ it("saves a new compose before sending, uses the new ETag, toasts with a View li
   );
   const options = mocks.toast.mock.calls[0]?.[1] as { action: ReactNode };
   const notice = await mount(h("div", null, options.action));
+  const sent = await send.mock.results[0]?.value;
+  if (!sent) throw new Error("Send did not return its thread");
   expect(notice.host.querySelector("a")?.getAttribute("href")).toBe(
-    `/mail/t/${encodeRef(draft.thread)}`,
+    `/mail/t/${encodeRef(sent.thread)}`,
   );
   expect(notice.host.querySelector("a")?.textContent).toBe("View");
   expect(mocks.invalidate).toHaveBeenCalledTimes(2);
@@ -178,7 +190,7 @@ it.each([
   const { saved, view } = await editing();
   const save = vi.spyOn(client, "saveDraft");
   const send = vi.spyOn(client, "sendDemo");
-  await shortcut(view.host, modifier);
+  expect((await shortcut(view.host, modifier)).defaultPrevented).toBe(true);
   expect(save).not.toHaveBeenCalled();
   expect(send).toHaveBeenCalledExactlyOnceWith(saved.iri, saved.etag);
   expect(mocks.router.push).toHaveBeenCalledWith("/mail/sent");
@@ -200,16 +212,80 @@ it("persists unsaved draft edits before sending the resulting version", async ()
   await view.unmount();
 });
 
-it("preserves compose fields on send conflicts and never toasts or navigates as if sent", async () => {
+it.each([
+  "click",
+  "ctrlKey",
+  "metaKey",
+] as const)("keeps focus during %s Send and focuses the alert on failure", async (trigger) => {
   const { view } = await editing();
-  vi.spyOn(client, "sendDemo").mockRejectedValue(new MailError("conflict", 412));
+  const pending = deferred<Awaited<ReturnType<MailClient["sendDemo"]>>>();
+  const send = vi.spyOn(client, "sendDemo").mockReturnValue(pending.promise);
+  const focused = trigger === "click" ? button(view.host, "Send") : control(view.host, "Message");
+  await act(() => focused.focus());
+  if (trigger === "click") await click(focused);
+  else await shortcut(focused, trigger);
+  expect(document.activeElement).toBe(focused);
+  expect(control(view.host, "Message").readOnly).toBe(true);
+  expect(button(view.host, "Send").disabled).toBe(false);
+  expect(button(view.host, "Send").getAttribute("aria-disabled")).toBe("true");
   await click(button(view.host, "Send"));
-  expect(view.host.querySelector('[role="alert"]')?.textContent).toContain("changed elsewhere");
+  await shortcut(focused, "ctrlKey");
+  expect(send).toHaveBeenCalledOnce();
+  await act(() => pending.reject(new MailError("conflict", 412)));
+  const alert = view.host.querySelector<HTMLElement>('[role="alert"]');
+  expect(alert?.textContent).toContain("changed elsewhere");
+  expect(alert?.tabIndex).toBe(-1);
+  expect(document.activeElement).toBe(alert);
   expect(control(view.host, "Message").value).toBe(fields.text);
   expect(button(view.host, "Send").disabled).toBe(false);
+  expect(control(view.host, "Message").readOnly).toBe(false);
   expect(mocks.toast).not.toHaveBeenCalled();
   expect(mocks.router.push).not.toHaveBeenCalled();
   await view.unmount();
+});
+
+it.each([
+  "Subject",
+  "Save draft",
+])("keeps focus on %s throughout an existing draft save", async (label) => {
+  const { saved, view } = await editing();
+  const pending = deferred<SavedDraft>();
+  vi.spyOn(client, "saveDraft").mockReturnValue(pending.promise);
+  const focused = label === "Subject" ? control(view.host, label) : button(view.host, label);
+  await act(() => focused.focus());
+  if (label === "Subject")
+    await act(() =>
+      view.host
+        .querySelector("form")
+        ?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
+    );
+  else await click(focused);
+  expect(document.activeElement).toBe(focused);
+  expect(control(view.host, "Subject").readOnly).toBe(true);
+  await act(() => pending.resolve(saved));
+  expect(document.activeElement).toBe(focused);
+  expect(control(view.host, "Subject").readOnly).toBe(false);
+  await view.unmount();
+});
+
+it("links the toast to the repaired thread of a sparse draft without reading it again", async () => {
+  const { saved, draft, view } = await editing();
+  await view.unmount();
+  await client.store.mutate(documentOf(saved.iri), (box) => {
+    box.message(saved.iri).partOfThread = undefined;
+  });
+  const sparse = await mount(h(ComposePage));
+  const read = vi.spyOn(client, "draft");
+  await click(button(sparse.host, "Send"));
+  expect(read).not.toHaveBeenCalled();
+  const options = mocks.toast.mock.calls[0]?.[1] as { action: ReactNode };
+  const notice = await mount(h("div", null, options.action));
+  expect(notice.host.querySelector("a")?.getAttribute("href")).toBe(
+    `/mail/t/${encodeRef(draft.thread)}`,
+  );
+  expect((await client.thread(draft.thread)).messages[0]?.iri).toBe(saved.iri);
+  await notice.unmount();
+  await sparse.unmount();
 });
 
 it("keeps malformed recipients in compose and never sends after draft validation fails", async () => {
@@ -218,6 +294,7 @@ it("keeps malformed recipients in compose and never sends after draft validation
   await fill(view.host, "To", "not-an-address");
   await click(button(view.host, "Send"));
   expect(view.host.querySelector('[role="alert"]')?.textContent).toContain("Not an email address");
+  expect(document.activeElement).toBe(view.host.querySelector('[role="alert"]'));
   expect(control(view.host, "To").value).toBe("not-an-address");
   expect(send).not.toHaveBeenCalled();
   expect(mocks.router.push).not.toHaveBeenCalled();

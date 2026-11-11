@@ -64,6 +64,10 @@ function ComposeForm({ requested }: { requested: string | null }) {
   const [busy, setBusy] = useState(false);
   const sending = useRef(false);
   const [error, setError] = useState("");
+  const errorRef = useRef<HTMLParagraphElement>(null);
+  useEffect(() => {
+    if (error) errorRef.current?.focus();
+  }, [error]);
   const ids = {
     to: useId(),
     cc: useId(),
@@ -98,11 +102,11 @@ function ComposeForm({ requested }: { requested: string | null }) {
   }, [client, editing]);
   const change = (key: keyof Fields) => (value: string) =>
     setFields((current) => ({ ...current, [key]: value }));
-  const canSend =
+  const sendAvailable =
     session.mode === "demo" &&
     status === "ready" &&
-    !busy &&
     parseRecipients(fields.to).length + parseRecipients(fields.cc).length > 0;
+  const canSend = sendAvailable && !busy;
   const persist = async () => {
     const next = await client.saveDraft(
       account,
@@ -121,6 +125,7 @@ function ComposeForm({ requested }: { requested: string | null }) {
   };
   const save = async (event: FormEvent) => {
     event.preventDefault();
+    if (busy || sending.current) return;
     setBusy(true);
     setError("");
     try {
@@ -142,12 +147,11 @@ function ComposeForm({ requested }: { requested: string | null }) {
     try {
       const next =
         saved && JSON.stringify(fields) === JSON.stringify(savedFields) ? saved : await persist();
-      const draft = await client.draft(next.iri);
-      await client.sendDemo(next.iri, next.etag);
+      const sent = await client.sendDemo(next.iri, next.etag);
       invalidate();
       toast("Saved in Sent (demo, not delivered)", {
         duration: 8000,
-        action: <Link href={`/mail/t/${encodeRef(draft.thread)}`}>View</Link>,
+        action: <Link href={`/mail/t/${encodeRef(sent.thread)}`}>View</Link>,
       });
       router.push("/mail/sent");
     } catch (failure) {
@@ -159,6 +163,7 @@ function ComposeForm({ requested }: { requested: string | null }) {
     }
   };
   const discard = async () => {
+    if (busy || sending.current) return;
     if (!saved) {
       router.push("/mail/inbox");
       return;
@@ -198,16 +203,16 @@ function ComposeForm({ requested }: { requested: string | null }) {
           onSubmit={save}
           aria-busy={busy}
           onKeyDown={(event) => {
-            if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
+            if (canSend && (event.ctrlKey || event.metaKey) && event.key === "Enter") {
               event.preventDefault();
-              if (canSend) void send();
+              void send();
             }
           }}
         >
           <Label htmlFor={ids.to}>To</Label>
           <Input
             id={ids.to}
-            disabled={busy}
+            readOnly={busy}
             aria-invalid={error ? true : undefined}
             aria-describedby={described}
             value={fields.to}
@@ -218,7 +223,7 @@ function ComposeForm({ requested }: { requested: string | null }) {
           <Label htmlFor={ids.cc}>Cc</Label>
           <Input
             id={ids.cc}
-            disabled={busy}
+            readOnly={busy}
             aria-invalid={error ? true : undefined}
             aria-describedby={described}
             value={fields.cc}
@@ -228,37 +233,39 @@ function ComposeForm({ requested }: { requested: string | null }) {
           <Label htmlFor={ids.subject}>Subject</Label>
           <Input
             id={ids.subject}
-            disabled={busy}
+            readOnly={busy}
             value={fields.subject}
             onChange={(event) => change("subject")(event.target.value)}
           />
           <Label htmlFor={ids.text}>Message</Label>
           <Textarea
             id={ids.text}
-            disabled={busy}
+            readOnly={busy}
             rows={12}
             value={fields.text}
             onChange={(event) => change("text")(event.target.value)}
           />
           {error && (
-            <p id={ids.error} className="mail-error" role="alert">
+            <p id={ids.error} ref={errorRef} className="mail-error" role="alert" tabIndex={-1}>
               {error}
             </p>
           )}
           <div className="mail-compose-actions">
-            <Button type="submit" disabled={busy}>
+            <Button type="submit" aria-disabled={busy}>
               Save draft
             </Button>
             <Button
               type="button"
               variant="outline"
-              disabled={!canSend}
+              disabled={!sendAvailable}
+              aria-disabled={busy || !sendAvailable}
+              aria-keyshortcuts="Control+Enter Meta+Enter"
               aria-describedby={ids.note}
               onClick={() => void send()}
             >
               Send
             </Button>
-            <Button type="button" variant="ghost" disabled={busy} onClick={discard}>
+            <Button type="button" variant="ghost" aria-disabled={busy} onClick={discard}>
               Discard
             </Button>
           </div>

@@ -24,6 +24,7 @@ import {
   persistImportedMail,
   readDraft,
   type SavedDraft,
+  type SentDemoDraft,
   sendDemoDraft,
   setLabel,
   setRead,
@@ -245,6 +246,9 @@ export class MailClient {
         draft:
           isAppDraft(this.rootOf(message.value), message.value) &&
           [...message.folderIris].some((f) => folderKey(f) === "drafts"),
+        demoSent:
+          isAppDraft(this.rootOf(message.value), message.value) &&
+          message.folderIris.has(folderIriFromKey(this.rootOf(message.value), "sent")),
         labels: [...message.folderIris],
         attachments: await mailAttachments(this.store, message.value),
       });
@@ -308,7 +312,7 @@ export class MailClient {
     return readDraft(this.store, this.rootOf(iri), iri);
   }
   /** Files in Sent inside the demo pod; never delivers mail to a recipient. */
-  async sendDemo(draftIri: string, etag: string | null): Promise<string> {
+  async sendDemo(draftIri: string, etag: string | null): Promise<SentDemoDraft> {
     if (this.mode !== "demo") throw new MailError("forbidden", 403);
     return sendDemoDraft(this.store, this.rootOf(draftIri), { iri: draftIri, etag }, new Date());
   }

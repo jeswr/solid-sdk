@@ -111,6 +111,7 @@ beforeEach(() => {
         read: false,
         starred: false,
         draft: false,
+        demoSent: false,
         labels: [],
         attachments: [],
       },
@@ -437,16 +438,28 @@ it.each([
   "demo",
   "solid",
   "extension",
-] as const)("shows the not-delivered note only for Sent in a %s session", async (mode) => {
+] as const)("shows the not-delivered note only for app demo-sent messages in a %s session and restores its fixture", async (mode) => {
   mocks.mode = mode;
   const message = conversation.messages[0]!;
-  message.labels = [`${client.root("imported")}folders/system:sent.ttl#it`];
+  const originalLabels = message.labels;
+  const originalDemoSent = message.demoSent;
   const view = await mount(h(ThreadView, { iri: conversation.iri }));
-  expect(view.host.textContent?.includes("Sent from the demo pod. Not delivered.")).toBe(
-    mode === "demo",
-  );
-  message.labels = [folders[0]!.iri];
-  await view.render(h(ThreadView, { iri: conversation.iri }));
-  expect(view.host.textContent).not.toContain("Sent from the demo pod. Not delivered.");
-  await view.unmount();
+  try {
+    message.labels = [`${client.root("imported")}folders/system:sent.ttl#it`];
+    message.demoSent = true;
+    await view.render(h(ThreadView, { iri: conversation.iri }));
+    expect(view.host.textContent?.includes("Sent from the demo pod. Not delivered.")).toBe(
+      mode === "demo",
+    );
+    // Imported Sent messages have the same label, but were already delivered.
+    message.demoSent = false;
+    await view.render(h(ThreadView, { iri: conversation.iri }));
+    expect(view.host.textContent).not.toContain("Sent from the demo pod. Not delivered.");
+  } finally {
+    message.labels = originalLabels;
+    message.demoSent = originalDemoSent;
+    await view.unmount();
+  }
+  expect(message.labels).toBe(originalLabels);
+  expect(message.demoSent).toBe(originalDemoSent);
 });

@@ -24,6 +24,10 @@ export interface SavedDraft {
   iri: string;
   etag: string | null;
 }
+export interface SentDemoDraft {
+  iri: string;
+  thread: string;
+}
 const MAX_SUBJECT = 998;
 const MAX_TEXT = 1024 * 1024;
 const MAX_RECIPIENTS = 100;
@@ -139,12 +143,17 @@ function write(message: Message, fields: DraftInput, at: Date): void {
     message.cc.add(iri);
   message.dateSent = at;
 }
-async function loadDraft(store: MailStore, root: string, iri: string, etag?: string | null) {
+async function loadAppDraft(store: MailStore, root: string, iri: string) {
   if (!isAppDraft(root, iri)) throw new MailError("not-found", 404);
   const loaded = await store.load(documentOf(iri));
   const message = loaded.mailbox.findMessage(iri);
+  if (!message) throw new MailError("not-found", 404);
+  return { loaded, message };
+}
+async function loadDraft(store: MailStore, root: string, iri: string, etag?: string | null) {
+  const { loaded, message } = await loadAppDraft(store, root, iri);
   // Only messages still filed under Drafts are editable; a sent or imported mail never is.
-  if (!message?.folderIris.has(draftsFolder(root))) throw new MailError("not-found", 404);
+  if (!message.folderIris.has(draftsFolder(root))) throw new MailError("not-found", 404);
   // The caller's validator covers the version the person was editing, not just this read.
   if (etag !== undefined && etag !== loaded.etag) throw new MailError("conflict", 412);
   return { loaded, message };
@@ -187,16 +196,24 @@ export async function updateDraft(
 /**
  * Demo-only filing, with no delivery transport. The message's caller-supplied ETag guards
  * the transition; shared folder writes use fresh validators and bounded conflict retries.
- * As with draft saves, cross-document failures may leave partial writes: callers reload.
+ * A retry while still listed in Drafts finishes a partial send without rewriting the message.
  */
 export async function sendDemoDraft(
   store: MailStore,
   root: string,
   draft: SavedDraft,
   now: Date,
-): Promise<string> {
+): Promise<SentDemoDraft> {
   if (!Number.isFinite(now.getTime())) throw new TypeError("Invalid send date");
-  const { loaded, message } = await loadDraft(store, root, draft.iri, draft.etag);
+  const { loaded, message } = await loadAppDraft(store, root, draft.iri);
+  const sentFolder = `${systemFolderDocument(root, "sent")}#it`;
+  const resuming = !message.folderIris.has(draftsFolder(root));
+  if (resuming) {
+    if (!message.folderIris.has(sentFolder)) throw new MailError("not-found", 404);
+    const folderDoc = await store.load(documentOf(draftsFolder(root)), true);
+    if (!folderDoc.mailbox.findFolder(draftsFolder(root))?.messageIris.has(draft.iri))
+      throw new MailError("not-found", 404);
+  } else if (draft.etag !== loaded.etag) throw new MailError("conflict", 412);
   const fields = draftFields({
     to: [...message.to].map(address),
     cc: [...message.cc].map(address),
@@ -209,22 +226,23 @@ export async function sendDemoDraft(
   if (!isAppDraft(root, threadIri, "threads")) throw new TypeError("Invalid draft thread");
   const threadDoc = await store.load(documentOf(threadIri), true);
   const thread = threadDoc.mailbox.createThread(threadIri);
+  const sentAt = resuming ? message.dateSent : now;
   thread.title = fields.subject || "(No subject)";
-  thread.created ??= now;
-  thread.modified = now;
+  thread.created ??= sentAt;
+  thread.modified = sentAt;
   thread.addMessage(draft.iri);
-  write(message, fields, now);
-  // A draft may know its own email address. A WebID alone is not a From address.
-  if (!/^mailto:/i.test(message.sender ?? "")) message.sender = undefined;
-  message.partOfThread = threadIri;
-  message.folderIris.delete(draftsFolder(root));
-  message.folderIris.add(`${systemFolderDocument(root, "sent")}#it`);
-  // Claim the draft version first: a racing send/save must fail before touching folders.
-  await store.save(loaded);
+  if (!resuming) {
+    write(message, fields, now);
+    message.partOfThread = threadIri;
+    message.folderIris.delete(draftsFolder(root));
+    message.folderIris.add(sentFolder);
+    // Claim the draft version first: a racing send/save must fail before touching folders.
+    await store.save(loaded);
+  }
   await store.save(threadDoc);
   await fileUnderFolder(store, root, "sent", draft.iri, true);
   await fileUnderFolder(store, root, "drafts", draft.iri, false);
-  return draft.iri;
+  return { iri: draft.iri, thread: threadIri };
 }
 /**
  * Discards a draft: leaves Drafts first, so a failed delete leaves a harmless orphan rather than

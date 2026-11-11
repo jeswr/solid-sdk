@@ -17,7 +17,7 @@ import Link from "next/link";
 import { useTheme } from "next-themes";
 import { useEffect, useRef, useState } from "react";
 import { encodeRef } from "@/lib/refs";
-import { folderKey, type MessageView, mailErrorMessage } from "../lib/client";
+import { type MessageView, mailErrorMessage } from "../lib/client";
 import { useFolders, useMail, useMailActions, useThread } from "../state/mail-context";
 import { MailAsync } from "./async";
 import { MailAttachment } from "./attachment";
@@ -158,7 +158,7 @@ function MessageCard({
               )}
             </>
           )}
-          {session.mode === "demo" && message.labels.some((iri) => folderKey(iri) === "sent") && (
+          {session.mode === "demo" && message.demoSent && (
             <p className="mail-muted">Sent from the demo pod. Not delivered.</p>
           )}
           {message.draft && (

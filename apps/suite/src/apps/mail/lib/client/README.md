@@ -7,7 +7,10 @@
 session's WebID and passes its mode as the fourth argument (default: `solid`).
 `sendDemo(draftIri, etag)` requires mode `demo`, otherwise it throws `MailError`
 with code `forbidden` before I/O. It files the draft in Sent through the model and
-returns the message IRI; it never delivers mail. All reads and writes, including attachment
+returns `{ iri, thread }` for the message and its actual thread; it never delivers mail.
+Retrying a partially filed send while it remains listed in Drafts completes the move without
+rewriting the message. `MessageView.demoSent` distinguishes these app-created messages from
+imported Sent mail. All reads and writes, including attachment
 bytes, retain the model's pod scope. Attachment/original bytes use `binaryFetch`, which checks pod scope
 without parsing JSON-LD. `model/client-support.ts` owns profile pointers, address
 display names and attachment metadata. Rendering never probes attachment availability.
