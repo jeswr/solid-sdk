@@ -199,29 +199,155 @@ afterEach(() => {
   runtime.accounts = null;
 });
 
-it.each([
-  "rename",
-  "remove",
-] as const)("%s of a remotely deleted board drops its draft and permits copy or dismissal", async (operation) => {
-  const { render } = await mount();
-  repo[operation].mockRejectedValueOnce(
-    new StorageError("precondition-failed", { method: "PUT", url: board.id }),
-  );
-  repo.read.mockRejectedValueOnce(new StorageError("not-found", { method: "GET", url: board.id }));
-  const list = find(render(), BoardList).props as unknown as ComponentProps<typeof BoardList>;
-  if (operation === "rename") list.onRename(board, "New name");
-  else list.onDelete(board);
-  await vi.waitFor(() => {
+// AUTHORED-BY Claude Opus 5.5
+type ListProps = ComponentProps<typeof BoardList>;
+const listOf = (tree: ReactNode) => find(tree, BoardList).props as unknown as ListProps;
+const click = (tree: ReactNode, label: string) =>
+  (find(tree, "Button", label).props.onClick as () => void)();
+const notFound = () => new StorageError("not-found", { method: "GET", url: board.id });
+const stale = () => new StorageError("precondition-failed", { method: "PUT", url: board.id });
+const deletedDialog = (render: () => ReactNode) =>
+  vi.waitFor(() => {
     const tree = render();
     expect(find(tree, "Dialog").props.open).toBe(true);
-    expect(find(tree, BoardList).props.boards).toEqual([]);
-    expect(readDrafts(localStorage, pod.webId, pod.storageUrl)).toEqual([]);
+    expect(find(tree, "DialogTitle").props.children).toBe("This board was deleted elsewhere");
   });
-  const copy = find(render(), "Button", "Keep a copy");
-  expect(copy.props.disabled).not.toBe(true);
+
+it("keeps a remotely deleted board's renamed draft until the user explicitly dismisses it", async () => {
+  const { render } = await mount();
+  repo.rename.mockRejectedValueOnce(stale());
+  repo.read.mockRejectedValueOnce(notFound());
+  listOf(render()).onRename(board, "New name");
+  await deletedDialog(render);
+  const renamed = { ...board, title: "New name" };
+  expect(listOf(render()).boards).toEqual([renamed]);
+  expect(readDrafts(localStorage, pod.webId, pod.storageUrl)).toEqual([renamed]);
+  expect(find(render(), "Button", "Keep a copy").props.disabled).not.toBe(true);
   expect(find(render(), "DialogContent").props.onEscapeKeyDown).toBeUndefined();
-  (find(render(), "Button", "Dismiss").props.onClick as () => void)();
+  // Escape or an outside click closes the dialog without choosing.
+  (find(render(), "Dialog").props.onOpenChange as (open: boolean) => void)(false);
   expect(find(render(), "Dialog").props.open).toBe(false);
+  expect(readDrafts(localStorage, pod.webId, pod.storageUrl)).toEqual([renamed]);
+  repo.rename.mockRejectedValueOnce(stale());
+  repo.read.mockRejectedValueOnce(notFound());
+  listOf(render()).onRename(renamed, "New name");
+  await deletedDialog(render);
+  click(render(), "Dismiss");
+  const tree = render();
+  expect(find(tree, "Dialog").props.open).toBe(false);
+  expect(listOf(tree).boards).toEqual([]);
+  expect(readDrafts(localStorage, pod.webId, pod.storageUrl)).toEqual([]);
+});
+
+it("copies a remotely deleted board's latest draft into a new board, then forgets the original", async () => {
+  const { render } = await mount();
+  repo.rename.mockRejectedValueOnce(stale());
+  repo.read.mockRejectedValueOnce(notFound());
+  listOf(render()).onRename(board, "Local name");
+  await deletedDialog(render);
+  const copy = { ...board, id: "copy", descriptor: "copy", title: "Local name — copy" };
+  repo.create.mockResolvedValueOnce(copy);
+  click(render(), "Keep a copy");
+  await vi.waitFor(() => expect(listOf(render()).boards).toEqual([copy]));
+  expect(repo.create).toHaveBeenCalledWith("Local name — copy", board.scene);
+  expect(readDrafts(localStorage, pod.webId, pod.storageUrl)).toEqual([]);
+});
+
+it.each([
+  ["a 404 from the delete itself", () => repo.remove.mockRejectedValueOnce(notFound())],
+  [
+    "a 412 whose descriptor is gone",
+    () => {
+      repo.remove.mockRejectedValueOnce(stale());
+      repo.read.mockRejectedValueOnce(notFound());
+    },
+  ],
+] as const)("treats %s as a quiet, successful deletion", async (_name, arrange) => {
+  const { render } = await mount();
+  arrange();
+  listOf(render()).onDelete(board);
+  await vi.waitFor(() => expect(repo.remove).toHaveBeenCalledOnce());
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  const tree = render();
+  expect(find(tree, "Dialog").props.open).toBe(false);
+  expect(listOf(tree).boards).toEqual([]);
+  expect(notices.error).not.toHaveBeenCalled();
+  expect(readDrafts(localStorage, pod.webId, pod.storageUrl)).toEqual([]);
+});
+
+it("dismissing a rename conflict on a board that still exists reloads it and clears the draft", async () => {
+  const { render } = await mount();
+  const remote = { ...board, title: "Their name", descriptorEtag: '"theirs"' };
+  repo.rename.mockRejectedValueOnce(stale());
+  repo.read.mockResolvedValueOnce(remote);
+  listOf(render()).onRename(board, "My name");
+  expect(readDrafts(localStorage, pod.webId, pod.storageUrl)).toEqual([
+    { ...board, title: "My name" },
+  ]);
+  await vi.waitFor(() =>
+    expect(find(render(), "Button", "Reload board").props.disabled).toBe(false),
+  );
+  click(render(), "Dismiss");
+  const tree = render();
+  expect(find(tree, "Dialog").props.open).toBe(false);
+  expect(listOf(tree).boards).toEqual([remote]);
+  expect(readDrafts(localStorage, pod.webId, pod.storageUrl)).toEqual([]);
+});
+
+it("restores a board after a delete 412 without a draft, and Dismiss adopts the pod version", async () => {
+  const { render } = await mount();
+  const remote = { ...board, title: "Changed elsewhere", etag: '"theirs"' };
+  repo.remove.mockRejectedValueOnce(stale());
+  repo.read.mockResolvedValueOnce(remote);
+  listOf(render()).onDelete(board);
+  await vi.waitFor(() =>
+    expect(find(render(), "Button", "Reload board").props.disabled).toBe(false),
+  );
+  expect(find(render(), "DialogTitle").props.children).toBe("This board changed elsewhere");
+  expect(listOf(render()).boards).toEqual([board]);
+  expect(readDrafts(localStorage, pod.webId, pod.storageUrl)).toEqual([]);
+  click(render(), "Dismiss");
+  expect(listOf(render()).boards).toEqual([remote]);
+  expect(readDrafts(localStorage, pod.webId, pod.storageUrl)).toEqual([]);
+});
+
+it("keeps a writer registered when Strict Mode re-registers it before the first release runs", async () => {
+  const { render } = await mount();
+  (find(render(), BoardList).props.onOpen as (b: Board) => void)(board);
+  const editor = find(render(), BoardEditor).props as unknown as ComponentProps<typeof BoardEditor>;
+  const writer = new BoardAutosave(repo, { ...board, etag: '"writer"' }, vi.fn());
+  const finish = vi.spyOn(writer, "finish");
+  const first = editor.onWriter?.(board.id, writer);
+  const second = editor.onWriter?.(board.id, writer);
+  first?.();
+  editor.onBack();
+  repo.remove.mockResolvedValueOnce(undefined);
+  listOf(render()).onDelete(board);
+  await vi.waitFor(() => expect(repo.remove).toHaveBeenCalledWith({ ...board, etag: '"writer"' }));
+  expect(finish).toHaveBeenCalledOnce();
+  second?.();
+});
+
+it("purges drafts of accounts that signed out while Whiteboard was closed", () => {
+  vi.stubGlobal("localStorage", storage());
+  activateDraftOwner(localStorage, "carol");
+  writeDrafts(localStorage, "carol", pod.storageUrl, [board]);
+  activateDraftOwner(localStorage, "bob:x");
+  writeDrafts(localStorage, "bob:x", pod.storageUrl, [board]);
+  localStorage.setItem("whiteboard.drafts.v1:%E0%A4%A:root", "malformed");
+  localStorage.setItem("whiteboard.drafts.v1::root", "no owner");
+  runtime.accounts = { status: "loading", accounts: [], active: null };
+  const driver = new Driver();
+  driver.render(WhiteboardApp, {});
+  runtime.accounts = {
+    status: "ready",
+    accounts: [{ webId: "bob:x" }],
+    active: { webId: "bob:x" },
+  };
+  driver.render(WhiteboardApp, {});
+  expect(readDrafts(localStorage, "bob:x", pod.storageUrl)).toEqual([board]);
+  expect(readDrafts(localStorage, "carol", pod.storageUrl)).toEqual([]);
+  expect(localStorage.getItem("whiteboard.drafts.v1:%E0%A4%A:root")).toBe("malformed");
 });
 
 it("keeps copying available when the remote version cannot be read", async () => {

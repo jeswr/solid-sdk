@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 import { parseScene, serializeScene } from "@jeswr/excalidraw-scene";
 import type { Board } from "./repository";
 /** Only unsaved whiteboard snapshots, scoped to the active account and pod. */
@@ -22,6 +23,22 @@ export function purgeDraftOwner(storage: DraftStorage, owner: string): void {
   }
   for (const name of keys) storage.removeItem(name);
   if (storage.getItem(OWNER_KEY) === owner) storage.setItem(OWNER_KEY, "");
+}
+/** Every account with stored drafts, including accounts that signed out while the app was closed. */
+export function draftOwners(storage: DraftStorage): string[] {
+  const owners = new Set<string>();
+  for (let i = 0; i < (storage.length ?? 0); i++) {
+    const name = storage.key?.(i);
+    if (!name?.startsWith(PREFIX)) continue;
+    const end = name.indexOf(":", PREFIX.length);
+    if (end <= PREFIX.length) continue;
+    try {
+      owners.add(decodeURIComponent(name.slice(PREFIX.length, end)));
+    } catch {
+      // A malformed key cannot belong to a signed-in account's write path.
+    }
+  }
+  return [...owners];
 }
 /** Switching accounts changes the write fence without discarding either account's drafts. */
 export function activateDraftOwner(storage: DraftStorage, owner: string | null): void {

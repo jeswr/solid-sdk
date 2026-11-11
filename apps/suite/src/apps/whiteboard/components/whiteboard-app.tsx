@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 "use client";
 import { StorageError } from "@jeswr/storage-client";
 import {
@@ -21,7 +22,13 @@ import { AppFrame, AppHeading, AppSessionGuard } from "@/shell/app-frame";
 import { useOptionalAccounts } from "@/shell/session/accounts-context";
 import { useConnectionState } from "@/shell/sync/connection-state";
 import { seedSamples } from "../demo/sample";
-import { activateDraftOwner, purgeDraftOwner, readDrafts, writeDrafts } from "../lib/drafts";
+import {
+  activateDraftOwner,
+  draftOwners,
+  purgeDraftOwner,
+  readDrafts,
+  writeDrafts,
+} from "../lib/drafts";
 import {
   type Board,
   disconnectedBoards,
@@ -71,12 +78,14 @@ function Boards({ session }: { session: PodSession }) {
   const [otherVersion, setOtherVersion] = useState<Board | null>(null);
   const [remoteDeleted, setRemoteDeleted] = useState(false);
   const conflictRequest = useRef(0);
-  // Keep disposed editors reachable until their teardown flush settles.
-  const writers = useRef(new Map<string, BoardAutosave>());
+  // Keep disposed editors reachable until their teardown flush settles. Each registration owns a
+  // token: Strict Mode re-registers the same writer before the first cleanup's async release runs.
+  const writers = useRef(new Map<string, { writer: BoardAutosave; token: symbol }>());
   const registerWriter = useCallback((id: string, writer: BoardAutosave) => {
-    writers.current.set(id, writer);
+    const token = Symbol(id);
+    writers.current.set(id, { writer, token });
     return () => {
-      if (writers.current.get(id) === writer) writers.current.delete(id);
+      if (writers.current.get(id)?.token === token) writers.current.delete(id);
     };
   }, []);
   const deleting = useRef(new Set<string>());
@@ -213,28 +222,45 @@ function Boards({ session }: { session: PodSession }) {
       writeDrafts(localStorage, session.webId, session.storageUrl, [...dirty.current.values()]);
     } catch {}
   };
-  const dismissConflict = () => {
+  /** Escape and outside clicks only close the dialog; the draft waits for an explicit choice. */
+  const closeConflict = () => {
     conflictRequest.current++;
     setConflicted(null);
   };
-  const showConflict = async (board: Board): Promise<boolean> => {
+  /** Dismiss accepts the pod's state: a deleted board is forgotten, a changed one reloaded. */
+  const dismissConflict = () => {
+    if (conflicted && remoteDeleted) forget(conflicted);
+    else if (otherVersion) update(otherVersion, true);
+    closeConflict();
+  };
+  const keepConflictCopy = () => {
+    if (conflicted) {
+      const latest = dirty.current.get(conflicted.id) ?? conflicted;
+      create(`${latest.title} — copy`, latest.scene);
+      if (remoteDeleted) forget(conflicted);
+    }
+    if (otherVersion) update(otherVersion, true);
+    closeConflict();
+  };
+  /** Only a missing descriptor means the board was deleted; a damaged canvas is not deletion. */
+  const readRemote = async (board: Board): Promise<Board | "deleted" | null> => {
+    try {
+      return (await repository?.read(board.descriptor)) ?? null;
+    } catch (error) {
+      if (error instanceof StorageError && error.code === "not-found") return "deleted";
+      if (live.current) toast.error("Couldn't load the other version. You can still keep a copy.");
+      return null;
+    }
+  };
+  const showConflict = async (board: Board, remote?: Board | "deleted" | null) => {
     const request = ++conflictRequest.current;
     setConflicted(board);
     setOtherVersion(null);
     setRemoteDeleted(false);
-    try {
-      const remote = await repository?.read(board.descriptor);
-      if (request === conflictRequest.current && live.current && remote) setOtherVersion(remote);
-      return false;
-    } catch (error) {
-      if (error instanceof StorageError && error.code === "not-found") {
-        forget(board);
-        if (request === conflictRequest.current && live.current) setRemoteDeleted(true);
-        return true;
-      }
-      if (live.current) toast.error("Couldn't load the other version. You can still keep a copy.");
-      return false;
-    }
+    const result = remote === undefined ? await readRemote(board) : remote;
+    if (request !== conflictRequest.current || !live.current) return;
+    if (result === "deleted") setRemoteDeleted(true);
+    else if (result) setOtherVersion(result);
   };
   const task = (work: () => Promise<void>) => {
     const next = queue.current.then(work);
@@ -278,7 +304,7 @@ function Boards({ session }: { session: PodSession }) {
   };
   const remove = (board: Board) => {
     if (!repository) return;
-    const writer = writers.current.get(board.id);
+    const writer = writers.current.get(board.id)?.writer;
     deleting.current.add(board.id);
     setBoards((current) => current.filter((b) => b.id !== board.id));
     setSelected(null);
@@ -297,16 +323,29 @@ function Boards({ session }: { session: PodSession }) {
         },
       },
     });
+    let remote: Board | null | undefined;
     void task(async () => {
       const saved = writer ? mergeBoardFields(board, await writer.finish(), "canvas") : board;
-      await repository.remove(saved);
-      writers.current.delete(board.id);
-    }).catch(async (error) => {
-      if (isConflict(error) || (error instanceof StorageError && error.code === "not-found")) {
-        if (await showConflict(board)) return;
+      try {
+        await repository.remove(saved);
+      } catch (error) {
+        // A board that is already gone is what this deletion asked for: succeed quietly.
+        if (!(error instanceof StorageError && error.code === "not-found")) {
+          if (!isConflict(error)) throw error;
+          const found = await readRemote(board);
+          if (found !== "deleted") {
+            remote = found;
+            throw error;
+          }
+        }
       }
+      writers.current.delete(board.id);
+    }).catch(() => {
+      if (remote !== undefined) void showConflict(board, remote);
       deleting.current.delete(board.id);
-      retain(board, true);
+      // After a 412 the dialog offers the local copy and finish() discarded unsent edits, so
+      // the restored board keeps no draft that would override the pod listing on every boot.
+      retain(board, remote === undefined);
       if (live.current)
         setBoards((current) =>
           current.some((b) => b.id === board.id) ? current : [board, ...current],
@@ -405,7 +444,7 @@ function Boards({ session }: { session: PodSession }) {
         <Dialog
           open={conflicted !== null}
           onOpenChange={(open) => {
-            if (!open) dismissConflict();
+            if (!open) closeConflict();
           }}
         >
           <DialogContent>
@@ -426,20 +465,12 @@ function Boards({ session }: { session: PodSession }) {
                 disabled={!otherVersion}
                 onClick={() => {
                   if (otherVersion) update(otherVersion, true);
-                  dismissConflict();
+                  closeConflict();
                 }}
               >
                 Reload board
               </Button>
-              <Button
-                onClick={() => {
-                  if (conflicted) create(`${conflicted.title} — copy`, conflicted.scene);
-                  if (otherVersion) update(otherVersion, true);
-                  dismissConflict();
-                }}
-              >
-                Keep a copy
-              </Button>
+              <Button onClick={keepConflictCopy}>Keep a copy</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -455,7 +486,8 @@ export function WhiteboardApp() {
     try {
       if (!accounts || accounts.status === "loading") return;
       const signedIn = new Set(accounts.accounts.map((account) => account.webId));
-      for (const owner of knownOwners.current ?? []) {
+      // On first run, also purge accounts that signed out while Whiteboard was closed.
+      for (const owner of knownOwners.current ?? draftOwners(localStorage)) {
         if (!signedIn.has(owner)) purgeDraftOwner(localStorage, owner);
       }
       knownOwners.current = signedIn;

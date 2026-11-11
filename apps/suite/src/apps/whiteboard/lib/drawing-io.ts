@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 /** Descriptor + blob I/O seam. Keep RDF behind solid-drawing until its codegen migration lands. */
 import {
   emptyScene,
@@ -95,10 +96,14 @@ export class DrawingIO implements DrawingAccess {
     if (!metadata) throw new TypeError("This board has an invalid drawing descriptor");
     if (!this.storage.isWithinStorage(metadata.sceneDocument))
       throw new Error("This canvas is outside your pod");
-    const canvas = await this.storage.read(metadata.sceneDocument, {
-      ...freshRead,
-      accept: "application/json",
-    });
+    const canvas = await this.storage
+      .read(metadata.sceneDocument, { ...freshRead, accept: "application/json" })
+      .catch((error: unknown) => {
+        // Only a missing descriptor means deleted; a missing canvas is a damaged board.
+        if (error instanceof StorageError && error.code === "not-found")
+          throw new Error("This board's canvas is missing from your pod");
+        throw error;
+      });
     return {
       id: url,
       title: metadata.title ?? "Untitled board",

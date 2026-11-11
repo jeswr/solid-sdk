@@ -919,3 +919,25 @@ it("discards unsent edits during deletion and does not restart a retired writer"
   await writer.retry();
   expect(save).toHaveBeenCalledOnce();
 });
+
+// AUTHORED-BY Claude Opus 5.5
+it("reports a board whose canvas is missing as damaged, never as deleted", async () => {
+  const { repository, storage } = await fixture();
+  const damaged = await repository.create("Damaged");
+  await storage.delete(damaged.blob, { ifMatch: damaged.etag as string });
+  const error = await repository.read(damaged.descriptor).catch((caught: unknown) => caught);
+  expect(error).toBeInstanceOf(Error);
+  expect(error).not.toBeInstanceOf(StorageError);
+  expect((error as Error).message).toBe("This board's canvas is missing from your pod");
+  const denied = await repository.create("Denied canvas");
+  const read = storage.read.bind(storage);
+  vi.spyOn(storage, "read").mockImplementation((url, options) => {
+    if (url === denied.blob) throw new StorageError("forbidden", { url, method: "GET" });
+    return read(url, options);
+  });
+  await expect(repository.read(denied.descriptor)).rejects.toMatchObject({ code: "forbidden" });
+  await storage.delete(damaged.descriptor, {
+    ifMatch: damaged.descriptorEtag as string,
+  });
+  await expect(repository.read(damaged.descriptor)).rejects.toMatchObject({ code: "not-found" });
+});
