@@ -3,6 +3,7 @@
 import { toast } from "@jeswr/suite-ui";
 import { encodeRef } from "@/lib/refs";
 import { ShareDialog } from "../../../shell/share";
+import { useNeedsConnection } from "../../../shell/sync/requires-online";
 import type { StoredProject } from "../lib/model/store";
 import { tasksShareCapabilities } from "../lib/share/adapter";
 import { useTasks } from "../state/tasks-context";
@@ -15,7 +16,9 @@ export function ShareProject({
   onClose: () => void;
 }) {
   const tasks = useTasks();
+  const connection = useNeedsConnection();
   const name = project.tracker.title ?? "Project";
+  if (connection.disabled) return <p role="status">Sharing needs a connection</p>;
   return (
     <ShareDialog
       open

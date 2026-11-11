@@ -35,6 +35,7 @@ import { useRouter } from "next/navigation";
 import { type ReactNode, useId, useRef, useState } from "react";
 import { encodeRef } from "@/lib/refs";
 import { useRoutePathname } from "@/lib/route-params";
+import { useNeedsConnection } from "../../../shell/sync/requires-online";
 import { dueDate, isOverdue, localDay } from "../lib/format/due";
 import { ModelError } from "../lib/model/errors";
 import type { StoredProject } from "../lib/model/store";
@@ -86,6 +87,7 @@ function ProjectRow({
   last: boolean;
 }) {
   const tasks = useTasks();
+  const connection = useNeedsConnection();
   const calendar = useCalendarExchange(project);
   const { preferences, dispatch } = useTasksPreferences();
   const favourite = preferences.favourites.includes(project.url);
@@ -193,7 +195,11 @@ function ProjectRow({
                   Rename
                 </DropdownMenuItem>
                 {tasks.sharingAvailable && (
-                  <DropdownMenuItem disabled={!project.etag} onSelect={() => setSharing(true)}>
+                  <DropdownMenuItem
+                    disabled={!project.etag || connection.disabled}
+                    title={connection.disabled ? "Sharing needs a connection" : undefined}
+                    onSelect={() => setSharing(true)}
+                  >
                     Share
                   </DropdownMenuItem>
                 )}

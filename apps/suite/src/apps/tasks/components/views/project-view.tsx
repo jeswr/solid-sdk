@@ -13,6 +13,7 @@ import { Inbox, ListTodo } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect } from "react";
 import { useRoutePathname } from "@/lib/route-params";
+import { useConnectionState } from "../../../../shell/sync/connection-state";
 import { classifyError } from "../../lib/model/errors";
 import { replaceQuery } from "../../lib/route/replace-query";
 import { projectGroups } from "../../lib/views/project-groups";
@@ -35,6 +36,7 @@ export function ProjectView({
   inbox?: boolean;
 }) {
   const tasks = useTasks();
+  const offline = useConnectionState() !== "online";
   const { preferences } = useTasksPreferences();
   const pathname = usePathname();
   // The sort key matches the menu, which keys views by the slash-free route.
@@ -138,7 +140,9 @@ export function ProjectView({
             <LoadingSkeleton preset="list" count={8} />
           ) : undefined,
         error:
-          load?.status === "error" ? (
+          offline && ((!project && tasks.status !== "loading") || load?.status === "error") ? (
+            <EmptyState title="Not available offline" body="Reconnect to open this project" />
+          ) : load?.status === "error" ? (
             <ProjectError
               error={load.error}
               retry={() => {

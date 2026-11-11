@@ -3,6 +3,7 @@
 // AUTHORED-BY Claude Opus 5.5
 "use client";
 import { Button, ErrorState, LoadingSkeleton, Toaster } from "@jeswr/suite-ui";
+import { OnlineGate } from "@jeswr/suite-ui/sync";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   type ReactNode,
@@ -18,6 +19,7 @@ import { SuiteFrame } from "@/components/interim-shell/suite-frame";
 import { decodeRef, encodeRef } from "@/lib/refs";
 import { useRouteParams, useRoutePathname } from "@/lib/route-params";
 import { PodSessionProvider, usePodSessionState } from "@/lib/session/pod-session";
+import { useNeedsConnection } from "../../../shell/sync/requires-online";
 import { parseQuickAdd } from "../lib/compose/quick-add";
 import { classifyError } from "../lib/model/errors";
 import { replaceQuery } from "../lib/route/replace-query";
@@ -43,6 +45,7 @@ const VIEW_NAMES: Readonly<Record<string, string>> = {
 
 function TasksChrome({ children }: { children: ReactNode }) {
   const tasks = useTasks();
+  const connection = useNeedsConnection();
   const { preferences, dispatch } = useTasksPreferences();
   const [sharing, setSharing] = useState(false);
   const pathname = useRoutePathname();
@@ -258,9 +261,11 @@ function TasksChrome({ children }: { children: ReactNode }) {
           supportsSort || projectUrl ? (
             <>
               {activeProject && tasks.sharingAvailable && (
-                <Button variant="outline" onClick={() => setSharing(true)}>
-                  Share
-                </Button>
+                <OnlineGate online={!connection.disabled} reason="Sharing needs a connection">
+                  <Button variant="outline" onClick={() => setSharing(true)}>
+                    Share
+                  </Button>
+                </OnlineGate>
               )}
               {supportsSort && <SortMenu viewId={pathname} />}
               {projectUrl && (
