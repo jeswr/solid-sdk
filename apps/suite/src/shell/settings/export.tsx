@@ -1,7 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 "use client";
 import { Button, Checkbox, Progress } from "@jeswr/suite-ui";
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useAccounts } from "../session/accounts-provider";
 import { exportApps, exportRootFolders } from "./export-apps";
 import { createTakeoutJob, exportFilename, type TakeoutState } from "./export-job";
@@ -10,8 +10,8 @@ const bytes = (value: number) => `${value.toLocaleString()} bytes`;
 const empty: TakeoutState = { phase: "idle" };
 
 export function ExportSettings() {
-  const { active, status } = useAccounts();
-  if (!active || status !== "ready") return <p>Sign in to export your pod.</p>;
+  const { active } = useAccounts();
+  if (!active) return <p>Sign in to export your pod.</p>;
   return <AccountExportSettings key={`${active.id}:${active.storageUrl}`} />;
 }
 
@@ -23,30 +23,58 @@ function AccountExportSettings() {
   const [choices, setChoices] = useState<{ url: string; label: string }[]>([]);
   const [everything, setEverything] = useState(true);
   const [selected, setSelected] = useState<string[]>([]);
-  const active = accounts.active;
+  const activeId = accounts.active?.id;
+  const storageUrl = accounts.active?.storageUrl;
+  const webId = accounts.active?.webId;
+  const waiting = useRef(new Set<() => void>());
   useEffect(() => {
-    if (!active || accounts.status !== "ready") {
+    if (accounts.status === "ready") for (const resume of waiting.current) resume();
+  }, [accounts.status]);
+  useEffect(() => {
+    if (!activeId || !storageUrl || !webId) {
       setJob(undefined);
       return;
     }
     const controller = new AbortController();
+    const sameAccount = () =>
+      latest.current.active?.id === activeId &&
+      latest.current.active.storageUrl === storageUrl &&
+      (latest.current.status !== "ready" || latest.current.isActiveAccount(activeId));
     const fetch: typeof globalThis.fetch = async (input, init) => {
-      controller.signal.throwIfAborted();
-      if (!latest.current.isActiveAccount(active.id)) throw new Error("Account changed");
+      const signal = init?.signal
+        ? AbortSignal.any([init.signal, controller.signal])
+        : controller.signal;
+      signal.throwIfAborted();
+      while (sameAccount() && latest.current.status !== "ready") {
+        await new Promise<void>((resolve, reject) => {
+          const resume = () => {
+            waiting.current.delete(resume);
+            signal.removeEventListener("abort", abort);
+            resolve();
+          };
+          const abort = () => {
+            waiting.current.delete(resume);
+            reject(signal.reason);
+          };
+          waiting.current.add(resume);
+          signal.addEventListener("abort", abort, { once: true });
+        });
+      }
+      if (!sameAccount()) throw new Error("Account changed");
       const response = await latest.current.fetch(input, init);
-      if (controller.signal.aborted || !latest.current.isActiveAccount(active.id)) {
+      if (controller.signal.aborted || !sameAccount()) {
         void response.body?.cancel().catch(() => {});
         throw new Error("Account changed");
       }
       return response;
     };
-    const next = createTakeoutJob(fetch, active.storageUrl);
+    const next = createTakeoutJob(fetch, storageUrl);
     setJob(next);
     setChoices([]);
     setEverything(true);
     setSelected([]);
     void next.plan();
-    void exportRootFolders(fetch, active.storageUrl, controller.signal)
+    void exportRootFolders(fetch, storageUrl, controller.signal)
       .then((folders) => {
         if (controller.signal.aborted) return;
         setChoices((current) => {
@@ -56,7 +84,7 @@ function AccountExportSettings() {
         });
       })
       .catch(() => {});
-    void exportApps(fetch, active.storageUrl, active.webId, controller.signal)
+    void exportApps(fetch, storageUrl, webId, controller.signal)
       .then((apps) => {
         if (!controller.signal.aborted)
           setChoices((current) => {
@@ -70,11 +98,26 @@ function AccountExportSettings() {
       controller.abort();
       next.dispose();
     };
-  }, [active, accounts.status]);
+  }, [activeId, storageUrl, webId]);
   const state = useSyncExternalStore(
     job?.subscribe ?? (() => () => {}),
     job?.snapshot ?? (() => empty),
     () => empty,
+  );
+  useEffect(() => {
+    if (state.phase !== "exporting" && !state.download) return;
+    const warn = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [state.phase, state.download]);
+  const fileCount = useMemo(
+    () =>
+      state.plan?.resources.reduce((count, item) => count + Number(item.kind !== "container"), 0) ??
+      0,
+    [state.plan],
   );
   const busy = state.phase === "planning" || state.phase === "exporting";
   const choose = (all: boolean, urls: string[]) => {
@@ -82,7 +125,10 @@ function AccountExportSettings() {
     setSelected(urls);
     void job?.plan(all ? undefined : urls);
   };
-  const skipped = state.manifest?.entries.filter((entry) => entry.error) ?? [];
+  const skipped = useMemo(
+    () => state.manifest?.entries.filter((entry) => entry.error) ?? [],
+    [state.manifest],
+  );
   return (
     <section aria-labelledby="export-heading">
       <h2 id="export-heading">Download your data</h2>
@@ -138,8 +184,7 @@ function AccountExportSettings() {
         {state.phase === "planning" && <p>Estimating your export…</p>}
         {state.plan && (
           <p>
-            Estimate: {state.plan.resources.filter((item) => item.kind !== "container").length}{" "}
-            files, {bytes(state.plan.estimatedBytes)}
+            Estimate: {fileCount} files, {bytes(state.plan.estimatedBytes)}
             {state.plan.unknownSizes > 0 &&
               `, plus ${state.plan.unknownSizes} files of unknown size`}
             .
@@ -153,7 +198,10 @@ function AccountExportSettings() {
         )}
         {state.phase === "cancelled" && <p>Export cancelled.</p>}
         {state.phase === "complete" && (
-          <p>Export ready. {skipped.length} items skipped or incomplete.</p>
+          <p>
+            {state.saved ? "Export saved." : "Export ready."} {skipped.length} items skipped or
+            incomplete.
+          </p>
         )}
       </div>
       {state.phase === "exporting" && (
@@ -163,6 +211,7 @@ function AccountExportSettings() {
           value={state.progress?.files ?? 0}
         />
       )}
+      {state.warning && <p role="note">{state.warning}</p>}
       {state.error && <p role="alert">{state.error}</p>}
       <div className="settings-choice-row">
         {busy ? (

@@ -1,21 +1,24 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { Zip, ZipPassThrough } from "fflate";
 import { pathAllocator } from "./paths.js";
 import { planExport } from "./plan.js";
 import {
   abortable,
   addZipBytes,
   auxiliaries,
+  auxiliaryWithinParent,
   cancel,
   context,
+  ExportLimitError,
   exportError,
   HttpError,
   kindFor,
   rdf,
+  sizeOf,
 } from "./scope.js";
 import type { ExportEntry, ExportManifest, ExportPodOptions, ExportResource } from "./types.js";
+import { streamingZip } from "./zip.js";
 
-/** Streams one body at a time into the ZIP; concurrent GETs prefetch headers, never whole files. */
+/** Each GET starts when its member can be consumed immediately, with sink backpressure. */
 export async function exportPod(options: ExportPodOptions): Promise<ExportManifest> {
   const concurrency = options.concurrency ?? 4;
   if (!Number.isSafeInteger(concurrency) || concurrency < 1 || concurrency > 32)
@@ -33,38 +36,47 @@ export async function exportPod(options: ExportPodOptions): Promise<ExportManife
   }
   const resources: ExportResource[] = [];
   const seen = new Map<string, ExportResource>();
+  const processed = new Set<string>();
+  const eligible = new Set<string>();
+  let totalFiles = 0;
   const add = (resource: ExportResource, auxiliary: boolean) => {
     const url = ctx.canonical(resource.url);
     if (!(auxiliary ? ctx.selected(url, true) : ctx.visit(url))) return;
     const existing = seen.get(url);
     if (existing) {
-      if (auxiliary) existing.kind = resource.kind;
+      if (auxiliary && existing.kind !== "container" && !processed.has(url))
+        existing.kind = kindFor(url, resource.contentType, resource.kind);
       return;
     }
     ctx.checkDepth(url);
-    if (seen.size >= Math.min(ctx.maxEntries, 65_534))
-      throw new RangeError("Export exceeds maxEntries or the ZIP entry limit");
+    if (seen.size >= Math.min(ctx.maxEntries, 65_533))
+      throw new ExportLimitError(
+        `Export exceeds maxEntries (${ctx.maxEntries}) or the ZIP entry limit (65533)`,
+      );
     const copy = { ...resource, url, kind: kindFor(url, resource.contentType, resource.kind) };
     seen.set(url, copy);
     resources.push(copy);
+    if (copy.kind !== "container") totalFiles++;
+    if (auxiliary || ctx.selected(url)) eligible.add(url);
   };
   const deferred: ExportResource[] = [];
   for (const resource of plan.resources) {
-    // Validate even entries later pruned by filters. Reused plans cannot introduce authority.
     ctx.canonical(resource.url);
     if (resource.auxiliaryFor) {
       for (const source of resource.auxiliaryFor) ctx.canonical(source);
       deferred.push(resource);
     } else add(resource, false);
   }
-  // Auxiliary documents follow included parents, including chains and shared ACLs.
   for (let changed = true; changed; ) {
     changed = false;
     for (let index = deferred.length - 1; index >= 0; index--) {
       const resource = deferred[index] as ExportResource;
       if (
-        (options.include !== undefined && ctx.visit(ctx.canonical(resource.url))) ||
-        resource.auxiliaryFor?.some((source) => seen.has(ctx.canonical(source)))
+        (options.include !== undefined && ctx.selected(ctx.canonical(resource.url))) ||
+        resource.auxiliaryFor?.some(
+          (source) =>
+            eligible.has(ctx.canonical(source)) && auxiliaryWithinParent(resource.url, source),
+        )
       ) {
         add(resource, true);
         deferred.splice(index, 1);
@@ -81,65 +93,28 @@ export async function exportPod(options: ExportPodOptions): Promise<ExportManife
     root: ctx.root,
     entries: [],
   };
-  let output: Uint8Array[] = [];
-  let zipError: Error | undefined;
-  const zip = new Zip((error, chunk) => {
-    if (error) zipError = error;
-    else output.push(chunk);
-  });
-  let archiveBytes = 0;
-  const drain = async () => {
-    if (zipError) throw zipError;
-    const chunks = output;
-    output = [];
-    for (const chunk of chunks) {
-      signal.throwIfAborted();
-      archiveBytes = addZipBytes(archiveBytes, chunk.byteLength);
-      await abortable(Promise.resolve(options.sink(chunk)), signal);
-    }
-  };
+  const zip = streamingZip(options, signal);
   let files = 0;
   let bytes = 0;
-  const progress = (current: string) =>
-    options.onProgress?.({
-      files,
-      totalFiles: resources.filter((item) => item.kind !== "container").length,
-      bytes,
-      estimatedBytes: plan.estimatedBytes,
-      current,
-    });
-  type Pending = { response: Response } | { error: unknown };
-  const pending = new Map<number, Promise<Pending>>();
-  let scheduled = 0;
-  const schedule = (index: number) => {
-    while (scheduled < resources.length && scheduled < index + concurrency) {
-      const item = resources[scheduled] as ExportResource;
-      if (!item.error && item.kind !== "container") {
-        const accept =
-          rdf(item.contentType) ||
-          item.kind === "rdf" ||
-          item.kind === "acl" ||
-          item.kind === "meta"
-            ? "text/turtle"
-            : item.contentType
-              ? "*/*"
-              : "text/turtle, */*;q=0.1";
-        pending.set(
-          scheduled,
-          ctx.fetch(item.url, { headers: { accept } }).then(
-            (response): Pending => ({ response }),
-            (error): Pending => ({ error }),
-          ),
-        );
-      }
-      scheduled++;
+  let lastProgress = -Infinity;
+  const progress = (current: string, force = false) => {
+    const now = Date.now();
+    if (force || now - lastProgress >= 100) {
+      lastProgress = now;
+      options.onProgress?.({
+        files,
+        totalFiles,
+        bytes,
+        estimatedBytes: plan.estimatedBytes,
+        current,
+      });
     }
   };
   try {
     for (let index = 0; index < resources.length; index++) {
       signal.throwIfAborted();
-      schedule(index);
       const item = resources[index] as ExportResource;
+      processed.add(item.url);
       const entry: ExportEntry = {
         url: item.url,
         path: paths.get(item.url) ?? allocate(item.url, item.kind === "container"),
@@ -150,19 +125,31 @@ export async function exportPod(options: ExportPodOptions): Promise<ExportManife
       manifest.entries.push(entry);
       if (item.error) entry.error = { ...item.error };
       else if (item.kind === "container") {
-        const folder = new ZipPassThrough(entry.path);
-        zip.add(folder);
-        folder.push(new Uint8Array(), true);
-        await drain();
+        const member = zip.add(entry.path);
+        await member.finish(true);
       } else {
-        const result = (await pending.get(index)) as Pending;
-        signal.throwIfAborted();
-        pending.delete(index);
-        if ("error" in result) entry.error = exportError(result.error);
-        else {
-          const response = result.response;
+        let response: Response | undefined;
+        try {
+          const accept =
+            rdf(item.contentType) || ["rdf", "acl", "meta"].includes(item.kind)
+              ? "text/turtle"
+              : item.contentType
+                ? "*/*"
+                : "text/turtle, */*;q=0.1";
+          response = await ctx.fetch(item.url, { headers: { accept } });
+        } catch (error) {
+          signal.throwIfAborted();
+          entry.error = exportError(error);
+        }
+        if (response) {
           if (!response.ok) {
             cancel(response);
+            if (item.auxiliaryFor && (response.status === 404 || response.status === 410)) {
+              manifest.entries.pop();
+              totalFiles--;
+              seen.delete(item.url);
+              continue;
+            }
             entry.error = exportError(new HttpError(response.status));
           } else {
             try {
@@ -173,21 +160,25 @@ export async function exportPod(options: ExportPodOptions): Promise<ExportManife
                 } catch {
                   continue;
                 }
+                if (!ctx.selected(url, true)) continue;
+                if (!seen.has(url)) {
+                  // CSS advertises missing auxiliaries on every response. Probe before counting.
+                  const head = await ctx.fetch(url, { method: "HEAD" });
+                  cancel(head);
+                  if (head.status === 404 || head.status === 410) continue;
+                }
                 add(
                   { url, kind: link.kind, contentType: "text/turtle", auxiliaryFor: [item.url] },
                   true,
                 );
-                const previous = manifest.entries.find((candidate) => candidate.url === url);
-                if (previous) previous.kind = link.kind;
               }
             } catch (error) {
-              cancel(response);
-              throw error;
+              signal.throwIfAborted();
+              entry.error = exportError(error);
             }
             entry.contentType = response.headers.get("content-type") ?? item.contentType;
             entry.kind = kindFor(item.url, entry.contentType, item.kind);
-            const file = new ZipPassThrough(entry.path);
-            zip.add(file);
+            const member = zip.add(entry.path, true);
             const reader = response.body?.getReader();
             const stop = () => {
               void reader?.cancel().catch(() => {});
@@ -201,20 +192,31 @@ export async function exportPod(options: ExportPodOptions): Promise<ExportManife
                 } catch (error) {
                   signal.throwIfAborted();
                   entry.error = exportError(error);
+                  entry.partial = true;
                   stop();
                   break;
                 }
                 signal.throwIfAborted();
                 if (result.done) break;
                 addZipBytes(entry.bytes, result.value.byteLength);
-                file.push(result.value, false);
+                member.file.push(result.value, false);
                 entry.bytes += result.value.byteLength;
                 bytes += result.value.byteLength;
-                await drain();
+                await zip.drain();
                 progress(item.url);
               }
-              file.push(new Uint8Array(), true);
-              await drain();
+              const expected = sizeOf(response);
+              const encoding = response.headers.get("content-encoding");
+              if (
+                response.status !== 204 &&
+                expected !== undefined &&
+                (!encoding || encoding.toLowerCase() === "identity") &&
+                entry.bytes < expected
+              ) {
+                entry.partial = true;
+                entry.error = { message: "Resource body was truncated" };
+              }
+              entry.path = await member.finish(!entry.partial);
             } finally {
               signal.removeEventListener("abort", stop);
               stop();
@@ -226,19 +228,14 @@ export async function exportPod(options: ExportPodOptions): Promise<ExportManife
       if (item.kind !== "container") files++;
       progress(item.url);
     }
-    const file = new ZipPassThrough("export-manifest.json");
-    zip.add(file);
-    file.push(new TextEncoder().encode(JSON.stringify(manifest, null, 2)), true);
-    await drain();
-    zip.end();
-    await drain();
+    progress("", true);
+    const member = zip.add("export-manifest.json");
+    member.file.push(new TextEncoder().encode(JSON.stringify(manifest, null, 2)), false);
+    await member.finish(true);
+    await zip.end();
     return manifest;
   } finally {
     controller.abort();
     zip.terminate();
-    for (const request of pending.values())
-      void request.then((result) => {
-        if ("response" in result) cancel(result.response);
-      });
   }
 }

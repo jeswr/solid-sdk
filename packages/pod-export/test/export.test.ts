@@ -1,7 +1,13 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { strFromU8, unzipSync } from "fflate";
+import { strFromU8, Unzip, UnzipPassThrough, unzipSync } from "fflate";
 import { describe, expect, it, vi } from "vitest";
-import { type ExportPlan, exportPod, planExport } from "../src/index.js";
+import {
+  createPodFetch,
+  type ExportPlan,
+  exportPod,
+  inventoryPod,
+  planExport,
+} from "../src/index.js";
 import { pathAllocator } from "../src/paths.js";
 import { abortable, addZipBytes, exportError, HttpError, kindFor, sizeOf } from "../src/scope.js";
 
@@ -65,22 +71,29 @@ async function archive(
   extra: Partial<Parameters<typeof exportPod>[0]> = {},
 ) {
   const chunks: Uint8Array[] = [];
+  let offset = 0;
+  const byOffset = new Map<number, Uint8Array>();
   const manifest = await exportPod({
     fetch,
     root,
     plan: planned,
     sink(chunk) {
       chunks.push(chunk);
+      byOffset.set(offset, chunk);
+      offset += chunk.byteLength;
+    },
+    patch(offset, chunk) {
+      byOffset.get(offset)?.set(chunk);
     },
     ...extra,
   });
   const result = new Uint8Array(chunks.reduce((n, chunk) => n + chunk.length, 0));
-  let offset = 0;
+  offset = 0;
   for (const chunk of chunks) {
     result.set(chunk, offset);
     offset += chunk.length;
   }
-  return { manifest, files: unzipSync(result) };
+  return { manifest, files: unzipSync(result), bytes: result };
 }
 
 describe("inventory", () => {
@@ -206,7 +219,7 @@ describe("inventory", () => {
     await expect(planExport({ fetch: server.fetch, root, maxDepth: 0 })).rejects.toThrow(
       "maxDepth",
     );
-    const links = pod({ "": { members: [], link: "<.acl>; rel=acl" } });
+    const links = pod({ "": { members: [], link: "<.acl>; rel=acl" }, ".acl": {} });
     await expect(planExport({ fetch: links.fetch, root, maxEntries: 1 })).rejects.toThrow(
       "maxEntries",
     );
@@ -333,7 +346,7 @@ describe("ZIP", () => {
     const { files, manifest } = await archive(server.fetch, plan(["one", "one.acl"]));
     expect(Object.keys(files)).toContain("pod/one.meta");
     expect(manifest.entries.find((r) => r.url.endsWith("one.acl"))?.kind).toBe("acl");
-    expect(server.calls).toHaveLength(3);
+    expect(server.calls.filter((call) => call.method === "GET")).toHaveLength(3);
   });
   it("limits outstanding requests and preserves streaming backpressure", async () => {
     let active = 0,
@@ -365,7 +378,7 @@ describe("ZIP", () => {
         await Promise.resolve();
       },
     });
-    expect(maximum).toBe(3);
+    expect(maximum).toBe(1);
     expect(reads).toBe(12);
     expect(writes).toBeGreaterThan(reads);
   });
@@ -440,7 +453,8 @@ describe("ZIP", () => {
       plan(["file"]),
     );
     expect(manifest.entries[0]?.error).toBeDefined();
-    expect(files["pod/file"]).toEqual(new Uint8Array());
+    expect(files["pod/file.partial"]).toEqual(new Uint8Array());
+    expect(manifest.entries[0]?.partial).toBe(true);
   });
   it("validates reused plans and applies filters and caps again", async () => {
     const fetch = vi.fn();
@@ -542,12 +556,13 @@ describe("safe ZIP names and metadata", () => {
   });
 });
 
-it("rejects oversized GET auxiliary discovery and cancels prefetched bodies on fatal output errors", async () => {
+it("records GET auxiliary limits and cancels the active body on fatal output errors", async () => {
   const server = pod({ file: { link: "<other>; rel=acl" }, other: {} });
-  await expect(archive(server.fetch, plan(["file"]), { maxEntries: 1 })).rejects.toThrow(
-    "maxEntries",
-  );
-  const overflow = pod({ "": { members: [], link: "<x>; rel=acl, <y>; rel=acl" } });
+  expect(
+    (await archive(server.fetch, plan(["file"]), { maxEntries: 1 })).manifest.entries[0]?.error
+      ?.message,
+  ).toContain("maxEntries");
+  const overflow = pod({ "": { members: [], link: "<x>; rel=acl, <y>; rel=acl" }, x: {}, y: {} });
   await expect(planExport({ fetch: overflow.fetch, root, maxEntries: 2 })).rejects.toThrow(
     "maxEntries",
   );
@@ -572,7 +587,7 @@ it("rejects oversized GET auxiliary discovery and cancels prefetched bodies on f
     }),
   ).rejects.toThrow("sink failed");
   await Promise.resolve();
-  expect(cancelled).toHaveBeenCalledTimes(2);
+  expect(cancelled).toHaveBeenCalledTimes(1);
 });
 it("cleans up late fetch responses after abort and records unrelated Link relations", async () => {
   let finish!: (response: Response) => void;
@@ -757,4 +772,445 @@ it("keeps empty-segment URL collisions and their container hierarchies distinct"
 it("also separates empty-segment collisions without explicitly listed parent folders", () => {
   const allocate = pathAllocator(root);
   expect(allocate(`${root}a//b`, false)).not.toBe(allocate(`${root}a/b`, false));
+});
+
+// Security review regressions (sst-s3gs).
+describe("review: inventory and selection boundaries", () => {
+  it.each([
+    404, 410,
+  ])("drops absent auxiliary HTTP %i before entry/depth accounting", async (status) => {
+    const server = pod({
+      "": { members: [], link: "<deep/missing>; rel=acl" },
+      "deep/missing": { head: status },
+    });
+    const result = await planExport({ fetch: server.fetch, root, maxEntries: 1, maxDepth: 0 });
+    expect(result.resources).toHaveLength(1);
+    expect(result.resources[0]?.error).toBeUndefined();
+    expect(result.unknownSizes).toBe(0);
+  });
+
+  it("keeps container identities and processed kinds, bounds auxiliary locations, and ignores ancestor advertisements", async () => {
+    const server = pod({
+      "": {
+        members: ["a/", "b/", "source", "source.acl"],
+        link: "<root.acl>; rel=acl, <a/>; rel=acl",
+      },
+      "a/": { members: ["a/file"], link: "<a.acl>; rel=acl" },
+      "b/": { members: [] },
+      "a/file": { link: "<../outside.acl>; rel=acl, <file.acl>; rel=acl" },
+      "a/file.acl": {},
+      source: { link: "<b/>; rel=describedby, <source.acl>; rel=acl" },
+      "source.acl": { link: "<source>; rel=describedby" },
+      "root.acl": {},
+      "a.acl": {},
+      "outside.acl": {},
+    });
+    const planned = await planExport({ fetch: server.fetch, root });
+    expect(
+      planned.resources
+        .filter((r) => r.url.endsWith("a/") || r.url.endsWith("b/"))
+        .every((r) => r.kind === "container"),
+    ).toBe(true);
+    expect(planned.resources.find((r) => r.url.endsWith("source"))?.kind).toBe("binary");
+    const selected = await planExport({ fetch: server.fetch, root, include: ["a/file"] });
+    expect(selected.resources.map((r) => r.url.slice(root.length))).toEqual([
+      "",
+      "a/",
+      "a/file",
+      "a/file.acl",
+    ]);
+    const reused = await archive(server.fetch, planned, { include: ["a/file"] });
+    expect(reused.manifest.entries.map((r) => r.url.slice(root.length)).sort()).toEqual([
+      "",
+      "a/",
+      "a/file",
+      "a/file.acl",
+    ]);
+    const malicious = plan(["a/file"]);
+    malicious.resources.push({
+      url: `${root}outside.acl`,
+      kind: "acl",
+      contentType: "",
+      auxiliaryFor: [`${root}a/file`],
+    });
+    expect(
+      (await archive(server.fetch, malicious, { include: ["a/file"] })).manifest.entries.some((r) =>
+        r.url.endsWith("outside.acl"),
+      ),
+    ).toBe(false);
+  });
+
+  it("counts failed transports against the bound, including failures before HEAD metadata", async () => {
+    const server = pod({ "": { members: ["file"] }, file: { fail: true } });
+    await expect(planExport({ fetch: server.fetch, root, maxEntries: 1 })).rejects.toThrow(
+      "maxEntries",
+    );
+    await expect(planExport({ fetch: server.fetch, root, maxDepth: 0 })).rejects.toThrow(
+      "maxDepth",
+    );
+  });
+});
+
+describe("review: shared migration inventory", () => {
+  it("supports strict direct children, semantic readers, auxiliary omission and progress", async () => {
+    const server = pod({
+      "": { link: "<access>; rel=acl, <described>; rel=describedby" },
+      plain: {},
+      "child/": {},
+      "described/": {},
+      "described/file": {},
+      described: {},
+      late: {},
+      advertiser: { link: "<late>; rel=acl, <described>; rel=describedby" },
+    });
+    const skip = vi.fn();
+    const progress = vi.fn();
+    const result = await inventoryPod({
+      fetch: server.fetch,
+      root,
+      directChildren: true,
+      skipAuxiliaries: true,
+      failFast: true,
+      readMembers: async (url) =>
+        url === root
+          ? [
+              `${root}plain`,
+              `${root}child/`,
+              `${root}old.acl`,
+              `${root}access`,
+              `${root}late`,
+              `${root}described/`,
+              `${root}advertiser`,
+            ]
+          : url.endsWith("described/")
+            ? [`${root}described/file`]
+            : [],
+      onHead: () => {},
+      onSkipAuxiliary: skip,
+      onProgress: progress,
+    });
+    expect(result.resources.map((r) => r.url.slice(root.length))).toEqual([
+      "",
+      "plain",
+      "child/",
+      "described/",
+      "advertiser",
+      "described/file",
+    ]);
+    expect(skip).toHaveBeenCalledWith(`${root}old.acl`, false);
+    expect(skip).toHaveBeenCalledWith(`${root}access`, false);
+    expect(skip).toHaveBeenCalledWith(`${root}late`, true);
+    expect(progress.mock.lastCall?.[0].done).toBeGreaterThan(1);
+  });
+
+  it("omits late-advertised auxiliary subtrees after traversal", async () => {
+    const server = pod({
+      "": {},
+      "meta/": {},
+      "meta/child": {},
+      source: { link: "<meta/>; rel=describedby" },
+    });
+    const result = await inventoryPod({
+      fetch: server.fetch,
+      root,
+      skipAuxiliaries: true,
+      directChildren: true,
+      readMembers: async (url) =>
+        url === root ? [`${root}meta/`, `${root}source`] : [`${root}meta/child`],
+    });
+    expect(result.resources.map((r) => r.url)).toEqual([root, `${root}source`]);
+  });
+
+  it.each([
+    "deep/file",
+    "deep/",
+    "bad?query",
+    "https://evil.example/foreign",
+  ])("rejects non-child or malformed member %s", async (child) => {
+    await expect(
+      inventoryPod({
+        fetch: pod({ "": {} }).fetch,
+        root,
+        directChildren: true,
+        failFast: true,
+        readMembers: async () => [child.startsWith("https:") ? child : root + child],
+      }),
+    ).rejects.toThrow();
+  });
+
+  it("propagates strict read failures and permits omission callbacks to be absent", async () => {
+    await expect(
+      inventoryPod({ fetch: pod({ "": { head: 405 } }).fetch, root, failFast: true }),
+    ).rejects.toThrow("405");
+    await expect(
+      inventoryPod({
+        fetch: pod({ "": {} }).fetch,
+        root,
+        failFast: true,
+        onHead: () => {
+          throw new Error("semantic failure");
+        },
+      }),
+    ).rejects.toThrow("semantic failure");
+    await inventoryPod({
+      fetch: pod({ "": {} }).fetch,
+      root,
+      skipAuxiliaries: true,
+      readMembers: async () => [`${root}a.meta`],
+    });
+    await inventoryPod({
+      fetch: pod({ "": {}, a: { link: "<a>; rel=acl" } }).fetch,
+      root,
+      skipAuxiliaries: true,
+      readMembers: async () => [`${root}a`],
+    });
+  });
+});
+
+describe("review: ZIP resilience and bounded work", () => {
+  it.each([404, 410])("drops GET-only advertised missing auxiliary HTTP %i", async (head) => {
+    const result = await archive(
+      pod({ file: { link: "<missing>; rel=acl" }, missing: { head } }).fetch,
+      plan(["file"]),
+      { maxEntries: 1 },
+    );
+    expect(result.manifest.entries).toHaveLength(1);
+    expect(result.manifest.entries[0]?.error).toBeUndefined();
+  });
+
+  it("records GET link overflow and depth limits, then exports subsequent resources", async () => {
+    for (const link of ["<deep/file>; rel=acl", `<x>; rel=acl; title="${"x".repeat(65_536)}"`]) {
+      const result = await archive(
+        pod({ file: { link }, good: {}, "deep/file": {} }).fetch,
+        plan(["file", "good"]),
+        { maxDepth: 1 },
+      );
+      expect(result.manifest.entries[0]?.error).toBeDefined();
+      expect(strFromU8(result.files["pod/good"] as Uint8Array)).toBe("hello");
+    }
+    const result = await archive(
+      pod({ file: { link: "<file?query>; rel=acl, <excluded>; rel=acl" }, excluded: {} }).fetch,
+      plan(["file"]),
+      { exclude: ["excluded"] },
+    );
+    expect(result.manifest.entries[0]?.error).toBeUndefined();
+    expect(result.manifest.entries).toHaveLength(1);
+  });
+
+  it("marks cleanly truncated bodies and protects partial-name collisions", async () => {
+    const result = await archive(
+      pod({ file: { body: "short", size: "10" }, "file.partial": { body: "complete" } }).fetch,
+      plan(["file", "file.partial"]),
+    );
+    const partial = result.manifest.entries[0];
+    expect(partial).toMatchObject({
+      path: "pod/file.partial",
+      partial: true,
+      bytes: 5,
+      error: { message: "Resource body was truncated" },
+    });
+    expect(strFromU8(result.files[partial?.path as string] as Uint8Array)).toBe("short");
+    expect(result.manifest.entries[1]?.path).not.toBe(partial?.path);
+    expect(strFromU8(result.files[result.manifest.entries[1]?.path as string] as Uint8Array)).toBe(
+      "complete",
+    );
+  });
+
+  it("does not mistake a compressed content length for a decoded body length", async () => {
+    const result = await archive(
+      async () =>
+        new Response("decoded", {
+          headers: { "content-length": "100", "content-encoding": "gzip" },
+        }),
+      plan(["file"]),
+    );
+    expect(result.manifest.entries[0]?.partial).toBeUndefined();
+    expect(strFromU8(result.files["pod/file"] as Uint8Array)).toBe("decoded");
+  });
+
+  it("keeps forward-only ZIP headers conservative and throttles chunk progress", async () => {
+    const clock = vi.spyOn(Date, "now").mockReturnValue(Date.parse("2026-11-11T00:00:00Z"));
+    const progress = vi.fn();
+    const result = await archive(
+      async () =>
+        new Response(
+          new ReadableStream({
+            start(controller) {
+              for (let i = 0; i < 1000; i++) controller.enqueue(text.encode("x"));
+              controller.close();
+            },
+          }),
+        ),
+      plan(["file"]),
+      { patch: undefined, onProgress: progress },
+    );
+    clock.mockRestore();
+    expect(result.manifest.entries[0]?.path).toBe("pod/file.partial");
+    expect(result.manifest.entries[0]?.partial).toBeUndefined();
+    expect(result.files["pod/file.partial"]?.length).toBe(1000);
+    expect(progress).toHaveBeenCalledTimes(2);
+    expect(progress.mock.lastCall?.[0]).toMatchObject({ files: 1, totalFiles: 1, bytes: 1000 });
+  });
+
+  it("caps resources at 65,533 while reserving room for the manifest", async () => {
+    const fetch = vi.fn();
+    const paths = Array.from({ length: 65_534 }, (_, i) => `f${i}/`);
+    await expect(archive(fetch, plan(paths), { maxEntries: 100_000 })).rejects.toThrow(
+      "ZIP entry limit",
+    );
+    await expect(
+      archive(fetch, plan(paths.slice(0, -1)), {
+        maxEntries: 100_000,
+        sink() {
+          throw new Error("destination reached");
+        },
+      }),
+    ).rejects.toThrow("destination reached");
+    expect(fetch).not.toHaveBeenCalled();
+  }, 30_000);
+});
+
+describe("review: transport and Windows names", () => {
+  it("accepts scoped Request/URL inputs and validates response locations and response URLs", async () => {
+    const fetch = vi.fn(
+      async (_input: RequestInfo | URL, _init?: RequestInit) =>
+        new Response(null, { headers: { location: "same" } }),
+    );
+    const transport = createPodFetch({ root, fetch });
+    await transport(new Request(`${root}same`));
+    await transport(new URL(`${root}same`), { signal: new AbortController().signal });
+    expect(fetch.mock.calls[0]?.[0]).toBe(`${root}same`);
+    const mismatched = createPodFetch({
+      root,
+      fetch: async () =>
+        Object.defineProperty(new Response(), "url", { value: "https://evil.example/file" }),
+    });
+    await expect(mismatched(new Request(`${root}same`))).rejects.toThrow();
+    const escaped = createPodFetch({
+      root,
+      fetch: async () =>
+        new Response(null, { status: 201, headers: { location: "https://evil.example/" } }),
+    });
+    await expect(escaped(root)).rejects.toThrow();
+  });
+
+  it("prefixes reserved Windows basenames with and without extensions", () => {
+    for (const name of [
+      "CON",
+      "prn",
+      "Aux",
+      "nul",
+      ...Array.from({ length: 9 }, (_, i) => `COM${i + 1}`),
+      ...Array.from({ length: 9 }, (_, i) => `LPT${i + 1}`),
+    ]) {
+      for (const suffix of ["", ".txt", ".tar.gz"]) {
+        const path = pathAllocator(root);
+        expect(path(root + name + suffix, false)).toBe(`pod/_${name}${suffix}`);
+        expect(path(`${root + name + suffix}/`, true)).toBe(`pod/_${name}${suffix}~2/`);
+      }
+    }
+    expect(pathAllocator(root)(`${root}CONSOLE.txt`, false)).toBe("pod/CONSOLE.txt");
+  });
+});
+
+it.each([
+  404, 410,
+])("omits a planned auxiliary that disappears at GET with HTTP %i", async (get) => {
+  const server = pod({ file: { link: "<file.acl>; rel=acl" }, "file.acl": { head: 405, get } });
+  const planned = plan(["file"]);
+  planned.resources.push({
+    url: `${root}file.acl`,
+    kind: "acl",
+    contentType: "text/turtle",
+    auxiliaryFor: [`${root}file`],
+  });
+  const progress = vi.fn();
+  const result = await archive(server.fetch, planned, { onProgress: progress });
+  expect(result.manifest.entries.map((entry) => entry.url)).toEqual([`${root}file`]);
+  expect(progress.mock.lastCall?.[0]).toMatchObject({ files: 1, totalFiles: 1 });
+});
+
+it("prunes auxiliary containers of excluded advertisers while retaining listed container ancestors", async () => {
+  const server = pod({
+    "": { members: ["source", "listed/"] },
+    source: { link: "<only-linked/>; rel=describedby, <listed/>; rel=acl" },
+    "only-linked/": { members: [] },
+    "listed/": { members: [] },
+  });
+  const planned = await planExport({ fetch: server.fetch, root });
+  const result = await archive(server.fetch, planned, { exclude: ["source"] });
+  expect(result.manifest.entries.map((entry) => entry.url)).toEqual([root, `${root}listed/`]);
+});
+
+it("retains bytes before a mid-body exception and propagates a failed header patch", async () => {
+  let reads = 0;
+  const result = await archive(
+    async () =>
+      new Response(
+        new ReadableStream({
+          pull(controller) {
+            if (reads++ === 0) controller.enqueue(text.encode("prefix"));
+            else controller.error(new Error("truncated transfer"));
+          },
+        }),
+      ),
+    plan(["file"]),
+  );
+  expect(result.manifest.entries[0]).toMatchObject({
+    path: "pod/file.partial",
+    bytes: 6,
+    partial: true,
+  });
+  expect(strFromU8(result.files["pod/file.partial"] as Uint8Array)).toBe("prefix");
+  await expect(
+    archive(pod({ file: {} }).fetch, plan(["file"]), {
+      patch() {
+        throw new Error("seek failed");
+      },
+    }),
+  ).rejects.toThrow("seek failed");
+});
+
+it("retains migration's numeric length estimates as an explicit inventory policy", async () => {
+  for (const [length, expected] of [
+    ["", 0],
+    ["0x10", 16],
+    ["-1", undefined],
+    ["1.5", undefined],
+  ] as const) {
+    const result = await inventoryPod({
+      fetch: pod({ "": { members: ["file"] }, file: { size: length } }).fetch,
+      root,
+      numericContentLength: true,
+    });
+    expect(result.resources[1]?.size).toBe(expected);
+  }
+});
+
+it("writes matching local and central ZIP names for completed Unicode and partial members", async () => {
+  const result = await archive(
+    pod({ "caf%C3%A9": { body: "ok" }, bad: { body: "prefix", size: "100" } }).fetch,
+    plan(["caf%C3%A9", "bad"]),
+  );
+  const localNames: string[] = [];
+  const streamed = new Unzip((file) => {
+    localNames.push(file.name);
+    file.ondata = (error) => {
+      if (error) throw error;
+    };
+    file.start();
+  });
+  streamed.register(UnzipPassThrough);
+  streamed.push(result.bytes, true);
+  expect(localNames).toEqual(Object.keys(result.files));
+  expect(localNames).toEqual(["pod/café", "pod/bad.partial", "export-manifest.json"]);
+});
+
+it("compares document identity without fragments in the shared Request transport", async () => {
+  const fetch = vi.fn<typeof globalThis.fetch>(async () =>
+    Object.defineProperty(new Response(), "url", { value: `${root}profile` }),
+  );
+  const scoped = createPodFetch({ root, fetch });
+  await scoped(new Request(`${root}profile#me`));
+  expect(fetch.mock.calls[0]?.[0]).toBe(`${root}profile`);
 });

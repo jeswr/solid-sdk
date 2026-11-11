@@ -18,6 +18,8 @@ export function abortable<T>(promise: Promise<T>, signal?: AbortSignal): Promise
   });
 }
 
+export class ExportLimitError extends RangeError {}
+
 export class HttpError extends Error {
   constructor(readonly status: number) {
     super(`HTTP ${status}`);
@@ -25,9 +27,11 @@ export class HttpError extends Error {
 }
 export function exportError(error: unknown): ExportError {
   // Do not echo transport errors, which can contain credentials or untrusted response data.
-  return error instanceof HttpError
-    ? { message: error.message, status: error.status }
-    : { message: "Resource could not be read" };
+  return error instanceof ExportLimitError
+    ? { message: error.message }
+    : error instanceof HttpError
+      ? { message: error.message, status: error.status }
+      : { message: "Resource could not be read" };
 }
 
 export function context(options: ExportOptions) {
@@ -60,39 +64,67 @@ export function context(options: ExportOptions) {
   const checkDepth = (url: string) => {
     const relative = new URL(url).pathname.slice(new URL(root).pathname.length);
     if (relative.split("/").filter(Boolean).length > maxDepth)
-      throw new RangeError("Export exceeds maxDepth");
+      throw new ExportLimitError("Export exceeds maxDepth");
+  };
+  const fetch = createPodFetch({ ...options, root, canonical });
+  return { root, canonical, selected, visit, checkDepth, maxEntries, fetch };
+}
+
+/** Shared redirect-refusing transport, with optional stricter caller URL validation. */
+export function createPodFetch(options: {
+  root: string;
+  fetch: typeof globalThis.fetch;
+  signal?: AbortSignal;
+  canonical?: (url: string) => string;
+}): typeof globalThis.fetch {
+  const canonical = (url: string) => {
+    const checked = new URL(
+      assertWithinPodScope(options.root, options.canonical ? options.canonical(url) : url),
+    );
+    checked.hash = "";
+    return checked.href;
   };
   const transport = refuseRedirects(options.fetch);
-  const fetch: typeof globalThis.fetch = async (input, init) => {
-    const url = canonical(String(input));
-    options.signal?.throwIfAborted();
-    const pending = transport(url, { ...init, signal: options.signal }).then((response) => {
-      if (options.signal?.aborted) {
-        cancel(response);
-        options.signal.throwIfAborted();
-      }
+  return async (input, init) => {
+    const url = canonical(input instanceof Request ? input.url : String(input));
+    const signal = options.signal ?? init?.signal ?? undefined;
+    signal?.throwIfAborted();
+    const pending = transport(url, { ...init, signal }).then((response) => {
       try {
-        if (response.redirected || (response.url && canonical(response.url) !== url))
-          throw new TypeError("Unexpected response URL");
+        signal?.throwIfAborted();
+        if (
+          response.redirected ||
+          (response.status >= 300 && response.status < 400) ||
+          (response.url && canonical(response.url) !== url)
+        )
+          throw new TypeError("Pod redirect or unexpected response URL");
+        const location = response.headers.get("location");
+        if (location) canonical(new URL(location, url).href);
       } catch (error) {
         cancel(response);
         throw error;
       }
       return response;
     });
-    return abortable(pending, options.signal);
+    return abortable(pending, signal);
   };
-  return { root, canonical, selected, visit, checkDepth, maxEntries, fetch };
 }
 
-export function auxiliaries(response: Response, url: string) {
+/** An auxiliary may be a sibling, or anywhere below the advertiser's parent. */
+export function auxiliaryWithinParent(url: string, source: string): boolean {
+  const parent = new URL(source.endsWith("/") ? ".." : ".", source);
+  const target = new URL(url);
+  return target.origin === parent.origin && target.pathname.startsWith(parent.pathname);
+}
+
+export function auxiliaries(response: Response, url: string, restrict = true) {
   return parseLinkHeaders(response.headers.get("link"), url, {
     maxBytes: 65_536,
     maxMembers: 1024,
     maxResolvedBytes: 1_048_576,
     onOverflow: "throw",
   }).flatMap((link): { url: string; kind: "acl" | "meta" }[] => {
-    if (link.context !== url) return [];
+    if (link.context !== url || (restrict && !auxiliaryWithinParent(link.target, url))) return [];
     if (link.rel.includes("acl")) return [{ url: link.target, kind: "acl" }];
     if (link.rel.includes("describedby")) return [{ url: link.target, kind: "meta" }];
     return [];
@@ -104,14 +136,15 @@ export function rdf(contentType: string): boolean {
   );
 }
 export function kindFor(url: string, contentType: string, hint?: ExportKind): ExportKind {
+  if (url.endsWith("/")) return "container";
   if (hint === "acl" || hint === "meta") return hint;
-  return url.endsWith("/") ? "container" : rdf(contentType) ? "rdf" : "binary";
+  return rdf(contentType) ? "rdf" : "binary";
 }
-export function sizeOf(response: Response): number | undefined {
+export function sizeOf(response: Response, numeric = false): number | undefined {
   const value = response.headers.get("content-length");
-  if (value === null || !/^\d+$/.test(value)) return undefined;
+  if (value === null || (!numeric && !/^\d+$/.test(value))) return undefined;
   const size = Number(value);
-  return Number.isSafeInteger(size) ? size : undefined;
+  return Number.isSafeInteger(size) && size >= 0 ? size : undefined;
 }
 
 /** fflate emits classic ZIP offsets; refuse overflow before delivering corrupt output. */

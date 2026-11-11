@@ -73,8 +73,7 @@ it("estimates, selects a folder, exports, shows skipped reasons and clears the d
     /^pod-export-.*\.zip$/,
   );
   expect(screen.getByText(/items skipped or incomplete/)).toBeDefined();
-  fireEvent.click(screen.getByText(/Skipped or incomplete items/));
-  expect(screen.getAllByText(/HTTP 404/).length).toBeGreaterThan(0);
+  expect(screen.queryByText(/Skipped or incomplete items/)).toBeNull();
   session.current = { ...session.current, active: null, status: "signed-out" };
   view.rerender(<ExportSettings />);
   expect(screen.queryByRole("link", { name: "Download ZIP" })).toBeNull();
@@ -103,4 +102,75 @@ it("shows estimate failures and resets private UI immediately on an account swit
   view.rerender(<ExportSettings />);
   expect(screen.queryByRole("alert")).toBeNull();
   expect(screen.getByText("Estimating your export…")).toBeDefined();
+});
+
+it("keeps the same-account job through status flickers and warns before leaving during export or with a ready download", async () => {
+  const original = session.current.fetch as typeof globalThis.fetch;
+  let release!: () => void;
+  let started!: () => void;
+  const entered = new Promise<void>((resolve) => {
+    started = resolve;
+  });
+  const cancelled = vi.fn();
+  const fetch = vi.fn<typeof globalThis.fetch>(async (input, init) => {
+    if (String(input).endsWith("docs/hello.txt") && init?.method !== "HEAD") {
+      started();
+      return new Response(
+        new ReadableStream({
+          start(controller) {
+            controller.enqueue(new TextEncoder().encode("hello"));
+            release = () => controller.close();
+          },
+          cancel: cancelled,
+        }),
+      );
+    }
+    return original(input, init);
+  });
+  session.current.fetch = fetch;
+  const view = render(<ExportSettings />);
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name: "Start export" })).not.toHaveProperty(
+      "disabled",
+      true,
+    ),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Start export" }));
+  await entered;
+  const warn = () => {
+    const event = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(event);
+    expect(event.defaultPrevented).toBe(true);
+  };
+  warn();
+  session.current = {
+    ...session.current,
+    active: { ...(session.current.active as object) },
+    status: "loading",
+    isActiveAccount: () => false,
+  };
+  view.rerender(<ExportSettings />);
+  expect(screen.getByRole("button", { name: "Cancel" })).toBeDefined();
+  release();
+  await waitFor(() => expect(screen.getByRole("button", { name: "Cancel" })).toBeDefined());
+  session.current = {
+    ...session.current,
+    active: { ...(session.current.active as object) },
+    status: "ready",
+    isActiveAccount: () => true,
+  };
+  view.rerender(<ExportSettings />);
+  await screen.findByRole("link", { name: "Download ZIP" });
+  expect(cancelled).not.toHaveBeenCalled();
+  expect(revoke).not.toHaveBeenCalled();
+  warn();
+  session.current = { ...session.current, status: "loading" };
+  view.rerender(<ExportSettings />);
+  expect(screen.getByRole("link", { name: "Download ZIP" })).toBeDefined();
+  expect(revoke).not.toHaveBeenCalled();
+  warn();
+  view.unmount();
+  const event = new Event("beforeunload", { cancelable: true });
+  window.dispatchEvent(event);
+  expect(event.defaultPrevented).toBe(false);
 });

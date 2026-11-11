@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { assertWithinPodScope, createPodScopedFetch, refuseRedirects } from "@jeswr/guarded-fetch";
+import { assertWithinPodScope } from "@jeswr/guarded-fetch";
 import { readContainerMembers } from "@jeswr/ldp-container";
+import { createPodFetch } from "@jeswr/pod-export";
 import { createTypeIndex } from "@jeswr/pod-type-index";
 import { createMemoryCache } from "@jeswr/storage-capabilities/cache";
 import { createPodClient } from "@jeswr/storage-client";
@@ -14,7 +15,7 @@ export async function exportRootFolders(
   root: string,
   signal: AbortSignal,
 ) {
-  const transport = createPodScopedFetch(root, { fetch: refuseRedirects(fetch) });
+  const transport = createPodFetch({ root, fetch, signal });
   const members = await readContainerMembers(transport, root, { scope: root, signal });
   return exportFolders({
     root,
@@ -56,9 +57,7 @@ export async function exportApps(
   webId: string,
   signal: AbortSignal,
 ) {
-  const transport = refuseRedirects(fetch);
-  const scoped: typeof globalThis.fetch = async (input, init) =>
-    transport(assertWithinPodScope(root, String(input)), { ...init, signal });
+  const scoped = createPodFetch({ root, fetch, signal });
   const { storage, features } = await createPodClient({
     fetch: scoped,
     storage: root,

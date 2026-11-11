@@ -3,10 +3,16 @@
 export function pathAllocator(root: string) {
   const assigned = new Map<string, string>([["", "pod"]]);
   const used = new Set<string>(["pod"]);
-  const unique = (base: string) => {
+  const unique = (base: string, file = false) => {
     let candidate = base;
-    for (let n = 2; used.has(candidate.toLowerCase()); n++) candidate = `${base}~${n}`;
+    for (
+      let n = 2;
+      used.has(candidate.toLowerCase()) || (file && used.has(`${candidate}.partial`.toLowerCase()));
+      n++
+    )
+      candidate = `${base}~${n}`;
     used.add(candidate.toLowerCase());
+    if (file) used.add(`${candidate}.partial`.toLowerCase());
     return candidate;
   };
   return (url: string, container: boolean): string => {
@@ -37,8 +43,9 @@ export function pathAllocator(root: string) {
       // These are ZIP path names, never filesystem paths or RDF identifiers.
       // biome-ignore lint/suspicious/noControlCharactersInRegex: unsafe ZIP name bytes are removed.
       const clean = decoded.replace(/[\x00-\x1f\x7f/\\:*?"<>|]/g, "_").replace(/[. ]+$/g, "");
-      const name = clean && clean !== "." && clean !== ".." ? clean : "_";
-      path = unique(`${path}/${name}`);
+      let name = clean && clean !== "." && clean !== ".." ? clean : "_";
+      if (/^(?:CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(?:\.|$)/i.test(name)) name = `_${name}`;
+      path = unique(`${path}/${name}`, !folder);
       assigned.set(identity, path);
     }
     // A trailing empty segment can identify a distinct container after the last named one.

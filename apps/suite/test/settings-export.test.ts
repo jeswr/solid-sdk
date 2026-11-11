@@ -46,7 +46,7 @@ describe("Settings Takeout", () => {
     const archive = unzipSync(new Uint8Array(await (blob() as Blob).arrayBuffer()));
     expect(new TextDecoder().decode(archive["pod/notes/hello.txt"])).toBe("hello takeout");
     expect(archive["pod/images/pixel.bin"]).toEqual(new Uint8Array([0, 255, 42]));
-    expect(job.snapshot().manifest?.entries.some((r) => r.error?.status === 404)).toBe(true);
+    expect(job.snapshot().manifest?.entries.some((r) => r.error?.status === 404)).toBe(false);
     expect(listener).toHaveBeenCalled();
     unsubscribe();
     await job.plan(["notes/"]);

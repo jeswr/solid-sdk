@@ -70,3 +70,19 @@ it("lists root folders independently of inventory and tolerates a missing root",
     ),
   ).toEqual([]);
 });
+
+it("handles Request discovery inputs and refuses a foreign successful response URL", async () => {
+  const fetch = vi.fn<typeof globalThis.fetch>(async () => new Response());
+  await exportApps(fetch, root, `${root}profile/card#me`, new AbortController().signal);
+  const transport = mocks.client.mock.calls[0]?.[0].fetch as typeof globalThis.fetch;
+  await transport(new Request(`${root}docs/`));
+  expect(fetch.mock.calls[0]?.[0]).toBe(`${root}docs/`);
+  const cancelled = vi.fn();
+  fetch.mockResolvedValueOnce(
+    Object.defineProperty(new Response(new ReadableStream({ cancel: cancelled })), "url", {
+      value: "https://foreign.example/private",
+    }),
+  );
+  await expect(transport(new Request(`${root}docs/`))).rejects.toThrow();
+  expect(cancelled).toHaveBeenCalled();
+});
