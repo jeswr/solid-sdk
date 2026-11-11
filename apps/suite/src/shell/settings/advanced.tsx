@@ -5,6 +5,7 @@ import { useCapabilities } from "@jeswr/suite-ui/sync";
 import { usePathname } from "next/navigation";
 import { CopyButton } from "../account/account-card";
 import { diagnostics } from "../lib/settings-diagnostics";
+import { InstallApp } from "./install-app";
 import { useAllPreferences, usePreferences } from "./preferences";
 
 export function AdvancedSettings() {
@@ -15,6 +16,7 @@ export function AdvancedSettings() {
   const pathname = usePathname();
   return (
     <>
+      <InstallApp />
       <label className="settings-toggle">
         <input
           type="checkbox"
