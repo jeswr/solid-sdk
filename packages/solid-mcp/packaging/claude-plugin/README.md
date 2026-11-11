@@ -49,10 +49,17 @@ The alternative `npx -y @jeswr/agent-session-capture claude` remains inert until
 that package is published. Do not run it during preparation.
 As documented by agent-session-capture, the command reads `transcript_path` and
 `cwd` directly from hook stdin JSON. No shell path interpolation is used. Each hook
-has a **30-second** timeout to allow startup overhead around capture's internal
-10-second budget. If startup is killed before capture reads stdin and queues the
-transcript, there is no queued snapshot to retry. Only snapshots already queued
-by capture survive for replay.
+declares a 30-second `timeout`, which covers `PreCompact`. **`SessionEnd` is different:**
+Claude Code runs all SessionEnd hooks under one shared budget that defaults to
+1.5 seconds, and a plugin's `timeout` does not raise it. Without more budget, a
+capture that takes longer than 1.5 s at session end is cancelled. To give capture its
+internal 10-second budget plus startup overhead, set
+`CLAUDE_CODE_SESSIONEND_HOOKS_TIMEOUT_MS=30000` in the environment that launches
+Claude Code (or in the `env` block of your Claude Code user settings) before enabling
+the hook. If startup is killed before capture reads stdin and queues the transcript,
+there is no queued snapshot to retry. Only snapshots already queued by capture
+survive for replay; `PreCompact` captures and later replays still pick up the
+conversation.
 
 Enabling capture authorizes owner-only transcript writes. Capture requires WebID,
 complete CSS credentials, and explicit `SOLID_MCP_READONLY=false`. Its existing

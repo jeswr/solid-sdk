@@ -551,6 +551,8 @@ third-party license notices from the bundle inputs. The output is ignored,
 and `files` excludes all packaging artifacts from npm and mirrors. Tests run the
 validator and isolated bundle startup. See the packaging README for configuration
 choices, separate remote/local plugins, deferred npm distribution and the capture
-hooks' local `solid-capture claude` command with a 30-second timeout. The private
+hooks' local `solid-capture claude` command (SessionEnd needs
+`CLAUDE_CODE_SESSIONEND_HOOKS_TIMEOUT_MS=30000`; the plugin timeout alone does not raise
+Claude Code's 1.5-second SessionEnd budget). The private
 capture package is not on npm; hooks need a local installation today. The package's
 `mcpName` matches the registry name and survives mirror manifest rewriting.
