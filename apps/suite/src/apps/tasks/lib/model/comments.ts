@@ -2,7 +2,8 @@
 import { isDirectChild } from "../../../docs/lib/model/layout";
 import { ModelError } from "./errors";
 import { RdfIO, type Resource } from "./io";
-import { type Node, NS, node, requireHttp, Store } from "./rdf";
+import type { ResourceCopy } from "./move";
+import { DataFactory, type Node, NS, node, requireHttp, Store } from "./rdf";
 import type { StoredProject, StoredTask } from "./store";
 
 const OA = "http://www.w3.org/ns/oa#";
@@ -78,12 +79,13 @@ const oldest = (a: TaskComment, b: TaskComment) =>
 export class TaskCommentStore {
   readonly container: string;
   private readonly target: string;
+  private readonly folder: string;
   private readonly io: RdfIO;
   constructor(
     project: StoredProject,
     task: StoredTask,
     private readonly webId: string,
-    http: typeof fetch,
+    private readonly http: typeof fetch,
   ) {
     const folder = project.tracker.stateStore;
     if (!folder) throw new TypeError("Expected a stateStore container.");
@@ -97,6 +99,7 @@ export class TaskCommentStore {
       task.task.id !== `${task.url}#it`
     )
       throw new TypeError("Invalid comment task.");
+    this.folder = folder;
     this.container = `${folder}comments/`;
     this.target = task.task.id;
     this.io = new RdfIO(http);
@@ -108,7 +111,9 @@ export class TaskCommentStore {
   }
   private async read(url: string) {
     this.location(url);
-    const resource = await this.io.read(url);
+    return this.parse(await this.io.read(url));
+  }
+  private parse(resource: Resource) {
     const comment = readComment(resource);
     if (
       comment.kind === "root" ? comment.target !== this.target : !this.replyTarget(comment.target)
@@ -123,16 +128,39 @@ export class TaskCommentStore {
       target.endsWith(".ttl#it")
     );
   }
-  async list(): Promise<TaskCommentThread[]> {
-    const entries: TaskComment[] = [];
+  /** Missing permission hints remain unknown; the pod still enforces every write. */
+  async canWrite(): Promise<boolean | undefined> {
+    try {
+      const response = await this.http(this.folder, {
+        method: "HEAD",
+        redirect: "error",
+        headers: { "Cache-Control": "no-cache" },
+      });
+      if (response.status === 401 || response.status === 403) return false;
+      if (!response.ok) return undefined;
+      const user = /(?:^|,)\s*user\s*=\s*"([^"]*)"/i.exec(response.headers.get("WAC-Allow") ?? "");
+      return user ? /\bwrite\b/i.test(user[1] as string) : undefined;
+    } catch {
+      return undefined;
+    }
+  }
+  private async resources(strict = false) {
+    const entries: (Resource & { comment: TaskComment })[] = [];
     for (const url of await this.io.list(this.container)) {
       if (!isDirectChild(url, this.container) || !url.endsWith(".ttl")) continue;
+      // Transport/redirect failures must abort a move, even when they are TypeErrors.
+      const resource = strict ? await this.io.read(url) : undefined;
       try {
-        entries.push((await this.read(url)).comment);
-      } catch {
-        // Untrusted, inaccessible or disappearing resources do not break other threads.
+        entries.push(resource ? this.parse(resource) : await this.read(url));
+      } catch (error) {
+        // Moves must abort on unreadable comments; UI listings tolerate them.
+        if (strict && !(error instanceof TypeError)) throw error;
       }
     }
+    return entries;
+  }
+  async list(): Promise<TaskCommentThread[]> {
+    const entries = (await this.resources()).map(({ comment }) => comment);
     return entries
       .filter((entry) => entry.kind === "root")
       .sort(oldest)
@@ -142,6 +170,46 @@ export class TaskCommentStore {
           .filter((entry) => entry.kind === "reply" && entry.target === root.id)
           .sort(oldest),
       }));
+  }
+  /** Capture full RDF revisions, including tombstones, before a recoverable task move. */
+  async prepareMove(container: string, taskId: string): Promise<ResourceCopy[]> {
+    const entries = await this.resources(true);
+    const roots = new Set(
+      entries.filter(({ comment }) => comment.kind === "root").map(({ comment }) => comment.id),
+    );
+    const selected = entries.filter(
+      ({ comment }) => comment.kind === "root" || roots.has(comment.target),
+    );
+    const targets = new Map(
+      selected.map(({ comment }) => [comment.id, `${container}${crypto.randomUUID()}.ttl#it`]),
+    );
+    return selected.map((original) => {
+      const id = targets.get(original.comment.id) as string;
+      const url = id.slice(0, -3);
+      const dataset = new Store([...original.dataset]);
+      // Relocate our named subjects with accessors, retaining blank bodies and foreign metadata.
+      for (const suffix of ["#it", "#body"]) {
+        const before = node(original.url + suffix, dataset);
+        const after = node(url + suffix, dataset);
+        const predicates = new Set(
+          [...dataset.match(DataFactory.namedNode(before.value))].map(
+            (quad) => quad.predicate.value,
+          ),
+        );
+        for (const predicate of predicates) {
+          for (const value of before.nodes(predicate)) after.nodes(predicate).add(value);
+          before.clear(predicate);
+        }
+      }
+      const annotation = node(id, dataset);
+      if (only(annotation, `${OA}hasBody`).termType === "NamedNode")
+        annotation.setIri(`${OA}hasBody`, `${url}#body`);
+      annotation.setIri(
+        `${OA}hasTarget`,
+        original.comment.kind === "root" ? taskId : targets.get(original.comment.target),
+      );
+      return { original, destination: { url, dataset } };
+    });
   }
   async create(value: string, creator = this.webId, now = new Date()): Promise<TaskComment> {
     return this.publish(value, creator, this.target, "root", now);
@@ -207,10 +275,7 @@ export class TaskCommentStore {
   }
   async delete(entry: TaskComment, now = new Date()) {
     const current = await this.own(entry);
-    if (
-      current.comment.kind === "root" &&
-      (await this.list()).some(({ root, replies }) => root.url === entry.url && replies.length > 0)
-    )
+    if (current.comment.kind === "root")
       await this.replaceBody(current, DELETED_COMMENT, now, true);
     else await this.io.remove(entry.url, current.etag);
   }

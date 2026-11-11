@@ -112,18 +112,22 @@ describe("task annotations", () => {
     expect(pod.mutations()).toHaveLength(count);
   });
 
-  it("deletes replies and empty roots, and tombstones roots with replies", async () => {
+  it("deletes replies and always tombstones roots, including roots without visible replies", async () => {
     const { comments, pod } = await setup();
     const empty = await comments.create("No replies");
     await comments.delete(empty);
-    expect(pod.files.has(empty.url)).toBe(false);
-    expect(pod.mutations().at(-1)).toMatchObject({ method: "DELETE", url: empty.url });
+    expect(pod.files.has(empty.url)).toBe(true);
+    expect((await comments.list())[0]?.root).toMatchObject({
+      deleted: true,
+      text: "[Comment deleted]",
+    });
+    expect(pod.mutations().at(-1)).toMatchObject({ method: "PUT", url: empty.url });
     expect(pod.mutations().at(-1)?.headers.get("If-Match")).toBe(empty.etag);
     const root = await comments.create("Parent");
     const reply = await comments.reply(root, "Keep me");
     const tombstonedAt = new Date("2026-11-04");
     await comments.delete(root, tombstonedAt);
-    const thread = (await comments.list())[0];
+    const thread = (await comments.list()).find(({ root: entry }) => entry.url === root.url);
     expect(thread?.root).toMatchObject({
       text: "[Comment deleted]",
       deleted: true,
@@ -138,7 +142,12 @@ describe("task annotations", () => {
     await comments.delete(reply);
     expect(pod.files.has(reply.url)).toBe(false);
     await comments.delete(thread.root);
-    expect(await comments.list()).toEqual([]);
+    expect((await comments.list()).every(({ root }) => root.deleted)).toBe(true);
+    expect(
+      pod.requests.some(
+        (request) => request.method === "DELETE" && [root.url, empty.url].includes(request.url),
+      ),
+    ).toBe(false);
   });
 
   it("enforces session creators and ownership before mutations", async () => {
@@ -164,14 +173,13 @@ describe("task annotations", () => {
     await expect(comments.list()).rejects.toMatchObject({ status: 503 });
   });
 
-  it("lets an append-only collaborator create without rewriting the task or project", async () => {
+  it("lets an editor comment using inherited project permissions without resource ACL writes", async () => {
     const { comments, inbox, task, pod } = await setup();
     await comments.create("Owner");
     const collaborator = new TaskCommentStore(inbox, task, bob, pod.fetch);
     const before = pod.mutations().length;
     pod.intercept = (request) =>
-      request.method !== "GET" &&
-      (!request.url.startsWith(comments.container) || request.headers.has("If-Match"))
+      request.method !== "GET" && !request.url.startsWith(comments.container)
         ? new Response(null, { status: 403 })
         : undefined;
     const comment = await collaborator.create("Collaborator");

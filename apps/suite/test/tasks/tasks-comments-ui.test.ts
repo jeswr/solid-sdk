@@ -185,6 +185,76 @@ describe("task comment UI", () => {
     expect((await fixture.comments.list())[0]?.root.text).toBe("Draft");
   });
 
+  it("retains the opening revision and draft across focus refreshes and conflicts until Reload", async () => {
+    const fixture = await setup();
+    const original = await fixture.comments.create("Original");
+    const { host } = await fixture.render();
+    await settle();
+    await click(button("Edit"));
+    await type("My draft", "Edit comment");
+    await fixture.comments.edit(original, "Remote edit");
+    await act(() => window.dispatchEvent(new Event("focus")));
+    await settle();
+    expect(field("Edit comment").value).toBe("My draft");
+    const before = fixture.pod.mutations().filter((request) => request.method === "PUT").length;
+    await click(button("Save"));
+    await settle();
+    expect(fixture.pod.mutations().filter((request) => request.method === "PUT")).toHaveLength(
+      before,
+    );
+    expect(field("Edit comment").value).toBe("My draft");
+    expect(host.querySelector('[role="alert"]')?.textContent).toContain(
+      "This comment changed; try again.",
+    );
+    expect((await fixture.comments.list())[0]?.root.text).toBe("Remote edit");
+    await click(button("Reload"));
+    await settle();
+    expect(host.querySelector("textarea")?.value).toBe("");
+    expect(host.textContent).toContain("Remote edit");
+    await click(button("Edit"));
+    expect(field("Edit comment").value).toBe("Remote edit");
+  });
+
+  it("hides empty tombstones while keeping their replies visible", async () => {
+    const fixture = await setup();
+    const root = await fixture.comments.create("Root");
+    await fixture.comments.delete(root);
+    const { host } = await fixture.render();
+    await settle();
+    expect(host.textContent).toContain("No comments yet");
+    expect(host.textContent).not.toContain("[Comment deleted]");
+    const reply = await fixture.comments.reply(root, "Late reply");
+    await act(() => window.dispatchEvent(new Event("focus")));
+    await settle();
+    expect(host.textContent).toContain("[Comment deleted]");
+    expect(host.textContent).toContain("Late reply");
+    await fixture.comments.delete(reply);
+    await act(() => window.dispatchEvent(new Event("focus")));
+    await settle();
+    expect(host.textContent).toContain("No comments yet");
+  });
+
+  it.each([
+    'user="read"',
+    'user="read append"',
+  ])("hides all mutation controls for a project reporting %s", async (allow) => {
+    const fixture = await setup();
+    await fixture.comments.create("Visible comment");
+    fixture.pod.intercept = (request) =>
+      request.method === "HEAD" && request.url === fixture.inbox.tracker.stateStore
+        ? new Response(null, { headers: { "WAC-Allow": allow } })
+        : undefined;
+    const { host } = await fixture.render();
+    await settle();
+    expect(host.textContent).toContain("Visible comment");
+    expect(host.querySelector("textarea")).toBeNull();
+    expect(
+      [...host.querySelectorAll("button")].some((node) =>
+        ["Comment", "Reply", "Edit", "Delete"].includes(node.textContent ?? ""),
+      ),
+    ).toBe(false);
+  });
+
   it("guards composition and duplicate submissions; Escape cancels a reply and restores focus", async () => {
     const fixture = await setup();
     await fixture.comments.create("Root");

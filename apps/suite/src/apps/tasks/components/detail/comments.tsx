@@ -99,6 +99,7 @@ export function TaskComments({ stored, project }: { stored: StoredTask; project:
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
+  const [writable, setWritable] = useState<boolean>();
   const [editing, setEditing] = useState<TaskComment>();
   const [replying, setReplying] = useState<TaskComment>();
   const origin = useRef<HTMLButtonElement | null>(null);
@@ -108,9 +109,10 @@ export function TaskComments({ stored, project }: { stored: StoredTask; project:
   const refresh = useCallback(async () => {
     const request = ++generation.current;
     try {
-      const rows = await store.list();
+      const [rows, access] = await Promise.all([store.list(), store.canWrite()]);
       if (live.current && request === generation.current) {
         setThreads(rows);
+        setWritable(access);
         setError(undefined);
       }
     } catch (cause) {
@@ -164,6 +166,10 @@ export function TaskComments({ stored, project }: { stored: StoredTask; project:
     setReplying(undefined);
     requestAnimationFrame(() => origin.current?.focus());
   }, []);
+  const visibleThreads = threads
+    .map(({ root, replies }) => ({ root, replies: replies.filter((reply) => !reply.deleted) }))
+    .filter(({ root, replies }) => !root.deleted || replies.length > 0);
+  const conflict = error === "This comment changed; try again.";
   const message = (comment: TaskComment) => (
     <div key={comment.url} className="tsk-comment-message">
       <header>
@@ -172,17 +178,17 @@ export function TaskComments({ stored, project }: { stored: StoredTask; project:
         </span>
         <ModifiedTime value={comment.created} />
       </header>
-      {editing?.url === comment.url ? (
+      {writable !== false && editing?.url === comment.url ? (
         <CommentForm
           label="Edit comment"
-          initial={comment.text}
-          submit={(text) => act(() => store.edit(comment, text))}
+          initial={editing.text}
+          submit={(text) => act(() => store.edit(editing, text))}
           cancel={cancel}
         />
       ) : (
         <p>{plainTextLinks(comment.text)}</p>
       )}
-      {comment.creator === tasks.webId && !comment.deleted && (
+      {writable !== false && comment.creator === tasks.webId && !comment.deleted && (
         <div className="tsk-detail-inline">
           <Button
             type="button"
@@ -228,17 +234,18 @@ export function TaskComments({ stored, project }: { stored: StoredTask; project:
             size="sm"
             variant="ghost"
             onClick={() => {
+              if (conflict) cancel();
               setLoading(true);
               void refresh();
             }}
           >
-            Retry
+            {conflict ? "Reload" : "Retry"}
           </Button>
         </div>
       )}
-      {!loading && !error && threads.length === 0 && <p>No comments yet</p>}
+      {!loading && !error && visibleThreads.length === 0 && <p>No comments yet</p>}
       <ol>
-        {threads.map(({ root, replies }) => (
+        {visibleThreads.map(({ root, replies }) => (
           <li key={root.url}>
             {message(root)}
             <ol>
@@ -246,20 +253,22 @@ export function TaskComments({ stored, project }: { stored: StoredTask; project:
                 <li key={reply.url}>{message(reply)}</li>
               ))}
             </ol>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              disabled={busy}
-              onClick={(event) => {
-                origin.current = event.currentTarget;
-                setEditing(undefined);
-                setReplying(root);
-              }}
-            >
-              Reply
-            </Button>
-            {replying?.url === root.url && (
+            {writable !== false && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                disabled={busy}
+                onClick={(event) => {
+                  origin.current = event.currentTarget;
+                  setEditing(undefined);
+                  setReplying(root);
+                }}
+              >
+                Reply
+              </Button>
+            )}
+            {writable !== false && replying?.url === root.url && (
               <CommentForm
                 label="Reply"
                 submit={(text) => act(() => store.reply(root, text))}
@@ -269,7 +278,9 @@ export function TaskComments({ stored, project }: { stored: StoredTask; project:
           </li>
         ))}
       </ol>
-      <CommentForm label="Comment" submit={(text) => act(() => store.create(text))} />
+      {!loading && writable !== false && (
+        <CommentForm label="Comment" submit={(text) => act(() => store.create(text))} />
+      )}
     </section>
   );
 }
