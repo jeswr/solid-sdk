@@ -274,6 +274,38 @@ it("keeps demo notifications and agent digest examples without reading a pod", a
   expect(accounts.current.fetch).not.toHaveBeenCalled();
 });
 
+it.each([
+  "solid",
+  "demo",
+] as const)("persists individual and all read flags when a %s notification session is recreated", async (kind) => {
+  accounts.current = { ...accounts.current, active: { ...alice, kind } };
+  let view = render(tree());
+  await waitFor(() => expect(actions.unread).toBe(kind === "demo" ? 4 : 1));
+  const item = actions.items[0];
+  if (!item) throw new Error("Expected a notification");
+  const id = item.id;
+  await act(async () => {
+    await actions.markRead(id);
+    // Reconcile the source acknowledgement before recreating the controller.
+    await actions.refresh();
+  });
+  view.unmount();
+  view = render(tree());
+  await waitFor(() => expect(actions.items.some((item) => item.id === id)).toBe(true));
+  expect(actions.items.find((item) => item.id === id)?.read).toBe(true);
+  expect(actions.unread).toBe(kind === "demo" ? 3 : 0);
+  await act(async () => {
+    await actions.markAllRead();
+    await actions.refresh();
+  });
+  view.unmount();
+  render(tree());
+  await waitFor(() => expect(actions.items).toHaveLength(kind === "demo" ? 6 : 1));
+  expect(actions.unread).toBe(0);
+  expect(actions.items.every((item) => item.read)).toBe(true);
+  expect(accounts.current.fetch).not.toHaveBeenCalled();
+});
+
 it("keeps local notifications available when the pod source fails", async () => {
   const local: SuiteNotification = {
     id: "local-pod-failure",

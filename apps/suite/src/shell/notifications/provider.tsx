@@ -26,6 +26,7 @@ import { accountPreferences, showDesktopNotification } from "./desktop";
 import { immediateDesktopNotification, notifyImmediately } from "./digest";
 import { localNotificationSource } from "./local-store";
 import { createPodNotificationSource } from "./pod-source";
+import { createNotificationReadState } from "./read-state";
 import { useDigest } from "./use-digest";
 
 const NotificationsContext = createContext<NotificationsController | null>(null);
@@ -117,13 +118,18 @@ export function NotificationSessionProvider({
   latestPreferences.current = saved;
   const controller = useMemo(
     () =>
-      createNotificationsController(sources, decider, (item) => {
-        if (notifyImmediately(item, latestPreferences.current, new Date()))
-          void showDesktopNotification(immediateDesktopNotification(item)).catch(() => {
-            /* Delivery failure never interrupts the tray. */
-          });
-      }),
-    [sources, decider],
+      createNotificationsController(
+        sources,
+        decider,
+        (item) => {
+          if (notifyImmediately(item, latestPreferences.current, new Date()))
+            void showDesktopNotification(immediateDesktopNotification(item)).catch(() => {
+              /* Delivery failure never interrupts the tray. */
+            });
+        },
+        createNotificationReadState(accountId),
+      ),
+    [sources, decider, accountId],
   );
   const digest = useDigest(accountId, controller, saved);
   useEffect(() => {
