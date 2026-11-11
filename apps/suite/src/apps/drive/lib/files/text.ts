@@ -22,5 +22,9 @@ export function decodePreviewText(bytes: Uint8Array, contentType: string) {
   } catch {
     editableEncoding = false;
   }
+  // A textarea normalises newlines. Only uniform LF or CRLF can round-trip safely.
+  const withoutCrlf = text.replace(/\r\n/g, "");
+  if (withoutCrlf.includes("\r") || (text.includes("\r\n") && withoutCrlf.includes("\n")))
+    editableEncoding = false;
   return { text, editableEncoding, declaredCharset: charsets.length > 0 };
 }

@@ -1,6 +1,7 @@
 // AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Codex GPT-6.1-Sol
 "use client";
 
 /**
@@ -184,6 +185,7 @@ export function captureDriveFocusRemoval(subtree?: Element | null) {
 export function DriveUiProvider({ children }: { children: ReactNode }) {
   const [dialog, setDialog] = useState<DriveUiValue["dialog"]>();
   const [preview, setPreviewState] = useState<PreviewState>();
+  const activePreview = useRef<PreviewState | undefined>(undefined);
   const previewGuards = useRef(new Set<() => boolean>());
   const registerPreviewGuard = useCallback((guard: () => boolean) => {
     previewGuards.current.add(guard);
@@ -197,7 +199,15 @@ export function DriveUiProvider({ children }: { children: ReactNode }) {
   );
   const setPreview = useCallback(
     (next: PreviewState | undefined) => {
-      if (mayLeavePreview()) setPreviewState(next);
+      const current = activePreview.current;
+      const replacing =
+        current !== undefined &&
+        (next === undefined ||
+          current.items[current.index]?.url !== next.items[next.index]?.url ||
+          current.activationId !== next.activationId);
+      if (replacing && !mayLeavePreview()) return;
+      activePreview.current = next;
+      setPreviewState(next);
     },
     [mayLeavePreview],
   );
@@ -481,7 +491,7 @@ async function refreshAfter<T>(
 let nativeSaveInFlight = false;
 
 export function useDriveActions() {
-  const { openDialog, setDetailsItems } = useDriveUi();
+  const { openDialog, setDetailsItems, mayLeavePreview } = useDriveUi();
   const retargetDetails = useCallback(
     (moves: readonly { from: string; to: string }[]) => {
       setDetailsItems((current) => {
@@ -511,11 +521,13 @@ export function useDriveActions() {
   const open = useCallback(
     (item: DriveItem, siblings?: readonly DriveItem[], setPreview?: DriveUiValue["setPreview"]) => {
       if (item.kind === "folder") {
+        if (!mayLeavePreview()) return;
         router.push(hrefFor(item));
         return;
       }
       // Docs documents open in the Docs editor, not the generic preview.
       if (isDocsDocument(item, session.storageUrl)) {
+        if (!mayLeavePreview()) return;
         router.push(docsHref(item.url));
         return;
       }
@@ -529,9 +541,9 @@ export function useDriveActions() {
             files.findIndex((f) => f.url === item.url),
           ),
         });
-      } else router.push(hrefFor(item));
+      } else if (mayLeavePreview()) router.push(hrefFor(item));
     },
-    [router, session.storageUrl],
+    [router, session.storageUrl, mayLeavePreview],
   );
 
   const download = useCallback(

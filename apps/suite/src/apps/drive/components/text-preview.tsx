@@ -26,17 +26,28 @@ export function TextPreview({
   value,
   fallback,
   reload,
+  onEditingChange,
+  resourceChanged = false,
 }: {
   item: DriveItem;
   value: PreviewText | undefined;
   fallback: ReactNode;
   reload: () => void;
+  onEditingChange?: (editing: boolean) => void;
+  resourceChanged?: boolean;
 }) {
   const { client, session, invalidate } = useDrive();
   const { registerPreviewGuard } = useDriveUi();
   const [local, setLocal] = useState<PreviewText>();
-  const current = local ?? value;
+  const [saved, setSaved] = useState<PreviewText>();
   const [editing, setEditing] = useState(false);
+  const latestValue = useRef(value);
+  latestValue.current = value;
+  const savedAgainst = useRef(value);
+  // Ignore the pre-save GET while keeping the write receipt. A subsequent read
+  // supersedes it, including equivalent reads carrying the saved ETag.
+  const refreshed = saved && (!value || value === savedAgainst.current) ? saved : value;
+  const current = local ?? refreshed;
   const [draft, setDraft] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string>();
@@ -48,7 +59,17 @@ export function TextPreview({
   const busy = useRef(false);
   const label = useId();
   const [online, setOnline] = useState(() => navigator.onLine !== false);
-  const dirty = editing && draft !== current?.text;
+  const dirty = editing && draft !== current?.text.replace(/\r\n/g, "\n");
+  const changed = conflict || (editing && resourceChanged);
+  useLayoutEffect(() => {
+    onEditingChange?.(editing);
+  }, [editing, onEditingChange]);
+  useEffect(() => {
+    if (editing && resourceChanged) setConflict(true);
+  }, [editing, resourceChanged]);
+  useEffect(() => {
+    if (saved && value && value !== savedAgainst.current) setSaved(undefined);
+  }, [saved, value]);
   useEffect(() => {
     const update = () => setOnline(navigator.onLine !== false);
     window.addEventListener("online", update);
@@ -113,26 +134,30 @@ export function TextPreview({
   };
   const cancel = () => {
     if (busy.current) return;
-    if (draft !== current.text && !window.confirm("Discard your changes?")) return;
+    if (dirty && !window.confirm("Discard your changes?")) return;
+    setLocal(undefined);
     finish();
   };
   const save = async () => {
-    if (!writable || !strong || navigator.onLine === false || busy.current || conflict) return;
+    if (!writable || !strong || navigator.onLine === false || busy.current || changed) return;
     busy.current = true;
     setSaving(true);
     setError(undefined);
     try {
       const contentType = `${current.contentType}${current.declaredCharset ? "; charset=utf-8" : ""}`;
+      const text = current.text.includes("\r\n") ? draft.replace(/\n/g, "\r\n") : draft;
       const result = await client.write(
         item.url,
-        draft,
+        text,
         { contentType, ifMatch: etag, ...discoveryOptions(current) },
         { kind: "protect-ancestors" },
       );
       if (!live.current) {
         return;
       }
-      setLocal({ ...current, text: draft, etag: result.etag ?? undefined });
+      savedAgainst.current = latestValue.current;
+      setSaved({ ...current, text, etag: result.etag ?? undefined });
+      setLocal(undefined);
       finish();
       toast.success("Saved");
       invalidate(item.url);
@@ -176,10 +201,12 @@ export function TextPreview({
             onChange={(event) => setDraft(event.target.value)}
           />
           {disabledReason ? <p id={`${label}-reason`}>{disabledReason}</p> : null}
-          {error ? <p role="alert">{error}</p> : null}
+          {changed || error ? (
+            <p role="alert">{changed ? "This file changed since you opened it" : error}</p>
+          ) : null}
           <div className="drv-text-editor-actions">
             <Button
-              disabled={!strong || !online || saving || conflict}
+              disabled={!strong || !online || saving || changed}
               aria-describedby={disabledReason ? `${label}-reason` : undefined}
               type="submit"
             >
@@ -188,15 +215,15 @@ export function TextPreview({
             <Button type="button" variant="outline" disabled={saving} onClick={cancel}>
               Cancel
             </Button>
-            {conflict || !strong ? (
+            {changed || !strong ? (
               <Button
                 type="button"
                 variant="outline"
                 disabled={saving}
                 onClick={() => {
-                  if (draft !== current.text && !window.confirm("Discard your changes and reload?"))
-                    return;
+                  if (dirty && !window.confirm("Discard your changes and reload?")) return;
                   setLocal(undefined);
+                  setSaved(undefined);
                   finish();
                   reload();
                 }}
@@ -215,7 +242,7 @@ export function TextPreview({
               size="sm"
               onClick={() => {
                 setLocal(current);
-                setDraft(current.text);
+                setDraft(current.text.replace(/\r\n/g, "\n"));
                 setEditing(true);
               }}
             >

@@ -277,16 +277,20 @@ export function PreviewBody({
   const { client, session } = useDrive();
   const actions = useDriveActions();
   const { state: loaded, reload } = useLoadedFile(client, item, metadataStatus);
+  const [textEditing, setTextEditing] = useState(false);
   const kind = filePreviewKind(item);
   if (item.protectionRequired) return <ProtectionBanner key={item.url} item={item} />;
   const type = resolveContentType(item.name, item.contentType);
-  if (type === "text/plain" || type === "text/markdown")
+  const textType = type === "text/plain" || type === "text/markdown";
+  if (textType || textEditing)
     return (
       <TextPreview
         key={`${session.webId}:${item.url}`}
         item={item}
         value={loaded.status === "text" ? loaded : undefined}
         reload={reload}
+        onEditingChange={setTextEditing}
+        resourceChanged={!textType}
         fallback={
           loaded.status === "loading" ? (
             <Skeleton className="drv-preview-skeleton" aria-label="Loading preview" />

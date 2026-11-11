@@ -4,6 +4,8 @@ import { createRequire } from "node:module";
 import { toast } from "@jeswr/suite-ui";
 import type { ReactNode } from "react";
 import { afterEach, expect, test, vi } from "vitest";
+import { DetailsPane } from "../src/apps/drive/components/details";
+import { type MenuEntry, useItemMenu } from "../src/apps/drive/components/item-menu";
 import { PreviewBody, PreviewDialog, PreviewPage } from "../src/apps/drive/components/preview";
 import { TextPreview } from "../src/apps/drive/components/text-preview";
 import {
@@ -11,16 +13,31 @@ import {
   DriveError,
   type DriveItem,
 } from "../src/apps/drive/lib/client/client";
+import { decodePreviewText } from "../src/apps/drive/lib/files/text";
+import { docsHref } from "../src/apps/drive/lib/open-with/docs";
 import type { DriveContextValue } from "../src/apps/drive/state/drive-context";
+import { type OpenWithDocsControl, useOpenWithDocs } from "../src/apps/drive/state/open-with-docs";
 import { DriveUiProvider, useDriveActions, useDriveUi } from "../src/apps/drive/state/ui";
 import { createDemoPod } from "../src/lib/demo-pod/pod";
 import { act, deferred, h, key, mount } from "./drive-ui-dom";
 
 vi.mock("../src/apps/drive/state/drive-context", () => ({ useDrive: () => drive }));
-vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
+const mocks = vi.hoisted(() => ({ push: vi.fn(), convert: vi.fn() }));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push: mocks.push }) }));
+vi.mock("../src/apps/docs/hooks/open-with-docs", () => ({ openWithDocs: mocks.convert }));
+vi.mock("../src/apps/drive/lib/open-with/docs", async (original) => ({
+  ...(await original<typeof import("../src/apps/drive/lib/open-with/docs")>()),
+  probeDocsWritable: vi.fn(async () => true),
+}));
 vi.mock("@jeswr/suite-ui", async (original) => ({
   ...(await original<typeof import("@jeswr/suite-ui")>()),
-  toast: Object.assign(vi.fn(), { success: vi.fn(), error: vi.fn() }),
+  toast: Object.assign(vi.fn(), {
+    success: vi.fn(),
+    error: vi.fn(),
+    loading: vi.fn(),
+    dismiss: vi.fn(),
+    warning: vi.fn(),
+  }),
 }));
 const requireUi = createRequire(
   new URL("../../../packages/suite-ui/package.json", import.meta.url),
@@ -218,6 +235,30 @@ test("412 retains the draft, blocks further saves and offers confirmed Reload", 
     expect(view.host.querySelector(".drv-preview-text")?.textContent).toBe("Their version"),
   );
   expect(confirm).toHaveBeenCalledTimes(2);
+  const newest = await drive.client.readVersion(FILE);
+  write.mockRestore();
+  const retry = vi.spyOn(drive.client, "write");
+  await editText(get, "After Reload");
+  await save(get);
+  expect(retry).toHaveBeenCalledWith(
+    FILE,
+    "After Reload",
+    expect.objectContaining({ ifMatch: newest.etag }),
+    { kind: "protect-ancestors" },
+  );
+  await pod.fetch(FILE, {
+    method: "PUT",
+    headers: { "content-type": "text/plain" },
+    body: "Background after Reload",
+  });
+  await view.render(
+    contents(h(PreviewBody, { item: await drive.client.stat(FILE), metadataStatus: "ready" })),
+  );
+  await vi.waitFor(() =>
+    expect(view.host.querySelector(".drv-preview-text")?.textContent).toBe(
+      "Background after Reload",
+    ),
+  );
 });
 
 test("a save without a returned validator requires Reload before another save", async () => {
@@ -499,7 +540,7 @@ async function openDialog() {
   await act(async () => ui.setPreview({ items: [previous, item, next], index: 1 }));
   const get = within(document.body);
   await vi.waitFor(() => expect(get.getByRole("button", { name: "Edit" })).toBeTruthy());
-  return { get, view };
+  return { get, view, item };
 }
 function expectLeft(path: DismissalPath) {
   if (["Close", "outside", "Escape"].includes(path)) expect(ui.preview).toBeUndefined();
@@ -631,4 +672,399 @@ test.each([
     expect(confirm).toHaveBeenCalledOnce();
     expect((get.getByRole("textbox") as HTMLTextAreaElement).value).toBe("Draft");
   }
+});
+
+test.each([
+  ["", true],
+  ["one\ntwo\n", true],
+  ["one\r\ntwo\r\n", true],
+  ["one\r\ntwo\n", false],
+  ["one\ntwo\r\n", false],
+  ["one\rtwo", false],
+  ["one\r\ntwo\r", false],
+])("newline decoding only admits uniform LF and CRLF: %j", (text, editable) => {
+  expect(decodePreviewText(new TextEncoder().encode(text), "text/plain")).toEqual({
+    text,
+    editableEncoding: editable,
+    declaredCharset: false,
+  });
+});
+
+test.each([
+  "one\r\ntwo\n",
+  "one\rtwo",
+  "one\r\ntwo\r",
+])("mixed and old Mac newlines remain preview-only: %j", async (body) => {
+  const { get, view } = await setup({ preview: true, body });
+  expect(view.host.querySelector(".drv-preview-text")?.textContent).toBe(body);
+  expect(get.queryByRole("button", { name: "Edit" })).toBeNull();
+});
+
+test("CRLF drafts compare as LF and save the exact original newline convention", async () => {
+  const { get, pod, http, view } = await setup({ preview: true, body: "one\r\ntwo\r\n" });
+  const confirm = vi.spyOn(window, "confirm");
+  await act(async () => fireEvent.click(get.getByRole("button", { name: "Edit" })));
+  expect((get.getByRole("textbox") as HTMLTextAreaElement).value).toBe("one\ntwo\n");
+  expect(beforeUnload().defaultPrevented).toBe(false);
+  await act(async () => fireEvent.click(get.getByRole("button", { name: "Cancel" })));
+  expect(confirm).not.toHaveBeenCalled();
+  await editText(get, "one\nchanged\n");
+  expect(beforeUnload().defaultPrevented).toBe(true);
+  await save(get);
+  const put = http.mock.calls.findLast(
+    ([url, init]) => String(url) === FILE && init?.method === "PUT",
+  );
+  expect(put?.[1]?.body).toBe("one\r\nchanged\r\n");
+  expect(new Uint8Array(await (await pod.fetch(FILE)).arrayBuffer())).toEqual(
+    new TextEncoder().encode("one\r\nchanged\r\n"),
+  );
+  expect(view.host.querySelector(".drv-preview-text")?.textContent).toBe("one\r\nchanged\r\n");
+  await act(async () => fireEvent.click(get.getByRole("button", { name: "Edit" })));
+  expect(beforeUnload().defaultPrevented).toBe(false);
+  await act(async () => fireEvent.click(get.getByRole("button", { name: "Cancel" })));
+  expect(confirm).not.toHaveBeenCalled();
+});
+
+test("Cancel releases the opened version and later Edit uses the latest GET validator", async () => {
+  const { get, item, view, pod } = await setup({ preview: true });
+  await editText(get);
+  vi.spyOn(window, "confirm").mockReturnValue(true);
+  await pod.fetch(FILE, {
+    method: "PUT",
+    headers: { "content-type": "text/plain" },
+    body: "New version",
+  });
+  const newest = await drive.client.readVersion(FILE);
+  await view.render(
+    contents(
+      h(PreviewBody, { item: { ...item, etag: newest.etag as string }, metadataStatus: "ready" }),
+    ),
+  );
+  expect((get.getByRole("textbox") as HTMLTextAreaElement).value).toBe("Changed text");
+  await act(async () => fireEvent.click(get.getByRole("button", { name: "Cancel" })));
+  await vi.waitFor(() =>
+    expect(view.host.querySelector(".drv-preview-text")?.textContent).toBe("New version"),
+  );
+  const write = vi.spyOn(drive.client, "write");
+  await editText(get, "Fresh edit");
+  await save(get);
+  expect(write).toHaveBeenCalledWith(
+    FILE,
+    "Fresh edit",
+    expect.objectContaining({ ifMatch: newest.etag }),
+    { kind: "protect-ancestors" },
+  );
+  await pod.fetch(FILE, {
+    method: "PUT",
+    headers: { "content-type": "text/plain" },
+    body: "Later version",
+  });
+  await view.render(
+    contents(h(PreviewBody, { item: await drive.client.stat(FILE), metadataStatus: "ready" })),
+  );
+  await vi.waitFor(() =>
+    expect(view.host.querySelector(".drv-preview-text")?.textContent).toBe("Later version"),
+  );
+});
+
+test.each([
+  false,
+  true,
+])("saved text stays visible until a newer read (same ETag: %s)", async (sameEtag) => {
+  const { item, view } = await setup();
+  const value = {
+    text: "Original text",
+    truncated: false,
+    writable: true,
+    editableEncoding: true,
+    contentType: "text/plain",
+    etag: '"v1"',
+  };
+  const reload = vi.fn();
+  const render = (next: typeof value | undefined) =>
+    view.render(contents(h(TextPreview, { item, value: next, reload, fallback: "Loading" })));
+  await render(value);
+  const get = within(view.host);
+  const write = vi.spyOn(drive.client, "write").mockResolvedValue({ etag: '"saved"' });
+  await editText(get);
+  await save(get);
+  expect(view.host.querySelector(".drv-preview-text")?.textContent).toBe("Changed text");
+  await act(async () => fireEvent.click(get.getByRole("button", { name: "Edit" })));
+  await act(async () => fireEvent.click(get.getByRole("button", { name: "Cancel" })));
+  expect(view.host.querySelector(".drv-preview-text")?.textContent).toBe("Changed text");
+  await render(undefined);
+  await render(value);
+  expect(view.host.querySelector(".drv-preview-text")?.textContent).toBe("Changed text");
+  const refreshed = {
+    ...value,
+    text: sameEtag ? "Changed text" : "Remote text",
+    etag: sameEtag ? '"saved"' : '"remote"',
+  };
+  await render(refreshed);
+  expect(view.host.querySelector(".drv-preview-text")?.textContent).toBe(refreshed.text);
+  await render(undefined);
+  expect(view.host.textContent).toBe("Loading");
+  await render(refreshed);
+  await editText(get, "Next draft");
+  await save(get);
+  expect(write).toHaveBeenLastCalledWith(
+    FILE,
+    "Next draft",
+    expect.objectContaining({ ifMatch: refreshed.etag }),
+    { kind: "protect-ancestors" },
+  );
+});
+
+test.each([
+  "clean",
+  "dirty",
+])("a content-type refresh preserves a %s editor and requires Reload", async (state) => {
+  const { get, item, view, pod } = await setup({ preview: true });
+  const write = vi.spyOn(drive.client, "write");
+  await act(async () => fireEvent.click(get.getByRole("button", { name: "Edit" })));
+  if (state === "dirty")
+    await act(async () =>
+      fireEvent.change(get.getByRole("textbox"), { target: { value: "Keep draft" } }),
+    );
+  const textarea = get.getByRole("textbox");
+  const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+  await pod.fetch(FILE, {
+    method: "PUT",
+    headers: { "content-type": "text/csv" },
+    body: "Name,Value\nNew,Content",
+  });
+  const refreshed = { ...item, ...(await drive.client.stat(FILE)) };
+  await view.render(contents(h(PreviewBody, { item: refreshed, metadataStatus: "ready" })));
+  expect(get.getByRole("textbox")).toBe(textarea);
+  expect((textarea as HTMLTextAreaElement).value).toBe(
+    state === "dirty" ? "Keep draft" : "Original text",
+  );
+  expect(get.getByRole("alert").textContent).toBe("This file changed since you opened it");
+  expect((get.getByRole("button", { name: "Save" }) as HTMLButtonElement).disabled).toBe(true);
+  await act(async () => fireEvent.submit(get.getByRole("form")));
+  expect(write).not.toHaveBeenCalled();
+  expect(beforeUnload().defaultPrevented).toBe(state === "dirty");
+  expect(confirm).not.toHaveBeenCalled();
+  await act(async () => fireEvent.click(get.getByRole("button", { name: "Reload" })));
+  if (state === "dirty") {
+    expect(get.getByRole("textbox")).toBe(textarea);
+    expect(confirm).toHaveBeenCalledWith("Discard your changes and reload?");
+    confirm.mockReturnValue(true);
+    await act(async () => fireEvent.click(get.getByRole("button", { name: "Reload" })));
+  }
+  await vi.waitFor(() => expect(get.getByRole("table").textContent).toContain("New"));
+  expect(get.queryByRole("textbox")).toBeNull();
+  expect(beforeUnload().defaultPrevented).toBe(false);
+});
+
+test.each([
+  "dirty",
+  "saving",
+])("same-file metadata reconciliation never guards a %s editor", async (state) => {
+  const { get } = await openDialog();
+  await editText(get);
+  const pending = deferred<{ etag?: string }>();
+  vi.spyOn(drive.client, "write").mockReturnValue(pending.promise);
+  if (state === "saving") await save(get);
+  const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+  const current = ui.preview as NonNullable<typeof ui.preview>;
+  const updated = { ...(current.items[1] as DriveItem), name: "Renamed.txt" };
+  await act(async () =>
+    ui.setPreview({ ...current, items: [updated, current.items[0] as DriveItem], index: 0 }),
+  );
+  expect(ui.preview?.index).toBe(0);
+  expect(ui.preview?.items[0]?.name).toBe("Renamed.txt");
+  expect(confirm).not.toHaveBeenCalled();
+  expect((get.getByRole("textbox") as HTMLTextAreaElement).value).toBe("Changed text");
+  if (state === "saving") await act(async () => pending.reject(new Error("Failed")));
+});
+
+test("setPreview guards closing, URL replacement and activation, including same-tick updates", async () => {
+  const { item } = await setup();
+  const guard = vi.fn(() => false);
+  const stop = ui.registerPreviewGuard(guard);
+  await act(async () => {
+    ui.setPreview(undefined);
+    ui.setPreview({ items: [item], index: 0 });
+    ui.setPreview(undefined);
+  });
+  expect(ui.preview?.items[0]?.url).toBe(FILE);
+  expect(guard).toHaveBeenCalledOnce();
+  for (const next of [
+    { items: [item], index: 1 },
+    { items: [{ ...item, url: `${DRIVE}other.txt` }], index: 0 },
+    { items: [item], index: 0, activationId: "reopened" },
+  ])
+    await act(async () => ui.setPreview(next));
+  expect(guard).toHaveBeenCalledTimes(4);
+  guard.mockReturnValue(true);
+  await act(async () => ui.setPreview({ items: [], index: 0 }));
+  await act(async () => ui.setPreview({ items: [], index: 0 }));
+  expect(guard).toHaveBeenCalledTimes(5);
+  stop();
+});
+
+let docsControl: OpenWithDocsControl | undefined;
+let menu: MenuEntry[];
+function DocsActions({ item }: { item: DriveItem }) {
+  docsControl = useOpenWithDocs(item);
+  menu = useItemMenu(actions, [item], [item]);
+  return null;
+}
+
+test.each([
+  "header",
+  "menu",
+  "Docs document",
+])("%s Open with Docs guards before conversion or navigation", async (path) => {
+  const { item, view } = await setup();
+  const target =
+    path === "Docs document"
+      ? { ...item, url: `${ROOT}docs/note.ttl`, contentType: "text/turtle" }
+      : item;
+  await view.render(
+    contents(
+      h("div", null, h(PreviewPage, { item, parent: DRIVE }), h(DocsActions, { item: target })),
+    ),
+  );
+  const get = within(view.host);
+  await vi.waitFor(() => expect(get.getByRole("button", { name: "Edit" })).toBeTruthy());
+  await editText(get);
+  const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+  const run = async () =>
+    act(async () => {
+      if (path === "header") fireEvent.click(get.getByRole("button", { name: "Open with Docs" }));
+      else if (path === "menu") {
+        const entry = menu.find((entry) => entry !== "separator" && entry.id === "open-with");
+        if (entry !== undefined && entry !== "separator" && "submenu" in entry)
+          entry.submenu[0]?.onSelect();
+      } else await docsControl?.run();
+    });
+  await run();
+  expect(confirm).toHaveBeenCalledExactlyOnceWith("Discard your changes?");
+  expect(mocks.convert).not.toHaveBeenCalled();
+  expect(mocks.push).not.toHaveBeenCalled();
+  expect((get.getByRole("textbox") as HTMLTextAreaElement).value).toBe("Changed text");
+  const pending = deferred<{ etag?: string }>();
+  vi.spyOn(drive.client, "write").mockReturnValue(pending.promise);
+  await save(get);
+  await run();
+  expect(confirm).toHaveBeenCalledOnce();
+  expect(mocks.convert).not.toHaveBeenCalled();
+  expect(mocks.push).not.toHaveBeenCalled();
+  await act(async () => pending.reject(new Error("Failed")));
+  confirm.mockReturnValue(true);
+  mocks.convert.mockResolvedValue({ url: `${ROOT}docs/converted.ttl`, skipped: [] });
+  await run();
+  await vi.waitFor(() =>
+    expect(mocks.push).toHaveBeenCalledWith(
+      docsHref(path === "Docs document" ? target.url : `${ROOT}docs/converted.ttl`),
+    ),
+  );
+});
+
+test("a save started during Docs conversion blocks its eventual navigation", async () => {
+  const { item, view } = await setup();
+  await view.render(
+    contents(
+      h("div", null, h(PreviewBody, { item, metadataStatus: "ready" }), h(DocsActions, { item })),
+    ),
+  );
+  const get = within(view.host);
+  await vi.waitFor(() => expect(get.getByRole("button", { name: "Edit" })).toBeTruthy());
+  await editText(get);
+  vi.spyOn(window, "confirm").mockReturnValue(true);
+  const conversion = deferred<{ url: string; skipped: [] }>();
+  mocks.convert.mockReturnValue(conversion.promise);
+  let opening: Promise<void> | undefined;
+  await act(async () => {
+    opening = docsControl?.run();
+  });
+  await vi.waitFor(() => expect(mocks.convert).toHaveBeenCalled());
+  const pending = deferred<{ etag?: string }>();
+  vi.spyOn(drive.client, "write").mockReturnValue(pending.promise);
+  await save(get);
+  await act(async () => {
+    conversion.resolve({ url: `${ROOT}docs/converted.ttl`, skipped: [] });
+    await opening;
+  });
+  expect(mocks.push).not.toHaveBeenCalled();
+  expect(get.getByRole("textbox")).toBeTruthy();
+  await act(async () => pending.reject(new Error("Failed")));
+});
+
+test.each([
+  "folder",
+  "Docs",
+  "file",
+])("shared Open action guards router navigation to a %s", async (kind) => {
+  const { get, item } = await openDialog();
+  const target =
+    kind === "folder"
+      ? { ...item, kind: "folder" as const, url: DRIVE }
+      : kind === "Docs"
+        ? { ...item, url: `${ROOT}docs/note.ttl`, contentType: "text/turtle" }
+        : item;
+  await editText(get);
+  const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+  await act(async () => actions.open(target));
+  expect(confirm).toHaveBeenCalledExactlyOnceWith("Discard your changes?");
+  expect(mocks.push).not.toHaveBeenCalled();
+  const pending = deferred<{ etag?: string }>();
+  vi.spyOn(drive.client, "write").mockReturnValue(pending.promise);
+  await save(get);
+  await act(async () => actions.open(target));
+  expect(confirm).toHaveBeenCalledOnce();
+  expect(mocks.push).not.toHaveBeenCalled();
+  await act(async () => pending.reject(new Error("Failed")));
+  confirm.mockReturnValue(true);
+  await act(async () => actions.open(target));
+  expect(mocks.push).toHaveBeenCalledOnce();
+});
+
+test.each([
+  "My Drive",
+  "nested",
+])("preview Details location link %s guards drafts and saves", async (name) => {
+  const { item, view } = await setup();
+  await view.render(
+    contents(
+      h(
+        "div",
+        null,
+        h(PreviewBody, { item, metadataStatus: "ready" }),
+        h(DetailsPane, { items: [{ ...item, url: `${DRIVE}nested/note.txt` }], onClose: vi.fn() }),
+      ),
+    ),
+  );
+  const get = within(view.host);
+  await vi.waitFor(() => expect(get.getByRole("button", { name: "Edit" })).toBeTruthy());
+  const link = get.getByRole("link", { name });
+  async function clickLocation() {
+    let blocked = false;
+    document.addEventListener(
+      "click",
+      (event) => {
+        blocked = event.defaultPrevented;
+        event.preventDefault();
+      },
+      { once: true },
+    );
+    await act(async () => fireEvent.click(link));
+    return blocked;
+  }
+  const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+  expect(await clickLocation()).toBe(false);
+  expect(confirm).not.toHaveBeenCalled();
+  await editText(get);
+  expect(await clickLocation()).toBe(true);
+  expect(confirm).toHaveBeenCalledExactlyOnceWith("Discard your changes?");
+  const pending = deferred<{ etag?: string }>();
+  vi.spyOn(drive.client, "write").mockReturnValue(pending.promise);
+  await save(get);
+  expect(await clickLocation()).toBe(true);
+  expect(confirm).toHaveBeenCalledOnce();
+  await act(async () => pending.reject(new Error("Failed")));
+  confirm.mockReturnValue(true);
+  expect(await clickLocation()).toBe(false);
 });
