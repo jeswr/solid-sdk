@@ -8,6 +8,7 @@ description: Use when fetching or parsing RDF with @jeswr/fetch-rdf, handling Rd
 <!-- AUTHORED-BY Codex GPT-5 -->
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 <!-- AUTHORED-BY Codex GPT-6 -->
+<!-- // AUTHORED-BY Codex GPT-6 -->
 
 **Read RDF with `@jeswr/fetch-rdf`**
 
@@ -25,6 +26,13 @@ const etag = headers.get("etag");
 ### Rules
 
 - Use `fetchRdf` for network reads and `parseRdf` when bytes are already available. Do not duplicate content-type dispatch with an inline N3 parser.
+- For an existing synchronous buffered reader, use `parseRdfSync(body, options?)`.
+  It shares the N3-family parser and budgets with `parseRdf`; pass `format` to
+  restrict syntax (omitting it retains n3's permissive detection), and a throwing
+  `check` hook to enforce a deadline during parsing and store insertion. JSON-LD
+  and streams require `parseRdf`. No transport or remote context loads occur.
+  Use `onQuad` for document order (including duplicates); discard observations on
+  failure. Iterating the returned store can reorder values and deduplicate quads.
 - Inject the correct fetch explicitly at security boundaries. Do not assume a patched global when code can run before auth initialization or against a foreign origin.
 - Retain the returned ETag for conditional writes. Handle `null` for servers that do not supply one.
 - Branch on `RdfFetchError` and its structured status fields; do not string-match error messages.
@@ -77,11 +85,11 @@ Pure ESM, Node ≥24. Workspace dependencies use `workspace:*`.
 
 ```ts
 import {
-  fetchRdf, parseRdf, extractMediaType, SUPPORTED_RDF_MEDIA_TYPES,
+  fetchRdf, parseRdf, parseRdfSync, extractMediaType, SUPPORTED_RDF_MEDIA_TYPES,
   createFetchDocumentLoader, RdfFetchError,
 } from "@jeswr/fetch-rdf";
 import type {
-  FetchRdfOptions, ParseRdfOptions, FetchedRdf, RdfFetchErrorOptions,
+  FetchRdfOptions, ParseRdfOptions, ParseRdfSyncOptions, FetchedRdf, RdfFetchErrorOptions,
   DocumentLoader, RdfBody, RdfMediaType, RdfParser, DatasetCore, Quad, Term,
 } from "@jeswr/fetch-rdf";
 ```
