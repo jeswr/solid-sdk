@@ -3,7 +3,7 @@
 import { RdfFetchError } from "@jeswr/fetch-rdf";
 import { NS } from "@jeswr/suite-vocab";
 import { classifySubject } from "../lib/model/classify";
-import type { DomainItem } from "../lib/model/discovery";
+import { type DomainItem, resourceUrl } from "../lib/model/discovery";
 import { inStorage, readResource, subjectOf } from "../lib/model/rdf";
 import type { HomeSession } from "./use-domain-items";
 
@@ -43,10 +43,11 @@ const WELL_KNOWN = [
  * removed through the edit form, never by deleting the profile document.
  */
 export function protectedDocument(item: DomainItem, storage: string, webId?: string): boolean {
-  if (webId !== undefined && item.url === webId.split("#")[0]) return true;
+  const url = resourceUrl(item.url);
+  if (webId !== undefined && url === resourceUrl(webId)) return true;
   // Contact details are always an aggregate of the profile's own linked nodes.
   if (item.dataType?.id === "contact-details") return true;
-  if (WELL_KNOWN.some((path) => item.url === new URL(path, storage).href)) return true;
+  if (WELL_KNOWN.some((path) => url === resourceUrl(new URL(path, storage).href))) return true;
   for (const quad of item.dataset) {
     if (INFRASTRUCTURE_PREDICATES.has(quad.predicate.value)) return true;
     if (quad.predicate.value === `${NS.RDF}type` && INFRASTRUCTURE_TYPES.has(quad.object.value))
@@ -57,7 +58,7 @@ export function protectedDocument(item: DomainItem, storage: string, webId?: str
       item.dataType?.id !== "files" &&
       quad.predicate.value === `${NS.RDF}type` &&
       quad.subject.termType === "NamedNode" &&
-      quad.subject.value.split("#")[0] === item.url &&
+      resourceUrl(quad.subject.value) === url &&
       !quad.subject.equals(item.subject) &&
       classifySubject(subjectOf(item.dataset, quad.subject), webId).dataType
     )
@@ -74,7 +75,7 @@ function linkTargets(headers: Headers, base: string, relations: readonly string[
     const rel = /;\s*rel\s*=\s*(?:"([^"]*)"|([^;\s]+))/i.exec(part);
     const rels = (rel?.[1] ?? rel?.[2] ?? "").split(/\s+/);
     if (target && rels.some((value) => relations.includes(value)))
-      targets.push(new URL(target, base).href.split("#")[0] as string);
+      targets.push(resourceUrl(new URL(target, base).href));
   }
   return targets;
 }
@@ -89,7 +90,8 @@ export async function linkedProtectedDocument(
   session: HomeSession,
   target: string,
 ): Promise<boolean> {
-  const profileUrl = session.webId.split("#")[0] as string;
+  target = resourceUrl(target);
+  const profileUrl = resourceUrl(session.webId);
   if (target === profileUrl) return true;
   const profileFetch: typeof fetch = inStorage(profileUrl, session.storageUrl)
     ? session.fetch
@@ -99,7 +101,7 @@ export async function linkedProtectedDocument(
     const owner = subjectOf(profile.dataset, session.webId);
     if (
       PROFILE_LINKS.flatMap((predicate) => owner.iris(predicate)).some(
-        (url) => url.split("#")[0] === target,
+        (url) => resourceUrl(url) === target,
       )
     )
       return true;

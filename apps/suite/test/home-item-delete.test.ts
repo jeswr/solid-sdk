@@ -79,6 +79,33 @@ it("refuses individual deletion in a shared history, including stale cards, and 
   }
 });
 
+it("protects every record when shared document subjects use URL aliases", async () => {
+  const { session, controller, pod, fetch } = await setup();
+  const target = `${root}integrations/netflix/media/viewing-history.ttl`;
+  const alias = "https://POD.example:443/alice/integrations/netflix/media/viewing-history.ttl";
+  const history = `@prefix s: <https://schema.org/>.
+    <${alias}#garden> a s:WatchAction; s:name "The Garden".
+    <${alias}#weekend> a s:WatchAction; s:name "A Quiet Weekend".`;
+  await pod.fetch(target, {
+    method: "PUT",
+    headers: { "content-type": "text/turtle" },
+    body: history,
+  });
+  try {
+    for (const subject of ["garden", "weekend"]) {
+      const { item } = await readItem(session, target, `${alias}#${subject}`);
+      expect(itemActions(item, root).map((action) => action.id)).not.toContain("delete");
+      // Protection is also checked against a fresh read when the card has no saved RDF.
+      expect(await controller.remove({ ...item, dataset: new Store() }, vi.fn())).toBe(false);
+    }
+    expect(controller.pendingDeletes()).toEqual([]);
+    expect(fetch.mock.calls.some(([, init]) => init?.method === "DELETE")).toBe(false);
+    expect(await (await pod.fetch(target)).text()).toBe(history);
+  } finally {
+    controller.dispose();
+  }
+});
+
 it("refuses an old queued document deletion when a shared history is resumed", async () => {
   const { session, controller, pod, fetch, refresh } = await setup();
   controller.dispose();

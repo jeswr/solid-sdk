@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import {
   type DomainItem,
   discoverDomainItems,
+  domainItemKey,
   nameFromUrl,
   sortItems,
 } from "../../src/apps/home/lib/model/discovery";
@@ -14,6 +15,50 @@ import { readTypeIndexes } from "../../src/apps/home/lib/model/type-index";
 import { fixtureFetch, rdf, STORAGE, WEB_ID } from "./fixtures";
 
 describe("domain discovery", () => {
+  it("keys blank-node primary subjects by document and type rather than parser labels", async () => {
+    const url = `${STORAGE}blank.ttl`;
+    const options = {
+      storage: STORAGE,
+      fetch: fixtureFetch({ [url]: '[] a schema:Movie; schema:name "A film".' }),
+      typeIndex: [{ forClass: `${NS.SCHEMA}Movie`, instance: url }],
+    };
+    const first = await discoverDomainItems("media", options);
+    const second = await discoverDomainItems("media", options);
+    expect(first.items).toHaveLength(1);
+    expect(second.items).toHaveLength(1);
+    expect(first.items[0]?.subject.value).not.toBe(second.items[0]?.subject.value);
+    expect(first.items.map(domainItemKey)).toEqual(second.items.map(domainItemKey));
+  });
+
+  it("caps records across documents at 1,000 and marks the refresh as truncated", async () => {
+    const urls = Array.from({ length: 6 }, (_, index) => `${STORAGE}history-${index}.ttl`);
+    const fetch = fixtureFetch(
+      Object.fromEntries(
+        urls.map((url) => [
+          url,
+          Array.from(
+            { length: 201 },
+            (_, index) =>
+              `<#record-${index}> a schema:WatchAction; schema:name "Film ${index}";
+                prov:wasGeneratedBy <runs.ttl#run>.`,
+          ).join("\n"),
+        ]),
+      ),
+    );
+    const result = await discoverDomainItems("media", {
+      storage: STORAGE,
+      fetch,
+      typeIndex: urls.map((instance) => ({ forClass: `${NS.SCHEMA}WatchAction`, instance })),
+    });
+    expect(result.failures).toEqual([]);
+    expect(result.items).toHaveLength(1_000);
+    expect(result.truncated).toBe(true);
+    expect(new Set(result.items.map(domainItemKey)).size).toBe(1_000);
+    expect(urls.map((url) => result.items.filter((item) => item.url === url).length)).toEqual([
+      200, 200, 200, 200, 200, 0,
+    ]);
+  });
+
   it.each([
     "A Quiet Weekend",
     "The Garden",

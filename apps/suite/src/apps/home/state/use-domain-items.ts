@@ -10,10 +10,13 @@ import { useEffect, useSyncExternalStore } from "react";
 import { typedViewData } from "../../../components/typed-view-data";
 import type { PodSession } from "../../../lib/session/pod-session";
 import {
+  type DiscoveryOptions,
   type DomainItem,
   type DomainItems,
   discoverDomainItems,
   domainItemKey,
+  MAX_RECORDS_PER_DOCUMENT,
+  MAX_RECORDS_PER_REFRESH,
   sortItems,
 } from "../lib/model/discovery";
 import { DiscoveryBudget } from "../lib/model/discovery-budget";
@@ -90,6 +93,13 @@ function reconcileItems(
   visitedFor: (item: DomainItem) => ReadonlyMap<string, string | null>,
 ): DomainItem[] {
   const items = new Map(result.items.map((item) => [domainItemKey(item), item]));
+  const perDocument = new Map<string, number>();
+  let records = 0;
+  for (const item of items.values()) {
+    if (item.dataType?.id === "files") continue;
+    records++;
+    perDocument.set(item.url, (perDocument.get(item.url) ?? 0) + 1);
+  }
   for (const item of previous) {
     const failedRead = failures.some((failure) => affectsItem(failure.url, item));
     const unvisited =
@@ -101,8 +111,18 @@ function reconcileItems(
       !items.has(domainItemKey(item)) &&
       (failedRead || unvisited) &&
       !unavailable.some((url) => affectsItem(url, item))
-    )
+    ) {
+      if (item.dataType?.id !== "files") {
+        const count = perDocument.get(item.url) ?? 0;
+        if (records >= MAX_RECORDS_PER_REFRESH || count >= MAX_RECORDS_PER_DOCUMENT) {
+          result.truncated = true;
+          continue;
+        }
+        records++;
+        perDocument.set(item.url, count + 1);
+      }
       items.set(domainItemKey(item), item);
+    }
   }
   return sortItems([...items.values()]);
 }
@@ -193,6 +213,7 @@ function createDomainStore(session: HomeSession) {
         const usage = storageUsage(fetch, session.storageUrl);
         // Independent budgets keep a large domain from starving every other domain.
         const scanned = [...DOMAINS, UNCATEGORISED];
+        const documentCache: NonNullable<DiscoveryOptions["documentCache"]> = new Map();
         const domains = await Promise.all(
           scanned.map((domain) =>
             discoverDomainItems(domain, {
@@ -201,6 +222,7 @@ function createDomainStore(session: HomeSession) {
               webId: session.webId,
               profile,
               typeIndex: indexes.locations,
+              documentCache,
             }),
           ),
         );

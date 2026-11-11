@@ -25,9 +25,23 @@ export interface DomainItem extends Classification {
 
 /** Multiple records can share a document; profile views can also share a subject. */
 export function domainItemKey(item: DomainItem): string {
-  // Binary listing subjects may be URL aliases for the same file.
-  const subject = item.dataType?.id === "files" ? item.url : item.subject.value;
-  return JSON.stringify([item.url, item.subject.termType, subject, item.dataType?.id]);
+  // Blank-node labels belong to one parse, so these cards keep document/type identity.
+  // Binary listing subjects may also be URL aliases for the same file.
+  const subject =
+    item.subject.termType === "NamedNode" && item.dataType?.id !== "files"
+      ? item.subject.value
+      : undefined;
+  return JSON.stringify([resourceUrl(item.url), subject, item.dataType?.id]);
+}
+
+export const MAX_RECORDS_PER_DOCUMENT = 200;
+export const MAX_RECORDS_PER_REFRESH = 1_000;
+
+interface ClassifiedDocument {
+  dataset: DatasetCore;
+  etag: string | null;
+  items: DomainItem[];
+  truncated: boolean;
 }
 
 export interface DiscoveryOptions extends DiscoveryBudgetOptions {
@@ -38,12 +52,14 @@ export interface DiscoveryOptions extends DiscoveryBudgetOptions {
   webId?: string;
   /** Allows a profile hosted outside storage without forwarding credentials there. */
   profile?: DatasetCore;
+  /** Shared only within one refresh, so overlapping domain scans classify each document once. */
+  documentCache?: Map<string, ClassifiedDocument>;
 }
 
 export interface DomainItems {
   items: DomainItem[];
   failures: DiscoveryFailure[];
-  /** True when discovery stopped at its request budget or deadline. Failures also imply partial data. */
+  /** True when discovery reached its request, record or time budget. Failures also imply partial data. */
   truncated: boolean;
   etags: ReadonlyMap<string, string | null>;
   /** Listing membership is independent of whether child contents were visited. */
@@ -77,7 +93,7 @@ interface Visit {
 }
 
 /** Normalize HTTP resource identities without rewriting RDF subject identifiers. */
-function resourceUrl(value: string): string {
+export function resourceUrl(value: string): string {
   return (httpUrl(value)?.href ?? value).split("#")[0] as string;
 }
 
@@ -102,6 +118,7 @@ export async function discoverDomainItems(
   if (!inStorage(storage, storage) || new URL(storage).hash)
     throw new TypeError("Expected a storage root ending in /");
   const budget = options.budget ?? new DiscoveryBudget(options);
+  const documents = options.documentCache ?? new Map<string, ClassifiedDocument>();
   const listings = new Map<string, ReadonlySet<string>>();
   const result: DomainItems = {
     items: [],
@@ -117,52 +134,78 @@ export async function discoverDomainItems(
   const listedModified = new Map<string, string>();
 
   const addDataset = (dataset: DatasetCore, url: string, parent: string, etag: string | null) => {
-    // Connector collections stamp their records with import provenance. Enumerate
-    // those local, classified subjects instead of choosing just one from the file.
-    // Unstamped documents retain primary-subject discovery; profiles use the WebID.
-    const imported = new Map<string, ReturnType<typeof subjectOf>>();
-    for (const { subject } of dataset.match(
-      null,
-      DataFactory.namedNode(`${NS.PROV}wasGeneratedBy`),
-    )) {
-      if (
-        subject.termType !== "NamedNode" ||
-        subject.value === url ||
-        resourceUrl(subject.value) !== url
-      )
-        continue;
-      const node = subjectOf(dataset, subject);
-      if (classifySubject(node, webId).dataType) imported.set(subject.value, node);
-    }
-    const nodes =
-      webId && url === resourceUrl(webId)
-        ? [subjectOf(dataset, webId)]
-        : imported.size
-          ? [...imported.values()]
-          : [primarySubject(dataset, url)];
-    for (const node of nodes) {
-      if (!node || dataset.match(TermAs.term(node)).size === 0) continue;
-      const classified = classifySubject(node, webId);
-      const modifiedAt = node.modified;
-      const item: DomainItem = {
-        ...classified,
-        url,
-        subject: TermAs.term(node),
-        dataset,
-        etag,
-        containerUrl: parent,
-        title: node.name ?? nameFromUrl(url),
-        ...(modifiedAt ? { modified: modifiedAt } : {}),
+    let document = documents.get(url);
+    if (!document) {
+      const remaining =
+        MAX_RECORDS_PER_REFRESH -
+        [...documents.values()].reduce((count, entry) => count + entry.items.length, 0);
+      const limit = Math.min(MAX_RECORDS_PER_DOCUMENT, remaining);
+      const items: DomainItem[] = [];
+      let truncated = false;
+      const add = (node: ReturnType<typeof subjectOf>, classified: Classification) => {
+        if (items.length >= limit) {
+          truncated = true;
+          return;
+        }
+        const modifiedAt = node.modified;
+        const item: DomainItem = {
+          ...classified,
+          url,
+          subject: TermAs.term(node),
+          dataset,
+          etag,
+          containerUrl: parent,
+          title: node.name ?? nameFromUrl(url),
+          ...(modifiedAt ? { modified: modifiedAt } : {}),
+        };
+        items.push(item);
+        if (hasProfileContactDetails(node, webId)) {
+          if (items.length >= limit) truncated = true;
+          else
+            items.push({
+              ...item,
+              ...classificationForType("contact-details"),
+              title: "Contact details",
+            });
+        }
       };
-      result.items.push(item);
-      if (hasProfileContactDetails(node, webId)) {
-        result.items.push({
-          ...item,
-          ...classificationForType("contact-details"),
-          title: "Contact details",
-        });
+      // Connector collections stamp records with provenance. Only named local records
+      // get individual cards; blank-node collections keep primary-subject discovery.
+      const imported = new Set<string>();
+      if (!webId || url !== resourceUrl(webId)) {
+        for (const { subject } of dataset.match(
+          null,
+          DataFactory.namedNode(`${NS.PROV}wasGeneratedBy`),
+        )) {
+          if (
+            subject.termType !== "NamedNode" ||
+            subject.value === url ||
+            resourceUrl(subject.value) !== url ||
+            imported.has(subject.value)
+          )
+            continue;
+          const node = subjectOf(dataset, subject);
+          const classified = classifySubject(node, webId);
+          if (!classified.dataType) continue;
+          imported.add(subject.value);
+          add(node, classified);
+          if (truncated) break;
+        }
       }
+      if (!imported.size) {
+        const node =
+          webId && url === resourceUrl(webId)
+            ? subjectOf(dataset, webId)
+            : primarySubject(dataset, url);
+        if (node && dataset.match(TermAs.term(node)).size > 0)
+          add(node, classifySubject(node, webId));
+      }
+      document = { dataset, etag, items, truncated };
+      documents.set(url, document);
     }
+    result.truncated ||= document.truncated;
+    // Listing dates and parents belong to the current scan, not the shared cache.
+    result.items.push(...document.items.map((item) => ({ ...item, containerUrl: parent })));
   };
 
   for (const location of options.typeIndex ?? []) {
@@ -222,6 +265,12 @@ export async function discoverDomainItems(
       continue;
     }
     try {
+      const cached = documents.get(url);
+      if (cached && !visit.container && !visit.files) {
+        etags.set(url, cached.etag);
+        addDataset(cached.dataset, url, visit.parent, cached.etag);
+        continue;
+      }
       const resource = await budget.read(fetch, url);
       if (!resource) break;
       const { dataset, etag } = resource;
@@ -285,7 +334,7 @@ export async function discoverDomainItems(
         result.failures.push({ url, error });
     }
   }
-  result.truncated = budget.truncated;
+  result.truncated = budget.truncated || result.truncated;
   const unique = new Map<string, DomainItem>();
   for (const item of result.items) {
     // A direct registration may have been read before its container listing.
