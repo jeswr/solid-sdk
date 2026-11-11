@@ -116,9 +116,11 @@ export async function runImport(opts: RunImportOptions): Promise<ImportReport> {
   armDeadline();
   const signal = AbortSignal.any([...(opts.signal ? [opts.signal] : []), deadline.signal]);
   const sourceApi = budgetedFetch(api, id, budget, signal);
+  // Source deadlines stop upstream work; completed data may still be checkpointed to the Pod.
+  // Explicit user cancellation continues to stop every Pod operation at its boundary.
   const checked = <A extends unknown[], R>(step: (...args: A) => Promise<R>) =>
-    unlessAborted(signal, step);
-  const podWriter = abortablePodWriter(opts.podWriter, signal);
+    unlessAborted(opts.signal, step);
+  const podWriter = abortablePodWriter(opts.podWriter, opts.signal);
   let session: ReturnType<typeof createImportSession>;
   try {
     signal.throwIfAborted();
@@ -181,7 +183,7 @@ export async function runImport(opts: RunImportOptions): Promise<ImportReport> {
     // run was not cancelled, preserving the original failure if the provenance write fails.
     // A cancelled run starts no further Pod I/O, so its writes name an unrecorded activity
     // (documented on RunImportOptions.signal).
-    if (signal?.aborted) session.release();
+    if (opts.signal?.aborted) session.release();
     else
       try {
         await session.finish();
@@ -190,7 +192,8 @@ export async function runImport(opts: RunImportOptions): Promise<ImportReport> {
       }
     opts.onState?.(session.state());
     // A cancel can surface as an adapter or write error; callers match the abort reason.
-    throw signal?.aborted ? signal.reason : error;
+    if (opts.signal?.aborted) throw opts.signal.reason;
+    throw signal.aborted ? signal.reason : error;
   } finally {
     sourceApi.close();
     timeout?.removeEventListener("abort", expire);

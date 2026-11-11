@@ -1,30 +1,15 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { snapshotFetchInput } from "@jeswr/guarded-fetch";
-import type { RunBudget } from "./budget.js";
-import { IntegrationSyncError } from "./errors.js";
+import { MAX_JSON_BYTES, type RunBudget } from "./budget.js";
+import {
+  during,
+  registerSourceBodyLimit,
+  SOURCE_RESPONSE_TIMEOUT_MS,
+  SourceTimeoutError,
+  sourceBodyTimeoutMs,
+} from "./source-timeout.js";
 
-/** Absolute response deadline, covering both headers and the entire body, including trickles. */
-export const SOURCE_RESPONSE_TIMEOUT_MS = 60_000;
-
-/** Reject even if a custom source transport/reader ignores its signal. Remove settled listeners. */
-function during<T>(signal: AbortSignal, step: () => Promise<T>): Promise<T> {
-  return new Promise((resolve, reject) => {
-    const stop = () => reject(signal.reason);
-    signal.addEventListener("abort", stop, { once: true });
-    if (signal.aborted) {
-      signal.removeEventListener("abort", stop);
-      reject(signal.reason);
-      return;
-    }
-    Promise.resolve()
-      .then(() => {
-        signal.throwIfAborted();
-        return step();
-      })
-      .then(resolve, reject)
-      .finally(() => signal.removeEventListener("abort", stop));
-  });
-}
+export { SOURCE_RESPONSE_TIMEOUT_MS } from "./source-timeout.js";
 
 /** Only successful Drive representations are written per-file instead of retained for a run. */
 function driveContent(adapterId: string, url: string, response: Response): boolean {
@@ -55,22 +40,16 @@ export function budgetedFetch(
         : typeof snapshot.input === "string"
           ? undefined
           : snapshot.input.signal;
-    // The run deadline is shared; each response also gets an absolute deadline so a slow
-    // trickle cannot keep a reader alive indefinitely. Preserve a caller's controller too.
-    const responseTimeout = AbortSignal.timeout(SOURCE_RESPONSE_TIMEOUT_MS);
-    const combined = AbortSignal.any([
-      runSignal,
-      responseTimeout,
-      ...(effective ? [effective] : []),
-    ]);
+    const combined = AbortSignal.any([runSignal, ...(effective ? [effective] : [])]);
     const controller = new AbortController();
-    const reason = () =>
-      responseTimeout.aborted && !runSignal.aborted
-        ? new IntegrationSyncError(adapterId, "The source response timed out.", {
-            url: snapshot.url,
-          })
-        : combined.reason;
-    const stop = () => controller.abort(reason());
+    let idleTimer: ReturnType<typeof setTimeout> | undefined;
+    let bodyTimer: ReturnType<typeof setTimeout> | undefined;
+    const timeOut = () => controller.abort(new SourceTimeoutError(adapterId, snapshot.url));
+    const armIdle = () => {
+      clearTimeout(idleTimer);
+      idleTimer = setTimeout(timeOut, SOURCE_RESPONSE_TIMEOUT_MS);
+    };
+    const stop = () => controller.abort(combined.reason);
     combined.addEventListener("abort", stop, { once: true });
     if (combined.aborted) stop();
     let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
@@ -79,6 +58,8 @@ export function budgetedFetch(
       combined.removeEventListener("abort", stop);
       controller.signal.removeEventListener("abort", cancel);
       active.delete(close);
+      clearTimeout(idleTimer);
+      clearTimeout(bodyTimer);
     };
     const cancel = () => {
       if (settled) return;
@@ -93,6 +74,7 @@ export function budgetedFetch(
     };
     active.add(close);
     controller.signal.addEventListener("abort", cancel, { once: true });
+    armIdle();
     try {
       const res = await during(controller.signal, async () => {
         const response = await transport(snapshot.input, {
@@ -109,6 +91,19 @@ export function budgetedFetch(
         cleanup();
         return res;
       }
+      const bodyStarted = performance.now();
+      const configure = (cap: number) => {
+        clearTimeout(bodyTimer);
+        const deadline = bodyStarted + sourceBodyTimeoutMs(cap, res.headers.get("content-length"));
+        const armBody = () => {
+          const remaining = deadline - performance.now();
+          if (remaining <= 0) timeOut();
+          else bodyTimer = setTimeout(armBody, Math.min(Math.ceil(remaining), 2_147_483_647));
+        };
+        armBody();
+      };
+      armIdle();
+      configure(MAX_JSON_BYTES);
       const bodyReader = res.body.getReader();
       reader = bodyReader;
       const charge = !driveContent(adapterId, snapshot.url, res);
@@ -128,6 +123,7 @@ export function budgetedFetch(
                 stream.close();
               } else {
                 if (charge) budget.bytes(chunk.value.byteLength);
+                armIdle();
                 stream.enqueue(chunk.value);
               }
             } catch (error) {
@@ -142,11 +138,13 @@ export function budgetedFetch(
         },
         { highWaterMark: 0 },
       );
-      return new Response(body, {
+      const response = new Response(body, {
         status: res.status,
         statusText: res.statusText,
         headers: res.headers,
       });
+      registerSourceBodyLimit(response, configure);
+      return response;
     } catch (error) {
       cleanup();
       throw error;

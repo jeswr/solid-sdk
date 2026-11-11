@@ -76,3 +76,36 @@ describe("Drive content budgets", () => {
     source.close();
   });
 });
+
+it.each(["headers", "body"])("skips a Drive file when its %s times out", async (phase) => {
+  vi.useFakeTimers();
+  vi.spyOn(AbortSignal, "timeout").mockImplementation((ms) => {
+    const controller = new AbortController();
+    setTimeout(() => controller.abort(new DOMException("Timed out", "TimeoutError")), ms);
+    return controller.signal;
+  });
+  const cancel = vi.fn();
+  const source = budgetedFetch(
+    async () =>
+      phase === "headers"
+        ? new Promise<Response>(() => {})
+        : new Response(new ReadableStream({ cancel })),
+    "google-drive",
+    new RunBudget("google-drive"),
+    new AbortController().signal,
+  );
+  try {
+    const pending = download(source.api, url, 25 * 1024 * 1024, true);
+    const outcome = pending.then(
+      (value) => value,
+      (error: unknown) => ({ error }),
+    );
+    await vi.advanceTimersByTimeAsync(60_001);
+    expect(await outcome).toEqual({ reason: "timeout" });
+    if (phase === "body") expect(cancel).toHaveBeenCalledOnce();
+  } finally {
+    source.close();
+    vi.restoreAllMocks();
+    vi.useRealTimers();
+  }
+});

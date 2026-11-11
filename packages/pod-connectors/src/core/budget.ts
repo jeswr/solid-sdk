@@ -6,6 +6,7 @@
  * pages (or very large ones) fails the run, keeping the checkpoint, instead of exhausting memory.
  */
 import { IntegrationSyncError } from "./errors.js";
+import { limitSourceBody } from "./source-timeout.js";
 
 /** Largest JSON response any adapter parses. */
 /** A response body exceeded its byte cap; adapters may skip the item instead of failing. */
@@ -160,6 +161,7 @@ export async function readBytes(
   maxBytes: number,
   budget?: RunBudget,
 ): Promise<Uint8Array> {
+  limitSourceBody(res, maxBytes);
   const tooLarge = () => new ResponseTooLargeError(adapterId, url);
   const declared = Number(res.headers.get("content-length"));
   if (Number.isFinite(declared) && declared > maxBytes) {

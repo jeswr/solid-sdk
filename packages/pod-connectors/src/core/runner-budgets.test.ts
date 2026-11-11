@@ -154,7 +154,8 @@ describe.each(
     });
     const settled = vi.fn();
     pending.then(settled, settled);
-    await vi.advanceTimersByTimeAsync(60_001);
+    // An endless trickle hits the finite size-scaled body deadline; idle/header stalls hit 60 s.
+    await vi.advanceTimersByTimeAsync(phase === "trickle" ? 188_001 : 60_001);
     expect(signal?.aborted).toBe(true);
     expect(settled).toHaveBeenCalledOnce();
     if (phase !== "headers") expect(cancel).toHaveBeenCalledOnce();
@@ -249,4 +250,42 @@ it("makes request() fail after the wall-clock deadline", () => {
   const budget = new RunBudget("x", { maxDurationMs: 10 });
   vi.advanceTimersByTime(10);
   expect(() => budget.request()).toThrow(expect.objectContaining({ resource: "duration" }));
+});
+
+it("preserves caller cancellation if it lands during duration-failure cleanup", async () => {
+  fakeClock();
+  const controller = new AbortController();
+  const reason = new Error("Caller cancelled during cleanup");
+  const original = ALL_ADAPTERS[0];
+  if (!original) throw new Error("Missing fixture");
+  const pod = createMemoryPod();
+  const pending = runImport({
+    adapter: {
+      ...original,
+      async import(ctx) {
+        try {
+          await ctx.api("https://api.test/stalled");
+        } catch (error) {
+          controller.abort(reason);
+          throw error;
+        }
+        return {};
+      },
+    },
+    mode: "live",
+    signal: controller.signal,
+    limits: { maxDurationMs: 10 },
+    sourceAuth: { fetch: async () => new Promise<Response>(() => {}) },
+    podWriter: createFetchPodWriter({
+      adapterId: original.metadata.id,
+      webId: TEST_WEBID,
+      profileDocumentUrl: TEST_PROFILE_DOC,
+      podRoot: TEST_POD_ROOT,
+      fetch: pod.fetch,
+    }),
+  });
+  const outcome = pending.catch((error: unknown) => error);
+  await vi.advanceTimersByTimeAsync(11);
+  expect(await outcome).toBe(reason);
+  expect(pod.urls().some((url) => url.endsWith("_provenance.ttl"))).toBe(false);
 });

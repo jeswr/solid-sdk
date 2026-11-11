@@ -196,9 +196,11 @@ export interface ImportContext {
   /** Incremental cursor from the previous import of this adapter, if any. */
   readonly cursor?: string;
   /**
-   * Cancels the run. The runner already refuses further `api`, `read`, `write`, `writeBinary`,
-   * `remove` and `progress` calls once it aborts; adapters pass it on to stop in-flight waits
-   * (for example on a rate-limit delay). A cancelled run records no activity, so documents it
+   * Combines caller cancellation and the source run deadline. Both stop source requests and
+   * in-flight waits (for example on a rate-limit delay). Caller cancellation also refuses
+   * subsequent Pod reads/writes/removals and progress; deadline expiry permits saving completed
+   * data and private journals before failing without advancing the successful checkpoint.
+   * A caller-cancelled run records no activity, so documents it
    * already wrote name an activity absent from `_provenance.ttl` (see `RunImportOptions.signal`).
    */
   readonly signal?: AbortSignal;

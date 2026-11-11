@@ -1,6 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { describe, expect, it, vi } from "vitest";
-import { RunBudget } from "./budget.js";
+import { RunBudget, readBytes } from "./budget.js";
 import { budgetedFetch } from "./source-budget.js";
 
 const url = "https://api.test/source";
@@ -109,4 +109,117 @@ it("releases the underlying reader and aborts its request on byte exhaustion", a
   expect(body.locked).toBe(false);
   expect(cancel).toHaveBeenCalledOnce();
   source.close();
+});
+
+it.each([
+  ["google-drive", "https://www.googleapis.com/drive/v3/files/file?alt=media", 25 * 1024 * 1024],
+  [
+    "gmail",
+    "https://gmail.googleapis.com/gmail/v1/users/me/messages/id?format=raw",
+    48 * 1024 * 1024,
+  ],
+])("allows a healthy large %s body to take longer than 60 seconds", async (id, endpoint, cap) => {
+  vi.useFakeTimers();
+  vi.spyOn(AbortSignal, "timeout").mockImplementation((ms) => {
+    const controller = new AbortController();
+    setTimeout(() => controller.abort(new DOMException("Timed out", "TimeoutError")), ms);
+    return controller.signal;
+  });
+  const source = budgetedFetch(
+    async () =>
+      new Response(
+        new ReadableStream<Uint8Array>({
+          async pull(stream) {
+            await new Promise((resolve) => setTimeout(resolve, 30_000));
+            stream.enqueue(new Uint8Array([1]));
+            if (++chunks === 3) stream.close();
+          },
+        }),
+        { headers: { "content-length": String(cap) } },
+      ),
+    id,
+    new RunBudget(id),
+    new AbortController().signal,
+  );
+  let chunks = 0;
+  try {
+    const pending = (await source.api(endpoint)).arrayBuffer();
+    const outcome = pending.then(
+      (body) => ({ body }),
+      (error: unknown) => ({ error }),
+    );
+    await vi.advanceTimersByTimeAsync(90_001);
+    expect(await outcome).toEqual({ body: new Uint8Array([1, 1, 1]).buffer });
+  } finally {
+    source.close();
+    vi.restoreAllMocks();
+    vi.useRealTimers();
+  }
+});
+
+it.each([
+  true,
+  false,
+])("scales the body deadline with the reader cap (length header: %s)", async (declared) => {
+  vi.useFakeTimers();
+  let chunks = 0;
+  const cap = 64 * 1024 * 1024;
+  const source = budgetedFetch(
+    async () =>
+      new Response(
+        new ReadableStream<Uint8Array>({
+          async pull(stream) {
+            await new Promise((resolve) => setTimeout(resolve, 50_000));
+            stream.enqueue(new Uint8Array([1]));
+            if (++chunks === 5) stream.close();
+          },
+        }),
+        { headers: declared ? { "content-length": String(cap) } : {} },
+      ),
+    "test",
+    new RunBudget("test"),
+    new AbortController().signal,
+  );
+  try {
+    const pending = readBytes(await source.api(url), "test", url, cap);
+    const outcome = pending.then(
+      (body) => ({ body }),
+      (error: unknown) => ({ error }),
+    );
+    await vi.advanceTimersByTimeAsync(250_001);
+    expect(await outcome).toEqual({ body: new Uint8Array([1, 1, 1, 1, 1]) });
+  } finally {
+    source.close();
+    vi.useRealTimers();
+  }
+});
+
+it("stops endless trickles at the reader's size-scaled deadline", async () => {
+  vi.useFakeTimers();
+  let timer: ReturnType<typeof setInterval>;
+  const cancel = vi.fn(() => clearInterval(timer));
+  const source = budgetedFetch(
+    async () =>
+      new Response(
+        new ReadableStream<Uint8Array>({
+          start(stream) {
+            timer = setInterval(() => stream.enqueue(new Uint8Array([32])), 1000);
+          },
+          cancel,
+        }),
+      ),
+    "test",
+    new RunBudget("test"),
+    new AbortController().signal,
+  );
+  try {
+    const pending = readBytes(await source.api(url), "test", url, 1024);
+    const failure = expect(pending).rejects.toMatchObject({ name: "IntegrationSyncError" });
+    await vi.advanceTimersByTimeAsync(61_001);
+    await failure;
+    expect(cancel).toHaveBeenCalledOnce();
+  } finally {
+    source.close();
+    vi.useRealTimers();
+  }
 });

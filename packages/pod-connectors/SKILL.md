@@ -48,8 +48,12 @@ Factory `adapter.limits` and host `runImport({ limits })` merge per key with the
 defined value; undefined cannot erase a bound. Keep direct adapter tests supplied with a
 budget, and use the runner for transport enforcement tests.
 
-Every source request receives the combined run deadline, caller cancellation and a 60-second
-absolute response deadline, which includes headers and the full body. Preserve effective
+Every source request receives the combined run deadline and caller cancellation. Headers
+have a 60-second timeout; bodies have a 60-second per-chunk idle timeout and a finite absolute
+allowance of 60 seconds plus one second per 256 KiB of the reader cap or smaller valid declared
+length. `readBytes` supplies that cap to the source wrapper, including Gmail raw and Drive
+content. Source deadline expiry permits Pod checkpoint writes; explicit caller cancellation
+still stops all Pod ports. Preserve effective
 Request/init signals, including Drive's per-download controller. Fetches and reader waits
 must reject even if a custom transport ignores its signal. Cap Spotify Retry-After waits to
 `budget.remainingMs`. `RunBudget.request()` and all other charges check the deadline; exhausted
@@ -57,18 +61,23 @@ budgets stay exhausted. Keep independent per-response/per-file caps. `getJson`/`
 map HTTP errors and call the shared capped reader. Never let a cancellation failure replace
 a status, byte-limit or deadline error. Drive uses these same JSON/binary body helpers.
 
-Gmail full-sync budget failures flush completed memberships then save a private account-local
-journal with page token, row offset, initial history id and seen-message manifest. Resume after
-completed rows; do not refetch their raw payloads or double-charge list/raw messages. Keep the
+Gmail continuing pages and full-sync budget failures (including duration) flush completed
+memberships then save a private account-local journal with page token, completed IDs, initial
+history id and seen-message manifest. Skip completed IDs; never resume by row offset or
+assume a message RDF write alone means its bytes and memberships succeeded. An HTTP 400 for
+a saved token restarts the listing once, rebuilding seen IDs and retaining completed IDs.
+Do not refetch completed raw payloads or double-charge list/raw messages. Keep the
 journal until the final sweep and memberships commit. Return its original history id so
 mutations during partial runs replay next time. Bound retained reconciliation identifiers
-across retries (2,000,000 identifiers / 16 MiB UTF-8 text). Test consecutive request-, item- and
-byte-capped runs, incomplete message retries and final removal of vanished mail.
+across retries (2,000,000 identifiers / 16 MiB UTF-8 text). Test consecutive request-, item-, byte- and
+duration-capped runs, incomplete message retries and final removal of vanished mail.
 
 Successful Drive media/export copies consume the independent per-file cap rather than the
 run byte budget, because content is committed per file. The central wrapper exempts only
 successful Drive representation endpoints; JSON and inspected error bodies remain metered.
-Downloads still consume requests and deadlines. Preserve unchanged-representation reuse and
+Downloads still consume requests and deadlines. Only a source response timeout becomes
+`contentSkipped: "timeout"`; run budget failures and caller cancellation must propagate.
+Preserve unchanged-representation reuse and
 test that request-capped retries make progress with content larger than the run JSON allowance.
 
 `RunBudgetExceededError` extends `IntegrationSyncError`, reports `resource`/`limit` (including

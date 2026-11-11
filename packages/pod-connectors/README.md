@@ -80,12 +80,16 @@ and expired-cursor fallbacks cannot reset counters or omit transport accounting.
 | `maxBytes` | 512 MiB | Cumulative source response bytes; successful Drive media/export copies use their separate per-file cap. |
 | `maxDurationMs` | 1,800,000 (30 minutes) | Total elapsed time, including source waits and Retry-After backoff. |
 
-Every source response also has a 60-second absolute deadline from dispatch through the
-last body byte. A server that never sends headers, stalls its body or trickles bytes
-cannot extend that deadline. Pending fetches and reads reject even when an injected
-transport ignores cancellation; their signals are aborted and bodies cancelled. Spotify
-caps Retry-After waits to the remaining run time. Each JSON response retains its 32 MiB
-cap (Gmail raw-message JSON uses its existing larger per-message cap).
+Source headers have a 60-second deadline, and bodies have a 60-second idle timeout between
+chunks. Bodies also have a finite total allowance: 60 seconds plus one second per 256 KiB
+of the smaller of the reader's byte cap and a valid declared Content-Length (the cap alone
+when the length is absent). Healthy large downloads can exceed 60 seconds; endless trickles
+still stop. Pending fetches and reads reject even when an injected transport ignores
+cancellation; their signals are aborted and bodies cancelled. Spotify caps Retry-After
+waits to the remaining run time. Each JSON response retains its 32 MiB cap (Gmail raw-message
+JSON uses its existing larger per-message cap). The run deadline stops source work while
+allowing completed data and private journals to finish saving to the Pod. Explicit caller
+cancellation still refuses every subsequent source and Pod operation.
 
 Pass any subset through `runImport({ ..., limits: { maxRequests: 500, maxItems: 10_000,
 maxBytes: 64 * 1024 * 1024, maxDurationMs: 300_000 } })`. Values must be non-negative safe
@@ -93,18 +97,22 @@ integers; zero allows none of that resource and omitted fields retain defaults. 
 settings on `createSpotifyAdapter`, `createGithubAdapter`, `createStravaAdapter` and
 `createRedditAdapter` combine with host limits per key using the smaller defined value;
 undefined host fields cannot erase a factory bound. Each run starts fresh counters.
-Direct adapter callers must supply a budget and a budgeted transport, as the runner does.
+Hosts should call `runImport`, including fixture demos. Direct adapter callers must supply
+a budget and a budgeted transport, as the runner does.
 
 Duplicates, tombstones and malformed array entries consume item capacity too. Gmail counts
 labels, history records and their nested changes, and thread members; a listed message and
 its raw payload count as one message. Limits apply to source traffic; Pod reads, writes and
 provenance use their existing storage protections.
 
-Gmail journals an interrupted full sync's page token, row position, initial history id and
-seen-message manifest inside its account container. After a request/item/byte budget
-failure, completed message bytes and memberships are saved before the journal. Retries
-resume after those messages instead of refetching their raw payloads or charging their rows
-again. The final sweep uses the retained manifest, and the original history id ensures
+Gmail journals a full sync's page token, completed message IDs, initial history id and
+seen-message manifest inside its account container after each continuing page and after a
+request/item/byte/duration budget failure. Completed message bytes and memberships are saved
+before the journal. Retries skip completed IDs instead of refetching raw payloads or charging
+their rows again; incomplete message writes are retried. Row positions are never used, so
+deletions cannot shift an unprocessed message past the resume point. A saved page token
+rejected with HTTP 400 restarts the listing once and rebuilds the seen manifest, retaining
+completed IDs for reuse. The final sweep uses the retained manifest, and the original history id ensures
 mailbox mutations during these runs replay afterward. Successful history state remains
 unchanged until the complete scan and reconciliation succeed. Budgets must fit the profile,
 labels, one listing page and at least one message. The journal's reconciliation manifest is
@@ -113,7 +121,9 @@ bounded independently at 2,000,000 identifiers and 16 MiB of UTF-8 identifier te
 Drive's `createGoogleDriveAdapter({ maxBytes })` retains its separate per-file copy cap
 (default 25 MiB). Successful media/export bytes are written per file and consume no JSON
 run byte allowance; inspected error bodies still do. Requests, records, response deadlines
-and the total deadline apply to downloads too. A request-capped retry reuses already-linked
+and the total deadline apply to downloads too. A per-response timeout saves metadata with
+`contentSkipped: "timeout"` and continues to the next file; run exhaustion and caller
+cancellation still fail the import. A request-capped retry reuses already-linked
 unchanged representations and progresses to the remaining files.
 
 Exhaustion throws `RunBudgetExceededError`, a subtype of `IntegrationSyncError`, exported

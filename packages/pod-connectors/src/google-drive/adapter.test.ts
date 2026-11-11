@@ -1377,3 +1377,26 @@ describe("Drive capped convergence", () => {
     for (const file of files) expect(metadata(file.id).contentSkipped).toBeUndefined();
   });
 });
+
+it("records a timed-out file as metadata and completes the remaining Drive scan", async () => {
+  vi.useFakeTimers();
+  try {
+    const { run, metadata } = setup();
+    const { api, result } = run(full([BINARY, DOC]), {
+      media: { ...CONTENT, [mediaUrl(BINARY.id)]: () => new Promise<Response>(() => {}) },
+    });
+    const outcome = result.then(
+      (report) => ({ report }),
+      (error: unknown) => ({ error }),
+    );
+    await vi.waitFor(() =>
+      expect(api.mock.calls.some(([input]) => String(input) === mediaUrl(BINARY.id))).toBe(true),
+    );
+    await vi.advanceTimersByTimeAsync(60_001);
+    expect(await outcome).toMatchObject({ report: { cursor: "1000" } });
+    expect(metadata(BINARY.id).contentSkipped).toBe("timeout");
+    expect(metadata(DOC.id).encodings.size).toBe(2);
+  } finally {
+    vi.useRealTimers();
+  }
+});

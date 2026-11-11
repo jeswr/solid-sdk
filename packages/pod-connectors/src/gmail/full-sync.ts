@@ -22,11 +22,13 @@ class FullSyncState extends PodThing {
   set pageToken(value: string | undefined) {
     OptionalAs.object(this, `${MAIL_SCHEMA}version`, value, LiteralFrom.string);
   }
-  get offset(): number {
-    return OptionalFrom.subjectPredicate(this, `${MAIL_SCHEMA}position`, LiteralAs.number) ?? 0;
-  }
-  set offset(value: number) {
-    OptionalAs.object(this, `${MAIL_SCHEMA}position`, value, LiteralFrom.integer);
+  get completed(): Set<string> {
+    return SetFrom.subjectPredicate(
+      this,
+      `${MAIL_SCHEMA}itemListElement`,
+      NamedNodeAs.string,
+      NamedNodeFrom.string,
+    );
   }
   get seen(): Set<string> {
     return SetFrom.subjectPredicate(
@@ -40,8 +42,9 @@ class FullSyncState extends PodThing {
 
 export class FullSyncJournal {
   pageToken?: string;
-  offset = 0;
   readonly seen = new Set<string>();
+  readonly completed = new Set<string>();
+  private readonly retained = new Set<string>();
   private seenBytes = 0;
   private constructor(
     readonly historyId: string,
@@ -58,31 +61,49 @@ export class FullSyncJournal {
     const stored = await ctx.read(slug);
     const state = new FullSyncState(`${ctx.resolve(slug)}#it`, stored ?? new Store(), DataFactory);
     const journal = new FullSyncJournal(state.identifier ?? historyId, ctx, slug);
-    if (
-      (state.pageToken !== undefined && state.pageToken.length > 4096) ||
-      !Number.isSafeInteger(state.offset) ||
-      state.offset < 0
-    )
+    if (state.pageToken !== undefined && state.pageToken.length > 4096)
       throw new TypeError("Invalid Gmail full-sync journal.");
     journal.pageToken = state.pageToken;
-    journal.offset = state.offset;
     const base = ctx.resolve(accountRoot);
-    for (const iri of state.seen) {
-      if (!iri.startsWith(base)) throw new TypeError("Invalid Gmail full-sync journal member.");
-      journal.remember(`${accountRoot}${iri.slice(base.length)}`);
+    for (const [source, target] of [
+      [state.seen, journal.seen],
+      [state.completed, journal.completed],
+    ] as const) {
+      for (const iri of source) {
+        if (!iri.startsWith(base)) throw new TypeError("Invalid Gmail full-sync journal member.");
+        const member = `${accountRoot}${iri.slice(base.length)}`;
+        journal.retain(member);
+        target.add(member);
+      }
     }
     return journal;
   }
 
   remember(iri: string): void {
-    if (this.seen.has(iri)) return;
+    this.retain(iri);
+    this.seen.add(iri);
+  }
+
+  complete(iri: string): void {
+    this.retain(iri);
+    this.completed.add(iri);
+  }
+
+  /** Restart reconciliation while retaining completed work for cheap token-expiry retries. */
+  restart(): void {
+    this.pageToken = undefined;
+    this.seen.clear();
+  }
+
+  private retain(iri: string): void {
+    if (this.retained.has(iri)) return;
     const bytes = new TextEncoder().encode(iri).byteLength;
     // Bound reconciliation memory across repeated capped runs as well as within one run.
-    if (this.seen.size >= DEFAULT_RUN_LIMITS.maxItems)
+    if (this.retained.size >= DEFAULT_RUN_LIMITS.maxItems)
       throw new RunBudgetExceededError("gmail", "items", DEFAULT_RUN_LIMITS.maxItems);
     if (bytes > 16 * 1024 * 1024 - this.seenBytes)
       throw new RunBudgetExceededError("gmail", "bytes", 16 * 1024 * 1024);
-    this.seen.add(iri);
+    this.retained.add(iri);
     this.seenBytes += bytes;
   }
 
@@ -92,8 +113,8 @@ export class FullSyncJournal {
     state.types.add(CLASSES.Dataset);
     state.identifier = this.historyId;
     state.pageToken = this.pageToken;
-    state.offset = this.offset;
     for (const iri of this.seen) state.seen.add(this.ctx.resolve(iri));
+    for (const iri of this.completed) state.completed.add(this.ctx.resolve(iri));
     // load() retained the conditional write precondition.
     await this.ctx.write({
       slug: this.slug,

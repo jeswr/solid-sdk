@@ -141,32 +141,65 @@ class Sync {
   async full(historyId: string): Promise<string> {
     const journal = await FullSyncJournal.load(this.ctx, accountRoot(this.account), historyId);
     this.journal = journal;
+    const resumed = new Set(journal.completed);
     for (const slug of journal.seen) this.seen.add(slug);
+    let restarted = false;
     try {
-      do {
+      for (;;) {
         const params = new URLSearchParams({ maxResults: "100", includeSpamTrash: "true" });
         if (journal.pageToken) params.set("pageToken", journal.pageToken);
-        const page = await getJson<GmailMessageList>(
-          ID,
-          this.ctx.api,
-          `${GMAIL_API}/messages?${params}`,
-        );
-        const rows = page?.messages ?? [];
-        for (let index = journal.offset; index < rows.length; index++) {
-          // A listed message is one item, not another item when format=raw is fetched.
+        let page: GmailMessageList;
+        try {
+          page = await getJson<GmailMessageList>(
+            ID,
+            this.ctx.api,
+            `${GMAIL_API}/messages?${params}`,
+          );
+        } catch (error) {
+          if (
+            !(error instanceof IntegrationSyncError) ||
+            error.status !== 400 ||
+            !journal.pageToken ||
+            restarted
+          )
+            throw error;
+          // Tokens expire and deletions can shift pages. Rebuild the reconciliation manifest
+          // from a fresh listing, but keep completed IDs so their payloads need not be fetched.
+          restarted = true;
+          journal.restart();
+          this.seen.clear();
+          await journal.save();
+          continue;
+        }
+        for (const row of page?.messages ?? []) {
+          const id = row?.id;
+          const slug = validId(id) ? messageSlug(this.account, `gmail-${id}`) : undefined;
+          if (slug && journal.completed.has(slug)) {
+            // Only rows charged by earlier runs are exempt; duplicates in this run count.
+            if (!resumed.has(slug)) this.ctx.budget.items(1);
+            journal.remember(slug);
+            this.seen.add(slug);
+            continue;
+          }
+          // A completed ID was charged on its original run. New and malformed rows still
+          // count before filtering, and incomplete payloads are retried even if RDF exists.
           this.ctx.budget.items(1);
-          const id = rows[index]?.id;
-          if (validId(id)) journal.remember(messageSlug(this.account, `gmail-${id}`));
+          if (slug) journal.remember(slug);
           await this.store(id);
-          journal.offset = index + 1;
+          if (slug) journal.complete(slug);
         }
         journal.pageToken = page?.nextPageToken || undefined;
-        journal.offset = 0;
-      } while (journal.pageToken);
+        if (!journal.pageToken) break;
+        await this.mail.flush();
+        await journal.save();
+      }
     } catch (error) {
-      if (error instanceof RunBudgetExceededError && !this.ctx.signal?.aborted) {
+      if (
+        error instanceof RunBudgetExceededError &&
+        (!this.ctx.signal?.aborted || this.ctx.signal.reason === error)
+      ) {
         // Commit memberships before journalling completed messages. A partial raw/body
-        // failure keeps its offset, so the next run retries it rather than skipping its bytes.
+        // failure never marks its ID complete, so the next run retries all its bytes.
         try {
           await this.mail.flush();
           await journal.save();

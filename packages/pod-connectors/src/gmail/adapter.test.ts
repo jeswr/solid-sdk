@@ -987,3 +987,156 @@ it("resumes Gmail across pages under an item cap, retains the initial history id
   expect(pod.urls().some((url) => url.endsWith("_full-sync.ttl"))).toBe(false);
   expect(members(pod, folder("system:inbox"))).toHaveLength(messages.length);
 });
+
+// Ports the delta-review duration probe, with assertions and a deterministic source clock.
+it("completes a full sync across consecutive duration-capped runs", async () => {
+  vi.useFakeTimers();
+  vi.spyOn(AbortSignal, "timeout").mockImplementation((ms) => {
+    const controller = new AbortController();
+    setTimeout(() => controller.abort(new DOMException("Timed out", "TimeoutError")), ms);
+    return controller.signal;
+  });
+  try {
+    const { pod, podWriter } = setup();
+    const messages = Array.from({ length: 8 }, (_, i) => ({
+      ...(MESSAGES.m1 as GmailMessage),
+      id: `duration-${i}`,
+      threadId: `duration-${i}`,
+    }));
+    const source = fixtureFetch("gmail", [
+      ...base,
+      { url: `${GMAIL_API}/messages`, json: { messages } },
+      ...messages.map(fetched),
+    ]);
+    const fetchedIds: string[] = [];
+    const api: typeof fetch = async (input, init) => {
+      const id = new URL(String(input)).pathname.split("/messages/")[1];
+      if (id) {
+        fetchedIds.push(id);
+        await vi.advanceTimersByTimeAsync(40);
+      }
+      return source(input, init);
+    };
+    let complete = false;
+    for (let run = 0; run < 4; run++) {
+      try {
+        expect(
+          (
+            await runImport({
+              adapter: gmailAdapter,
+              mode: "live",
+              podWriter,
+              sourceAuth: { fetch: api },
+              limits: { maxDurationMs: 150 },
+            })
+          ).cursor,
+        ).toBe("1000");
+        complete = true;
+        break;
+      } catch (error) {
+        expect(error).toMatchObject({ resource: "duration" });
+        expect(pod.urls().some((url) => url.endsWith("_full-sync.ttl"))).toBe(true);
+      }
+    }
+    expect(complete).toBe(true);
+    expect(members(pod, folder("system:inbox"))).toHaveLength(messages.length);
+    expect(fetchedIds.filter((id) => id === messages[0]?.id)).toHaveLength(1);
+    expect(pod.urls().some((url) => url.endsWith("_full-sync.ttl"))).toBe(false);
+  } finally {
+    vi.restoreAllMocks();
+    vi.useRealTimers();
+  }
+});
+
+it("does not skip a message when deletion shifts a saved page's rows", async () => {
+  const { pod, podWriter } = setup();
+  const messages = ["shift-a", "shift-b", "shift-c"].map((id) => ({
+    ...(MESSAGES.m1 as GmailMessage),
+    id,
+    threadId: id,
+  }));
+  const raw = vi.fn(fixtureFetch("gmail", [...base, ...messages.map(fetched)]));
+  let rows = messages;
+  const api: typeof fetch = async (input, init) =>
+    new URL(String(input)).pathname.endsWith("/messages")
+      ? Response.json({ messages: rows })
+      : raw(input, init);
+  await expect(
+    runImport({
+      adapter: gmailAdapter,
+      mode: "live",
+      podWriter,
+      sourceAuth: { fetch: api },
+      limits: { maxItems: 8 },
+    }),
+  ).rejects.toMatchObject({ resource: "items" });
+  rows = messages.slice(1);
+  await runImport({ adapter: gmailAdapter, mode: "live", podWriter, sourceAuth: { fetch: api } });
+  for (const row of rows) expect(pod.get(msg(`gmail-${row.id}`))).toBeDefined();
+});
+
+it("restarts an expired saved page token and reuses completed message IDs", async () => {
+  const { pod, podWriter } = setup();
+  const messages = ["token-a", "token-gone", "token-b"].map((id) => ({
+    ...(MESSAGES.m1 as GmailMessage),
+    id,
+    threadId: id,
+  }));
+  const raw = vi.fn(fixtureFetch("gmail", [...base, ...messages.map(fetched)]));
+  let expired = false;
+  const api: typeof fetch = async (input, init) => {
+    const url = new URL(String(input));
+    if (url.pathname.endsWith("/messages")) {
+      if (url.searchParams.has("pageToken"))
+        return expired
+          ? Response.json({}, { status: 400 })
+          : Response.json({ messages: messages.slice(2) });
+      return Response.json({
+        messages: expired ? [messages[0], messages[2]] : messages.slice(0, 2),
+        ...(!expired ? { nextPageToken: "expired" } : {}),
+      });
+    }
+    return raw(input, init);
+  };
+  await expect(
+    runImport({
+      adapter: gmailAdapter,
+      mode: "live",
+      podWriter,
+      sourceAuth: { fetch: api },
+      limits: { maxRequests: 5 },
+    }),
+  ).rejects.toMatchObject({ resource: "requests" });
+  expired = true;
+  await expect(
+    runImport({ adapter: gmailAdapter, mode: "live", podWriter, sourceAuth: { fetch: api } }),
+  ).resolves.toMatchObject({ cursor: "1000" });
+  expect(pod.get(msg("gmail-token-a"))).toBeDefined();
+  expect(pod.get(msg("gmail-token-gone"))).toBeUndefined();
+  expect(pod.get(msg("gmail-token-b"))).toBeDefined();
+  expect(
+    raw.mock.calls.filter(([input]) => String(input).includes("/messages/token-a")),
+  ).toHaveLength(1);
+});
+
+it("still charges duplicate completed IDs returned again within the same run", async () => {
+  const { podWriter } = setup();
+  const item = MESSAGES.m1 as GmailMessage;
+  const api = fixtureFetch("gmail", [
+    ...base,
+    fetched(item),
+    {
+      url: `${GMAIL_API}/messages`,
+      json: { messages: [{ id: item.id }, { id: item.id }] },
+    },
+  ]);
+  await expect(
+    runImport({
+      adapter: gmailAdapter,
+      mode: "live",
+      podWriter,
+      sourceAuth: { fetch: api },
+      limits: { maxItems: 8 },
+    }),
+  ).rejects.toMatchObject({ resource: "items" });
+});
