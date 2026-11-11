@@ -14,7 +14,7 @@ import { PIM, SOLID, SSD } from "./vocab.js";
 const DEFAULT_TTL_MS = 3_600_000;
 const LWS_STORAGE = "https://www.w3.org/ns/lws#storage";
 // Increment whenever parser changes invalidate previously derived feature evidence.
-const PARSED_CACHE_VERSION = 2;
+const PARSED_CACHE_VERSION = 3;
 /** Shared module default so `capabilities()` and the resolver see the same records. */
 export const defaultCache = createMemoryCache();
 
@@ -242,6 +242,7 @@ export async function resolveStorageDescription(
       protocol: lws ? "lws" : "solid",
       id: lws ? lws.target : discovery.root,
       root: discovery.root,
+      owner: null,
       descriptionUrl: lws?.target ?? solid?.target ?? null,
       services: [],
       capabilities: [],

@@ -6,6 +6,8 @@ export default defineConfig({
     worker: 'src/worker.ts',
     // P5: optional React hooks. `react` is an (optional) peer dep — never bundle it.
     react: 'src/react.ts',
+    outbox: 'src/outbox.ts',
+    merge: 'src/merge.ts',
   },
   format: ['esm'],
   target: 'es2022',

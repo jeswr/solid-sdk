@@ -89,6 +89,7 @@ export function dropMessage(
   views: readonly TaskView[],
   projects: readonly ProjectName[],
   manual = true,
+  flat = false,
 ): string {
   const name = quoted(task.title);
   switch (plan.kind) {
@@ -99,7 +100,7 @@ export function dropMessage(
     case "reschedule":
       return `Moved ${name} to ${dayLabel(plan.dayKey)}.`;
     case "position": {
-      if (plan.parentId) {
+      if (plan.parentId && !flat) {
         const parent = titleOf(views, (view) => view.id === plan.parentId);
         return plan.parentChanged
           ? `Made ${name} a sub-task of ${parent}.`

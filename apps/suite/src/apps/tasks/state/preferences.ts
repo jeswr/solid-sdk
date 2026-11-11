@@ -5,6 +5,7 @@ import { useCallback, useEffect, useSyncExternalStore } from "react";
 import {
   defaultPreferences,
   type PreferenceAction,
+  parseFavourites,
   parsePreferences,
   parseSharedProjects,
   preferencesReducer,
@@ -17,6 +18,8 @@ const KEY = "suite.tasks.prefs";
 /** Shared with me is per account: another WebID signing in on this browser never sees it. */
 export const sharedProjectsKey = (webId: string) =>
   `suite.tasks.shared:${encodeURIComponent(webId)}`;
+export const favouritesKey = (webId: string) =>
+  `suite.tasks.favourites:${encodeURIComponent(webId)}`;
 let identity: string | undefined;
 let snapshot: TasksPreferences = defaultPreferences;
 const listeners = new Set<() => void>();
@@ -41,14 +44,27 @@ function readShared(): TasksPreferences["sharedProjects"] {
     return snapshot.sharedOwner === identity ? snapshot.sharedProjects : [];
   }
 }
+function readFavourites(): string[] {
+  if (!identity) return [];
+  try {
+    return parseFavourites(window.localStorage.getItem(favouritesKey(identity)));
+  } catch {
+    return snapshot.sharedOwner === identity ? snapshot.favourites : [];
+  }
+}
 /**
- * Bind Shared with me to the signed-in WebID (undefined when signed out). A change of identity
- * replaces the in-memory list with that account's own, so nothing carries across accounts.
+ * Bind account lists to the signed-in WebID (undefined when signed out). A change of identity
+ * replaces the in-memory lists with that account's own, so nothing carries across accounts.
  */
 export function setPreferencesIdentity(webId: string | undefined) {
   if (webId === identity) return;
   identity = webId;
-  snapshot = { ...snapshot, sharedProjects: readShared(), sharedOwner: identity };
+  snapshot = {
+    ...snapshot,
+    sharedProjects: readShared(),
+    favourites: readFavourites(),
+    sharedOwner: identity,
+  };
   emit();
 }
 /** Shared across the sidebar and list; browser storage is always optional. */
@@ -66,7 +82,12 @@ export function useTasksPreferences() {
       } catch {
         /* In-memory preferences still work when storage is disabled. */
       }
-      snapshot = { ...global, sharedProjects: readShared(), sharedOwner: identity };
+      snapshot = {
+        ...global,
+        sharedProjects: readShared(),
+        favourites: readFavourites(),
+        sharedOwner: identity,
+      };
       emit();
     };
     read();
@@ -74,33 +95,48 @@ export function useTasksPreferences() {
       if (
         event.key === KEY ||
         event.key === null ||
-        (identity !== undefined && event.key === sharedProjectsKey(identity))
+        (identity !== undefined &&
+          (event.key === sharedProjectsKey(identity) || event.key === favouritesKey(identity)))
       )
         read();
     };
     window.addEventListener("storage", change);
     return () => window.removeEventListener("storage", change);
   }, []);
-  const dispatch = useCallback((action: PreferenceAction) => {
-    const shared = action.type === "sharedProject" || action.type === "removeSharedProject";
-    if (shared && !identity) return;
-    const next = preferencesReducer(snapshot, action);
-    if (next === snapshot) return;
-    snapshot = next;
-    try {
-      if (shared && identity)
-        window.localStorage.setItem(
-          sharedProjectsKey(identity),
-          JSON.stringify(snapshot.sharedProjects),
-        );
-      else {
-        const { sharedProjects: _shared, sharedOwner: _owner, ...global } = snapshot;
-        window.localStorage.setItem(KEY, JSON.stringify(global));
+  const owner = preferences.sharedOwner;
+  const dispatch = useCallback(
+    (action: PreferenceAction) => {
+      const shared = action.type === "sharedProject" || action.type === "removeSharedProject";
+      const favourite = action.type === "favouriteProject";
+      if ((shared || favourite) && !identity) return;
+      // A menu callback retained across an account switch cannot write to the new account.
+      if (favourite && owner !== identity) return;
+      const next = preferencesReducer(snapshot, action);
+      if (next === snapshot) return;
+      snapshot = next;
+      try {
+        if (shared && identity)
+          window.localStorage.setItem(
+            sharedProjectsKey(identity),
+            JSON.stringify(snapshot.sharedProjects),
+          );
+        else if (favourite && identity)
+          window.localStorage.setItem(favouritesKey(identity), JSON.stringify(snapshot.favourites));
+        else {
+          const {
+            sharedProjects: _shared,
+            sharedOwner: _owner,
+            favourites: _favourites,
+            ...global
+          } = snapshot;
+          window.localStorage.setItem(KEY, JSON.stringify(global));
+        }
+      } catch {
+        /* Storage may be full or disabled. */
       }
-    } catch {
-      /* Storage may be full or disabled. */
-    }
-    emit();
-  }, []);
+      emit();
+    },
+    [owner],
+  );
   return { preferences, dispatch };
 }

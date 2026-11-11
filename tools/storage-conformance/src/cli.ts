@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { storageCases } from "./cases.js";
 import { runTarget } from "./harness.js";
+import { sq8Cases } from "./optional-cases.js";
 import { writeReports } from "./report.js";
 import { selectTargets } from "./targets/index.js";
 import type { TargetReport } from "./types.js";
@@ -18,7 +19,10 @@ export async function main(args: string[]): Promise<number> {
   const targets = selectTargets(values.target ?? process.env.TARGET);
   const reports: TargetReport[] = [];
   for (const target of targets) {
-    const report = await runTarget(target, storageCases);
+    const report = await runTarget(
+      target,
+      target.name.startsWith("sparq-") ? [...storageCases, ...sq8Cases] : storageCases,
+    );
     reports.push(report);
     const counts = { pass: 0, fail: 0, skip: 0 };
     for (const row of report.results) counts[row.status]++;

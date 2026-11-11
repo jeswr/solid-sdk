@@ -266,3 +266,19 @@ takes precedence regardless of input order. Preserve existing modes for unchange
 selections (including chatroom Write and partial ACP contributions completed by inheritance),
 even when another principal changes. Never reconstruct an unchanged selection solely by
 inverting the many-to-one role mapping.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+
+For `./roles`, `kind: "folder"` with a trailing-slash URL edits resource and member scope
+together: WAC uses accessTo + default on the same authorization; ACP uses accessControl +
+memberAccessControl with the same policy. All three mutations use both scopes;
+revocation removes both. Non-folder operations preserve their resource-only contract.
+Before reads and every mutation, refuse own-folder permissions whose per-principal modes
+differ between resource and member scope with typed `partial-scope` (mutations report it
+in `failed`, without writes). This includes members-only rules and no-op selections.
+Track each policy placement's management provenance: exempt only ESS own-ACR `access`
+and own-ACR `accessControl` management. Member `memberAccess` and own-ACR
+`memberAccessControl` management must still cause `partial-scope`, including policies
+shared with own-ACR management. Never rewrite descendant access
+documents. Test shared principals, foreign targets, metadata, both scopes, owner lockout
+and ETag races; preserve 100% coverage.

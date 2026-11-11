@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+import { RedirectRefusedError } from "@jeswr/guarded-fetch";
 import type {
   CreateWorkbookInput,
   OpenedWorkbook,
@@ -11,11 +12,12 @@ import type {
 } from "../contract";
 import {
   WorkbookConflictError,
+  WorkbookLinkError,
   WorkbookNotFoundError,
   WorkbookPartialSaveError,
 } from "../contract";
 import { createSheetStorage, type Snapshot, type WorkbookMetadata, workbookLayout } from "../model";
-import { assertWorkbook, directChild, slug } from "./layout";
+import { assertSharedWorkbook, assertWorkbook, directChild, slug } from "./layout";
 import type { ProjectedSheet } from "./projection";
 import { registration } from "./registration";
 import { hasStatus, resources, strongEtag } from "./resources";
@@ -23,6 +25,7 @@ import { hasStatus, resources, strongEtag } from "./resources";
 export function createWorkbookService(options: WorkbookServiceOptions): WorkbookService {
   const root = new URL("sheets/", options.podRoot).href;
   const storage = createSheetStorage(options.fetch, options.podRoot);
+  const publicFetch = options.publicFetch ?? globalThis.fetch;
   const io = resources(storage);
   const now = options.now ?? (() => new Date());
   const register = registration(options, root);
@@ -137,18 +140,24 @@ export function createWorkbookService(options: WorkbookServiceOptions): Workbook
     throw new Error("Could not allocate a spreadsheet slug after 50 attempts");
   }
 
-  async function open(container: string): Promise<OpenedWorkbook> {
-    container = checked(container);
+  async function read(
+    container: string,
+    source = storage,
+    readOnly = false,
+  ): Promise<OpenedWorkbook> {
     const layout = workbookLayout(container);
     try {
       const [index, snapshot] = await Promise.all([
-        storage.loadIndex(container),
-        storage.loadSnapshot(container),
+        source.loadIndex(container),
+        source.loadSnapshot(container),
       ]);
       return {
         container,
         metadata: index.value,
         snapshot: snapshot.value,
+        ...(readOnly || index.readOnly === true || snapshot.readOnly === true
+          ? { readOnly: true }
+          : {}),
         version: {
           snapshotEtag: strongEtag(snapshot.etag, layout.snapshot),
           indexEtag: strongEtag(index.etag, layout.index),
@@ -160,6 +169,31 @@ export function createWorkbookService(options: WorkbookServiceOptions): Workbook
         throw new WorkbookNotFoundError(container, "missing");
       if (hasStatus(error, 401) || hasStatus(error, 403))
         throw new WorkbookNotFoundError(container, "forbidden");
+      throw error;
+    }
+  }
+
+  async function open(container: string): Promise<OpenedWorkbook> {
+    return read(checked(container));
+  }
+
+  async function openShared(container: string): Promise<OpenedWorkbook> {
+    const url = assertSharedWorkbook(root, container);
+    // Sessions cannot authorize a foreign workbook. Public reads never use session
+    // credentials, and the storage transport bounds them to this URL with no redirects.
+    const anonymous: typeof fetch = (input, init) =>
+      publicFetch(input, { ...init, credentials: "omit" });
+    try {
+      return await read(url, createSheetStorage(anonymous, url), true);
+    } catch (error) {
+      if (error instanceof WorkbookNotFoundError && error.reason === "forbidden")
+        throw new WorkbookLinkError(
+          "You need access from the owner's pod; opening private workbooks shared from another pod is not supported yet",
+        );
+      if (error instanceof RedirectRefusedError)
+        throw new WorkbookLinkError(
+          "This shared spreadsheet redirects to another address. Open a direct workbook link.",
+        );
       throw error;
     }
   }
@@ -364,6 +398,7 @@ export function createWorkbookService(options: WorkbookServiceOptions): Workbook
       return create({ title, snapshot: readXlsx(data, { title }) });
     },
     open,
+    openShared,
     save,
     rename,
     async copy(container, title) {

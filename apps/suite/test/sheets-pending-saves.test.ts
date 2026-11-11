@@ -1,6 +1,8 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { WorkbookConflictError, WorkbookPartialSaveError } from "../src/apps/sheets/lib/contract";
+import { SheetStorageError } from "../src/apps/sheets/lib/model";
 import { createPendingSaves } from "../src/apps/sheets/lib/pending-saves";
 import { harness, snapshot } from "./sheets-workbook-helpers";
 
@@ -332,4 +334,51 @@ describe("pending workbook saves", () => {
     await entry.flush();
     expect(registry.get(book.container)).toBeUndefined();
   });
+});
+
+it("does not schedule, rename, retry or reconnect saves for a read-only workbook", async () => {
+  const { h, book, registry, entry } = await setup();
+  const save = vi.spyOn(h.service, "save");
+  const detach = entry.subscribe(() => {});
+  entry.reset({ ...book, readOnly: true });
+  entry.schedule(() => snapshot("Blocked"));
+  entry.rename("Blocked title");
+  entry.setOnline(false);
+  entry.setOnline(true);
+  await entry.retry(true);
+  await entry.flush();
+  expect(save).not.toHaveBeenCalled();
+  expect(entry.dirty).toBe(false);
+  expect(entry.workbook.metadata.title).toBe(book.metadata.title);
+  detach();
+  await entry.flush();
+  expect(registry.get(book.container)).toBeUndefined();
+});
+
+it("retains edits after a nested forbidden save while stopping every automatic retry", async () => {
+  const { h, book, registry, entry, setOnline } = await setup();
+  const save = vi
+    .spyOn(h.service, "save")
+    .mockRejectedValueOnce(
+      new WorkbookPartialSaveError(
+        book.version,
+        new Error("Derived write failed", { cause: new SheetStorageError(403, null) }),
+      ),
+    );
+  const detach = entry.subscribe(() => {});
+  const local = snapshot("Unsaved edits");
+  entry.schedule(() => local);
+  await entry.flush();
+  expect(entry.workbook.readOnly).toBe(true);
+  expect(entry.workbook.snapshot).toEqual(local);
+  expect(entry.dirty).toBe(true);
+  setOnline(false);
+  setOnline(true);
+  entry.schedule(() => snapshot("Blocked edit"));
+  entry.rename("Blocked title");
+  await entry.retry();
+  await entry.flush();
+  expect(save).toHaveBeenCalledOnce();
+  detach();
+  registry.drop(book.container);
 });
