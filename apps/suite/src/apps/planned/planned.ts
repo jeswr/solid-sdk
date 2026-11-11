@@ -14,8 +14,6 @@ export const plannedApps: ReadonlySet<AppSlug> = new Set<AppSlug>([
 
   "recipes",
 
-  "media",
-
   "journal",
 
   "events",
