@@ -126,10 +126,7 @@ export class WacSharingAdapter implements SharingAdapter {
     };
   }
   async load(url: string, signal: AbortSignal): Promise<SharingState> {
-    // Folder sharing needs acl:default on every grant (members inherit it); this adapter
-    // writes acl:accessTo only, so a folder downgrade or removal would leave inherited
-    // access in place. Fail closed until default-aware writes exist.
-    if (new URL(this.url(url)).pathname.endsWith("/")) throw new ShareError("unsupported");
+    this.url(url);
     if (this.options.commentsUrl) {
       if (this.boundUrl !== undefined && this.boundUrl !== url) throw new ShareError("unsupported");
       this.boundUrl = url;
@@ -272,7 +269,10 @@ export class WacSharingAdapter implements SharingAdapter {
       const scoped = new ScopedAuthorization(auth as Term, dataset, DataFactory);
       if (!scoped.values(predicate).has(identifier)) continue;
       const own = scoped.values(`${ACL}accessTo`).has(resource);
-      const members = container && scoped.values(`${ACL}default`).has(resource);
+      const members =
+        container &&
+        (scoped.values(`${ACL}default`).has(resource) ||
+          scoped.values(`${ACL}defaultForNew`).has(resource));
       if (container && own !== members) throw new ShareError("unsupported");
       if (!own) continue;
       for (const mode of auth.mode) modes.add(mode);
@@ -287,8 +287,15 @@ export class WacSharingAdapter implements SharingAdapter {
       isolated.values(`${ACL}agentClass`).clear();
       isolated.values(predicate).add(identifier);
       isolated.values(`${ACL}accessTo`).delete(resource);
-      if (container) isolated.values(`${ACL}default`).delete(resource);
-      if (!isolated.values(`${ACL}accessTo`).size && !isolated.values(`${ACL}default`).size) {
+      if (container) {
+        isolated.values(`${ACL}default`).delete(resource);
+        isolated.values(`${ACL}defaultForNew`).delete(resource);
+      }
+      if (
+        !isolated.values(`${ACL}accessTo`).size &&
+        !isolated.values(`${ACL}default`).size &&
+        !isolated.values(`${ACL}defaultForNew`).size
+      ) {
         for (const quad of [...dataset.match(isolated as Term)]) dataset.delete(quad);
       }
     }

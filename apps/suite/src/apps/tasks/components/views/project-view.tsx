@@ -21,6 +21,7 @@ import { TaskListFocus } from "../../state/list-focus";
 import { useTasksPreferences } from "../../state/preferences";
 import { useTasks } from "../../state/tasks-context";
 import { BulkToolbar } from "../bulk-toolbar";
+import { ProjectDot } from "../project-dot";
 import { TaskList } from "../task-list";
 import { projectHref, useViewMode } from "../view-toggle";
 import { ProjectError } from "./project-error";
@@ -113,6 +114,7 @@ export function ProjectView({
     <TaskListFocus className="tsk-content">
       <header className="tsk-view-header">
         <h1>
+          {!inbox && project && <ProjectDot colour={project.tracker.color} />}
           {!inbox && project ? (
             <EditableText
               label="Project name"

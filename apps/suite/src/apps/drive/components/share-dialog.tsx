@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex
 // AUTHORED-BY Codex GPT-6
 "use client";
@@ -239,7 +240,7 @@ export function ShareDialog({
                   "You can view access. Only an owner with Control can change sharing."}
               </p>
             )}
-            {snapshot.contentsDiffer && (
+            {(snapshot.contentsDiffer || snapshot.resource.endsWith("/")) && (
               <p className="su-muted" role="note">
                 {CONTENTS_DIFFER}
               </p>

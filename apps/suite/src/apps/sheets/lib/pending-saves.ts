@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Codex GPT-6.1-Sol
 import { createAutosave } from "./autosave";
 import {
   type OpenedWorkbook,
@@ -7,6 +8,7 @@ import {
   WorkbookPartialSaveError,
   type WorkbookService,
 } from "./contract";
+import { hasStatus } from "./workbook/resources";
 
 /** Application-lifetime writers. Browser events and I/O enter through injected seams. */
 export function createPendingSaves() {
@@ -56,14 +58,18 @@ export function createPendingSaves() {
           if (title === savingTitle) title = storedTitle;
         } catch (error) {
           if (dropped) return;
+          for (let cause = error; cause instanceof Error; cause = cause.cause) {
+            if (hasStatus(cause, 403)) opened = { ...opened, readOnly: true };
+          }
           if (error instanceof WorkbookPartialSaveError)
             opened = { ...opened, version: error.version };
           throw error;
         }
       },
     });
-    const flush = () => queue.flush().then(releaseIdle);
+    const flush = () => (opened.readOnly ? Promise.resolve() : queue.flush()).then(releaseIdle);
     const schedule = (next: () => Snapshot) => {
+      if (opened.readOnly) return;
       read = next;
       queue.schedule(() => {
         local = read();
@@ -90,7 +96,16 @@ export function createPendingSaves() {
         };
       },
       schedule,
+      setReadOnly(readOnly = true) {
+        if (!readOnly && !opened.readOnly) return;
+        opened = { ...opened, readOnly };
+        // Stop timers and capture the engine getter without discarding its pending edit.
+        // Restored Write resumes with the registry's current connectivity.
+        queue.setOnline(readOnly ? false : online);
+        if (readOnly) void queue.flush();
+      },
       rename(next: string) {
+        if (opened.readOnly) return;
         title = next.trim();
         // flush() captures any pending engine getter before writing the rename.
         schedule(read);
@@ -116,8 +131,10 @@ export function createPendingSaves() {
         listeners.clear();
       },
       flush,
-      retry: (force = false) => queue.retry(force).then(releaseIdle),
+      retry: (force = false) =>
+        (opened.readOnly ? Promise.resolve() : queue.retry(force)).then(releaseIdle),
       setOnline(value: boolean) {
+        if (opened.readOnly) return;
         queue.setOnline(value);
         void flush();
       },

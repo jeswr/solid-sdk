@@ -66,6 +66,10 @@ export const sparqSolidTarget: ConformanceTarget = {
         webId,
         fetch: transport,
         storage,
+        serviceEndpoints: {
+          trash: `${root}.trash/`,
+          versioning: `${root}.versions/?resource={resource}`,
+        },
         recordScenario: session.recordScenario,
         requestCount: session.requestCount,
         claims: {

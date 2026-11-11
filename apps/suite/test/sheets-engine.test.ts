@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Snapshot } from "../src/apps/sheets/lib/contract";
@@ -19,6 +20,7 @@ const mock = vi.hoisted(() => {
       getSheetId: () => active,
       getSheetName: () => (data.sheets as Record<string, { name: string }>)[active]?.name,
     }),
+    setEditable: vi.fn(),
     setActiveSheet: vi.fn((id: string) => {
       active = id;
     }),
@@ -40,6 +42,7 @@ const mock = vi.hoisted(() => {
   const univer = { dispose: vi.fn() };
   return {
     api,
+    workbook,
     univer,
     subscription,
     emit: (event: Parameters<typeof handler>[0]) => handler(event),
@@ -331,4 +334,34 @@ describe("Univer engine adapter", () => {
     expect(change).toHaveBeenCalledOnce();
     engine.dispose();
   });
+});
+
+it("enforces view-only access at mount, after reload and after losing write access", async () => {
+  const engine = await (await loadEngine())({} as HTMLElement, {
+    snapshot: initial(),
+    dark: false,
+    compact: true,
+    readOnly: true,
+  });
+  expect(mock.workbook.setEditable).toHaveBeenLastCalledWith(false);
+  const change = vi.fn();
+  engine.onChange(change);
+  engine.importCsv("Blocked", { mode: "replace-active" });
+  mock.emit(mutation);
+  await Promise.resolve();
+  expect(engine.snapshot()).toEqual(initial());
+  expect(change).not.toHaveBeenCalled();
+  engine.load(initial());
+  expect(mock.workbook.setEditable).toHaveBeenLastCalledWith(false);
+  engine.setReadOnly(false);
+  expect(mock.workbook.setEditable).toHaveBeenLastCalledWith(true);
+  mock.emit(mutation);
+  engine.setReadOnly(true);
+  await Promise.resolve();
+  expect(change).not.toHaveBeenCalled();
+  engine.setReadOnly(false);
+  mock.emit(mutation);
+  await Promise.resolve();
+  expect(change).toHaveBeenCalledOnce();
+  engine.dispose();
 });

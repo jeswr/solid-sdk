@@ -46,7 +46,8 @@ export type NativeCodeDriverOptions = DriverBase &
          * Resolve with the whole validated callback URL, for pod-auth's current `ui.getCode`, which
          * runs RFC 9207 validation itself against the issuer metadata of the pending request. The
          * driver still requires exactly one `iss`, so a missing one can never pass as legacy mode;
-         * with `resolveIssuer` it also checks the value before handing the URL over.
+         * with `resolveIssuer` it also checks the value before handing the URL over. An error
+         * callback is handed over too, so pod-auth rejects it after its own issuer check.
          */
         returns: "callback";
         resolveIssuer?(authorizationUrl: URL): string | Promise<string>;
@@ -126,7 +127,8 @@ function checkCallback(
   redirect: Redirect,
   state: string,
   issuer: string | undefined,
-): { url: URL; code: string } {
+  deferError: boolean,
+): { url: URL; code: string | undefined } {
   const bad = (why: string) => () => new AuthorizationRequestError(`Callback ${why}`);
   let url: URL;
   try {
@@ -146,6 +148,9 @@ function checkCallback(
   if (issuer !== undefined && iss !== issuer) {
     throw bad("iss does not match the authorization server")();
   }
+  // In callback mode pod-auth validates the whole response, so an error callback reaches it
+  // and is rejected only after its RFC 9207 issuer check (sst-o1zg).
+  if (params.has("error") && deferError) return { url, code: undefined };
   if (params.has("error")) {
     // RFC 6749 §4.1.2.1 limits both fields to %x20-21 / %x23-5B / %x5D-7E; the
     // identity provider is the user's choice, so its text is bounded before it
@@ -226,8 +231,8 @@ export function createNativeCodeDriver(options: NativeCodeDriverOptions): GetCod
         }
         throw new NativeAuthError("The system browser sign-in failed");
       }
-      const checked = checkCallback(String(result?.url), redirect, state, issuer);
-      return callback ? checked.url.href : checked.code;
+      const checked = checkCallback(String(result?.url), redirect, state, issuer, callback);
+      return callback ? checked.url.href : (checked.code as string);
     })();
     // A result that arrives after an abort is dropped.
     work.catch(() => undefined);
