@@ -64,6 +64,11 @@ export class NanopubStore {
     this.policyUrl = new URL("private/pkg/mcp-policy.ttl", root).href;
   }
 
+  /** The explicit owner identity supplied at construction; no discovery or I/O. */
+  get ownerWebId(): string {
+    return this.owner;
+  }
+
   /** Resolve only UUID nanopub identities to the fixed storage container. */
   url(id: string): string {
     const match = uuid.exec(id);

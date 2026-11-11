@@ -1,0 +1,337 @@
+{
+  "manifestVersion": 1,
+  "runtime": {
+    "name": "@jeswr/model-runtime",
+    "major": 0
+  },
+  "prefixes": {
+    "health": "https://jeswr.org/ns/sectors/health#",
+    "core": "https://jeswr.org/ns/core#"
+  },
+  "entities": [
+    {
+      "name": "AllergyIntolerance",
+      "typeIris": [
+        "http://hl7.org/fhir/AllergyIntolerance"
+      ],
+      "subject": {
+        "convention": "self"
+      },
+      "fields": [
+        {
+          "name": "hasCode",
+          "predicate": "https://jeswr.org/ns/sectors/health#hasCode",
+          "kind": "iri",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "patient",
+          "predicate": "https://jeswr.org/ns/sectors/health#patient",
+          "kind": "iri",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "name",
+          "predicate": "https://schema.org/name",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "maxCount": 1,
+          "guards": {}
+        }
+      ]
+    },
+    {
+      "name": "CodeableConcept",
+      "typeIris": [
+        "https://jeswr.org/ns/sectors/health#CodeableConcept"
+      ],
+      "aliasTypeIris": [
+        "https://w3id.org/jeswr/sectors/health#CodeableConcept"
+      ],
+      "subject": {
+        "convention": "self"
+      },
+      "fields": [
+        {
+          "name": "exactMatch",
+          "predicate": "http://www.w3.org/2004/02/skos/core#exactMatch",
+          "kind": "iri",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "codeValue",
+          "predicate": "https://jeswr.org/ns/core#value",
+          "kind": "literal",
+          "aliasPredicates": [
+            "https://w3id.org/jeswr/core#value"
+          ],
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "name",
+          "predicate": "https://schema.org/name",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "maxCount": 1,
+          "guards": {}
+        }
+      ]
+    },
+    {
+      "name": "Condition",
+      "typeIris": [
+        "https://jeswr.org/ns/sectors/health#Condition"
+      ],
+      "aliasTypeIris": [
+        "https://schema.org/MedicalCondition",
+        "https://w3id.org/jeswr/sectors/health#Condition"
+      ],
+      "subject": {
+        "convention": "self"
+      },
+      "fields": [
+        {
+          "name": "hasCode",
+          "predicate": "https://jeswr.org/ns/sectors/health#hasCode",
+          "kind": "iri",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "patient",
+          "predicate": "https://jeswr.org/ns/sectors/health#patient",
+          "kind": "iri",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "name",
+          "predicate": "https://schema.org/name",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "maxCount": 1,
+          "guards": {}
+        }
+      ]
+    },
+    {
+      "name": "Encounter",
+      "typeIris": [
+        "https://jeswr.org/ns/sectors/health#Encounter"
+      ],
+      "aliasTypeIris": [
+        "https://w3id.org/jeswr/sectors/health#Encounter"
+      ],
+      "subject": {
+        "convention": "self"
+      },
+      "fields": [
+        {
+          "name": "hasCode",
+          "predicate": "https://jeswr.org/ns/sectors/health#hasCode",
+          "kind": "iri",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "patient",
+          "predicate": "https://jeswr.org/ns/sectors/health#patient",
+          "kind": "iri",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "recordedBy",
+          "predicate": "https://jeswr.org/ns/sectors/health#recordedBy",
+          "kind": "iri",
+          "aliasPredicates": [
+            "https://w3id.org/jeswr/sectors/health#recordedBy"
+          ],
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "name",
+          "predicate": "https://schema.org/name",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "maxCount": 1,
+          "guards": {}
+        }
+      ]
+    },
+    {
+      "name": "Immunization",
+      "typeIris": [
+        "https://jeswr.org/ns/sectors/health#Immunization"
+      ],
+      "aliasTypeIris": [
+        "https://w3id.org/jeswr/sectors/health#Immunization"
+      ],
+      "subject": {
+        "convention": "self"
+      },
+      "fields": [
+        {
+          "name": "hasCode",
+          "predicate": "https://jeswr.org/ns/sectors/health#hasCode",
+          "kind": "iri",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "medication",
+          "predicate": "https://jeswr.org/ns/sectors/health#medication",
+          "kind": "iri",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "patient",
+          "predicate": "https://jeswr.org/ns/sectors/health#patient",
+          "kind": "iri",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "name",
+          "predicate": "https://schema.org/name",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "maxCount": 1,
+          "guards": {}
+        }
+      ]
+    },
+    {
+      "name": "MedicationStatement",
+      "typeIris": [
+        "https://jeswr.org/ns/sectors/health#MedicationStatement"
+      ],
+      "aliasTypeIris": [
+        "https://w3id.org/jeswr/sectors/health#MedicationStatement"
+      ],
+      "subject": {
+        "convention": "self"
+      },
+      "fields": [
+        {
+          "name": "hasCode",
+          "predicate": "https://jeswr.org/ns/sectors/health#hasCode",
+          "kind": "iri",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "medication",
+          "predicate": "https://jeswr.org/ns/sectors/health#medication",
+          "kind": "iri",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "patient",
+          "predicate": "https://jeswr.org/ns/sectors/health#patient",
+          "kind": "iri",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "name",
+          "predicate": "https://schema.org/name",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "maxCount": 1,
+          "guards": {}
+        }
+      ]
+    },
+    {
+      "name": "MedicinalProduct",
+      "typeIris": [
+        "https://jeswr.org/ns/sectors/health#MedicinalProduct"
+      ],
+      "aliasTypeIris": [
+        "https://schema.org/Drug",
+        "https://w3id.org/jeswr/sectors/health#MedicinalProduct"
+      ],
+      "subject": {
+        "convention": "self"
+      },
+      "fields": [
+        {
+          "name": "name",
+          "predicate": "https://schema.org/name",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "maxCount": 1,
+          "guards": {}
+        }
+      ]
+    },
+    {
+      "name": "Observation",
+      "typeIris": [
+        "https://jeswr.org/ns/sectors/health#Observation"
+      ],
+      "aliasTypeIris": [
+        "http://hl7.org/fhir/Observation",
+        "https://schema.org/Observation",
+        "https://w3id.org/jeswr/sectors/health#Observation"
+      ],
+      "subject": {
+        "convention": "self"
+      },
+      "fields": [
+        {
+          "name": "hasCode",
+          "predicate": "https://jeswr.org/ns/sectors/health#hasCode",
+          "kind": "iri",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "hasUnit",
+          "predicate": "https://jeswr.org/ns/sectors/health#hasUnit",
+          "kind": "iri",
+          "aliasPredicates": [
+            "https://w3id.org/jeswr/sectors/health#hasUnit"
+          ],
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "patient",
+          "predicate": "https://jeswr.org/ns/sectors/health#patient",
+          "kind": "iri",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "unitCode",
+          "predicate": "https://jeswr.org/ns/sectors/health#unitCode",
+          "kind": "literal",
+          "aliasPredicates": [
+            "https://w3id.org/jeswr/sectors/health#unitCode"
+          ],
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "name",
+          "predicate": "https://schema.org/name",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "maxCount": 1,
+          "guards": {}
+        }
+      ]
+    }
+  ]
+}

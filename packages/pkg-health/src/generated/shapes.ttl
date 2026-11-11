@@ -1,0 +1,158 @@
+@prefix core: <https://jeswr.org/ns/core#>.
+@prefix health: <https://jeswr.org/ns/sectors/health#>.
+@prefix sh: <http://www.w3.org/ns/shacl#>.
+@prefix shapes: <https://jeswr.org/ns/pkg-health/shapes#>.
+
+shapes:06e50e0ccc135a14db54820193150c907694c715effb682c89a6d7ca09378b77-n2 <http://www.w3.org/1999/02/22-rdf-syntax-ns#first> health:hasUnit;
+    <http://www.w3.org/1999/02/22-rdf-syntax-ns#rest> shapes:7e6f3bdc50c7ce86821db86845b6d18a06a16d24f385cb2fe45d1c43600c7bfe-n3.
+shapes:0d7ad3a9c7b73a75fea6f76cfc4587420a6164751afb8b7798f0b547d45d68ae-n8 <http://www.w3.org/1999/02/22-rdf-syntax-ns#first> <https://w3id.org/jeswr/sectors/health#recordedBy>;
+    <http://www.w3.org/1999/02/22-rdf-syntax-ns#rest> <http://www.w3.org/1999/02/22-rdf-syntax-ns#nil>.
+shapes:15fb6ad35d4af642364f584edd2024acaea3a57678f2d806650adf1d2d028471-Immunization-hasCode sh:maxCount 1;
+    sh:nodeKind sh:IRI;
+    sh:path health:hasCode;
+    sh:severity sh:Info.
+shapes:16814bf7c57441025113750d8d90d0d360559e0fade28f8b690c14a8ea3b2e5f-n4 <http://www.w3.org/1999/02/22-rdf-syntax-ns#first> core:value;
+    <http://www.w3.org/1999/02/22-rdf-syntax-ns#rest> shapes:5a39f7dd9ab79f35958b8ef8c85f0d66d4e374fed979044f5f5190b945416e4e-n5.
+shapes:1d9a941f86a57027d3482c7eed1ba371e1ccbff06099a3a54bf055e3d8fc748e-Immunization-patient sh:maxCount 1;
+    sh:nodeKind sh:IRI;
+    sh:path health:patient;
+    sh:severity sh:Info.
+shapes:1f13c533fe23248d2a1a4103deea3721d3c6e65108668814520fc0d90a55969d-Immunization-medication sh:maxCount 1;
+    sh:nodeKind sh:IRI;
+    sh:path health:medication;
+    sh:severity sh:Info.
+shapes:248a625b2792e09a753a65a930288b4e74b3f93e6e5656380f28612e77a8f680-Encounter-name sh:datatype <http://www.w3.org/2001/XMLSchema#string>;
+    sh:maxCount 1;
+    sh:path <https://schema.org/name>;
+    sh:severity sh:Info.
+shapes:286218b71d5242f956952655e2b8e13a546e0bfd19b625bcbf0bcb0af507e806-AllergyIntolerance-name sh:datatype <http://www.w3.org/2001/XMLSchema#string>;
+    sh:maxCount 1;
+    sh:path <https://schema.org/name>;
+    sh:severity sh:Info.
+shapes:33e3d0f9a7adf10075a30eb0b50c714b3b1df7e2017f55ce9c777fe7919b8d92-Immunization-name sh:datatype <http://www.w3.org/2001/XMLSchema#string>;
+    sh:maxCount 1;
+    sh:path <https://schema.org/name>;
+    sh:severity sh:Info.
+shapes:41b0cd000ddb5bb5039cc3e994cb52f4512bb503abc84887731af79b21bf1ac7-n10 <http://www.w3.org/1999/02/22-rdf-syntax-ns#first> <https://w3id.org/jeswr/sectors/health#unitCode>;
+    <http://www.w3.org/1999/02/22-rdf-syntax-ns#rest> <http://www.w3.org/1999/02/22-rdf-syntax-ns#nil>.
+shapes:454147c1c1edf1e001bb058451a7785f0f591812d0141b7e4efbd104836b9b4f-Observation-hasCode sh:maxCount 1;
+    sh:nodeKind sh:IRI;
+    sh:path health:hasCode;
+    sh:severity sh:Info.
+shapes:4f7cb7f19c23dcabcedf056e3c9da78d141be30d02d6e933ec4c11043a6eef44-Observation-hasUnit sh:maxCount 1;
+    sh:nodeKind sh:IRI;
+    sh:path _:path_34eb592e6e81e2f8a1693fb3f8b21bc9c26f26cad817bcfd09841aa0462de1d1;
+    sh:severity sh:Info.
+shapes:530693a1b038c1ce0d08cdb93589c8639baed4858121e14e885fb5385902e27a-CodeableConcept-value sh:datatype <http://www.w3.org/2001/XMLSchema#string>;
+    sh:maxCount 1;
+    sh:name "codeValue";
+    sh:path _:path_5f68069c4b822606f4847f7f96cf54f1f346883fc6d70de093b5c07260835d44;
+    sh:severity sh:Info.
+shapes:540c7d7470faf5eee0a574d54193f521df50a3e7ca4b808ec7a0d8f8c8ae2e74-MedicationStatement-hasCode sh:maxCount 1;
+    sh:nodeKind sh:IRI;
+    sh:path health:hasCode;
+    sh:severity sh:Info.
+shapes:5a39f7dd9ab79f35958b8ef8c85f0d66d4e374fed979044f5f5190b945416e4e-n5 <http://www.w3.org/1999/02/22-rdf-syntax-ns#first> <https://w3id.org/jeswr/core#value>;
+    <http://www.w3.org/1999/02/22-rdf-syntax-ns#rest> <http://www.w3.org/1999/02/22-rdf-syntax-ns#nil>.
+shapes:62d292b5dd8d7ea814c339645ce1fa5276349484c60a5cd99f9e7db64ad15525-AllergyIntolerance-hasCode sh:maxCount 1;
+    sh:nodeKind sh:IRI;
+    sh:path health:hasCode;
+    sh:severity sh:Info.
+shapes:686fb2620fc0c9bf3b24fcfcc6aa0c6e903e825d1d2f3bd40f9cb382d0acd1b1-n11 <http://www.w3.org/1999/02/22-rdf-syntax-ns#first> health:unitCode;
+    <http://www.w3.org/1999/02/22-rdf-syntax-ns#rest> shapes:41b0cd000ddb5bb5039cc3e994cb52f4512bb503abc84887731af79b21bf1ac7-n10.
+shapes:6f6a6cf8f44300d7f0959a593c21d13e9649a569f4aaa37e09f46cb8be26e2b5-Observation-unitCode sh:datatype <http://www.w3.org/2001/XMLSchema#string>;
+    sh:maxCount 1;
+    sh:path _:path_8a8d8317f6e0b4d0253e03292dbf40cf6d0a68fead795c85d5a6758b7fec651f;
+    sh:severity sh:Info.
+shapes:7e6f3bdc50c7ce86821db86845b6d18a06a16d24f385cb2fe45d1c43600c7bfe-n3 <http://www.w3.org/1999/02/22-rdf-syntax-ns#first> <https://w3id.org/jeswr/sectors/health#hasUnit>;
+    <http://www.w3.org/1999/02/22-rdf-syntax-ns#rest> <http://www.w3.org/1999/02/22-rdf-syntax-ns#nil>.
+shapes:889c34e83938946c8c3ffbeda857ebd0e998dffe15872fc8ffb07f343960d166-Observation-patient sh:maxCount 1;
+    sh:nodeKind sh:IRI;
+    sh:path health:patient;
+    sh:severity sh:Info.
+shapes:934e7271bbf1ba27d098477b4521a5725c835653e07e54a2383b4c086dbf73a8-Condition-hasCode sh:maxCount 1;
+    sh:nodeKind sh:IRI;
+    sh:path health:hasCode;
+    sh:severity sh:Info.
+shapes:9b57394c92e85bd623827cd775f428800f4a0746fbc79fdc5c6ec1bc90017826-CodeableConcept-name sh:datatype <http://www.w3.org/2001/XMLSchema#string>;
+    sh:maxCount 1;
+    sh:path <https://schema.org/name>;
+    sh:severity sh:Info.
+shapes:9b7257cb637175e2734ce79b6505be0fa23de62b747083b0d25e383cc09ba2fb-MedicationStatement-patient sh:maxCount 1;
+    sh:nodeKind sh:IRI;
+    sh:path health:patient;
+    sh:severity sh:Info.
+shapes:AllergyIntolerance a sh:NodeShape;
+    sh:property shapes:286218b71d5242f956952655e2b8e13a546e0bfd19b625bcbf0bcb0af507e806-AllergyIntolerance-name, shapes:62d292b5dd8d7ea814c339645ce1fa5276349484c60a5cd99f9e7db64ad15525-AllergyIntolerance-hasCode, shapes:bffda30c0b2b74bd9b59cbb87c2b48e3d74dbe5b5680a5363d83133b82879bd9-AllergyIntolerance-patient;
+    sh:targetClass <http://hl7.org/fhir/AllergyIntolerance>.
+shapes:CodeableConcept a sh:NodeShape;
+    sh:property shapes:530693a1b038c1ce0d08cdb93589c8639baed4858121e14e885fb5385902e27a-CodeableConcept-value, shapes:9b57394c92e85bd623827cd775f428800f4a0746fbc79fdc5c6ec1bc90017826-CodeableConcept-name, shapes:ab3b9489ce64902cf8d5c329dd91f71bdd24ee02f5c1969ea28509dc760679ff-CodeableConcept-exactMatch;
+    sh:targetClass health:CodeableConcept, <https://w3id.org/jeswr/sectors/health#CodeableConcept>.
+shapes:Condition a sh:NodeShape;
+    sh:property shapes:934e7271bbf1ba27d098477b4521a5725c835653e07e54a2383b4c086dbf73a8-Condition-hasCode, shapes:be42c6161ae943c4f6aba8cc7b405fe71032441a797fc2e5b38d793c68edd897-Condition-name, shapes:d7f57a9a8184c3b98ff765f9922656c37545cae1191932ca29826ea876fdbbd0-Condition-patient;
+    sh:targetClass health:Condition, <https://schema.org/MedicalCondition>, <https://w3id.org/jeswr/sectors/health#Condition>.
+shapes:Encounter a sh:NodeShape;
+    sh:property shapes:248a625b2792e09a753a65a930288b4e74b3f93e6e5656380f28612e77a8f680-Encounter-name, shapes:b3764634cf190a2d3ba92aeca1365e92679b2441b30888d1a57aebfd892d8bbc-Encounter-recordedBy, shapes:c13d9fec2e0a812531c070023da29466e8805cad898d7650fccc5d53285a893c-Encounter-patient, shapes:f31a21307cad2cfd6c9145d7e62121e0a19235a268330bf7d7a93555bf29c308-Encounter-hasCode;
+    sh:targetClass health:Encounter, <https://w3id.org/jeswr/sectors/health#Encounter>.
+shapes:Immunization a sh:NodeShape;
+    sh:property shapes:15fb6ad35d4af642364f584edd2024acaea3a57678f2d806650adf1d2d028471-Immunization-hasCode, shapes:1d9a941f86a57027d3482c7eed1ba371e1ccbff06099a3a54bf055e3d8fc748e-Immunization-patient, shapes:1f13c533fe23248d2a1a4103deea3721d3c6e65108668814520fc0d90a55969d-Immunization-medication, shapes:33e3d0f9a7adf10075a30eb0b50c714b3b1df7e2017f55ce9c777fe7919b8d92-Immunization-name;
+    sh:targetClass health:Immunization, <https://w3id.org/jeswr/sectors/health#Immunization>.
+shapes:MedicationStatement a sh:NodeShape;
+    sh:property shapes:540c7d7470faf5eee0a574d54193f521df50a3e7ca4b808ec7a0d8f8c8ae2e74-MedicationStatement-hasCode, shapes:9b7257cb637175e2734ce79b6505be0fa23de62b747083b0d25e383cc09ba2fb-MedicationStatement-patient, shapes:b53d34464c9a67bfa843b3e0f938e0f81b2536e436c2671ed3220bd6d514911c-MedicationStatement-medication, shapes:e7031c0813f4223851dce9c28a5b9d39f573b14dfb9262442f8e8f22129954af-MedicationStatement-name;
+    sh:targetClass health:MedicationStatement, <https://w3id.org/jeswr/sectors/health#MedicationStatement>.
+shapes:MedicinalProduct a sh:NodeShape;
+    sh:property shapes:cafe27a081b2af2ac5c7426a1d9d83c87d2b23eab8c53ec46ded4ffa36fbac41-MedicinalProduct-name;
+    sh:targetClass health:MedicinalProduct, <https://schema.org/Drug>, <https://w3id.org/jeswr/sectors/health#MedicinalProduct>.
+shapes:Observation a sh:NodeShape;
+    sh:property shapes:454147c1c1edf1e001bb058451a7785f0f591812d0141b7e4efbd104836b9b4f-Observation-hasCode, shapes:4f7cb7f19c23dcabcedf056e3c9da78d141be30d02d6e933ec4c11043a6eef44-Observation-hasUnit, shapes:6f6a6cf8f44300d7f0959a593c21d13e9649a569f4aaa37e09f46cb8be26e2b5-Observation-unitCode, shapes:889c34e83938946c8c3ffbeda857ebd0e998dffe15872fc8ffb07f343960d166-Observation-patient, shapes:d06b519addcafa00ee6b537a6b1172079fe8664aea0e8d39e199905512c3982b-Observation-name;
+    sh:targetClass <http://hl7.org/fhir/Observation>, health:Observation, <https://schema.org/Observation>, <https://w3id.org/jeswr/sectors/health#Observation>.
+shapes:ab3b9489ce64902cf8d5c329dd91f71bdd24ee02f5c1969ea28509dc760679ff-CodeableConcept-exactMatch sh:maxCount 1;
+    sh:nodeKind sh:IRI;
+    sh:path <http://www.w3.org/2004/02/skos/core#exactMatch>;
+    sh:severity sh:Info.
+shapes:b3764634cf190a2d3ba92aeca1365e92679b2441b30888d1a57aebfd892d8bbc-Encounter-recordedBy sh:maxCount 1;
+    sh:nodeKind sh:IRI;
+    sh:path _:path_25b7f09c732afec1c1f4a42ec43dda66f1b8ac8816f2b6e17e8064105d5200f2;
+    sh:severity sh:Info.
+shapes:b53d34464c9a67bfa843b3e0f938e0f81b2536e436c2671ed3220bd6d514911c-MedicationStatement-medication sh:maxCount 1;
+    sh:nodeKind sh:IRI;
+    sh:path health:medication;
+    sh:severity sh:Info.
+shapes:be42c6161ae943c4f6aba8cc7b405fe71032441a797fc2e5b38d793c68edd897-Condition-name sh:datatype <http://www.w3.org/2001/XMLSchema#string>;
+    sh:maxCount 1;
+    sh:path <https://schema.org/name>;
+    sh:severity sh:Info.
+shapes:bffda30c0b2b74bd9b59cbb87c2b48e3d74dbe5b5680a5363d83133b82879bd9-AllergyIntolerance-patient sh:maxCount 1;
+    sh:nodeKind sh:IRI;
+    sh:path health:patient;
+    sh:severity sh:Info.
+shapes:c13d9fec2e0a812531c070023da29466e8805cad898d7650fccc5d53285a893c-Encounter-patient sh:maxCount 1;
+    sh:nodeKind sh:IRI;
+    sh:path health:patient;
+    sh:severity sh:Info.
+shapes:cafe27a081b2af2ac5c7426a1d9d83c87d2b23eab8c53ec46ded4ffa36fbac41-MedicinalProduct-name sh:datatype <http://www.w3.org/2001/XMLSchema#string>;
+    sh:maxCount 1;
+    sh:path <https://schema.org/name>;
+    sh:severity sh:Info.
+shapes:d06b519addcafa00ee6b537a6b1172079fe8664aea0e8d39e199905512c3982b-Observation-name sh:datatype <http://www.w3.org/2001/XMLSchema#string>;
+    sh:maxCount 1;
+    sh:path <https://schema.org/name>;
+    sh:severity sh:Info.
+shapes:d7f57a9a8184c3b98ff765f9922656c37545cae1191932ca29826ea876fdbbd0-Condition-patient sh:maxCount 1;
+    sh:nodeKind sh:IRI;
+    sh:path health:patient;
+    sh:severity sh:Info.
+shapes:e7031c0813f4223851dce9c28a5b9d39f573b14dfb9262442f8e8f22129954af-MedicationStatement-name sh:datatype <http://www.w3.org/2001/XMLSchema#string>;
+    sh:maxCount 1;
+    sh:path <https://schema.org/name>;
+    sh:severity sh:Info.
+shapes:f2b9fe7401cbfe3cc87c75e296dc30cebeac7a87e340481930e0861fce9ef448-n0 <http://www.w3.org/1999/02/22-rdf-syntax-ns#first> health:recordedBy;
+    <http://www.w3.org/1999/02/22-rdf-syntax-ns#rest> shapes:0d7ad3a9c7b73a75fea6f76cfc4587420a6164751afb8b7798f0b547d45d68ae-n8.
+shapes:f31a21307cad2cfd6c9145d7e62121e0a19235a268330bf7d7a93555bf29c308-Encounter-hasCode sh:maxCount 1;
+    sh:nodeKind sh:IRI;
+    sh:path health:hasCode;
+    sh:severity sh:Info.
+_:path_25b7f09c732afec1c1f4a42ec43dda66f1b8ac8816f2b6e17e8064105d5200f2 sh:alternativePath shapes:f2b9fe7401cbfe3cc87c75e296dc30cebeac7a87e340481930e0861fce9ef448-n0.
+_:path_34eb592e6e81e2f8a1693fb3f8b21bc9c26f26cad817bcfd09841aa0462de1d1 sh:alternativePath shapes:06e50e0ccc135a14db54820193150c907694c715effb682c89a6d7ca09378b77-n2.
+_:path_5f68069c4b822606f4847f7f96cf54f1f346883fc6d70de093b5c07260835d44 sh:alternativePath shapes:16814bf7c57441025113750d8d90d0d360559e0fade28f8b690c14a8ea3b2e5f-n4.
+_:path_8a8d8317f6e0b4d0253e03292dbf40cf6d0a68fead795c85d5a6758b7fec651f sh:alternativePath shapes:686fb2620fc0c9bf3b24fcfcc6aa0c6e903e825d1d2f3bd40f9cb382d0acd1b1-n11.
