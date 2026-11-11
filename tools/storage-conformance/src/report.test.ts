@@ -19,6 +19,17 @@ test("matrix orders targets and rows, escapes cells and distinguishes absent res
   expect(generateMatrix(reports)).toContain("| a | pass | not-run |");
   expect(generateMatrix(reports)).toContain("| b\\|c d | not-run | skip (target-lacks:move) |");
   expect(generateMatrix([])).toContain("# Storage conformance matrix");
+  for (const id of [
+    "SC-ROLES-commenter",
+    "SC-TRASH-roundtrip",
+    "SC-VERSIONS-roundtrip",
+    "SC-TYPEINDEX-register-find",
+    "SC-PREFS-create-update-412",
+  ]) {
+    expect(generateMatrix(reports)).toContain(`| ${id} | not-run | not-run |`);
+  }
+  for (const feature of ["accessControl", "typeIndex", "trash", "versioning"])
+    expect(generateMatrix(reports)).toContain(`| claims:${feature} | not-run | not-run |`);
 });
 
 test("writes per-target JSON and matrix, rejects traversal target names", async () => {

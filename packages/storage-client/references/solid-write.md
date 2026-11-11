@@ -138,3 +138,10 @@ Solid write side (ADR-003 §6, T-022; implementation isolated in `src/solid-writ
   remove only present triples; cancelling changes are no-op and return the current ETag. Otherwise
   PATCH describedby with N3 and its If-Match; 405 naturally maps to method-not-allowed. Return its
   response ETag or follow-up HEAD of the metadata URL or null. No describedby remains unsupported.
+
+- `WriteOptions.keepalive` / `CreateOptions.keepalive` reach fetch after the shared 64 KiB
+  encoded-body check; unknown-size streams/Blobs fail bad-request before sending.
+- `MetadataOp.title` sets `dct:title` on the anchor for add, and removes the exact literal for
+  remove, using wrapper accessors and the existing N3 Patch builder. Titles accept quotes,
+  newlines and Unicode as literal data. Emulated moves drop ACLs; pod-access SDK-APP-04 owns
+  the preserving variant.

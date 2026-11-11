@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex
 // AUTHORED-BY Codex GPT-6
 import type { Mode, PodImplementation } from "../types.js";
@@ -81,6 +82,7 @@ export interface RoleError extends Error {
     | "conflict"
     | "precondition-required"
     | "owner-lockout"
+    | "partial-scope"
     | "inherited-grant";
   url: string;
   feature: "accessControl";

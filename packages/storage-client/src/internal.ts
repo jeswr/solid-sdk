@@ -4,6 +4,36 @@
 import { StorageError } from "./errors.js";
 import type { Body, Entry, Page, PageCursor } from "./types.js";
 
+/** Fetch keepalive bodies must fit the browser's 64 KiB budget without consuming streams. */
+export function validateKeepalive(
+  method: string,
+  url: string,
+  body: Body | null | undefined,
+  keepalive: boolean | undefined,
+): void {
+  if (keepalive !== undefined && typeof keepalive !== "boolean")
+    throw new TypeError("keepalive must be a boolean");
+  if (!keepalive) return;
+  const size =
+    body == null
+      ? 0
+      : typeof body === "string"
+        ? new TextEncoder().encode(body).byteLength
+        : body instanceof Uint8Array
+          ? body.byteLength
+          : body instanceof Blob
+            ? body.size
+            : NaN;
+  if (!Number.isSafeInteger(size) || size < 0 || size > 64 * 1024) {
+    throw new StorageError("bad-request", {
+      method,
+      url,
+      message:
+        "keepalive requires a known body size of at most 64 KiB; use the outbox for larger or streaming bodies",
+    });
+  }
+}
+
 /** ADR-003 §4: listAll stops here. */
 export const MAX_PAGES = 10_000;
 

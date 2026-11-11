@@ -3,9 +3,8 @@ import { parseRdf } from "@jeswr/fetch-rdf";
 import type { Store } from "n3";
 import { DataFactory } from "n3";
 import { ACL, ACP, RDF, safeIri } from "../rdf.js";
-import type { EffectivePolicy } from "../types.js";
 import { roleError } from "./errors.js";
-import { readPolicy } from "./rdf.js";
+import { type RolePolicy, readPolicy } from "./rdf.js";
 import type { RolesOptions } from "./types.js";
 
 export interface Document {
@@ -13,7 +12,7 @@ export interface Document {
   resource: string;
   model: "wac" | "acp";
   dataset: Store;
-  policy: EffectivePolicy;
+  policy: RolePolicy;
   etag: string | null;
 }
 export interface Snapshot {

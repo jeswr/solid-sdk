@@ -6,7 +6,7 @@
 import { assertWithinPodScope, redactUserinfo } from "@jeswr/guarded-fetch";
 import { type ParsedLink, parseLinkHeaders, parseWacAllow } from "@jeswr/storage-capabilities";
 import { StorageError, storageErrorFrom } from "./errors.js";
-import { throwIfAborted } from "./internal.js";
+import { throwIfAborted, validateKeepalive } from "./internal.js";
 import type { AuthFetch, Body, LinkTarget, ReadResult, ResourceKind } from "./types.js";
 
 /**
@@ -78,13 +78,16 @@ export async function send(
   signal: AbortSignal | undefined,
   body?: Body,
   revalidate = false,
+  keepalive?: boolean,
 ): Promise<Response> {
   throwIfAborted(method, url, signal);
+  validateKeepalive(method, url, body, keepalive);
   try {
     return await fetch(url, {
       method,
       headers,
       redirect: "manual",
+      ...(keepalive === undefined ? {} : { keepalive }),
       ...(revalidate ? { cache: "no-cache" } : {}),
       ...(signal ? { signal } : {}),
       ...(body === undefined

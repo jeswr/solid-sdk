@@ -125,7 +125,7 @@ describe("notes store", () => {
     expect((await s.store.create({ title: "Hello World" })).url).toBe(`${ROOT}hello-world-3.ttl`);
     expect((await s.store.create()).url).toBe(`${ROOT}note.ttl`);
     expect((await s.store.create({ title: "!!!" })).url).toBe(`${ROOT}note-2.ttl`);
-    expect(await s.store.read(a.url)).toEqual(a);
+    expect(await s.store.read(a.url)).toEqual({ ...a, localGeneration: expect.any(Number) });
     for (const url of Object.values(s.store.containers)) expect(s.pod.has(url)).toBe(true);
     expect(
       s.calls
@@ -247,7 +247,7 @@ describe("notes store", () => {
     expect(note.created).toBe(original.created);
     expect(note.labels).toEqual(["home"]);
     expect(note.revisions[0]?.id).toBe(`${note.url}#rev-25`);
-    expect(await s.store.read(note.url)).toEqual(note);
+    expect(await s.store.read(note.url)).toEqual({ ...note, localGeneration: expect.any(Number) });
     await expect(s.store.save(original, { title: "Stale" }, original.etag)).rejects.toBeInstanceOf(
       NoteConflictError,
     );
@@ -313,7 +313,9 @@ describe("notes store", () => {
       }
     }
     expect(note.url).toBe(originalUrl);
-    expect(await s.store.list("active")).toEqual([note]);
+    expect(await s.store.list("active")).toEqual([
+      { ...note, localGeneration: expect.any(Number) },
+    ]);
     expect(await s.store.unarchive(note)).toBe(note);
     const archived = await s.store.archive(note);
     expect(await s.store.archive(archived)).toBe(archived);
@@ -329,7 +331,10 @@ describe("notes store", () => {
     const first = await s.store.archive(original);
     const second = await s.store.create({ title: "Same" });
     expect((await s.store.archive(second)).url).toBe(`${ROOT}archive/same-2.ttl`);
-    expect(await s.store.read(first.url)).toEqual(first);
+    expect(await s.store.read(first.url)).toEqual({
+      ...first,
+      localGeneration: expect.any(Number),
+    });
     const url = `${ROOT}extensionless`;
     const dataset = buildNote(url, { title: "Plain" });
     await writeRdf(url, dataset, { createOnly: true, fetchImpl: s.pod.fetch });
@@ -654,7 +659,10 @@ describe("notes store", () => {
     fail = false;
     expect(await s.store.renameLabelEverywhere("A", "B")).toEqual([]);
     expect((await s.store.read(archived.url))?.labels).toEqual(["B"]);
-    expect(await s.store.read(destination.url)).toEqual(destination);
+    expect(await s.store.read(destination.url)).toEqual({
+      ...destination,
+      localGeneration: expect.any(Number),
+    });
     expect(await s.store.renameLabelEverywhere("A", "B")).toEqual([]);
   });
 
@@ -697,7 +705,7 @@ describe("notes store", () => {
   });
 });
 
-function noteWithoutEtag({ etag: _etag, ...note }: StoredNote) {
+function noteWithoutEtag({ etag: _etag, localGeneration: _generation, ...note }: StoredNote) {
   return note;
 }
 
@@ -719,7 +727,10 @@ it("never deletes a replacement at the confirmed trash URL", async () => {
   );
   expect(s.calls).toEqual([{ url: confirmed.url, method: "DELETE", headers: expect.any(Headers) }]);
   expect(s.calls[0]?.headers.get("if-match")).toBe(confirmed.etag);
-  expect(await s.store.read(replacement.url)).toEqual(replacement);
+  expect(await s.store.read(replacement.url)).toEqual({
+    ...replacement,
+    localGeneration: expect.any(Number),
+  });
 });
 
 it("reports a typed purge conflict if trash is replaced after listing", async () => {
@@ -751,7 +762,10 @@ it("rolls back the stale destination on a concurrent source edit without a verif
   s.calls.length = 0;
   await expect(s.store.archive(original)).rejects.toBeInstanceOf(NoteConflictError);
   expect(s.calls.filter((call) => call.method === "GET")).toEqual([]);
-  expect(await s.store.read(original.url)).toEqual(edited);
+  expect(await s.store.read(original.url)).toEqual({
+    ...edited,
+    localGeneration: expect.any(Number),
+  });
   expect(s.pod.has(`${ROOT}archive/concurrent.ttl`)).toBe(false);
 });
 
@@ -793,4 +807,38 @@ it("verifies a transport that rejects without an Error and rolls back its uncomm
   expect(s.calls.filter((call) => call.method === "GET")).toHaveLength(1);
   expect(s.pod.has(original.url)).toBe(true);
   expect(s.pod.has(`${ROOT}archive/note.ttl`)).toBe(false);
+});
+
+it("orders read starts and acknowledged writes locally even when the resource clock moves backwards", async () => {
+  const s = await fixture();
+  const original = await s.store.create({ title: "Original" });
+  let resume!: () => void;
+  let captured!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    resume = resolve;
+  });
+  const started = new Promise<void>((resolve) => {
+    captured = resolve;
+  });
+  s.intercept(async (url, init) => {
+    if (url !== original.url || (init?.method ?? "GET") !== "GET") return;
+    const snapshot = await s.pod.fetch(url, init);
+    captured();
+    await gate;
+    return snapshot;
+  });
+  const reading = s.store.read(original.url);
+  await started;
+  s.clock(new Date(NOW.getTime() - 60_000));
+  const saved = await s.store.save(original, { title: "Written later" }, original.etag);
+  resume();
+  const stale = await reading;
+  expect(stale?.etag).toBe(original.etag);
+  expect(stale?.localGeneration).toBeLessThan(saved.localGeneration as number);
+  expect(Date.parse(saved.modified as string)).toBeLessThan(
+    Date.parse(original.modified as string),
+  );
+  const fresh = await s.store.read(original.url);
+  expect(fresh?.etag).toBe(saved.etag);
+  expect(fresh?.localGeneration).toBeGreaterThan(saved.localGeneration as number);
 });

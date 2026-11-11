@@ -41,7 +41,11 @@ jobs:
       - run: pnpm turbo run build --filter=@jeswr/app-extension^...
       - name: Install Playwright Chromium
         working-directory: apps/extension
-        run: pnpm exec playwright install --with-deps chromium
+        run: |
+          # The runner image already carries Chromium's system libraries. If the
+          # apt mirrors are unreachable, fall back to the browser download alone.
+          timeout 600 pnpm exec playwright install --with-deps chromium \
+            || { echo "::warning::playwright --with-deps failed; installing Chromium without system deps"; pnpm exec playwright install chromium; }
       - name: Run e2e
         run: pnpm --filter @jeswr/app-extension run test:e2e
       - uses: actions/upload-artifact@v4

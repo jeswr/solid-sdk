@@ -1,6 +1,8 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { storageCases } from "./cases.js";
+import { sq8Cases } from "./optional-cases.js";
 import type { TargetReport } from "./types.js";
 
 function cell(value: string): string {
@@ -11,7 +13,16 @@ function cell(value: string): string {
 export function generateMatrix(reports: readonly TargetReport[]): string {
   const sorted = [...reports].sort((a, b) => a.target.localeCompare(b.target));
   const tests = [
-    ...new Set(sorted.flatMap((report) => report.results.map((row) => row.test))),
+    ...new Set([
+      ...storageCases.map((scenario) => scenario.id),
+      ...(sorted.some((report) => report.target.startsWith("sparq-"))
+        ? sq8Cases.map((scenario) => scenario.id)
+        : []),
+      ...["accessControl", "trash", "versioning", "typeIndex"].map(
+        (feature) => `claims:${feature}`,
+      ),
+      ...sorted.flatMap((report) => report.results.map((row) => row.test)),
+    ]),
   ].sort();
   const lines = [
     "<!-- AUTHORED-BY Codex GPT-6.1-Sol -->",

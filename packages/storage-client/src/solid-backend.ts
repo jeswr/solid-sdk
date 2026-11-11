@@ -3,7 +3,7 @@
 // AUTHORED-BY Codex GPT-6
 // Solid backend read side (ADR-003 §6, T-021); mutations are isolated in solid-write.ts.
 import { deriveFeatures, type Features } from "@jeswr/storage-capabilities";
-import { LiteralAs, OptionalFrom } from "@rdfjs/wrapper";
+import { LiteralAs, OptionalFrom, TermAs } from "@rdfjs/wrapper";
 import { Container, Resource } from "@solid/object/solid";
 import { DataFactory } from "n3";
 import { StorageError } from "./errors.js";
@@ -13,6 +13,7 @@ import {
   acceptReadStatus,
   createReadOperations,
   MEDIA_TYPE,
+  RDF_ACCEPT,
   type ReadExpectation,
   rdfBody,
 } from "./read.js";
@@ -41,6 +42,15 @@ export interface SolidBackendOptions {
 
 /** A listed member with the optional `dct:format` literal some servers emit. */
 class Member extends Resource {
+  get displayTitle(): string | undefined {
+    const title = OptionalFrom.subjectPredicate(
+      this,
+      "http://purl.org/dc/terms/title",
+      TermAs.term,
+    );
+    return title?.termType === "Literal" ? title.value : undefined;
+  }
+
   get format(): string | undefined {
     return OptionalFrom.subjectPredicate(this, DCT_FORMAT, LiteralAs.string);
   }
@@ -91,6 +101,7 @@ export function createSolidBackend(options: SolidBackendOptions): StorageClient 
       protocol: "solid",
       id: root,
       root,
+      owner: null,
       descriptionUrl: null,
       services: [],
       capabilities: [],
@@ -147,6 +158,7 @@ export function createSolidBackend(options: SolidBackendOptions): StorageClient 
     const modified = member.modifiedAt;
     return {
       url: member.id,
+      displayName: tolerant(() => member.displayTitle) ?? null,
       kind,
       contentType: kind === "container" ? null : (format ?? iana ?? null),
       size: typeof size === "number" && Number.isSafeInteger(size) && size >= 0 ? size : null,
@@ -239,9 +251,11 @@ export function createSolidBackend(options: SolidBackendOptions): StorageClient 
           message: `${described.url} advertises no describedby metadata`,
         });
       }
-      const document = await client.readRdf(described.metadataUrl);
+      // Keep metadata's HTTP errors on the shared mapping, separate from readRdf negotiation.
+      const document = await get(described.metadataUrl, { Accept: RDF_ACCEPT }, undefined);
+      const { dataset } = await rdfBody(document, "not-rdf");
       const links = new Map<string, Map<string, MetadataLink[]>>();
-      for (const quad of document.dataset.match()) {
+      for (const quad of dataset.match()) {
         if (quad.subject.termType !== "NamedNode" || quad.object.termType !== "NamedNode") continue;
         const rels = links.get(quad.subject.value) ?? new Map<string, MetadataLink[]>();
         rels.set(quad.predicate.value, [
@@ -250,7 +264,7 @@ export function createSolidBackend(options: SolidBackendOptions): StorageClient 
         ]);
         links.set(quad.subject.value, rels);
       }
-      return { url: document.url, etag: document.etag, links, raw: document.dataset };
+      return { url: document.url, etag: document.etag, links, raw: dataset };
     },
 
     async parentOf(url) {

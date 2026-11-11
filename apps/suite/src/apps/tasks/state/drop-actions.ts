@@ -43,6 +43,8 @@ export interface RetryAnnouncement {
   message: string;
   /** Whether the listing shows completed rows, for `isPlaced`. */
   showCompleted: boolean;
+  /** Board retries check the flat card order rather than tree sibling order. */
+  flat?: boolean;
   describe: (plan: DropPlan) => string;
   announce: (message: string) => void;
 }
@@ -55,12 +57,12 @@ export interface RetryAnnouncement {
  */
 export function announceRetries(
   cache: TasksCache,
-  { task, plan: first, message, showCompleted, describe, announce }: RetryAnnouncement,
+  { task, plan: first, message, showCompleted, flat, describe, announce }: RetryAnnouncement,
 ): (written: boolean, plan: DropPlan) => void {
   const placed = () => {
     const { views } = cache.getSnapshot();
     const project = views.filter((view) => view.projectUrl === task.projectUrl);
-    return isPlaced(first, visibleTasks(project, showCompleted));
+    return isPlaced(first, visibleTasks(project, showCompleted), { flat });
   };
   return (written, plan) => {
     if (written) announce(describe(plan));

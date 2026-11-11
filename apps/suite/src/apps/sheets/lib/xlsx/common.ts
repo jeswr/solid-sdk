@@ -5,6 +5,8 @@ export const REL = "http://schemas.openxmlformats.org/officeDocument/2006/relati
 export const STRICT_REL = "http://purl.oclc.org/ooxml/officeDocument/relationships";
 export const PACKAGE_REL = "http://schemas.openxmlformats.org/package/2006/relationships";
 export const LIMITS = {
+  compressedBytes: 50 * 1024 * 1024,
+  elements: 2_000_000,
   entries: 1000,
   entryBytes: 20 * 1024 * 1024,
   totalBytes: 100 * 1024 * 1024,
