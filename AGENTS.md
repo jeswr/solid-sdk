@@ -89,6 +89,26 @@ must have a `codegen` script that runs `@jeswr/federation-codegen` into `src/gen
 changes), and a drift test that runs `pnpm run codegen --out <tmp>` and compares every
 generated file byte-for-byte. Fixture tests are in `test/check-codegen.test.mjs`.
 
+<!-- AUTHORED-BY Codex GPT-6 -->
+**Code-quality gates.** `pnpm run check:rdf-discipline` and `pnpm run check:app-duplication`
+run in `lint:root`. They ratchet hand-built RDF in app source and normalized logic copied
+across apps or between apps and libraries, using committed `scripts/*-baseline.json` files.
+New violations, increased counts and new duplicate clusters fail. Reduced or removed debt
+passes with a note that the baseline can shrink; `pnpm run <check> --update-baseline` records
+reductions and RDF file moves. Adding fingerprints, paths or counts to a baseline requires
+`--update-baseline --accept-new`, which prints every accepted increase. RDF exceptions
+require a same-line `// rdf-discipline-allow: <reason>` comment on a violation; unused or
+empty exceptions fail, and exception counts are ratcheted per file.
+Duplication uses 120-token windows (`--window` overrides this for fixtures), ignores imports,
+pure type declarations, parentheses and whitespace-only JSX, and filters data-heavy windows.
+It reports source ranges and ratchets location counts per path rather than token lengths;
+extract shared logic into `packages/*`. Suite sub-apps count as separate projects.
+Both guards scan app `src/` and `scripts/` trees; duplication also scans package `src/` trees.
+They exclude declarations, `src/generated/`, test/spec files, `__tests__` and `__fixtures__`.
+Test/fixture/build/out directory names are excluded only outside `src/`; summaries count
+skipped source paths. Both accept `--root` for isolated fixtures in
+`test/check-{rdf-discipline,app-duplication}.test.mjs`.
+
 <!-- AUTHORED-BY Codex GPT-5 -->
 ## Local agent skills
 
