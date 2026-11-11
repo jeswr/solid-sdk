@@ -13,7 +13,7 @@
 - `.` (`dist/index.d.ts`): `ANONYMOUS_SCOPE`, `AppShellConfig`, `CACHE_PREFIX`, `CACHE_PROVENANCE_HEADER`, `CacheMetadata`, `CacheStorageLike`, `DB_PREFIX`, `DEFAULT_CACHE_NAME`, `DEFAULT_DB_NAME`, `DEFAULT_WARM_BUDGET`, `InvalidateDeps`, `InvalidateOutcome`, `NotificationActivityType`, `NotificationFrame`, `NotificationsClientConfig`, `OfflineClient`, `OfflineClientConfig`, `OfflineEvent`, `OfflineStatusSnapshot`, `OfflineStatusSurface`, `PageCache`, `PageCacheOptions`, `PageToWorkerMessage`, `PurgeDeps`, `PurgeResult`, `ResolvedAppShellConfig`, `ResolvedWarmBudget`, `ResourceFreshness`, `RevalidationEvent`, `ShellCache`, `ShellCacheStorage`, `ShellDeps`, `ShellResult`, `ShellServeSource`, `StatusListener`, `StatusSurfaceOptions`, `SweepResult`, `UpdatedEvent`, `UpdatedListener`, `WarmBudget`, `WarmConfig`, `WarmController`, `WarmDeps`, `WarmResult`, `WarmVisit`, `assetConfigCandidates`, `cacheNameForWebId`, `cacheProvenance`, `cleanupOldShellCaches`, `containerChildren`, `createOfflineClient`, `createPageCache`, `createStatusSurface`, `createWarmController`, `dbNameForWebId`, `deriveSeeds`, `handleNavigation`, `handleNotification`, `handlePrecachedAsset`, `isPrecachedAsset`, `isScopeChange`, `onIdle`, `parseWacAllow`, `precacheAppShell`, `purgeForWebId`, `resolveAppShellConfig`, `resolveAssetShellConfig`, `resolveBudget`, `resolveServingShellConfig`, `resyncSweep`, `sameShellConfig`, `scopeFor`, `scopeHash`, `shellBucketComplete`, `shellCacheName`, `typeIndexTargets`, `userCanRead`, `warm`
 - `./worker` (`dist/worker.d.ts`): _(no named exports)_
 - `./react` (`dist/react.d.ts`): `OfflineStatusSnapshot`, `OfflineStatusSurface`, `ResourceFreshness`, `ResourceState`, `UseOfflineResourceOptions`, `UseOfflineResourceResult`, `UseOfflineStatusResult`, `useOfflineResource`, `useOfflineStatus`
-- `./outbox` (`dist/outbox.d.ts`): `ConflictRecord`, `Outbox`, `OutboxItem`, `OutboxOperation`, `QueueingStorageClient`, `QueueingWriteResult`, `ReplayOptions`, `createOutbox`, `withOutbox`
+- `./outbox` (`dist/outbox.d.ts`): `ConflictRecord`, `GuardPolicy`, `GuardedDelivery`, `JsonValue`, `Outbox`, `OutboxGuard`, `OutboxItem`, `OutboxOperation`, `QueueOption`, `QueueingStorageClient`, `QueueingWriteResult`, `ReplayDelegate`, `ReplayOptions`, `createOutbox`, `withOutbox`
 - `./merge` (`dist/merge.d.ts`): `mergeRdf`
 
 ### `dist/index.d.ts`
@@ -1111,8 +1111,16 @@ export { OfflineStatusSnapshot, OfflineStatusSurface, type ResourceState, type U
 ### `dist/outbox.d.ts`
 
 ```ts
-import { Body, CreateOptions, StorageClient, WriteOptions, WriteResult } from '@jeswr/storage-client';
+import { Body, CreateOptions, StorageClient, WriteResult, WriteOptions } from '@jeswr/storage-client';
 
+type JsonValue = null | boolean | number | string | JsonValue[] | {
+    [key: string]: JsonValue;
+};
+/** Persisted application policy; assertions are visible only to delivery delegates. */
+interface OutboxGuard {
+    tag: string;
+    assertions?: JsonValue;
+}
 interface OutboxItem {
     id: string;
     op: 'write' | 'create' | 'delete';
@@ -1125,6 +1133,10 @@ interface OutboxItem {
     createdAt: number;
     status: 'waiting' | 'replaying' | 'failed' | 'conflict';
     error?: string;
+    readonly guard?: {
+        readonly tag: string;
+    };
+    readonly blocked?: 'no-delegate' | 'guard-required';
 }
 interface ConflictRecord {
     id: string;
@@ -1142,6 +1154,7 @@ interface OutboxOperation {
     body?: Body | null;
     contentType?: string;
     ifMatch?: string;
+    keepalive?: boolean;
     container?: string;
     name?: string;
     label?: string;
@@ -1149,7 +1162,29 @@ interface OutboxOperation {
     deleteOptions?: {
         recursive?: boolean;
     };
+    guard?: OutboxGuard;
 }
+/** A defensive snapshot of the actual request, including conflict-resolution changes. */
+interface GuardedDelivery {
+    op: OutboxOperation['op'];
+    url: string;
+    container?: string;
+    name?: string;
+    contentType?: string;
+    body: Uint8Array | null;
+    ifMatch?: string;
+    keepalive?: boolean;
+    createOptions?: OutboxOperation['createOptions'];
+    deleteOptions?: OutboxOperation['deleteOptions'];
+    assertions?: JsonValue;
+    purpose: 'replay' | 'resolve-mine' | 'resolve-both';
+}
+type ReplayDelegate = (delivery: GuardedDelivery, ctx: {
+    storage: StorageClient;
+    signal: AbortSignal;
+}) => Promise<WriteResult | void>;
+/** Trusted session policy, independent of editable queue records. Throwing fails closed. */
+type GuardPolicy = (operation: Pick<OutboxOperation, 'op' | 'url' | 'container'>) => boolean;
 interface ReplayOptions {
     /** Per-item byte progress, at start (0) and successful completion (size). */
     onProgress?: (sent: number, total: number) => void;
@@ -1164,6 +1199,10 @@ interface Outbox {
     conflicts(): ConflictRecord[];
     /** Durable enqueue; normally called by withOutbox. */
     enqueue(operation: OutboxOperation): Promise<OutboxItem>;
+    /** Session-local registration. Duplicate tags throw; close unregisters everything. */
+    registerDelegate(tag: string, delegate: ReplayDelegate): () => void;
+    /** Require this guard tag for matching operations. Session-local; duplicate tags throw. */
+    registerGuardPolicy(tag: string, matches: GuardPolicy): () => void;
     /** Accepts a conflict ID or an item ID; returns a defensive copy. */
     localBody(id: string): Promise<Uint8Array | null>;
     replay(client: StorageClient, options?: ReplayOptions): Promise<void>;
@@ -1173,11 +1212,13 @@ interface Outbox {
     on(event: 'change' | 'conflict', listener: () => void): () => void;
     /** Deletes only this WebID's queue. Logout deliberately does not call this. */
     purge(): Promise<void>;
-    /** Releases listeners; persisted changes survive. */
+    /** Releases listeners/delegates and aborts guarded deliveries; persisted changes survive. */
     close(): void;
 }
 type QueueOption = {
     offline?: 'queue';
+    guard?: OutboxGuard;
+    keepalive?: boolean;
 };
 type RdfOptions = Parameters<StorageClient['writeRdf']>[2];
 type DeleteOptions = NonNullable<Parameters<StorageClient['delete']>[1]>;
@@ -1199,7 +1240,7 @@ declare function createOutbox(options: {
 /** Opt-in only. Patch/move and every read keep the wrapped client's behavior. */
 declare function withOutbox(client: StorageClient, outbox: Outbox): QueueingStorageClient;
 
-export { type ConflictRecord, type Outbox, type OutboxItem, type OutboxOperation, type QueueingStorageClient, type QueueingWriteResult, type ReplayOptions, createOutbox, withOutbox };
+export { type ConflictRecord, type GuardPolicy, type GuardedDelivery, type JsonValue, type Outbox, type OutboxGuard, type OutboxItem, type OutboxOperation, type QueueOption, type QueueingStorageClient, type QueueingWriteResult, type ReplayDelegate, type ReplayOptions, createOutbox, withOutbox };
 ```
 
 ### `dist/merge.d.ts`
