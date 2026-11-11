@@ -72,6 +72,13 @@ export function createResourceTokenVerifier(options: {
     fetchedAt: number;
   }>(now);
   const profiles = createDiscoveryCache<string[]>(now);
+  // When each JWKS URL was last refetched for an unknown kid, successful or not, so a failing
+  // or slow issuer is not asked again inside the throttle window.
+  const lastRefresh = new Map<string, number>();
+  const refreshing = new Map<
+    string,
+    Promise<{ keys: ReturnType<typeof createLocalJWKSet>; fetchedAt: number }>
+  >();
   // Never forward inbound headers or credentials, including when fetchRdf calls this seam.
   const anonymousFetch: typeof fetch = (input, init) =>
     options.outboundFetch(input, { ...init, credentials: "omit" });
@@ -117,12 +124,18 @@ export function createResourceTokenVerifier(options: {
       verified = await verifyAccessToken();
     } catch (error) {
       // A rotated issuer key: refetch the JWKS at most once a minute per JWKS URL, then retry.
-      if (
-        (error as { code?: unknown }).code !== "ERR_JWKS_NO_MATCHING_KEY" ||
-        now() - cached.fetchedAt < 60_000
-      )
-        throw error;
-      cached = await jwks(uri, loadKeys, true);
+      if ((error as { code?: unknown }).code !== "ERR_JWKS_NO_MATCHING_KEY") throw error;
+      // Join a refresh already in flight; otherwise start one unless this URL was refetched
+      // (successfully or not) inside the window.
+      let refresh = refreshing.get(uri);
+      if (refresh === undefined) {
+        if (now() - Math.max(cached.fetchedAt, lastRefresh.get(uri) ?? -Infinity) < 60_000)
+          throw error;
+        lastRefresh.set(uri, now());
+        refresh = jwks(uri, loadKeys, true).finally(() => refreshing.delete(uri));
+        refreshing.set(uri, refresh);
+      }
+      cached = await refresh;
       verified = await verifyAccessToken();
     }
     const { payload } = verified;

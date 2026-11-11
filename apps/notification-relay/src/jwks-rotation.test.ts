@@ -162,6 +162,12 @@ test("shares a failed JWKS refresh and retries after the throttle window", async
   // A failed refresh retains the last working JWKS.
   await expect(f.verify(await f.request())).resolves.toMatchObject({ webid });
   expect(f.outboundFetch).toHaveBeenCalledTimes(1);
+  // A failed refresh still starts the throttle window: no refetch per later request.
+  for (let i = 0; i < 3; i++)
+    await expect(f.verify(await f.rotatedRequest())).rejects.toMatchObject({
+      code: "ERR_JWKS_NO_MATCHING_KEY",
+    });
+  expect(f.outboundFetch).toHaveBeenCalledTimes(1);
   f.time(epoch + 120_000);
   f.outboundFetch.mockImplementation(async () => Response.json({ keys: [f.rotated.jwk] }));
   await expect(f.verify(await f.rotatedRequest())).resolves.toMatchObject({ webid });
