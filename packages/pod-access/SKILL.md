@@ -295,3 +295,30 @@ URL/grant/reason entries in `dropped`; warn only on that result. `reapplied` con
 resource URLs. Reapplication failure/abort moves back and restores the snapshot without the
 caller signal. Typed StorageError conflicts expose `step: reapply | rollback-failed`, `from`,
 `to` and last known `url`; rollback failures retain both causes. Never retry or widen a grant.
+
+
+`movePreservingAccess` emulation stages inside pod-access, never through `storage.move`:
+preflight destination caller Control even for an empty own selection, and lockout-check every
+planned own ACL/ACR. Snapshot resource and own-document ETags, endpoint and presence/absence;
+require strong validators. Create exact-name empty placeholders top-down, install own grants
+with `ownOnly: true`, read back and verify own rows/document presence, then stream content
+with the placeholder ETag. Verify parents before creating children. Preserve inheritance for
+items without own documents; preserve the presence of empty own ACP documents too. Re-read source validators before each access application and
+across the whole source before any deletion; any change is conflict, including ACL appearance
+or disappearance. Verify destination access and caller management before deleting sources.
+
+Mirror storage-client's private container-RDF allow-list and 2,000-entry cap through public
+storage APIs; exclude auxiliary access/metadata documents and drop describedby metadata.
+Refuse names public decoded-name `create` cannot reproduce exactly. Read one resource stream
+at a time. Delete sources bottom-up with snapshot resource ETags; after child deletions change
+a container ETag, require verified-empty server-managed RDF and its fresh strong validator.
+Delete listed source access documents after their protected data; refuse incompatible placements.
+Before deletion, failure/cancellation leaves sources untouched and conditionally cleans up
+copies bottom-up, ignoring the caller signal (`step: reapply`); cleanup failures are
+`rollback-failed` with both roots and all causes. Content-bearing residuals have verified own
+access (or source-equivalent inheritance); an access-installation failure may leave an empty
+placeholder. Once deletion begins, stop on failure with `step: source-delete`, retaining the
+whole verified destination and any remaining source items. Never recreate data or move it back.
+Native moves still delegate unchanged. Keep ordering, validator races, cleanup/deletion failures,
+lockout, aborts and both WAC/ACP transports covered at 100%. README documents non-atomic ancestor
+and final-check races; never promise transactional visibility.

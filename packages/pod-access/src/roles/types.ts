@@ -65,7 +65,7 @@ export interface GrantMutationOptions extends RolesOptions {
 /** Optional read-modify-write baseline; a version map must cover every selected URL. */
 export interface SetGrantsOptions extends GrantMutationOptions {
   expected?: GrantSnapshot | Readonly<Record<string, GrantSnapshot["version"]>>;
-  /** Replace only own grants, without materialising inherited WAC defaults. Used by moves. */
+  /** Replace/create own access, including empty ACP selections, without copying WAC defaults. */
   ownOnly?: boolean;
 }
 /** A batch is not atomic. A failed URL may have earlier successful auxiliary writes. */

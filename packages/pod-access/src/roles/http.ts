@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex
 import { parseRdf } from "@jeswr/fetch-rdf";
 import type { Store } from "n3";
@@ -17,6 +18,7 @@ export interface Document {
 }
 export interface Snapshot {
   resource: string;
+  resourceEtag: string | null;
   ownUrl: string;
   own: Document | undefined;
   model: "wac" | "acp";
@@ -162,6 +164,7 @@ async function discover(
   scoped(resource, root);
   const documents: Document[] = [];
   let ownUrl = "";
+  let resourceEtag: string | null = null;
   let own: Document | undefined;
   let model: "wac" | "acp" | undefined;
   let current = resource;
@@ -170,6 +173,7 @@ async function discover(
       throw roleError("invalid-response", resource, "Ancestor walk exceeds 64 documents");
     const head = await request(current, options, { method: "HEAD" });
     requireOk(head, current);
+    if (current === resource) resourceEtag = head.headers.get("etag");
     const endpoints = [
       ...new Set([
         ...links(head.headers, current, "acl"),
@@ -230,7 +234,7 @@ async function discover(
       // non-empty document with neither ACP terms nor a WAC authorization is not evidence of
       // either model: detection stops there and reports unknown (fail closed).
       if (detecting && exists && dataset.size > 0 && !acp && !wac)
-        return { resource, ownUrl, own, model: undefined, documents };
+        return { resource, resourceEtag, ownUrl, own, model: undefined, documents };
       const decides = !detecting || (exists && dataset.size > 0);
       if (decides) {
         if (model && exists && detected !== model)
@@ -263,5 +267,5 @@ async function discover(
     if (current === root) break;
     current = scoped(new URL(current.endsWith("/") ? ".." : ".", current).href, root);
   }
-  return { resource, ownUrl, own, model, documents };
+  return { resource, resourceEtag, ownUrl, own, model, documents };
 }

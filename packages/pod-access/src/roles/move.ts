@@ -1,9 +1,18 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { type StorageClient, StorageError } from "@jeswr/storage-client";
-import { moveGrants, planMoveGrants, setGrants } from "./client.js";
+import { moveDestination, moveGrants, planMoveGrants, readGrants, setGrants } from "./client.js";
 import { isRoleError } from "./errors.js";
-import { load, scoped } from "./http.js";
+import { scoped } from "./http.js";
 import { rolesToModes } from "./mapping.js";
+import {
+  checkContainerRdf,
+  emptyContainerEtag,
+  exactName,
+  moveError,
+  parent,
+  sourceType,
+  strongEtag,
+} from "./move-tree.js";
 import type { GrantMutationOptions, RoleGrant, SetGrantsOptions } from "./types.js";
 
 /** `to` is a destination container, as in StorageClient.move; `name` is a decoded name hint. */
@@ -15,14 +24,14 @@ export interface MovePreservingAccessOptions extends GrantMutationOptions {
 export interface MovePreservingAccessResult {
   url: string;
   preserved: boolean;
-  /** Destination resource URLs whose own grants were reapplied. */
+  /** Destination URLs whose own access document was installed and verified. */
   reapplied: string[];
   /** Original resource URLs and own grants that the destination cannot express. */
   dropped: { url: string; grant: RoleGrant; reason: string }[];
 }
-/** Recovery failures retain both locations and the original failure in `cause`. */
+/** Staging, cleanup and source-deletion failures retain both roots and the original cause. */
 export interface MovePreservingAccessError extends StorageError {
-  step: "reapply" | "rollback-failed";
+  step: "reapply" | "rollback-failed" | "source-delete";
   from: string;
   to: string;
 }
@@ -45,15 +54,6 @@ function failure(
     }),
     { step, from, to },
   );
-}
-function etag(value: string | null, url: string): string {
-  if (value === null || !/^"[\x21\x23-\x7e\x80-\xff]*"$/.test(value))
-    throw new StorageError("precondition-required", {
-      url,
-      method: "MOVE",
-      message: "Move requires a strong ETag",
-    });
-  return value;
 }
 function unsupported(url: string, message: string): StorageError {
   return new StorageError("unsupported", {
@@ -83,9 +83,42 @@ async function apply(url: string, grants: RoleGrant[], options: SetGrantsOptions
   const result = await setGrants([url], grants, options);
   if (result.failed.length) throw result.failed[0]?.error;
 }
+type OwnSnapshot = Awaited<ReturnType<typeof moveGrants>>;
+interface Item {
+  url: string;
+  container: boolean;
+  etag: string;
+  own: OwnSnapshot;
+  grants: RoleGrant[];
+}
+interface Copy {
+  url: string;
+  container: boolean;
+  etag: string | null;
+}
+function equalRows(a: RoleGrant[], b: RoleGrant[]): boolean {
+  const keys = (rows: RoleGrant[]) => rows.map((g) => JSON.stringify([g.agent, g.role])).sort();
+  return JSON.stringify(keys(a)) === JSON.stringify(keys(b));
+}
+async function unchanged(
+  storage: StorageClient,
+  item: Item,
+  options: SetGrantsOptions,
+  signal?: AbortSignal,
+) {
+  const own = await moveGrants(item.url, options);
+  const head = await storage.head(item.url, signal ? { signal } : {});
+  if (
+    own.ownUrl !== item.own.ownUrl ||
+    own.ownEtag !== item.own.ownEtag ||
+    own.resourceEtag !== item.own.resourceEtag ||
+    head.etag !== item.etag
+  )
+    throw moveError(item.url, "Source content or own access changed", "conflict");
+}
 /**
- * Preserve own WAC/ACP roles around an emulated move. Inherited access follows the new
- * ancestors. Native moves bypass access entirely. Recovery deliberately ignores caller abort.
+ * Stage empty placeholders top-down, verify own access before content, then conditionally
+ * delete sources bottom-up. Native moves bypass roles. Recovery never recreates source data.
  */
 export async function movePreservingAccess(
   storage: StorageClient,
@@ -93,17 +126,17 @@ export async function movePreservingAccess(
   to: string,
   options: MovePreservingAccessOptions,
 ): Promise<MovePreservingAccessResult> {
-  // Snapshot caller options before the first await.
   options = { ...options, root: options.root ?? storage.root };
   const { signal } = options;
   scoped(from, storage.root);
   scoped(to, storage.root);
   signal?.throwIfAborted();
-  const head = await storage.head(from, { ...(signal ? { signal } : {}) });
+  const io = signal ? { signal } : {};
+  const head = await storage.head(from, io);
   const moveOptions = {
     ...(options.name !== undefined ? { name: options.name } : {}),
-    ifMatch: etag(head.etag, from),
-    ...(signal ? { signal } : {}),
+    ifMatch: strongEtag(head.etag, from),
+    ...io,
   };
   if (storage.features.move.state === "available" && storage.features.move.detail.native) {
     const moved = await storage.move(from, to, moveOptions);
@@ -113,49 +146,78 @@ export async function movePreservingAccess(
     throw unsupported(from, "Emulated access preservation requires Solid roles");
   if (options.commentsContainer)
     throw unsupported(from, "Moves with a separate comments container require a scope-aware move");
-  const destination = await load(to, roleOptions(options, false, signal));
+  if (from === storage.root || !to.endsWith("/") || /[?#]/.test(from + to))
+    throw moveError(from, "Move requires a non-root source and a destination container");
+  if (head.kind === "container" && to.startsWith(from))
+    throw moveError(from, "Cannot move a container into itself", "conflict");
+  const name = options.name ?? exactName(from);
+  if (
+    !name ||
+    name === "." ||
+    name === ".." ||
+    name.includes("/") ||
+    name.includes("\\") ||
+    [...name].some((c) => {
+      const code = c.codePointAt(0) as number;
+      return code < 32 || (code >= 127 && code <= 159);
+    })
+  )
+    throw new StorageError("bad-request", { url: from, method: "MOVE", message: "Invalid name" });
+  const dest = scoped(
+    `${to}${encodeURIComponent(name)}${head.kind === "container" ? "/" : ""}`,
+    storage.root,
+  );
+  const destinationHead = await storage.head(to, io);
+  if (destinationHead.allow && !destinationHead.allow.control)
+    throw new StorageError("forbidden", {
+      url: to,
+      method: "MOVE",
+      message: "Destination requires Control",
+    });
+  const destination = await moveDestination(to, roleOptions(options, false, signal));
   const pending = [{ url: from, head }];
   const seen = new Set([from]);
   const auxiliaries = new Set<string>();
-  for (let i = 0; i < pending.length; i++) {
-    const item = pending[i] as (typeof pending)[number];
+  for (const item of pending) {
     for (const rel of ["acl", "http://www.w3.org/ns/solid/acp#accessControl", "describedby"])
-      for (const link of item.head.links.get(rel) ?? []) auxiliaries.add(link.target);
-    if (item.head.metadataUrl) auxiliaries.add(item.head.metadataUrl);
+      for (const link of item.head.links.get(rel) ?? [])
+        auxiliaries.add(scoped(link.target, storage.root));
+    if (item.head.metadataUrl) auxiliaries.add(scoped(item.head.metadataUrl, storage.root));
+    strongEtag(item.head.etag, item.url);
     if (item.head.kind !== "container") continue;
-    for await (const child of storage.listAll(item.url, { ...(signal ? { signal } : {}) })) {
+    const members: string[] = [];
+    for await (const child of storage.listAll(item.url, io)) {
       signal?.throwIfAborted();
       scoped(child.url, storage.root);
-      if (!child.url.startsWith(item.url) || child.url === item.url || seen.has(child.url))
-        throw unsupported(from, "Move listing contains a duplicate or non-descendant");
+      if (parent(child.url) !== item.url || seen.has(child.url))
+        throw unsupported(from, "Move listing contains a duplicate or non-child");
       seen.add(child.url);
       if (seen.size > MAX_MEMBERS)
-        throw new StorageError("unsupported", {
-          url: from,
-          method: "MOVE",
-          feature: "move",
-          message: `Emulated moves are capped at ${MAX_MEMBERS} resources`,
-        });
-      pending.push({
-        url: child.url,
-        head: await storage.head(child.url, { ...(signal ? { signal } : {}) }),
-      });
+        throw moveError(from, `Emulated moves are capped at ${MAX_MEMBERS} resources`);
+      members.push(child.url);
+      pending.push({ url: child.url, head: await storage.head(child.url, io) });
     }
+    const rdf = await storage.readRdf(item.url, io);
+    if (rdf.etag !== item.head.etag)
+      throw moveError(item.url, "Source container changed during discovery", "conflict");
+    checkContainerRdf(item.url, rdf.dataset, members);
   }
   const dropped: MovePreservingAccessResult["dropped"] = [];
-  const snapshots: {
-    url: string;
-    container: boolean;
-    original: RoleGrant[];
-    grants: RoleGrant[];
-  }[] = [];
+  const snapshots: Item[] = [];
   for (const item of pending) {
-    if (item.url !== from && (auxiliaries.has(item.url) || /\.(acl|acr)$/.test(item.url))) continue;
+    if (item.url !== from && (auxiliaries.has(item.url) || /\.(acl|acr)$/.test(item.url))) {
+      auxiliaries.add(item.url);
+      continue;
+    }
+    exactName(item.url);
     const container = item.head.kind === "container";
     const opts = roleOptions(options, container, signal);
-    const original = await moveGrants(item.url, opts);
+    const own = await moveGrants(item.url, opts);
+    if (own.ownEtag !== undefined) strongEtag(own.ownEtag, own.ownUrl);
+    if (own.resourceEtag !== item.head.etag)
+      throw moveError(item.url, "Source changed during access snapshot", "conflict");
     const grants: RoleGrant[] = [];
-    for (const grant of original) {
+    for (const grant of own.grants) {
       try {
         if (grant.expiresAt !== undefined || grant.purpose !== undefined)
           throw unsupported(item.url, "Solid roles cannot express expiresAt or purpose");
@@ -176,48 +238,165 @@ export async function movePreservingAccess(
         dropped.push({ url: item.url, grant, reason: error.message });
       }
     }
-    // Preflight the complete replacement, including caller lockout, without creating anything.
-    await planMoveGrants(item.url, to, grants, opts);
-    snapshots.push({ url: item.url, container, original, grants });
+    await planMoveGrants(item.url, to, grants, opts, own.ownEtag !== undefined);
+    snapshots.push({
+      url: item.url,
+      container,
+      etag: strongEtag(item.head.etag, item.url),
+      own,
+      grants,
+    });
+  }
+  // Delete subjects before their listed auxiliary documents. Removing an ACL first could
+  // expose still-live source bytes through inheritance. Unusual placements must also admit
+  // this ordering without removing a containing directory first.
+  const teardown = [...pending].sort(
+    (a, b) =>
+      b.url.replace(/\/$/, "").split("/").length - a.url.replace(/\/$/, "").split("/").length ||
+      Number(auxiliaries.has(a.url)) - Number(auxiliaries.has(b.url)),
+  );
+  const deletionIndex = new Map(teardown.map((item, i) => [item.url, i]));
+  for (const item of snapshots) {
+    const accessIndex = deletionIndex.get(item.own.ownUrl);
+    if (
+      accessIndex !== undefined &&
+      snapshots.some(
+        (subject) =>
+          ((subject.url === item.url && !item.container) ||
+            (item.container && subject.url.startsWith(item.url) && subject.url !== item.url)) &&
+          (deletionIndex.get(subject.url) as number) > accessIndex,
+      )
+    )
+      throw unsupported(
+        item.url,
+        "Source access document cannot be safely ordered after its subjects",
+      );
   }
   signal?.throwIfAborted();
-  const moved = await storage.move(from, to, moveOptions);
+  const copies: Copy[] = [];
   const reapplied: string[] = [];
   try {
-    scoped(moved.url, storage.root);
     for (const item of snapshots) {
       signal?.throwIfAborted();
-      const url = moved.url + item.url.slice(from.length);
-      await apply(url, item.grants, roleOptions(options, item.container, signal));
-      reapplied.push(url);
+      const opts = roleOptions(options, item.container, signal);
+      await unchanged(storage, item, opts, signal);
+      // Open one source stream before creating its placeholder, as storage-client does.
+      // GET supplies the authoritative media type; a server may omit it from HEAD.
+      const read = item.container ? undefined : await storage.read(item.url, io);
+      try {
+        if (read && read.etag !== item.etag)
+          throw moveError(item.url, "Source bytes changed before copy", "conflict");
+        const type = read ? sourceType(read.contentType, item.url) : "text/turtle";
+        const url = dest + item.url.slice(from.length);
+        const created = await storage.create(parent(url), "", {
+          name: exactName(url),
+          kind: item.container ? "container" : "resource",
+          contentType: type,
+          ...io,
+        });
+        const copy = { url: created.url, container: item.container, etag: created.etag };
+        copies.push(copy);
+        if (created.url !== url)
+          throw moveError(url, "Placeholder returned a different URL", "conflict");
+        const placeholderEtag = strongEtag(created.etag, url);
+        await unchanged(storage, item, opts, signal);
+        if (item.own.ownEtag !== undefined) {
+          await apply(url, item.grants, opts);
+          const verified = await readGrants(url, opts);
+          if (
+            !equalRows(
+              verified.grants.filter((g) => !g.inherited),
+              item.grants,
+            )
+          )
+            throw moveError(url, "Destination own grants differ from the snapshot", "conflict");
+          const own = await moveGrants(url, opts);
+          if (own.ownEtag === undefined || !equalRows(own.grants, item.grants))
+            throw moveError(url, "Destination own access was not installed", "conflict");
+          reapplied.push(url);
+        }
+        if (read) {
+          const written = await storage.write(url, read.body ?? "", {
+            contentType: type,
+            ifMatch: placeholderEtag,
+            ...io,
+          });
+          copy.etag = written.etag;
+          strongEtag(written.etag, url);
+        }
+      } finally {
+        // Cancellation must not wait for a transport that still owns/locks this stream.
+        void read?.body?.cancel().catch(() => {});
+      }
     }
+    // Re-read destination access after all writes, then all source validators before any DELETE.
+    for (const item of snapshots) {
+      const url = dest + item.url.slice(from.length);
+      const opts = roleOptions(options, item.container, signal);
+      const actual = await readGrants(url, opts);
+      if (
+        !actual.grants.some(
+          (g) => g.agent.type === "webid" && g.agent.id === options.webId && g.role === "manager",
+        )
+      )
+        throw moveError(url, "Moved item lost caller management", "conflict");
+      if (
+        item.own.ownEtag !== undefined &&
+        !equalRows((await moveGrants(url, opts)).grants, item.grants)
+      )
+        throw moveError(url, "Destination access changed during staging", "conflict");
+    }
+    for (const item of snapshots)
+      await unchanged(storage, item, roleOptions(options, item.container, signal), signal);
+    for (const item of pending)
+      if (auxiliaries.has(item.url) && (await storage.head(item.url, io)).etag !== item.head.etag)
+        throw moveError(item.url, "Source auxiliary changed", "conflict");
     signal?.throwIfAborted();
-    return { url: moved.url, preserved: dropped.length === 0, reapplied, dropped };
   } catch (error) {
-    let location = moved.url;
-    try {
-      const current = await storage.head(moved.url);
-      const returned = await storage.move(
-        moved.url,
-        new URL(from.endsWith("/") ? ".." : ".", from).href,
-        {
-          name: decodeURIComponent(from.replace(/\/$/, "").split("/").at(-1) as string),
-          ifMatch: etag(current.etag, moved.url),
-        },
-      );
-      location = returned.url;
-      if (returned.url !== from) throw new Error("Rollback returned a different URL");
-      for (const item of snapshots)
-        await apply(item.url, item.original, roleOptions(options, item.container, undefined));
-    } catch (rollbackError) {
+    const failures: unknown[] = [];
+    for (const copy of [...copies].reverse()) {
+      try {
+        const validator = copy.container
+          ? await emptyContainerEtag(storage, copy.url)
+          : strongEtag(copy.etag, copy.url);
+        await storage.delete(copy.url, { ifMatch: validator });
+      } catch (cleanupError) {
+        failures.push(cleanupError);
+      }
+    }
+    if (failures.length)
       throw failure(
         "rollback-failed",
         from,
-        moved.url,
-        new AggregateError([error, rollbackError], "Reapplication and rollback failed"),
-        location,
+        dest,
+        new AggregateError([error, ...failures], "Staging and cleanup failed"),
+        dest,
       );
-    }
-    throw failure("reapply", from, moved.url, error, from);
+    throw failure("reapply", from, dest, error, from);
   }
+  // Once deletion starts, all copies are retained. Never roll back or recreate any source.
+  try {
+    for (const item of teardown) {
+      signal?.throwIfAborted();
+      try {
+        const validator =
+          item.head.kind === "container"
+            ? await emptyContainerEtag(storage, item.url)
+            : strongEtag(item.head.etag, item.url);
+        await storage.delete(item.url, { ifMatch: validator, ...io });
+      } catch (error) {
+        if (
+          !(
+            auxiliaries.has(item.url) &&
+            error instanceof StorageError &&
+            error.code === "not-found"
+          )
+        )
+          throw error;
+      }
+    }
+  } catch (error) {
+    throw failure("source-delete", from, dest, error, dest);
+  }
+  return { url: dest, preserved: dropped.length === 0, reapplied, dropped };
 }

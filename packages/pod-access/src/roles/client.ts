@@ -118,7 +118,7 @@ export async function grantsWithRoles(url: string, options: RolesOptions): Promi
   return (await readGrants(url, options)).grants;
 }
 /** Internal move snapshot: project own policy independently, refusing lossy role round trips. */
-export async function moveGrants(url: string, options: RolesOptions): Promise<RoleGrant[]> {
+export async function moveGrants(url: string, options: RolesOptions) {
   const snapshot = await load(url, options);
   const own = { ...snapshot, documents: snapshot.own ? [snapshot.own] : [] };
   const grants = project(own, options);
@@ -138,7 +138,20 @@ export async function moveGrants(url: string, options: RolesOptions): Promise<Ro
     if (!sameModes(original, modes))
       throw roleError("unsupported", url, "Own permissions cannot round-trip through roles");
   }
-  return grants;
+  return {
+    grants,
+    ownUrl: snapshot.ownUrl,
+    ownEtag: snapshot.own ? snapshot.own.etag : undefined,
+    resourceEtag: snapshot.resourceEtag,
+  };
+}
+/** Internal move preflight: establish direct caller Control, including ESS ACR management. */
+export async function moveDestination(url: string, options: SetGrantsOptions) {
+  const snapshot = await load(url, options);
+  const me = agentKey({ type: "webid", id: options.webId });
+  if (!rows(snapshot).get(me)?.modes.has("control"))
+    throw roleError("owner-lockout", url, "Destination requires caller manager/Control access");
+  return snapshot;
 }
 /** Internal read-only full-set preflight for a not-yet-created child; no endpoint is guessed. */
 export async function planMoveGrants(
@@ -146,9 +159,20 @@ export async function planMoveGrants(
   parent: string,
   grants: RoleGrant[],
   options: SetGrantsOptions,
+  own = true,
 ): Promise<void> {
   for (const grant of grants) validateMetadata(grant);
   const destination = await load(parent, options);
+  const me = agentKey({ type: "webid", id: options.webId });
+  const inheritedControl = rows(destination, destination.documents, true)
+    .get(me)
+    ?.modes.has("control");
+  const ownControl = grants.some(
+    (grant) => agentKey(grant.agent) === me && grant.role === "manager",
+  );
+  if (!(ownControl || ((!own || destination.model === "acp") && inheritedControl)))
+    throw roleError("owner-lockout", url, "Moved item must retain caller manager/Control access");
+  if (!own) return;
   await prepare(url, grants, options, {
     ...destination,
     resource: url,
@@ -231,7 +255,9 @@ async function plan(
   const changes = [...keys].filter(
     (key) => !sameModes(before.get(key)?.modes ?? new Set(), desired.get(key)?.modes ?? new Set()),
   );
-  if (!changes.length) return undefined;
+  // Moves must also preserve an existing empty own ACR. An empty ACP selection still
+  // inherits controls; WAC's empty selection is refused by the lockout check below.
+  if (!changes.length && !(options.ownOnly && !snapshot.own)) return undefined;
   const me = agentKey({ type: "webid", id: options.webId });
   // Require direct, independently established management; public/group/client access
   // must not be the only safeguard against the caller locking themselves out.

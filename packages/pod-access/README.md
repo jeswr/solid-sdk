@@ -530,32 +530,68 @@ caller WebID, root and trusted implementation are the usual role options. As wit
 `url`. An advertised native move bypasses access entirely and returns `preserved: true`, with
 empty `reapplied` and `dropped` arrays. This supports native LWS moves without treating ODRL as WAC.
 
-Emulated Solid moves snapshot only own WAC/ACP roles, including container and descendant roles,
-then preflight the destination model and caller management before moving. The traversal uses
-`listAll` and refuses above 2,000 resources including the root, matching storage-client's cap.
-Advertised access/metadata documents and `.acl`/`.acr` descendants are auxiliary, not separate
-sharing targets. Folder grants must represent identical folder and member modes; partial or
-lossy role projections and separate comments-container moves are refused before moving.
-Inherited grants are neither copied nor reported as dropped: inherited access follows the
-new ancestors and can therefore change.
+Emulated Solid moves run a staged copy inside pod-access; they never call `storage.move`.
+Before any write, the destination container must establish caller (`webId`) manager/Control
+access, even when the source has no own grants. An advertised WAC-Allow denial refuses too.
+Every planned own-access replacement runs the roles lockout check; the moved root and all
+moved descendants must retain caller management. `acceptReset` never bypasses these checks.
 
-Unsupported own grants stop the operation with `StorageError('unsupported')`, feature
-`accessControl`, before any move or write. With `acceptReset: true`, expressible grants are
-reapplied and unexpressible ones appear in `dropped: [{ url, grant, reason }]`, using original
-resource URLs. `preserved` is false exactly when `dropped` is nonempty. Caller lockout and
-unreadable/unrepresentable source policies always refuse, even with `acceptReset`.
-`reapplied` lists destination resource URLs whose full own selection succeeded. Moves use
-`setGrants` with `ownOnly: true`, which replaces own grants without materialising WAC ancestor
-defaults; ordinary `setGrants` retains its existing inherited-default behavior.
+The snapshot includes each item's resource ETag, advertised own ACL/ACR URL, document ETag
+and document presence/absence. All validators must be strong. Own grants must round-trip
+through roles without losing modes or folder/member scope. Separate comments-container
+moves are refused. Source validators are re-read before each access application and across
+the entire source tree immediately before deletion. A changed resource, changed access
+document, or an own ACL/ACR appearing/disappearing aborts with `StorageError('conflict')`.
 
-Any thrown reapplication error, failed `setGrants` entry or cancellation after moving triggers
-an attempt to move the data back and restore the original own selections. Recovery ignores the
-spent abort signal. A `MovePreservingAccessError` is a non-retryable `StorageError('conflict')`
-with `step: 'reapply'` after successful recovery, or `step: 'rollback-failed'` when recovery
-fails. `from` and `to` retain the original and moved root URLs; `url` reports the last known
-location. Rollback failure carries both causes in an `AggregateError`. No retries are automatic.
-These multi-request operations cannot promise atomic visibility or protection against concurrent
-ancestor changes; storage-client's underlying partial-move errors also propagate unchanged.
+Staging proceeds root first, parents before children:
+
+1. Create an exact-name empty placeholder with `storage.create` (Solid `If-None-Match: *`).
+   Resource placeholders retain the source Content-Type; containers use `kind: 'container'`.
+2. When the source has an own ACL/ACR, apply its own selection with `setGrants({ ownOnly: true })`
+   and read it back. Verify document presence and equality of the own role rows. No content
+   is written, and no child is created, until the parent's access has been verified.
+3. Stream one source resource at a time through `storage.read` and conditional `storage.write`,
+   using the placeholder's ETag. Recheck destination access and caller management after staging.
+4. Recheck every source validator, then delete source items bottom-up with `If-Match`.
+   Resources use their snapshot ETags. Child deletion changes container ETags, so containers
+   require a fresh verified-empty, server-managed RDF representation and its strong ETag.
+
+The traversal cap is 2,000 entries including the root and auxiliaries. As in storage-client,
+non-server-managed container RDF is refused; advertised access/metadata documents and
+`.acl`/`.acr` descendants are excluded from copying, and describedby metadata is dropped.
+Source access auxiliaries are deleted after their protected data; placements that cannot
+satisfy that order are refused. The backend's container allow-list is private, so pod-access
+mirrors it using public `listAll`/`readRdf` calls with their existing response bounds. Resource bytes stream without
+whole-tree buffering. Unlike the backend's private exact-URL helper, public `create` takes
+decoded names: names whose encoding cannot be reproduced exactly are refused before writes.
+
+Inherited grants follow the destination ancestors; they are neither copied nor reported as
+dropped, and can change. Unsupported own grants refuse before writes. With `acceptReset: true`,
+expressible own grants are staged and unexpressible grants appear in
+`dropped: [{ url, grant, reason }]`, naming original URLs. `preserved` is false exactly when
+`dropped` is nonempty. Unreadable or unrepresentable source policies always refuse.
+`reapplied` lists destination URLs whose own ACL/ACR selection was installed and verified;
+items without own access documents retain inheritance and are omitted. Empty own ACP
+selections still create and verify an own document; empty WAC selections refuse caller lockout.
+
+A `MovePreservingAccessError` is a non-retryable `StorageError('conflict')`, with `from` and
+`to` naming both roots and the original failure in `cause`:
+
+- `step: 'reapply'`: staging, verification or cancellation failed before deletion. Sources
+  are untouched; destination copies were conditionally removed bottom-up. `url` is `from`.
+- `step: 'rollback-failed'`: best-effort cleanup failed; `url` is `to`. An `AggregateError`
+  retains the staging and cleanup causes. Content-bearing residuals already have verified
+  own access, or inheritance when the source had no own document. An access-installation
+  failure can leave only an empty placeholder for that item.
+- `step: 'source-delete'`: deletion has started and failed or was cancelled. The destination
+  with verified access is retained in full; some source items may remain. `url` is `to`.
+  No data is recreated, no move-back is attempted, and no destination cleanup runs.
+
+Cleanup ignores the caller's spent abort signal and never deletes a resource without its
+last acknowledged strong write validator, or a container without verifying it is empty.
+These operations are not transactional: concurrent ancestor changes and races between the
+last access check and deletion cannot be made atomic through the public APIs. No retries
+are automatic. Native moves retain the existing storage backend path unchanged.
 
 ### Solid access requests
 

@@ -13,7 +13,6 @@ import {
   type SetGrantsResult,
   setGrants,
 } from "@jeswr/pod-access/roles";
-import { StorageError } from "@jeswr/storage-client";
 import { container, etag, text } from "./case-helpers.js";
 import { expectStorageError } from "./testing.js";
 import type { ConformanceCase, RunningTarget, SupportProbe } from "./types.js";
@@ -283,8 +282,11 @@ export function roleCases(moveProbe: SupportProbe): readonly ConformanceCase[] {
           ),
         );
       }
-      if (result.url !== item.url)
-        await expectStorageError(target.storage.head(item.url), "not-found");
+      if (!target.storage.features.move.detail.native) assert.notEqual(result.url, item.url);
+      const members = [];
+      for await (const entry of target.storage.listAll(destination)) members.push(entry.url);
+      assert(members.includes(result.url), "Destination listing must contain the moved resource");
+      await expectStorageError(target.storage.head(item.url), "not-found");
     },
   };
   return [...(["commenter", "editor", "manager"] as const).map(roundtrip), inherited, move];

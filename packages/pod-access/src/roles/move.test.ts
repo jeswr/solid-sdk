@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 
+import { StorageError } from "@jeswr/storage-client";
 import { createMemoryStorage } from "@jeswr/storage-client/memory";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import {
@@ -8,6 +9,7 @@ import {
   manager,
   memoryAccess,
   owner,
+  required,
   root,
   selection,
 } from "../../test/roles-helpers.js";
@@ -34,27 +36,41 @@ async function setup(sourceModel: "wac" | "acp" = "wac", destinationModel = sour
     // ACP walks to root; use no root document to avoid intentionally mixed ancestors.
     access.docs.delete(`${root}.${sourceModel === "wac" ? "acl" : "acr"}`);
   }
+  const events: string[] = [];
   const fetch: typeof globalThis.fetch = async (input, init = {}) => {
     const url = String(input);
     if (init.method === "HEAD") {
-      await storage.head(url, { ...(init.signal ? { signal: init.signal } : {}) });
+      const current = await storage.head(url, { ...(init.signal ? { signal: init.signal } : {}) });
       const model = url.startsWith(target) ? destinationModel : sourceModel;
       access.advertise(url, `${url}.${model === "wac" ? "acl" : "acr"}`);
+      const response = await access.fetch(input, init);
+      const headers = new Headers(response.headers);
+      if (current.etag) headers.set("etag", current.etag);
+      return new Response(null, { headers });
     }
-    return access.fetch(input, init);
+    const response = await access.fetch(input, init);
+    events.push(`${init.method === "PUT" ? "access-write" : "access-read"}:${url}`);
+    return response;
   };
-  const move = storage.move.bind(storage);
-  vi.spyOn(storage, "move").mockImplementation(async (from, to, opts) => {
-    const result = await move(from, to, opts);
-    // Emulated Solid moves discard ACL/ACR documents, including all descendant documents.
-    for (const url of access.docs.keys())
-      if (
-        url === `${from}.acl` ||
-        url === `${from}.acr` ||
-        (from.endsWith("/") && url.startsWith(from))
-      )
-        access.docs.delete(url);
+  vi.spyOn(storage, "move");
+  const create = storage.create.bind(storage);
+  vi.spyOn(storage, "create").mockImplementation(async (...args) => {
+    const result = await create(...args);
+    events.push(`placeholder:${result.url}`);
+    if (result.url.startsWith(target)) expect(args[1]).toBe("");
     return result;
+  });
+  const write = storage.write.bind(storage);
+  vi.spyOn(storage, "write").mockImplementation(async (...args) => {
+    events.push(`content:${args[0]}`);
+    return write(...args);
+  });
+  const remove = storage.delete.bind(storage);
+  vi.spyOn(storage, "delete").mockImplementation(async (...args) => {
+    events.push(`delete:${args[0]}`);
+    await remove(...args);
+    access.docs.delete(`${args[0]}.acl`);
+    access.docs.delete(`${args[0]}.acr`);
   });
   async function item(
     name = "file",
@@ -70,8 +86,9 @@ async function setup(sourceModel: "wac" | "acp" = "wac", destinationModel = sour
     return result.url;
   }
   const options = { fetch, root, webId: owner };
-  return { storage, source, target, access, item, options };
+  return { storage, source, target, access, item, options, events };
 }
+const realMoveGrants = client.moveGrants;
 afterEach(() => vi.restoreAllMocks());
 async function ownBob(url: string, options: Parameters<typeof readGrants>[1]) {
   return (await readGrants(url, options)).grants.find(
@@ -154,7 +171,7 @@ describe.each(["wac", "acp"] as const)("%s emulated moves", (model) => {
     expect(await (await f.storage.read(from)).text()).toBe("secret");
     expect(await ownBob(from, f.options)).toMatchObject({ role: "viewer" });
     await expect(f.storage.head(`${f.target}file`)).rejects.toMatchObject({ code: "not-found" });
-    expect(f.storage.move).toHaveBeenCalledTimes(2);
+    expect(f.storage.move).not.toHaveBeenCalled();
   });
 });
 
@@ -195,80 +212,6 @@ test.each([
       (await readGrants(result.url, f.options)).grants.some((g) => g.agent.type === "group"),
     ).toBe(false);
   }
-});
-
-test("setGrants throw and rollback move failure retain both URLs and both causes", async () => {
-  const f = await setup();
-  const from = await f.item();
-  const error = new Error("set failed");
-  vi.spyOn(client, "setGrants").mockRejectedValue(error);
-  vi.mocked(f.storage.move).mockRejectedValueOnce(new Error("copy failed"));
-  await expect(movePreservingAccess(f.storage, from, f.target, f.options)).rejects.toThrow(
-    "copy failed",
-  );
-  const move = vi.mocked(f.storage.move).getMockImplementation();
-  if (!move) throw new Error("Missing move seam");
-  vi.mocked(f.storage.move)
-    .mockImplementationOnce(move)
-    .mockRejectedValueOnce(new Error("cannot return"));
-  await expect(movePreservingAccess(f.storage, from, f.target, f.options)).rejects.toMatchObject({
-    step: "rollback-failed",
-    from,
-    to: `${f.target}file`,
-    cause: { errors: [error, expect.any(Error)] },
-  });
-  expect(await (await f.storage.read(`${f.target}file`)).text()).toBe("secret");
-});
-
-test("rollback restore failure is distinct and names the returned original location", async () => {
-  const f = await setup();
-  const from = await f.item();
-  vi.spyOn(client, "setGrants").mockRejectedValue(new Error("access down"));
-  await expect(movePreservingAccess(f.storage, from, f.target, f.options)).rejects.toMatchObject({
-    step: "rollback-failed",
-    from,
-    to: `${f.target}file`,
-    url: from,
-  });
-  expect(await (await f.storage.read(from)).text()).toBe("secret");
-});
-
-test.each([
-  "before",
-  "snapshot",
-  "after-move",
-  "after-write",
-])("abort %s is respected; recovery ignores the spent signal", async (when) => {
-  const f = await setup();
-  const from = await f.item();
-  const controller = new AbortController();
-  if (when === "before") controller.abort();
-  if (when === "snapshot")
-    f.access.intercept(() => {
-      controller.abort();
-      return undefined;
-    });
-  if (when === "after-move") {
-    const move = vi.mocked(f.storage.move).getMockImplementation();
-    if (!move) throw new Error("Missing seam");
-    vi.mocked(f.storage.move).mockImplementationOnce(async (...args) => {
-      const result = await move(...args);
-      controller.abort();
-      return result;
-    });
-  }
-  if (when === "after-write")
-    f.access.intercept((url, init) => {
-      if (url.startsWith(f.target) && init.method === "PUT") controller.abort();
-      return undefined;
-    });
-  await expect(
-    movePreservingAccess(f.storage, from, f.target, { ...f.options, signal: controller.signal }),
-  ).rejects.toMatchObject(when.startsWith("after") ? { step: "reapply" } : { name: "AbortError" });
-  expect(await (await f.storage.read(from)).text()).toBe("secret");
-  if (when.startsWith("after"))
-    expect(await ownBob(from, f.options)).toMatchObject({ role: "viewer" });
-  else expect(f.storage.move).not.toHaveBeenCalled();
 });
 
 test("cap counts root and all members and refuses before access writes or moves", async () => {
@@ -441,7 +384,12 @@ test("the exact 2000-resource boundary succeeds", async () => {
   for (let i = 0; i < 1999; i++)
     await f.storage.create(from, "", { name: String(i), contentType: "text/plain" });
   // Isolate the traversal boundary from 2000 independent HTTP role plans.
-  vi.spyOn(client, "moveGrants").mockResolvedValue([]);
+  vi.spyOn(client, "moveGrants").mockImplementation(async (url) => ({
+    grants: [],
+    ownUrl: `${url}.acl`,
+    ownEtag: undefined,
+    resourceEtag: (await f.storage.head(url)).etag,
+  }));
   vi.spyOn(client, "planMoveGrants").mockResolvedValue();
   vi.spyOn(client, "setGrants").mockImplementation(async (urls) => ({
     applied: urls,
@@ -449,27 +397,9 @@ test("the exact 2000-resource boundary succeeds", async () => {
     notification: { requested: false, delivered: false },
   }));
   const result = await movePreservingAccess(f.storage, from, f.target, f.options);
-  expect(result.reapplied).toHaveLength(2000);
+  expect(result.reapplied).toHaveLength(0);
   expect(result.preserved).toBe(true);
-});
-
-test("an unexpected rollback Location is a rollback failure with the actual location", async () => {
-  const f = await setup();
-  const from = await f.item();
-  const move = vi.mocked(f.storage.move).getMockImplementation();
-  if (!move) throw new Error("Missing move seam");
-  vi.mocked(f.storage.move)
-    .mockImplementationOnce(move)
-    .mockImplementationOnce((url, to, opts) => move(url, to, { ...opts, name: "different" }));
-  vi.spyOn(client, "setGrants").mockRejectedValue(new Error("no access"));
-  await expect(movePreservingAccess(f.storage, from, f.target, f.options)).rejects.toMatchObject({
-    step: "rollback-failed",
-    from,
-    to: `${f.target}file`,
-    url: `${f.source}different`,
-  });
-  expect(await (await f.storage.read(`${f.source}different`)).text()).toBe("secret");
-});
+}, 60_000);
 
 test.each([
   "purpose",
@@ -481,7 +411,10 @@ test.each([
     ...selection(),
     [field]: field === "purpose" ? "https://example.org/work" : new Date("2027-01-01Z"),
   };
-  vi.spyOn(client, "moveGrants").mockResolvedValue([manager, grant]);
+  const original = await client.moveGrants(from, f.options);
+  vi.spyOn(client, "moveGrants").mockImplementation(async (url, opts) =>
+    url === from ? { ...original, grants: [manager, grant] } : realMoveGrants(url, opts),
+  );
   await expect(movePreservingAccess(f.storage, from, f.target, f.options)).rejects.toMatchObject({
     code: "unsupported",
     feature: "accessControl",
@@ -499,7 +432,10 @@ test.each([
 test("role mapping refusals propagate before moving", async () => {
   const f = await setup();
   const from = await f.item();
-  vi.spyOn(client, "moveGrants").mockResolvedValue([manager, selection("commenter")]);
+  vi.spyOn(client, "moveGrants").mockResolvedValue({
+    ...(await client.moveGrants(from, f.options)),
+    grants: [manager, selection("commenter")],
+  });
   await expect(
     movePreservingAccess(f.storage, from, f.target, { ...f.options, kind: "document" }),
   ).rejects.toMatchObject({ code: "comments-container-required" });
@@ -509,37 +445,24 @@ test("role mapping refusals propagate before moving", async () => {
 test("manager lockout is not accepted as a reset", async () => {
   const f = await setup();
   const from = await f.item();
-  vi.spyOn(client, "moveGrants").mockResolvedValue([selection()]);
+  vi.spyOn(client, "moveGrants").mockResolvedValue({
+    ...(await client.moveGrants(from, f.options)),
+    grants: [selection()],
+  });
+  vi.mocked(f.storage.create).mockClear();
   await expect(
     movePreservingAccess(f.storage, from, f.target, { ...f.options, acceptReset: true }),
   ).rejects.toMatchObject({ code: "owner-lockout" });
   expect(f.storage.move).not.toHaveBeenCalled();
-});
-
-test("ownOnly full-set removes unwanted explicit grants instead of materialising ancestors", async () => {
-  const f = await setup();
-  const from = await f.item();
-  const move = vi.mocked(f.storage.move).getMockImplementation();
-  if (!move) throw new Error("Missing move seam");
-  vi.mocked(f.storage.move).mockImplementationOnce(async (...args) => {
-    const result = await move(...args);
-    f.access.attach(
-      result.url,
-      await fixture("wac", result.url, [manager, selection("editor", { type: "public" })]),
-    );
-    return result;
-  });
-  const result = await movePreservingAccess(f.storage, from, f.target, f.options);
-  expect(
-    (await readGrants(result.url, f.options)).grants.some((g) => g.agent.type === "public"),
-  ).toBe(false);
-  expect(await ownBob(result.url, f.options)).toMatchObject({ role: "viewer" });
+  expect(f.storage.create).not.toHaveBeenCalled();
+  expect(f.storage.write).not.toHaveBeenCalled();
+  expect(f.access.writes()).toEqual([]);
 });
 
 test("internal own snapshots support default resource kind and ESS ACR management", async () => {
   const f = await setup();
   const from = await f.item();
-  expect(await client.moveGrants(from, f.options)).toHaveLength(2);
+  expect((await client.moveGrants(from, f.options)).grants).toHaveLength(2);
   const { writeAcp } = await import("../index.js");
   const { policy, grant } = await import("../../test/helpers.js");
   const body = await writeAcp(
@@ -555,7 +478,575 @@ test("internal own snapshots support default resource kind and ESS ACR managemen
   const ess = memoryAccess("acp");
   ess.attach(from, body);
   // ESS ACR-management declarations are projected back to a manager role.
-  expect((await client.moveGrants(from, { ...ess.options, implementation: "ess" }))[0]?.role).toBe(
-    "manager",
+  expect(
+    (await client.moveGrants(from, { ...ess.options, implementation: "ess" })).grants[0]?.role,
+  ).toBe("manager");
+});
+
+describe.each(["wac", "acp"] as const)("%s staging safety", (model) => {
+  test("orders empty placeholder, own access write/read-back, content, then source deletion", async () => {
+    const f = await setup(model);
+    const from = await f.item("tree", [manager, selection()], true);
+    const child = await f.item("child", [manager, selection()], false, from);
+    const result = await movePreservingAccess(f.storage, from, f.target, f.options);
+    const suffix = model === "wac" ? ".acl" : ".acr";
+    for (const url of [result.url, `${result.url}child`]) {
+      const created = f.events.indexOf(`placeholder:${url}`);
+      const accessWrite = f.events.indexOf(`access-write:${url}${suffix}`);
+      const readBack = f.events.indexOf(`access-read:${url}${suffix}`, accessWrite + 1);
+      const next = f.events.indexOf(
+        url === result.url ? `placeholder:${url}child` : `content:${url}`,
+      );
+      expect(created).toBeGreaterThan(-1);
+      expect(accessWrite).toBeGreaterThan(created);
+      expect(readBack).toBeGreaterThan(accessWrite);
+      expect(next).toBeGreaterThan(readBack);
+    }
+    expect(f.events.indexOf(`delete:${child}`)).toBeGreaterThan(
+      f.events.indexOf(`content:${result.url}child`),
+    );
+    expect(f.events.indexOf(`delete:${from}`)).toBeGreaterThan(f.events.indexOf(`delete:${child}`));
+    expect(f.storage.move).not.toHaveBeenCalled();
+    const deletion = vi.mocked(f.storage.delete).mock.calls.find(([url]) => url === child);
+    expect(deletion?.[1]?.ifMatch).toMatch(/^"/);
+  });
+
+  test.each([
+    false,
+    true,
+  ])("destination without caller Control refuses before any write (own absent %s)", async (absent) => {
+    const f = await setup(model);
+    const from = await f.item();
+    if (absent) f.access.docs.delete(`${from}.${model === "wac" ? "acl" : "acr"}`);
+    f.access.attach(f.target, await fixture(model, f.target, [selection()], true));
+    f.access.attach(root, await fixture(model, root, [selection()], true));
+    vi.mocked(f.storage.create).mockClear();
+    await expect(movePreservingAccess(f.storage, from, f.target, f.options)).rejects.toMatchObject({
+      code: "owner-lockout",
+    });
+    expect(f.storage.create).not.toHaveBeenCalled();
+    expect(f.storage.write).not.toHaveBeenCalled();
+    expect(f.storage.delete).not.toHaveBeenCalled();
+    expect(f.access.writes()).toEqual([]);
+  });
+
+  test.each([
+    "change",
+    "appear",
+    "disappear",
+  ])("source own access %s after content aborts with source intact", async (change) => {
+    const f = await setup(model);
+    const from = await f.item();
+    const endpoint = `${from}.${model === "wac" ? "acl" : "acr"}`;
+    if (change === "appear") f.access.docs.delete(endpoint);
+    const changed = await fixture(model, from, [manager, selection("editor")]);
+    const write = required(vi.mocked(f.storage.write).getMockImplementation());
+    vi.spyOn(f.storage, "write").mockImplementationOnce(async (...args) => {
+      const result = await write(...args);
+      if (change === "disappear") f.access.docs.delete(endpoint);
+      else f.access.put(endpoint, changed, '"changed"');
+      return result;
+    });
+    await expect(movePreservingAccess(f.storage, from, f.target, f.options)).rejects.toMatchObject({
+      code: "conflict",
+      step: "reapply",
+      cause: { code: "conflict" },
+    });
+    expect(await (await f.storage.read(from)).text()).toBe("secret");
+    await expect(f.storage.head(`${f.target}file`)).rejects.toMatchObject({ code: "not-found" });
+    expect(vi.mocked(f.storage.delete).mock.calls.every(([url]) => url.startsWith(f.target))).toBe(
+      true,
+    );
+  });
+
+  test("an access change during placeholder creation aborts before access reapplication or content", async () => {
+    const f = await setup(model);
+    const from = await f.item();
+    const endpoint = `${from}.${model === "wac" ? "acl" : "acr"}`;
+    const doc = required(f.access.docs.get(endpoint));
+    const create = required(vi.mocked(f.storage.create).getMockImplementation());
+    vi.spyOn(f.storage, "create").mockImplementationOnce(async (...args) => {
+      const result = await create(...args);
+      f.access.put(endpoint, doc.body, '"new"');
+      return result;
+    });
+    await expect(movePreservingAccess(f.storage, from, f.target, f.options)).rejects.toMatchObject({
+      step: "reapply",
+      cause: { code: "conflict" },
+    });
+    expect(f.access.writes()).toEqual([]);
+    expect(f.storage.write).not.toHaveBeenCalled();
+    expect(await (await f.storage.read(from)).text()).toBe("secret");
+  });
+
+  test("ACL read-back mismatch refuses content and cleans up", async () => {
+    const f = await setup(model);
+    const from = await f.item();
+    const wrong = await fixture(model, `${f.target}file`, [manager]);
+    f.access.intercept((url, init) => {
+      if (url === `${f.target}file.${model === "wac" ? "acl" : "acr"}` && init.method === "PUT")
+        return new Response(null, { status: 204 }); // Server acknowledges but does not persist.
+      if (url === `${f.target}file.${model === "wac" ? "acl" : "acr"}` && init.method !== "HEAD")
+        return new Response(wrong, { headers: { "content-type": "text/turtle", etag: '"wrong"' } });
+      return undefined;
+    });
+    await expect(movePreservingAccess(f.storage, from, f.target, f.options)).rejects.toMatchObject({
+      step: "reapply",
+    });
+    expect(f.storage.write).not.toHaveBeenCalled();
+    await expect(f.storage.head(`${f.target}file`)).rejects.toMatchObject({ code: "not-found" });
+  });
+
+  test("cleanup failure retains a protected copy and both causes", async () => {
+    const f = await setup(model);
+    const from = await f.item();
+    const original = new Error("content unavailable");
+    const cleanup = new Error("cannot clean up");
+    vi.spyOn(f.storage, "write").mockRejectedValueOnce(original);
+    vi.spyOn(f.storage, "delete").mockRejectedValueOnce(cleanup);
+    await expect(movePreservingAccess(f.storage, from, f.target, f.options)).rejects.toMatchObject({
+      step: "rollback-failed",
+      from,
+      to: `${f.target}file`,
+      cause: { errors: [original, cleanup] },
+    });
+    expect(await ownBob(`${f.target}file`, f.options)).toMatchObject({ role: "viewer" });
+    expect(await (await f.storage.read(from)).text()).toBe("secret");
+  });
+
+  test("failure during source deletion retains all verified copies and never recreates data", async () => {
+    const f = await setup(model);
+    const from = await f.item("tree", [manager, selection()], true);
+    const child = await f.item("child", [manager, selection()], false, from);
+    const remove = required(vi.mocked(f.storage.delete).getMockImplementation());
+    vi.spyOn(f.storage, "delete").mockImplementation(async (...args) => {
+      if (args[0] === from) throw new Error("delete failed");
+      return remove(...args);
+    });
+    await expect(movePreservingAccess(f.storage, from, f.target, f.options)).rejects.toMatchObject({
+      step: "source-delete",
+      from,
+      to: `${f.target}tree/`,
+      url: `${f.target}tree/`,
+    });
+    expect(await ownBob(`${f.target}tree/child`, f.options)).toMatchObject({ role: "viewer" });
+    expect(await (await f.storage.read(`${f.target}tree/child`)).text()).toBe("secret");
+    await expect(f.storage.head(child)).rejects.toMatchObject({ code: "not-found" });
+    expect((await f.storage.head(from)).kind).toBe("container");
+    expect(vi.mocked(f.storage.delete).mock.calls.every(([url]) => url.startsWith(from))).toBe(
+      true,
+    );
+    expect(f.storage.move).not.toHaveBeenCalled();
+  });
+});
+
+test.each([
+  "before",
+  "snapshot",
+  "placeholder",
+  "access",
+  "content",
+])("abort at %s cleans up before deletion", async (when) => {
+  const f = await setup();
+  const from = await f.item();
+  const controller = new AbortController();
+  if (when === "before") controller.abort();
+  if (when === "snapshot" || when === "access")
+    f.access.intercept((url, init) => {
+      if (when === "snapshot" || (url.startsWith(f.target) && init.method === "PUT"))
+        controller.abort();
+      return undefined;
+    });
+  if (when === "placeholder") {
+    const create = required(vi.mocked(f.storage.create).getMockImplementation());
+    vi.spyOn(f.storage, "create").mockImplementationOnce(async (...args) => {
+      const result = await create(...args);
+      controller.abort();
+      return result;
+    });
+  }
+  if (when === "content") {
+    const write = required(vi.mocked(f.storage.write).getMockImplementation());
+    vi.spyOn(f.storage, "write").mockImplementationOnce(async (...args) => {
+      const result = await write(...args);
+      controller.abort();
+      return result;
+    });
+  }
+  await expect(
+    movePreservingAccess(f.storage, from, f.target, { ...f.options, signal: controller.signal }),
+  ).rejects.toMatchObject(
+    ["before", "snapshot"].includes(when) ? { name: "AbortError" } : { step: "reapply" },
   );
+  expect(await (await f.storage.read(from)).text()).toBe("secret");
+  await expect(f.storage.head(`${f.target}file`)).rejects.toMatchObject({ code: "not-found" });
+});
+
+test("explicit WAC-Allow denial at destination refuses even with a manager row", async () => {
+  const f = await setup();
+  const from = await f.item();
+  const head = f.storage.head.bind(f.storage);
+  vi.spyOn(f.storage, "head").mockImplementation(async (...args) => {
+    const current = await head(...args);
+    return args[0] === f.target
+      ? { ...current, allow: { read: true, write: true, append: true, control: false } }
+      : current;
+  });
+  vi.mocked(f.storage.create).mockClear();
+  await expect(movePreservingAccess(f.storage, from, f.target, f.options)).rejects.toMatchObject({
+    code: "forbidden",
+  });
+  expect(f.storage.create).not.toHaveBeenCalled();
+});
+
+test("an empty own selection still requires destination management", async () => {
+  const f = await setup();
+  const from = await f.item("empty", []);
+  f.access.attach(f.target, await fixture("wac", f.target, [selection()], true));
+  vi.mocked(f.storage.create).mockClear();
+  await expect(movePreservingAccess(f.storage, from, f.target, f.options)).rejects.toMatchObject({
+    code: "owner-lockout",
+  });
+  expect(f.storage.create).not.toHaveBeenCalled();
+});
+
+test.each([
+  "root",
+  "destination",
+  "cycle",
+])("refuses invalid %s move before writing", async (kind) => {
+  const f = await setup();
+  const from = await f.item("tree", [manager], true);
+  vi.mocked(f.storage.create).mockClear();
+  await expect(
+    movePreservingAccess(
+      f.storage,
+      kind === "root" ? root : from,
+      kind === "cycle" ? from : kind === "destination" ? f.target.slice(0, -1) : f.target,
+      f.options,
+    ),
+  ).rejects.toMatchObject({ code: kind === "cycle" ? "conflict" : "unsupported" });
+  expect(f.storage.create).not.toHaveBeenCalled();
+});
+
+test.each([
+  "",
+  ".",
+  "..",
+  "a/b",
+  "a\\b",
+  "\u0001",
+  "\u0080",
+])("rejects unsafe explicit name %j", async (name) => {
+  const f = await setup();
+  const from = await f.item();
+  await expect(
+    movePreservingAccess(f.storage, from, f.target, { ...f.options, name }),
+  ).rejects.toMatchObject({ code: "bad-request" });
+});
+
+test.each([
+  "container",
+  "roles",
+])("source %s change during preflight is a conflict before writes", async (where) => {
+  const f = await setup();
+  const from = await f.item("tree", [manager], true);
+  if (where === "container") {
+    const readRdf = f.storage.readRdf.bind(f.storage);
+    vi.spyOn(f.storage, "readRdf").mockImplementationOnce(async (...args) => ({
+      ...(await readRdf(...args)),
+      etag: '"changed"',
+    }));
+  } else {
+    vi.spyOn(client, "moveGrants").mockResolvedValueOnce({
+      ...(await client.moveGrants(from, { ...f.options, kind: "folder" })),
+      resourceEtag: '"changed"',
+    });
+  }
+  vi.mocked(f.storage.create).mockClear();
+  await expect(movePreservingAccess(f.storage, from, f.target, f.options)).rejects.toMatchObject({
+    code: "conflict",
+  });
+  expect(f.storage.create).not.toHaveBeenCalled();
+});
+
+test("unexpected create Location is cleaned up without writing content", async () => {
+  const f = await setup();
+  const from = await f.item();
+  const create = required(vi.mocked(f.storage.create).getMockImplementation());
+  vi.spyOn(f.storage, "create").mockImplementationOnce((url, body, opts) =>
+    create(url, body, { ...opts, name: "different" }),
+  );
+  await expect(movePreservingAccess(f.storage, from, f.target, f.options)).rejects.toMatchObject({
+    step: "reapply",
+    cause: { code: "conflict" },
+  });
+  expect(f.storage.write).not.toHaveBeenCalled();
+  await expect(f.storage.head(`${f.target}different`)).rejects.toMatchObject({ code: "not-found" });
+});
+
+test.each([
+  "etag",
+  "type",
+])("GET %s is checked before creating the placeholder", async (changed) => {
+  const f = await setup();
+  const from = await f.item();
+  const read = f.storage.read.bind(f.storage);
+  vi.spyOn(f.storage, "read").mockImplementationOnce(async (...args) => ({
+    ...(await read(...args)),
+    ...(changed === "etag" ? { etag: '"changed"' } : { contentType: "invalid type" }),
+  }));
+  vi.mocked(f.storage.create).mockClear();
+  await expect(movePreservingAccess(f.storage, from, f.target, f.options)).rejects.toMatchObject({
+    step: "reapply",
+    cause: { code: changed === "etag" ? "conflict" : "invalid-response" },
+  });
+  expect(f.storage.create).not.toHaveBeenCalled();
+  expect(f.storage.write).not.toHaveBeenCalled();
+});
+
+test("missing GET media type refuses; HEAD media type is optional and null body copies empty", async () => {
+  const f = await setup();
+  const from = await f.item();
+  const read = f.storage.read.bind(f.storage);
+  vi.spyOn(f.storage, "read").mockImplementationOnce(async (...args) => ({
+    ...(await read(...args)),
+    contentType: null,
+  }));
+  await expect(movePreservingAccess(f.storage, from, f.target, f.options)).rejects.toMatchObject({
+    step: "reapply",
+    cause: { code: "invalid-response" },
+  });
+  const head = f.storage.head.bind(f.storage);
+  vi.spyOn(f.storage, "head").mockImplementationOnce(async (...args) => ({
+    ...(await head(...args)),
+    contentType: null,
+  }));
+  vi.mocked(f.storage.read).mockImplementationOnce(async (...args) => ({
+    ...(await read(...args)),
+    body: null,
+  }));
+  const result = await movePreservingAccess(f.storage, from, f.target, f.options);
+  expect(await (await f.storage.read(result.url)).text()).toBe("");
+});
+
+test.each([
+  "absent",
+  "different",
+])("own access %s on the second verification refuses content", async (change) => {
+  const f = await setup();
+  const from = await f.item();
+  vi.spyOn(client, "moveGrants").mockImplementation(async (url, opts) => {
+    const current = await realMoveGrants(url, opts);
+    return url.startsWith(f.target)
+      ? { ...current, ...(change === "absent" ? { ownEtag: undefined } : { grants: [manager] }) }
+      : current;
+  });
+  await expect(movePreservingAccess(f.storage, from, f.target, f.options)).rejects.toMatchObject({
+    step: "reapply",
+  });
+  expect(f.storage.write).not.toHaveBeenCalled();
+});
+
+test.each([
+  "management",
+  "own-grants",
+])("destination %s changing after content aborts before source deletion", async (change) => {
+  const f = await setup();
+  const from = await f.item();
+  const write = required(vi.mocked(f.storage.write).getMockImplementation());
+  vi.spyOn(f.storage, "write").mockImplementationOnce(async (...args) => {
+    const result = await write(...args);
+    f.access.attach(
+      args[0],
+      await fixture(
+        "wac",
+        args[0],
+        change === "management" ? [selection()] : [manager, selection("editor")],
+      ),
+    );
+    return result;
+  });
+  await expect(movePreservingAccess(f.storage, from, f.target, f.options)).rejects.toMatchObject({
+    step: "reapply",
+    cause: { code: "conflict" },
+  });
+  expect(await (await f.storage.read(from)).text()).toBe("secret");
+});
+
+test("source bytes and auxiliary changes after staging both prevent deletion", async () => {
+  for (const auxiliary of [false, true]) {
+    const f = await setup();
+    const from = await f.item("tree", [manager], true);
+    const child = await f.item("child", [manager, selection()], false, from);
+    const aux = await f.storage.create(from, "metadata", {
+      name: "child.acl",
+      contentType: "text/plain",
+    });
+    const write = required(vi.mocked(f.storage.write).getMockImplementation());
+    vi.spyOn(f.storage, "write").mockImplementation(async (...args) => {
+      const result = await write(...args);
+      if (args[0].startsWith(f.target)) {
+        const url = auxiliary ? aux.url : child;
+        await write(url, "changed", {
+          contentType: "text/plain",
+          ifMatch: (await f.storage.head(url)).etag as string,
+        });
+      }
+      return result;
+    });
+    await expect(movePreservingAccess(f.storage, from, f.target, f.options)).rejects.toMatchObject({
+      step: "reapply",
+      cause: { code: "conflict" },
+    });
+    expect(vi.mocked(f.storage.delete).mock.calls.every(([url]) => url.startsWith(f.target))).toBe(
+      true,
+    );
+    vi.restoreAllMocks();
+  }
+});
+
+test("auto-deleted source auxiliaries are skipped; other deletion failures stop", async () => {
+  for (const code of ["not-found", "server"] as const) {
+    const f = await setup();
+    const from = await f.item("tree", [manager], true);
+    const child = await f.item("child", [manager], false, from);
+    const aux = await f.storage.create(from, "policy", {
+      name: "child.acl",
+      contentType: "text/plain",
+    });
+    const remove = required(vi.mocked(f.storage.delete).getMockImplementation());
+    vi.spyOn(f.storage, "delete").mockImplementation(async (...args) => {
+      if (args[0] === aux.url) throw new StorageError(code, { url: aux.url, method: "DELETE" });
+      await remove(...args);
+      if (args[0] === child) await remove(aux.url, { ifMatch: aux.etag as string });
+    });
+    const move = movePreservingAccess(f.storage, from, f.target, f.options);
+    if (code === "not-found") expect((await move).preserved).toBe(true);
+    else
+      await expect(move).rejects.toMatchObject({
+        step: "source-delete",
+        cause: { code: "server" },
+      });
+    vi.restoreAllMocks();
+  }
+});
+
+test("listed container ACL is removed only after its protected children", async () => {
+  const f = await setup();
+  const from = await f.item("tree", [manager], true);
+  const child = await f.item("child", [manager], false, from);
+  const aux = await f.storage.create(from, "policy", { name: ".acl", contentType: "text/plain" });
+  const result = await movePreservingAccess(f.storage, from, f.target, f.options);
+  expect(result.preserved).toBe(true);
+  expect(f.events.indexOf(`delete:${aux.url}`)).toBeGreaterThan(
+    f.events.indexOf(`delete:${child}`),
+  );
+  expect(f.events.indexOf(`delete:${from}`)).toBeGreaterThan(f.events.indexOf(`delete:${aux.url}`));
+});
+
+test("refuses auxiliary placement that would remove source access before its resource", async () => {
+  const f = await setup();
+  const from = await f.item("tree", [manager], true);
+  const child = await f.item("child", [manager], false, from);
+  const nested = await f.item("nested", [manager], true, from);
+  const aux = await f.storage.create(nested, "policy", { name: "own", contentType: "text/plain" });
+  f.access.put(aux.url, await fixture("wac", child, [manager]));
+  f.access.intercept((url, init) =>
+    url === child && init.method === "HEAD"
+      ? new Response(null, { headers: { link: `<${aux.url}>; rel="acl"` } })
+      : undefined,
+  );
+  const head = f.storage.head.bind(f.storage);
+  vi.spyOn(f.storage, "head").mockImplementation(async (...args) => {
+    const result = await head(...args);
+    return args[0] === child
+      ? { ...result, links: new Map([["acl", [{ target: aux.url, params: {} }]]]) }
+      : result;
+  });
+  vi.mocked(f.storage.create).mockClear();
+  await expect(movePreservingAccess(f.storage, from, f.target, f.options)).rejects.toMatchObject({
+    code: "unsupported",
+    message: expect.stringContaining("safely ordered"),
+  });
+  expect(f.storage.create).not.toHaveBeenCalled();
+});
+
+test("an empty own ACP document is installed before content instead of becoming absent", async () => {
+  const f = await setup("acp");
+  const from = await f.item("empty", []);
+  const result = await movePreservingAccess(f.storage, from, f.target, f.options);
+  expect(result.reapplied).toEqual([result.url]);
+  expect((await client.moveGrants(result.url, f.options)).ownEtag).toMatch(/^"/);
+  const accessWrite = f.events.indexOf(`access-write:${result.url}.acr`);
+  expect(accessWrite).toBeGreaterThan(f.events.indexOf(`placeholder:${result.url}`));
+  expect(f.events.indexOf(`content:${result.url}`)).toBeGreaterThan(accessWrite);
+  expect((await readGrants(result.url, f.options)).grants.every((g) => g.inherited)).toBe(true);
+});
+
+test("an ambiguous content commit retains the protected copy when its old validator cannot clean it", async () => {
+  const f = await setup();
+  const from = await f.item();
+  const write = required(vi.mocked(f.storage.write).getMockImplementation());
+  vi.spyOn(f.storage, "write").mockImplementationOnce(async (...args) => {
+    await write(...args);
+    throw new Error("lost write acknowledgement");
+  });
+  await expect(movePreservingAccess(f.storage, from, f.target, f.options)).rejects.toMatchObject({
+    step: "rollback-failed",
+    from,
+    to: `${f.target}file`,
+    cause: {
+      errors: [expect.any(Error), expect.objectContaining({ code: "precondition-failed" })],
+    },
+  });
+  expect(await ownBob(`${f.target}file`, f.options)).toMatchObject({ role: "viewer" });
+  expect(await (await f.storage.read(`${f.target}file`)).text()).toBe("secret");
+  expect(await (await f.storage.read(from)).text()).toBe("secret");
+});
+
+test("cleanup continues after a child failure and retains its protected ancestor", async () => {
+  const f = await setup();
+  const from = await f.item("tree", [manager, selection()], true);
+  await f.item("a", [manager, selection()], false, from);
+  await f.item("b", [manager, selection()], false, from);
+  const original = new Error("last copy failed");
+  const write = required(vi.mocked(f.storage.write).getMockImplementation());
+  vi.spyOn(f.storage, "write").mockImplementation(async (...args) => {
+    if (args[0] === `${f.target}tree/b`) throw original;
+    return write(...args);
+  });
+  const remove = required(vi.mocked(f.storage.delete).getMockImplementation());
+  vi.spyOn(f.storage, "delete").mockImplementation(async (...args) => {
+    if (args[0] === `${f.target}tree/b`) throw new Error("cannot clean b");
+    return remove(...args);
+  });
+  await expect(movePreservingAccess(f.storage, from, f.target, f.options)).rejects.toMatchObject({
+    step: "rollback-failed",
+    cause: { errors: [original, expect.any(Error), expect.objectContaining({ code: "conflict" })] },
+  });
+  await expect(f.storage.head(`${f.target}tree/a`)).rejects.toMatchObject({ code: "not-found" });
+  expect(await ownBob(`${f.target}tree/`, { ...f.options, kind: "folder" })).toMatchObject({
+    role: "viewer",
+  });
+  expect(await ownBob(`${f.target}tree/b`, f.options)).toMatchObject({ role: "viewer" });
+  expect(await (await f.storage.read(`${from}a`)).text()).toBe("secret");
+  expect(await (await f.storage.read(`${from}b`)).text()).toBe("secret");
+});
+
+test.each([
+  null,
+  'W/"1"',
+  "*",
+])("unusable own-document ETag %s refuses before any write", async (etag) => {
+  const f = await setup();
+  const from = await f.item();
+  const doc = required(f.access.docs.get(`${from}.acl`));
+  f.access.put(`${from}.acl`, doc.body, etag);
+  vi.mocked(f.storage.create).mockClear();
+  await expect(movePreservingAccess(f.storage, from, f.target, f.options)).rejects.toMatchObject({
+    code: "precondition-required",
+  });
+  expect(f.storage.create).not.toHaveBeenCalled();
+  expect(f.access.writes()).toEqual([]);
 });
