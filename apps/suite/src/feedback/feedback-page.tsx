@@ -24,6 +24,8 @@ import { type Message, type Submission, validateAnswers, validateSubmission } fr
 type TranscriptMessage = Message & { audio?: number[] };
 const draftKey = "suite.feedback.draft.v1";
 class FeedbackRetryLater extends Error {}
+// The server validates before it writes anything, so a rejected record can still be edited.
+class FeedbackRejected extends Error {}
 const retryLaterMessage =
   "Feedback storage is busy. Please try again later. Your answers and recordings are still here. Use Download my feedback to keep a copy.";
 export function feedbackApiBase(): string {
@@ -40,6 +42,7 @@ export function feedbackApiBase(): string {
 async function feedbackResponse(response: Response) {
   if ([429, 503].includes(response.status) && response.headers.has("Retry-After"))
     throw new FeedbackRetryLater();
+  if ([400, 413, 415, 422].includes(response.status)) throw new FeedbackRejected();
   if (!response.ok || !response.headers.get("content-type")?.includes("application/json"))
     throw new Error("Feedback request failed.");
   const value = await response.json().catch(() => undefined);
@@ -490,6 +493,14 @@ export function FeedbackPage() {
       setReference(result.reference);
       clearDraft();
     } catch (error) {
+      if (error instanceof FeedbackRejected) {
+        setFrozenRecord(undefined);
+        clearDraft();
+        setError(
+          "We couldn't accept this feedback. Check your answers and contact details (for example, the email address) and submit again, or use Download my feedback to keep a copy.",
+        );
+        return;
+      }
       setError(
         error instanceof FeedbackRetryLater
           ? retryLaterMessage

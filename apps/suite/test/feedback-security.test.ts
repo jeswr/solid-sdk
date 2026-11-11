@@ -202,3 +202,29 @@ it.each([
   now += 90_000;
   expect(() => backoff.check()).not.toThrow();
 });
+it("pauses core requests too when a search response hits a secondary limit", async () => {
+  let now = 1_800_000_000_000;
+  const backoff = createGithubBackoff(() => now);
+  await expect(
+    backoff.observe(
+      Response.json(
+        { message: "You have exceeded a secondary rate limit." },
+        {
+          status: 403,
+          headers: {
+            "x-ratelimit-resource": "search",
+            "x-ratelimit-limit": "30",
+            "x-ratelimit-remaining": "20",
+            "retry-after": "90",
+          },
+        },
+      ),
+    ),
+  ).rejects.toMatchObject({ status: 503, retryAfter: 90 });
+  // Secondary limits can span endpoints, so uploads and submissions wait as well.
+  expect(() => backoff.check()).toThrow(expect.objectContaining({ status: 503, retryAfter: 90 }));
+  expect(() => backoff.check("search")).toThrow();
+  now += 90_000;
+  expect(() => backoff.check()).not.toThrow();
+  expect(() => backoff.check("search")).not.toThrow();
+});

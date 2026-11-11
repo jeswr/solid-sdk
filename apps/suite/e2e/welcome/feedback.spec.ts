@@ -385,6 +385,54 @@ for (const recovery of ["retry", "reload", "start new"] as const)
     expect(await page.evaluate(() => localStorage.getItem("suite.feedback.draft.v1"))).toBeNull();
   });
 
+// A rejected email used to freeze the record, so every retry resent the invalid payload.
+test("a rejected email stays editable and the corrected feedback submits", async ({ page }) => {
+  const github = feedbackGithub();
+  const env = { FEEDBACK_GITHUB_TOKEN: "secret", FEEDBACK_GITHUB_REPO: "private/feedback" };
+  const statuses: number[] = [];
+  await page.route("**/api/feedback/turn", (route) => route.fulfill({ json: { hosted: false } }));
+  await page.route("**/api/feedback/submit", async (route) => {
+    const handlers = createFeedbackHandlers({
+      env,
+      store: createGithubStore(env, github.transport),
+      limiter: () => undefined,
+    });
+    const response = await handlers.submit(
+      new Request(route.request().url(), {
+        method: "POST",
+        headers: {
+          Origin: new URL(route.request().url()).origin,
+          "Content-Type": "application/json",
+        },
+        body: route.request().postData(),
+      }),
+    );
+    statuses.push(response.status);
+    await route.fulfill({
+      status: response.status,
+      headers: Object.fromEntries(response.headers),
+      body: await response.text(),
+    });
+  });
+  await page.goto("/feedback");
+  await page.getByRole("button", { name: "Just tell us", exact: true }).click();
+  const answer = page.getByLabel("Your answer", { exact: true });
+  const email = page.getByLabel("Email (optional)", { exact: true });
+  await answer.fill("Alice found the demo confusing.");
+  await email.fill("alice");
+  await page.getByRole("button", { name: "Submit what I've said so far", exact: true }).click();
+  await expect(page.getByRole("main").getByRole("alert")).toContainText("email address");
+  expect(statuses).toEqual([400]);
+  expect(github.records).toHaveLength(0);
+  await expect(email).toBeEditable();
+  await expect(answer).toBeEditable();
+  await email.fill("alice@example.test");
+  await page.getByRole("button", { name: "Submit what I've said so far", exact: true }).click();
+  await expect(page.getByRole("status").filter({ hasText: "Thanks" })).toContainText("#");
+  expect(statuses).toEqual([400, 200]);
+  expect(github.records).toHaveLength(1);
+});
+
 for (const outcome of [
   "lost response",
   "resume without issue",

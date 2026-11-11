@@ -185,7 +185,11 @@ export function createGithubBackoff(now = () => Date.now()) {
         : 0;
       const deadlines = [low ? reset : 0, retryAt].filter((at) => Number.isFinite(at) && at > t);
       // GitHub asks for at least a minute when a secondary limit has no retry header.
-      until[resource] = Math.max(until[resource], ...(deadlines.length ? deadlines : [t + 60_000]));
+      const deadline = Math.max(...(deadlines.length ? deadlines : [t + 60_000]));
+      // A primary low budget is per resource; secondary limits can span endpoints,
+      // so they pause both buckets.
+      for (const bucket of secondary ? (["core", "search"] as const) : [resource])
+        until[bucket] = Math.max(until[bucket], deadline);
       // Only an actual rate-limit failure interrupts an admitted submission;
       // ordinary responses (including the label fallback) can still finish.
       if (secondary || (response.status === 403 && low)) check(resource);
