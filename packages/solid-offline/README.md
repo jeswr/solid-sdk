@@ -185,9 +185,10 @@ Enumeration of keys on a same-origin caller's own objects is not bounded by thes
 Array lengths are checked against the remaining value budget before enumeration. Undefined,
 non-finite numbers, sparse arrays, accessors, class instances and cycles are rejected.
 Guards are snapshotted at enqueue, with validated assertions serialized once into a canonical
-JSON string for IndexedDB. Hydration checks that string's UTF-8 byte length against 16 KiB
-before `JSON.parse`, then applies the same depth, value-count and byte validation to the
-parsed value. Legacy object-valued assertions fail closed; no guarded records have shipped.
+JSON string for IndexedDB. Hydration reads only the stored envelope's `tag` and
+`assertions` fields, without enumerating its keys, and ignores any other stored key.
+It checks the assertion string's UTF-8 byte length against 16 KiB before `JSON.parse`,
+then applies the same depth, value-count and byte validation to the parsed value. Legacy object-valued assertions fail closed; no guarded records have shipped.
 Invalid stored guards become failed items and cannot be sent, including through retry.
 `pending()` exposes only the read-only `guard.tag`, never assertions.
 
