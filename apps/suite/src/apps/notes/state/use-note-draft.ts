@@ -33,12 +33,15 @@ export function useNoteDraft(
   const [modified, setModified] = useState(note.modified ?? note.created);
   useEffect(() => {
     // A refreshed resource can acknowledge a card/other writer's non-text save.
+    // The store stamps request starts and acknowledged writes with local generations.
+    // RDF modification dates may move backwards when another client's clock is slow.
     // Never replace a durable dirty draft or an in-flight writer's baseline.
     if (
       pending.get(note.url) ||
       superseded.current.has(note.etag) ||
-      Date.parse(note.modified ?? note.created ?? "") <
-        Date.parse(baseline.current.modified ?? baseline.current.created ?? "")
+      (note.localGeneration !== undefined &&
+        baseline.current.localGeneration !== undefined &&
+        note.localGeneration < baseline.current.localGeneration)
     )
       return;
     adopt(note);

@@ -56,20 +56,22 @@ describe("Notes autosave", () => {
     expect(ui.save).toHaveBeenLastCalledWith(expect.anything(), expect.anything(), '"v2"');
   });
 
-  it("ignores an unseen older refresh after accepting an acknowledged save", async () => {
+  it("fences a refresh started before an acknowledged write by local generation", async () => {
     const ui = await setup();
     const latest = {
       ...original,
       title: "Latest",
-      modified: "2026-11-11T12:00:00Z",
+      modified: "2026-11-11T11:00:00Z",
       etag: '"latest"',
+      localGeneration: 3,
     };
     await act(() => ui.draft.accept(latest));
     await ui.refreshNote({
       ...original,
       title: "Old",
-      modified: "2026-11-11T11:00:00Z",
+      modified: "2026-11-11T12:00:00Z",
       etag: '"unseen"',
+      localGeneration: 2,
     });
     await act(() => ui.draft.change({ body: "Next" }));
     await act(() => ui.draft.flush());

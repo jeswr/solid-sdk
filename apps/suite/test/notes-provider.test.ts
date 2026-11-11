@@ -185,7 +185,10 @@ it("flushes an unmounted dialog's pending draft before a card moves its URL", as
     moved = await s.value.move(note, "archive");
   });
   expect(moved).toMatchObject({ title: "Latest title", body: "<p>Latest text</p>", labels: ["A"] });
-  expect(await s.value.store.read(moved.url)).toEqual(moved);
+  expect(await s.value.store.read(moved.url)).toEqual({
+    ...moved,
+    localGeneration: expect.any(Number),
+  });
   expect(pending.get(note.url)).toBeUndefined();
   expect(s.value.notes.some((item) => item.url === note.url)).toBe(false);
 });

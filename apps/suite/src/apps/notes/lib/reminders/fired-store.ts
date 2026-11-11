@@ -1,51 +1,108 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 const DAY = 86_400_000;
 export const MAX_FIRED_REMINDERS = 2000;
+export const CLAIM_TTL = 30_000;
 const DATABASE = "suite.notes.reminders";
 const STORE = "firedReminders";
-type History = [string, number][];
+type Record =
+  | { state: "pending"; owner: string; expires: number; time: number }
+  | { state: "delivered"; time: number };
+type History = [string, Record | number][];
 
 export interface FiredReminderStore {
-  /** True only after this caller has atomically claimed the reminder. */
-  claim(key: string, now: number): Promise<boolean>;
-  /** Release a successfully claimed reminder that was never delivered. */
-  release(key: string): Promise<void>;
+  /** A pending claim excludes other owners only until release or expiry. */
+  claim(key: string, now: number, owner?: string): Promise<boolean>;
+  deliver(key: string, now: number, owner?: string): Promise<void>;
+  release(key: string, owner?: string): Promise<void>;
+  /** Copy history before assigning a legacy reminder its persisted identity. */
+  migrate(from: string, to: string): Promise<void>;
 }
 
-function prune(history: History, now: number): Map<string, number> {
+function prune(history: History, now: number): Map<string, Record> {
   return new Map(
     history
-      .filter(([, time]) => time > Math.max(now, time) - 30 * DAY)
-      .sort((a, b) => a[1] - b[1])
+      // Version-one numeric claims already represent delivered notifications.
+      .map(([key, value]): [string, Record] => [
+        key,
+        typeof value === "number" ? { state: "delivered", time: value } : value,
+      ])
+      .filter(([, record]) =>
+        record.state === "pending"
+          ? record.expires > now
+          : record.time > Math.max(now, record.time) - 30 * DAY,
+      )
+      .sort((a, b) => a[1].time - b[1].time)
       .slice(-MAX_FIRED_REMINDERS),
   );
 }
 
-export function createMemoryFiredStore(): FiredReminderStore {
-  let history = new Map<string, number>();
+type Update = (change: (history: Map<string, Record>) => boolean, now?: number) => Promise<boolean>;
+
+function operations(update: Update): FiredReminderStore {
+  const instance = crypto.randomUUID();
+  const ownerFor = (key: string) => JSON.stringify([instance, key]);
   return {
-    async claim(key, now) {
-      history = prune([...history], now);
-      if (history.has(key)) return false;
-      history.set(key, now);
-      history = prune([...history], now);
-      return true;
+    claim(key, now, owner = ownerFor(key)) {
+      return update((history) => {
+        if (history.has(key)) return false;
+        history.set(key, { state: "pending", owner, expires: now + CLAIM_TTL, time: now });
+        return true;
+      }, now);
     },
-    async release(key) {
-      history.delete(key);
+    async deliver(key, now, owner = ownerFor(key)) {
+      await update((history) => {
+        const record = history.get(key);
+        if (record?.state !== "pending" || record.owner !== owner) return false;
+        // A migrated pending claim has the same owner. Settle both keys so an
+        // older page snapshot and the saved UUID agree on the delivery outcome.
+        for (const [key, record] of history) {
+          if (record.state === "pending" && record.owner === owner) {
+            history.set(key, { state: "delivered", time: now });
+          }
+        }
+        return true;
+      });
+    },
+    async release(key, owner = ownerFor(key)) {
+      await update((history) => {
+        const record = history.get(key);
+        if (record?.state !== "pending" || record.owner !== owner) return false;
+        for (const [key, record] of history) {
+          if (record.state === "pending" && record.owner === owner) {
+            history.delete(key);
+          }
+        }
+        return true;
+      });
+    },
+    async migrate(from, to) {
+      await update((history) => {
+        const record = history.get(from);
+        if (record && history.get(to)?.state !== "delivered") history.set(to, record);
+        return true;
+      });
     },
   };
 }
 
-/** As in Tasks, a readwrite transaction locks the read/merge/claim across tabs.
- * Accounts have separate bounded histories; Notes has its own database.
- * Close each connection after its claim, including failed/blocked opens.
+export function createMemoryFiredStore(): FiredReminderStore {
+  let history = new Map<string, Record>();
+  return operations(async (change, now) => {
+    history = prune([...history], now ?? Number.NEGATIVE_INFINITY);
+    const result = change(history);
+    history = prune([...history], now ?? Number.NEGATIVE_INFINITY);
+    return result;
+  });
+}
+
+/** A readwrite transaction locks the read/merge/write across tabs. Accounts
+ * have separate bounded histories; each operation closes its connection.
  */
 export function createIndexedDbFiredStore(
   account: string,
   indexedDB: IDBFactory,
 ): FiredReminderStore {
-  const update = (key: string, now?: number): Promise<boolean> => {
+  return operations((change, now) => {
     return new Promise((resolve, reject) => {
       const request = indexedDB.open(DATABASE, 1);
       let blocked = false;
@@ -63,10 +120,10 @@ export function createIndexedDbFiredStore(
         }
         const tx = db.transaction(STORE, "readwrite");
         const store = tx.objectStore(STORE);
-        let claimed = false;
+        let result = false;
         tx.oncomplete = () => {
           db.close();
-          resolve(claimed);
+          resolve(result);
         };
         tx.onerror = tx.onabort = () => {
           db.close();
@@ -74,24 +131,52 @@ export function createIndexedDbFiredStore(
         };
         const read = store.get(account);
         read.onsuccess = () => {
-          const history =
-            now === undefined
-              ? new Map<string, number>(read.result)
-              : prune(read.result ?? [], now);
-          if (now === undefined) history.delete(key);
-          else if (!history.has(key)) {
-            history.set(key, now);
-            claimed = true;
-          }
-          store.put(now === undefined ? [...history] : [...prune([...history], now)], account);
+          const history = prune(read.result ?? [], now ?? Number.NEGATIVE_INFINITY);
+          result = change(history);
+          store.put([...prune([...history], now ?? Number.NEGATIVE_INFINITY)], account);
         };
       };
     });
-  };
+  });
+}
+
+const pageMemory = new Map<string, FiredReminderStore>();
+/** Scheduler mounts and note saves share account-scoped fallback history. The
+ * optional stores let tests model separate browser documents sharing IndexedDB.
+ */
+export function createBrowserFiredStore(
+  account: string,
+  memory = pageMemory.get(account) ?? createMemoryFiredStore(),
+  durable = typeof indexedDB === "undefined"
+    ? memory
+    : createIndexedDbFiredStore(account, indexedDB),
+): FiredReminderStore {
+  pageMemory.set(account, memory);
   return {
-    claim: update,
-    async release(key) {
-      await update(key);
+    async claim(key, now, owner) {
+      if (!(await memory.claim(key, now, owner))) return false;
+      try {
+        if (durable === memory || (await durable.claim(key, now, owner))) return true;
+        // Rejected is not delivered. Retry against durable storage next time.
+        await memory.release(key, owner);
+        return false;
+      } catch {
+        return true;
+      }
+    },
+    async deliver(key, now, owner) {
+      await memory.deliver(key, now, owner);
+      if (durable !== memory) await durable.deliver(key, now, owner).catch(() => {});
+    },
+    async release(key, owner) {
+      if (durable !== memory) await durable.release(key, owner).catch(() => {});
+      await memory.release(key, owner);
+    },
+    async migrate(from, to) {
+      // With working durable storage, migration must commit BEFORE the pod save.
+      // A failed migration leaves the legacy resource unchanged and retryable.
+      if (durable !== memory) await durable.migrate(from, to);
+      await memory.migrate(from, to);
     },
   };
 }

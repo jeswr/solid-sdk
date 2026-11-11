@@ -20,6 +20,8 @@ import {
 } from "../../../docs/lib/model/type-index";
 import { DOCUMENT_CLASS, NS, PREFIXES } from "../../../docs/lib/model/vocab";
 import { deleteLabel, mergeLabels } from "../organise/labels";
+import { createBrowserFiredStore, type FiredReminderStore } from "../reminders/fired-store";
+import { reminderKey } from "../reminders/scheduler";
 import { type NoteAction, reduceNoteState } from "../state";
 import { NoteConflictError, NoteMoveUncertainError } from "./errors";
 import {
@@ -33,6 +35,8 @@ import {
 
 export interface StoredNote extends Note {
   etag: string | null;
+  /** Local request/write order; independent of RDF dates and discarded on draft recovery. */
+  localGeneration?: number;
 }
 export interface NoteChanges {
   title?: string;
@@ -49,6 +53,7 @@ export interface NotesStoreOptions {
   podRoot: string;
   webId: string;
   now?: () => Date;
+  fired?: FiredReminderStore;
 }
 
 /** Account-scoped I/O; every caller and listing URL is checked before it is used. */
@@ -59,10 +64,13 @@ export class NotesStore {
   private readonly podRoot: string;
   private readonly webId: string;
   private initialization?: Promise<void>;
+  private generation = 0;
+  private readonly fired: FiredReminderStore | undefined;
 
   constructor(options: NotesStoreOptions) {
     this.podRoot = normalizePodBase(options.podRoot);
     this.webId = options.webId;
+    this.fired = options.fired;
     this.fetchImpl = refuseRedirects(options.fetch);
     this.now = options.now ?? (() => new Date());
     const active = new URL("notes/", this.podRoot).href;
@@ -83,9 +91,10 @@ export class NotesStore {
 
   async read(url: string): Promise<StoredNote | undefined> {
     const location = this.scope(url);
+    const localGeneration = ++this.generation;
     const { dataset, etag } = await readRdf(url, this.fetchImpl);
     const note = parseNote(url, dataset, location);
-    return note && { ...note, etag };
+    return note && { ...note, etag, localGeneration };
   }
 
   async list(location: NoteLocation): Promise<StoredNote[]> {
@@ -188,7 +197,11 @@ export class NotesStore {
           fetchImpl: this.fetchImpl,
           prefixes: PREFIXES,
         });
-        return { ...(parseNote(url, dataset, location) as Note), etag };
+        return {
+          ...(parseNote(url, dataset, location) as Note),
+          etag,
+          localGeneration: ++this.generation,
+        };
       } catch (error) {
         if (error instanceof ResourceWriteError && error.status === 412) continue;
         throw error;
@@ -214,16 +227,31 @@ export class NotesStore {
     };
   }
 
+  private async identify(note: Note): Promise<Note> {
+    if (!note.reminder || note.reminderId) return note;
+    const identified = { ...note, reminderId: crypto.randomUUID() };
+    await (this.fired ?? createBrowserFiredStore(this.webId)).migrate(
+      reminderKey(note),
+      reminderKey(identified),
+    );
+    return identified;
+  }
+
   async save(note: Note, input: NoteChanges, etag: string | null): Promise<StoredNote> {
     this.scope(note.url, note.location);
-    const dataset = buildNote(note.url, { ...this.input(note), ...input });
+    const identified = await this.identify(note);
+    const dataset = buildNote(note.url, { ...this.input(identified), ...input });
     try {
       const written = await writeRdf(note.url, dataset, {
         etag,
         fetchImpl: this.fetchImpl,
         prefixes: PREFIXES,
       });
-      return { ...(parseNote(note.url, dataset, note.location) as Note), etag: written.etag };
+      return {
+        ...(parseNote(note.url, dataset, note.location) as Note),
+        etag: written.etag,
+        localGeneration: ++this.generation,
+      };
     } catch (error) {
       if (error instanceof ResourceWriteError && error.status === 412)
         throw new NoteConflictError(note.url, { cause: error });
@@ -263,6 +291,7 @@ export class NotesStore {
     this.validator(note.url, note.etag);
     const sourceEtag = note.etag;
     await this.ensureContainers();
+    const identified = await this.identify(note);
     const filename = new URL(note.url).pathname.split("/").at(-1) as string;
     const moved = await this.allocate(this.containers[state.status], filename, (url) => {
       // Relink every entity, including foreign/imported IDs, without carrying a
@@ -276,7 +305,7 @@ export class NotesStore {
       for (const [index, revision] of revisions.entries())
         revision.wasRevisionOf = revisions[index + 1]?.id;
       const dataset = buildNote(url, {
-        ...this.input(note),
+        ...this.input(identified),
         priorRevisions: revisions,
         now: new Date(revisions[0]?.generatedAt ?? note.modified ?? this.now()),
         reminder: state.status === "trashed" ? null : note.reminder,

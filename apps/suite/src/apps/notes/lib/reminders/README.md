@@ -5,12 +5,19 @@ Claims use this identifier and the trigger time. Text saves, archive/unarchive a
 trigger edits preserve the identifier; removing and setting a reminder creates a
 new one. Trash removes the reminder.
 
-Legacy reminders without an identifier use the note URL and trigger time, so a
-move can cause a repeat notification. Rewriting a legacy reminder persists an
-identifier for subsequent saves and moves. Creation metadata is never an identity.
+Legacy reminders without an identifier initially use the note URL and trigger time.
+Before a text save or move first assigns a UUID, the store copies any existing
+claim to the UUID key. It retains the URL claim for pages still showing the old
+snapshot. A failed durable migration prevents the save and can be retried.
+Creation metadata is never an identity.
 
-IndexedDB claims are atomic per account across tabs. Retention removes claims
-older than thirty days and bounds history to 2,000 entries; an older caller does
-not discard a newer timestamp as being in the future. A delivery owner that
-unmounts while its claim is pending releases the undelivered claim from durable
-storage and page memory, allowing a later mount to deliver it.
+IndexedDB keeps one record per reminder key, either pending (owner and a
+30-second expiry) or delivered. Only the claim owner can complete or release a
+pending record. Cancelled delivery releases the record; abandoned claims expire.
+Rejected tabs discard their local reservation and recheck on subsequent ticks.
+Migrated pending records settle together under their original owner.
+
+Retention removes delivered records older than thirty days and bounds each
+account's history to 2,000 entries. An older caller does not discard a newer
+timestamp as being in the future. When IndexedDB is unavailable, page memory
+keeps the same state transitions and survives scheduler remounts.

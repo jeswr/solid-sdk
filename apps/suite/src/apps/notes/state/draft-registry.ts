@@ -13,6 +13,7 @@ const stored = draft.extend({
   previous: z.enum(["active", "archived"]).optional(),
   trashedAt: optionalText,
   reminder: optionalText,
+  reminderId: optionalText,
   format: z.string(),
   created: optionalText,
   modified: optionalText,

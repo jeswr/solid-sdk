@@ -6,8 +6,8 @@ const DAY = 86_400_000;
 export const MAX_REMINDER_DELAY = 24 * DAY;
 
 /** Persisted reminder identities survive moves, including filename collisions.
- * Legacy reminders without an identifier fall back to the resource URL; moving
- * those documents may deliver again until a save persists an identifier.
+ * Legacy reminders use the resource URL until a save migrates their claims
+ * to a persisted identifier.
  */
 export function reminderKey(note: Note): string {
   return JSON.stringify([note.reminderId ?? note.url, note.reminder]);
@@ -26,8 +26,10 @@ export function createReminderScheduler(options: {
         const time = Date.parse(note.reminder);
         if (!canDeliver || !(time > now - DAY && time <= now)) continue;
         const key = reminderKey(note);
-        if ((await options.fired.claim(key, now)) && options.notify(note) === false)
-          await options.fired.release(key);
+        const owner = crypto.randomUUID();
+        if (!(await options.fired.claim(key, now, owner))) continue;
+        if (options.notify(note) === false) await options.fired.release(key, owner);
+        else await options.fired.deliver(key, now, owner);
       }
     },
     nextDelay(notes: readonly Note[], now: number): number {

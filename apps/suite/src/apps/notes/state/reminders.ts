@@ -3,17 +3,11 @@
 import { toast } from "@jeswr/suite-ui";
 import { useEffect, useRef } from "react";
 import type { StoredNote } from "../lib/model/store";
-import {
-  createIndexedDbFiredStore,
-  createMemoryFiredStore,
-  type FiredReminderStore,
-} from "../lib/reminders/fired-store";
+import { createBrowserFiredStore } from "../lib/reminders/fired-store";
 import { createReminderScheduler, reminderKey } from "../lib/reminders/scheduler";
 
 const granted = () => typeof Notification !== "undefined" && Notification.permission === "granted";
 const prompted = new Set<string>();
-// Share the fallback across mounts in this page when durable storage is unavailable.
-const fallbackStores = new Map<string, FiredReminderStore>();
 
 /** Offer once after the user saves a reminder; the action is a permission gesture. */
 export function offerReminderPermission(account: string): void {
@@ -53,31 +47,8 @@ export function useNoteReminders(
   const check = useRef<() => void>(() => {});
   useEffect(() => {
     let active = true;
-    let fallback = fallbackStores.get(account);
-    if (!fallback) {
-      fallback = createMemoryFiredStore();
-      fallbackStores.set(account, fallback);
-    }
-    const memory = fallback;
-    const durable =
-      typeof indexedDB === "undefined" ? memory : createIndexedDbFiredStore(account, indexedDB);
     const scheduler = createReminderScheduler({
-      fired: {
-        async claim(key, now) {
-          // Reserve locally before I/O. A later storage failure must not redeliver
-          // an already claimed reminder; concurrent tabs still arbitrate in IndexedDB.
-          if (!(await memory.claim(key, now))) return false;
-          try {
-            return durable === memory || (await durable.claim(key, now));
-          } catch {
-            return true;
-          }
-        },
-        async release(key) {
-          if (durable !== memory) await durable.release(key).catch(() => {});
-          await memory.release(key);
-        },
-      },
+      fired: createBrowserFiredStore(account),
       notify: (note) => {
         if (!active) return false;
         const title = note.title || "Untitled note";

@@ -253,7 +253,7 @@ it("waits for a card reminder PUT before opening with the acknowledged ETag", as
   await ui.unmount();
 });
 
-it("adopts refreshed reminder ETags in a clean dialog before the next text edit", async () => {
+it("adopts a newer ETag with an earlier modified timestamp before the next text edit", async () => {
   const pod = createDemoPod({ root: "https://pod.example/" });
   const store = createNotesStore({
     podRoot: "https://pod.example/",
@@ -263,8 +263,27 @@ it("adopts refreshed reminder ETags in a clean dialog before the next text edit"
   const original = await store.create({ title: "Original" });
   mocks.context.store = store;
   const ui = await mount(h(NoteDialog, { note: original }));
-  const latest = await store.save(original, { reminder: NOW.toISOString() }, original.etag);
+  const otherClient = createNotesStore({
+    podRoot: "https://pod.example/",
+    webId: "https://pod.example/#me",
+    fetch: pod.fetch,
+    now: () => new Date(NOW.getTime() - 60_000),
+  });
+  const remote = await otherClient.save(
+    original,
+    { title: "Other client", reminder: NOW.toISOString() },
+    original.etag,
+  );
+  const latest = (await store.read(original.url)) as StoredNote;
+  expect(latest.etag).toBe(remote.etag);
+  expect(latest.etag).not.toBe(original.etag);
+  expect(Date.parse(latest.modified as string)).toBeLessThan(
+    Date.parse(original.modified as string),
+  );
   await ui.render(h(NoteDialog, { note: latest }));
+  expect(document.querySelector<HTMLInputElement>('[aria-label="Note title"]')?.value).toBe(
+    "Other client",
+  );
   await fill("Note title", "After refresh");
   await click(button("Close"));
   expect(await store.read(original.url)).toMatchObject({
@@ -459,32 +478,33 @@ it("delivers once when React replays the scheduler mount effect", async () => {
 
 it("releases a deferred IndexedDB claim after unmount and delivers once on remount", async () => {
   const gate = deferred<void>();
-  const createStore = firedStores.createIndexedDbFiredStore;
-  const release = vi.fn<(key: string) => Promise<void>>();
-  const claim = vi.fn<(key: string, now: number) => Promise<boolean>>();
+  const createStore = firedStores.createBrowserFiredStore;
+  const release = vi.fn<firedStores.FiredReminderStore["release"]>();
+  const claim = vi.fn<firedStores.FiredReminderStore["claim"]>();
   const factory = vi
-    .spyOn(firedStores, "createIndexedDbFiredStore")
-    .mockImplementationOnce((account, indexedDB) => {
-      const store = createStore(account, indexedDB);
-      release.mockImplementation((key) => store.release(key));
-      claim.mockImplementation(async (key, now) => {
-        await gate.promise;
-        return store.claim(key, now);
+    .spyOn(firedStores, "createBrowserFiredStore")
+    .mockImplementationOnce((account) => {
+      const store = createStore(account);
+      release.mockImplementation((key, owner) => store.release(key, owner));
+      claim.mockImplementation(async (key, now, owner) => {
+        const result = await store.claim(key, now, owner);
+        if (result) await gate.promise;
+        return result;
       });
-      return { claim, release };
+      return { ...store, claim, release };
     });
   const due = note({ reminder: NOW.toISOString() });
   const props = { notes: [due], open: vi.fn(), account: "unmount-during-claim" };
   try {
     const ui = await mount(h(Scheduler, props));
-    expect(claim).toHaveBeenCalledExactlyOnceWith(reminderKey(due), NOW.getTime());
+    expect(claim).toHaveBeenCalledWith(reminderKey(due), NOW.getTime(), expect.any(String));
     await ui.unmount();
     await act(async () => {
       gate.resolve();
       await claim.mock.results[0]?.value;
     });
     expect(mocks.toast).not.toHaveBeenCalled();
-    expect(release).toHaveBeenCalledExactlyOnceWith(reminderKey(due));
+    expect(release).toHaveBeenCalledExactlyOnceWith(reminderKey(due), expect.any(String));
     const reopened = await mount(h(Scheduler, props));
     expect(mocks.toast).toHaveBeenCalledExactlyOnceWith("Remember", expect.anything());
     await reopened.unmount();
