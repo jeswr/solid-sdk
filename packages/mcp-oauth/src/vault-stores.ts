@@ -3,6 +3,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { type FileHandle, mkdir, open, readFile, rename, rm } from "node:fs/promises";
 import { resolve } from "node:path";
 import { createNodeGuardedFetch } from "@jeswr/guarded-fetch/node";
+import { expiry } from "./expiry.js";
 import { secureUrl } from "./protocol.js";
 
 /**
@@ -18,14 +19,6 @@ export interface VaultStore {
     value: string,
     ttlSeconds?: number,
   ): Promise<boolean>;
-}
-
-/** Validate TTLs before touching storage; omission writes a permanent record. */
-export function expiry(ttlSeconds?: number): number | undefined {
-  if (ttlSeconds === undefined) return undefined;
-  if (!Number.isSafeInteger(ttlSeconds) || ttlSeconds <= 0)
-    throw new Error("Vault TTL must be a positive integer in seconds");
-  return Date.now() + ttlSeconds * 1000;
 }
 
 type Entry = { value: string; expiresAt?: number | undefined };

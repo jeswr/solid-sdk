@@ -3,6 +3,7 @@ import { randomBytes } from "node:crypto";
 import { createNodeGuardedFetch, refuseRedirects } from "@jeswr/guarded-fetch/node";
 import {
   type ConsentContext,
+  consentDisplay,
   createAuthorizationServer,
   createPodSessionProvider,
   type PodSession,
@@ -355,14 +356,9 @@ export async function createApp(
         await sessions.revoke(validated.session.id);
         throw new Error("Consent persistence failed");
       }
-      const client = validated.client;
-      const clientIdentity = client.client_id.startsWith("https://")
-        ? `<p>Client: <strong>${escapeHtml(new URL(client.client_id).host)}</strong></p><p>Client name (self-declared): ${escapeHtml(client.client_name ?? "")}</p>`
-        : `<p>Client: ${escapeHtml(client.client_name ?? client.client_id)} (unverified (self-declared))</p>`;
-      const redirectUri = validated.authorization.redirectUri;
       return page(
         "Allow pod access?",
-        `${clientIdentity}<p>Redirect host: <strong>${escapeHtml(new URL(redirectUri).host)}</strong></p><p>Redirect URI: ${escapeHtml(redirectUri)}</p><p>Client ID: ${escapeHtml(consent.clientId ?? "")}</p><p>Pod owner: ${escapeHtml(validated.session.webId)}</p><p>Access: ${options.readOnly !== false ? "read only" : "read and write"}. Scope: ${escapeHtml(consent.scope ?? "")}. Personal data remains subject to your pod policy.</p><form method="post" action="/auth/consent">${csrfInput(consent)}<button name="decision" value="allow">Allow</button><button name="decision" value="deny">Deny</button></form>`,
+        `${consentDisplay(validated)}<p>Access: ${options.readOnly !== false ? "read only" : "read and write"}. Personal data remains subject to your pod policy.</p><form method="post" action="/auth/consent">${csrfInput(consent)}<button name="decision" value="allow">Allow</button><button name="decision" value="deny">Deny</button></form>`,
       );
     }
     if (

@@ -24,7 +24,11 @@ export function createVaultOAuthStores(
     return {
       async get(id) {
         const bytes = await vault.get(key(kind, id));
-        return bytes ? decode<{ value: T }>(bytes).value : undefined;
+        if (!bytes) return undefined;
+        const record = decode<{ value: T; expiresAt?: number }>(bytes);
+        return record.expiresAt !== undefined && record.expiresAt <= now()
+          ? undefined
+          : record.value;
       },
       async put(id, value, ttlSeconds) {
         const expiresAt = ttlSeconds === undefined ? undefined : now() + ttlSeconds;
@@ -43,6 +47,7 @@ export function createVaultOAuthStores(
           const bytes = await vault.get(key(kind, id));
           if (!bytes) return undefined;
           const record = decode<{ value: T; used: boolean; expiresAt?: number }>(bytes);
+          if (record.expiresAt !== undefined && record.expiresAt <= now()) return undefined;
           if (record.used) return { value: record.value, firstUse: false };
           const expiresAt = ttlSeconds === undefined ? record.expiresAt : now() + ttlSeconds;
           const remaining = expiresAt === undefined ? undefined : Math.max(1, expiresAt - now());

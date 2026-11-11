@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+export { consentDisplay } from "./consent.js";
 /** ES256 signing-key generation for server configuration. */
 export { generateSigningKey } from "./jwt.js";
 export {

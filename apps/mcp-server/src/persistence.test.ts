@@ -1,6 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { createSessionVault, type Grant, MemoryVaultStore } from "@jeswr/mcp-oauth";
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import { createVaultOAuthStores, vaultSigningKey } from "./persistence.js";
 
 it("atomically consumes once across workers and retains replay evidence", async () => {
@@ -107,4 +107,35 @@ it("expires pending records without extending them and keeps consumed code evide
   } finally {
     vi.useRealTimers();
   }
+});
+
+it("backstops expired records when the vault ignores TTLs, including consumed evidence", async () => {
+  const vault = createSessionVault({
+    key: Buffer.alloc(32, 7).toString("base64"),
+    store: new MemoryVaultStore(),
+  });
+  const swap = vault.compareAndSwap.bind(vault);
+  vi.spyOn(vault, "compareAndSwap").mockImplementation((id, expected, secret) =>
+    swap(id, expected, secret),
+  );
+  let now = 100;
+  const stores = createVaultOAuthStores(vault, "issuer", () => now);
+  const authorization = {
+    clientId: "c",
+    redirectUri: "https://client.example/cb",
+    resource: "https://mcp.example/mcp",
+    state: "state",
+    scope: "mcp",
+    challenge: "challenge",
+  };
+  const value = { authorization, expiresAt: 110 };
+  await stores.pending.put("unused", value, 10);
+  await stores.pending.put("used", value, 10);
+  await stores.pending.consume("used");
+  now = 110;
+  for (const id of ["unused", "used"]) {
+    expect(await stores.pending.get(id)).toBeUndefined();
+    expect(await stores.pending.consume(id, 100)).toBeUndefined();
+  }
+  vi.restoreAllMocks();
 });

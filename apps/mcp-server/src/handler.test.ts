@@ -182,8 +182,8 @@ describe("OAuth composition", () => {
     );
     const client = await registration.json();
     const consent = await f.consent({ client_id: client.client_id, redirect_uri: redirect });
-    expect(consent.html).toContain("Claude (unverified (self-declared))");
-    expect(consent.html).toContain("Redirect host: <strong>evil.example:8443</strong>");
+    expect(consent.html).toContain("<bdi>Claude</bdi> (unverified (self-declared))");
+    expect(consent.html).toContain("Redirect host: <strong><bdi>evil.example:8443</bdi></strong>");
     expect(consent.html).toContain(
       "https://evil.example:8443/cb?x=&lt;img&gt;&amp;q=&quot;quoted&quot;",
     );
@@ -201,11 +201,28 @@ describe("OAuth composition", () => {
       }),
     );
     const consent = await f.consent({ client_id: id });
-    expect(consent.html).toContain("Client: <strong>identity.example:8443</strong>");
+    expect(consent.html).toContain("Client: <strong><bdi>identity.example:8443</bdi></strong>");
     expect(consent.html).toContain("&lt;b&gt;Claude&lt;/b&gt;");
-    expect(consent.html).toContain("Redirect host: <strong>127.0.0.1:4321</strong>");
+    expect(consent.html).toContain("Redirect host: <strong><bdi>127.0.0.1:4321</bdi></strong>");
     expect(consent.html).toContain(id);
     expect(consent.html).not.toContain("<b>Claude</b>");
+  });
+
+  it("shows IDN identity and redirect hosts in punycode with isolated untrusted fields", async () => {
+    const id = "https://bücher.example/client.json";
+    const redirect = "https://éxample.example/callback";
+    const f = await fixture(undefined, [], async () =>
+      Response.json({ client_id: id, client_name: "Book app", redirect_uris: [redirect] }),
+    );
+    const consent = await f.consent({ client_id: id, redirect_uri: redirect });
+    expect(consent.html).toContain("Client: <strong><bdi>xn--bcher-kva.example</bdi></strong>");
+    expect(consent.html).toContain(
+      "Redirect host: <strong><bdi>xn--xample-9ua.example</bdi></strong>",
+    );
+    expect(consent.html).toContain(`<bdi>${redirect}</bdi>`);
+    expect(consent.html).toContain("<bdi>Book app</bdi>");
+    expect(consent.html).toContain("<bdi>https://pod.example/profile/card#me</bdi>");
+    expect(consent.html).toContain("<bdi>mcp</bdi>");
   });
 
   it("gives abandoned browser records a bounded TTL", async () => {

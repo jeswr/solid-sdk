@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+import * as podAuth from "@jeswr/pod-auth/node";
 import { SERVER_MAX_REPLAY_BODY_BYTES as DEFAULT_MAX_REPLAY_BODY_BYTES } from "@jeswr/pod-auth/node";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { fixture, RESOURCE } from "../test/fixtures.js";
@@ -85,7 +86,8 @@ describe("Solid-OIDC pod broker", () => {
       ...f.options,
       fetch: async (input, init) => {
         const request = new Request(input, init);
-        if (request.url.endsWith("/token")) throw new Error("fixture timeout");
+        if (request.url.endsWith("/token"))
+          return Response.json({ error: "temporarily_unavailable" }, { status: 503 });
         return f.op.fetch(request);
       },
     });
@@ -93,7 +95,279 @@ describe("Solid-OIDC pod broker", () => {
       retryable: true,
     });
     expect(await provider.isActive(session.id)).toBe(true);
-    if (failure === "contention") expect(await f.vault.get(key)).toEqual(original);
+    expect(await f.vault.get(key)).toEqual(original);
+    expect(
+      (await (await createPodSessionProvider(f.options).fetchFor(session.id))(`${POD_ROOT}notes`))
+        .status,
+    ).toBe(200);
+  });
+
+  it.each([
+    "malformed claims",
+    "final throw",
+    "final contention",
+  ])("retires post-rotation failures: %s", async (failure) => {
+    const f = brokerFixture();
+    const { session } = await f.login();
+    const create = podAuth.createNodeOidcClient;
+    if (failure === "malformed claims")
+      vi.spyOn(podAuth, "createNodeOidcClient").mockImplementation(async (options) => {
+        const client = await create(options);
+        const refresh = client.refresh.bind(client);
+        vi.spyOn(client, "refresh").mockImplementation(async (token) => ({
+          ...(await refresh(token)),
+          idToken: "a.b.c",
+        }));
+        return client;
+      });
+    else {
+      const swap = f.vault.compareAndSwap.bind(f.vault);
+      vi.spyOn(f.vault, "compareAndSwap").mockImplementation(async (id, expected, secret, ttl) => {
+        if (
+          id === `session:${session.id}` &&
+          !JSON.parse(Buffer.from(secret).toString()).refreshing
+        ) {
+          if (failure === "final throw") throw new Error("final write offline");
+          return false;
+        }
+        return swap(id, expected, secret, ttl);
+      });
+    }
+    const fetcher = await createPodSessionProvider(f.options).fetchFor(session.id);
+    await expect(fetcher(`${POD_ROOT}notes`)).rejects.not.toHaveProperty("retryable");
+    expect(await f.provider.isActive(session.id)).toBe(false);
+    expect(await f.store.get(`session:${session.id}`)).toBe("deleted");
+    expect(f.op.captured.filter((r) => r.url.startsWith(POD_ROOT))).toHaveLength(0);
+  });
+
+  it.each([
+    "timeout",
+    "reset",
+    "unparseable 200",
+    "malformed id token",
+    "invalid_client",
+    "unauthorized_client",
+    "unsupported_grant_type",
+  ])("retires uncertain or terminal refresh failures: %s", async (failure) => {
+    const f = brokerFixture();
+    const { session } = await f.login();
+    const restored = createPodSessionProvider({
+      ...f.options,
+      fetch: async (input, init) => {
+        const request = new Request(input, init);
+        if (!request.url.endsWith("/token")) return f.op.fetch(request);
+        if (failure === "timeout" || failure === "reset") {
+          await f.op.fetch(request); // issuer spends the token; its response never reaches the broker
+          if (failure === "timeout") throw new DOMException("after send", "TimeoutError");
+          throw new TypeError("fetch failed", {
+            cause: Object.assign(new Error("reset"), { code: "ECONNRESET" }),
+          });
+        }
+        if (failure === "unparseable 200") {
+          await f.op.fetch(request);
+          return new Response("not JSON");
+        }
+        if (failure === "malformed id token") {
+          const response = await f.op.fetch(request);
+          return Response.json({ ...(await response.json()), id_token: "a.b.c" });
+        }
+        return Response.json({ error: failure }, { status: 400 });
+      },
+    });
+    await expect(
+      (await restored.fetchFor(session.id))(`${POD_ROOT}notes`),
+    ).rejects.not.toHaveProperty("retryable");
+    expect(await restored.isActive(session.id)).toBe(false);
+    expect(await f.store.get(`session:${session.id}`)).toBe("deleted");
+  });
+
+  it.each([
+    "dated",
+    "legacy",
+  ])("retires a stale %s claim across workers without redeeming its token", async (variant) => {
+    const f = brokerFixture();
+    const { session } = await f.login();
+    const key = `session:${session.id}`;
+    const record = JSON.parse(Buffer.from((await f.vault.get(key)) as Uint8Array).toString());
+    const claimedAt = f.options.now();
+    await f.vault.put(
+      key,
+      Buffer.from(
+        JSON.stringify({
+          ...record,
+          refreshing: true,
+          ...(variant === "dated" ? { claimedAt } : {}),
+        }),
+      ),
+    );
+    f.advance(60);
+    expect(await f.provider.isActive(session.id)).toBe(false);
+    expect(await f.store.get(key)).toBe("deleted");
+    await expect(createPodSessionProvider(f.options).fetchFor(session.id)).rejects.toThrow(
+      "inactive",
+    );
+    expect(f.op.captured.filter((r) => r.body.includes("grant_type=refresh_token"))).toHaveLength(
+      0,
+    );
+  });
+
+  it.each([
+    "throw",
+    "contention",
+  ])("bounds persistent release %s and retires after recovery", async (failure) => {
+    const f = brokerFixture();
+    const { session } = await f.login();
+    const key = `session:${session.id}`;
+    const original = await f.vault.get(key);
+    const swap = f.vault.compareAndSwap.bind(f.vault);
+    let attempts = 0;
+    vi.spyOn(f.vault, "compareAndSwap").mockImplementation(async (id, expected, secret, ttl) => {
+      if (id === key && original && Buffer.from(secret).equals(original)) {
+        attempts++;
+        if (failure === "throw" || attempts > 8) throw new Error("release offline");
+        return false;
+      }
+      return swap(id, expected, secret, ttl);
+    });
+    const restored = createPodSessionProvider({
+      ...f.options,
+      fetch: async (input, init) => {
+        const request = new Request(input, init);
+        if (request.url.endsWith("/token"))
+          return Response.json({ error: "temporarily_unavailable" }, { status: 503 });
+        return f.op.fetch(request);
+      },
+    });
+    await expect((await restored.fetchFor(session.id))(`${POD_ROOT}notes`)).rejects.toThrow(
+      "claim release failed",
+    );
+    expect(attempts).toBe(8);
+    f.advance(60);
+    expect(await restored.isActive(session.id)).toBe(false);
+  });
+
+  it("detaches the refresh deadline from the cached resource client", async () => {
+    const f = brokerFixture();
+    const { session } = await f.login();
+    const controller = new AbortController();
+    vi.spyOn(AbortSignal, "timeout").mockReturnValue(controller.signal);
+    const provider = createPodSessionProvider({
+      ...f.options,
+      fetch: async (input, init) => {
+        const request = new Request(input, init);
+        request.signal.throwIfAborted();
+        return f.op.fetch(request);
+      },
+    });
+    const fetcher = await provider.fetchFor(session.id);
+    expect((await fetcher(`${POD_ROOT}notes`)).status).toBe(200);
+    controller.abort();
+    expect((await fetcher(`${POD_ROOT}notes`)).status).toBe(200);
+  });
+
+  it("retires a refresh that finishes after the claim deadline without issuing a resource request", async () => {
+    const f = brokerFixture();
+    const { session } = await f.login();
+    f.op.controls.onToken = async () => {
+      f.advance(60);
+    };
+    await expect(
+      (await createPodSessionProvider(f.options).fetchFor(session.id))(`${POD_ROOT}notes`),
+    ).rejects.toThrow("claim expired");
+    expect(await f.provider.isActive(session.id)).toBe(false);
+    expect(f.op.captured.filter((r) => r.url.startsWith(POD_ROOT))).toHaveLength(0);
+  });
+
+  it.each([
+    "primitive",
+    "invalid JSON",
+    "null body",
+    "missing OAuth error",
+    "invalid_grant 503",
+  ])("retires ambiguous token endpoint failures: %s", async (failure) => {
+    const f = brokerFixture();
+    const { session } = await f.login();
+    const provider = createPodSessionProvider({
+      ...f.options,
+      fetch: async (input, init) => {
+        const request = new Request(input, init);
+        if (!request.url.endsWith("/token")) return f.op.fetch(request);
+        if (failure === "primitive") throw "transport rejected without an Error";
+        if (failure === "invalid JSON") return new Response("bad JSON", { status: 503 });
+        return Response.json(
+          failure === "null body"
+            ? null
+            : failure === "missing OAuth error"
+              ? {}
+              : { error: "invalid_grant" },
+          { status: 503 },
+        );
+      },
+    });
+    await expect((await provider.fetchFor(session.id))(`${POD_ROOT}notes`)).rejects.toBeDefined();
+    expect(await provider.isActive(session.id)).toBe(false);
+  });
+
+  it("releases an exhausted DPoP nonce challenge without spending the token", async () => {
+    const f = brokerFixture();
+    const { session } = await f.login();
+    const original = await f.vault.get(`session:${session.id}`);
+    const provider = createPodSessionProvider({
+      ...f.options,
+      fetch: async (input, init) => {
+        const request = new Request(input, init);
+        if (request.url.endsWith("/token"))
+          return Response.json(
+            { error: "use_dpop_nonce" },
+            { status: 400, headers: { "dpop-nonce": "retry-nonce" } },
+          );
+        return f.op.fetch(request);
+      },
+    });
+    await expect((await provider.fetchFor(session.id))(`${POD_ROOT}notes`)).rejects.toMatchObject({
+      retryable: true,
+    });
+    expect(await f.vault.get(`session:${session.id}`)).toEqual(original);
+    expect(
+      (await (await createPodSessionProvider(f.options).fetchFor(session.id))(`${POD_ROOT}notes`))
+        .status,
+    ).toBe(200);
+  });
+
+  it.each([
+    "retired",
+    "replaced",
+  ])("never restores the original credential over a %s session during release", async (failure) => {
+    const f = brokerFixture();
+    const { session } = await f.login();
+    const key = `session:${session.id}`;
+    const original = (await f.vault.get(key)) as Uint8Array;
+    const record = JSON.parse(Buffer.from(original).toString());
+    const replacement = Buffer.from(
+      JSON.stringify({ ...record, refreshToken: "different-credential" }),
+    );
+    const swap = f.vault.compareAndSwap.bind(f.vault);
+    vi.spyOn(f.vault, "compareAndSwap").mockImplementation(async (id, expected, secret, ttl) => {
+      if (id === key && Buffer.from(secret).equals(original)) {
+        if (failure === "retired") await f.provider.revoke(session.id);
+        else await f.vault.put(key, replacement);
+        return false;
+      }
+      return swap(id, expected, secret, ttl);
+    });
+    const provider = createPodSessionProvider({
+      ...f.options,
+      fetch: async (input, init) => {
+        const request = new Request(input, init);
+        if (request.url.endsWith("/token"))
+          return Response.json({ error: "temporarily_unavailable" }, { status: 503 });
+        return f.op.fetch(request);
+      },
+    });
+    await expect((await provider.fetchFor(session.id))(`${POD_ROOT}notes`)).rejects.toMatchObject({
+      retryable: true,
+    });
+    expect(await f.vault.get(key)).toEqual(failure === "retired" ? undefined : replacement);
   });
 
   it("expires login records and their consumed markers", async () => {
@@ -110,7 +384,8 @@ describe("Solid-OIDC pod broker", () => {
   it.each([
     "503",
     "429",
-    "timeout",
+    "dns",
+    "connect",
     "discovery",
   ])("releases refresh ownership and preserves the credential after %s", async (failure) => {
     const f = brokerFixture();
@@ -123,7 +398,12 @@ describe("Solid-OIDC pod broker", () => {
       fetch: async (input, init) => {
         const request = new Request(input, init);
         if (failing && (failure === "discovery" || request.url.endsWith("/token"))) {
-          if (failure === "timeout") throw new DOMException("fixture timeout", "TimeoutError");
+          if (failure === "dns" || failure === "connect")
+            throw new TypeError("fetch failed", {
+              cause: Object.assign(new Error("not sent"), {
+                code: failure === "dns" ? "ENOTFOUND" : "ECONNREFUSED",
+              }),
+            });
           return Response.json(
             { error: "temporarily_unavailable" },
             { status: failure === "429" ? 429 : 503 },
@@ -1078,6 +1358,7 @@ describe("Solid-OIDC pod broker", () => {
               ...value,
               expiresAt: value.expiresAt - 1,
               refreshing: failure === "claimed",
+              claimedAt: f.options.now(),
             }),
           ),
         );

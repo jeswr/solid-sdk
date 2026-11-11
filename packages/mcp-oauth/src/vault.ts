@@ -1,7 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
-import { setTimeout as delay } from "node:timers/promises";
+import { retryTransition } from "./retry.js";
 import { KvVaultStore, type VaultStore } from "./vault-stores.js";
 
 /**
@@ -83,17 +83,11 @@ export function createSessionVault(options: SessionVaultOptions = {}): SessionVa
         throw new Error("Vault write conflict");
     },
     async delete(id, ttlSeconds) {
-      // Retirement must survive credential updates and transient file-lock contention.
-      // Keep retrying until this worker or a competing retiree has made it irreversible.
-      for (;;) {
+      // A permanent tombstone wins over rotations; persistent outages fail closed and surface.
+      await retryTransition(async () => {
         const current = await store.get(id);
-        if (
-          current === "deleted" ||
-          (await store.compareAndSwap(id, current, "deleted", ttlSeconds))
-        )
-          return;
-        await delay(10);
-      }
+        return current === "deleted" || store.compareAndSwap(id, current, "deleted", ttlSeconds);
+      }, "Vault retirement failed");
     },
   };
 }

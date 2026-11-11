@@ -14,7 +14,9 @@ and broker sessions. Browser completion requires the flow cookie, callback state
 same-origin form POST and single-use CSRF-protected consent. Never expose the core's
 trusted authorize seam as an unauthenticated route. Consent must show the exact request redirect
 and emphasize its host, mark DCR names "unverified (self-declared)", and identify metadata-document
-clients by the client_id URL host. Escape every metadata field. Keep original ten-minute TTLs on
+clients by the client_id URL host. Use mcp-oauth's consentDisplay(context) for escaped, bidi-isolated untrusted values
+and punycode hosts. Registration rejects Unicode control/format characters in client names.
+Check record-envelope expiry in get/consume even if the vault ignores TTLs. Keep original ten-minute TTLs on
 browser/pending state and consumption markers; DCR expires at thirty days with max ten redirects.
 Unused codes expire at five minutes; used code evidence stays through grant expiry. Permanent
 session revocation tombstones never receive ephemeral TTLs. OAuth records and the signing key

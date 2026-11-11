@@ -1,6 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
-import { setTimeout as delay } from "node:timers/promises";
 import { fetchRdf } from "@jeswr/fetch-rdf";
 import { isWithinPodScope } from "@jeswr/guarded-fetch";
 import { createNodeGuardedFetch, refuseRedirects } from "@jeswr/guarded-fetch/node";
@@ -26,6 +25,7 @@ import {
   secureUrl,
   unique,
 } from "./protocol.js";
+import { retryTransition } from "./retry.js";
 import type { PodSession, PodSessionProvider } from "./types.js";
 import type { SessionVault } from "./vault.js";
 
@@ -33,6 +33,18 @@ const OIDC_ISSUER = "http://www.w3.org/ns/solid/terms#oidcIssuer";
 const STORAGE = "http://www.w3.org/ns/pim/space#storage";
 const MAX_CACHED_CLIENTS = 256;
 const CLIENT_CACHE_TTL = 300;
+// Covers discovery, nonce retries and token verification; expired ownership is never taken over.
+const MAX_REFRESH_SECONDS = 60;
+type RefreshAttempt = { safeToRetry: boolean; signal: AbortSignal | undefined };
+const preSendCodes = new Set(["ENOTFOUND", "EAI_AGAIN", "ECONNREFUSED", "UND_ERR_CONNECT_TIMEOUT"]);
+const preSendFailure = (error: unknown): boolean => {
+  if (!(error instanceof Error)) return false;
+  const cause = error.cause;
+  return (
+    ("code" in error && preSendCodes.has(String(error.code))) ||
+    (cause instanceof Error && "code" in cause && preSendCodes.has(String(cause.code)))
+  );
+};
 /** Reading an LWS storage description to confirm a realm inside the session's grant. */
 const DESCRIPTION_TIMEOUT_MS = 8_000;
 const encode = (value: unknown) => Buffer.from(JSON.stringify(value));
@@ -76,6 +88,7 @@ interface StoredPodSession {
   expiresAt: number;
   accessExpiresAt: number;
   refreshing: boolean;
+  claimedAt?: number;
 }
 
 /** The caller can retry this request while the durable pod session remains active. */
@@ -165,7 +178,12 @@ export function createPodSessionProvider(options: PodSessionProviderOptions): Po
     const { dataset } = await fetchRdf(webUrl(webId).href, { fetch: fetcher });
     return new Profile(webId, dataset, DataFactory);
   };
-  const clientFor = async (issuer: string, key?: PrivateJwk, sessionId?: string) => {
+  const clientFor = async (
+    issuer: string,
+    key?: PrivateJwk,
+    sessionId?: string,
+    attempt?: RefreshAttempt,
+  ) => {
     // Construction performs discovery; the same transport later fetches pod resources.
     let discovering = true;
     const client = await createNodeOidcClient({
@@ -203,7 +221,42 @@ export function createPodSessionProvider(options: PodSessionProviderOptions): Po
           if (exchangesSubject && !trustsExchangeOrigin(trust, new URL(request.url)))
             throw new Error("LWS exchange endpoint is not trusted");
         }
-        const response = await fetcher(request, { credentials: "omit" });
+        const refreshRequest =
+          attempt !== undefined &&
+          request.method === "POST" &&
+          new URLSearchParams(await request.clone().text()).get("grant_type") === "refresh_token";
+        if (refreshRequest) attempt.safeToRetry = false;
+        let response: Response;
+        try {
+          response = await fetcher(request, {
+            credentials: "omit",
+            ...(attempt?.signal === undefined
+              ? {}
+              : { signal: AbortSignal.any([request.signal, attempt.signal]) }),
+          });
+          // A rate-limit response proves refusal even when its body is not an OAuth error.
+          if (refreshRequest && response.status >= 400) {
+            attempt.safeToRetry = response.status === 429;
+            if (response.status !== 429) {
+              const body = await readBody(response);
+              try {
+                const data = JSON.parse(body) as { error?: unknown } | null;
+                const code = data?.error;
+                attempt.safeToRetry =
+                  typeof code === "string" &&
+                  code !== "invalid_grant" &&
+                  (response.status >= 500 || code === "use_dpop_nonce");
+              } catch {
+                // A malformed response does not prove that the refresh token is unspent.
+              }
+              response = new Response(body, response);
+            }
+          }
+        } catch (error) {
+          // Only explicit DNS/connect failures prove the request never left this worker.
+          if (refreshRequest && preSendFailure(error)) attempt.safeToRetry = true;
+          throw error;
+        }
         if (discovering && response.status === 200) {
           // Read the original: cancelling a clone can wait for its unread sibling.
           const body = await readBody(response);
@@ -237,6 +290,15 @@ export function createPodSessionProvider(options: PodSessionProviderOptions): Po
         value.nonce.length === 0
       )
         throw new Error("Invalid pod session");
+      if (
+        value.refreshing &&
+        (!Number.isFinite(value.claimedAt) ||
+          (value.claimedAt as number) + MAX_REFRESH_SECONDS <= now())
+      ) {
+        forgetClient(id);
+        await vault.delete(sessionKey(id));
+        return undefined;
+      }
       if (!(value.expiresAt > now())) {
         forgetClient(id);
         return undefined;
@@ -382,12 +444,17 @@ export function createPodSessionProvider(options: PodSessionProviderOptions): Po
           forgetClient(id);
           if (value.refreshing)
             throw new PodRefreshRetryableError("Pod refresh is already claimed; retry request");
-          const claimed = encode({ ...value, refreshing: true });
+          const claimedAt = now();
+          const claimed = encode({ ...value, refreshing: true, claimedAt });
           if (!(await vault.compareAndSwap(sessionKey(id), bytes, claimed)))
             throw new PodRefreshRetryableError("Pod session conflict; retry request");
           let refreshed = false;
+          const attempt: RefreshAttempt = {
+            safeToRetry: true,
+            signal: AbortSignal.timeout(MAX_REFRESH_SECONDS * 1000),
+          };
           try {
-            const client = await clientFor(value.issuer, value.key, id);
+            const client = await clientFor(value.issuer, value.key, id, attempt);
             const tokens = await client.refresh(value.refreshToken);
             refreshed = true;
             if (tokens.idToken !== undefined) {
@@ -407,44 +474,39 @@ export function createPodSessionProvider(options: PodSessionProviderOptions): Po
               refreshing: false,
             };
             const secret = encode(updated);
+            if (claimedAt + MAX_REFRESH_SECONDS <= now())
+              throw new Error("Pod refresh claim expired");
             if (!(await vault.compareAndSwap(sessionKey(id), claimed, secret)))
               throw new Error("Pod session was revoked");
             cached = cacheClient(updated, secret, client);
           } catch (error) {
             forgetClient(id);
-            // oauth4webapi's definitive token error is surfaced by pod-auth unchanged.
-            const invalidGrant =
-              error instanceof Error &&
-              error.name === "ResponseBodyError" &&
-              "error" in error &&
-              error.error === "invalid_grant";
-            if (invalidGrant || error instanceof RefreshMismatchError) {
+            // A successful rotation or uncertain sent outcome can never restore old credentials.
+            if (refreshed || !attempt.safeToRetry) {
               await vault.delete(sessionKey(id));
               throw error;
             }
-            if (!refreshed) {
-              // A concurrent revoke or rotation wins: CAS never resurrects or overwrites it.
-              try {
-                for (;;) {
-                  if (await vault.compareAndSwap(sessionKey(id), claimed, bytes)) break;
-                  const current = await vault.get(sessionKey(id));
-                  if (!current || !Buffer.from(current).equals(claimed)) break;
-                  await delay(10);
-                }
-              } catch (releaseError) {
-                throw new PodRefreshRetryableError(
-                  "Pod refresh claim release failed; retry request",
-                  {
-                    cause: releaseError,
-                  },
-                );
-              }
-              throw new PodRefreshRetryableError("Pod refresh failed; retry request", {
-                cause: error,
-              });
+            // A concurrent revoke or rotation wins: never overwrite anything but our claim.
+            try {
+              await retryTransition(async () => {
+                if (await vault.compareAndSwap(sessionKey(id), claimed, bytes)) return true;
+                const current = await vault.get(sessionKey(id));
+                return !current || !Buffer.from(current).equals(claimed);
+              }, "Pod refresh claim release failed");
+            } catch (releaseError) {
+              throw new PodRefreshRetryableError(
+                "Pod refresh claim release failed; retry request",
+                {
+                  cause: releaseError,
+                },
+              );
             }
-            // Once rotation succeeded, never restore the spent credential after a write failure.
-            throw error;
+            throw new PodRefreshRetryableError("Pod refresh failed; retry request", {
+              cause: error,
+            });
+          } finally {
+            // The cached resource client must outlive this refresh's network deadline.
+            attempt.signal = undefined;
           }
         }
         if (!(await provider.isActive(id))) throw new Error("Pod session is inactive");

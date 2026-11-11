@@ -1,8 +1,8 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 
+import { expiry } from "./expiry.js";
 import type { Grant, GrantStore, OAuthStores, OneTimeStore } from "./types.js";
-import { expiry } from "./vault-stores.js";
 
 /** Snapshotting, atomic-in-one-process store. Consumed records remain as replay tombstones. */
 export class MemoryStore<T> implements OneTimeStore<T> {

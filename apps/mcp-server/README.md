@@ -23,7 +23,11 @@ register,token,revoke,jwks}`, `/.well-known/oauth-authorization-server/auth`, an
 upstream Solid-OIDC login precedes explicit approval of the MCP client. Consent shows the exact
 redirect URI for this request and emphasizes its host. Dynamically registered names carry an
 "unverified (self-declared)" label; metadata-document clients are identified by their client_id
-URL host, with their self-declared name shown separately. Registration accepts at most ten
+URL host, with their self-declared name shown separately. The shared `consentDisplay` helper
+escapes and isolates each untrusted value with `<bdi>`, strips Unicode control/format characters from names,
+and displays IDN hosts as punycode while keeping the exact redirect URI. Registration rejects
+control/format characters in names. Vault-backed OAuth records check absolute expiry in reads
+and consumption even when a backing store ignores TTL hints. Registration accepts at most ten
 redirect URIs and expires after thirty days. Forms require the
 browser's HttpOnly SameSite cookie, same-origin POST and CSRF secret. Callback state and
 consent are consumed atomically. HTML escapes metadata, has no script or inline styles,
@@ -67,9 +71,12 @@ never reuse retired session IDs. Browser flows, pending login and their consumpt
 transitions preserve their original deadline. Unused authorization codes expire after five
 minutes; consumed code evidence is retained through grant expiry for replay revocation. TTLs are
 implemented by memory, file and shared KV vaults. Upstream sessions have the broker's absolute
-thirty-day lifetime. Transient pod refresh failures release the ownership claim and return a
-retryable error; concurrent refresh requests also receive a retryable error. Definitive
-invalid_grant and identity mismatches still retire the session.
+thirty-day lifetime. Refresh failures release ownership only for provably unsent requests,
+retryable OAuth errors (5xx or nonce challenges), or HTTP 429. Uncertain sent outcomes,
+other OAuth 4xx, malformed refreshed claims and rotation persistence failures retire the session
+and require login. Claims older than the 60-second refresh deadline are retired, never taken
+over. Release/deletion retries are bounded to eight attempts with exponential backoff; persistent
+store failures throw. This favors avoiding reuse of potentially spent tokens over availability.
 
 The app adapts two CSS PUT differences: a verified existing-container 409 becomes a
 create-only 412, and missing binary write ETags are recovered through exact byte readback

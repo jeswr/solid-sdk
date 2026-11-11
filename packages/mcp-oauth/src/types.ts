@@ -73,7 +73,8 @@ export interface RefreshToken {
 
 /**
  * Snapshot reads and durable writes. Optional TTLs are positive whole seconds; omission is permanent.
- * An expired record behaves as missing. Production stores must enforce supplied TTLs.
+ * An expired record behaves as missing in get and consume, even if the underlying store ignores
+ * TTLs: retain an absolute deadline in the stored envelope and check it against the current clock.
  */
 export interface RecordStore<T> {
   get(id: string): Promise<T | undefined>;
