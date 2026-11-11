@@ -140,7 +140,7 @@ export function createRegistration(options: RegistrationOptions): Registration {
     signal: AbortSignal | undefined,
     body?: Json,
     accepted?: () => void,
-    invalidPassword = false,
+    passwordEnrollment = false,
   ): Promise<Json> => {
     signal?.throwIfAborted();
     const jsonFetch = boundedDocumentFetch(async (input, init) => {
@@ -171,11 +171,15 @@ export function createRegistration(options: RegistrationOptions): Registration {
         (await checkUsername(body.name, { signal })) !== "available"
       )
         throw new RegistrationError("username-taken", "pod");
+      // The local password policy already passed, so a 400 from password enrollment means the
+      // derived login ID exists: the name was registered before, even if HEAD said "unknown".
+      // CSS 7 needs a login method before pod creation, and removes the login-less account
+      // this leaves after 30 minutes, so retries never accumulate password-bearing duplicates.
       const code =
         response.status === 409
           ? "username-taken"
-          : response.status === 400 && invalidPassword
-            ? "weak-password"
+          : response.status === 400 && passwordEnrollment
+            ? "username-taken"
             : [403, 404, 405].includes(response.status)
               ? "registration-closed"
               : "registration-failed";

@@ -147,8 +147,12 @@ when CSS can advertise them. Missing controls return false; transport/HTTP/parse
 Usernames are 3–30 lowercase ASCII letters, digits or hyphens. Invalid names return `invalid`
 without network; HEAD on the predicted pod gives `available` for 404, `taken` for 2xx, and
 `unknown` for 401/403 (CSS also denies missing children of a non-public root, so a denial does
-not prove the name is used). `register` proceeds on `unknown`; CSS's 400 pod-name conflict then
-becomes `username-taken` unless a re-probe sees 404.
+not prove the name is used). `register` proceeds on `unknown`. A name registered before then
+fails at password enrollment, because its derived login ID exists: CSS answers 400 and `register`
+reports `username-taken` at step `password` (`weak-password` comes only from the local policy
+check, before any request). CSS 7 needs a login method before pod creation and removes the
+login-less account this leaves after 30 minutes. If only the pod name is taken, CSS's 400
+pod-name conflict becomes `username-taken` unless a re-probe sees 404.
 Other statuses, redirects and network failures throw. `previewUrls` is pure and returns
 `{ pod: '<podHost>/<name>/', webId: '<pod>profile/card#me' }`; invalid names throw.
 

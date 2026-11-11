@@ -233,6 +233,9 @@ Capture a pristine protocol transport; never send account requests through PodAu
 
 Keep local username validation before any network, and HEAD's exact 404 available / 2xx taken /
 401,403 unknown / error split. Never report 401/403 as taken: CSS denies missing children too.
+A 400 from password enrollment is `username-taken` (duplicate derived login ID), never
+`weak-password`; that code is only for the local pre-network policy check. Keep the order
+account → password → pod: CSS 7 rejects pod creation on an account without a login method.
 The username-only password ID is `<username>@registration.invalid`; expose it as public loginId,
 never pretend it is a recovery email. Do not retain passwords/account tokens or raw error causes.
 Snapshot inputs before awaits. Report account/password/pod/webid/profile/sign-in with frozen prior

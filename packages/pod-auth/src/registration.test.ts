@@ -309,6 +309,31 @@ test("an occupied username never creates an account", async () => {
   expect(f.calls).toHaveLength(1);
 });
 
+test.each([
+  401, 403,
+])("an existing private username (HEAD %s) is reported taken at password enrollment, not as a weak password", async (status) => {
+  const f = fixture();
+  f.responses.set("/alice/", () => new Response(null, { status }));
+  // CSS 7.2 rejects the duplicate <username>@registration.invalid login with a bare 400.
+  f.responses.set("/password", () => new Response("duplicate login", { status: 400 }));
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const error = await f.client.register(request).catch((error: unknown) => error);
+    expect(error).toBeInstanceOf(RegistrationError);
+    expect(error).toMatchObject({
+      code: "username-taken",
+      step: "password",
+      created: { account: true, loginId: "alice@registration.invalid" },
+    });
+    expect((error as RegistrationError).created.password).toBeUndefined();
+    expect((error as RegistrationError).created.podUrl).toBeUndefined();
+  }
+  expect(f.calls.some((call) => ["/login", "/pod"].includes(new URL(call.url).pathname))).toBe(
+    false,
+  );
+  expect(f.profileFetch).not.toHaveBeenCalled();
+  expect(f.login).not.toHaveBeenCalled();
+});
+
 test("a denied (unknown) username probe does not block registration", async () => {
   const f = fixture();
   f.responses.set("/alice/", () => new Response(null, { status: 401 }));
@@ -318,7 +343,9 @@ test("a denied (unknown) username probe does not block registration", async () =
 test.each([
   ["/create", 403, "registration-closed", "account"],
   ["/create", 409, "username-taken", "account"],
-  ["/password", 400, "weak-password", "password"],
+  ["/password", 400, "username-taken", "password"],
+  ["/password", 403, "registration-closed", "password"],
+  ["/password", 500, "registration-failed", "password"],
   ["/login", 500, "registration-failed", "password"],
   ["/pod", 409, "username-taken", "pod"],
   ["/pod", 405, "registration-closed", "pod"],

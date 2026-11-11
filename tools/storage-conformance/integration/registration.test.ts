@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { fetchRdf, parseRdf } from "@jeswr/fetch-rdf";
 import { createPodAuth } from "@jeswr/pod-auth";
-import { createRegistration } from "@jeswr/pod-auth/registration";
+import { createRegistration, RegistrationError } from "@jeswr/pod-auth/registration";
 import { createMemoryCache } from "@jeswr/storage-capabilities/cache";
 import { createPodClient } from "@jeswr/storage-client";
 import { expect, test } from "vitest";
@@ -173,6 +173,14 @@ test("fresh CSS v7 registration returns the new Identity and its PodAuth session
     expect([...ownPod.dataset].some((quad) => quad.subject.value === pod)).toBe(true);
     // The owner-only pod denies anonymous HEAD, which CSS also does for missing names.
     expect(await registration.checkUsername(username)).toBe("unknown");
+    // Registering the same name again must say it is taken, never "weak password".
+    const duplicate = await registration
+      .register({ username, displayName: "Duplicate", password: randomUUID() })
+      .catch((error: unknown) => error);
+    expect(duplicate).toBeInstanceOf(RegistrationError);
+    expect(duplicate).toMatchObject({ code: "username-taken", step: "password" });
+    expect((duplicate as RegistrationError).created.password).toBeUndefined();
+    expect((duplicate as RegistrationError).created.podUrl).toBeUndefined();
   } finally {
     ui.clear();
     try {
