@@ -113,6 +113,7 @@ export function createTripsState(
       const temporary = { ...input, id: `pending:${crypto.randomUUID()}` };
       enqueue({
         apply: (snapshot) => ({
+          ...snapshot,
           reservations: [...snapshot.reservations, temporary],
           trips: snapshot.trips.map((trip) =>
             trip.id === actual(tripId) || trip.id === tripId
@@ -121,18 +122,28 @@ export function createTripsState(
           ),
         }),
         persist: async (snapshot) => {
-          const reservation = await store.addReservation(input);
-          ids.set(temporary.id, reservation.id);
           const trip = snapshot.trips.find((entry) => entry.id === actual(tripId));
           if (!trip) throw new Error("Trip no longer exists");
-          const saved = await store.saveTrip({
-            ...trip,
-            reservations: [...trip.reservations, reservation.id],
-          });
-          return {
-            trips: snapshot.trips.map((entry) => (entry.id === saved.id ? saved : entry)),
-            reservations: [...snapshot.reservations, reservation],
-          };
+          const reservation = await store.addReservation(input);
+          try {
+            const saved = await store.saveTrip({
+              ...trip,
+              reservations: [...trip.reservations, reservation.id],
+            });
+            ids.set(temporary.id, reservation.id);
+            return {
+              ...snapshot,
+              trips: snapshot.trips.map((entry) => (entry.id === saved.id ? saved : entry)),
+              reservations: [...snapshot.reservations, reservation],
+            };
+          } catch (error) {
+            try {
+              await store.deleteReservation(reservation);
+            } catch {
+              /* Best-effort compensation. */
+            }
+            throw error;
+          }
         },
       });
     },
@@ -206,6 +217,7 @@ export function createTripsState(
           const saved = await store.saveTrip(draft);
           ids.set(draft.id, saved.id);
           return {
+            ...snapshot,
             trips: [...snapshot.trips, saved],
             reservations: [
               ...new Map(

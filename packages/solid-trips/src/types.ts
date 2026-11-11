@@ -47,9 +47,15 @@ export interface ReservationInput {
 }
 export interface Reservation extends ReservationInput {
   id: string;
+  etag?: string | null | undefined;
 }
 export type ExtractMarkup = (html: string) => Promise<ReservationInput[]>;
+export interface ReadNotice {
+  skipped: number;
+  capped: boolean;
+}
 export interface TripSnapshot {
+  notice?: ReadNotice | undefined;
   trips: Trip[];
   reservations: Reservation[];
 }

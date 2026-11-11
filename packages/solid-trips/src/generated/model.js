@@ -14,7 +14,8 @@ const manifest = {
     "dct": "http://purl.org/dc/terms/",
     "prov": "http://www.w3.org/ns/prov#",
     "trips": "https://jeswr.org/ns/trips#",
-    "xsd": "http://www.w3.org/2001/XMLSchema#"
+    "xsd": "http://www.w3.org/2001/XMLSchema#",
+    "fedcon": "https://jeswr.org/fedcon#"
   },
   "entities": [
     {
@@ -62,6 +63,14 @@ const manifest = {
           "guards": {}
         },
         {
+          "name": "title",
+          "predicate": "http://schema.org/name",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
           "name": "provider",
           "predicate": "http://schema.org/provider",
           "kind": "iri",
@@ -90,11 +99,10 @@ const manifest = {
         {
           "name": "status",
           "predicate": "http://schema.org/reservationStatus",
-          "kind": "iri",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
           "maxCount": 1,
-          "guards": {
-            "iriScheme": "http-https"
-          }
+          "guards": {}
         },
         {
           "name": "underName",
@@ -116,7 +124,7 @@ const manifest = {
         },
         {
           "name": "trust",
-          "predicate": "https://jeswr.org/ns/trips#trust",
+          "predicate": "https://jeswr.org/fedcon#emailMarkupTrust",
           "kind": "literal",
           "datatype": "http://www.w3.org/2001/XMLSchema#string",
           "maxCount": 1,
@@ -150,7 +158,7 @@ const manifest = {
           "name": "end",
           "predicate": "http://schema.org/arrivalTime",
           "kind": "literal",
-          "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
           "maxCount": 1,
           "guards": {}
         },
@@ -175,7 +183,7 @@ const manifest = {
           "name": "start",
           "predicate": "http://schema.org/departureTime",
           "kind": "literal",
-          "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
           "maxCount": 1,
           "guards": {}
         }
@@ -230,7 +238,7 @@ const manifest = {
           "name": "start",
           "predicate": "http://schema.org/startDate",
           "kind": "literal",
-          "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
           "maxCount": 1,
           "guards": {}
         }
@@ -250,6 +258,14 @@ const manifest = {
           "predicate": "http://schema.org/dateModified",
           "kind": "literal",
           "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "title",
+          "predicate": "http://schema.org/name",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
           "maxCount": 1,
           "guards": {}
         },
@@ -282,11 +298,10 @@ const manifest = {
         {
           "name": "status",
           "predicate": "http://schema.org/reservationStatus",
-          "kind": "iri",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
           "maxCount": 1,
-          "guards": {
-            "iriScheme": "http-https"
-          }
+          "guards": {}
         },
         {
           "name": "underName",
@@ -308,7 +323,7 @@ const manifest = {
         },
         {
           "name": "trust",
-          "predicate": "https://jeswr.org/ns/trips#trust",
+          "predicate": "https://jeswr.org/fedcon#emailMarkupTrust",
           "kind": "literal",
           "datatype": "http://www.w3.org/2001/XMLSchema#string",
           "maxCount": 1,
@@ -342,7 +357,7 @@ const manifest = {
           "name": "end",
           "predicate": "http://schema.org/arrivalTime",
           "kind": "literal",
-          "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
           "maxCount": 1,
           "guards": {}
         },
@@ -359,7 +374,7 @@ const manifest = {
           "name": "start",
           "predicate": "http://schema.org/departureTime",
           "kind": "literal",
-          "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
           "maxCount": 1,
           "guards": {}
         },
@@ -387,6 +402,14 @@ const manifest = {
           "predicate": "http://schema.org/dateModified",
           "kind": "literal",
           "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "title",
+          "predicate": "http://schema.org/name",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
           "maxCount": 1,
           "guards": {}
         },
@@ -419,11 +442,10 @@ const manifest = {
         {
           "name": "status",
           "predicate": "http://schema.org/reservationStatus",
-          "kind": "iri",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
           "maxCount": 1,
-          "guards": {
-            "iriScheme": "http-https"
-          }
+          "guards": {}
         },
         {
           "name": "underName",
@@ -445,7 +467,7 @@ const manifest = {
         },
         {
           "name": "trust",
-          "predicate": "https://jeswr.org/ns/trips#trust",
+          "predicate": "https://jeswr.org/fedcon#emailMarkupTrust",
           "kind": "literal",
           "datatype": "http://www.w3.org/2001/XMLSchema#string",
           "maxCount": 1,
@@ -505,7 +527,15 @@ const manifest = {
           "name": "end",
           "predicate": "http://schema.org/endTime",
           "kind": "literal",
-          "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "title",
+          "predicate": "http://schema.org/name",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
           "maxCount": 1,
           "guards": {}
         },
@@ -538,17 +568,16 @@ const manifest = {
         {
           "name": "status",
           "predicate": "http://schema.org/reservationStatus",
-          "kind": "iri",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
           "maxCount": 1,
-          "guards": {
-            "iriScheme": "http-https"
-          }
+          "guards": {}
         },
         {
           "name": "start",
           "predicate": "http://schema.org/startTime",
           "kind": "literal",
-          "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
           "maxCount": 1,
           "guards": {}
         },
@@ -572,7 +601,7 @@ const manifest = {
         },
         {
           "name": "trust",
-          "predicate": "https://jeswr.org/ns/trips#trust",
+          "predicate": "https://jeswr.org/fedcon#emailMarkupTrust",
           "kind": "literal",
           "datatype": "http://www.w3.org/2001/XMLSchema#string",
           "maxCount": 1,
@@ -624,7 +653,7 @@ const manifest = {
           "name": "start",
           "predicate": "http://schema.org/checkinTime",
           "kind": "literal",
-          "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
           "maxCount": 1,
           "guards": {}
         },
@@ -632,7 +661,7 @@ const manifest = {
           "name": "end",
           "predicate": "http://schema.org/checkoutTime",
           "kind": "literal",
-          "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
           "maxCount": 1,
           "guards": {}
         },
@@ -641,6 +670,14 @@ const manifest = {
           "predicate": "http://schema.org/dateModified",
           "kind": "literal",
           "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "title",
+          "predicate": "http://schema.org/name",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
           "maxCount": 1,
           "guards": {}
         },
@@ -673,11 +710,10 @@ const manifest = {
         {
           "name": "status",
           "predicate": "http://schema.org/reservationStatus",
-          "kind": "iri",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
           "maxCount": 1,
-          "guards": {
-            "iriScheme": "http-https"
-          }
+          "guards": {}
         },
         {
           "name": "underName",
@@ -699,7 +735,7 @@ const manifest = {
         },
         {
           "name": "trust",
-          "predicate": "https://jeswr.org/ns/trips#trust",
+          "predicate": "https://jeswr.org/fedcon#emailMarkupTrust",
           "kind": "literal",
           "datatype": "http://www.w3.org/2001/XMLSchema#string",
           "maxCount": 1,
@@ -806,7 +842,15 @@ const manifest = {
           "name": "end",
           "predicate": "http://schema.org/dropoffTime",
           "kind": "literal",
-          "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "title",
+          "predicate": "http://schema.org/name",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
           "maxCount": 1,
           "guards": {}
         },
@@ -823,7 +867,7 @@ const manifest = {
           "name": "start",
           "predicate": "http://schema.org/pickupTime",
           "kind": "literal",
-          "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
           "maxCount": 1,
           "guards": {}
         },
@@ -856,11 +900,10 @@ const manifest = {
         {
           "name": "status",
           "predicate": "http://schema.org/reservationStatus",
-          "kind": "iri",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
           "maxCount": 1,
-          "guards": {
-            "iriScheme": "http-https"
-          }
+          "guards": {}
         },
         {
           "name": "underName",
@@ -882,7 +925,7 @@ const manifest = {
         },
         {
           "name": "trust",
-          "predicate": "https://jeswr.org/ns/trips#trust",
+          "predicate": "https://jeswr.org/fedcon#emailMarkupTrust",
           "kind": "literal",
           "datatype": "http://www.w3.org/2001/XMLSchema#string",
           "maxCount": 1,
@@ -912,6 +955,14 @@ const manifest = {
           "guards": {}
         },
         {
+          "name": "title",
+          "predicate": "http://schema.org/name",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
           "name": "provider",
           "predicate": "http://schema.org/provider",
           "kind": "iri",
@@ -940,11 +991,10 @@ const manifest = {
         {
           "name": "status",
           "predicate": "http://schema.org/reservationStatus",
-          "kind": "iri",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
           "maxCount": 1,
-          "guards": {
-            "iriScheme": "http-https"
-          }
+          "guards": {}
         },
         {
           "name": "underName",
@@ -966,7 +1016,7 @@ const manifest = {
         },
         {
           "name": "trust",
-          "predicate": "https://jeswr.org/ns/trips#trust",
+          "predicate": "https://jeswr.org/fedcon#emailMarkupTrust",
           "kind": "literal",
           "datatype": "http://www.w3.org/2001/XMLSchema#string",
           "maxCount": 1,
@@ -1000,7 +1050,7 @@ const manifest = {
           "name": "end",
           "predicate": "http://schema.org/arrivalTime",
           "kind": "literal",
-          "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
           "maxCount": 1,
           "guards": {}
         },
@@ -1017,7 +1067,7 @@ const manifest = {
           "name": "start",
           "predicate": "http://schema.org/departureTime",
           "kind": "literal",
-          "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
           "maxCount": 1,
           "guards": {}
         },

@@ -4,6 +4,7 @@
 @prefix schema: <http://schema.org/> .
 @prefix dct: <http://purl.org/dc/terms/> .
 @prefix prov: <http://www.w3.org/ns/prov#> .
+@prefix fedcon: <https://jeswr.org/fedcon#> .
 @prefix trips: <https://jeswr.org/ns/trips#> .
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
 @prefix sh: <http://www.w3.org/ns/shacl#> .
@@ -59,7 +60,7 @@ schema:provider a owl:ObjectProperty ; rdfs:label "provider" ; skos:definition "
 schema:underName a owl:ObjectProperty ; rdfs:label "underName" ; skos:definition "schema:underName as used in the Trips profile." ; rdfs:domain schema:Thing ; rdfs:range rdfs:Resource .
 schema:dateModified a owl:DatatypeProperty ; rdfs:label "dateModified" ; skos:definition "schema:dateModified as used in the Trips profile." ; rdfs:domain schema:Thing ; rdfs:range rdfs:Resource .
 prov:wasDerivedFrom a owl:ObjectProperty ; rdfs:label "wasDerivedFrom" ; skos:definition "prov:wasDerivedFrom as used in the Trips profile." ; rdfs:domain schema:Thing ; rdfs:range rdfs:Resource .
-trips:trust a owl:DatatypeProperty ; rdfs:label "trust" ; skos:definition "trips:trust as used in the Trips profile." ; rdfs:domain schema:Thing ; rdfs:range rdfs:Resource .
+fedcon:emailMarkupTrust a owl:DatatypeProperty ; rdfs:label "trust" ; skos:definition "fedcon:emailMarkupTrust as used in the Trips profile." ; rdfs:domain schema:Thing ; rdfs:range rdfs:Resource .
 schema:reservationFor a owl:ObjectProperty ; rdfs:label "reservationFor" ; skos:definition "schema:reservationFor as used in the Trips profile." ; rdfs:domain schema:Thing ; rdfs:range rdfs:Resource .
 schema:checkinTime a owl:DatatypeProperty ; rdfs:label "checkinTime" ; skos:definition "schema:checkinTime as used in the Trips profile." ; rdfs:domain schema:Thing ; rdfs:range rdfs:Resource .
 schema:checkoutTime a owl:DatatypeProperty ; rdfs:label "checkoutTime" ; skos:definition "schema:checkoutTime as used in the Trips profile." ; rdfs:domain schema:Thing ; rdfs:range rdfs:Resource .

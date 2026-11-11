@@ -37,6 +37,7 @@ export interface AirportEntity {
 
 export interface BusReservationData {
   "modified"?: Date;
+  "title"?: string;
   "provider"?: string;
   "booking"?: string;
   "reservationNumber"?: string;
@@ -48,6 +49,7 @@ export interface BusReservationData {
 
 export interface BusReservationWrapper extends EntityWrapper {
   "modified"?: Date;
+  "title"?: string;
   "provider"?: string;
   "booking"?: string;
   "reservationNumber"?: string;
@@ -79,18 +81,18 @@ export interface BusReservationEntity {
 
 export interface BusTripData {
   "to"?: string;
-  "end"?: Date;
+  "end"?: string;
   "number"?: string;
   "from"?: string;
-  "start"?: Date;
+  "start"?: string;
 }
 
 export interface BusTripWrapper extends EntityWrapper {
   "to"?: string;
-  "end"?: Date;
+  "end"?: string;
   "number"?: string;
   "from"?: string;
-  "start"?: Date;
+  "start"?: string;
 }
 
 export interface BusTripEntity {
@@ -144,13 +146,13 @@ export interface CarEntity {
 export interface EventData {
   "location"?: string;
   "title"?: string;
-  "start"?: Date;
+  "start"?: string;
 }
 
 export interface EventWrapper extends EntityWrapper {
   "location"?: string;
   "title"?: string;
-  "start"?: Date;
+  "start"?: string;
 }
 
 export interface EventEntity {
@@ -175,6 +177,7 @@ export interface EventEntity {
 
 export interface EventReservationData {
   "modified"?: Date;
+  "title"?: string;
   "provider"?: string;
   "booking"?: string;
   "reservationNumber"?: string;
@@ -186,6 +189,7 @@ export interface EventReservationData {
 
 export interface EventReservationWrapper extends EntityWrapper {
   "modified"?: Date;
+  "title"?: string;
   "provider"?: string;
   "booking"?: string;
   "reservationNumber"?: string;
@@ -217,17 +221,17 @@ export interface EventReservationEntity {
 
 export interface FlightData {
   "to"?: string;
-  "end"?: Date;
+  "end"?: string;
   "from"?: string;
-  "start"?: Date;
+  "start"?: string;
   "number"?: string;
 }
 
 export interface FlightWrapper extends EntityWrapper {
   "to"?: string;
-  "end"?: Date;
+  "end"?: string;
   "from"?: string;
-  "start"?: Date;
+  "start"?: string;
   "number"?: string;
 }
 
@@ -253,6 +257,7 @@ export interface FlightEntity {
 
 export interface FlightReservationData {
   "modified"?: Date;
+  "title"?: string;
   "provider"?: string;
   "booking"?: string;
   "reservationNumber"?: string;
@@ -264,6 +269,7 @@ export interface FlightReservationData {
 
 export interface FlightReservationWrapper extends EntityWrapper {
   "modified"?: Date;
+  "title"?: string;
   "provider"?: string;
   "booking"?: string;
   "reservationNumber"?: string;
@@ -325,12 +331,13 @@ export interface FoodEstablishmentEntity {
 
 export interface FoodEstablishmentReservationData {
   "modified"?: Date;
-  "end"?: Date;
+  "end"?: string;
+  "title"?: string;
   "provider"?: string;
   "booking"?: string;
   "reservationNumber"?: string;
   "status"?: string;
-  "start"?: Date;
+  "start"?: string;
   "underName"?: string;
   "source"?: string;
   "trust"?: "verified" | "unverified";
@@ -338,12 +345,13 @@ export interface FoodEstablishmentReservationData {
 
 export interface FoodEstablishmentReservationWrapper extends EntityWrapper {
   "modified"?: Date;
-  "end"?: Date;
+  "end"?: string;
+  "title"?: string;
   "provider"?: string;
   "booking"?: string;
   "reservationNumber"?: string;
   "status"?: string;
-  "start"?: Date;
+  "start"?: string;
   "underName"?: string;
   "source"?: string;
   "trust"?: "verified" | "unverified";
@@ -400,9 +408,10 @@ export interface LodgingBusinessEntity {
 }
 
 export interface LodgingReservationData {
-  "start"?: Date;
-  "end"?: Date;
+  "start"?: string;
+  "end"?: string;
   "modified"?: Date;
+  "title"?: string;
   "provider"?: string;
   "booking"?: string;
   "reservationNumber"?: string;
@@ -413,9 +422,10 @@ export interface LodgingReservationData {
 }
 
 export interface LodgingReservationWrapper extends EntityWrapper {
-  "start"?: Date;
-  "end"?: Date;
+  "start"?: string;
+  "end"?: string;
   "modified"?: Date;
+  "title"?: string;
   "provider"?: string;
   "booking"?: string;
   "reservationNumber"?: string;
@@ -534,9 +544,10 @@ export interface PlaceEntity {
 export interface RentalCarReservationData {
   "modified"?: Date;
   "to"?: string;
-  "end"?: Date;
+  "end"?: string;
+  "title"?: string;
   "from"?: string;
-  "start"?: Date;
+  "start"?: string;
   "provider"?: string;
   "booking"?: string;
   "reservationNumber"?: string;
@@ -549,9 +560,10 @@ export interface RentalCarReservationData {
 export interface RentalCarReservationWrapper extends EntityWrapper {
   "modified"?: Date;
   "to"?: string;
-  "end"?: Date;
+  "end"?: string;
+  "title"?: string;
   "from"?: string;
-  "start"?: Date;
+  "start"?: string;
   "provider"?: string;
   "booking"?: string;
   "reservationNumber"?: string;
@@ -583,6 +595,7 @@ export interface RentalCarReservationEntity {
 
 export interface TrainReservationData {
   "modified"?: Date;
+  "title"?: string;
   "provider"?: string;
   "booking"?: string;
   "reservationNumber"?: string;
@@ -594,6 +607,7 @@ export interface TrainReservationData {
 
 export interface TrainReservationWrapper extends EntityWrapper {
   "modified"?: Date;
+  "title"?: string;
   "provider"?: string;
   "booking"?: string;
   "reservationNumber"?: string;
@@ -625,17 +639,17 @@ export interface TrainReservationEntity {
 
 export interface TrainTripData {
   "to"?: string;
-  "end"?: Date;
+  "end"?: string;
   "from"?: string;
-  "start"?: Date;
+  "start"?: string;
   "number"?: string;
 }
 
 export interface TrainTripWrapper extends EntityWrapper {
   "to"?: string;
-  "end"?: Date;
+  "end"?: string;
   "from"?: string;
-  "start"?: Date;
+  "start"?: string;
   "number"?: string;
 }
 

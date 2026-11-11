@@ -19,19 +19,25 @@ Trip uses schema:name, startDate/endDate (xsd:date), touristDestination (text), 
 (notes), image (IRI), **subjectOf** (set of reservation IRIs), dct:created/modified and
 https://jeswr.org/ns/trips#archived. subjectOf describes documents about the journey; it
 avoids schema:itinerary's Place/ItemList range. Reservation fields use reservationNumber,
-reservationStatus (IRI), provider → Organization/name, underName → Person/name,
+reservationStatus (string or IRI), provider (literal or Organization/name), underName → Person/name,
 reservationFor → the class-specific generated node, dateModified, prov:wasDerivedFrom,
-and https://jeswr.org/ns/trips#trust (only an explicit "verified" renders as verified).
+and https://jeswr.org/fedcon#emailMarkupTrust (only an explicit "verified" renders as verified).
+Providers can also be on reservationFor → airline/provider. Sender keys and opaque
+resource slugs never determine booking identity or trust. Missing dateModified stays absent.
 
 Flights have flightNumber, departure/arrivalAirport → iataCode/name and departure/arrivalTime.
 Trains/buses have number, stations/stops and times. Lodging has name/address and checkin/checkoutTime;
 car hire has name, pickup/dropoffLocation and pickup/dropoffTime; restaurants have name/address
 and start/endTime; events have name, location → Place/name/address and startDate.
 
-`model.ts` delegates entity creation, field constraints, recognition and serialization to
-`entities.*`. It supplies graph assembly and plain application records. Generated Date values
-lose the original offset: after generated datatype validation, typed RDF/JS accessors retain
-the lexical datetime for display and manual writes. `itinerary()` orders original calendar
+`model.ts` delegates entity creation, recognition and serialization to `entities.*`.
+The generated READ profile accepts the connector's xsd:string times and statuses. The
+facade validates ISO calendar/clock/offset values and bridges typed xsd:dateTime values,
+IRI statuses and provider literals/nodes using typed RDF/JS accessors. Invalid times are
+omitted without dropping other booking fields. Manual writes keep xsd:dateTime and the
+original lexical offset (the generator's Date projection loses it). Booking names live on
+the reservation itself, including transport bookings. Supplying a fetched document URL to
+`parseReservations(dataset, url)` excludes subjects asserted about other documents. `itinerary()` orders original calendar
 spelling and clocks without guessing a time zone. A hotel appears on its check-in day with
 its check-out date shown on the card.
 
@@ -43,17 +49,27 @@ stay out of suggestions. `deduplicate` uses trimmed, case-insensitive confirmati
 latest valid dateModified wins, with stable lexical identifier ties.
 
 `createTripsStore` takes storage, Type Index and an owner-only provisioning port. `openTripsStore`
-wires the suite clients and pod-access role writer. It creates trips/ with one document per
+wires the suite clients, pod-access role writer and fail-closed `checkOwnerOnly` verifier. It creates trips/ with one document per
 trip and trips/reservations/ for manual bookings. Resources are empty until privacy succeeds;
 all content writes require observed ETags. Private Trip registration uses pod-type-index.
-Existing settings, preferences and index documents must also be owner-only. Access changes
-fail closed on unsupported models. An explicit authenticated demo session bypasses access
+Trips never provisions or changes access on shared settings, preferences or Type Index
+resources. Registration requires an existing linked private Type Index; privacy of that
+index and linked preferences is verified read-only, including just before registration
+writes. Missing/unreadable/non-private shared documents refuse registration with no
+bootstrap. The exact session WebID profile may live outside storage: it is read through
+bounded fetch-rdf with the session fetch and redirects refused. Data links and all writes
+remain pod-scoped. Access changes fail closed on unsupported models. An explicit authenticated demo session bypasses access
 provisioning only for the non-enforcing demo fixture.
 
-Scan discovers reservation registrations, or each registered EmailMessage account's agreed
-trips/ subcontainer. It does not crawl messages or modify connector data. Reads are bounded
+Scan discovers the connector's per-reservation-class trips/ registrations. EmailMessage
+registrations point at messages/ and are never used to guess a trips/ path. It does not crawl messages or modify connector data. Reads are bounded
 by 30 seconds, 16 sources, 200 documents, eight pages per container, 1 MiB listing pages and
-512 KiB/10,000 quads per RDF document. Overflow rejects the entire scan. The connector API
+512 KiB/10,000 quads per RDF document and 200 parsed reservations. Scans retain partial
+results and return `{ notice: { skipped, capped } }` when sources fail or limits are reached.
+Own Trips/manual containers page to completion without the scan's 200-document/eight-page
+caps; per-document failures are skipped and counted. Repeated cursors stop with a notice.
+Failed creation steps conditionally delete the new resource best effort; booking-link
+compensation can delete only a new manual booking with its observed response validator. The connector API
 is not present in this worktree; `importEmail(html, extract)` is the injected seam. Without
 it, import reports "Coming soon". Email imports always start unverified.
 
@@ -61,8 +77,10 @@ Known generator/profile gaps:
 
 - A composite cannot reuse a class in two nodes (two Airports/Places), or across composites
   (shared Organization/Person). Flat generated nodes are joined in the facade.
-- Literal-or-node unions are unavailable: provider/underName project IRI nodes; literal
-  provider names and structured PostalAddress values are omitted from this profile.
+- Datatype/node unions are unavailable: the generated profile models string times/statuses
+  and IRI-linked providers. The facade's typed compatibility bridge reads typed dateTimes,
+  IRI statuses and literal providers too. Structured PostalAddress values remain omitted;
+  underName is an IRI-linked Person/name.
 - Blank nodes cannot be projected by the IRI-only link profile; omit those children.
 - DateTime maps to Date and loses lexical offsets; typed wrapper accessors retain validated
   original times, without changing the generator or runtime.
@@ -70,3 +88,14 @@ Event end times are outside this first-cut profile; only event start time is pro
 
 The app has no calendar exporter: needs extraction: calendar ics writer. Deferred features:
 flight status; maps; sharing with companions; calendar sync; automatic email extraction.
+
+Exact divergences pinned in regression tests:
+
+- Connector string values, booking-level airline/provider and fedcon trust now survive
+  parse/group (`test/connector.test.ts`); invalid times are omitted, absent modification
+  times stay absent, and booking names persist for all seven reservation classes.
+- Foreign reservation subjects are excluded on fetched-document reads; guessed mail paths
+  are removed. Load/scan failures retain usable results with a notice (`test/recovery.test.ts`).
+- Only Trips resources receive access changes. Existing private indexes are verified with
+  checkOwnerOnly; external profiles are allowed only as exact identity reads, never as data
+  or write destinations (`test/factory.test.ts`, `test/type-index.test.ts`).

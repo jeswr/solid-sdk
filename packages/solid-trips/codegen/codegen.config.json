@@ -5,7 +5,8 @@
     "dct": "http://purl.org/dc/terms/",
     "prov": "http://www.w3.org/ns/prov#",
     "trips": "https://jeswr.org/ns/trips#",
-    "xsd": "http://www.w3.org/2001/XMLSchema#"
+    "xsd": "http://www.w3.org/2001/XMLSchema#",
+    "fedcon": "https://jeswr.org/fedcon#"
   },
   "entities": [
     {
@@ -136,9 +137,6 @@
         "convention": "self"
       },
       "fields": {
-        "status": {
-          "iriScheme": "http-https"
-        },
         "provider": {
           "iriScheme": "http-https"
         },
@@ -160,9 +158,6 @@
         "convention": "self"
       },
       "fields": {
-        "status": {
-          "iriScheme": "http-https"
-        },
         "provider": {
           "iriScheme": "http-https"
         },
@@ -184,9 +179,6 @@
         "convention": "self"
       },
       "fields": {
-        "status": {
-          "iriScheme": "http-https"
-        },
         "provider": {
           "iriScheme": "http-https"
         },
@@ -208,9 +200,6 @@
         "convention": "self"
       },
       "fields": {
-        "status": {
-          "iriScheme": "http-https"
-        },
         "provider": {
           "iriScheme": "http-https"
         },
@@ -232,9 +221,6 @@
         "convention": "self"
       },
       "fields": {
-        "status": {
-          "iriScheme": "http-https"
-        },
         "provider": {
           "iriScheme": "http-https"
         },
@@ -256,9 +242,6 @@
         "convention": "self"
       },
       "fields": {
-        "status": {
-          "iriScheme": "http-https"
-        },
         "provider": {
           "iriScheme": "http-https"
         },
@@ -280,9 +263,6 @@
         "convention": "self"
       },
       "fields": {
-        "status": {
-          "iriScheme": "http-https"
-        },
         "provider": {
           "iriScheme": "http-https"
         },

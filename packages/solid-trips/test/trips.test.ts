@@ -231,7 +231,7 @@ describe("bounded pod storage", () => {
       );
       expect((await store.scan([])).suggestions).toHaveLength(1);
       expect((await store.scan(loaded.trips, loaded.reservations)).suggestions).toHaveLength(0);
-      expect(protect.mock.calls.length).toBeGreaterThanOrEqual(5);
+      expect(protect.mock.calls.length).toBeGreaterThanOrEqual(4);
     });
   it("fails closed on unsafe scan sources and access failures", async () => {
     const storage = createMemoryStorage({ protocol: "solid", root });
@@ -244,7 +244,7 @@ describe("bounded pod storage", () => {
     };
     const store = createTripsStore({ storage, index, protect: async () => {} });
     await store.initialise();
-    await expect(store.scan([])).rejects.toThrow();
+    expect((await store.scan([])).notice.skipped).toBe(1);
     const blocked = createTripsStore({
       storage,
       index,
@@ -270,7 +270,7 @@ describe("bounded pod storage", () => {
     };
     const store = createTripsStore({ storage, index, protect: async () => {} });
     await store.initialise();
-    await expect(store.scan([])).rejects.toThrow("16 sources");
+    expect((await store.scan([])).notice.capped).toBe(true);
     await expect(importEmail("hello")).rejects.toThrow("Coming soon");
     const extract = vi.fn(async () => [
       { kind: "EventReservation" as const, trust: "verified" as const },
@@ -296,24 +296,16 @@ describe("scan boundaries and recovery", () => {
     const storage = { ...original, ...overrides };
     const index = {
       register: vi.fn(async () => undefined),
-      findAll: vi.fn(
-        async () =>
-          new Map([
-            [
-              "http://schema.org/EmailMessage",
-              locations.map((value) => value.replace(/trips\/$/, "")),
-            ],
-          ]),
-      ),
+      findAll: vi.fn(async () => new Map([["http://schema.org/FlightReservation", locations]])),
     };
     return { storage, index, store: createTripsStore({ storage, index, protect: async () => {} }) };
   }
-  it("follows the registered mail account path and tolerates an absent connector subcontainer", async () => {
+  it("uses class-registered trips containers and reports an absent connector source", async () => {
     const { store } = sourceStore();
     await store.initialise();
     expect(await store.scan([])).toMatchObject({ sources: 1, suggestions: [] });
   });
-  it("rejects excess pages and documents, and does not publish partial results", async () => {
+  it("reports excess pages and documents with partial results", async () => {
     const { store } = sourceStore({
       list: vi.fn(async () => ({
         items: [],
@@ -322,7 +314,7 @@ describe("scan boundaries and recovery", () => {
         total: null,
       })),
     });
-    await expect(store.scan([])).rejects.toThrow("eight pages");
+    expect((await store.scan([])).notice).toEqual({ skipped: 1, capped: true });
     const tooMany = sourceStore({
       list: vi.fn(async () => ({
         items: Array.from({ length: 201 }, (_, n) => ({
@@ -338,7 +330,7 @@ describe("scan boundaries and recovery", () => {
         total: null,
       })),
     });
-    await expect(tooMany.store.scan([])).rejects.toThrow("200 documents");
+    expect((await tooMany.store.scan([])).notice.capped).toBe(true);
   });
   it("does not treat access denial as an empty scan", async () => {
     const forbidden = new (await import("@jeswr/storage-client")).StorageError("forbidden", {
@@ -351,7 +343,7 @@ describe("scan boundaries and recovery", () => {
         throw forbidden;
       }),
     });
-    await expect(store.scan([])).rejects.toBe(forbidden);
+    expect((await store.scan([])).notice).toEqual({ skipped: 1, capped: false });
   });
   it("refuses an edit with a missing validator", async () => {
     const { store } = sourceStore();

@@ -21,7 +21,12 @@ function setup(
 ) {
   const store = {
     saveTrip,
-    addReservation: vi.fn(async (input) => ({ ...input, id: "https://pod.example/new#it" })),
+    addReservation: vi.fn(async (input) => ({
+      ...input,
+      id: "https://pod.example/new#it",
+      etag: '"created"',
+    })),
+    deleteReservation: vi.fn(async () => {}),
   } as unknown as TripsStore;
   const failure = vi.fn();
   const state = createTripsState(store, { trips: [a, b], reservations: [] }, failure);
@@ -228,4 +233,30 @@ it("keeps the confirmed view when partial-move reconciliation is also offline", 
   await tick();
   expect(state.getSnapshot().trips[1]?.reservations).toEqual([]);
   expect(state.getSnapshot().error).toContain("Part of this move");
+});
+
+it("removes a new booking when linking it to a trip fails, even if compensation is offline", async () => {
+  for (const cleanupFails of [false, true]) {
+    const { state, store, failure } = setup(
+      vi.fn(async () => {
+        throw new Error("conflict");
+      }),
+    );
+    if (cleanupFails) vi.mocked(store.deleteReservation).mockRejectedValue(new Error("offline"));
+    state.addBooking(a.id, { kind: "FlightReservation", title: "New booking" });
+    await tick();
+    expect(store.deleteReservation).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "https://pod.example/new#it", etag: '"created"' }),
+    );
+    expect(state.getSnapshot().reservations).toEqual([]);
+    expect(state.resolveId("pending:missing")).toBe("pending:missing");
+    expect(failure).toHaveBeenCalledOnce();
+  }
+});
+it("does not create an orphan booking for a trip that has disappeared", async () => {
+  const { state, store } = setup();
+  state.addBooking("missing", { kind: "FlightReservation" });
+  await tick();
+  expect(store.addReservation).not.toHaveBeenCalled();
+  expect(store.deleteReservation).not.toHaveBeenCalled();
 });

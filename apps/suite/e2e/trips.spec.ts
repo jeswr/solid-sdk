@@ -19,6 +19,8 @@ test("Trips demo itinerary, manual booking and moving between trips", async ({ p
   await page.getByLabel("Booking name", { exact: true }).fill("Example onward flight");
   await page.getByLabel("Provider", { exact: true }).fill("Example Air");
   await page.getByLabel("Confirmation number", { exact: true }).fill("DEMO321");
+  await page.getByLabel("Start time", { exact: true }).fill("2026-12-01T09:30");
+  await page.getByLabel("Start UTC offset (optional)", { exact: true }).fill("+02:00");
   await page.getByRole("button", { name: "Save booking", exact: true }).click();
   await expect(page.getByText("DEMO321", { exact: true })).toBeVisible();
   await expect(page.getByText("Saving to your pod…", { exact: true })).toBeHidden();
@@ -26,6 +28,7 @@ test("Trips demo itinerary, manual booking and moving between trips", async ({ p
   await page.reload();
   await page.getByRole("button", { name: "Lisbon, all planned", exact: true }).click();
   await expect(page.getByText("DEMO321", { exact: true })).toBeVisible();
+  await expect(page.getByText("Example onward flight", { exact: true })).toBeVisible();
   await page.getByRole("combobox", { name: "Move DEMO321 to another trip" }).click();
   await page.getByRole("option", { name: "York by rail", exact: true }).click();
   await expect(page.getByText("DEMO321", { exact: true })).toBeHidden();

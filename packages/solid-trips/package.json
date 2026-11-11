@@ -50,5 +50,6 @@
   },
   "peerDependencies": {
     "@rdfjs/types": "^2.0.1"
-  }
+  },
+  "securityCritical": true
 }

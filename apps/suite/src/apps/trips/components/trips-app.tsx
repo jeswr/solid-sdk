@@ -44,6 +44,7 @@ import { useConnectionState } from "@/shell/sync/connection-state";
 import { RequiresOnline } from "@/shell/sync/requires-online";
 import { TripsProvider, useTrips } from "../state/trips-context";
 import { BookingEditor, kindLabels, TripEditor } from "./editors";
+import { ReadNotice } from "./read-notice";
 import "./trips.css";
 
 const icons = {
@@ -151,7 +152,7 @@ function BookingCard({ item, trip }: { item: Reservation; trip: Trip }) {
   );
 }
 function Workspace() {
-  const { trips, reservations, store, state, saving, error, session } = useTrips();
+  const { trips, reservations, store, state, saving, error, session, notice } = useTrips();
   const [tab, setTab] = useState<"upcoming" | "past" | "archive">("upcoming");
   const [selected, setSelected] = useState<string>();
   const [editing, setEditing] = useState<Trip | "new">();
@@ -272,23 +273,31 @@ function Workspace() {
             rolled back.
           </p>
         )}
+        <ReadNotice notice={notice} />
         <p className="tr-save" role="status" aria-live="polite">
           {saving ? "Saving to your pod…" : (error ?? "")}
         </p>
         {scanning && <LoadingSkeleton preset="list" label="Looking for booking confirmations" />}
         {scanError && (
-          <ErrorState error="unreachable" actions={{ retry: runScan }}>
-            <p>The scan could not finish. No partial suggestions were accepted.</p>
+          <ErrorState error="unknown">
+            <p>
+              The booking source list could not be read. Check your connection and access, then try
+              again.
+            </p>
+            <Button onClick={runScan}>Try scanning again</Button>
           </ErrorState>
         )}
         {scan && !scanning && (
           <section className="tr-suggestions" aria-label="Suggested trips">
             <h2>Suggested trips</h2>
+            <ReadNotice notice={scan.notice} scan />
             {!suggestions.length ? (
               <p>
-                {scan.sources
-                  ? "You're all caught up. No new trips to suggest."
-                  : "No registered booking sources yet. Connect your mail when reservation extraction becomes available."}
+                {scan.notice.skipped || scan.notice.capped
+                  ? "No new trips in the sources read so far. Some sources were skipped."
+                  : scan.sources
+                    ? "You're all caught up. No new trips to suggest."
+                    : "No registered booking sources yet. Connect your mail when reservation extraction becomes available."}
               </p>
             ) : (
               suggestions.map((suggestion) => (

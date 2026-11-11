@@ -1,6 +1,11 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
 "use client";
-import { type ReservationInput, reservationKinds, type Trip } from "@jeswr/solid-trips";
+import {
+  bookingTime,
+  type ReservationInput,
+  reservationKinds,
+  type Trip,
+} from "@jeswr/solid-trips";
 import {
   Button,
   Dialog,
@@ -125,16 +130,23 @@ export function BookingEditor({ trip, close }: { trip: Trip; close: () => void }
             event.preventDefault();
             const data = new FormData(event.currentTarget);
             const value = (key: string) => String(data.get(key) ?? "").trim() || undefined;
-            const start = value("start"),
-              end = value("end");
-            if (
-              !start ||
-              !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(Z|[+-]\d{2}:\d{2})?$/.test(start) ||
-              !Number.isFinite(Date.parse(start)) ||
-              (end && (!Number.isFinite(Date.parse(end)) || Date.parse(end) < Date.parse(start)))
-            ) {
+            let start: string | undefined, end: string | undefined;
+            try {
+              start = bookingTime(value("start") ?? "", value("startOffset"));
+              end = bookingTime(value("end") ?? "", value("endOffset"));
+              // Local times carry no inferred zone. Compare their calendar/clock values
+              // unless both confirmations supplied explicit offsets.
+              const bothOffsets =
+                !!start &&
+                !!end &&
+                [start, end].every((time) => /(?:Z|[+-]\d{2}:\d{2})$/.test(time));
+              const stamp = (time: string) =>
+                Date.parse(bothOffsets ? time : `${time.replace(/(?:Z|[+-]\d{2}:\d{2})$/, "")}Z`);
+              if (!start || (end && stamp(end) < stamp(start)))
+                throw new Error("Use an end time after the start time");
+            } catch {
               setError(
-                "Use ISO times such as 2026-12-01T09:30:00+00:00, with the end after the start.",
+                "Choose valid local times, with the end after the start. Optional UTC offsets look like +01:00 or Z.",
               );
               return;
             }
@@ -202,14 +214,20 @@ export function BookingEditor({ trip, close }: { trip: Trip; close: () => void }
           <TextField
             name="start"
             label={kind === "LodgingReservation" ? "Check-in time" : "Start time"}
-            value={`${trip.startDate}T12:00:00+00:00`}
+            type="datetime-local"
+            value={`${trip.startDate}T12:00`}
             required
           />
+          <TextField name="startOffset" label="Start UTC offset (optional)" />
           {kind !== "EventReservation" && (
-            <TextField
-              name="end"
-              label={kind === "LodgingReservation" ? "Check-out time" : "End time"}
-            />
+            <>
+              <TextField
+                name="end"
+                type="datetime-local"
+                label={kind === "LodgingReservation" ? "Check-out time" : "End time"}
+              />
+              <TextField name="endOffset" label="End UTC offset (optional)" />
+            </>
           )}
           {error && <p role="alert">{error}</p>}
           <Button type="submit">Save booking</Button>

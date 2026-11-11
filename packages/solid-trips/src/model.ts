@@ -1,6 +1,6 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
 import type { DatasetCore } from "@jeswr/fetch-rdf";
-import { LiteralAs, OptionalAs, OptionalFrom, TermWrapper } from "@rdfjs/wrapper";
+import { LiteralAs, NamedNodeAs, OptionalAs, OptionalFrom, TermWrapper } from "@rdfjs/wrapper";
 import { DataFactory, Store } from "n3";
 import { entities } from "./generated/model.js";
 import { type Reservation, type ReservationInput, reservationKinds, type Trip } from "./types.js";
@@ -61,11 +61,63 @@ function timePath(kind: ReservationInput["kind"], field: "start" | "end") {
     return { child: true, predicate: field === "start" ? "startDate" : "endDate" };
   return { child: true, predicate: field === "start" ? "departureTime" : "arrivalTime" };
 }
-export function parseReservations(dataset: DatasetCore): Reservation[] {
+/** ISO calendar and clock validation, without inferring a zone for local times. */
+export function parseReservationTime(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  const match =
+    /^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.\d+)?)?(Z|[+-]\d{2}:\d{2})?$/.exec(value);
+  if (!match) return undefined;
+  const [, date, hours, minutes, seconds, zone] = match;
+  const day = new Date(`${date}T00:00:00Z`);
+  if (
+    !Number.isFinite(day.getTime()) ||
+    day.toISOString().slice(0, 10) !== date ||
+    Number(hours) > 23 ||
+    Number(minutes) > 59 ||
+    Number(seconds ?? 0) > 59
+  )
+    return undefined;
+  if (zone && zone !== "Z") {
+    const h = Number(zone.slice(1, 3)),
+      m = Number(zone.slice(4));
+    if (h > 14 || m > 59 || (h === 14 && m !== 0)) return undefined;
+  }
+  return value;
+}
+/** datetime-local form values plus an optional explicit offset; never use the browser zone. */
+export function bookingTime(local: string, offset = ""): string | undefined {
+  if (!local) {
+    if (offset) throw new TypeError("Choose a local time before adding an offset");
+    return undefined;
+  }
+  const value = `${local.length === 16 ? `${local}:00` : local}${offset}`;
+  if (!parseReservationTime(value))
+    throw new TypeError("Use a valid local date and time and an offset such as +01:00 or Z");
+  return value;
+}
+// Generator gap: a field cannot project both a literal and an IRI. Keep this
+// compatibility bridge in the facade; generated entities still recognise roots.
+function providerName(subject: TermWrapper, predicate = "provider"): string | undefined {
+  return OptionalFrom.subjectPredicate(subject, SCHEMA + predicate, (term) => {
+    if (
+      term.termType === "Literal" &&
+      term.datatype.value === "http://www.w3.org/2001/XMLSchema#string"
+    )
+      return term.value;
+    if (term.termType === "NamedNode")
+      return new entities.Organization.Wrapper(term.value, subject.dataset, DataFactory).name;
+    return undefined;
+  });
+}
+export function parseReservations(dataset: DatasetCore, documentUrl?: string): Reservation[] {
   const result: Reservation[] = [];
   const subjects = new Set(
     [...dataset]
-      .filter((quad) => quad.subject.termType === "NamedNode")
+      .filter(
+        (quad) =>
+          quad.subject.termType === "NamedNode" &&
+          (!documentUrl || quad.subject.value.split("#")[0] === documentUrl.split("#")[0]),
+      )
       .map((quad) => quad.subject.value),
   );
   for (const id of subjects)
@@ -75,9 +127,10 @@ export function parseReservations(dataset: DatasetCore): Reservation[] {
       const booking = root.booking
         ? new entities[target[kind]].Wrapper(root.booking, dataset, DataFactory)
         : undefined;
-      const provider = root.provider
-        ? new entities.Organization.Wrapper(root.provider, dataset, DataFactory).name
-        : undefined;
+      const reservation = new entities[kind].Wrapper(id, dataset, DataFactory);
+      const provider =
+        providerName(reservation) ??
+        (booking && (providerName(booking, "airline") ?? providerName(booking)));
       const underName = root.underName
         ? new entities.Person.Wrapper(root.underName, dataset, DataFactory).name
         : undefined;
@@ -85,16 +138,31 @@ export function parseReservations(dataset: DatasetCore): Reservation[] {
         id,
         kind,
         reservationNumber: root.reservationNumber,
-        status: root.status,
+        status:
+          root.status ??
+          OptionalFrom.subjectPredicate(reservation, `${SCHEMA}reservationStatus`, (term) =>
+            term.termType === "NamedNode" ? NamedNodeAs.string(term) : undefined,
+          ),
+        title: root.title,
         provider,
         underName,
         source: root.source,
-        modified: root.modified?.toISOString(),
+        modified:
+          root.modified?.toISOString() ??
+          (() => {
+            const lexical = OptionalFrom.subjectPredicate(
+              reservation,
+              `${SCHEMA}dateModified`,
+              (term) => (term.termType === "Literal" ? LiteralAs.string(term) : undefined),
+            );
+            const valid = parseReservationTime(lexical);
+            return valid ? new Date(valid).toISOString() : undefined;
+          })(),
         trust: root.trust === "verified" ? "verified" : "unverified",
       };
       for (const field of ["title", "number", "address"] as const)
         if (booking && field in booking)
-          item[field] = (booking as unknown as Record<string, string>)[field];
+          item[field] ??= (booking as unknown as Record<string, string>)[field];
       for (const field of ["from", "to", "location"] as const) {
         const owner = field in root ? root : booking;
         const link =
@@ -114,11 +182,17 @@ export function parseReservations(dataset: DatasetCore): Reservation[] {
       for (const field of ["start", "end"] as const) {
         const path = timePath(kind, field);
         const owner = path.child ? booking : new entities[kind].Wrapper(id, dataset, DataFactory);
-        if (owner && field in owner && (owner as unknown as Record<string, unknown>)[field])
-          item[field] = OptionalFrom.subjectPredicate(
-            owner,
-            SCHEMA + path.predicate,
-            LiteralAs.string,
+        if (owner)
+          item[field] = parseReservationTime(
+            OptionalFrom.subjectPredicate(owner, SCHEMA + path.predicate, (term) =>
+              term.termType === "Literal" &&
+              [
+                "http://www.w3.org/2001/XMLSchema#string",
+                "http://www.w3.org/2001/XMLSchema#dateTime",
+              ].includes(term.datatype.value)
+                ? LiteralAs.string(term)
+                : undefined,
+            ),
           );
       }
       result.push(item);
@@ -136,8 +210,8 @@ export function buildReservation(url: string, input: ReservationInput) {
     location = `${url}#location`;
   const data = {
     ...input,
-    start: input.start ? new Date(input.start) : undefined,
-    end: input.end ? new Date(input.end) : undefined,
+    start: input.start,
+    end: input.end,
     modified: input.modified ? new Date(input.modified) : undefined,
     booking,
     provider: input.provider ? provider : undefined,
@@ -163,11 +237,15 @@ export function buildReservation(url: string, input: ReservationInput) {
       if (code) add(entities.Airport.build(node, { iataCode: code }));
     }
   }
-  // Generated dateTime guards validate these values. Typed accessors retain their original
-  // lexical offset for the itinerary; projecting Date alone loses that source information.
+  // Generator gap: dateTime maps to Date, losing the original lexical UTC offset.
+  // The facade validates ISO times; typed accessors keep manual bookings as xsd:dateTime
+  // with that offset intact. The lead tracks a generator lexical-dateTime projection.
   for (const field of ["start", "end"] as const) {
     const value = input[field];
     if (!value) continue;
+    // xsd:dateTime needs seconds even when a connector string used ISO minute precision.
+    if (!/T\d{2}:\d{2}:\d{2}/.test(value) || !parseReservationTime(value))
+      throw new TypeError("Use a valid ISO date and time including seconds");
     const path = timePath(input.kind, field);
     OptionalAs.object(
       new TermWrapper(path.child ? booking : id, graph, DataFactory),

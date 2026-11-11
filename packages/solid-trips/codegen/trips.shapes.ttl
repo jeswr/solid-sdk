@@ -1,12 +1,16 @@
 # AUTHORED-BY Codex (GPT-6.1 Sol)
 # No travel sector exists in solid-federation-vocab. This is a new schema.org profile.
-# Narrowings: singleton IRI-linked children, xsd:string names/addresses, IRI statuses.
-# PostalAddress objects and literal providers are omitted (no datatype/node union).
+# READ profile matches CON-A8 string times/statuses; the facade validates ISO times.
+# Generator gap: datatype/node unions are unavailable. Typed dateTimes, IRI statuses
+# and literal providers use typed-accessor compatibility in the facade.
+# Narrowings: singleton IRI-linked children and xsd:string names/addresses.
+# Structured PostalAddress objects are omitted.
 # Links are singleton IRI fields. Shared child classes cannot be reused in composites;
 # flat generated wrappers are joined by the facade, without requiring child rdf:type.
 @prefix schema: <http://schema.org/> .
 @prefix dct: <http://purl.org/dc/terms/> .
 @prefix prov: <http://www.w3.org/ns/prov#> .
+@prefix fedcon: <https://jeswr.org/fedcon#> .
 @prefix trips: <https://jeswr.org/ns/trips#> .
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
 @prefix sh: <http://www.w3.org/ns/shacl#> .
@@ -36,20 +40,20 @@ trips:PlaceShape a sh:NodeShape ; sh:targetClass schema:Place ;
  sh:property [ sh:path schema:address ; sh:name "address" ; sh:datatype xsd:string ; sh:maxCount 1 ] .
 trips:FlightShape a sh:NodeShape ; sh:targetClass schema:Flight ;
  sh:property [ sh:path schema:flightNumber ; sh:name "number" ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
- sh:property [ sh:path schema:departureTime ; sh:name "start" ; sh:datatype xsd:dateTime ; sh:maxCount 1 ] ;
- sh:property [ sh:path schema:arrivalTime ; sh:name "end" ; sh:datatype xsd:dateTime ; sh:maxCount 1 ] ;
+ sh:property [ sh:path schema:departureTime ; sh:name "start" ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
+ sh:property [ sh:path schema:arrivalTime ; sh:name "end" ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
  sh:property [ sh:path schema:departureAirport ; sh:name "from" ; sh:nodeKind sh:IRI ; sh:maxCount 1 ] ;
  sh:property [ sh:path schema:arrivalAirport ; sh:name "to" ; sh:nodeKind sh:IRI ; sh:maxCount 1 ] .
 trips:TrainTripShape a sh:NodeShape ; sh:targetClass schema:TrainTrip ;
  sh:property [ sh:path schema:trainNumber ; sh:name "number" ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
- sh:property [ sh:path schema:departureTime ; sh:name "start" ; sh:datatype xsd:dateTime ; sh:maxCount 1 ] ;
- sh:property [ sh:path schema:arrivalTime ; sh:name "end" ; sh:datatype xsd:dateTime ; sh:maxCount 1 ] ;
+ sh:property [ sh:path schema:departureTime ; sh:name "start" ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
+ sh:property [ sh:path schema:arrivalTime ; sh:name "end" ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
  sh:property [ sh:path schema:departureStation ; sh:name "from" ; sh:nodeKind sh:IRI ; sh:maxCount 1 ] ;
  sh:property [ sh:path schema:arrivalStation ; sh:name "to" ; sh:nodeKind sh:IRI ; sh:maxCount 1 ] .
 trips:BusTripShape a sh:NodeShape ; sh:targetClass schema:BusTrip ;
  sh:property [ sh:path schema:busNumber ; sh:name "number" ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
- sh:property [ sh:path schema:departureTime ; sh:name "start" ; sh:datatype xsd:dateTime ; sh:maxCount 1 ] ;
- sh:property [ sh:path schema:arrivalTime ; sh:name "end" ; sh:datatype xsd:dateTime ; sh:maxCount 1 ] ;
+ sh:property [ sh:path schema:departureTime ; sh:name "start" ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
+ sh:property [ sh:path schema:arrivalTime ; sh:name "end" ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
  sh:property [ sh:path schema:departureBusStop ; sh:name "from" ; sh:nodeKind sh:IRI ; sh:maxCount 1 ] ;
  sh:property [ sh:path schema:arrivalBusStop ; sh:name "to" ; sh:nodeKind sh:IRI ; sh:maxCount 1 ] .
 trips:LodgingBusinessShape a sh:NodeShape ; sh:targetClass schema:LodgingBusiness ;
@@ -60,78 +64,85 @@ trips:FoodEstablishmentShape a sh:NodeShape ; sh:targetClass schema:FoodEstablis
  sh:property [ sh:path schema:address ; sh:name "address" ; sh:datatype xsd:string ; sh:maxCount 1 ] .
 trips:EventShape a sh:NodeShape ; sh:targetClass schema:Event ;
  sh:property [ sh:path schema:name ; sh:name "title" ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
- sh:property [ sh:path schema:startDate ; sh:name "start" ; sh:datatype xsd:dateTime ; sh:maxCount 1 ] ;
+ sh:property [ sh:path schema:startDate ; sh:name "start" ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
  sh:property [ sh:path schema:location ; sh:name "location" ; sh:nodeKind sh:IRI ; sh:maxCount 1 ] .
 trips:CarShape a sh:NodeShape ; sh:targetClass schema:Car ;
  sh:property [ sh:path schema:name ; sh:name "title" ; sh:datatype xsd:string ; sh:maxCount 1 ] .
 trips:FlightReservationShape a sh:NodeShape ; sh:targetClass schema:FlightReservation ;
+ sh:property [ sh:path schema:name ; sh:name "title" ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
  sh:property [ sh:path schema:reservationNumber ; sh:name "reservationNumber" ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
- sh:property [ sh:path schema:reservationStatus ; sh:name "status" ; sh:nodeKind sh:IRI ; sh:maxCount 1 ] ;
+ sh:property [ sh:path schema:reservationStatus ; sh:name "status" ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
  sh:property [ sh:path schema:provider ; sh:name "provider" ; sh:nodeKind sh:IRI ; sh:maxCount 1 ] ;
  sh:property [ sh:path schema:underName ; sh:name "underName" ; sh:nodeKind sh:IRI ; sh:maxCount 1 ] ;
  sh:property [ sh:path schema:dateModified ; sh:name "modified" ; sh:datatype xsd:dateTime ; sh:maxCount 1 ] ;
  sh:property [ sh:path prov:wasDerivedFrom ; sh:name "source" ; sh:nodeKind sh:IRI ; sh:maxCount 1 ] ;
- sh:property [ sh:path trips:trust ; sh:name "trust" ; sh:datatype xsd:string ; sh:in ( "verified" "unverified" ) ; sh:maxCount 1 ] ;
+ sh:property [ sh:path fedcon:emailMarkupTrust ; sh:name "trust" ; sh:datatype xsd:string ; sh:in ( "verified" "unverified" ) ; sh:maxCount 1 ] ;
  sh:property [ sh:path schema:reservationFor ; sh:name "booking" ; sh:nodeKind sh:IRI ; sh:maxCount 1 ] .
 trips:TrainReservationShape a sh:NodeShape ; sh:targetClass schema:TrainReservation ;
+ sh:property [ sh:path schema:name ; sh:name "title" ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
  sh:property [ sh:path schema:reservationNumber ; sh:name "reservationNumber" ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
- sh:property [ sh:path schema:reservationStatus ; sh:name "status" ; sh:nodeKind sh:IRI ; sh:maxCount 1 ] ;
+ sh:property [ sh:path schema:reservationStatus ; sh:name "status" ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
  sh:property [ sh:path schema:provider ; sh:name "provider" ; sh:nodeKind sh:IRI ; sh:maxCount 1 ] ;
  sh:property [ sh:path schema:underName ; sh:name "underName" ; sh:nodeKind sh:IRI ; sh:maxCount 1 ] ;
  sh:property [ sh:path schema:dateModified ; sh:name "modified" ; sh:datatype xsd:dateTime ; sh:maxCount 1 ] ;
  sh:property [ sh:path prov:wasDerivedFrom ; sh:name "source" ; sh:nodeKind sh:IRI ; sh:maxCount 1 ] ;
- sh:property [ sh:path trips:trust ; sh:name "trust" ; sh:datatype xsd:string ; sh:in ( "verified" "unverified" ) ; sh:maxCount 1 ] ;
+ sh:property [ sh:path fedcon:emailMarkupTrust ; sh:name "trust" ; sh:datatype xsd:string ; sh:in ( "verified" "unverified" ) ; sh:maxCount 1 ] ;
  sh:property [ sh:path schema:reservationFor ; sh:name "booking" ; sh:nodeKind sh:IRI ; sh:maxCount 1 ] .
 trips:BusReservationShape a sh:NodeShape ; sh:targetClass schema:BusReservation ;
+ sh:property [ sh:path schema:name ; sh:name "title" ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
  sh:property [ sh:path schema:reservationNumber ; sh:name "reservationNumber" ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
- sh:property [ sh:path schema:reservationStatus ; sh:name "status" ; sh:nodeKind sh:IRI ; sh:maxCount 1 ] ;
+ sh:property [ sh:path schema:reservationStatus ; sh:name "status" ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
  sh:property [ sh:path schema:provider ; sh:name "provider" ; sh:nodeKind sh:IRI ; sh:maxCount 1 ] ;
  sh:property [ sh:path schema:underName ; sh:name "underName" ; sh:nodeKind sh:IRI ; sh:maxCount 1 ] ;
  sh:property [ sh:path schema:dateModified ; sh:name "modified" ; sh:datatype xsd:dateTime ; sh:maxCount 1 ] ;
  sh:property [ sh:path prov:wasDerivedFrom ; sh:name "source" ; sh:nodeKind sh:IRI ; sh:maxCount 1 ] ;
- sh:property [ sh:path trips:trust ; sh:name "trust" ; sh:datatype xsd:string ; sh:in ( "verified" "unverified" ) ; sh:maxCount 1 ] ;
+ sh:property [ sh:path fedcon:emailMarkupTrust ; sh:name "trust" ; sh:datatype xsd:string ; sh:in ( "verified" "unverified" ) ; sh:maxCount 1 ] ;
  sh:property [ sh:path schema:reservationFor ; sh:name "booking" ; sh:nodeKind sh:IRI ; sh:maxCount 1 ] .
 trips:LodgingReservationShape a sh:NodeShape ; sh:targetClass schema:LodgingReservation ;
+ sh:property [ sh:path schema:name ; sh:name "title" ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
  sh:property [ sh:path schema:reservationNumber ; sh:name "reservationNumber" ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
- sh:property [ sh:path schema:reservationStatus ; sh:name "status" ; sh:nodeKind sh:IRI ; sh:maxCount 1 ] ;
+ sh:property [ sh:path schema:reservationStatus ; sh:name "status" ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
  sh:property [ sh:path schema:provider ; sh:name "provider" ; sh:nodeKind sh:IRI ; sh:maxCount 1 ] ;
  sh:property [ sh:path schema:underName ; sh:name "underName" ; sh:nodeKind sh:IRI ; sh:maxCount 1 ] ;
  sh:property [ sh:path schema:dateModified ; sh:name "modified" ; sh:datatype xsd:dateTime ; sh:maxCount 1 ] ;
  sh:property [ sh:path prov:wasDerivedFrom ; sh:name "source" ; sh:nodeKind sh:IRI ; sh:maxCount 1 ] ;
- sh:property [ sh:path trips:trust ; sh:name "trust" ; sh:datatype xsd:string ; sh:in ( "verified" "unverified" ) ; sh:maxCount 1 ] ;
+ sh:property [ sh:path fedcon:emailMarkupTrust ; sh:name "trust" ; sh:datatype xsd:string ; sh:in ( "verified" "unverified" ) ; sh:maxCount 1 ] ;
  sh:property [ sh:path schema:reservationFor ; sh:name "booking" ; sh:nodeKind sh:IRI ; sh:maxCount 1 ] ;
- sh:property [ sh:path schema:checkinTime ; sh:name "start" ; sh:datatype xsd:dateTime ; sh:maxCount 1 ] ;
- sh:property [ sh:path schema:checkoutTime ; sh:name "end" ; sh:datatype xsd:dateTime ; sh:maxCount 1 ] .
+ sh:property [ sh:path schema:checkinTime ; sh:name "start" ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
+ sh:property [ sh:path schema:checkoutTime ; sh:name "end" ; sh:datatype xsd:string ; sh:maxCount 1 ] .
 trips:FoodEstablishmentReservationShape a sh:NodeShape ; sh:targetClass schema:FoodEstablishmentReservation ;
+ sh:property [ sh:path schema:name ; sh:name "title" ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
  sh:property [ sh:path schema:reservationNumber ; sh:name "reservationNumber" ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
- sh:property [ sh:path schema:reservationStatus ; sh:name "status" ; sh:nodeKind sh:IRI ; sh:maxCount 1 ] ;
+ sh:property [ sh:path schema:reservationStatus ; sh:name "status" ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
  sh:property [ sh:path schema:provider ; sh:name "provider" ; sh:nodeKind sh:IRI ; sh:maxCount 1 ] ;
  sh:property [ sh:path schema:underName ; sh:name "underName" ; sh:nodeKind sh:IRI ; sh:maxCount 1 ] ;
  sh:property [ sh:path schema:dateModified ; sh:name "modified" ; sh:datatype xsd:dateTime ; sh:maxCount 1 ] ;
  sh:property [ sh:path prov:wasDerivedFrom ; sh:name "source" ; sh:nodeKind sh:IRI ; sh:maxCount 1 ] ;
- sh:property [ sh:path trips:trust ; sh:name "trust" ; sh:datatype xsd:string ; sh:in ( "verified" "unverified" ) ; sh:maxCount 1 ] ;
+ sh:property [ sh:path fedcon:emailMarkupTrust ; sh:name "trust" ; sh:datatype xsd:string ; sh:in ( "verified" "unverified" ) ; sh:maxCount 1 ] ;
  sh:property [ sh:path schema:reservationFor ; sh:name "booking" ; sh:nodeKind sh:IRI ; sh:maxCount 1 ] ;
- sh:property [ sh:path schema:startTime ; sh:name "start" ; sh:datatype xsd:dateTime ; sh:maxCount 1 ] ;
- sh:property [ sh:path schema:endTime ; sh:name "end" ; sh:datatype xsd:dateTime ; sh:maxCount 1 ] .
+ sh:property [ sh:path schema:startTime ; sh:name "start" ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
+ sh:property [ sh:path schema:endTime ; sh:name "end" ; sh:datatype xsd:string ; sh:maxCount 1 ] .
 trips:EventReservationShape a sh:NodeShape ; sh:targetClass schema:EventReservation ;
+ sh:property [ sh:path schema:name ; sh:name "title" ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
  sh:property [ sh:path schema:reservationNumber ; sh:name "reservationNumber" ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
- sh:property [ sh:path schema:reservationStatus ; sh:name "status" ; sh:nodeKind sh:IRI ; sh:maxCount 1 ] ;
+ sh:property [ sh:path schema:reservationStatus ; sh:name "status" ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
  sh:property [ sh:path schema:provider ; sh:name "provider" ; sh:nodeKind sh:IRI ; sh:maxCount 1 ] ;
  sh:property [ sh:path schema:underName ; sh:name "underName" ; sh:nodeKind sh:IRI ; sh:maxCount 1 ] ;
  sh:property [ sh:path schema:dateModified ; sh:name "modified" ; sh:datatype xsd:dateTime ; sh:maxCount 1 ] ;
  sh:property [ sh:path prov:wasDerivedFrom ; sh:name "source" ; sh:nodeKind sh:IRI ; sh:maxCount 1 ] ;
- sh:property [ sh:path trips:trust ; sh:name "trust" ; sh:datatype xsd:string ; sh:in ( "verified" "unverified" ) ; sh:maxCount 1 ] ;
+ sh:property [ sh:path fedcon:emailMarkupTrust ; sh:name "trust" ; sh:datatype xsd:string ; sh:in ( "verified" "unverified" ) ; sh:maxCount 1 ] ;
  sh:property [ sh:path schema:reservationFor ; sh:name "booking" ; sh:nodeKind sh:IRI ; sh:maxCount 1 ] .
 trips:RentalCarReservationShape a sh:NodeShape ; sh:targetClass schema:RentalCarReservation ;
+ sh:property [ sh:path schema:name ; sh:name "title" ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
  sh:property [ sh:path schema:reservationNumber ; sh:name "reservationNumber" ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
- sh:property [ sh:path schema:reservationStatus ; sh:name "status" ; sh:nodeKind sh:IRI ; sh:maxCount 1 ] ;
+ sh:property [ sh:path schema:reservationStatus ; sh:name "status" ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
  sh:property [ sh:path schema:provider ; sh:name "provider" ; sh:nodeKind sh:IRI ; sh:maxCount 1 ] ;
  sh:property [ sh:path schema:underName ; sh:name "underName" ; sh:nodeKind sh:IRI ; sh:maxCount 1 ] ;
  sh:property [ sh:path schema:dateModified ; sh:name "modified" ; sh:datatype xsd:dateTime ; sh:maxCount 1 ] ;
  sh:property [ sh:path prov:wasDerivedFrom ; sh:name "source" ; sh:nodeKind sh:IRI ; sh:maxCount 1 ] ;
- sh:property [ sh:path trips:trust ; sh:name "trust" ; sh:datatype xsd:string ; sh:in ( "verified" "unverified" ) ; sh:maxCount 1 ] ;
+ sh:property [ sh:path fedcon:emailMarkupTrust ; sh:name "trust" ; sh:datatype xsd:string ; sh:in ( "verified" "unverified" ) ; sh:maxCount 1 ] ;
  sh:property [ sh:path schema:reservationFor ; sh:name "booking" ; sh:nodeKind sh:IRI ; sh:maxCount 1 ] ;
- sh:property [ sh:path schema:pickupTime ; sh:name "start" ; sh:datatype xsd:dateTime ; sh:maxCount 1 ] ;
- sh:property [ sh:path schema:dropoffTime ; sh:name "end" ; sh:datatype xsd:dateTime ; sh:maxCount 1 ] ;
+ sh:property [ sh:path schema:pickupTime ; sh:name "start" ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
+ sh:property [ sh:path schema:dropoffTime ; sh:name "end" ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
  sh:property [ sh:path schema:pickupLocation ; sh:name "from" ; sh:nodeKind sh:IRI ; sh:maxCount 1 ] ;
  sh:property [ sh:path schema:dropoffLocation ; sh:name "to" ; sh:nodeKind sh:IRI ; sh:maxCount 1 ] .
