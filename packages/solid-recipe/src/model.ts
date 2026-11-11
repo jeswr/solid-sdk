@@ -45,6 +45,16 @@ export function decodeOrdered(lines: readonly string[]): string[] {
     .map((line) => line.replace(/^\d{6}:/, ""));
 }
 
+/** Trust private ordering only while it agrees with schema.org-only writers. */
+function reconcileOrdered(standard: string[] = [], ordered: string[] = []): string[] {
+  const decoded = decodeOrdered(ordered);
+  const standardValues = new Set(standard);
+  return new Set(decoded).size === standardValues.size &&
+    decoded.every((line) => standardValues.has(line))
+    ? decoded
+    : standard;
+}
+
 function toGenerated(data: RecipeData): GeneratedRecipe {
   return {
     ...data,
@@ -87,12 +97,8 @@ export async function parseRecipe(
     ? {
         ...plain,
         name: data.name,
-        ingredients: orderedIngredients?.length
-          ? decodeOrdered(orderedIngredients)
-          : (data.ingredients ?? []),
-        instructions: orderedInstructions?.length
-          ? decodeOrdered(orderedInstructions)
-          : (data.instructions ?? []),
+        ingredients: reconcileOrdered(data.ingredients, orderedIngredients),
+        instructions: reconcileOrdered(data.instructions, orderedInstructions),
       }
     : undefined;
 }

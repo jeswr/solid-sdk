@@ -48,8 +48,18 @@ describe.each(["solid", "lws"] as const)("partial recipe listings on %s", (proto
     expect(write).not.toHaveBeenCalled();
   });
 
+  it("silently ignores a recipe deleted between listing and reading", async () => {
+    const { store, storage, good } = await setup(protocol);
+    const deleted = await store.create({ ...data, name: "Deleted in another tab" });
+    const read = storage.read.bind(storage);
+    vi.spyOn(storage, "read").mockImplementation(async (url, options) => {
+      if (url === deleted.url) await storage.delete(url, { ifMatch: deleted.etag as string });
+      return read(url, options);
+    });
+    expect(await store.list()).toEqual({ recipes: [good], plans: [], skipped: [] });
+  });
+
   it.each([
-    "not-found",
     "not-rdf",
     "invalid-response",
     "unsupported",

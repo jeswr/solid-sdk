@@ -5,6 +5,7 @@ import {
   decodeOrdered,
   durationFromMinutes,
   durationMinutes,
+  encodeOrdered,
   extractRecipeJsonLd,
   fromSchemaOrgJsonLd,
   normalizeDuration,
@@ -41,6 +42,46 @@ describe("clean schema.org values and private ordering", () => {
     expect(await parseRecipe(url, ttl)).toMatchObject({
       ingredients: ["123456: hi", "000001:2 eggs", "Salt"],
       instructions: ["123456: wait", "Stir"],
+    });
+  });
+
+  describe.each([
+    ["ingredients", "orderedIngredients"],
+    ["instructions", "orderedInstructions"],
+  ] as const)("reconciling %s with %s", (standard, ordered) => {
+    const privateLines = ["Second", "First", "Second"];
+    it.each([
+      ["adds an item", ["First", "Second", "Added"]],
+      ["removes an item", ["First"]],
+      ["removes every item", []],
+      ["replaces an item", ["First", "Replacement"]],
+    ])("keeps external schema.org edits when a writer %s", async (_change, values) => {
+      const ttl = await entities.Recipe.serialize(url, {
+        name: "External soup",
+        [standard]: values,
+        [ordered]: encodeOrdered(privateLines),
+      });
+      const parsed = await parseRecipe(url, ttl);
+      expect(parsed?.[standard]).toEqual(values);
+      if (!parsed) throw new Error("Expected a recipe");
+
+      const saved = await serializeRecipe(url, { ...parsed, favourite: true });
+      const raw = await entities.Recipe.parseDocument(url, saved);
+      expect(raw?.[standard] ?? []).toEqual(values);
+      expect(raw?.[ordered] ?? []).toEqual(encodeOrdered(values));
+      expect(await parseRecipe(url, saved)).toMatchObject({
+        [standard]: values,
+        favourite: true,
+      });
+    });
+
+    it("preserves private order and duplicates when both sets agree", async () => {
+      const ttl = await entities.Recipe.serialize(url, {
+        name: "Soup",
+        [standard]: ["First", "Second"],
+        [ordered]: encodeOrdered(privateLines),
+      });
+      expect((await parseRecipe(url, ttl))?.[standard]).toEqual(privateLines);
     });
   });
 

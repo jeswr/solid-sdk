@@ -34,10 +34,14 @@ RDF literal sets have no intrinsic order and collapse duplicates. Standard
 `schema:recipeIngredient` and `schema:recipeInstructions` now carry clean text,
 with private `recipe:orderedIngredient` and `recipe:orderedInstruction` copies
 encoding a six-digit position and a colon (`000000:2 cups flour`). Only the private
-copies are decoded and sorted using a consistent lexical total order. When a
-private copy is absent or empty, the standard values are returned verbatim in
-store iteration order; even `123456: hi` is external text, never an encoded line.
-The private copies preserve duplicates; standard RDF sets collapse identical text.
+copies are decoded and sorted using a consistent lexical total order. A private
+copy is used only when its decoded values, as a set, equal the standard values.
+Otherwise, including when the private copy is absent or empty, the standard values
+are returned verbatim in store iteration order; even `123456: hi` is external text,
+never an encoded line. This preserves additions and removals by schema.org-only
+writers, and the next save rebuilds the private copy from those standard values.
+The private copies preserve order and duplicates when both sets agree. Readers
+which only know schema.org see instructions unordered with duplicates collapsed.
 The old first-cut standard position prefixes are treated as plain external text;
 there is no ambiguous auto-migration. Tests: `test/compatibility.test.ts`.
 
@@ -45,6 +49,8 @@ A generation probe for repeated `schema:HowToStep` nodes with `schema:text` and
 integer `schema:position` was rejected: a composite link must have `sh:maxCount 1`.
 The fallback keeps both standard predicates clean without changing the generator
 or runtime. Ordered RDF lists are also outside the current generated surface.
+The package will move to ordered composites (`schema:HowToStep` with
+`schema:position`) when the generator supports them.
 
 Cooking duration parsing now matches the runtime's XSD lexical rules: days, hours
 and minutes are integers; only seconds may be fractional (including `.5S` and
@@ -58,7 +64,8 @@ it displays for `PT45S`. Pins: `test/compatibility.test.ts`, Suite `test/recipes
 
 Listings return `{ recipes, plans, skipped }`. Malformed, non-RDF, unrelated or
 individually unreadable resources are collected in `skipped`; access/transport
-failures still reject the listing. Read records retain nullable or weak ETags;
+failures still reject the listing. Resources deleted between listing and reading
+are ignored silently. Read records retain nullable or weak ETags;
 only writes require strong validators. Pins: `test/store-compatibility.test.ts`.
 
 `recipe:MealPlan` uses `schema:name` for the Monday ISO date identifying the week,

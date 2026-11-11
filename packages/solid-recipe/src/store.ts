@@ -99,9 +99,10 @@ export function recipeStore(
             try {
               current = await read(entry.url);
             } catch (error) {
+              if (missing(error)) continue;
               if (
                 error instanceof StorageError &&
-                ["not-found", "not-rdf", "invalid-response", "unsupported"].includes(error.code)
+                ["not-rdf", "invalid-response", "unsupported"].includes(error.code)
               ) {
                 skipped.push({ url: entry.url, reason: "unreadable" });
                 continue;
