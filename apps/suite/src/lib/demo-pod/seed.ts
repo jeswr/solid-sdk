@@ -15,6 +15,7 @@ import { withDemoAgentKey } from "../../apps/agent/lib/demo-mandate";
 import { buildAgentSeed, demoApprovalVerificationMethod } from "../../apps/agent/lib/seed";
 import { HILLS_PNG, REPORT_PDF, SUNSET_PNG } from "./binaries";
 import type { DemoSeedFile } from "./pod";
+import { seedAssistants } from "./seed-assistants";
 import { seedContacts } from "./seed-contacts";
 import { buildHomeSeed } from "./seed-home";
 import { seedPermissions } from "./seed-permissions";
@@ -131,6 +132,7 @@ export async function buildDemoSeed(
     "",
   ].join("\n");
   const files: DemoSeedFile[] = [
+    ...(await seedAssistants(now)),
     ...(await buildHomeSeed(now)),
     ...(await seedPermissions(DEMO_ROOT, DEMO_WEBID, now)),
     ...(await buildAgentSeed(now)),

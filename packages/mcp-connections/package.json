@@ -1,0 +1,62 @@
+{
+  "$comment": "AUTHORED-BY Codex GPT-6.1-Sol",
+  "name": "@jeswr/mcp-connections",
+  "version": "0.1.0",
+  "securityCritical": true,
+  "description": "Browser-safe MCP pod layout and bounded personal-data audit projections.",
+  "type": "module",
+  "license": "MIT",
+  "author": "Jesse Wright <63333554+jeswr@users.noreply.github.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jeswr/solid-sdk.git",
+    "directory": "packages/mcp-connections"
+  },
+  "homepage": "https://github.com/jeswr/solid-sdk/tree/main/packages/mcp-connections#readme",
+  "bugs": {
+    "url": "https://github.com/jeswr/solid-sdk/issues"
+  },
+  "keywords": [
+    "solid",
+    "mcp",
+    "audit"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "SKILL.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "lint": "biome check src test vitest.config.ts",
+    "lint:fix": "biome check --write src test vitest.config.ts",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.test.json",
+    "test": "vitest run --coverage",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@jeswr/fetch-rdf": "workspace:*",
+    "@jeswr/ldp-container": "workspace:*",
+    "@rdfjs/wrapper": "0.34.0",
+    "n3": "2.0.3"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.1",
+    "@types/n3": "^1.26.1",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.9",
+    "@vitest/coverage-v8": "4.1.10"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "private": true
+}

@@ -29,6 +29,7 @@
     "@jeswr/guarded-fetch",
     "@jeswr/ldp-container",
     "@jeswr/matrix-chat-to-pod",
+    "@jeswr/mcp-connections",
     "n8n-nodes-solid",
     "@jeswr/openclaw-memory-solid",
     "@jeswr/personal-agent",

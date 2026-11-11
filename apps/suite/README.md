@@ -3,6 +3,20 @@
 
 The Next.js application is `@jeswr/app-suite`. Use Node 24 and the root pnpm workspace.
 
+## Assistants
+
+Settings > Assistants offers Claude/ChatGPT OAuth setup and a read-only personal-data audit view.
+Set `NEXT_PUBLIC_SUITE_MCP_URL` to the canonical HTTPS assistant endpoint with path exactly `/mcp`
+and no userinfo, query or fragment; unset/invalid runtime values show setup fallback text.
+The page reads the owner's monthly `private/pkg/audit/YYYY-MM.ttl` files through
+`@jeswr/mcp-connections`, showing at most 100 newest metadata rows from the newest three files.
+Personal values and resource URLs are never displayed. Unreadable/malformed or oversized data
+shows an error with Retry; a missing audit container is empty. Offline views ask to reconnect,
+and account changes discard the previous account's rows. Demo pods include metadata examples.
+S1 includes no connection records or revoke actions. For a single-user server, revoke access by
+rotating `MCP_ACCESS_TOKEN`; such servers write no connection records.
+See `src/shell/settings/assistants/SKILL.md` for maintenance and test rules.
+
 ## Pilot feedback
 
 `/feedback` is available without signing in. It offers a guided interview and a quick note,
