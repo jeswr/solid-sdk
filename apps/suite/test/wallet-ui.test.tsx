@@ -1,7 +1,8 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 // @vitest-environment jsdom
-import type { WalletRecord } from "@jeswr/solid-wallet";
+import { type WalletRecord, WalletUnsupportedError } from "@jeswr/solid-wallet";
 import { act, useSyncExternalStore } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
@@ -111,4 +112,36 @@ it("shows skipped record warnings without hiding valid cards", async () => {
   await act(async () => root.render(<WalletHome />));
   expect(container.textContent).toContain("1 unreadable document skipped");
   expect(container.querySelector("article")?.textContent).toContain(item.name);
+});
+it("labels a credential's unverified expiry as a claim in Expiring soon", async () => {
+  const soon = new Date(Date.now() + 10 * 86_400_000);
+  const day = soon.toISOString().slice(0, 10);
+  vi.mocked(state.repository.list).mockResolvedValueOnce([
+    { ...item, expires: soon },
+    {
+      ...item,
+      url: "https://pod.example/wallet/two.ttl",
+      name: "Passport",
+      kind: "passport",
+      credential: undefined,
+      expires: soon,
+    },
+  ]);
+  await state.refresh();
+  await act(async () => root.render(<WalletHome />));
+  const buttons = [
+    ...(container.querySelector('[aria-label="Expiring soon"]')?.querySelectorAll("button") ?? []),
+  ].map((button) => button.textContent);
+  expect(buttons).toEqual(
+    expect.arrayContaining([`${item.name} · claims to expire ${day}`, `Passport · ${day}`]),
+  );
+  expect(buttons).toHaveLength(2);
+});
+it("shows an unsupported pod distinctly when the list is refused", async () => {
+  vi.mocked(state.repository.list).mockRejectedValueOnce(new WalletUnsupportedError());
+  await state.refresh();
+  await act(async () => root.render(<WalletHome />));
+  const alert = container.querySelector('[role="alert"]')?.textContent ?? "";
+  expect(alert).toContain("This pod's access setup isn't supported by Wallet yet.");
+  expect(alert).not.toContain("Check Wallet permissions");
 });

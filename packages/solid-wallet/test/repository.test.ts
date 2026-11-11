@@ -1,11 +1,17 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 
 import type { TypeIndex } from "@jeswr/pod-type-index";
 import { type Entry, StorageError } from "@jeswr/storage-client";
 import { createMemoryStorage } from "@jeswr/storage-client/memory";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { createWalletRepository, limitedText, WalletPrivacyError } from "../src/index.js";
+import {
+  createWalletRepository,
+  limitedText,
+  WalletPrivacyError,
+  WalletUnsupportedError,
+} from "../src/index.js";
 
 const owner = "https://pod.example/profile#me";
 const permissions = vi.hoisted(() => ({ read: vi.fn(), write: vi.fn() }));
@@ -49,6 +55,62 @@ it("refuses shared, unknown and unsupported access before records are written", 
   permissions.write.mockResolvedValue({ failed: [{}] });
   await expect(other.repository.initialise()).rejects.toBeInstanceOf(WalletPrivacyError);
   await expect(fixture("lws").repository.initialise()).rejects.toThrow(/Solid storage/);
+});
+const refusedFor = (...reasons: string[]) => ({
+  private: false,
+  reasons: reasons.map((reason) => ({ subject: "unknown", modes: [], reason })),
+});
+it.each([
+  "unsupported-model",
+  "unrepresentable",
+  "not-storage-root",
+])("reports %s as an unsupported pod before provisioning any folder", async (reason) => {
+  const { repository, storage, typeIndex } = fixture();
+  const create = vi.spyOn(storage, "create");
+  permissions.read.mockResolvedValue(refusedFor(reason));
+  const failure = repository.initialise();
+  await expect(failure).rejects.toBeInstanceOf(WalletUnsupportedError);
+  await expect(failure).rejects.toThrow("This pod's access setup isn't supported by Wallet yet.");
+  await expect(failure).rejects.not.toBeInstanceOf(WalletPrivacyError);
+  expect(permissions.read).toHaveBeenCalledOnce();
+  expect(permissions.read).toHaveBeenCalledWith(
+    expect.objectContaining({ url: storage.root, ownerWebId: owner }),
+  );
+  expect(create).not.toHaveBeenCalled();
+  expect(permissions.write).not.toHaveBeenCalled();
+  expect(typeIndex.register).not.toHaveBeenCalled();
+  // An existing wallet that later reports the same reason is not called shared either.
+  await expect(repository.assertPrivate()).rejects.toBeInstanceOf(WalletUnsupportedError);
+  await expect(fixture("lws").repository.initialise()).rejects.toBeInstanceOf(
+    WalletUnsupportedError,
+  );
+});
+it("keeps the shared-storage error for real sharing, unknown and mixed refusals", async () => {
+  for (const reasons of [["non-owner"], ["unknown"], ["non-owner", "unrepresentable"], []]) {
+    const { repository } = fixture();
+    permissions.read.mockResolvedValue(refusedFor(...reasons));
+    await expect(repository.assertPrivate()).rejects.toBeInstanceOf(WalletPrivacyError);
+    // Sharing on the storage root itself does not block provisioning the private wallet.
+    permissions.read.mockImplementation(async ({ url }: { url: string }) =>
+      url === "https://pod.example/" ? refusedFor(...reasons) : { private: true },
+    );
+    await repository.initialise();
+  }
+});
+it("skips the root support check on WAC, where the wallet folder's own ACL governs", async () => {
+  const memory = createMemoryStorage({ root: "https://pod.example/" });
+  const storage = {
+    ...memory,
+    features: {
+      ...memory.features,
+      accessControl: { state: "available", detail: { model: "wac" }, evidence: "fixture" },
+    },
+  } as typeof memory;
+  const typeIndex = { register: vi.fn(async () => undefined) } as unknown as TypeIndex;
+  await createWalletRepository({ storage, fetch: vi.fn(), webId: owner, typeIndex }).initialise();
+  expect(permissions.read).not.toHaveBeenCalledWith(
+    expect.objectContaining({ url: "https://pod.example/" }),
+  );
 });
 it("propagates folder and access transport errors", async () => {
   const { storage, repository } = fixture();
@@ -175,9 +237,11 @@ it("checks linked preferences and index access during real private registration"
   );
   await repository.initialise();
   const write = vi.spyOn(storage, "writeRdf");
-  permissions.read.mockImplementation(async ({ url }: { url: string }) => ({
-    private: !url.endsWith("privateTypeIndex.ttl"),
-  }));
+  permissions.read.mockImplementation(async ({ url }: { url: string }) =>
+    url.endsWith("privateTypeIndex.ttl")
+      ? { private: false, reasons: [{ subject: "public", modes: ["read"], reason: "non-owner" }] }
+      : { private: true },
+  );
   await expect(repository.initialise()).rejects.toBeInstanceOf(WalletPrivacyError);
   expect(write).not.toHaveBeenCalled();
 });
@@ -232,6 +296,13 @@ it("reads bounded original credential bytes and permits an empty supported previ
   const source = `\n${JSON.stringify({ ...credentialToJsonLd(vc), proof: vc.proof })}\n`;
   const url = await repository.storeCredential(source);
   expect(await repository.credential(url)).toBe(source);
+  const named = await repository.storeCredential(source, "demo-credential.json");
+  expect(named).toBe(new URL("demo-credential.json", repository.credentials).href);
+  await expect(repository.storeCredential(source, "demo-credential.json")).rejects.toMatchObject({
+    code: "conflict",
+  });
+  for (const name of ["../escape.json", "demo.ttl", "a/b.json", ""])
+    await expect(repository.storeCredential(source, name)).rejects.toThrow(/ending in \.json/);
   const preview = await repository.upload(new Blob([], { type: "image/png" }));
   const actualRead = storage.read.bind(storage);
   vi.spyOn(storage, "read").mockImplementation(async (...args) => ({

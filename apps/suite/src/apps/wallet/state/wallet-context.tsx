@@ -1,6 +1,8 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Claude Opus 5.5
 "use client";
-import { toast } from "@jeswr/suite-ui";
+import { WalletUnsupportedError } from "@jeswr/solid-wallet";
+import { ErrorState, LoadingSkeleton, toast } from "@jeswr/suite-ui";
 import {
   createContext,
   type ReactNode,
@@ -9,7 +11,9 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
+import { ExtensionSessionError } from "@/lib/session/extension-pod-session";
 import type { PodSession } from "@/lib/session/pod-session";
+import { WalletUnsupported } from "../components/wallet-unsupported";
 import { ensureWalletSample } from "../demo/sample";
 import { openWallet } from "../lib/data/client";
 import { createWalletState, type WalletState } from "./wallet-state";
@@ -37,9 +41,11 @@ export function WalletProvider({
       if (!live) return;
       await repository.initialise();
       if (!live) return;
-      controller = createWalletState(repository, () =>
+      controller = createWalletState(repository, (error, failure) =>
         toast.error(
-          "Couldn't save to your pod. Your change was rolled back. Check your connection and permissions, then try again.",
+          failure && (failure.sessionEnded || staleSession(error))
+            ? `Delete not completed. "${failure.item.name}" may still be in your pod. Open Wallet with that account to check, then delete it again if needed.`
+            : "Couldn't save to your pod. Your change was rolled back. Check your connection and permissions, then try again.",
         ),
       );
       setResult({ state: controller });
@@ -63,9 +69,18 @@ export function WalletProvider({
   return <WalletContext value={{ session, state: result.state }}>{children}</WalletContext>;
 }
 
-import { ErrorState, LoadingSkeleton } from "@jeswr/suite-ui";
+/** An extension account switch rejects with "stale", possibly wrapped by storage-client. */
+function staleSession(error: unknown): boolean {
+  let current = error;
+  for (let depth = 0; depth < 8 && current instanceof Error; depth++) {
+    if (current instanceof ExtensionSessionError && current.code === "stale") return true;
+    current = current.cause;
+  }
+  return false;
+}
 
 function WalletBoot({ error, retry }: { error?: unknown; retry: () => void }) {
+  if (error instanceof WalletUnsupportedError) return <WalletUnsupported />;
   return error ? (
     <ErrorState error="unreachable" actions={{ retry }}>
       <p>

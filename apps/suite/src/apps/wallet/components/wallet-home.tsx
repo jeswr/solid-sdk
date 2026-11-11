@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 "use client";
 import {
   expiryStatus,
@@ -9,6 +10,7 @@ import {
   KIND_LABELS,
   sortItems,
   type WalletRecord,
+  WalletUnsupportedError,
 } from "@jeswr/solid-wallet";
 import {
   Button,
@@ -26,6 +28,10 @@ import { useConnectionState } from "@/shell/sync/connection-state";
 import { useWallet } from "../state/wallet-context";
 import { ItemDetail } from "./item-detail";
 import { ItemForm } from "./item-form";
+import { WalletUnsupported } from "./wallet-unsupported";
+
+/** A credential's expiry is its own unverified claim until a detail view checks it. */
+const claimed = (item: WalletRecord) => !!item.credential || item.kind === "verifiable-credential";
 export function WalletHome() {
   const { state, session, snapshot } = useWallet();
   const connection = useConnectionState();
@@ -125,7 +131,8 @@ export function WalletHome() {
           <div className="wallet-expiry-items">
             {expiring.map((item) => (
               <Button key={item.url} variant="outline" onClick={() => setSelected(item.url)}>
-                {item.name} · {item.expires?.toISOString().slice(0, 10)}
+                {item.name} · {claimed(item) ? "claims to expire " : ""}
+                {item.expires?.toISOString().slice(0, 10)}
               </Button>
             ))}
           </div>
@@ -161,6 +168,8 @@ export function WalletHome() {
       </div>
       {snapshot.phase === "loading" ? (
         <LoadingSkeleton preset="grid" label="Loading wallet documents" />
+      ) : snapshot.phase === "error" && snapshot.error instanceof WalletUnsupportedError ? (
+        <WalletUnsupported />
       ) : snapshot.phase === "error" ? (
         <ErrorState
           error="unreachable"
@@ -252,7 +261,7 @@ export function WalletHome() {
                       <p>{item.identifier ? `•••• ${item.identifier.slice(-4)}` : ""}</p>
                       <div className="wallet-card-bottom">
                         <span data-expiry={status}>
-                          {item.credential || item.kind === "verifiable-credential"
+                          {claimed(item)
                             ? item.expires
                               ? `Expires ${item.expires.toISOString().slice(0, 10)}`
                               : "No expiry date"
@@ -267,7 +276,7 @@ export function WalletHome() {
                         <span>
                           {busy
                             ? "Saving…"
-                            : item.credential || item.kind === "verifiable-credential"
+                            : claimed(item)
                               ? "Unverified claims"
                               : item.expires?.toISOString().slice(0, 10)}
                         </span>

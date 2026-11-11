@@ -1,7 +1,8 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 import { assertWithinPodScope } from "@jeswr/guarded-fetch";
-import { checkOwnerOnly, type OwnerOnlyOptions } from "@jeswr/pod-access";
+import { checkOwnerOnly, type OwnerOnlyOptions, type OwnerOnlyResult } from "@jeswr/pod-access";
 import { setGrants } from "@jeswr/pod-access/roles";
 import { createTypeIndex, type TypeIndex } from "@jeswr/pod-type-index";
 import { type StorageClient, StorageError, type WriteResult } from "@jeswr/storage-client";
@@ -18,6 +19,26 @@ export class WalletPrivacyError extends Error {
     );
     this.name = "WalletPrivacyError";
   }
+}
+/** The pod's access model cannot be checked by Wallet; changing Permissions would not help. */
+export class WalletUnsupportedError extends Error {
+  constructor(message = "This pod's access setup isn't supported by Wallet yet.") {
+    super(message);
+    this.name = "WalletUnsupportedError";
+  }
+}
+const UNSUPPORTED_REASONS: readonly string[] = [
+  "unsupported-model",
+  "unrepresentable",
+  "not-storage-root",
+];
+type Refused = Extract<OwnerOnlyResult, { private: false }>;
+/** Only refusals that are entirely about the access model; any sharing keeps the privacy error. */
+function unsupported(result: Refused): boolean {
+  return (
+    result.reasons.length > 0 &&
+    result.reasons.every((reason) => UNSUPPORTED_REASONS.includes(reason.reason))
+  );
 }
 export async function limitedText(
   body: ReadableStream<Uint8Array> | null,
@@ -95,18 +116,28 @@ export function createWalletRepository(options: {
       profile: webId,
       fetch: transport,
     });
+  function ownerOnly(url: string) {
+    return checkOwnerOnly({
+      storage,
+      url,
+      ownerWebId: webId,
+      ...(options.acpDialect ? { acpDialect: options.acpDialect } : {}),
+    });
+  }
   async function privateAccess(url: string) {
-    if (
-      !(
-        await checkOwnerOnly({
-          storage,
-          url,
-          ownerWebId: webId,
-          ...(options.acpDialect ? { acpDialect: options.acpDialect } : {}),
-        })
-      ).private
-    )
-      throw new WalletPrivacyError();
+    const result = await ownerOnly(url);
+    if (!result.private)
+      throw unsupported(result) ? new WalletUnsupportedError() : new WalletPrivacyError();
+  }
+  // Runs before any folder is provisioned. A WAC wallet folder gets its own ACL, so nothing
+  // above it is consulted. ACP always evaluates up to the storage root, so a model, dialect
+  // or root that checkOwnerOnly cannot represent there would refuse every later check.
+  // Sharing reasons are left to the checks on each provisioned folder.
+  async function assertSupported() {
+    const access = storage.features.accessControl;
+    if (access.state === "available" && access.detail.model === "wac") return;
+    const result = await ownerOnly(storage.root);
+    if (!result.private && unsupported(result)) throw new WalletUnsupportedError();
   }
   async function container(parent: string, name: string): Promise<string> {
     const expected = new URL(`${name}/`, parent).href;
@@ -148,7 +179,10 @@ export function createWalletRepository(options: {
   }
   async function initialise() {
     if (storage.protocol !== "solid")
-      throw new Error("Wallet currently needs Solid storage with readable WAC or ACP permissions");
+      throw new WalletUnsupportedError(
+        "Wallet currently needs Solid storage with readable WAC or ACP permissions",
+      );
+    await assertSupported();
     const actual = await container(storage.root, "wallet");
     if (actual !== base) throw new Error("The pod assigned an unsupported wallet location");
     await privateAccess(base);
@@ -283,12 +317,15 @@ export function createWalletRepository(options: {
       await storage.create(paths.files, file, { name: crypto.randomUUID(), contentType: file.type })
     ).url;
   }
-  async function storeCredential(source: string) {
+  /** A stable `name` makes a seed create-only: a second store fails with a conflict. */
+  async function storeCredential(source: string, name?: string) {
+    if (name !== undefined && !/^[a-zA-Z0-9_-]+\.json$/.test(name))
+      throw new TypeError("Choose a credential filename ending in .json");
     await parseCredential(source);
     await assertPrivate();
     return (
       await storage.create(paths.credentials, source, {
-        name: `${crypto.randomUUID()}.json`,
+        name: name ?? `${crypto.randomUUID()}.json`,
         contentType: "application/ld+json",
       })
     ).url;

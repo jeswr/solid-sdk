@@ -1,11 +1,16 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 import { checkOwnerOnly } from "@jeswr/pod-access";
 import type { TypeIndex } from "@jeswr/pod-type-index";
 import type { StorageClient } from "@jeswr/storage-client";
 import { createMemoryStorage } from "@jeswr/storage-client/memory";
 import { expect, it, vi } from "vitest";
-import { createWalletRepository, WalletPrivacyError } from "../src/index.js";
+import {
+  createWalletRepository,
+  WalletPrivacyError,
+  WalletUnsupportedError,
+} from "../src/index.js";
 
 const owner = "https://pod.example/profile#me";
 async function fixture(selector: string, modes: string, memberDefault = false) {
@@ -134,4 +139,47 @@ it("refuses a non-owner ACP client-scoped policy with a trusted dialect", async 
     }),
   ).rejects.toBeInstanceOf(WalletPrivacyError);
   expect(create).not.toHaveBeenCalled();
+});
+
+it.each([
+  ["not-storage-root", "acp", "css", false],
+  ["unrepresentable", "acp", undefined, true],
+  ["unsupported-model", "none", undefined, true],
+] as const)("reports a %s pod as unsupported before creating any folder", async (reason, model, acpDialect, typed) => {
+  // A sub-root session (an extension grant on a folder) lacks the server's pim:Storage type.
+  const memory = createMemoryStorage({ root: "https://pod.example/alice/" });
+  const storage: StorageClient = {
+    ...memory,
+    features: {
+      ...memory.features,
+      accessControl: { state: "available", detail: { model }, evidence: "fixture" },
+    },
+    head: async (url, options) => {
+      const head = await memory.head(url, options);
+      return typed
+        ? head
+        : { ...head, links: new Map([["acl", [{ target: `${url}.acr`, params: {} }]]]) };
+    },
+  };
+  expect(
+    await checkOwnerOnly({
+      storage,
+      url: storage.root,
+      ownerWebId: owner,
+      ...(acpDialect ? { acpDialect } : {}),
+    }),
+  ).toMatchObject({ private: false, reasons: [{ reason }] });
+  const create = vi.spyOn(storage, "create");
+  const repository = createWalletRepository({
+    storage,
+    webId: owner,
+    fetch: vi.fn(),
+    typeIndex: {} as TypeIndex,
+    ...(acpDialect ? { acpDialect } : {}),
+  });
+  const failure = repository.initialise();
+  await expect(failure).rejects.toBeInstanceOf(WalletUnsupportedError);
+  await expect(failure).rejects.not.toBeInstanceOf(WalletPrivacyError);
+  expect(create).not.toHaveBeenCalled();
+  await expect(memory.head(repository.base)).rejects.toMatchObject({ code: "not-found" });
 });

@@ -1,5 +1,6 @@
 <!-- AUTHORED-BY Codex (GPT-6.1 Sol) -->
 <!-- AUTHORED-BY Codex GPT-6 -->
+<!-- AUTHORED-BY Claude Opus 5.5 -->
 # @jeswr/solid-wallet
 
 Generated document-vault metadata and a private Solid repository for Suite Wallet.
@@ -32,7 +33,8 @@ through solid-vc and compares canonical RDF against the supported public
 verification projection, refusing lossy contexts or claims. `checkCredential`
 checks signatures and returns an explicit explanation for verified, invalid,
 expired, not-yet-valid, suspended, revoked and unknown results. Authentication failures
-take precedence over dates and status supplied by an untrusted credential. Callers must supply issuer key control and
+take precedence over dates and status supplied by an untrusted credential. A proof-purpose
+or related-resource mismatch is invalid ("not valid for this use"), never "could not check". Callers must supply issuer key control and
 status resolution; Suite does so with solid-vc's WebID and Bitstring Status List
 resolvers on its credential-free public transport. Verification is not an
 endorsement of the issuing authority. Unsupported DID resolvers, proofs and
@@ -40,7 +42,7 @@ JSON-LD projections remain unverified. The original VC source is never rewritten
 
 `createWalletRepository({ storage, fetch, webId })` provisions `wallet/`,
 `wallet/files/` and `wallet/credentials/` using storage-client. Each item is its own
-Turtle resource. Credentials are byte-exact `application/ld+json` resources capped
+Turtle resource. Credentials (`storeCredential(source, name?)`; a stable `.json` name is create-only) are byte-exact `application/ld+json` resources capped
 at 256 KiB, preserving any UTF-8 BOM; invalid UTF-8 is refused. JPEG/PNG/WebP/PDF uploads and streamed previews are capped at 10 MiB.
 New items use server-returned URLs; edits and deletes use observed ETags. Preview
 links and credential links are restricted to their respective wallet containers.
@@ -55,7 +57,11 @@ are recovered through HEAD and a matching metadata read, preserving conflict che
 The repository uses pod-access's fail-closed `checkOwnerOnly` to check owner-only access,
 including inherited resource and member rules, before listing or writing.
 New empty containers receive owner-only access; existing shared or unsupported
-permissions block further use and are never silently replaced. Type Index
+permissions block further use and are never silently replaced. Refusals that are
+entirely about the access model (`unsupported-model`, `unrepresentable`,
+`not-storage-root`) throw `WalletUnsupportedError`; sharing and unknown access throw
+`WalletPrivacyError`. `initialise` checks support at the storage root before creating
+any folder on non-WAC storage, where ACP evaluation always reaches the root. Type Index
 registration is private and delegated to pod-type-index. Settings, linked
 preferences and custom private indexes must also have owner-only access.
 WAC is supported. ACP requires the optional `acpDialect` from independently trusted

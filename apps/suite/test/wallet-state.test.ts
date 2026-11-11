@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 
 import type { WalletRecord, WalletRepository } from "@jeswr/solid-wallet";
 import { afterEach, expect, it, vi } from "vitest";
@@ -121,12 +122,15 @@ it("restores a failed deletion and flushes pending deletions on session disposal
   state.remove(item);
   await vi.advanceTimersByTimeAsync(8001);
   expect(state.getSnapshot().items).toEqual([item]);
-  expect(failed).toHaveBeenCalledWith("offline");
+  expect(failed).toHaveBeenCalledWith("offline", { action: "delete", item, sessionEnded: false });
   const undo = state.remove(item);
+  vi.mocked(repository.remove).mockRejectedValueOnce("stale");
   state.dispose();
   undo();
   await vi.advanceTimersByTimeAsync(8001);
   expect(repository.remove).toHaveBeenCalledTimes(2);
+  // A delete flushed by disposal (e.g. an account switch) reports that its view has ended.
+  expect(failed).toHaveBeenLastCalledWith("stale", { action: "delete", item, sessionEnded: true });
   await expect(state.save(item, item)).rejects.toThrow(/session has ended/);
 });
 it("ignores a refresh that finishes after account disposal", async () => {
@@ -269,7 +273,11 @@ it("flushes pending deletes exactly once and reports failures delivered after di
   other.state.dispose();
   fail(new Error("late failure"));
   await Promise.resolve();
-  expect(other.failed).toHaveBeenCalledWith(new Error("late failure"));
+  expect(other.failed).toHaveBeenCalledWith(new Error("late failure"), {
+    action: "delete",
+    item,
+    sessionEnded: true,
+  });
   expect(failed).not.toHaveBeenCalled();
 });
 

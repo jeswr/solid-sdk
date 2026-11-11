@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 
 import { checkCredential } from "@jeswr/solid-wallet";
 import { expect, it } from "vitest";
@@ -106,4 +107,123 @@ it("retries an interrupted seed without duplicating completed wallet items", asy
       walletVerification(session, now),
     ),
   ).toMatchObject({ state: "verified" });
+  // The retry reused the first attempt's credential and issuer instead of orphaning copies.
+  expect(await credentialFiles(session)).toEqual([
+    "demo-credential.json",
+    "demo-issuer.ttl",
+    "demo-seeded.txt",
+  ]);
+});
+
+async function demoSession(intercept?: (input: RequestInfo | URL, init?: RequestInit) => void) {
+  const now = new Date("2026-11-11T12:00:00Z");
+  const pod = createDemoPod({
+    root: DEMO_ROOT,
+    seed: await buildDemoSeed(now.getTime()),
+    now: () => now.getTime(),
+    latency: 0,
+  });
+  const session: PodSession = {
+    mode: "demo",
+    webId: DEMO_WEBID,
+    storageUrl: DEMO_ROOT,
+    displayName: DEMO_NAME,
+    fetch: async (input, init) => {
+      intercept?.(input, init);
+      return pod.fetch(input, init);
+    },
+    subscribe: pod.subscribe,
+    reset: async () => {},
+  };
+  return { now, session };
+}
+async function credentialFiles(session: PodSession) {
+  const { storage, repository } = await openWallet(session);
+  const names: string[] = [];
+  for await (const entry of storage.listAll(repository.credentials))
+    names.push(new URL(entry.url).pathname.split("/").at(-1) as string);
+  return names.sort();
+}
+
+it("does not store another credential when a seed fails after storing one", async () => {
+  let failed = false;
+  const { now, session } = await demoSession((_input, init) => {
+    if (
+      !failed &&
+      init?.method === "PUT" &&
+      typeof init.body === "string" &&
+      init.body.includes("DEMO-P000042")
+    ) {
+      failed = true;
+      throw new Error("seed interrupted");
+    }
+  });
+  await expect(ensureWalletSample(session, now)).rejects.toThrow();
+  expect(await credentialFiles(session)).toEqual(["demo-credential.json", "demo-issuer.ttl"]);
+  await ensureWalletSample(session, now);
+  expect(await credentialFiles(session)).toEqual([
+    "demo-credential.json",
+    "demo-issuer.ttl",
+    "demo-seeded.txt",
+  ]);
+  const { repository } = await openWallet(session);
+  expect(await repository.list()).toHaveLength(4);
+});
+
+it("replaces an empty seed record left by an interrupted create instead of blocking startup", async () => {
+  let interrupted = false;
+  let cleanupBlocked = false;
+  const { now, session } = await demoSession((input, init) => {
+    const url = String(input instanceof Request ? input.url : input);
+    if (
+      !interrupted &&
+      init?.method === "PUT" &&
+      typeof init.body === "string" &&
+      init.body.includes("DEMO-INS-731")
+    ) {
+      interrupted = true;
+      throw new Error("seed interrupted");
+    }
+    // The conditional cleanup of the empty record also fails, leaving it behind.
+    if (!cleanupBlocked && init?.method === "DELETE" && url.endsWith("/demo-insurance.ttl")) {
+      cleanupBlocked = true;
+      throw new Error("offline");
+    }
+  });
+  await expect(ensureWalletSample(session, now)).rejects.toThrow();
+  expect(cleanupBlocked).toBe(true);
+  const { repository } = await openWallet(session);
+  const empty = new URL("demo-insurance.ttl", repository.base).href;
+  await expect(repository.read(empty)).rejects.toBeInstanceOf(TypeError);
+  await ensureWalletSample(session, now);
+  let skipped = 0;
+  const records = await repository.list(() => ++skipped);
+  expect(skipped).toBe(0);
+  expect(records).toHaveLength(4);
+  expect((await repository.read(empty)).identifier).toBe("DEMO-INS-731");
+});
+
+it("replaces an invalid existing seed record with a conditional write", async () => {
+  const puts: (string | null)[] = [];
+  let seeding = false;
+  const { now, session } = await demoSession((input, init) => {
+    const url = String(input instanceof Request ? input.url : input);
+    if (seeding && init?.method === "PUT" && url.endsWith("/demo-passport.ttl"))
+      puts.push(new Headers(init.headers).get("if-match"));
+  });
+  const { storage, repository } = await openWallet(session);
+  await repository.initialise();
+  const invalid = (
+    await storage.create(repository.base, "<#x> a <https://schema.org/Thing> .", {
+      name: "demo-passport.ttl",
+      contentType: "text/turtle",
+    })
+  ).url;
+  const { etag } = await storage.head(invalid, { revalidate: true });
+  seeding = true;
+  await ensureWalletSample(session, now);
+  expect(puts).toEqual([etag]);
+  const records = await repository.list();
+  expect(records).toHaveLength(4);
+  expect((await repository.read(invalid)).identifier).toBe("DEMO-P000042");
 });

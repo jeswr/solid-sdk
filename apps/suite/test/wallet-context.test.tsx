@@ -1,9 +1,13 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Claude Opus 5.5
 // @vitest-environment jsdom
+import { WalletUnsupportedError } from "@jeswr/solid-wallet";
+import { StorageError } from "@jeswr/storage-client";
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { useWallet, WalletProvider } from "@/apps/wallet/state/wallet-context";
+import { ExtensionSessionError } from "@/lib/session/extension-pod-session";
 import type { PodSession } from "@/lib/session/pod-session";
 
 const seams = vi.hoisted(() => ({ open: vi.fn(), seed: vi.fn(), failure: vi.fn() }));
@@ -17,13 +21,13 @@ vi.mock("@jeswr/suite-ui", () => ({
     actions,
   }: {
     children: React.ReactNode;
-    actions: { retry: () => void };
+    actions?: { retry: () => void };
   }) =>
     createElement(
       "div",
       { role: "alert" },
       children,
-      createElement("button", { type: "button", onClick: actions.retry }, "Retry"),
+      actions && createElement("button", { type: "button", onClick: actions.retry }, "Retry"),
     ),
 }));
 let container: HTMLDivElement;
@@ -218,4 +222,85 @@ it("ignores late boot failures, refreshes notifications when idle and reports fa
     });
     await saving;
   });
+});
+
+it("shows an unsupported pod distinctly, without shared-storage or permissions advice", async () => {
+  const repository = {
+    initialise: vi.fn().mockRejectedValue(new WalletUnsupportedError()),
+    list: vi.fn(async () => []),
+  };
+  seams.open.mockResolvedValue({ repository });
+  await act(async () => {
+    root.render(
+      <WalletProvider session={session}>
+        <Content />
+      </WalletProvider>,
+    );
+  });
+  const alert = container.querySelector('[role="alert"]')?.textContent ?? "";
+  expect(alert).toContain("This pod's access setup isn't supported by Wallet yet.");
+  expect(alert).not.toMatch(/shared|private storage|Check Wallet and Settings/);
+  expect(container.querySelector("button")).toBeNull();
+  expect(repository.list).not.toHaveBeenCalled();
+});
+it("words a delete that cannot finish after an account switch as not completed", async () => {
+  vi.useFakeTimers();
+  try {
+    const item = {
+      name: "Passport",
+      kind: "passport" as const,
+      created: new Date(),
+      modified: new Date(),
+      url: "https://pod.example/wallet/one.ttl",
+      etag: '"v1"',
+    };
+    const stale = new ExtensionSessionError("stale");
+    const repository = {
+      initialise: vi.fn(async () => {}),
+      list: vi.fn(async () => [item]),
+      remove: vi
+        .fn()
+        .mockRejectedValueOnce(new Error("offline"))
+        // storage-client wraps the extension's rejection as a network error.
+        .mockRejectedValueOnce(
+          new StorageError("network", { method: "DELETE", url: item.url, cause: stale }),
+        )
+        .mockRejectedValueOnce(new Error("privacy check failed")),
+    };
+    seams.open.mockResolvedValue({ repository });
+    await act(async () => {
+      root.render(
+        <WalletProvider session={session}>
+          <Content />
+        </WalletProvider>,
+      );
+    });
+    seams.failure.mockClear();
+    await act(async () => {
+      observed?.state.remove(item);
+      await vi.advanceTimersByTimeAsync(8001);
+    });
+    expect(seams.failure).toHaveBeenLastCalledWith(expect.stringMatching(/^Couldn't save/));
+    await act(async () => {
+      observed?.state.remove(item);
+      await vi.advanceTimersByTimeAsync(8001);
+    });
+    expect(seams.failure).toHaveBeenLastCalledWith(
+      expect.stringMatching(/^Delete not completed\. "Passport" may still be in your pod/),
+    );
+    // Unmounting for the new account flushes the pending delete against the old session.
+    await act(async () => {
+      observed?.state.remove(item);
+    });
+    await act(async () => root.unmount());
+    root = createRoot(container);
+    await act(async () => {
+      await vi.runAllTimersAsync();
+    });
+    expect(repository.remove).toHaveBeenCalledTimes(3);
+    expect(seams.failure).toHaveBeenCalledTimes(3);
+    expect(seams.failure).toHaveBeenLastCalledWith(expect.stringMatching(/^Delete not completed/));
+  } finally {
+    vi.useRealTimers();
+  }
 });

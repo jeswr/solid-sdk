@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 import type { WalletItemData, WalletRecord, WalletRepository } from "@jeswr/solid-wallet";
 export interface WalletSnapshot {
   phase: "loading" | "ready" | "error";
@@ -9,10 +10,16 @@ export interface WalletSnapshot {
   skippedRecords?: number;
   undo?: { item: WalletRecord; token: number } | undefined;
 }
+/** Deletes say whether they settled after this account's view ended (e.g. an account switch). */
+export interface WalletDeleteFailure {
+  action: "delete";
+  item: WalletRecord;
+  sessionEnded: boolean;
+}
 /** One state object per mounted account. An item has at most one outstanding mutation. */
 export function createWalletState(
   repository: WalletRepository,
-  onFailure: (error: unknown) => void,
+  onFailure: (error: unknown, failure?: WalletDeleteFailure) => void,
 ) {
   let snapshot: WalletSnapshot = { phase: "loading", items: [], busy: [] };
   let active = true;
@@ -109,7 +116,7 @@ export function createWalletState(
             items: [...snapshot.items, item],
             busy: snapshot.busy.filter((id) => id !== item.url),
           });
-          onFailure(error);
+          onFailure(error, { action: "delete", item, sessionEnded: !active });
         },
       );
     };

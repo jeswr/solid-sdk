@@ -1,12 +1,14 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 import {
   credentialToJsonLd,
   generateKeyPairForSuite,
   issue,
   publishVerificationMethod,
 } from "@jeswr/solid-vc";
-import { StorageError } from "@jeswr/storage-client";
+import type { WalletItemData, WalletRepository } from "@jeswr/solid-wallet";
+import { type StorageClient, StorageError } from "@jeswr/storage-client";
 import type { PodSession } from "@/lib/session/pod-session";
 import { openWallet } from "../lib/data/client";
 
@@ -37,36 +39,7 @@ async function seed(session: PodSession, now: Date) {
     notes: "Fictional sample document. Not valid for identification.",
     tags: ["sample"],
   };
-  // Keep issuer and public key in the pod so demo verification also survives reloads.
-  const issuerDocument = (
-    await storage.create(repository.credentials, null, { contentType: "text/turtle" })
-  ).url;
-  const issuer = `${issuerDocument}#issuer`;
-  const key = await generateKeyPairForSuite(`${issuerDocument}#key`, "Ed25519");
-  const published = await publishVerificationMethod({ controller: issuer, key });
-  const empty = await storage.read(issuerDocument);
-  if (!empty.etag) throw new Error("The sample issuer needs a version");
-  await storage.write(issuerDocument, published.turtle, {
-    contentType: "text/turtle",
-    ifMatch: empty.etag,
-  });
-  const signed = await issue({
-    credential: {
-      issuer,
-      type: ["https://schema.org/EducationalOccupationalCredential"],
-      validFrom: date(-7).toISOString(),
-      validUntil: date(365).toISOString(),
-      credentialSubject: {
-        id: session.webId,
-        "https://schema.org/name": "Rowan Meadow",
-        "https://schema.org/description": "Completed the fictional Woodland First Aid course",
-      },
-    },
-    key,
-    options: { created: now },
-  });
-  const source = JSON.stringify({ ...credentialToJsonLd(signed), proof: signed.proof }, null, 2);
-  const credential = await repository.storeCredential(source);
+  const credential = await sampleCredential(session, storage, repository, now, date);
   const samples = [
     {
       ...common,
@@ -102,24 +75,113 @@ async function seed(session: PodSession, now: Date) {
       expires: date(365),
     },
   ];
-  for (const data of samples) {
-    const name = `demo-${data.kind}.ttl`;
-    try {
-      await repository.read(new URL(name, repository.base).href);
-      continue;
-    } catch (error) {
-      if (!(error instanceof StorageError) || error.code !== "not-found") throw error;
-    }
-    try {
-      await repository.save(data, undefined, name);
-    } catch (error) {
-      // Another seed may have won the create-only deterministic name.
-      if (!(error instanceof StorageError) || error.code !== "conflict") throw error;
-      await repository.read(new URL(name, repository.base).href);
-    }
-  }
+  for (const data of samples) await seedRecord(storage, repository, `demo-${data.kind}.ttl`, data);
   await storage.create(repository.credentials, "seeded", {
     name: "demo-seeded.txt",
     contentType: "text/plain",
   });
+}
+
+const isCode = (error: unknown, code: string) =>
+  error instanceof StorageError && error.code === code;
+
+/** Reuse a stored sample credential: a retried seed must not leave orphan credential copies. */
+async function sampleCredential(
+  session: PodSession,
+  storage: StorageClient,
+  repository: WalletRepository,
+  now: Date,
+  date: (days: number) => Date,
+): Promise<string> {
+  const stored = new URL("demo-credential.json", repository.credentials).href;
+  try {
+    await storage.head(stored);
+    return stored;
+  } catch (error) {
+    if (!isCode(error, "not-found")) throw error;
+  }
+  // Keep issuer and public key in the pod so demo verification also survives reloads. No
+  // stored credential is signed by an earlier attempt's key, so that key may be replaced.
+  const issuerDocument = new URL("demo-issuer.ttl", repository.credentials).href;
+  try {
+    await storage.create(repository.credentials, null, {
+      name: "demo-issuer.ttl",
+      contentType: "text/turtle",
+    });
+  } catch (error) {
+    if (!isCode(error, "conflict")) throw error;
+  }
+  const issuer = `${issuerDocument}#issuer`;
+  const key = await generateKeyPairForSuite(`${issuerDocument}#key`, "Ed25519");
+  const published = await publishVerificationMethod({ controller: issuer, key });
+  const current = await storage.head(issuerDocument, { revalidate: true });
+  if (!current.etag) throw new Error("The sample issuer needs a version");
+  await storage.write(issuerDocument, published.turtle, {
+    contentType: "text/turtle",
+    ifMatch: current.etag,
+  });
+  const signed = await issue({
+    credential: {
+      issuer,
+      type: ["https://schema.org/EducationalOccupationalCredential"],
+      validFrom: date(-7).toISOString(),
+      validUntil: date(365).toISOString(),
+      credentialSubject: {
+        id: session.webId,
+        "https://schema.org/name": "Rowan Meadow",
+        "https://schema.org/description": "Completed the fictional Woodland First Aid course",
+      },
+    },
+    key,
+    options: { created: now },
+  });
+  const source = JSON.stringify({ ...credentialToJsonLd(signed), proof: signed.proof }, null, 2);
+  try {
+    return await repository.storeCredential(source, "demo-credential.json");
+  } catch (error) {
+    // Another seed stored it first; its issuer key was written before it.
+    if (!isCode(error, "conflict")) throw error;
+    return stored;
+  }
+}
+
+/**
+ * Create each sample once. An empty or invalid record left by an interrupted seed is
+ * replaced only at the version observed before it was read, never a concurrent valid one.
+ */
+async function seedRecord(
+  storage: StorageClient,
+  repository: WalletRepository,
+  name: string,
+  data: WalletItemData,
+) {
+  const url = new URL(name, repository.base).href;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    let etag: string | null = null;
+    try {
+      etag = (await storage.head(url, { revalidate: true })).etag;
+      await repository.read(url);
+      return;
+    } catch (error) {
+      if (isCode(error, "not-found")) {
+        try {
+          await repository.save(data, undefined, name);
+          return;
+        } catch (error) {
+          // Another seed may have won the create-only deterministic name.
+          if (!isCode(error, "conflict")) throw error;
+          continue;
+        }
+      }
+      if (!(error instanceof TypeError) && !isCode(error, "not-rdf")) throw error;
+    }
+    if (!etag) throw new Error("Couldn't repair the Wallet sample data");
+    try {
+      await repository.save(data, { ...data, url, etag });
+      return;
+    } catch (error) {
+      if (!isCode(error, "precondition-failed")) throw error;
+    }
+  }
+  throw new Error("Couldn't prepare the Wallet sample data");
 }

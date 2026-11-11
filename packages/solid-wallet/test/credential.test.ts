@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 
 import {
   credentialToJsonLd,
@@ -139,10 +140,10 @@ const displays = {
   STATUS_REVOKED: ["revoked", "Revoked"],
   STATUS_SUSPENDED: ["suspended", "Suspended"],
   STATUS_UNREACHABLE: ["unknown", "Could not check"],
-  PROOF_PURPOSE_MISMATCH: ["unknown", "Could not check"],
+  PROOF_PURPOSE_MISMATCH: ["invalid", "Signature invalid / not valid for this use"],
   UNTRUSTED_ISSUER: ["unknown", "Could not check"],
   RELATED_RESOURCE_MISSING: ["unknown", "Could not check"],
-  RELATED_RESOURCE_MISMATCH: ["unknown", "Could not check"],
+  RELATED_RESOURCE_MISMATCH: ["invalid", "Signature invalid / not valid for this use"],
 } satisfies Record<VerificationErrorCode, readonly [string, string]>;
 it.each(Object.entries(displays))("explains %s", (code, [state, title]) => {
   expect(
@@ -163,6 +164,29 @@ it.each([
     (code) => ({ code: code as VerificationErrorCode, message: code }),
   );
   expect(verificationDisplay({ verified: false, errors }, "issuer").state).toBe("invalid");
+});
+it.each([
+  "PROOF_PURPOSE_MISMATCH",
+  "RELATED_RESOURCE_MISMATCH",
+] as const)("ranks %s as invalid over untrusted dates, status and lookup gaps", (code) => {
+  const errors = [
+    "STATUS_REVOKED",
+    "STATUS_UNREACHABLE",
+    "EXPIRED",
+    "NOT_YET_VALID",
+    "UNTRUSTED_ISSUER",
+    code,
+  ].map((item) => ({ code: item as VerificationErrorCode, message: item }));
+  expect(verificationDisplay({ verified: false, errors }, "issuer")).toMatchObject({
+    state: "invalid",
+    title: "Signature invalid / not valid for this use",
+  });
+  expect(
+    verificationDisplay(
+      { verified: false, errors: [...errors, { code: "INVALID_SIGNATURE", message: "bad" }] },
+      "issuer",
+    ).title,
+  ).toBe("Signature invalid / not from this issuer");
 });
 it("labels an expired forgery as invalid", async () => {
   expect(

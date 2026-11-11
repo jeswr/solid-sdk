@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 import {
   canonicalNQuads,
   credentialToJsonLd,
@@ -109,17 +110,22 @@ export function verificationDisplay(result: VerificationResult, issuer: string):
     "NO_PROOF",
     "UNKNOWN_CRYPTOSUITE",
   ];
-  const state = codes.some((code) => invalid.includes(code))
-    ? "invalid"
-    : codes.includes("STATUS_REVOKED")
-      ? "revoked"
-      : codes.includes("STATUS_SUSPENDED")
-        ? "suspended"
-        : codes.includes("EXPIRED")
-          ? "expired"
-          : codes.includes("NOT_YET_VALID")
-            ? "not-yet-valid"
-            : "unknown";
+  // A proof made for another purpose or over different related content does not
+  // authenticate this credential for this use; it is never merely "could not check".
+  const misused = ["PROOF_PURPOSE_MISMATCH", "RELATED_RESOURCE_MISMATCH"];
+  const forged = codes.some((code) => invalid.includes(code));
+  const state =
+    forged || codes.some((code) => misused.includes(code))
+      ? "invalid"
+      : codes.includes("STATUS_REVOKED")
+        ? "revoked"
+        : codes.includes("STATUS_SUSPENDED")
+          ? "suspended"
+          : codes.includes("EXPIRED")
+            ? "expired"
+            : codes.includes("NOT_YET_VALID")
+              ? "not-yet-valid"
+              : "unknown";
   const titles = {
     invalid: "Signature invalid / not from this issuer",
     revoked: "Revoked",
@@ -130,7 +136,8 @@ export function verificationDisplay(result: VerificationResult, issuer: string):
   };
   return {
     state,
-    title: titles[state],
+    title:
+      state === "invalid" && !forged ? "Signature invalid / not valid for this use" : titles[state],
     reason:
       result.errors.map((error) => error.message).join("; ") ||
       "The verifier did not return a complete result.",
