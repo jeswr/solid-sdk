@@ -48,7 +48,10 @@ export function ShellPodSessionProvider({
       mounted.current &&
       binding.current.version === version &&
       latest.current.status === "ready" &&
-      latest.current.active === account;
+      latest.current.active === account &&
+      // The rendered state can lag a switch or sign-out that React has not committed yet, while
+      // AccountsProvider.fetch picks credentials from live state: check the live account too.
+      latest.current.isActiveAccount(account.id);
     const fetch: typeof globalThis.fetch = async (input, init) => {
       if (!usable()) throw new Error("Sign in to continue");
       const response = await latest.current.fetch(input, init);
