@@ -30,9 +30,17 @@ import {
 import { createBoundary } from "./boundary.js";
 import { protectStore, scopedStore } from "./kv.js";
 import { createLwsProvider } from "./lws-provider.js";
+import { namespaceFence } from "./namespace.js";
 import { secureUrl } from "./options.js";
 import { memoryStore, sessionStorage } from "./sessions.js";
-import type { CidSubject, Identity, KvStore, LoginHint, PodAuthOptions } from "./types.js";
+import type {
+  CidSubject,
+  GrantOwner,
+  Identity,
+  KvStore,
+  LoginHint,
+  PodAuthOptions,
+} from "./types.js";
 
 export type AgentPolicy = Pick<
   PodAuthOptions,
@@ -302,7 +310,7 @@ export function createProviders(
     namespace,
     options,
   );
-  const fence =
+  const baseFence =
     options.storage === undefined
       ? (browser?.fence ?? new SessionFence(namespace, { broadcast: false }))
       : new SessionFence(namespace, {
@@ -310,6 +318,7 @@ export function createProviders(
             scopedStore<number>(options.storage.sessions, "pod-auth:fence:" + namespace),
           ),
         });
+  const fence = namespaceFence(baseFence, persistence.exclusive);
   const metadata = <T extends {}>(name: string, fallback?: KvStore<T>) => {
     const store =
       options.storage === undefined
@@ -479,7 +488,7 @@ export function createProviders(
     codeProvider,
     asProvider,
     clientProvider,
-    undefined,
+    persistence.credentials,
     sessionOptions,
   );
   // Interpose on the shared session read, so the exact ID token selected by UMA is checked before exchange.
@@ -662,6 +671,16 @@ export function createProviders(
     persistence,
     contextFor,
     fence,
+    forget: async () => await persistence.exclusive(() => solidProvider.forget()),
+    retireIfOwnedBy: async (expected: GrantOwner, retiring: () => void) =>
+      await persistence.exclusive(async () => {
+        const result = await persistence.retirement(expected);
+        if (result.retired) {
+          retiring();
+          await logout();
+        }
+        return result;
+      }),
     restore: async (account: import("./sessions.js").ActiveAccount) => {
       const selected = { ...account.selected, issuer: account.issuer };
       // Pin discovery to the remembered issuer while retaining the original credential key.
@@ -674,40 +693,14 @@ export function createProviders(
       const claims = await solidProvider.restore(request);
       if (claims === undefined) return undefined;
       if (claims.webId !== account.webId || !sameIssuer(claims.issuer, account.issuer)) {
-        await solidProvider.forget();
+        await persistence.exclusive(() => solidProvider.forget());
         throw new Error("Restored identity does not match the remembered account");
       }
       await hooks.session(request, claims, "solid-oidc", selected);
       sessionRequest = request;
       return claims;
     },
-    logout: async () => {
-      boundary.clear();
-      const failures: unknown[] = [];
-      // Load the catalog without redeeming a token, so a fresh instance can revoke and purge too.
-      try {
-        await solidProvider.session.forget(persistence.keys);
-      } catch (error) {
-        failures.push(error);
-      }
-      try {
-        await manager.logout();
-      } catch (error) {
-        failures.push(error);
-      }
-      try {
-        await fence.supersede(persistence.clear);
-      } catch (error) {
-        failures.push(error);
-      }
-      hint = {};
-      restoredContext = undefined;
-      loginContext = undefined;
-      sessionRequest = undefined;
-      selections.clear();
-      authorizationServers.clear();
-      if (failures.length > 0) throw new AggregateError(failures, "Logout cleanup failed");
-    },
+    logout: async () => await persistence.exclusive(logout),
     /**
      * `granted` runs once a grant may exist (an authorization code went to the token exchange, or the
      * upgrade completed), so an abandoned login knows it must discard one.
@@ -736,6 +729,33 @@ export function createProviders(
       }
     },
   };
+  async function logout() {
+    boundary.clear();
+    const failures: unknown[] = [];
+    // Load the catalog without redeeming a token, so a fresh instance can revoke and purge too.
+    try {
+      await solidProvider.session.forget(persistence.keys);
+    } catch (error) {
+      failures.push(error);
+    }
+    try {
+      await manager.logout();
+    } catch (error) {
+      failures.push(error);
+    }
+    try {
+      await fence.supersede(persistence.clear);
+    } catch (error) {
+      failures.push(error);
+    }
+    hint = {};
+    restoredContext = undefined;
+    loginContext = undefined;
+    sessionRequest = undefined;
+    selections.clear();
+    authorizationServers.clear();
+    if (failures.length > 0) throw new AggregateError(failures, "Logout cleanup failed");
+  }
   async function loginAttempt(value: LoginHint, signal: AbortSignal, granted: () => void) {
     restoredContext = undefined;
     loginContext = undefined;

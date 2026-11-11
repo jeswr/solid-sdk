@@ -170,6 +170,19 @@ sessions/keys and the pointer across reloads, fences in-flight work, and emits `
 Await cleanup; errors reject after cleanup attempts and notification. Clear application capability
 caches on `logout`. Local logout does not sign out the OP browser session.
 
+Reject an earlier login/restore result with `retireIfOwnedBy(identity)`, passing its `grantId` as well
+as WebID/issuer. Never compose `remembered()`/`identity()` ownership reads with unconditional logout.
+OIDC identities expose this public, opaque identifier; refresh preserves it and each new authorization
+changes it. Any newly installed namespace grant advances the stored owner; refreshing an older grant
+does not reclaim it. Retirement compares ownership and performs all logout cleanup/revocation under
+the same exclusive namespace mutation lock used by credential commits (before the engine fence lock).
+Web Locks coordinate cooperating tabs/workers with shared stores; Node's FIFO fallback covers only the
+current realm; browsers without Web Locks fail closed. Direct storage edits/older library versions are
+outside this coordination. Success returns `{ retired: true }` and emits logout; failures reject after
+cleanup attempts. Skips return `{ retired: false, reason }` with `missing-grant`, `no-grant`,
+`owner-changed` or `grant-changed`, without credential, fence or lifecycle changes. Agents return
+`no-grant`. Issuer-only credentials remain private memory; their stored owner metadata contains no token.
+
 `on('login' | 'restore' | 'logout' | 'expired' | 'challenge', handler)` returns an idempotent
 unsubscribe function. Events carry identity snapshots and timestamps; observers cannot interrupt auth.
 React consumers mount one `PodAuthProvider` with `auth` or `config` and read `usePodAuth()`. Restore

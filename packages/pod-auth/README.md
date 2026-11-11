@@ -301,6 +301,38 @@ and storage failures reject after cleanup has been attempted and the event emitt
 outside the auth namespace is preserved. Local logout does not sign out the OP browser session.
 Listen for `logout` to clear application capability caches. A subsequent login can select another account.
 
+Use `retireIfOwnedBy(identity)` when rejecting an earlier login/restore result. Pass the original
+credential-free identity snapshot (or its `{ webId, issuer, grantId }` fields): an account comparison
+alone cannot distinguish a newer sign-in for the same WebID. OIDC identities now include an opaque
+`grantId`, derived from the grant's public DPoP key, account, client and fence generation. Refresh
+rotation retains it; a new authorization gets a new value. Installing any new grant in this namespace,
+including another storage context, advances the stored owner. Refreshing an older grant never reclaims
+ownership. The owner is public metadata only; access tokens and issuer-only credentials remain in memory.
+
+```ts
+const identity = await auth.login(hint);
+if (!applicationAccepts(identity)) {
+  const result = await auth.retireIfOwnedBy(identity);
+  // result: { retired: true } or { retired: false, reason }
+}
+```
+
+The ownership check and the complete logout cleanup/revocation hold one exclusive namespace mutation
+lock. Every credential commit takes this lock before the engine's fence lock, including commits from
+login, refresh, restore, UMA and LWS. New commits wait through cleanup; work from a superseded generation
+cannot subsequently publish credentials. Success has the same namespace-wide purge and `logout` event
+as `logout()`, including cleanup attempts and notification before rejecting a revocation/storage failure.
+Skipped results leave credentials, fence generation, identity and events untouched. Reasons are
+`missing-grant` (no identifier supplied), `no-grant` (no usable owner record, including legacy sessions
+until their next commit), `owner-changed` (different WebID/issuer), and `grant-changed` (newer grant for
+the same account). Agents have no stored OIDC namespace and return `no-grant`; use their `logout()`.
+
+Web Locks coordinate cooperating pod-auth instances in all tabs/workers sharing the origin's storage
+partition and the same client/callback namespace and stores. Node's keyed FIFO fallback coordinates
+only the current realm, not separate processes/workers. Browsers without Web Locks fail closed.
+Custom stores must preserve the same namespace and fence across participating instances. Direct store
+edits and older pod-auth versions that do not take the mutation lock cannot participate in this guarantee.
+
 `on` returns an idempotent unsubscribe function. `login` fires once when an identity is established,
 including reactive authentication; `challenge` fires when a provider accepts an authorized 401.
 Each event contains `type`, an identity snapshot and `timestamp`; challenge events also have `url`.

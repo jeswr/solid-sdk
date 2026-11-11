@@ -61,6 +61,8 @@ export interface CidSubject {
 }
 
 export interface Identity {
+  /** Opaque grant identifier. Stable across refresh rotation; a new sign-in gets a new value. */
+  grantId?: string;
   webId: string | null;
   issuer: string;
   subject: string;
@@ -68,6 +70,17 @@ export interface Identity {
   protocol: "solid-oidc" | "lws";
   storages: readonly string[];
 }
+
+/** Credential-free ownership snapshot from a pod-auth Identity. Missing identifiers fail closed. */
+export type GrantOwner = Pick<Identity, "webId" | "issuer" | "grantId">;
+
+/** A skipped retirement never revokes, clears credentials, advances the fence or emits logout. */
+export type GrantRetirementResult =
+  | { retired: true }
+  | {
+      retired: false;
+      reason: "missing-grant" | "no-grant" | "owner-changed" | "grant-changed";
+    };
 
 export interface LoginHint {
   webId?: string;
@@ -104,6 +117,13 @@ export interface PodAuth {
   restore(): Promise<Identity | null>;
   /** Revoke when advertised, purge local credentials, and emit logout even if revocation fails. */
   logout(): Promise<void>;
+  /**
+   * Retire only the namespace grant matching this identity snapshot, including its grantId.
+   * Ownership comparison and logout cleanup share a namespace lock with credential commits.
+   * Web Locks coordinate tabs/workers sharing storage; Node's fallback covers only this realm.
+   * Browsers without Web Locks fail closed. Cleanup failures reject after attempted cleanup.
+   */
+  retireIfOwnedBy(expected: GrantOwner): Promise<GrantRetirementResult>;
   /** Read only the credential-free remembered pointer, without discovery or credential access. */
   remembered(): Promise<{ webId: string; issuer: string; displayName?: string; avatar?: string }[]>;
   /** Reports current claims without discovery, refresh or UI interaction. */

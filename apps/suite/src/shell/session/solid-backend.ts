@@ -172,34 +172,17 @@ export class SolidBackend implements SessionBackend {
       this.#restoring = undefined;
       const core = this.#core();
       try {
-        // logout purges the shared namespace. Check its pointer and live identity, and fence
-        // every awaited read so stale rejection cannot purge a newer shell/other-tab session.
-        const remembered = await core.remembered();
-        if (currentAttempt()) {
-          const current = await core.identity();
-          if (
-            currentAttempt() &&
-            current &&
-            current.webId === identity.webId &&
-            current.issuer === identity.issuer &&
-            current.subject === identity.subject &&
-            current.clientId === identity.clientId &&
-            current.protocol === identity.protocol &&
-            current.storages.length === identity.storages.length &&
-            current.storages.every((storage, index) => storage === identity.storages[index]) &&
-            remembered.every(
-              (value) => value.webId === identity.webId && value.issuer === identity.issuer,
-            )
-          ) {
-            this.#account = null;
-            this.#expired = false;
-            ++this.#sessionVersion;
-            await core.logout();
-          }
+        // pod-auth compares the exact grant and cleans up under its namespace lock, including
+        // across tabs. The rejected snapshot cannot retire a newer sign-in for the same WebID.
+        const result = await core.retireIfOwnedBy(identity);
+        if (result.retired && currentAttempt()) {
+          this.#account = null;
+          this.#expired = false;
+          ++this.#sessionVersion;
         }
       } catch {
         // pod-auth attempts local cleanup even if revocation fails. Keep the actionable
-        // identity error; failed ownership reads must never trigger an unfenced logout.
+        // identity error; failed ownership reads must never trigger unconditional logout.
       }
     }
     throw new SignInError("invalid-identity");

@@ -41,6 +41,7 @@ test("explicit WebID login, validated claims, PKCE + DPoP authenticated read, pr
   expect(await auth.identity()).toBeNull();
   const identity = await auth.login({ webId: op.webId });
   expect(identity).toEqual({
+    grantId: expect.any(String),
     webId: op.webId,
     issuer: op.issuer,
     subject: op.subject,
@@ -394,6 +395,7 @@ test("identity may have no WebID and reports no token material", async () => {
   expect(identity.webId).toBeNull();
   expect(Object.keys(identity).sort()).toEqual([
     "clientId",
+    "grantId",
     "issuer",
     "protocol",
     "storages",

@@ -9,6 +9,8 @@ import { decideSilentRestore } from "./session-restore.js";
 import type {
   AuthEvent,
   AuthEventType,
+  GrantOwner,
+  GrantRetirementResult,
   Identity,
   LoginHint,
   PodAuth,
@@ -20,6 +22,8 @@ export type {
   AuthEvent,
   AuthEventType,
   CidSubject,
+  GrantOwner,
+  GrantRetirementResult,
   Identity,
   KvStore,
   LoginHint,
@@ -36,6 +40,7 @@ export function createPodAuth(options: PodAuthOptions): PodAuth {
   let current: Identity | null = null;
   let restoring: Promise<Identity | null> | undefined;
   let loggingOut: Promise<void> | undefined;
+  let retiring = false;
   let epoch = 0;
   let mode: "login" | "restore" = "login";
   let pending: { key: string; promise: Promise<Identity>; cancellable: boolean } | undefined;
@@ -62,7 +67,7 @@ export function createPodAuth(options: PodAuthOptions): PodAuth {
     protocol: Identity["protocol"],
     expected: LoginHint,
   ) => {
-    if (loggingOut !== undefined) throw new Error("Logout is in progress");
+    if (loggingOut !== undefined || retiring) throw new Error("Logout is in progress");
     const started = epoch;
     if (
       (expected.webId !== undefined && expected.webId !== claims.webId) ||
@@ -73,7 +78,7 @@ export function createPodAuth(options: PodAuthOptions): PodAuth {
           (claims.webId ?? null) !== current.webId))
     ) {
       current = null;
-      await providers.solidProvider.forget();
+      await providers.forget();
       throw new Error("Authenticated identity does not match the selected account");
     }
     const generation = await providers.fence.generation();
@@ -98,6 +103,7 @@ export function createPodAuth(options: PodAuthOptions): PodAuth {
     const first = current === null;
     observedFence = providers.fence.signal;
     current = {
+      grantId: providers.persistence.grantFor(claims),
       webId: claims.webId ?? null,
       issuer: claims.issuer,
       subject: claims.subject,
@@ -138,7 +144,8 @@ export function createPodAuth(options: PodAuthOptions): PodAuth {
       return account === null ? [] : [{ webId: account.webId, issuer: account.issuer }];
     },
     restore: () => {
-      if (loggingOut || pending) return Promise.reject(new Error("Authentication is in progress"));
+      if (loggingOut || retiring || pending)
+        return Promise.reject(new Error("Authentication is in progress"));
       if (restoring) return restoring;
       const started = epoch;
       let failure: unknown;
@@ -195,10 +202,31 @@ export function createPodAuth(options: PodAuthOptions): PodAuth {
       loggingOut = promise;
       return promise;
     },
+    retireIfOwnedBy: (expected: GrantOwner): Promise<GrantRetirementResult> => {
+      // Snapshot before waiting for any lock: callers may mutate their own metadata objects.
+      const owner = { ...expected };
+      let accepted = false;
+      return providers
+        .retireIfOwnedBy(owner, () => {
+          accepted = true;
+          retiring = true;
+          ++epoch;
+          current = null;
+          providers.boundary.clear();
+        })
+        .finally(() => {
+          if (accepted) {
+            observedFence = providers.fence.signal;
+            current = null;
+            retiring = false;
+            emit("logout");
+          }
+        });
+    },
     login: (hint, loginOptions) => {
       const abort = loginOptions?.signal;
       if (abort?.aborted) return Promise.reject(abort.reason);
-      if (loggingOut || restoring)
+      if (loggingOut || retiring || restoring)
         return Promise.reject(new Error("Authentication is in progress"));
       let selected: LoginHint;
       try {

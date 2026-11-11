@@ -1,9 +1,21 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
-import { type RefreshSessionRecord, withLock } from "@jeswr/reactive-authentication";
+import {
+  type Identity as Claims,
+  contextKey,
+  type DPoPTokenCacheEntry,
+  type RefreshSessionRecord,
+  withLock,
+} from "@jeswr/reactive-authentication";
 import { protectStore, scopedStore } from "./kv.js";
 import { secureUrl } from "./options.js";
-import type { KvStore, LoginHint, PodAuthOptions } from "./types.js";
+import type {
+  GrantOwner,
+  GrantRetirementResult,
+  KvStore,
+  LoginHint,
+  PodAuthOptions,
+} from "./types.js";
 
 /** Public metadata only. The engine key locates the credential; it contains no token or key material. */
 interface Account {
@@ -39,6 +51,41 @@ export function memoryStore<T extends {} = {}>(): KvStore<T> {
 export function sessionStorage(raw: KvStore, namespace: string, options: PodAuthOptions) {
   const store = protectStore(scopedStore(raw, namespace + ":sessions"));
   const transient = new Map<string, RefreshSessionRecord>();
+  const cache = memoryStore<DPoPTokenCacheEntry>();
+  const knownGrants = new Set<string>();
+  const claimsGrants = new WeakMap<Claims, string>();
+  const exclusive = <T>(work: () => Promise<T>) => withLock(namespace + ":mutation", work);
+  const credentialOf = async (record: RefreshSessionRecord | DPoPTokenCacheEntry) => {
+    const { x, y } = await crypto.subtle.exportKey("jwk", record.dpopKey.publicKey);
+    return JSON.stringify([
+      record.authorizationServer.issuer,
+      record.identity?.webId ?? null,
+      record.client.client_id,
+      x,
+      y,
+    ]);
+  };
+  const grantOf = async (record: RefreshSessionRecord | DPoPTokenCacheEntry) =>
+    await contextKey("pod-auth-grant", [await credentialOf(record), String(record.generation)]);
+  const own = async (record: RefreshSessionRecord | DPoPTokenCacheEntry, grantId: string) => {
+    await store.setItem("owner", {
+      webId: record.identity?.webId ?? null,
+      issuer: record.authorizationServer.issuer,
+      grantId,
+    });
+  };
+  const credentials: KvStore<DPoPTokenCacheEntry> = {
+    ...cache,
+    setItem: async (key, entry) => {
+      const grantId = await grantOf(entry);
+      // Access-only grants have no refresh record. Record their ownership at the fenced cache
+      // commit too. Invalidation and refresh of an older grant must never reclaim the namespace.
+      if (!knownGrants.has(grantId)) await own(entry, grantId);
+      knownGrants.add(grantId);
+      if (entry.identity !== undefined) claimsGrants.set(entry.identity, grantId);
+      await cache.setItem(key, entry);
+    },
+  };
   const catalog = async () => ((await store.getItem("accounts")) ?? []) as Account[];
   const active = async (): Promise<ActiveAccount | null> => {
     const value = (await store.getItem("active")) as ActiveAccount | null;
@@ -116,6 +163,7 @@ export function sessionStorage(raw: KvStore, namespace: string, options: PodAuth
         await store.removeItem(account.credential);
         return null;
       }
+      knownGrants.add(await grantOf(record));
       return record;
     },
     setItem: async (key, record) =>
@@ -123,6 +171,9 @@ export function sessionStorage(raw: KvStore, namespace: string, options: PodAuth
         const webId = record.identity?.webId;
         // Issuer-only identities cannot supply the WebID-scoped restore guarantee.
         if (webId === undefined) {
+          const grantId = await grantOf(record);
+          if (!knownGrants.has(grantId)) await own(record, grantId);
+          knownGrants.add(grantId);
           transient.set(key, record);
           return;
         }
@@ -135,9 +186,14 @@ export function sessionStorage(raw: KvStore, namespace: string, options: PodAuth
           throw new Error("Invalid persisted session credential");
         // Authorization creates a fresh DPoP key; rotation retains it. Never replace another
         // outstanding grant for the same account, including one issued in another context.
-        const { x, y } = await crypto.subtle.exportKey("jwk", record.dpopKey.publicKey);
-        const credential = JSON.stringify([issuer, webId, clientId, x, y]);
+        const credential = await credentialOf(record);
+        const grantId = await grantOf(record);
         const accounts = new Map((await catalog()).map((a) => [a.key, a]));
+        if (
+          ![...accounts.values()].some((a) => a.credential === credential) ||
+          (await store.getItem("owner")) === null
+        )
+          await own(record, grantId);
         const previous = accounts.get(key);
         if (previous !== undefined && previous.credential !== credential) {
           // Engine keys use oidc:<hash>; keep a separate alias solely for logout cleanup.
@@ -149,6 +205,7 @@ export function sessionStorage(raw: KvStore, namespace: string, options: PodAuth
         // Catalog first: a failed credential write is discoverable for later cleanup, never usable.
         await store.setItem("accounts", [...accounts.values()]);
         await store.setItem(credential, record);
+        knownGrants.add(grantId);
         transient.delete(key);
       }),
     removeItem: async (key) => {
@@ -159,6 +216,20 @@ export function sessionStorage(raw: KvStore, namespace: string, options: PodAuth
   };
   return {
     sessions,
+    credentials,
+    grantFor: (claims: Claims) => claimsGrants.get(claims),
+    exclusive,
+    retirement: async (expected: GrantOwner): Promise<GrantRetirementResult> => {
+      if (typeof expected.grantId !== "string" || expected.grantId.length === 0)
+        return { retired: false, reason: "missing-grant" };
+      const owner = (await store.getItem("owner")) as GrantOwner | null;
+      if (owner === null || typeof owner.grantId !== "string" || owner.grantId.length === 0)
+        return { retired: false, reason: "no-grant" };
+      if (owner.webId !== expected.webId || owner.issuer !== expected.issuer)
+        return { retired: false, reason: "owner-changed" };
+      if (owner.grantId !== expected.grantId) return { retired: false, reason: "grant-changed" };
+      return { retired: true };
+    },
     lock: async (key: string) =>
       namespace + ":session:" + ((await catalog()).find((a) => a.key === key)?.credential ?? key),
     active,
@@ -184,6 +255,7 @@ export function sessionStorage(raw: KvStore, namespace: string, options: PodAuth
       for (const account of await catalog()) await store.removeItem(account.credential);
       await store.removeItem("accounts");
       await store.removeItem("active");
+      await store.removeItem("owner");
     },
   };
 }

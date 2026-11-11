@@ -28,6 +28,7 @@ const nativeBindings = vi.hoisted(() => ({
 vi.mock("@jeswr/suite-native/capacitor", () => nativeBindings);
 
 const alice = {
+  grantId: "alice-grant",
   webId: "https://pod.example/alice/profile#me",
   issuer: "https://id.example/",
   subject: "alice",
@@ -71,6 +72,12 @@ function harness(options: SolidBackendOptions = {}) {
     logout: vi.fn<PodAuth["logout"]>(async () => {
       identity = null;
       emit("logout");
+    }),
+    retireIfOwnedBy: vi.fn<PodAuth["retireIfOwnedBy"]>(async (expected) => {
+      if (identity !== expected) return { retired: false, reason: "grant-changed" };
+      identity = null;
+      emit("logout");
+      return { retired: true };
     }),
     fetch: vi.fn<typeof fetch>(async () => new Response("private content")),
     on: vi.fn<PodAuth["on"]>((type, listener) => {
@@ -767,6 +774,20 @@ describe("Solid shell over pod-auth", () => {
     expect(h.auth.login).not.toHaveBeenCalled();
   });
 
+  it("delegates rejected grant cleanup to pod-auth with the original identity snapshot", async () => {
+    const h = harness();
+    const rejected = { ...alice, storages: [], grantId: "rejected-grant" };
+    h.auth.login.mockImplementationOnce(async () => {
+      h.setIdentity(rejected);
+      return rejected;
+    });
+    await expect(h.backend.signIn({ issuer: alice.issuer })).rejects.toEqual(
+      new SignInError("invalid-identity"),
+    );
+    expect(h.auth.retireIfOwnedBy).toHaveBeenCalledExactlyOnceWith(rejected);
+    expect(h.auth.logout).not.toHaveBeenCalled();
+  });
+
   it.each([
     { ...alice, webId: null },
     { ...alice, storages: [] },
@@ -780,7 +801,7 @@ describe("Solid shell over pod-auth", () => {
     await expect(h.backend.signIn({ issuer: alice.issuer })).rejects.toMatchObject({
       code: "invalid-identity",
     });
-    expect(h.auth.logout).toHaveBeenCalledOnce();
+    expect(h.auth.retireIfOwnedBy).toHaveBeenCalledExactlyOnceWith(identity);
     expect(await h.backend.restore()).toBeNull();
     expect(await h.auth.identity()).toBeNull();
     await expect(h.backend.fetchFor(bob)(bob.storageUrl)).rejects.toThrow();
@@ -797,7 +818,7 @@ describe("Solid shell over pod-auth", () => {
     const h = harness();
     h.setIdentity({ ...alice, storages });
     await expect(h.backend.restore()).rejects.toEqual(new SignInError("invalid-identity"));
-    expect(h.auth.logout).toHaveBeenCalledOnce();
+    expect(h.auth.retireIfOwnedBy).toHaveBeenCalledOnce();
     expect(await h.backend.restore()).toBeNull();
     const reload = new SolidBackend({ createAuth: h.createAuth, publicFetch: h.publicFetch });
     expect(await reload.restore()).toBeNull();
@@ -805,43 +826,48 @@ describe("Solid shell over pod-auth", () => {
   });
 
   it.each([
-    "identity",
-    "remembered",
-  ])("does not purge a newer account found through %s while rejecting a grant", async (replacement) => {
+    "owner-changed",
+    "grant-changed",
+  ] as const)("preserves the namespace when pod-auth skips retirement: %s", async (reason) => {
     const h = harness();
     const rejected = { ...alice, storages: [] };
+    const newer =
+      reason === "owner-changed"
+        ? { ...alice, webId: bob.webId, subject: "bob", storages: [bob.storageUrl] }
+        : { ...alice, grantId: "newer-grant" };
     h.auth.login.mockImplementationOnce(async () => {
       h.setIdentity(rejected);
-      if (replacement === "identity")
-        h.setIdentity({ ...alice, webId: bob.webId, subject: "bob", storages: [bob.storageUrl] });
-      else h.auth.remembered.mockResolvedValue([{ webId: bob.webId, issuer: bob.issuer }]);
+      h.setIdentity(newer);
       return rejected;
     });
+    h.auth.retireIfOwnedBy.mockResolvedValue({ retired: false, reason });
     await expect(h.backend.signIn({ issuer: alice.issuer })).rejects.toEqual(
       new SignInError("invalid-identity"),
     );
     expect(h.auth.logout).not.toHaveBeenCalled();
+    expect(h.auth.retireIfOwnedBy).toHaveBeenCalledExactlyOnceWith(rejected);
+    expect(await h.auth.identity()).toBe(newer);
   });
 
-  it("does not purge again if sign-out supersedes rejection during an ownership read", async () => {
+  it("does not purge again if sign-out supersedes conditional retirement", async () => {
     const h = harness();
     const rejected = { ...alice, storages: [] };
     const entered = deferred<void>();
-    const pointer = deferred<Awaited<ReturnType<PodAuth["remembered"]>>>();
+    const retirement = deferred<Awaited<ReturnType<PodAuth["retireIfOwnedBy"]>>>();
     h.auth.login.mockImplementationOnce(async () => {
       h.setIdentity(rejected);
       return rejected;
     });
-    h.auth.remembered.mockImplementationOnce(() => {
+    h.auth.retireIfOwnedBy.mockImplementationOnce(() => {
       entered.resolve();
-      return pointer.promise;
+      return retirement.promise;
     });
     const signingIn = h.backend.signIn({ issuer: alice.issuer });
     const failure = expect(signingIn).rejects.toEqual(new SignInError("invalid-identity"));
     await entered.promise;
     await h.backend.signOut({ ...bob, id: `solid:${alice.webId}`, webId: alice.webId });
     h.setIdentity({ ...alice, webId: bob.webId, subject: "bob", storages: [bob.storageUrl] });
-    pointer.resolve([{ webId: alice.webId, issuer: alice.issuer }]);
+    retirement.resolve({ retired: false, reason: "grant-changed" });
     await failure;
     expect(h.auth.logout).toHaveBeenCalledOnce();
     expect((await h.auth.identity())?.webId).toBe(bob.webId);
@@ -854,7 +880,7 @@ describe("Solid shell over pod-auth", () => {
       h.setIdentity(identity);
       return identity;
     });
-    h.auth.logout.mockImplementationOnce(async () => {
+    h.auth.retireIfOwnedBy.mockImplementationOnce(async () => {
       h.setIdentity(null);
       h.emit("logout");
       throw new Error("revocation failed");
