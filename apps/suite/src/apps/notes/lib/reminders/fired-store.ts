@@ -8,12 +8,14 @@ type History = [string, number][];
 export interface FiredReminderStore {
   /** True only after this caller has atomically claimed the reminder. */
   claim(key: string, now: number): Promise<boolean>;
+  /** Release a successfully claimed reminder that was never delivered. */
+  release(key: string): Promise<void>;
 }
 
 function prune(history: History, now: number): Map<string, number> {
   return new Map(
     history
-      .filter(([, time]) => time > now - 30 * DAY && time <= now)
+      .filter(([, time]) => time > Math.max(now, time) - 30 * DAY)
       .sort((a, b) => a[1] - b[1])
       .slice(-MAX_FIRED_REMINDERS),
   );
@@ -29,6 +31,9 @@ export function createMemoryFiredStore(): FiredReminderStore {
       history = prune([...history], now);
       return true;
     },
+    async release(key) {
+      history.delete(key);
+    },
   };
 }
 
@@ -40,45 +45,53 @@ export function createIndexedDbFiredStore(
   account: string,
   indexedDB: IDBFactory,
 ): FiredReminderStore {
-  return {
-    claim(key, now) {
-      return new Promise((resolve, reject) => {
-        const request = indexedDB.open(DATABASE, 1);
-        let blocked = false;
-        request.onupgradeneeded = () => request.result.createObjectStore(STORE);
-        request.onerror = () => reject(request.error);
-        request.onblocked = () => {
-          blocked = true;
-          reject(new Error("Notes reminder database upgrade is blocked."));
+  const update = (key: string, now?: number): Promise<boolean> => {
+    return new Promise((resolve, reject) => {
+      const request = indexedDB.open(DATABASE, 1);
+      let blocked = false;
+      request.onupgradeneeded = () => request.result.createObjectStore(STORE);
+      request.onerror = () => reject(request.error);
+      request.onblocked = () => {
+        blocked = true;
+        reject(new Error("Notes reminder database upgrade is blocked."));
+      };
+      request.onsuccess = () => {
+        const db = request.result;
+        if (blocked) {
+          db.close();
+          return;
+        }
+        const tx = db.transaction(STORE, "readwrite");
+        const store = tx.objectStore(STORE);
+        let claimed = false;
+        tx.oncomplete = () => {
+          db.close();
+          resolve(claimed);
         };
-        request.onsuccess = () => {
-          const db = request.result;
-          if (blocked) {
-            db.close();
-            return;
+        tx.onerror = tx.onabort = () => {
+          db.close();
+          reject(tx.error);
+        };
+        const read = store.get(account);
+        read.onsuccess = () => {
+          const history =
+            now === undefined
+              ? new Map<string, number>(read.result)
+              : prune(read.result ?? [], now);
+          if (now === undefined) history.delete(key);
+          else if (!history.has(key)) {
+            history.set(key, now);
+            claimed = true;
           }
-          const tx = db.transaction(STORE, "readwrite");
-          const store = tx.objectStore(STORE);
-          let claimed = false;
-          tx.oncomplete = () => {
-            db.close();
-            resolve(claimed);
-          };
-          tx.onerror = tx.onabort = () => {
-            db.close();
-            reject(tx.error);
-          };
-          const read = store.get(account);
-          read.onsuccess = () => {
-            const history = prune(read.result ?? [], now);
-            if (!history.has(key)) {
-              history.set(key, now);
-              claimed = true;
-            }
-            store.put([...prune([...history], now)], account);
-          };
+          store.put(now === undefined ? [...history] : [...prune([...history], now)], account);
         };
-      });
+      };
+    });
+  };
+  return {
+    claim: update,
+    async release(key) {
+      await update(key);
     },
   };
 }

@@ -45,6 +45,36 @@ async function setup(
   };
 }
 describe("Notes autosave", () => {
+  it("ignores superseded ETags even when modified times are equal or absent", async () => {
+    const ui = await setup();
+    await act(() => ui.draft.change({ title: "Acknowledged" }));
+    await act(() => ui.draft.flush());
+    await ui.refreshNote({ ...original });
+    expect(ui.draft.draft.title).toBe("Acknowledged");
+    await act(() => ui.draft.change({ body: "Next" }));
+    await act(() => ui.draft.flush());
+    expect(ui.save).toHaveBeenLastCalledWith(expect.anything(), expect.anything(), '"v2"');
+  });
+
+  it("ignores an unseen older refresh after accepting an acknowledged save", async () => {
+    const ui = await setup();
+    const latest = {
+      ...original,
+      title: "Latest",
+      modified: "2026-11-11T12:00:00Z",
+      etag: '"latest"',
+    };
+    await act(() => ui.draft.accept(latest));
+    await ui.refreshNote({
+      ...original,
+      title: "Old",
+      modified: "2026-11-11T11:00:00Z",
+      etag: '"unseen"',
+    });
+    await act(() => ui.draft.change({ body: "Next" }));
+    await act(() => ui.draft.flush());
+    expect(ui.save).toHaveBeenLastCalledWith(expect.anything(), expect.anything(), latest.etag);
+  });
   it("adopts a clean refreshed baseline, including text, labels and its ETag", async () => {
     const ui = await setup();
     const latest = { ...original, title: "Remote", labels: ["Updated"], etag: '"remote"' };

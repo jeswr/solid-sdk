@@ -91,7 +91,19 @@ describe("Notes atomic fired claims", () => {
     ]);
   });
 
-  it("prunes expired and future claims and bounds each account's stored history", async () => {
+  it("preserves newer claims when concurrent tick times oppose transaction order", async () => {
+    const factory = new IDBFactory();
+    const a = createIndexedDbFiredStore("alice", factory);
+    const b = createIndexedDbFiredStore("alice", factory);
+    const newer = b.claim("same", NOW + 1);
+    const older = a.claim("same", NOW);
+    expect(await Promise.all([newer, older])).toEqual([true, false]);
+    expect(await history(factory)).toEqual([["same", NOW + 1]]);
+    expect(await a.claim("different", NOW)).toBe(true);
+    expect(await b.claim("same", NOW)).toBe(false);
+  });
+
+  it("prunes expired claims, retains future claims and bounds each account's stored history", async () => {
     const factory = new IDBFactory();
     const store = createIndexedDbFiredStore("alice", factory);
     await store.claim("initial", NOW);
@@ -106,11 +118,10 @@ describe("Notes atomic fired claims", () => {
     expect(await store.claim("new", NOW)).toBe(true);
     const records = await history(factory);
     expect(records).toHaveLength(MAX_FIRED_REMINDERS);
-    expect(records.at(-1)).toEqual(["new", NOW]);
+    expect(records.at(-1)).toEqual(["future", NOW + 1]);
+    expect(records.at(-2)).toEqual(["new", NOW]);
     expect(
-      records.some(([key]) =>
-        ["expired", "future", `key-${MAX_FIRED_REMINDERS - 1}`].includes(key),
-      ),
+      records.some(([key]) => ["expired", `key-${MAX_FIRED_REMINDERS - 1}`].includes(key)),
     ).toBe(false);
     expect(await store.claim("key-0", NOW)).toBe(false);
     expect(await store.claim("key-0", NOW + 30 * DAY)).toBe(true);
@@ -126,7 +137,20 @@ describe("Notes atomic fired claims", () => {
       await store.claim(`key-${index}`, NOW);
     expect(await store.claim("first", NOW)).toBe(true);
     expect(await store.claim("first", NOW + 30 * DAY)).toBe(true);
-    expect(await store.claim("first", NOW)).toBe(true);
+    expect(await store.claim("first", NOW)).toBe(false);
+  });
+
+  it.each(["memory", "indexedDB"])("releases only the undelivered key in %s", async (kind) => {
+    const factory = new IDBFactory();
+    const store =
+      kind === "memory" ? createMemoryFiredStore() : createIndexedDbFiredStore("alice", factory);
+    await store.release("missing");
+    expect(await store.claim("delivered", NOW)).toBe(true);
+    expect(await store.claim("undelivered", NOW + 1)).toBe(true);
+    expect(await store.claim("undelivered", NOW)).toBe(false);
+    await store.release("undelivered");
+    expect(await store.claim("undelivered", NOW)).toBe(true);
+    expect(await store.claim("delivered", NOW)).toBe(false);
   });
 
   it("reports open errors and closes a late open after an upgrade was blocked", async () => {

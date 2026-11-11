@@ -3,6 +3,8 @@ import { type ReactNode, StrictMode } from "react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { StoredNote } from "../src/apps/notes/lib/model/store";
 import { createNotesStore } from "../src/apps/notes/lib/model/store";
+import * as firedStores from "../src/apps/notes/lib/reminders/fired-store";
+import { reminderKey } from "../src/apps/notes/lib/reminders/scheduler";
 import { createDemoPod } from "../src/lib/demo-pod/pod";
 import { act, click, deferred, h, mount } from "./drive-ui-dom";
 
@@ -453,6 +455,44 @@ it("delivers once when React replays the scheduler mount effect", async () => {
   );
   expect(mocks.toast).toHaveBeenCalledExactlyOnceWith("Remember", expect.anything());
   await ui.unmount();
+});
+
+it("releases a deferred IndexedDB claim after unmount and delivers once on remount", async () => {
+  const gate = deferred<void>();
+  const createStore = firedStores.createIndexedDbFiredStore;
+  const release = vi.fn<(key: string) => Promise<void>>();
+  const claim = vi.fn<(key: string, now: number) => Promise<boolean>>();
+  const factory = vi
+    .spyOn(firedStores, "createIndexedDbFiredStore")
+    .mockImplementationOnce((account, indexedDB) => {
+      const store = createStore(account, indexedDB);
+      release.mockImplementation((key) => store.release(key));
+      claim.mockImplementation(async (key, now) => {
+        await gate.promise;
+        return store.claim(key, now);
+      });
+      return { claim, release };
+    });
+  const due = note({ reminder: NOW.toISOString() });
+  const props = { notes: [due], open: vi.fn(), account: "unmount-during-claim" };
+  try {
+    const ui = await mount(h(Scheduler, props));
+    expect(claim).toHaveBeenCalledExactlyOnceWith(reminderKey(due), NOW.getTime());
+    await ui.unmount();
+    await act(async () => {
+      gate.resolve();
+      await claim.mock.results[0]?.value;
+    });
+    expect(mocks.toast).not.toHaveBeenCalled();
+    expect(release).toHaveBeenCalledExactlyOnceWith(reminderKey(due));
+    const reopened = await mount(h(Scheduler, props));
+    expect(mocks.toast).toHaveBeenCalledExactlyOnceWith("Remember", expect.anything());
+    await reopened.unmount();
+    await mount(h(Scheduler, props));
+    expect(mocks.toast).toHaveBeenCalledTimes(1);
+  } finally {
+    factory.mockRestore();
+  }
 });
 
 it("leaves hidden reminders unclaimed until visible, unless desktop notifications are granted", async () => {

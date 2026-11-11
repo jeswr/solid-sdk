@@ -1,12 +1,15 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
-import { beforeEach, expect, it, vi } from "vitest";
+import type { ReactNode } from "react";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import type { StoredNote } from "../src/apps/notes/lib/model/store";
 import { getPendingDrafts } from "../src/apps/notes/state/draft-registry";
 import { NotesProvider, useNotesContext } from "../src/apps/notes/state/notes-context";
+import { useNoteDraft } from "../src/apps/notes/state/use-note-draft";
 import { createDemoPod } from "../src/lib/demo-pod/pod";
 import { encodeRef } from "../src/lib/refs";
 import type { PodSession } from "../src/lib/session/pod-session";
-import { act, h, mount } from "./drive-ui-dom";
+import { act, deferred, h, mount } from "./drive-ui-dom";
 
 const navigation = vi.hoisted(() => ({
   pathname: "/notes",
@@ -26,7 +29,8 @@ beforeEach(() => {
   navigation.query = new URLSearchParams();
   navigation.push.mockClear();
 });
-async function fixture() {
+afterEach(() => vi.useRealTimers());
+async function fixture(children?: ReactNode) {
   const pod = createDemoPod({ root: "https://notes.example/" });
   const fetchImpl = vi.fn(pod.fetch);
   const session: PodSession = {
@@ -41,7 +45,7 @@ async function fixture() {
   let value!: ReturnType<typeof useNotesContext>;
   function Harness() {
     value = useNotesContext();
-    return null;
+    return children ?? null;
   }
   const render = () => h(NotesProvider, { session, children: h(Harness) });
   const ui = await mount(render());
@@ -81,6 +85,57 @@ it("keeps all three lists mounted across route and dialog navigation", async () 
   history.replaceState({ from: "https://untrusted.example/" }, "");
   await act(() => s.value.closeNote());
   expect(navigation.push).toHaveBeenLastCalledWith("/notes", { scroll: false });
+});
+
+it("keeps acknowledged text and ETags while the provider's list refresh is deferred", async () => {
+  vi.useFakeTimers({ toFake: ["Date"], now: new Date("2026-11-11T12:00:00Z") });
+  let draft!: ReturnType<typeof useNoteDraft>;
+  function Draft({ note }: { note: StoredNote }) {
+    const context = useNotesContext();
+    draft = useNoteDraft(
+      note,
+      context.store,
+      context.refresh,
+      getPendingDrafts(context.session.webId),
+    );
+    return null;
+  }
+  function Editor() {
+    const note = useNotesContext().notes[0];
+    return note ? h(Draft, { note }) : null;
+  }
+  const s = await fixture(h(Editor));
+  let original!: StoredNote;
+  await act(async () => {
+    original = await s.value.create({ title: "Original", body: "Old body" }, false, "default");
+  });
+  const gate = deferred<void>();
+  const list = s.value.store.list.bind(s.value.store);
+  vi.spyOn(s.value.store, "list").mockImplementation(async (location) => {
+    await gate.promise;
+    return list(location);
+  });
+  const save = vi.spyOn(s.value.store, "save");
+  vi.setSystemTime(Date.now() + 1000);
+  await act(() => draft.change({ title: "Acknowledged", body: "New body" }));
+  await act(() => draft.flush());
+  expect(getPendingDrafts(s.value.session.webId).get(original.url)).toBeUndefined();
+  expect(s.value.active.loading).toBe(true);
+  expect(s.value.notes[0]?.etag).toBe(original.etag);
+  expect(draft.draft).toEqual({ title: "Acknowledged", body: "New body", labels: [] });
+  const acknowledged = await save.mock.results[0]?.value;
+  await act(() => draft.change({ body: "Next edit during refresh" }));
+  await act(() => draft.flush());
+  expect(save.mock.calls[1]?.[2]).toBe(acknowledged.etag);
+  expect(draft.status).toBe("saved");
+  await act(() => gate.resolve());
+  expect(s.value.active.loading).toBe(false);
+  expect(draft.draft).toEqual({
+    title: "Acknowledged",
+    body: "Next edit during refresh",
+    labels: [],
+  });
+  expect(await s.value.store.read(original.url)).toMatchObject(draft.draft);
 });
 it("carries pin and colour preferences through archive, trash and restore URL changes", async () => {
   const s = await fixture();

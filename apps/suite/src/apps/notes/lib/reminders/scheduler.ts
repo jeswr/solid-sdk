@@ -5,17 +5,19 @@ import type { FiredReminderStore } from "./fired-store";
 const DAY = 86_400_000;
 export const MAX_REMINDER_DELAY = 24 * DAY;
 
-/** Creation metadata survives moves, including filename collisions in the destination.
- * Legacy documents without a creation time retain their resource identity.
+/** Persisted reminder identities survive moves, including filename collisions.
+ * Legacy reminders without an identifier fall back to the resource URL; moving
+ * those documents may deliver again until a save persists an identifier.
  */
 export function reminderKey(note: Note): string {
-  return JSON.stringify([note.created ? [note.creator, note.created] : note.url, note.reminder]);
+  return JSON.stringify([note.reminderId ?? note.url, note.reminder]);
 }
 
 /** Browser-independent delivery; the shared store arbitrates each delivery. */
 export function createReminderScheduler(options: {
   fired: FiredReminderStore;
-  notify: (note: Note) => void;
+  /** False means the delivery owner disappeared before delivery. */
+  notify: (note: Note) => undefined | boolean;
 }) {
   return {
     async tick(notes: readonly Note[], now: number, canDeliver = true): Promise<void> {
@@ -23,7 +25,9 @@ export function createReminderScheduler(options: {
         if (note.location === "trashed" || !note.reminder) continue;
         const time = Date.parse(note.reminder);
         if (!canDeliver || !(time > now - DAY && time <= now)) continue;
-        if (await options.fired.claim(reminderKey(note), now)) options.notify(note);
+        const key = reminderKey(note);
+        if ((await options.fired.claim(key, now)) && options.notify(note) === false)
+          await options.fired.release(key);
       }
     },
     nextDelay(notes: readonly Note[], now: number): number {

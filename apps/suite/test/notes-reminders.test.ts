@@ -3,6 +3,7 @@ import { LiteralFrom, OptionalAs, TermFrom, TermWrapper } from "@rdfjs/wrapper";
 import { DataFactory } from "n3";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { documentSubject } from "../src/apps/docs/lib/model/document";
+import { writeRdf } from "../src/apps/docs/lib/model/rdf-io";
 import { NS } from "../src/apps/docs/lib/model/vocab";
 import { buildNote, type Note, NoteDoc, parseNote, SCHED } from "../src/apps/notes/lib/model/note";
 import { notesPreferencesSchema } from "../src/apps/notes/lib/model/prefs";
@@ -45,6 +46,9 @@ describe("reminder RDF", () => {
   it("sets, changes and removes the named reminder and its triples", () => {
     const data = buildNote(URL, { title: "Remember", reminder: ISO });
     const doc = new NoteDoc(documentSubject(URL), data, DataFactory);
+    const id = doc.reminderId;
+    expect(id).toMatch(/^[a-f\d]{8}-(?:[a-f\d]{4}-){3}[a-f\d]{12}$/);
+    expect(parseNote(URL, data, "active")?.reminderId).toBe(id);
     expect(parseNote(URL, data, "active")?.reminder).toBe(ISO);
     expect(
       [...data.match(DataFactory.namedNode(`${URL}#reminder`))].map((q) => [
@@ -54,6 +58,7 @@ describe("reminder RDF", () => {
     ).toEqual([
       [`${NS.RDF}type`, `${SCHED}Reminder`],
       [`${SCHED}triggerTime`, ISO],
+      [`${NS.DCT}identifier`, id],
     ]);
     expect(
       [
@@ -65,14 +70,18 @@ describe("reminder RDF", () => {
     ).toBe(`${URL}#reminder`);
     doc.reminder = new Date("2026-11-12T08:00:00Z");
     expect(doc.reminder?.toISOString()).toBe("2026-11-12T08:00:00.000Z");
-    expect(data.match(DataFactory.namedNode(`${URL}#reminder`)).size).toBe(2);
+    expect(data.match(DataFactory.namedNode(`${URL}#reminder`)).size).toBe(3);
+    expect(doc.reminderId).toBe(id);
     expect(() => {
       doc.reminder = new Date("invalid");
     }).toThrow("Invalid reminder date");
     doc.reminder = undefined;
     expect(doc.reminder).toBeUndefined();
+    expect(doc.reminderId).toBeUndefined();
     expect(data.match(DataFactory.namedNode(`${URL}#reminder`)).size).toBe(0);
     expect(buildNote(URL, { title: "", reminder: null }).size).toBeGreaterThan(0);
+    doc.reminder = NOW;
+    expect(doc.reminderId).not.toBe(id);
     expect(parseNote(URL, buildNote(URL, { title: "", reminder: NOW }), "active")?.reminder).toBe(
       NOW.toISOString(),
     );
@@ -82,6 +91,12 @@ describe("reminder RDF", () => {
     const data = buildNote(URL, { title: "Remember", reminder: ISO });
     const doc = new NoteDoc(documentSubject(URL), data, DataFactory);
     const reminder = new TermWrapper(`${URL}#reminder`, data, DataFactory);
+    OptionalAs.object(reminder, `${NS.DCT}identifier`, URL, (value) =>
+      DataFactory.namedNode(value),
+    );
+    expect(doc.reminderId).toBeUndefined();
+    doc.reminderId = undefined;
+    expect(doc.reminderId).toBeUndefined();
     for (const value of [
       undefined,
       DataFactory.namedNode(URL),
@@ -96,6 +111,7 @@ describe("reminder RDF", () => {
     OptionalAs.object(doc, `${SCHED}hasReminder`, "malformed", LiteralFrom.string);
     expect(doc.reminder).toBeUndefined();
     doc.reminder = undefined;
+    doc.reminderId = "ignored";
     expect(doc.reminder).toBeUndefined();
   });
 
@@ -107,6 +123,7 @@ describe("reminder RDF", () => {
       fetch: pod.fetch,
     });
     let saved = await store.create({ title: "Reminder", reminder: ISO });
+    const id = saved.reminderId;
     saved = await store.save(saved, { title: "Edited" }, saved.etag);
     expect(saved.reminder).toBe(ISO);
     saved = await store.archive(saved);
@@ -115,10 +132,14 @@ describe("reminder RDF", () => {
     saved = await store.unarchive(saved);
     expect(saved.reminder).toBe(ISO);
     saved = await store.save(saved, { reminder: "2026-11-12T08:00:00Z" }, saved.etag);
+    expect(saved.reminderId).toBe(id);
+    expect((await store.read(saved.url))?.reminderId).toBe(id);
     expect(saved.reminder).toBe("2026-11-12T08:00:00.000Z");
     saved = await store.save(saved, { reminder: null }, saved.etag);
     expect(saved.reminder).toBeUndefined();
+    expect(saved.reminderId).toBeUndefined();
     saved = await store.save(saved, { reminder: ISO }, saved.etag);
+    expect(saved.reminderId).not.toBe(id);
     saved = await store.archive(saved);
     saved = await store.trash(saved);
     expect(saved.reminder).toBeUndefined();
@@ -259,14 +280,76 @@ describe("reminder scheduler", () => {
     );
     expect(s.notify).toHaveBeenCalledTimes(1);
   });
-  it("distinguishes creation times, creators, legacy resources and changed triggers", async () => {
+  it("delivers distinct persisted reminders with colliding creation metadata", async () => {
     const s = fixture();
-    const original = { ...due, created: NOW.toISOString(), creator: "alice" };
+    const original = { ...due, reminderId: "first", created: NOW.toISOString(), creator: "alice" };
     const moved = { ...original, url: "https://pod.example/archived/renamed.ttl" };
     await s.scheduler.tick(
-      [original, moved, { ...original, created: ISO }, { ...original, creator: "bob" }, due],
+      [original, moved, { ...original, url: "second", reminderId: "second" }, due],
       NOW.getTime(),
     );
-    expect(s.notify).toHaveBeenCalledTimes(4);
+    expect(s.notify.mock.calls.map(([note]) => note)).toEqual([
+      original,
+      expect.objectContaining({ reminderId: "second" }),
+      due,
+    ]);
+  });
+
+  it("persists distinct IDs for resources created by the same author at the same time", async () => {
+    const store = createNotesStore({
+      podRoot: "https://pod.example/",
+      webId: "https://pod.example/#me",
+      fetch: createDemoPod({ root: "https://pod.example/" }).fetch,
+    });
+    const first = await store.create({ title: "Copy", reminder: NOW.toISOString() });
+    const second = await store.create({ title: "Copy", reminder: NOW.toISOString() });
+    expect(first.created).toBe(second.created);
+    expect(first.creator).toBe(second.creator);
+    expect(first.reminderId).toBeTruthy();
+    expect(first.reminderId).not.toBe(second.reminderId);
+    const s = fixture();
+    await s.scheduler.tick([first, second], NOW.getTime());
+    expect(s.notify).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps an identified legacy note without created from repeating after moves", async () => {
+    const pod = createDemoPod({ root: "https://pod.example/" });
+    const store = createNotesStore({
+      podRoot: "https://pod.example/",
+      webId: "https://pod.example/#me",
+      fetch: pod.fetch,
+    });
+    const data = buildNote(URL, { title: "Legacy", reminder: NOW, now: NOW });
+    const doc = new NoteDoc(documentSubject(URL), data, DataFactory);
+    doc.created = undefined;
+    await writeRdf(URL, data, { createOnly: true, fetchImpl: pod.fetch });
+    const legacy = (await store.read(URL)) as NonNullable<Awaited<ReturnType<typeof store.read>>>;
+    expect(legacy.created).toBeUndefined();
+    const s = fixture();
+    await s.scheduler.tick([legacy], NOW.getTime());
+    const archived = await store.archive(legacy);
+    expect(archived.reminderId).toBe(legacy.reminderId);
+    await s.scheduler.tick([archived], NOW.getTime());
+    const restored = await store.unarchive(archived);
+    expect(restored.reminderId).toBe(legacy.reminderId);
+    await s.scheduler.tick([restored], NOW.getTime());
+    expect(s.notify).toHaveBeenCalledExactlyOnceWith(legacy);
+  });
+
+  it("falls back to distinct URLs for legacy reminders, accepting a repeat after a move", async () => {
+    const s = fixture();
+    await s.scheduler.tick([due, { ...due, url: "legacy-two" }], NOW.getTime());
+    await s.scheduler.tick([{ ...due, url: "legacy-moved", location: "archived" }], NOW.getTime());
+    expect(s.notify).toHaveBeenCalledTimes(3);
+  });
+
+  it("releases a successful claim when its delivery owner has disappeared", async () => {
+    const fired = createMemoryFiredStore();
+    const notify = vi.fn(() => false);
+    await createReminderScheduler({ fired, notify }).tick([due], NOW.getTime());
+    const delivered = vi.fn();
+    await createReminderScheduler({ fired, notify: delivered }).tick([due], NOW.getTime());
+    await createReminderScheduler({ fired, notify: delivered }).tick([due], NOW.getTime());
+    expect(delivered).toHaveBeenCalledExactlyOnceWith(due);
   });
 });

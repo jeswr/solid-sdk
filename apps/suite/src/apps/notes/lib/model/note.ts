@@ -37,6 +37,7 @@ export interface Note
   url: string;
   labels: string[];
   reminder?: string | undefined;
+  reminderId?: string | undefined;
   location: NoteLocation;
   trashedAt?: string | undefined;
   previous?: "active" | "archived" | undefined;
@@ -75,9 +76,23 @@ export class NoteDoc extends DocumentDoc {
     if (new Date(`${day}T00:00:00Z`).toISOString().slice(0, 10) !== day) return undefined;
     return date;
   }
+  get reminderId(): string | undefined {
+    const link = OptionalFrom.subjectPredicate(this, `${SCHED}hasReminder`, TermAs.term);
+    if (link?.termType !== "NamedNode") return undefined;
+    const node = new TermWrapper(link, this.dataset, this.factory);
+    const id = OptionalFrom.subjectPredicate(node, `${NS.DCT}identifier`, TermAs.term);
+    return id?.termType === "Literal" ? id.value : undefined;
+  }
+  set reminderId(value: string | undefined) {
+    const link = OptionalFrom.subjectPredicate(this, `${SCHED}hasReminder`, TermAs.term);
+    if (link?.termType !== "NamedNode") return;
+    const node = new TermWrapper(link, this.dataset, this.factory);
+    OptionalAs.object(node, `${NS.DCT}identifier`, value, LiteralFrom.string);
+  }
   set reminder(value: Date | undefined) {
     if (value !== undefined && !Number.isFinite(value.getTime()))
       throw new RangeError("Invalid reminder date");
+    const reminderId = this.reminderId;
     const links = SetFrom.subjectPredicate(
       this,
       `${SCHED}hasReminder`,
@@ -97,6 +112,7 @@ export class NoteDoc extends DocumentDoc {
     OptionalAs.object(node, `${NS.RDF}type`, `${SCHED}Reminder`, NamedNodeFrom.string);
     OptionalAs.object(node, `${SCHED}triggerTime`, value, LiteralFrom.dateTime);
     OptionalAs.object(this, `${SCHED}hasReminder`, id, NamedNodeFrom.string);
+    this.reminderId = reminderId ?? crypto.randomUUID();
   }
   get trashedAt(): Date | undefined {
     return OptionalFrom.subjectPredicate(this, `${NS.PROV}invalidatedAtTime`, LiteralAs.date);
@@ -115,6 +131,7 @@ export class NoteDoc extends DocumentDoc {
 export interface BuildNoteInput extends Omit<BuildDocumentInput, "format"> {
   labels?: readonly string[] | undefined;
   reminder?: Date | string | null | undefined;
+  reminderId?: string | undefined;
   trashedAt?: Date | string | undefined;
   previousContainer?: string | undefined;
 }
@@ -146,6 +163,7 @@ export function buildNote(url: string, input: BuildNoteInput): Store {
   doc.trashedAt = input.trashedAt === undefined ? undefined : new Date(input.trashedAt);
   doc.previousContainer = input.previousContainer;
   doc.reminder = input.reminder == null ? undefined : new Date(input.reminder);
+  if (input.reminderId !== undefined) doc.reminderId = input.reminderId;
   return dataset;
 }
 
@@ -164,6 +182,7 @@ export function parseNote(
     url,
     labels: [...doc.labels],
     reminder: doc.reminder?.toISOString(),
+    reminderId: doc.reminderId,
     location,
     trashedAt: location === "trashed" ? doc.trashedAt?.toISOString() : undefined,
     previous:

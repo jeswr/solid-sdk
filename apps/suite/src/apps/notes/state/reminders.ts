@@ -73,9 +73,13 @@ export function useNoteReminders(
             return true;
           }
         },
+        async release(key) {
+          if (durable !== memory) await durable.release(key).catch(() => {});
+          await memory.release(key);
+        },
       },
       notify: (note) => {
-        if (!active) return;
+        if (!active) return false;
         const title = note.title || "Untitled note";
         const onOpen = () => latest.current.open(note as StoredNote);
         toast(title, {
