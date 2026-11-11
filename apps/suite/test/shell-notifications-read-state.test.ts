@@ -6,7 +6,10 @@ import {
   createDemoNotificationSource,
   demoNotifications,
 } from "../src/shell/notifications/demo-source";
-import { createNotificationReadState } from "../src/shell/notifications/read-state";
+import {
+  createNotificationReadState,
+  MAX_READ_RECEIPTS,
+} from "../src/shell/notifications/read-state";
 
 function memoryStorage() {
   const values = new Map<string, string>();
@@ -128,4 +131,17 @@ it("keeps notifications usable when browser storage is blocked", async () => {
   await controller.markAllRead();
   expect(controller.getSnapshot().unread).toBe(0);
   controller.stop();
+});
+
+// Receipts used to accumulate forever, eventually filling browser storage so new reads were lost.
+it("keeps only the newest read receipts", () => {
+  const storage = memoryStorage();
+  const state = createNotificationReadState("alice", storage);
+  for (let i = 0; i < MAX_READ_RECEIPTS + 50; i++) state.save(new Set([`n${i}`]));
+  const kept = state.load();
+  expect(kept.size).toBe(MAX_READ_RECEIPTS);
+  expect(kept.has("n0")).toBe(false);
+  expect(kept.has(`n${MAX_READ_RECEIPTS + 49}`)).toBe(true);
+  state.save(new Set(["n60"]));
+  expect([...state.load()].at(-1)).toBe("n60");
 });
