@@ -40,6 +40,9 @@ importers:
 
   apps/access-manager:
     dependencies:
+      '@jeswr/app-session':
+        specifier: workspace:*
+        version: link:../../packages/app-session
       '@jeswr/app-shell':
         specifier: workspace:*
         version: link:../../packages/app-shell
@@ -49,42 +52,21 @@ importers:
       '@jeswr/pod-access':
         specifier: workspace:*
         version: link:../../packages/pod-access
-      '@jeswr/solid-elements':
-        specifier: workspace:*
-        version: link:../../packages/solid-elements
       '@jeswr/solid-odrl':
         specifier: workspace:*
         version: link:../../packages/solid-odrl
-      '@jeswr/solid-session-restore':
-        specifier: workspace:*
-        version: link:../../packages/solid-session-restore
       '@jeswr/suite-vocab':
         specifier: workspace:*
         version: link:../../packages/suite-vocab
-      '@lit/react':
-        specifier: ^1.0.8
-        version: 1.0.8(@types/react@19.2.17)
       '@rdfjs/wrapper':
         specifier: 0.34.0
         version: 0.34.0
       '@solid/object':
         specifier: 0.6.0
         version: 0.6.0
-      '@solid/reactive-authentication':
-        specifier: 0.1.5
-        version: 0.1.5
-      dpop:
-        specifier: 2.1.1
-        version: 2.1.1
-      lit:
-        specifier: ^3.3.3
-        version: 3.3.3
       n3:
         specifier: 2.0.3
         version: 2.0.3
-      oauth4webapi:
-        specifier: 3.8.6
-        version: 3.8.6
       react:
         specifier: 19.2.7
         version: 19.2.7
@@ -95,6 +77,9 @@ importers:
       '@biomejs/biome':
         specifier: 2.5.0
         version: 2.5.0
+      '@jeswr/pod-auth':
+        specifier: workspace:*
+        version: link:../../packages/pod-auth
       '@rdfjs/types':
         specifier: 2.0.1
         version: 2.0.1

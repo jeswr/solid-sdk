@@ -1,3 +1,4 @@
+// AUTHORED-BY GPT-6.1 Sol
 // @vitest-environment jsdom
 // AUTHORED-BY Claude Fable 5
 // DataClassView (grouping + per-class access summary) and HistoryView
@@ -25,7 +26,9 @@ async function walkAll(pod: PodStub): Promise<WalkedNode[]> {
 
 function withSession(pod: PodStub, ui: React.ReactNode) {
   return render(
-    <SessionProvider session={{ webId: OWNER, fetch: pod.fetch }}>{ui}</SessionProvider>,
+    <SessionProvider session={{ webId: OWNER, fetch: pod.fetch }} publicFetch={pod.fetch}>
+      {ui}
+    </SessionProvider>,
   );
 }
 

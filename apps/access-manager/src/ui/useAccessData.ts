@@ -7,7 +7,7 @@
 // injected session fetch.
 
 import { useCallback, useEffect, useState } from "react";
-import type { Session } from "../auth/SessionContext.js";
+import { type Session, usePublicFetch } from "../auth/SessionContext.js";
 import { discoverInbox } from "../lib/inbox.js";
 import { storageRoots } from "../lib/profile.js";
 import { type WalkedNode, walkStorage } from "../lib/storage-walk.js";
@@ -28,6 +28,7 @@ export interface AccessData {
 }
 
 export function useAccessData(session: Session): AccessData {
+  const profileFetch = usePublicFetch(session.fetch);
   const [storages, setStorages] = useState<string[]>([]);
   const [storageRoot, setStorageRoot] = useState<string | null>(null);
   const [nodes, setNodes] = useState<WalkedNode[]>([]);
@@ -45,7 +46,7 @@ export function useAccessData(session: Session): AccessData {
     setStorages([]);
     setStorageRoot(null);
     setError(null);
-    storageRoots(session.webId, session.fetch)
+    storageRoots(session.webId, profileFetch)
       .then((roots) => {
         if (cancelled) return;
         setStorages(roots);
@@ -55,7 +56,7 @@ export function useAccessData(session: Session): AccessData {
       .catch(() => {
         if (!cancelled) setError("Could not read your WebID profile.");
       });
-    discoverInbox(session.webId, session.fetch)
+    discoverInbox(session.webId, profileFetch)
       .then((url) => {
         if (!cancelled) setInboxUrl(url ?? null);
       })
@@ -65,7 +66,7 @@ export function useAccessData(session: Session): AccessData {
     return () => {
       cancelled = true;
     };
-  }, [session]);
+  }, [session, profileFetch]);
 
   // The walk + registrations (per storage root / refresh generation).
   useEffect(() => {
@@ -74,7 +75,7 @@ export function useAccessData(session: Session): AccessData {
     let cancelled = false;
     setNodes([]);
     setWalking(true);
-    readTypeRegistrations(session.webId, session.fetch)
+    readTypeRegistrations(session.webId, session.fetch, profileFetch)
       .then((regs) => {
         if (!cancelled) setRegistrations(regs);
       })
@@ -96,7 +97,7 @@ export function useAccessData(session: Session): AccessData {
     return () => {
       cancelled = true;
     };
-  }, [session, storageRoot, generation]);
+  }, [session, storageRoot, generation, profileFetch]);
 
   return {
     storages,

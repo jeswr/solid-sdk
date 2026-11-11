@@ -1,5 +1,6 @@
 <!-- AUTHORED-BY Claude Fable 5 -->
 <!-- AUTHORED-BY Codex GPT-6 -->
+<!-- AUTHORED-BY GPT-6.1 Sol -->
 
 # Solid Access Manager
 
@@ -56,19 +57,36 @@ Phase 1 (the proposal's P2): it works **entirely against existing pod surfaces**
 ## Dev quickstart
 
 ```sh
-npm ci            # keyless — the lockfile pins git+https transports (ignore-scripts=true)
-npm test          # vitest suite against an in-memory pod stub — no server needed
-npm run gate      # lint (biome) + typecheck (tsc) + test (vitest) + build (vite)
-npm run dev       # vite dev server
+pnpm install --offline  # from the workspace root; lifecycle scripts stay disabled
+pnpm --filter @jeswr/app-access-manager test  # in-memory pod fixtures, no server
+pnpm turbo run lint typecheck test build --filter=@jeswr/app-access-manager
+pnpm --filter @jeswr/app-access-manager dev   # Vite dev server
 ```
 
-Login uses the suite stack: `<jeswr-login-panel>` (`@jeswr/solid-elements`)
-over `@solid/reactive-authentication` (authorization-code + PKCE + DPoP popup;
-`public/callback.html` is the popup contract) with silent session restore via
-`@jeswr/solid-session-restore`. Set `VITE_CLIENT_ID` to a Client Identifier
-Document URL to override the client identity; without it or `APP_ORIGIN`, dynamic
-registration is used (dev fallback). All data access flows through an injectable
-authenticated-fetch seam, so every view is unit-testable with a stubbed fetch.
+Login uses `@jeswr/app-session`: one page-lifetime `@jeswr/pod-auth` core,
+restore once on mount, popup authorization through `<authorization-code-flow>`,
+and the shared two-step `SignInCard` from `@jeswr/suite-ui/sign-in`. Remembered
+accounts, WebID or provider addresses, and explicit choice among a WebID's
+issuers use the same shared React provider and login screen as Pod Docs and Drive.
+`public/callback.html` is the only registered login callback. Set `VITE_CLIENT_ID`
+to override the hosted HTTPS Client Identifier Document; otherwise it resolves
+under the app's deployment base. Dynamic registration and insecure HTTP are
+available only in a development build on a loopback host.
+
+Every pod reader and writer receives `auth.fetch` explicitly. Global fetch stays
+unchanged; public profile reads use the shared pristine transport with cookies
+omitted. Credentials are limited to the authenticated WebID's verified advertised
+storage roots. Access Manager retains its `{ webId, fetch }` view context and
+explicit picker for multiple storages; it never manages a WebID-origin fallback
+as if it were a pod. Logout, expiry and account changes discard the signed-in
+views and clear the app's profile-display cache.
+
+On the first real-app mount, the shared provider removes only the old controller's
+`solid-access-manager.remembered-account` and
+`solid-access-manager.recent-accounts` localStorage entries, and the
+`solid-access-manager:sessions` IndexedDB database. Theme preferences and other
+apps' stores are preserved. Demo mode never mounts the auth provider or runs this
+cleanup.
 
 From the monorepo root (Node 24), build for hosting with:
 
@@ -94,7 +112,7 @@ app can be embedded in walkthrough iframes with no auth and no network:
 - `?demo=dataclass` — the data-class view
 
 Demo mode is gated STRICTLY on the `?demo` query param (`src/demo/gate.ts`);
-without it the entry point builds the real `LoginController`, unchanged. The
+without it the entry point mounts the shared session provider. The
 demo fetch (`src/demo/pod.ts`) serves fixtures on GET/HEAD only and THROWS on
 every mutating method, so Approve / Deny / Revoke are visibly present but
 provably inert — the refusal surfaces in the saving indicator. Tests in
@@ -102,7 +120,7 @@ provably inert — the refusal surfaces in the saving indicator. Tests in
 no-write guarantee.
 
 The workspace Pages build above includes both the real app and these demo views.
-The older `npm run build:pages` remains a standalone demo build for
+The older `pnpm run build:pages` builds the standalone app and demo views for
 `/solid-access-manager/`; use the workspace command for the production app and
 its hosted client identity.
 

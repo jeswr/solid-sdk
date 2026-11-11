@@ -11,7 +11,7 @@
   "stack": {
     "language": "typescript",
     "runtime": "node>=20.12",
-    "ui": "vite + react + @jeswr/app-shell + @jeswr/solid-elements",
+    "ui": "vite + react + @jeswr/app-shell + @jeswr/app-session",
     "rdf": "@jeswr/fetch-rdf + @solid/object + @rdfjs/wrapper + @jeswr/solid-odrl + n3",
     "test": "vitest",
     "lint": "biome",
