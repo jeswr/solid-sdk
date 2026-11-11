@@ -11,6 +11,7 @@ import { useRoutePathname } from "@/lib/route-params";
 import { PodSessionProvider, usePodSessionState } from "@/lib/session/pod-session";
 import type { StoredNote } from "../lib/model/store";
 import { NotesProvider, useNotesContext } from "../state/notes-context";
+import { useNoteReminders } from "../state/reminders";
 import { NoteDialog } from "./note-dialog";
 import { NotesGrid } from "./notes-grid";
 import { NotesSidebar } from "./sidebar";
@@ -65,15 +66,17 @@ function NotesRoutes() {
     <>
       <NotesGrid
         view={
-          pathname === "/notes/archive"
-            ? "archived"
-            : pathname === "/notes/trash"
-              ? "trashed"
-              : pathname === "/notes/search"
-                ? "search"
-                : label !== undefined
-                  ? "label"
-                  : "active"
+          pathname === "/notes/reminders"
+            ? "reminders"
+            : pathname === "/notes/archive"
+              ? "archived"
+              : pathname === "/notes/trash"
+                ? "trashed"
+                : pathname === "/notes/search"
+                  ? "search"
+                  : label !== undefined
+                    ? "label"
+                    : "active"
         }
         {...(label === undefined ? {} : { label })}
         query={query}
@@ -83,7 +86,10 @@ function NotesRoutes() {
   );
 }
 function NotesChrome({ children }: { children: ReactNode }) {
-  const { store, session, refresh, prefs, updatePrefs } = useNotesContext();
+  const { store, session, refresh, prefs, updatePrefs, notes, openNote } = useNotesContext();
+  useNoteReminders(session.webId, notes, (note) =>
+    openNote(note, document.getElementById("main-content") ?? document.body),
+  );
   useEffect(() => {
     const key = `suite.notes.purged.${session.webId}.${store.containers.active}`;
     if (purged.has(key)) return;

@@ -47,14 +47,16 @@ import type { StoredNote } from "../lib/model/store";
 import { checklistItems } from "../lib/ui/checklist";
 import { getPendingDrafts } from "../state/draft-registry";
 import { useNotesContext } from "../state/notes-context";
+import { offerReminderPermission } from "../state/reminders";
 import { useNoteDraft } from "../state/use-note-draft";
 import { ColourPicker, ConfirmDialog, LabelChips, LabelPicker } from "./controls";
+import { ReminderChip, ReminderPicker } from "./reminder-picker";
 import { hasOpenItems, SendToTasksDialog } from "./send-to-tasks";
 
 export function NoteDialog({ note }: { note: StoredNote }) {
-  const { store, refresh, session, prefs, pin, colour, closeNote, opener, move } =
+  const { store, refresh, session, prefs, pin, colour, closeNote, opener, move, mutations } =
     useNotesContext();
-  const { draft, change, flush, resolve, status, modified } = useNoteDraft(
+  const { draft, change, flush, resolve, accept, status, modified } = useNoteDraft(
     note,
     store,
     refresh,
@@ -329,6 +331,7 @@ export function NoteDialog({ note }: { note: StoredNote }) {
         )}
         <footer className="notes-dialog-footer">
           <LabelChips links={false} labels={draft.labels} />
+          <ReminderChip value={note.reminder} now={new Date(now)} />
           <div className="notes-dialog-actions">
             {trashed ? (
               <Button
@@ -345,6 +348,18 @@ export function NoteDialog({ note }: { note: StoredNote }) {
               </Button>
             ) : (
               <>
+                <ReminderPicker
+                  disabled={busy}
+                  value={note.reminder}
+                  onChange={(reminder) =>
+                    void act(async (saved) => {
+                      const updated = await mutations.save(saved, { reminder });
+                      accept(updated);
+                      if (reminder) offerReminderPermission(session.webId);
+                      unlock();
+                    })
+                  }
+                />
                 <LabelPicker
                   disabled={busy}
                   value={draft.labels}

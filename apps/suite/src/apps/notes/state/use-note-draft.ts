@@ -3,7 +3,7 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { NoteConflictError } from "../lib/model/errors";
-import type { NoteChanges, NotesStore, StoredNote } from "../lib/model/store";
+import type { NotesStore, StoredNote } from "../lib/model/store";
 import type { DraftRegistry } from "./draft-registry";
 import type { NoteDraft, PendingDrafts } from "./pending-drafts";
 
@@ -59,7 +59,7 @@ export function useNoteDraft(
       void flush().catch(() => {});
     };
   }, [pending, save, flush, note.url, store]);
-  const change = (patch: NoteChanges) => {
+  const change = (patch: Partial<NoteDraft>) => {
     pending.change(
       baseline.current,
       { ...current.current, ...patch, labels: [...(patch.labels ?? current.current.labels)] },
@@ -88,5 +88,11 @@ export function useNoteDraft(
       );
     }
   };
-  return { draft, change, flush, resolve, status, modified };
+  // Non-draft actions run after flush while the editor is locked. Adopt their
+  // acknowledged resource before another text edit can start a conditional write.
+  const accept = (saved: StoredNote) => {
+    baseline.current = saved;
+    setModified(saved.modified);
+  };
+  return { draft, change, flush, resolve, accept, status, modified };
 }

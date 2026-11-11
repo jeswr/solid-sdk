@@ -38,6 +38,7 @@ export interface NoteChanges {
   title?: string;
   body?: string;
   labels?: readonly string[];
+  reminder?: string | null;
 }
 export interface NoteFailure {
   url: string;
@@ -278,6 +279,7 @@ export class NotesStore {
         ...this.input(note),
         priorRevisions: revisions,
         now: new Date(revisions[0]?.generatedAt ?? note.modified ?? this.now()),
+        reminder: state.status === "trashed" ? null : note.reminder,
         trashedAt: state.status === "trashed" ? this.now() : undefined,
         previousContainer: state.status === "trashed" ? this.containers[state.previous] : undefined,
       });

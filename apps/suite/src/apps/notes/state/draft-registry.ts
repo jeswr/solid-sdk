@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 import { z } from "zod";
 import type { NotesStore, StoredNote } from "../lib/model/store";
@@ -11,6 +12,7 @@ const stored = draft.extend({
   location: z.enum(["active", "archived", "trashed"]),
   previous: z.enum(["active", "archived"]).optional(),
   trashedAt: optionalText,
+  reminder: optionalText,
   format: z.string(),
   created: optionalText,
   modified: optionalText,

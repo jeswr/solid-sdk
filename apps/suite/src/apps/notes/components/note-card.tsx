@@ -22,10 +22,13 @@ import type { StoredNote } from "../lib/model/store";
 import { noteText } from "../lib/model/text";
 import { checklistItems, toggleChecklistItem } from "../lib/ui/checklist";
 import { useNotesContext } from "../state/notes-context";
+import { offerReminderPermission } from "../state/reminders";
 import { ColourPicker, ConfirmDialog, LabelChips, LabelPicker } from "./controls";
+import { ReminderChip, ReminderPicker } from "./reminder-picker";
 
-export function NoteCard({ note }: { note: StoredNote }) {
-  const { prefs, openNote, pin, colour, attempt, mutations, move, create } = useNotesContext();
+export function NoteCard({ note, now = new Date() }: { note: StoredNote; now?: Date }) {
+  const { prefs, openNote, pin, colour, attempt, mutations, move, create, session } =
+    useNotesContext();
   const id = useId();
   const [deleting, setDeleting] = useState<StoredNote>();
   const pending = note.etag === null && note.url.includes("/pending-");
@@ -89,6 +92,7 @@ export function NoteCard({ note }: { note: StoredNote }) {
         </ul>
       )}
       <LabelChips labels={note.labels} />
+      <ReminderChip value={note.reminder} now={now} />
       <div className="notes-card-actions">
         {note.location === "trashed" ? (
           <>
@@ -143,6 +147,16 @@ export function NoteCard({ note }: { note: StoredNote }) {
                 <Archive size={17} aria-hidden="true" />
               )}
             </IconButton>
+            <ReminderPicker
+              disabled={busy || pending}
+              value={note.reminder}
+              onChange={(reminder) =>
+                run(async () => {
+                  await mutations.save(note, { reminder });
+                  if (reminder) offerReminderPermission(session.webId);
+                })
+              }
+            />
             <LabelPicker
               disabled={busy || pending}
               value={note.labels}

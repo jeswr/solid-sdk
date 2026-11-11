@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 5.5
 import { validLink } from "../../../docs/lib/editor/logic";
 import type { NoteColour } from "../model/prefs";
@@ -44,7 +45,7 @@ export const KEEP_SKIP_REASONS: Record<
 
 export interface KeepImportItem {
   readonly fileName: string;
-  readonly input: Required<NoteChanges>;
+  readonly input: Required<Pick<NoteChanges, "title" | "body" | "labels">>;
   readonly pinned: boolean;
   readonly colour: NoteColour;
   readonly archived: boolean;

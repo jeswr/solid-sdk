@@ -655,3 +655,14 @@
 .notes-editor ul[data-type="taskList"] > li p {
   margin: 0;
 }
+
+.notes-reminder-chip[data-overdue="true"] {
+  color: var(--muted-foreground);
+  text-decoration: line-through;
+}
+.notes-reminder-picker,
+.notes-reminder-picker form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
