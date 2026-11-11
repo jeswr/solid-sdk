@@ -23,6 +23,10 @@
     "./preferences": {
       "types": "./dist/preferences/index.d.ts",
       "default": "./dist/preferences/index.js"
+    },
+    "./offline": {
+      "types": "./dist/offline.d.ts",
+      "default": "./dist/offline.js"
     }
   },
   "files": [
@@ -45,6 +49,7 @@
     "@jeswr/pod-access": "workspace:*",
     "@jeswr/pod-auth": "workspace:*",
     "@jeswr/rdf-engine": "workspace:*",
+    "@jeswr/solid-offline": "workspace:*",
     "@jeswr/storage-capabilities": "workspace:*",
     "@jeswr/storage-client": "workspace:*"
   },

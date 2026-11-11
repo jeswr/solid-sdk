@@ -1,0 +1,21 @@
+/* AUTHORED-BY Codex GPT-6.1-Sol */
+.tsk-import {
+  max-height: calc(100dvh - 2rem);
+  overflow-y: auto;
+  overflow-wrap: anywhere;
+}
+.tsk-import [role="alert"] {
+  color: var(--destructive);
+}
+.tsk-import-warnings {
+  padding: var(--space-3);
+  border: 1px solid var(--border-strong);
+  border-inline-start: 3px solid var(--warning);
+  border-radius: var(--radius-md);
+  max-height: 10rem;
+  overflow-y: auto;
+}
+.tsk-import-warnings ul {
+  padding-inline-start: var(--space-4);
+  list-style: disc;
+}

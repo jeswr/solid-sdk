@@ -35,6 +35,7 @@ export type Precondition =
 export interface Stored<T> {
   value: T;
   etag: string | null;
+  readOnly?: boolean;
 }
 
 export class SheetStorageError extends Error {
@@ -69,7 +70,12 @@ export function createSheetStorage(fetch: typeof globalThis.fetch, podRoot: stri
   async function read(url: string, accept: string): Promise<Stored<string>> {
     const response = await scopedFetch(url, { headers: { Accept: accept }, cache: "no-store" });
     if (!response.ok) throw new SheetStorageError(response.status, response.headers.get("etag"));
-    return { value: await response.text(), etag: response.headers.get("etag") };
+    const user = /(?:^|,)\s*user\s*=\s*"([^"]*)"/i.exec(response.headers.get("wac-allow") ?? "");
+    return {
+      value: await response.text(),
+      etag: response.headers.get("etag"),
+      ...(user && !/\bwrite\b/i.test(user[1] as string) ? { readOnly: true } : {}),
+    };
   }
   async function write(
     url: string,

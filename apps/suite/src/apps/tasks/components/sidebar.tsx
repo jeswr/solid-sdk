@@ -45,6 +45,7 @@ import { useNow } from "../state/clock";
 import { useTasksPreferences } from "../state/preferences";
 import { useTasks } from "../state/tasks-context";
 import { useDropTarget } from "./dnd/use-task-drag";
+import { TasksImportDialog } from "./import/import-dialog";
 import { ProjectColourPicker } from "./project-colour-picker";
 import { ProjectDot } from "./project-dot";
 import { ShareProject } from "./share-project";
@@ -468,6 +469,7 @@ export function TasksSidebar() {
         </>
       )}
       <div className="tsk-sidebar-footer">
+        <TasksImportDialog />
         {creating ? (
           <form
             onSubmit={(event) => {

@@ -9,9 +9,11 @@
 > Parsed from each entry `.d.ts` `export { … }` set (alias/`type`-modifier resolved). A
 > removed or renamed export shows as a diff here, independent of the chunk bodies below.
 
-- `.` (`dist/index.d.ts`): `ANONYMOUS_SCOPE`, `AppShellConfig`, `CACHE_PREFIX`, `CacheMetadata`, `CacheStorageLike`, `DB_PREFIX`, `DEFAULT_CACHE_NAME`, `DEFAULT_DB_NAME`, `DEFAULT_WARM_BUDGET`, `InvalidateDeps`, `InvalidateOutcome`, `NotificationActivityType`, `NotificationFrame`, `NotificationsClientConfig`, `OfflineClient`, `OfflineClientConfig`, `OfflineEvent`, `OfflineStatusSnapshot`, `OfflineStatusSurface`, `PageToWorkerMessage`, `PurgeDeps`, `PurgeResult`, `ResolvedAppShellConfig`, `ResolvedWarmBudget`, `ResourceFreshness`, `RevalidationEvent`, `ShellCache`, `ShellCacheStorage`, `ShellDeps`, `ShellResult`, `ShellServeSource`, `StatusListener`, `StatusSurfaceOptions`, `SweepResult`, `UpdatedEvent`, `UpdatedListener`, `WarmBudget`, `WarmConfig`, `WarmController`, `WarmDeps`, `WarmResult`, `WarmVisit`, `assetConfigCandidates`, `cacheNameForWebId`, `cleanupOldShellCaches`, `containerChildren`, `createOfflineClient`, `createStatusSurface`, `createWarmController`, `dbNameForWebId`, `deriveSeeds`, `handleNavigation`, `handleNotification`, `handlePrecachedAsset`, `isPrecachedAsset`, `isScopeChange`, `onIdle`, `parseWacAllow`, `precacheAppShell`, `purgeForWebId`, `resolveAppShellConfig`, `resolveAssetShellConfig`, `resolveBudget`, `resolveServingShellConfig`, `resyncSweep`, `sameShellConfig`, `scopeFor`, `scopeHash`, `shellBucketComplete`, `shellCacheName`, `typeIndexTargets`, `userCanRead`, `warm`
+- `.` (`dist/index.d.ts`): `ANONYMOUS_SCOPE`, `AppShellConfig`, `CACHE_PREFIX`, `CACHE_PROVENANCE_HEADER`, `CacheMetadata`, `CacheStorageLike`, `DB_PREFIX`, `DEFAULT_CACHE_NAME`, `DEFAULT_DB_NAME`, `DEFAULT_WARM_BUDGET`, `InvalidateDeps`, `InvalidateOutcome`, `NotificationActivityType`, `NotificationFrame`, `NotificationsClientConfig`, `OfflineClient`, `OfflineClientConfig`, `OfflineEvent`, `OfflineStatusSnapshot`, `OfflineStatusSurface`, `PageToWorkerMessage`, `PurgeDeps`, `PurgeResult`, `ResolvedAppShellConfig`, `ResolvedWarmBudget`, `ResourceFreshness`, `RevalidationEvent`, `ShellCache`, `ShellCacheStorage`, `ShellDeps`, `ShellResult`, `ShellServeSource`, `StatusListener`, `StatusSurfaceOptions`, `SweepResult`, `UpdatedEvent`, `UpdatedListener`, `WarmBudget`, `WarmConfig`, `WarmController`, `WarmDeps`, `WarmResult`, `WarmVisit`, `assetConfigCandidates`, `cacheNameForWebId`, `cacheProvenance`, `cleanupOldShellCaches`, `containerChildren`, `createOfflineClient`, `createStatusSurface`, `createWarmController`, `dbNameForWebId`, `deriveSeeds`, `handleNavigation`, `handleNotification`, `handlePrecachedAsset`, `isPrecachedAsset`, `isScopeChange`, `onIdle`, `parseWacAllow`, `precacheAppShell`, `purgeForWebId`, `resolveAppShellConfig`, `resolveAssetShellConfig`, `resolveBudget`, `resolveServingShellConfig`, `resyncSweep`, `sameShellConfig`, `scopeFor`, `scopeHash`, `shellBucketComplete`, `shellCacheName`, `typeIndexTargets`, `userCanRead`, `warm`
 - `./worker` (`dist/worker.d.ts`): _(no named exports)_
 - `./react` (`dist/react.d.ts`): `OfflineStatusSnapshot`, `OfflineStatusSurface`, `ResourceFreshness`, `ResourceState`, `UseOfflineResourceOptions`, `UseOfflineResourceResult`, `UseOfflineStatusResult`, `useOfflineResource`, `useOfflineStatus`
+- `./outbox` (`dist/outbox.d.ts`): `ConflictRecord`, `Outbox`, `OutboxItem`, `OutboxOperation`, `QueueingStorageClient`, `QueueingWriteResult`, `ReplayOptions`, `createOutbox`, `withOutbox`
+- `./merge` (`dist/merge.d.ts`): `mergeRdf`
 
 ### `dist/index.d.ts`
 
@@ -20,6 +22,7 @@ import { a as OfflineStatusSurface } from './status-<chunk>.js';
 export { O as OfflineStatusSnapshot, R as ResourceFreshness, b as StatusListener, S as StatusSurfaceOptions, c as createStatusSurface } from './status-<chunk>.js';
 import { StorageClient } from '@jeswr/storage-client';
 import { ChangeType, NotificationsClient } from '@jeswr/pod-notifications';
+import { Outbox } from './outbox.js';
 
 /**
  * MANDATORY LOGOUT-PURGE (§7).
@@ -375,6 +378,8 @@ interface AppShellConfig {
 interface OfflineClientConfig {
     /** Page-side storage client, created with the authenticated page fetch. */
     storage?: StorageClient;
+    /** Page-only write queue for this WebID; retained across logout. */
+    outbox?: Outbox;
     /** Optional shared notification client; otherwise created from storage + fetch. */
     notificationsClient?: NotificationsClient;
     /** Serialized storage root used by the credential-free worker for invalidation. */
@@ -769,6 +774,11 @@ declare function handleNavigation(request: Request, deps: ShellDeps): Promise<Sh
  */
 declare function handlePrecachedAsset(request: Request, deps: ShellDeps): Promise<ShellResult>;
 
+/** Response header describing how the offline worker served an in-scope pod GET. */
+declare const CACHE_PROVENANCE_HEADER = "X-Solid-Offline-Cache";
+/** Read the worker's cache provenance without consuming the response body. */
+declare function cacheProvenance(response: Response): 'hit' | 'miss' | 'stale' | null;
+
 /** Prefix for the IndexedDB metadata DB name (generation-scoped). */
 declare const DB_PREFIX = "solid-offline-v2:";
 /** Prefix for the Cache API cache name (generation-scoped). */
@@ -950,7 +960,7 @@ declare function createOfflineClient(config?: OfflineClientConfig): OfflineClien
     readonly status: OfflineStatusSurface;
 };
 
-export { ANONYMOUS_SCOPE, type AppShellConfig, CACHE_PREFIX, type CacheMetadata, type CacheStorageLike, DB_PREFIX, DEFAULT_CACHE_NAME, DEFAULT_DB_NAME, DEFAULT_WARM_BUDGET, type InvalidateDeps, type InvalidateOutcome, type NotificationActivityType, type NotificationFrame, type NotificationsClientConfig, type OfflineClient, type OfflineClientConfig, type OfflineEvent, OfflineStatusSurface, type PageToWorkerMessage, type PurgeDeps, type PurgeResult, type ResolvedAppShellConfig, type ResolvedWarmBudget, type RevalidationEvent, type ShellCache, type ShellCacheStorage, type ShellDeps, type ShellResult, type ShellServeSource, type SweepResult, type UpdatedEvent, type UpdatedListener, type WarmBudget, type WarmConfig, type WarmController, type WarmDeps, type WarmResult, type WarmVisit, assetConfigCandidates, cacheNameForWebId, cleanupOldShellCaches, containerChildren, createOfflineClient, createWarmController, dbNameForWebId, deriveSeeds, handleNavigation, handleNotification, handlePrecachedAsset, isPrecachedAsset, isScopeChange, onIdle, parseWacAllow, precacheAppShell, purgeForWebId, resolveAppShellConfig, resolveAssetShellConfig, resolveBudget, resolveServingShellConfig, resyncSweep, sameShellConfig, scopeFor, scopeHash, shellBucketComplete, shellCacheName, typeIndexTargets, userCanRead, warm };
+export { ANONYMOUS_SCOPE, type AppShellConfig, CACHE_PREFIX, CACHE_PROVENANCE_HEADER, type CacheMetadata, type CacheStorageLike, DB_PREFIX, DEFAULT_CACHE_NAME, DEFAULT_DB_NAME, DEFAULT_WARM_BUDGET, type InvalidateDeps, type InvalidateOutcome, type NotificationActivityType, type NotificationFrame, type NotificationsClientConfig, type OfflineClient, type OfflineClientConfig, type OfflineEvent, OfflineStatusSurface, type PageToWorkerMessage, type PurgeDeps, type PurgeResult, type ResolvedAppShellConfig, type ResolvedWarmBudget, type RevalidationEvent, type ShellCache, type ShellCacheStorage, type ShellDeps, type ShellResult, type ShellServeSource, type SweepResult, type UpdatedEvent, type UpdatedListener, type WarmBudget, type WarmConfig, type WarmController, type WarmDeps, type WarmResult, type WarmVisit, assetConfigCandidates, cacheNameForWebId, cacheProvenance, cleanupOldShellCaches, containerChildren, createOfflineClient, createWarmController, dbNameForWebId, deriveSeeds, handleNavigation, handleNotification, handlePrecachedAsset, isPrecachedAsset, isScopeChange, onIdle, parseWacAllow, precacheAppShell, purgeForWebId, resolveAppShellConfig, resolveAssetShellConfig, resolveBudget, resolveServingShellConfig, resyncSweep, sameShellConfig, scopeFor, scopeHash, shellBucketComplete, shellCacheName, typeIndexTargets, userCanRead, warm };
 ```
 
 ### `dist/worker.d.ts`
@@ -1055,6 +1065,117 @@ interface UseOfflineResourceResult<T> {
 declare function useOfflineResource<T = Response>(url: string | undefined, options?: UseOfflineResourceOptions): UseOfflineResourceResult<T>;
 
 export { OfflineStatusSnapshot, OfflineStatusSurface, type ResourceState, type UseOfflineResourceOptions, type UseOfflineResourceResult, type UseOfflineStatusResult, useOfflineResource, useOfflineStatus };
+```
+
+### `dist/outbox.d.ts`
+
+```ts
+import { Body, CreateOptions, StorageClient, WriteOptions, WriteResult } from '@jeswr/storage-client';
+
+interface OutboxItem {
+    id: string;
+    op: 'write' | 'create' | 'delete';
+    url: string;
+    container?: string;
+    name?: string;
+    contentType?: string;
+    size: number;
+    label?: string;
+    createdAt: number;
+    status: 'waiting' | 'replaying' | 'failed' | 'conflict';
+    error?: string;
+}
+interface ConflictRecord {
+    id: string;
+    itemId: string;
+    url: string;
+    kind: 'rdf' | 'binary';
+    localEtag: string | null;
+    remoteEtag: string | null;
+    contentType: string;
+}
+/** Persistable input. Signals and credentials are never stored. */
+interface OutboxOperation {
+    op: OutboxItem['op'];
+    url: string;
+    body?: Body | null;
+    contentType?: string;
+    ifMatch?: string;
+    container?: string;
+    name?: string;
+    label?: string;
+    createOptions?: Omit<CreateOptions, 'signal'>;
+    deleteOptions?: {
+        recursive?: boolean;
+    };
+}
+interface ReplayOptions {
+    /** Per-item byte progress, at start (0) and successful completion (size). */
+    onProgress?: (sent: number, total: number) => void;
+    /** Stops before the next item and cancels the active request. */
+    signal?: AbortSignal;
+}
+interface Outbox {
+    readonly webId: string;
+    /** Await hydration before reading the initial synchronous snapshots. */
+    readonly ready: Promise<void>;
+    pending(): OutboxItem[];
+    conflicts(): ConflictRecord[];
+    /** Durable enqueue; normally called by withOutbox. */
+    enqueue(operation: OutboxOperation): Promise<OutboxItem>;
+    /** Accepts a conflict ID or an item ID; returns a defensive copy. */
+    localBody(id: string): Promise<Uint8Array | null>;
+    replay(client: StorageClient, options?: ReplayOptions): Promise<void>;
+    /** Uses the client supplied to withOutbox or the most recent replay. */
+    retry(id?: string): Promise<void>;
+    resolve(id: string, strategy: 'mine' | 'theirs' | 'both'): Promise<void>;
+    on(event: 'change' | 'conflict', listener: () => void): () => void;
+    /** Deletes only this WebID's queue. Logout deliberately does not call this. */
+    purge(): Promise<void>;
+    /** Releases listeners; persisted changes survive. */
+    close(): void;
+}
+type QueueOption = {
+    offline?: 'queue';
+};
+type RdfOptions = Parameters<StorageClient['writeRdf']>[2];
+type DeleteOptions = NonNullable<Parameters<StorageClient['delete']>[1]>;
+type QueueingWriteResult = WriteResult & {
+    queued?: true;
+};
+interface QueueingStorageClient extends StorageClient {
+    write(url: string, body: Body, opts: WriteOptions & QueueOption): Promise<QueueingWriteResult>;
+    writeRdf(url: string, dataset: Parameters<StorageClient['writeRdf']>[1], opts: RdfOptions & QueueOption): Promise<QueueingWriteResult>;
+    create(container: string, body: Body | null, opts?: CreateOptions & QueueOption): Promise<QueueingWriteResult>;
+    delete(url: string, opts?: DeleteOptions & QueueOption): Promise<void>;
+}
+/** A separate DB from read metadata: logout may purge the cache, never unsent writes. */
+declare function createOutbox(options: {
+    webId: string;
+    idb?: IDBFactory;
+    now?: () => number;
+}): Outbox;
+/** Opt-in only. Patch/move and every read keep the wrapped client's behavior. */
+declare function withOutbox(client: StorageClient, outbox: Outbox): QueueingStorageClient;
+
+export { type ConflictRecord, type Outbox, type OutboxItem, type OutboxOperation, type QueueingStorageClient, type QueueingWriteResult, type ReplayOptions, createOutbox, withOutbox };
+```
+
+### `dist/merge.d.ts`
+
+```ts
+import { StorageClient } from '@jeswr/storage-client';
+
+type Quad = Parameters<StorageClient['writeRdf']>[1] extends Iterable<infer Q> ? Q : never;
+/**
+ * Set merge: (remote − (base − local)) ∪ (local − base).
+ * Preserves the original terms. Blank nodes compare by label; skolemise first
+ * when labels are not stable between the three inputs. This is not a semantic
+ * or functional-property conflict detector.
+ */
+declare function mergeRdf(base: Iterable<Quad>, local: Iterable<Quad>, remote: Iterable<Quad>): Quad[];
+
+export { mergeRdf };
 ```
 
 ### `dist/status-<chunk>.d.ts`
