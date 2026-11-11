@@ -410,3 +410,12 @@ wraps such controls: transparent while online; offline it disables them and expl
 keyboard- and pointer-reachable tooltip (default `OFFLINE_REASON`, "You're offline. This needs a
 connection."). Its trigger is a span, so it stays focusable inside a disabled fieldset. `ConflictDialog` calls `onChoose`
 with `mine`, `theirs` or `both`; the caller applies the choice and controls when it closes.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+### Smart chips
+
+`Chip` renders a `ChipRef` with its kind icon, resolves live metadata through an injected
+callback, and exposes a hover/focus card with owner and an Open link. Unreadable references
+keep their stored label and link directly to the IRI with a lock icon. `ChipPicker` supplies
+a debounced combobox/listbox with arrows, Enter, Escape, composition handling and cancelled
+search fencing. Import the existing components stylesheet; both components use suite tokens.

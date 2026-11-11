@@ -231,3 +231,13 @@ WebID and storage root. Another account's values never hydrate or broadcast into
 store. Create a fresh factory per authenticated session and dispose the old one; this revokes
 retained setters and aborts/fences late operations. Pending durable values remain available only
 to that same WebID/storage session on restart. Construction and speculative renders do no I/O.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+### Smart chips
+
+`@jeswr/suite-sdk/chips` provides `ChipRef`, `chipCandidates` over the existing search facade,
+`resolveChip` (session-scoped, 30-second display metadata cache), text-composer helpers and
+once-on-save mention notification drafts/delivery. `@jeswr/suite-sdk/chips/tiptap` exports
+`createChipExtension`, an inline atom whose fallback HTML is a normal resource anchor.
+The suite-ui package supplies `Chip` hover cards and the keyboard-accessible `ChipPicker`.
+See [SKILL.md](./SKILL.md) for lifecycle and receipt guarantees.

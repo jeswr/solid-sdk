@@ -11,6 +11,7 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
+import { notifySavedText } from "@/lib/chip-mentions";
 import type { PodSession } from "@/lib/session/pod-session";
 import { classifyError } from "../lib/model/errors";
 import { type StoredProject, TaskStore } from "../lib/model/store";
@@ -130,7 +131,12 @@ function useTasksValue(session: PodSession) {
       loadTasks: cache.loadTasks.bind(cache),
       retry: cache.retry,
       createTask: cache.createTask.bind(cache),
-      updateTask: cache.updateTask.bind(cache),
+      updateTask: async (...args: Parameters<typeof cache.updateTask>) => {
+        const saved = await cache.updateTask(...args);
+        if (saved)
+          void notifySavedText(session, saved.url, saved.task.description ?? "").catch(() => {});
+        return saved;
+      },
       updateProject: cache.updateProject.bind(cache),
       moveTaskToProject: cache.moveTaskToProject.bind(cache),
       deleteTask: cache.deleteTask.bind(cache),

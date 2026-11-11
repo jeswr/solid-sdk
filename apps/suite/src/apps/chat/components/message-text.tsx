@@ -1,12 +1,16 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // biome-ignore-all lint/suspicious/noArrayIndexKey: syntax tokens are stateless and replaced with each parsed message
+
 import { Fragment } from "react";
+import { SuiteChip } from "@/components/chips";
 import { type InlineNode, parseMessageText } from "../lib/text";
 
 function Inline({ nodes }: { nodes: InlineNode[] }) {
   return nodes.map((node, index) => (
     <Fragment key={index}>
-      {node.type === "text" || node.type === "emoji" ? (
+      {node.type === "chip" ? (
+        <SuiteChip reference={node.ref} />
+      ) : node.type === "text" || node.type === "emoji" ? (
         node.value
       ) : node.type === "code" ? (
         <code>{node.value}</code>

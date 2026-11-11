@@ -46,6 +46,19 @@ function message(id: string, content: string): Message {
 async function tick() {
   for (let i = 0; i < 12; i++) await Promise.resolve();
 }
+it("calls the saved-message hook only after an acknowledged send", async () => {
+  storage();
+  const saved = vi.fn();
+  const send = vi.fn(async () => message("canonical", "Mention"));
+  const box = new ChatOutbox({ webId, send }, () => true, new ChatLocalState(webId), saved);
+  box.send(room, "Mention");
+  expect(saved).not.toHaveBeenCalled();
+  await tick();
+  expect(saved).toHaveBeenCalledWith(message("canonical", "Mention"));
+  box.flush();
+  await tick();
+  expect(saved).toHaveBeenCalledTimes(1);
+});
 it("keeps offline sends pending, flushes in order and acknowledges only canonical IDs", async () => {
   let online = false;
   const send = vi.fn(async (_room: string, text: string, input?: { id?: string; at?: Date }) =>

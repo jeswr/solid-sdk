@@ -20,6 +20,7 @@ import { ArrowLeft, ImagePlus, Star } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { ChipEditorTools, suiteChipExtension } from "@/components/chips";
 import { SuiteFrame } from "@/components/interim-shell/suite-frame";
 import { encodeRef } from "@/lib/refs";
 import type { PodSession } from "@/lib/session/pod-session";
@@ -172,7 +173,7 @@ function HydratedEditor({ runtime }: { runtime: DocumentPersistence }) {
       extensions: editorExtensions(
         runtime.doc,
         podScopedFetch(runtime.session.fetch, runtime.session.storageUrl),
-      ),
+      ).map((extension) => (extension.name === "chip" ? suiteChipExtension() : extension)),
       editable: !runtime.readOnly,
       autofocus: runtime.stored ? false : "start",
       editorProps: {
@@ -444,6 +445,7 @@ function HydratedEditor({ runtime }: { runtime: DocumentPersistence }) {
     });
   return (
     <div className="docs-editor-shell" data-outline={outline ? "open" : "closed"}>
+      <ChipEditorTools editor={editor} session={runtime.session} />
       <SuiteFrame
         app="docs"
         sidebar={<DocsSidebar />}

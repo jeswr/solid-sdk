@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 
+export { Chip, ChipPicker } from "./chips.js";
 export type {
   CollectionErrorKind,
   CollectionState,

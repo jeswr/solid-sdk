@@ -1,6 +1,6 @@
 ---
 name: suite-sdk
-description: Use when working on @jeswr/suite-sdk registration, notifications, server/local search, LocalIndex feeders, useSearch, useNotify, useInbox integration with PodAuthProvider, or pod-backed preferences and offline preference replay.
+description: Use when working on @jeswr/suite-sdk registration, notifications, smart chips and mentions, server/local search, LocalIndex feeders, useSearch, useNotify, useInbox integration with PodAuthProvider, or pod-backed preferences and offline preference replay.
 ---
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 <!-- AUTHORED-BY Codex GPT-6 -->
@@ -160,3 +160,26 @@ tab updates. Test preferences source with real memory Solid/LWS operations and f
 keep the explicit `src/preferences/**` 100% statement/branch/function/line threshold.
 
 Public API changes must update this skill and README together.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+## Smart chips (`./chips`, `./chips/tiptap`)
+
+`ChipRef` carries `{ iri, kind, label, app? }`. `chipCandidates(query, { search, contacts,
+limit?, signal? })` consumes the existing `Search` callable, merges contacts/known WebIDs,
+ranks label prefixes first and deduplicates exact IRIs. Search errors propagate.
+`resolveChip(iri, { fetch, label?, kind? })` reads display metadata through fetch-rdf and
+wrapper accessors. Its bounded 30-second cache belongs to the supplied session transport.
+Unreadable resources keep the stored label and a lock icon; non-RDF files retain their
+stored metadata. Inject bounded authenticated fetch; server callers still need DNS pinning.
+
+`createChipExtension()` on the separate `./chips/tiptap` entry is a framework-neutral inline
+atom with `{iri, kind, label}` attributes and ordinary anchor HTML. Consumers provide picker
+and node-view integration. No new domain model or search index is created. `chipQuery`,
+`chipText` and `textChips` support plain-text composers, preserving kind and resource IRI.
+
+`mentionNotification(resource, mentionedWebId, excerpt)` uses the existing Create builder.
+`createMentionNotifier({ actor, notify, receipts })` runs only after acknowledged saves,
+skips self/nonpeople, claims actor/resource/person receipts before sending, and never retries
+an ambiguous result. Receipts must be durable and account scoped. Browser-local receipts
+provide at-most-once attempts on that browser; they do not provide cross-device delivery or
+retry guarantees. A caller requiring distributed deduplication needs a shared receipt store.

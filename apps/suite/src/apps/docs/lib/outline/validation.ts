@@ -1,5 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+
+import { type ChipKind, chipIri, chipKinds } from "@jeswr/suite-sdk/chips";
 import { DocumentOutlineError, type NodePath } from "./types";
 
 /** Limits include metadata; the character budget measures input UTF-16 code units. */
@@ -24,7 +26,7 @@ const blocks = [
   "image",
   "table",
 ];
-const inline = ["text", "hardBreak"];
+const inline = ["text", "hardBreak", "chip"];
 const children: Record<string, readonly string[]> = {
   doc: blocks,
   paragraph: inline,
@@ -41,6 +43,7 @@ const children: Record<string, readonly string[]> = {
   tableCell: blocks,
   tableHeader: blocks,
   text: [],
+  chip: [],
   hardBreak: [],
   horizontalRule: [],
   image: [],
@@ -171,6 +174,13 @@ function parseDocument(input: unknown): DocumentNode {
       }
     } else if ("text" in value) invalid("Only text nodes may carry text", path);
     const attrs = value.attrs as Record<string, unknown> | undefined;
+    if (
+      type === "chip" &&
+      (typeof attrs?.label !== "string" ||
+        !chipIri(String(attrs?.iri ?? "")) ||
+        !chipKinds.includes(attrs?.kind as ChipKind))
+    )
+      invalid("Invalid chip attributes", path);
     const level = attrs?.level;
     if (type === "heading" && level !== 1 && level !== 2 && level !== 3) {
       invalid("Expected heading level 1, 2 or 3", path);
@@ -201,7 +211,8 @@ function parseDocument(input: unknown): DocumentNode {
     }
     return {
       type,
-      text: type === "text" ? (value.text as string) : "",
+      text:
+        type === "text" ? (value.text as string) : type === "chip" ? (attrs?.label as string) : "",
       level: type === "heading" ? (level as 1 | 2 | 3) : 1,
       content: content.map((child, index) => read(child, [...path, index], allowedChildren)),
     };

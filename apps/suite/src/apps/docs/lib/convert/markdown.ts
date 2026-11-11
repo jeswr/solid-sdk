@@ -116,6 +116,7 @@ function inlineCode(text: string): string {
 type MarkdownRule = { tag: string; attributes: string[]; omitted?: string[] };
 const OMITTED_BLOCK_STYLES = ["indent", "lineHeight", "spaceBefore", "spaceAfter"];
 export const MARKDOWN_NODE_RULES: Record<string, MarkdownRule> = {
+  chip: { tag: "a", attributes: ["iri", "kind", "label"] },
   doc: { tag: "", attributes: [] },
   text: { tag: "", attributes: [] },
   paragraph: { tag: "p", attributes: ["textAlign"], omitted: OMITTED_BLOCK_STYLES },
@@ -324,6 +325,8 @@ function exactAttributes(node: JSONContent | InlineMark, mark = false): string {
 }
 
 function htmlNode(node: JSONContent): string {
+  if (node.type === "chip")
+    return `<a${attributes({ href: node.attrs?.iri, "data-chip": "", "data-chip-kind": node.attrs?.kind, "data-chip-label": node.attrs?.label })}>${escapeHtmlText(String(node.attrs?.label ?? ""))}</a>`;
   if (node.type === "text") return serializeInline([node], false, true);
   const rule = MARKDOWN_NODE_RULES[node.type as string] as { tag: string };
   const tag = node.type === "heading" ? `h${node.attrs?.level}` : rule.tag;
@@ -381,6 +384,7 @@ function gfmTable(node: JSONContent): boolean {
 }
 
 function needsHtml(node: JSONContent): boolean {
+  if (node.type === "chip") return true;
   if (node.type === "text") return false;
   if (node.marks?.length || node.attrs?.textAlign != null) return true;
   if (node.type === "table") return !gfmTable(node);
@@ -1392,6 +1396,7 @@ function clean(
 function textContent(node: JSONContent): string {
   if (node.type === "hardBreak") return "\n";
   // Images are text-bearing leaves in descriptions, including nested images.
+  if (node.type === "chip") return String(node.attrs?.label ?? "");
   if (node.type === "image") return String(node.attrs?.alt ?? "");
   return node.text ?? (node.content ?? []).map(textContent).join(" ");
 }

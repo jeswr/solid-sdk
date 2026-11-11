@@ -1,11 +1,13 @@
 // AUTHORED-BY Codex
 // AUTHORED-BY Codex GPT-6
+
 import { RdfFetchError } from "@jeswr/fetch-rdf";
 import { type SolidPersistence, SolidUpdateStore } from "@jeswr/y-solid";
 import { generateHTML, getSchema, type JSONContent } from "@tiptap/react";
 import { prosemirrorJSONToYDoc, yDocToProsemirrorJSON } from "@tiptap/y-tiptap";
 import { IndexeddbPersistence, storeState } from "y-indexeddb";
 import { applyUpdate, Doc, encodeStateAsUpdate, mergeUpdates } from "yjs";
+import { notifySavedHtml } from "@/lib/chip-mentions";
 import type { PodSession } from "@/lib/session/pod-session";
 import { createSolidDriveClient } from "../../drive/lib/client/client";
 import { deriveTitle, type SaveState, wordCount } from "../lib/editor/logic";
@@ -128,7 +130,7 @@ export class DocumentPersistence {
   onCreated: (url: string) => void = () => {};
   constructor(
     readonly session: PodSession,
-    readonly draftId = crypto.randomUUID(),
+    readonly draftId: string = crypto.randomUUID(),
   ) {
     const keepaliveFetch: typeof fetch = (input, init) => {
       const body = init?.body;
@@ -1289,6 +1291,7 @@ export class DocumentPersistence {
       }
       this.state = this.conflict ? "failed" : "saved";
       if (this.state === "saved" && this.stored && !this.stopped) {
+        void notifySavedHtml(this.session, this.stored.url, this.body).catch(() => {});
         void this.automaticVersions.afterSave(
           new DocumentVersionStore(docContainerUrls(this.stored.url).versions, this.session.fetch),
           this.doc,

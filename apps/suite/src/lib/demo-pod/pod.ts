@@ -116,6 +116,8 @@ export interface DemoPodSnapshot {
 
 /** A resource to place in a fresh pod. Paths are relative to the pod root. */
 export interface DemoSeedFile {
+  /** Display metadata for the demo account's existing cross-app search source. */
+  readonly search?: import("@jeswr/suite-sdk/chips").ChipRef;
   readonly path: string;
   readonly body: Uint8Array | string;
   readonly contentType: string;
