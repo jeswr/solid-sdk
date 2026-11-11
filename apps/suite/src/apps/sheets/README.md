@@ -2,6 +2,8 @@
 // AUTHORED-BY Codex GPT-6
 
 Sheets uses `WorkbookService` for pod storage and a lazy Univer 1.2.0 adapter for the editor.
+The service in `lib/workbook/index.ts` stores guarded snapshots and derived CSV/RDF
+projections on the active pod.
 The demo session uses the same service against the browser's persistent demo pod.
 
 The editor and list menu open the shell's sharing dialog for the workbook container.
@@ -86,17 +88,19 @@ views retain the existing credential-free, view-only boundary.
 
 Current thread locations live in `workbook.json` as
 `commentAnchors: { version: 1, anchors: { [annotationId]: { sheetId, cell } | "deleted" } }`.
-The version and every address are Zod-validated on snapshot save/open. Readers use
+The optional collection and each address are Zod-validated on snapshot save/open.
+Invalid entries are ignored independently; valid anchors, charts and workbook cells survive. Readers use
 this map when present and otherwise use the annotation's creation selector.
 The adapter observes Univer row/column insert/delete mutations and transforms the
-whole map synchronously with workbook state. Native command interceptors include
+whole map and chart sources synchronously with workbook state. A shared structural
+command checkpoint includes
 deletion history in the same undo/redo entries as the cells. Undo and redo shift
 all anchors and open drafts, including those created after the command. Only
 reversing the command that deleted a cell revives its anchors; an unrelated
 insertion leaves them deleted. Editing stays locked from engine mount until the
 initial comment list has loaded and missing anchors are registered. Refreshes
 also hold editing until registration completes. A failed load releases editing,
-CSV import and undo/redo, shows an error with Retry, and disables comment actions
+CSV import, chart editing and undo/redo, shows an error with Retry, and disables comment actions
 until a load succeeds. Registered anchors continue following edits. This lock cannot
 override view-only access. These anchors
 commit atomically with the guarded workbook snapshot; reloading a winning revision
@@ -115,3 +119,34 @@ policy. This implementation does not add signatures.
 
 Comments refresh when the window gains focus or via Refresh comments. Unsupported
 structural operations such as cut/move are outside the row/column mutation bridge.
+
+Charts (SHT-05) are app-owned SVGs in a scrollable strip below the grid. This avoids
+coupling their position and keyboard controls to Univer's canvas coordinates or its Pro
+chart plugin. The editor and chart renderer are lazy chunks; the list page loads neither.
+Insert chart uses the active selection. The chart editor supports column, bar, line, pie
+and scatter charts, an A1 range on the original sheet (optionally sheet-qualified),
+a title, legend, and series from rows or columns. Text edges are detected as headers;
+blank/non-numeric cells are gaps, and numeric text is accepted. Pie uses positive values
+from the first series; scatter pairs the first numeric series with each remaining series.
+Series colours use the shared `--chart-1` through `--chart-5` theme tokens. Each SVG has
+an accessible title and a series summary. The strip updates after cell edits and formula
+results, and the editor uses native labelled keyboard controls.
+View-only workbooks still render the chart strip, but disable insert and edit controls
+and hide the chart editor. The engine also blocks chart changes, including source restoration
+from undo history, after write access is lost.
+
+`workbook.json` retains the existing engine snapshot and adds `charts: { version: 1,
+entries: [...] }`. Zod validates the collection and each entry on save/load; invalid entries
+(including unknown versions, duplicate IDs, and missing/out-of-bounds sources) are ignored
+and reported as content-free console warnings. Legacy snapshots need no migration.
+Row/column mutations shift chart sources during forward edits, undo and redo, including charts
+created after a command. Deletions record the current source and its revision before each replay,
+including redo. Undo restores that range only while the revision is unchanged; manual sheet or
+range edits increment the revision, while presentation edits preserve it. An open chart editor
+uses the live source on Apply unless its range field was changed. Fully deleted
+sources stay saved with `range: null` and show “Data range deleted”. Source validity is
+independent of the rendering budget: ranges above 10,000 cells remain saved and show
+“Range too large to chart” until reduced.
+Chart controls and the adapter also block chart changes while comments load.
+Charts follow the existing guarded autosave and conflict flow. XLSX import/export behavior
+is unchanged: charts are **not exported to XLSX**, and imported Excel charts are not read.

@@ -85,6 +85,14 @@ test("create, edit, add a sheet, download CSV, and persist across reload", async
   await expect
     .poll(() => page.evaluate(() => window.__sheetsEngine?.activeSheet().name))
     .toBe("Sheet1");
+  const selectedRange = await page.evaluate(() => window.__sheetsEngine?.selection?.().range);
+  await page.getByRole("button", { name: "Insert chart", exact: true }).click();
+  await expect(page.getByLabel("Data range (A1)")).toHaveValue(selectedRange as string);
+  await page.getByLabel("Data range (A1)").fill("A1:A4");
+  await page.getByLabel("Chart title", { exact: true }).fill("Totals");
+  await page.getByLabel("Chart type").selectOption("line");
+  await page.getByRole("button", { name: "Insert", exact: true }).click();
+  await expect(page.getByRole("img", { name: /^Totals/ })).toBeVisible();
   await expect(page.getByText("Saved to your pod", { exact: true })).toBeVisible();
   expect(
     (await new AxeBuilder({ page }).exclude('[data-testid="univer-container"]').analyze())
@@ -117,6 +125,14 @@ test("create, edit, add a sheet, download CSV, and persist across reload", async
       }),
     )
     .toBe("1\r\n2\r\n3\r\n6\r\n");
+  await expect(page.getByRole("img", { name: /^Totals/ })).toBeVisible();
+  await page.getByRole("button", { name: "Edit chart", exact: true }).click();
+  await page.getByLabel("Chart type").selectOption("bar");
+  await page.getByRole("button", { name: "Apply", exact: true }).click();
+  await page.getByRole("button", { name: "Edit chart", exact: true }).click();
+  await page.getByRole("button", { name: "Delete chart", exact: true }).click();
+  await expect(page.getByRole("img", { name: /^Totals/ })).toHaveCount(0);
+  await expect(page.getByText("Saved to your pod", { exact: true })).toBeVisible();
 });
 
 test("invalid references have a useful not-found state", async ({ page }) => {

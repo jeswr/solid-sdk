@@ -191,5 +191,7 @@ describe("icon-only button lint", () => {
         iconButtonIssues(readFileSync(file, "utf8")).map((issue) => `${file}: ${issue}`),
       ),
     ).toEqual([]);
-  });
+    // Parses every suite-ui and apps/suite source file with the TypeScript
+    // compiler; the tree has grown past the 5 s default on CI runners.
+  }, 30_000);
 });

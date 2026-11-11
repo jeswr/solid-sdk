@@ -1,6 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import {
   currentCommentAnchor,
   WorkbookCommentAnchors,
@@ -92,4 +92,107 @@ it("carries draft deletion history into a thread persisted after the structural 
   state.load({});
   state.revive(deletion);
   expect(state.snapshot()).toEqual({});
+});
+
+it("sanitizes optional anchor collections independently, retaining valid entries and chart metadata", async () => {
+  const { validateCommentSnapshot } = await import("../src/apps/sheets/lib/comments/anchors");
+  const workbook = { sheets: { stable: { name: "Data" } }, charts: { version: 1, entries: [] } };
+  expect(validateCommentSnapshot(workbook)).toBe(workbook);
+  const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+  try {
+    for (const commentAnchors of [null, { version: 2, anchors: {} }, { version: 1 }]) {
+      expect(validateCommentSnapshot({ ...workbook, commentAnchors })).toEqual(workbook);
+    }
+    const cleaned = validateCommentSnapshot({
+      ...workbook,
+      commentAnchors: {
+        version: 1,
+        anchors: {
+          root: { sheetId: "stable", cell: "D5" },
+          gone: "deleted",
+          bad: { sheetId: "stable", cell: "$B$3" },
+          "": "deleted",
+          overflow: { sheetId: "stable", cell: Infinity },
+        },
+      },
+    });
+    expect(cleaned).toEqual({
+      ...workbook,
+      commentAnchors: {
+        version: 1,
+        anchors: { root: { sheetId: "stable", cell: "D5" }, gone: "deleted" },
+      },
+    });
+    expect(() => serializeSnapshot(cleaned)).not.toThrow();
+    expect(warn).toHaveBeenCalledTimes(6);
+  } finally {
+    warn.mockRestore();
+  }
+});
+
+it("opens, saves and creates mixed snapshots without invalid optional entries hiding the other feature or cells", async () => {
+  const { harness, snapshot } = await import("./sheets-workbook-helpers");
+  const { readCharts } = await import("../src/apps/sheets/lib/charts/spec");
+  const h = await harness();
+  const chart = {
+    id: "chart",
+    sheetId: "data",
+    range: "A1:B2",
+    type: "column",
+    title: "Values",
+    legend: true,
+    series: "columns",
+  };
+  const book = await h.service.create({ title: "Both", snapshot: snapshot() });
+  const goodAnchors = {
+    version: 1,
+    anchors: { root: { sheetId: "data", cell: "B2" }, gone: "deleted" },
+  };
+  const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+  try {
+    for (const [charts, commentAnchors, expectedCharts, expectedAnchors] of [
+      [
+        { version: 1, entries: [chart, { ...chart, id: "bad", range: "invalid" }] },
+        goodAnchors,
+        [chart],
+        goodAnchors,
+      ],
+      [
+        { version: 1, entries: [chart] },
+        {
+          version: 1,
+          anchors: { ...goodAnchors.anchors, bad: { sheetId: "data", cell: "invalid" } },
+        },
+        [chart],
+        goodAnchors,
+      ],
+      [{ version: 2, entries: [] }, goodAnchors, [], goodAnchors],
+      [{ version: 1, entries: [chart] }, { version: 2, anchors: {} }, [chart], undefined],
+    ] as const) {
+      const mixed = {
+        ...book.snapshot,
+        charts,
+        commentAnchors,
+      } as unknown as import("../src/apps/sheets/lib/contract").Snapshot;
+      await h.fetch(`${book.container}workbook.json`, {
+        method: "PUT",
+        body: JSON.stringify(mixed),
+      });
+      const opened = await h.service.open(book.container);
+      const assert = (value: typeof opened.snapshot) => {
+        expect(readCharts(value).charts).toEqual(expectedCharts);
+        expect(value.commentAnchors).toEqual(expectedAnchors);
+        expect(value.sheets).toEqual(book.snapshot.sheets);
+      };
+      assert(opened.snapshot);
+      await h.service.save(book.container, mixed, opened.version);
+      assert((await h.service.open(book.container)).snapshot);
+      assert((await h.service.create({ title: "Mixed copy", snapshot: mixed })).snapshot);
+      const current = await h.storage.loadSnapshot(book.container);
+      await h.storage.saveSnapshot(book.container, mixed, { ifMatch: current.etag as string });
+      assert((await h.storage.loadSnapshot(book.container)).value);
+    }
+  } finally {
+    warn.mockRestore();
+  }
 });

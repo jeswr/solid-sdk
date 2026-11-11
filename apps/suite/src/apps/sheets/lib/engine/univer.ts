@@ -16,6 +16,8 @@ import {
   mergeLocales,
 } from "@univerjs/presets";
 import { SheetInterceptorService, SheetsSelectionsService } from "@univerjs/sheets";
+import { shiftChartRanges } from "../charts/range";
+import { type ChartSpec, readCharts, withCharts } from "../charts/spec";
 import { type AnchorDeletions, WorkbookCommentAnchors } from "../comments/anchors";
 import { type CellAnchor, commentStructuralEdit } from "../comments/selector";
 import type { MountEngine, Snapshot } from "../contract";
@@ -42,13 +44,17 @@ const PERSISTED_FORMULA_MUTATIONS = new Set([
 // names it explicitly. CF viewport and style caches update without mutations.
 const RECOMPUTE_MUTATIONS = new Set(["sheet.mutation.data-validation-formula-mark-dirty"]);
 
-interface AnchorOperation {
+interface StructuralOperation {
+  chartSources?: {
+    sheetId: string;
+    sources: { id: string; sheetId: string; range: ChartSpec["range"]; revision: number }[];
+  };
   redo: AnchorDeletions[];
   undo: AnchorDeletions[];
 }
-interface AnchorMutation {
+interface StructuralMutation {
   unitId: string;
-  operation: AnchorOperation;
+  operation: StructuralOperation;
   direction: "undo" | "redo";
   phase: "begin" | "end";
 }
@@ -82,6 +88,9 @@ export const mountUniver: MountEngine = async (container, options) => {
     ],
   });
   let workbook = univerAPI.createWorkbook(options.snapshot as Partial<IWorkbookData>);
+  let charts = options.snapshot.charts;
+  // Only manual source edits (including deletion/recreation) advance revisions.
+  const chartRevisions = new Map<string, number>();
   let readOnly = options.readOnly ?? false;
   let commentsLoading = options.commentsLoading ?? false;
   const setEditable = () => workbook.setEditable(!readOnly && !commentsLoading);
@@ -109,6 +118,7 @@ export const mountUniver: MountEngine = async (container, options) => {
     selectionChanged,
   );
   const listeners = new Set<() => void>();
+  const valueListeners = new Set<() => void>();
   const anchors = new WorkbookCommentAnchors(options.snapshot);
   let disposed = false;
   let loading = false;
@@ -123,6 +133,7 @@ export const mountUniver: MountEngine = async (container, options) => {
       if (disposed || current !== generation) return;
       queued = false;
       for (const listener of listeners) listener();
+      for (const listener of valueListeners) listener();
     });
   };
   const commands = injector.get(ICommandService);
@@ -133,34 +144,73 @@ export const mountUniver: MountEngine = async (container, options) => {
     if (commentsLoading && command.type === CommandType.COMMAND) throw new CanceledError();
   });
   const interceptors = injector.get(SheetInterceptorService);
-  const anchorMutation = "sheets.mutation.comment-anchors";
-  let activeOperation: AnchorMutation | undefined;
-  const anchorCommand = commands.registerCommand({
-    id: anchorMutation,
+  const structuralMutation = "sheets.mutation.structural-metadata";
+  let activeOperation: StructuralMutation | undefined;
+  const structuralCommand = commands.registerCommand({
+    id: structuralMutation,
     type: CommandType.MUTATION,
-    handler: (_accessor, params: AnchorMutation) => {
+    handler: (_accessor, params: StructuralMutation) => {
+      if (readOnly || commentsLoading || params.unitId !== workbook.getId()) return false;
       if (params.phase === "begin") {
         params.operation[params.direction] = [];
         activeOperation = params;
-      } else activeOperation = undefined;
+        const record = params.operation.chartSources;
+        if (params.direction === "redo" && record) {
+          // Refresh before every deletion replay, including redo after source edits.
+          record.sources = readCharts({ charts } as Snapshot)
+            .charts.filter((chart) => chart.sheetId === record.sheetId)
+            .map((chart) => ({
+              id: chart.id,
+              sheetId: chart.sheetId,
+              range: chart.range,
+              revision: chartRevisions.get(chart.id) ?? 0,
+            }));
+        }
+      } else {
+        const record = params.operation.chartSources;
+        if (params.direction === "undo" && record && charts !== undefined) {
+          const sources = new Map(record.sources.map((source) => [source.id, source]));
+          // Inverse mutations shift both features first. Restore lost chart boundaries
+          // only if the user has not manually replaced that source since capture.
+          charts = withCharts(
+            {},
+            readCharts({ charts }).charts.map((chart) => {
+              const source = sources.get(chart.id);
+              return source?.sheetId === chart.sheetId &&
+                source.revision === (chartRevisions.get(chart.id) ?? 0)
+                ? { ...chart, range: source.range }
+                : chart;
+            }),
+          ).charts;
+        }
+        activeOperation = undefined;
+      }
       return true;
     },
   });
   const mutation = (
-    operation: AnchorOperation,
+    operation: StructuralOperation,
     direction: "undo" | "redo",
     phase: "begin" | "end",
   ) => ({
-    id: anchorMutation,
+    id: structuralMutation,
     params: { unitId: workbook.getId(), operation, direction, phase },
   });
   // Native undo/redo carries each command's deletion history, including deletions
   // caused by undo itself. Unrelated insertions never get that history.
   const beforeStructure = interceptors.interceptCommand({
     getMutations(command) {
-      if (!/^sheet\.command\.(insert-row|insert-col|remove-row|remove-col)$/.test(command.id))
+      const params = command.params as { unitId: string; subUnitId: string } | undefined;
+      if (
+        readOnly ||
+        params?.unitId !== workbook.getId() ||
+        !/^sheet\.command\.(insert-row|insert-col|remove-row|remove-col)$/.test(command.id)
+      )
         return { redos: [], undos: [] };
-      const operation: AnchorOperation = { redo: [], undo: [] };
+      const operation: StructuralOperation = { redo: [], undo: [] };
+      if (charts !== undefined && /^sheet\.command\.remove-(row|col)$/.test(command.id)) {
+        operation.chartSources = { sheetId: params.subUnitId, sources: [] };
+      }
       return {
         preRedos: [mutation(operation, "redo", "begin")],
         preUndos: [mutation(operation, "undo", "begin")],
@@ -183,6 +233,9 @@ export const mountUniver: MountEngine = async (container, options) => {
       };
     },
   });
+  const calculation = univerAPI.getFormula().calculationResultApplied(() => {
+    if (!disposed && !loading) for (const listener of valueListeners) listener();
+  });
   const subscription = univerAPI.addEvent(univerAPI.Event.CommandExecuted, (event) => {
     if (
       event.type !== CommandType.MUTATION ||
@@ -198,6 +251,12 @@ export const mountUniver: MountEngine = async (container, options) => {
     if (event.options?.fromFormula && !editedSinceLoad) return;
     const edit = commentStructuralEdit(event.id, event.params);
     if (edit) {
+      if (charts !== undefined) {
+        charts = withCharts(
+          {},
+          shiftChartRanges(readCharts({ charts }).charts, edit.sheet, edit),
+        ).charts;
+      }
       const deleted = anchors.shift(edit);
       if (activeOperation) {
         const { operation, direction } = activeOperation;
@@ -214,12 +273,15 @@ export const mountUniver: MountEngine = async (container, options) => {
     const data: Snapshot = JSON.parse(JSON.stringify(workbook.save()));
     delete data.commentAnchors;
     Object.assign(data, anchors.snapshot());
+    // Univer drops unknown top-level metadata when saving its canvas model.
+    if (charts !== undefined) data.charts = JSON.parse(JSON.stringify(charts));
     serializeSnapshot(data);
     return data;
   };
   const load = (data: Snapshot) => {
     serializeSnapshot(data);
     loading = true;
+    charts = data.charts;
     editedSinceLoad = false;
     ++generation;
     queued = false;
@@ -235,6 +297,39 @@ export const mountUniver: MountEngine = async (container, options) => {
     }
   };
   return {
+    setCharts(value) {
+      if (readOnly || commentsLoading) return;
+      const previous = new Map(
+        readCharts({ charts } as Snapshot).charts.map((chart) => [
+          chart.id,
+          JSON.stringify([chart.sheetId, chart.range]),
+        ]),
+      );
+      const next = new Map(
+        readCharts({ charts: value }).charts.map((chart) => [
+          chart.id,
+          JSON.stringify([chart.sheetId, chart.range]),
+        ]),
+      );
+      // Keep tombstones so removing and recreating an ID cannot revive its history.
+      for (const id of new Set([...previous.keys(), ...next.keys()])) {
+        if (previous.get(id) !== next.get(id))
+          chartRevisions.set(id, (chartRevisions.get(id) ?? 0) + 1);
+      }
+      charts = JSON.parse(JSON.stringify(value));
+      notify();
+    },
+    selection() {
+      const sheet = workbook.getActiveSheet();
+      return {
+        sheetId: sheet.getSheetId(),
+        range: sheet.getActiveRange()?.getA1Notation() ?? "A1",
+      };
+    },
+    onValuesChange(listener) {
+      valueListeners.add(listener);
+      return () => valueListeners.delete(listener);
+    },
     setCommentsLoading(value) {
       commentsLoading = value;
       setEditable();
@@ -329,15 +424,17 @@ export const mountUniver: MountEngine = async (container, options) => {
       disposed = true;
       ++generation;
       subscription.dispose();
+      calculation.dispose();
       loadingGuard.dispose();
       selectionSubscription.unsubscribe();
       sheetSubscription.dispose();
       beforeStructure.dispose();
       afterStructure.dispose();
-      anchorCommand.dispose();
+      structuralCommand.dispose();
       selections.clear();
       structures.clear();
       listeners.clear();
+      valueListeners.clear();
       univer.dispose();
     },
   };

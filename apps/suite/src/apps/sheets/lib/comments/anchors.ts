@@ -13,11 +13,34 @@ const address = z.strictObject({ sheetId: z.string(), cell: z.string() }).refine
     return false;
   }
 });
+const anchorEntrySchema = z.union([address, z.literal("deleted")]);
 export const commentAnchorsSchema = z.strictObject({
   version: z.literal(1),
-  anchors: z.record(z.string().min(1), z.union([address, z.literal("deleted")])),
+  anchors: z.record(z.string().min(1), anchorEntrySchema),
 });
 type Anchors = z.infer<typeof commentAnchorsSchema>["anchors"];
+/** Isolate invalid optional metadata before strict workbook JSON validation. */
+export function validateCommentSnapshot(snapshot: Snapshot): Snapshot {
+  if (snapshot.commentAnchors === undefined) return snapshot;
+  const collection = commentAnchorsSchema
+    .extend({
+      anchors: z.record(z.string(), z.unknown()),
+    })
+    .safeParse(snapshot.commentAnchors);
+  if (!collection.success) {
+    console.warn("Sheets: Ignored an invalid or unsupported comment anchor collection");
+    const { commentAnchors: _invalid, ...workbook } = snapshot;
+    return workbook;
+  }
+  const entries: [string, Anchors[string]][] = [];
+  for (const [id, value] of Object.entries(collection.data.anchors)) {
+    const parsed = anchorEntrySchema.safeParse(value);
+    if (id && parsed.success) entries.push([id, parsed.data]);
+    else console.warn("Sheets: Ignored an invalid comment anchor entry");
+  }
+  return { ...snapshot, commentAnchors: { version: 1, anchors: Object.fromEntries(entries) } };
+}
+
 export interface DraftAnchor {
   current(): CellAnchor;
   commit(annotationId: string): void;
