@@ -47,7 +47,7 @@ describe("ensureDiaryReady", () => {
       }
     });
     await expect(ensureDiaryReady(storage, ROOT, OWNER)).rejects.toThrow(
-      `owner-only ACL write failed: PUT ${acl} -> 403`,
+      `owner-only ACL write failed: PUT ${acl} -> 403 Forbidden`,
     );
     await expect(storage.head(`${ROOT}health/diary/meals/`)).rejects.toMatchObject({ status: 404 });
     denied = false;
@@ -74,13 +74,24 @@ describe("ensureContainer", () => {
     expect(storage.create).not.toHaveBeenCalled();
   });
 
-  it.each([409, 412])("tolerates a concurrent container create (%i)", async (status) => {
+  it("tolerates only a concurrent name-taken container create (412)", async () => {
     const { storage } = recordingStorage();
     vi.mocked(storage.create).mockRejectedValueOnce(new StorageError(
-      status === 409 ? "conflict" : "precondition-failed",
-      { status, url: `${ROOT}notes/`, method: "PUT" },
+      "conflict",
+      { status: 412, url: `${ROOT}notes/`, method: "PUT" },
     ));
     await expect(ensureContainer(storage, `${ROOT}notes/`)).resolves.toBeUndefined();
+  });
+
+  it("surfaces a real HTTP 409 instead of pretending the container exists", async () => {
+    const { storage } = recordingStorage();
+    const failure = new StorageError("conflict", {
+      status: 409, url: `${ROOT}notes/`, method: "PUT",
+    });
+    vi.mocked(storage.create).mockRejectedValueOnce(failure);
+    await expect(ensureContainer(storage, `${ROOT}notes/`)).rejects.toMatchObject({
+      name: "PodWriteError", status: 409, cause: failure,
+    });
   });
 
   it("still attempts conditional creation when HEAD is unavailable", async () => {
@@ -118,4 +129,16 @@ it("preserves the UI write error and retains the SDK failure as its cause", asyn
     name: "PodWriteError", status: 403, url,
     message: `Pod write to ${url} failed: HTTP 403`, cause: failure,
   });
+});
+
+it.each([
+  ["network", "Failed to fetch"],
+  ["scope", "Storage location is outside this pod"],
+  ["unsupported", "Unsupported storage operation"],
+] as const)("gives a status-less %s write failure a stable short message", async (code, message) => {
+  const { storage } = recordingStorage();
+  const url = `${ROOT}private-meal.ttl`;
+  const failure = new StorageError(code, { url, method: "PUT" });
+  vi.mocked(storage.write).mockRejectedValueOnce(failure);
+  await expect(putResource(storage, url, "")).rejects.toMatchObject({ message, cause: failure });
 });

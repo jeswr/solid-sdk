@@ -15,7 +15,18 @@
 import { aclUrlFor, buildOwnerOnlyAcl } from "@jeswr/solid-health-diary";
 import { StorageError, type StorageClient } from "@jeswr/storage-client";
 import { type PodStorage, resolvePodStorage } from "./client";
+import { podErrorMessage } from "./errors";
 import { asContainer, containerOf, diaryContainers, diaryRoot } from "./layout";
+
+// StorageError retains the status code, but not Response.statusText.
+const STATUS_TEXT: Readonly<Record<number, string>> = {
+  400: "Bad Request", 401: "Unauthorized", 403: "Forbidden", 404: "Not Found",
+  405: "Method Not Allowed", 409: "Conflict", 410: "Gone", 412: "Precondition Failed",
+  413: "Payload Too Large", 415: "Unsupported Media Type", 422: "Unprocessable Content",
+  428: "Precondition Required", 429: "Too Many Requests", 500: "Internal Server Error",
+  501: "Not Implemented", 502: "Bad Gateway", 503: "Service Unavailable",
+  504: "Gateway Timeout", 507: "Insufficient Storage",
+};
 
 /** A pod write failed with a non-2xx status. */
 export class PodWriteError extends Error {
@@ -24,6 +35,7 @@ export class PodWriteError extends Error {
     readonly status: number,
     message?: string,
     cause?: unknown,
+    readonly statusText = STATUS_TEXT[status] ?? "",
   ) {
     super(message ?? `Pod write to ${url} failed: HTTP ${status}`, { cause });
     this.name = "PodWriteError";
@@ -53,15 +65,18 @@ export async function ensureContainer(storage: PodStorage, containerUrl: string)
       name: decodeURIComponent(new URL(url).pathname.split("/").at(-2) ?? ""),
     });
   } catch (error) {
-    if (error instanceof StorageError && (error.status === 409 || error.status === 412)) return;
+    if (error instanceof StorageError && error.status === 412) return;
     throw podWriteError(url, error);
   }
 }
 
 /** Retain the write error shown by the outbox/UI, with SDK details available as cause. */
 export function podWriteError(url: string, error: unknown): unknown {
-  if (!(error instanceof StorageError) || error.status === null) return error;
-  return new PodWriteError(url, error.status, undefined, error);
+  if (error instanceof StorageError && error.status !== null) {
+    return new PodWriteError(url, error.status, undefined, error);
+  }
+  const message = podErrorMessage(error);
+  return error instanceof Error && message !== error.message ? new Error(message, { cause: error }) : error;
 }
 
 /** Reviewed owner-only ACL builder, persisted through the same storage client. */
@@ -77,7 +92,8 @@ export async function writeOwnerOnlyAcl(
   } catch (error) {
     if (error instanceof PodWriteError) {
       throw new PodWriteError(url, error.status,
-        `owner-only ACL write failed: PUT ${url} -> ${error.status}`, error);
+        `owner-only ACL write failed: PUT ${url} -> ${error.status}${error.statusText ? ` ${error.statusText}` : ""}`,
+        error, error.statusText);
     }
     throw error;
   }

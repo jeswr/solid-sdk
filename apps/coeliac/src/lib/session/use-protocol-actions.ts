@@ -29,6 +29,7 @@ import {
 } from "../protocol/fsm";
 import { newConclusionRecord, newProtocolRecord, storedProtocolToData, updateProtocolRecord } from "../protocol/persist";
 import { NotSignedInError } from "./use-diary-actions";
+import { podErrorMessage } from "../pod/errors";
 import { useSession } from "./context";
 
 /** The result of a protocol mutation: the updated record + a settle-when-synced promise. */
@@ -160,7 +161,7 @@ async function flushProtocol(ctx: Ctx, record: StoredProtocol): Promise<void> {
     );
     await ctx.store.markProtocolSync(record.ulid, "synced");
   } catch (err) {
-    await ctx.store.markProtocolSync(record.ulid, "error", (err as Error).message);
+    await ctx.store.markProtocolSync(record.ulid, "error", podErrorMessage(err));
     throw err;
   }
 }
@@ -173,7 +174,7 @@ async function flushConclusion(ctx: Ctx, record: StoredConclusion): Promise<void
     );
     await ctx.store.markConclusionSync(record.ulid, "synced");
   } catch (err) {
-    await ctx.store.markConclusionSync(record.ulid, "error", (err as Error).message);
+    await ctx.store.markConclusionSync(record.ulid, "error", podErrorMessage(err));
     throw err;
   }
 }

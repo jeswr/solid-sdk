@@ -5,6 +5,7 @@
  * invariants #2/#3 and the "all writes owner-only" acceptance.
  */
 import { recordingStorage } from "../../../test/storage";
+import { StorageError } from "@jeswr/storage-client";
 import { beforeEach, describe, expect, it } from "vitest";
 import { DiaryStore } from "../cache/diary-store";
 import { MemoryKv } from "../cache/kv";
@@ -30,6 +31,26 @@ function scenario() {
 beforeEach(() => resetDiaryReadyMemo());
 
 describe("flushOutbox", () => {
+  it.each([
+    [new StorageError("network", { url: ROOT, method: "HEAD" }), "Failed to fetch"],
+    [new StorageError("scope", { url: ROOT, method: "HEAD" }), "Storage location is outside this pod"],
+    [Object.assign(new Error(`Discovery failed at ${ROOT}`), {
+      name: "CapabilitiesError", code: "description-unreachable", url: ROOT,
+    }), "Couldn't discover pod storage"],
+    [Object.assign(new Error(`Discovery failed at ${ROOT}`), {
+      name: "CapabilitiesError", code: "network", url: ROOT,
+    }), "Failed to fetch"],
+  ])("stores a short sync error for a status-less SDK failure (%s)", async (failure, message) => {
+    const store = new DiaryStore(new MemoryKv(), WEBID);
+    const meal = newMealRecord({ storageRoot: ROOT, items: [{ name: "Rice" }] });
+    await store.putMeal(meal);
+    const storage = async () => { throw failure; };
+    expect(await flushOutbox({ storage, webId: WEBID, storageRoot: ROOT }, store)).toEqual({
+      synced: 0, failed: 1,
+    });
+    expect((await store.pending()).meals[0]).toMatchObject({ sync: "error", error: message });
+  });
+
   it("syncs a pending meal to the pod, ACL-first, owner-only", async () => {
     const s = scenario();
     const store = new DiaryStore(new MemoryKv(), WEBID);

@@ -43,3 +43,18 @@ it("retries failed discovery without a backend fallback and then reuses the succ
   expect(createPodClient).toHaveBeenCalledTimes(2);
   expect(fetch).not.toHaveBeenCalled();
 });
+
+it("rejects LWS before exposing its client for fixed-URL writes or WAC ACLs", async () => {
+  const storage = createMemoryStorage({ root: ROOT, protocol: "lws" });
+  vi.mocked(createPodClient).mockResolvedValue({ storage } as PodClient);
+  const write = vi.spyOn(storage, "write");
+  const create = vi.spyOn(storage, "create");
+  const sessionStorage = createSessionStorage(vi.fn(), ROOT);
+  await expect(resolvePodStorage(sessionStorage)).rejects.toMatchObject({
+    name: "UnsupportedStorageError",
+    code: "unsupported-storage",
+    message: "This diary requires Solid storage with fixed URLs and owner-only WAC ACLs. LWS storage is not supported.",
+  });
+  expect(write).not.toHaveBeenCalled();
+  expect(create).not.toHaveBeenCalled();
+});

@@ -12,6 +12,7 @@ import { useCallback } from "react";
 import type { StoredMeal, StoredSymptom } from "../cache/diary-store";
 import { type NewMealInput, type NewSymptomInput, cloneForRelog, newMealRecord, newSymptomRecord } from "../diary/log";
 import { syncMeal, syncSymptom } from "../diary/sync";
+import { podErrorMessage } from "../pod/errors";
 import { useSession } from "./context";
 
 /** A record written optimistically, with a promise that settles when it syncs. */
@@ -46,7 +47,7 @@ export function useDiaryActions() {
           await syncMeal({ storage: ctx.storage, webId: ctx.webId, storageRoot: ctx.storageRoot }, record);
           await ctx.store.markMealSync(record.ulid, "synced");
         } catch (err) {
-          await ctx.store.markMealSync(record.ulid, "error", (err as Error).message);
+          await ctx.store.markMealSync(record.ulid, "error", podErrorMessage(err));
           throw err;
         }
       })();
@@ -65,7 +66,7 @@ export function useDiaryActions() {
           await syncMeal({ storage: ctx.storage, webId: ctx.webId, storageRoot: ctx.storageRoot }, record);
           await ctx.store.markMealSync(record.ulid, "synced");
         } catch (err) {
-          await ctx.store.markMealSync(record.ulid, "error", (err as Error).message);
+          await ctx.store.markMealSync(record.ulid, "error", podErrorMessage(err));
           throw err;
         }
       })();
@@ -84,7 +85,7 @@ export function useDiaryActions() {
           await syncSymptom({ storage: ctx.storage, webId: ctx.webId, storageRoot: ctx.storageRoot }, record);
           await ctx.store.markSymptomSync(record.ulid, "synced");
         } catch (err) {
-          await ctx.store.markSymptomSync(record.ulid, "error", (err as Error).message);
+          await ctx.store.markSymptomSync(record.ulid, "error", podErrorMessage(err));
           throw err;
         }
       })();

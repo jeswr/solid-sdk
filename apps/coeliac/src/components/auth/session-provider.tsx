@@ -19,6 +19,7 @@ import { DiaryStore } from "@/lib/cache/diary-store";
 import { defaultKv } from "@/lib/cache/kv";
 import { flushOutbox } from "@/lib/diary/sync";
 import { createSessionStorage } from "@/lib/pod/client";
+import { podErrorMessage } from "@/lib/pod/errors";
 import { ensureDiaryReady, resetDiaryReadyMemo } from "@/lib/pod/pod-fs";
 import { podRootFallback, resolveStorageRoot } from "@/lib/pod/storage";
 import { registerDiaryTypes } from "@/lib/pod/type-index";
@@ -38,6 +39,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const controllerRef = useRef<LoginController | null>(null);
   const [controller, setController] = useState<LoginController | null>(null);
   const [value, setValue] = useState<SessionValue>(() => ({ ...anonymousSession }));
+  // Bind asynchronous warnings to the store that started registration so an old
+  // account's late failure cannot appear in another account's session.
+  const [registrationWarning, setRegistrationWarning] = useState<{
+    store: DiaryStore; message: string;
+  } | null>(null);
   const valueRef = useRef(value);
   // The store of the just-departed account whose logout purge FAILED — retained
   // (only for that case) so "Clear local data" can re-attempt the purge after the
@@ -86,9 +92,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         /* provisioned lazily on first write */
       }
       try {
-        await registerDiaryTypes(storage, { webId, storageRoot });
-      } catch {
-        /* interop nicety */
+        await registerDiaryTypes(storage, { webId, storageRoot, fetch: authedFetch });
+      } catch (error) {
+        setRegistrationWarning({ store,
+          message: `Couldn't register your diary for discovery by other apps: ${podErrorMessage(error)}. Meal and symptom logging remain available.`,
+        });
       }
       try {
         await flushOutbox({ storage, webId, storageRoot }, store);
@@ -280,7 +288,12 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       {value.status === "loading" ? (
         <RestoringSplash />
       ) : value.status === "authed" ? (
-        children
+        <>
+          {registrationWarning?.store === value.store ? (
+            <p role="alert">{registrationWarning.message}</p>
+          ) : null}
+          {children}
+        </>
       ) : (
         <>
           {value.revokeWarning !== null ? (

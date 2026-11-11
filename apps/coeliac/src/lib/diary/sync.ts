@@ -24,6 +24,7 @@ import type {
 } from "../cache/diary-store";
 import type { PodStorage } from "../pod/client";
 import { writeGeneticSummary } from "../genetics/summary";
+import { podErrorMessage } from "../pod/errors";
 import { ensureDiaryReady, putResource } from "../pod/pod-fs";
 import { storedConclusionToData, storedProtocolToData } from "../protocol/persist";
 
@@ -131,7 +132,7 @@ export async function flushOutbox(ctx: SyncContext, store: DiaryStore): Promise<
       await store.markMealSync(meal.ulid, "synced");
       synced += 1;
     } catch (err) {
-      await store.markMealSync(meal.ulid, "error", (err as Error).message);
+      await store.markMealSync(meal.ulid, "error", podErrorMessage(err));
       failed += 1;
     }
   }
@@ -141,7 +142,7 @@ export async function flushOutbox(ctx: SyncContext, store: DiaryStore): Promise<
       await store.markSymptomSync(symptom.ulid, "synced");
       synced += 1;
     } catch (err) {
-      await store.markSymptomSync(symptom.ulid, "error", (err as Error).message);
+      await store.markSymptomSync(symptom.ulid, "error", podErrorMessage(err));
       failed += 1;
     }
   }
@@ -155,7 +156,7 @@ export async function flushOutbox(ctx: SyncContext, store: DiaryStore): Promise<
       unsyncedProtocolUlids.delete(protocol.ulid);
       synced += 1;
     } catch (err) {
-      await store.markProtocolSync(protocol.ulid, "error", (err as Error).message);
+      await store.markProtocolSync(protocol.ulid, "error", podErrorMessage(err));
       failed += 1;
     }
   }
@@ -168,7 +169,7 @@ export async function flushOutbox(ctx: SyncContext, store: DiaryStore): Promise<
       await store.markConclusionSync(conclusion.ulid, "synced");
       synced += 1;
     } catch (err) {
-      await store.markConclusionSync(conclusion.ulid, "error", (err as Error).message);
+      await store.markConclusionSync(conclusion.ulid, "error", podErrorMessage(err));
       failed += 1;
     }
   }
@@ -184,7 +185,7 @@ export async function flushOutbox(ctx: SyncContext, store: DiaryStore): Promise<
         await store.markGeneticSync(current.rev, "synced");
         synced += 1;
       } catch (err) {
-        await store.markGeneticSync(current.rev, "error", (err as Error).message);
+        await store.markGeneticSync(current.rev, "error", podErrorMessage(err));
         failed += 1;
       }
     }

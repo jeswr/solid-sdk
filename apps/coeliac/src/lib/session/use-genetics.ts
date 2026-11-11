@@ -36,6 +36,7 @@ import { parseClinicalText, parseConsumerArray } from "../genetics/parse";
 import { readGeneticSummary } from "../genetics/summary";
 import { geneticsSummaryUrl } from "../pod/layout";
 import { NotSignedInError } from "./use-diary-actions";
+import { podErrorMessage } from "../pod/errors";
 import { useSession } from "./context";
 
 /** An interpreted, pre-consent preview of what WOULD be stored (never raw bytes). */
@@ -222,7 +223,7 @@ export function useGenetics(): GeneticsState & GeneticsActions {
           await store.markGeneticSync(record.rev, "synced");
           setSummary(await store.getGeneticSummary());
         } catch (err) {
-          await store.markGeneticSync(record.rev, "error", (err as Error).message);
+          await store.markGeneticSync(record.rev, "error", podErrorMessage(err));
           setSummary(await store.getGeneticSummary());
           throw err;
         }
