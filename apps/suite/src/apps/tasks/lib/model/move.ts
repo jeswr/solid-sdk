@@ -25,6 +25,7 @@ export class TaskMove {
   readonly references = new Map<string, StoredTask>();
   private plan!: ReferenceMove[];
   private copies: ResourceCopy[] | undefined;
+  private readonly copyAttempts = new Map<string, ResourceCopy>();
   private rollingBack = false;
   private replan = false;
   private result: StoredTask | undefined;
@@ -105,6 +106,52 @@ export class TaskMove {
     }
   }
 
+  private async reconcileCopy(copy: ResourceCopy, latest: ResourceCopy): Promise<void> {
+    const url = copy.destination.url;
+    const attempted = this.copyAttempts.get(url);
+    if (attempted) {
+      // A lost PUT and read-back leave the old ETag unusable. Confirm that exact
+      // attempt before considering a source revision that may have arrived since.
+      const current = await this.io.optional(url);
+      if (!current || !same(current.dataset, attempted.destination.dataset))
+        throw new ModelError(412, url, current?.etag);
+      Object.assign(copy, { original: attempted.original, destination: current });
+      this.copyAttempts.delete(url);
+    }
+    if (copy.destination.etag !== undefined && copy.original.etag === latest.original.etag) return;
+    await this.io.container(new URL("./", url).href);
+    const current = await this.io.optional(url);
+    const dataset = latest.destination.dataset;
+    if (current && same(current.dataset, dataset)) {
+      Object.assign(copy, { original: latest.original, destination: current });
+      return;
+    }
+    const etag = copy.destination.etag;
+    if (etag === undefined ? current !== undefined : current?.etag !== etag) {
+      if (etag === undefined || !current) throw new ModelError(412, url, current?.etag);
+      // A separately edited destination wins over subsequent source revisions.
+      // Keep our last written ETag so later source edits cannot claim that version.
+      copy.original = latest.original;
+      return;
+    }
+    this.copyAttempts.set(url, { original: latest.original, destination: { url, dataset } });
+    let destination: Resource;
+    try {
+      destination = await this.io.write(
+        url,
+        dataset,
+        etag === undefined ? { create: true } : { etag },
+      );
+    } catch (error) {
+      const confirmed = await this.io.optional(url);
+      this.copyAttempts.delete(url);
+      if (!confirmed || !same(confirmed.dataset, dataset)) throw error;
+      destination = confirmed;
+    }
+    Object.assign(copy, { original: latest.original, destination });
+    this.copyAttempts.delete(url);
+  }
+
   private async finish(moved: StoredTask): Promise<StoredTask> {
     // The task DELETE committed. Cleanup failures retry forward, never roll back the move.
     this.result = moved;
@@ -122,13 +169,7 @@ export class TaskMove {
           changed ||= !previous || previous.original.etag !== copy.original.etag;
           // Reserve new URLs before writing, including when the response or read-back is lost.
           if (!previous) copies.push(copy);
-          await this.io.container(new URL("./", copy.destination.url).href);
-          const destination = await this.write(
-            copy.destination.url,
-            copy.destination.dataset,
-            previous?.destination.etag,
-          );
-          Object.assign(previous ?? copy, { original: copy.original, destination });
+          await this.reconcileCopy(previous ?? copy, copy);
         }
         // A stable pass permits deletion. Leave room for another scan afterwards,
         // so a late reply cannot turn successful cleanup into an invisible orphan.

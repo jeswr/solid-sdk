@@ -390,7 +390,123 @@ describe("comment lifecycle with projects and task moves", () => {
     expect(await comments.list()).toEqual([]);
   });
 
-  it("retains the source when a concurrent destination edit prevents re-copying", async () => {
+  it.each([
+    "cleanup",
+    "Retry",
+  ])("keeps a destination edit with an unchanged source during %s", async (stage) => {
+    const { store, pod, source, target, task, root } = await setup();
+    const move = store.prepareTaskMove(task, source, target, "moved");
+    const editDestination = async () => {
+      const moved = await store.readTask(`${target.tracker.stateStore}moved.ttl`);
+      const destination = store.comments(target, moved);
+      const copied = (await destination.list())[0]?.root;
+      if (!copied) throw new Error("Missing copied root");
+      await destination.edit(copied, "Destination edit");
+      return copied.url;
+    };
+    let destinationUrl: string | undefined;
+    pod.intercept = async (request) => {
+      if (stage === "cleanup" && request.method === "DELETE" && request.url === task.url)
+        destinationUrl = await editDestination();
+      if (stage === "Retry" && request.method === "DELETE" && request.url === root.url)
+        return new Response(null, { status: 503 });
+    };
+    if (stage === "Retry") {
+      await expect(move.run()).rejects.toThrow("Some comments are still moving. Retry");
+      destinationUrl = await editDestination();
+      pod.intercept = undefined;
+    }
+    const moved = await move.run();
+    expect(pod.files.has(task.url)).toBe(false);
+    expect(pod.files.has(root.url)).toBe(false);
+    expect((await store.comments(target, moved).list())[0]?.root.text).toBe("Destination edit");
+    // The initial copy and the destination user's edit are the only writes.
+    expect(
+      pod
+        .mutations()
+        .filter((request) => request.method === "PUT" && request.url === destinationUrl),
+    ).toHaveLength(2);
+  });
+
+  it.each([
+    false,
+    true,
+  ])("confirms an uncertain reconciliation PUT before copying a newer source revision (%s)", async (newerSource) => {
+    const { store, pod, source, target, task, comments, root } = await setup();
+    const move = store.prepareTaskMove(task, source, target, "moved");
+    let attemptedUrl: string | undefined;
+    pod.intercept = async (request) => {
+      if (request.method === "DELETE" && request.url === task.url)
+        await comments.edit(root, "Reconciled revision");
+      if (
+        !pod.files.has(task.url) &&
+        request.method === "PUT" &&
+        request.url.startsWith(`${target.tracker.stateStore}comments/`) &&
+        request.url.endsWith(".ttl")
+      ) {
+        attemptedUrl = request.url;
+        pod.seed(request.url, request.body);
+        throw new TypeError("Reconciliation response lost");
+      }
+      if (attemptedUrl === request.url && request.method === "GET")
+        return new Response(null, { status: 503 });
+    };
+    await expect(move.run()).rejects.toThrow("Some comments are still moving. Retry");
+    expect(attemptedUrl).toBeDefined();
+    expect(pod.files.has(task.url)).toBe(false);
+    expect(pod.files.has(root.url)).toBe(true);
+    pod.intercept = undefined;
+    if (newerSource) {
+      const latest = (await comments.list())[0]?.root;
+      if (!latest) throw new Error("Missing source root");
+      await comments.edit(latest, "Newer source revision");
+    }
+    const moved = await move.run();
+    expect((await store.comments(target, moved).list())[0]?.root).toMatchObject({
+      url: attemptedUrl,
+      text: newerSource ? "Newer source revision" : "Reconciled revision",
+    });
+    const writes = pod.mutations().filter((r) => r.method === "PUT" && r.url === attemptedUrl);
+    expect(writes.map((r) => r.headers.get("If-Match"))).toEqual(
+      newerSource ? [null, '"1"', '"2"'] : [null, '"1"'],
+    );
+    expect(await comments.list()).toEqual([]);
+  });
+
+  it("reports a differing destination after an uncertain PUT without overwriting it", async () => {
+    const { store, pod, source, target, task, comments, root } = await setup();
+    const move = store.prepareTaskMove(task, source, target, "moved");
+    let attemptedUrl: string | undefined;
+    pod.intercept = async (request) => {
+      if (request.method === "DELETE" && request.url === task.url)
+        await comments.edit(root, "Source edit");
+      if (!pod.files.has(task.url) && request.method === "PUT" && request.url.endsWith(".ttl")) {
+        attemptedUrl = request.url;
+        pod.seed(request.url, request.body);
+        throw new TypeError("Reconciliation response lost");
+      }
+      if (attemptedUrl === request.url && request.method === "GET")
+        return new Response(null, { status: 503 });
+    };
+    await expect(move.run()).rejects.toThrow("Some comments are still moving. Retry");
+    pod.intercept = undefined;
+    const moved = await store.readTask(`${target.tracker.stateStore}moved.ttl`);
+    const destination = store.comments(target, moved);
+    const copied = (await destination.list())[0]?.root;
+    if (!copied) throw new Error("Missing copied root");
+    await destination.edit(copied, "Destination edit");
+    const before = pod.mutations().length;
+    for (let attempt = 0; attempt < 2; attempt++)
+      await expect(move.run()).rejects.toMatchObject({
+        message: "Some comments are still moving. Retry",
+        cause: { status: 412, url: attemptedUrl },
+      });
+    expect(pod.mutations()).toHaveLength(before);
+    expect((await destination.list())[0]?.root.text).toBe("Destination edit");
+    expect((await comments.list())[0]?.root.text).toBe("Source edit");
+  });
+
+  it("keeps the destination version when both source and destination have later edits", async () => {
     const { store, pod, source, target, task, comments, root } = await setup();
     pod.intercept = async (request) => {
       if (request.method === "DELETE" && request.url === task.url) {
@@ -402,13 +518,35 @@ describe("comment lifecycle with projects and task moves", () => {
         await comments.edit(root, "Source edit");
       }
     };
-    await expect(store.moveTaskToProject(task, source, target, "moved")).rejects.toThrow(
-      "Some comments are still moving. Retry",
-    );
-    expect(pod.files.has(root.url)).toBe(true);
-    const moved = await store.readTask(`${target.tracker.stateStore}moved.ttl`);
+    const moved = await store.moveTaskToProject(task, source, target, "moved");
+    expect(pod.files.has(root.url)).toBe(false);
     expect((await store.comments(target, moved).list())[0]?.root.text).toBe("Destination edit");
-    expect((await comments.list())[0]?.root.text).toBe("Source edit");
+    expect(await comments.list()).toEqual([]);
+  });
+
+  it("keeps a destination edit across multiple newer source revisions and cleanup retries", async () => {
+    const { store, pod, source, target, task, comments, root } = await setup();
+    const move = store.prepareTaskMove(task, source, target, "moved");
+    pod.intercept = async (request) => {
+      if (request.method === "DELETE" && request.url === task.url) {
+        const moved = await store.readTask(`${target.tracker.stateStore}moved.ttl`);
+        const destination = store.comments(target, moved);
+        const copied = (await destination.list())[0]?.root;
+        if (!copied) throw new Error("Missing copied root");
+        await destination.edit(copied, "Destination edit");
+        await comments.edit(root, "Source edit");
+      }
+      if (request.method === "DELETE" && request.url === root.url)
+        return new Response(null, { status: 503 });
+    };
+    await expect(move.run()).rejects.toMatchObject({ cause: { status: 503 } });
+    pod.intercept = undefined;
+    const latest = (await comments.list())[0]?.root;
+    if (!latest) throw new Error("Missing source root");
+    await comments.edit(latest, "Newer source edit");
+    const moved = await move.run();
+    expect((await store.comments(target, moved).list())[0]?.root.text).toBe("Destination edit");
+    expect(await comments.list()).toEqual([]);
   });
 
   it("reconciles a lost source comment DELETE response without duplicating its destination", async () => {

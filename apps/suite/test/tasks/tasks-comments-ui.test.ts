@@ -258,6 +258,104 @@ describe("task comment UI", () => {
   });
 
   it.each([
+    false,
+    true,
+  ])("clears the editor when its root is deleted (replies: %s)", async (hasReply) => {
+    const fixture = await setup();
+    const root = await fixture.comments.create("First", webId, new Date("2026-11-01T10:00:00Z"));
+    if (hasReply) await fixture.comments.reply(root, "Answer");
+    await fixture.comments.create("Second", webId, new Date("2026-11-01T10:01:00Z"));
+    const { host } = await fixture.render();
+    await settle();
+    await click(button("Edit"));
+    await type("Unsaved draft", "Edit comment");
+    await click(button("Delete"));
+    await settle();
+    expect(
+      [...host.querySelectorAll("label")].some((label) => label.textContent === "Edit comment"),
+    ).toBe(false);
+    expect(button("Edit").disabled).toBe(false);
+    await click(button("Edit"));
+    expect(field("Edit comment").value).toBe(hasReply ? "Answer" : "Second");
+  });
+
+  it.each([
+    "missing root",
+    "tombstoned root",
+    "missing reply",
+    "hidden reply",
+  ])("clears the editor when a refresh finds a %s", async (change) => {
+    const fixture = await setup();
+    const root = await fixture.comments.create("Root", webId, new Date("2026-11-01T10:00:00Z"));
+    const reply = await fixture.comments.reply(root, "Answer");
+    await fixture.comments.create("Second", webId, new Date("2026-11-01T10:01:00Z"));
+    const { host } = await fixture.render();
+    await settle();
+    const edits = [...host.querySelectorAll("button")].filter(
+      (entry) => entry.textContent === "Edit",
+    );
+    const edited = change.includes("reply") ? reply : root;
+    await click(edits[change.includes("reply") ? 1 : 0] as HTMLButtonElement);
+    await type("Unsaved draft", "Edit comment");
+    if (change === "tombstoned root") await fixture.comments.delete(root);
+    else if (change === "hidden reply") fixture.pod.files.delete(root.url);
+    else fixture.pod.files.delete(edited.url);
+    await act(() => window.dispatchEvent(new Event("focus")));
+    await settle();
+    expect(
+      [...host.querySelectorAll("label")].some((label) => label.textContent === "Edit comment"),
+    ).toBe(false);
+    const remaining = [...host.querySelectorAll("button")].filter(
+      (entry) => entry.textContent === "Edit",
+    );
+    expect(remaining.length).toBeGreaterThan(0);
+    expect(remaining.every((entry) => !entry.disabled)).toBe(true);
+    await click(remaining[0] as HTMLButtonElement);
+    expect(field("Edit comment").value).not.toBe("Unsaved draft");
+  });
+
+  it("clears the editor after a successful deletion even if refreshing fails", async () => {
+    const fixture = await setup();
+    const root = await fixture.comments.create("Root");
+    await fixture.render();
+    await settle();
+    await click(button("Edit"));
+    let deleted = false;
+    fixture.pod.intercept = (request) => {
+      if (request.method === "PUT" && request.url === root.url) deleted = true;
+      if (deleted && request.method === "GET" && request.url === fixture.comments.container)
+        return new Response(null, { status: 503 });
+    };
+    await click(button("Delete"));
+    await settle();
+    expect(document.querySelector('[role="alert"]')).not.toBeNull();
+    expect(document.querySelector("label")?.textContent).not.toBe("Edit comment");
+    expect(button("Edit").disabled).toBe(false);
+  });
+
+  it("discards the hidden editor when write access is lost and restored", async () => {
+    const fixture = await setup();
+    await fixture.comments.create("Root");
+    await fixture.render();
+    await settle();
+    await click(button("Edit"));
+    await type("Unsaved draft", "Edit comment");
+    fixture.pod.intercept = (request) =>
+      request.method === "HEAD" && request.url === fixture.inbox.tracker.stateStore
+        ? new Response(null, { headers: { "WAC-Allow": 'user="read"' } })
+        : undefined;
+    await act(() => window.dispatchEvent(new Event("focus")));
+    await settle();
+    expect(document.querySelector("textarea")).toBeNull();
+    fixture.pod.intercept = undefined;
+    await act(() => window.dispatchEvent(new Event("focus")));
+    await settle();
+    expect(button("Edit").disabled).toBe(false);
+    await click(button("Edit"));
+    expect(field("Edit comment").value).toBe("Root");
+  });
+
+  it.each([
     'user="read"',
     'user="read append"',
   ])("hides all mutation controls for a project reporting %s", async (allow) => {

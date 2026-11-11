@@ -113,6 +113,15 @@ export function TaskComments({ stored, project }: { stored: StoredTask; project:
       if (live.current && request === generation.current) {
         setThreads(rows);
         setWritable(access);
+        setEditing((current) =>
+          current &&
+          access !== false &&
+          rows.some(({ root, replies }) =>
+            [root, ...replies].some((comment) => comment.url === current.url && !comment.deleted),
+          )
+            ? current
+            : undefined,
+        );
         setError(undefined);
       }
     } catch (cause) {
@@ -209,7 +218,11 @@ export function TaskComments({ stored, project }: { stored: StoredTask; project:
             size="sm"
             disabled={busy}
             onClick={() =>
-              void act(() => store.delete(comment)).then((saved) => {
+              void act(async () => {
+                await store.delete(comment);
+                if (live.current)
+                  setEditing((current) => (current?.url === comment.url ? undefined : current));
+              }).then((saved) => {
                 if (saved) document.getElementById(`${id}-heading`)?.focus();
               })
             }
