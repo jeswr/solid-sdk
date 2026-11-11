@@ -1,13 +1,12 @@
 {
-  "$comment": "AUTHORED-BY Codex GPT-6.1-Sol",
   "hooks": {
     "SessionEnd": [
       {
         "hooks": [
           {
             "type": "command",
-            "command": "npx -y @jeswr/agent-session-capture claude",
-            "timeout": 10
+            "command": "solid-capture claude",
+            "timeout": 30
           }
         ]
       }
@@ -17,8 +16,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "npx -y @jeswr/agent-session-capture claude",
-            "timeout": 10
+            "command": "solid-capture claude",
+            "timeout": 30
           }
         ]
       }

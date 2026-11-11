@@ -113,13 +113,23 @@ before changing descriptors or builder/validator scripts. Use the vendored regis
 from `cli-config.ts`, checks the real loader and compares both tool inventories to
 an actual in-memory MCP `tools/list`, including aliases and read-only hints.
 Run it after a fresh build. The package tests exercise it after the gate builds.
+Keep package.json's `mcpName` equal to server.json's `name`; preserve it in mirrors.
 
 The MCPB UI deliberately requires an issuer-based credential group; omit optional
 empty env strings, keep secrets sensitive and read-only true. `packaging:build`
-reuses the build, fully bundles the CLI's remaining runtime dependencies, refuses
-non-builtin external imports and writes a deterministic ZIP under ignored
+rebuilds the package, fully bundles the CLI's remaining runtime dependencies, refuses
+non-builtin external imports, generates deterministic `THIRD_PARTY_NOTICES.txt`
+from input packages' names, versions, license metadata and LICENSE files (fail
+closed when missing), and writes a deterministic ZIP under ignored
 `packaging/out/`. Smoke-test that archive outside the workspace without node_modules.
-Never ship packaging through `files`. Plugin hooks use the capture README's stdin
-interface, with the requested ten-second timeout. The ChatGPT JSON is our own
-planning descriptor, not an OpenAI schema. These are local preparation artifacts;
+Never ship packaging through `files`. Keep two plugins: remote-only `solid-pod`
+with capture hooks, and stdio-only `solid-pod-local`, forwarding only pod root
+and read-only with `${SOLID_MCP_READONLY:-true}`. Other local settings use the
+regular 0600 CLI config file. Plugin MCP/hook JSON must not carry `$comment`.
+Hooks use the capture README's stdin interface, `solid-capture claude` on PATH,
+and a 30-second timeout. Capture is private and not on npm; the documented npx
+alternative needs future publication. Startup killed before queueing leaves no
+snapshot. Verify Node >=24 against Desktop's bundled runtime before submission.
+The ChatGPT JSON is our own planning descriptor, not an OpenAI schema.
+These are local preparation artifacts;
 do not publish, submit, upload, deploy or enable anything as part of this work.

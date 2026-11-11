@@ -20,27 +20,39 @@ After Jesse creates and populates the repository, the intended remote commands a
 /plugin install solid-pod@solid-suite
 ```
 
-The plugin declares two servers. `solid-pod` uses `SOLID_MCP_URL`, the HTTPS `/mcp`
-URL of an operator's OAuth-enabled `apps/mcp-server` deployment. `solid-pod-local`
-runs `npx -y @jeswr/solid-mcp` with the CLI's seven `SOLID_MCP_*` variables forwarded
-from the launching shell. These package commands require a future distribution;
-the private `@jeswr/agent-session-capture` package is not currently installable from
-npm. A local checkout can instead use the absolute built CLI paths documented by
-each package. Declaring the marketplace does not publish either package.
+Choose one plugin; each declares exactly one server:
 
-Configure the chosen server before enabling it. Keep writes disabled by default.
-Claude variable expansion can reject missing variables or pass empty strings;
-the CLI deliberately rejects empty settings. If optional auth/WebID/token-endpoint
-variables are unset, remove those optional env entries from your copied local
-configuration and use the private 0600 config file. Do not fill them with dummy
-credentials. An incomplete credential group fails closed.
+- `solid-pod` uses only `SOLID_MCP_URL`, the HTTPS `/mcp` URL of an operator's
+  OAuth-enabled `apps/mcp-server` deployment. Remote MCP access needs no local
+  `SOLID_MCP_*` settings. This plugin also includes the capture hooks below.
+- `solid-pod-local` runs `npx -y @jeswr/solid-mcp` over stdio and has no hooks.
+  Install it with `/plugin install solid-pod-local@solid-suite`. It forwards only
+  `SOLID_MCP_POD_ROOT` and `SOLID_MCP_READONLY` (using `${SOLID_MCP_READONLY:-true}`).
+  Set the pod root in the launching shell. Every other setting comes from
+  `~/.config/solid-mcp/config.json`, a regular, non-symlink file with exactly mode
+  **0600**, as documented in the solid-mcp README. Put `webId`, `clientId`,
+  `clientSecret`, and `oidcIssuer` or `tokenUrl` there; issuer discovery does not
+  need a token-endpoint override. Leave unused optional fields absent. Existing
+  CLI environment overrides still apply if inherited by the process. The plugin's
+  read-only default overrides a file's `readOnly: false`; set
+  `SOLID_MCP_READONLY=false` explicitly to enable server writes.
 
-`SessionEnd` and `PreCompact` run `npx -y @jeswr/agent-session-capture claude`.
+The local MCP command requires a future npm distribution. For a local checkout,
+replace its command/args with the absolute built CLI paths documented by solid-mcp.
+Configure the chosen server before enabling it. An incomplete credential group
+fails closed. Declaring the marketplace does not publish either package.
+
+`SessionEnd` and `PreCompact` run `solid-capture claude`. A local installation with
+`solid-capture` on PATH is the recommended command. `@jeswr/agent-session-capture`
+is private today and is not on npm: capture hooks are inert without a local install.
+The alternative `npx -y @jeswr/agent-session-capture claude` remains inert until
+that package is published. Do not run it during preparation.
 As documented by agent-session-capture, the command reads `transcript_path` and
 `cwd` directly from hook stdin JSON. No shell path interpolation is used. Each hook
-has the requested **10-second** timeout; the package README recommends 15 seconds
-to allow startup overhead around its internal 10-second budget, so a slow startup
-may be interrupted and leave a queued snapshot for retry.
+has a **30-second** timeout to allow startup overhead around capture's internal
+10-second budget. If startup is killed before capture reads stdin and queues the
+transcript, there is no queued snapshot to retry. Only snapshots already queued
+by capture survive for replay.
 
 Enabling capture authorizes owner-only transcript writes. Capture requires WebID,
 complete CSS credentials, and explicit `SOLID_MCP_READONLY=false`. Its existing

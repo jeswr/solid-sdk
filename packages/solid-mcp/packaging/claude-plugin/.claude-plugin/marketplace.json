@@ -10,7 +10,12 @@
     {
       "name": "solid-pod",
       "source": "./plugins/solid-pod",
-      "description": "Scoped Solid pod MCP tools and optional session capture."
+      "description": "Remote Solid pod MCP tools and optional session capture."
+    },
+    {
+      "name": "solid-pod-local",
+      "source": "./plugins/solid-pod-local",
+      "description": "Local stdio Solid pod MCP tools with private file configuration."
     }
   ]
 }

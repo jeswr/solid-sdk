@@ -8,7 +8,9 @@ The npm names in descriptors are intended future distribution names; npm publish
 remains deferred. Do not run the plugin's `npx` commands as part of preparation.
 
 - `server.json` is the only registry descriptor. Its remote URL points to the
-  operator's deployment of `apps/mcp-server`; `{host}` is unresolved.
+  operator's deployment of `apps/mcp-server`; `{host}` is unresolved. The npm
+  manifest's `mcpName` must equal `server.json`'s `name` for registry ownership
+  verification; the mirror rewrite preserves that field.
 - `mcpb/manifest.json` describes a Node >=24 stdio bundle. The UI deliberately
   requires an authenticated issuer-based setup: pod root, CSS credential ID and
   secret, and OIDC issuer. Read-only defaults to true. The optional WebID and
@@ -17,8 +19,12 @@ remains deferred. Do not run the plugin's `npx` commands as part of preparation.
   No access token is supplied or stored in the bundle. The credential ID is masked
   conservatively along with its secret. Memory/personal tools still require trusted
   client identity and policy; listing a tool grants no access.
-- `claude-plugin/` is a copyable marketplace skeleton; see its README.
-- `chatgpt-app/` contains our own planning descriptor and a manual checklist.
+  Before submission, check `compatibility.runtimes.node` (`>=24`) against Claude
+  Desktop's bundled Node version. The declared requirement remains unchanged.
+- `claude-plugin/` contains separate remote `solid-pod` (with capture hooks) and
+  stdio-only `solid-pod-local` plugins; see its README for private file settings,
+  read-only defaults and capture's required local installation.
+- `chatgpt-app/` contains our own planning descriptor and a manual procedure.
 - `schemas/` records the official reference sources and fetch date.
 
 From the workspace root, after building workspace prerequisites:
@@ -30,12 +36,16 @@ pnpm --filter @jeswr/solid-mcp run packaging:check
 pnpm --filter @jeswr/solid-mcp run packaging:build
 ```
 
-`packaging:build` reuses the existing build, validates the descriptors, then fully
+`packaging:build` rebuilds the package, validates the descriptors, then fully
 bundles its partially bundled CLI with esbuild. Every external import must be a
 Node builtin. A temporary directory contains `manifest.json`, a minimal ESM
-`package.json`, `dist/cli.js`, README and LICENSE. No production node_modules are
-needed. The ZIP uses sorted entries, fixed permissions and 1980 timestamps. It
-writes only `out/solid-mcp-<version>.mcpb` and removes the temporary directory.
+`package.json`, `dist/cli.js`, README, LICENSE and `THIRD_PARTY_NOTICES.txt`. Notices
+come from esbuild's actual input packages in node_modules: name, version, license
+metadata and every LICENSE text, sorted deterministically. Missing license metadata
+or text fails the build. First-party workspace packages use the suite's own license.
+No production node_modules are needed. The ZIP uses sorted entries, fixed permissions
+and 1980 timestamps. It writes only `out/solid-mcp-<version>.mcpb` and removes the
+temporary directory.
 The archive is local, unsigned and gitignored. It contains no runtime configuration
 or credentials. Staging and tests work offline with installed dependencies.
 

@@ -1,7 +1,7 @@
 {
   "name": "solid-pod",
   "version": "0.2.0",
-  "description": "Scoped Solid pod MCP tools and optional session capture. AUTHORED-BY Codex GPT-6.1-Sol",
+  "description": "Remote Solid pod MCP tools and optional session capture. AUTHORED-BY Codex GPT-6.1-Sol",
   "author": {
     "name": "Jesse Wright"
   },

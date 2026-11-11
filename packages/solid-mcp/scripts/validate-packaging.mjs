@@ -89,8 +89,10 @@ function object(properties, required = Object.keys(properties)) {
 const comment = Object.fromEntries([["$comment", string]]);
 
 /** Validate only local artifacts. This function never publishes or starts the CLI. */
-export async function validatePackaging(root = packagingRoot) {
-  const pkg = json(join(packageRoot, "package.json"));
+export async function validatePackaging(
+  root = packagingRoot,
+  pkg = json(join(packageRoot, "package.json")),
+) {
   const registry = json(join(root, "server.json"));
   const manifest = json(join(root, "mcpb/manifest.json"));
   const app = json(join(root, "chatgpt-app/app.json"));
@@ -109,6 +111,7 @@ export async function validatePackaging(root = packagingRoot) {
     "Published files exclude packaging",
   );
   assert.equal(registry.name, "io.github.jeswr/solid-mcp");
+  assert.equal(pkg.mcpName, registry.name, "npm mcpName must match the registry name");
   assert.equal(registry.version, pkg.version, "Registry version drift");
   assert.equal(registry.packages.length, 1);
   const npm = registry.packages[0];
@@ -211,11 +214,11 @@ export async function validatePackaging(root = packagingRoot) {
       metadata: object({ description: string }),
       plugins: {
         type: "array",
-        minItems: 1,
-        maxItems: 1,
+        minItems: 2,
+        maxItems: 2,
         items: object({
-          name: { const: "solid-pod" },
-          source: { const: "./plugins/solid-pod" },
+          name: { enum: ["solid-pod", "solid-pod-local"] },
+          source: { enum: ["./plugins/solid-pod", "./plugins/solid-pod-local"] },
           description: string,
         }),
       },
@@ -223,38 +226,50 @@ export async function validatePackaging(root = packagingRoot) {
     marketplace,
     "marketplace.json",
   );
-  const pluginRoot = safePath(marketplaceRoot, marketplace.plugins[0].source);
-  const plugin = json(join(pluginRoot, ".claude-plugin/plugin.json"));
-  schemaCheck(
-    ajv,
-    object({
-      name: { const: "solid-pod" },
-      version: { const: pkg.version },
-      description: string,
-      author: object({ name: { const: "Jesse Wright" } }),
-      license: { const: "MIT" },
-    }),
-    plugin,
-    "plugin.json",
+  same(
+    sorted(marketplace.plugins.map((entry) => entry.name)),
+    ["solid-pod", "solid-pod-local"],
+    "Marketplace must contain both plugins exactly once",
   );
-  const mcp = json(join(pluginRoot, ".mcp.json"));
-  schemaCheck(
-    ajv,
-    object({
-      ...comment,
-      mcpServers: object({
-        "solid-pod": object({ type: { const: "http" }, url: { const: `\${SOLID_MCP_URL}` } }),
-        "solid-pod-local": object({
-          type: { const: "stdio" },
-          command: { const: "npx" },
-          args: { const: ["-y", pkg.name] },
-          env: object(Object.fromEntries(names.map((name) => [name, { const: `\${${name}}` }]))),
-        }),
+  for (const entry of marketplace.plugins) {
+    assert.equal(entry.source, `./plugins/${entry.name}`, "Marketplace source/name mismatch");
+    const pluginRoot = safePath(marketplaceRoot, entry.source);
+    const plugin = json(join(pluginRoot, ".claude-plugin/plugin.json"));
+    schemaCheck(
+      ajv,
+      object({
+        name: { const: entry.name },
+        version: { const: pkg.version },
+        description: string,
+        author: object({ name: { const: "Jesse Wright" } }),
+        license: { const: "MIT" },
       }),
-    }),
-    mcp,
-    ".mcp.json",
-  );
+      plugin,
+      `${entry.name}/plugin.json`,
+    );
+    const server =
+      entry.name === "solid-pod"
+        ? object({ type: { const: "http" }, url: { const: `\${SOLID_MCP_URL}` } })
+        : object({
+            type: { const: "stdio" },
+            command: { const: "npx" },
+            args: { const: ["-y", pkg.name] },
+            env: object({
+              SOLID_MCP_POD_ROOT: { const: `\${SOLID_MCP_POD_ROOT}` },
+              SOLID_MCP_READONLY: { const: `\${SOLID_MCP_READONLY:-true}` },
+            }),
+          });
+    schemaCheck(
+      ajv,
+      object({ mcpServers: object({ [entry.name]: server }) }),
+      json(join(pluginRoot, ".mcp.json")),
+      `${entry.name}/.mcp.json`,
+    );
+    if (entry.name === "solid-pod-local") {
+      assert(!existsSync(join(pluginRoot, "hooks")), "Local plugin must remain stdio-only");
+    }
+  }
+  const pluginRoot = safePath(marketplaceRoot, "./plugins/solid-pod");
   const hooks = json(join(pluginRoot, "hooks/hooks.json"));
   const hook = {
     type: "array",
@@ -267,15 +282,15 @@ export async function validatePackaging(root = packagingRoot) {
         maxItems: 1,
         items: object({
           type: { const: "command" },
-          command: { const: "npx -y @jeswr/agent-session-capture claude" },
-          timeout: { const: 10 },
+          command: { const: "solid-capture claude" },
+          timeout: { const: 30 },
         }),
       },
     }),
   };
   schemaCheck(
     ajv,
-    object({ ...comment, hooks: object({ SessionEnd: hook, PreCompact: hook }) }),
+    object({ hooks: object({ SessionEnd: hook, PreCompact: hook }) }),
     hooks,
     "hooks.json",
   );

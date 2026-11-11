@@ -1,5 +1,6 @@
 {
   "name": "@jeswr/solid-mcp",
+  "mcpName": "io.github.jeswr/solid-mcp",
   "version": "0.2.0",
   "description": "A Model Context Protocol (MCP) server that exposes a Solid pod to MCP clients (Claude Desktop, etc.) as Resources + Tools (list / read / search / write) over an injectable authenticated Solid fetch. Read-only by default; pod-scope-guarded. Experimental, AI-agent-generated.",
   "type": "module",

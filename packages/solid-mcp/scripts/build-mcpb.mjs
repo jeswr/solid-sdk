@@ -1,14 +1,76 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { builtinModules } from "node:module";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
 import { zipSync } from "fflate";
 import { packageRoot, validatePackaging } from "./validate-packaging.mjs";
+
+const compare = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
+
+/** Inventory actual bundle inputs, including each version and every license file. */
+export function thirdPartyNotices(metafile, root = packageRoot) {
+  const suitePackages = realpathSync(dirname(packageRoot));
+  const packages = new Map();
+  const visited = new Set();
+  for (const input of Object.keys(metafile.inputs)) {
+    let directory = dirname(realpathSync(resolve(root, input)));
+    let pkg;
+    for (;;) {
+      const manifest = join(directory, "package.json");
+      if (existsSync(manifest)) {
+        const candidate = JSON.parse(readFileSync(manifest, "utf8"));
+        // Some packages have nested package.json files containing only {type}.
+        if (candidate.name && candidate.version) {
+          pkg = candidate;
+          break;
+        }
+      }
+      assert(dirname(directory) !== directory, `No package metadata for bundle input: ${input}`);
+      directory = dirname(directory);
+    }
+    // First-party workspace libraries are covered by the suite's own license.
+    if (dirname(directory) === suitePackages || visited.has(directory)) continue;
+    visited.add(directory);
+    assert(
+      typeof pkg.license === "string" && pkg.license.trim(),
+      `Missing license metadata for ${pkg.name}@${pkg.version}`,
+    );
+    const licenses = readdirSync(directory, { withFileTypes: true })
+      .filter((entry) => /^(?:licen[sc]e|copying)(?:[._-].*)?$/i.test(entry.name))
+      .sort((a, b) => compare(a.name, b.name));
+    assert(licenses.length > 0, `Missing LICENSE text for ${pkg.name}@${pkg.version}`);
+    const key = `${pkg.name}@${pkg.version}`;
+    let notice = `Package: ${pkg.name}\nVersion: ${pkg.version}\nLicense: ${pkg.license}\n`;
+    for (const license of licenses) {
+      assert(license.isFile(), `License must be a regular file: ${key}/${license.name}`);
+      const text = readFileSync(join(directory, license.name), "utf8");
+      assert(text.trim(), `Empty LICENSE text for ${key}/${license.name}`);
+      notice += `\n--- ${license.name} ---\n${text}${text.endsWith("\n") ? "" : "\n"}`;
+    }
+    if (packages.has(key)) {
+      assert.equal(packages.get(key), notice, `Conflicting license notices for ${key}`);
+    }
+    packages.set(key, notice);
+  }
+  return [
+    "AUTHORED-BY Codex GPT-6.1-Sol\nThird-party packages included in the MCPB bundle.\n",
+    ...[...packages].sort(([a], [b]) => compare(a, b)).map(([, notice]) => notice),
+  ].join("\n");
+}
 
 /** Stage a self-contained CLI, without copying credentials, caches or node_modules. */
 export async function stageMcpb(stage) {
@@ -38,6 +100,7 @@ export async function stageMcpb(stage) {
       );
     }
   }
+  writeFileSync(join(stage, "THIRD_PARTY_NOTICES.txt"), thirdPartyNotices(result.metafile));
   const pkg = JSON.parse(readFileSync(join(packageRoot, "package.json"), "utf8"));
   writeFileSync(
     join(stage, "package.json"),
