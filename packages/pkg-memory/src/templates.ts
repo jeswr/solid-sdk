@@ -317,9 +317,20 @@ class HealthInput {
     const system = this.iri(code.system);
     const snomed = system.startsWith(SNOMED_PREFIX);
     const id = this.iri(code.id, snomed);
-    // A SNOMED CT identifier carries its own check digit, so it is not mistaken for a card.
-    if (snomed && typeof code.code === "string" && (sctid(code.code) || snomedIri(code.code)))
-      return { id, display, code: code.code, system };
+    const codeId =
+      typeof code.code === "string"
+        ? sctid(code.code)
+          ? code.code
+          : snomedIri(code.code)
+        : undefined;
+    const iriId = snomedIri(id);
+    // A SNOMED concept IRI and its supplied code must identify the same concept.
+    if (id.startsWith(NS.sct) && (iriId === undefined || iriId !== codeId)) return this.invalid();
+    // Only checksum-valid concept identifiers receive the clinical-code exemption.
+    if (snomed) {
+      if (codeId === undefined) return this.invalid();
+      return { id, display, code: code.code as string, system };
+    }
     return { id, display, code: this.literal(code.code, "string"), system };
   }
 
@@ -417,12 +428,14 @@ const VERHOEFF_P = [
 ];
 
 /**
- * A SNOMED CT identifier: 6-18 ASCII digits, no leading zero, a partition identifier
- * (second- and third-last digits) of 00-05 or 10-15, and a valid Verhoeff check digit.
+ * A SNOMED CT concept identifier: 6-18 ASCII digits, no leading zero, partition 00
+ * or 10, and a valid Verhoeff check digit. Extension concepts (10) also require
+ * an item identifier and the seven-digit namespace, hence at least 11 digits.
  */
 function sctid(text: string): boolean {
-  if (!/^[1-9][0-9]{5,17}(?![\s\S])/.test(text) || !/(?:0[0-5]|1[0-5])[0-9](?![\s\S])/.test(text))
-    return false;
+  if (!/^[1-9][0-9]{5,17}(?![\s\S])/.test(text)) return false;
+  const partition = text.slice(-3, -1);
+  if (partition !== "00" && (partition !== "10" || text.length < 11)) return false;
   let check = 0;
   for (let i = 0; i < text.length; i += 1) {
     const digit = text.charCodeAt(text.length - 1 - i) - 48;
@@ -434,9 +447,9 @@ function sctid(text: string): boolean {
 }
 
 /** `http://snomed.info/id/<sctid>`, exactly. */
-function snomedIri(text: string): boolean {
+function snomedIri(text: string): string | undefined {
   const match = /^http:\/\/snomed\.info\/id\/([0-9]+)(?![\s\S])/.exec(text);
-  return match !== null && sctid(match[1] as string);
+  return match !== null && sctid(match[1] as string) ? match[1] : undefined;
 }
 
 function encounterSnapshot(fact: Fact, owner: string): EncounterValue {
@@ -445,8 +458,13 @@ function encounterSnapshot(fact: Fact, owner: string): EncounterValue {
   const bounds = input.snapshot(v.period, ["start", "end"]);
   const start = input.temporal(bounds.start);
   const end = bounds.end === undefined ? undefined : input.temporal(bounds.end);
-  // Refuse only an interval that is reversed in every possible timezone.
-  if (end !== undefined && healthTimeRange(end)[1] < healthTimeRange(start)[0])
+  // Dates share a calendar ordering. Widen only a date compared with a zoned date-time.
+  if (
+    end !== undefined &&
+    (start.datatype === "date" && end.datatype === "date"
+      ? end.value < start.value
+      : healthTimeRange(end)[1] < healthTimeRange(start)[0])
+  )
     return input.invalid();
   return {
     id: input.iri(v.id),

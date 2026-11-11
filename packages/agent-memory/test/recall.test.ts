@@ -132,16 +132,25 @@ it("requires every category in the mandate and permits health only when explicit
   const h = await harness();
   await seed(h);
   expect(await h.memory.recall({ ...QUERY, categories: ["pd:Health"] })).toEqual([]);
-  const healthOnly = createAgentMemory({
+  // Clinical facts are always tagged pd:MedicalHealth, so pd:Health alone no longer admits them.
+  const plainHealth = createAgentMemory({
     ...h.options,
     loadMandate: async () => ({ ...mandate, memoryScope: ["pd:Health"] }),
+  });
+  expect(await plainHealth.recall(QUERY)).toEqual([]);
+  const healthOnly = createAgentMemory({
+    ...h.options,
+    loadMandate: async () => ({ ...mandate, memoryScope: ["pd:Health", "pd:MedicalHealth"] }),
   });
   expect((await healthOnly.recall(QUERY)).map((x) => x.nanopubs[0]?.identifier)).toEqual([
     "recall-fixture/health",
   ]);
   const both = createAgentMemory({
     ...h.options,
-    loadMandate: async () => ({ ...mandate, memoryScope: ["pd:Health", `${PD}Preference`] }),
+    loadMandate: async () => ({
+      ...mandate,
+      memoryScope: ["pd:Health", "pd:MedicalHealth", `${PD}Preference`],
+    }),
   });
   expect(await both.recall({ ...QUERY, categories: ["pd:Health"] })).toHaveLength(2);
   expect(await both.recall(QUERY)).toHaveLength(3);
@@ -196,7 +205,10 @@ it.each([
 });
 
 it("reloads scope and forwards purpose on every recall", async () => {
-  const loader = vi.fn(async () => ({ ...mandate, memoryScope: ["pd:Health"] }));
+  const loader = vi.fn(async () => ({
+    ...mandate,
+    memoryScope: ["pd:Health", "pd:MedicalHealth"],
+  }));
   const h = await harness({ loadMandate: loader });
   await seed(h);
   expect(await h.memory.recall(QUERY)).toHaveLength(1);

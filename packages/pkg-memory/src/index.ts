@@ -26,6 +26,7 @@ export type {
 } from "./model.js";
 export {
   buildNanopublications,
+  CLINICAL_TYPES,
   EPISTEMIC_STATUSES,
   parseAssertion,
   parseNanopublications,

@@ -11,6 +11,7 @@ import SHACLValidator from "rdf-validate-shacl";
 import { describe, expect, it, vi } from "vitest";
 import {
   buildNanopublications,
+  CLINICAL_TYPES,
   containsCardNumber,
   createDefaultPolicy,
   createFactAssertion,
@@ -33,8 +34,25 @@ import { exampleBuildOptions } from "../src/testing.js";
 const options = exampleBuildOptions();
 const owner = options.owner;
 const pan = "4111 1111 1111 1111";
-// Synthetic identifiers with valid Verhoeff checks; the latter two also pass full Luhn.
+// Synthetic concept identifiers with valid Verhoeff checks; the latter two also pass full Luhn.
 const snomedIds = ["999000041000000102", "400000010001", "400000000000002008"];
+const clinicalTypes = [
+  ...[NS.health, LEGACY_HEALTH_NS].flatMap((namespace) =>
+    [
+      "Condition",
+      "MedicationStatement",
+      "MedicinalProduct",
+      "Observation",
+      "Immunization",
+      "Encounter",
+    ].map((name) => namespace + name),
+  ),
+  `${NS.fhir}AllergyIntolerance`,
+  `${NS.fhir}Observation`,
+  `${NS.schema}MedicalCondition`,
+  `${NS.schema}Drug`,
+  `${NS.schema}Observation`,
+];
 const snomedSystems = ["http://snomed.info/sct", "http://snomed.info/sct/83821000000107"];
 const day: HealthTemporalValue = { value: "2026-11-01", datatype: "date" };
 const instant: HealthTemporalValue = { value: "2026-11-01T09:00:00Z", datatype: "dateTime" };
@@ -164,7 +182,8 @@ describe("health fact graphs", () => {
     it(`${template}: accepts long SNOMED codes and exact concept IRIs under SNOMED systems`, () => {
       const field = template === "observation" ? "code" : "vaccine";
       for (const system of snomedSystems) {
-        for (const digits of snomedIds) {
+        // The 11-digit extension has item 1 and seven-digit namespace 1000000.
+        for (const digits of [...snomedIds, "38341003", "271649006", "11000000101"]) {
           for (const value of [digits, `http://snomed.info/id/${digits}`]) {
             const id = `http://snomed.info/id/${digits}`;
             const data = assertion(template, {
@@ -349,6 +368,55 @@ describe("health template refusal boundaries", () => {
   });
 
   for (const template of ["observation", "immunization"] as const) {
+    it(`${template}: refuses non-concept partitions, short extensions and mismatched SNOMED codes`, () => {
+      const field = template === "observation" ? "code" : "vaccine";
+      const base = examples[template];
+      for (const digits of [
+        "4111111111111137", // Luhn + Verhoeff valid, relationship partition 13.
+        "1000000013",
+        "1000000021",
+        "1000000032",
+        "1000000045",
+        "1000000050",
+        "1000000111",
+        "1000000124",
+        "1000000130",
+        "1000000148",
+        "1000000153",
+        "1000000202", // Unsupported partition 20.
+        "1000000107", // Partition 10 without room for an item + seven-digit namespace.
+        "38341004", // Concept partition, invalid check digit.
+        undefined,
+        null,
+        42,
+      ]) {
+        for (const system of snomedSystems) {
+          for (const value of [digits, `http://snomed.info/id/${digits}`]) {
+            refuses(template, { ...base, [field]: { ...code, code: value, system } });
+            refuses(template, {
+              ...base,
+              [field]: { id: `http://snomed.info/id/${digits}`, code: value, system },
+            });
+          }
+        }
+      }
+      expect(containsCardNumber("4111111111111137")).toBe(true);
+      for (const system of [...snomedSystems, code.system]) {
+        for (const id of ["38341003", "400000010001"]) {
+          for (const value of [
+            "271649006",
+            "http://snomed.info/id/271649006",
+            "EX-TEMP",
+            undefined,
+          ])
+            refuses(template, {
+              ...base,
+              [field]: { id: `http://snomed.info/id/${id}`, code: value, system },
+            });
+        }
+      }
+    });
+
     it(`${template}: limits the SNOMED exemption to exact, checksum-valid clinical codes`, () => {
       const field = template === "observation" ? "code" : "vaccine";
       const base = examples[template];
@@ -659,6 +727,8 @@ describe("health template refusal boundaries", () => {
     const dt = (value: string): HealthTemporalValue => ({ value, datatype: "dateTime" });
     const date = (value: string): HealthTemporalValue => ({ value, datatype: "date" });
     for (const [start, end] of [
+      [date("2026-11-02"), day],
+      [date("2026-11-03"), day],
       [date("2026-11-04"), day],
       [dt("2026-11-02T14:00:00Z"), day],
       [day, dt("2026-10-31T09:59:59.999999Z")],
@@ -669,6 +739,8 @@ describe("health template refusal boundaries", () => {
       refuses("encounter", { ...encounter, period: { start, end } });
     for (const [start, end] of [
       [day, day],
+      [day, date("2026-11-02")],
+      [day, date("2026-11-03")],
       [instant, day],
       [day, instant],
       [instant, instant],
@@ -676,7 +748,6 @@ describe("health template refusal boundaries", () => {
       [dt("2026-11-01T23:00:00-02:00"), date("2026-11-02")],
       [dt("2026-11-01T24:00:00.000Z"), dt("2026-11-02T00:00:00Z")],
       [dt("0001-01-01T00:00:00Z"), dt("0001-01-01T00:00:00.000001Z")],
-      [date("2026-11-02"), day],
       [dt("2026-11-02T00:00:00Z"), day],
       [day, dt("2026-10-31T23:59:59.999999Z")],
     ])
@@ -899,7 +970,14 @@ async function combinedHealthShapes(): Promise<Store> {
 describe("health nanopublications and profile conformance", () => {
   it("adds MedicalHealth to every health event regardless of caller-supplied categories", async () => {
     const client = "https://example.org/agents/test";
-    for (const categories of [undefined, [], ["pd:Contact"], ["pd:Health"], ["pd:MedicalHealth"]]) {
+    for (const categories of [
+      undefined,
+      [],
+      ["pd:Contact"],
+      ["pd:Health"],
+      ["pd:Financial"],
+      ["pd:MedicalHealth"],
+    ]) {
       const built = await buildNanopublications(
         {
           batch_id: "health-categories",
@@ -960,19 +1038,33 @@ describe("health nanopublications and profile conformance", () => {
     }
   });
 
-  it("tags exact clinical RDF classes across namespaces and preserves assertion contents", async () => {
+  it("exports one immutable clinical class list for consumers", () => {
+    expect(CLINICAL_TYPES).toEqual(clinicalTypes);
+    expect(Object.isFrozen(CLINICAL_TYPES)).toBe(true);
+  });
+
+  it.each(
+    [undefined, [], ["pd:Contact"], ["pd:Health"], ["pd:Financial"], ["pd:MedicalHealth"]].map(
+      (categories) => ({
+        categories,
+      }),
+    ),
+  )("tags exact clinical RDF classes across namespaces and preserves assertions with categories %j", async ({
+    categories,
+  }) => {
     const inputs = [];
-    for (const namespace of [NS.health, LEGACY_HEALTH_NS]) {
-      for (const name of ["Observation", "Immunization", "Encounter"]) {
-        const data = new Store();
-        new RdfNode("https://example.org/event", data).link(`${NS.rdf}type`, namespace + name);
-        inputs.push(data);
-      }
+    for (const type of clinicalTypes) {
+      const data = new Store();
+      new RdfNode("https://example.org/event", data).link(`${NS.rdf}type`, type);
+      inputs.push(data);
     }
     const nonclinical = new Store();
-    new RdfNode("https://example.org/unrelated", nonclinical)
-      .text(`${NS.rdf}type`, `${NS.health}Observation`)
-      .link(`${NS.rdf}type`, `${NS.health}ObservationLike`);
+    const unrelated = new RdfNode("https://example.org/unrelated", nonclinical);
+    for (const type of clinicalTypes) {
+      unrelated.text(`${NS.rdf}type`, type).link(`${NS.rdf}type`, `${type}Like`);
+      unrelated.link(`${NS.rdf}type`, type.toLowerCase());
+      unrelated.link(`${NS.schema}additionalType`, type);
+    }
     const built = await buildNanopublications(
       {
         batch_id: "health-rdf-categories",
@@ -981,13 +1073,21 @@ describe("health nanopublications and profile conformance", () => {
           id: String(i),
           epistemic: "Documented",
           assertion: data,
+          categories,
         })),
       },
       options,
     );
     for (const np of built.nanopubs) {
       const index = Number(np.identifier.split("/").at(-1));
-      expect(np.categories).toEqual(index < inputs.length ? [`${NS.pd}MedicalHealth`] : []);
+      expect(np.categories).toEqual(
+        [
+          ...new Set([
+            ...(categories ?? []).map((category) => NS.pd + category.slice(3)),
+            ...(index < inputs.length ? [`${NS.pd}MedicalHealth`] : []),
+          ]),
+        ].sort(),
+      );
       expect(
         isomorphic(
           [...graph(built.dataset, np.assertionId)],

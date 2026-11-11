@@ -41,9 +41,10 @@ administration records and `encounter` for clinical visits. Their snapshots reje
 unknown keys and card numbers in text, numeric values (expanded to fixed-point),
 and decimal lexical forms, with fixed refusal messages. Clinical
 times accept only `date` or timezone-bearing `dateTime`, never year 0000. A date-only
-encounter bound covers its full calendar day widened by ±14 hours because its
-timezone is unknown; refuse only an end earlier than the earliest possible start
-across these ranges. Supplied `HealthCode` concepts require both a code (`core:value`)
+encounter bound is compared directly with another date: require end >= start.
+Only mixed date/dateTime comparisons widen the date's full calendar day by ±14
+hours because its timezone is unknown; refuse an end earlier than the earliest
+possible start across those ranges. Supplied `HealthCode` concepts require both a code (`core:value`)
 and system (`core:inScheme`), satisfying health + Core shapes. A vaccine product
 may omit coding; supplied coding requires both fields. Vaccines use
 `health:medication`, providers use `health:careProvider` without an Organization
@@ -55,14 +56,28 @@ surface. Inherited template headers are refused; throwing dispatch getters or pr
 produce a fixed `Invalid fact template` error. Entity IRIs must be unchanged HTTP(S),
 distinct from each other and the owner. Scan the owner and every supplied IRI after
 repeated percent-decoding and NFKC folding. Exempt only Verhoeff-valid SNOMED CT
-codes and exact `http://snomed.info/id/<id>` code or concept/product IRIs under an
-`http://snomed.info/` system. No exemption applies to other identifier roles or
+concept codes (6–18 ASCII digits, no leading zero, partition `00` or `10`) and
+exact `http://snomed.info/id/<id>` code or concept/product IRIs under an
+`http://snomed.info/` system. Partition `10` requires at least 11 digits, including
+an item identifier and seven-digit namespace. Refuse all non-concept partitions
+and malformed codes under a SNOMED system, including short codes. A supplied
+SNOMED concept/product IRI must carry the same SCTID as its code (digits or exact
+SNOMED IRI). No exemption applies to other identifier roles or
 systems, including `https://dmd.nhs.uk`; the SNOMED UK drug extension follows the
-SNOMED rule. Keep `kind` and clinical datatypes closed enums.
-The builder adds `pd:MedicalHealth` to the provenance of every explicitly typed
-Observation, Immunization and Encounter assertion (canonical or legacy namespace),
-even when the caller omits categories or supplies another category. Preserve the
-assertion graph and retain any caller-supplied categories.
+SNOMED rule. No concept/namespace registry lookup is performed. Residual false
+acceptance is approximately 1 in 500 Luhn-valid 12–18 digit candidates
+(Verhoeff 1/10 × concept partitions 2/100), or 1 in 5,000 arbitrary candidates
+including Luhn, assuming near-independent uniform digits. An adversary can
+construct a passing number; this is not a security bound. Nineteen-digit ids
+receive no exemption. Keep `kind` and clinical datatypes closed enums.
+The builder adds `pd:MedicalHealth` for exact named-node `rdf:type` values in the
+exported frozen `CLINICAL_TYPES` array: canonical/legacy health Condition,
+MedicationStatement, MedicinalProduct, Observation, Immunization and Encounter;
+FHIR AllergyIntolerance and Observation; schema.org MedicalCondition, Drug and
+Observation. This includes every class matched by MCP `health_query`. Literal
+types and look-alikes do not match. Apply the tag even when the caller omits
+categories or supplies another category. Preserve the assertion graph and retain
+any caller-supplied categories. Consumers should reuse the exported inventory.
 See the README for the remaining shape-driven property mappings.
 
 Use `purposeFilter(policy, purpose, clientId)` on every personal-data read. It

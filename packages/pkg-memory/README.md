@@ -96,12 +96,14 @@ without an ontology reasoner. `HealthTemporalValue` accepts only `date` and
 `dateTime`; dates use `time:inXSDDate`, date-times `time:inXSDDateTime`. Year 0000
 is refused and every date-time must carry `Z` or a valid ±hh:mm timezone.
 Date-times retain the package's microsecond normalization. Encounter endpoints
-are compared as UTC instants at that precision. A date-only bound denotes the
-whole calendar day with no timezone. Following XSD's indeterminate comparison,
-its possible UTC range is widened by ±14 hours: from 10:00Z on the preceding
-day through 13:59:59.999999Z on the following day. The earliest possible start
-and latest possible end are compared; only an interval reversed throughout these
-ranges is refused. For example, a start of `2026-01-02` and an end of
+are compared as UTC instants at that precision. When both endpoints are dates,
+their calendar values are compared directly: the end must be on or after the start.
+For mixed date/dateTime endpoints, a date-only bound denotes the whole calendar
+day with no timezone. Following XSD's indeterminate comparison, its possible UTC
+range is widened by ±14 hours: from 10:00Z on the preceding day through
+13:59:59.999999Z on the following day. The earliest possible start and latest
+possible end are compared; only an interval reversed throughout these ranges is
+refused. For example, a start of `2026-01-02` and an end of
 `2026-01-01T20:00:00+10:00` are accepted at the earliest-start boundary.
 Nested times and vaccine codes are blank nodes, skolemized on build.
 
@@ -117,12 +119,25 @@ and provider identifiers must differ from each other and from the owner. The own
 and all supplied IRIs are percent-decoded up to four rounds and NFKC-normalized
 before card-number scanning;
 malformed or residual percent escapes are refused. The sole exemption is clinical
-coding under an `http://snomed.info/` system: a Verhoeff-valid SNOMED CT identifier
-(6–18 ASCII digits, no leading zero, partition 00–05 or 10–15), either as digits
-or an exact `http://snomed.info/id/<id>` code or concept/product IRI. Other identifier
-roles and coding systems receive no exemption. This includes dm+d's
+coding under an `http://snomed.info/` system: a Verhoeff-valid SNOMED CT concept
+identifier (6–18 ASCII digits, no leading zero, partition `00` or `10`), either
+as digits or an exact `http://snomed.info/id/<id>` code or concept/product IRI.
+Extension concepts (`10`) require at least 11 digits to fit an item identifier,
+the seven-digit namespace, partition and check digit. Description, relationship,
+subset and map partitions are refused. Codes under a SNOMED system must meet
+these concept rules even when too short to trigger the card detector. Whenever a
+supplied concept/product IRI is in `http://snomed.info/id/`, its SCTID must match
+the supplied code's SCTID, whether the code is digits or an exact SNOMED IRI.
+Other identifier roles and coding systems receive no exemption. This includes dm+d's
 `https://dmd.nhs.uk` system; a SNOMED UK drug-extension system under
-`http://snomed.info/` follows the SNOMED rule. Snapshot refusals use fixed
+`http://snomed.info/` follows the SNOMED rule. This is a structural check without
+an assigned-concept or namespace registry lookup. Residual false acceptance is
+roughly 1 in 500 Luhn-valid 12–18 digit candidates (Verhoeff: 1/10; concept
+partitions: 2/100), or about 1 in 5,000 arbitrary candidates when also counting
+Luhn, assuming approximately independent, uniformly distributed digits. These
+estimates are not an adversarial bound: a deliberately constructed number can
+pass all checks. Nineteen-digit identifiers never receive the exemption.
+Snapshot refusals use fixed
 messages (`Invalid observation`, `Invalid immunization`, `Invalid encounter`);
 inherited health-template headers are refused, and an unreadable template getter
 or proxy produces `Invalid fact template` without exposing its thrown value.
@@ -132,10 +147,19 @@ the fixture gate's local `owl:imports` traversal, assert zero MUST Violations fo
 complete and minimal variants, and check the Encounter `recordedBy` SHOULD Warning.
 
 `buildNanopublications` always adds `pd:MedicalHealth` to the provenance categories
-of assertions explicitly typed as Observation, Immunization or Encounter in the
-canonical or legacy health namespace. Caller-supplied categories are retained;
-omitting or mislabelling them cannot bypass special-category authorization for
-these templates. Assertion contents and their identifiers remain unchanged.
+of assertions explicitly typed with any class in the exported, frozen
+`CLINICAL_TYPES` array: Condition, MedicationStatement, MedicinalProduct,
+Observation, Immunization and Encounter in the canonical or legacy health
+namespace; FHIR AllergyIntolerance and Observation; and schema.org MedicalCondition,
+Drug and Observation. This covers every class currently matched by MCP's
+`health_query` and the clinical record/product classes emitted by the templates.
+Only exact named-node `rdf:type` values match; look-alikes and literal type values
+do not. Caller-supplied categories are retained; omitting or mislabelling them
+cannot bypass special-category authorization for these classes. Assertion contents
+and their identifiers remain unchanged. Consumers can import `CLINICAL_TYPES` to
+share this class inventory. Behaviour change: an agent-memory mandate whose
+memoryScope names only `pd:Health` no longer recalls clinical facts; it must also
+name `pd:MedicalHealth` (pinned in agent-memory's recall tests).
 
 `findCardNumbers` and `containsCardNumber` expose the detector. It flags every
 Luhn-valid window of 12 to 19 digits that does not start with 0, in linear time.
