@@ -204,7 +204,7 @@ describe("Excel implicit row and cell positions", () => {
   });
 });
 
-it("ignores later inflater callbacks after the shared budget is exhausted", () => {
+it("stops at the shared budget while relationships are still being inflated", () => {
   const limit = LIMITS.totalBytes;
   LIMITS.totalBytes = 1;
   try {
