@@ -69,7 +69,21 @@ it.each([
   const entry = l.append(
     type === "ledger-checkpoint"
       ? { type, lastPrunedSeq: 1, lastPrunedHash: `sha-256:${"a".repeat(64)}` }
-      : { ...record, type, proposal: "urn:proposal:1", mandate: "urn:mandate:1" },
+      : {
+          ...record,
+          type,
+          proposal: "urn:proposal:1",
+          mandate: "urn:mandate:1",
+          ...(type === "personal-data-read"
+            ? {
+                tool: "memory_recall",
+                decision: "permit" as const,
+                reason: "autonomous",
+                categories: [],
+                resources: [],
+              }
+            : {}),
+        },
     AT,
   );
   const url = `${BASE}1.ttl`;

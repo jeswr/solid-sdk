@@ -112,3 +112,7 @@ The original Python builder, canonical KG shapes and real registry YAML are not
 present in this checkout.
 
 Run the package's `lint`, `build`, `typecheck`, and `test` scripts from the workspace.
+
+`MemoryMandate` and `DEFAULT_MEMORY_SCOPE` are re-exported from `@jeswr/pkg-memory`;
+category normalization also uses its shared `memoryCategory`. Recall behavior and
+the default preference-only scope remain the same.

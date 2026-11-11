@@ -37,3 +37,29 @@ Never use live providers or credentials in tests. Future fake implementations be
 in `./testing`. Send implementations belong exclusively in channel send subpaths,
 importable only by agent-executor and channel tests. Only agent-model-gateway may
 import OpenAI or Anthropic SDKs; the gateway must never import agent-audit.
+
+`personal-data-read` is appended to `ENTRY_KINDS`. It requires `tool`, `decision`,
+`reason`, `categories` (at most 64 IRIs) and `resources` (at most 100 IRIs), and
+accepts an optional purpose IRI. Empty category/resource arrays describe refusals
+or empty results. These three metadata fields are forbidden on other record
+kinds. Unknown fields, arguments, results and personal-data values remain
+forbidden. Its RDF projection uses `dpv:hasPurpose`, `dpv:hasPersonalData` and
+`prov:used` through the existing typed writer. `auditArtifact` and task statistics
+verify chain integrity but otherwise ignore this kind entirely.
+
+`new PodChain(fetch, baseContainerUrl).append(record, at)` allocates entries
+directly in an existing pod container whose URL must end with `/`. Calls on one
+instance serialize. Each attempt reads `chain.ttl`, seals the next sequence using
+the existing canonical hash, creates `<seq>.ttl` with `If-None-Match: *`, then
+publishes its head with `If-Match` and a strong ETag (or `If-None-Match: *` for
+genesis). A colliding immutable entry is checked for schema, exact RDF projection,
+predecessor and hash before helping publish it and retrying the caller's append.
+This heals an interrupted entry creation and supports concurrent writers. A
+writer whose entry another writer published returns that entry after verifying
+the published chain. Five attempts bound contention. Corrupt collisions fail with
+`Audit chain integrity failure`; redirects and transport failures use fixed
+messages. Provision the container and owner-private ACL separately.
+`loadChain(fetch, baseContainerUrl)` verifies the complete published prefix at an
+explicit base; `loadTrace` uses the same reader at the conventional audit path.
+Hash integrity still requires an independently trusted head to detect rewritten
+history or tail truncation.

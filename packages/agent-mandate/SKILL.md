@@ -48,3 +48,26 @@ use synthetic example identities, generated test keys and injected I/O; never ca
 
 Maintain Node >=24, ESM/workspace dependencies, strict TypeScript, Biome, and 100% per-file
 coverage in every metric. Every decision-matrix row must name its expected decision and reason.
+
+`autonomousTargets(mandate, request, candidates, engine?)` returns sorted, unique
+exact autonomous read targets. Pass trusted agent, action, time and attributes;
+only `read` (or its full ODRL IRI) is accepted. Attributes are snapshotted once
+before evaluation. An absent mandate, non-scalar
+purpose, approval-only grant, prohibition or invalid validity/agent binding yields
+no target. Each exact-target permission must itself pass evaluation: an
+untargeted grant cannot bypass its constraints. Wildcard targets are refused; asset collections
+are never expanded. This projects scope only from an already verified mandate.
+
+`createPodMandateVerifier({ credentialUrl, ownerWebId, agentId, fetch,
+profileFetch?, now? })` is available from the root and `./verify`. `now` is an
+optional clock function. The derived sibling `status.ttl` must end in
+`/agent/mandates/status.ttl`, otherwise construction throws a fixed TypeError.
+Key/profile and status resolvers are recreated for every load.
+Each load fetches the exact credential with `Accept: application/trig`, refuses
+redirects and failed responses, bounds the streamed body to 256 KiB, and requires
+its signed ID to equal the fetched URL. It delegates WebID key control and signed,
+confirmed-clear owner-issued status verification to solid-vc and the existing
+VC verifier. Failures return undefined without exposing transport/parser details.
+Inject scoped fetches; `profileFetch` can keep public WebID resolution separate
+from private credential/status access. The helper uses no Node builtins and is
+browser-bundleable. Provision credentials and the status list separately.

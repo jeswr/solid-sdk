@@ -67,30 +67,38 @@ export interface LoadedTrace {
 }
 /** Fetch exactly the published prefix; don't follow arbitrary PROV links or list an unbounded container. */
 export async function loadTrace(io: AuditFetch, root: string): Promise<LoadedTrace> {
-  const base = auditBase(root);
+  return loadChain(io, auditBase(root));
+}
+/** Read a chain from an explicitly provisioned container. */
+export async function loadChain(io: AuditFetch, container: string): Promise<LoadedTrace> {
+  const base = storageRoot(container);
   const head = await readHead(io, base);
   if (!head) throw new Error("missing-prov: no audit head");
   const entries: LedgerEntry[] = [];
   for (let seq = 1; seq <= head.seq; seq++) {
-    const url = new URL(`${seq}.ttl`, base).href;
-    const res = await readDocument(io, url);
-    if (!res) throw new Error("missing-prov: audit entry absent");
-    const graph = await parseTurtle(res.body, url);
-    const n = node(graph, url);
-    const entry = entrySchema.parse({
-      seq,
-      at: n.text("http://www.w3.org/ns/prov#startedAtTime"),
-      prev: n.text(`${AGENT}prevHash`),
-      hash: n.text(`${AGENT}ledgerHash`),
-      record: JSON.parse(n.text(`${AGENT}record`)),
-    });
-    assertSameGraph(graph, entryGraph(url, entry));
-    entries.push(entry);
+    entries.push(await readEntry(io, base, seq));
   }
   const chain = verifyLedger(entries);
   if (!chain.ok || entries.at(-1)?.hash !== head.hash)
     throw new Error("chain-integrity: hash chain or head mismatch");
   return { entries, chain };
+}
+/** Shared strict projection reader; the caller verifies the hash and predecessor. */
+export async function readEntry(io: AuditFetch, base: string, seq: number): Promise<LedgerEntry> {
+  const url = new URL(`${seq}.ttl`, base).href;
+  const res = await readDocument(io, url);
+  if (!res) throw new Error("missing-prov: audit entry absent");
+  const graph = await parseTurtle(res.body, url);
+  const n = node(graph, url);
+  const entry = entrySchema.parse({
+    seq,
+    at: n.text("http://www.w3.org/ns/prov#startedAtTime"),
+    prev: n.text(`${AGENT}prevHash`),
+    hash: n.text(`${AGENT}ledgerHash`),
+    record: JSON.parse(n.text(`${AGENT}record`)),
+  });
+  assertSameGraph(graph, entryGraph(url, entry));
+  return entry;
 }
 export interface AuditOptions {
   readonly fetch: AuditFetch;
@@ -123,7 +131,8 @@ export async function auditArtifact(options: AuditOptions): Promise<AuditReport>
     const trace = await loadTrace(options.fetch, root);
     chain = trace.chain;
     const events = trace.entries.filter(
-      (e): e is LedgerEntry & { record: AuditRecord } => e.record.type !== "ledger-checkpoint",
+      (e): e is LedgerEntry & { record: AuditRecord } =>
+        e.record.type !== "ledger-checkpoint" && e.record.type !== "personal-data-read",
     );
     const proposals = events.filter(
       (e) => e.record.type === "proposal" && e.record.id === options.proposal,

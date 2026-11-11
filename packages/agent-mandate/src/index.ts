@@ -24,7 +24,9 @@ export {
   mandateCredential,
   type VcMandateOptions,
 } from "./mandate.js";
+export { createPodMandateVerifier, type PodMandateOptions } from "./pod.js";
 export { evaluateIntent, solidOdrlEngine } from "./policy.js";
+export { autonomousTargets } from "./scope.js";
 export {
   AGENT,
   type Constraint,

@@ -83,7 +83,7 @@ verdict, digest and reason. Typed wrapper accessors construct graphs; n3.Writer
 serializes deterministic Turtle. `chain.ttl` is a `prov:Collection` whose head
 member is the entry entity; it publishes the head only after the entry succeeds.
 Entry creation uses `If-None-Match: *`; head updates require an
-ETag. A partial write can be retried, but a different existing entry, stale head,
+ETag. With `PodMirror`, a partial write can be retried, but a different existing entry, stale head,
 absent ETag or competing history fails closed. Provision the container and its
 owner-selected ACL separately; this package never broadens access.
 
@@ -199,3 +199,29 @@ empty task ID when unassigned events exist, even for a named-task filter. An emp
 selection with no unassigned events emits the header only.
 Exports omit owner/agent identities, conversation IRIs and raw event records.
 The hash-chain limits described above also apply to these statistics.
+
+`personal-data-read` is appended to `ENTRY_KINDS`. It requires `tool`, `decision`,
+`reason`, `categories` (at most 64 IRIs) and `resources` (at most 100 IRIs), and
+accepts an optional purpose IRI. Empty category/resource arrays describe refusals
+or empty results. These three metadata fields are forbidden on other record
+kinds. Unknown fields, arguments, results and personal-data values remain
+forbidden. Its RDF projection uses `dpv:hasPurpose`, `dpv:hasPersonalData` and
+`prov:used` through the existing typed writer. `auditArtifact` and task statistics
+verify chain integrity but otherwise ignore this kind entirely.
+
+`new PodChain(fetch, baseContainerUrl).append(record, at)` allocates entries
+directly in an existing pod container whose URL must end with `/`. Calls on one
+instance serialize. Each attempt reads `chain.ttl`, seals the next sequence using
+the existing canonical hash, creates `<seq>.ttl` with `If-None-Match: *`, then
+publishes its head with `If-Match` and a strong ETag (or `If-None-Match: *` for
+genesis). A colliding immutable entry is checked for schema, exact RDF projection,
+predecessor and hash before helping publish it and retrying the caller's append.
+This heals an interrupted entry creation and supports concurrent writers. A
+writer whose entry another writer published returns that entry after verifying
+the published chain. Five attempts bound contention. Corrupt collisions fail with
+`Audit chain integrity failure`; redirects and transport failures use fixed
+messages. Provision the container and owner-private ACL separately.
+`loadChain(fetch, baseContainerUrl)` verifies the complete published prefix at an
+explicit base; `loadTrace` uses the same reader at the conventional audit path.
+Hash integrity still requires an independently trusted head to detect rewritten
+history or tail truncation.
