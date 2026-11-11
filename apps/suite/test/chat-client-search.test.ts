@@ -54,7 +54,7 @@ it("searches only joined rooms, excludes deletions and skips unavailable rooms",
   const result = await client.search('garden in:"BOOK CLUB"', { timeZone: "UTC" });
   expect(result.results).toEqual([
     {
-      room: { url: joined.url, name: joined.name },
+      room: { url: joined.url, name: joined.name, isDirect: false, members: joined.members },
       message: first,
       score: 2,
       snippet: { text: "Garden plans", ranges: [[0, 6]] },
@@ -93,7 +93,9 @@ it("limits room loads to four at once and reports a failed day without losing ot
   expect(loads).toHaveBeenCalledTimes(7);
   expect(result.searchedRooms).toBe(6);
   expect(result.results).toHaveLength(6);
-  expect(result.skipped).toEqual([{ url: rooms[1]?.url, name: "Room 1" }]);
+  expect(result.skipped).toEqual([
+    { url: rooms[1]?.url, name: "Room 1", isDirect: false, members: [ME] },
+  ]);
   expect(result.truncated).toBe(false);
   expect(loads).toHaveBeenCalledWith(rooms[0]?.url, {
     before: NOW,
@@ -220,4 +222,29 @@ it("validates queries, time zones and budgets before loading rooms and propagate
   expect((await client.search("hello", { maxRooms: 100, timeZone: "UTC" })).truncated).toBe(false);
   joined.mockRejectedValue(new TypeError("offline"));
   await expect(client.search("hello", { timeZone: "UTC" })).rejects.toThrow("offline");
+});
+it("names direct messages by their members and lets in: target a DM by the other person's name", async () => {
+  const Bob = "https://bob.example/profile#me";
+  const dm: Room = { ...room(9), name: "", members: [ME, Bob], isDirect: true };
+  const broken = { url: `${ROOT}chat/rooms/broken/`, error: new Error("gone") };
+  vi.spyOn(client, "joinedRooms").mockResolvedValue([room(0), dm, broken]);
+  vi.spyOn(client, "messages").mockImplementation(async (url) => ({
+    messages: url === dm.url ? [{ ...message(1), id: `${dm.url}2026/11/03.ttl#m-1` }] : [],
+    next: null,
+  }));
+  (client as unknown as { resolvedNames: Map<string, string> }).resolvedNames.set(
+    Bob,
+    "Bob Builder",
+  );
+  const result = await client.search('garden in:"bob builder"', { timeZone: "UTC" });
+  expect(result.results.map(({ room }) => room)).toEqual([
+    { url: dm.url, name: "", isDirect: true, members: [ME, Bob] },
+  ]);
+  const all = await client.search("garden", { timeZone: "UTC" });
+  expect(all.skipped).toEqual([
+    { url: broken.url, name: broken.url, isDirect: false, members: [] },
+  ]);
+  // Only the other member's name selects a DM; the reader's own name does not.
+  (client as unknown as { resolvedNames: Map<string, string> }).resolvedNames.set(ME, "Alice");
+  expect((await client.search('garden in:"alice"', { timeZone: "UTC" })).results).toEqual([]);
 });
