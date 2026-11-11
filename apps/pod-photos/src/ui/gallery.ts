@@ -18,13 +18,8 @@
 // genuinely-missing container and surfaces as the underlying RdfFetchError.
 //
 // ── AUTH SEAM ────────────────────────────────────────────────────────────────
-// The authenticated `fetch` is INJECTED, never imported (see the data layer's
-// own note in src/pod/rdf.ts). Pass the session's fetch via `fetch`; omit it and
-// the data layer falls back to the global fetch — which, in a real session,
-// @solid/reactive-authentication patches so a plain fetch transparently upgrades
-// with a DPoP token. That wiring is the create-solid-app shell's job (#18-gated:
-// https://github.com/solid-contrib/reactive-authentication/issues/18); this
-// facade is deliberately unaware of it and works today against a stub fetch.
+// Pass the host's pod-auth session fetch explicitly. The data layer defaults to
+// unauthenticated global fetch and stays independent of the sign-in flow.
 
 import { RdfFetchError } from '@jeswr/fetch-rdf';
 import { ContainerDataset } from '@solid/object';
@@ -62,11 +57,7 @@ export interface GalleryListing {
 
 /** Options for {@link listGallery}. */
 export interface ListGalleryOptions {
-  /**
-   * The authenticated fetch (e.g. the one @solid/reactive-authentication patches
-   * onto globalThis.fetch). Omit to use the ambient global fetch. The injectable
-   * auth seam — unit tests pass a stub here.
-   */
+  /** Authenticated transport for pod reads; defaults to unauthenticated global fetch. */
   fetch?: typeof fetch;
   /**
    * A cooperative cancellation signal. The data layer's `freshRdf` does not (yet)
