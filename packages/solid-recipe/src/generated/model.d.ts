@@ -51,6 +51,8 @@ export interface RecipeData {
   "created"?: Date;
   "modified"?: Date;
   "favourite"?: boolean;
+  "orderedIngredients"?: string[];
+  "orderedInstructions"?: string[];
   "author"?: string;
   "cookTime"?: string;
   "description"?: string;
@@ -73,6 +75,8 @@ export interface RecipeWrapper extends EntityWrapper {
   "created"?: Date;
   "modified"?: Date;
   "favourite"?: boolean;
+  readonly "orderedIngredients": Set<string>;
+  readonly "orderedInstructions": Set<string>;
   "author"?: string;
   "cookTime"?: string;
   "description"?: string;
@@ -126,6 +130,8 @@ export interface RecipeRecipeNodeWrapper extends EntityWrapper {
   "created"?: Date;
   "modified"?: Date;
   "favourite"?: boolean;
+  readonly "orderedIngredients": Set<string>;
+  readonly "orderedInstructions": Set<string>;
   "author"?: string;
   "cookTime"?: string;
   "description"?: string;

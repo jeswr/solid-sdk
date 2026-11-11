@@ -1,5 +1,10 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
-import { type RecipeData, type RecipeRecord, validateRecipe } from "@jeswr/solid-recipe";
+import {
+  durationFromMinutes,
+  type RecipeData,
+  type RecipeRecord,
+  validateRecipe,
+} from "@jeswr/solid-recipe";
 
 export function filterRecipes(
   recipes: RecipeRecord[],
@@ -44,7 +49,7 @@ export function recipeFromForm(
     const minutes = Number(raw);
     if (!Number.isFinite(minutes) || minutes < 0)
       throw new TypeError("Enter a cooking time in minutes, zero or more");
-    return `PT${minutes}M`;
+    return durationFromMinutes(minutes);
   };
   const lines = (key: string) =>
     get(key)

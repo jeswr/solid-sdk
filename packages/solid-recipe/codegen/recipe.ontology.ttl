@@ -40,3 +40,6 @@ schema:Rating a owl:Class ; rdfs:label "Personal rating"@en ; rdfs:comment "The 
 schema:review rdfs:label "Review"@en ; rdfs:comment "Reused schema.org review link, narrowed to one personal review."@en .
 schema:reviewRating rdfs:label "Review rating"@en ; rdfs:comment "Reused schema.org rating link."@en .
 schema:ratingValue rdfs:label "Rating value"@en ; rdfs:comment "Reused schema.org numeric rating value."@en .
+
+recipe:orderedIngredient a owl:DatatypeProperty ; rdfs:label "Ordered ingredient"@en ; rdfs:comment "Private position-prefixed copy preserving ingredient order and duplicate text."@en ; rdfs:domain schema:Recipe ; rdfs:range xsd:string .
+recipe:orderedInstruction a owl:DatatypeProperty ; rdfs:label "Ordered instruction"@en ; rdfs:comment "Private position-prefixed copy preserving instruction order and duplicate text."@en ; rdfs:domain schema:Recipe ; rdfs:range xsd:string .

@@ -35,7 +35,9 @@
               "materializeDefault": true
             },
             "created": {},
-            "modified": {}
+            "modified": {},
+            "orderedIngredients": {},
+            "orderedInstructions": {}
           },
           "links": {
             "nutrition": "nutrition",

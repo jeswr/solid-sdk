@@ -1,11 +1,19 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
 
-import type { Day, PlanRecord, RecipeData, RecipeRecord, RecipeStore } from "@jeswr/solid-recipe";
+import type {
+  Day,
+  PlanRecord,
+  RecipeData,
+  RecipeRecord,
+  RecipeStore,
+  SkippedRecipeEntry,
+} from "@jeswr/solid-recipe";
 import { StorageError } from "@jeswr/storage-client";
 
 export interface RecipeSnapshot {
   recipes: RecipeRecord[];
   plans: PlanRecord[];
+  skipped: SkippedRecipeEntry[];
   status: "loading" | "ready" | "error";
   pending: number;
 }
@@ -18,7 +26,8 @@ interface Operation {
 /** Recipe-specific serial queue: failed intents leave the confirmed baseline intact. */
 export function createRecipeState(store: RecipeStore, onError: () => void) {
   let confirmed: Content = { recipes: [], plans: [] };
-  let snapshot: RecipeSnapshot = { ...confirmed, status: "loading", pending: 0 };
+  let skipped: SkippedRecipeEntry[] = [];
+  let snapshot: RecipeSnapshot = { ...confirmed, skipped, status: "loading", pending: 0 };
   const listeners = new Set<() => void>();
   const operations: Operation[] = [];
   let generation = 0;
@@ -27,6 +36,7 @@ export function createRecipeState(store: RecipeStore, onError: () => void) {
     if (!alive) return;
     snapshot = {
       ...operations.reduce((value, op) => op.apply(value), confirmed),
+      skipped,
       status,
       pending: operations.length,
     };
@@ -67,6 +77,7 @@ export function createRecipeState(store: RecipeStore, onError: () => void) {
         const data = await store.list();
         if (!alive || captured !== generation) return;
         confirmed = data;
+        skipped = data.skipped;
         emit("ready");
       } catch (error) {
         if (!alive || captured !== generation) return;
@@ -81,6 +92,7 @@ export function createRecipeState(store: RecipeStore, onError: () => void) {
         }
         // Failed refreshes never paint data whose access may have been revoked.
         confirmed = { recipes: [], plans: [] };
+        skipped = [];
         emit("error");
       }
     },

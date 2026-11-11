@@ -67,10 +67,7 @@ export function scaleIngredient(line: string, factor: number): string {
 
 /** Cooking durations only: months/years have no fixed minute conversion. */
 export function durationMinutes(value: string): number | undefined {
-  const match =
-    /^P(?:(\d+(?:\.\d+)?)D)?(?:T(?:(\d+(?:\.\d+)?)H)?(?:(\d+(?:\.\d+)?)M)?(?:(\d+(?:\.\d+)?)S)?)?$/.exec(
-      value,
-    );
+  const match = /^P(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+(?:\.\d*)?|\.\d+)S)?)?$/.exec(value);
   if (!match?.slice(1).some(Boolean) || value.endsWith("T")) return undefined;
   const minutes =
     Number(match[1] ?? 0) * 1440 +
@@ -78,6 +75,29 @@ export function durationMinutes(value: string): number | undefined {
     Number(match[3] ?? 0) +
     Number(match[4] ?? 0) / 60;
   return Number.isFinite(minutes) ? minutes : undefined;
+}
+
+/** Minute inputs may be fractional; XSD permits decimals only in the seconds component. */
+export function durationFromMinutes(minutes: number): string {
+  const micros = Math.round(minutes * 60 * 1_000_000);
+  if (!Number.isSafeInteger(micros) || minutes < 0)
+    throw new TypeError("Enter a cooking time in minutes, zero or more");
+  const hours = Math.floor(micros / 3_600_000_000);
+  const remaining = micros % 3_600_000_000;
+  const wholeMinutes = Math.floor(remaining / 60_000_000);
+  const seconds = (remaining % 60_000_000) / 1_000_000;
+  return `PT${hours ? `${hours}H` : ""}${wholeMinutes || (!hours && !seconds) ? `${wholeMinutes}M` : ""}${seconds ? `${seconds}S` : ""}`;
+}
+
+/** Cooking-only XSD durations; unsupported or invalid optional imports are omitted. */
+export function normalizeDuration(value: string): string | undefined {
+  const minutes = durationMinutes(value);
+  if (minutes === undefined) return undefined;
+  try {
+    return durationFromMinutes(minutes);
+  } catch {
+    return undefined;
+  }
 }
 export function formatDuration(value?: string): string {
   if (!value) return "";

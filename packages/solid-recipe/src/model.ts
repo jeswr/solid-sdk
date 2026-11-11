@@ -6,6 +6,7 @@ import {
 } from "./generated/model.js";
 
 export const RECIPE_CLASS = "https://schema.org/Recipe";
+export const MEAL_PLAN_CLASS = "https://jeswr.org/ns/recipe#MealPlan";
 export const DAYS = [
   "monday",
   "tuesday",
@@ -18,7 +19,10 @@ export const DAYS = [
 export type Day = (typeof DAYS)[number];
 export type { MealPlanData };
 
-type OptionalRecipeFields = Omit<GeneratedRecipe, "name" | "ingredients" | "instructions">;
+type OptionalRecipeFields = Omit<
+  GeneratedRecipe,
+  "name" | "ingredients" | "instructions" | "orderedIngredients" | "orderedInstructions"
+>;
 export type RecipeData = {
   [Key in keyof OptionalRecipeFields]: OptionalRecipeFields[Key] | undefined;
 } & {
@@ -33,21 +37,19 @@ export function encodeOrdered(lines: readonly string[]): string[] {
   return lines.map((line, index) => `${String(index).padStart(6, "0")}:${line}`);
 }
 
-/** Unprefixed external RDF values retain their dataset order; malformed prefixes are text. */
+/** Decode only the private ordered-copy predicates, never external schema.org text. */
 export function decodeOrdered(lines: readonly string[]): string[] {
+  if (!lines.some((line) => /^\d{6}:/.test(line))) return [...lines];
   return [...lines]
-    .sort((a, b) => {
-      if (/^\d{6}:/.test(a) && /^\d{6}:/.test(b)) return a.localeCompare(b);
-      return 0;
-    })
+    .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))
     .map((line) => line.replace(/^\d{6}:/, ""));
 }
 
 function toGenerated(data: RecipeData): GeneratedRecipe {
   return {
     ...data,
-    ingredients: encodeOrdered(data.ingredients),
-    instructions: encodeOrdered(data.instructions),
+    orderedIngredients: encodeOrdered(data.ingredients),
+    orderedInstructions: encodeOrdered(data.instructions),
   };
 }
 export function validateRecipe(data: RecipeData): void {
@@ -80,11 +82,17 @@ export async function parseRecipe(
   contentType = "text/turtle",
 ): Promise<RecipeData | undefined> {
   const data = await entities.Recipe.parseDocument(url, body, contentType);
+  const { orderedIngredients, orderedInstructions, ...plain } = data ?? {};
   return data
     ? {
-        ...data,
-        ingredients: decodeOrdered(data.ingredients ?? []),
-        instructions: decodeOrdered(data.instructions ?? []),
+        ...plain,
+        name: data.name,
+        ingredients: orderedIngredients?.length
+          ? decodeOrdered(orderedIngredients)
+          : (data.ingredients ?? []),
+        instructions: orderedInstructions?.length
+          ? decodeOrdered(orderedInstructions)
+          : (data.instructions ?? []),
       }
     : undefined;
 }

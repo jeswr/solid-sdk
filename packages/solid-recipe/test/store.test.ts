@@ -51,6 +51,7 @@ it("maps only missing containers to empty, and propagates access/list/read failu
   expect(await recipeStore(storage, "https://pod.example/missing/").list()).toEqual({
     recipes: [],
     plans: [],
+    skipped: [],
   });
   const saved = await store.create(recipe);
   vi.spyOn(storage, "read").mockRejectedValueOnce(
@@ -87,6 +88,12 @@ it("opens storage, creates recipes/ once and reports Type Index failures without
   expect(wiring.register).toHaveBeenCalledWith("https://schema.org/Recipe", {
     container: first.container,
   });
+  expect(wiring.register).toHaveBeenCalledWith("https://jeswr.org/ns/recipe#MealPlan", {
+    container: "https://pod.example/meal-plans/",
+  });
+  const savedRecipe = await first.create(recipe);
+  const savedPlan = await first.savePlan({ name: "week", monday: recipeSubject(savedRecipe.url) });
+  expect(savedPlan.url.startsWith("https://pod.example/meal-plans/")).toBe(true);
   wiring.register.mockRejectedValueOnce(new Error("index denied"));
   expect((await openRecipeStore(input)).registrationError).toBeInstanceOf(Error);
   vi.spyOn(storage, "head").mockRejectedValueOnce(new Error("access denied"));
@@ -113,7 +120,7 @@ it("uses a Turtle default when media type is absent and fails closed on unreadab
     text: async () => "",
   }));
   await expect(store.create(recipe)).rejects.toThrow("Couldn't read the saved recipe");
-  vi.spyOn(store, "list").mockResolvedValue({ recipes: [first], plans: [] });
+  vi.spyOn(store, "list").mockResolvedValue({ recipes: [first], plans: [], skipped: [] });
   await expect(store.savePlan({ name: "week" })).rejects.toThrow(
     "Couldn't read the saved meal plan",
   );

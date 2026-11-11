@@ -33,5 +33,10 @@
   },
   "devDependencies": {
     "@jeswr/federation-codegen": "workspace:*"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jeswr/solid-sdk.git",
+    "directory": "packages/solid-recipe"
   }
 }

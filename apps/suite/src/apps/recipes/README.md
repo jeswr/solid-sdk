@@ -20,17 +20,13 @@ require reconnection; this first cut has no durable recipe cache or offline writ
 Keep an unfinished form open while reconnecting. The shell service worker supplies
 its own route fallback. This app does not copy another app's cache or store code.
 
-Follow-up work for the lead's tracker:
-
-- Add ingredients to Tasks.
-- URL import through a shared, credential-free guarded page-fetch service.
-- Durable account-scoped recipe snapshots and offline queued edits.
-- Multiple meals per day, shopping lists, recipe deletion and bulk organisation.
-- Rich HowToSection headings, linked authors and quantity/nutrition conversion.
-
-Generator limitation: ordered collections require the documented literal position
-encoding. Meal plans use generated independent day IRI fields rather than repeated
-composite children. No other app's production code was copied or required for extraction.
+The standard ingredient and instruction predicates carry clean text; private ordered
+copies preserve positions and duplicates (see the package's "Exact divergences").
+Generated repeated step composites are not admitted. New meal plans use their own
+Type Index registration and container; legacy co-located plans remain readable.
+Unreadable files produce a quiet notice while valid recipes remain available.
+Favouriting preserves cook mode, scale and checklists. No other app's production
+code was copied or required for extraction.
 
 `test/recipes*` covers lib, state, provider and demo behavior. The Playwright spec
 `e2e/recipes.spec.ts` covers demo import, persisted creation, cooking, scaling and

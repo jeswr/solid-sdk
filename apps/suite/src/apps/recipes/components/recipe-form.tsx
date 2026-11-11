@@ -85,7 +85,7 @@ export function RecipeForm({
                   type={type}
                   min={type === "number" ? 0 : undefined}
                   max={name === "rating" ? 5 : undefined}
-                  step={type === "number" ? 0.5 : undefined}
+                  step={type === "number" ? (name === "rating" ? 0.5 : "any") : undefined}
                   defaultValue={
                     name === "prepTime" || name === "cookTime" || name === "totalTime"
                       ? durationMinutes(initial?.[name] ?? "")

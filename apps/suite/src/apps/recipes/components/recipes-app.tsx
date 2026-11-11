@@ -65,7 +65,7 @@ function Session() {
   );
 }
 function Workspace() {
-  const { recipes, plans, status, pending, actions } = useRecipes();
+  const { recipes, plans, skipped, status, pending, actions } = useRecipes();
   const connection = useConnectionState();
   const offline = connection !== "online";
   const [tab, setTab] = useState<"box" | "plan">("box");
@@ -164,6 +164,13 @@ function Workspace() {
             Saving {pending === 1 ? "your change" : `${pending} changes`}…
           </p>
         )}
+        {status === "ready" && skipped.length > 0 && (
+          <p role="status" className="recipes-muted">
+            {skipped.length === 1
+              ? "One file could not be read as a recipe or meal plan. Your other recipes are ready."
+              : `${skipped.length} files could not be read as recipes or meal plans. Your other recipes are ready.`}
+          </p>
+        )}
         {status === "loading" ? (
           <LoadingSkeleton preset="grid" label="Loading your recipes" />
         ) : status === "error" ? (
@@ -177,7 +184,7 @@ function Workspace() {
           />
         ) : record ? (
           <RecipeDetail
-            key={`${record.url}:${record.data.modified?.getTime()}`}
+            key={record.url}
             record={record}
             disabled={offline || record.url.startsWith("local:")}
             onBack={() => setSelected(undefined)}

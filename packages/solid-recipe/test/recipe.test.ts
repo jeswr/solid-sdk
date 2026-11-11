@@ -171,7 +171,7 @@ describe("duration formatting", () => {
     ["P1DT", "P1DT"],
   ])("formats %s", (input, output) => expect(formatDuration(input)).toBe(output));
   it("returns finite minute values", () => {
-    expect(durationMinutes("PT1.5H")).toBe(90);
+    expect(durationMinutes("PT1.5H")).toBeUndefined();
     expect(durationMinutes("PT")).toBeUndefined();
     expect(durationMinutes(`P${"9".repeat(400)}D`)).toBeUndefined();
   });
@@ -243,7 +243,7 @@ describe("untrusted Recipe JSON-LD import", () => {
           recipeInstructions: "Boil\nServe",
         },
       });
-      expect(row.prepTime).toBe("P7D");
+      expect(row.prepTime).toBe("PT168H");
       expect(row.cookTime).toBeUndefined();
       expect(row.instructions).toEqual(["Boil", "Serve"]);
       expect(row.url).toBe("https://example.org/source");

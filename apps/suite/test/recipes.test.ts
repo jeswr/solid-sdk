@@ -32,7 +32,7 @@ function deferred<T>() {
 function setup() {
   const store: RecipeStore = {
     container: "https://pod.example/recipes/",
-    list: vi.fn(async () => ({ recipes: [record], plans: [] })),
+    list: vi.fn(async () => ({ recipes: [record], plans: [], skipped: [] })),
     create: vi.fn(async (value) => ({ ...record, url: `${record.url}new`, data: value })),
     update: vi.fn(async (original, value) => ({ ...original, data: value, etag: '"2"' })),
     savePlan: vi.fn(async (value) => ({ url: `${record.url}plan`, etag: '"1"', data: value })),
@@ -41,6 +41,16 @@ function setup() {
   return { store, errors, state: createRecipeState(store, errors) };
 }
 describe("recipe view helpers", () => {
+  it.each([
+    ["0.5", "PT30S"],
+    ["1.5", "PT1M30S"],
+    ["60.75", "PT1H45S"],
+  ])("normalises %s form minutes into valid XSD duration", (minutes, duration) => {
+    const form = new FormData();
+    form.set("name", "Soup");
+    form.set("prepTime", minutes);
+    expect(recipeFromForm(form).prepTime).toBe(duration);
+  });
   it("searches terms across name, ingredients, description, author and tags with intersecting filters", () => {
     const recipes = [
       record,
@@ -123,6 +133,23 @@ describe("recipe view helpers", () => {
   });
 });
 describe("recipe optimistic state", () => {
+  it("keeps skipped notices through mutations, replaces them on refresh and clears them on access failure", async () => {
+    const { state, store } = setup();
+    const skipped = [{ url: `${store.container}bad`, reason: "invalid-data" as const }];
+    vi.mocked(store.list).mockResolvedValueOnce({ recipes: [record], plans: [], skipped });
+    await state.refresh();
+    expect(state.getSnapshot().skipped).toEqual(skipped);
+    state.favourite(record.url);
+    await vi.waitFor(() => expect(state.getSnapshot().pending).toBe(0));
+    expect(state.getSnapshot().skipped).toEqual(skipped);
+    await state.refresh();
+    expect(state.getSnapshot().skipped).toEqual([]);
+    vi.mocked(store.list).mockRejectedValueOnce(
+      new StorageError("forbidden", { url: store.container, method: "GET" }),
+    );
+    await state.refresh();
+    expect(state.getSnapshot()).toMatchObject({ status: "error", recipes: [], skipped: [] });
+  });
   it("drops a successful write callback after disposal", async () => {
     const { state, store } = setup();
     await state.refresh();
@@ -138,7 +165,7 @@ describe("recipe optimistic state", () => {
   });
   it("ignores an older rejected refresh after a newer read succeeds", async () => {
     const { state, store } = setup();
-    const old = deferred<{ recipes: RecipeRecord[]; plans: [] }>();
+    const old = deferred<{ recipes: RecipeRecord[]; plans: []; skipped: [] }>();
     vi.mocked(store.list).mockReturnValueOnce(old.promise);
     const pending = state.refresh();
     await state.refresh();
@@ -244,16 +271,21 @@ describe("recipe optimistic state", () => {
   });
   it("ignores stale refreshes and clears data when a fresh read fails", async () => {
     const { state, store } = setup();
-    const slow = deferred<{ recipes: RecipeRecord[]; plans: [] }>();
+    const slow = deferred<{ recipes: RecipeRecord[]; plans: []; skipped: [] }>();
     vi.mocked(store.list).mockReturnValueOnce(slow.promise);
     const stale = state.refresh();
     await state.refresh();
-    slow.resolve({ recipes: [], plans: [] });
+    slow.resolve({ recipes: [], plans: [], skipped: [] });
     await stale;
     expect(state.getSnapshot().recipes).toHaveLength(1);
     vi.mocked(store.list).mockRejectedValueOnce(new Error("forbidden"));
     await state.refresh();
-    expect(state.getSnapshot()).toMatchObject({ status: "error", recipes: [], plans: [] });
+    expect(state.getSnapshot()).toMatchObject({
+      status: "error",
+      recipes: [],
+      plans: [],
+      skipped: [],
+    });
   });
   it("does not expose old-account callbacks after disposal", async () => {
     const { state, store, errors } = setup();

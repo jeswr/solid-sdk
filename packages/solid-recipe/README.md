@@ -28,13 +28,38 @@ SHACL header: one literal author name, one source/image HTTP(S) IRI, text yield,
 one optional nutrition node, and ordered text instead of RDF lists. Only a nonblank
 name is required; ingredients and steps can be added later.
 
-RDF literal sets have no intrinsic order and collapse duplicates. The facade writes
-each ingredient and step as a six-digit zero-based position, a colon, and the text:
-`000000:2 cups flour`. It sorts and removes these prefixes on read. Equal text at two
-positions remains two distinct RDF literals. Plain external strings remain readable
-in their dataset order, which other RDF producers cannot guarantee. The generated
-core does not support ordered RDF lists or repeated composite children. No generator
-or runtime code was changed.
+## Exact divergences
+
+RDF literal sets have no intrinsic order and collapse duplicates. Standard
+`schema:recipeIngredient` and `schema:recipeInstructions` now carry clean text,
+with private `recipe:orderedIngredient` and `recipe:orderedInstruction` copies
+encoding a six-digit position and a colon (`000000:2 cups flour`). Only the private
+copies are decoded and sorted using a consistent lexical total order. When a
+private copy is absent or empty, the standard values are returned verbatim in
+store iteration order; even `123456: hi` is external text, never an encoded line.
+The private copies preserve duplicates; standard RDF sets collapse identical text.
+The old first-cut standard position prefixes are treated as plain external text;
+there is no ambiguous auto-migration. Tests: `test/compatibility.test.ts`.
+
+A generation probe for repeated `schema:HowToStep` nodes with `schema:text` and
+integer `schema:position` was rejected: a composite link must have `sh:maxCount 1`.
+The fallback keeps both standard predicates clean without changing the generator
+or runtime. Ordered RDF lists are also outside the current generated surface.
+
+Cooking duration parsing now matches the runtime's XSD lexical rules: days, hours
+and minutes are integers; only seconds may be fractional (including `.5S` and
+`1.S`). Invalid optional imports such as `PT1.5H` are omitted instead of aborting
+import. `durationFromMinutes` converts fractional form minutes into whole hours,
+minutes and decimal seconds, rounded to microseconds; negative/nonfinite or unsafe
+microsecond totals are rejected. `normalizeDuration` returns undefined for these
+unsafe or unsupported optional imports. Week imports become whole hours (`P1W` →
+`PT168H`). The editor accepts arbitrary fractional minutes, including the `0.75`
+it displays for `PT45S`. Pins: `test/compatibility.test.ts`, Suite `test/recipes*`.
+
+Listings return `{ recipes, plans, skipped }`. Malformed, non-RDF, unrelated or
+individually unreadable resources are collected in `skipped`; access/transport
+failures still reject the listing. Read records retain nullable or weak ETags;
+only writes require strong validators. Pins: `test/store-compatibility.test.ts`.
 
 `recipe:MealPlan` uses `schema:name` for the Monday ISO date identifying the week,
 and `recipe:monday` through `recipe:sunday` for optional HTTP(S) recipe subject IRIs.
@@ -45,7 +70,7 @@ contract. There are no nested copies of recipe data in a plan.
 `fromSchemaOrgJsonLd(json)` accepts Recipe objects, type arrays, top-level arrays,
 `@graph` and `mainEntity` wrappers, string/object/array image and author values,
 HowToStep/HowToSection instructions, and cooking durations. ISO week durations become
-day durations, since `xsd:duration` excludes weeks. Invalid optional values are omitted.
+whole-hour durations, since `xsd:duration` excludes weeks. Invalid optional values are omitted.
 Import ignores aggregate ratings and treats text as text, with no HTML execution.
 `extractRecipeJsonLd(html)` returns parsed JSON values from inert ld+json script text;
 `importRecipe(source)` selects the first valid recipe. Paste input is capped at 5 MB,
@@ -57,12 +82,15 @@ alone. `formatDuration` formats fixed cooking durations; month/year durations re
 their original spelling because they have no fixed minute equivalent.
 
 `openRecipeStore({fetch, storageUrl, webId})` uses storage-client and pod-type-index
-to create `recipes/` and register schema:Recipe in the private Type Index. Index failure
+to create `recipes/` and `meal-plans/` and register schema:Recipe and recipe:MealPlan
+in the private Type Index against their respective containers. Index failure
 is exposed as `registrationError`, so callers can explain failed discovery without
 hiding accessible recipes. `recipeStore(storage, container)` accepts an existing
 client, including memory clients for Solid and LWS. It uses returned create URLs,
-observed strong ETags, bounded container listings and conditional writes. Conflicts
-propagate to the caller. Weekly plans accept only recipe subjects present in the box.
+nullable read ETags, bounded container listings and strongly conditional writes. Conflicts
+propagate to the caller. Weekly plans accept only recipe subjects known from successful list/create/update calls,
+without re-listing the box per change. Legacy plans in recipes/ remain readable.
+`recipeStore(storage, container, planContainer?)` defaults to co-location for existing callers.
 Registration relies on the pod's existing access policy; this package never grants access.
 
 An explicitly configured `protocol: "solid"` uses the SDK's Solid backend for a known

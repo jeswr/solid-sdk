@@ -1,5 +1,5 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
-import { durationMinutes } from "./format.js";
+import { normalizeDuration } from "./format.js";
 import { type RecipeData, validateRecipe } from "./model.js";
 
 type JsonObject = Record<string, unknown>;
@@ -90,7 +90,7 @@ function duration(value: unknown): string | undefined {
   if (!raw) return undefined;
   const weeks = /^P(\d+)W$/.exec(raw);
   const result = weeks ? `P${Number(weeks[1]) * 7}D` : raw;
-  return durationMinutes(result) === undefined ? undefined : result;
+  return normalizeDuration(result);
 }
 export function fromSchemaOrgJsonLd(json: unknown): RecipeData {
   const row = findRecipe(typeof json === "string" ? JSON.parse(json) : json);
@@ -131,14 +131,34 @@ export function extractRecipeJsonLd(html: string): unknown[] {
   if (html.length > 5_000_000) throw new TypeError("Paste a page smaller than 5 MB");
   const result: unknown[] = [];
   // Script raw-text ends at its first closing tag. Quoted attributes may contain '>'.
-  const blocks = /<script\b((?:[^>"']|"[^"]*"|'[^']*')*)>([\s\S]*?)<\/script\s*>/gi;
-  for (const match of html.matchAll(blocks)) {
-    const attributes = match[1] as string;
+  const opening = /<script\b/gi;
+  const closing = /<\/script\s*>/gi;
+  let cursor = 0;
+  while (cursor < html.length) {
+    opening.lastIndex = cursor;
+    const start = opening.exec(html);
+    if (!start) break;
+    const attributeStart = opening.lastIndex;
+    let end = attributeStart;
+    let quote = "";
+    for (; end < html.length; end++) {
+      const char = html[end];
+      if (quote) {
+        if (char === quote) quote = "";
+      } else if (char === '"' || char === "'") quote = char;
+      else if (char === ">") break;
+    }
+    if (end === html.length) break;
+    closing.lastIndex = end + 1;
+    const close = closing.exec(html);
+    if (!close) break; // An unclosed raw-text script consumes the rest of the page.
+    cursor = closing.lastIndex;
+    const attributes = html.slice(attributeStart, end);
     const type = /(?:^|\s)type\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+))/i.exec(attributes);
     if ((type?.[1] ?? type?.[2] ?? type?.[3] ?? "").trim().toLowerCase() !== "application/ld+json")
       continue;
     try {
-      result.push(JSON.parse((match[2] as string).replace(/^\s*<!--|-->\s*$/g, "")));
+      result.push(JSON.parse(html.slice(end + 1, close.index).replace(/^\s*<!--|-->\s*$/g, "")));
     } catch {
       /* A broken block must not hide a later valid recipe. */
     }

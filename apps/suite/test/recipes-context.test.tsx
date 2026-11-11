@@ -34,7 +34,7 @@ function fixture() {
   } as unknown as PodSession;
   const store: RecipeStore = {
     container: "https://pod.example/recipes/",
-    list: vi.fn(async () => ({ recipes: [], plans: [] })),
+    list: vi.fn(async () => ({ recipes: [], plans: [], skipped: [] })),
     create: vi.fn(async () => {
       throw new Error("save failed");
     }),

@@ -1,7 +1,7 @@
 # AUTHORED-BY Codex (GPT-6.1 Sol)
 # No federation recipes sector exists at this revision. This local schema.org profile
 # narrows author to a literal name, image/source to HTTP(S) IRIs, yield to text,
-# ingredients/instructions to position-prefixed repeated strings (no RDF lists),
+# ingredients/instructions to plain repeated strings plus private ordered copies (no RDF lists),
 # nutrition to one NutritionInformation node with optional text calories. Ratings
 # are personal 0-5 values, never aggregateRating. Plans have one recipe IRI per day.
 @prefix schema: <https://schema.org/> .
@@ -27,6 +27,8 @@ recipe:RecipeShape a sh:NodeShape ; sh:targetClass schema:Recipe ;
  sh:property [ sh:path schema:keywords ; sh:name "keywords" ; sh:datatype xsd:string ] ;
  sh:property [ sh:path schema:recipeIngredient ; sh:name "ingredients" ; sh:datatype xsd:string ] ;
  sh:property [ sh:path schema:recipeInstructions ; sh:name "instructions" ; sh:datatype xsd:string ] ;
+ sh:property [ sh:path recipe:orderedIngredient ; sh:name "orderedIngredients" ; sh:datatype xsd:string ] ;
+ sh:property [ sh:path recipe:orderedInstruction ; sh:name "orderedInstructions" ; sh:datatype xsd:string ] ;
  sh:property [ sh:path recipe:favourite ; sh:name "favourite" ; sh:datatype xsd:boolean ; sh:maxCount 1 ] ;
  sh:property [ sh:path dct:created ; sh:name "created" ; sh:datatype xsd:dateTime ; sh:maxCount 1 ] ;
  sh:property [ sh:path dct:modified ; sh:name "modified" ; sh:datatype xsd:dateTime ; sh:maxCount 1 ] ;

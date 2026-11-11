@@ -143,7 +143,7 @@ export function RecipeDetail({
           )}
           <ul className="recipes-checklist">
             {recipe.ingredients.map((ingredient, index) => (
-              // biome-ignore lint/suspicious/noArrayIndexKey: ordered duplicate ingredients are distinct checklist entries; the detail remounts after edits.
+              // biome-ignore lint/suspicious/noArrayIndexKey: positions distinguish duplicate ingredients; changed text resets its checkbox.
               <li key={`${index}:${ingredient}`}>
                 <Checkbox id={`ingredient-${index}`} />
                 <Label htmlFor={`ingredient-${index}`}>
@@ -158,7 +158,7 @@ export function RecipeDetail({
           {!recipe.instructions.length && <p className="recipes-muted">No steps added yet.</p>}
           <ol className="recipes-checklist recipes-steps">
             {recipe.instructions.map((step, index) => (
-              // biome-ignore lint/suspicious/noArrayIndexKey: step positions are stable for this immutable detail view.
+              // biome-ignore lint/suspicious/noArrayIndexKey: positions distinguish duplicate steps; changed text resets its checkbox.
               <li key={`${index}:${step}`}>
                 <span className="recipes-step-number" aria-hidden="true">
                   {index + 1}

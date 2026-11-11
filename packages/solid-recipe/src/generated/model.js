@@ -148,6 +148,22 @@ const manifest = {
               "guards": {}
             },
             {
+              "name": "orderedIngredients",
+              "predicate": "https://jeswr.org/ns/recipe#orderedIngredient",
+              "kind": "literal",
+              "collection": "set",
+              "datatype": "http://www.w3.org/2001/XMLSchema#string",
+              "guards": {}
+            },
+            {
+              "name": "orderedInstructions",
+              "predicate": "https://jeswr.org/ns/recipe#orderedInstruction",
+              "kind": "literal",
+              "collection": "set",
+              "datatype": "http://www.w3.org/2001/XMLSchema#string",
+              "guards": {}
+            },
+            {
               "name": "author",
               "predicate": "https://schema.org/author",
               "kind": "literal",
@@ -393,6 +409,22 @@ const nodeViewsManifest = {
           "maxCount": 1,
           "default": false,
           "materializeDefault": true,
+          "guards": {}
+        },
+        {
+          "name": "orderedIngredients",
+          "predicate": "https://jeswr.org/ns/recipe#orderedIngredient",
+          "kind": "literal",
+          "collection": "set",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "guards": {}
+        },
+        {
+          "name": "orderedInstructions",
+          "predicate": "https://jeswr.org/ns/recipe#orderedInstruction",
+          "kind": "literal",
+          "collection": "set",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
           "guards": {}
         },
         {
