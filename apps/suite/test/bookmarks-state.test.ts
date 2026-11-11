@@ -231,6 +231,18 @@ describe("optimistic bookmark library", () => {
     await store.load();
     expect(store.getSnapshot().items).toEqual([]);
   });
+  it("clears previously read bookmarks and shows an error when the session expires", async () => {
+    const { store, repo } = setup();
+    await store.load();
+    expect(store.getSnapshot().items).toHaveLength(1);
+    const error = { code: "unauthenticated" };
+    vi.mocked(repo.list).mockRejectedValueOnce(error);
+    await store.load();
+    expect(store.getSnapshot()).toMatchObject({ status: "error", error, items: [] });
+    await store.load();
+    expect(store.getSnapshot()).toMatchObject({ status: "ready", error: null });
+    expect(store.getSnapshot().items).toHaveLength(1);
+  });
   it("fences out-of-order successes, errors and disposed sessions", async () => {
     const { store, repo } = setup();
     const slow = deferred<BookmarkListing>();

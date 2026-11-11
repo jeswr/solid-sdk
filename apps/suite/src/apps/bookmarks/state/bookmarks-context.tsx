@@ -17,6 +17,7 @@ import { ensureSample } from "../demo/sample";
 import { createLibraryStore, type LibraryStore } from "./library-store";
 
 const Context = createContext<LibraryStore | null>(null);
+const DISCOVERY_TIMEOUT_MS = 30_000;
 export function BookmarksProvider({
   session,
   children,
@@ -30,17 +31,26 @@ export function BookmarksProvider({
   // biome-ignore lint/correctness/useExhaustiveDependencies: attempt explicitly retries storage discovery.
   useEffect(() => {
     let live = true;
+    const controller = new AbortController();
     let opened: LibraryStore | undefined;
     let off: (() => void) | undefined;
+    const timeout = setTimeout(() => {
+      controller.abort();
+      if (live) setError(true);
+    }, DISCOVERY_TIMEOUT_MS);
+    setStore(null);
     setError(false);
     void Promise.resolve()
       .then(async () => {
+        controller.signal.throwIfAborted();
         const { storage } = await createPodClient({
           fetch: session.fetch,
           storage: session.storageUrl,
           capabilities: createMemoryCache(),
+          signal: controller.signal,
         });
-        if (!live) return;
+        clearTimeout(timeout);
+        if (!live || controller.signal.aborted) return;
         const repository = createBookmarkRepository({
           storage,
           fetch: session.fetch,
@@ -60,10 +70,13 @@ export function BookmarksProvider({
         });
       })
       .catch(() => {
+        clearTimeout(timeout);
         if (live) setError(true);
       });
     return () => {
       live = false;
+      clearTimeout(timeout);
+      controller.abort();
       off?.();
       opened?.dispose();
     };

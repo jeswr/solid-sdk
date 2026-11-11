@@ -60,6 +60,7 @@ function Probe() {
 afterEach(() => {
   vi.clearAllMocks();
   vi.unstubAllGlobals();
+  vi.useRealTimers();
 });
 function fixture() {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
@@ -181,6 +182,7 @@ it("loads the session, reconciles change events, reports save failures and unsub
       storage: f.session.storageUrl,
       fetch: f.session.fetch,
       capabilities: expect.any(Object),
+      signal: expect.any(AbortSignal),
     });
     expect(createBookmarkRepository).toHaveBeenCalledWith({
       storage: expect.any(Object),
@@ -195,6 +197,69 @@ it("loads the session, reconciles change events, reports save failures and unsub
     await f.close();
   }
   expect(f.unsubscribe).toHaveBeenCalledOnce();
+  expect(vi.mocked(createPodClient).mock.calls[0]?.[0].signal?.aborted).toBe(true);
+});
+it("aborts pending discovery on teardown and ignores a late discovery result", async () => {
+  const f = fixture();
+  let finish!: (pod: Awaited<ReturnType<typeof createPodClient>>) => void;
+  vi.mocked(createPodClient).mockReturnValueOnce(
+    new Promise((resolve) => {
+      finish = resolve;
+    }),
+  );
+  await act(async () =>
+    f.root.render(
+      <BookmarksProvider session={f.session}>
+        <Probe />
+      </BookmarksProvider>,
+    ),
+  );
+  const signal = vi.mocked(createPodClient).mock.calls[0]?.[0].signal;
+  expect(signal?.aborted).toBe(false);
+  await f.close();
+  expect(signal?.aborted).toBe(true);
+  await act(async () => finish({ storage: {} } as Awaited<ReturnType<typeof createPodClient>>));
+  expect(ensureSample).not.toHaveBeenCalled();
+  expect(createBookmarkRepository).not.toHaveBeenCalled();
+});
+it("times out hung discovery, aborts it and retries with a fresh signal", async () => {
+  vi.useFakeTimers();
+  const f = fixture();
+  let finish!: (pod: Awaited<ReturnType<typeof createPodClient>>) => void;
+  vi.mocked(createPodClient).mockReturnValueOnce(
+    new Promise((resolve) => {
+      finish = resolve;
+    }),
+  );
+  try {
+    await act(async () =>
+      f.root.render(
+        <BookmarksProvider session={f.session}>
+          <Probe />
+        </BookmarksProvider>,
+      ),
+    );
+    const first = vi.mocked(createPodClient).mock.calls[0]?.[0].signal;
+    expect(f.host.textContent).toContain("loading:0");
+    await act(async () => vi.advanceTimersByTime(30_000));
+    expect(first?.aborted).toBe(true);
+    expect(f.host.textContent).toContain("Couldn't open");
+    expect(createBookmarkRepository).not.toHaveBeenCalled();
+    // A transport that ignores abort must not open a repository after the deadline.
+    await act(async () => finish({ storage: {} } as Awaited<ReturnType<typeof createPodClient>>));
+    expect(createBookmarkRepository).not.toHaveBeenCalled();
+    expect(f.host.textContent).toContain("Couldn't open");
+    await act(async () => f.host.querySelector("button")?.click());
+    const second = vi.mocked(createPodClient).mock.calls[1]?.[0].signal;
+    expect(second).toBeDefined();
+    expect(second).not.toBe(first);
+    expect(second?.aborted).toBe(false);
+    expect(f.host.textContent).toContain("ready:1");
+    await act(async () => vi.advanceTimersByTime(30_000));
+    expect(f.host.textContent).toContain("ready:1");
+  } finally {
+    await f.close();
+  }
 });
 it("shows SDK discovery failures without falling back to a protocol-specific client", async () => {
   const f = fixture();

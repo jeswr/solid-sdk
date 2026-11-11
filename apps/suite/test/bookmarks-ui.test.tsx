@@ -139,3 +139,15 @@ it("does not warn about removed or non-RDF children", async () => {
   await render();
   expect(host.textContent).not.toContain("couldn't be read");
 });
+
+it("marks a rate-limited listing incomplete while keeping loaded bookmarks visible", async () => {
+  snapshot = {
+    ...snapshot,
+    skipped: [{ url: "https://pod.example/limited", reason: "rate-limited" }],
+  };
+  await render();
+  expect(host.querySelectorAll(".bkm-item")).toHaveLength(2);
+  expect(host.textContent).toContain("Your library is incomplete");
+  expect(host.textContent).toContain("too many requests");
+  expect(host.textContent).not.toContain("1 item couldn't be read.");
+});

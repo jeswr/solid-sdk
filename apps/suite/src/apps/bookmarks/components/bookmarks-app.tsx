@@ -24,7 +24,6 @@ import {
   SelectTrigger,
   SelectValue,
   Textarea,
-  Toaster,
   toast,
 } from "@jeswr/suite-ui";
 import {
@@ -282,6 +281,7 @@ function Library() {
   const unreadable = snapshot.skipped.filter(
     ({ reason }) => reason !== "not-found" && reason !== "not-rdf",
   ).length;
+  const rateLimited = snapshot.skipped.some(({ reason }) => reason === "rate-limited");
   const selection = selected.filter((id) => items.some((item) => item.id === id));
   const tags = bookmarkTags(snapshot.items);
   const editable = snapshot.status === "ready" && connection === "online";
@@ -435,7 +435,9 @@ function Library() {
         )}
         {unreadable > 0 && (
           <p className="bkm-notice">
-            {unreadable} {unreadable === 1 ? "item couldn't" : "items couldn't"} be read.
+            {rateLimited
+              ? "Your library is incomplete. The pod is receiving too many requests. Try refreshing later."
+              : `${unreadable} ${unreadable === 1 ? "item couldn't" : "items couldn't"} be read.`}
           </p>
         )}
         {snapshot.registration === "failed" && !registrationHintDismissed && (
@@ -800,7 +802,6 @@ export function BookmarksApp() {
     <AppSessionGuard>
       <PodSessionProvider>
         <SessionGate />
-        <Toaster position="bottom-center" />
       </PodSessionProvider>
     </AppSessionGuard>
   );

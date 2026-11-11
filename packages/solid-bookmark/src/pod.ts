@@ -9,7 +9,7 @@ import {
   parseBookmark,
   serializeBookmark,
 } from "./bookmark.js";
-import { isHttpIri } from "./iri.js";
+import { httpIriOrUndefined } from "./iri.js";
 import { BOOKMARK_CLASS } from "./vocab.js";
 
 export interface StoredBookmark {
@@ -22,6 +22,7 @@ export type BookmarkPatch = Partial<
 >;
 export interface BookmarkListing {
   items: StoredBookmark[];
+  /** A rate-limited entry means listing stopped early; items is an incomplete collection. */
   skipped: { url: string; reason: StorageErrorCode | "unknown" }[];
 }
 export type BookmarkRegistrationStatus = "pending" | "registered" | "failed";
@@ -37,8 +38,10 @@ function version(record: { etag: string | null }): string {
   if (!record.etag) throw new Error("This pod did not supply a version for a safe edit");
   return record.etag;
 }
-function validate(data: Partial<BookmarkData>): void {
-  if (data.url !== undefined && !isHttpIri(data.url)) throw new TypeError("Enter an http(s) URL");
+function canonicalUrl(value: string | undefined): string {
+  const url = httpIriOrUndefined(value);
+  if (!url) throw new TypeError("Enter an http(s) URL");
+  return url;
 }
 
 /** One typed resource per bookmark, preserving unrelated RDF on conditional edits. */
@@ -124,17 +127,16 @@ export function createBookmarkRepository(options: {
           const record = await read(entry.url);
           if (record) records.push(record);
         } catch (error) {
-          skipped.push({
-            url: entry.url,
-            reason: error instanceof StorageError ? error.code : "unknown",
-          });
+          const reason = error instanceof StorageError ? error.code : "unknown";
+          if (reason === "unauthenticated") throw error;
+          skipped.push({ url: entry.url, reason });
+          if (reason === "rate-limited") break;
         }
       }
       return { items: records, skipped };
     },
     async create(data) {
-      validate(data);
-      if (!isHttpIri(data.url)) throw new TypeError("Enter an http(s) URL");
+      data = { ...data, url: canonicalUrl(data.url) };
       await initialize();
       const created = await storage.create(container, null, { contentType: "text/turtle", links });
       try {
@@ -166,7 +168,7 @@ export function createBookmarkRepository(options: {
       }
     },
     async update(record, patch) {
-      validate(patch);
+      if (patch.url !== undefined) patch = { ...patch, url: canonicalUrl(patch.url) };
       version(record);
       const fresh = await storage.readRdf(record.url);
       if (fresh.etag !== record.etag)

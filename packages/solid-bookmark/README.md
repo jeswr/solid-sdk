@@ -153,11 +153,20 @@ message and error code, leaves CRUD usable, and retries once on a later initiali
 repository's lifetime. Concurrent initialisers share an attempt. Read the live
 `repository.registration` status (`pending`, `registered`, `failed`) to show a dismissible hint.
 Private registration means unlisted; it does not change access permissions.
-Records contain `{ url, etag, data }`. Edits use generated accessors on the original dataset,
-preserve unrelated RDF and require the observed ETag. Missing or follow-up-only write validators
+Records contain `{ url, etag, data }`. Both `create` and `update` canonicalise bookmark target
+URLs with `httpIriOrUndefined`,
+the same guard as the importer (for example, `http://example.org` becomes
+`http://example.org/`). Invalid, relative, obfuscated-scheme and non-HTTP(S) URLs are rejected
+before pod I/O. Returned records contain the canonical href; input objects are not mutated.
+Edits use generated accessors on the original dataset, preserve unrelated RDF and require the
+observed ETag. Missing or follow-up-only write validators
 require refreshing before another edit or delete. Collections over 5,000 entries fail explicitly.
 `list()` returns a `BookmarkListing`: `{ items: StoredBookmark[], skipped: { url, reason }[] }`.
-All child read failures are isolated; `reason` is a storage error code or `unknown`.
+Child `unauthenticated` errors fail the whole listing so callers can show their session-expiry
+path. The first `rate-limited` child stops further reads and returns the bookmarks already read,
+with a `skipped` entry whose `reason: "rate-limited"` marks the collection incomplete (remaining
+children have not been read). Other child errors are skipped; `reason` is a storage error code
+or `unknown`.
 Untyped resources are ignored. Container listing and initialisation errors still propagate.
 The current storage-client `readRdf` API has no per-resource byte limit; listings use a
 4 MB per-page limit. Failed creates attempt to delete an orphan only after a fresh read

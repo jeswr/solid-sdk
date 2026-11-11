@@ -55,7 +55,14 @@ tokenizer-only paths tested, including entities, malformed nesting, bounds and u
 `createBookmarkRepository` with the storage client returned by SDK `createPodClient`;
 the Solid-only factory has been removed. Do not import storage-client's backend subpaths.
 `list()` returns `{ items, skipped: [{ url, reason }] }` (`BookmarkListing`); individual
-child failures must not hide healthy siblings. Container failures still propagate.
+child failures must not hide healthy siblings, except `unauthenticated`, which fails the
+whole listing for the session-expiry path. On the first `rate-limited` child, stop reading
+and return the bookmarks already read; the `skipped` entry with reason `rate-limited`
+marks this collection incomplete, including unvisited children. Container failures still propagate.
+Both `create` and `update` canonicalise target URLs with the importer's `httpIriOrUndefined`
+guard (so `http://example.org` becomes `http://example.org/`) before pod I/O, returning canonical
+hrefs without mutating input objects. Reject everything that guard rejects, including relative,
+non-HTTP(S) and obfuscated schemes.
 `repository.registration` is a live `BookmarkRegistrationStatus` (`pending`, `registered`,
 `failed`). Registration failure is non-fatal, logs only a fixed message/error code, and
 retries at most once on a later initialise per repository lifetime. Initialisers share

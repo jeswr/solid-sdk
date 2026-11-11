@@ -5,6 +5,7 @@ import { StorageError, type StorageErrorCode } from "@jeswr/storage-client";
 import { createMemoryStorage } from "@jeswr/storage-client/memory";
 import { describe, expect, it, vi } from "vitest";
 import { parseBookmark } from "../src/bookmark.js";
+import { httpIriOrUndefined } from "../src/iri.js";
 import { createBookmarkRepository } from "../src/pod.js";
 import { BOOKMARK_CLASS } from "../src/vocab.js";
 
@@ -30,8 +31,6 @@ describe.each(["solid", "lws"] as const)("partial reads and registration (%s)", 
     "server",
     "network",
     "invalid-response",
-    "rate-limited",
-    "unauthenticated",
   ] as StorageErrorCode[])("keeps healthy siblings after a child %s failure", async (code) => {
     const { storage, repo } = setup(protocol);
     const good = await repo.create({ url: "https://example.org/good" });
@@ -52,6 +51,49 @@ describe.each(["solid", "lws"] as const)("partial reads and registration (%s)", 
       items: [expect.objectContaining({ url: good.url })],
       skipped: [{ url: bad.url, reason: code }],
     });
+  });
+  it("fails the whole listing and stops reading when a child requires sign-in", async () => {
+    const { storage, repo } = setup(protocol);
+    await repo.create({ url: "https://example.org/one" });
+    await repo.create({ url: "https://example.org/two" });
+    await repo.create({ url: "https://example.org/three" });
+    const entries = (await storage.list(new URL("bookmarks/", storage.root).href)).items;
+    const blocked = entries[1];
+    if (!blocked) throw new Error("Missing fixture");
+    const expired = new StorageError("unauthenticated", { url: blocked.url, method: "GET" });
+    const read = storage.readRdf.bind(storage);
+    const reads = vi
+      .spyOn(storage, "readRdf")
+      .mockImplementation((url) => (url === blocked.url ? Promise.reject(expired) : read(url)));
+    await expect(repo.list()).rejects.toBe(expired);
+    expect(reads.mock.calls.map(([url]) => url)).toEqual(entries.slice(0, 2).map(({ url }) => url));
+  });
+  it.each([
+    0, 1,
+  ])("stops at a rate-limited child after %i reads and marks the listing incomplete", async (position) => {
+    const { storage, repo } = setup(protocol);
+    await repo.create({ url: "https://example.org/one" });
+    await repo.create({ url: "https://example.org/two" });
+    await repo.create({ url: "https://example.org/three" });
+    const entries = (await storage.list(new URL("bookmarks/", storage.root).href)).items;
+    const limited = entries[position]?.url;
+    if (!limited) throw new Error("Missing fixture");
+    const read = storage.readRdf.bind(storage);
+    const reads = vi
+      .spyOn(storage, "readRdf")
+      .mockImplementation((url) =>
+        url === limited
+          ? Promise.reject(new StorageError("rate-limited", { url, method: "GET", status: 429 }))
+          : read(url),
+      );
+    const listing = await repo.list();
+    expect(listing.items.map(({ url }) => url)).toEqual(
+      entries.slice(0, position).map(({ url }) => url),
+    );
+    expect(listing.skipped).toEqual([{ url: limited, reason: "rate-limited" }]);
+    expect(reads.mock.calls.map(([url]) => url)).toEqual(
+      entries.slice(0, position + 1).map(({ url }) => url),
+    );
   });
   it("keeps the container usable when registration fails and retries only once later", async () => {
     const { repo, index } = setup(protocol);
@@ -198,6 +240,53 @@ describe("failed create cleanup", () => {
 });
 
 describe.each(["solid", "lws"] as const)("bookmark repository (%s)", (protocol) => {
+  it.each([
+    ["http://example.org", "http://example.org/"],
+    ["  https://EXAMPLE.org:443/a/../b  ", "https://example.org/b"],
+    ["HTTPS://example.org/a b", "https://example.org/a%20b"],
+    ["https://example.org/a\n", "https://example.org/a"],
+  ])("canonicalises create and update URLs: %s", async (input, canonical) => {
+    const { repo } = setup(protocol);
+    expect(httpIriOrUndefined(input)).toBe(canonical);
+    const data = { url: input, title: "Original" };
+    const record = await repo.create(data);
+    expect(data.url).toBe(input);
+    expect(record.data.url).toBe(canonical);
+    expect((await repo.list()).items[0]?.data.url).toBe(canonical);
+    const patch = { url: input, title: "Edited" };
+    const updated = await repo.update(record, patch);
+    expect(patch.url).toBe(input);
+    expect(updated.data).toMatchObject({ url: canonical, title: "Edited" });
+    expect((await repo.list()).items[0]?.data.url).toBe(canonical);
+  });
+  it.each([
+    "",
+    "javascript:alert(1)",
+    "data:text/html,x",
+    "file:///x",
+    "mailto:a@example.org",
+    "/relative",
+    "//example.org/",
+    "https:example.org",
+    "https:/example.org",
+    "ht\ntps://example.org/",
+    "https://",
+    "https://[invalid]/",
+    "https://example.org/|unsafe",
+    "https://exa mple.org/",
+  ])("rejects guard-invalid create and update URLs before pod I/O: %s", async (url) => {
+    const { repo, storage } = setup(protocol);
+    const record = await repo.create({ url: "https://example.org/" });
+    const create = vi.spyOn(storage, "create");
+    const read = vi.spyOn(storage, "readRdf");
+    const write = vi.spyOn(storage, "writeRdf");
+    expect(httpIriOrUndefined(url)).toBeUndefined();
+    await expect(repo.create({ url })).rejects.toThrow(TypeError);
+    await expect(repo.update(record, { url })).rejects.toThrow(TypeError);
+    expect(create).not.toHaveBeenCalled();
+    expect(read).not.toHaveBeenCalled();
+    expect(write).not.toHaveBeenCalled();
+  });
   it("initialises once, registers a private container and performs conditional CRUD", async () => {
     const { repo, index, storage } = setup(protocol);
     await Promise.all([repo.initialize(), repo.initialize()]);
