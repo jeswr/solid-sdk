@@ -22,9 +22,10 @@ before creation. Use canonical encoded child names (`x%3Ay.ttl`, not `x:y.ttl` o
 `x%3ay.ttl`). `proposalLocation` accepts only IDs passing the shared `isExactChildUrl`
 predicate as direct `.ttl` children of `proposals/`; all other IDs use a deterministic
 digest location. Before outbox projection, repair and persist cached legacy IDs through
-the same rule without invoking the Proposer again, recording `migrations` (legacyId ->
-location). Model-call evidence keeps the legacy reference so existing audit records replay;
-outbox, pod write and proposal evidence use the repaired location.
+the same rule without invoking the Proposer again, only when neither ledger evidence
+(model-call or proposal records) nor a legacy-URL resource shows an earlier projection.
+Otherwise keep the legacy ID end to end; an unpublished one fails closed for manual
+migration. Never project one proposal under two IDs.
 Replay/retry only remapped name-taken 412s; real 409s fail. Container
 creation conflicts require a confirming HEAD before provisioning continues.
 The memory adapter forwards the SDK memory backend's exact name-taken 412 directly;

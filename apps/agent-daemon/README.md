@@ -25,10 +25,16 @@ would change on name encoding before any create request (for example `x:y.ttl` a
 `x%3ay.ttl`; `x%3Ay.ttl` is accepted). Proposal IDs must pass the shared
 `isExactChildUrl` predicate for a direct `.ttl` child of `proposals/`; other IDs use a
 deterministic digest location. Cached IDs from older runs are repaired and saved before
-outbox projection, preserving replay without another Proposer call. The saved result
-records each repair as `migrations: [{ legacyId, location }]`: projection, publication and
-proposal evidence use `location`, while model-call evidence keeps `legacyId`, so calls an
-earlier failed run already audited replay without a conflict.
+outbox projection, preserving replay without another Proposer call, but only when no
+earlier pass reached projection. Older releases accepted any `proposals/**.ttl` ID and
+projected into the outbox before auditing or publishing, so ledger evidence for the
+result's model calls or proposals, or a resource already at the legacy URL, means the
+outbox holds that legacy ID. The daemon then keeps it end to end (idempotent outbox
+replay, read-only confirmation of the published resource, same audit evidence) rather
+than adding a second outbox entry. If such a legacy proposal was never published it
+fails closed with `Legacy proposal already projected; manual migration needed`.
+A projection interrupted before any audit append or publication leaves no such evidence
+and cannot be detected from the daemon's side; recover it by reconciling the outbox.
 Only a taken name reported as Solid's remapped
 412 permits proposal replay or index-create retry; a real 409 remains a write failure.
 After a container-create conflict, a fresh HEAD must confirm the container exists.

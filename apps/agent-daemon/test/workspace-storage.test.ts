@@ -1,5 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { digestOf, recordFromTurtle } from "@jeswr/agent-model";
+import { digestOf, recordFromTurtle, recordToTurtle } from "@jeswr/agent-model";
 import { exampleRecords } from "@jeswr/agent-model/testing";
 import { StorageError } from "@jeswr/storage-client";
 import { createMemoryStorage } from "@jeswr/storage-client/memory";
@@ -101,6 +101,40 @@ it.each([
   expect((await storage.list(workspace.url("proposals/"))).items).toEqual([]);
 });
 
+it.each([
+  ["x:y.ttl", "x:y.ttl"],
+  ["x%3ay.ttl", "x%3ay.ttl"],
+  ["snow\u2603.ttl", "snow%E2%98%83.ttl"],
+])("confirms, but never creates, an earlier release's legacy proposal %s", async (name, written) => {
+  const storage = createMemoryPod(root).storage;
+  const io = vi.fn();
+  const workspace = new PodWorkspace({ io, storage, root, ownerWebId, privateTypeIndex });
+  const proposal = {
+    ...exampleRecords["action-proposal"],
+    id: `${workspace.url("proposals/")}${name}`,
+  };
+  expect(workspace.legacyProposal(proposal.id)).toBe(true);
+  expect(workspace.legacyProposal(workspace.proposalLocation(proposal.id))).toBe(false);
+  expect(workspace.legacyProposal(workspace.url("inbox/x:y.ttl"))).toBe(false);
+  expect(await workspace.legacyProposalPublished(proposal.id)).toBe(false);
+  await expect(workspace.confirmLegacyProposal(proposal)).rejects.toThrow(
+    "Legacy proposal already projected; manual migration needed",
+  );
+  // Earlier releases wrote through fetch, which encodes the URL as WHATWG URL serialises it.
+  await storage.write(`${workspace.url("proposals/")}${written}`, await recordToTurtle(proposal), {
+    contentType: "text/turtle",
+    ifMatch: "*",
+  });
+  expect(await workspace.legacyProposalPublished(proposal.id)).toBe(true);
+  await workspace.confirmLegacyProposal(proposal);
+  await expect(
+    workspace.confirmLegacyProposal({ ...proposal, renderedPreview: "Changed" }),
+  ).rejects.toThrow("Proposal conflict");
+  const exact = { ...proposal, id: workspace.proposalLocation(proposal.id) };
+  await expect(workspace.confirmLegacyProposal(exact)).rejects.toThrow("outside proposals");
+  await expect(workspace.legacyProposalPublished(exact.id)).rejects.toThrow("outside proposals");
+  expect(io).not.toHaveBeenCalled();
+});
 it("creates and replays an exactly encoded proposal URL", async () => {
   const storage = createMemoryPod(root).storage;
   const workspace = new PodWorkspace({ io: vi.fn(), storage, root, ownerWebId, privateTypeIndex });

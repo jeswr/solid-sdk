@@ -233,6 +233,24 @@ export class PodWorkspace {
       ? id
       : this.url(`proposals/${digestOf(id).slice(8)}.ttl`);
   }
+  /** An ID earlier releases accepted under proposals/ that is not an exact child URL. */
+  legacyProposal(id: string): boolean {
+    return this.proposalLocation(id) !== id && this.within(id, "proposals/") && id.endsWith(".ttl");
+  }
+  /** Whether an earlier release published a legacy proposal ID; it wrote via fetch's URL. */
+  async legacyProposalPublished(id: string): Promise<boolean> {
+    if (!this.legacyProposal(id)) throw new Error("Proposal outside proposals container");
+    return !(await this.document(new URL(id).href)).missing;
+  }
+  /** Replay a proposal an earlier release published at a legacy ID; never create one. */
+  async confirmLegacyProposal(proposal: ActionProposal): Promise<void> {
+    if (!this.legacyProposal(proposal.id)) throw new Error("Proposal outside proposals container");
+    const current = await this.document(new URL(proposal.id).href);
+    if (current.missing)
+      throw new Error("Legacy proposal already projected; manual migration needed");
+    if (canonicalJson(fromRdf(current.store, proposal.id)) !== canonicalJson(proposal))
+      throw new Error("Proposal conflict");
+  }
   async proposal(proposal: ActionProposal): Promise<void> {
     if (this.proposalLocation(proposal.id) !== proposal.id)
       throw new Error("Proposal outside proposals container");

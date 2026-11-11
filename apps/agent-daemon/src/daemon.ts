@@ -12,7 +12,13 @@ import { z } from "zod";
 import type { TaskContext } from "./instrumentation.js";
 import { scrubLog } from "./logging.js";
 import { checkedProposalResult } from "./proposal-results.js";
-import type { AuthenticatedComposition, Daemon, DaemonAccount, DaemonOptions } from "./types.js";
+import type {
+  AuthenticatedComposition,
+  Daemon,
+  DaemonAccount,
+  DaemonOptions,
+  ProposalResult,
+} from "./types.js";
 import { PodWorkspace } from "./workspace.js";
 
 export const POLL_MS = 30_000;
@@ -131,6 +137,18 @@ export function createDaemon(o: DaemonOptions): Daemon {
         ...task,
       });
   }
+  /** Whether the ledger holds evidence that an earlier pass reached this result's projection. */
+  function auditedEarlier(result: ProposalResult): boolean {
+    const calls = new Set(result.calls.map((call) => call.id));
+    const proposals = new Set(result.proposals.map((proposal) => proposal.id));
+    return o.audit
+      .entries()
+      .some(
+        ({ record }) =>
+          (record.type === "model-call" && calls.has(record.id)) ||
+          (record.type === "proposal" && proposals.has(record.id)),
+      );
+  }
   async function accountPass(account: DaemonAccount) {
     const cursor = await o.checkpoints.get(account.id);
     let next: string | undefined;
@@ -202,26 +220,33 @@ export function createDaemon(o: DaemonOptions): Daemon {
       if (result) {
         const cached = checkedProposalResult(result);
         result = cached;
-        const proposals = cached.proposals.map((proposal) => ({
-          ...proposal,
-          id: o.workspace.proposalLocation(proposal.id),
-        }));
-        if (proposals.some((proposal, index) => proposal.id !== cached.proposals[index]?.id)) {
-          // Earlier runs may already hold model-call evidence naming the first cached ID.
-          // Record each repair so replay keeps that reference while effects use the new one.
-          const earlier = new Map(cached.migrations?.map((m) => [m.location, m.legacyId]));
-          const migrations = proposals.flatMap((proposal, index) => {
-            const previous = cached.proposals[index]?.id ?? proposal.id;
-            const legacyId = earlier.get(previous) ?? previous;
-            return legacyId === proposal.id ? [] : [{ legacyId, location: proposal.id }];
-          });
-          result = checkedProposalResult({
-            calls: cached.calls,
-            proposals,
-            ...(migrations.length > 0 ? { migrations } : {}),
-          });
-          // Repair legacy IDs durably before the trusted outbox sees their new locations.
-          await o.proposalResults.put(key, result);
+        const legacy = cached.proposals.filter(
+          (proposal) => o.workspace.proposalLocation(proposal.id) !== proposal.id,
+        );
+        if (legacy.length > 0) {
+          const published: boolean[] = [];
+          for (const proposal of legacy)
+            published.push(
+              o.workspace.legacyProposal(proposal.id) &&
+                (await o.workspace.legacyProposalPublished(proposal.id)),
+            );
+          if (auditedEarlier(cached) || published.includes(true)) {
+            // An earlier release projected this result into the outbox before auditing or
+            // publishing it. Keep its IDs end to end: re-projection is then idempotent, while
+            // a repaired ID would add a second outbox entry for the same proposal.
+            if (published.includes(false))
+              throw new Error("Legacy proposal already projected; manual migration needed");
+          } else {
+            result = checkedProposalResult({
+              calls: cached.calls,
+              proposals: cached.proposals.map((proposal) => ({
+                ...proposal,
+                id: o.workspace.proposalLocation(proposal.id),
+              })),
+            });
+            // No evidence of projection: repair durably before the outbox sees the new IDs.
+            await o.proposalResults.put(key, result);
+          }
         }
       } else {
         const flagged = await o.isFlagged(account.id, thread);
@@ -262,26 +287,22 @@ export function createDaemon(o: DaemonOptions): Daemon {
           throw new Error("Outbox terms digest mismatch");
         entries.push(entry);
       }
-      const migrations = result.migrations;
       result = checkedProposalResult({
         calls: result.calls,
         proposals: entries.map((entry) => entry.proposal),
-        ...(migrations ? { migrations } : {}),
       });
       // Publish only the finalized proposals returned by the trusted outbox projection.
       // Keep the original result durable until this replacement succeeds, so retries
       // retain model-call and proposal identities even if projection or fsync fails.
       await o.proposalResults.put(key, result);
-      const only = result.proposals.length === 1 ? result.proposals[0] : undefined;
-      // A repaired proposal keeps its legacy reference so existing model-call evidence replays.
-      const proposalRef = only
-        ? (migrations?.find((m) => m.location === only.id)?.legacyId ??
-          o.workspace.proposalLocation(only.id))
-        : undefined;
+      // Model-call evidence names the proposal ID that is projected and published.
+      const proposalRef = result.proposals.length === 1 ? result.proposals[0]?.id : undefined;
       await calls(result.calls, task, proposalRef);
       for (const entry of entries) {
         const proposal = entry.proposal;
-        await o.workspace.proposal(proposal);
+        if (o.workspace.proposalLocation(proposal.id) === proposal.id)
+          await o.workspace.proposal(proposal);
+        else await o.workspace.confirmLegacyProposal(proposal);
         const terms = proposalApprovalTerms(entry);
         await append({
           type: "proposal",
