@@ -15,6 +15,7 @@ vi.mock("@jeswr/solid-events", async (original) => ({
     total: 0,
     nextOffset: null,
     listingLimited: false,
+    members: [],
   }),
 }));
 vi.mock("@jeswr/suite-ui", async (original) => ({
@@ -63,6 +64,7 @@ it("shows unreadable reply counts and unverified claims separately", async () =>
     total: 1,
     nextOffset: null,
     listingLimited: false,
+    members: [],
     invalid: 2,
     replies: [
       {
@@ -106,6 +108,7 @@ it("shows a separate unverified tally, estimated capacity and collapsed earlier 
     total: 3,
     nextOffset: null,
     listingLimited: false,
+    members: [],
   });
   const view = await mount(
     h(InvitationDetail, { event: { ...event, capacity: 8 }, fetch: vi.fn() }),
@@ -126,12 +129,14 @@ it("keeps loaded replies visible, announces truncation and retries loading the n
     additionalGuests: 0,
     repliedAt: new Date(),
   };
+  const snapshot = Array.from({ length: 201 }, (_, i) => `https://host.example/rsvps/${i}.ttl`);
   vi.mocked(readReplies).mockResolvedValueOnce({
     replies: [reply],
     invalid: 0,
     total: 201,
     nextOffset: 200,
     listingLimited: false,
+    members: snapshot,
   });
   const fetch = vi.fn();
   const view = await mount(h(InvitationDetail, { event, fetch }));
@@ -161,13 +166,38 @@ it("keeps loaded replies visible, announces truncation and retries loading the n
     total: 201,
     nextOffset: null,
     listingLimited: false,
+    members: snapshot,
   });
   await click(load());
-  expect(readReplies).toHaveBeenLastCalledWith(fetch, event.url, { offset: 200 });
+  // Load more pages the first listing's snapshot rather than re-listing the container.
+  expect(readReplies).toHaveBeenLastCalledWith(fetch, event.url, {
+    offset: 200,
+    members: snapshot,
+  });
   expect(view.host.textContent).toContain("Showing 201 of 201 reply files");
   expect(view.host.textContent).toContain("Cleo");
   expect(view.host.textContent).toContain("Tavi");
   expect(load()).toBeUndefined();
+  // A refresh discards the snapshot, lists again and pages the new listing.
+  const relisted = [...snapshot].reverse();
+  vi.mocked(readReplies).mockResolvedValueOnce({
+    replies: [reply],
+    invalid: 0,
+    total: 201,
+    nextOffset: 200,
+    listingLimited: false,
+    members: relisted,
+  });
+  const refreshed = vi.fn();
+  await view.render(h(InvitationDetail, { event, fetch: refreshed }));
+  expect(vi.mocked(readReplies).mock.lastCall).toEqual([refreshed, event.url]);
+  expect(view.host.textContent).not.toContain("Tavi");
+  vi.mocked(readReplies).mockReturnValueOnce(new Promise(() => {}));
+  await click(load());
+  expect(readReplies).toHaveBeenLastCalledWith(refreshed, event.url, {
+    offset: 200,
+    members: relisted,
+  });
 });
 it("renders an oversized listing as a notice instead of an error state", async () => {
   vi.mocked(readReplies).mockResolvedValueOnce({
@@ -176,6 +206,7 @@ it("renders an oversized listing as a notice instead of an error state", async (
     total: null,
     nextOffset: null,
     listingLimited: true,
+    members: [],
   });
   const view = await mount(h(InvitationDetail, { event, fetch: vi.fn() }));
   expect(view.host.textContent).toContain("reply listing exceeds the safety limits");

@@ -35,7 +35,8 @@ export interface RsvpSummary extends RsvpTally {
 }
 
 /** Only transport-proven authorship can replace and count for a WebID.
- * Group unverified revisions separately by claimed WebID/receipt hash, which is not proof.
+ * Group unverified revisions separately by claimed WebID/receipt hash, which is not proof;
+ * claims for a WebID with a verified reply are earlier replies, outside both tallies.
  * Server times take precedence; the effective time must not be five minutes ahead. */
 export function summariseRsvps(
   replies: readonly Reply[],
@@ -72,6 +73,12 @@ export function summariseRsvps(
       if (old && !verified) earlierReplies.push(old);
     } else if (!verified) earlierReplies.push(reply);
   }
+  // A verified reply settles that agent: its unverified claims are collapsed, never counted.
+  for (const [key, claim] of claims)
+    if (newest.has(key)) {
+      claims.delete(key);
+      earlierReplies.push(claim);
+    }
   const latest = [...newest.values()].sort(
     (a, b) => time(b) - time(a) || a.url.localeCompare(b.url),
   );

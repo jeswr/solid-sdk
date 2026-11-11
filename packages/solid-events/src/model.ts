@@ -10,6 +10,7 @@ export const EVENT_STATUS = {
   cancelled: "https://schema.org/EventCancelled",
   postponed: "https://schema.org/EventPostponed",
 } as const;
+export const RDF = { type: "http://www.w3.org/1999/02/22-rdf-syntax-ns#type" } as const;
 export const RSVP_RESPONSE = {
   yes: "https://schema.org/RsvpResponseYes",
   no: "https://schema.org/RsvpResponseNo",

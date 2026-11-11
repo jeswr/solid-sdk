@@ -25,6 +25,7 @@ import {
   entities,
   eventDocumentUrl,
   type InviteeData,
+  RDF,
   type RsvpData,
   validateEvent,
   validateInvitee,
@@ -65,8 +66,11 @@ export function publicEventFetch(fetch: typeof globalThis.fetch): typeof globalT
 }
 
 export interface ReplyReadOptions {
-  /** Offset into listing order; each call reads at most 200 files. */
+  /** Offset into `members` (or a fresh listing); each call reads at most 200 files. */
   offset?: number;
+  /** The `members` snapshot of an earlier call: page it without re-listing the container.
+   * Every URL is still checked against the event's reply container before it is read. */
+  members?: readonly string[];
   /** Trusted deployment adapter for server-authenticated creator metadata.
    * Must verify the server's contract; arbitrary headers/RDF are not identity evidence. */
   authenticatedCreator?: (url: string, response: Response) => string | undefined;
@@ -77,10 +81,12 @@ export interface ReplyList {
   total: number | null;
   nextOffset: number | null;
   listingLimited: boolean;
+  /** Eligible reply file URLs of the listing this page indexes; pass back to load more. */
+  members: string[];
 }
 
 /** Keep per-file failures separate from container access denial.
- * Solid listings have no ordering/offset contract: page the first members in listing order.
+ * Solid listings have no ordering/offset contract: list once, then page that snapshot.
  * fetch-rdf's exported streaming reader supplies the byte cap (storage boundedText is internal). */
 export async function readReplies(
   fetch: typeof globalThis.fetch,
@@ -92,27 +98,37 @@ export async function readReplies(
   const transport = refuseRedirects(fetch);
   const offset = options.offset ?? 0;
   if (!Number.isSafeInteger(offset) || offset < 0) throw new TypeError("Invalid reply offset");
-  let members: Awaited<ReturnType<typeof readContainerMembers>>;
-  try {
-    members = await readContainerMembers(transport, container, {
-      scope: container,
-      maxBytes: 2 * 1024 * 1024,
-    });
-  } catch (error) {
-    if (
-      (error instanceof RdfFetchError && error.code === "PARSE_LIMIT") ||
-      error instanceof SsrfError
-    )
-      return { replies: [], invalid: 0, total: null, nextOffset: null, listingLimited: true };
-    throw error;
+  let members: readonly string[] | undefined = options.members;
+  if (!members) {
+    try {
+      const listed = await readContainerMembers(transport, container, {
+        scope: container,
+        maxBytes: 2 * 1024 * 1024,
+      });
+      members = (listed ?? []).map(({ url }) => url);
+    } catch (error) {
+      if (
+        (error instanceof RdfFetchError && error.code === "PARSE_LIMIT") ||
+        error instanceof SsrfError
+      )
+        return {
+          replies: [],
+          invalid: 0,
+          total: null,
+          nextOffset: null,
+          listingLimited: true,
+          members: [],
+        };
+      throw error;
+    }
   }
-  const files = (members ?? []).filter(
-    ({ url }) => !url.endsWith("/") && !url.endsWith(".acl") && !url.endsWith(".acr"),
+  const files = members.filter(
+    (url) => !url.endsWith("/") && !url.endsWith(".acl") && !url.endsWith(".acr"),
   );
   const page = files.slice(offset, offset + 200);
   const replies: (Reply | undefined)[] = new Array(page.length);
   let invalid = 0;
-  async function read({ url }: { url: string }, index: number) {
+  async function read(url: string, index: number) {
     try {
       assertWithinPodScope(container, url, { allowRoot: false });
       const result = await fetchRdf(url, { fetch: transport, maxBytes: 64 * 1024 });
@@ -123,14 +139,21 @@ export async function readReplies(
           .filter(
             (q) =>
               q.subject.termType === "NamedNode" &&
-              q.predicate.value === "http://www.w3.org/1999/02/22-rdf-syntax-ns#type" &&
+              q.predicate.value === RDF.type &&
               q.object.termType === "NamedNode" &&
               q.object.value === entities.Rsvp.typeIri,
           )
           .map((q) => q.subject.value),
       );
+      // Parse only the generated subject of its own document; other typed subjects are ignored.
       const parsed = [...subjects]
-        .map((subject) => entities.Rsvp.parse(subject.slice(0, -3), result.dataset))
+        .map((subject) => {
+          const resource = new URL(subject);
+          resource.hash = "";
+          return entities.Rsvp.subject(resource.href) === subject
+            ? entities.Rsvp.parse(resource.href, result.dataset)
+            : undefined;
+        })
         .filter((r) => r !== undefined);
       if (parsed.length !== 1) throw new TypeError("Expected one reply");
       const reply = parsed[0] as RsvpData;
@@ -158,6 +181,7 @@ export async function readReplies(
     total: files.length,
     nextOffset: offset + page.length < files.length ? offset + page.length : null,
     listingLimited: false,
+    members: files,
   };
 }
 

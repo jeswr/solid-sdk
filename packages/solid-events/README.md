@@ -70,6 +70,11 @@ The default WAC flow cannot prove authorship, so WebID and anonymous claims appe
 The latest claim is counted only in a separately labelled unverified tally; superseded claims appear
 as earlier replies. A claimed WebID or copied guest hash cannot replace any verified reply.
 Anyone can copy these public correlation keys, so this grouping does not establish identity.
+When the guest list is visible, any reader can copy another guest's stored `guestKey` hash into a
+newer raw POST, which then replaces that guest's displayed (unverified) reply. Treat a guest's
+current unverified reply as the latest claim under that key, never as that guest's own answer.
+Unverified claims for a WebID that also has a verified reply are listed only as earlier replies and
+count in neither tally nor the capacity estimate.
 A successful authenticated POST alone does not prove the submitted agent owns its WebID.
 
 `readReplies` accepts an optional `authenticatedCreator(url, response)` deployment adapter. It
@@ -97,12 +102,14 @@ contain plaintext keys; readers never use those keys to authenticate anyone. Cap
 
 Replies are created by POST to `rsvps/` with a Slug hint and the server's scoped Location is used
 as the receipt URL. The subject is generated independently of the final document name. No guest
-child Write or inherited Append is needed. `readReplies` returns `{ replies, invalid, total, nextOffset, listingLimited }`: individual
+child Write or inherited Append is needed. `readReplies` returns `{ replies, invalid, total, nextOffset, listingLimited, members }`: individual
 malformed, unreadable, unrelated or over-64-KiB resources increment `invalid`; container denial
 still rejects. The reader reuses fetch-rdf's streaming byte cap (storage-client's `boundedText`
 is internal), refuses redirects, and reads at most 200 eligible files per call, with at most
-six requests active, in listing order. Pass `offset: nextOffset` to read another page without
-re-fetching earlier files. The UI shows loaded/total files and a Load more control; counts apply
+six requests active, in listing order. Solid listings are unordered and can change between reads, so `members` is the
+first call's eligible file list: pass `{ offset: nextOffset, members }` to read the next page of
+that snapshot without re-listing or re-fetching earlier files (every snapshot URL is still
+scope-checked). The UI keeps the snapshot until a refresh, which lists the container again. The UI shows loaded/total files and a Load more control; counts apply
 only to loaded replies. Listings are capped at 2 MiB. Parser/transport safety-limit refusals return
 `listingLimited: true`, `total: null` and no replies, with a notice instead of an error state.
 Access denials and ordinary listing failures still reject. The organiser view also uses `publicEventFetch` outside demo.

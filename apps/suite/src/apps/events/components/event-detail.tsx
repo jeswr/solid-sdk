@@ -66,11 +66,10 @@ export function InvitationDetail({
 }) {
   const [replies, setReplies] = useState<Reply[]>([]);
   const [invalid, setInvalid] = useState(0);
-  const [page, setPage] = useState<Pick<ReplyList, "total" | "nextOffset" | "listingLimited">>({
-    total: 0,
-    nextOffset: null,
-    listingLimited: false,
-  });
+  // `members` is the first listing's snapshot; Load more pages it, a refresh lists again.
+  const [page, setPage] = useState<
+    Pick<ReplyList, "total" | "nextOffset" | "listingLimited" | "members">
+  >({ total: 0, nextOffset: null, listingLimited: false, members: [] });
   const readGeneration = useRef(0);
   const [loadingMore, setLoadingMore] = useState(false);
   const [moreError, setMoreError] = useState(false);
@@ -90,7 +89,7 @@ export function InvitationDetail({
     setInvalid(0);
     setMoreError(false);
     setLoadingMore(false);
-    setPage({ total: 0, nextOffset: null, listingLimited: false });
+    setPage({ total: 0, nextOffset: null, listingLimited: false, members: [] });
     void readReplies(fetch, event.url).then(
       (result) => {
         if (live) {
@@ -114,7 +113,7 @@ export function InvitationDetail({
     const generation = readGeneration.current;
     setLoadingMore(true);
     setMoreError(false);
-    void readReplies(fetch, event.url, { offset: page.nextOffset }).then(
+    void readReplies(fetch, event.url, { offset: page.nextOffset, members: page.members }).then(
       (result) => {
         if (generation !== readGeneration.current) return;
         setReplies((rows) => [

@@ -754,3 +754,86 @@ it("refuses edits to another organiser or sharing changes and ignores unrelated 
   );
   expect(await repository.invitees(event)).toEqual([]);
 });
+it("ignores typed reply subjects other than their document's generated #it subject", async () => {
+  harness();
+  const url = `${ROOT}events/e/rsvps/r.ttl`;
+  const event = `${ROOT}events/e/index.ttl`;
+  vi.mocked(readContainerMembers).mockResolvedValue([{ url, container: false }]);
+  const body = await entities.Rsvp.serialize(url, {
+    agent: OWNER,
+    event: entities.Event.subject(event),
+    response: RSVP_RESPONSE.yes,
+    additionalGuests: 0,
+    repliedAt: new Date(),
+  });
+  const me = body.replace(`<${url}#it>`, `<${url}#me>`);
+  expect(me).not.toBe(body);
+  const read = (text: string) =>
+    readReplies(
+      async () => new Response(text, { headers: { "content-type": "text/turtle" } }),
+      event,
+    );
+  const parse = vi.spyOn(entities.Rsvp, "parse");
+  try {
+    expect(await read(me)).toMatchObject({ invalid: 1, replies: [] });
+    expect(parse).not.toHaveBeenCalled();
+    expect(await read(body + me)).toMatchObject({ invalid: 0, replies: [{ url, agent: OWNER }] });
+    // Only the generated #it subject is parsed (validateRsvp re-parses on its own fixture IRI).
+    expect(
+      parse.mock.calls.map(([subject]) => subject).filter((s) => !s.includes("validation.example")),
+    ).toEqual([url]);
+  } finally {
+    parse.mockRestore();
+  }
+});
+it("pages through the first listing's snapshot instead of re-listing a changing container", async () => {
+  harness();
+  const event = `${ROOT}events/e/index.ttl`;
+  const container = `${ROOT}events/e/rsvps/`;
+  const urls = Array.from({ length: 201 }, (_, i) => `${container}${i}.ttl`);
+  vi.mocked(readContainerMembers).mockResolvedValue([
+    { url: `${container}nested/`, container: true },
+    { url: `${container}.acl`, container: false },
+    ...urls.map((url) => ({ url, container: false })),
+  ]);
+  const fetch = vi.fn<typeof globalThis.fetch>(
+    async (input) =>
+      new Response(
+        await entities.Rsvp.serialize(String(input), {
+          event: entities.Event.subject(event),
+          agent: OWNER,
+          response: RSVP_RESPONSE.yes,
+          additionalGuests: 0,
+          repliedAt: new Date(),
+        }),
+        { headers: { "content-type": "text/turtle" } },
+      ),
+  );
+  const first = await readReplies(fetch, event);
+  expect(first).toMatchObject({ total: 201, nextOffset: 200, members: urls });
+  // The live listing changes order and grows; the next page must not skip or repeat files.
+  vi.mocked(readContainerMembers).mockClear();
+  vi.mocked(readContainerMembers).mockResolvedValue(
+    [`${container}new.ttl`, ...[...urls].reverse()].map((url) => ({ url, container: false })),
+  );
+  const second = await readReplies(fetch, event, {
+    offset: first.nextOffset as number,
+    members: first.members,
+  });
+  expect(readContainerMembers).not.toHaveBeenCalled();
+  expect(second).toMatchObject({ total: 201, nextOffset: null, invalid: 0, members: urls });
+  expect(second.replies.map((r) => r.url)).toEqual([urls[200]]);
+  expect(fetch).toHaveBeenCalledTimes(201);
+  // A snapshot is still filtered and scope-checked before any file is read.
+  fetch.mockClear();
+  const supplied = await readReplies(fetch, event, {
+    members: [
+      `${container}x/`,
+      `${container}x.acr`,
+      `${ROOT}events/other/1.ttl`,
+      urls[0] as string,
+    ],
+  });
+  expect(supplied).toMatchObject({ total: 2, invalid: 1, replies: [{ url: urls[0] }] });
+  expect(fetch).toHaveBeenCalledTimes(1);
+}, 30000);

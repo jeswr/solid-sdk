@@ -122,7 +122,13 @@ it("never lets a claimed WebID or a copied guest hash override verified authorsh
     repliedAt: new Date("2026-11-11T12:01:00Z"),
   });
   const result = summariseRsvps([verified, forged], event);
-  expect(result).toMatchObject({ yes: 1, no: 0, latest: [verified], unverified: [forged] });
+  expect(result).toMatchObject({
+    yes: 1,
+    no: 0,
+    latest: [verified],
+    unverified: [],
+    earlierReplies: [forged],
+  });
   const copied = { ...forged, agent: undefined, displayName: "Alex", guestKey: "sha256:copied" };
   expect(
     summariseRsvps([copied, { ...copied, url: `${copied.url}2` }], event).unverified,
@@ -197,4 +203,42 @@ it("still flags unverified late claims without adding them to verified counts", 
     rsvpDeadline: new Date(+claim.repliedAt - 1000),
   });
   expect(summary).toMatchObject({ yes: 0, latest: [], unverified: [claim], late: [claim] });
+});
+it("drops unverified claims for an agent with a verified reply from the unverified tally and capacity", () => {
+  const verified = reply({ additionalGuests: 0 });
+  const olderClaim = reply({
+    verifiedAgent: undefined,
+    url: "https://host.example/r/claim-1",
+    additionalGuests: 5,
+    repliedAt: new Date("2026-11-11T11:00:00Z"),
+  });
+  const newerClaim = reply({
+    verifiedAgent: undefined,
+    url: "https://host.example/r/claim-2",
+    additionalGuests: 4,
+    repliedAt: new Date("2026-11-11T12:02:00Z"),
+  });
+  const guest = reply({
+    agent: undefined,
+    verifiedAgent: undefined,
+    displayName: "Tavi",
+    guestKey: "sha256:tavi",
+    url: "https://host.example/r/guest",
+    additionalGuests: 1,
+  });
+  const expected = {
+    yes: 1,
+    attending: 1,
+    latest: [verified],
+    unverified: [guest],
+    unverifiedTally: { yes: 1, no: 0, maybe: 0, additionalGuests: 1, attending: 2 },
+    remaining: 7,
+    overCapacity: 0,
+    earlierReplies: [newerClaim, olderClaim],
+  };
+  for (const order of [
+    [verified, olderClaim, newerClaim, guest],
+    [newerClaim, guest, olderClaim, verified],
+  ])
+    expect(summariseRsvps(order, { ...event, capacity: 10 })).toMatchObject(expected);
 });
