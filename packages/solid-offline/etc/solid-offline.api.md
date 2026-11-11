@@ -13,6 +13,7 @@
 - `./worker` (`dist/worker.d.ts`): _(no named exports)_
 - `./react` (`dist/react.d.ts`): `OfflineStatusSnapshot`, `OfflineStatusSurface`, `ResourceFreshness`, `ResourceState`, `UseOfflineResourceOptions`, `UseOfflineResourceResult`, `UseOfflineStatusResult`, `useOfflineResource`, `useOfflineStatus`
 - `./outbox` (`dist/outbox.d.ts`): `ConflictRecord`, `GuardPolicy`, `GuardedDelivery`, `JsonValue`, `Outbox`, `OutboxGuard`, `OutboxItem`, `OutboxOperation`, `QueueOption`, `QueueingStorageClient`, `QueueingWriteResult`, `ReplayDelegate`, `ReplayOptions`, `createOutbox`, `withOutbox`
+- `./journal` (`dist/journal.d.ts`): `DurableJournal`, `IntentStorage`, `browserIntentStorage`, `withJournalLock`
 - `./merge` (`dist/merge.d.ts`): `mergeRdf`
 
 ### `dist/index.d.ts`
@@ -1200,6 +1201,45 @@ declare function createOutbox(options: {
 declare function withOutbox(client: StorageClient, outbox: Outbox): QueueingStorageClient;
 
 export { type ConflictRecord, type GuardPolicy, type GuardedDelivery, type JsonValue, type Outbox, type OutboxGuard, type OutboxItem, type OutboxOperation, type QueueOption, type QueueingStorageClient, type QueueingWriteResult, type ReplayDelegate, type ReplayOptions, createOutbox, withOutbox };
+```
+
+### `dist/journal.d.ts`
+
+```ts
+interface IntentStorage {
+    readonly length: number;
+    key(index: number): string | null;
+    getItem(key: string): string | null;
+    setItem(key: string, value: string): void;
+    removeItem(key: string): void;
+}
+declare const browserIntentStorage: () => Storage;
+declare class DurableJournal<T extends {
+    id: string;
+    startedAt: string;
+}> {
+    readonly prefix: string;
+    private decode;
+    private warn;
+    private unavailableMessage;
+    private storage;
+    constructor(prefix: string, decode: (value: unknown) => T, warn: (message: string) => void, unavailableMessage: string, storage?: () => IntentStorage);
+    private access;
+    private forget;
+    private keys;
+    private prune;
+    private snapshot;
+    list(): T[];
+    /** False means memory-only storage. Migrations must retain their durable source. */
+    put(intent: T): boolean;
+    remove(intent: T): void;
+    /** Web Locks serialize cooperating tabs; conditional pod writes still guard other clients. */
+    lock<T>(work: () => Promise<T>): Promise<T>;
+}
+/** Serialize a handoff that spans journal namespaces (for example a legacy account key). */
+declare function withJournalLock<T>(key: string, work: () => Promise<T>): Promise<T>;
+
+export { DurableJournal, type IntentStorage, browserIntentStorage, withJournalLock };
 ```
 
 ### `dist/merge.d.ts`

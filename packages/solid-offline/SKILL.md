@@ -1,6 +1,6 @@
 ---
 name: solid-offline
-description: Use when implementing or changing the solid-offline service-worker cache, proactive warmer, StorageClient reads, pod-notifications invalidation, app-shell precache, WebID-scoped storage, logout purge, status surface, or React offline hooks.
+description: Use when implementing or changing the solid-offline service-worker cache, proactive warmer, StorageClient reads, pod-notifications invalidation, app-shell precache, WebID-scoped storage, logout purge, status surface, React offline hooks, or durable compound intent journals.
 ---
 <!-- AUTHORED-BY Codex GPT-5 -->
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
@@ -203,3 +203,30 @@ Test outbox behavior over fake-indexeddb and fake StorageClients with no network
 ordering, durable failures/conflicts, resolution validators and create-only copy headers,
 progress, per-WebID isolation, cross-tab refresh, opt-in behavior and logout races. Update the
 API report after rebuilding both new entry points.
+
+## Durable compound intent journals
+
+Use `DurableJournal`, `browserIntentStorage`, `withJournalLock` and `IntentStorage` from
+`@jeswr/solid-offline/journal` for application-owned multi-document recovery. Keep domain
+codecs, pod-scope checks, conditional writes, replay and compensation in the application.
+The journal entry has no React, worker or authenticated transport dependency.
+
+- Supply an unambiguous prefix containing the encoded active account and normalized pod or
+  collection URL. Decode and validate the version and both identities inside each record too.
+  IDs form per-operation keys; `startedAt` determines replay order. Revive only known date fields.
+- Checkpoint with `put` before each pod write. `put` returns true for durable persistence and
+  false for memory fallback. Remove records only after confirmed completion or compensation.
+  Never persist credentials. Read-cache logout cleanup does not retire compound intents.
+- Preserve shared fallback state across provider remounts. Synchronize observed deletions,
+  including null reads and deletions learned after a quota failure. Do not reload a stale
+  persistent checkpoint over dirty memory or discard a never-persisted record merely because
+  storage lacks it. Corrupt observed records must fail decoding rather than revive older data.
+- Storage failure warns once per prefix. Unreadable storage leaves only the last observed
+  snapshot; reload durability is unavailable. Inject a lazy `() => IntentStorage` for tests.
+- Wrap foreground and recovery work in `journal.lock`. `withJournalLock(key, work)` also
+  coordinates a legacy handoff across pod namespaces. Copy all valid records durably before
+  removing the old source; stop migration/replay if put returns false. Use stable imported IDs
+  and retain newer checkpoints on retry. Preserve unrelated pods and reject mixed-scope records.
+- Test external deletion followed by storage failure, partial observations, quota failures,
+  dirty checkpoints, corrupt records, remounts and concurrency. The journal file must retain
+  100% statement, branch, function and line coverage. Rebuild and regenerate the API report.

@@ -1,7 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
-import { DurableJournal, type IntentStorage } from "../../../lib/intent-journal";
+import { DurableJournal, type IntentStorage } from "@jeswr/solid-offline/journal";
 import type { SavedDocument } from "../lib/model/intent";
 import type { MergeSelection } from "./merge";
 
@@ -30,7 +30,7 @@ export interface MergeDuplicate {
   person: SavedDocument;
   labels: string[];
 }
-export { browserIntentStorage, type IntentStorage } from "../../../lib/intent-journal";
+export { browserIntentStorage, type IntentStorage } from "@jeswr/solid-offline/journal";
 
 export function journalPrefix(webId: string, bookUrl: string) {
   return `solid-suite:contacts:intent:${encodeURIComponent(webId)}:${encodeURIComponent(bookUrl)}:`;

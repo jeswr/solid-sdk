@@ -59,6 +59,8 @@ import '@jeswr/solid-offline/worker';
 - Identity cleanup: `purgeForWebId`; `offline.logout()` purges both Cache API and IndexedDB data.
 - Durable writes: `createOutbox`, `withOutbox`, `Outbox`, `OutboxItem`, `ConflictRecord`, and
   `QueueingStorageClient` from `@jeswr/solid-offline/outbox`.
+- Intent journals: `DurableJournal`, `browserIntentStorage`, `withJournalLock` and
+  `IntentStorage` from `@jeswr/solid-offline/journal`.
 - RDF merge: `mergeRdf` from `@jeswr/solid-offline/merge`.
 - Worker entry: `@jeswr/solid-offline/worker`.
 - React entry: `useOfflineStatus` and `useOfflineResource` from `@jeswr/solid-offline/react`.
@@ -113,6 +115,53 @@ const stale = provenance === 'stale';
 ```
 
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+
+## Compound intent journals
+
+`@jeswr/solid-offline/journal` provides synchronous per-operation JSON persistence for
+application-owned multi-document workflows. It is separate from the write outbox: the app
+owns replay, compensation, validators and pod writes. Calendar and Contacts use this entry.
+It has no React, service-worker, RDF or authenticated transport dependency.
+
+```ts
+import { DurableJournal } from '@jeswr/solid-offline/journal';
+
+type Intent = { id: string; startedAt: string; webId: string; pod: string; step: string };
+declare const webId: string;
+declare const pod: string;
+declare const decode: (value: unknown) => Intent; // Validate account, pod, version and domain fields.
+declare const warn: (message: string) => void;
+const prefix = `example:intent:${encodeURIComponent(webId)}:${encodeURIComponent(pod)}:`;
+const journal = new DurableJournal<Intent>(
+  prefix, decode, warn, 'Recovery cannot survive a reload. Keep this tab open.',
+);
+await journal.lock(async () => {
+  const intent: Intent = { id: crypto.randomUUID(), startedAt: new Date().toISOString(), webId, pod, step: 'prepared' };
+  journal.put(intent); // Checkpoint before the first pod write.
+  // Apply and checkpoint domain steps, then remove only after completion or compensation.
+});
+```
+
+`list()` decodes records in `startedAt` order and rejects corrupt JSON or mismatched IDs.
+The caller supplies version/account/pod validation and date revival; generic storage never
+interprets domain payloads. One key (`prefix + id`) stores each record. Inject a lazy
+`() => IntentStorage` as the fifth constructor argument for tests or another storage seam;
+the default `browserIntentStorage` acquires `localStorage` lazily. Persist no credentials.
+
+`put(intent)` returns `true` only when the checkpoint reached persistent storage, and
+`false` for memory-only fallback. `remove(intent)` removes its record. Successful observations
+refresh memory, including deletions by other tabs and keys disappearing during a read.
+Storage failures warn once per namespace and share fallback state across remounts. Readable
+storage can still evict a previously persisted record in fallback mode; its stale checkpoint
+cannot overwrite dirty memory, and never-persisted records remain available. If storage is
+unreadable, only the last observed snapshot is available. Fallback cannot survive a reload.
+
+`lock(work)` serializes cooperating tabs with Web Locks and instances in the same realm
+without them. `withJournalLock(key, work)` supplies the same coordination for handoffs spanning
+namespaces, such as migrating an old account-wide envelope to per-pod journals. Copy every
+checkpoint durably before removing its source; if `put()` returns false, retain the source
+and stop the handoff before replay. Stable operation IDs let retries retain newer checkpoints.
+No helper promises exactly-once delivery or cross-tab serialization without Web Locks.
 
 ## Write outbox
 

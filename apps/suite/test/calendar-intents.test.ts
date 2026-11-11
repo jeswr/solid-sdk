@@ -767,3 +767,341 @@ it("refuses a missing foreground master before creating or journaling a replacem
   expect(p.send).not.toHaveBeenCalled();
   expect(p.journal.list()).toEqual([]);
 });
+
+it("does not resurrect a completed intent and delete its committed replacement after storage fails", async () => {
+  const p = await pod();
+  const account = `${web}-completed`;
+  let unavailable = false;
+  const source = () => {
+    if (unavailable) throw Error("storage unavailable");
+    return p.storage;
+  };
+  const journal = new SeriesJournal(account, root, p.warn, source);
+  const master = { ...original.data, recurrence: { frequency: "WEEKLY" as const, count: 3 } };
+  const completed = {
+    ...master,
+    recurrence: { ...master.recurrence, exceptDate: [data.start] },
+  };
+  const saved = intent({
+    webId: account,
+    original: { ...original, data: completed },
+    replacementEtag: '"copy"',
+  });
+  await p.put(original.url, master, original.etag);
+  await p.put(created.url, data, '"copy"');
+  journal.put(saved);
+  expect(journal.list()).toEqual([saved]);
+  // Another tab commits the master and removes the record, outside this module's memory.
+  await p.put(original.url, completed, '"committed"');
+  p.storage.removeItem(`${journal.prefix}${saved.id}`);
+  expect(journal.list()).toEqual([]);
+  unavailable = true;
+  const recovery = createSeriesIntents(account, p.send, p.allowed, {
+    ...p.recovery,
+    journalStorage: source,
+  });
+  await recovery.recover();
+  expect(p.send).not.toHaveBeenCalled();
+  expect(p.resources.get(created.url)?.etag).toBe('"copy"');
+  expect((await p.io.loadEvent(original.url))?.data).toMatchObject(completed);
+  expect(journal.list()).toEqual([]);
+});
+
+it.each([
+  false,
+  true,
+])("drains a save queued during a compound after it settles (failure: %s)", async (failed) => {
+  const p = await pod();
+  let entered!: () => void;
+  let finish!: () => void;
+  const waiting = new Promise<void>((resolve) => {
+    entered = resolve;
+  });
+  const gate = new Promise<void>((resolve) => {
+    finish = resolve;
+  });
+  p.intercept(async (request) => {
+    if (request.method === "PUT" && request.url === original.url) {
+      entered();
+      await gate;
+      if (failed) return new Response(null, { status: 500 });
+    }
+    return undefined;
+  });
+  const changed = vi.fn();
+  const box = createEventOutbox(web, p.storage, p.send, changed, p.allowed, p.recovery);
+  const compound = box.compound?.(created, original, { current: undefined });
+  const checked = failed
+    ? expect(compound).rejects.toThrow("500")
+    : expect(compound).resolves.toBe(true);
+  await waiting;
+  const unrelated = { ...created, url: `${root}calendar/work/during-compound.ttl` };
+  const saved = box.save(unrelated);
+  const flushed = box.flush();
+  expect(p.send).toHaveBeenCalledTimes(2);
+  finish();
+  await Promise.all([checked, saved, flushed]);
+  expect(p.send.mock.calls.map(([write]) => write.kind)).toEqual(
+    failed ? ["create", "update", "delete", "create"] : ["create", "update", "create"],
+  );
+  expect(p.send).toHaveBeenLastCalledWith(unrelated);
+  expect(p.resources.has(unrelated.url)).toBe(true);
+  expect(JSON.parse(p.storage.getItem(outboxKey(web)) as string).writes).toEqual([]);
+  expect(changed).toHaveBeenLastCalledWith([], false);
+});
+
+const oldKey = (account = web) => `suite:calendar:intents:${account}`;
+function legacy(p: Awaited<ReturnType<typeof pod>>, records: unknown[], account = web) {
+  p.storage.setItem(oldKey(account), JSON.stringify({ v: 1, webId: account, intents: records }));
+}
+const oldIntent = (patch: Partial<SeriesIntent> = {}) => ({ created, original, ...patch });
+
+it.each([
+  false,
+  true,
+])("migrates legacy checkpoints durably before removing their envelope (recurrence: %s)", async (recurring) => {
+  const p = await pod();
+  const record = oldIntent({
+    created: {
+      ...created,
+      data: { ...data, ...(recurring ? { recurrence: { frequency: "WEEKLY" as const } } : {}) },
+    },
+    replacementEtag: '"copy"',
+    attemptingOriginal: true,
+    rollback: false,
+    done: true,
+  });
+  legacy(p, [record]);
+  const remove = p.storage.removeItem.bind(p.storage);
+  vi.spyOn(p.storage, "removeItem").mockImplementation((key) => {
+    if (key === oldKey()) {
+      expect(p.journal.list()).toMatchObject([
+        {
+          ...record,
+          operation: { mode: recurring ? "following" : "this", action: "edit" },
+        },
+      ]);
+      expect(p.journal.list()[0]?.created.data.start).toBeInstanceOf(Date);
+    }
+    remove(key);
+  });
+  await p.controller().recover();
+  expect(p.storage.getItem(oldKey())).toBeNull();
+  expect(p.journal.list()).toEqual([]);
+  expect(p.send).not.toHaveBeenCalled();
+});
+it("resumes a prepared legacy operation and migrates it only once", async () => {
+  const p = await pod();
+  legacy(p, [oldIntent()]);
+  await p.controller().recover();
+  expect(p.send.mock.calls.map(([write]) => write.kind)).toEqual(["create", "update"]);
+  expect(p.storage.getItem(oldKey())).toBeNull();
+  await p.controller().recover();
+  expect(p.send).toHaveBeenCalledTimes(2);
+});
+it.each([
+  "attempted",
+  "rollback",
+])("preserves legacy %s checkpoints during replay", async (step) => {
+  const p = await pod();
+  await p.put(created.url, data, '"copy"');
+  if (step === "attempted") await p.put(original.url, original.data, '"committed"');
+  legacy(p, [
+    oldIntent({
+      replacementEtag: '"copy"',
+      ...(step === "attempted" ? { attemptingOriginal: true } : { rollback: true }),
+    }),
+  ]);
+  await p.controller().recover();
+  expect(p.resources.has(created.url)).toBe(step === "attempted");
+  expect(p.send.mock.calls.map(([write]) => write.kind)).toEqual(
+    step === "attempted" ? [] : ["delete"],
+  );
+});
+it("drops corrupt or foreign legacy envelopes without any pod writes", async () => {
+  for (const raw of [
+    "{",
+    "null",
+    JSON.stringify({ v: 2 }),
+    JSON.stringify({ v: 1, webId: "foreign", intents: [oldIntent()] }),
+    JSON.stringify({ v: 1, webId: web, intents: {} }),
+    JSON.stringify({ v: 1, webId: web, intents: [] }),
+  ]) {
+    const p = await pod();
+    p.storage.setItem(oldKey(), raw);
+    await p.controller().recover();
+    expect(p.storage.getItem(oldKey())).toBeNull();
+    expect(p.journal.list()).toEqual([]);
+    expect(p.send).not.toHaveBeenCalled();
+  }
+});
+it("drops invalid legacy records, including mixed pod scope, without any pod writes", async () => {
+  for (const record of [
+    null,
+    {},
+    oldIntent({ created: original as never }),
+    oldIntent({ original: created as never }),
+    oldIntent({ original: { ...original, url: created.url } }),
+    oldIntent({ original: { ...original, etag: 'W/"weak"' } }),
+    oldIntent({ attemptingOriginal: 1 as never }),
+    oldIntent({ replacementEtag: 1 as never }),
+    ...[
+      "relative",
+      "file:///copy.ttl",
+      "https://name@pod.example/calendar/work/copy.ttl",
+      "https://:test-password@pod.example/calendar/work/copy.ttl",
+      `${root}calendar/work/`,
+      `${created.url}#it`,
+      `${created.url}?query`,
+      "https://foreign.example/copy.ttl",
+    ].map((url) => oldIntent({ created: { ...created, url } })),
+    oldIntent({ created: { ...created, data: { ...data, start: "invalid" } } }),
+  ]) {
+    const p = await pod();
+    legacy(p, [record]);
+    await p.controller().recover();
+    expect(p.storage.getItem(oldKey())).toBeNull();
+    expect(p.journal.list()).toEqual([]);
+    expect(p.send).not.toHaveBeenCalled();
+  }
+});
+it("retains valid legacy records for other pods and serializes their shared account handoff", async () => {
+  const p = await pod();
+  const otherRoot = "https://other.example/";
+  const other = oldIntent({
+    created: { ...created, url: `${otherRoot}calendar/copy.ttl` },
+    original: { ...original, url: `${otherRoot}calendar/master.ttl` },
+  });
+  legacy(p, [oldIntent(), other, null]);
+  await p.journal.migrateLegacy();
+  expect(p.journal.list()).toHaveLength(1);
+  expect(JSON.parse(p.storage.getItem(oldKey()) as string).intents).toEqual([
+    JSON.parse(JSON.stringify(other)),
+  ]);
+  // A second inspection of an entirely foreign envelope does not rewrite it.
+  const set = vi.spyOn(p.storage, "setItem");
+  await p.journal.migrateLegacy();
+  expect(set).not.toHaveBeenCalled();
+  const nextPod = new SeriesJournal(web, otherRoot, p.warn, () => p.storage);
+  await Promise.all([p.journal.migrateLegacy(), nextPod.migrateLegacy()]);
+  expect(nextPod.list()).toHaveLength(1);
+  expect(p.storage.getItem(oldKey())).toBeNull();
+  expect(p.send).not.toHaveBeenCalled();
+});
+it("retains a legacy source and blocks replay across remounts when the durable copy fails", async () => {
+  const p = await pod();
+  const account = `${web}-migration-quota`;
+  const journal = new SeriesJournal(account, root, p.warn, () => p.storage);
+  const recovery = { ...p.recovery, journalStorage: () => p.storage };
+  legacy(p, [oldIntent()], account);
+  const set = p.storage.setItem.bind(p.storage);
+  vi.spyOn(p.storage, "setItem").mockImplementation((key, value) => {
+    if (key.startsWith(journal.prefix)) throw Error("quota");
+    set(key, value);
+  });
+  await createSeriesIntents(account, p.send, p.allowed, recovery).recover();
+  expect(p.storage.getItem(oldKey(account))).not.toBeNull();
+  expect(journal.list()).toEqual([]);
+  await createSeriesIntents(account, p.send, p.allowed, recovery).recover();
+  expect(p.storage.getItem(oldKey(account))).not.toBeNull();
+  expect(p.send).not.toHaveBeenCalled();
+  // Explicitly retire the test fixture without leaving a failed handoff in shared memory.
+  p.storage.removeItem(oldKey(account));
+  await journal.migrateLegacy();
+});
+it("retries an interrupted legacy retirement without replacing a newer checkpoint", async () => {
+  const p = await pod();
+  const account = `${web}-migration-removal`;
+  let unavailable = false;
+  const source = () => {
+    if (unavailable) throw Error("unavailable");
+    return p.storage;
+  };
+  const recovery = { ...p.recovery, journalStorage: source };
+  const controller = () => createSeriesIntents(account, p.send, p.allowed, recovery);
+  const journal = new SeriesJournal(account, root, p.warn, source);
+  legacy(p, [oldIntent({ replacementEtag: '"copy"' })], account);
+  await p.put(created.url, data, '"copy"');
+  const remove = p.storage.removeItem.bind(p.storage);
+  const failed = vi.spyOn(p.storage, "removeItem").mockImplementation((key) => {
+    if (key === oldKey(account)) throw Error("failed retirement");
+    remove(key);
+  });
+  await controller().recover();
+  expect(p.send).not.toHaveBeenCalled();
+  const [checkpoint] = journal.list();
+  journal.put({ ...(checkpoint as SeriesIntent), attemptingOriginal: true });
+  await p.put(original.url, original.data, '"committed"');
+  unavailable = true;
+  await controller().recover();
+  expect(p.send).not.toHaveBeenCalled();
+  unavailable = false;
+  failed.mockRestore();
+  await controller().recover();
+  expect(p.resources.has(created.url)).toBe(true);
+  expect(p.send).not.toHaveBeenCalled();
+  expect(p.storage.getItem(oldKey(account))).toBeNull();
+  expect(journal.list()).toEqual([]);
+});
+
+it("rejects a legacy operation split between two pods on the same origin", async () => {
+  const p = await pod();
+  legacy(p, [
+    oldIntent({
+      created: { ...created, url: `${root}one/calendar/copy.ttl` },
+      original: { ...original, url: `${root}two/calendar/master.ttl` },
+    }),
+  ]);
+  const journal = new SeriesJournal(web, `${root}one/`, p.warn, () => p.storage);
+  await journal.migrateLegacy();
+  expect(journal.list()).toEqual([]);
+  expect(p.storage.getItem(oldKey())).toBeNull();
+});
+
+it("recovers failed compound cleanup before draining a save that joined the compound", async () => {
+  const p = await pod();
+  let entered!: () => void;
+  let finish!: () => void;
+  const waiting = new Promise<void>((resolve) => {
+    entered = resolve;
+  });
+  const gate = new Promise<void>((resolve) => {
+    finish = resolve;
+  });
+  let cleanup = 0;
+  const unrelated = {
+    ...created,
+    url: `${root}calendar/work/after-cleanup.ttl`,
+    data: { ...data, uid: "unrelated" },
+  };
+  p.intercept(async (request) => {
+    if (request.method === "PUT" && request.url === original.url) {
+      entered();
+      await gate;
+      return new Response(null, { status: 500 });
+    }
+    if (request.method === "DELETE" && ++cleanup === 1) return new Response(null, { status: 500 });
+    if (request.method === "PUT" && request.url === unrelated.url) {
+      expect(p.journal.list()).toEqual([]);
+      expect(p.resources.has(created.url)).toBe(false);
+    }
+    return undefined;
+  });
+  const box = createEventOutbox(web, p.storage, p.send, vi.fn(), p.allowed, p.recovery);
+  const compound = expect(
+    box.compound?.(created, original, { current: undefined }),
+  ).rejects.toThrow("500");
+  await waiting;
+  const saved = box.save(unrelated);
+  const flushed = box.flush();
+  finish();
+  await Promise.all([compound, saved, flushed]);
+  expect(p.send.mock.calls.map(([write]) => write.kind)).toEqual([
+    "create",
+    "update",
+    "delete",
+    "delete",
+    "create",
+  ]);
+  expect(p.resources.has(unrelated.url)).toBe(true);
+});

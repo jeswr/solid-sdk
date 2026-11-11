@@ -148,15 +148,23 @@ export function createEventOutbox(
           });
           // Our own pod notifications join the active compound operation. They must not
           // schedule an immediate second recovery after a failed compensation.
-          const settled = task.then(
-            () => undefined,
-            () => undefined,
-          );
+          const settled = task
+            .then(
+              () => undefined,
+              () => undefined,
+            )
+            .then(() => {
+              if (running !== settled) return;
+              running = undefined;
+              // Saves that joined this compound must wait for their own drain as well.
+              // flush() recovers any pending compound before sending ordinary writes.
+              if (entries.length && !offline) return flush();
+            });
           running = settled;
           try {
             return await task;
           } finally {
-            if (running === settled) running = undefined;
+            await settled;
           }
         }
       : undefined,

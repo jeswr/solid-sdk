@@ -1,9 +1,14 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { fetchRdf, RdfFetchError } from "@jeswr/fetch-rdf";
-import { createPodScopedFetch } from "@jeswr/guarded-fetch";
+import { createPodScopedFetch, podScopedUrl } from "@jeswr/guarded-fetch";
+import {
+  browserIntentStorage,
+  DurableJournal,
+  type IntentStorage,
+  withJournalLock,
+} from "@jeswr/solid-offline/journal";
 import type { DatasetCore } from "@rdfjs/types";
 import { isomorphic } from "rdf-isomorphic";
-import { DurableJournal, type IntentStorage } from "../../../lib/intent-journal";
 import { buildEvent, CalendarHttpError } from "../lib/model";
 import type { SeriesMode, SeriesReplacement } from "./editing";
 import { reviveEventWrite } from "./outbox";
@@ -33,44 +38,157 @@ export const intentsKey = (webId: string, storageUrl: string) =>
   `solid-suite:calendar:intent:${encodeURIComponent(webId)}:${encodeURIComponent(new URL(storageUrl).href)}:`;
 
 /** One versioned record per operation, scoped to the authenticated account and pod. */
+function decodeSeriesIntent(value: unknown, webId: string, storageUrl: string): SeriesIntent {
+  const intent = value as SeriesIntent;
+  if (
+    intent.v !== 1 ||
+    intent.webId !== webId ||
+    intent.storageUrl !== storageUrl ||
+    typeof intent.id !== "string" ||
+    !intent.id ||
+    typeof intent.startedAt !== "string" ||
+    !["this", "following", "all"].includes(intent.operation.mode) ||
+    !["edit", "delete"].includes(intent.operation.action)
+  )
+    throw new TypeError("Calendar recovery record is invalid.");
+  const created = reviveEventWrite(intent.created);
+  const original = reviveEventWrite(intent.original);
+  if (created.kind !== "create" || original.kind === "create" || created.url === original.url)
+    throw new TypeError("Invalid series intent");
+  for (const field of ["attemptingOriginal", "rollback", "done"] as const)
+    if (intent[field] !== undefined && typeof intent[field] !== "boolean")
+      throw new TypeError("Invalid series checkpoint");
+  if (intent.replacementEtag != null && typeof intent.replacementEtag !== "string")
+    throw new TypeError("Invalid replacement ETag");
+  return { ...intent, created, original };
+}
+
+const legacyKey = (webId: string) => `suite:calendar:intents:${webId}`;
+const legacyHandoffs = new Set<string>();
+type LegacyIntent = Pick<
+  SeriesIntent,
+  "created" | "original" | "replacementEtag" | "attemptingOriginal" | "rollback" | "done"
+>;
+
 export class SeriesJournal extends DurableJournal<SeriesIntent> {
   constructor(
-    webId: string,
-    storageUrl: string,
+    private webId: string,
+    private storageUrl: string,
     warn: (message: string) => void,
-    storage?: () => IntentStorage,
+    private source: () => IntentStorage = browserIntentStorage,
   ) {
     storageUrl = new URL(storageUrl).href;
     super(
       intentsKey(webId, storageUrl),
-      (value) => {
-        const intent = value as SeriesIntent;
-        if (
-          intent.v !== 1 ||
-          intent.webId !== webId ||
-          intent.storageUrl !== storageUrl ||
-          typeof intent.id !== "string" ||
-          !intent.id ||
-          typeof intent.startedAt !== "string" ||
-          !["this", "following", "all"].includes(intent.operation.mode) ||
-          !["edit", "delete"].includes(intent.operation.action)
-        )
-          throw new TypeError("Calendar recovery record is invalid.");
-        const created = reviveEventWrite(intent.created);
-        const original = reviveEventWrite(intent.original);
-        if (created.kind !== "create" || original.kind === "create" || created.url === original.url)
-          throw new TypeError("Invalid series intent");
-        for (const field of ["attemptingOriginal", "rollback", "done"] as const)
-          if (intent[field] !== undefined && typeof intent[field] !== "boolean")
-            throw new TypeError("Invalid series checkpoint");
-        if (intent.replacementEtag != null && typeof intent.replacementEtag !== "string")
-          throw new TypeError("Invalid replacement ETag");
-        return { ...intent, created, original };
-      },
+      (value) => decodeSeriesIntent(value, webId, storageUrl),
       warn,
       "This browser cannot save Calendar recovery. Keep this tab open until saving finishes; recovery will be lost on reload.",
-      storage,
+      source,
     );
+    this.storageUrl = storageUrl;
+  }
+  /** Copy checkpoints durably before retiring the old account-wide envelope. */
+  migrateLegacy(): Promise<void> {
+    // Other pods of this account can share the legacy envelope. Serialize its handoff too.
+    return withJournalLock(legacyKey(this.webId), async () => {
+      let storage: IntentStorage;
+      let raw: string | null;
+      try {
+        storage = this.source();
+        raw = storage.getItem(legacyKey(this.webId));
+      } catch (error) {
+        // New journals retain their normal memory fallback when no legacy handoff is known.
+        if (legacyHandoffs.has(legacyKey(this.webId))) throw error;
+        return;
+      }
+      if (raw === null) {
+        legacyHandoffs.delete(legacyKey(this.webId));
+        return;
+      }
+      legacyHandoffs.add(legacyKey(this.webId));
+      let records: unknown[];
+      try {
+        const envelope = JSON.parse(raw);
+        if (envelope.v !== 1 || envelope.webId !== this.webId || !Array.isArray(envelope.intents))
+          throw new TypeError("Invalid legacy calendar journal");
+        records = envelope.intents;
+      } catch {
+        storage.removeItem(legacyKey(this.webId));
+        legacyHandoffs.delete(legacyKey(this.webId));
+        return;
+      }
+      const existing = new Map(super.list().map((entry) => [entry.id, entry]));
+      const remaining: unknown[] = [];
+      for (const record of records) {
+        let intent: SeriesIntent;
+        try {
+          const saved = record as LegacyIntent;
+          intent = decodeSeriesIntent(
+            {
+              v: 1,
+              id: `legacy:${saved.created.url}`,
+              startedAt: "1970-01-01T00:00:00.000Z",
+              webId: this.webId,
+              storageUrl: this.storageUrl,
+              operation: {
+                mode: saved.created.data.recurrence ? "following" : "this",
+                action: "edit",
+              },
+              created: saved.created,
+              original: saved.original,
+              replacementEtag: saved.replacementEtag,
+              attemptingOriginal: saved.attemptingOriginal,
+              rollback: saved.rollback,
+              done: saved.done,
+            },
+            this.webId,
+            this.storageUrl,
+          );
+          const createdUrl = new URL(intent.created.url);
+          const originalUrl = new URL(intent.original.url);
+          const urls = [createdUrl, originalUrl];
+          if (
+            urls.some(
+              (url) =>
+                !["http:", "https:"].includes(url.protocol) ||
+                url.username ||
+                url.password ||
+                url.hash ||
+                url.search ||
+                url.pathname.endsWith("/"),
+            ) ||
+            createdUrl.origin !== originalUrl.origin
+          )
+            throw new TypeError("Invalid legacy event URLs");
+          const inPod = urls.map((url) =>
+            Boolean(podScopedUrl(this.storageUrl, url.href, { allowRoot: false })),
+          );
+          if (!inPod.every(Boolean)) {
+            // A valid operation belonging wholly to another pod must remain available there.
+            if (inPod.every((inside) => !inside)) remaining.push(record);
+            continue;
+          }
+        } catch {
+          continue; // Invalid legacy data must never become pod writes.
+        }
+        const checkpoint = existing.get(intent.id) ?? intent;
+        if (!super.put(checkpoint)) {
+          // Memory alone cannot authorize retiring a durable source or replaying it twice.
+          super.remove(checkpoint);
+          throw new Error("Calendar recovery migration needs durable storage.");
+        }
+        existing.set(intent.id, checkpoint);
+      }
+      if (remaining.length !== records.length || !records.length) {
+        if (remaining.length)
+          storage.setItem(
+            legacyKey(this.webId),
+            JSON.stringify({ v: 1, webId: this.webId, intents: remaining }),
+          );
+        else storage.removeItem(legacyKey(this.webId));
+      }
+      legacyHandoffs.delete(legacyKey(this.webId));
+    });
   }
 }
 export interface SeriesRecovery {
@@ -191,6 +309,7 @@ export function createSeriesIntents(
   async function recover() {
     let entries: SeriesIntent[];
     try {
+      await journal.migrateLegacy();
       entries = journal.list();
     } catch {
       recovery.warn(
@@ -223,6 +342,7 @@ export function createSeriesIntents(
       replacement: SeriesReplacement,
       operation: SeriesOperation = { mode: "this", action: "edit" },
     ): Promise<boolean> {
+      await journal.migrateLegacy();
       const pending = journal.list().find((entry) => entry.original.url === original.url);
       if (pending) {
         replacement.current = {
