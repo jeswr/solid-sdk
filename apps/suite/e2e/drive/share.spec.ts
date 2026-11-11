@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex
 // AUTHORED-BY Claude Opus 5.5
 import { expect, type Page, test } from "@playwright/test";
@@ -66,28 +67,33 @@ test("shares a file as Editor, persists across reload, enables link access and r
   await dialog.getByRole("button", { name: "Done" }).click();
 });
 
-test("shows folder sharing as read-only with every edit control disabled", async ({ page }) => {
+test("shares a folder as Editor and persists the row after reopening", async ({ page }) => {
   await resetDemo(page);
   await page.goto("/drive");
-  const row = page.locator("tr[data-url]").filter({ has: page.getByText("Work", { exact: true }) });
-  await row.focus();
-  await row.press("Space");
-  await page
-    .getByRole("toolbar", { name: "Selection actions" })
-    .getByRole("button", { name: "Share", exact: true })
-    .click();
-  const dialog = page.getByRole("dialog", { name: "Share “Work”" });
-  await expect(
-    dialog.getByRole("status").filter({ hasText: "Folder sharing is read-only for now" }),
-  ).toContainText("To change access to a file, share that file.");
-  await expect(dialog.getByRole("region", { name: "People with access" })).toBeVisible();
-  await expect(dialog.getByRole("button", { name: "Share", exact: true })).toBeDisabled();
-  await expect(dialog.getByLabel("Role for added people")).toBeDisabled();
-  await expect(dialog.getByLabel("Who can access")).toBeDisabled();
-  for (const select of await dialog.getByLabel(/^Role for https:/).all())
-    await expect(select).toBeDisabled();
+  const row = page
+    .locator("tr[data-url]")
+    .filter({ has: page.getByText("Photos", { exact: true }) });
+  const open = async () => {
+    await row.focus();
+    await row.press("Space");
+    await page
+      .getByRole("toolbar", { name: "Selection actions" })
+      .getByRole("button", { name: "Share", exact: true })
+      .click();
+    return page.getByRole("dialog", { name: "Share “Photos”" });
+  };
+  let dialog = await open();
+  await expect(dialog.getByRole("note")).toContainText("have their own sharing won't change");
+  await dialog.getByRole("combobox", { name: "Add people" }).fill(BOB);
+  await dialog.getByRole("button", { name: "Add person" }).click();
+  await dialog.getByLabel("Role for added people").selectOption("editor");
+  await dialog.getByRole("button", { name: "Share", exact: true }).click();
+  await expect(dialog.getByLabel(`Role for ${BOB}`)).toHaveValue("editor");
   await dialog.getByRole("button", { name: "Done" }).click();
-  await expect(dialog).toHaveCount(0);
+  await page.reload();
+  dialog = await open();
+  await expect(dialog.getByLabel(`Role for ${BOB}`)).toHaveValue("editor");
+  await dialog.getByRole("button", { name: "Done" }).click();
 });
 
 test("removes access copied from the folder's default once the file has its own sharing", async ({
