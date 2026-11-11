@@ -20,9 +20,6 @@
   "apps/coeliac/src/lib/pod/type-index.ts": {
     "rdf-factory": 1
   },
-  "apps/extension/src/background/core/class-resolution-budget.ts": {
-    "rdf-factory": 1
-  },
   "apps/issues/scripts/dev.mjs": {
     "rdf-literal": 1
   },
