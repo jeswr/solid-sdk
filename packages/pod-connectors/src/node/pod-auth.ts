@@ -1,19 +1,22 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { assertWithinPodScope, refuseRedirects, snapshotFetchInput } from "@jeswr/guarded-fetch";
 import {
-  createSession,
-  discoveryUrl,
-  type FetchLike,
-  rdfFetchFor,
-  readOidcJson,
-} from "@jeswr/solid-dpop";
+  assertWithinPodScope,
+  isWithinPodScope,
+  refuseRedirects,
+  snapshotFetchInput,
+} from "@jeswr/guarded-fetch";
+import { forClientCredentials, type PodAuth } from "@jeswr/pod-auth/node";
+import { abortableFetch } from "../core/abort.js";
 import { freshRdf } from "../pod/rdf-read.js";
 import { validatedTypeIndexTarget } from "../pod/type-index-write.js";
 import type { NodeConfig } from "./config.js";
-import { httpsUrl, NodeRuntimeError, textValue } from "./errors.js";
+import { httpsUrl, NodeRuntimeError, object, textValue } from "./errors.js";
 
 /** Buffer a replayable body for nonce retries, observing the effective caller signal. */
-async function readRequestBody(request: Request): Promise<Uint8Array | undefined> {
+async function readRequestBody(
+  request: Request,
+  maxBytes = Number.POSITIVE_INFINITY,
+): Promise<Uint8Array | undefined> {
   if (!request.body) return undefined;
   const reader = request.body.getReader();
   const signal = request.signal;
@@ -37,6 +40,10 @@ async function readRequestBody(request: Request): Promise<Uint8Array | undefined
       if (done) break;
       chunks.push(value);
       size += value.byteLength;
+      if (size > maxBytes) {
+        void reader.cancel().catch(() => {});
+        throw new Error("Body exceeds its byte limit");
+      }
     }
     const body = new Uint8Array(size);
     let offset = 0;
@@ -51,115 +58,168 @@ async function readRequestBody(request: Request): Promise<Uint8Array | undefined
   }
 }
 
-/** Create an in-memory DPoP client-credentials session on a dedicated Pod transport. */
+/**
+ * Adapt the CLI's explicit token endpoint and profile-selected cross-storage index policy.
+ * pod-auth owns credentials, DPoP, refresh, nonce handling and request replay.
+ */
 export async function createClientCredentialsFetch(
   config: NodeConfig,
   transport: typeof fetch,
 ): Promise<typeof fetch> {
-  const fetchSafe = refuseRedirects(transport);
-  // Public callers may construct NodeConfig without going through the file loader.
   try {
     httpsUrl(config.oidcIssuer);
     httpsUrl(config.profileDocumentUrl);
     httpsUrl(config.podRoot);
     if (config.tokenUrl !== undefined) httpsUrl(config.tokenUrl);
-  } catch {
-    throw new NodeRuntimeError("auth", "Pod client-credentials login failed.");
-  }
-  const discovery = discoveryUrl(config.oidcIssuer);
-  let tokenEndpoint = config.tokenUrl;
-  const credentials = {
-    issuer: config.oidcIssuer,
-    id: config.clientId,
-    secret: config.clientSecret,
-  };
-  const authTransport: FetchLike = async (url, init) => {
-    if (url === discovery) {
-      if (!tokenEndpoint) {
-        const response = await fetchSafe(url, init as RequestInit);
-        if (!response.ok) throw new Error("Discovery failed");
-        const metadata = await readOidcJson(response, init?.signal);
-        if (metadata.issuer !== config.oidcIssuer) throw new Error("Issuer mismatch");
-        tokenEndpoint = httpsUrl(metadata.token_endpoint);
-      }
-      return Response.json({ issuer: config.oidcIssuer, token_endpoint: tokenEndpoint });
-    }
-    if (url !== tokenEndpoint) throw new Error("Unexpected authorization endpoint");
-    const response = await fetchSafe(url, init as RequestInit);
-    if (response.ok) {
-      const token = await readOidcJson(response, init?.signal);
-      textValue(token.access_token);
-      if (
-        typeof token.token_type !== "string" ||
-        token.token_type.toLowerCase() !== "dpop" ||
-        (token.expires_in !== undefined &&
-          (typeof token.expires_in !== "number" ||
-            !Number.isFinite(token.expires_in) ||
-            token.expires_in <= 0))
-      )
-        throw new Error("Invalid DPoP token");
-      return Response.json(token, { status: response.status, headers: response.headers });
-    }
-    return response;
-  };
-  try {
-    const session = await createSession(credentials, authTransport);
+    const discovery = new URL(config.oidcIssuer);
+    discovery.pathname = `${discovery.pathname.replace(/\/$/, "")}/.well-known/openid-configuration`;
+    const discoveryUrl = discovery.href;
+    let tokenEndpoint = config.tokenUrl;
+    let metadata: Record<string, unknown> | undefined = config.tokenUrl
+      ? { issuer: config.oidcIssuer, token_endpoint: config.tokenUrl }
+      : undefined;
     let selectedIndex: string | undefined;
+    let indexAuth: Promise<PodAuth> | undefined;
+    let profileEpoch = 0;
+    const fetchSafe = refuseRedirects(transport);
     const assertDestination = (url: string) => {
       if (url !== config.profileDocumentUrl && url !== selectedIndex)
         assertWithinPodScope(config.podRoot, url);
     };
-    const podTransport: FetchLike = async (url, init) => {
-      assertDestination(url);
-      return fetchSafe(url, init as RequestInit);
+    const boundedJson = async (url: string, response: Response, signal: AbortSignal) => {
+      if (Number(response.headers.get("content-length")) > 1024 * 1024) {
+        void response.body?.cancel().catch(() => {});
+        throw new Error("Protocol response exceeds its byte limit");
+      }
+      const request = new Request(url, {
+        method: "POST",
+        body: response.body,
+        signal,
+        ...(response.body ? { duplex: "half" } : {}),
+      });
+      return object(
+        JSON.parse(new TextDecoder().decode(await readRequestBody(request, 1024 * 1024))),
+      );
     };
-    // Token refresh uses the same guarded discovery/exchange path, while resource I/O
-    // stays inside the explicit Pod scope, canonical profile and validated index document.
-    const combined: FetchLike = (url, init) =>
-      url === discovery || url === tokenEndpoint
-        ? authTransport(url, init)
-        : podTransport(url, init);
-    return async (input, init) => {
+    const guarded: typeof fetch = async (input, init) => {
       const snapshot = snapshotFetchInput(input, init);
-      // Materialise string inputs for body/policy access; Requests are already captured.
       const request =
         typeof snapshot.input === "string"
           ? new Request(snapshot.input, snapshot.init)
           : snapshot.input;
-      const url = typeof snapshot.input === "string" ? request.url : snapshot.url;
+      const url = request.url;
       request.signal.throwIfAborted();
-      assertDestination(url);
-      const profileRead = url === config.profileDocumentUrl && request.method === "GET";
-      if (profileRead) selectedIndex = undefined;
-      const body = await readRequestBody(request);
-      // solid-dpop's fetch adapter does not forward RequestInit.signal. Capture it in
-      // this request's transport so refresh and nonce retries share its cancellation,
-      // without letting concurrent requests overwrite one another's signal.
-      const requestTransport: FetchLike = (url, init) => {
-        const internalSignal = (init as RequestInit | undefined)?.signal;
-        const requestInit = {
-          ...init,
-          signal: internalSignal
-            ? AbortSignal.any([request.signal, internalSignal])
-            : request.signal,
-        };
-        requestInit.signal.throwIfAborted();
-        return combined(url, requestInit);
-      };
-      const authenticated = rdfFetchFor(session, credentials, requestTransport);
-      const response = await authenticated(url, {
+      if (url === discoveryUrl && metadata) return Response.json(metadata);
+      const protocol = url === discoveryUrl || url === tokenEndpoint;
+      if (!protocol) {
+        assertDestination(url);
+        // The CLI has explicitly established this service identity. Let pod-auth upgrade
+        // its request before dispatch instead of sending unauthenticated write probes.
+        if (!request.headers.has("authorization"))
+          return new Response(null, { status: 401, headers: { "www-authenticate": "DPoP" } });
+      }
+      const bytes = await readRequestBody(request);
+      const response = await fetchSafe(url, {
         method: request.method,
         headers: request.headers,
-        body: body as BodyInit | undefined,
+        body:
+          bytes === undefined
+            ? undefined
+            : protocol
+              ? new TextDecoder().decode(bytes)
+              : (bytes as Uint8Array<ArrayBuffer>),
+        signal: request.signal,
+        redirect: "manual",
+        cache: "no-cache",
+      });
+      request.signal.throwIfAborted();
+      if (!protocol) {
+        if (
+          response.status === 401 &&
+          response.headers.has("dpop-nonce") &&
+          !response.headers.has("www-authenticate")
+        ) {
+          const headers = new Headers(response.headers);
+          headers.set("www-authenticate", 'DPoP error="use_dpop_nonce"');
+          return new Response(response.body, { status: response.status, headers });
+        }
+        return response;
+      }
+      if (url === discoveryUrl && !response.ok) {
+        void response.body?.cancel().catch(() => {});
+        throw new Error("Discovery failed");
+      }
+      const json = await boundedJson(url, response, request.signal);
+      if (url === discoveryUrl) {
+        if (json.issuer !== config.oidcIssuer) throw new Error("Issuer mismatch");
+        tokenEndpoint = httpsUrl(json.token_endpoint);
+        metadata = json;
+      } else if (response.ok) {
+        textValue(json.access_token);
+        if (
+          typeof json.token_type !== "string" ||
+          json.token_type.toLowerCase() !== "dpop" ||
+          (json.expires_in !== undefined &&
+            (typeof json.expires_in !== "number" ||
+              !Number.isFinite(json.expires_in) ||
+              json.expires_in <= 0))
+        )
+          throw new Error("Invalid DPoP token");
+      }
+      const headers = new Headers(response.headers);
+      headers.delete("content-length");
+      return Response.json(json, { status: response.status, headers });
+    };
+    const login = (boundary: string[], signal?: AbortSignal) =>
+      forClientCredentials({
+        issuer: config.oidcIssuer,
+        clientId: config.clientId,
+        clientSecret: config.clientSecret,
+        boundary,
+        fetch: signal ? abortableFetch(guarded, signal) : guarded,
+      });
+    const auth = await login([config.podRoot, config.profileDocumentUrl]);
+    return async (input, init) => {
+      const snapshot = snapshotFetchInput(input, init);
+      const request =
+        typeof snapshot.input === "string"
+          ? new Request(snapshot.input, snapshot.init)
+          : snapshot.input;
+      request.signal.throwIfAborted();
+      const url = request.url;
+      assertDestination(url);
+      const profileRead = url === config.profileDocumentUrl && request.method === "GET";
+      if (profileRead) {
+        selectedIndex = undefined;
+        indexAuth = undefined;
+        ++profileEpoch;
+      }
+      const epoch = profileEpoch;
+      // pod-auth's static boundary is immutable. Grant only the validated document in a
+      // separate memory-only agent, never the other storage's root or issuer origin.
+      let selected = auth;
+      if (url === selectedIndex && !isWithinPodScope(config.podRoot, url)) {
+        indexAuth ??= login([url], request.signal);
+        selected = await indexAuth;
+      }
+      request.signal.throwIfAborted();
+      assertDestination(url);
+      const headers = new Headers(request.headers);
+      headers.delete("authorization");
+      headers.delete("dpop");
+      // Immutable binary bodies replay without pod-auth buffering them again.
+      const suppliedBody = snapshot.init?.body;
+      const response = await selected.fetch(request, {
+        headers,
+        ...(suppliedBody instanceof Blob ? { body: suppliedBody } : {}),
       });
       if (profileRead && response.ok) {
-        // Parse the authenticated response without another network request. Share the
-        // writer's selection and storage validation, granting only this one document.
         const { dataset } = await freshRdf(url, async () => response.clone());
-        // Node configuration requires HTTPS, including for cross-storage exceptions.
-        selectedIndex = httpsUrl(
+        request.signal.throwIfAborted();
+        const index = httpsUrl(
           validatedTypeIndexTarget(config.webId, dataset, config.podRoot).indexUrl,
         );
+        if (epoch === profileEpoch) selectedIndex = index;
       }
       return response;
     };
