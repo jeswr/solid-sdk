@@ -1,6 +1,8 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+import { randomUUID } from "node:crypto";
 import AxeBuilder from "@axe-core/playwright";
+import { forClientCredentials } from "@jeswr/pod-auth/node";
 import {
   type APIRequestContext,
   test as base,
@@ -191,4 +193,46 @@ export async function warmLiveRoutes(request: APIRequestContext) {
   ]) {
     expect((await request.get(path)).status()).toBe(200);
   }
+}
+
+/** Arrange through CSS's account API; browser tests still use interactive OIDC. */
+export async function accountAuth(name: AccountName) {
+  const account = cssAccount(name);
+  let cookie = "";
+  const json = async (path: string, body?: unknown) => {
+    const url = new URL(path, account.issuer);
+    expect(url.origin).toBe(new URL(account.issuer).origin);
+    const response = await fetch(url, {
+      method: body === undefined ? "GET" : "POST",
+      redirect: "error",
+      headers: {
+        Accept: "application/json",
+        Cookie: cookie,
+        ...(body === undefined ? {} : { "Content-Type": "application/json" }),
+      },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    });
+    cookie = response.headers.get("set-cookie")?.split(";")[0] ?? cookie;
+    // Account responses contain credentials: assert only status, never response bodies.
+    expect(response.ok).toBe(true);
+    return response.json();
+  };
+  const before = await json(".account/");
+  await json(before.controls.password.login, {
+    email: account.email,
+    password: account.password,
+  });
+  const after = await json(".account/");
+  const credentials = await json(after.controls.account.clientCredentials, {
+    name: `shell-e2e-${randomUUID()}`,
+    webId: account.webId,
+  });
+  return forClientCredentials({
+    issuer: account.issuer,
+    clientId: credentials.id,
+    clientSecret: credentials.secret,
+    // Both fixture users explicitly receive this known root for arrangement only.
+    boundary: [new URL("alice/", account.issuer).href],
+    allowInsecureLoopback: true,
+  });
 }
