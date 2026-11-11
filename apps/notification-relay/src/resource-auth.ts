@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 import { createHash } from "node:crypto";
 import { fetchRdf } from "@jeswr/fetch-rdf";
 import {
@@ -66,7 +67,10 @@ export function createResourceTokenVerifier(options: {
     throw new Error("Relay URL must be an origin");
   const now = options.now ?? Date.now;
   const metadata = createDiscoveryCache<string>(now);
-  const jwks = createDiscoveryCache<ReturnType<typeof createLocalJWKSet>>(now);
+  const jwks = createDiscoveryCache<{
+    keys: ReturnType<typeof createLocalJWKSet>;
+    fetchedAt: number;
+  }>(now);
   const profiles = createDiscoveryCache<string[]>(now);
   // Never forward inbound headers or credentials, including when fetchRdf calls this seam.
   const anonymousFetch: typeof fetch = (input, init) =>
@@ -95,14 +99,33 @@ export function createResourceTokenVerifier(options: {
       if (uri.hash) throw new Error("Invalid JWKS URL");
       return uri.href;
     });
-    const keys = await jwks(uri, async () => createLocalJWKSet((await json(uri)) as JSONWebKeySet));
-    const { payload } = await jwtVerify(token, keys, {
-      algorithms,
-      issuer: iss,
-      audience: "solid",
-      requiredClaims: ["iss", "aud", "exp", "webid", "cnf"],
-      currentDate: new Date(now()),
+    const loadKeys = async () => ({
+      keys: createLocalJWKSet((await json(uri)) as JSONWebKeySet),
+      fetchedAt: now(),
     });
+    let cached = await jwks(uri, loadKeys);
+    const verifyAccessToken = async () =>
+      jwtVerify(token, cached.keys, {
+        algorithms,
+        issuer: iss,
+        audience: "solid",
+        requiredClaims: ["iss", "aud", "exp", "webid", "cnf"],
+        currentDate: new Date(now()),
+      });
+    let verified: Awaited<ReturnType<typeof verifyAccessToken>>;
+    try {
+      verified = await verifyAccessToken();
+    } catch (error) {
+      // A rotated issuer key: refetch the JWKS at most once a minute per JWKS URL, then retry.
+      if (
+        (error as { code?: unknown }).code !== "ERR_JWKS_NO_MATCHING_KEY" ||
+        now() - cached.fetchedAt < 60_000
+      )
+        throw error;
+      cached = await jwks(uri, loadKeys, true);
+      verified = await verifyAccessToken();
+    }
+    const { payload } = verified;
     const webidUrl = safeUrl(payload.webid, options.allowLoopbackForTests);
     const webid = payload.webid as string;
     const header = decodeProtectedHeader(proof);
