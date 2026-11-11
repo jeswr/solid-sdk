@@ -312,6 +312,10 @@ Restore adopts the currently remembered scope. Durable sessions are checked befo
 leave the core; a missing pointer or credential emits expiry, with checks fenced against newer lifecycle
 operations. Disposal also closes pending and retiring cores and cancels revocation deadlines; it keeps
 remembered sessions available for restoration.
+Expiry advances the scope's session generation and refuses fetch/restore until explicit login succeeds.
+Failed or cancelled login leaves that expired state in place. All cores using the same scope share its
+generation; use the manager's separate scopes for independent accounts. `restore({ signal })` supports
+cancelling an OIDC restore, and manager disposal aborts its restores before any further core creation.
 
 For React, use `AccountsProvider` and `useAccounts` from `@jeswr/suite-sdk`; existing `usePodAuth`
 consumers follow the active core. A single account is a manager with one account, so a separate

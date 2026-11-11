@@ -154,8 +154,8 @@ const revocationTimeoutMs = 5_000;
  *   consumed at most once across requests, tabs and workers sharing the storage partition.
  * - With a session store, the durable record is the only refresh token ever used; memory copies only
  *   serve unexpired access tokens.
- * - Records are removed before their refresh token is consumed and replacements are written durable-first,
- *   so a crash or failed write costs a new authorization instead of leaving a spent or unpersisted token.
+ * - Replacements are written durable-first. Preservation mode replaces a rotated record in one write;
+ *   a failed replacement removes the consumed credential rather than leaving a spent refresh token.
  * - Every entry is stamped with the fence generation; entries from before a logout are never used.
  */
 export class OidcSession {
@@ -454,12 +454,18 @@ export class OidcSession {
         async () => {
           signal.throwIfAborted();
           this.#keys.add(key);
-          await store.removeItem(key);
-          await store.setItem(key, {
-            ...record,
-            created: Date.now(),
-            refreshToken: processed.refresh_token ?? record.refreshToken,
-          });
+          try {
+            // Replace in one write: readers must not mistake rotation for a missing session.
+            await store.setItem(key, {
+              ...record,
+              created: Date.now(),
+              refreshToken: processed.refresh_token ?? record.refreshToken,
+            });
+          } catch (error) {
+            // A failed replacement cannot retain the already-consumed refresh token.
+            await store.removeItem(key);
+            throw error;
+          }
         },
         signal,
       );

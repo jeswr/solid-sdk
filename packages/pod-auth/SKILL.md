@@ -171,6 +171,9 @@ presence before cached credentials leave the core; missing pointers count as exp
 durable sessions. Fence asynchronous expiry checks against current identity and lifecycle generations.
 Track every owned core through pending add, retirement and restore. Disposal closes their listeners
 and cancels revocation deadlines immediately, preserving remembered credentials.
+Expiry supersedes the scope's generation and stays latched until explicit login establishes a session;
+fetch and restore cannot revive cached authority. Check manager lifetime after remembered-list reads
+and before constructing cores, and forward its signal into OIDC `restore({ signal })`.
 
 Use suite-sdk's `AccountsProvider` / `useAccounts` for React consumers to follow the active core
 through the existing PodAuthProvider. One account is simply a manager with one account; no

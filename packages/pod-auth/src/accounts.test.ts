@@ -1117,7 +1117,347 @@ test("durable checks validate this identity when another core changed the shared
   alice.on("expired", expired);
   await expect(alice.fetch(f.alice.root + "private")).rejects.toThrow("Session expired");
   expect(expired).toHaveBeenCalledOnce();
+  // Unscoped single-session cores share a fence. Independent manager accounts have separate scopes.
+  expect(await bob.identity()).toBeNull();
+  expect((await bob.fetch(f.bobRoot + "private")).status).toBe(401);
+  await bob.login({ webId: f.bob.webId });
   expect((await bob.fetch(f.bobRoot + "private")).status).toBe(200);
   alice.dispose?.();
   bob.dispose?.();
+});
+
+test("parallel fetch during refresh rotation sees a durable record and keeps the account", async () => {
+  const f = fixture();
+  const manager = f.load();
+  await manager.add({ webId: f.alice.webId });
+  await manager.add({ webId: f.bob.webId });
+  const [key, previous] = f
+    .records()
+    .find(([, record]) => record.identity?.webId === f.alice.webId)!;
+  const ready = Promise.withResolvers<void>(),
+    release = Promise.withResolvers<void>();
+  const write = f.storage.sessions.setItem.getMockImplementation()!;
+  let paused = false;
+  f.storage.sessions.setItem.mockImplementation(async (slot, value) => {
+    if (
+      !paused &&
+      slot === key &&
+      "refreshToken" in value &&
+      value.refreshToken !== previous.refreshToken
+    ) {
+      paused = true;
+      ready.resolve();
+      await release.promise;
+    }
+    await write(slot, value);
+  });
+  const expired = vi.fn();
+  manager.on("expired", expired);
+  const now = Date.now();
+  vi.spyOn(Date, "now").mockReturnValue(now + 301_000);
+  const first = manager.fetchFor(f.alice.webId!)(f.alice.root + "rotation-first");
+  const observedFirst = Promise.allSettled([first]);
+  let second: Promise<Response> | undefined;
+  try {
+    await ready.promise;
+    expect(f.values.get(key)).toEqual(previous);
+    const get = f.storage.sessions.getItem.getMockImplementation()!;
+    const reached = Promise.withResolvers<{} | null>();
+    f.storage.sessions.getItem.mockImplementation(async (slot) => {
+      const value = await get(slot);
+      if (slot === key) reached.resolve(value);
+      return value;
+    });
+    second = manager.fetchFor(f.alice.webId!)(f.alice.root + "rotation-second");
+    expect(await reached.promise).toEqual(previous);
+    expect(expired).not.toHaveBeenCalled();
+    expect(manager.accounts()).toHaveLength(2);
+    release.resolve();
+    expect((await first).status).toBe(200);
+    expect((await second).status).toBe(200);
+    expect(f.alice.stats.refreshes).toBe(1);
+    expect(f.alice.stats.reuse).toBe(0);
+    expect(f.records()).toHaveLength(2);
+    expect(expired).not.toHaveBeenCalled();
+    expect((await manager.fetchFor(f.bob.webId!)(f.bobRoot + "private")).status).toBe(200);
+  } finally {
+    release.resolve();
+    await observedFirst;
+    if (second) await Promise.allSettled([second]);
+  }
+});
+
+test("expiry invalidates cached credentials and stays latched through restore and failed login", async () => {
+  const f = fixture();
+  const auth = createPodAuth({
+    ...f.options,
+    boundary: { roots: [f.alice.root], automatic: false },
+  });
+  try {
+    await auth.login();
+    expect((await auth.fetch(f.alice.root + "before")).status).toBe(200);
+    const originalToken = f.alice.requests
+      .findLast((request) => request.headers.has("authorization"))!
+      .headers.get("authorization");
+    const stored = structuredClone([...f.values]);
+    loseSession(f, f.alice.webId!);
+    const expired = vi.fn();
+    auth.on("expired", expired);
+    await expect(auth.fetch(f.alice.root + "lost")).rejects.toThrow("Session expired");
+    const generation = [...f.values].find(([key]) => JSON.parse(key)[1] === "generation")!;
+    expect(generation[1]).toBeGreaterThan(0);
+    // Even resurrecting the old public pointer and credential must not revive cached authority.
+    for (const [key, value] of stored)
+      if (JSON.parse(key)[1] !== "generation") f.values.set(key, value);
+    const requests = f.alice.requests.length;
+    await expect(auth.fetch(f.alice.root + "again")).rejects.toThrow("Session expired");
+    expect(await auth.restore()).toBeNull();
+    expect(f.alice.requests.length).toBe(requests);
+    const getCode = f.options.ui.getCode;
+    f.options.ui.getCode = async () => {
+      throw Error("login cancelled");
+    };
+    await expect(auth.login()).rejects.toThrow("login cancelled");
+    await expect(auth.fetch(f.alice.root + "still-expired")).rejects.toThrow("Session expired");
+    expect(await auth.identity()).toBeNull();
+    f.options.ui.getCode = getCode;
+    const cancel = new AbortController();
+    const stop = auth.on("login", () => cancel.abort(Error("cancelled after grant")));
+    await expect(auth.login(undefined, { signal: cancel.signal })).rejects.toThrow(
+      "cancelled after grant",
+    );
+    stop();
+    await expect(auth.fetch(f.alice.root + "cancelled-grant")).rejects.toThrow("Session expired");
+    let fromLogin: Promise<Response> | undefined;
+    auth.on("login", () => {
+      fromLogin = auth.fetch(f.alice.root + "login-observer");
+    });
+    await auth.login();
+    expect((await fromLogin)?.status).toBe(200);
+    expect((await auth.fetch(f.alice.root + "after")).status).toBe(200);
+    expect(
+      f.alice.requests
+        .findLast((request) => request.headers.has("authorization"))!
+        .headers.get("authorization"),
+    ).not.toBe(originalToken);
+    expect(expired).toHaveBeenCalledOnce();
+  } finally {
+    auth.dispose?.();
+  }
+});
+
+test("login from the expiry observer waits for session generation invalidation", async () => {
+  const f = fixture();
+  const auth = createPodAuth(f.options);
+  const ready = Promise.withResolvers<void>(),
+    release = Promise.withResolvers<void>();
+  let relogin: Promise<unknown> | undefined;
+  try {
+    await auth.login();
+    loseSession(f, f.alice.webId!);
+    const write = f.storage.sessions.setItem.getMockImplementation()!;
+    let paused = false;
+    f.storage.sessions.setItem.mockImplementation(async (key, value) => {
+      if (!paused && JSON.parse(key)[1] === "generation") {
+        paused = true;
+        ready.resolve();
+        await release.promise;
+      }
+      await write(key, value);
+    });
+    auth.on("expired", () => {
+      relogin = auth.login();
+    });
+    const rejected = expect(auth.fetch(f.alice.root + "expired")).rejects.toThrow(
+      "Session expired",
+    );
+    await ready.promise;
+    expect(f.alice.stats.authorizations).toBe(1);
+    release.resolve();
+    await rejected;
+    await relogin;
+    expect(f.alice.stats.authorizations).toBe(2);
+    expect((await auth.fetch(f.alice.root + "fresh")).status).toBe(200);
+  } finally {
+    release.resolve();
+    await relogin;
+    auth.dispose?.();
+  }
+});
+
+test("dispose during remembered-list loading creates no cores and starts no refresh", async () => {
+  const f = fixture();
+  const first = f.load();
+  await first.add();
+  first.dispose();
+  const fresh = f.load();
+  const ready = Promise.withResolvers<void>(),
+    release = Promise.withResolvers<void>();
+  const get = f.storage.sessions.getItem.getMockImplementation()!;
+  f.storage.sessions.getItem.mockImplementation(async (key) => {
+    const value = await get(key);
+    if (JSON.parse(key)[1] === "remembered") {
+      ready.resolve();
+      await release.promise;
+    }
+    return value;
+  });
+  const uuid = vi.spyOn(crypto, "randomUUID");
+  const channels: { close: ReturnType<typeof vi.fn> }[] = [];
+  class Channel {
+    close = vi.fn();
+    constructor() {
+      channels.push(this);
+    }
+  }
+  vi.stubGlobal("BroadcastChannel", Channel);
+  const reads = f.storage.sessions.getItem.mock.calls.length;
+  const restoring = fresh.restoreAll();
+  const rejected = expect(restoring).rejects.toThrow("disposed");
+  await ready.promise;
+  fresh.dispose();
+  release.resolve();
+  await rejected;
+  expect(channels).toEqual([]);
+  expect(uuid).not.toHaveBeenCalled();
+  expect(f.alice.stats.refreshes).toBe(0);
+  expect(f.storage.sessions.getItem.mock.calls.length - reads).toBe(1);
+  expect(fresh.accounts()).toEqual([]);
+});
+
+test("restore propagates caller cancellation into an in-flight refresh", async () => {
+  const f = fixture();
+  const ready = Promise.withResolvers<void>();
+  const transport = globalThis.fetch;
+  let pause = false;
+  let requestSignal: AbortSignal | undefined;
+  vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+    const request = new Request(input, init);
+    if (pause && request.url === f.alice.issuer + "token") {
+      requestSignal = request.signal;
+      ready.resolve();
+      return new Promise<Response>((_resolve, reject) =>
+        request.signal.addEventListener("abort", () => reject(request.signal.reason), {
+          once: true,
+        }),
+      );
+    }
+    return transport(request);
+  });
+  const original = createPodAuth(f.options),
+    restored = createPodAuth(f.options);
+  try {
+    await original.login();
+    const controller = new AbortController();
+    pause = true;
+    const rejected = expect(restored.restore({ signal: controller.signal })).rejects.toThrow(
+      "restore cancelled",
+    );
+    await ready.promise;
+    controller.abort(Error("restore cancelled"));
+    await rejected;
+    expect(requestSignal?.aborted).toBe(true);
+    expect(await restored.identity()).toBeNull();
+    await expect(restored.restore({ signal: controller.signal })).rejects.toThrow(
+      "restore cancelled",
+    );
+    pause = false;
+    expect((await restored.restore())?.webId).toBe(f.alice.webId);
+    expect(f.alice.stats.refreshes).toBe(1);
+  } finally {
+    original.dispose?.();
+    restored.dispose?.();
+  }
+});
+
+test("logout during restore's first generation read prevents any refresh", async () => {
+  const f = fixture();
+  const auth = createPodAuth(f.options);
+  await auth.login();
+  const get = f.storage.sessions.getItem.getMockImplementation()!;
+  const ready = Promise.withResolvers<void>(),
+    release = Promise.withResolvers<void>();
+  let paused = false;
+  f.storage.sessions.getItem.mockImplementation(async (key) => {
+    const value = await get(key);
+    if (!paused && JSON.parse(key)[1] === "generation") {
+      paused = true;
+      ready.resolve();
+      await release.promise;
+    }
+    return value;
+  });
+  const restoring = auth.restore();
+  try {
+    await ready.promise;
+    await auth.logout();
+    release.resolve();
+    expect(await restoring).toBeNull();
+    expect(f.alice.stats.refreshes).toBe(0);
+  } finally {
+    release.resolve();
+    await restoring;
+    auth.dispose?.();
+  }
+});
+
+test("an expired restore cannot emit expiry after logout supersedes pointer cleanup", async () => {
+  const f = fixture();
+  const original = createPodAuth(f.options),
+    restored = createPodAuth(f.options);
+  await original.login();
+  f.alice.failRefresh("invalid_grant");
+  const remove = f.storage.sessions.removeItem.getMockImplementation()!;
+  const ready = Promise.withResolvers<void>(),
+    release = Promise.withResolvers<void>();
+  let paused = false;
+  f.storage.sessions.removeItem.mockImplementation(async (key) => {
+    if (!paused && JSON.parse(key)[1] === "active") {
+      paused = true;
+      ready.resolve();
+      await release.promise;
+    }
+    await remove(key);
+  });
+  const expired = vi.fn();
+  restored.on("expired", expired);
+  const restoring = restored.restore();
+  try {
+    await ready.promise;
+    await restored.logout();
+    release.resolve();
+    expect(await restoring).toBeNull();
+    expect(expired).not.toHaveBeenCalled();
+  } finally {
+    release.resolve();
+    await restoring;
+    original.dispose?.();
+    restored.dispose?.();
+  }
+});
+
+test("failed expiry fencing cannot fall back to a cached token during re-login", async () => {
+  const f = fixture();
+  const auth = createPodAuth({
+    ...f.options,
+    boundary: { roots: [f.alice.root], automatic: false },
+  });
+  try {
+    await auth.login();
+    loseSession(f, f.alice.webId!);
+    const write = f.storage.sessions.setItem.getMockImplementation()!;
+    f.storage.sessions.setItem.mockImplementation(async (key, value) => {
+      if (JSON.parse(key)[1] === "generation") throw Error("fence write denied");
+      await write(key, value);
+    });
+    const before = f.alice.requests.length;
+    await expect(auth.fetch(f.alice.root + "expired")).rejects.toThrow("Session storage failed");
+    f.storage.sessions.setItem.mockImplementation(write);
+    await expect(auth.login()).rejects.toThrow("Session storage failed");
+    await expect(auth.fetch(f.alice.root + "cached")).rejects.toThrow("Session expired");
+    expect(f.alice.requests.length).toBe(before);
+    expect(await auth.identity()).toBeNull();
+  } finally {
+    auth.dispose?.();
+  }
 });

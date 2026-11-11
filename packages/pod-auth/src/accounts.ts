@@ -271,8 +271,10 @@ export function createAccountManager(options: PodAuthOptions): AccountManager {
     restoreAll: () =>
       enqueue(async () => {
         const remembered = await read();
+        assertOpen();
         const restored = await Promise.all(
           remembered.entries.map(async (pointer) => {
+            assertOpen();
             const candidate = entries.get(pointer.webId);
             const existing = candidate?.scope === pointer.scope ? candidate : undefined;
             const auth = existing?.auth ?? create(pointer.scope);
@@ -282,7 +284,7 @@ export function createAccountManager(options: PodAuthOptions): AccountManager {
               if (existing === undefined) emit("expired", pointer.webId);
             });
             try {
-              const identity = await auth.restore();
+              const identity = await auth.restore({ signal: lifetime.signal });
               assertOpen();
               if (identity === null || identity.webId !== pointer.webId) return null;
               accepted = true;

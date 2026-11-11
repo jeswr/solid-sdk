@@ -18,6 +18,9 @@ The public entry points remain `.`, `./elements`, `./registerElements`, and `./s
 - Revalidate the captured fence generation after credential-store reads. `OidcSession.identity()` reports
   `undefined` when logout supersedes a pending read, while unrelated store errors still propagate.
 - Preserve non-extractable DPoP keys, refresh rotation, session fences and cross-tab locking.
+- Preservation-mode refresh rotation replaces the durable record in one write inside its fence commit.
+  Never remove it before replacement: unlocked presence readers would observe a false expiry. On a
+  failed replacement, remove the consumed credential and propagate the failure.
 - `OidcSessionOptions.revocationSignal` cancels pending revocations and deadlines on owner disposal.
   Remove its listeners on settlement; cancellation alone never purges retained session stores.
 - RFC 9728 LWS discovery is supported; legacy `as_uri`/`realm` challenges are behind

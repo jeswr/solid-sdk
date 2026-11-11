@@ -36,6 +36,8 @@ export function createPodAuth(options: PodAuthOptions): PodAuth {
   const lifetime = new AbortController();
   let current: Identity | null = null;
   let durableSession = false;
+  let expired = false;
+  let expiring: Promise<void> | undefined;
   let restoring: Promise<Identity | null> | undefined;
   let loggingOut: Promise<void> | undefined;
   let epoch = 0;
@@ -112,6 +114,7 @@ export function createPodAuth(options: PodAuthOptions): PodAuth {
       protocol,
       storages: providers.boundary.storages(),
     };
+    expired = false;
     if (first) emit(mode);
   };
   const providers = createProviders(
@@ -141,7 +144,22 @@ export function createPodAuth(options: PodAuthOptions): PodAuth {
     }
     return started === epoch ? snapshot() : null;
   };
+  const expire = async () => {
+    expired = true;
+    ++epoch;
+    current = null;
+    durableSession = false;
+    providers.boundary.clear();
+    // Cancel cached upgrades now; explicit login waits for this generation change to finish.
+    const invalidation = providers.fence.supersede().then(() => {
+      expiring = undefined;
+    });
+    expiring = invalidation;
+    emit("expired");
+    await invalidation;
+  };
   const checkExpiry = async (started: number) => {
+    if (expired && !pending) return true;
     const identity = current;
     const unchanged = () =>
       started === epoch && current === identity && !pending && !restoring && !loggingOut;
@@ -156,10 +174,7 @@ export function createPodAuth(options: PodAuthOptions): PodAuth {
       }));
     if (!unchanged()) return false;
     if (!present) {
-      current = null;
-      durableSession = false;
-      providers.boundary.clear();
-      emit("expired");
+      await expire();
       return true;
     }
     return false;
@@ -167,6 +182,7 @@ export function createPodAuth(options: PodAuthOptions): PodAuth {
   const api: PodAuth = {
     fetch: async (input, init) => {
       lifetime.signal.throwIfAborted();
+      if (expired) throw new Error("Session expired");
       const started = epoch;
       if (await checkExpiry(started)) throw new Error("Session expired");
       if (started !== epoch) throw new Error("Session changed during authentication");
@@ -188,24 +204,31 @@ export function createPodAuth(options: PodAuthOptions): PodAuth {
       const account = await providers.persistence.active();
       return account === null ? [] : [{ webId: account.webId, issuer: account.issuer }];
     },
-    restore: () => {
+    restore: (restoreOptions) => {
       if (lifetime.signal.aborted) return Promise.reject(lifetime.signal.reason);
+      const abort = restoreOptions?.signal;
+      if (abort?.aborted) return Promise.reject(abort.reason);
       if (loggingOut || pending) return Promise.reject(new Error("Authentication is in progress"));
       if (restoring) return restoring;
+      if (expired) return Promise.resolve(null);
       const started = ++epoch;
+      const signal = AbortSignal.any([lifetime.signal, ...(abort === undefined ? [] : [abort])]);
       let failure: unknown;
       const promise = (async () => {
         mode = "restore";
         const existing = await readIdentity();
+        if (started !== epoch) return null;
+        signal.throwIfAborted();
         if (existing !== null) return existing;
         const account = await providers.persistence.active();
         if (started !== epoch) return null;
+        signal.throwIfAborted();
         const decision = await decideSilentRestore({
           lastActiveWebId: account?.webId,
           remembered: account === null ? [] : [account],
           restoreIssuer: async () => {
             try {
-              const claims = await providers.restore(account!, lifetime.signal);
+              const claims = await providers.restore(account!, signal);
               return claims?.webId === undefined ? undefined : { webId: claims.webId };
             } catch (error) {
               // Transport/protocol failures are fail-closed; storage errors still propagate below.
@@ -215,13 +238,14 @@ export function createPodAuth(options: PodAuthOptions): PodAuth {
           },
         });
         if (started !== epoch) return null;
+        signal.throwIfAborted();
         if (decision.outcome === "restored") return snapshot();
         current = null;
         // A missing credential (invalid_grant or unusable key) drops its pointer. Transient failures keep it.
         if (account !== null) {
           if (!(await providers.persistence.present(account))) {
             await providers.persistence.forgetPointer();
-            emit("expired");
+            if (started === epoch) await expire();
           }
         }
         if (failure instanceof StorageFailure) throw failure.cause;
@@ -274,8 +298,10 @@ export function createPodAuth(options: PodAuthOptions): PodAuth {
         return pending.key === key && abort === undefined && !pending.cancellable
           ? pending.promise
           : Promise.reject(new Error("Another login is in progress"));
+      const wasExpired = expired;
       const started = ++epoch;
       const promise = (async () => {
+        if (expiring !== undefined) await expiring;
         const existing = await readIdentity();
         if (started !== epoch) throw new Error("Session changed during authentication");
         if (existing !== null) {
@@ -308,6 +334,7 @@ export function createPodAuth(options: PodAuthOptions): PodAuth {
         }
         return snapshot()!;
       })().finally(() => {
+        if (wasExpired && current === null) expired = true;
         pending = undefined;
       });
       pending = { key, promise, cancellable: abort !== undefined };

@@ -102,8 +102,8 @@ export interface PodAuth {
    * Agents ignore the signal once started.
    */
   login(hint?: LoginHint, options?: LoginOptions): Promise<Identity>;
-  /** Restore the remembered account; never requests interactive authorization. */
-  restore(): Promise<Identity | null>;
+  /** Restore the remembered account; never requests interactive authorization. Signal cancels OIDC restore. */
+  restore(options?: { signal?: AbortSignal }): Promise<Identity | null>;
   /**
    * Revoke when advertised, purge local credentials, and emit logout even if revocation fails.
    * `scope: "session"` requires an explicit sessionScope and purges only that scope's sessions/keys.
