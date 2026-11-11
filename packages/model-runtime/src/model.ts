@@ -640,6 +640,7 @@ function orderedItemIri(doc: TermWrapper, term: Term): boolean {
     isSafeAbsoluteIri(term.value) &&
     /^https?:\/\//i.test(term.value) &&
     term.value.split("#", 1)[0] === doc.value.split("#", 1)[0] &&
+    term.value !== doc.value.split("#", 1)[0] &&
     term.value !== doc.value
   );
 }
@@ -739,11 +740,19 @@ function writeOrdered(
   const focus = new TermWrapper(doc as unknown as Term, output, doc.factory);
   const links = SetFrom.subjectPredicate(focus, field.predicate, TermAs.term, TermFrom.itself);
   const owned = new Set<string>();
+  const documentIri = doc.value.split("#", 1)[0] as string;
+  const itemPrefix = `${documentIri}#${field.name}-`;
   let oldItems = 0;
   for (const term of links) {
     if (++oldItems > MAX_ORDERED_ITEMS)
       throw new TypeError(`field ${field.name} exceeds the ${MAX_ORDERED_ITEMS}-item cap`);
-    if (!orderedItemIri(doc, term)) continue;
+    if (
+      !orderedItemIri(doc, term) ||
+      !term.value.startsWith(itemPrefix) ||
+      !/^[1-9][0-9]*$/.test(term.value.slice(itemPrefix.length)) ||
+      !output.countQuads(term.value, RDF_TYPE, ordered.itemClass, null)
+    )
+      continue;
     // A shared item is never ours to delete, even when another owner uses the same field.
     const exclusive = output
       .getQuads(null, null, term.value, null)
@@ -765,19 +774,26 @@ function writeOrdered(
   links.clear();
   const valuePlan = orderedValuePlan(plan);
   let index = 0;
+  let suffix = 0;
   for (const member of members) {
-    const iri = subjectIri(doc.value.split("#", 1)[0] as string, `${field.name}-${index + 1}`);
-    const term = doc.factory.namedNode(iri);
-    if (!orderedItemIri(doc, term))
-      throw new TypeError("ordered item requires a same-document http(s) subject");
-    if (
-      !owned.has(iri) &&
-      (output.countQuads(iri, null, null, null) || output.countQuads(null, null, iri, null))
-    )
-      throw new TypeError(`ordered item subject collision for field ${field.name}`);
+    let term: Term;
+    do {
+      const iri = subjectIri(documentIri, `${field.name}-${++suffix}`);
+      term = doc.factory.namedNode(iri);
+      if (!/^https?:\/\//i.test(iri))
+        throw new TypeError("ordered item requires a same-document http(s) subject");
+    } while (
+      term.value === doc.value ||
+      (!owned.has(term.value) &&
+        (output.countQuads(term.value, null, null, null) ||
+          output.countQuads(null, null, term.value, null)))
+    );
     const item = new TermWrapper(term, output, doc.factory);
     writeSingle(item, valuePlan, member);
-    if (readSingle(item, valuePlan) === undefined) continue;
+    if (readSingle(item, valuePlan) === undefined) {
+      suffix--;
+      continue;
+    }
     index++;
     SetFrom.subjectPredicate(item, RDF_TYPE, NamedNodeAs.string, safeNamedNodeFrom).add(
       ordered.itemClass,
@@ -794,6 +810,10 @@ function writeOrdered(
     );
     links.add(term);
   }
+  if (index < Math.max(field.minCount ?? 0, field.guards?.requiredFailClosed ? 1 : 0))
+    throw new TypeError(`field ${field.name} violates sh:minCount`);
+  if (field.maxCount !== undefined && index > field.maxCount)
+    throw new TypeError(`field ${field.name} violates sh:maxCount`);
   // Capture the explicit delta before migration, preserving its unrelated canonicalisation.
   const removed = [...doc.dataset.match()].filter((q) => !output.has(q));
   const added = [...output].filter((q) => !doc.dataset.has(q));

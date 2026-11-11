@@ -523,6 +523,20 @@ function compileCompositeEntity(
     };
   });
 
+  for (const node of nodes) {
+    for (const field of nodes.flatMap((owner) => owner.fields)) {
+      const prefix = `${field.name}-`;
+      if (
+        field.collection === "ordered" &&
+        node.fragment.startsWith(prefix) &&
+        /^[1-9][0-9]*$/.test(node.fragment.slice(prefix.length))
+      )
+        throw new Error(
+          `composite ${compConfig.name} node "${node.name}" fragment "${node.fragment}" collides with ordered field "${field.name}" item fragments`,
+        );
+    }
+  }
+
   return { name: compConfig.name, kind: "composite", root: compConfig.root, nodes };
 }
 

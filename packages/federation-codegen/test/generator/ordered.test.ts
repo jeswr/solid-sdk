@@ -372,9 +372,7 @@ shapes:9a251c98b7418c80a1e73c5b513ea327dd57babbd25d229ffae73677acbf24f6-HowToSte
     expect(entity.parse("https://pod.test/recipe", store)).toEqual(
       severity === "Violation" ? undefined : {},
     );
-    expect(
-      entity.parse("https://pod.test/recipe", entity.build("https://pod.test/recipe", {})),
-    ).toEqual(severity === "Violation" ? undefined : {});
+    expect(() => entity.build("https://pod.test/recipe", {})).toThrow(/minCount/);
   });
   it("enforces even an optional Violation field's present item constraints", () => {
     const result = generate(
@@ -499,6 +497,99 @@ shapes:9a251c98b7418c80a1e73c5b513ea327dd57babbd25d229ffae73677acbf24f6-HowToSte
     expect(wrapper.steps).toEqual(values.steps);
     wrapper.steps = ["new", "new"];
     expect(entity.parse("https://pod.test/recipe", store)).toEqual({ steps: ["new", "new"] });
+  });
+  it.each([
+    "steps-1",
+    "steps-12",
+    "steps-256",
+  ])("rejects composite fragment %s reserved by a renamed ordered field", (fragment) => {
+    const cfg: CodegenConfig = {
+      ...config,
+      entities: [
+        {
+          kind: "composite",
+          name: "Recipe",
+          root: "recipe",
+          nodes: {
+            recipe: {
+              targetClass: `${S}Recipe`,
+              fragment,
+              fields: {
+                instructions: {
+                  ...present(entityConfigFor(config, `${S}Recipe`)?.fields?.instructions),
+                  rename: "steps",
+                },
+              },
+            },
+          },
+        },
+      ],
+    };
+    expect(() => generate(profile, cfg)).toThrow(/fragment.*ordered.*steps/);
+  });
+  it.each([
+    "instructions-1",
+    "steps-0",
+    "steps-01",
+    "steps-1-extra",
+    "steps--1",
+  ])("allows composite fragment %s outside the resolved ordered-item pattern", (fragment) => {
+    const cfg: CodegenConfig = {
+      ...config,
+      entities: [
+        {
+          kind: "composite",
+          name: "Recipe",
+          root: "recipe",
+          nodes: {
+            recipe: {
+              targetClass: `${S}Recipe`,
+              fragment,
+              fields: {
+                instructions: {
+                  ...present(entityConfigFor(config, `${S}Recipe`)?.fields?.instructions),
+                  rename: "steps",
+                },
+              },
+            },
+          },
+        },
+      ],
+    };
+    expect(generate(profile, cfg).admission.ok).toBe(true);
+  });
+  it("checks every composite node fragment against ordered fields on other nodes", () => {
+    const source = `${profile}
+      ex:HolderShape a sh:NodeShape; sh:targetClass ex:Holder;
+        sh:property [ sh:name "recipe"; sh:path ex:recipe; sh:node ex:RecipeShape; sh:minCount 1; sh:maxCount 1 ] .`;
+    const cfg: CodegenConfig = {
+      ...config,
+      entities: [
+        {
+          kind: "composite",
+          name: "Holder",
+          root: "holder",
+          nodes: {
+            holder: {
+              targetClass: "https://recipe.test/Holder",
+              fragment: "steps-2",
+              links: { recipe: "recipe" },
+            },
+            recipe: {
+              targetClass: `${S}Recipe`,
+              fragment: "recipe",
+              fields: {
+                instructions: {
+                  ...present(entityConfigFor(config, `${S}Recipe`)?.fields?.instructions),
+                  rename: "steps",
+                },
+              },
+            },
+          },
+        },
+      ],
+    };
+    expect(() => compileManifest(normalize(source, cfg), cfg)).toThrow(/fragment.*ordered.*steps/);
   });
   it("returns ordered diagnostics through the admission-report API", () => {
     const shapes = normalize(profile.replace("sh:datatype xsd:integer", "sh:datatype xsd:decimal"));

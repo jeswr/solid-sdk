@@ -138,6 +138,75 @@ describe("ordered item nodes", () => {
   });
 
   it.each([
+    ["#review", "Review"],
+    ["", "Review"],
+    ["", "HowToStep"],
+    ["#it", "HowToStep"],
+    ["#instructions-1", "Review"],
+    ["#instructions-0", "HowToStep"],
+    ["#instructions-01", "HowToStep"],
+    ["#instructions-1-extra", "HowToStep"],
+    ["#other-1", "HowToStep"],
+  ])("preserves appended links to non-owned <%s> items of class %s", (fragment, type) => {
+    const entity = model();
+    const store = data(
+      `<${fragment}> . <${fragment}> a schema:${type}; schema:position 7; schema:text "Great"`,
+    );
+    const target = URL + fragment;
+    const original = store.getQuads(target, null, null, null);
+    const wrapper = new entity.Wrapper(entity.subject(URL), store, DataFactory) as unknown as {
+      instructions: string[];
+    };
+    wrapper.instructions = ["a"];
+    expect(wrapper.instructions).toEqual(["a"]);
+    for (const quad of original) {
+      if (quad.predicate.value !== `${S}recipeInstructions`) expect(store.has(quad)).toBe(true);
+    }
+    expect(store.countQuads(entity.subject(URL), `${S}recipeInstructions`, target, null)).toBe(0);
+  });
+
+  it("cleans up genuine minted items on replacement", () => {
+    const entity = model();
+    const store = entity.build(URL, { instructions: ["old", "discard"] });
+    const wrapper = new entity.Wrapper(entity.subject(URL), store, DataFactory) as unknown as {
+      instructions: string[];
+    };
+    wrapper.instructions = ["a"];
+    expect(wrapper.instructions).toEqual(["a"]);
+    expect(
+      store.countQuads(`${URL}#instructions-1`, `${S}text`, DataFactory.literal("old"), null),
+    ).toBe(0);
+    expect(store.countQuads(`${URL}#instructions-2`, null, null, null)).toBe(0);
+  });
+
+  it.each([
+    false,
+    true,
+  ])("preserves a minted IRI without an explicit item type (subclass: %s)", (subclass) => {
+    const entity = model();
+    const store = data(
+      '<#instructions-1> . <#instructions-1> schema:position 7; schema:text "Great"',
+    );
+    if (subclass) {
+      store.addQuads(
+        new Parser({ baseIRI: URL }).parse(`
+        <#instructions-1> a <${S}SpecialStep> .
+        <${S}SpecialStep> <http://www.w3.org/2000/01/rdf-schema#subClassOf> <${S}HowToStep> .`),
+      );
+    }
+    const original = store.getQuads(`${URL}#instructions-1`, null, null, null);
+    const wrapper = new entity.Wrapper(entity.subject(URL), store, DataFactory) as unknown as {
+      instructions: string[];
+    };
+    wrapper.instructions = ["a"];
+    expect(wrapper.instructions).toEqual(["a"]);
+    expect(store.getQuads(`${URL}#instructions-1`, null, null, null)).toEqual(original);
+    expect(
+      store.countQuads(`${URL}#instructions-2`, `${S}text`, DataFactory.literal("a"), null),
+    ).toBe(1);
+  });
+
+  it.each([
     "Violation",
     "Warning",
     "Info",
@@ -193,6 +262,8 @@ describe("ordered item nodes", () => {
     DataFactory.namedNode("https://pod.test/recipe#bad>"),
     DataFactory.namedNode("javascript:alert(1)"),
     DataFactory.namedNode("relative"),
+    DataFactory.namedNode(URL),
+    DataFactory.namedNode(`${URL}#it`),
   ])("rejects hostile item links: %j", (term) => {
     for (const severity of ["Violation", "Warning", "Info"] as const) {
       const entity = model(severity);
@@ -282,6 +353,47 @@ describe("ordered item nodes", () => {
     expect([...store]).toEqual(oversized);
   });
 
+  it.each([
+    "Violation",
+    "Warning",
+    "Info",
+  ] as const)("enforces outer cardinality after filtering before mutation at %s severity", (severity) => {
+    const entity = model(severity, { minCount: 2, maxCount: 3 });
+    const store = entity.build(URL, { instructions: ["a", "b"] });
+    const wrapper = new entity.Wrapper(entity.subject(URL), store, DataFactory) as unknown as {
+      instructions: unknown;
+    };
+    const before = [...store];
+    for (const instructions of [undefined, [], ["a"], ["a", 42], ["a", "b", "c", "d"]]) {
+      expect(() => {
+        wrapper.instructions = instructions;
+      }).toThrow(/minCount|maxCount/);
+      expect([...store]).toEqual(before);
+      expect(() => entity.build(URL, { instructions })).toThrow(/minCount|maxCount/);
+    }
+    wrapper.instructions = ["a", "a", "b", 42];
+    expect(entity.parse(URL, store)).toEqual({ instructions: ["a", "a", "b"] });
+    expect(entity.parse(URL, entity.build(URL, { instructions: ["a", "a"] }))).toEqual({
+      instructions: ["a", "a"],
+    });
+  });
+
+  it("enforces an ordered maxCount of zero", () => {
+    const entity = model("Warning", { minCount: 0, maxCount: 0 });
+    const store = entity.build(URL, {});
+    const wrapper = new entity.Wrapper(entity.subject(URL), store, DataFactory) as unknown as {
+      instructions: unknown;
+    };
+    const before = [...store];
+    expect(() => {
+      wrapper.instructions = ["a"];
+    }).toThrow(/maxCount/);
+    expect([...store]).toEqual(before);
+    expect(() => entity.build(URL, { instructions: ["a"] })).toThrow(/maxCount/);
+    wrapper.instructions = [];
+    expect(entity.parse(URL, store)).toEqual({});
+  });
+
   it("bounds pathological raw reads and cyclic class traversal", () => {
     const entity = model();
     const store = entity.build(URL, { instructions: ["a"] });
@@ -314,7 +426,7 @@ describe("ordered item nodes", () => {
     expect(entity.parse(URL, store)).toBeUndefined();
   });
 
-  it("leaves shared and foreign nodes untouched and rejects deterministic subject collisions atomically", () => {
+  it("leaves shared and foreign nodes untouched and skips occupied item IRIs", () => {
     const entity = model();
     const store = entity.build(URL, { instructions: ["a", "b"] });
     store.addQuad(
@@ -325,11 +437,11 @@ describe("ordered item nodes", () => {
     const wrapper = new entity.Wrapper(entity.subject(URL), store, DataFactory) as unknown as {
       instructions: unknown;
     };
-    const before = [...store];
-    expect(() => {
-      wrapper.instructions = ["new", "collision"];
-    }).toThrow(/collision/);
-    expect([...store]).toEqual(before);
+    wrapper.instructions = ["new", "collision"];
+    expect(entity.parse(URL, store)).toEqual({ instructions: ["new", "collision"] });
+    expect(
+      store.countQuads(`${URL}#instructions-3`, `${S}text`, DataFactory.literal("collision"), null),
+    ).toBe(1);
     wrapper.instructions = ["new"];
     expect(
       store.countQuads(`${URL}#instructions-2`, `${S}text`, DataFactory.literal("b"), null),
@@ -345,12 +457,12 @@ describe("ordered item nodes", () => {
       DataFactory.namedNode(`${S}text`),
       DataFactory.literal("remote"),
     );
-    wrapper.instructions = undefined;
+    wrapper.instructions = ["replacement"];
     expect(store.countQuads("https://remote.test/doc#item", `${S}text`, null, null)).toBe(1);
   });
 
   it("exposes array snapshots, supports clearing, and rejects nonarrays", () => {
-    const entity = model();
+    const entity = model("Violation", { minCount: 0, guards: {} });
     const store = entity.build(URL, { instructions: ["a"] });
     const wrapper = new entity.Wrapper(entity.subject(URL), store, DataFactory) as unknown as {
       instructions: string[] | undefined;
@@ -359,9 +471,12 @@ describe("ordered item nodes", () => {
     expect(wrapper.instructions).toEqual(["a"]);
     expect(() => entity.build(URL, { instructions: "a" })).toThrow(TypeError);
     wrapper.instructions = [];
-    expect(wrapper.instructions).toBeUndefined(); // required minimum is now unsatisfied
-    expect(entity.parse(URL, store)).toBeUndefined();
-    expect(model("Warning").parse(URL, store)).toEqual({});
+    expect(wrapper.instructions).toEqual([]);
+    expect(entity.parse(URL, store)).toEqual({});
+    wrapper.instructions = ["again"];
+    wrapper.instructions = undefined;
+    expect(wrapper.instructions).toEqual([]);
+    expect(store.countQuads(`${URL}#instructions-1`, null, null, null)).toBe(0);
   });
 
   it("shares hostile text, strict lexical, numeric, boolean, date and IRI guards with scalar fields", async () => {
@@ -377,7 +492,7 @@ describe("ordered item nodes", () => {
       ["iri", undefined, "javascript:alert(1)", { iriScheme: "https" }],
       ["iri", undefined, "  https://food.test/a  ", { iriScheme: "https" }],
     ] as const) {
-      const field = { kind, datatype, guards } as Partial<ManifestField>;
+      const field = { kind, datatype, guards, minCount: 0 } as Partial<ManifestField>;
       const entity = model("Warning", field);
       const input = manifest("Warning", field);
       const source = present(input.entities[0]);
@@ -440,7 +555,7 @@ describe("ordered item nodes", () => {
   ])("rejects a mutable unsafe %s before replacement", (key) => {
     const interpreted = defineModel(manifest());
     const entity = present(interpreted.entities.Recipe);
-    const store = entity.build(URL, {});
+    const store = entity.build(URL, { instructions: ["original"] });
     const owner = interpreted.manifest.entities[0];
     if (!owner || owner.kind === "composite") throw new Error("missing flat fixture");
     const field = present(owner.fields[0]);
