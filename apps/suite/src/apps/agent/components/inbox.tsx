@@ -13,11 +13,20 @@ import {
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { collection, metadataOf } from "../lib/collections";
-import { archiveKey, deviceState, saveDeviceState } from "../lib/device-state";
+import { archiveKey, deviceState } from "../lib/device-state";
 import { useAgentQuery, useAgentWorkspace } from "../lib/hooks";
-import { triageLabel } from "../lib/inbox";
+import { archivedMessages, triageLabel } from "../lib/inbox";
 import { resourceSlug } from "../lib/paths";
-import { type InboxMessage, loadedRecords, readAccounts, readInbox } from "../lib/readers";
+import {
+  type InboxMessage,
+  loadedRecords,
+  readAccounts,
+  readControl,
+  readInbox,
+} from "../lib/readers";
+import { createAgentSigner } from "../lib/sign";
+import { createAgentVerifier } from "../lib/verify";
+import { useApprovalDevice } from "./approval-key-setup-sheet";
 import { useMobileSheet } from "./responsive-sheet";
 import { QueryRows, Screen } from "./states";
 
@@ -62,6 +71,7 @@ function MessageDetail({ message }: { message: InboxMessage }) {
 export function InboxScreen({ binding }: { binding?: string }) {
   const { client, session } = useAgentWorkspace();
   const mobile = useMobileSheet();
+  const device = useApprovalDevice();
   const [selected, setSelected] = useState<InboxMessage>();
   const selectedSlug = selected && resourceSlug(selected.id);
   const [hidden, setHidden] = useState<Set<string>>(new Set());
@@ -82,7 +92,11 @@ export function InboxScreen({ binding }: { binding?: string }) {
     `${client.paths.inbox}${binding ?? ""}/${allowed ? "" : "#unreadable"}`,
     (c) => (allowed && binding ? readInbox(c, binding) : Promise.resolve(collection<never>([]))),
   );
-  // Each view restores its device-local archive state; it never writes a control statement.
+  // Archive is a signed owner control, so it holds on every device and for the agent.
+  const archived = useAgentQuery(client.paths.archive, (c) =>
+    readControl(c, createAgentVerifier(session), client.paths.archive),
+  );
+  // Messages archived on this device before signed archiving stay hidden here.
   useEffect(() => {
     if (messages.status === "ready")
       setHidden(
@@ -93,15 +107,24 @@ export function InboxScreen({ binding }: { binding?: string }) {
         ),
       );
   }, [messages, session.webId]);
+  const signedArchive =
+    archived.status === "ready"
+      ? archivedMessages(loadedRecords(archived.data), session.webId, Date.now())
+      : new Set<string>();
   useEffect(() => {
     if (!allowed) setSelected(undefined);
   }, [allowed]);
-  const archive = (message: InboxMessage) => {
-    const saved = saveDeviceState(archiveKey(session.webId, message.id), "true");
-    setHidden((current) => new Set([...current, message.id]));
-    setArchiveError(!saved);
-    setSelected(undefined);
-  };
+  const archive = (message: InboxMessage) =>
+    void device.requireKey(async () => {
+      setArchiveError(false);
+      try {
+        await createAgentSigner(session, client).signControl("Archive", { target: message.id });
+        setHidden((current) => new Set([...current, message.id]));
+        setSelected(undefined);
+      } catch {
+        setArchiveError(true);
+      }
+    });
   const rowsQuery =
     messages.status === "ready"
       ? {
@@ -111,6 +134,7 @@ export function InboxScreen({ binding }: { binding?: string }) {
               (row) =>
                 !("record" in row) ||
                 (!hidden.has(row.record.id) &&
+                  !signedArchive.has(row.record.id) &&
                   allowedIds.has(new URL(row.record.id).pathname.split("/").at(-2) ?? "")),
             ),
             metadataOf(messages.data),
@@ -141,11 +165,7 @@ export function InboxScreen({ binding }: { binding?: string }) {
           );
         }}
       </QueryRows>
-      {archiveError && (
-        <p role="status">
-          Archived for this visit. This device couldn't save the archive preference.
-        </p>
-      )}
+      {archiveError && <p role="status">Couldn't archive this message. Try again.</p>}
       <div ref={list}>
         <h2 ref={heading} tabIndex={-1}>
           Messages
@@ -221,7 +241,7 @@ export function InboxScreen({ binding }: { binding?: string }) {
                   Archive
                 </Button>
               </div>
-              <p>Archive hides this message on this device.</p>
+              <p>Archive hides this message on all your devices. The message is kept.</p>
             </>
           )}
         </SheetContent>

@@ -3,6 +3,7 @@
 import type { InboundMessage } from "@jeswr/agent-model";
 import { parseRdf } from "@jeswr/fetch-rdf";
 import { PROV } from "./paths";
+import type { DisplayControl } from "./readers";
 
 export interface StructuredCard {
   kind: "calendar" | "jsonld";
@@ -95,4 +96,25 @@ export function triageLabel(value: string | undefined): string {
       ? (LABELS[value] as string)
       : value
     : "Not assessed";
+}
+
+/** Messages the owner archived: verified, owner-attributed Archive controls in force at `now`. */
+export function archivedMessages(
+  controls: readonly DisplayControl[],
+  owner: string,
+  now: number,
+): Set<string> {
+  return new Set(
+    controls
+      .filter(
+        (c) =>
+          c.kind === "Archive" &&
+          c.verification === "verified" &&
+          c.attributedTo === owner &&
+          c.target !== undefined &&
+          Date.parse(c.createdAt) <= now &&
+          Date.parse(c.expires) > now,
+      )
+      .map((c) => c.target as string),
+  );
 }
