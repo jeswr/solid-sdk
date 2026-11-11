@@ -165,4 +165,27 @@ describe("optimistic forms controller", () => {
     await controller.load();
     expect(controller.getSnapshot().status).toBe("ready");
   });
+  it("reports failed refreshes while retaining confirmed forms and their skipped list", async () => {
+    const backing = store();
+    const list = vi.spyOn(backing, "listForms").mockResolvedValueOnce({
+      forms: [form],
+      skipped: [`${root}invalid.ttl`],
+    });
+    const controller = new FormsController(backing, vi.fn());
+    await controller.load();
+    list.mockRejectedValueOnce(new Error("offline"));
+    await controller.load();
+    expect(controller.getSnapshot()).toMatchObject({
+      status: "ready",
+      forms: [form],
+      skipped: [`${root}invalid.ttl`],
+      refreshFailed: true,
+    });
+    await controller.load();
+    expect(controller.getSnapshot()).toMatchObject({
+      status: "ready",
+      skipped: [],
+      refreshFailed: false,
+    });
+  });
 });

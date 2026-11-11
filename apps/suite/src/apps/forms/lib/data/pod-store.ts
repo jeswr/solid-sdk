@@ -1,10 +1,11 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
 import { fetchRdf } from "@jeswr/fetch-rdf";
 import { createGuardedFetch } from "@jeswr/guarded-fetch";
-import type { StorageClient } from "@jeswr/storage-client";
+import { type StorageClient, StorageError } from "@jeswr/storage-client";
+import { isomorphic } from "rdf-isomorphic";
 import { formUrl } from "../form-url";
 import type { FormModel, FormRuntime } from "../runtime";
-import type { FormsStore } from "./store";
+import { type FormsStore, ResponseSaveUncertainError } from "./store";
 
 interface Allocation {
   url: string;
@@ -30,6 +31,7 @@ export function createPodFormsStore(options: {
   const versions = new Map<string, string | null>();
   const allocated = new Map<string, Allocation>();
   const responses = new Map<string, Allocation>();
+  const isForeign = (url: string) => formUrl(url).origin !== new URL(storage.root).origin;
   const publicFetch = createGuardedFetch({
     fetch: options.publicFetch,
     allowLoopback: process.env.NODE_ENV === "development",
@@ -40,8 +42,7 @@ export function createPodFormsStore(options: {
     return url.href;
   };
   const loadForm = async (shape: string) => {
-    const url = formUrl(shape);
-    if (url.origin !== new URL(storage.root).origin) {
+    if (isForeign(shape)) {
       const result = await fetchRdf(documentUrl(shape), {
         fetch: (input, init) =>
           publicFetch(input, { ...init, credentials: "omit", redirect: "error" }),
@@ -105,6 +106,7 @@ export function createPodFormsStore(options: {
   };
   return {
     validate: runtime.validate,
+    isForeign,
     loadForm,
     async listForms() {
       const forms: FormModel[] = [];
@@ -142,17 +144,41 @@ export function createPodFormsStore(options: {
         options.responsesContainer,
         "response",
       );
-      const body = await runtime.serialize(runtime.build(form, allocation.shape, values));
-      await write(allocation, options.responsesContainer, body);
-      const read = await storage.readRdf(allocation.url);
-      versions.set(allocation.shape, read.etag);
-      const response = {
-        subject: allocation.shape,
-        form: form.shape,
-        values: runtime.parse(form, allocation.shape, read.dataset),
-      };
-      responses.delete(form.shape);
-      return response;
+      const graph = runtime.build(form, allocation.shape, values);
+      const body = await runtime.serialize(graph);
+      // An earlier committed write without a response validator needs readback,
+      // never the form editor's reload path or a fresh response allocation.
+      let confirm = versions.has(allocation.shape) && !versions.get(allocation.shape);
+      if (!confirm) {
+        try {
+          await write(allocation, options.responsesContainer, body);
+        } catch (error) {
+          if (
+            !(error instanceof StorageError) ||
+            (error.code !== "precondition-failed" &&
+              !(allocation.name && error.code === "conflict"))
+          )
+            throw error;
+          confirm = true;
+        }
+      }
+      try {
+        const read = await storage.readRdf(allocation.url);
+        // Compare the runtime's entire graph, including its response subject.
+        // An empty graph cannot establish that this submission is present.
+        if (confirm && (!graph.size || !isomorphic([...graph], [...read.dataset])))
+          throw new ResponseSaveUncertainError();
+        const response = {
+          subject: allocation.shape,
+          form: form.shape,
+          values: runtime.parse(form, allocation.shape, read.dataset),
+        };
+        versions.set(allocation.shape, read.etag);
+        responses.delete(form.shape);
+        return response;
+      } catch {
+        throw new ResponseSaveUncertainError();
+      }
     },
   };
 }

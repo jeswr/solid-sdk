@@ -26,8 +26,16 @@ and responses use `#response`. Solid creates full documents with named condition
 creates (`If-None-Match: *`). LWS reserves empty documents so server-assigned identifiers
 are known; reservations are recorded immediately and reused on failure. Interrupted
 LWS allocations can leave empty documents; no unconditional cleanup is attempted.
+If a retained response create or conditional write conflicts after a lost reply,
+the store reads that same document once and compares its graph, including the
+response subject, with the runtime's intended graph. A match confirms the save;
+otherwise the fill view warns that the response may already be saved and keeps
+the answers available. A committed write without a usable validator also requires
+this confirmation before any retry can be treated as saved.
 Listing skips unreadable or unadmitted resources, returns their URLs in `skipped`,
 and shows a quiet notice without hiding valid forms.
+Failed refreshes retain the confirmed forms and previous skipped list, with a
+visible refresh notice and retry action; a successful refresh replaces both.
 
 Both the fill view and stores require absolute HTTPS form URLs without userinfo,
 at most 4096 characters; development also permits HTTP localhost/127.0.0.1.
@@ -35,7 +43,8 @@ The pod adapter's `readShapes` callback is restricted to the user's storage orig
 and must refuse redirects. Foreign origins use the separately injected pristine
 `publicFetch` through `@jeswr/guarded-fetch` with credentials omitted and redirects
 refused. The fill view identifies the foreign hosting origin before any answers
-are entered. The host must never supply an authentication wrapper as `publicFetch`.
+are entered, using the store's `isForeign` decision against `storage.root`.
+The host must never supply an authentication wrapper as `publicFetch`.
 
 To connect the real package when it lands, install its namespace as
 `formRuntime.current` in `lib/runtime.ts` and set `formRuntime.openStore` to the host's
@@ -71,7 +80,8 @@ and explain that saving requires a connection; there is no private app outbox.
 CSV exports use CRLF records, quote every field, double embedded quotes and prefix
 an apostrophe for formula-leading cells (including after whitespace), for headers
 as well as answers. The guard covers `= + - @ |` and full-width `＝ ＋ － ＠`.
-Native CSV exports use the shared native save sheet.
+CSV and feedback ZIP downloads share `lib/native/save-file.ts`'s `saveBlob` helper,
+which uses the native save sheet or a browser download with object-URL cleanup.
 
 Deferred for the lead's tracker:
 - Connect the parallel SHACL runtime and shared container discovery/registration.

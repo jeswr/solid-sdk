@@ -13,6 +13,7 @@ import {
   toast,
 } from "@jeswr/suite-ui";
 import { useEffect, useState } from "react";
+import { saveBlob } from "@/lib/native/save-file";
 import { answerText, responsesCsv } from "../lib/csv";
 import type { FormResponse } from "../lib/data/store";
 import type { FormModel } from "../lib/runtime";
@@ -62,20 +63,7 @@ export function ResponsesView({ form, close }: { form: FormModel; close: () => v
                 type: "text/csv;charset=utf-8",
               });
               try {
-                if (process.env.NEXT_PUBLIC_SUITE_TARGET === "native") {
-                  const { saveNatively } = await import("@/lib/native/save-file");
-                  await saveNatively(blob, "form-responses.csv", "text/csv");
-                } else {
-                  const url = URL.createObjectURL(blob);
-                  try {
-                    const link = document.createElement("a");
-                    link.href = url;
-                    link.download = "form-responses.csv";
-                    link.click();
-                  } finally {
-                    setTimeout(() => URL.revokeObjectURL(url), 30_000);
-                  }
-                }
+                await saveBlob(blob, "form-responses.csv", "text/csv");
               } catch {
                 toast.error("Couldn't export your responses. Try again.");
               }

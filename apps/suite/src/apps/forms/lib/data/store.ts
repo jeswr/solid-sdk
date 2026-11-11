@@ -8,6 +8,8 @@ export interface FormResponse {
 }
 export interface FormsStore {
   readonly validate: FormRuntime["validate"];
+  /** Uses the same storage origin as loadForm's credential boundary. */
+  isForeign(url: string): boolean;
   listForms(): Promise<{ forms: FormModel[]; skipped: string[] }>;
   /** Only absolute HTTPS shape URLs (HTTP loopback in development), without
    * userinfo, at most 4096 characters. Foreign storage origins MUST be read via
@@ -16,6 +18,15 @@ export interface FormsStore {
   saveForm(form: FormModel): Promise<FormModel>;
   listResponses(form: FormModel): Promise<FormResponse[]>;
   submit(form: FormModel, values: FormValues): Promise<FormResponse>;
+}
+/** A response write may have committed, but its saved content cannot be confirmed. */
+export class ResponseSaveUncertainError extends Error {
+  constructor() {
+    super(
+      "Your response may already be saved. Your answers are still here; check your pod before trying again.",
+    );
+    this.name = "ResponseSaveUncertainError";
+  }
 }
 export interface DemoSnapshot {
   version: 1;

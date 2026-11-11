@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+import { StorageError } from "@jeswr/storage-client";
 import { createMemoryStorage } from "@jeswr/storage-client/memory";
-import { Store } from "n3";
+import { DataFactory, Store, Writer } from "n3";
 import { describe, expect, it, vi } from "vitest";
 import { sampleForms } from "../src/apps/forms/demo/sample";
 import { openDemoFormsStore } from "../src/apps/forms/lib/data/demo-store";
@@ -27,6 +28,14 @@ const session = (fetch: typeof globalThis.fetch): PodSession => ({
 });
 
 describe("memory forms store", () => {
+  it("classifies foreign origins using its storage root", () => {
+    const store = createMemoryFormsStore(root, fixture);
+    expect(store.isForeign(`${root}elsewhere/form#form`)).toBe(false);
+    expect(store.isForeign("https://POD.example:443/form#form")).toBe(false);
+    expect(store.isForeign("https://author.example/form#form")).toBe(true);
+    expect(store.isForeign("https://pod.example:8443/form#form")).toBe(true);
+    expect(() => store.isForeign("javascript:alert(1)")).toThrow();
+  });
   it("seeds two fictional forms and isolated responses, with defensive copies", async () => {
     const store = createMemoryFormsStore(root, fixture);
     const { forms: list } = await store.listForms();
@@ -160,6 +169,153 @@ describe.each([
     });
     return { storage, store, runtime, readShapes, publicFetch, forms, responses };
   }
+  // A single canned RDF fixture, parameterised by subject and content, lets the
+  // graph comparison run for real without implementing the parallel runtime.
+  function responseFixture(runtime: FormRuntime) {
+    vi.mocked(runtime.build).mockImplementation(
+      (_form, subject, answers) =>
+        new Store([
+          DataFactory.quad(
+            DataFactory.namedNode(subject),
+            DataFactory.namedNode("https://schema.org/text"),
+            DataFactory.literal(String(answers.q_name)),
+          ),
+        ]),
+    );
+    vi.mocked(runtime.serialize).mockImplementation(async (graph) =>
+      new Writer().quadsToString([...graph]),
+    );
+  }
+  it("uses the storage root for the same foreign-origin decision as its reader", async () => {
+    const { store, readShapes } = await setup();
+    expect(store.isForeign("https://POD.example:443/form#form")).toBe(false);
+    expect(store.isForeign("https://author.example/form#form")).toBe(true);
+    expect(store.isForeign("https://pod.example:8443/form#form")).toBe(true);
+    expect(() => store.isForeign("/form")).toThrow();
+    await expect(store.loadForm(`${root}missing#form`)).rejects.toThrow();
+    expect(readShapes).toHaveBeenCalledExactlyOnceWith(`${root}missing#form`);
+  });
+  it("adopts a committed response after a lost write reply and conditional conflict", async () => {
+    const { storage, store, runtime, responses } = await setup();
+    responseFixture(runtime);
+    const create = storage.create.bind(storage);
+    const write = storage.write.bind(storage);
+    const createSpy = vi.spyOn(storage, "create");
+    const writeSpy = vi.spyOn(storage, "write");
+    if (protocol === "solid") {
+      createSpy.mockImplementationOnce(async (...args) => {
+        await create(...args);
+        throw new Error("lost reply");
+      });
+      // The HTTP Solid backend maps its If-None-Match 412 to conflict.
+      createSpy.mockRejectedValueOnce(
+        new StorageError("conflict", { method: "PUT", url: responses.url, status: 412 }),
+      );
+    } else {
+      writeSpy.mockImplementationOnce(async (...args) => {
+        await write(...args);
+        throw new Error("lost reply");
+      });
+    }
+    await expect(store.submit(form, values)).rejects.toThrow("lost reply");
+    const read = vi.spyOn(storage, "readRdf");
+    const recovered = await store.submit(form, values);
+    expect(recovered.values).toEqual(values);
+    expect(recovered.subject).toBe(vi.mocked(runtime.build).mock.calls[0]?.[1]);
+    expect(read).toHaveBeenCalledExactlyOnceWith(recovered.subject.split("#")[0]);
+    const entries = [];
+    for await (const entry of storage.listAll(responses.url)) entries.push(entry);
+    expect(entries).toHaveLength(1);
+    if (protocol === "solid") {
+      expect(createSpy).toHaveBeenCalledTimes(2);
+      expect(writeSpy).not.toHaveBeenCalled();
+    } else {
+      expect(createSpy).toHaveBeenCalledOnce();
+      expect(writeSpy).toHaveBeenCalledTimes(2);
+    }
+    // Once confirmed, a deliberate second submission gets a new identity.
+    expect((await store.submit(form, values)).subject).not.toBe(recovered.subject);
+  });
+  it.each([
+    "content",
+    "subject",
+    "empty",
+    "unreadable",
+  ])("reports an uncertain save when the conflicted document has different %s", async (difference) => {
+    const { storage, store, runtime } = await setup();
+    responseFixture(runtime);
+    const create = storage.create.bind(storage);
+    const write = storage.write.bind(storage);
+    const createSpy = vi.spyOn(storage, "create");
+    const writeSpy = vi.spyOn(storage, "write");
+    if (protocol === "solid")
+      createSpy.mockImplementationOnce(async (...args) => {
+        await create(...args);
+        throw new Error("lost reply");
+      });
+    else
+      writeSpy.mockImplementationOnce(async (...args) => {
+        await write(...args);
+        throw new Error("lost reply");
+      });
+    await expect(store.submit(form, values)).rejects.toThrow("lost reply");
+    const subject = vi.mocked(runtime.build).mock.calls[0]?.[1];
+    if (!subject) throw new Error("Missing submission subject");
+    const url = subject.split("#")[0] ?? "";
+    const current = await storage.readRdf(url);
+    const changed = difference === "subject" ? `${url}#someone-else` : subject;
+    const body =
+      difference === "empty"
+        ? ""
+        : await runtime.serialize(
+            runtime.build(form, changed, {
+              ...values,
+              q_name: difference === "content" ? "Changed answer" : values.q_name,
+            }),
+          );
+    await write(url, body, { contentType: "text/turtle", ifMatch: current.etag ?? "" });
+    const read = vi.spyOn(storage, "readRdf");
+    if (difference === "unreadable") read.mockRejectedValueOnce(new Error("offline"));
+    await expect(store.submit(form, values)).rejects.toThrow("Your response may already be saved");
+    expect(read).toHaveBeenCalledExactlyOnceWith(url);
+    expect(createSpy).toHaveBeenCalledTimes(protocol === "solid" ? 2 : 1);
+    expect(writeSpy).toHaveBeenCalledTimes(protocol === "solid" ? 0 : 2);
+  });
+  it.each([
+    false,
+    true,
+  ])("confirms an unversioned committed response only with a non-empty graph (%s)", async (empty) => {
+    const { storage, store, runtime } = await setup();
+    if (!empty) responseFixture(runtime);
+    const create = storage.create.bind(storage);
+    const write = storage.write.bind(storage);
+    const createSpy = vi.spyOn(storage, "create");
+    const writeSpy = vi.spyOn(storage, "write");
+    if (protocol === "solid")
+      createSpy.mockImplementationOnce(async (...args) => ({
+        ...(await create(...args)),
+        etag: null,
+        etagSource: "follow-up",
+      }));
+    else
+      writeSpy.mockImplementationOnce(async (...args) => ({
+        ...(await write(...args)),
+        etag: null,
+        etagSource: "follow-up",
+      }));
+    vi.spyOn(storage, "readRdf").mockRejectedValueOnce(new Error("readback failed"));
+    await expect(store.submit(form, values)).rejects.toThrow("Your response may already be saved");
+    if (empty)
+      await expect(store.submit(form, values)).rejects.toThrow(
+        "Your response may already be saved",
+      );
+    else {
+      const recovered = await store.submit(form, values);
+      expect(recovered.subject).toBe(vi.mocked(runtime.build).mock.calls[0]?.[1]);
+    }
+    expect(createSpy).toHaveBeenCalledOnce();
+    expect(writeSpy).toHaveBeenCalledTimes(protocol === "solid" ? 0 : 1);
+  });
   it("respects server-assigned identifiers and uses runtime conversion on every write", async () => {
     const { storage, store, runtime } = await setup();
     const saved = await store.saveForm(form);

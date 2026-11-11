@@ -45,6 +45,14 @@ export function FormsHome() {
             ? "A form couldn't be saved. Open its draft and try again."
             : `${state.forms.length} forms in your pod`}
       </p>
+      {state.refreshFailed && (
+        <div role="status" className="fm-notice">
+          <p>Couldn't refresh your forms. Showing the last saved list.</p>
+          <Button variant="outline" onClick={() => void controller.load()}>
+            Try refreshing again
+          </Button>
+        </div>
+      )}
       {state.skipped.length > 0 && (
         <p className="fm-muted">
           {state.skipped.length} resources couldn't be opened as forms and were skipped.

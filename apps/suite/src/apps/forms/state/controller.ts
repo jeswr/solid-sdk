@@ -8,6 +8,7 @@ export interface FormsState {
   skipped: string[];
   pending: number;
   failed: boolean;
+  refreshFailed: boolean;
 }
 
 /** Account-scoped optimistic form list; writes settle in their submission order. */
@@ -18,6 +19,7 @@ export class FormsController {
     skipped: [],
     pending: 0,
     failed: false,
+    refreshFailed: false,
   };
   private listeners = new Set<() => void>();
   private queue = Promise.resolve();
@@ -56,10 +58,14 @@ export class FormsController {
         merged.set(saved.shape, saved);
       }
       this.confirmed = [...merged.values()];
-      this.publish({ status: "ready", skipped });
+      this.publish({ status: "ready", skipped, refreshFailed: false });
     } catch {
       if (generation === this.generation)
-        this.publish({ status: this.confirmed.length ? "ready" : "error" });
+        // Keep the last successful skipped list alongside its confirmed forms.
+        this.publish({
+          status: this.confirmed.length ? "ready" : "error",
+          refreshFailed: this.confirmed.length > 0,
+        });
     }
   }
   save(form: FormModel): Promise<FormModel> {

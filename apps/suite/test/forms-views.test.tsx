@@ -14,8 +14,9 @@ import { FormsHome } from "../src/apps/forms/components/forms-home";
 import { ResponsesView } from "../src/apps/forms/components/responses-view";
 import { sampleForms } from "../src/apps/forms/demo/sample";
 import { createMemoryFormsStore } from "../src/apps/forms/lib/data/memory-store";
-import { FormsProvider } from "../src/apps/forms/state/forms-context";
-import { saveNatively } from "../src/lib/native/save-file";
+import { ResponseSaveUncertainError } from "../src/apps/forms/lib/data/store";
+import { FormsProvider, useForms } from "../src/apps/forms/state/forms-context";
+import { saveBlob } from "../src/lib/native/save-file";
 import type { PodSession } from "../src/lib/session/pod-session";
 
 const query = vi.hoisted(() => ({ shape: "" }));
@@ -25,7 +26,7 @@ vi.mock("next/navigation", () => ({
 vi.mock("@/shell/app-frame", () => ({
   AppHeading: ({ children }: { children: React.ReactNode }) => <h1>{children}</h1>,
 }));
-vi.mock("../src/lib/native/save-file", () => ({ saveNatively: vi.fn() }));
+vi.mock("../src/lib/native/save-file", () => ({ saveBlob: vi.fn() }));
 const root = "https://pod.example/";
 const sample = sampleForms(root);
 const form = sample.forms[0];
@@ -59,6 +60,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   cleanup();
+  vi.clearAllMocks();
   vi.restoreAllMocks();
   vi.unstubAllEnvs();
   vi.unstubAllGlobals();
@@ -93,42 +95,21 @@ describe("response view", () => {
       true,
     );
   });
-  it("saves CSV through the native share sheet and reports export errors", async () => {
+  it("passes CSV to the shared saver and reports export errors", async () => {
     vi.stubEnv("NEXT_PUBLIC_SUITE_TARGET", "native");
-    vi.mocked(saveNatively).mockResolvedValueOnce(false).mockRejectedValueOnce(new Error("disk"));
+    vi.mocked(saveBlob).mockResolvedValueOnce(false).mockRejectedValueOnce(new Error("disk"));
     const error = vi.spyOn(toast, "error");
     show(<ResponsesView form={form} close={() => {}} />);
     await screen.findByRole("table");
     fireEvent.click(screen.getByRole("button", { name: "Export CSV" }));
     await waitFor(() =>
-      expect(saveNatively).toHaveBeenCalledWith(expect.any(Blob), "form-responses.csv", "text/csv"),
+      expect(saveBlob).toHaveBeenCalledWith(expect.any(Blob), "form-responses.csv", "text/csv"),
     );
     expect(error).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "Export CSV" }));
     await waitFor(() =>
       expect(error).toHaveBeenCalledWith("Couldn't export your responses. Try again."),
     );
-  });
-  it("downloads browser CSV and revokes the object URL", async () => {
-    vi.stubEnv("NEXT_PUBLIC_SUITE_TARGET", "web");
-    const create = vi.fn(() => "blob:forms-export");
-    const revoke = vi.fn();
-    vi.stubGlobal(
-      "URL",
-      class extends URL {
-        static createObjectURL = create;
-        static revokeObjectURL = revoke;
-      },
-    );
-    const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
-    show(<ResponsesView form={form} close={() => {}} />);
-    await screen.findByRole("table");
-    vi.useFakeTimers();
-    fireEvent.click(screen.getByRole("button", { name: "Export CSV" }));
-    expect(click).toHaveBeenCalledOnce();
-    expect(click.mock.instances[0]).toMatchObject({ download: "form-responses.csv" });
-    vi.advanceTimersByTime(30_000);
-    expect(revoke).toHaveBeenCalledWith("blob:forms-export");
   });
 });
 
@@ -158,9 +139,76 @@ describe("fill URL boundary and source notice", () => {
     await screen.findByText(/This form is hosted at https:\/\/author.example/);
     expect(screen.getByRole("button", { name: "Save response to my pod" })).toBeTruthy();
   });
+  it.each([
+    false,
+    true,
+  ])("uses the store's foreign-origin decision (%s), even when the session differs", async (foreign) => {
+    query.shape = form.shape;
+    const store = makeStore();
+    const decision = vi.spyOn(store, "isForeign").mockReturnValue(foreign);
+    show(<FillView />, store);
+    await screen.findByRole("button", { name: "Save response to my pod" });
+    expect(decision).toHaveBeenCalledWith(form.shape);
+    expect(!!screen.queryByText(/opened without your pod credentials/)).toBe(foreign);
+  });
+  it.each([
+    false,
+    true,
+  ])("preserves answers and shows respondent-specific failure copy (uncertain: %s)", async (uncertain) => {
+    query.shape = form.shape;
+    const store = makeStore();
+    const question = form.fields[0];
+    if (!question) throw new Error("Missing name question");
+    const model = { ...form, fields: [question] };
+    vi.spyOn(store, "loadForm").mockResolvedValue(model);
+    vi.spyOn(store, "submit").mockRejectedValue(
+      uncertain ? new ResponseSaveUncertainError() : new Error("Reload this form before editing"),
+    );
+    const error = vi.spyOn(toast, "error");
+    show(<FillView />, store);
+    const input = await screen.findByLabelText(/Your name/);
+    fireEvent.change(input, { target: { value: "Ember Vale" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save response to my pod" }));
+    const notice = await screen.findByRole("alert");
+    expect(notice.textContent).toContain(
+      uncertain ? "Your response may already be saved" : "Couldn't save your response",
+    );
+    expect(notice.textContent).not.toContain("Reload this form before editing");
+    expect(error).toHaveBeenCalledWith(notice.textContent);
+    expect((input as HTMLInputElement).value).toBe("Ember Vale");
+    expect(store.submit).toHaveBeenCalledOnce();
+  });
 });
 
 describe("forms home", () => {
+  it("keeps the last forms visible after a refresh failure and offers a working retry", async () => {
+    const store = makeStore();
+    const list = vi.spyOn(store, "listForms");
+    function Reload() {
+      const { controller } = useForms();
+      return (
+        <button type="button" onClick={() => void controller.load()}>
+          Reload
+        </button>
+      );
+    }
+    show(
+      <>
+        <Reload />
+        <FormsHome />
+      </>,
+      store,
+    );
+    await screen.findByRole("button", { name: `Design form: ${form.label}` });
+    list.mockRejectedValueOnce(new Error("offline"));
+    fireEvent.click(screen.getByRole("button", { name: "Reload" }));
+    await screen.findByText("Couldn't refresh your forms. Showing the last saved list.");
+    expect(screen.getByRole("button", { name: `Design form: ${form.label}` })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Try refreshing again" }));
+    await waitFor(() => expect(screen.queryByText(/Couldn't refresh/)).toBeNull());
+    await screen.findByRole("button", { name: `Design form: ${form.label}` });
+    expect(list).toHaveBeenCalledTimes(3);
+  });
   it("reports skipped resources quietly and retains visible design text in the accessible name", async () => {
     const store = makeStore();
     vi.spyOn(store, "listForms").mockResolvedValue({

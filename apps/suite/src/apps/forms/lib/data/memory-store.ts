@@ -29,6 +29,7 @@ export function createMemoryFormsStore(
   };
   return {
     validate: runtime.validate,
+    isForeign: (url) => formUrl(url).origin !== new URL(root).origin,
     listForms: async () => ({ forms: structuredClone(snapshot.forms), skipped: [] }),
     async loadForm(shape) {
       formUrl(shape);

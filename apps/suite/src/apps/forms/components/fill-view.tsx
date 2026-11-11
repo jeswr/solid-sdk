@@ -3,7 +3,7 @@
 import { Button, EmptyState, ErrorState, LoadingSkeleton, toast } from "@jeswr/suite-ui";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
-import type { FormResponse } from "../lib/data/store";
+import { type FormResponse, ResponseSaveUncertainError } from "../lib/data/store";
 import { formUrl } from "../lib/form-url";
 import type { FormModel } from "../lib/runtime";
 import { useForms } from "../state/forms-context";
@@ -11,7 +11,7 @@ import { AnswerForm } from "./answer-form";
 
 export function FillView() {
   const shape = useSearchParams().get("form");
-  const { controller, session } = useForms();
+  const { controller } = useForms();
   let address: URL | undefined;
   try {
     if (shape) address = formUrl(shape);
@@ -24,12 +24,14 @@ export function FillView() {
   const [attempt, setAttempt] = useState(0);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState<FormResponse>();
+  const [saveError, setSaveError] = useState<string>();
   // biome-ignore lint/correctness/useExhaustiveDependencies: attempt explicitly retries the read
   useEffect(() => {
     let live = true;
     setForm(undefined);
     setError(false);
     setSaved(undefined);
+    setSaveError(undefined);
     if (shape && valid)
       void controller.store.loadForm(shape).then(
         (result) => {
@@ -84,7 +86,7 @@ export function FillView() {
     );
   return (
     <section className="fm-fill">
-      {address.origin !== new URL(session.storageUrl).origin && (
+      {controller.store.isForeign(shape) && (
         <p className="fm-notice">
           This form is hosted at {address.origin}. It was opened without your pod credentials.
         </p>
@@ -101,22 +103,27 @@ export function FillView() {
           onSubmit={(values) => {
             if (saving) return;
             setSaving(true);
+            setSaveError(undefined);
             void controller.store
               .submit(form, values)
               .then(
                 (response) => {
                   setSaved(response);
                 },
-                () => {
-                  toast.error(
-                    "Couldn't save your response. Your answers are still here; try again when connected.",
-                  );
+                (error: unknown) => {
+                  const message =
+                    error instanceof ResponseSaveUncertainError
+                      ? error.message
+                      : "Couldn't save your response. Your answers are still here; try again when connected.";
+                  setSaveError(message);
+                  toast.error(message);
                 },
               )
               .finally(() => setSaving(false));
           }}
         />
       </div>
+      {saveError && <p role="alert">{saveError}</p>}
       {saving && (
         <div role="status" className="fm-card">
           <h2>Saving your response…</h2>

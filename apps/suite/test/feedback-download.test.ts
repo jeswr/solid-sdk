@@ -1,42 +1,22 @@
-// AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex (GPT-6.1 Sol)
 import { afterEach, expect, it, vi } from "vitest";
 import { saveFeedbackArchive } from "../src/feedback/download";
+import { saveBlob } from "../src/lib/native/save-file";
 
-const saveNatively = vi.hoisted(() => vi.fn());
-vi.mock("@/lib/native/save-file", () => ({ saveNatively }));
-afterEach(() => {
-  vi.unstubAllEnvs();
-  vi.unstubAllGlobals();
-  vi.useRealTimers();
-  vi.clearAllMocks();
-});
-it("saves through the native sheet, preserving cancellation and errors without using a blob anchor", async () => {
-  vi.stubEnv("NEXT_PUBLIC_SUITE_TARGET", "native");
-  saveNatively
+vi.mock("@/lib/native/save-file", () => ({ saveBlob: vi.fn() }));
+afterEach(() => vi.clearAllMocks());
+it("passes the ZIP bytes to the shared saver and preserves cancellation and errors", async () => {
+  vi.mocked(saveBlob)
     .mockResolvedValueOnce(true)
     .mockResolvedValueOnce(false)
     .mockRejectedValueOnce(new Error("save failed"));
   expect(await saveFeedbackArchive(new Uint8Array([1, 2]))).toBe(true);
-  const [blob, name, mime] = saveNatively.mock.calls[0] ?? [];
+  const [blob, name, mime] = vi.mocked(saveBlob).mock.calls[0] ?? [];
   expect(name).toBe("solid-suite-feedback.zip");
   expect(mime).toBe("application/zip");
+  expect(blob?.type).toBe("application/zip");
+  if (!blob) throw new Error("Missing archive blob");
   expect(new Uint8Array(await blob.arrayBuffer())).toEqual(new Uint8Array([1, 2]));
   expect(await saveFeedbackArchive(new Uint8Array())).toBe(false);
   await expect(saveFeedbackArchive(new Uint8Array())).rejects.toThrow("save failed");
-});
-it("downloads on web and revokes the object URL", async () => {
-  vi.useFakeTimers();
-  vi.stubEnv("NEXT_PUBLIC_SUITE_TARGET", "web");
-  const anchor = { href: "", download: "", click: vi.fn() };
-  vi.stubGlobal("document", { createElement: vi.fn().mockReturnValue(anchor) });
-  const url = vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:feedback");
-  const revoke = vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
-  expect(await saveFeedbackArchive(new Uint8Array([1]))).toBe(true);
-  expect(anchor.href).toBe("blob:feedback");
-  expect(anchor.download).toBe("solid-suite-feedback.zip");
-  expect(anchor.click).toHaveBeenCalled();
-  await vi.advanceTimersByTimeAsync(30_000);
-  expect(revoke).toHaveBeenCalledWith("blob:feedback");
-  url.mockRestore();
-  revoke.mockRestore();
 });
