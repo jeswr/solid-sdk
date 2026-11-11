@@ -18,7 +18,8 @@ and every 1st…31st (monthly day). Rules use uppercase `freq`, `interval`, opti
 (schema weekday names) and optional `byMonthDay` integer arrays, per VOC-01. The initial due is
 on or after local today; explicit dates override it. Bare interval rules start today. Missing
 monthly dates are skipped rather than clamped. A lone time qualifies the initial recurrence day.
-Future occurrence expansion and nth-weekday rules are outside this library.
+Monthly ordinal weekdays ("every 3rd Friday", "every last Monday") use `byDay` and `bySetPos`
+(1–5 or -1 for last). Future occurrence expansion belongs to the model recurrence library.
 
 Tokens are whitespace-delimited `#project`, `@label` and case-insensitive `p1`…`p4`. Names use
 Unicode letters/numbers, underscores and hyphens. First project, priority, recurrence and date

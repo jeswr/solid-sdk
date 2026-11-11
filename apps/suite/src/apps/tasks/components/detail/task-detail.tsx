@@ -23,7 +23,7 @@ import type { StoredProject, StoredTask } from "../../lib/model/store";
 import { compareTasks, treeRows } from "../../lib/views/project-groups";
 import { expandedRows, taskLevel, taskProgress } from "../../lib/views/tree";
 import { toTaskView } from "../../lib/views/types";
-import { completeTask, deleteTask } from "../../state/actions";
+import { completeTask, deleteTask, skipTask } from "../../state/actions";
 import { useTasks } from "../../state/tasks-context";
 import { TaskProgress, TreeToggle, useCollapsedTasks } from "../tree-controls";
 import { TaskAttachments } from "./attachments";
@@ -238,6 +238,16 @@ export function TaskDetail({
             >
               Delete
             </DropdownMenuItem>
+            {view.recurring && view.state === "open" && (
+              <DropdownMenuItem
+                disabled={!stored.etag || tasks.saving.includes(stored.url)}
+                onSelect={() => {
+                  void skipTask(view, tasks);
+                }}
+              >
+                Skip this occurrence
+              </DropdownMenuItem>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
         <IconButton

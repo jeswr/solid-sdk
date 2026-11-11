@@ -15,7 +15,6 @@ export function fromEditorRule(rule: EditorRule | null, due: Date): RecurrenceRu
   if (!rule) return undefined;
   validateRecurrence(rule);
   if (
-    rule.bySetPos !== undefined ||
     (rule.byMonthDay && (rule.byMonthDay.length !== 1 || (rule.byMonthDay[0] as number) < 1)) ||
     (rule.byMonth && (rule.byMonth.length !== 1 || rule.byMonth[0] !== due.getMonth() + 1)) ||
     (rule.freq === "YEARLY" && rule.byMonthDay && rule.byMonthDay[0] !== due.getDate()) ||
@@ -28,6 +27,7 @@ export function fromEditorRule(rule: EditorRule | null, due: Date): RecurrenceRu
     frequency: rule.freq,
     interval: rule.interval,
     ...(rule.byDay ? { byDay: [...rule.byDay] } : {}),
+    ...(rule.bySetPos !== undefined ? { bySetPos: rule.bySetPos } : {}),
     ...(rule.freq === "MONTHLY" && rule.byMonthDay ? { byMonthDay: rule.byMonthDay[0] } : {}),
     ...(rule.count !== undefined ? { count: rule.count } : {}),
     ...(rule.until ? { until: rule.until.length === 10 ? rule.until : new Date(rule.until) } : {}),
@@ -43,6 +43,7 @@ export function toEditorRule(rule: RecurrenceRule | undefined): EditorRule | nul
     freq: rule.frequency,
     interval: rule.interval ?? 1,
     ...(rule.byDay ? { byDay: [...new Set(rule.byDay)] } : {}),
+    ...(rule.bySetPos !== undefined ? { bySetPos: rule.bySetPos } : {}),
     ...(rule.byMonthDay !== undefined ? { byMonthDay: [rule.byMonthDay] } : {}),
     ...(rule.count !== undefined ? { count: rule.count } : {}),
     ...(rule.until !== undefined

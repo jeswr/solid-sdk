@@ -15,6 +15,7 @@ import { type CompletionPlan, planComplete, planUndo } from "../lib/views/comple
 import { type DropPosition, positionForDrop } from "../lib/views/positions";
 import { projectColour } from "../lib/views/project-colours";
 import { compareTasks } from "../lib/views/project-groups";
+import { applySkip, planSkip, type SkipPlan, skipMatches } from "../lib/views/skip";
 import { type TaskView, toTaskView } from "../lib/views/types";
 import { changeProject, changeTask, moveItem, optimisticValue, sortedProjects } from "./mutations";
 
@@ -1180,6 +1181,61 @@ export class TasksCache {
     if (hidden) this.hiddenTasks.add(url);
     else this.hiddenTasks.delete(url);
     this.emit();
+  }
+  /** One conditional update: skipped occurrences never create completion history. */
+  skipTask(item: StoredTask, now = new Date()): Promise<SkipPlan | undefined> {
+    const current = Object.values(this.snapshot.tasks)
+      .flatMap((load) => load.items)
+      .find((task) => task.url === item.url);
+    if (!current || this.unresolvedCompletions.has(item.url)) return Promise.resolve(undefined);
+    const plan = planSkip(current, this.snapshot.views, now);
+    if (!plan) return Promise.resolve(undefined);
+    return this.updateOccurrence(current, plan.original, plan.previous).then((result) =>
+      result ? plan : undefined,
+    );
+  }
+  undoSkip(item: StoredTask, plan: SkipPlan): Promise<StoredTask | undefined> {
+    return this.updateOccurrence(item, plan.previous, plan.original);
+  }
+  private updateOccurrence(
+    item: StoredTask,
+    target: TaskDetails,
+    expected: TaskDetails,
+  ): Promise<StoredTask | undefined> {
+    const project = this.snapshot.projects.find((project) =>
+      this.snapshot.tasks[project.url]?.items.some((task) => task.url === item.url),
+    );
+    if (!project) return Promise.resolve(undefined);
+    const accepts = (task: TaskItem) => skipMatches(task, expected) || skipMatches(task, target);
+    const current = this.snapshot.tasks[project.url]?.items.find((task) => task.url === item.url);
+    if (!current || !accepts(current.task)) {
+      this.onNotice("The occurrence was changed by a newer action");
+      return Promise.resolve(undefined);
+    }
+    return this.mutate(
+      (state) => {
+        const current = state.tasks[project.url]?.items.find((task) => task.url === item.url);
+        return current && accepts(current.task)
+          ? replaceTask(
+              state,
+              project.url,
+              item.url,
+              changeTask(current, (task) => applySkip(task, target)),
+            )
+          : state;
+      },
+      async () => {
+        const current = this.task(project.url, item.url);
+        if (!accepts(current.task)) throw new Error("The occurrence was changed by a newer action");
+        const task = await this.store.updateTask(current, (task) => applySkip(task, target));
+        this.undoRepairs.get(item.url)?.supersede(task);
+        return { result: task, commit: (state) => replaceTask(state, project.url, item.url, task) };
+      },
+      () => {
+        void this.updateOccurrence(item, target, expected);
+      },
+      [item.url],
+    );
   }
   completeTask(
     item: StoredTask,

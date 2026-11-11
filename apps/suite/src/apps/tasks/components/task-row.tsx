@@ -44,7 +44,7 @@ import { labelColour } from "../lib/views/label-colours";
 import type { Row } from "../lib/views/project-groups";
 import { planTreeMove, taskLevel, taskProgress } from "../lib/views/tree";
 import { priorityValue } from "../lib/views/types";
-import { completeTask, deleteTask } from "../state/actions";
+import { completeTask, deleteTask, skipTask } from "../state/actions";
 import { completeTasks } from "../state/bulk-actions";
 import { useNow } from "../state/clock";
 import { useTaskListFocus } from "../state/list-focus";
@@ -548,6 +548,16 @@ export function TaskRow({
                 >
                   Repeat…
                 </DropdownMenuItem>
+                {task.recurring && task.state === "open" && (
+                  <DropdownMenuItem
+                    disabled={pending || completing || saving}
+                    onSelect={() => {
+                      void skipTask(task, tasks);
+                    }}
+                  >
+                    Skip this occurrence
+                  </DropdownMenuItem>
+                )}
                 {task.recurring && task.state === "open" && (
                   <DropdownMenuItem
                     disabled={pending || completing}
