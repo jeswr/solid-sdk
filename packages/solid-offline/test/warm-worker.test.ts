@@ -27,6 +27,7 @@ afterEach(async () => {
   await dispose?.();
   dispose = undefined;
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
 });
 
 async function worker(transport: typeof fetch) {
@@ -39,6 +40,8 @@ async function worker(transport: typeof fetch) {
     const body = await response.arrayBuffer();
     cache.seed(request, new Response(body, { status: response.status, headers: response.headers }));
   });
+  const { MetadataStore: WorkerMetadata } = await import('../src/metadata-store.js');
+  vi.spyOn(WorkerMetadata.prototype, 'bytes', 'get').mockReturnValue(cache);
   const network = vi.fn(transport);
   vi.stubGlobal('self', {
     addEventListener: (type: string, handler: (event: unknown) => void) =>

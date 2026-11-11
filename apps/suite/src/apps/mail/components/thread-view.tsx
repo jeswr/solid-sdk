@@ -16,6 +16,7 @@ import { Archive, ArrowLeft, MailOpen, Star, X } from "lucide-react";
 import Link from "next/link";
 import { useTheme } from "next-themes";
 import { useEffect, useRef, useState } from "react";
+import { encodeRef } from "@/lib/refs";
 import { type MessageView, mailErrorMessage } from "../lib/client";
 import { useFolders, useMail, useMailActions, useThread } from "../state/mail-context";
 import { MailAsync } from "./async";
@@ -155,6 +156,17 @@ function MessageCard({
                 </details>
               )}
             </>
+          )}
+          {message.draft && (
+            <p className="mail-draft-note">
+              <span className="mail-muted">Draft, not sent.</span>{" "}
+              <Link
+                className="mail-action-link"
+                href={`/mail/compose?draft=${encodeRef(message.iri)}`}
+              >
+                Edit draft
+              </Link>
+            </p>
           )}
           {message.truncated && (
             <p className="mail-muted">

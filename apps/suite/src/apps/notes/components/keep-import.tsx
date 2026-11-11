@@ -21,8 +21,9 @@ import {
   MAX_KEEP_NOTE_BYTES,
   planKeepImport,
 } from "../lib/keep";
-import type { StoredNote } from "../lib/model/store";
+import type { NoteFailure, StoredNote } from "../lib/model/store";
 import { useNotesContext } from "../state/notes-context";
+import { NoteFailures } from "./note-failures";
 
 type Phase =
   | { kind: "choose"; reading?: boolean }
@@ -34,6 +35,7 @@ type Phase =
       failed: KeepImportItem[];
       remaining: KeepImportItem[];
       unarchived: number;
+      archiveFailures: NoteFailure[];
     };
 
 const plural = (count: number, one: string, many = `${one}s`) =>
@@ -105,6 +107,7 @@ export function KeepImportDialog({ open, close }: { open: boolean; close: () => 
     );
     const items = selected.filter((item) => !present.has(keepFingerprint(item.input)));
     const failed: KeepImportItem[] = [];
+    const archiveFailures: NoteFailure[] = [];
     let remaining: KeepImportItem[] = [];
     let imported = 0;
     let unarchived = 0;
@@ -139,8 +142,9 @@ export function KeepImportDialog({ open, close }: { open: boolean; close: () => 
         continue;
       }
       if (item.archived)
-        note = await store.archive(note).catch(() => {
+        note = await store.archive(note).catch((error) => {
           unarchived++;
+          archiveFailures.push({ url: note.url, error });
           return note;
         });
       const url = note.url;
@@ -159,7 +163,7 @@ export function KeepImportDialog({ open, close }: { open: boolean; close: () => 
       });
     }
     await refresh().catch(() => undefined);
-    setPhase({ kind: "finished", imported, failed, remaining, unarchived });
+    setPhase({ kind: "finished", imported, failed, remaining, unarchived, archiveFailures });
   };
 
   const stop = () => {
@@ -318,6 +322,7 @@ export function KeepImportDialog({ open, close }: { open: boolean; close: () => 
                 {phase.unarchived === 1 ? "is" : "are"} in Notes instead.
               </p>
             )}
+            <NoteFailures failures={phase.archiveFailures} />
             {phase.remaining.length > 0 && (
               <p>Stopped with {plural(phase.remaining.length, "note")} still to import.</p>
             )}

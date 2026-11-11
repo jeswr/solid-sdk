@@ -1,4 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+
+import { LoginScreen, useSession } from "@jeswr/app-session/react";
 import {
   AccountMenu,
   Button,
@@ -9,8 +11,6 @@ import {
 } from "@jeswr/app-shell";
 import { FileBrowser } from "@jeswr/pod-drive/ui";
 import { Loading } from "@jeswr/solid-elements/react";
-import { useSession } from "./auth/SessionProvider";
-import { LoginScreen } from "./LoginScreen";
 
 export function App() {
   const { webId } = useSession();
@@ -39,7 +39,7 @@ function AppContent() {
         </main>
       );
     }
-    return <LoginScreen />;
+    return <AppLoginScreen />;
   }
   return (
     <div className="app-shell">
@@ -78,5 +78,17 @@ function AppContent() {
         <FileBrowser rootUrl={session.podRoot} fetch={fetch} title="Your files" />
       </main>
     </div>
+  );
+}
+
+function AppLoginScreen() {
+  return (
+    <LoginScreen
+      appName="Drive"
+      knownProviders={import.meta.env.VITE_KNOWN_PROVIDERS}
+      homeIdp={import.meta.env.VITE_HOME_IDP}
+      homeIdpName={import.meta.env.VITE_HOME_IDP_NAME}
+      dev={import.meta.env.DEV}
+    />
   );
 }
