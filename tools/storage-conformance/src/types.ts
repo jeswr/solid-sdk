@@ -25,6 +25,10 @@ export interface RunningTarget {
   recordScenario?(name: string): void;
   /** Count calls at the injected storage transport, for before-request refusals. */
   requestCount?(): number;
+  /** Trusted fixture routes used to probe services independently of advertisements. */
+  serviceEndpoints?: { trash: string; versioning: string; typeSearch?: string };
+  /** The memory Solid fixture can also exercise ACP without changing network targets. */
+  accessModel?: "wac" | "acp";
   stop(): Promise<void>;
 }
 

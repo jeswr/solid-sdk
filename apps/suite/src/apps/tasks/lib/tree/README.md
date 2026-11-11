@@ -29,3 +29,16 @@ Every operation returns a new array in the original snapshot order, preserving e
 and unchanged task objects. The array's order is not display order: sort each sibling group by
 `orderKey`. Inputs are never mutated. Apply/persist the returned snapshot atomically with the
 data layer's concurrency checks; retain the previous snapshot for undo.
+
+The Tasks UI uses **direct-child** progress, including completed or collapsed children, in list
+rows, board cards and the detail header. Completing/reopening remains non-cascading and uses the
+existing recurrence/undo flow. Project lists and detail trees support unlimited depth; visual
+indentation stops at five levels (two on mobile), while ARIA levels retain the full ancestry.
+Collapsed task IDs live only in session memory, scoped to the task cache. Board and date views render tasks flat.
+
+`lib/views/tree.ts` adapts the existing numeric `schema:position` ordering into temporary,
+unique fractional keys for tree planning, then maps the changed root's destination neighbours
+back to a numeric position. Indent/outdent persist `dct:isPartOf` and `schema:position` in one
+conditional cache update of that root; descendants and their completion states are untouched.
+A move is unavailable when numeric ordering has no representable gap or the complete forest
+cannot be validated. No other sibling is renumbered by these operations.

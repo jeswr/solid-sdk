@@ -1,8 +1,10 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { OpenedWorkbook, WorkbookService } from "../src/apps/sheets/lib/contract";
 import { WorkbookConflictError, WorkbookNotFoundError } from "../src/apps/sheets/lib/contract";
 import { pendingSaves } from "../src/apps/sheets/lib/pending-saves";
+import { createWorkbookService } from "../src/apps/sheets/lib/workbook";
 import { act, deferred, h, mount } from "./drive-ui-dom";
 import { harness, snapshot } from "./sheets-workbook-helpers";
 
@@ -28,6 +30,44 @@ async function setup(online = true) {
 afterEach(() => vi.restoreAllMocks());
 
 describe("workbook editor lifecycle", () => {
+  it("opens and reloads a shared route using the recipient's distinct storage root", async () => {
+    const { book, options, service } = await setup(false);
+    const ownerEntry = pendingSaves.acquire(service, book);
+    ownerEntry.setOnline(false);
+    const ownerEdit = snapshot("Alice's pending edit");
+    ownerEntry.schedule(() => ownerEdit);
+    await ownerEntry.flush();
+    const recipient = createWorkbookService({
+      ...options,
+      publicFetch: options.fetch,
+      podRoot: "https://pod.example/bob/",
+      webId: "https://pod.example/bob/profile/card#me",
+    });
+    context.service = recipient;
+    const own = vi.spyOn(recipient, "open");
+    const shared = vi.spyOn(recipient, "openShared");
+    const editor = await mount(h(Editor, { container: book.container }));
+    expect(state.error).toBeUndefined();
+    expect(state.readOnly).toBe(true);
+    expect(state.workbook?.snapshot).toEqual(book.snapshot);
+    await act(async () => {
+      expect(await state.reload()).toEqual(book.snapshot);
+    });
+    expect(own).not.toHaveBeenCalled();
+    expect(shared).toHaveBeenCalledTimes(2);
+    expect(ownerEntry.workbook.snapshot).toEqual(ownerEdit);
+    expect(ownerEntry.workbook.readOnly).not.toBe(true);
+    shared.mockRejectedValueOnce(new WorkbookNotFoundError(book.container));
+    await act(async () => {
+      await expect(state.reload()).rejects.toMatchObject({ reason: "missing" });
+    });
+    shared.mockRejectedValueOnce(new WorkbookNotFoundError(book.container));
+    await act(() => state.retryOpen());
+    expect(pendingSaves.get(book.container)).toBe(ownerEntry);
+    expect(ownerEntry.dirty).toBe(true);
+    await editor.unmount();
+    pendingSaves.drop(book.container);
+  });
   it("reuses offline pending edits on reopen and saves them after navigating away again", async () => {
     const { service, book } = await setup(false);
     const open = vi.spyOn(service, "open");
@@ -274,4 +314,124 @@ describe("workbook editor lifecycle", () => {
     expect(pendingSaves.get(book.container)).toBeUndefined();
     await editor.unmount();
   });
+});
+
+it("suppresses detached pending saves when re-opening reveals view-only access", async () => {
+  const { service, book } = await setup(false);
+  const entry = pendingSaves.acquire(service, book);
+  entry.setOnline(false);
+  const local = snapshot("Preserved copy");
+  entry.schedule(() => local);
+  await entry.flush();
+  vi.spyOn(service, "open").mockResolvedValue({ ...book, readOnly: true });
+  const save = vi.spyOn(service, "save");
+  const editor = await mount(h(Editor, { container: book.container }));
+  expect(state.readOnly).toBe(true);
+  expect(state.workbook?.snapshot).toEqual(local);
+  await act(async () => {
+    state.rename("Blocked");
+    state.scheduleSave(() => snapshot());
+    await state.retry();
+  });
+  await editor.unmount();
+  expect(save).not.toHaveBeenCalled();
+  expect(pendingSaves.get(book.container)?.dirty).toBe(true);
+  pendingSaves.drop(book.container);
+});
+
+it("retains edits, title and unload protection through repeated view-only navigation after a 403", async () => {
+  const { service, book, setHook } = await setup();
+  const save = vi.spyOn(service, "save");
+  const first = await mount(h(Editor, { container: book.container }));
+  const local = snapshot("Keep this unsaved edit");
+  setHook((call) => (call.method === "PUT" ? new Response(null, { status: 403 }) : undefined));
+  await act(async () => {
+    state.scheduleSave(() => local);
+    state.rename("Unsaved title");
+    await state.flush();
+  });
+  expect(state.readOnly).toBe(true);
+  expect(state.status).toBe("error");
+  await first.unmount();
+  vi.spyOn(service, "open").mockResolvedValue({ ...book, readOnly: true });
+  for (let navigation = 0; navigation < 3; navigation++) {
+    const reopened = await mount(h(Editor, { container: book.container }));
+    expect(state.readOnly).toBe(true);
+    expect(state.workbook?.snapshot).toEqual(local);
+    expect(state.metadata?.title).toBe("Unsaved title");
+    expect(pendingSaves.get(book.container)?.dirty).toBe(true);
+    const closing = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(closing);
+    expect(closing.defaultPrevented).toBe(true);
+    await act(async () => {
+      window.dispatchEvent(new Event("online"));
+      await state.retry();
+      await state.flush();
+    });
+    await reopened.unmount();
+  }
+  expect(save).toHaveBeenCalledTimes(1);
+  expect(pendingSaves.get(book.container)?.dirty).toBe(true);
+  pendingSaves.drop(book.container);
+});
+
+it.each([
+  true,
+  false,
+])("restores Write on reopen without losing retained edits (online %s)", async (online) => {
+  const { service, book, pod, setHook } = await setup();
+  const save = vi.spyOn(service, "save");
+  const first = await mount(h(Editor, { container: book.container }));
+  const local = snapshot("Retained after revocation");
+  let revoked = true;
+  setHook(async (call) => {
+    if (call.method === "PUT" && revoked) return new Response(null, { status: 403 });
+    if (call.method !== "GET") return undefined;
+    const response = await pod.fetch(call.url, call.init);
+    const headers = new Headers(response.headers);
+    headers.set("wac-allow", `user="${revoked ? "read" : "read write"}",public=""`);
+    return new Response(response.body, { status: response.status, headers });
+  });
+  await act(async () => {
+    state.scheduleSave(() => local);
+    state.rename("Retained title");
+    await state.flush();
+  });
+  expect(state.readOnly).toBe(true);
+  await first.unmount();
+  const pending = pendingSaves.get(book.container);
+  const view = await mount(h(Editor, { container: book.container }));
+  expect(state.readOnly).toBe(true);
+  expect(state.workbook?.snapshot).toEqual(local);
+  await view.unmount();
+  expect(save).toHaveBeenCalledTimes(1);
+  if (!online) {
+    vi.spyOn(window.navigator, "onLine", "get").mockReturnValue(false);
+    window.dispatchEvent(new Event("offline"));
+  }
+  revoked = false;
+  const writable = await mount(h(Editor, { container: book.container }));
+  expect(state.readOnly).toBe(false);
+  expect(state.workbook?.snapshot).toEqual(local);
+  expect(state.metadata?.title).toBe("Retained title");
+  expect(pendingSaves.get(book.container)).toBe(pending);
+  await act(async () => {
+    if (!online) {
+      await state.retry();
+      expect(save).toHaveBeenCalledTimes(1);
+      vi.spyOn(window.navigator, "onLine", "get").mockReturnValue(true);
+      window.dispatchEvent(new Event("online"));
+    }
+    await state.retry();
+    await state.flush();
+  });
+  expect(state.status).toBe("saved");
+  expect((await service.open(book.container)).snapshot).toEqual(local);
+  expect((await service.open(book.container)).metadata.title).toBe("Retained title");
+  await act(async () => {
+    state.scheduleSave(() => snapshot("Writable again"));
+    await state.flush();
+  });
+  expect((await service.open(book.container)).snapshot).toEqual(snapshot("Writable again"));
+  await writable.unmount();
 });

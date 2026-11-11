@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 /**
  * Stale-while-revalidate engine for §2.
  *
@@ -32,6 +33,7 @@ import {
   keyRequest,
   type RequestLike,
   requestCacheDirective,
+  withCacheProvenance,
 } from './cache-policy.js';
 import type { MetadataStore } from './metadata-store.js';
 import { reportRevalidation } from './revalidation-events.js';
@@ -120,7 +122,10 @@ export async function handleFetch(request: Request, deps: SwrDeps): Promise<Hand
   //    passthrough — decidable from the request alone, no cache consulted.
   if (!isPotentiallyCacheable(rl)) {
     const response = await deps.fetch(request);
-    return { response, source: 'network-no-cache' };
+    return {
+      response: rl.method === 'GET' ? withCacheProvenance(response, 'miss') : response,
+      source: 'network-no-cache',
+    };
   }
 
   // 2. HEAD is a non-destructive passthrough (never serves/evicts GET bytes).
@@ -192,7 +197,7 @@ async function handleDirective(
   if (directive === 'no-store') {
     const passthrough = new Request(request, { method: 'GET', cache: 'no-store' });
     const response = await deps.fetch(passthrough);
-    return { response, source: 'request-no-store' };
+    return { response: withCacheProvenance(response, 'miss'), source: 'request-no-store' };
   }
   // no-cache: forced synchronous revalidation before serving.
   return forcedRevalidate(request, rl, deps);
@@ -235,7 +240,7 @@ async function handleCachePath(
       // Serve the cached negative bytes if we kept them (#8); else synthesize the
       // bare status so offline/within-TTL reads are uniform.
       const response = negBytes ? negBytes.clone() : new Response(null, { status: record.status });
-      return { response, source: 'cache-hit-negative' };
+      return { response: withCacheProvenance(response, 'hit'), source: 'cache-hit-negative' };
     }
     // TTL expired → treat as a miss: re-fetch from network.
     return networkAndMaybeStore(request, rl, deps, 'expired-negative');
@@ -251,11 +256,18 @@ async function handleCachePath(
   if (deps.isOnline()) {
     // HIT + ONLINE: serve provisional bytes NOW, revalidate in background.
     const revalidation = revalidate(request, rl, record, deps);
-    return { response: cached.clone(), source: 'cache-hit-online', revalidation };
+    return {
+      response: withCacheProvenance(cached, 'stale'),
+      source: 'cache-hit-online',
+      revalidation,
+    };
   }
 
   // HIT + OFFLINE: serve provisional bytes, mark them stale/unconfirmed.
-  return { response: withOfflineStale(cached.clone()), source: 'cache-hit-offline' };
+  return {
+    response: withOfflineStale(withCacheProvenance(cached, 'stale')),
+    source: 'cache-hit-offline',
+  };
 }
 
 /**
@@ -323,7 +335,10 @@ async function forcedRevalidate(
         await deps.meta.touch(record.key, deps.now());
         if (cached) {
           terminal = 'revalidated';
-          return { response: cached.clone(), source: 'request-no-cache-revalidated' };
+          return {
+            response: withCacheProvenance(cached, 'hit'),
+            source: 'request-no-cache-revalidated',
+          };
         }
         // Bytes evicted under us → fall through to a fresh unconditional read below
         // (purge first so no stale variant can survive). Re-fetch without the
@@ -379,7 +394,10 @@ async function finalizeForced(
   const authoritative =
     (fresh.status >= 200 && fresh.status < 300) || fresh.status === 403 || fresh.status === 404;
   if (!authoritative) {
-    return { response: fresh, source: 'request-no-cache-revalidated' };
+    return {
+      response: withCacheProvenance(fresh, 'miss'),
+      source: 'request-no-cache-revalidated',
+    };
   }
   const decision = classifyResponse(rl, resLike(fresh));
   // A change/revoke affects the whole resource → purge ALL variants first, so a
@@ -387,7 +405,10 @@ async function finalizeForced(
   // answer.
   await purgeAllVariants(rl.url, deps);
   if (decision.cacheable) await store(rl, fresh, deps, decision.negative);
-  return { response: fresh.clone(), source: 'request-no-cache-revalidated' };
+  return {
+    response: withCacheProvenance(fresh, 'miss'),
+    source: 'request-no-cache-revalidated',
+  };
 }
 
 /** True if the request *could* be cached (GET/HEAD + not a never-cache endpoint). */
@@ -486,7 +507,7 @@ async function missOrFetch(
 ): Promise<HandleResult> {
   if (!deps.isOnline()) {
     const response = await deps.fetch(request);
-    return { response, source: 'offline-miss' };
+    return { response: withCacheProvenance(response, 'miss'), source: 'offline-miss' };
   }
   return networkAndMaybeStore(request, rl, deps, 'miss');
 }
@@ -501,11 +522,11 @@ async function networkAndMaybeStore(
   const response = await deps.fetch(request);
   const decision = classifyResponse(rl, resLike(response));
   if (!decision.cacheable) {
-    return { response, source: 'network-miss-nostore' };
+    return { response: withCacheProvenance(response, 'miss'), source: 'network-miss-nostore' };
   }
   // GET only (HEAD is metadata-only, handled upstream).
   await store(rl, response, deps, decision.negative);
-  return { response: response.clone(), source: 'network-miss-store' };
+  return { response: withCacheProvenance(response, 'miss'), source: 'network-miss-store' };
 }
 
 /**

@@ -10,17 +10,23 @@ import { podFetch } from "./sparq-solid.js";
 test("selection expands both memory protocols, deduplicates and refuses typos", () => {
   expect(selectTargets().map((target) => target.name)).toEqual([
     "memory-solid",
+    "memory-solid-acp",
     "memory-lws",
     "sparq-solid",
   ]);
-  expect(selectTargets("memory,memory-lws,memory-solid,sparq-solid")).toHaveLength(3);
+  expect(selectTargets("memory,memory-lws,memory-solid,memory-solid-acp,sparq-solid")).toHaveLength(
+    4,
+  );
   expect(selectTargets("css").map((target) => target.name)).toEqual(["css"]);
   expect(() => selectTargets("")).toThrow();
 });
 
-test("memory has no accidental network fallback and refuses second-identity impersonation", async () => {
+test("memory transport has no network fallback and refuses second-identity impersonation", async () => {
   const running = await memoryTarget("solid").start();
-  await expect(running.fetch(running.root)).rejects.toThrow("no HTTP transport");
+  expect((await running.fetch(running.root, { method: "HEAD" })).status).toBe(200);
+  await expect(running.fetch("https://foreign.example/")).rejects.toThrow(
+    "Foreign memory transport",
+  );
   expect(await running.authFetchFor(running.webId)).toBe(running.fetch);
   await expect(running.authFetchFor("https://identity.example/bob#me")).rejects.toMatchObject({
     code: "unsupported",

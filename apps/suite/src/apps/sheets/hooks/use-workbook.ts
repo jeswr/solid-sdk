@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { OpenedWorkbook, Snapshot } from "../lib/contract";
 import { WorkbookNotFoundError } from "../lib/contract";
 import { pendingSaves } from "../lib/pending-saves";
+import { directChild } from "../lib/workbook/layout";
 import { useWorkbookService } from "../state/service";
 
 export function useWorkbook(container: string) {
@@ -14,6 +15,13 @@ export function useWorkbook(container: string) {
   const [status, setStatus] = useState<ReturnType<typeof pendingSaves.acquire>["status"]>("saved");
   const [attempt, setAttempt] = useState(0);
   const writer = useRef<ReturnType<typeof pendingSaves.acquire> | undefined>(undefined);
+  const own = container.startsWith(service.root) && directChild(service.root, container);
+  const open = useCallback(async () => {
+    return {
+      opened: await (own ? service.open(container) : service.openShared(container)),
+      shared: !own,
+    };
+  }, [container, service, own]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: attempt explicitly retries opening the workbook
   useEffect(() => {
@@ -23,10 +31,17 @@ export function useWorkbook(container: string) {
     setWorkbook(null);
     setError(undefined);
     pendingSaves.connect(window, () => navigator.onLine);
-    void service.open(container).then(
-      (opened) => {
+    void open().then(
+      ({ opened, shared }) => {
         if (!live) return;
+        // Shared links have no writer and never consume another account's pending edits.
+        if (shared) {
+          setWorkbook(opened);
+          setStatus("saved");
+          return;
+        }
         const pending = pendingSaves.get(container);
+        pending?.setReadOnly(opened.readOnly === true);
         const entry = pendingSaves.acquire(service, pending?.workbook ?? opened);
         writer.current = entry;
         const update = () => {
@@ -38,7 +53,7 @@ export function useWorkbook(container: string) {
       },
       (failure: unknown) => {
         if (!live) return;
-        if (failure instanceof WorkbookNotFoundError && failure.reason === "missing")
+        if (failure instanceof WorkbookNotFoundError && failure.reason === "missing" && own)
           pendingSaves.drop(container);
         setError(failure);
       },
@@ -59,17 +74,18 @@ export function useWorkbook(container: string) {
       document.removeEventListener("visibilitychange", visibility);
       window.removeEventListener("pagehide", flush);
     };
-  }, [container, service, attempt]);
+  }, [container, service, open, own, attempt]);
 
   const scheduleSave = useCallback((read: () => Snapshot) => writer.current?.schedule(read), []);
   const reload = async () => {
     try {
-      const opened = await service.open(container);
-      writer.current?.reset(opened);
+      const { opened, shared } = await open();
+      if (shared) setWorkbook(opened);
+      else writer.current?.reset(opened);
       return opened.snapshot;
     } catch (failure) {
       if (failure instanceof WorkbookNotFoundError) {
-        if (failure.reason === "missing") pendingSaves.drop(container);
+        if (failure.reason === "missing" && own) pendingSaves.drop(container);
         setError(failure);
       }
       throw failure;
@@ -77,6 +93,7 @@ export function useWorkbook(container: string) {
   };
   return {
     workbook,
+    readOnly: workbook?.readOnly === true,
     metadata: workbook?.metadata,
     version: workbook?.version,
     error,

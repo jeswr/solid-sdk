@@ -46,6 +46,7 @@ import { useTasks } from "../state/tasks-context";
 import { useCalendarExchange } from "./calendar-exchange/calendar-exchange";
 import "./calendar-exchange/calendar-exchange.css";
 import { useDropTarget } from "./dnd/use-task-drag";
+import { TasksImportDialog } from "./import/import-dialog";
 import { ShareProject } from "./share-project";
 
 /** A sidebar entry that accepts dropped rows: the task moves to that project (06-tasks §4.4). */
@@ -396,6 +397,7 @@ export function TasksSidebar() {
         </>
       )}
       <div className="tsk-sidebar-footer">
+        <TasksImportDialog />
         {creating ? (
           <form
             onSubmit={(event) => {

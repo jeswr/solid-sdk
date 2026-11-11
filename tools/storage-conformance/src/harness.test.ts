@@ -5,7 +5,7 @@ import { memoryTarget } from "./targets/memory.js";
 import type { ConformanceCase, RunningTarget } from "./types.js";
 
 async function fixture() {
-  const running = await memoryTarget("lws").start();
+  const running = await memoryTarget("lws", { versioning: false }).start();
   const features = await running.resolveFeatures?.();
   if (!features) throw new Error("Missing fixture features");
   return { running, features };
