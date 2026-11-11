@@ -89,6 +89,18 @@ must have a `codegen` script that runs `@jeswr/federation-codegen` into `src/gen
 changes), and a drift test that runs `pnpm run codegen --out <tmp>` and compares every
 generated file byte-for-byte. Fixture tests are in `test/check-codegen.test.mjs`.
 
+<!-- AUTHORED-BY Codex GPT-6 -->
+**Code-quality gates.** `pnpm run check:rdf-discipline` and `pnpm run check:app-duplication`
+run in `lint:root`. They ratchet hand-built RDF in app source and normalized logic copied
+across apps or between apps and libraries, using committed `scripts/*-baseline.json` files.
+New violations, increased counts and new duplicate clusters fail; reduced or removed debt
+also fails until `pnpm run <check> --update-baseline` tightens the baseline. RDF exceptions
+require a same-line `// rdf-discipline-allow: <reason>` comment and appear in the summary.
+Duplication uses 120-token windows (`--window` overrides this for fixtures), ignores imports
+and pure type declarations, and reports source ranges; extract shared logic into `packages/*`.
+Both guards exclude tests, fixtures, declarations and `src/generated/`, and accept `--root`
+for isolated fixtures in `test/check-{rdf-discipline,app-duplication}.test.mjs`.
+
 <!-- AUTHORED-BY Codex GPT-5 -->
 ## Local agent skills
 
