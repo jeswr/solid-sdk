@@ -1,0 +1,25 @@
+# AUTHORED-BY Codex (GPT-6.1 Sol)
+@prefix schema: <http://schema.org/> .
+@prefix slides: <https://jeswr.org/ns/slides#> .
+@prefix dct: <http://purl.org/dc/terms/> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+schema:PresentationDigitalDocument a owl:Class ; rdfs:label "Presentation"@en ; rdfs:comment "A presentation in a presentation document."@en .
+slides:Slide a owl:Class ; rdfs:label "Slide"@en ; rdfs:comment "A slide in a presentation document."@en .
+schema:name a owl:DatatypeProperty ; rdfs:label "name"@en ; rdfs:comment "name value on a presentation."@en ; rdfs:domain schema:PresentationDigitalDocument ; rdfs:range xsd:string .
+schema:description a owl:DatatypeProperty ; rdfs:label "description"@en ; rdfs:comment "description value on a presentation."@en ; rdfs:domain schema:PresentationDigitalDocument ; rdfs:range xsd:string .
+slides:theme a owl:DatatypeProperty ; rdfs:label "theme"@en ; rdfs:comment "theme value on a presentation."@en ; rdfs:domain schema:PresentationDigitalDocument ; rdfs:range xsd:string .
+slides:aspectRatio a owl:DatatypeProperty ; rdfs:label "aspectRatio"@en ; rdfs:comment "aspectRatio value on a presentation."@en ; rdfs:domain schema:PresentationDigitalDocument ; rdfs:range xsd:string .
+dct:created a owl:DatatypeProperty ; rdfs:label "created"@en ; rdfs:comment "created value on a presentation."@en ; rdfs:domain schema:PresentationDigitalDocument ; rdfs:range xsd:dateTime .
+dct:modified a owl:DatatypeProperty ; rdfs:label "modified"@en ; rdfs:comment "modified value on a presentation."@en ; rdfs:domain schema:PresentationDigitalDocument ; rdfs:range xsd:dateTime .
+schema:hasPart a owl:ObjectProperty ; rdfs:label "slideUrls"@en ; rdfs:comment "slideUrls value on a presentation."@en ; rdfs:domain schema:PresentationDigitalDocument ; rdfs:range slides:Slide .
+schema:position a owl:DatatypeProperty ; rdfs:label "position"@en ; rdfs:comment "position value on a slide."@en ; rdfs:domain slides:Slide ; rdfs:range xsd:integer .
+slides:layout a owl:DatatypeProperty ; rdfs:label "layout"@en ; rdfs:comment "layout value on a slide."@en ; rdfs:domain slides:Slide ; rdfs:range xsd:string .
+schema:text a owl:DatatypeProperty ; rdfs:label "body"@en ; rdfs:comment "body value on a slide."@en ; rdfs:domain slides:Slide ; rdfs:range xsd:string .
+slides:secondBody a owl:DatatypeProperty ; rdfs:label "secondBody"@en ; rdfs:comment "secondBody value on a slide."@en ; rdfs:domain slides:Slide ; rdfs:range xsd:string .
+schema:image a owl:ObjectProperty ; rdfs:label "image"@en ; rdfs:comment "image value on a slide."@en ; rdfs:domain slides:Slide ; rdfs:range rdfs:Resource .
+slides:imageAlt a owl:DatatypeProperty ; rdfs:label "imageAlt"@en ; rdfs:comment "imageAlt value on a slide."@en ; rdfs:domain slides:Slide ; rdfs:range xsd:string .
+slides:speakerNotes a owl:DatatypeProperty ; rdfs:label "notes"@en ; rdfs:comment "notes value on a slide."@en ; rdfs:domain slides:Slide ; rdfs:range xsd:string .
+slides:hidden a owl:DatatypeProperty ; rdfs:label "hidden"@en ; rdfs:comment "hidden value on a slide."@en ; rdfs:domain slides:Slide ; rdfs:range xsd:boolean .
+slides:drawing a owl:ObjectProperty ; rdfs:label "drawing"@en ; rdfs:comment "drawing value on a slide."@en ; rdfs:domain slides:Slide ; rdfs:range rdfs:Resource .
