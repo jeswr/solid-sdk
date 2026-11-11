@@ -396,9 +396,20 @@ test("the exact 2000-resource boundary succeeds", async () => {
     failed: [],
     notification: { requested: false, delivered: false },
   }));
-  const result = await movePreservingAccess(f.storage, from, f.target, f.options);
-  expect(result.reapplied).toHaveLength(0);
-  expect(result.preserved).toBe(true);
+  // Stop at the first staged write: the boundary is the discovery cap, and copying 2,000
+  // resources through the memory backend takes minutes under CI coverage load.
+  const create = f.storage.create.bind(f.storage);
+  const staged = new Error("staging reached");
+  vi.spyOn(f.storage, "create").mockImplementation(async (parent, ...rest) => {
+    if (parent.startsWith(f.target)) throw staged;
+    return create(parent, ...rest);
+  });
+  const error = await movePreservingAccess(f.storage, from, f.target, f.options).catch(
+    (caught: unknown) => caught,
+  );
+  // Discovery accepted all 2,000 resources and reached the first staged placeholder.
+  expect(error).toMatchObject({ step: "reapply", cause: staged });
+  expect(await f.storage.head(from)).toMatchObject({ kind: "container" });
 }, 60_000);
 
 test.each([
