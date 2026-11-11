@@ -1016,7 +1016,10 @@ test("an ambiguous content commit retains the protected copy when its old valida
   expect(await (await f.storage.read(from)).text()).toBe("secret");
 });
 
-test("a placeholder ETag seen only by a follow-up HEAD is never used to write or delete", async () => {
+test.each([
+  "no",
+  "an empty-chunk",
+] as const)("a placeholder without a response ETag is used while still empty (%s body)", async (shape) => {
   const f = await setup();
   const from = await f.item();
   const create = required(vi.mocked(f.storage.create).getMockImplementation());
@@ -1024,14 +1027,47 @@ test("a placeholder ETag seen only by a follow-up HEAD is never used to write or
     const { etagSource: _own, ...result } = await create(...args);
     return { ...result, etagSource: "follow-up" };
   });
+  // A server may answer the placeholder GET with no body, or with zero-length chunks.
+  const read = f.storage.read.bind(f.storage);
+  vi.spyOn(f.storage, "read").mockImplementation(async (url, ...rest) => {
+    const result = await read(url, ...rest);
+    if (url !== `${f.target}file`) return result;
+    const body =
+      shape === "no"
+        ? null
+        : new ReadableStream<Uint8Array>({
+            start(controller) {
+              controller.enqueue(new Uint8Array());
+              controller.close();
+            },
+          });
+    return { ...result, body };
+  });
+  const moved = await movePreservingAccess(f.storage, from, f.target, f.options);
+  expect(moved.url).toBe(`${f.target}file`);
+  expect(await (await f.storage.read(`${f.target}file`)).text()).toBe("secret");
+  await expect(f.storage.head(from)).rejects.toMatchObject({ code: "not-found" });
+});
+
+test("a placeholder another writer filled is never written or deleted", async () => {
+  const f = await setup();
+  const from = await f.item();
+  const create = required(vi.mocked(f.storage.create).getMockImplementation());
+  const write = required(vi.mocked(f.storage.write).getMockImplementation());
+  vi.spyOn(f.storage, "create").mockImplementationOnce(async (...args) => {
+    const { etagSource: _own, ...result } = await create(...args);
+    await write(result.url, "intruder", { contentType: "text/plain", ifMatch: "*" });
+    return { ...result, etagSource: "follow-up" };
+  });
+  vi.mocked(f.storage.write).mockClear();
   const remove = vi.spyOn(f.storage, "delete");
   await expect(movePreservingAccess(f.storage, from, f.target, f.options)).rejects.toMatchObject({
     step: "rollback-failed",
-    cause: { errors: [expect.anything(), expect.objectContaining({ code: "conflict" })] },
+    cause: { errors: [expect.objectContaining({ code: "conflict" }), expect.anything()] },
   });
   expect(f.storage.write).not.toHaveBeenCalled();
   expect(remove).not.toHaveBeenCalled();
-  expect(await ownBob(`${f.target}file`, f.options)).toMatchObject({ role: "viewer" });
+  expect(await (await f.storage.read(`${f.target}file`)).text()).toBe("intruder");
   expect(await (await f.storage.read(from)).text()).toBe("secret");
 });
 

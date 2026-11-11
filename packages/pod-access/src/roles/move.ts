@@ -100,6 +100,23 @@ interface Copy {
 function ownEtag(result: WriteResult): string | null {
   return result.etagSource === "response" ? result.etag : null;
 }
+/**
+ * CSS sends no ETag on create. Read the placeholder once instead: a version that is still empty
+ * is content-equivalent to the one this move created, so writing or deleting it under that
+ * validator cannot lose another writer's bytes. Any byte means someone else wrote it.
+ */
+async function emptyPlaceholderEtag(
+  storage: StorageClient,
+  url: string,
+  io: { signal?: AbortSignal },
+): Promise<string> {
+  const current = await storage.read(url, io);
+  // Leaving the loop early cancels the stream, so an intruder's large body is never drained.
+  for await (const chunk of current.body ?? [])
+    if (chunk.byteLength)
+      throw moveError(url, "Placeholder was written by someone else", "conflict");
+  return strongEtag(current.etag, url);
+}
 function equalRows(a: RoleGrant[], b: RoleGrant[]): boolean {
   const keys = (rows: RoleGrant[]) => rows.map((g) => JSON.stringify([g.agent, g.role])).sort();
   return JSON.stringify(keys(a)) === JSON.stringify(keys(b));
@@ -304,6 +321,8 @@ export async function movePreservingAccess(
         copies.push(copy);
         if (created.url !== url)
           throw moveError(url, "Placeholder returned a different URL", "conflict");
+        if (!item.container && copy.etag === null)
+          copy.etag = await emptyPlaceholderEtag(storage, url, io);
         await unchanged(storage, item, opts, signal);
         if (item.own.ownEtag !== undefined) {
           await apply(url, item.grants, opts);
