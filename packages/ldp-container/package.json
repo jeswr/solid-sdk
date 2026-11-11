@@ -36,9 +36,10 @@
     "SKILL.md"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
-    "lint": "biome check src test vitest.config.ts",
-    "lint:fix": "biome check --write src test vitest.config.ts",
+    "build": "tsc -p tsconfig.build.json && node scripts/copy-generated.mjs",
+    "codegen": "node node_modules/@jeswr/federation-codegen/dist/cli.js gen --ontology codegen/listing.ontology.ttl --shapes codegen/listing.shapes.ttl --config codegen.config.json --out src/generated",
+    "lint": "biome check src scripts test vitest.config.ts codegen.config.json package.json",
+    "lint:fix": "biome check --write src scripts test vitest.config.ts codegen.config.json package.json",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.test.json",
     "test": "vitest run",
     "test:watch": "vitest"
@@ -46,13 +47,13 @@
   "dependencies": {
     "@jeswr/fetch-rdf": "workspace:*",
     "@jeswr/guarded-fetch": "workspace:*",
-    "@jeswr/rdf-serialize": "workspace:*",
-    "@jeswr/suite-vocab": "workspace:*",
+    "@jeswr/model-runtime": "workspace:*",
     "@solid/object": "^0.6.0",
     "n3": "^2.0.3"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.1",
+    "@jeswr/federation-codegen": "workspace:*",
     "@types/n3": "^1.26.1",
     "typescript": "^6.0.3",
     "vitest": "^4.1.9"

@@ -102,3 +102,60 @@ test("rejects invalid dates rather than emitting invalid dateTime literals", () 
     ]),
   ).toThrow(RangeError);
 });
+
+test("preserves literal contents and IRI spelling without sanitizing or normalizing", () => {
+  const metadata: ListingMetadata = {
+    url: "https://POD.example:443/files/report%2Epdf?b=2&a=1#part",
+    title: "  report\u0001\n📄  ",
+    modified: null,
+    size: null,
+    contentType: "application/example\u0001",
+    types: ["https://EXAMPLE.org:443/Type"],
+  };
+  const quads = buildListingDataset(container, [metadata]);
+  const member = quads.filter((quad) => quad.subject.value === metadata.url);
+  expect(member).toHaveLength(3);
+  expect(member.map((quad) => quad.object.value)).toEqual(
+    expect.arrayContaining([metadata.title, metadata.contentType, ...metadata.types]),
+  );
+  expect(quads.find((quad) => quad.subject.value === container)?.object.value).toBe(metadata.url);
+});
+
+test.each([
+  0.5,
+  Number.NaN,
+  Number.POSITIVE_INFINITY,
+])("generated guards omit invalid integer size %s", (size) => {
+  const quads = buildListingDataset(container, [
+    {
+      url: `${container}invalid-size`,
+      title: "invalid-size",
+      modified: null,
+      size,
+      contentType: null,
+      types: [],
+    },
+  ]);
+  expect(quads).toHaveLength(2);
+  expect(
+    quads.some((quad) => quad.predicate.value === "http://www.w3.org/ns/posix/stat#size"),
+  ).toBe(false);
+});
+
+test("generated wrappers reject unsafe subjects and type IRIs", () => {
+  const metadata: ListingMetadata = {
+    url: `${container}report`,
+    title: "report",
+    modified: null,
+    size: null,
+    contentType: null,
+    types: [],
+  };
+  expect(() => buildListingDataset("relative", [])).toThrow(TypeError);
+  expect(() =>
+    buildListingDataset(container, [{ ...metadata, url: `${container}bad space` }]),
+  ).toThrow(TypeError);
+  expect(() => buildListingDataset(container, [{ ...metadata, types: ["relative"] }])).toThrow(
+    TypeError,
+  );
+});

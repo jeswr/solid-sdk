@@ -3510,12 +3510,9 @@ importers:
       '@jeswr/guarded-fetch':
         specifier: workspace:*
         version: link:../guarded-fetch
-      '@jeswr/rdf-serialize':
+      '@jeswr/model-runtime':
         specifier: workspace:*
-        version: link:../rdf-serialize
-      '@jeswr/suite-vocab':
-        specifier: workspace:*
-        version: link:../suite-vocab
+        version: link:../model-runtime
       '@solid/object':
         specifier: ^0.6.0
         version: 0.6.0
@@ -3526,6 +3523,9 @@ importers:
       '@biomejs/biome':
         specifier: ^2.5.1
         version: 2.5.3
+      '@jeswr/federation-codegen':
+        specifier: workspace:*
+        version: link:../federation-codegen
       '@types/n3':
         specifier: ^1.26.1
         version: 1.26.1
