@@ -39,12 +39,14 @@ import type { SaveStatus } from "../lib/autosave";
 import {
   type SheetEngine,
   type Snapshot,
+  type SnapshotSaved,
   WorkbookLinkError,
   WorkbookNotFoundError,
 } from "../lib/contract";
 import { loadEngine } from "../lib/engine";
 import { pendingSaves } from "../lib/pending-saves";
 import { useWorkbookService } from "../state/service";
+import { WorkbookComments } from "./cell-comments";
 import { ShareWorkbook } from "./share-workbook";
 import { SheetsSidebar, workbookHref } from "./sheets-sidebar";
 import "@univerjs/preset-sheets-core/lib/index.css";
@@ -83,20 +85,24 @@ export function SheetNotFound() {
 
 function Grid({
   snapshot,
+  revision,
   onChange,
+  onSaved,
   engineRef,
   onReady,
   readOnly,
 }: {
   snapshot: Snapshot;
+  revision: string;
   onChange: (read: () => Snapshot) => void;
+  onSaved: (listener: SnapshotSaved) => (() => void) | undefined;
   engineRef: { current: SheetEngine | null };
   onReady: (engine: SheetEngine | null) => void;
   readOnly: boolean;
 }) {
   const host = useRef<HTMLDivElement>(null);
-  const latestSnapshot = useRef(snapshot);
-  latestSnapshot.current = snapshot;
+  const latestSnapshot = useRef({ snapshot, revision });
+  latestSnapshot.current = { snapshot, revision };
   const { resolvedTheme } = useTheme();
   const dark = useRef(resolvedTheme === "dark");
   const [ready, setReady] = useState(false);
@@ -116,16 +122,19 @@ function Grid({
     let live = true;
     let engine: SheetEngine | undefined;
     let unsubscribe: (() => void) | undefined;
+    let unsubscribeSaved: (() => void) | undefined;
     setFailed(false);
     setReady(false);
     void (async () => {
       const mount = await loadEngine();
       if (!live || !host.current) return;
       engine = await mount(host.current, {
-        snapshot: latestSnapshot.current,
+        snapshot: latestSnapshot.current.snapshot,
+        workbookRevision: latestSnapshot.current.revision,
         dark: dark.current,
         compact: matchMedia("(max-width: 639px)").matches,
         readOnly: viewOnly.current,
+        commentsLoading: true,
       });
       if (!live) {
         engine.dispose();
@@ -136,6 +145,9 @@ function Grid({
       engine.setDark(dark.current);
       engine.setReadOnly(viewOnly.current);
       const active = engine;
+      unsubscribeSaved = onSaved((data, savedRevision) =>
+        active.setWorkbookRevision?.(savedRevision, data),
+      );
       unsubscribe = engine.onChange(() => {
         if (!viewOnly.current) onChange(() => active.snapshot());
       });
@@ -147,12 +159,13 @@ function Grid({
     return () => {
       live = false;
       unsubscribe?.();
+      unsubscribeSaved?.();
       if (window.__sheetsEngine === engine) delete window.__sheetsEngine;
       engineRef.current = null;
       onReady(null);
       engine?.dispose();
     };
-  }, [engineRef, onChange, onReady, attempt]);
+  }, [engineRef, onChange, onSaved, onReady, attempt]);
   return (
     <section
       className="sht-grid-region"
@@ -189,6 +202,7 @@ export function SheetEditor({ container }: { container: string }) {
   const service = useWorkbookService();
   const router = useRouter();
   const engine = useRef<SheetEngine | null>(null);
+  const [commentsLoading, setCommentsLoading] = useState(true);
   const [chartEngine, setChartEngine] = useState<SheetEngine | null>(null);
   const [chartRevision, setChartRevision] = useState(0);
   const fileTrigger = useRef<HTMLButtonElement>(null);
@@ -196,6 +210,8 @@ export function SheetEditor({ container }: { container: string }) {
   const input = useRef<HTMLInputElement>(null);
   const [dialog, setDialog] = useState<"import" | "delete" | "share">();
   const [mode, setMode] = useState<"new-sheet" | "replace-active">("new-sheet");
+  const [csvFile, setCsvFile] = useState<File>();
+  const [importError, setImportError] = useState<string>();
   const [busy, setBusy] = useState(false);
   const [returnConflictFocus, setReturnConflictFocus] = useState(false);
   const [grid, setGrid] = useState<{ container: string; revision: number }>();
@@ -246,6 +262,28 @@ export function SheetEditor({ container }: { container: string }) {
       link.click();
       setTimeout(() => URL.revokeObjectURL(url), 0);
     });
+  const importCsv = async (file: File) => {
+    try {
+      const result = engine.current?.importCsv(await file.text(), {
+        mode,
+        name: file.name.replace(/\.csv$/i, ""),
+      });
+      if (result?.status !== "imported") {
+        setImportError(
+          result?.status === "blocked" && result.reason === "read-only"
+            ? "You need Write access to import a CSV."
+            : "Comments are loading. Try importing again when they finish.",
+        );
+        return;
+      }
+      if (input.current) input.current.value = "";
+      setCsvFile(undefined);
+      setImportError(undefined);
+      setDialog(undefined);
+    } catch {
+      setImportError("Couldn't import this CSV. Try again.");
+    }
+  };
   if (state.error instanceof WorkbookNotFoundError && state.error.reason === "missing")
     return <SheetNotFound />;
   if (state.error)
@@ -299,7 +337,10 @@ export function SheetEditor({ container }: { container: string }) {
               <DropdownMenuItem asChild>
                 <Link href="/sheets/new">New spreadsheet</Link>
               </DropdownMenuItem>
-              <DropdownMenuItem disabled={state.readOnly} onSelect={() => setDialog("import")}>
+              <DropdownMenuItem
+                disabled={state.readOnly || commentsLoading}
+                onSelect={() => setDialog("import")}
+              >
                 Import CSV
               </DropdownMenuItem>
               <DropdownMenuItem onSelect={download}>Download current sheet as CSV</DropdownMenuItem>
@@ -354,12 +395,21 @@ export function SheetEditor({ container }: { container: string }) {
     >
       <div className="sht-editor">
         <h1 className="sr-only">{title}</h1>
+        {state.workbook && (
+          <WorkbookComments
+            container={container}
+            engine={chartEngine}
+            onLoadingChange={setCommentsLoading}
+          />
+        )}
         {state.workbook ? (
           <>
             <Grid
               key={grid?.revision ?? 0}
               snapshot={state.workbook.snapshot}
+              revision={state.workbook.version.snapshotEtag}
               onChange={state.scheduleSave}
+              onSaved={state.onSaved}
               engineRef={engine}
               onReady={setChartEngine}
               readOnly={state.readOnly}
@@ -369,7 +419,7 @@ export function SheetEditor({ container }: { container: string }) {
                 key={chartRevision}
                 engine={chartEngine}
                 snapshot={state.workbook.snapshot}
-                readOnly={state.readOnly}
+                readOnly={state.readOnly || commentsLoading}
               />
             </Suspense>
           </>
@@ -401,7 +451,7 @@ export function SheetEditor({ container }: { container: string }) {
               CSV fields are imported as text, including values that start with an equals sign.
             </DialogDescription>
           </DialogHeader>
-          <fieldset className="sht-import-options">
+          <fieldset className="sht-import-options" disabled={state.readOnly || commentsLoading}>
             <legend>Where should the data go?</legend>
             <label>
               <input
@@ -422,7 +472,15 @@ export function SheetEditor({ container }: { container: string }) {
               Replace current sheet
             </label>
           </fieldset>
-          <Button disabled={state.readOnly} onClick={() => input.current?.click()}>
+          {commentsLoading && (
+            <p role="status">Comments are loading. Try importing again when they finish.</p>
+          )}
+          {importError && !commentsLoading && <p role="alert">{importError}</p>}
+          {csvFile && <p>{csvFile.name}</p>}
+          <Button
+            disabled={state.readOnly || commentsLoading}
+            onClick={() => input.current?.click()}
+          >
             Choose CSV file
           </Button>
           <input
@@ -432,21 +490,23 @@ export function SheetEditor({ container }: { container: string }) {
             type="file"
             aria-label="CSV file to import"
             accept=".csv,text/csv"
-            onChange={async (event) => {
+            disabled={state.readOnly || commentsLoading}
+            onChange={(event) => {
               const file = event.currentTarget.files?.[0];
-              event.currentTarget.value = "";
               if (!file || state.readOnly) return;
-              try {
-                engine.current?.importCsv(await file.text(), {
-                  mode,
-                  name: file.name.replace(/\.csv$/i, ""),
-                });
-                setDialog(undefined);
-              } catch {
-                toast.error("Couldn't import this CSV");
-              }
+              setCsvFile(file);
+              setImportError(undefined);
+              void importCsv(file);
             }}
           />
+          {csvFile && importError && (
+            <Button
+              disabled={state.readOnly || commentsLoading}
+              onClick={() => void importCsv(csvFile)}
+            >
+              Retry import
+            </Button>
+          )}
         </DialogContent>
       </Dialog>
       <AlertDialog
@@ -508,10 +568,11 @@ export function SheetEditor({ container }: { container: string }) {
               onClick={(event) => {
                 event.preventDefault();
                 void action(async () => {
-                  const snapshot = await state.reload();
+                  await state.reload((snapshot, revision) =>
+                    engine.current?.load(snapshot, revision),
+                  );
                   setChartRevision((revision) => revision + 1);
-                  if (engine.current) engine.current.load(snapshot);
-                  else
+                  if (!engine.current)
                     setGrid((current) => ({
                       container,
                       revision: (current?.revision ?? 0) + 1,

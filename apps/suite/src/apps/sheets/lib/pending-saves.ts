@@ -4,6 +4,7 @@ import { createAutosave } from "./autosave";
 import {
   type OpenedWorkbook,
   type Snapshot,
+  type SnapshotSaved,
   WorkbookConflictError,
   WorkbookPartialSaveError,
   type WorkbookService,
@@ -30,6 +31,10 @@ export function createPendingSaves() {
     let dropped = false;
     let local = initial.snapshot;
     let read = () => local;
+    const savedListeners = new Set<SnapshotSaved>();
+    const acknowledge = (snapshot: Snapshot, revision: string) => {
+      for (const listener of savedListeners) listener(snapshot, revision);
+    };
     const listeners = new Set<() => void>();
     const publish = () => {
       for (const listener of listeners) listener();
@@ -47,6 +52,7 @@ export function createPendingSaves() {
       async save(snapshot, force) {
         if (dropped) return;
         const savingTitle = title;
+        const verifying = opened.version.pendingVerification;
         try {
           const result = await service.save(initial.container, snapshot, opened.version, {
             force,
@@ -54,6 +60,7 @@ export function createPendingSaves() {
           });
           if (dropped) return;
           opened = { ...opened, ...result, snapshot };
+          acknowledge(snapshot, result.version.snapshotEtag);
           storedTitle = result.metadata.title;
           if (title === savingTitle) title = storedTitle;
         } catch (error) {
@@ -61,8 +68,13 @@ export function createPendingSaves() {
           for (let cause = error; cause instanceof Error; cause = cause.cause) {
             if (hasStatus(cause, 403)) opened = { ...opened, readOnly: true };
           }
-          if (error instanceof WorkbookPartialSaveError)
+          if (error instanceof WorkbookPartialSaveError) {
             opened = { ...opened, version: error.version };
+            // Verification failures can carry a previous write's ETag. Only a
+            // confirmed snapshot write in this attempt acknowledges this value.
+            if (!verifying && !error.version.pendingVerification?.snapshot)
+              acknowledge(snapshot, error.version.snapshotEtag);
+          }
           throw error;
         }
       },
@@ -85,6 +97,10 @@ export function createPendingSaves() {
       },
       get dirty() {
         return queue.dirty;
+      },
+      onSaved(listener: SnapshotSaved) {
+        savedListeners.add(listener);
+        return () => savedListeners.delete(listener);
       },
       subscribe(listener: () => void) {
         listeners.add(listener);
@@ -129,6 +145,7 @@ export function createPendingSaves() {
         dropped = true;
         queue.reset();
         listeners.clear();
+        savedListeners.clear();
       },
       flush,
       retry: (force = false) =>

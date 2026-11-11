@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 import type { ISheetDataValidationRule, IWorkbookData } from "@univerjs/core";
+import { act, createElement } from "react";
 import { describe, expect, it, vi } from "vitest";
 import type { Snapshot } from "../src/apps/sheets/lib/contract";
 
@@ -47,10 +48,11 @@ const headless = await vi.hoisted(async () => {
 
 // Replace only the browser preset bootstrap. The app's mountUniver, snapshot(),
 // load(), real facade, resource models and command bus run unchanged.
-// No DOM, canvas or browser globals are stubbed.
+// The engine needs no DOM or canvas. Failure regressions mount the panel in a temporary DOM.
+vi.mock("@univerjs/core", () => headless.core);
+vi.mock("@univerjs/sheets", () => headless.sheets);
 vi.mock("@univerjs/presets", () => ({
   CommandType: headless.core.CommandType,
-  ICommandService: headless.core.ICommandService,
   LocaleType: headless.core.LocaleType,
   mergeLocales: headless.core.mergeLocales,
   createUniver: () => {
@@ -58,7 +60,6 @@ vi.mock("@univerjs/presets", () => ({
     return headless.current;
   },
 }));
-vi.mock("@univerjs/sheets", () => headless.sheets);
 vi.mock("@univerjs/preset-sheets-core", () => ({ UniverSheetsCorePreset: () => ({}) }));
 vi.mock("@univerjs/preset-sheets-data-validation", () => ({
   UniverSheetsDataValidationPreset: () => ({}),
@@ -69,11 +70,618 @@ vi.mock("@univerjs/preset-sheets-conditional-formatting", () => ({
 vi.mock("@univerjs/preset-sheets-core/locales/en-US", () => ({ default: {} }));
 vi.mock("@univerjs/preset-sheets-data-validation/locales/en-US", () => ({ default: {} }));
 vi.mock("@univerjs/preset-sheets-conditional-formatting/locales/en-US", () => ({ default: {} }));
+vi.mock("@/lib/session/pod-session", () => ({
+  usePodSessionState: () => ({ status: "loading" }),
+}));
 
+import { CellComments } from "../src/apps/sheets/components/cell-comments";
 import { chartValues } from "../src/apps/sheets/lib/charts/range";
 import { type ChartSpec, readCharts, withCharts } from "../src/apps/sheets/lib/charts/spec";
+import { currentCommentAnchor } from "../src/apps/sheets/lib/comments/anchors";
+import { CellCommentStore } from "../src/apps/sheets/lib/comments/store";
 import { mountUniver } from "../src/apps/sheets/lib/engine/univer";
-import { harness, snapshot } from "./sheets-workbook-helpers";
+import { harness, snapshot, WEBID } from "./sheets-workbook-helpers";
+
+it.each([
+  "insert",
+  "undo-redo",
+  "delete",
+  "redo-delete",
+  "undo-delete",
+  "unrelated-insert",
+  "slow-retry",
+  "csv-import",
+  "permissions",
+  "late-list",
+] as const)("rebases unseen comments after a failed first load (%s)", async (scenario) => {
+  const pod = await harness();
+  const anchor = { sheetId: "data", cell: "B3", deleted: false };
+  const book = await pod.service.create({
+    title: "Late discovery",
+    snapshot: {
+      id: "late-discovery",
+      name: "Late discovery",
+      sheetOrder: ["data"],
+      sheets: {
+        data: {
+          id: "data",
+          name: "Data",
+          rowCount: 10,
+          columnCount: 4,
+          cellData: { 2: { 1: { v: "Commented content", t: 1 } } },
+        },
+      },
+    },
+  });
+  const store = new CellCommentStore(book.container, pod.fetch);
+  const root = await store.create(
+    "Unseen comment",
+    WEBID,
+    anchor,
+    new Date(),
+    book.version.snapshotEtag,
+  );
+  const rows = await store.list();
+  const pending = Promise.withResolvers<typeof rows>();
+  const list = vi.spyOn(store, "list");
+  if (scenario === "late-list") list.mockReturnValueOnce(pending.promise);
+  else if (scenario !== "permissions") list.mockRejectedValueOnce(new Error("Listing failed"));
+  if (scenario === "permissions" || scenario === "late-list")
+    vi.spyOn(store, "permissions").mockRejectedValueOnce(new Error("Permissions failed"));
+  const engine = await mountUniver({} as HTMLElement, {
+    snapshot: book.snapshot,
+    workbookRevision: book.version.snapshotEtag,
+    dark: false,
+    compact: true,
+    commentsLoading: true,
+  });
+  const injector = headless.current?.univer.__getInjector();
+  injector?.get(headless.core.IUniverInstanceService).focusUnit(book.snapshot.id as string);
+  const commands = injector?.get(headless.core.ICommandService);
+  const execute = async (id: string, params?: object) => {
+    await act(async () => expect(await commands?.executeCommand(id, params)).toBe(true));
+  };
+  const row = (kind: "insert" | "remove", index: number) =>
+    execute(`sheet.command.${kind}-row`, {
+      unitId: book.snapshot.id,
+      subUnitId: "data",
+      direction: headless.core.Direction.UP,
+      range: { startRow: index, endRow: index, startColumn: 0, endColumn: 3 },
+    });
+  const undo = () => execute("univer.command.undo");
+  const redo = () => execute("univer.command.redo");
+  const current = () => currentCommentAnchor(engine.snapshot(), root.url, anchor);
+  const { createRequire } = await import("node:module");
+  const { JSDOM } = createRequire(
+    new URL("../../../packages/suite-ui/package.json", import.meta.url),
+  )("jsdom");
+  const { window: dom } = new JSDOM("<!doctype html><html><body></body></html>");
+  for (const key of [
+    "window",
+    "document",
+    "navigator",
+    "HTMLElement",
+    "Element",
+    "Node",
+    "MutationObserver",
+    "getComputedStyle",
+  ])
+    vi.stubGlobal(key, key === "window" ? dom : dom[key]);
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const { createRoot } = await import("react-dom/client");
+  const host = document.createElement("div");
+  document.body.append(host);
+  const panel = createRoot(host);
+  const button = (name: string) => {
+    const found = [...host.querySelectorAll<HTMLButtonElement>("button")].find(
+      (button) => button.textContent === name,
+    );
+    if (!found) throw new Error(`Missing ${name}`);
+    return found;
+  };
+  const click = async (name: string) => act(async () => button(name).click());
+  const loading = vi.fn();
+  try {
+    expect(engine.snapshot().commentAnchors).toBeUndefined();
+    await act(async () =>
+      panel.render(
+        createElement(CellComments, {
+          store,
+          engine,
+          webId: WEBID,
+          local: true,
+          onLoadingChange: loading,
+        }),
+      ),
+    );
+    await vi.waitFor(() => expect(loading).toHaveBeenLastCalledWith(false));
+    await act(async () => host.querySelector<HTMLButtonElement>("button[aria-expanded]")?.click());
+    expect(host.querySelector('[role="alert"]')).not.toBeNull();
+    expect(button("Comment").disabled).toBe(true);
+    if (scenario === "permissions") {
+      await vi.waitFor(() => expect(host.textContent).toContain("Unseen comment"));
+      expect(button("Data!B3")).toBeTruthy();
+      for (const name of ["Reply", "Edit", "Delete", "Resolve"])
+        expect(button(name).disabled, name).toBe(true);
+    } else expect(engine.snapshot().commentAnchors).toBeUndefined();
+    await row("insert", 0);
+    if (scenario === "undo-redo") {
+      await undo();
+      await redo();
+    }
+    if (["delete", "redo-delete", "undo-delete", "unrelated-insert"].includes(scenario)) {
+      await row("remove", 3);
+      if (scenario === "undo-delete" || scenario === "redo-delete") await undo();
+      if (scenario === "redo-delete") await redo();
+      if (scenario === "unrelated-insert") await row("insert", 3);
+    }
+    if (scenario === "csv-import")
+      await act(async () =>
+        expect(engine.importCsv("Imported", { mode: "new-sheet" })).toEqual({ status: "imported" }),
+      );
+    if (scenario === "slow-retry") {
+      list.mockReturnValueOnce(pending.promise);
+      await click("Retry");
+      await row("insert", 0);
+      await act(async () => pending.resolve(rows));
+    } else if (scenario === "late-list") {
+      await act(async () => pending.resolve(rows));
+    } else await click("Retry");
+    const deleted = ["delete", "redo-delete", "unrelated-insert"].includes(scenario);
+    await vi.waitFor(() => expect(host.textContent).toContain("Unseen comment"));
+    expect(current()).toEqual({
+      ...anchor,
+      cell: deleted ? "B3" : scenario === "slow-retry" ? "B5" : "B4",
+      deleted,
+    });
+    expect(button(deleted ? "Data!B3" : `Data!${current().cell}`).disabled).toBe(deleted);
+    if (deleted) {
+      expect(host.textContent).toContain("Cell deleted");
+      if (scenario === "unrelated-insert") {
+        await undo();
+        expect(current().deleted).toBe(true);
+      }
+      await undo();
+      expect(current()).toEqual({ ...anchor, cell: "B4" });
+      await redo();
+      expect(current().deleted).toBe(true);
+    } else {
+      const data = engine.snapshot() as unknown as IWorkbookData;
+      expect(data.sheets.data?.cellData?.[scenario === "slow-retry" ? 4 : 3]?.[1]?.v).toBe(
+        "Commented content",
+      );
+    }
+    if (scenario === "late-list") {
+      expect(button("Comment").disabled).toBe(true);
+      expect(host.querySelector('[role="alert"]')?.textContent).toBe("Permissions failed");
+    }
+    await pod.service.save(book.container, engine.snapshot(), book.version);
+    expect((await pod.service.open(book.container)).snapshot.commentAnchors).toEqual(
+      engine.snapshot().commentAnchors,
+    );
+    expect((await store.list())[0]?.root.anchor).toEqual(anchor);
+  } finally {
+    await act(async () => panel.unmount());
+    dom.close();
+    engine.dispose();
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  }
+});
+
+it.each([
+  "saved",
+  "missing",
+  "unknown",
+] as const)("discovers a collaborator's comment created after the structural save (%s revision)", async (baseline) => {
+  const pod = await harness();
+  const book = await pod.service.create({
+    title: "Comment after save",
+    snapshot: snapshot("Header,Value\nA,1\nB,2"),
+  });
+  const engine = await mountUniver({} as HTMLElement, {
+    snapshot: book.snapshot,
+    workbookRevision: book.version.snapshotEtag,
+    dark: false,
+    compact: true,
+  });
+  const current = headless.current as ReturnType<typeof headless.create>;
+  const injector = current.univer.__getInjector();
+  injector.get(headless.core.IUniverInstanceService).focusUnit(book.snapshot.id as string);
+  const commands = injector.get(headless.core.ICommandService);
+  const insert = () =>
+    commands.executeCommand("sheet.command.insert-row", {
+      unitId: book.snapshot.id,
+      subUnitId: "data",
+      direction: headless.core.Direction.UP,
+      range: { startRow: 0, endRow: 0, startColumn: 0, endColumn: 1 },
+    });
+  try {
+    expect(await insert()).toBe(true);
+    const saved = engine.snapshot();
+    const result = await pod.service.save(book.container, saved, book.version);
+    engine.setWorkbookRevision?.(result.version.snapshotEtag, saved);
+    const collaborator = await pod.service.open(book.container);
+    const anchor = { sheetId: "data", cell: "B4", deleted: false };
+    const store = new CellCommentStore(book.container, pod.fetch);
+    const root = await store.create(
+      "Created after insertion",
+      "https://collaborator.example/#me",
+      anchor,
+      new Date(),
+      baseline === "saved"
+        ? collaborator.version.snapshotEtag
+        : baseline === "unknown"
+          ? '"another-mount"'
+          : undefined,
+    );
+    const discover = async () => {
+      const rows = await store.list();
+      engine.registerCommentAnchors?.(
+        Object.fromEntries(rows.map(({ root }) => [root.url, root.anchor as typeof anchor])),
+        "snapshot",
+        Object.fromEntries(rows.map(({ root }) => [root.url, root.workbookRevision])),
+      );
+    };
+    await discover();
+    expect(currentCommentAnchor(engine.snapshot(), root.url, anchor)).toEqual(anchor);
+    // Discovery itself can be saved without ever moving B4 to B5.
+    let version = (await pod.service.save(book.container, engine.snapshot(), result.version))
+      .version;
+    expect(
+      currentCommentAnchor((await pod.service.open(book.container)).snapshot, root.url, anchor),
+    ).toEqual(anchor);
+    expect(await insert()).toBe(true);
+    await discover();
+    expect(currentCommentAnchor(engine.snapshot(), root.url, anchor).cell).toBe("B5");
+    expect(await current.univerAPI.undo()).toBe(true);
+    expect(currentCommentAnchor(engine.snapshot(), root.url, anchor)).toEqual(anchor);
+    version = (await pod.service.save(book.container, engine.snapshot(), version)).version;
+    expect(version.snapshotEtag).not.toBe(book.version.snapshotEtag);
+    expect((await store.list())[0]?.root.anchor).toEqual(anchor);
+  } finally {
+    engine.dispose();
+  }
+});
+
+it("replays only edits after the exact saved snapshot when edits continue during a save", async () => {
+  const pod = await harness();
+  const book = await pod.service.create({
+    title: "In-flight save",
+    snapshot: snapshot("H,V\nA,1\nB,2"),
+  });
+  const engine = await mountUniver({} as HTMLElement, {
+    snapshot: book.snapshot,
+    workbookRevision: book.version.snapshotEtag,
+    dark: false,
+    compact: true,
+  });
+  const current = headless.current as ReturnType<typeof headless.create>;
+  const injector = current.univer.__getInjector();
+  injector.get(headless.core.IUniverInstanceService).focusUnit(book.snapshot.id as string);
+  const commands = injector.get(headless.core.ICommandService);
+  const insert = () =>
+    commands.executeCommand("sheet.command.insert-row", {
+      unitId: book.snapshot.id,
+      subUnitId: "data",
+      direction: headless.core.Direction.UP,
+      range: { startRow: 0, endRow: 0, startColumn: 0, endColumn: 1 },
+    });
+  try {
+    expect(await insert()).toBe(true);
+    const saved = engine.snapshot();
+    const saving = pod.service.save(book.container, saved, book.version);
+    expect(await insert()).toBe(true);
+    const { version } = await saving;
+    engine.setWorkbookRevision?.(version.snapshotEtag, saved);
+    const anchor = { sheetId: "data", cell: "B4", deleted: false };
+    engine.registerCommentAnchors?.({ later: anchor }, "snapshot", { later: version.snapshotEtag });
+    expect(currentCommentAnchor(engine.snapshot(), "later", anchor).cell).toBe("B5");
+    expect(await current.univerAPI.undo()).toBe(true);
+    expect(currentCommentAnchor(engine.snapshot(), "later", anchor)).toEqual(anchor);
+  } finally {
+    engine.dispose();
+  }
+});
+
+it("rebases from the newer snapshot after reload, preserving its registered anchors", async () => {
+  const initial = snapshot("Header,Value\nA,1\nB,2");
+  const anchor = { sheetId: "data", cell: "B3", deleted: false };
+  const engine = await mountUniver({} as HTMLElement, {
+    snapshot: initial,
+    workbookRevision: '"mount"',
+    dark: false,
+    compact: true,
+  });
+  const injector = headless.current?.univer.__getInjector();
+  injector?.get(headless.core.IUniverInstanceService).focusUnit(initial.id as string);
+  const commands = injector?.get(headless.core.ICommandService);
+  const insert = () =>
+    commands?.executeCommand("sheet.command.insert-col", {
+      unitId: initial.id,
+      subUnitId: "data",
+      direction: headless.core.Direction.LEFT,
+      range: { startRow: 0, endRow: 2, startColumn: 0, endColumn: 0 },
+    });
+  try {
+    expect(await insert()).toBe(true);
+    engine.registerCommentAnchors?.({ discovered: anchor }, "snapshot", { discovered: '"mount"' });
+    expect(currentCommentAnchor(engine.snapshot(), "discovered", anchor).cell).toBe("C3");
+    const newer = {
+      ...initial,
+      commentAnchors: {
+        version: 1,
+        anchors: { registered: { sheetId: "data", cell: "A2" } },
+      },
+    };
+    engine.load(newer, '"newer"');
+    injector?.get(headless.core.IUniverInstanceService).focusUnit(initial.id as string);
+    expect(await insert()).toBe(true);
+    engine.registerCommentAnchors?.({ discovered: anchor, registered: anchor }, "snapshot", {
+      discovered: '"newer"',
+    });
+    expect(currentCommentAnchor(engine.snapshot(), "discovered", anchor).cell).toBe("C3");
+    expect(currentCommentAnchor(engine.snapshot(), "registered", anchor).cell).toBe("B2");
+    expect(await commands?.executeCommand("univer.command.undo")).toBe(true);
+    expect(currentCommentAnchor(engine.snapshot(), "discovered", anchor)).toEqual(anchor);
+  } finally {
+    engine.dispose();
+  }
+});
+
+it.each([
+  "list",
+  "permissions",
+] as const)("recovers native editing, undo/redo and CSV import after rejected comments %s", async (method) => {
+  const pod = await harness();
+  const anchor = { sheetId: "data", cell: "B2", deleted: false };
+  const book = await pod.service.create({ title: "Failed comments" });
+  const store = new CellCommentStore(book.container, pod.fetch);
+  const root = await store.create("Existing comment", WEBID, anchor);
+  const engine = await mountUniver({} as HTMLElement, {
+    snapshot: {
+      id: "failed-comments",
+      name: "Failed comments",
+      sheetOrder: ["data"],
+      sheets: {
+        data: {
+          id: "data",
+          name: "Data",
+          rowCount: 10,
+          columnCount: 4,
+          cellData: { 1: { 1: { v: "Original", t: 1 } } },
+        },
+      },
+      commentAnchors: { version: 1, anchors: { [root.url]: { sheetId: "data", cell: "B2" } } },
+    },
+    dark: false,
+    compact: true,
+  });
+  const injector = headless.current?.univer.__getInjector();
+  injector?.get(headless.core.IUniverInstanceService).focusUnit("failed-comments");
+  const commands = injector?.get(headless.core.ICommandService);
+  const execute = async (id: string, params?: object) => {
+    let result: boolean | undefined;
+    await act(async () => {
+      result = await commands?.executeCommand(id, params);
+    });
+    return result;
+  };
+  const { createRequire } = await import("node:module");
+  const { JSDOM } = createRequire(
+    new URL("../../../packages/suite-ui/package.json", import.meta.url),
+  )("jsdom");
+  const { window: dom } = new JSDOM("<!doctype html><html><body></body></html>");
+  for (const key of [
+    "window",
+    "document",
+    "navigator",
+    "HTMLElement",
+    "Element",
+    "Node",
+    "MutationObserver",
+    "getComputedStyle",
+  ])
+    vi.stubGlobal(key, key === "window" ? dom : dom[key]);
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const { createRoot } = await import("react-dom/client");
+  const host = document.createElement("div");
+  document.body.append(host);
+  const panel = createRoot(host);
+  const click = async (button: HTMLButtonElement) => {
+    await act(async () => {
+      button.click();
+    });
+  };
+  const loading = vi.fn();
+  await act(async () => {
+    panel.render(
+      createElement(CellComments, {
+        store,
+        engine,
+        webId: WEBID,
+        local: true,
+        onLoadingChange: loading,
+      }),
+    );
+  });
+  try {
+    await vi.waitFor(() => expect(loading).toHaveBeenLastCalledWith(false));
+    const toggle = host.querySelector<HTMLButtonElement>("button[aria-expanded]");
+    if (!toggle) throw new Error("Missing comments toggle");
+    await click(toggle);
+    vi.spyOn(store, method).mockRejectedValueOnce(new Error("Comments unavailable"));
+    // The other request never settles: rejection must release both loading flags at once.
+    vi.spyOn(store, method === "list" ? "permissions" : "list").mockReturnValueOnce(
+      new Promise<never>(() => {}),
+    );
+    await act(async () => {
+      window.dispatchEvent(new window.Event("focus"));
+    });
+    expect(host.querySelector('[role="alert"]')?.textContent).toBe("Comments unavailable");
+    expect(loading).toHaveBeenLastCalledWith(false);
+    const buttons = [...host.querySelectorAll<HTMLButtonElement>("button")];
+    for (const name of ["Comment", "Reply", "Edit", "Delete", "Resolve"])
+      expect(buttons.find((button) => button.textContent === name)?.disabled, name).toBe(true);
+    engine.setCharts?.(withCharts({}, [chart]).charts);
+    expect(readCharts(engine.snapshot()).charts).toEqual([chart]);
+    const params = { unitId: "failed-comments", subUnitId: "data" };
+    const value = () =>
+      (engine.snapshot() as unknown as IWorkbookData).sheets.data?.cellData?.[1]?.[1]?.v;
+    expect(
+      await execute("sheet.command.set-range-values", {
+        ...params,
+        range: { startRow: 1, endRow: 1, startColumn: 1, endColumn: 1 },
+        value: { v: "Edited" },
+      }),
+    ).toBe(true);
+    expect(value()).toBe("Edited");
+    expect(await execute("univer.command.undo")).toBe(true);
+    expect(value()).toBe("Original");
+    expect(await execute("univer.command.redo")).toBe(true);
+    expect(value()).toBe("Edited");
+    expect(
+      await execute("sheet.command.insert-row", {
+        ...params,
+        range: { startRow: 0, endRow: 0, startColumn: 0, endColumn: 3 },
+        direction: headless.core.Direction.UP,
+      }),
+    ).toBe(true);
+    expect(currentCommentAnchor(engine.snapshot(), root.url, anchor).cell).toBe("B3");
+    expect(readCharts(engine.snapshot()).charts[0]?.range).toBe("A2:B5");
+    expect(await execute("univer.command.undo")).toBe(true);
+    expect(currentCommentAnchor(engine.snapshot(), root.url, anchor).cell).toBe("B2");
+    expect(readCharts(engine.snapshot()).charts[0]?.range).toBe("A1:B4");
+    expect(await execute("univer.command.redo")).toBe(true);
+    expect(currentCommentAnchor(engine.snapshot(), root.url, anchor).cell).toBe("B3");
+    await act(async () => {
+      expect(engine.importCsv("Label\nImported", { mode: "new-sheet", name: "Imported" })).toEqual({
+        status: "imported",
+      });
+    });
+    const retry = buttons.find((button) => button.textContent === "Retry");
+    if (!retry) throw new Error("Missing Retry button");
+    await click(retry);
+    await vi.waitFor(() => expect(host.querySelector('[role="alert"]')).toBeNull());
+    expect(currentCommentAnchor(engine.snapshot(), root.url, anchor).cell).toBe("B3");
+    expect(buttons.find((button) => button.textContent === "Reply")?.disabled).toBe(false);
+  } finally {
+    await act(async () => {
+      panel.unmount();
+    });
+    dom.close();
+    engine.dispose();
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  }
+});
+
+it.each([
+  "undo",
+  "redo",
+] as const)("blocks native %s and editing commands during a delayed comment refresh without consuming history", async (direction) => {
+  const { currentCommentAnchor } = await import("../src/apps/sheets/lib/comments/anchors");
+  const { CellCommentStore } = await import("../src/apps/sheets/lib/comments/store");
+  const { harness } = await import("./sheets-workbook-helpers");
+  const pod = await harness();
+  const engine = await mountUniver({} as HTMLElement, {
+    snapshot: {
+      id: "loading-history",
+      name: "Loading history",
+      sheetOrder: ["data"],
+      sheets: {
+        data: {
+          id: "data",
+          name: "Data",
+          rowCount: 10,
+          columnCount: 4,
+          cellData: { 1: { 1: { v: "Commented cell", t: 1 } } },
+        },
+      },
+    },
+    dark: false,
+    compact: true,
+  });
+  const injector = headless.current?.univer.__getInjector();
+  injector?.get(headless.core.IUniverInstanceService).focusUnit("loading-history");
+  const commands = injector?.get(headless.core.ICommandService);
+  const params = {
+    unitId: "loading-history",
+    subUnitId: "data",
+    range: { startRow: 0, endRow: 0, startColumn: 0, endColumn: 3 },
+    direction: headless.core.Direction.UP,
+  };
+  try {
+    expect(await commands?.executeCommand("sheet.command.insert-row", params)).toBe(true);
+    if (direction === "redo")
+      expect(await commands?.executeCommand("univer.command.undo")).toBe(true);
+    const anchor = {
+      sheetId: "data",
+      cell: direction === "undo" ? "B3" : "B2",
+      deleted: false,
+    };
+    const book = await pod.service.create({
+      title: "Loading history",
+      snapshot: engine.snapshot(),
+    });
+    const store = new CellCommentStore(book.container, pod.fetch);
+    const root = await store.create("Collaborator", "https://collaborator.example/#me", anchor);
+    let finish!: () => void;
+    const delayed = new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+    engine.setCommentsLoading?.(true);
+    const refresh = delayed.then(async () => {
+      const rows = await store.list();
+      engine.registerCommentAnchors?.(
+        Object.fromEntries(rows.map(({ root }) => [root.url, root.anchor as typeof anchor])),
+        "current",
+      );
+      engine.setCommentsLoading?.(false);
+    });
+    const before = engine.snapshot();
+    const change = vi.fn();
+    const structure = vi.fn();
+    engine.onChange(change);
+    engine.onStructure?.(structure);
+    // Exercise the real async and sync command-service paths used by shortcuts
+    // and facades. No fake engine suppresses the mutations for this test.
+    expect(await commands?.executeCommand(`univer.command.${direction}`)).toBe(false);
+    expect(commands?.syncExecuteCommand(`univer.command.${direction}`)).toBe(false);
+    for (const id of [
+      "sheet.command.insert-row",
+      "sheet.command.insert-col",
+      "sheet.command.remove-row",
+      "sheet.command.remove-col",
+      "sheet.command.set-range-values",
+      "sheet.command.set-worksheet-name",
+    ]) {
+      expect(
+        await commands?.executeCommand(id, { ...params, value: { v: "Blocked" }, name: "Blocked" }),
+        id,
+      ).toBe(false);
+    }
+    expect(engine.snapshot()).toEqual(before);
+    expect(change).not.toHaveBeenCalled();
+    expect(structure).not.toHaveBeenCalled();
+    finish();
+    await refresh;
+    expect(currentCommentAnchor(engine.snapshot(), root.url, anchor)).toEqual(anchor);
+    expect(await commands?.executeCommand(`univer.command.${direction}`)).toBe(true);
+    const expectedCell = direction === "undo" ? "B2" : "B3";
+    expect(currentCommentAnchor(engine.snapshot(), root.url, anchor).cell).toBe(expectedCell);
+    const sheet = (engine.snapshot() as unknown as IWorkbookData).sheets.data;
+    expect(sheet?.rowCount).toBe(direction === "undo" ? 10 : 11);
+    expect(sheet?.cellData?.[direction === "undo" ? 1 : 2]?.[1]?.v).toBe("Commented cell");
+    await pod.service.save(book.container, engine.snapshot(), book.version);
+    const saved = await pod.service.open(book.container);
+    expect(currentCommentAnchor(saved.snapshot, root.url, anchor).cell).toBe(expectedCell);
+    engine.load(saved.snapshot);
+    expect(currentCommentAnchor(engine.snapshot(), root.url, anchor).cell).toBe(expectedCell);
+  } finally {
+    engine.dispose();
+  }
+});
 
 // Rule data colours, joined so the suite token gate (no raw colour literals) passes.
 const RED = ["#", "ff0000"].join("");
@@ -238,6 +846,257 @@ describe("real headless Univer rule persistence through the app adapter", () => 
   }, 10_000);
 });
 
+it("restores thread and draft anchors with real Univer undo/redo, never an unrelated insertion", async () => {
+  const { currentCommentAnchor } = await import("../src/apps/sheets/lib/comments/anchors");
+  const { snapshot } = await import("./sheets-workbook-helpers");
+  const engine = await mountUniver({} as HTMLElement, {
+    snapshot: {
+      ...snapshot(),
+      sheets: { data: { id: "data", name: "Data", rowCount: 20, columnCount: 26 } },
+    },
+    dark: false,
+    compact: true,
+  });
+  const anchor = { sheetId: "data", cell: "B3", deleted: false };
+  const id = "https://pod.example/comments/thread.ttl";
+  engine.registerCommentAnchors?.({ [id]: anchor });
+  const draft = engine.trackCommentDraft?.(anchor);
+  const commands = headless.current?.univer.__getInjector().get(headless.core.ICommandService);
+  headless.current?.univer
+    .__getInjector()
+    .get(headless.core.IUniverInstanceService)
+    .focusUnit("original");
+  const params = {
+    unitId: "original",
+    subUnitId: "data",
+    range: { startRow: 2, endRow: 2, startColumn: 0, endColumn: 25 },
+  };
+  const current = () => currentCommentAnchor(engine.snapshot(), id, anchor);
+  try {
+    expect(await commands?.executeCommand("sheet.command.remove-row", params)).toBe(true);
+    expect(current().deleted).toBe(true);
+    expect(draft?.current().deleted).toBe(true);
+    expect(await commands?.executeCommand("univer.command.undo")).toBe(true);
+    expect(current()).toEqual(anchor);
+    expect(draft?.current()).toEqual(anchor);
+    expect(await commands?.executeCommand("univer.command.redo")).toBe(true);
+    expect(current().deleted).toBe(true);
+    expect(draft?.current().deleted).toBe(true);
+    expect(
+      await commands?.executeCommand("sheet.command.insert-row", {
+        ...params,
+        direction: headless.core.Direction.UP,
+      }),
+    ).toBe(true);
+    expect(current().deleted).toBe(true);
+    expect(draft?.current().deleted).toBe(true);
+    expect(await commands?.executeCommand("univer.command.undo")).toBe(true);
+    expect(current().deleted).toBe(true);
+    expect(await commands?.executeCommand("univer.command.undo")).toBe(true);
+    expect(current()).toEqual(anchor);
+    expect(
+      await commands?.executeCommand("sheet.command.insert-col", {
+        ...params,
+        range: { ...params.range, startColumn: 0, endColumn: 0 },
+        direction: headless.core.Direction.LEFT,
+      }),
+    ).toBe(true);
+    expect(current().cell).toBe("C3");
+    expect(draft?.current().cell).toBe("C3");
+    expect(await commands?.executeCommand("univer.command.undo")).toBe(true);
+    expect(current()).toEqual(anchor);
+    const saved = engine.snapshot();
+    engine.load(saved);
+    expect(current()).toEqual(anchor);
+    expect(draft?.current().deleted).toBe(true);
+  } finally {
+    draft?.dispose();
+    engine.dispose();
+  }
+});
+
+it("saves all anchors in the guarded workbook revision and discards a losing client's transforms without comment writes", async () => {
+  const { harness, snapshot, WEBID } = await import("./sheets-workbook-helpers");
+  const { CellCommentStore } = await import("../src/apps/sheets/lib/comments/store");
+  const { currentCommentAnchor } = await import("../src/apps/sheets/lib/comments/anchors");
+  const h = await harness(true);
+  const book = await h.service.create({ title: "Anchors", snapshot: snapshot() });
+  const comments = new CellCommentStore(book.container, h.fetch);
+  const anchor = { sheetId: "data", cell: "B3", deleted: false };
+  const roots = await Promise.all([
+    comments.create("First", WEBID, anchor),
+    comments.create("Second", WEBID, anchor),
+  ]);
+  const fallback = Object.fromEntries(roots.map((root) => [root.url, anchor]));
+  const mount = async () => {
+    const engine = await mountUniver({} as HTMLElement, {
+      snapshot: book.snapshot,
+      dark: false,
+      compact: true,
+    });
+    headless.current?.univer
+      .__getInjector()
+      .get(headless.core.IUniverInstanceService)
+      .focusUnit(book.snapshot.id as string);
+    engine.registerCommentAnchors?.(fallback);
+    const commands = headless.current?.univer.__getInjector().get(headless.core.ICommandService);
+    return { engine, commands };
+  };
+  const a = await mount();
+  const b = await mount();
+  const before = h.calls.length;
+  h.setHook((call) =>
+    call.url === roots[1]?.url && call.method === "PUT"
+      ? new Response(null, { status: 403 })
+      : undefined,
+  );
+  const insert = (client: typeof a, count: number) =>
+    client.commands?.executeCommand("sheet.command.insert-row", {
+      unitId: book.snapshot.id,
+      subUnitId: "data",
+      direction: headless.core.Direction.UP,
+      range: { startRow: 0, endRow: count - 1, startColumn: 0, endColumn: 25 },
+    });
+  try {
+    expect(await insert(a, 1)).toBe(true);
+    expect(await insert(b, 2)).toBe(true);
+    expect(currentCommentAnchor(b.engine.snapshot(), roots[0].url, anchor).cell).toBe("B5");
+    await h.service.save(book.container, a.engine.snapshot(), book.version);
+    await expect(
+      h.service.save(book.container, b.engine.snapshot(), book.version),
+    ).rejects.toMatchObject({ name: "WorkbookConflictError" });
+    const winner = await h.service.open(book.container);
+    b.engine.load(winner.snapshot);
+    for (const root of roots) {
+      expect(currentCommentAnchor(winner.snapshot, root.url, anchor).cell).toBe("B4");
+      expect(currentCommentAnchor(b.engine.snapshot(), root.url, anchor).cell).toBe("B4");
+    }
+    expect((await comments.list()).map(({ root }) => root.anchor)).toEqual([anchor, anchor]);
+    expect(
+      h.calls
+        .slice(before)
+        .filter(
+          (call) =>
+            call.url.startsWith(comments.container) && ["PUT", "DELETE"].includes(call.method),
+        ),
+    ).toEqual([]);
+  } finally {
+    a.engine.dispose();
+    b.engine.dispose();
+  }
+});
+
+it("undoes deletion for a comment whose creation completes after its cell was deleted", async () => {
+  const anchor = { sheetId: "data", cell: "B3", deleted: false };
+  const engine = await mountUniver({} as HTMLElement, {
+    snapshot: {
+      id: "pending",
+      name: "Pending",
+      sheetOrder: ["data"],
+      sheets: { data: { id: "data", name: "Data", rowCount: 10, columnCount: 4 } },
+    },
+    dark: false,
+    compact: true,
+  });
+  const injector = headless.current?.univer.__getInjector();
+  injector?.get(headless.core.IUniverInstanceService).focusUnit("pending");
+  const commands = injector?.get(headless.core.ICommandService);
+  const draft = engine.trackCommentDraft?.(anchor);
+  const { currentCommentAnchor } = await import("../src/apps/sheets/lib/comments/anchors");
+  try {
+    expect(
+      await commands?.executeCommand("sheet.command.remove-row", {
+        unitId: "pending",
+        subUnitId: "data",
+        range: { startRow: 2, endRow: 2, startColumn: 0, endColumn: 3 },
+      }),
+    ).toBe(true);
+    draft?.commit("published-after-delete");
+    draft?.dispose();
+    expect(currentCommentAnchor(engine.snapshot(), "published-after-delete", anchor).deleted).toBe(
+      true,
+    );
+    expect(await commands?.executeCommand("univer.command.undo")).toBe(true);
+    expect(currentCommentAnchor(engine.snapshot(), "published-after-delete", anchor)).toEqual(
+      anchor,
+    );
+    expect(await commands?.executeCommand("univer.command.redo")).toBe(true);
+    expect(currentCommentAnchor(engine.snapshot(), "published-after-delete", anchor).deleted).toBe(
+      true,
+    );
+  } finally {
+    engine.dispose();
+  }
+});
+
+it.each([
+  "row",
+  "column",
+])("revives comments and drafts created in an inserted %s only when redoing that insertion", async (axis) => {
+  const { currentCommentAnchor } = await import("../src/apps/sheets/lib/comments/anchors");
+  const anchor = { sheetId: "data", cell: "B3", deleted: false };
+  const below = { ...anchor, cell: "D5" };
+  const engine = await mountUniver({} as HTMLElement, {
+    snapshot: {
+      id: "late-anchors",
+      name: "Late anchors",
+      sheetOrder: ["data"],
+      sheets: { data: { id: "data", name: "Data", rowCount: 10, columnCount: 6 } },
+    },
+    dark: false,
+    compact: true,
+  });
+  const injector = headless.current?.univer.__getInjector();
+  injector?.get(headless.core.IUniverInstanceService).focusUnit("late-anchors");
+  const commands = injector?.get(headless.core.ICommandService);
+  const insert = () =>
+    commands?.executeCommand(`sheet.command.insert-${axis === "row" ? "row" : "col"}`, {
+      unitId: "late-anchors",
+      subUnitId: "data",
+      direction: axis === "row" ? headless.core.Direction.UP : headless.core.Direction.LEFT,
+      range:
+        axis === "row"
+          ? { startRow: 2, endRow: 2, startColumn: 0, endColumn: 5 }
+          : { startRow: 0, endRow: 9, startColumn: 1, endColumn: 1 },
+    });
+  const current = (id: string) => currentCommentAnchor(engine.snapshot(), id, anchor);
+  let draft: ReturnType<NonNullable<typeof engine.trackCommentDraft>> | undefined;
+  try {
+    expect(await insert()).toBe(true);
+    engine.registerCommentAnchors?.({ late: anchor, below }, "current");
+    draft = engine.trackCommentDraft?.(anchor);
+    const pending = engine.trackCommentDraft?.(anchor);
+    expect(draft?.current()).toEqual(anchor);
+    for (let cycle = 0; cycle < 2; cycle++) {
+      expect(await commands?.executeCommand("univer.command.undo")).toBe(true);
+      expect(current("late").deleted).toBe(true);
+      expect(draft?.current().deleted).toBe(true);
+      expect(current("below").cell).toBe(axis === "row" ? "D4" : "C5");
+      if (cycle === 0) {
+        pending?.commit("published-after-undo");
+        pending?.dispose();
+      }
+      expect(current("published-after-undo").deleted).toBe(true);
+      expect(await commands?.executeCommand("univer.command.redo")).toBe(true);
+      expect(current("late")).toEqual(anchor);
+      expect(draft?.current()).toEqual(anchor);
+      expect(current("published-after-undo")).toEqual(anchor);
+      expect(current("below")).toEqual(below);
+    }
+    expect(await commands?.executeCommand("univer.command.undo")).toBe(true);
+    expect(await insert()).toBe(true);
+    expect(current("late").deleted).toBe(true);
+    expect(draft?.current().deleted).toBe(true);
+    expect(current("published-after-undo").deleted).toBe(true);
+    expect(await commands?.executeCommand("univer.command.undo")).toBe(true);
+    expect(current("late").deleted).toBe(true);
+    expect(draft?.current().deleted).toBe(true);
+  } finally {
+    draft?.dispose();
+    engine.dispose();
+  }
+});
+
 const chart: ChartSpec = {
   id: "chart",
   sheetId: "data",
@@ -276,14 +1135,34 @@ describe("chart references through real Univer structural command history", () =
     });
     try {
       const commands = headless.current?.univer.__getInjector().get(headless.core.ICommandService);
-      const restore = () =>
-        commands?.executeCommand("sheets.mutation.restore-chart-sources", {
-          unitId: engine.snapshot().id,
-          sources: [{ id: chart.id, sheetId: chart.sheetId, range: null, revision: 0 }],
-        });
-      const record = { unitId: initial.id, subUnitId: "data", sources: [] };
+      const record: {
+        sheetId: string;
+        sources: { id: string; sheetId: string; range: string | null; revision: number }[];
+      } = {
+        sheetId: "data",
+        sources: [],
+      };
       const capture = () =>
-        commands?.executeCommand("sheets.mutation.capture-chart-sources", record);
+        commands?.executeCommand("sheets.mutation.structural-metadata", {
+          unitId: engine.snapshot().id,
+          operation: { redo: [], undo: [], chartSources: record },
+          direction: "redo",
+          phase: "begin",
+        });
+      const restore = () =>
+        commands?.executeCommand("sheets.mutation.structural-metadata", {
+          unitId: engine.snapshot().id,
+          operation: {
+            redo: [],
+            undo: [],
+            chartSources: {
+              sheetId: "data",
+              sources: [{ id: chart.id, sheetId: chart.sheetId, range: null, revision: 0 }],
+            },
+          },
+          direction: "undo",
+          phase: "end",
+        });
       expect(await capture()).toBe(false);
       expect(record.sources).toEqual([]);
       expect(await restore()).toBe(false);
@@ -293,6 +1172,10 @@ describe("chart references through real Univer structural command history", () =
       expect(record.sources).toHaveLength(2);
       expect(await restore()).toBe(true);
       expect(readCharts(engine.snapshot()).charts[0]?.range).toBeNull();
+      engine.setCommentsLoading?.(true);
+      expect(await capture()).toBe(false);
+      expect(await restore()).toBe(false);
+      engine.setCommentsLoading?.(false);
       engine.load(initial);
       engine.setReadOnly(true);
       expect(await restore()).toBe(false);
@@ -862,18 +1745,22 @@ describe("chart references through real Univer structural command history", () =
     try {
       const commands = headless.current?.univer.__getInjector().get(headless.core.ICommandService);
       expect(
-        await commands?.executeCommand("sheets.mutation.restore-chart-sources", {
+        await commands?.executeCommand("sheets.mutation.structural-metadata", {
           unitId: "previous-workbook",
-          sources: [{ id: "chart", range: null }],
+          operation: { redo: [], undo: [] },
+          direction: "undo",
+          phase: "end",
         }),
       ).toBe(false);
       engine.load(snapshot("A,B\n1,2", true));
       expect(
-        await commands?.executeCommand("sheets.mutation.restore-chart-sources", {
+        await commands?.executeCommand("sheets.mutation.structural-metadata", {
           unitId: engine.snapshot().id,
-          sources: [{ id: "chart", range: null }],
+          operation: { redo: [], undo: [], chartSources: { sheetId: "data", sources: [] } },
+          direction: "undo",
+          phase: "end",
         }),
-      ).toBe(false);
+      ).toBe(true);
       const insert = async () =>
         expect(
           await commands?.executeCommand(headless.sheets.InsertRowCommand.id, {
@@ -892,4 +1779,78 @@ describe("chart references through real Univer structural command history", () =
       engine.dispose();
     }
   });
+});
+
+it.each([
+  "row",
+  "column",
+] as const)("replays %s history for chart sources and comment tombstones together and saves both", async (axis) => {
+  const pod = await harness();
+  const initial = chartSnapshot();
+  const book = await pod.service.create({ title: "Charts and comments", snapshot: initial });
+  let version = book.version;
+  const engine = await mountUniver({} as HTMLElement, {
+    snapshot: book.snapshot,
+    dark: false,
+    compact: true,
+  });
+  const anchor = { sheetId: "data", cell: "B2", deleted: false };
+  engine.registerCommentAnchors?.({ root: anchor, other: { ...anchor, sheetId: "other" } });
+  const draft = engine.trackCommentDraft?.(anchor);
+  const current = headless.current as ReturnType<typeof headless.create>;
+  const injector = current.univer.__getInjector();
+  injector.get(headless.core.IUniverInstanceService).focusUnit(book.snapshot.id as string);
+  const commands = injector.get(headless.core.ICommandService);
+  const assertState = async (deleted: boolean) => {
+    const data = engine.snapshot();
+    expect(readCharts(data).charts[0]?.range).toBe(deleted ? null : chart.range);
+    expect(currentCommentAnchor(data, "root", anchor)).toEqual({ ...anchor, deleted });
+    expect(currentCommentAnchor(data, "other", anchor)).toEqual({ ...anchor, sheetId: "other" });
+    expect(draft?.current()).toEqual({ ...anchor, deleted });
+    version = (await pod.service.save(book.container, data, version)).version;
+    expect((await pod.service.open(book.container)).snapshot).toEqual(data);
+  };
+  try {
+    expect(
+      await commands.executeCommand(
+        axis === "row" ? headless.sheets.RemoveRowCommand.id : headless.sheets.RemoveColCommand.id,
+        {
+          unitId: book.snapshot.id,
+          subUnitId: "data",
+          range: {
+            startRow: 0,
+            endRow: axis === "row" ? 3 : 9,
+            startColumn: 0,
+            endColumn: axis === "column" ? 1 : 5,
+          },
+        },
+      ),
+    ).toBe(true);
+    await assertState(true);
+    engine.setCommentsLoading?.(true);
+    const locked = engine.snapshot();
+    engine.setCharts?.(withCharts({}, []).charts);
+    expect(await current.univerAPI.undo()).toBe(false);
+    expect(await current.univerAPI.redo()).toBe(false);
+    expect(engine.importCsv("Blocked", { mode: "replace-active" })).toEqual({
+      status: "blocked",
+      reason: "comments-loading",
+    });
+    expect(engine.snapshot()).toEqual(locked);
+    engine.setCommentsLoading?.(false);
+    for (let replay = 0; replay < 2; replay++) {
+      expect(await current.univerAPI.undo()).toBe(true);
+      await assertState(false);
+      expect(await current.univerAPI.redo()).toBe(true);
+      await assertState(true);
+    }
+    expect(await current.univerAPI.undo()).toBe(true);
+    await assertState(false);
+    const saved = engine.snapshot();
+    engine.load(saved);
+    expect(engine.snapshot()).toEqual(saved);
+  } finally {
+    draft?.dispose();
+    engine.dispose();
+  }
 });
