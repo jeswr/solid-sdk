@@ -152,7 +152,6 @@ for (const convert of [notesToDocs, docsToNotes]) {
     });
 
     it.each([
-      "image",
       "table",
       "blockquote",
       "hardBreak",

@@ -1,4 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 "use client";
 import {
   AppRail,
@@ -14,9 +16,11 @@ import {
   type ShellFrameProps,
   type ShellPreferences,
 } from "@jeswr/suite-ui/shell";
-import { OfflinePill, SyncSheet } from "@jeswr/suite-ui/sync";
-import { usePathname, useRouter } from "next/navigation";
+import { OfflinePill } from "@jeswr/suite-ui/sync";
+import { useRouter } from "next/navigation";
 import { type ReactNode, Suspense, useEffect, useState } from "react";
+import { useRoutePathname } from "@/lib/route-params";
+import { WalkthroughDock } from "@/welcome/walkthrough";
 import { AccountMenu } from "./account/account-menu";
 import { useSuiteEnvironment } from "./environment";
 import { parseRailPreferences } from "./lib/preferences";
@@ -29,7 +33,9 @@ import { useAccounts } from "./session/accounts-provider";
 import { SessionGuard } from "./session/session-guard";
 import { GlobalShortcuts } from "./shortcuts/global-shortcuts";
 import { ShortcutsProvider, useShortcutSettings } from "./shortcuts/provider";
+import { useRecentTitle } from "./sync/offline-provider";
 import { useSyncSnapshot } from "./sync/online";
+import { ShellSyncSheet } from "./sync/shell-sync-sheet";
 
 export interface SuiteShellProps {
   app: AppSlug;
@@ -38,6 +44,8 @@ export interface SuiteShellProps {
   context?: ReactNode;
   actions?: ReactNode;
   details?: ShellFrameProps["details"];
+  /** App-specific search UI and routing, when supplied by an existing app. */
+  search?: ReactNode;
   /** Overrides the account's shared search source (ShellSearchProvider) for this page. */
   searchSource?: SearchSource;
   children: ReactNode;
@@ -50,10 +58,12 @@ function Frame({
   context,
   actions,
   details,
+  search,
   searchSource,
   children,
 }: SuiteShellProps) {
-  const pathname = usePathname();
+  // The registry compares slash-free routes; the native export adds a trailing slash.
+  const pathname = useRoutePathname();
   const router = useRouter();
   const shellSource = useShellSearchSource();
   const sync = useSyncSnapshot();
@@ -62,6 +72,11 @@ function Frame({
   const { characterKeys } = useShortcutSettings();
   const env = useSuiteEnvironment();
   const app = appRegistry.find((item) => item.slug === slug);
+  const title = app ? `${pageTitle} · ${app.name} · Solid Suite` : undefined;
+  useEffect(() => {
+    if (title) document.title = title;
+  }, [title]);
+  useRecentTitle(title);
   const [preferences, setPreferences] = useState<ShellPreferences>(defaultShellPreferences);
   const [rail, setRail] = useState<RailPreferences>(() => parseRailPreferences(null));
   useEffect(() => {
@@ -124,11 +139,18 @@ function Frame({
         topBar={{
           appName: app.name,
           context,
-          actions,
+          actions: (
+            <>
+              {actions}
+              <a className="suite-feedback-link" href="/feedback">
+                Give feedback
+              </a>
+            </>
+          ),
           account: <div className="shell-mobile-account">{account}</div>,
           bell: <NotificationsBell mobile />,
           offlinePill: <OfflinePill snapshot={sync} onOpen={() => setSyncOpen(true)} />,
-          search: (
+          search: search ?? (
             <GlobalSearch
               source={searchSource ?? shellSource}
               scope={{ app: slug, label: app.name }}
@@ -144,14 +166,8 @@ function Frame({
       >
         {children}
       </ShellFrame>
-      <SyncSheet
-        open={syncOpen}
-        onOpenChange={setSyncOpen}
-        snapshot={sync}
-        onRetryAll={() => {}}
-        onRetry={() => {}}
-        onResolve={() => {}}
-      />
+      <ShellSyncSheet open={syncOpen} onOpenChange={setSyncOpen} />
+      <WalkthroughDock />
     </RailPreferencesProvider>
   );
 }
@@ -162,7 +178,20 @@ function Frame({
  */
 function ReadyShortcuts() {
   const { status } = useAccounts();
-  return status === "ready" ? <GlobalShortcuts /> : null;
+  return status === "ready" ? (
+    <GlobalShortcuts
+      onOpenApps={() => {
+        // The rail and mobile tab bar own their launchers. Activate the visible native
+        // trigger once the palette has closed, so focus and cleanup match pointer entry.
+        setTimeout(() => {
+          const triggers = document.querySelectorAll<HTMLButtonElement>(
+            '[data-slot="app-launcher-trigger"]',
+          );
+          [...triggers].find((trigger) => trigger.getClientRects().length > 0)?.click();
+        }, 0);
+      }}
+    />
+  ) : null;
 }
 
 export function SuiteShell(props: SuiteShellProps) {

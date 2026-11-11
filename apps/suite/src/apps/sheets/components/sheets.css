@@ -112,6 +112,7 @@
   background: var(--surface-2);
 }
 .sht-title {
+  flex: 1;
   min-width: 0;
 }
 .sht-title .suite-label,
@@ -145,12 +146,21 @@
   color: var(--foreground-muted);
   font-size: var(--text-xs);
 }
+.sht-save > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .sht-actions {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   gap: var(--space-2);
 }
 .sht-editor {
+  min-width: 0;
+  max-width: 100%;
   height: 100%;
   min-height: 0;
   overflow: hidden;
@@ -191,6 +201,11 @@
   overflow: hidden;
 }
 @media (max-width: 639px) {
+  .ish-frame[data-app="sheets"],
+  .ish-frame[data-app="sheets"] .ish-main {
+    min-width: 0;
+    max-width: 100%;
+  }
   .sht-list {
     padding: var(--space-4);
   }
@@ -220,6 +235,33 @@
   }
   .sht-actions button {
     padding-inline: var(--space-2);
+  }
+  /* Univer's compact preset hides the ribbon; File is the single overflow menu. */
+  .sht-univer [data-u-comp="formula-bar"] {
+    height: 28px;
+    min-width: 0;
+    overflow: hidden;
+    flex-wrap: nowrap;
+  }
+  .sht-univer [data-u-comp="formula-bar"] > :first-child {
+    width: 56px;
+    flex: 0 0 56px;
+  }
+  .sht-univer [data-u-comp="formula-bar"] > :nth-child(2) {
+    min-width: 0;
+    flex: 1;
+  }
+  .sht-univer [data-u-comp="formula-bar-actions"] {
+    width: 64px;
+  }
+  .sht-univer [data-u-comp="slide-tab-bar"] {
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scrollbar-width: thin;
+  }
+  .sht-univer [data-u-comp="slide-tab-item"],
+  .sht-univer :has(> [data-u-comp="sheet-bar-append-button"]) {
+    flex-shrink: 0;
   }
   .sht-save {
     line-height: 1.2;
@@ -259,5 +301,173 @@
     right: var(--space-4);
     bottom: calc(64px + var(--space-4));
     z-index: 30;
+  }
+}
+
+.sht-editor {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+.sht-comment-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+.sht-editor > .sht-grid-region {
+  flex: 1;
+}
+.sht-editor:has(.sht-comments) > .sht-grid-region {
+  width: calc(100% - min(360px, 85%));
+}
+.sht-comments {
+  position: absolute;
+  inset-block: 40px 0;
+  inset-inline-end: 0;
+  width: min(360px, 85%);
+  overflow: auto;
+  padding: var(--space-3);
+  border-inline-start: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--foreground);
+  font-size: var(--text-sm);
+}
+.sht-comments ul {
+  list-style: none;
+  padding: 0;
+}
+.sht-comments li {
+  padding: var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  margin-block: var(--space-2);
+}
+.sht-comments .sht-comment-active {
+  border-color: var(--primary);
+  background: var(--surface-2);
+}
+.sht-comment-body {
+  overflow-wrap: anywhere;
+}
+.sht-comment-body p {
+  white-space: pre-wrap;
+}
+.sht-comment-body time {
+  display: block;
+  color: var(--foreground-muted);
+}
+.sht-comments textarea {
+  display: block;
+  width: 100%;
+  min-height: 80px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--space-2);
+  background: var(--surface);
+  color: var(--foreground);
+}
+
+/* Charts use a strip so their controls do not depend on Univer's canvas coordinates. */
+.sht-grid-region {
+  flex: 1;
+}
+.sht-chart-workspace {
+  flex-shrink: 0;
+  max-height: 50%;
+  overflow: auto;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+}
+.sht-chart-toolbar {
+  padding: var(--space-2);
+}
+.sht-chart-layout {
+  display: flex;
+  align-items: flex-start;
+}
+.sht-chart-strip {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  gap: var(--space-3);
+  overflow-x: auto;
+  padding: var(--space-3);
+}
+.sht-chart-card {
+  flex: 0 0 min(480px, 80vw);
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+.sht-chart-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+.sht-chart-heading h2 {
+  font-size: var(--text-sm);
+  overflow-wrap: anywhere;
+}
+.sht-chart-svg {
+  width: 100%;
+  color: var(--foreground);
+}
+.sht-chart-svg text {
+  fill: currentColor;
+  font-size: 10px;
+}
+.sht-chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  font-size: var(--text-xs);
+  list-style: none;
+}
+.sht-chart-legend li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+.sht-chart-legend span {
+  width: 12px;
+  height: 12px;
+  border-radius: var(--radius-sm);
+}
+.sht-chart-editor {
+  flex: 0 0 280px;
+  padding: var(--space-3);
+  border-left: 1px solid var(--border);
+}
+.sht-chart-editor form {
+  display: grid;
+  gap: var(--space-2);
+}
+.sht-chart-editor input,
+.sht-chart-editor select {
+  min-height: 32px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--foreground);
+}
+.sht-chart-buttons,
+.sht-chart-checkbox {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+@media (max-width: 639px) {
+  .sht-chart-layout {
+    flex-direction: column-reverse;
+  }
+  .sht-chart-editor {
+    flex-basis: auto;
+    width: 100%;
+  }
+  .sht-chart-strip {
+    width: 100%;
   }
 }

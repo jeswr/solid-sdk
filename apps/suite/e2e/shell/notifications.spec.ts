@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { mkdir } from "node:fs/promises";
 import AxeBuilder from "@axe-core/playwright";
 import { expect, type Page, test } from "@playwright/test";
@@ -26,8 +27,10 @@ async function capture(page: Page, name: string, project: string) {
 async function demo(page: Page) {
   await page.goto("/signin");
   await page.getByRole("button", { name: "Try it with a demo pod" }).click();
-  await expect(page).toHaveURL(/\/drive(?:\/my)?$/);
+  await expect(page).toHaveURL(/\/home$/);
   await page.goto("/search");
+  // A full navigation returns before account restoration mounts the interactive shell.
+  await page.getByRole("heading", { level: 1, name: "Search" }).click();
 }
 async function open(page: Page) {
   const mobile = (page.viewportSize()?.width ?? 1280) < 768;

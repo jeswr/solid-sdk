@@ -3,7 +3,7 @@
 The **@jeswr Solid suite workspace** — reusable TypeScript SDK packages plus the private
 applications that consume them, consolidated into one pnpm + Turborepo workspace.
 
-The workspace contains 72 packages and 18 applications; `suite.json` records the inventory.
+The workspace contains 71 packages and 17 applications; `suite.json` records the inventory.
 The original forty packages and thirteen applications were imported with full git history.
 Maintainer-directed additions include `@jeswr/synthetic-rdf`, `@jeswr/solid-seed`, and
 [`@jeswr/ldp-container`](packages/ldp-container/README.md), the shared security-critical
@@ -74,17 +74,27 @@ Reusable agent guidance lives with the code it describes:
   [`packages/fetch-rdf/SKILL.md`](packages/fetch-rdf/SKILL.md).
 - Cross-cutting guidance is in [`skills/<skill>/SKILL.md`](skills/solid-server-matrix/SKILL.md).
   This also temporarily holds guidance for external suite packages that have not yet been imported
-  into this workspace (`@solid/object`, notifications, and Client Identifier
-  Documents). Move such a skill beside its package when that package joins the monorepo.
+  into this workspace (`@solid/object` and Client Identifier Documents). Move such a skill beside its
+  package when that package joins the monorepo.
 
 Every skill has trigger-oriented YAML frontmatter and a concise body. Update the relevant skill when
 a package's public API, security boundary, or recommended workflow changes; avoid copying package
 guidance back into a central catch-all document.
 
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 [`skills/INDEX.md`](skills/INDEX.md) lists every shared and package skill. After editing skills, run
 `pnpm run check:skills --write` to regenerate it. `pnpm run check:skills` validates frontmatter,
 names, descriptions, the 500-line body budget, relative links, local user paths, and secret patterns;
 it also rejects a missing or stale index. This read-only check runs in `lint:root`.
 Shared skill companion files and package `references/` are scanned too. Links are checked locally
 without fetching external URLs; fragments and query strings do not affect file resolution.
+
+For apps using the storage SDK, start with [Solid and LWS differences](skills/lws-vs-solid/SKILL.md),
+which routes to the five package skills. The older notifications and reactive-authentication skills
+route to `pod-notifications` and `pod-auth`; package skills govern the implemented APIs.
+
+After building those packages and their dependencies, run
+`node scripts/check-sdk-skill-examples.mjs` to typecheck their TypeScript examples against public
+exports. W13 distribution uses the same canonical skill names in both `~/.claude/skills/` and
+`~/.codex/skills/`; real-home sync is a separate reviewed step, with validation in a temporary home.

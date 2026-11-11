@@ -1,0 +1,71 @@
+{
+  "$comment": "AUTHORED-BY Codex GPT-6.1-Sol",
+  "name": "@jeswr/suite-sdk",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Suite notification, search and preferences facades. Experimental, AI-agent-generated.",
+  "type": "module",
+  "sideEffects": false,
+  "securityCritical": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./testing": {
+      "types": "./dist/testing.d.ts",
+      "default": "./dist/testing.js"
+    },
+    "./search": {
+      "types": "./dist/search/index.d.ts",
+      "default": "./dist/search/index.js"
+    },
+    "./preferences": {
+      "types": "./dist/preferences/index.d.ts",
+      "default": "./dist/preferences/index.js"
+    },
+    "./offline": {
+      "types": "./dist/offline.d.ts",
+      "default": "./dist/offline.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "SKILL.md"
+  ],
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "biome check .",
+    "test": "vitest run"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "@jeswr/guarded-fetch": "workspace:*",
+    "@jeswr/pod-access": "workspace:*",
+    "@jeswr/pod-auth": "workspace:*",
+    "@jeswr/rdf-engine": "workspace:*",
+    "@jeswr/solid-offline": "workspace:*",
+    "@jeswr/storage-capabilities": "workspace:*",
+    "@jeswr/storage-client": "workspace:*"
+  },
+  "peerDependencies": {
+    "react": ">=18"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.1",
+    "@types/node": "^25.9.2",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "fake-indexeddb": "6.2.5",
+    "jsdom": "^26.1.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.9"
+  }
+}

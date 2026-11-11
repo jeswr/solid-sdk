@@ -4,8 +4,8 @@
 /**
  * React bridge for the per-resource Sharing panel (feature-completeness plan
  * Wave 3). The UI never touches RDF: it renders {@link ResourceAccess} entries
- * and calls the typed {@link ResourceSharingBackend} for mutations. Production
- * paths pass NO `fetch` — the auth-patched global runs (AGENTS.md §Reading data).
+ * and calls the typed {@link ResourceSharingBackend} for mutations through the
+ * session transport.
  *
  * The backend is rebuilt whenever the signed-in WebID changes (the self-lockout
  * guard is bound to it). Reads re-run when the resource URL changes or on an
@@ -35,7 +35,7 @@ export interface ResourceSharingState {
  * for mutations. Re-reads after a mutation via `reload()`.
  */
 export function useResourceSharing(resourceUrl: string): ResourceSharingState {
-  const { webId, status } = useSession();
+  const { webId, status, podFetch } = useSession();
   const [state, setState] = useState<{
     access?: ResourceAccess;
     loading: boolean;
@@ -46,8 +46,8 @@ export function useResourceSharing(resourceUrl: string): ResourceSharingState {
 
   // One backend per signed-in WebID — the self-lockout guard binds to it.
   const backend = useMemo(
-    () => (webId ? new WacResourceSharingBackend(webId) : undefined),
-    [webId],
+    () => (webId ? new WacResourceSharingBackend(webId, podFetch) : undefined),
+    [webId, podFetch],
   );
 
   useEffect(() => {

@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 import CryptoKit
 import Foundation
 import Security
@@ -90,33 +91,45 @@ final class PushProofTests: XCTestCase {
         XCTAssertFalse(PushSigningKey.acceptsAttributes([kSecAttrIsExtractable as String: true]))
         XCTAssertFalse(PushSigningKey.acceptsAttributes([:]))
     }
-    func testES256SignsExactRequestBytes() throws {
+    func testES256SignsReplayProtectedInstallationProof() throws {
         let key = P256.Signing.PrivateKey(), body = "{ \"x\": 1 }\n"
-        let proof = try PushProof.sign(method: "POST", url: "https://relay.example/push/installations?x=1", body: body, timestamp: 42,
-            signer: { try key.signature(for: $0).rawRepresentation })
+        let sign = { try PushProof.sign(method: "POST", url: "https://relay.example/push/installations", body: body, timestamp: 42,
+            signer: { try key.signature(for: $0).rawRepresentation }) }
+        let proof = try sign()
         let parts = proof.components(separatedBy: "."); XCTAssertEqual(parts.count, 3)
-        XCTAssertEqual(try PushCrypto.unb64(parts[0]), Data("{\"alg\":\"ES256\"}".utf8))
+        XCTAssertEqual(try PushCrypto.unb64(parts[0]), Data("{\"alg\":\"ES256\",\"typ\":\"installation-proof+jwt\"}".utf8))
         let claims = try XCTUnwrap(JSONSerialization.jsonObject(with: PushCrypto.unb64(parts[1])) as? [String: Any])
-        XCTAssertEqual(claims.count, 4); XCTAssertEqual(claims["method"] as? String, "POST"); XCTAssertEqual(claims["timestamp"] as? Int, 42)
-        XCTAssertEqual(claims["url"] as? String, "https://relay.example/push/installations?x=1")
-        XCTAssertEqual(claims["bodyHash"] as? String, PushCrypto.b64(Data(SHA256.hash(data: Data(body.utf8)))))
+        XCTAssertEqual(claims.count, 5); XCTAssertEqual(claims["htm"] as? String, "POST"); XCTAssertEqual(claims["iat"] as? Int, 42)
+        XCTAssertEqual(claims["htu"] as? String, "https://relay.example/push/installations")
+        XCTAssertEqual(claims["body_sha256"] as? String, PushCrypto.b64(Data(SHA256.hash(data: Data(body.utf8)))))
+        let jti = try XCTUnwrap(claims["jti"] as? String)
+        XCTAssertNotNil(jti.range(of: "\\A[A-Za-z0-9_-]{22}\\z", options: .regularExpression))
+        let other = try XCTUnwrap(JSONSerialization.jsonObject(with: PushCrypto.unb64(try sign().components(separatedBy: ".")[1])) as? [String: Any])
+        XCTAssertNotEqual(other["jti"] as? String, jti)
         let signature = try P256.Signing.ECDSASignature(rawRepresentation: PushCrypto.unb64(parts[2]))
         XCTAssertTrue(key.publicKey.isValidSignature(signature, for: Data("\(parts[0]).\(parts[1])".utf8)))
         XCTAssertFalse(key.publicKey.isValidSignature(signature, for: Data("\(parts[0]).\(parts[1])x".utf8)))
     }
     func testCanonicalClaimsMatchAndroidAndInvalidInputsNeverReachSigner() throws {
-        let expected = "{\"bodyHash\":\"47DEQpj8HBSa-_TImW-5JCeuQeRkm5NMpJWZG3hSuFU\",\"method\":\"DELETE\",\"timestamp\":1,\"url\":\"https://relay.example/push/installations/id\"}"
-        _ = try PushProof.sign(method: "DELETE", url: "https://relay.example/push/installations/id", body: "", timestamp: 1) { bytes in
-            let parts = String(decoding: bytes, as: UTF8.self).components(separatedBy: ".")
-            XCTAssertEqual(try PushCrypto.unb64(parts[1]), Data(expected.utf8)); return Data(repeating: 0, count: 64)
+        // Interop fixture: byte-identical to PushProofTest.java and accepted by the relay's
+        // apps/notification-relay/src/device-proof-interop.test.ts.
+        let expected = "eyJhbGciOiJFUzI1NiIsInR5cCI6Imluc3RhbGxhdGlvbi1wcm9vZitqd3QifQ.eyJib2R5X3NoYTI1NiI6InZha1VuRGhQTVpzLXJMcHZLMml0Zk95OGxFWU12UG13STJvQlNNWWtUeG8iLCJodG0iOiJQT1NUIiwiaHR1IjoiaHR0cHM6Ly9yZWxheS5leGFtcGxlL3B1c2gvaW5zdGFsbGF0aW9ucy9hYmMvYWN0aXZhdGUiLCJpYXQiOjE3MDAwMDAwMDAsImp0aSI6ImludGVyb3AtZml4dHVyZS1qdGkifQ"
+        _ = try PushProof.sign(method: "POST", url: "https://relay.example/push/installations/abc/activate", body: "{\"nonce\":\"n\"}",
+                               timestamp: 1700000000, jti: "interop-fixture-jti") { bytes in
+            XCTAssertEqual(String(decoding: bytes, as: UTF8.self), expected); return Data(repeating: 0, count: 64)
         }
         let forbidden: (Data) throws -> Data = { _ in XCTFail("Invalid request reached key"); throw PushCrypto.Failure.invalid }
-        for url in ["http://relay.example/", "https://user@relay.example/", "https://relay.example/#f", "//relay.example/", "relative", "https:/path"] {
-            XCTAssertThrowsError(try PushProof.sign(method: "DELETE", url: url, body: "", timestamp: 1, signer: forbidden))
+        for jti in ["", "a b", "a.b", String(repeating: "a", count: 129)] {
+            XCTAssertThrowsError(try PushProof.sign(method: "DELETE", url: "https://relay.example/", body: "", timestamp: 1, jti: jti, signer: forbidden))
+        }
+        for url in ["http://relay.example/", "https://user@relay.example/", "https://relay.example/#f", "https://relay.example/?x=1", "https://relay.example/?",
+                    "//relay.example/", "relative", "https:/path"] {
+            XCTAssertThrowsError(try PushProof.sign(method: "DELETE", url: url, body: "", timestamp: 1, jti: "j", signer: forbidden))
         }
         for method in ["post", "POST\n", "", "POST DELETE"] {
-            XCTAssertThrowsError(try PushProof.sign(method: method, url: "https://relay.example/", body: "", timestamp: 1, signer: forbidden))
+            XCTAssertThrowsError(try PushProof.sign(method: method, url: "https://relay.example/", body: "", timestamp: 1, jti: "j", signer: forbidden))
         }
-        XCTAssertThrowsError(try PushProof.sign(method: "POST", url: "https://relay.example/", body: String(repeating: "a", count: 65537), timestamp: 1, signer: forbidden))
+        XCTAssertThrowsError(try PushProof.sign(method: "POST", url: "https://relay.example/", body: String(repeating: "a", count: 65537), timestamp: 1,
+                                                jti: "j", signer: forbidden))
     }
 }

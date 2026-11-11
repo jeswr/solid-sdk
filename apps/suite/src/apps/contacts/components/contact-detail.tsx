@@ -19,13 +19,19 @@ import {
   TagInput,
 } from "@jeswr/suite-ui";
 import { LiteralAs, OptionalFrom, TermWrapper } from "@rdfjs/wrapper";
-import { ArrowLeft, ExternalLink, Mail, Pencil, Phone, Star, Trash2 } from "lucide-react";
+import { ArrowLeft, ExternalLink, Mail, MapPin, Pencil, Phone, Star, Trash2 } from "lucide-react";
 import { DataFactory } from "n3";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { usePodSessionState } from "@/lib/session/pod-session";
 import { useContact, useContactMutations, useStarred } from "../state/contacts-context";
-import { contactLabels, displayPhone, projectContact } from "../state/data";
+import {
+  contactLabels,
+  displayAddress,
+  displayPhone,
+  homeCountry,
+  projectContact,
+} from "../state/data";
 import { ContactExport } from "./contact-export";
 import { ContactAvatar } from "./contacts-list";
 
@@ -149,6 +155,29 @@ export function ContactDetail({ contactRef, onClose }: { contactRef: string; onC
                     <span>{displayPhone(phone)}</span>
                   </a>
                 ))}
+                {(person.data.addresses ?? []).map((address, index) => {
+                  // AUTHORED-BY Claude Opus 5.5
+                  const kind =
+                    address.kind === "home" ? "Home" : address.kind === "work" ? "Work" : "Address";
+                  const text = displayAddress(address, homeCountry(navigator.language));
+                  return (
+                    <a
+                      // Addresses have no identity of their own; order is stable per snapshot.
+                      // biome-ignore lint/suspicious/noArrayIndexKey: see above.
+                      key={index}
+                      href={`https://www.openstreetmap.org/search?query=${encodeURIComponent(text.replaceAll("\n", ", "))}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      aria-label={`Map ${address.kind ? `${address.kind} ` : ""}address for ${person.data.name}: ${text.replaceAll("\n", ", ")} (opens in a new tab)`}
+                    >
+                      <MapPin size={18} aria-hidden="true" />
+                      <span>
+                        <span className="con-address-kind">{kind}</span>
+                        <span className="con-address-text">{text}</span>
+                      </span>
+                    </a>
+                  );
+                })}
                 {webId && (
                   <a href={webId} target="_blank" rel="noopener noreferrer">
                     <ExternalLink size={18} aria-hidden="true" />
@@ -179,7 +208,7 @@ export function ContactDetail({ contactRef, onClose }: { contactRef: string; onC
                 <AlertDialogContent>
                   <AlertDialogTitle>Delete {person.data.name}?</AlertDialogTitle>
                   <AlertDialogDescription>
-                    You can undo this deletion from the notification.
+                    It moves to Trash, where you can restore it for 30 days.
                   </AlertDialogDescription>
                   <AlertDialogFooter>
                     <AlertDialogCancel>Cancel</AlertDialogCancel>

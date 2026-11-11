@@ -1,7 +1,7 @@
-import { RdfFetchError } from "@jeswr/fetch-rdf";
+// AUTHORED-BY Codex GPT-6.1-Sol
+import { StorageError } from "@jeswr/storage-client";
 import { Store } from "n3";
 import { describe, expect, it } from "vitest";
-import { ResourceDeleteError, ResourceWriteError } from "./errors.js";
 import {
   deleteRdf,
   nameFromUrl,
@@ -77,10 +77,10 @@ describe("readRdf", () => {
     expect(calls[0]?.headers["cache-control"]).toBe(REVALIDATE_HEADERS["cache-control"]);
   });
 
-  it("throws RdfFetchError with .status on a 404", async () => {
+  it("throws StorageError with .status on a 404", async () => {
     const { fetch } = mockFetch({});
     await expect(readRdf(URL_X, fetch)).rejects.toMatchObject({ status: 404 });
-    await expect(readRdf(URL_X, fetch)).rejects.toBeInstanceOf(RdfFetchError);
+    await expect(readRdf(URL_X, fetch)).rejects.toBeInstanceOf(StorageError);
   });
 
   it("uses the global fetch when no fetchImpl is given (production path)", async () => {
@@ -108,11 +108,11 @@ describe("writeRdf", () => {
   it("PUTs Turtle with an explicit content-type and returns the new etag", async () => {
     const { fetch, calls } = mockFetch({ [`PUT ${URL_X}`]: { status: 201, etag: 'W/"new"' } });
     const store = turtleToStore(`<#it> <http://example/p> "v" .`, URL_X);
-    const { etag } = await writeRdf(URL_X, store, { fetchImpl: fetch });
+    const { etag } = await writeRdf(URL_X, store, { fetchImpl: fetch, etag: '"old"' });
     expect(etag).toBe('W/"new"');
     expect(calls[0]?.method).toBe("PUT");
     expect(calls[0]?.headers["content-type"]).toBe("text/turtle");
-    expect(calls[0]?.headers["if-match"]).toBeUndefined();
+    expect(calls[0]?.headers["if-match"]).toBe('"old"');
     expect(calls[0]?.headers["if-none-match"]).toBeUndefined();
   });
 
@@ -128,10 +128,12 @@ describe("writeRdf", () => {
     expect(calls[0]?.headers["if-none-match"]).toBe("*");
   });
 
-  it("throws ResourceWriteError with the status on a non-2xx", async () => {
+  it("throws StorageError with the status on a non-2xx", async () => {
     const { fetch } = mockFetch({ [`PUT ${URL_X}`]: { status: 412 } });
-    const err = await writeRdf(URL_X, new Store(), { fetchImpl: fetch }).catch((e) => e);
-    expect(err).toBeInstanceOf(ResourceWriteError);
+    const err = await writeRdf(URL_X, new Store(), { fetchImpl: fetch, etag: '"old"' }).catch(
+      (e) => e,
+    );
+    expect(err).toBeInstanceOf(StorageError);
     expect(err.status).toBe(412);
   });
 
@@ -143,7 +145,7 @@ describe("writeRdf", () => {
       return new Response(null, { status: 201, headers: { etag: 'W/"g"' } });
     }) as typeof fetch;
     try {
-      const { etag } = await writeRdf(URL_X, new Store());
+      const { etag } = await writeRdf(URL_X, new Store(), { etag: '"old"' });
       expect(etag).toBe('W/"g"');
       expect(called).toBe(URL_X);
     } finally {
@@ -155,8 +157,8 @@ describe("writeRdf", () => {
     const original = globalThis.fetch;
     globalThis.fetch = (async () => new Response(null, { status: 500 })) as typeof fetch;
     try {
-      const err = await writeRdf(URL_X, new Store()).catch((e) => e);
-      expect(err).toBeInstanceOf(ResourceWriteError);
+      const err = await writeRdf(URL_X, new Store(), { etag: '"old"' }).catch((e) => e);
+      expect(err).toBeInstanceOf(StorageError);
       expect(err.status).toBe(500);
     } finally {
       globalThis.fetch = original;
@@ -167,21 +169,21 @@ describe("writeRdf", () => {
 describe("deleteRdf", () => {
   it("succeeds on a 2xx", async () => {
     const { fetch, calls } = mockFetch({ [`DELETE ${URL_X}`]: { status: 205 } });
-    await expect(deleteRdf(URL_X, fetch)).resolves.toBeUndefined();
+    await expect(deleteRdf(URL_X, fetch, undefined, '"old"')).resolves.toBeUndefined();
     expect(calls[0]?.method).toBe("DELETE");
   });
 
   it("treats 404 and 410 as idempotent success", async () => {
     const { fetch: f404 } = mockFetch({ [`DELETE ${URL_X}`]: { status: 404 } });
-    await expect(deleteRdf(URL_X, f404)).resolves.toBeUndefined();
+    await expect(deleteRdf(URL_X, f404, undefined, '"old"')).resolves.toBeUndefined();
     const { fetch: f410 } = mockFetch({ [`DELETE ${URL_X}`]: { status: 410 } });
-    await expect(deleteRdf(URL_X, f410)).resolves.toBeUndefined();
+    await expect(deleteRdf(URL_X, f410, undefined, '"old"')).resolves.toBeUndefined();
   });
 
-  it("throws ResourceDeleteError on any other non-2xx", async () => {
+  it("throws StorageError on any other non-2xx", async () => {
     const { fetch } = mockFetch({ [`DELETE ${URL_X}`]: { status: 500 } });
-    const err = await deleteRdf(URL_X, fetch).catch((e) => e);
-    expect(err).toBeInstanceOf(ResourceDeleteError);
+    const err = await deleteRdf(URL_X, fetch, undefined, '"old"').catch((e) => e);
+    expect(err).toBeInstanceOf(StorageError);
     expect(err.status).toBe(500);
   });
 
@@ -189,7 +191,7 @@ describe("deleteRdf", () => {
     const original = globalThis.fetch;
     globalThis.fetch = (async () => new Response(null, { status: 205 })) as typeof fetch;
     try {
-      await expect(deleteRdf(URL_X)).resolves.toBeUndefined();
+      await expect(deleteRdf(URL_X, undefined, undefined, '"old"')).resolves.toBeUndefined();
     } finally {
       globalThis.fetch = original;
     }
@@ -199,8 +201,8 @@ describe("deleteRdf", () => {
     const original = globalThis.fetch;
     globalThis.fetch = (async () => new Response(null, { status: 500 })) as typeof fetch;
     try {
-      const err = await deleteRdf(URL_X).catch((e) => e);
-      expect(err).toBeInstanceOf(ResourceDeleteError);
+      const err = await deleteRdf(URL_X, undefined, undefined, '"old"').catch((e) => e);
+      expect(err).toBeInstanceOf(StorageError);
       expect(err.status).toBe(500);
     } finally {
       globalThis.fetch = original;

@@ -3,14 +3,17 @@
 import { isomorphic } from "rdf-isomorphic";
 import { missingLabels } from "../lib/compose/planning";
 import { projectMoveData } from "../lib/detail/task-data";
-import { ModelError } from "../lib/model/errors";
+import { ModelError, ProjectMembersSyncError } from "../lib/model/errors";
 import type { TaskMove } from "../lib/model/move";
-import { DataFactory } from "../lib/model/rdf";
+import { DataFactory, isSharedTrackerUrl, requireProjectFolder } from "../lib/model/rdf";
 import type { ProjectCreation, StoredProject, StoredTask, TaskStore } from "../lib/model/store";
 import { createTask, type TaskDetails, TaskItem } from "../lib/model/task";
 import { createTracker, type TaskTracker } from "../lib/model/tracker";
+import { runBulk } from "../lib/views/bulk";
+import { completedHistoryToKeep, completedParentsToKeep } from "../lib/views/clear-completed";
 import { type CompletionPlan, planComplete, planUndo } from "../lib/views/completion";
 import { type DropPosition, positionForDrop } from "../lib/views/positions";
+import { projectColour } from "../lib/views/project-colours";
 import { compareTasks } from "../lib/views/project-groups";
 import { type TaskView, toTaskView } from "../lib/views/types";
 import { changeProject, changeTask, moveItem, optimisticValue, sortedProjects } from "./mutations";
@@ -132,10 +135,101 @@ export class TasksCache {
   /** Where each task moved by this session went (original URL → its copy's URL). */
   private movedTasks = new Map<string, string>();
   private hiddenTasks = new Set<string>();
+  /** Failed commit-time reads block queued completed deletes until an explicit strict refresh. */
+  private completedDeletionBlocked = true;
   private undoOperations = new WeakMap<CompletionPlan, () => Promise<boolean | undefined>>();
   private completionCopies = new WeakMap<CompletionPlan, StoredTask>();
   private undoRepairs = new Map<string, UndoRepair>();
+  private sharedProjects = new Map<string, string>();
+  private ownProjects = new Set<string>();
+  private removedSharedProjects = new Set<string>();
+  /** Bumped when a shared project is forgotten, so a read already in flight is dropped. */
+  private sharedGenerations = new Map<string, number>();
+  private removedAssignments = new Map<string, Map<string, Map<string, string | null>>>();
   readonly inboxUrl: string;
+  isOwnProject(url: string) {
+    return this.ownProjects.has(url) || url.startsWith(this.store.projects);
+  }
+  async setSharedProjects(projects: readonly { url: string; title: string }[]) {
+    const next = new Map(
+      projects
+        .filter((project) => isSharedTrackerUrl(project.url))
+        .map((project) => [project.url, project.title]),
+    );
+    for (const url of this.sharedProjects.keys()) if (!next.has(url)) this.forgetSharedProject(url);
+    for (const url of next.keys()) this.removedSharedProjects.delete(url);
+    this.sharedProjects = next;
+    await this.start();
+    if (this.baseline.status === "error") return;
+    await this.refreshProjects().catch((error: unknown) => {
+      this.onFailure(error, () => {
+        void this.setSharedProjects(projects);
+      });
+    });
+  }
+  hasSharedProject(url: string): boolean {
+    return this.sharedProjects.has(url);
+  }
+  forgetSharedProject(url: string) {
+    this.removedSharedProjects.add(url);
+    this.sharedGenerations.set(url, (this.sharedGenerations.get(url) ?? 0) + 1);
+    this.sharedProjects.delete(url);
+    this.projectFailures.delete(url);
+    ++this.projectRead;
+    this.taskReadGenerations.set(url, (this.taskReadGenerations.get(url) ?? 0) + 1);
+    const tasks = { ...this.baseline.tasks };
+    delete tasks[url];
+    this.baseline = {
+      ...this.baseline,
+      projects: this.baseline.projects.filter((project) => project.url !== url),
+      tasks,
+    };
+    this.emit();
+  }
+  private validateSharedProject(project: StoredProject) {
+    if (!isSharedTrackerUrl(project.url)) throw new ModelError(400, project.url);
+    requireProjectFolder(project.url, project.tracker.stateStore);
+  }
+  /**
+   * The user navigated to this project: a project removed from Shared with me may be opened
+   * again. Background re-renders and retries on the same route keep it removed.
+   */
+  allowSharedProject(url: string) {
+    this.removedSharedProjects.delete(url);
+  }
+  /** Read a project that isn't one of the user's own. */
+  async openProject(url: string): Promise<StoredProject | undefined> {
+    if (!isSharedTrackerUrl(url) || this.removedSharedProjects.has(url)) return undefined;
+    const generation = this.sharedGenerations.get(url) ?? 0;
+    const stale = () => (this.sharedGenerations.get(url) ?? 0) !== generation;
+    await this.start();
+    if (stale()) return undefined;
+    const existing = this.baseline.projects.find((project) => project.url === url);
+    if (existing) return existing;
+    this.baseline = {
+      ...this.baseline,
+      tasks: { ...this.baseline.tasks, [url]: { status: "loading", items: [] } },
+    };
+    this.emit();
+    try {
+      const project = await this.store.readProject(url);
+      this.validateSharedProject(project);
+      if (stale()) return undefined;
+      this.sharedProjects.set(url, project.tracker.title ?? "Project");
+      this.baseline = replaceProject(this.baseline, project);
+      this.projectFailures.delete(url);
+      this.emit();
+      return project;
+    } catch (error) {
+      if (stale()) return undefined;
+      this.baseline = {
+        ...this.baseline,
+        tasks: { ...this.baseline.tasks, [url]: { status: "error", items: [], error } },
+      };
+      this.emit();
+      return undefined;
+    }
+  }
   constructor(
     readonly store: TaskStore,
     private readonly onFailure: MutationFailure,
@@ -216,12 +310,30 @@ export class TasksCache {
     this.emit();
     void this.start();
   };
-  async refreshProjects(): Promise<void> {
+  async refreshProjects(strict = false): Promise<void> {
     const epoch = this.epoch;
     const generation = ++this.projectRead;
     const failures = new Map<string, unknown>();
-    const projects = await this.store.listProjects((url, error) => failures.set(url, error));
+    const projects = await this.store
+      .listProjects((url, error) => failures.set(url, error), { strict })
+      .catch((error: unknown) => {
+        this.completedDeletionBlocked = true;
+        throw error;
+      });
+    const ownProjects = new Set(projects.map((project) => project.url));
+    for (const url of this.sharedProjects.keys()) {
+      if (ownProjects.has(url)) continue;
+      try {
+        const project = await this.store.readProject(url);
+        this.validateSharedProject(project);
+        projects.push(project);
+      } catch (error) {
+        failures.set(url, error);
+      }
+    }
+    if (failures.size) this.completedDeletionBlocked = true;
     if (epoch !== this.epoch || generation !== this.projectRead) return;
+    this.ownProjects = ownProjects;
     const tasks = { ...this.baseline.tasks };
     for (const project of projects) {
       const previous = this.baseline.projects.find((item) => item.url === project.url);
@@ -250,7 +362,9 @@ export class TasksCache {
   }
   async retryProject(url: string): Promise<void> {
     await this.refreshProjects();
-    const project = this.baseline.projects.find((item) => item.url === url);
+    const project =
+      this.baseline.projects.find((item) => item.url === url) ??
+      (url.endsWith("/") ? undefined : await this.openProject(url));
     if (project && !this.projectFailures.has(url)) await this.loadTasks(project, true);
   }
   loadTasks(project: StoredProject, force = false): Promise<void> {
@@ -282,7 +396,7 @@ export class TasksCache {
     this.reads.set(project.url, request);
     return request;
   }
-  private async readTasks(project: StoredProject) {
+  private async readTasks(project: StoredProject, strict = false) {
     const epoch = this.epoch;
     const generation = this.taskReadGenerations.get(project.url);
     const stateStore = project.tracker.stateStore as string;
@@ -307,7 +421,7 @@ export class TasksCache {
     };
     this.emit();
     try {
-      const items = await this.store.listTasks(stateStore);
+      const items = await this.store.listTasks(stateStore, { strict });
       if (!isCurrent()) return;
       if (epoch !== this.epoch) {
         this.dirtyReads.add(project.url);
@@ -321,6 +435,7 @@ export class TasksCache {
         },
       };
     } catch (error) {
+      this.completedDeletionBlocked = true;
       if (!isCurrent()) return;
       if (epoch !== this.epoch) {
         this.dirtyReads.add(project.url);
@@ -382,6 +497,9 @@ export class TasksCache {
     write: () => Promise<{ result: T; commit: Patch }>,
     retry: () => void,
     urls: string[] = [],
+    onFailure: MutationFailure = this.onFailure,
+    signal?: AbortSignal,
+    strictReconciliation = false,
   ): Promise<T | undefined> {
     const entry = { apply, urls };
     this.pending.push(entry);
@@ -389,20 +507,24 @@ export class TasksCache {
     this.emit();
     const run = this.tail.then(async () => {
       try {
+        // Cancellation can happen while this operation waits behind another mutation.
+        if (signal?.aborted) return undefined;
         const { result, commit } = await write();
         this.baseline = commit(this.baseline);
         return result;
       } catch (error) {
         // A section/project operation can partially succeed; reconcile its confirmed resources.
         try {
-          await this.refreshProjects();
+          await this.refreshProjects(strictReconciliation);
           for (const project of this.baseline.projects)
             if (this.baseline.tasks[project.url] && !this.baseline.tasks[project.url]?.error)
-              await this.readTasks(project);
+              await this.readTasks(project, strictReconciliation);
+          if (this.completedDeletionIncomplete()) this.completedDeletionBlocked = true;
         } catch {
+          this.completedDeletionBlocked = true;
           /* The baseline plus the remaining queue is still safe to render. */
         }
-        this.onFailure(error, retry);
+        onFailure(error, retry);
         return undefined;
       } finally {
         this.pending = this.pending.filter((item) => item !== entry);
@@ -425,13 +547,123 @@ export class TasksCache {
   createTask(project: StoredProject, data: NewTask): Promise<StoredTask | undefined> {
     return this.prepareTaskCreate(project, data)();
   }
+  /** One queue reservation protects an import while independent task documents write four at a time.
+   * Project-scoped source identities make task creation idempotent across retries. */
+  importTasks(
+    project: StoredProject,
+    entries: readonly { id: string; sourceId: string; parentId: string | null; data: NewTask }[],
+    signal: AbortSignal,
+    onProgress: (completed: number) => void,
+  ) {
+    return this.mutate(
+      (state) => state,
+      async () => {
+        const current = this.project(project.url);
+        const outcomes = new Map<string, Promise<StoredTask | undefined>>();
+        const confirmed: StoredTask[] = [];
+        let failed = 0;
+        let completed = 0;
+        await runBulk(entries, (entry) => {
+          const run = async (): Promise<StoredTask | undefined> => {
+            if (signal.aborted) return;
+            const parent = entry.parentId ? await outcomes.get(entry.parentId) : undefined;
+            if (signal.aborted) return;
+            try {
+              // Keep the forest intact when a parent failed; unrelated rows still import.
+              if (entry.parentId && !parent) throw new Error("The parent could not be imported");
+              const data = entry.data;
+              const hash = await crypto.subtle.digest(
+                "SHA-256",
+                new TextEncoder().encode(JSON.stringify([current.url, entry.sourceId])),
+              );
+              if (signal.aborted) return;
+              const id = `import-${Array.from(new Uint8Array(hash), (byte) => byte.toString(16).padStart(2, "0")).join("")}`;
+              const url = `${current.tracker.stateStore}${id}.ttl`;
+              let reserved: StoredTask | undefined;
+              let task: StoredTask;
+              try {
+                task = await this.store.createTask(
+                  current,
+                  {
+                    ...data,
+                    state: data.state ?? "open",
+                    creator: data.creator ?? this.webId,
+                    ...(data.allDay
+                      ? { dueDate: new Date(`${data.allDay}T00:00:00`) }
+                      : data.due
+                        ? { dueDate: data.due }
+                        : {}),
+                    rank: data.position,
+                    ...(parent ? { parent: parent.task.id } : {}),
+                    categoryTypes: [
+                      ...(data.labelIds ?? []),
+                      ...(data.sectionId ? [data.sectionId] : []),
+                    ],
+                  },
+                  id,
+                  (resource) => {
+                    reserved = {
+                      ...resource,
+                      task: new TaskItem(`${url}#it`, resource.dataset, DataFactory),
+                    };
+                  },
+                );
+              } catch (error) {
+                // A 412 means this stable URL was already imported. Never overwrite it.
+                // Reconcile an ambiguous response only against this attempt's exact payload.
+                const existing = await this.optionalTask(url);
+                if (
+                  !existing ||
+                  (!(error instanceof ModelError && error.status === 412) &&
+                    (!reserved || !isomorphic([...reserved.dataset], [...existing.dataset])))
+                )
+                  throw error;
+                task = existing;
+              }
+              confirmed.push(task);
+              return task;
+            } catch {
+              failed++;
+              return undefined;
+            } finally {
+              onProgress(++completed);
+            }
+          };
+          const outcome = run();
+          outcomes.set(entry.id, outcome);
+          return outcome;
+        });
+        return {
+          result: { imported: confirmed.length, failed },
+          commit: (state: TasksSnapshot): TasksSnapshot => {
+            const previous = state.tasks[project.url];
+            const items = new Map((previous?.items ?? []).map((task) => [task.url, task]));
+            for (const task of confirmed) items.set(task.url, task);
+            return {
+              ...state,
+              tasks: {
+                ...state.tasks,
+                [project.url]: { ...previous, status: "ready", items: [...items.values()] },
+              },
+            };
+          },
+        };
+      },
+      () => {},
+      [project.url],
+      () => {},
+    );
+  }
   /** One reservation and captured draft shared by every retry, including batch-owned toasts. */
   prepareTaskCreate(
     project: StoredProject,
     data: NewTask,
     onRetry?: () => void,
+    /** Stable import identity; a matching UID on 412 belongs to another import. */
+    reservation?: { id: string; onConflict: () => void },
   ): () => Promise<StoredTask | undefined> {
-    const id = crypto.randomUUID();
+    const id = reservation?.id ?? crypto.randomUUID();
+    if (!/^[a-zA-Z0-9-]+$/.test(id)) throw new TypeError("Invalid task identifier.");
     const url = `${project.tracker.stateStore}${id}.ttl`;
     const details: TaskDetails = {
       ...data,
@@ -494,6 +726,8 @@ export class TasksCache {
           const current = this.project(project.url);
           if (`${current.tracker.stateStore}${id}.ttl` !== url) throw new ModelError(409, url);
           const existing = reconcile ? await this.optionalTask(url) : undefined;
+          if (existing && reservation && existing.task.calendarUid !== data.calendarUid)
+            throw new ModelError(412, url);
           if (existing)
             return {
               result: existing,
@@ -508,7 +742,17 @@ export class TasksCache {
                 task.rank = patch.position;
               }),
             );
-          const task = await this.store.createTask(current, details, id);
+          let task: StoredTask;
+          try {
+            task = await this.store.createTask(current, details, id);
+          } catch (error) {
+            if (!reservation || !(error instanceof ModelError) || error.status !== 412) throw error;
+            const raced = await this.optionalTask(url);
+            if (!raced || !data.calendarUid || raced.task.calendarUid !== data.calendarUid)
+              throw error;
+            reservation.onConflict();
+            task = raced;
+          }
           return {
             result: task,
             commit: (state) => {
@@ -571,6 +815,8 @@ export class TasksCache {
     project: StoredProject,
     names: readonly string[],
     onRetry?: () => void,
+    onFailure?: MutationFailure,
+    signal?: AbortSignal,
   ): Promise<StoredProject | undefined> {
     const current = this.baseline.projects.find((item) => item.url === project.url);
     if (!this.pending.length && current && !missingLabels(current, names).length)
@@ -583,7 +829,7 @@ export class TasksCache {
         tracker.defineCategory("Label", name, undefined, source?.color);
       }
     };
-    return this.updateProject(project, define, onRetry);
+    return this.updateProject(project, define, onRetry, onFailure, signal);
   }
   updateTask(
     item: StoredTask,
@@ -811,21 +1057,122 @@ export class TasksCache {
     this.unresolvedMoves.set(item.url, { target: target.url, run });
     return run();
   }
-  deleteTask(item: StoredTask): Promise<boolean | undefined> {
-    const project = this.baseline.projects.find((project) =>
-      this.baseline.tasks[project.url]?.items.some((task) => task.url === item.url),
+  /** Include hidden rows: Undo visibility must never change recurrence or ancestry planning. */
+  completedDeletionPlan(candidates?: ReadonlySet<string>) {
+    const tasks = Object.values(this.baseline.tasks).flatMap((load) =>
+      load.items.map(({ task }) => ({
+        id: task.id,
+        parentId: task.parent,
+        state: task.state === "closed" ? ("closed" as const) : ("open" as const),
+        derivedFrom: task.clonedFrom,
+      })),
     );
+    const history = completedHistoryToKeep(tasks, candidates);
+    return { ...completedParentsToKeep(tasks, candidates, history), history };
+  }
+  private completedDeletionIncomplete(tasks = this.baseline.tasks): boolean {
+    return (
+      this.baseline.status !== "ready" ||
+      this.projectFailures.size > 0 ||
+      this.baseline.projects.some((project) => !tasks[project.url]) ||
+      Object.values(tasks).some(
+        (load) => load.status !== "ready" || load.refreshing || (load.warningCount ?? 0) > 0,
+      )
+    );
+  }
+  /** Strict refresh shares the write queue; failed reads cannot authorize destructive planning. */
+  refreshCompletedDeletion(): Promise<TaskView[] | undefined> {
+    return this.mutate(
+      (state) => state,
+      async () => {
+        this.completedDeletionBlocked = true;
+        const tasks = { ...this.baseline.tasks };
+        const views: TaskView[] = [];
+        for (const project of this.baseline.projects) {
+          const current = this.project(project.url);
+          const items = await this.store.listTasks(current.tracker.stateStore as string, {
+            strict: true,
+          });
+          const projected = projectTasks(current, items);
+          tasks[current.url] = { status: "ready", ...projected };
+          views.push(...projected.views);
+        }
+        if (this.completedDeletionIncomplete(tasks))
+          throw new Error("Couldn't refresh tasks before deletion");
+        this.completedDeletionBlocked = false;
+        return { result: views, commit: (state) => ({ ...state, tasks }) };
+      },
+      () => {},
+      [],
+      () => {},
+      undefined,
+      true,
+    );
+  }
+  deleteTask(
+    item: StoredTask,
+    options: { silent?: boolean; completedOnly?: boolean } = {},
+  ): Promise<boolean | undefined> {
+    const project = this.baseline.projects.find((project) => {
+      const folder = project.tracker.stateStore;
+      return (
+        this.baseline.tasks[project.url]?.items.some((task) => task.url === item.url) ||
+        (folder !== undefined && item.url.startsWith(folder))
+      );
+    });
     if (!project) return Promise.resolve(undefined);
     const remove: Patch = (state) => replaceTask(state, project.url, item.url);
     return this.mutate(
       remove,
       async () => {
-        await this.store.deleteTask(this.task(project.url, item.url));
+        if (
+          options.completedOnly &&
+          (this.completedDeletionBlocked || this.completedDeletionIncomplete())
+        ) {
+          this.completedDeletionBlocked = true;
+          throw new Error("Couldn't revalidate tasks before deletion. Retry to refresh them.");
+        }
+        const optionalTask = (url: string) =>
+          this.optionalTask(url).catch((error: unknown) => {
+            this.completedDeletionBlocked = true;
+            throw error;
+          });
+        const current = this.baseline.tasks[project.url]?.items.find(
+          (task) => task.url === item.url,
+        );
+        // Retry may follow reconciliation of a committed DELETE whose response was lost.
+        if (!current) {
+          if (await optionalTask(item.url)) throw new ModelError(409, item.url);
+          return { result: true, commit: remove };
+        }
+        if (options.completedOnly) {
+          // Descendants settle first. Any remaining child (including a failed DELETE)
+          // protects its ancestors, as does all recurring-task history.
+          if (
+            current.task.state !== "closed" ||
+            Object.values(this.baseline.tasks).some((load) =>
+              load.items.some(({ task }) => task.parent === current.task.id),
+            ) ||
+            this.completedDeletionPlan(new Set([current.task.id])).history.has(current.task.id)
+          )
+            return { result: false, commit: (state) => state };
+        }
+        try {
+          await this.store.deleteTask(current);
+        } catch (error) {
+          // A transport failure or error response can follow a successful deletion.
+          // Only a confirmed 404/410 makes that ambiguous outcome successful.
+          if (await optionalTask(current.url)) throw error;
+        }
         return { result: true, commit: remove };
       },
       () => {
-        void this.deleteTask(item);
+        void this.deleteTask(item, options);
       },
+      [item.url],
+      options.silent ? () => {} : this.onFailure,
+      undefined,
+      options.completedOnly,
     );
   }
   /** Temporary visibility owned by the delayed-delete controller, independent of pod writes. */
@@ -1329,39 +1676,53 @@ export class TasksCache {
   prepareProjectCreate(
     title: string,
     onRetry?: () => void,
-  ): () => Promise<StoredProject | undefined> {
+    onFailure?: MutationFailure,
+    signal?: AbortSignal,
+    /** When provided, keep the created project usable even if saving sidebar order fails. */
+    onPositionFailure?: () => void,
+  ): (signal?: AbortSignal) => Promise<StoredProject | undefined> {
     const url = `${this.store.projects}pending-${crypto.randomUUID()}.ttl`;
     const { tracker, dataset } = createTracker(url, title, `${url}/`, [this.webId], new Date());
     const optimistic = { url, tracker, dataset, etag: null };
     let created: StoredProject | undefined;
     const operation: ProjectCreation = { owner: crypto.randomUUID() };
     const position = this.snapshot.projects.length;
-    const attempt = (retry = false): Promise<StoredProject | undefined> =>
+    const attempt = (
+      retry: boolean,
+      attemptSignal?: AbortSignal,
+    ): Promise<StoredProject | undefined> =>
       this.mutate(
         (state) => replaceProject(state, created ?? optimistic),
         async () => {
           created ??= await this.store.createProject(title, false, operation);
           const current = retry ? await this.store.readProject(created.url) : created;
-          const project =
-            current.tracker.position === position
-              ? current
-              : await this.store.updateProject(current, (tracker) => {
-                  tracker.position = position;
-                });
+          let project = current;
+          try {
+            if (current.tracker.position !== position)
+              project = await this.store.updateProject(current, (tracker) => {
+                tracker.position = position;
+              });
+          } catch (error) {
+            // Import can continue in this project even when sidebar ordering could not be saved.
+            if (!onPositionFailure) throw error;
+            onPositionFailure();
+          }
           return { result: project, commit: (state) => replaceProject(state, project) };
         },
         onRetry ?? (() => void run()),
         [url],
+        onFailure,
+        attemptSignal,
       );
     let attempted = false;
     let saved: StoredProject | undefined;
     let running: Promise<StoredProject | undefined> | undefined;
-    const run = (): Promise<StoredProject | undefined> => {
+    const run = (attemptSignal = signal): Promise<StoredProject | undefined> => {
       if (saved) return Promise.resolve(saved);
       if (running) return running;
       const retry = attempted;
       attempted = true;
-      running = attempt(retry)
+      running = attempt(retry, attemptSignal)
         .then((project) => {
           saved = project;
           return project;
@@ -1378,6 +1739,8 @@ export class TasksCache {
     change: (tracker: TaskTracker) => void,
     /** Composite operations retry their complete intent rather than this write alone. */
     onRetry?: () => void,
+    onFailure?: MutationFailure,
+    signal?: AbortSignal,
   ): Promise<StoredProject | undefined> {
     const attempt = (retry = false): Promise<StoredProject | undefined> =>
       this.mutate(
@@ -1400,6 +1763,8 @@ export class TasksCache {
             void attempt(true);
           }),
         [project.url],
+        onFailure,
+        signal,
       );
     return attempt();
   }
@@ -1456,10 +1821,132 @@ export class TasksCache {
       );
     return attempt();
   }
+  /** Fresh reads and conditional writes share the task mutation queue, including Retry. */
+  syncProjectMember(
+    project: StoredProject,
+    webId: string,
+    granted: boolean,
+    { silent = false } = {},
+  ) {
+    const unassigned = new Set<string>();
+    const restored = new Set<string>();
+    let byMember = this.removedAssignments.get(project.url);
+    if (!byMember) {
+      byMember = new Map();
+      this.removedAssignments.set(project.url, byMember);
+    }
+    let removed = byMember.get(webId);
+    if (!removed) {
+      removed = new Map();
+      byMember.set(webId, removed);
+    }
+    const assignments = removed;
+    const attempt = (): Promise<StoredProject | undefined> =>
+      this.mutate(
+        (state) => state,
+        async () => {
+          const projects = this.isOwnProject(project.url) ? this.store.projects : undefined;
+          requireProjectFolder(project.url, project.tracker.stateStore, projects);
+          const current = await this.store.readProject(project.url);
+          const folder = requireProjectFolder(project.url, current.tracker.stateStore, projects);
+          const confirmed: StoredTask[] = [];
+          if (!granted) {
+            const items = await this.store.listTasks(folder, { strict: true, skipInvalid: true });
+            for (const item of items) {
+              if (item.task.assignee !== webId) {
+                confirmed.push(item);
+                continue;
+              }
+              let updated: StoredTask;
+              try {
+                updated = await this.store.updateTask(item, (task) => {
+                  task.assignee = undefined;
+                });
+              } catch (error) {
+                // A lost response can still have committed. Confirm before counting or retrying.
+                updated = await this.store.readTask(item.url);
+                if (updated.task.assignee !== undefined) throw error;
+              }
+              confirmed.push(updated);
+              assignments.set(item.url, updated.etag);
+              unassigned.add(item.url);
+            }
+          } else {
+            for (const [url, etag] of assignments) {
+              let item: StoredTask;
+              try {
+                item = await this.store.readTask(url);
+              } catch (error) {
+                if (!(error instanceof ModelError && error.status === 404)) throw error;
+                assignments.delete(url);
+                continue;
+              }
+              if (!etag || item.etag !== etag || item.task.assignee !== undefined) {
+                assignments.delete(url);
+                continue;
+              }
+              try {
+                confirmed.push(
+                  await this.store.updateTask(item, (task) => {
+                    task.assignee = webId;
+                  }),
+                );
+              } catch (error) {
+                // A concurrent edit always wins. Retry still uses the saved post-unassign ETag.
+                if (!(error instanceof ModelError && error.status === 412)) throw error;
+                assignments.delete(url);
+                continue;
+              }
+              assignments.delete(url);
+              restored.add(url);
+            }
+          }
+          const members = new Set(current.tracker.groupMembers);
+          if (granted) members.add(webId);
+          else members.delete(webId);
+          const result =
+            members.has(webId) === current.tracker.groupMembers.includes(webId)
+              ? current
+              : await this.store.updateProject(current, (tracker) =>
+                  tracker.setGroupMembers([...members]),
+                );
+          if (!silent) {
+            if (unassigned.size) this.onNotice(`Unassigned ${unassigned.size} tasks`);
+            if (restored.size) this.onNotice(`Restored ${restored.size} assignments`);
+          }
+          unassigned.clear();
+          restored.clear();
+          return {
+            result,
+            commit: (state) => {
+              let next = replaceProject(state, result);
+              for (const item of confirmed) next = replaceTask(next, project.url, item.url, item);
+              return next;
+            },
+          };
+        },
+        () => {
+          void attempt();
+        },
+        [project.url],
+        (error, retry) => {
+          // ShareDialog owns feedback for its actions and background reconciliation.
+          if (!silent) this.onFailure(new ProjectMembersSyncError(error), retry);
+        },
+      );
+    return attempt();
+  }
   renameProject = (project: StoredProject, title: string) =>
     this.updateProject(project, (tracker) => {
       tracker.title = title.trim();
     });
+  setProjectColor = (project: StoredProject, color: string | undefined) => {
+    const selected = projectColour(color);
+    if (color !== undefined && !selected) throw new TypeError("Unknown project colour.");
+    return this.updateProject(project, (tracker) => {
+      tracker.color = selected?.hex;
+    });
+  };
   archiveProject = (project: StoredProject) => {
     const archivedAt = new Date();
     return this.updateProject(project, (tracker) => {

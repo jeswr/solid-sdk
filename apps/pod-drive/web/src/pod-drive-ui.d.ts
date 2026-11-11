@@ -14,8 +14,8 @@ declare module "@jeswr/pod-drive/ui" {
     /** The container URL to open first (the drive root). */
     rootUrl: string;
     /**
-     * The authenticated fetch for pod reads. Omit to use the ambient global
-     * fetch (patched by @solid/reactive-authentication in a real session).
+     * The authenticated fetch for pod reads. Drive explicitly passes auth.fetch.
+     * Omit only when a host intentionally wants the ambient public fetch.
      */
     fetch?: typeof fetch;
     /** Optional heading rendered above the listing. */

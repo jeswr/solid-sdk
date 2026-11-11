@@ -14,6 +14,7 @@ import {
   recoveryPreview,
   suggestMapping,
 } from "../lib/data/import";
+import { importRules } from "../lib/data/rules";
 import type { CsvOptions, DateFormat } from "../lib/import";
 import { useMoney } from "../state/money-context";
 import { AccountDialog, Amount, CategorySelect, MoneySelect } from "./money-forms";
@@ -103,12 +104,7 @@ export function ImportScreen() {
     const request = generation.current;
     setBusy(true);
     try {
-      const rules = money.categories
-        .filter((c) => !money.categories.some((child) => child.parent === c.id))
-        .map((c) => ({
-          category: c.id,
-          description: { match: "contains" as const, value: c.label },
-        }));
+      const rules = importRules(money.rules, money.categories);
       const saved = await recoveryPreview(
         money.session,
         account.id,

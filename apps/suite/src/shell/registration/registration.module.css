@@ -1,0 +1,196 @@
+/* AUTHORED-BY Claude Opus 5.5 */
+.title {
+  margin: 0;
+  font-size: var(--text-xl);
+}
+.form {
+  display: grid;
+  gap: var(--space-5);
+  min-width: 0;
+}
+.form[hidden] {
+  display: none;
+}
+.field {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+}
+.fieldset {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.fieldset legend {
+  padding: 0;
+  margin-bottom: var(--space-2);
+  font-weight: 600;
+}
+.rules {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--text-sm);
+  color: var(--foreground-muted);
+}
+.rules li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.rules li[data-met="true"] {
+  color: var(--foreground);
+}
+.rules li[data-met="true"] svg {
+  color: var(--success, var(--primary));
+}
+.status,
+.hint {
+  margin: 0;
+  font-size: var(--text-sm);
+}
+/* Live regions stay rendered while empty (a region that appears already holding text
+   is often not announced); an empty paragraph with no margin takes no space. */
+.lock {
+  display: contents;
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+.status[data-state="taken"],
+.status[data-state="invalid"] {
+  color: var(--foreground);
+  font-weight: 500;
+}
+.error {
+  margin: 0;
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--destructive);
+}
+.preview {
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+  font-size: var(--text-sm);
+}
+.preview p {
+  margin: 0;
+}
+.url {
+  font-family: var(--font-mono);
+  color: var(--foreground);
+  overflow-wrap: anywhere;
+}
+.methods {
+  gap: var(--space-2);
+}
+.method,
+.consent {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+.consentLabel {
+  line-height: var(--lh-base);
+}
+.passwordRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.passwordRow input {
+  flex: 1 1 12rem;
+}
+.strength {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  font-size: var(--text-sm);
+}
+.meter {
+  display: inline-grid;
+  grid-template-columns: repeat(4, 1.75rem);
+  gap: 3px;
+}
+.meter span {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--surface-3);
+}
+.meter[data-score="1"] span:nth-child(-n + 1),
+.meter[data-score="2"] span:nth-child(-n + 2),
+.meter[data-score="3"] span:nth-child(-n + 3),
+.meter[data-score="4"] span:nth-child(-n + 4) {
+  background: var(--primary);
+}
+.meter[data-score="1"] span:nth-child(-n + 1) {
+  background: var(--destructive);
+}
+.progress {
+  display: grid;
+  gap: var(--space-4);
+}
+.progress h2 {
+  margin: 0;
+  font-size: var(--text-lg);
+}
+.progress h2:focus {
+  outline: none;
+}
+.progress h2:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+.steps {
+  display: grid;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.steps li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  color: var(--foreground-muted);
+}
+.steps li[data-status="active"],
+.steps li[data-status="done"],
+.steps li[data-status="failed"] {
+  color: var(--foreground);
+}
+.steps li[data-status="done"] .stepIcon {
+  color: var(--primary);
+}
+.steps li[data-status="failed"] .stepIcon {
+  color: var(--destructive);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .steps li[data-status="active"] .stepIcon {
+    animation: spin 1s linear infinite;
+  }
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.failure {
+  display: grid;
+  gap: var(--space-3);
+}
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}

@@ -99,6 +99,10 @@ export {
   chatPortStatus,
   validateWacAcl,
 } from "./chat-writer.js";
+// --- credential redaction, applied by ChatWriter to every stored title and message ---
+export { redactSecrets } from "./redact.js";
+// --- Markdown transcript, for handing an archived conversation to another account ---
+export { renderTranscript } from "./transcript.js";
 // --- vocabulary (IRI constants + prefixes) ---
 export {
   AS,

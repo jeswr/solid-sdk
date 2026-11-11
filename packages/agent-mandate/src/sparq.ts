@@ -8,7 +8,13 @@ import { SetFrom, TermAs, TermFrom } from "@rdfjs/wrapper";
 import { spawnSync } from "child_process";
 import { Store } from "n3";
 import { actionIri, encodePolicy, leftOperandIri } from "./codec.js";
-import { candidate, knownOperand, operandDatatype, supportedPolicy } from "./policy.js";
+import {
+  candidate,
+  knownOperand,
+  operandDatatype,
+  type RuleKind,
+  supportedPolicy,
+} from "./policy.js";
 import { Node, node, turtle } from "./rdf.js";
 import {
   AGENT,
@@ -137,8 +143,8 @@ export function sparqPolicyEngine(
           attributes.set(left, value);
         }
         // The shared evaluator matches prohibitions independently of their duties.
-        const comparable = (r: Rule) =>
-          (r.type === "prohibition" || (r.duties ?? []).length === 0) &&
+        const comparable = (r: Rule, kind: RuleKind) =>
+          (kind === "prohibition" || (r.duties ?? []).length === 0) &&
           supportedPolicy({ id: policy.id, permissions: [r] }) &&
           (r.constraints ?? []).every(
             (c) =>
@@ -154,26 +160,35 @@ export function sparqPolicyEngine(
           !supportedPolicy(policy) ||
           (policy.obligations ?? []).length > 0 ||
           rules.some((r) => (r.duties ?? []).length > 0) ||
-          rules.filter((r) => candidate(r, policy, request)).some((r) => !comparable(r));
+          [
+            ...(policy.permissions ?? []).filter(
+              (r) => candidate(r, policy, request, "permission") && !comparable(r, "permission"),
+            ),
+            ...(policy.prohibitions ?? []).filter(
+              (r) => candidate(r, policy, request, "prohibition") && !comparable(r, "prohibition"),
+            ),
+          ].length > 0;
         // Only a definite prohibition may decide a policy with unresolved candidates.
         if (
           unresolved &&
-          !(policy.prohibitions ?? []).some((r) => candidate(r, policy, request) && comparable(r))
+          !(policy.prohibitions ?? []).some(
+            (r) => candidate(r, policy, request, "prohibition") && comparable(r, "prohibition"),
+          )
         )
           return { effect: "indeterminate" };
         // The backend's use umbrella is broader than the shared suite profile.
         // Select candidates here, then use one exact action for rules and request.
-        const lower = (rules: readonly Rule[] = []) =>
-          rules
-            .filter((r) => candidate(r, policy, request) && comparable(r))
+        const lower = (rules: readonly Rule[] | undefined, kind: RuleKind) =>
+          (rules ?? [])
+            .filter((r) => candidate(r, policy, request, kind) && comparable(r, kind))
             .map(({ assignee: _assignee, assigner: _assigner, duties: _duties, ...rule }) => ({
               ...rule,
               action: "use",
               constraints: rule.constraints?.map((c) => ({ ...c, datatype: operandDatatype(c) })),
             }));
         // Unresolved policies can establish only a prohibition; permissions add no evidence.
-        const permissions = unresolved ? [] : lower(policy.permissions);
-        const prohibitions = lower(policy.prohibitions);
+        const permissions = unresolved ? [] : lower(policy.permissions, "permission");
+        const prohibitions = lower(policy.prohibitions, "prohibition");
         const decide = async (
           permissions: ReturnType<typeof lower>,
           prohibitions: ReturnType<typeof lower>,

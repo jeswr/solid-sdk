@@ -14,6 +14,7 @@
 @import "@jeswr/suite-ui/styles/sync.css";
 @import "@jeswr/suite-ui/styles/sign-in.css";
 @import "../shell/shell.css";
+@import "../welcome/welcome.css";
 @source "../../../../packages/suite-ui/src";
 
 * {
@@ -54,6 +55,14 @@ a {
 }
 .skip-link:focus {
   clip-path: none;
+}
+/* AUTHORED-BY Claude Opus 5.5: the native startup check's update screen (MOB-P3 E6). */
+.native-update {
+  display: grid;
+  gap: var(--space-3);
+  max-width: 32rem;
+  margin: 0 auto;
+  padding: var(--space-6) var(--space-4);
 }
 h1,
 h2,
@@ -512,4 +521,34 @@ nav[aria-label="Component fixtures"] {
 }
 .date-fixture-grid h2 {
   margin: 0 0 var(--space-2);
+}
+
+/* AUTHORED-BY Codex GPT-6.1: Drive and Docs reuse this dialog. */
+.drv-share-dialog {
+  width: min(34rem, calc(100vw - 2rem));
+  max-height: calc(100dvh - 2rem);
+  overflow-y: auto;
+}
+.drv-share-dialog :is(h2, p, strong, select) {
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+.drv-share-add {
+  border: 0;
+  padding: 0;
+  min-width: 0;
+  display: grid;
+  gap: var(--space-3);
+}
+.drv-share-people {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.drv-share-person {
+  border-bottom: 1px solid var(--border);
+  padding-block: var(--space-3);
+}
+.drv-share-dialog .su-wrap {
+  align-items: end;
 }

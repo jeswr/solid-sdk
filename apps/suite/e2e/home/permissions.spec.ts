@@ -3,6 +3,9 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, type Page, test } from "@playwright/test";
 import { encodeRef } from "../../src/lib/refs";
+import { seedDemoSession } from "../demo-session";
+
+test.beforeEach(({ page }) => seedDemoSession(page));
 
 const ROOT = "https://alice.demo.pod/";
 const BOB = "https://bob.demo.pod/profile/card#me";
@@ -44,7 +47,7 @@ function bobCard(page: Page) {
 async function open(page: Page) {
   await page.goto("/permissions");
   await expect(
-    page.getByRole("heading", { level: 1, name: "Permissions", exact: true }),
+    page.getByRole("heading", { level: 2, name: "Permissions", exact: true }),
   ).toBeVisible();
   await expect(bobCard(page)).toBeVisible();
 }
@@ -217,7 +220,7 @@ test("row names deep-link to person and pseudo-agent detail; unknown accounts ar
   await bobCard(page).getByRole("link", { name: "bob.demo.pod", exact: true }).click();
   await expect(page).toHaveURL(`/permissions/a/${encodeRef(BOB)}`);
   await expect(
-    page.getByRole("heading", { level: 1, name: "bob.demo.pod", exact: true }),
+    page.getByRole("heading", { level: 2, name: "bob.demo.pod", exact: true }),
   ).toBeVisible();
   await expect(page.getByText("Account ID", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Copy Account ID", exact: true })).toBeVisible();
@@ -227,7 +230,7 @@ test("row names deep-link to person and pseudo-agent detail; unknown accounts ar
   await accessible(page);
   await page.goto("/permissions/a/public");
   await expect(
-    page.getByRole("heading", { level: 1, name: "Anyone with the link", exact: true }),
+    page.getByRole("heading", { level: 2, name: "Anyone with the link", exact: true }),
   ).toBeVisible();
   await expect(page.getByRole("button", { name: "Make private", exact: true })).toBeVisible();
   await accessible(page);
@@ -248,7 +251,7 @@ test("an origin-only app is named by its host and its origin is never fetched", 
   });
   await page.goto(`/permissions/a/${encodeRef(APP)}`);
   await expect(
-    page.getByRole("heading", { level: 1, name: "maracoach.example", exact: true }),
+    page.getByRole("heading", { level: 2, name: "maracoach.example", exact: true }),
   ).toBeVisible();
   await expect(
     page.getByText("This app hasn't provided any details.", { exact: true }),

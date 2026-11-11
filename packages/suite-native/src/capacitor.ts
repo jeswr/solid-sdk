@@ -1,6 +1,7 @@
 // AUTHORED-BY Claude Opus 5.5
 import { registerPlugin } from "@capacitor/core";
 import type { AuthSessionPlugin } from "./auth-session.js";
+import type { PdfPreviewPlugin } from "./pdf-preview.js";
 import type { SecureStorePlugin } from "./secure-store.js";
 import type { SharePlugin } from "./share.js";
 import type { ShareIntakePlugin } from "./share-intake.js";
@@ -10,6 +11,8 @@ import type { ShareStagingPlugin } from "./share-staging.js";
 export const authSessionPlugin = registerPlugin<AuthSessionPlugin>("SuiteAuthSession");
 export const shareIntakePlugin = registerPlugin<ShareIntakePlugin>("SuiteShareIntake");
 export const shareStagingPlugin = registerPlugin<ShareStagingPlugin>("SuiteShareStaging");
+/** The Drive "Open PDF" handoff (MOB-P3 E5). */
+export const filesPlugin = registerPlugin<PdfPreviewPlugin>("SuiteFiles");
 export const secureStorePlugin = registerPlugin<SecureStorePlugin>("SuiteSecureStore");
 /** The `@capacitor/share` native plugin, registered by name so the suite needs no extra package. */
 export const sharePlugin = registerPlugin<SharePlugin>("Share");

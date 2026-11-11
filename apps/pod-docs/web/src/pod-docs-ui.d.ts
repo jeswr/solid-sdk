@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 //
 // Ambient typing for the @jeswr/pod-docs/ui module the host consumes. Vite
@@ -17,12 +18,16 @@ declare module "@jeswr/pod-docs/ui" {
     /** The pod owner's WebID — needed for type-index container discovery. */
     webId: string;
     /**
-     * The authenticated fetch for pod reads. Omit to use the ambient global
-     * fetch (patched by @solid/reactive-authentication in a real session).
+     * The authenticated fetch for pod reads. Pod Docs explicitly passes auth.fetch.
+     * Omit only when a host intentionally wants the ambient public fetch.
      */
     fetch?: typeof fetch;
+    /** Development only: explicitly allow HTTP loopback identity metadata. */
+    allowInsecureLoopback?: boolean;
     /** Optional heading rendered above the listing. */
     title?: string;
+    container?: string;
+    onContainerChange?: (selection: { podRoot: string; webId: string; container: string }) => void;
   }
 
   export function DocumentBrowser(props: DocumentBrowserProps): JSX.Element;

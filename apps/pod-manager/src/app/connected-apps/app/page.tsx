@@ -21,7 +21,7 @@ import { AppHomepageLink, ModeBadges } from "@/components/permissions-ui";
 import {
   freshGrantsForAgent,
   freshGrantsForCategory,
-  permissionsBackend,
+  usePermissionsBackend,
   useConnectedApp,
 } from "@/components/use-permissions";
 import {
@@ -44,6 +44,7 @@ export default function ConnectedAppPage() {
 function ConnectedAppDetail() {
   // `?id=` is the app's agent id URL (URLSearchParams decodes it). A missing
   // id falls through to the "no access" empty state below.
+  const permissionsBackend = usePermissionsBackend();
   const agentId = useSearchParams().get("id") ?? "";
   const { app, loading, error, reload, getFreshModel } = useConnectedApp(agentId);
   const router = useRouter();

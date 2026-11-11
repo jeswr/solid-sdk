@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6
 import { parseRdf } from "@jeswr/fetch-rdf";
 import {
@@ -11,7 +12,7 @@ import {
   type VerifiableCredential,
 } from "@jeswr/solid-vc";
 import { Store } from "n3";
-import { decodeLimit, decodePolicy, decodeProhibitions } from "./codec.js";
+import { decodeCurrency, decodeLimit, decodePolicy, decodeProhibitions } from "./codec.js";
 import { validInstant } from "./instant.js";
 import { mandateCredential } from "./mandate.js";
 import {
@@ -77,6 +78,7 @@ export async function parseMandateCredential(
       withApproval: decodePolicy(root.one(`${AGENT}withApproval`)),
       prohibitions: decodeProhibitions(root),
       limits: root.values(`${ODRL}constraint`).map(decodeLimit),
+      ...decodeCurrency(root),
     };
     // Reconstruction preserves the complete package-issued signed graph. Foreign/extra claims
     // cannot be laundered: the verifier checks the signature over this reconstructed graph.

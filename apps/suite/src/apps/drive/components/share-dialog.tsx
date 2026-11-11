@@ -1,4 +1,6 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex
+// AUTHORED-BY Codex GPT-6
 "use client";
 
 import {
@@ -12,16 +14,18 @@ import {
   PeoplePicker,
   type SharingPerson as PickerPerson,
 } from "@jeswr/suite-ui";
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import type { DriveItem } from "../lib/client/client";
 import {
   applySharing,
+  CONTENTS_DIFFER,
   loadSharing,
   SharingConflictError,
+  SharingIncompleteError,
   SharingRefreshError,
   type SharingSession,
   type SharingSnapshot,
-} from "../lib/sharing/apply";
+} from "../lib/sharing/adapter";
 import type { SharingRole, SharingSelection, SharingState } from "../lib/sharing/types";
 
 const profile = () => ({ loading: false });
@@ -69,6 +73,8 @@ export function ShareDialog({
   onClose,
   onSaved,
   onCloseAutoFocus,
+  notice,
+  disabledReason,
 }: {
   item: Pick<DriveItem, "name" | "url">;
   session: SharingSession;
@@ -76,6 +82,8 @@ export function ShareDialog({
   onClose: () => void;
   onSaved: () => void;
   onCloseAutoFocus?: (event: Event) => void;
+  notice?: string;
+  disabledReason?: string | undefined;
 }) {
   const [snapshot, setSnapshot] = useState<SharingSnapshot>();
   const [error, setError] = useState("");
@@ -86,6 +94,8 @@ export function ShareDialog({
   const [role, setRole] = useState<SharingRole>("viewer");
   const [announcement, setAnnouncement] = useState("");
   const [retry, setRetry] = useState(0);
+  const focusAfterSave = useRef<HTMLElement | null>(null);
+  const done = useRef<HTMLButtonElement>(null);
   const generalId = useId();
   const generalRoleId = useId();
   const lockId = useId();
@@ -117,8 +127,30 @@ export function ShareDialog({
     };
   }, [session, item.url, retry]);
 
+  useEffect(() => {
+    if (saving) return;
+    const previous = focusAfterSave.current;
+    focusAfterSave.current = null;
+    if (
+      !previous ||
+      (document.activeElement !== document.body &&
+        document.activeElement?.getAttribute("role") !== "dialog")
+    )
+      return;
+    // Disabling the saving control can strand focus on the modal container.
+    // A successful add clears its selection and leaves Share disabled; a removal
+    // deletes its trigger. Done remains available in both cases.
+    // Done is always rendered while the dialog is open.
+    const target =
+      previous.isConnected && !previous.matches(":disabled")
+        ? previous
+        : (done.current as HTMLButtonElement);
+    target.focus();
+  }, [saving]);
+
   const save = async (selection: SharingSelection) => {
-    if (!snapshot || saving) return;
+    if (!snapshot || saving || disabledReason) return;
+    focusAfterSave.current = document.activeElement as HTMLElement | null;
     setSaving(true);
     setError("");
     try {
@@ -129,11 +161,19 @@ export function ShareDialog({
       onSaved();
     } catch (reason) {
       if (reason instanceof SharingConflictError) setSnapshot(reason.snapshot);
+      // Part of the selection may be stored: show the reloaded access, never "saved".
+      if (reason instanceof SharingIncompleteError) {
+        setSnapshot(reason.snapshot);
+        setPeople([]);
+        setQuery("");
+        setAnnouncement("Sharing not saved as chosen");
+        onSaved();
+      }
       if (reason instanceof SharingRefreshError) {
         setSnapshot(undefined);
         setPeople([]);
         setQuery("");
-        setAnnouncement(reason.committed ? "Sharing saved" : "Sharing outcome unknown");
+        setAnnouncement(reason.committed ? "Sharing not confirmed" : "Sharing outcome unknown");
         onSaved();
       }
       setError(reason instanceof Error ? reason.message : "Couldn't save sharing");
@@ -142,7 +182,7 @@ export function ShareDialog({
     }
   };
   const state = snapshot?.state;
-  const blocked = loading || saving || !snapshot?.canManage;
+  const blocked = loading || saving || !!disabledReason || !snapshot?.canManage;
   // Every dismissal route (Done, close button, Escape and outside interaction) shares this guard.
   const close = () => {
     if (!saving) onClose();
@@ -167,6 +207,16 @@ export function ShareDialog({
           <DialogTitle>Share “{item.name}”</DialogTitle>
           <DialogDescription>Choose who can access this item.</DialogDescription>
         </DialogHeader>
+        {notice && (
+          <p role="note" className="su-muted">
+            {notice}
+          </p>
+        )}
+        {disabledReason && (
+          <p role="status" className="su-muted">
+            {disabledReason}
+          </p>
+        )}
         {loading && (
           <p className="su-muted" role="status">
             Loading sharing…
@@ -186,7 +236,13 @@ export function ShareDialog({
           <div className="su-stack" aria-busy={saving}>
             {!snapshot.canManage && (
               <p className="su-muted" role="status">
-                You can view access. Only an owner with Control can change sharing.
+                {snapshot.readOnly ??
+                  "You can view access. Only an owner with Control can change sharing."}
+              </p>
+            )}
+            {(snapshot.contentsDiffer || snapshot.resource.endsWith("/")) && (
+              <p className="su-muted" role="note">
+                {CONTENTS_DIFFER}
               </p>
             )}
             <p className="su-muted" id={lockId}>
@@ -326,6 +382,10 @@ export function ShareDialog({
                 </p>
               )}
             </section>
+            <p className="su-muted">
+              Access end dates aren't available in this sharing dialog. Access continues until you
+              remove it.
+            </p>
           </div>
         )}
         <p role="status" className="su-muted">
@@ -343,7 +403,7 @@ export function ShareDialog({
           >
             Copy link
           </Button>
-          <Button disabled={saving} onClick={close}>
+          <Button ref={done} disabled={saving} onClick={close}>
             Done
           </Button>
         </DialogFooter>

@@ -14,7 +14,8 @@
  * singleton's stable `getCode` (captured once) must end up calling element-2's
  * `getCode`, not the removed element-1's.
  */
-import type { AuthorizationCodeFlow } from "@solid/reactive-authentication";
+import { CodeRequestCancelledError } from "@jeswr/reactive-authentication";
+import type { AuthorizationCodeFlow } from "@jeswr/reactive-authentication/elements";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   AUTH_FLOW_ELEMENT,
@@ -26,7 +27,7 @@ import {
 afterEach(() => {
   authFlowHolder.current = null;
   // Tests stub the global `customElements` registry; reset it between tests.
-  (globalThis as { customElements?: unknown }).customElements = undefined;
+  vi.unstubAllGlobals();
 });
 
 /**
@@ -36,7 +37,7 @@ afterEach(() => {
  */
 function stubCustomElements(): { whenDefined: ReturnType<typeof vi.fn> } {
   const whenDefined = vi.fn(async () => undefined);
-  (globalThis as { customElements?: unknown }).customElements = { whenDefined };
+  vi.stubGlobal("customElements", { whenDefined });
   return { whenDefined };
 }
 
@@ -61,6 +62,23 @@ function makeFakeFlowElement(): {
 }
 
 describe("getCodeThroughHolder — drives the latest mounted element (StrictMode-safe)", () => {
+  it("declines a silent prompt=none request without opening the element's popup", async () => {
+    const element = vi.fn(async () => "https://app.example/callback.html?code=one");
+    authFlowHolder.current = element;
+    const url = new URL("https://issuer.example/auth?prompt=none&state=s");
+    await expect(getCodeThroughHolder(url, new AbortController().signal)).rejects.toBeInstanceOf(
+      CodeRequestCancelledError,
+    );
+    expect(element).not.toHaveBeenCalled();
+    // An interactive request still reaches the element.
+    await getCodeThroughHolder(
+      new URL("https://issuer.example/auth?prompt=consent"),
+      new AbortController().signal,
+    );
+    expect(element).toHaveBeenCalledTimes(1);
+    authFlowHolder.current = null;
+  });
+
   it("throws when no element is mounted", async () => {
     authFlowHolder.current = null;
     await expect(
@@ -145,9 +163,12 @@ describe("lazyElementGetCode — cold-start safe (getCode read at call time)", (
       this: unknown,
       _uri: URL,
       _signal: AbortSignal,
-    ): Promise<string> {
+    ): Promise<Disposable & { value: string }> {
       // `this` must be the element, not undefined / the module.
-      return this === element ? "https://app.example/callback.html?code=ok" : "WRONG-THIS";
+      return {
+        value: this === element ? "https://app.example/callback.html?code=ok" : "WRONG-THIS",
+        [Symbol.dispose]() {},
+      };
     });
     upgrade(getCodeImpl as unknown as AuthorizationCodeFlow["getCode"]);
 
@@ -167,7 +188,10 @@ describe("lazyElementGetCode — cold-start safe (getCode read at call time)", (
 
     // Simulate the reactive-auth chunk upgrading the element when `whenDefined`
     // resolves (i.e. its `customElements.define` ran during the dynamic import).
-    const getCodeImpl = vi.fn(async () => "https://app.example/callback.html?code=early");
+    const getCodeImpl = vi.fn(async () => ({
+      value: "https://app.example/callback.html?code=early",
+      [Symbol.dispose]() {},
+    }));
     whenDefined.mockImplementation(async (name: string) => {
       expect(name).toBe(AUTH_FLOW_ELEMENT);
       upgrade(getCodeImpl as unknown as AuthorizationCodeFlow["getCode"]);
@@ -186,11 +210,74 @@ describe("lazyElementGetCode — cold-start safe (getCode read at call time)", (
   it("does NOT wait on whenDefined when the element is already upgraded (fast path)", async () => {
     const { whenDefined } = stubCustomElements();
     const { element, upgrade } = makeFakeFlowElement();
-    upgrade(vi.fn(async () => "code") as unknown as AuthorizationCodeFlow["getCode"]);
+    upgrade(
+      vi.fn(async () => ({
+        value: "code",
+        [Symbol.dispose]() {},
+      })) as unknown as AuthorizationCodeFlow["getCode"],
+    );
     const accessor = lazyElementGetCode(element);
 
     await accessor(new URL("https://i/x"), new AbortController().signal);
     // Already a function → the belt-and-braces wait must be skipped entirely.
     expect(whenDefined).not.toHaveBeenCalled();
   });
+});
+
+// AUTHORED-BY Codex GPT-6.1-Sol
+describe("shared element callback adapter", () => {
+  it("preserves code, state and issuer and disposes the element result", async () => {
+    const dispose = vi.fn();
+    const value =
+      "https://app.example/callback.html?code=ok&state=s&iss=https%3A%2F%2Fop.example%2F";
+    const element = { getCode: vi.fn(async () => ({ value, [Symbol.dispose]: dispose })) };
+    const result = await lazyElementGetCode(element as unknown as AuthorizationCodeFlow)(
+      new URL("https://op.example/authorize"),
+      new AbortController().signal,
+    );
+    expect(result).toBe(value);
+    expect(dispose).toHaveBeenCalledTimes(1);
+  });
+  it("does not open a popup for an already aborted request", async () => {
+    const element = { getCode: vi.fn() };
+    const controller = new AbortController();
+    controller.abort();
+    await expect(
+      lazyElementGetCode(element as unknown as AuthorizationCodeFlow)(
+        new URL("https://op.example/authorize"),
+        controller.signal,
+      ),
+    ).rejects.toMatchObject({ name: "AbortError" });
+    expect(element.getCode).not.toHaveBeenCalled();
+  });
+  it("disposes a late callback after cancellation instead of returning it", async () => {
+    const controller = new AbortController();
+    const dispose = vi.fn();
+    const element = {
+      getCode: vi.fn(async () => {
+        controller.abort();
+        return { value: "https://app.example/?code=late", [Symbol.dispose]: dispose };
+      }),
+    };
+    await expect(
+      lazyElementGetCode(element as unknown as AuthorizationCodeFlow)(
+        new URL("https://op.example/authorize"),
+        controller.signal,
+      ),
+    ).rejects.toMatchObject({ name: "AbortError" });
+    expect(dispose).toHaveBeenCalledTimes(1);
+  });
+});
+
+it("honors cancellation while a cold element is waiting for registration", async () => {
+  const { whenDefined } = stubCustomElements();
+  whenDefined.mockReturnValue(new Promise(() => {}));
+  const { element } = makeFakeFlowElement();
+  const controller = new AbortController();
+  const result = lazyElementGetCode(element)(
+    new URL("https://op.example/authorize"),
+    controller.signal,
+  );
+  controller.abort();
+  await expect(result).rejects.toMatchObject({ name: "AbortError" });
 });

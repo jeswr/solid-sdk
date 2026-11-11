@@ -13,6 +13,7 @@ let route = { pathname: "/tasks/inbox", query: "" };
 const routeListeners = new Set<() => void>();
 const router = { replace: vi.fn(), push: vi.fn() };
 let dismissDetails: (() => void) | undefined;
+let replaceState: ReturnType<typeof vi.spyOn>;
 function useRoute() {
   return useSyncExternalStore(
     (listener) => {
@@ -55,6 +56,13 @@ vi.mock("@jeswr/suite-ui", async (original) => ({
   ...(await original<Record<string, unknown>>()),
   Toaster: () => null,
   toast: { success: vi.fn(), error: vi.fn() },
+}));
+const { offerNotificationPermission } = vi.hoisted(() => ({
+  offerNotificationPermission: vi.fn(),
+}));
+vi.mock("../../src/apps/tasks/state/reminders", async (original) => ({
+  ...(await original<Record<string, unknown>>()),
+  offerNotificationPermission,
 }));
 vi.mock("../../src/apps/tasks/state/tasks-context", () => ({
   TasksProvider: ({ children }: { children: ReactNode }) => children,
@@ -153,6 +161,7 @@ beforeEach(() => {
     value: vi.fn(),
   });
   router.replace.mockClear();
+  replaceState = vi.spyOn(window.history, "replaceState").mockImplementation(() => undefined);
 });
 afterEach(() => {
   vi.useRealTimers();
@@ -338,7 +347,23 @@ describe("detail edits", () => {
       document.removeEventListener("keydown", captureEscape, true);
     }
     expect(router.replace).not.toHaveBeenCalled();
+    expect(replaceState).not.toHaveBeenCalled();
     expect(host.querySelector('input[aria-label="Sub-task title"]')).toBeNull();
+  });
+  it("closes the detail by dropping only the task param from the URL", async () => {
+    await setup();
+    await mount(h(TasksApp, null, "List"));
+    await act(() => dismissDetails?.());
+    expect(replaceState).toHaveBeenCalledExactlyOnceWith(null, "", "/tasks/inbox?keep=value");
+    expect(router.replace).not.toHaveBeenCalled();
+  });
+  it("names the breadcrumb after its visible project and section", async () => {
+    await setup();
+    const { host } = await mount(h(TasksApp, null, "List"));
+    const breadcrumb = host.querySelector<HTMLButtonElement>(".tsk-detail-breadcrumb");
+    const label = breadcrumb?.getAttribute("aria-label") ?? "";
+    expect(label).toMatch(/, move task$/);
+    expect(label.startsWith(breadcrumb?.textContent?.trim() ?? "missing")).toBe(true);
   });
   it("expands one sub-task row, adds on Enter, and collapses on Escape", async () => {
     const { parent, store, inbox } = await setup();
@@ -444,6 +469,38 @@ describe("detail edits", () => {
     const task = (await store.readTask(parent.url)).task;
     if (label === "Due date") expect(task.allDay).toBe("2026-11-03");
     else expect(task.reminders[0]?.time).toEqual(new Date(2026, 10, 3, 9));
+  });
+  it("offers notification permission after a reminder is saved", async () => {
+    const { parent, store } = await setup();
+    offerNotificationPermission.mockClear();
+    await mount(h(Detail, { url: parent.url }));
+    const addButton = () =>
+      [...document.querySelectorAll("button")].find(
+        (button) => button.textContent === "Add reminder",
+      );
+    // Without a due date there is nothing to save, so nothing is offered.
+    expect(addButton()?.disabled).toBe(true);
+    await act(() =>
+      cache.updateTask(parent, (task) => {
+        task.dueDate = new Date("2026-11-10T17:00:00Z");
+      }),
+    );
+    const add = addButton();
+    if (!add) throw new Error("Missing Add reminder");
+    await click(add);
+    const hourBefore = [...document.querySelectorAll("button")].find(
+      (button) => button.textContent === "1 hour before",
+    );
+    if (!hourBefore) throw new Error("Missing 1 hour before");
+    let savingAtOffer: string[] | undefined;
+    offerNotificationPermission.mockImplementationOnce(() => {
+      savingAtOffer = [...cache.getSnapshot().saving];
+    });
+    await click(hourBefore);
+    await act(() => vi.waitFor(() => expect(offerNotificationPermission).toHaveBeenCalledOnce()));
+    // Offered only once the write settled.
+    expect(savingAtOffer).toEqual([]);
+    expect((await store.readTask(parent.url)).task.reminders).toMatchObject([{ offset: "-PT1H" }]);
   });
   it("interprets a relative due-date draft at commit time after midnight", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
@@ -585,14 +642,15 @@ describe("persistent detail route ownership", () => {
     await moveFromDetails();
     await act(() => vi.waitFor(() => expect(cache.getSnapshot().saving).toEqual([])));
     if (retrying) {
-      expect(router.replace).not.toHaveBeenCalled();
+      expect(replaceState).not.toHaveBeenCalled();
       pod.intercept = undefined;
       const retry = failures.mock.calls[0]?.[1] as () => void;
       await act(() => retry());
-      await act(() => vi.waitFor(() => expect(router.replace).toHaveBeenCalledOnce()));
+      await act(() => vi.waitFor(() => expect(replaceState).toHaveBeenCalledOnce()));
     }
-    expect(router.replace).toHaveBeenCalledOnce();
-    const href = router.replace.mock.calls[0]?.[0] as string;
+    expect(replaceState).toHaveBeenCalledOnce();
+    expect(router.replace).not.toHaveBeenCalled();
+    const href = replaceState.mock.calls[0]?.[2] as string;
     const next = new URL(href, "https://suite.example");
     const movedUrl = decodeRef(next.searchParams.get("task") as string);
     expect(next.pathname).toBe("/tasks/inbox");

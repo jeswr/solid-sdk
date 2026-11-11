@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 import { registerPlugin } from "@capacitor/core";
 
 export interface PushTopic {
@@ -36,7 +37,7 @@ export interface SuitePushPlugin {
     pushToken?: string;
   }): Promise<void>;
   silence(options: { registrationId: string }): Promise<void>;
-  /** Exact UTF-8 body sent to the relay. Native code supplies the timestamp and body hash. */
+  /** Exact UTF-8 body sent to the relay; url has no query. Native code supplies iat, body hash and a fresh jti. */
   sign(request: { method: string; url: string; body?: string }): Promise<{ proof: string }>;
   activate(options: { installationId: string }): Promise<{ nonce: string }>;
   /** Default: silence all and retain keys. Delete only after the registrar confirms relay cleanup. */

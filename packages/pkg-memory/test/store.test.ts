@@ -3,6 +3,7 @@
 /** biome-ignore-all lint/style/noNonNullAssertion: fixtures guarantee these entries. */
 import { readFile } from "node:fs/promises";
 import { parseRdf } from "@jeswr/fetch-rdf";
+import { serialize } from "@jeswr/rdf-serialize";
 import { policyToTurtle } from "@jeswr/solid-odrl";
 import { DataFactory, Store } from "n3";
 import { isomorphic } from "rdf-isomorphic";
@@ -49,10 +50,26 @@ const build = (
     { ...options, generatedAt },
   );
 function setup(overrides: Partial<PodPort> = {}) {
-  const memory = createMemoryPodPort(identity);
-  const pod = { ...memory, ...overrides };
+  const memory: PodPort = {
+    ...createMemoryPodPort(identity),
+    async head(target) {
+      return { acl: `${target}.acl` };
+    },
+  };
+  const pod: PodPort = { ...memory, ...overrides };
   const write = vi.spyOn(pod, "write");
   return { memory, pod, write, store: new NanopubStore(pod) };
+}
+
+async function publicAcl(target: string) {
+  const dataset = new Store();
+  const acl = "http://www.w3.org/ns/auth/acl#";
+  new RdfNode("urn:example:public", dataset)
+    .link(`${NS.rdf}type`, `${acl}Authorization`)
+    .link(`${acl}agentClass`, `${NS.foaf}Agent`)
+    .link(`${acl}accessTo`, target)
+    .link(`${acl}mode`, `${acl}Read`);
+  return encode(await serialize([...dataset]));
 }
 
 async function sharedBlankAssertions(ids = ["one", "two"], batch = "shared-blank") {
@@ -746,7 +763,7 @@ it.each([
   const lockUrl = `${store.container}.write-lock`;
   const aclUrl = `${lockUrl}.acl`;
   const previous = existing
-    ? await memory.write(aclUrl, encode("public ACL"), "text/turtle", {})
+    ? await memory.write(aclUrl, await publicAcl(lockUrl), "text/turtle", {})
     : undefined;
   write.mockClear();
   write.mockImplementation(async (url, body, type, cond) => {
@@ -785,7 +802,7 @@ it.each([
   const lockUrl = `${store.container}.write-lock`;
   const aclUrl = `${lockUrl}.acl`;
   if (["replace race", "missing ETag", "weak ETag"].includes(failure))
-    await memory.write(aclUrl, encode("public ACL"), "text/turtle", {});
+    await memory.write(aclUrl, await publicAcl(lockUrl), "text/turtle", {});
   pod.read = async (url) => {
     if (url === aclUrl && failure === "read failure") throw statusError(403);
     const result = await memory.read(url);
@@ -1544,7 +1561,7 @@ it.each([
   const url = store.url(value.nanopubs[0]!.id);
   const aclUrl = `${url}.acl`;
   const exists = ["replace race", "missing ETag", "weak ETag"].includes(failure);
-  if (exists) await memory.write(aclUrl, encode("existing ACL"), "text/turtle", {});
+  if (exists) await memory.write(aclUrl, await publicAcl(url), "text/turtle", {});
   pod.read = async (target) => {
     if (target === aclUrl && failure === "read failure") throw statusError(403);
     const result = await memory.read(target);

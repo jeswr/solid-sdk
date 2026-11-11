@@ -1,4 +1,6 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 // ADR-003 §1, verbatim except where marked "Extension".
 
 import type { DatasetCore, Quad } from "@jeswr/fetch-rdf";
@@ -27,6 +29,11 @@ export type ResourceKind = "container" | "resource";
 export interface Entry {
   url: string;
   kind: ResourceKind;
+  /**
+   * Advisory listing title (LWS target title / Solid dct:title), otherwise null. The backends
+   * always set it; it is optional so existing Entry fakes stay valid. Use displayNameOf().
+   */
+  displayName?: string | null;
   /** LWS `format`; Solid: from listing when present, else null. */
   contentType: string | null;
   size: number | null;
@@ -54,6 +61,8 @@ export interface ReadResult {
   etag: string | null;
   contentType: string | null;
   lastModified: Date | null;
+  /** Memento-Datetime on an immutable version, when supplied by the server. */
+  mementoDatetime?: Date | null;
   /** null on 304 / HEAD. */
   body: ReadableStream<Uint8Array> | null;
   bytes(): Promise<Uint8Array>;
@@ -85,6 +94,8 @@ export type Body = string | Uint8Array | Blob | ReadableStream<Uint8Array>;
 export interface WriteOptions {
   contentType: string;
   ifMatch: string | "*";
+  /** Keep the request alive on page teardown; bodies must have a known size <= 64 KiB. */
+  keepalive?: boolean;
   signal?: AbortSignal;
 }
 export interface CreateOptions {
@@ -92,16 +103,25 @@ export interface CreateOptions {
   contentType?: string;
   /** Default 'resource'. */
   kind?: ResourceKind;
-  /** Name hint. Honoured on Solid (PUT container+name, If-None-Match:*). Sent as Slug on LWS; server decides. */
+  /** Decoded name hint. Honoured on Solid (encoded PUT child, If-None-Match:*). Percent-encoded as Slug on LWS; server decides. */
   name?: string;
   /** Initial user metadata (LWS: Link headers on POST; Solid: ignored unless describedby is writable). */
   links?: readonly { rel: string; target: string }[];
+  /** Keep the request alive on page teardown; bodies must have a known size <= 64 KiB. */
+  keepalive?: boolean;
   signal?: AbortSignal;
 }
 export interface WriteResult {
   url: string;
   etag: string | null;
   created: boolean;
+  /**
+   * Where `etag` came from. `"response"`: the mutation response's own ETag, so it names the
+   * version this call wrote. `"follow-up"`: a later HEAD observed it, so it may already be a
+   * concurrent writer's version. Absent: the backend does not say. Only a `"response"` ETag is
+   * safe as `ifMatch` for a follow-up write or delete that must not clobber someone else.
+   */
+  etagSource?: "response" | "follow-up";
 }
 
 export type JsonPatchOp = {
@@ -136,6 +156,27 @@ export interface MetadataOp {
   anchor?: string;
   rel: string;
   href: string;
+  /** LWS target title; Solid dct:title on the anchor. */
+  title?: string;
+}
+
+/** Options for fresh HEAD and listing observations. */
+export interface ObservationOptions {
+  signal?: AbortSignal;
+  /** Additional HTTP headers; Accept, Range and If-None-Match remain operation-controlled. */
+  headers?: RequestInit["headers"];
+  /** Revalidate HTTP cache entries before use (`cache: 'no-cache'`), on every listing page. */
+  revalidate?: boolean;
+}
+
+/** Options shared by single-page and paginated listings. */
+export interface ListingOptions extends ObservationOptions {
+  /**
+   * Maximum response bytes per page, enforced while streaming before parsing. A non-negative
+   * safe integer; exact limits are accepted. Overflow throws StorageError('payload-too-large')
+   * without returning entries from that page. Existing backend hard limits still apply.
+   */
+  maxBytes?: number;
 }
 
 export interface StorageClient {
@@ -143,12 +184,9 @@ export interface StorageClient {
   readonly root: string;
   readonly features: Features;
 
-  list(
-    container: string,
-    opts?: { cursor?: PageCursor; signal?: AbortSignal },
-  ): Promise<Page<Entry>>;
-  listAll(container: string, opts?: { signal?: AbortSignal }): AsyncIterable<Entry>;
-  head(url: string, opts?: { signal?: AbortSignal }): Promise<ReadResult>;
+  list(container: string, opts?: ListingOptions & { cursor?: PageCursor }): Promise<Page<Entry>>;
+  listAll(container: string, opts?: ListingOptions): AsyncIterable<Entry>;
+  head(url: string, opts?: ObservationOptions): Promise<ReadResult>;
   read(
     url: string,
     opts?: {
@@ -156,6 +194,8 @@ export interface StorageClient {
       ifNoneMatch?: string;
       range?: { start: number; end?: number };
       signal?: AbortSignal;
+      /** Additional HTTP headers; Accept, Range and If-None-Match remain option-controlled. */
+      headers?: RequestInit["headers"];
     },
   ): Promise<ReadResult>;
   /** read + parseRdf (fetch-rdf). Accept: text/turtle, application/ld+json. Throws 'not-rdf' when the body is not RDF. */

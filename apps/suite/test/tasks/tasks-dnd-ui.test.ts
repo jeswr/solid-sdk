@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
+
 import { useSyncExternalStore } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { StoredProject } from "../../src/apps/tasks/lib/model/store";
@@ -7,8 +8,9 @@ import { act, h, mount } from "../drive-ui-dom";
 import { frameCache } from "./tasks-frame-fixtures";
 
 vi.mock("@/lib/refs", async () => import("../../src/lib/refs"));
+let pathname = "/tasks/inbox";
 vi.mock("next/navigation", () => ({
-  usePathname: () => "/tasks/inbox",
+  usePathname: () => pathname,
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
   useSearchParams: () => new URLSearchParams(),
 }));
@@ -39,6 +41,7 @@ vi.mock("../../src/apps/tasks/state/tasks-context", () => ({
 }));
 
 import { toast } from "@jeswr/suite-ui";
+import { BoardView } from "../../src/apps/tasks/components/board/board-view";
 import { TasksDnd } from "../../src/apps/tasks/components/dnd/tasks-dnd";
 import { ProjectView } from "../../src/apps/tasks/components/views/project-view";
 
@@ -49,7 +52,7 @@ function layout() {
   ) {
     const order = [
       ...document.querySelectorAll<HTMLElement>(
-        "[data-tsk-row], .tsk-section-header, div:has(> .tsk-add-row)",
+        "[data-tsk-row], .tsk-card, .tsk-board-body, .tsk-section-header, div:has(> .tsk-add-row)",
       ),
     ];
     const index = order.indexOf(this);
@@ -77,6 +80,7 @@ const settle = () =>
   });
 
 beforeEach(() => {
+  pathname = "/tasks/inbox";
   localStorage.clear();
   vi.clearAllMocks();
 });
@@ -85,6 +89,55 @@ afterEach(() => {
 });
 
 describe("keyboard drag and drop", () => {
+  it.each([
+    "/tasks/p/inbox/board",
+    "/tasks/p/inbox/board/",
+  ])("reorders flat board cards before a child without changing parent links at %s", async (path) => {
+    pathname = path;
+    const result = await frameCache();
+    cache = result.cache;
+    const root = await cache.createTask(result.inbox, { title: "Root" });
+    if (!root) throw new Error("Missing root");
+    const child = await cache.createTask(result.inbox, { title: "Child", parent: root.task.id });
+    const created = await cache.createTask(result.inbox, { title: "Other" });
+    if (!child || !created) throw new Error("Missing cards");
+    await cache.updateTask(child, (task) => {
+      task.rank = 2;
+    });
+    const other = await cache.updateTask(created, (task) => {
+      task.rank = 3;
+    });
+    if (!other) throw new Error("Missing ranked card");
+    layout();
+    const { host } = await mount(
+      h(TasksDnd, null, h("main", null, h(BoardView, { projectUrl: result.inbox.url }))),
+    );
+    const order = () => [...host.querySelectorAll(".tsk-card-title")].map((el) => el.textContent);
+    expect(order()).toEqual(["Root", "Child", "Other"]);
+    result.pod.requests.length = 0;
+    const handle = host.querySelector<HTMLElement>("button[aria-label=\"Move 'Other'\"]");
+    const over = host.querySelector<HTMLElement>(`[data-task-url="${child.url}"]`);
+    if (!handle || !over) throw new Error("Missing drag target");
+    const from = handle.closest(".tsk-card")?.getBoundingClientRect().top ?? 0;
+    const to = over.getBoundingClientRect().top + 5;
+    const pointer = (type: string, y: number) =>
+      Object.assign(new MouseEvent(type, { bubbles: true, button: 0, clientX: 60, clientY: y }), {
+        isPrimary: true,
+        pointerType: "mouse",
+      });
+    await act(() => handle.dispatchEvent(pointer("pointerdown", from + 20)));
+    await act(() => document.dispatchEvent(pointer("pointermove", from + 10)));
+    await act(() => document.dispatchEvent(pointer("pointermove", to)));
+    expect(liveRegion()).toContain("'Other' is before 'Child'.");
+    await act(() => document.dispatchEvent(pointer("pointerup", to)));
+    await settle();
+    expect((await result.store.readTask(other.url)).task.parent).toBeUndefined();
+    expect((await result.store.readTask(child.url)).task.parent).toBe(root.task.id);
+    expect(order()).toEqual(["Root", "Other", "Child"]);
+    expect(result.pod.mutations()).toHaveLength(1);
+    expect(result.pod.mutations()[0]?.headers.get("If-Match")).toBe(other.etag);
+  });
+
   it("picks up a row by its handle, moves it into the next section and announces each phase", async () => {
     const result = await frameCache();
     cache = result.cache;

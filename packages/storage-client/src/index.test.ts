@@ -9,9 +9,16 @@ import * as lws from "./lws.js";
 import * as memory from "./memory.js";
 import * as solid from "./solid.js";
 import * as testing from "./testing.js";
+import * as trash from "./trash.js";
+import * as versions from "./versions.js";
 
-test("entry points expose the T-020–T-023 surface; testing stays reserved", () => {
-  expect(Object.keys(api).sort()).toEqual(["StorageError", "toStorageError"]);
+test("entry points expose the storage client and testing surface", () => {
+  expect(Object.keys(api).sort()).toEqual([
+    "StorageError",
+    "createPodClient",
+    "displayNameOf",
+    "toStorageError",
+  ]);
   expect(Object.keys(errors).sort()).toEqual([
     "MAX_PROBLEM_BYTES",
     "StorageError",
@@ -23,11 +30,18 @@ test("entry points expose the T-020–T-023 surface; testing stays reserved", ()
   expect(Object.keys(helpers).sort()).toEqual([
     "JsonPatchError",
     "applyJsonPatch",
+    "displayNameOf",
     "jsonEqual",
     "retryOnConflict",
   ]);
   expect(Object.keys(memory)).toEqual(["createMemoryStorage"]);
   expect(Object.keys(solid).sort()).toEqual(["buildN3Patch", "createSolidBackend"]);
   expect(Object.keys(lws)).toEqual(["createLwsBackend"]);
-  expect(Object.keys(testing)).toEqual([]);
+  expect(Object.keys(trash)).toEqual(["createTrashClient"]);
+  expect(Object.keys(versions)).toEqual(["createVersionsClient"]);
+  expect(Object.keys(testing).sort()).toEqual([
+    "createRecordingFetch",
+    "createReplayFetch",
+    "loadFixtures",
+  ]);
 });

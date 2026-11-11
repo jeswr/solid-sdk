@@ -2,9 +2,11 @@
 /// <reference types="vite/client" />
 
 interface ImportMetaEnv {
-  /** Display hint: the suite's HOME identity provider. The auth issuer always
-   *  comes from the WebID profile, so this is non-load-bearing for login. */
+  /** Home provider shown first in the shared sign-in card. */
   readonly VITE_HOME_IDP?: string;
+  readonly VITE_HOME_IDP_NAME?: string;
+  /** Comma-separated HTTPS provider URLs; defaults to the shared directory. */
+  readonly VITE_KNOWN_PROVIDERS?: string;
   /** Mirror of APP_ORIGIN for UI labelling; the client_id is derived at runtime
    *  from the actual window origin. */
   readonly VITE_APP_ORIGIN?: string;

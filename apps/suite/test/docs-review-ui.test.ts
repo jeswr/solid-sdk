@@ -121,14 +121,19 @@ describe("Docs keyboard review regressions", () => {
     expect(document.activeElement).toBe(controls.at(-1));
     await key("Home");
     expect(document.activeElement).toBe(controls[0]);
-    const image = controls.find((control) => control.getAttribute("aria-label") === "Insert image");
-    expect(image?.hasAttribute("disabled")).toBe(true);
-    await act(async () =>
-      controls.find((control) => control.getAttribute("aria-label") === "Italic")?.focus(),
-    );
-    await key("ArrowRight");
-    expect(document.activeElement).toBe(controls.at(-1));
-    expect(controls.filter((control) => control.tabIndex === 0)).toEqual([controls.at(-1)]);
+    const more = controls.at(-1) as HTMLElement;
+    await act(async () => {
+      more.focus();
+      more.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    });
+    const image = await vi.waitFor(() => {
+      const found = [...document.querySelectorAll('[role="menuitem"]')].find(
+        (item) => item.textContent === "Insert image",
+      );
+      expect(found).toBeDefined();
+      return found as HTMLElement;
+    });
+    expect(image.getAttribute("data-disabled")).toBe("");
   });
   it.each([
     false,

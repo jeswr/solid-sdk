@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 /**
  * Pure cache-policy decisions for §2 of the offline-first architecture.
  *
@@ -11,6 +12,34 @@ export const CANONICAL_RDF_ACCEPT = 'text/turtle';
 
 /** Short TTL (ms) for the negative cache of 403/404 (crawl pruning + no-leak parity). */
 export const NEGATIVE_CACHE_TTL_MS = 30_000;
+
+/** Response header describing how the offline worker served an in-scope pod GET. */
+export const CACHE_PROVENANCE_HEADER = 'X-Solid-Offline-Cache';
+
+/** Read the worker's cache provenance without consuming the response body. */
+export function cacheProvenance(response: Response): 'hit' | 'miss' | 'stale' | null {
+  const value = response.headers.get(CACHE_PROVENANCE_HEADER);
+  return value === 'hit' || value === 'miss' || value === 'stale' ? value : null;
+}
+
+/** Clone before adding provenance; fetched/Cache API response headers may be immutable. */
+export function withCacheProvenance(
+  response: Response,
+  provenance: 'hit' | 'miss' | 'stale',
+): Response {
+  // Filtered responses expose neither headers nor a constructible status. Preserve
+  // their security boundary rather than manufacture an apparently readable response.
+  if (response.status === 0 || response.type === 'opaque' || response.type === 'opaqueredirect')
+    return response;
+  const clone = response.clone();
+  const headers = new Headers(clone.headers);
+  headers.set(CACHE_PROVENANCE_HEADER, provenance);
+  return new Response(clone.body, {
+    status: clone.status,
+    statusText: clone.statusText,
+    headers,
+  });
+}
 
 /** RDF media types we normalize to {@link CANONICAL_RDF_ACCEPT} for keying. */
 const RDF_ACCEPT_HINTS = [
@@ -102,7 +131,7 @@ export function isNeverCacheEndpoint(url: string): boolean {
     // Unparseable URL → be conservative, do not cache.
     return true;
   }
-  // WebSocket upgrade URLs.
+  // notification transport upgrade URLs.
   if (url.toLowerCase().startsWith('ws://') || url.toLowerCase().startsWith('wss://')) {
     return true;
   }

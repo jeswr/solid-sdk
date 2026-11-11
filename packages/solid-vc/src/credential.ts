@@ -8,11 +8,11 @@
 // /`credentialToJsonLd` serialise; `credentialFromRdf`/`parseCredential` read it
 // back. All RDF reads/writes go through src/wrappers.ts.
 
-import { randomUUID } from "node:crypto";
 import { parseRdf } from "@jeswr/fetch-rdf";
 import type { DatasetCore, Quad } from "@rdfjs/types";
+import { DataFactory } from "n3";
 import { credentialDocumentLoader } from "./context-loader.js";
-import { digestRdfContent } from "./digest.js";
+import { digestQuads, digestRdfContent } from "./digest.js";
 import { isAbsoluteIri, requireObjectIri, safeObjectIri } from "./iri.js";
 import { serialize } from "./serialize.js";
 import type {
@@ -358,7 +358,7 @@ function writeCredentialStatus(
  * is a pure projection of exactly what the caller supplied.
  */
 export function credentialToRdf(credential: Credential): Quad[] {
-  const id = credential.id ?? `urn:uuid:${randomUUID()}`;
+  const id = credential.id ?? `urn:uuid:${globalThis.crypto.randomUUID()}`;
   const subject = iriRef(id);
   const b = new GraphBuilder();
   b.addType(subject, VC_CREDENTIAL);
@@ -441,7 +441,7 @@ export function credentialToJsonLd(credential: Credential): Record<string, unkno
   // agree on the issuer IRI BYTE-FOR-BYTE; the guard only rejects the values the
   // RDF path would refuse.
   requireObjectIri(credential.issuer, "issuer");
-  const id = credential.id ?? `urn:uuid:${randomUUID()}`;
+  const id = credential.id ?? `urn:uuid:${globalThis.crypto.randomUUID()}`;
   const types = ["VerifiableCredential", ...(credential.type ?? [])];
   const doc: Record<string, unknown> = {
     "@context": LEGACY_SVC_INLINE_CONTEXT,
@@ -592,6 +592,80 @@ export function buildAgentAuthorizationCredential(auth: AgentAuthorization): Cre
 }
 
 /**
+ * Refuse policy content with a relative IRI other than a fragment reference
+ * (`#x`). The digest is over the BASE-FREE graph, which merges relative forms
+ * (`.#x` reads as `#x`, `./x` and `../x` both as `/x`) and, in JSON-LD, drops
+ * relative-IRI triples, so for any other form a presenter could swap in one with
+ * a different meaning under the same digest. Two checks, both over every IRI
+ * including literal datatypes:
+ *  - each base-free IRI is absolute or a fragment reference;
+ *  - the base-free graph, with each `#x` read against a fresh sentinel base, is
+ *    exactly the graph read against that base (nothing merged or dropped).
+ */
+async function refuseNonFragmentRelativeIris(content: string, contentType: string): Promise<void> {
+  const refuse = (): never => {
+    throw new Error(
+      "@jeswr/solid-vc: refusing to bind policyContent with a relative IRI other than a fragment " +
+        "reference (#…) — the content digest does not fix its meaning",
+    );
+  };
+  const sentinel = `https://${globalThis.crypto.randomUUID()}.invalid/policy`;
+  // Base-free first, so a syntax error reports without the sentinel in it.
+  const unbased = [
+    ...(
+      (await parseRdf(content, contentType, {
+        documentLoader: credentialDocumentLoader,
+      })) as unknown as DatasetCore
+    ).match(),
+  ] as Quad[];
+  let based: Quad[];
+  try {
+    based = [
+      ...(
+        (await parseRdf(content, contentType, {
+          baseIRI: sentinel,
+          documentLoader: credentialDocumentLoader,
+        })) as unknown as DatasetCore
+      ).match(),
+    ] as Quad[];
+  } catch {
+    return refuse();
+  }
+  if (based.some((q) => q.subject.termType === "Quad" || q.object.termType === "Quad")) {
+    throw new Error("@jeswr/solid-vc: refusing to bind policyContent with RDF 1.2 triple terms");
+  }
+  // A fragment reference is resolved as the verifier resolves it (`new URL`, which
+  // percent-encodes), so a `#` IRI whose resolution is not plain concatenation
+  // (`#ré`) is refused rather than bound into a credential no verifier accepts.
+  const resolve = (iri: string): string => {
+    if (isAbsoluteIri(iri)) return iri;
+    if (!iri.startsWith("#") || new URL(iri, sentinel).href !== `${sentinel}${iri}`) refuse();
+    return `${sentinel}${iri}`;
+  };
+  const term = <T extends Quad[keyof Quad & ("subject" | "predicate" | "object" | "graph")]>(
+    t: T,
+  ): T => {
+    if (t.termType === "NamedNode") return DataFactory.namedNode(resolve(t.value)) as unknown as T;
+    // The verifier does not resolve datatypes, so only absolute ones are bound.
+    if (t.termType === "Literal" && !isAbsoluteIri(t.datatype.value)) refuse();
+    return t;
+  };
+  const resolved = unbased.map(
+    (q) =>
+      DataFactory.quad(term(q.subject), term(q.predicate), term(q.object), term(q.graph)) as Quad,
+  );
+  let same: boolean;
+  try {
+    same = (await digestQuads(resolved)) === (await digestQuads(based));
+  } catch {
+    // N3 can emit an incomplete term for some base-free relative forms (`?#x` as
+    // an object), which the canonicalizer cannot serialise.
+    same = false;
+  }
+  if (!same) refuse();
+}
+
+/**
  * Build a POLICY-CONTENT-BOUND `AgentAuthorizationCredential` (the G1 binding):
  * like {@link buildAgentAuthorizationCredential}, but the exact ODRL
  * Agreement/policy content is cryptographically bound into the (to-be-signed)
@@ -625,6 +699,7 @@ export async function buildBoundAgentAuthorizationCredential(
     );
   }
   const contentType = auth.policyContentType ?? "text/turtle";
+  await refuseNonFragmentRelativeIris(auth.policyContent, contentType);
   const digestMultibase = await digestRdfContent(auth.policyContent, contentType);
   const { policyContent: _c, policyContentType: _ct, ...bare } = auth;
   const credential = buildAgentAuthorizationCredential(bare);

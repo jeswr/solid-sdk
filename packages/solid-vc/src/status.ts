@@ -1,4 +1,7 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Fable 5
+// AUTHORED-BY Claude Opus 5.5
 //
 // W3C Bitstring Status List v1.0 — credential revocation / suspension status
 // (runtime Phase-1 G2; the successor to StatusList2021).
@@ -40,6 +43,7 @@ import {
   setStatusBit,
 } from "./bitstring.js";
 import type { SuiteRegistry } from "./proof.js";
+import { parseStatusListCredential } from "./status-rdf.js";
 import type {
   BitstringStatusListEntry,
   Credential,
@@ -71,8 +75,14 @@ const DEFAULT_MAX_BODY_BYTES = 32 * 1024 * 1024;
  */
 const MAX_STATUS_ENTRIES = 8;
 
-/** The content types we ask a status-list host for. */
-const STATUS_ACCEPT = "application/vc+ld+json, application/ld+json;q=0.9, application/json;q=0.8";
+/**
+ * The content types we ask a status-list host for, all at equal weight: a Solid server then serves
+ * the list as stored (TriG/Turtle written by a pod app, or JSON-LD) instead of converting it. A
+ * ranked header made CSS convert a stored JSON-LD list into an empty TriG body.
+ */
+export const STATUS_LIST_ACCEPT =
+  "application/trig, text/turtle, application/vc+ld+json, application/ld+json, application/json";
+const STATUS_ACCEPT = STATUS_LIST_ACCEPT;
 
 // --- issue side --------------------------------------------------------------
 
@@ -159,9 +169,9 @@ export interface BitstringStatusListCredentialInput {
  * `<id>#list`, a `BitstringStatusList` carrying the GZIP'd base64url
  * `encodedList`.
  */
-export function buildBitstringStatusListCredential(
+export async function buildBitstringStatusListCredential(
   input: BitstringStatusListCredentialInput,
-): Credential {
+): Promise<Credential> {
   const id = requireHttpUrl(input.id, "status list credential id");
   if (!SUPPORTED_PURPOSES.has(input.statusPurpose)) {
     throw new Error(
@@ -173,7 +183,7 @@ export function buildBitstringStatusListCredential(
     id: `${id}#list`,
     type: "BitstringStatusList",
     statusPurpose: input.statusPurpose,
-    encodedList: encodeStatusList(bits),
+    encodedList: await encodeStatusList(bits),
   };
   return {
     id,
@@ -190,10 +200,10 @@ export function buildBitstringStatusListCredential(
  * throws fail-closed on a credential that is not a well-formed
  * `BitstringStatusListCredential`.
  */
-export function statusListBitsOf(
+export async function statusListBitsOf(
   credential: Credential,
   options?: { readonly maxDecodedBytes?: number },
-): Uint8Array {
+): Promise<Uint8Array> {
   const subject = singleSubjectOf(credential);
   const encoded = subject?.encodedList;
   if (typeof encoded !== "string") {
@@ -211,12 +221,12 @@ export function statusListBitsOf(
  * not mutated, and any existing proof is DROPPED (a changed list invalidates
  * the old signature by construction).
  */
-export function withStatusBit(
+export async function withStatusBit(
   credential: Credential | VerifiableCredential,
   index: number,
   value: boolean,
-): Credential {
-  const bits = statusListBitsOf(credential);
+): Promise<Credential> {
+  const bits = await statusListBitsOf(credential);
   setStatusBit(bits, index, value);
   const subject = singleSubjectOf(credential);
   if (subject === undefined) {
@@ -225,13 +235,13 @@ export function withStatusBit(
   const { proof: _proof, ...unsigned } = credential as VerifiableCredential;
   return {
     ...unsigned,
-    credentialSubject: { ...subject, encodedList: encodeStatusList(bits) },
+    credentialSubject: { ...subject, encodedList: await encodeStatusList(bits) },
   };
 }
 
 /** Read the bit at `index` of a status list credential (see {@link getStatusBit}). */
-export function readStatusBit(credential: Credential, index: number): boolean {
-  return getStatusBit(statusListBitsOf(credential), index);
+export async function readStatusBit(credential: Credential, index: number): Promise<boolean> {
+  return getStatusBit(await statusListBitsOf(credential), index);
 }
 
 // --- verify side (Phase C) ---------------------------------------------------
@@ -435,8 +445,8 @@ async function checkOneEntry(
   const body = await fetchStatusListBody(url, options);
   if (typeof body !== "string") return { kind: "unreachable", reason: body.reason };
 
-  // 2. parse the JSON document into the structured credential, strictly.
-  const parsed = parseStatusListDocument(body, url, entry.statusPurpose);
+  // 2. parse the JSON or RDF document into the structured credential, strictly.
+  const parsed = await parseStatusBody(body, url, entry.statusPurpose);
   if ("reason" in parsed) return { kind: "unreachable", reason: parsed.reason };
   const { listVc, encodedList } = parsed;
 
@@ -463,7 +473,7 @@ async function checkOneEntry(
   // 4. decode the bitstring (zip-bomb-capped) + read the bit.
   let bits: Uint8Array;
   try {
-    bits = decodeStatusList(encodedList, {
+    bits = await decodeStatusList(encodedList, {
       ...(options.maxDecodedBytes !== undefined
         ? { maxDecodedBytes: options.maxDecodedBytes }
         : {}),
@@ -539,7 +549,7 @@ async function readBodyBounded(res: Response, maxBytes: number): Promise<string 
   const stream = res.body;
   if (stream === null || stream === undefined || typeof stream.getReader !== "function") {
     const text = await res.text();
-    return Buffer.byteLength(text, "utf8") > maxBytes ? undefined : text;
+    return new TextEncoder().encode(text).byteLength > maxBytes ? undefined : text;
   }
   const reader = stream.getReader();
   const chunks: Uint8Array[] = [];
@@ -560,7 +570,11 @@ async function readBodyBounded(res: Response, maxBytes: number): Promise<string 
   } finally {
     reader.releaseLock();
   }
-  return Buffer.concat(chunks).toString("utf8");
+  // Preserve UTF-8 sequences across chunk boundaries and the BOM, as Buffer did.
+  const decoder = new TextDecoder("utf-8", { ignoreBOM: true });
+  let text = "";
+  for (const chunk of chunks) text += decoder.decode(chunk, { stream: true });
+  return text + decoder.decode();
 }
 
 /**
@@ -572,6 +586,33 @@ async function readBodyBounded(res: Response, maxBytes: number): Promise<string 
  * the ENTRY's purpose (a mismatch means the bit does not mean what the entry
  * claims). Any deviation → a reason (→ `unreachable`).
  */
+/** JSON/JSON-LD first, then TriG/Turtle, both held to the same strict structural checks. */
+async function parseStatusBody(
+  body: string,
+  url: string,
+  purpose: string,
+): Promise<ReturnType<typeof parseStatusListDocument>> {
+  const json = parseStatusListDocument(body, url, purpose);
+  if (!("reason" in json)) return json;
+  const rdf = await parseStatusListCredential(body);
+  return rdf === undefined ? json : parseStatusListDocument(JSON.stringify(rdf), url, purpose);
+}
+
+/**
+ * Parse a status-list body fetched with {@link STATUS_LIST_ACCEPT} (JSON/JSON-LD or TriG/Turtle)
+ * exactly as the status resolver does. The proof is NOT verified: callers must still run
+ * `verifyCredential` before trusting a bit. Returns `undefined` when the body is not a
+ * well-formed status list with the given purpose at `url`.
+ */
+export async function parseStatusListBody(
+  body: string,
+  url: string,
+  statusPurpose: string,
+): Promise<VerifiableCredential | undefined> {
+  const parsed = await parseStatusBody(body, url, statusPurpose);
+  return "reason" in parsed ? undefined : parsed.listVc;
+}
+
 function parseStatusListDocument(
   body: string,
   url: string,

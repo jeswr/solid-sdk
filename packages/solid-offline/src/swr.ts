@@ -1,3 +1,5 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 /**
  * Stale-while-revalidate engine for §2.
  *
@@ -19,6 +21,7 @@
 
 import {
   deleteVariantBytes,
+  evictListingPages,
   IGNORE_VARY,
   metadataFromResponse,
   putCanonicalBytes,
@@ -30,6 +33,7 @@ import {
   keyRequest,
   type RequestLike,
   requestCacheDirective,
+  withCacheProvenance,
 } from './cache-policy.js';
 import type { MetadataStore } from './metadata-store.js';
 import { reportRevalidation } from './revalidation-events.js';
@@ -67,8 +71,8 @@ export type ServeSource =
   | 'network-miss-store' // cache miss → network → stored
   | 'network-miss-nostore' // cache miss → network → not cacheable
   | 'network-no-cache' // request was never-cache; straight passthrough
-  | 'request-no-store' // request sent `Cache-Control: no-store`; pure network bypass
-  | 'request-no-cache-revalidated' // request sent `Cache-Control: no-cache`; forced synchronous revalidation
+  | 'request-no-store' // request demanded no-store; pure network bypass
+  | 'request-no-cache-revalidated' // request demanded freshness; forced synchronous revalidation
   | 'offline-miss'; // cache miss while offline → network error surfaces
 
 export interface HandleResult {
@@ -108,7 +112,7 @@ function withOfflineStale(response: Response): Response {
  * function (so each security branch is independently readable):
  *   1. never-cache endpoint → straight passthrough;
  *   2. HEAD → non-destructive passthrough (`handleHead`);
- *   3. an online `Cache-Control: no-store`/`no-cache` request → `handleDirective`;
+ *   3. an online request demanding freshness via header/cache mode → `handleDirective`;
  *   4. otherwise the metadata-first SWR cache path (`handleCachePath`).
  */
 export async function handleFetch(request: Request, deps: SwrDeps): Promise<HandleResult> {
@@ -118,7 +122,10 @@ export async function handleFetch(request: Request, deps: SwrDeps): Promise<Hand
   //    passthrough — decidable from the request alone, no cache consulted.
   if (!isPotentiallyCacheable(rl)) {
     const response = await deps.fetch(request);
-    return { response, source: 'network-no-cache' };
+    return {
+      response: rl.method === 'GET' ? withCacheProvenance(response, 'miss') : response,
+      source: 'network-no-cache',
+    };
   }
 
   // 2. HEAD is a non-destructive passthrough (never serves/evicts GET bytes).
@@ -126,9 +133,14 @@ export async function handleFetch(request: Request, deps: SwrDeps): Promise<Hand
     return handleHead(request, rl, deps);
   }
 
-  // 3. An online request-directive (no-store/no-cache) opts out of the SWR fast
-  //    path (offline they can't be satisfied → fall through to the cache path).
-  const directive = requestCacheDirective(rl);
+  // 3. Honor both Cache-Control and Request.cache: StorageClient observations
+  //    use cache: 'no-cache' without a header. Polling must await revalidation of
+  //    every page rather than mix a stale first page with fresh cursor pages.
+  //    no-store wins over freshness; offline retains the existing stale fallback.
+  let directive = requestCacheDirective(rl);
+  if (request.cache === 'no-store') directive = 'no-store';
+  else if (directive === 'default' && (request.cache === 'no-cache' || request.cache === 'reload'))
+    directive = 'no-cache';
   if (deps.isOnline() && directive !== 'default') {
     return handleDirective(directive, request, rl, deps);
   }
@@ -185,7 +197,7 @@ async function handleDirective(
   if (directive === 'no-store') {
     const passthrough = new Request(request, { method: 'GET', cache: 'no-store' });
     const response = await deps.fetch(passthrough);
-    return { response, source: 'request-no-store' };
+    return { response: withCacheProvenance(response, 'miss'), source: 'request-no-store' };
   }
   // no-cache: forced synchronous revalidation before serving.
   return forcedRevalidate(request, rl, deps);
@@ -228,7 +240,7 @@ async function handleCachePath(
       // Serve the cached negative bytes if we kept them (#8); else synthesize the
       // bare status so offline/within-TTL reads are uniform.
       const response = negBytes ? negBytes.clone() : new Response(null, { status: record.status });
-      return { response, source: 'cache-hit-negative' };
+      return { response: withCacheProvenance(response, 'hit'), source: 'cache-hit-negative' };
     }
     // TTL expired → treat as a miss: re-fetch from network.
     return networkAndMaybeStore(request, rl, deps, 'expired-negative');
@@ -244,11 +256,18 @@ async function handleCachePath(
   if (deps.isOnline()) {
     // HIT + ONLINE: serve provisional bytes NOW, revalidate in background.
     const revalidation = revalidate(request, rl, record, deps);
-    return { response: cached.clone(), source: 'cache-hit-online', revalidation };
+    return {
+      response: withCacheProvenance(cached, 'stale'),
+      source: 'cache-hit-online',
+      revalidation,
+    };
   }
 
   // HIT + OFFLINE: serve provisional bytes, mark them stale/unconfirmed.
-  return { response: withOfflineStale(cached.clone()), source: 'cache-hit-offline' };
+  return {
+    response: withOfflineStale(withCacheProvenance(cached, 'stale')),
+    source: 'cache-hit-offline',
+  };
 }
 
 /**
@@ -316,7 +335,10 @@ async function forcedRevalidate(
         await deps.meta.touch(record.key, deps.now());
         if (cached) {
           terminal = 'revalidated';
-          return { response: cached.clone(), source: 'request-no-cache-revalidated' };
+          return {
+            response: withCacheProvenance(cached, 'hit'),
+            source: 'request-no-cache-revalidated',
+          };
         }
         // Bytes evicted under us → fall through to a fresh unconditional read below
         // (purge first so no stale variant can survive). Re-fetch without the
@@ -372,7 +394,10 @@ async function finalizeForced(
   const authoritative =
     (fresh.status >= 200 && fresh.status < 300) || fresh.status === 403 || fresh.status === 404;
   if (!authoritative) {
-    return { response: fresh, source: 'request-no-cache-revalidated' };
+    return {
+      response: withCacheProvenance(fresh, 'miss'),
+      source: 'request-no-cache-revalidated',
+    };
   }
   const decision = classifyResponse(rl, resLike(fresh));
   // A change/revoke affects the whole resource → purge ALL variants first, so a
@@ -380,7 +405,10 @@ async function finalizeForced(
   // answer.
   await purgeAllVariants(rl.url, deps);
   if (decision.cacheable) await store(rl, fresh, deps, decision.negative);
-  return { response: fresh.clone(), source: 'request-no-cache-revalidated' };
+  return {
+    response: withCacheProvenance(fresh, 'miss'),
+    source: 'request-no-cache-revalidated',
+  };
 }
 
 /** True if the request *could* be cached (GET/HEAD + not a never-cache endpoint). */
@@ -455,6 +483,7 @@ function varyHeaders(vary: string | undefined): Headers {
  */
 async function purgeAllVariants(url: string, deps: SwrDeps): Promise<void> {
   const rows = await deps.meta.getByUrl(url);
+  await evictListingPages(url, rows, deps);
   // Drop EVERY variant's bytes (+ the defensive canonical-Turtle orphan sweep).
   await deleteVariantBytes(
     deps.cache,
@@ -478,7 +507,7 @@ async function missOrFetch(
 ): Promise<HandleResult> {
   if (!deps.isOnline()) {
     const response = await deps.fetch(request);
-    return { response, source: 'offline-miss' };
+    return { response: withCacheProvenance(response, 'miss'), source: 'offline-miss' };
   }
   return networkAndMaybeStore(request, rl, deps, 'miss');
 }
@@ -493,11 +522,11 @@ async function networkAndMaybeStore(
   const response = await deps.fetch(request);
   const decision = classifyResponse(rl, resLike(response));
   if (!decision.cacheable) {
-    return { response, source: 'network-miss-nostore' };
+    return { response: withCacheProvenance(response, 'miss'), source: 'network-miss-nostore' };
   }
   // GET only (HEAD is metadata-only, handled upstream).
   await store(rl, response, deps, decision.negative);
-  return { response: response.clone(), source: 'network-miss-store' };
+  return { response: withCacheProvenance(response, 'miss'), source: 'network-miss-store' };
 }
 
 /**
@@ -520,6 +549,9 @@ async function store(
   negative: boolean,
 ): Promise<void> {
   const now = deps.now();
+  // Cache misses can still have metadata after byte eviction; retain the old
+  // pagination links until their cursor chain is gone, before overwriting them.
+  await evictListingPages(rl.url, await deps.meta.getByUrl(rl.url), deps);
   // Store the bytes UN-mutated under the canonical (url, varyKey) key + the 1:1
   // metadata row (the shared coherence primitives — see `cache-coherence.ts`).
   await putCanonicalBytes(deps.cache, rl, response);

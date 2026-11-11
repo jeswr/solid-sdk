@@ -1,8 +1,9 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex
 import Image from "@tiptap/extension-image";
 import type { DOMOutputSpec } from "@tiptap/pm/model";
 import { normaliseImageDestination } from "../lib/editor/destination";
-import { displayImageBlob } from "./image-blob";
+import { readPodImage } from "../lib/editor/image-upload";
 import { imageLinkFromHtml, normaliseImageLink } from "./image-link";
 /**
  * Pod credentials go only to the pod's own origin: an image URL pasted from elsewhere is fetched
@@ -16,7 +17,7 @@ export function podScopedFetch(fetchImpl: typeof fetch, storageUrl: string): typ
       : fetch(input, { ...init, credentials: "omit", referrerPolicy: "no-referrer" });
 }
 /** The stored src stays a pod URL; authenticated bytes are displayed only in the node view. */
-export function privateImage(fetchImpl: typeof fetch) {
+export function privateImage(fetchImpl: typeof fetch, acceptSource = normaliseImageDestination) {
   return Image.extend({
     addAttributes() {
       return {
@@ -34,7 +35,7 @@ export function privateImage(fetchImpl: typeof fetch) {
         {
           tag: "img[src]",
           getAttrs: (element) => {
-            const src = normaliseImageDestination(element.getAttribute("src") ?? "");
+            const src = acceptSource(element.getAttribute("src") ?? "");
             return src ? { src } : false;
           },
         },
@@ -91,15 +92,13 @@ export function privateImage(fetchImpl: typeof fetch) {
         dom.dataset.docsImageState = "loading";
         dom.className = "docs-private-image";
         present();
-        const src = normaliseImageDestination(String(node.attrs.src));
+        const src = acceptSource(String(node.attrs.src));
         const load = () => {
           if (!alive || !src) return;
           dom.dataset.docsImageState = "loading";
           present();
-          void fetchImpl(src, { signal: abort.signal, redirect: "error" })
-            .then(async (response) => {
-              if (!response.ok) throw new Error("Image unavailable");
-              const blob = await displayImageBlob(await response.blob());
+          void readPodImage(src, fetchImpl, abort.signal)
+            .then((blob) => {
               if (alive) {
                 objectUrl = URL.createObjectURL(blob);
                 dom.src = objectUrl;

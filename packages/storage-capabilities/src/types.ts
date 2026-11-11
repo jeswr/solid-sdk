@@ -26,6 +26,8 @@ export interface StorageDescription {
   id: string;
   /** Root container: LWS StorageRoot endpoint; Solid: same as id. */
   root: string;
+  /** Solid solid:owner or LWS CID controller; absolute HTTP(S) IRI, otherwise null. */
+  owner: string | null;
   descriptionUrl: string | null; // where the description was fetched from
   services: readonly ServiceEntry[];
   capabilities: readonly CapabilityEntry[];

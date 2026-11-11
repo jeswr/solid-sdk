@@ -1,3 +1,4 @@
+<!-- AUTHORED-BY Codex GPT-6 -->
 <!-- AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate -->
 
 # `web/` — the Pod Docs static host shell
@@ -10,7 +11,12 @@ shape replicates across every `pod-*` app (see the recipe at the bottom).
 The host is intentionally tiny. The whole app is: log in → derive the user's pod
 from the session → mount the library component → let it read/write the pod. All
 the data logic (LDP, RDF, optimistic create/save, Type-Index discovery) lives in
-the library; the host only wires **auth + a pod root**.
+the library; the host wires auth, a pod root, and the saved documents collection.
+`CollectionBrowser` persists server-assigned collection URLs in local storage keyed by
+WebID and storage root, and passes `container` / `onContainerChange` to the library.
+Remounts restore the exact collection identifier; identity and root changes use separate
+selections. A late assignment remains associated with its original identity. If storage
+cannot be read or written, the host reports an error before creating another collection.
 
 ## How it works
 
@@ -19,44 +25,39 @@ index.html → src/main.tsx
   └─ <SessionProvider>            (src/auth/SessionProvider.tsx — the ONE auth seam)
        └─ <App>                   (src/App.tsx)
             ├─ logged out → <LoginScreen>          (WebID-first login)
-            └─ logged in  → <DocumentBrowser       (@jeswr/pod-docs/ui)
-                              podRoot webId />
+            └─ logged in  → <CollectionBrowser>    (src/CollectionBrowser.tsx)
+                              └─ <DocumentBrowser podRoot webId container onContainerChange />
 ```
 
 ### Auth (standalone, no server)
 
-`SessionProvider` is the only place auth is wired. On mount it:
+Docs uses one page-lifetime `@jeswr/pod-auth` core and the shared
+`@jeswr/suite-ui/sign-in` card, the same path as Pod Drive. Recent accounts appear
+first; users can also enter an address, choose the home provider or another listed
+provider, or enter a custom provider address. Addresses are resolved through a
+pristine public fetch. A WebID with several providers asks the user to choose a
+provider explicitly.
 
-1. snapshots the pristine `globalThis.fetch` (for the pre-popup public profile
-   read, so it can never recurse on a 401);
-2. **dynamically** imports `@solid/reactive-authentication` (so the browser-only
-   custom element + oauth stack never evaluate at module-eval / SSR / prerender
-   time — verified by the build: `customElements.define` is `0` in the main
-   bundle and lives only in the lazily-imported chunk);
-3. builds a `WebIdDPoPTokenProvider` (ported from `create-solid-app`) bound to
-   this origin's **static Client Identifier Document** at
-   `${origin}/clientid.jsonld`, so the consent screen shows "Pod Docs" instead
-   of a throwaway dynamic registration;
-4. calls `manager.registerGlobally()` — **this is what patches the global
-   `fetch`** (the 0.1.3 constructor does NOT). Forgetting it is the #1
-   reactive-auth bug.
+The core restores once on mount, including React StrictMode replay, and owns all
+credentials, persistence and logout. `auth.fetch` is passed explicitly to
+`DocumentBrowser`; global fetch stays public. The default automatic credential
+boundary uses only the authenticated WebID's advertised storage roots. Public
+profile reads for the display name, avatar and pod root use the pristine public
+transport.
 
-Once patched, every plain `fetch()` — including the ones inside `@jeswr/fetch-rdf`
-and the `@jeswr/pod-docs` data layer — transparently upgrades on a 401 with a
-DPoP token. So `<DocumentBrowser>` is mounted with **no `fetch` prop**: its
-`fetch?:` seam falls back to the now-authenticated ambient global.
+The popup element is lazily registered from `@jeswr/reactive-authentication/registerElements`.
+A StrictMode-safe holder adapts its disposable result to the full callback URL.
+`allowInsecureLoopback` and pod-auth's dynamic client registration are enabled only
+in a development build (`npm run dev`) whose hostname is localhost, 127.0.0.0/8 or
+::1; every other build uses the HTTPS `clientid.jsonld`, so `vite preview` over HTTP
+cannot sign in. Silent `prompt=none` re-authentication during restore is declined
+(no popup without a click). The popup supports cancellation; errors use plain
+messages without raw protocol details. On first load the app removes the
+sessionStorage autologin markers left by builds before pod-auth.
 
-Login is WebID-first: the user enters their WebID, the issuer is resolved from
-the WebID profile (never a hard-coded IdP), the popup mints a DPoP token, and a
-probe of the (private) storage root proves the session
-(`assessLoginProbe` — per-attempt token-attach delta, not a sticky flag).
-`allowInsecureLoopback` is enabled **only** for a `localhost` origin (dev against
-a local CSS over HTTP); a deployed HTTPS origin stays strict.
-
-> Tokens are in-memory only — closing the tab logs out. Durable session restore
-> (DPoP refresh token in IndexedDB, proactive refresh) is the Pod-Manager
-> enhancement and a documented follow-up for this shell; `scope` already
-> requests `offline_access` so it's a provider-level add, not a redesign.
+A `#autologin/<encoded-webid>` deep link adds a one-click account row and is
+removed from the address bar. It never opens a popup or redirects without a click.
+Only `callback.html` is registered as an OAuth redirect URI.
 
 ### How the documents container is derived from the session
 
@@ -112,7 +113,7 @@ APP_ORIGIN=https://docs.solid-test.jeswr.org npm run build
 #       dist/index.html
 #       dist/clientid.jsonld          (client_id = that origin)
 #       dist/callback.html            (postMessage target = that origin)
-#       dist/assets/*.js, *.css       (hashed; reactive-auth code-split into a
+#       dist/assets/*.js, *.css       (hashed; the popup element code-split into a
 #                                      lazily-imported chunk)
 ```
 

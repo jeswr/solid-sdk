@@ -68,6 +68,14 @@ export interface WriteOptions {
  * @throws ResourceWriteError on any non-2xx answer (412 = precondition failed:
  *   a concurrent edit under `etag`, or "already exists" under `createOnly`).
  */
+/** One strong entity-tag, with an opaque value per HTTP's etagc grammar.
+ * The end assertion also rejects trailing newlines; never normalize a validator. */
+function strongValidator(url: string, etag: string | null | undefined): string {
+  if (typeof etag !== "string" || !/^"[\x21\x23-\x7e\x80-\xff]*"(?![\s\S])/u.test(etag))
+    throw new ConcurrencyValidatorError(url);
+  return etag;
+}
+
 export async function writeRdf(
   url: string,
   dataset: DatasetCore,
@@ -77,15 +85,7 @@ export async function writeRdf(
   if (opts.createOnly) {
     headers["if-none-match"] = "*";
   } else {
-    // One strong entity-tag, with an opaque value per HTTP's etagc grammar.
-    // The end assertion also rejects trailing newlines; never normalize a validator.
-    if (
-      typeof opts.etag !== "string" ||
-      !/^"[\x21\x23-\x7e\x80-\xff]*"(?![\s\S])/u.test(opts.etag)
-    ) {
-      throw new ConcurrencyValidatorError(url);
-    }
-    headers["if-match"] = opts.etag;
+    headers["if-match"] = strongValidator(url, opts.etag);
   }
   const body = await serializeTurtle(dataset, opts.prefixes);
   const init: RequestInit = { method: "PUT", redirect: "error", headers, body };
@@ -99,10 +99,17 @@ export async function writeRdf(
  * the resource is already gone, the caller's desired end state).
  *
  * @param fetchImpl - required account-scoped fetch implementation.
- * @throws ResourceDeleteError on any other non-2xx answer.
+ * @throws ConcurrencyValidatorError when a given etag is not one strong validator.
+ * @throws ResourceDeleteError on any other non-2xx answer (412 when the etag no longer matches).
  */
-export async function deleteRdf(url: string, fetchImpl: typeof fetch): Promise<void> {
+export async function deleteRdf(
+  url: string,
+  fetchImpl: typeof fetch,
+  /** When given (even null), the delete is conditional on this strong validator. */
+  etag?: string | null,
+): Promise<void> {
   const init: RequestInit = { method: "DELETE", redirect: "error" };
+  if (etag !== undefined) init.headers = { "if-match": strongValidator(url, etag) };
   const res = await fetchImpl(url, init);
   if (res.ok || res.status === 404 || res.status === 410) return;
   throw new ResourceDeleteError(url, res.status);

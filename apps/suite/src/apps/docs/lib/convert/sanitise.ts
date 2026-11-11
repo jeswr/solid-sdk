@@ -1,12 +1,16 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex
 import sanitizeHtml from "sanitize-html";
 import { normaliseDestination, normaliseImageDestination } from "../editor/destination";
+import { sanitiseStyles } from "../editor/styles";
 import { reportSkipped, type SkippedItem } from "./skipped";
 
-/** Only the editor's supported HTML surface; no styles, active content or embedded data. */
+/** Only supported HTML and allowlisted document styles, without active content. */
 export function sanitiseImport(html: string, skipped: SkippedItem[] = []): string {
   const allowedTags = [
     "p",
+    "span",
     "h1",
     "h2",
     "h3",
@@ -17,6 +21,8 @@ export function sanitiseImport(html: string, skipped: SkippedItem[] = []): strin
     "u",
     "s",
     "strike",
+    "ins",
+    "del",
     "sub",
     "sup",
     "mark",
@@ -45,20 +51,35 @@ export function sanitiseImport(html: string, skipped: SkippedItem[] = []): strin
     ol: ["start", "type", "data-list-type"],
     ul: ["data-type"],
     li: ["data-type", "data-checked"],
+    // The suite's own indent marker; the editor validates its level on parse.
+    ...Object.fromEntries(["p", "h1", "h2", "h3"].map((tag) => [tag, ["data-indent"]])),
   };
   return sanitizeHtml(html, {
     allowedTags,
-    allowedAttributes,
+    allowedAttributes: { ...allowedAttributes, "*": ["style"] },
+    // Values have already passed the stricter shared document-style allowlist.
+    parseStyleAttributes: false,
     transformTags: {
       "*": (tagName, attribs) => {
+        if (
+          (tagName === "ins" || tagName === "del") &&
+          Object.keys(attribs).some((key) => key.startsWith("data-suggestion-"))
+        ) {
+          // A span with no attributes unwraps the external revision semantics,
+          // retaining text without importing authorship or a strike mark.
+          return { tagName: "span", attribs: {} };
+        }
         if (/^h[4-6]$/.test(tagName)) tagName = "h3";
         if (!allowedTags.includes(tagName)) reportSkipped(skipped, "Unsupported HTML");
+        const style = sanitiseStyles(attribs.style ?? "");
+        delete attribs.style;
         for (const key of Object.keys(attribs)) {
           if (!(allowedAttributes[tagName] ?? []).includes(key)) {
             delete attribs[key];
             reportSkipped(skipped, "Unsupported attributes");
           }
         }
+        if (style) attribs.style = style;
         for (const key of ["src", "href"]) {
           const url = attribs[key];
           if (url === undefined) continue;

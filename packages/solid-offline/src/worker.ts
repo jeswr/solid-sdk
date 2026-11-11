@@ -1,3 +1,5 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 /// <reference lib="webworker" />
 /**
  * `solid-offline/worker` — the service-worker script (P0 install/intercept
@@ -13,6 +15,9 @@
  * coverage — it cannot be exercised without a real SW lifecycle.
  */
 
+import { createPodClient, type StorageClient } from '@jeswr/storage-client';
+import { createLwsBackend } from '@jeswr/storage-client/lws';
+import { createSolidBackend } from '@jeswr/storage-client/solid';
 import {
   assetConfigCandidates,
   cleanupOldShellCaches,
@@ -28,13 +33,15 @@ import {
   type ShellDeps,
   sameShellConfig,
   shellBucketComplete,
-  shellCacheName,
 } from './app-shell.js';
+import { withCacheProvenance } from './cache-policy.js';
 import { handleNotification, type InvalidateDeps, resyncSweep } from './invalidation.js';
 import { MetadataStore } from './metadata-store.js';
 import { cacheNameForWebId, isScopeChange } from './scope.js';
+import { createPolicyStorage } from './storage.js';
 import { type Broadcaster, type ByteCache, handleFetch, type SwrDeps } from './swr.js';
-import type { AppShellConfig, PageToWorkerMessage } from './types.js';
+import type { AppShellConfig, OfflineClientConfig, PageToWorkerMessage } from './types.js';
+import { WARM_REQUEST_HEADER, type WarmStartMessage, WorkerWarmSession } from './warm-transport.js';
 
 declare const self: ServiceWorkerGlobalScope & {
   /**
@@ -57,6 +64,10 @@ const DEFAULT_CHANNEL_NAME = 'solid-offline';
 let metaPromise: Promise<MetadataStore> | undefined;
 let channel: BroadcastChannel | undefined;
 let configuredWebId: string | undefined;
+let storageRoot: string | undefined;
+let storageBackend: OfflineClientConfig['storageBackend'];
+const warmSessions = new Map<string, WorkerWarmSession>();
+let invalidationGeneration = 0;
 /** Tracks whether `configuredWebId` has ever been set by a config message. */
 let webIdConfigured = false;
 /** Resolved BroadcastChannel name (#15): the page sends the channel it uses. */
@@ -269,11 +280,51 @@ self.addEventListener('activate', (event: ExtendableEvent) => {
 });
 
 self.addEventListener('message', (event: ExtendableMessageEvent) => {
-  const data = event.data as PageToWorkerMessage | undefined;
+  const data = event.data as PageToWorkerMessage | WarmStartMessage | undefined;
   if (!data || typeof data !== 'object') return;
+  if (data.type === 'warm-start') {
+    const port = event.ports?.[0];
+    const client = event.source as Client | null;
+    if (!port) return;
+    if (
+      !client?.id ||
+      warmSessions.has(client.id) ||
+      data.root !== storageRoot ||
+      !Number.isSafeInteger(data.maxBytes) ||
+      data.maxBytes < 0 ||
+      typeof data.token !== 'string' ||
+      !data.token
+    ) {
+      port.postMessage({ id: 0, error: 'Worker warming scope unavailable or already active' });
+      port.close();
+      return;
+    }
+    const session = new WorkerWarmSession(data.root, data.maxBytes, data.token);
+    warmSessions.set(client.id, session);
+    event.waitUntil(
+      new Promise<void>((resolve) => {
+        port.onmessage = (message) => {
+          const command = message.data;
+          port.postMessage({ id: command.id, snapshot: session.command(command) });
+          if (command.type === 'close') {
+            if (warmSessions.get(client.id) === session) warmSessions.delete(client.id);
+            port.close();
+            resolve();
+          }
+        };
+        port.postMessage({ id: 0, snapshot: session.command({ type: 'inspect' }) });
+      }),
+    );
+    return;
+  }
   if (data.type === 'config') {
     // #15: adopt the page's resolved channel name (custom channels must work).
     setChannelName(data.config.channelName);
+    if (storageRoot !== data.config.storageRoot || configuredWebId !== data.config.webId)
+      for (const session of warmSessions.values()) session.close();
+    storageRoot = data.config.storageRoot;
+    storageBackend = data.config.storageBackend;
+    invalidationGeneration += 1;
     // P4: if the page sent an app-shell config, adopt it. `adoptShellConfig` is a
     // no-op when it equals the current one, and (roborev) REPLACES + re-precaches
     // when a new deploy ships a changed version/manifest — so a long-lived active
@@ -300,7 +351,7 @@ self.addEventListener('message', (event: ExtendableMessageEvent) => {
   } else if (data.type === 'ping') {
     event.source?.postMessage({ type: 'pong' });
   } else if (data.type === 'notification') {
-    // P3: the page forwarded a change frame from its WebSocket. Run the
+    // P3: the page forwarded a change frame from its notification transport. Run the
     // (unauthenticated) invalidation pipeline; keep it alive past the handler.
     const frame = data.frame;
     keepAlive(event, async () => {
@@ -334,7 +385,7 @@ function keepAlive(event: ExtendableMessageEvent, task: () => Promise<void>): vo
  * scoped metadata store + the SW fetch + the broadcast channel + the clock. The
  * SWR path adds `isOnline` on top (see `respond`).
  */
-async function baseDeps(): Promise<InvalidateDeps> {
+async function baseDeps(): Promise<Omit<SwrDeps, 'isOnline'>> {
   const cache = await self.caches.open(cacheName());
   const meta = await getMeta();
   return {
@@ -346,9 +397,56 @@ async function baseDeps(): Promise<InvalidateDeps> {
   };
 }
 
-/** Build the invalidation deps (the SW's OWN, unauthenticated fetch — see invalidation.ts). */
-function invalidateDeps(): Promise<InvalidateDeps> {
-  return baseDeps();
+/** Discover only for network operations; local invalidation needs just the storage boundary. */
+async function invalidateDeps(): Promise<InvalidateDeps> {
+  const root = storageRoot;
+  const backend = storageBackend;
+  const generation = invalidationGeneration;
+  function checkScope(): void {
+    if (generation !== invalidationGeneration)
+      throw new Error('Offline invalidation scope changed');
+  }
+  if (!root) throw new Error('Offline invalidation requires a storage root');
+  const { fetch: transport, ...deps } = await baseDeps();
+  checkScope();
+  const local = createSolidBackend({ root, fetch: transport });
+  let discovered: Promise<StorageClient> | undefined;
+  const networkStorage = (): Promise<StorageClient> => {
+    checkScope();
+    discovered ??= createPolicyStorage(async (fetch) => {
+      if (backend?.protocol === 'solid') return createSolidBackend({ root, fetch });
+      if (backend?.protocol === 'lws')
+        return createLwsBackend({ root, fetch, storage: backend.id });
+      return (await createPodClient({ storage: root, fetch })).storage;
+    }, transport);
+    return discovered;
+  };
+  return {
+    ...deps,
+    storage: {
+      ...local,
+      read: async (url, opts) => {
+        const storage = await networkStorage();
+        checkScope();
+        const result = await storage.read(url, {
+          ...opts,
+          accept: storage.protocol === 'lws' ? '*/*' : opts?.accept,
+        });
+        if (generation !== invalidationGeneration) {
+          await result.body?.cancel();
+          checkScope();
+        }
+        return result;
+      },
+      head: async (url, opts) => {
+        const storage = await networkStorage();
+        checkScope();
+        const result = await storage.head(url, opts);
+        checkScope();
+        return result;
+      },
+    },
+  };
 }
 
 self.addEventListener('fetch', (event: FetchEvent) => {
@@ -393,7 +491,7 @@ self.addEventListener('fetch', (event: FetchEvent) => {
   // serves a COMPLETE shell, switching to the new bucket the moment it finishes
   // precaching. Both handlers also still degrade gracefully (network-first
   // navigation / network-fallback asset) when nothing complete exists yet.
-  if (shellConfig) {
+  if (shellConfig && !request.headers.has(WARM_REQUEST_HEADER)) {
     if (request.mode === 'navigate' && method === 'GET') {
       event.respondWith(respondShellNavigation(event));
       return;
@@ -415,6 +513,17 @@ self.addEventListener('fetch', (event: FetchEvent) => {
       return;
     }
   }
+
+  // Pod caching/provenance applies only inside the configured storage boundary.
+  // Marked warming reads are scoped by their acknowledged session in `respond`.
+  if (
+    !request.headers.has(WARM_REQUEST_HEADER) &&
+    (!storageRoot ||
+      !createSolidBackend({ root: storageRoot, fetch: self.fetch.bind(self) }).isWithinStorage(
+        request.url,
+      ))
+  )
+    return;
 
   event.respondWith(respond(event));
 });
@@ -493,23 +602,47 @@ async function respondShellAsset(event: FetchEvent): Promise<Response> {
 }
 
 async function respond(event: FetchEvent): Promise<Response> {
+  const networkResponse = (response: Response) =>
+    event.request.method === 'GET' ? withCacheProvenance(response, 'miss') : response;
+  const warming = warmSessions.get(event.clientId);
+  const marked = event.request.headers.has(WARM_REQUEST_HEADER);
+  const guarded =
+    warming?.matches(event.request) &&
+    createSolidBackend({ root: warming.root, fetch: self.fetch.bind(self) }).isWithinStorage(
+      event.request.url,
+    )
+      ? warming
+      : undefined;
+  if (marked && !guarded) return networkResponse(new Response(null, { status: 413 }));
+  const headers = new Headers(event.request.headers);
+  headers.delete(WARM_REQUEST_HEADER);
+  // Warming must finish fresh reads before closing its guard. Foreground reads
+  // retain SWR; a marked GET uses the existing synchronous revalidation path.
+  if (guarded && !headers.get('cache-control')?.toLowerCase().includes('no-store'))
+    headers.set('cache-control', 'no-cache');
+  const request = marked ? new Request(event.request, { headers }) : event.request;
   // The SWR engine's deps are the shared base + the online flag (the only field
   // the invalidation pipeline doesn't need).
-  const deps: SwrDeps = {
-    ...(await baseDeps()),
-    isOnline: () => self.navigator.onLine,
-  };
-
   try {
-    const result = await handleFetch(event.request, deps);
+    const deps: SwrDeps = {
+      ...(await baseDeps()),
+      isOnline: () => self.navigator.onLine,
+    };
+    if (guarded) {
+      const transport = deps.fetch;
+      deps.fetch = (input, init) => guarded.fetch(new Request(input, init), transport);
+    }
+    const result = await handleFetch(request, deps);
     // Keep background revalidation alive past the response if the SW supports it.
     if (result.revalidation && typeof event.waitUntil === 'function') {
       event.waitUntil(result.revalidation.then(() => undefined));
     }
     return result.response;
   } catch {
+    // A warming failure must never retry outside the transport budget.
+    if (guarded) return networkResponse(new Response(null, { status: 413 }));
     // Never-authoritative: on any engine error, fall back to the live network so
     // the page still gets an authoritative answer.
-    return self.fetch(event.request);
+    return networkResponse(await self.fetch(event.request));
   }
 }

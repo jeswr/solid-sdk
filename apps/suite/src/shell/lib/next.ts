@@ -1,11 +1,11 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 /**
- * Where the suite opens after sign-in. Drive until the Home app (W4) lands on main,
- * then "/home" (02-suite-shell §1).
+ * Where the suite opens after sign-in (02-suite-shell §1).
  */
-export const START_PAGE = "/drive";
+export const START_PAGE = "/home";
 /** The start page's app name, for "Go to …" links (server components cannot read the registry). */
-export const START_PAGE_NAME = "Drive";
+export const START_PAGE_NAME = "Home";
 
 /** Validate both the supplied path and its decoded form before handing it to the router. */
 export function safeNext(next: string | null | undefined): string {

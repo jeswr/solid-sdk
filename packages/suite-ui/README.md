@@ -359,6 +359,7 @@ Run it again with `NEXT_PUBLIC_SHOW_BACKLOG_APPS=1` to capture the flagged backl
 
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 <!-- AUTHORED-BY Claude Opus 5.5 -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 ## DS-04 shell layout
 
 Shell components live in `@jeswr/suite-ui/shell`; also import `styles/shell.css`.
@@ -373,6 +374,10 @@ at `h2`. Set `skipLink={false}` when the root layout already provides that link.
 `preferences` / `onPreferencesChange` connect to the consuming app's preferences
 hook. Both `sidebarOpen` and `detailsOpen` accept `null` for the responsive default
 (open at ≥1024, closed below). Explicit boolean choices override that default.
+Apps that own details visibility can supply `details.open` and `details.onOpenChange`.
+Shell close buttons, shortcuts and sheet dismissal update that controlled state;
+the saved details preference is ignored. Explicitly opened app details take priority
+over the sidebar sheet on narrow viewports.
 The package performs no storage or network writes; the dev fixtures use a browser
 storage adapter until SDK-APP-11 is available. Bracket shortcuts ignore editable
 fields, modified/composing events and unrelated dialogs. Sheets trap focus and
@@ -400,5 +405,8 @@ Provide capabilities with `<CapabilityProvider capabilities={capabilities}>`.
 Missing capabilities are unsupported. Gate children must be controls that forward native
 `disabled` and `aria-disabled` props; fragments and multiple controls are supported.
 `useRequiresOnline(online, "change sharing")` returns `{ disabled, reason }` for controls that
-need a connection. Pass the current online value explicitly. `ConflictDialog` calls `onChoose`
+need a connection. Pass the current online value explicitly. `<OnlineGate online={online}>`
+wraps such controls: transparent while online; offline it disables them and explains why in a
+keyboard- and pointer-reachable tooltip (default `OFFLINE_REASON`, "You're offline. This needs a
+connection."). Its trigger is a span, so it stays focusable inside a disabled fieldset. `ConflictDialog` calls `onChoose`
 with `mine`, `theirs` or `both`; the caller applies the choice and controls when it closes.

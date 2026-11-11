@@ -8,6 +8,11 @@
 Channel-neutral interaction types, bounded message validation, conversation transitions,
 canonical digests and RDF mappings for the ten pod record families in agent DESIGN §2.4.
 
+The local `transmission-settled` conversation event records executor delivery evidence by
+action proposal in `state.transmissions`, including after conversation closure. It does not
+consume a protocol message or change agreement performance outcomes or phase. Protocol
+`receipt` messages must reference the active agreement and remain the performance contract.
+
 ```ts
 import { toRdf, fromRdf, recordToTurtle, recordFromTurtle } from '@jeswr/agent-model';
 import { exampleRecords } from '@jeswr/agent-model/testing';
@@ -26,6 +31,9 @@ original lexical form. Ordered arrays use RDF sequences; extracted structured co
 audit payloads and opaque proofs use `rdf:JSON` literals. Typed fields remain queryable. Nested structures may use blank nodes on input;
 record IDs and authority references remain absolute IRIs.
 
+Channel capabilities may include a `description` for provider limitations. It maps
+to `dcterms:description` and grants no permission to send.
+
 Accounts expose `channelHandleHash`; intents expose `recipientHash`. Callers compute
 salted hashes before constructing records. No handle-resolution or send operation exists.
 Accounts may also carry a strict `inventory` object with all salted `channelHandles`,
@@ -34,6 +42,15 @@ connector evidence and identity conflicts. Inventory lists use RDF sequences; ev
 conflict items use `rdf:JSON`. The primary handle remains scalar and may be omitted only
 when an explicit inventory has no handles. Inventory observations establish no live access.
 Owner restrictions, label and binding state remain separate from inventory.
+`SetBindingState` control statements require the target account IRI, binding, and a binding
+state or restrictions. Restriction-only changes omit the binding state so they cannot reconnect
+an account that another device disconnected.
+They may carry an optional `restrictions` object containing all four typed booleans
+(`read`, `triage`, `draft`, `send`) through the existing `agent:restrictions` predicate.
+Other control kinds cannot carry restrictions. An `Archive` control targets one inbound
+message IRI and asks consumers to hide that message from triage queues; the message is kept.
+Control parsing validates the complete object but grants no authority without external
+signature verification.
 Approval and mandate proofs are preserved without verification. A parsed approval is
 not authority to act; cryptographic verification and current expiry/revocation checks
 belong to agent-mandate and agent-executor. Mandate records reference credentials rather
@@ -54,3 +71,10 @@ the pilot parity tests.
 
 Run `pnpm run lint`, `pnpm run build`, `pnpm run typecheck`, and `pnpm run test` here.
 The package remains private per ADR-001 D5.
+
+`SetBindingState` is an append-only per-field settings log: `restrictions` contains one or
+more of `read`, `triage`, `draft`, `send`; omitted fields retain their previous values.
+`bindingState` is independent. After verifying owner control statements, consumers call
+`foldBindingControls(account, verifiedStatements)` to apply matching targets in creation-time,
+then statement-IRI order, starting from the account record. The function performs no
+cryptographic verification and never mutates its inputs.

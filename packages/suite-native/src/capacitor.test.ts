@@ -9,5 +9,6 @@ test("registers the native plugins by their native names", async () => {
   expect(bindings.shareIntakePlugin).toEqual({ pluginName: "SuiteShareIntake" });
   expect(bindings.shareStagingPlugin).toEqual({ pluginName: "SuiteShareStaging" });
   expect(bindings.secureStorePlugin).toEqual({ pluginName: "SuiteSecureStore" });
+  expect(bindings.filesPlugin).toEqual({ pluginName: "SuiteFiles" });
   expect(bindings.sharePlugin).toEqual({ pluginName: "Share" });
 });

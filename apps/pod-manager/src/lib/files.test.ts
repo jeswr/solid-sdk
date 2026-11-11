@@ -269,6 +269,8 @@ describe("uploadFile", () => {
     const headers = captured?.init.headers as Record<string, string>;
     expect(headers["content-type"]).toBe("image/png");
     expect(headers["if-none-match"]).toBe("*"); // create-only by default
+    // The File itself is the body, so pod-auth can replay it after a 401 without buffering it.
+    expect(captured?.init.body).toBe(file);
   });
 
   it("falls back to the extension MIME map when the File has no type", async () => {

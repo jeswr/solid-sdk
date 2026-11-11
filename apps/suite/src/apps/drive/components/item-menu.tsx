@@ -11,14 +11,22 @@ import {
   ContextMenuItem,
   ContextMenuSeparator,
   ContextMenuShortcut,
+  ContextMenuSub,
+  ContextMenuSubContent,
+  ContextMenuSubTrigger,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuShortcut,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
 } from "@jeswr/suite-ui";
 import {
+  AppWindow,
   Copy,
   Download,
+  FileText,
   FolderInput,
   FolderOpen,
   Info,
@@ -34,20 +42,31 @@ import {
 import type { DriveItem } from "../lib/client/client";
 import { isOwnStorage } from "../lib/client/ownership";
 import { useDrive } from "../state/drive-context";
+import { useOpenWithDocs } from "../state/open-with-docs";
 import type { DriveActions } from "../state/ui";
 import { useDriveUi } from "../state/ui";
 
-export type MenuEntry =
-  | {
-      id: string;
-      label: string;
-      icon: LucideIcon;
-      shortcut?: string;
-      destructive?: boolean;
-      disabled?: boolean;
-      onSelect: () => void;
-    }
-  | "separator";
+export interface MenuItemEntry {
+  id: string;
+  label: string;
+  icon: LucideIcon;
+  shortcut?: string;
+  destructive?: boolean;
+  disabled?: boolean;
+  /** Why a disabled item is unavailable, shown under its label. */
+  hint?: string;
+  onSelect: () => void;
+}
+
+/** A nested menu, e.g. "Open with" › "Docs". */
+export interface SubmenuEntry {
+  id: string;
+  label: string;
+  icon: LucideIcon;
+  submenu: readonly MenuItemEntry[];
+}
+
+export type MenuEntry = MenuItemEntry | SubmenuEntry | "separator";
 
 export function useItemMenu(
   actions: DriveActions,
@@ -56,6 +75,7 @@ export function useItemMenu(
 ): MenuEntry[] {
   const ui = useDriveUi();
   const { session } = useDrive();
+  const openWithDocs = useOpenWithDocs(targets.length === 1 ? targets[0] : undefined);
   const writable = targets.every((item) => isOwnStorage(item.url, session.storageUrl));
   const [first] = targets;
   if (!first) return [];
@@ -70,6 +90,25 @@ export function useItemMenu(
       shortcut: "Enter",
       onSelect: () => actions.open(first, siblings, ui.setPreview),
     });
+    if (openWithDocs) {
+      const disabledReason =
+        openWithDocs.kind === "convert" ? openWithDocs.disabledReason : undefined;
+      entries.push({
+        id: "open-with",
+        label: "Open with",
+        icon: AppWindow,
+        submenu: [
+          {
+            id: "open-with-docs",
+            label: "Docs",
+            icon: FileText,
+            disabled: disabledReason !== undefined || openWithDocs.pending,
+            ...(disabledReason ? { hint: disabledReason } : {}),
+            onSelect: () => void openWithDocs.run(),
+          },
+        ],
+      });
+    }
     entries.push("separator");
     entries.push({
       id: "share",
@@ -148,7 +187,7 @@ export function useItemMenu(
   return entries;
 }
 
-export function trashMenu(onRestore: () => void, onDelete: () => void): MenuEntry[] {
+export function trashMenu(onRestore: () => void, onDelete: () => void): MenuItemEntry[] {
   return [
     { id: "restore", label: "Restore", icon: RotateCcw, onSelect: onRestore },
     {
@@ -161,50 +200,89 @@ export function trashMenu(onRestore: () => void, onDelete: () => void): MenuEntr
   ];
 }
 
+function ItemLabel({ entry }: { entry: MenuItemEntry }) {
+  return entry.hint ? (
+    <span className="drv-menu-label">
+      {entry.label}
+      <span className="drv-menu-hint">{entry.hint}</span>
+    </span>
+  ) : (
+    entry.label
+  );
+}
+
+function DropdownItems({ entries }: { entries: readonly MenuEntry[] }) {
+  return entries.map((entry, index) =>
+    entry === "separator" ? (
+      // biome-ignore lint/suspicious/noArrayIndexKey: separators have no identity
+      <DropdownMenuSeparator key={`sep-${index}`} />
+    ) : "submenu" in entry ? (
+      <DropdownMenuSub key={entry.id}>
+        <DropdownMenuSubTrigger>
+          <entry.icon aria-hidden="true" size={16} />
+          {entry.label}
+        </DropdownMenuSubTrigger>
+        <DropdownMenuSubContent className="drv-menu">
+          <DropdownItems entries={entry.submenu} />
+        </DropdownMenuSubContent>
+      </DropdownMenuSub>
+    ) : (
+      <DropdownMenuItem
+        key={entry.id}
+        onSelect={entry.onSelect}
+        disabled={entry.disabled ?? false}
+        variant={entry.destructive ? "destructive" : "default"}
+      >
+        <entry.icon aria-hidden="true" size={16} />
+        <ItemLabel entry={entry} />
+        {entry.shortcut ? <DropdownMenuShortcut>{entry.shortcut}</DropdownMenuShortcut> : null}
+      </DropdownMenuItem>
+    ),
+  );
+}
+
 export function DropdownEntries({ entries }: { entries: readonly MenuEntry[] }) {
   return (
     <DropdownMenuContent align="end" className="drv-menu">
-      {entries.map((entry, index) =>
-        entry === "separator" ? (
-          // biome-ignore lint/suspicious/noArrayIndexKey: separators have no identity
-          <DropdownMenuSeparator key={`sep-${index}`} />
-        ) : (
-          <DropdownMenuItem
-            key={entry.id}
-            onSelect={entry.onSelect}
-            disabled={entry.disabled ?? false}
-            variant={entry.destructive ? "destructive" : "default"}
-          >
-            <entry.icon aria-hidden="true" size={16} />
-            {entry.label}
-            {entry.shortcut ? <DropdownMenuShortcut>{entry.shortcut}</DropdownMenuShortcut> : null}
-          </DropdownMenuItem>
-        ),
-      )}
+      <DropdownItems entries={entries} />
     </DropdownMenuContent>
+  );
+}
+
+function ContextItems({ entries }: { entries: readonly MenuEntry[] }) {
+  return entries.map((entry, index) =>
+    entry === "separator" ? (
+      // biome-ignore lint/suspicious/noArrayIndexKey: separators have no identity
+      <ContextMenuSeparator key={`sep-${index}`} />
+    ) : "submenu" in entry ? (
+      <ContextMenuSub key={entry.id}>
+        <ContextMenuSubTrigger>
+          <entry.icon aria-hidden="true" size={16} />
+          {entry.label}
+        </ContextMenuSubTrigger>
+        <ContextMenuSubContent className="drv-menu">
+          <ContextItems entries={entry.submenu} />
+        </ContextMenuSubContent>
+      </ContextMenuSub>
+    ) : (
+      <ContextMenuItem
+        key={entry.id}
+        onSelect={entry.onSelect}
+        disabled={entry.disabled ?? false}
+        variant={entry.destructive ? "destructive" : "default"}
+      >
+        <entry.icon aria-hidden="true" size={16} />
+        <ItemLabel entry={entry} />
+        {entry.shortcut ? <ContextMenuShortcut>{entry.shortcut}</ContextMenuShortcut> : null}
+      </ContextMenuItem>
+    ),
   );
 }
 
 export function ContextEntries({ entries }: { entries: readonly MenuEntry[] }) {
   return (
     <ContextMenuContent className="drv-menu">
-      {entries.map((entry, index) =>
-        entry === "separator" ? (
-          // biome-ignore lint/suspicious/noArrayIndexKey: separators have no identity
-          <ContextMenuSeparator key={`sep-${index}`} />
-        ) : (
-          <ContextMenuItem
-            key={entry.id}
-            onSelect={entry.onSelect}
-            disabled={entry.disabled ?? false}
-            variant={entry.destructive ? "destructive" : "default"}
-          >
-            <entry.icon aria-hidden="true" size={16} />
-            {entry.label}
-            {entry.shortcut ? <ContextMenuShortcut>{entry.shortcut}</ContextMenuShortcut> : null}
-          </ContextMenuItem>
-        ),
-      )}
+      <ContextItems entries={entries} />
     </ContextMenuContent>
   );
 }

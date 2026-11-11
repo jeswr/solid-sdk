@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex
 // AUTHORED-BY Codex GPT-6
 // Conditional apply, inherited ACL copying and lockout guard adapted from Drive
@@ -36,12 +37,17 @@ interface Row {
   agent: AgentRef;
   modes: Set<Mode>;
 }
-function rows(snapshot: Snapshot, documents = snapshot.documents): Map<string, Row> {
+function rows(
+  snapshot: Snapshot,
+  documents = snapshot.documents,
+  members = false,
+  excludeOwnAcrManagement = false,
+): Map<string, Row> {
   const result = new Map<string, Row>();
   for (const document of documents)
     for (const grant of document.policy.grants) {
-      if (!grant.modes.size) continue;
-      const scope = document.resource === snapshot.resource ? "resource" : "members";
+      if (!grant.modes.size || (excludeOwnAcrManagement && grant.ownAcrManagement)) continue;
+      const scope = !members && document.resource === snapshot.resource ? "resource" : "members";
       if (grant.appliesTo !== scope && grant.appliesTo !== "both") continue;
       if (grant.except.length || grant.who.some((clause) => clause.length !== 1))
         throw roleError(
@@ -72,6 +78,7 @@ function role(row: Row, model: Snapshot["model"], options: RolesOptions, comment
   );
 }
 function project(snapshot: Snapshot, options: RolesOptions, comments?: Snapshot): RoleGrant[] {
+  requireFolderScope(snapshot, options);
   const commentRows = comments ? rows(comments) : new Map<string, Row>();
   const effective = rows(snapshot);
   return snapshot.documents.flatMap((document) =>
@@ -110,6 +117,70 @@ function project(snapshot: Snapshot, options: RolesOptions, comments?: Snapshot)
 export async function grantsWithRoles(url: string, options: RolesOptions): Promise<RoleGrant[]> {
   return (await readGrants(url, options)).grants;
 }
+/** Internal move snapshot: project own policy independently, refusing lossy role round trips. */
+export async function moveGrants(url: string, options: RolesOptions) {
+  const snapshot = await load(url, options);
+  const own = { ...snapshot, documents: snapshot.own ? [snapshot.own] : [] };
+  const grants = project(own, options);
+  for (const row of rows(own).values()) {
+    const projected = grants.find((g) => agentKey(g.agent) === agentKey(row.agent));
+    const mapped =
+      projected &&
+      rolesToModes(projected.role, options.kind ?? "resource", {
+        ...options,
+        model: snapshot.model,
+      });
+    const modes = new Set(
+      mapped ? [...mapped.resource, ...(mapped.acr.length ? ["control" as const] : [])] : [],
+    );
+    const original = new Set(row.modes);
+    if (original.has("write")) original.add("append");
+    if (!sameModes(original, modes))
+      throw roleError("unsupported", url, "Own permissions cannot round-trip through roles");
+  }
+  return {
+    grants,
+    ownUrl: snapshot.ownUrl,
+    ownEtag: snapshot.own ? snapshot.own.etag : undefined,
+    resourceEtag: snapshot.resourceEtag,
+  };
+}
+/** Internal move preflight: establish direct caller Control, including ESS ACR management. */
+export async function moveDestination(url: string, options: SetGrantsOptions) {
+  const snapshot = await load(url, options);
+  const me = agentKey({ type: "webid", id: options.webId });
+  if (!rows(snapshot).get(me)?.modes.has("control"))
+    throw roleError("owner-lockout", url, "Destination requires caller manager/Control access");
+  return snapshot;
+}
+/** Internal read-only full-set preflight for a not-yet-created child; no endpoint is guessed. */
+export async function planMoveGrants(
+  url: string,
+  parent: string,
+  grants: RoleGrant[],
+  options: SetGrantsOptions,
+  own = true,
+): Promise<void> {
+  for (const grant of grants) validateMetadata(grant);
+  const destination = await load(parent, options);
+  const me = agentKey({ type: "webid", id: options.webId });
+  const inheritedControl = rows(destination, destination.documents, true)
+    .get(me)
+    ?.modes.has("control");
+  const ownControl = grants.some(
+    (grant) => agentKey(grant.agent) === me && grant.role === "manager",
+  );
+  if (!(ownControl || ((!own || destination.model === "acp") && inheritedControl)))
+    throw roleError("owner-lockout", url, "Moved item must retain caller manager/Control access");
+  if (!own) return;
+  await prepare(url, grants, options, {
+    ...destination,
+    resource: url,
+    own: undefined,
+    // This advertised endpoint is used only to validate the generated policy, never persisted.
+    ownUrl: destination.ownUrl,
+  });
+}
 function validators(snapshot: Snapshot) {
   return [
     snapshot.resource,
@@ -142,6 +213,24 @@ export async function readGrants(url: string, options: RolesOptions): Promise<Gr
 function sameModes(a: Set<Mode>, b: Set<Mode>): boolean {
   return a.size === b.size && [...a].every((mode) => b.has(mode));
 }
+function folderScope(snapshot: Snapshot, options: RolesOptions): boolean {
+  return options.kind === "folder" && snapshot.resource.endsWith("/");
+}
+/** A folder role must describe the same permissions on the folder and its members. */
+function requireFolderScope(snapshot: Snapshot, options: RolesOptions): void {
+  if (!folderScope(snapshot, options) || !snapshot.own) return;
+  // Exempt only grants placed as own-ACR management, before merging modes.
+  // ESS member-ACR management must remain visible as an unrepresentable scope difference.
+  const direct = rows(snapshot, [snapshot.own], false, true);
+  const members = rows(snapshot, [snapshot.own], true, true);
+  for (const key of new Set([...direct.keys(), ...members.keys()]))
+    if (!sameModes(direct.get(key)?.modes ?? new Set(), members.get(key)?.modes ?? new Set()))
+      throw roleError(
+        "partial-scope",
+        snapshot.resource,
+        "Folder permissions differ between the folder and its members; use a scope-aware access editor",
+      );
+}
 interface Write {
   resource: string;
   url: string;
@@ -158,15 +247,17 @@ function editableRows(snapshot: Snapshot): Map<string, Row> {
 async function plan(
   snapshot: Snapshot,
   desired: Map<string, Row>,
-  options: GrantMutationOptions,
+  options: GrantMutationOptions & Pick<SetGrantsOptions, "ownOnly">,
   agent?: AgentRef,
 ): Promise<Write | undefined> {
-  const before = editableRows(snapshot);
+  const before = options.ownOnly && !snapshot.own ? new Map<string, Row>() : editableRows(snapshot);
   const keys = new Set([...before.keys(), ...desired.keys()]);
   const changes = [...keys].filter(
     (key) => !sameModes(before.get(key)?.modes ?? new Set(), desired.get(key)?.modes ?? new Set()),
   );
-  if (!changes.length) return undefined;
+  // Moves must also preserve an existing empty own ACR. An empty ACP selection still
+  // inherits controls; WAC's empty selection is refused by the lockout check below.
+  if (!changes.length && !(options.ownOnly && !snapshot.own)) return undefined;
   const me = agentKey({ type: "webid", id: options.webId });
   // Require direct, independently established management; public/group/client access
   // must not be the only safeguard against the caller locking themselves out.
@@ -201,32 +292,48 @@ async function plan(
   const source = snapshot.documents[0];
   const dataset = snapshot.own
     ? new Store([...snapshot.own.dataset])
-    : snapshot.model === "wac" && source
+    : snapshot.model === "wac" && source && !options.ownOnly
       ? materialize(source.dataset, source.resource, snapshot.resource, source.url)
       : new Store();
   if (snapshot.model === "wac") {
     for (const key of changes) {
       const row = desired.get(key) ?? (before.get(key) as Row);
-      replaceWac(dataset, snapshot.resource, row.agent, [...(desired.get(key)?.modes ?? [])]);
-    }
-  } else {
-    if (agent)
-      removeAcpAgent(
+      replaceWac(
         dataset,
         snapshot.resource,
-        snapshot.ownUrl,
-        agent,
-        options.implementation ?? "css",
+        row.agent,
+        [...(desired.get(key)?.modes ?? [])],
+        folderScope(snapshot, options),
       );
+    }
+  } else {
+    const selected = agent
+      ? [agent]
+      : folderScope(snapshot, options)
+        ? changes.map((key) => (desired.get(key) ?? (before.get(key) as Row)).agent)
+        : undefined;
+    if (selected)
+      for (const principal of selected)
+        removeAcpAgent(
+          dataset,
+          snapshot.resource,
+          snapshot.ownUrl,
+          principal,
+          options.implementation ?? "css",
+          folderScope(snapshot, options),
+        );
     else detachAcp(dataset, snapshot.resource, snapshot.ownUrl, options.implementation ?? "css");
     appendAcp(
       dataset,
       snapshot.resource,
       snapshot.ownUrl,
-      agent
-        ? [...desired.values()].filter((row) => agentKey(row.agent) === agentKey(agent))
+      selected
+        ? [...desired.values()].filter((row) =>
+            selected.some((principal) => agentKey(row.agent) === agentKey(principal)),
+          )
         : desired.values(),
       options.implementation ?? "css",
+      folderScope(snapshot, options),
     );
   }
   // Re-read generated RDF through the same strict role policy boundary before persistence.
@@ -265,8 +372,9 @@ async function prepare(
   url: string,
   grants: RoleGrant[],
   options: SetGrantsOptions,
+  baseline?: Snapshot,
 ): Promise<Write[]> {
-  const snapshot = await load(url, options);
+  const snapshot = baseline ?? (await load(url, options));
   const comments = options.commentsContainer
     ? await load(options.commentsContainer, options)
     : undefined;
@@ -283,12 +391,13 @@ async function prepare(
     if (token !== version(snapshot, options, comments))
       throw roleError("conflict", url, "Grant snapshot is stale or does not cover this URL");
   }
-  const current = editableRows(snapshot);
+  const current =
+    options.ownOnly && !snapshot.own ? new Map<string, Row>() : editableRows(snapshot);
   const projected = project(snapshot, options, comments);
   const inherited = projected.filter((g) => g.inherited);
   const explicit = new Set(grants.filter((g) => !g.inherited).map((g) => agentKey(g.agent)));
   const desired = new Map<string, Row>();
-  if (snapshot.model === "wac") {
+  if (snapshot.model === "wac" && !options.ownOnly) {
     const own = snapshot.own;
     const retained = own
       ? {
@@ -457,6 +566,7 @@ async function prepareAgent(
   grant?: RoleGrant,
 ): Promise<Write[]> {
   const snapshot = await load(url, options);
+  requireFolderScope(snapshot, options);
   const comments = options.commentsContainer
     ? await load(options.commentsContainer, options)
     : undefined;
@@ -544,6 +654,19 @@ export async function addGrant(
 ): Promise<SetGrantsResult> {
   validateMetadata(grant);
   return applyBatch(urls, options, (url) => prepareAgent(url, grant.agent, options, grant));
+}
+/**
+ * Plan `addGrant` for each URL without writing: throws the first refusal (`owner-lockout`,
+ * `unsupported`, an unknown construct, …) that `addGrant` would report. Internal; used to refuse
+ * a decision before anything is committed.
+ */
+export async function planAddGrant(
+  urls: string[],
+  grant: RoleGrant,
+  options: GrantMutationOptions,
+): Promise<void> {
+  validateMetadata(grant);
+  for (const url of new Set(urls)) await prepareAgent(url, grant.agent, options, grant);
 }
 /** Remove one principal's direct role; inherited access must be edited at its source. */
 export async function removeGrant(

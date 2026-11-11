@@ -23,6 +23,8 @@ export const TERM_DEFINITIONS = {
   ActionProposal:
     "An executable proposal with exact action intent, rendered preview, provenance and lifecycle state.",
   AgentWorkspace: "Private agent workspace registered in the owner private type index.",
+  Archive:
+    "Control kind hiding the referenced inbound message from triage queues; the message itself is kept.",
   AgreementRecord:
     "Documentary record relating an identified offer, the accepting message and the exact terms digest (A8).",
   Approval:
@@ -35,7 +37,7 @@ export const TERM_DEFINITIONS = {
     "One coherent mechanism combination (integrity, authentication, representation, authorisation, binding).",
   Confirmation: "The confirmation-record type (owner-only; the Actor cannot write these).",
   ControlStatement:
-    "Owner control statement to halt, resume, change a binding, dispatch, revoke or forget; requires external proof verification.",
+    "Owner control statement to halt, resume, change a binding, dispatch, revoke, forget or archive; requires external proof verification.",
   DispatchNow: "Control kind requesting dispatch of a specific proposal through the executor.",
   EvidenceLedger:
     "An append-only hash-chained log kept by one agent. Integrity of the retained entries does not establish completeness (CT-10).",
@@ -74,6 +76,8 @@ export const TERM_DEFINITIONS = {
   ProposalFailed: "Migrated M1 lifecycle or intent term ProposalFailed.",
   ProposalPending: "Status individuals \u2014 a proposal is NEVER sent until it reaches Confirmed.",
   ProposalRejected: "Migrated M1 lifecycle or intent term ProposalRejected.",
+  Remember:
+    "Permission action for saving information to the agent memory; subject to owner mandate and approval checks.",
   RepresentationAssessment:
     "An evaluator's conclusion whether a software actor speaks for a party for an operation. Not an authorisation.",
   RepresentationStatement:
@@ -181,6 +185,7 @@ export const TERM_DEFINITIONS = {
   draft: "Whether drafts may be proposed for an account; false by default.",
   effectKey: "Idempotency key of the effect.",
   endToEndEncrypted: "Whether channel content has end-to-end encryption.",
+  federated: "Whether channel messages can be relayed between independently operated servers.",
   entryHash: "SHA-256 digest sealing the entry (over seq, time, previous hash and record).",
   evaluatedActor: "The software actor whose representation was assessed.",
   evaluatedPolicy: "The grant or policy the decision was evaluated under.",

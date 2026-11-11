@@ -28,6 +28,9 @@ export type VerifierPhase =
 export type VerifierErrorCode =
   // assembly
   | "CHAIN_MALFORMED"
+  // assembly — the caller's options cannot be evaluated safely (an invalid `now`,
+  // a missing `isControlledBy` seam, a malformed `revoked` or chain-length cap)
+  | "INVALID_OPTIONS"
   // Phase A (from solid-vc verifyCredential)
   | "MALFORMED"
   | "NO_PROOF"

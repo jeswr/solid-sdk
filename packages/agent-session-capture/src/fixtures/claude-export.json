@@ -1,0 +1,28 @@
+[
+  {
+    "uuid": "claude-fixture-conversation",
+    "name": "Fixture Claude conversation",
+    "created_at": "2026-10-25T12:00:00Z",
+    "chat_messages": [
+      {
+        "uuid": "question",
+        "sender": "human",
+        "created_at": "2026-10-25T12:00:00Z",
+        "text": "A fixture question.",
+        "attachments": [{ "text": "DROP_ATTACHMENT" }]
+      },
+      {
+        "uuid": "answer",
+        "sender": "assistant",
+        "created_at": "2026-10-25T12:00:01Z",
+        "text": "DROP_LEGACY_MIRROR",
+        "content": [
+          { "type": "text", "text": "A fixture answer." },
+          { "type": "thinking", "thinking": "DROP_THINKING" },
+          { "type": "tool_use", "input": "DROP_ARGUMENTS" },
+          { "type": "tool_result", "content": "DROP_TOOL_OUTPUT" }
+        ]
+      }
+    ]
+  }
+]

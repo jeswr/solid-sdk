@@ -1,3 +1,5 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 //
 // The document-browser's data hook — the SINGLE place the view touches the data
@@ -7,15 +9,9 @@
 //
 // ── AUTH SEAM ────────────────────────────────────────────────────────────────
 // The authenticated `fetch` is INJECTED, not imported. Pass the session's fetch
-// via the `fetch` option; omit it and the data layer falls back to the global
-// `fetch`. In production that global is the one
-// @solid/reactive-authentication's ReactiveFetchManager.registerGlobally()
-// patches (so a plain fetch transparently upgrades on a 401 with a DPoP token),
-// wired ONCE in the create-solid-app shell's <SolidAuthProvider>. That wiring is
-// #18-gated (create-solid-app S2 — interactive auth-code login;
-// https://github.com/solid-contrib/reactive-authentication/issues/18). This
-// hook is DELIBERATELY unaware of any of that: it works today against a stubbed
-// fetch in unit tests and later against the real session with NO code change.
+// via the `fetch` option (a host passes its pod-auth session's `auth.fetch`);
+// omit it and the data layer falls back to the unauthenticated global `fetch`.
+// This hook is DELIBERATELY unaware of how the session was created.
 // Do NOT hard-wire a login flow here.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -112,10 +108,15 @@ export interface DocsListingState {
 
 /** Options for {@link useDocsListing}. */
 export interface UseDocsListingOptions {
+  /** Development only: allow HTTP loopback identity metadata during registration. */
+  allowInsecureLoopback?: boolean;
+  /** Restore the collection saved for this WebID and storage root, preserving its identifier. */
+  container?: string;
+  /** Save the assigned collection under the supplied identity, including when a write finishes after navigation. */
+  onContainerChange?: (selection: { podRoot: string; webId: string; container: string }) => void;
   /**
-   * The authenticated fetch. Omit to use the ambient global fetch (which
-   * @solid/reactive-authentication patches in a real session). This is the
-   * injectable auth seam — see the file header.
+   * The authenticated fetch. Omit to use the unauthenticated global fetch.
+   * This is the injectable auth seam — see the file header.
    */
   fetch?: typeof fetch;
   /**
@@ -144,14 +145,56 @@ export function useDocsListing(
   webId: string,
   options: UseDocsListingOptions = {},
 ): DocsListingState {
-  const { fetch: authedFetch, createStore = createDocsStore } = options;
+  const {
+    fetch: authedFetch,
+    createStore = createDocsStore,
+    container,
+    onContainerChange,
+    allowInsecureLoopback = false,
+  } = options;
+  const containerCallback = useRef(onContainerChange);
+  useEffect(() => {
+    containerCallback.current = onContainerChange;
+  }, [onContainerChange]);
 
   // The store is rebuilt only when an identity input changes — so the load
   // effect's dependency is a stable reference across unrelated re-renders.
-  const store: DocsStore = useMemo(
-    () => createStore({ podRoot, webId, ...(authedFetch ? { fetchImpl: authedFetch } : {}) }),
-    [createStore, podRoot, webId, authedFetch],
+  const storeOptions = useMemo(
+    () => ({
+      podRoot,
+      webId,
+      allowInsecureLoopback,
+      onContainerChange: (assigned: string) =>
+        containerCallback.current?.({ podRoot, webId, container: assigned }),
+      ...(authedFetch ? { fetchImpl: authedFetch } : {}),
+    }),
+    [podRoot, webId, authedFetch, allowInsecureLoopback],
   );
+  const [selection, setSelection] = useState(() => ({
+    storeOptions,
+    createStore,
+    container,
+    store: createStore({ ...storeOptions, container }),
+  }));
+  if (
+    selection.storeOptions !== storeOptions ||
+    selection.createStore !== createStore ||
+    selection.container !== container
+  ) {
+    // A host saving the just-assigned identifier acknowledges this store's
+    // collection; keep its open document and in-flight creation intact.
+    const acknowledged =
+      selection.storeOptions === storeOptions &&
+      selection.createStore === createStore &&
+      selection.store.container === container;
+    setSelection({
+      storeOptions,
+      createStore,
+      container,
+      store: acknowledged ? selection.store : createStore({ ...storeOptions, container }),
+    });
+  }
+  const store: DocsStore = selection.store;
 
   const [entries, setEntries] = useState<DocumentEntry[]>([]);
   const [openDocument, setOpenDocument] = useState<StoredDocument | null>(null);

@@ -297,6 +297,20 @@ it("round 55: valid PDF uses the native viewer without Chromium's sandbox naviga
   await view.unmount();
   expect(revoke).toHaveBeenCalledWith("blob:preview");
 });
+// AUTHORED-BY Claude Opus 5.5
+it("MOB-P3 E5: the native shell offers Open PDF instead of reading the file into an iframe", async () => {
+  vi.stubEnv("NEXT_PUBLIC_SUITE_TARGET", "native");
+  try {
+    const view = await mount(h(PreviewBody, { item, metadataStatus: "ready" }));
+    expect(view.host.querySelector("iframe")).toBeNull();
+    expect(client.read).not.toHaveBeenCalled();
+    expect(create).not.toHaveBeenCalled();
+    expect(view.host.textContent).toContain("Open PDF");
+    await view.unmount();
+  } finally {
+    vi.unstubAllEnvs();
+  }
+});
 it("rejects non-image GET types for image listings and renders SVG only as img", async () => {
   const image = { ...item, contentType: "image/svg+xml", name: "image.svg" };
   client.read.mockResolvedValueOnce(new Blob(["<html>"], { type: "text/html" }));

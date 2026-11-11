@@ -3,19 +3,12 @@
 // AUTHORED-BY Codex GPT-6
 "use client";
 /**
- * Drive's interim account session: the installed extension's granted pod, or
- * the in-browser demo pod. Every data operation uses the active session's fetch.
+ * App sessions follow the shell account and its authenticated fetch. Standalone
+ * previews retain the extension/demo adapter; a shell session never falls back to demo.
  */
 
-import {
-  createContext,
-  type ReactNode,
-  useCallback,
-  useContext,
-  useEffect,
-  useRef,
-  useState,
-} from "react";
+import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
+import { useOptionalAccounts } from "@/shell/session/accounts-context";
 import { getDemoPod, resetDemoPod } from "../demo-pod/browser";
 import { DEMO_NAME, DEMO_ROOT, DEMO_WEBID } from "../demo-pod/seed";
 import { boundedRead } from "./bounded-read";
@@ -35,46 +28,11 @@ import {
   type SolidExtensionState,
   subscribeSolidExtension,
 } from "./extension-session";
+import { SessionContext, ShellPodSessionProvider } from "./shell-pod-session";
+import type { DemoPodSession, ExtensionPodSession, SessionResult } from "./types";
 
-interface SessionAccount {
-  readonly webId: string;
-  readonly displayName: string;
-  readonly storageUrl: string;
-  readonly fetch: typeof globalThis.fetch;
-  /** Change events or focus-driven revalidation for resources in the storage. */
-  subscribe(listener: (url: string) => void): () => void;
-}
-
-export interface DemoPodSession extends SessionAccount {
-  readonly mode: "demo";
-  reset(): Promise<void>;
-}
-
-export interface ExtensionPodSession extends SessionAccount {
-  readonly mode: "extension";
-  /** Native page reads of public profiles/indexes, always without credentials. */
-  readonly publicFetch: typeof globalThis.fetch;
-  disconnect(): Promise<void>;
-}
-
-export type PodSession = DemoPodSession | ExtensionPodSession;
-
-type SessionResult =
-  | { status: "loading" }
-  | { status: "ready"; session: PodSession }
-  | { status: "error"; mode: PodSession["mode"]; error: unknown };
-
-type SessionState = SessionResult & {
-  extension: SolidExtensionState;
-  connectExtension(): Promise<void>;
-  extensionError?: unknown;
-};
-
-const SessionContext = createContext<SessionState>({
-  status: "loading",
-  extension: ABSENT,
-  connectExtension: async () => {},
-});
+export { usePodSessionState } from "./shell-pod-session";
+export type { DemoPodSession, ExtensionPodSession, PodSession } from "./types";
 
 async function openDemoSession(): Promise<DemoPodSession> {
   const pod = await getDemoPod();
@@ -93,6 +51,15 @@ async function openDemoSession(): Promise<DemoPodSession> {
 }
 
 export function PodSessionProvider({ children }: { children: ReactNode }) {
+  const accounts = useOptionalAccounts();
+  return accounts ? (
+    <ShellPodSessionProvider accounts={accounts}>{children}</ShellPodSessionProvider>
+  ) : (
+    <InterimPodSessionProvider>{children}</InterimPodSessionProvider>
+  );
+}
+
+function InterimPodSessionProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<SessionResult>({ status: "loading" });
   const [extension, setExtension] = useState<SolidExtensionState>(ABSENT);
   const [extensionError, setExtensionError] = useState<unknown>();
@@ -400,8 +367,4 @@ export function PodSessionProvider({ children }: { children: ReactNode }) {
       {children}
     </SessionContext>
   );
-}
-
-export function usePodSessionState(): SessionState {
-  return useContext(SessionContext);
 }

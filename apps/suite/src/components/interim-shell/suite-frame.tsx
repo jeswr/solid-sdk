@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex
@@ -12,6 +13,7 @@
 
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@jeswr/suite-ui";
 import {
+  Bot,
   CalendarDays,
   FileText,
   HardDrive,
@@ -32,6 +34,7 @@ import {
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { type ReactNode, type RefObject, useEffect, useRef, useState } from "react";
+import { WalkthroughDock } from "@/welcome/walkthrough";
 
 export type SuiteAppId =
   | "home"
@@ -47,7 +50,8 @@ export type SuiteAppId =
   | "tasks"
   | "music"
   | "notes"
-  | "sheets";
+  | "sheets"
+  | "agent";
 
 const APPS: { id: SuiteAppId; label: string; href: string; icon: typeof HardDrive }[] = [
   { id: "home", label: "Home", href: "/home", icon: House },
@@ -64,6 +68,7 @@ const APPS: { id: SuiteAppId; label: string; href: string; icon: typeof HardDriv
   { id: "health", label: "Health", href: "/health", icon: HeartPulse },
   { id: "tasks", label: "Tasks", href: "/tasks", icon: SquareCheckBig },
   { id: "music", label: "Music", href: "/music", icon: Music },
+  { id: "agent", label: "Agent", href: "/agent", icon: Bot },
 ];
 
 export interface SuiteFrameProps {
@@ -110,7 +115,7 @@ function Rail({ app }: { app: SuiteAppId }) {
   );
 }
 
-function SearchBox({ search }: { search: NonNullable<SuiteFrameProps["search"]> }) {
+export function SearchBox({ search }: { search: NonNullable<SuiteFrameProps["search"]> }) {
   const router = useRouter();
   const [value, setValue] = useState(search.query ?? "");
   useEffect(() => setValue(search.query ?? ""), [search.query]);
@@ -220,7 +225,12 @@ export function SuiteFrame({
         </button>
         <div className="ish-context">{context}</div>
         {search ? <SearchBox search={search} /> : <div className="ish-spacer" />}
-        <div className="ish-actions">{actions}</div>
+        <div className="ish-actions">
+          {actions}
+          <Link className="suite-feedback-link" href="/feedback">
+            Give feedback
+          </Link>
+        </div>
       </header>
       <main id="main-content" className="ish-main" tabIndex={-1}>
         {children}
@@ -260,6 +270,7 @@ export function SuiteFrame({
           </Link>
         ))}
       </nav>
+      <WalkthroughDock />
     </div>
   );
 }

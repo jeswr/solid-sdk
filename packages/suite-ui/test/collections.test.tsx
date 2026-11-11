@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 // @vitest-environment jsdom
 import { readFileSync } from "node:fs";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
@@ -236,7 +237,8 @@ for (const kind of ["table", "grid"] as const) {
         ).toEqual([]);
         unmount();
       }
-    });
+      // Fifteen axe runs: allow for slow shared CI runners (the default 5 s timed out there).
+    }, 30_000);
     it.each<CollectionErrorKind>([
       "forbidden",
       "not-found",

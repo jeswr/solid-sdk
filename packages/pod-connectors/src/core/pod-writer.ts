@@ -5,6 +5,7 @@ import { assertWithinPodScope, createPodScopedFetch } from "@jeswr/guarded-fetch
 import { freshRdf } from "../pod/rdf-read.js";
 import { ResourceWriteError, writeResource } from "../pod/resource.js";
 import { ensureTypeRegistrations } from "../pod/type-index-write.js";
+import { abortableFetch } from "./abort.js";
 import { IntegrationSyncError } from "./errors.js";
 import type { BinaryDoc, PodWriter, WrittenBinary } from "./types.js";
 import { VOCAB_PREFIXES } from "./vocab.js";
@@ -18,15 +19,26 @@ export interface FetchPodWriterOptions {
   readonly podRoot: string;
   /** Host's authenticated Pod transport; resolved at call time by the host. */
   readonly fetch: typeof fetch;
+  /**
+   * The run's cancellation signal. Every Pod request this writer sends (reads, PUT/DELETE,
+   * the binary HEAD and Type Index/profile updates) checks it immediately before sending and
+   * carries it, composed with the request's own signal.
+   */
+  readonly signal?: AbortSignal;
 }
 
-/** Create a fetch-backed storage port. Source API credentials never enter this transport. */
+/**
+ * Create a fetch-backed storage port. Source API credentials never enter this transport.
+ * Pass the same `signal` as the run whenever the run is cancellable, or the requests inside a
+ * port (Type Index and profile updates, the binary HEAD) are not guarded.
+ */
 export function createFetchPodWriter(options: FetchPodWriterOptions): PodWriter {
   const { adapterId, webId, podRoot } = options;
   if (!/^[a-z0-9-]+$/.test(adapterId))
     throw new IntegrationSyncError(adapterId, "Invalid adapter id.");
   const root = assertWithinPodScope(podRoot, new URL(`integrations/${adapterId}/`, podRoot).href);
-  const podFetch = createPodScopedFetch(root, { fetch: options.fetch, allowRoot: false });
+  const transport = options.signal ? abortableFetch(options.fetch, options.signal) : options.fetch;
+  const podFetch = createPodScopedFetch(root, { fetch: transport, allowRoot: false });
   const resolve = (slug: string): string => {
     try {
       return assertWithinPodScope(root, new URL(slug, root).href, { allowRoot: false });
@@ -79,7 +91,7 @@ export function createFetchPodWriter(options: FetchPodWriterOptions): PodWriter 
         profileDocumentUrl: options.profileDocumentUrl,
         podRoot,
         registrations: [...registrations],
-        fetchImpl: options.fetch,
+        fetchImpl: transport,
       }),
   };
 }

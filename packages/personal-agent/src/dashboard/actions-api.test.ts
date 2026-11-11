@@ -1,11 +1,11 @@
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { request, type Server } from "node:http";
-import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { addFixtureProviderCalendars } from "../actions/cli.js";
 import { fixtureProviders } from "../actions/providers/fixtures.js";
+import { freePort } from "../test-support/free-port.js";
 import { createDashboardApp, type DashboardApp, listenDashboard } from "./server.js";
 
 // Synthetic only: fixture providers, temporary state, loopback.
@@ -15,15 +15,6 @@ let dir: string;
 let port = 0;
 let server: Server;
 let dash: DashboardApp;
-
-const freePort = () =>
-  new Promise<number>((done) => {
-    const s = createServer();
-    s.listen(0, "127.0.0.1", () => {
-      const a = s.address();
-      s.close(() => done(typeof a === "object" && a ? a.port : 0));
-    });
-  });
 
 // biome-ignore lint/suspicious/noExplicitAny: responses are inspected structurally
 type Loose = any;

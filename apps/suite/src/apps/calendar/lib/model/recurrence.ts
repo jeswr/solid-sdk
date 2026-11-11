@@ -92,7 +92,7 @@ export function expandEvent(
   const overlaps = (date: Date) =>
     +date < +to && (duration ? +date + duration > +from : +date >= +from);
   if (!event.recurrence) return overlaps(start) ? [event] : [];
-  const zone = typeof event.start === "string" ? "UTC" : timeZone;
+  const zone = typeof event.start === "string" ? "UTC" : (event.timeZone ?? timeZone);
   const rule = event.recurrence;
   const floatingStart = wallClock(start, zone);
   const floatingFrom = wallClock(new Date(+from - duration), zone);

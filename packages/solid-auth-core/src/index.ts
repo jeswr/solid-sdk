@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Fable 5
+// AUTHORED-BY Codex GPT-6.1-Sol
 //
 // @jeswr/solid-auth-core — public surface.
 //
@@ -21,6 +22,7 @@ export {
   isOriginAllowed,
   isUseDpopNonceChallenge,
   type LiveSession,
+  MAX_DISPLAY_NAME_LENGTH,
   MissingAuthFlowError,
   NoSolidIssuerError,
   parseWwwAuthenticate,

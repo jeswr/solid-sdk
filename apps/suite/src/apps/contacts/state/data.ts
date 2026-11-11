@@ -2,12 +2,15 @@
 
 import { normaliseEmail, normalisePhone } from "../lib/dedupe/normalise";
 import type { ListContact } from "../lib/list";
-import type { ContactData, ContactGroupData, Snapshot } from "../lib/model";
+import type { ContactAddress, ContactData, ContactGroupData, Snapshot } from "../lib/model";
 import { formatPhoneNumber, parsePhoneNumber } from "../lib/phone";
+import { formatAddressMultiline, ISO_COUNTRY_CODES, type PostalAddress } from "../lib/postal";
 
 /** Explicit undefined clears an optional field; omission preserves it. */
 export type ContactPatch = { name?: string } & {
-  [K in "emails" | "phones" | "note" | "organization" | "webId"]?: ContactData[K] | undefined;
+  [K in "emails" | "phones" | "addresses" | "note" | "organization" | "webId"]?:
+    | ContactData[K]
+    | undefined;
 };
 export function applyContactPatch(data: ContactData, patch: ContactPatch): ContactData {
   const next = { ...data, ...patch };
@@ -58,6 +61,53 @@ export function displayPhone(phone: string): string {
     return formatPhoneNumber(bare, "international");
   } catch {
     return bare;
+  }
+}
+
+// AUTHORED-BY Claude Opus 5.5
+/** A stored country of two letters is a code when it is an assigned ISO code; otherwise a name. */
+export function postalAddress(address: ContactAddress): PostalAddress {
+  const country = address.country?.trim() ?? "";
+  const code = country.toUpperCase();
+  return {
+    street: (address.street ?? "")
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean),
+    locality: address.locality ?? "",
+    region: address.region ?? "",
+    postalCode: address.postalCode ?? "",
+    ...(ISO_COUNTRY_CODES.includes(code)
+      ? { countryCode: code }
+      : country && !/^[A-Za-z]{2}$/.test(country)
+        ? { countryName: country }
+        : {}),
+  };
+}
+
+/** The user's region from the browser locale, so a domestic address omits its country. */
+export function homeCountry(locale: string): string {
+  try {
+    const region = new Intl.Locale(locale).maximize().region as string;
+    // Numeric UN M.49 regions such as 419 (Latin America) have no national template.
+    return ISO_COUNTRY_CODES.includes(region) ? region : "US";
+  } catch {
+    return "US";
+  }
+}
+
+/** Display lines per the national template; pod data the formatter rejects falls back to its parts. */
+export function displayAddress(address: ContactAddress, home: string): string {
+  try {
+    return formatAddressMultiline(postalAddress(address), home);
+  } catch {
+    return [
+      address.street,
+      [address.locality, address.region, address.postalCode].filter(Boolean).join(" "),
+      address.country,
+    ]
+      .filter(Boolean)
+      .join("\n");
   }
 }
 

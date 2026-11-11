@@ -185,6 +185,30 @@ Building a list/browser view over a pod container surfaced three patterns worth 
 
 
 
+<!-- AUTHORED-BY Claude Opus 5.5 -->
+
+## Offline conventions in the Solid Suite shell (`apps/suite`)
+
+- **`requiresOnline`.** Writes work offline everywhere (they queue in the outbox) except controls
+  that need a connection: share changes, registration, connector sign-in, purging the trash.
+  Wrap each in `<RequiresOnline>` (`src/shell/sync/requires-online.tsx`); it renders suite-ui's
+  `OnlineGate`, which disables the control while the shell is offline or reconnecting and
+  explains "You're offline. This needs a connection." in a keyboard- and pointer-reachable
+  tooltip. Use `useNeedsConnection()` when only the flag is needed (a whole fieldset). The
+  control must forward `disabled`/`aria-disabled`. First use: the share dialog's Add button.
+- **Connection state** comes from `useConnectionState()` ("online" | "offline" |
+  "reconnecting"): `navigator.onLine` plus, while offline, an unauthenticated opaque HEAD to the
+  active storage root every 30 s; "Reconnecting…" shows for at least 1.5 s. Outside the shell it
+  falls back to `navigator.onLine`. Never switch on `navigator.onLine` directly in a shell control.
+- **Outbox.** `useOutbox()` (`src/shell/sync/offline-provider.tsx`) is the seam the SyncSheet
+  reads until the SDK outbox lands: `enqueue({ label, where })` records a change *description*
+  (never contents); a reconnect sends pending items; failed items wait for Retry.
+- **Recent items** (behind `/offline`) record the shell's `pageTitle` and pathname only, per
+  account; no queries, fragments or document contents.
+- **Service worker** (`/service-worker`, production only): precaches shell routes and `/_next/static`
+  assets and answers offline navigations, falling back to `/offline`. It never caches storage
+  responses, requests with `Authorization`/`DPoP`, or cross-origin responses.
+
 ## Detailed integration patterns
 
 - Read for cross-app class mapping, prebuild environment precedence, and controlled forms. [references/interop-and-forms.md](references/interop-and-forms.md).

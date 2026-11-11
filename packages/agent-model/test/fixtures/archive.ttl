@@ -1,0 +1,13 @@
+# AUTHORED-BY Claude Opus 5.5
+@prefix agent: <https://jeswr.org/ns/agent#>.
+@prefix as: <https://www.w3.org/ns/activitystreams#>.
+@prefix prov: <http://www.w3.org/ns/prov#>.
+@prefix schema: <https://schema.org/>.
+
+<https://pod.example/agent/control.ttl> a agent:ControlStatement;
+    agent:controlKind agent:Archive;
+    prov:wasAttributedTo <https://owner.example/#me>;
+    <http://purl.org/dc/terms/created> "2026-10-26T00:00:00Z"^^<http://www.w3.org/2001/XMLSchema#dateTime>;
+    agent:expires "2026-10-27T00:00:00+00:00"^^<http://www.w3.org/2001/XMLSchema#dateTime>;
+    agent:target <https://pod.example/agent/inbound.ttl>;
+    <https://w3id.org/security#proof> "{\"proofValue\":\"test-proof-unverified\",\"type\":\"OpaqueTestProof\"}"^^<http://www.w3.org/1999/02/22-rdf-syntax-ns#JSON>.

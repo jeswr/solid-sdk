@@ -230,7 +230,8 @@ describe("Tasks cache and pure optimistic helpers", () => {
         task.title = "Stale";
       }),
     ).toBeUndefined();
-    expect(await cache.deleteTask(task)).toBeUndefined();
+    // Repeating a confirmed delete succeeds, including tasks without a tracker predicate.
+    expect(await cache.deleteTask(task)).toBe(true);
   });
 
   it("ensures labels before task creation and persists every composer property", async () => {

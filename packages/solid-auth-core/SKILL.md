@@ -1,12 +1,18 @@
 ---
 name: solid-auth-core
-description: Use when implementing browser Solid login with @jeswr/solid-auth-core, including WebID-first issuer discovery, DPoP login, pristine/public fetch separation, proactive authenticated fetch, silent restore, recent accounts, logout, or the React SessionProvider.
+description: Use when maintaining legacy @jeswr/solid-auth-core integrations. Deprecated; use @jeswr/pod-auth and its package skill for new suite authentication.
 ---
 <!-- AUTHORED-BY Codex GPT-5 -->
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 <!-- AUTHORED-BY Codex GPT-6 -->
 
 # Work with `@jeswr/solid-auth-core`
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+
+> **Deprecated — use `@jeswr/pod-auth`.** Read [the pod-auth skill](../pod-auth/SKILL.md) for
+> migration, the current API and security policy. The guidance below maintains existing consumers;
+> it does not describe pod-auth or authorize deleting legacy exports.
 
 Use `createSolidAuth()` instead of copying token-provider, login UX, restore, or React session code into an app.
 
@@ -42,7 +48,7 @@ React consumers use `SessionProvider` and `useSolidSession()` from `@jeswr/solid
 - Follow at most 20 hops. Apply Fetch's POST-to-GET 301/302 and non-GET/HEAD-to-GET 303 rewrites, dropping body/content headers including Content-Length. Buffer only non-stream `init.body` values before sending; check the abort signal before buffering, race reads against abort, cancel the reader on abort, and reject with the signal's reason (AbortError by default) without waiting for source cancellation. Treat Request bodies as streams and return redirects that require replaying a stream unfollowed.
 - Cache resource-server nonces only under the checked hop's origin; a nonce retry must sign that hop's URL. Refuse a response nonce when its reported URL belongs to a different origin.
 - `deriveProactiveAllowedOrigins` excludes the issuer origin by default; only `includeIssuerOrigin: true` opts in. A pod hosted on the issuer origin remains allowed through `podRoot`. Use `includeWebIdOrigin: false` if the WebID document is not served by the pod. The separate `computeAllowedOrigins` default still includes the issuer.
-- When storage origins become known after restore, call `reArmAllowedOrigins()` rather than re-running the grant.
+- When storage origins become known after restore, call `reArmAllowedOrigins(origins, { expectedWebId })` with the identity captured before the asynchronous profile read. A missing session, WebID mismatch, or any inadmissible origin returns `false` without changing the boundary; success admits the entire list. Omitting `expectedWebId` targets the session live at call time. HTTPS is required, except HTTP loopback under the explicit development opt-in.
 - Keep generation fences and per-session ownership checks around login, restore, refresh, logout, and persistence. Re-check after every awaited boundary before mutating live state.
 - On any failure after arming a session, clear both the provider session and the authenticated-fetch boundary.
 - Keep same-WebID login single-flight; reject concurrent login for a different WebID.
@@ -54,6 +60,7 @@ React consumers use `SessionProvider` and `useSolidSession()` from `@jeswr/solid
 - Use `logout()` for intentional sign-out or a definitive invalid grant; await durable cleanup before publishing logged-out state.
 - Persist/rotate credentials before publishing authenticated state.
 - Use `rememberAccount()` for display metadata instead of an app-local overlay.
+- `rememberAccount()` is a no-op for WebIDs outside HTTPS (HTTP loopback requires `allowInsecureLoopback`). Newly stored labels, including WebID fallbacks, are truncated to the exported `MAX_DISPLAY_NAME_LENGTH` (256 Unicode code points); the full account WebID is preserved. Admit only absolute HTTP(S) avatars. Omitted metadata and rejected avatars preserve existing safe values.
 - Prefer a stable Client Identifier Document and WebID-first login. If a profile advertises multiple issuers or storage roots, require an explicit choice.
 
 This package is security-critical. Keep tests adversarial and non-vacuous, including cross-account switching, delayed stale operations, login-stall regression, pristine-fetch routing, foreign-origin refusal, DPoP nonce handling, and restore/logout races. Run the full gate.

@@ -32,7 +32,8 @@ vi.mock("./auth/SessionProvider", () => ({
       avatarUrl: undefined,
     },
     logout,
-    autologinPending: false,
+    ready: true,
+    fetch: globalThis.fetch,
     restoringSession: false,
   }),
 }));

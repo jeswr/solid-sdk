@@ -37,6 +37,7 @@ names, numeric spellings, defaults, property order, and redundant VALUE paramete
 | PERCENT-COMPLETE | Optional integer `percentComplete` in 0–100; no inferred lifecycle changes |
 | RRULE | Opaque `rrule`, with lexical framing checked and DTSTART required; no recurrence evaluation |
 | RELATED-TO | One `parentUid`; absent RELTYPE defaults to PARENT; explicit PARENT is supported |
+| CATEGORIES | Optional `categories` label names; an escaped TEXT list, preserving commas and backslashes within names |
 
 `toTaskData` returns `{task, dueDay?}`. `task` structurally matches the relevant shared
 `TaskData` fields (including `Date` values); `dueDay` is the `sched:dueTime` xsd:date marker

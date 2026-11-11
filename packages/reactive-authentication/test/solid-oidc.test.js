@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { createMemoryStore } from "@key-value-kit/storage/memory";
 import { afterAll as after, beforeAll as before, test } from "vitest";
-import { SessionSupersededError } from "../src/mod.js";
+import {
+  IssuerNotAuthorizedError,
+  ReactiveAuthenticationError,
+  SessionSupersededError,
+} from "../src/mod.js";
 import { withMockedDate } from "./helpers/clock.js";
 import { automaticCodeProvider, startOpenIdProvider, startSolidStorage } from "./helpers/openid.js";
 import { callback, deferred, sharedFences, solidClient } from "./helpers/solid.js";
@@ -337,7 +341,21 @@ test("identity: WebID verification against the profile (exact issuer match)", as
 
     listed = `${op.issuer}tenant`; // a different issuer identifier on the same origin
     const bad = solidClient(op, rs, { provider: { verifyWebId: true } });
-    await assert.rejects(bad.manager.fetch(`${rs.url}/alice/v`), /does not list issuer/);
+    const accepted = rs.accepted.length;
+    await assert.rejects(bad.manager.fetch(`${rs.url}/alice/v`), (error) => {
+      assert.ok(error instanceof IssuerNotAuthorizedError);
+      assert.ok(error instanceof ReactiveAuthenticationError);
+      assert.equal(error.name, "IssuerNotAuthorizedError");
+      assert.equal(error.webId, `${profile.url}/card#me`);
+      assert.equal(error.issuer, op.issuer);
+      assert.equal(
+        error.message,
+        `${op.issuer} is not listed as a sign-in provider for ${profile.url}/card#me`,
+      );
+      return true;
+    });
+    assert.equal(await bad.provider.identity(new Request(`${rs.url}/alice/v`)), undefined);
+    assert.equal(rs.accepted.length, accepted, "untrusted identity sent no credentials");
   } finally {
     op.setWebId(undefined);
     await profile.close();

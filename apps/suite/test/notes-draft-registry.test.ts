@@ -1,6 +1,11 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { StoredNote } from "../src/apps/notes/lib/model/store";
+import { createNotesStore } from "../src/apps/notes/lib/model/store";
+import { createMemoryFiredStore } from "../src/apps/notes/lib/reminders/fired-store";
+import { createReminderScheduler } from "../src/apps/notes/lib/reminders/scheduler";
+import { createDemoPod } from "../src/lib/demo-pod/pod";
 import { deferred } from "./drive-ui-dom";
 
 const webId = "https://pod.example/profile/card#me";
@@ -482,4 +487,33 @@ it("recovers valid round-2 storage even if the aggregate envelope is damaged", a
     }),
   );
   expect((await registry()).get(note.url)?.draft).toEqual(draft);
+});
+
+it("preserves reminder identity and delivery count through a persisted text draft and reload", async () => {
+  vi.mocked(crypto.randomUUID).mockRestore();
+  const { createDraftRegistry } = await import("../src/apps/notes/state/draft-registry");
+  const store = createNotesStore({
+    fetch: createDemoPod({ root: "https://pod.example/" }).fetch,
+    podRoot: "https://pod.example/",
+    webId,
+  });
+  const saved = await store.create({ title: "Identified", reminder: new Date().toISOString() });
+  const fired = createMemoryFiredStore();
+  const notify = vi.fn();
+  const scheduler = createReminderScheduler({ fired, notify });
+  await scheduler.tick([saved], Date.now());
+  const seams = { storage: localStorage, tabId: "draft-reload", now: Date.now };
+  const first = createDraftRegistry(webId, seams);
+  first.change(saved, draft, (...args) => store.save(...args));
+  first.release();
+  const reloaded = createDraftRegistry(webId, seams);
+  const recovered = reloaded.get(saved.url);
+  expect(recovered?.note.reminderId).toBe(saved.reminderId);
+  expect(recovered?.draft).toEqual(draft);
+  reloaded.bind(saved, (...args) => store.save(...args));
+  await reloaded.retry();
+  const persisted = await store.read(saved.url);
+  expect(persisted).toMatchObject({ ...draft, reminderId: saved.reminderId });
+  await createReminderScheduler({ fired, notify }).tick([persisted as StoredNote], Date.now());
+  expect(notify).toHaveBeenCalledTimes(1);
 });

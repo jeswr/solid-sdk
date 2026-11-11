@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex
 // AUTHORED-BY Codex GPT-6
 import type { Mode, PodImplementation } from "../types.js";
@@ -37,6 +38,12 @@ export interface RoleModes {
 }
 /** Mapping context; WAC is the default. */
 export interface RoleContext {
+  /**
+   * The access model. For role mapping it selects the dialect (WAC by default). Given to a
+   * function that reads or writes access documents, it pins the model: a resource whose detected
+   * model differs is refused with an `unsupported` RoleError before anything is written.
+   * Leave it unset to work with whichever model the resource uses.
+   */
   model?: "wac" | "acp";
   commentsContainer?: string;
   /** Trusted dialect, default CSS: resource Control; ESS: own-ACR Read+Write; NSS: WAC defaultForNew. */
@@ -58,6 +65,8 @@ export interface GrantMutationOptions extends RolesOptions {
 /** Optional read-modify-write baseline; a version map must cover every selected URL. */
 export interface SetGrantsOptions extends GrantMutationOptions {
   expected?: GrantSnapshot | Readonly<Record<string, GrantSnapshot["version"]>>;
+  /** Replace/create own access, including empty ACP selections, without copying WAC defaults. */
+  ownOnly?: boolean;
 }
 /** A batch is not atomic. A failed URL may have earlier successful auxiliary writes. */
 export interface SetGrantsResult {
@@ -75,6 +84,7 @@ export interface RoleError extends Error {
     | "conflict"
     | "precondition-required"
     | "owner-lockout"
+    | "partial-scope"
     | "inherited-grant";
   url: string;
   feature: "accessControl";
