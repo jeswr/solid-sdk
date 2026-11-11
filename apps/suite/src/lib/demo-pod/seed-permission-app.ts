@@ -30,7 +30,7 @@ export function seedPermissionApp(now: number): DemoSeedFile[] {
       path: "apps/notenest/logo.svg",
       contentType: "image/svg+xml",
       modified: now,
-      body: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 56 56"><rect width="56" height="56" rx="12" fill="#176b59"/><path d="M16 39V17h6l12 15V17h6v22h-6L22 24v15z" fill="white"/></svg>',
+      body: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 56 56"><rect width="56" height="56" rx="12" fill="teal"/><path d="M16 39V17h6l12 15V17h6v22h-6L22 24v15z" fill="white"/></svg>',
     },
   ];
 }

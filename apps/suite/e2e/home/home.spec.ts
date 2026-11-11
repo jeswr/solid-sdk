@@ -27,12 +27,13 @@ test("Home greets Alice, shows identity, music provenance and app sections", asy
   await expect(page.getByRole("region", { name: "Your pod", exact: true })).toBeVisible();
   await expect(page.getByRole("link", { name: "Alice Wilder", exact: true })).toBeVisible();
   await expect(page.getByText("Your storage doesn't report a limit")).toBeVisible();
-  // The demo pod shares Work with Bob, health data with MaraCoach and one photo publicly.
+  // The demo pod shares Work with Bob, health data with MaraCoach, one photo publicly,
+  // and hosts the NoteNest app's public Client ID document and logo.
   await expect(
-    page.getByRole("link", { name: "1 app and 1 person have access", exact: true }),
+    page.getByRole("link", { name: "2 apps and 1 person have access", exact: true }),
   ).toHaveAttribute("href", "/permissions");
   await expect(
-    page.getByText("Anyone with the link can see 1 item", { exact: true }),
+    page.getByText("Anyone with the link can see 3 items", { exact: true }),
   ).toBeVisible();
   await accessible(page);
   await page.keyboard.press("6");

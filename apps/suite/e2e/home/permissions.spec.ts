@@ -103,8 +103,14 @@ test("People: keyboard toggle, inherited confirmation, saved policy and Undo; Ma
   await expect(
     bob.locator(".hm-permission-lines").getByText("Can see", { exact: true }),
   ).toBeVisible();
-  await expect(bob.getByText("Inherited from Work", { exact: true })).toBeVisible();
-  const toggle = bob.getByRole("switch", { name: "Files for bob.demo.pod", exact: true });
+  // Bob's grant is a default on Work only, so its line is scoped to the folder's contents.
+  await expect(
+    bob.locator(".hm-permission-lines").getByText("Everything in it", { exact: true }),
+  ).toBeVisible();
+  const toggle = bob.getByRole("switch", {
+    name: "Files · Everything in it for bob.demo.pod",
+    exact: true,
+  });
   await toggle.focus();
   await page.keyboard.press("Space");
   const confirm = page.getByRole("alertdialog", {
