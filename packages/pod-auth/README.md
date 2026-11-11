@@ -1,5 +1,6 @@
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 <!-- AUTHORED-BY Codex GPT-6 -->
+<!-- // AUTHORED-BY Codex GPT-6 -->
 
 # @jeswr/pod-auth
 
@@ -57,6 +58,20 @@ extends each verified profile storage to those server APIs on the same origin; t
 storage's grant and are not reported in `Identity.storages`. A path ending in `/` covers its
 descendants; any other path matches exactly. A path that is itself a verified storage or a static
 root stays a storage with its own grant.
+
+`auth.fetchFor({ webId, issuer }, { extraResourceOrigins: ['https://relay.example'] })`
+returns an account-bound fetch for explicitly trusted resource servers such as the mobile push
+relay. Configure these origins in the application build; never take them from a pod document or
+challenge. Each must be a canonical HTTPS origin, without a trailing slash, credentials, path,
+query or fragment. The account must already be signed in. Extra resources reuse its existing
+Solid-OIDC access token, DPoP key and refresh rotation, refuse redirects and omit cookies; they
+never start sign-in or perform LWS/UMA exchange. No tokens are returned to the application.
+Ordinary pod URLs retain their usual provider routing. The extra origins do not change
+`auth.fetch`, storage discovery or `Identity.storages`. A scoped handle becomes unusable after
+logout, including another tab's logout, even if the same account signs in again. Obtain a new
+handle after restore/login. Omitting the options retains the normal boundary with the same
+account pinning. Human LWS sessions can use their matching underlying Solid-OIDC grant;
+LWS-only/CID and client-credentials agents cannot add extra resource origins.
 
 `auth.fetch` buffers request bodies so it can replay them after a 401. Bodies larger than
 `maxReplayBodyBytes` (default 16 MiB) reject; the size is checked after the body is read, so it

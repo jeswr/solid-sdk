@@ -88,9 +88,26 @@ export interface LoginOptions {
   signal?: AbortSignal;
 }
 
+/** Public identity selector; no credentials cross this surface. */
+export interface FetchAccount {
+  webId: string | null;
+  issuer: string;
+}
+
+export interface FetchForOptions {
+  /** Explicit canonical HTTPS origins trusted by the application, never discovered from pod data. */
+  extraResourceOrigins?: readonly string[];
+}
+
 /** Suite authentication and credential-free session lifecycle. */
 export interface PodAuth {
   fetch: typeof fetch;
+  /**
+   * Pin a fetch to the current account/session. Extra resource origins receive only this session's
+   * Solid-OIDC DPoP credentials; they never broaden `fetch`, grant storage access, run LWS/UMA
+   * exchange or start sign-in. Redirects from extra resources are refused. Handles expire on logout.
+   */
+  fetchFor(account: FetchAccount, options?: FetchForOptions): typeof fetch;
   /**
    * Interactive login. `options.signal` abandons this attempt: its requests and the authorization popup are
    * cancelled and the promise rejects with the abort reason once the attempt has wound down, leaving stored

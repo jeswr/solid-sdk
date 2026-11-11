@@ -9,9 +9,11 @@ import {
   ClientIdClientProvider,
   type CodeProvider,
   type ContextKey,
+  CredentialBoundary,
   type CredentialRequest,
   type CredentialSource,
   createBrowserCaches,
+  type DPoPTokenCacheEntry,
   DPoPTokenProvider,
   DynamicRegistrationClientProvider,
   type HttpOptions,
@@ -460,6 +462,8 @@ export function createProviders(
       };
     },
   };
+  // Auxiliary resource servers share this exact in-memory grant, never a new authorization.
+  const credentialCache = memoryStore<DPoPTokenCacheEntry>();
   const sessionOptions = {
     namespace,
     fence,
@@ -473,6 +477,7 @@ export function createProviders(
     silentAfterRefreshFailure: true,
     silentFirst: false,
     sessionLock: persistence.lock,
+    cache: credentialCache,
   };
   const solidProvider = new DPoPTokenProvider(
     redirectUri,
@@ -662,6 +667,78 @@ export function createProviders(
     persistence,
     contextFor,
     fence,
+    fetchFor: (origins: readonly string[], account: Identity, assertSession: () => void) => {
+      if (account.webId === null || sessionRequest === undefined)
+        throw new Error("Extra resource origins require a Solid-OIDC account");
+      const target = sessionRequest;
+      const selected = { ...hint };
+      const context = contextFor(target, selected);
+      const resources = new CredentialBoundary(origins.map((origin) => `${origin}/`));
+      const provider = new DPoPTokenProvider(
+        redirectUri,
+        {
+          getCode: async () => {
+            throw new Error("Account session is unavailable");
+          },
+        },
+        {
+          getAuthorizationServer: async (request) =>
+            es256(
+              await asFor(selected).getAuthorizationServer(
+                new Request(target.url, { signal: request.signal }),
+              ),
+            ),
+        },
+        clientProvider,
+        undefined,
+        { ...sessionOptions, context: async () => await context, silentAfterRefreshFailure: false },
+      );
+      const assertIdentity = async (request: Request) => {
+        const identity = await provider.identity(request);
+        assertSession();
+        if (
+          identity?.webId !== account.webId ||
+          identity.issuer !== account.issuer ||
+          identity.subject !== account.subject ||
+          (identity.clientId ?? null) !== account.clientId
+        )
+          throw new Error("Account session is unavailable");
+      };
+      const scoped = new ReactiveFetchManager({
+        ...(options.maxReplayBodyBytes === undefined
+          ? {}
+          : { maxReplayBodyBytes: options.maxReplayBodyBytes }),
+        boundary: resources,
+        fetch: transport,
+        fence,
+        providers: [
+          {
+            fence,
+            // Reuse the normal Solid-only matcher (including exchange rejection and observation).
+            matches: observe(provider, "solid-oidc", true).matches,
+            upgrade: async (request, challenge) => {
+              assertSession();
+              // A human LWS session is eligible only through its already established Solid grant.
+              // Inspect claims without starting a flow, then recheck the result after any refresh.
+              await assertIdentity(request);
+              const upgraded = await provider.upgrade(request, challenge);
+              await assertIdentity(request);
+              return upgraded;
+            },
+            invalidate: async (request) => await provider.invalidate(request),
+            assertAllowed: assertSession,
+          },
+        ],
+      });
+      return async (input: RequestInfo | URL, init?: RequestInit) => {
+        const request = new Request(input, init);
+        // Keep normal pod routing. Auxiliary servers refuse every redirect, including before a 401,
+        // so application-supplied headers such as Installation-Proof cannot cross origins either.
+        return resources.allows(request.url)
+          ? await scoped.fetch(new Request(request, { redirect: "error", credentials: "omit" }))
+          : await manager.fetch(request);
+      };
+    },
     restore: async (account: import("./sessions.js").ActiveAccount) => {
       const selected = { ...account.selected, issuer: account.issuer };
       // Pin discovery to the remembered issuer while retaining the original credential key.

@@ -1,6 +1,39 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
-import type { PodAuthOptions } from "./types.js";
+import type { FetchAccount, FetchForOptions, Identity, PodAuthOptions } from "./types.js";
+
+/** Snapshot caller-selected origins before any asynchronous work. Exact origins exclude URL tricks. */
+export function extraResourceOrigins(options?: FetchForOptions): readonly string[] {
+  if (options === undefined) return [];
+  if (
+    !options ||
+    typeof options !== "object" ||
+    Array.isArray(options) ||
+    Object.keys(options).some((key) => key !== "extraResourceOrigins")
+  )
+    throw new TypeError("Invalid account fetch options");
+  const origins = options.extraResourceOrigins;
+  if (origins === undefined) return [];
+  if (!Array.isArray(origins)) throw new TypeError("extraResourceOrigins must be an array");
+  return origins.map((value: unknown) => {
+    if (typeof value !== "string") throw new TypeError("Invalid resource origin");
+    const url = secureUrl(value, false, "resource origin");
+    if (value !== url.origin)
+      throw new TypeError("Resource origins must be canonical HTTPS origins");
+    return value;
+  });
+}
+
+/** Reject malformed selectors and stale handles without exposing either account. */
+export function accountMatches(account: FetchAccount, identity: Identity | null): boolean {
+  return (
+    identity !== null &&
+    account !== null &&
+    typeof account === "object" &&
+    account.webId === identity.webId &&
+    account.issuer === identity.issuer
+  );
+}
 
 export function isLoopback(url: URL): boolean {
   return (

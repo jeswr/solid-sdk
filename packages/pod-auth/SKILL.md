@@ -3,6 +3,7 @@ name: pod-auth
 description: Use when integrating @jeswr/pod-auth login, bounded auth.fetch, restore, React sessions, Node agents, CSS self-registration or Client Identifier Documents, or migrating deprecated suite client authentication.
 ---
 <!-- AUTHORED-BY Codex GPT-6 -->
+<!-- // AUTHORED-BY Codex GPT-6 -->
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 
 # Work with `@jeswr/pod-auth`
@@ -93,6 +94,16 @@ first; storage failures are harmless. Providers use monograms by default; host-s
 `iconUrl` are opt-in. Re-verify default provider and sign-up addresses live before release.
 
 ## Preserve the credential boundary
+
+- `auth.fetchFor({ webId, issuer }, { extraResourceOrigins: [BUILD_TIME_ORIGIN] })` pins a fetch
+  to the current session for explicit non-pod resource servers. Require canonical HTTPS origins
+  (no trailing slash, userinfo, path, query, fragment or URL normalization). Never derive them
+  from pod data or a challenge. Extra resources reuse the same in-memory Solid grant, context,
+  DPoP key, generation fence and refresh lock; they refuse redirects, omit cookies, and cannot
+  start UI or exchange LWS/UMA credentials. Their origin boundary is separate from `auth.fetch`
+  and `Identity.storages`. Normal pod requests keep normal provider routing. Handles fail after
+  logout/relogin or cross-realm supersession; recreate after restore. A human LWS session must prove
+  ownership of its existing Solid grant before upgrade and after refresh. Agents reject extra origins.
 
 - Use the unbound `auth.fetch` throughout the SDK. Preserve global fetch; never call `registerGlobally`.
   Construct auth after installing the intended pristine transport in tests. Protocol discovery,
