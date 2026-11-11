@@ -51,6 +51,15 @@ function suiteNotification(notification: InboxNotification): SuiteNotification {
     id: notification.url,
     kind,
     title: notification.summary?.trim() || title,
+    ...(notificationKind(notification) === "mention" ? { category: "direct-mention" } : {}),
+    ...((notification.target ?? notification.object)
+      ? {
+          target: {
+            id: (notification.target ?? notification.object) as string,
+            title: notification.summary?.trim() || title,
+          },
+        }
+      : {}),
     ...(body ? { body } : {}),
     ...(href ? { href } : {}),
     // Undated items are stable across refreshes, sort last, and show no time in the tray.

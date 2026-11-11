@@ -98,6 +98,7 @@ export function createNotificationsController(
       if (overlay.read.size) await markRead([...overlay.read]);
     },
     markRead: (id: string) => markRead([id]),
+    markManyRead: (ids: readonly string[]) => markRead([...ids]),
     markAllRead: () => markRead(snapshot.items.map((item) => item.id)),
     dismiss(id: string) {
       overlay = dismissNotification(overlay, id);

@@ -12,6 +12,12 @@ export const UNDATED = -8640000000000000;
 export interface SuiteNotification {
   id: string;
   kind: NotificationKind;
+  /** Semantic source metadata used by the shared digest engine. */
+  app?: string;
+  category?: string;
+  target?: { id: string; title: string };
+  urgent?: boolean;
+  blocking?: boolean;
   title: string;
   body?: string;
   href?: string;

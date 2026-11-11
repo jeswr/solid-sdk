@@ -28,6 +28,11 @@ vi.mock("../src/shell/notifications/pod-source", async (original) => {
   return { ...actual, createPodNotificationSource: vi.fn(actual.createPodNotificationSource) };
 });
 
+// Agent reader behavior is covered independently; these tests isolate the inbox/session seam.
+vi.mock("../src/shell/notifications/agent-source", () => ({
+  createAgentNotificationSource: () => ({ id: "agent-fixture", list: async () => [] }),
+}));
+
 const alice: SuiteAccount = {
   id: "pod-notifications-alice",
   webId: "https://alice.example/profile#me",
@@ -256,14 +261,14 @@ it("doesn't create a pod source without a WebID", async () => {
   expect(createPodNotificationSource).not.toHaveBeenCalled();
 });
 
-it("keeps demo's six synthetic items and four unread without reading a pod", async () => {
+it("keeps demo notifications and agent digest examples without reading a pod", async () => {
   accounts.current = {
     ...accounts.current,
     active: { ...alice, id: "pod-notifications-demo", kind: "demo" },
   };
   render(tree());
-  await waitFor(() => expect(actions.items).toHaveLength(6));
-  expect(actions.unread).toBe(4);
+  await waitFor(() => expect(actions.items).toHaveLength(11));
+  expect(actions.unread).toBe(5);
   expect(actions.items.find((item) => item.id === "demo-request")?.request).toBeDefined();
   expect(createPodNotificationSource).not.toHaveBeenCalled();
   expect(accounts.current.fetch).not.toHaveBeenCalled();

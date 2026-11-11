@@ -231,3 +231,29 @@ WebID and storage root. Another account's values never hydrate or broadcast into
 store. Create a fresh factory per authenticated session and dispose the old one; this revokes
 retained setters and aborts/fences late operations. Pending durable values remain available only
 to that same WebID/storage session on restart. Construction and speculative renders do no I/O.
+
+## Notification summaries (`./digest`)
+
+`@jeswr/suite-sdk/digest` is pure TypeScript with no React or I/O. Adapt transport records to
+`DigestNotification` (stable id, kind/category, app, actor/target, title, epoch `time`, read,
+optional urgent/blocking). `classifyUrgency` identifies access requests, security/sign-in
+notices, direct mentions, blocking agent approvals and explicitly urgent sources.
+
+`buildDigest(records, { since, now })` includes `(since, now]`, deduplicates ids, groups by
+app + target/thread + category, orders urgent/unread/newest/id, and returns sections, agent
+counts and a deterministic headline. At most 50 groups and 100 ids per group are emitted;
+counts and `omitted` retain the full eligible population. An explicit async
+`summarise(digest): Promise<string>` option makes the call async and replaces only the headline.
+No model or remote service is called by default. Hook failures propagate.
+
+`nextDigestTime(schedule, now, tz?)` returns the next Date strictly after now, or null for off.
+Schedules use `mode: 'off' | 'hourly' | 'daily' | 'twice-daily'`; daily supplies `time: 'HH:MM'`,
+twice daily supplies `times: [first, second]`. Optional `quietHours: { enabled, start, end }`
+defers slots until quiet hours end; equal start/end disables quiet hours. `tz` is an IANA
+zone (default UTC). Daily folds use the first occurrence; spring gaps shift by the gap's
+duration. Hourly schedules include both occurrences of a repeated hour. `isDue(lastDelivered: Date | null, schedule, now, tz?)` catches up missed slots;
+a null watermark is due immediately outside quiet hours. Callers own clocks, persistence,
+account isolation, browser wake-up and desktop delivery.
+
+`inQuietHours(quiet, now, tz = "UTC")` exposes the same quiet-hours predicate for delivery
+adapters; reuse it rather than duplicating midnight-wrap rules in applications.

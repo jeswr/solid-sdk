@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+import { seedDigestNotifications } from "../../lib/demo-pod/seed-notifications";
 import type {
   AccessDecider,
   NotificationSource,
@@ -10,6 +11,7 @@ export function demoNotifications(now = new Date()): SuiteNotification[] {
   return [
     {
       id: "demo-share",
+      target: { id: "project-plans", title: "Project plans" },
       kind: "shared",
       title: "Avery Moss shared a folder with you",
       body: "Project plans",
@@ -36,6 +38,8 @@ export function demoNotifications(now = new Date()): SuiteNotification[] {
     },
     {
       id: "demo-comment",
+      category: "direct-mention",
+      target: { id: "q4-plan", title: "Q4 plan" },
       kind: "comment",
       title: "Avery Moss mentioned you in a comment",
       body: "Could you check the latest draft?",
@@ -69,8 +73,11 @@ export function demoNotifications(now = new Date()): SuiteNotification[] {
     },
   ];
 }
-export function createDemoNotificationSource(now = new Date()): NotificationSource & AccessDecider {
-  let items = demoNotifications(now);
+export function createDemoNotificationSource(
+  now = new Date(),
+  includeDigest = false,
+): NotificationSource & AccessDecider {
+  let items = [...demoNotifications(now), ...(includeDigest ? seedDigestNotifications(now) : [])];
   const listeners = new Set<() => void>();
   const changed = () => {
     for (const listener of listeners) listener();

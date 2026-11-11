@@ -1,6 +1,6 @@
 ---
 name: suite-sdk
-description: Use when working on @jeswr/suite-sdk registration, notifications, server/local search, LocalIndex feeders, useSearch, useNotify, useInbox integration with PodAuthProvider, or pod-backed preferences and offline preference replay.
+description: Use when working on @jeswr/suite-sdk registration, notifications, server/local search, LocalIndex feeders, useSearch, useNotify, useInbox integration with PodAuthProvider, pod-backed preferences and offline preference replay, or pure notification digests and scheduling.
 ---
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 <!-- AUTHORED-BY Codex GPT-6 -->
@@ -160,3 +160,27 @@ tab updates. Test preferences source with real memory Solid/LWS operations and f
 keep the explicit `src/preferences/**` 100% statement/branch/function/line threshold.
 
 Public API changes must update this skill and README together.
+
+## Notification summaries (`./digest`)
+
+Pure, transport-independent and without React or I/O. Adapt source records to
+`DigestNotification`: epoch-millisecond `time`, stable id, kind/category, app, title, read,
+optional actor, target, urgent and blocking. `classifyUrgency` recognises access requests,
+security/sign-in, direct mentions, blocking agent approvals and explicit urgent flags.
+`buildDigest(records, { since, now })` includes `(since, now]`, deduplicates ids and emits
+app/thread/category groups ordered urgent, unread, newest, id, with agent activity/approval
+counts and an English headline. Output is capped at 50 groups / 100 ids per group; counts
+include all eligible records. `summarise(digest): Promise<string>` is explicit opt-in and
+makes the call async; failures propagate. Never invoke a remote summariser implicitly.
+
+`nextDigestTime(schedule, now, tz = 'UTC')` returns a Date strictly after now, null for off.
+Modes: off, hourly, daily (`time`), twice-daily (`times: [first, second]`). Times use HH:MM.
+Quiet-hour slots defer until the period ends, including midnight wrap; equal endpoints
+mean no quiet interval. IANA zones use Intl: daily folds choose the first occurrence and
+spring gaps shift forward by their duration. Hourly schedules include both occurrences of a repeated hour. `isDue(lastDelivered, schedule, now, tz?)`
+uses the same slots, catches up missed delivery and treats null as immediately due outside
+quiet hours. Applications own account lifecycle, durable watermarks, wake-up and delivery.
+Keep all branches covered at 100%; update this skill and README with public API changes.
+
+`inQuietHours(quiet, now, tz = "UTC")` exposes the same quiet-hours predicate for delivery
+adapters; reuse it rather than duplicating midnight-wrap rules in applications.
