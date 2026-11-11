@@ -26,6 +26,7 @@ import {
 } from "./messages";
 import { dayPage, dayUrl, joinedRoomsUrl, roomContainer, roomIndex } from "./paths";
 import { ChatNode, NS, serializeChat } from "./rdf";
+import { appendReaction, appendUndo, type ReactionInput, type UndoInput } from "./reactions";
 import {
   appendReaction,
   appendUndo,
@@ -437,6 +438,34 @@ export async function unreact(
     context?.document,
     state,
   );
+}
+async function appendEvent(
+  fetch: typeof globalThis.fetch,
+  room: string,
+  message: string,
+  change: (dataset: Store) => Store | null,
+): Promise<ChatDocument> {
+  const url = messageResource(room, message);
+  const base = roomContainer(room);
+  for (let attempt = 0; ; attempt++) {
+    try {
+      const document = await optionalChat(fetch, base, url);
+      const delta = change(document.dataset);
+      if (!delta) return document;
+      const etag = await insertData(fetch, base, url, delta, {
+        ifMatch: strongEtag(document.etag),
+      });
+      return { url, dataset: new Store([...document.dataset, ...delta]), etag };
+    } catch (error) {
+      if (!(error instanceof ChatIoError && error.status === 412) || attempt === 1) throw error;
+    }
+  }
+}
+export function react(fetch: typeof globalThis.fetch, room: string, input: ReactionInput) {
+  return appendEvent(fetch, room, input.message, (dataset) => appendReaction(dataset, room, input));
+}
+export function unreact(fetch: typeof globalThis.fetch, room: string, input: UndoInput) {
+  return appendEvent(fetch, room, input.message, (dataset) => appendUndo(dataset, room, input));
 }
 async function mutate(
   fetch: typeof globalThis.fetch,
