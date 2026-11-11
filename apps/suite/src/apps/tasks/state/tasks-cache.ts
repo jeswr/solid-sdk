@@ -8,7 +8,7 @@ import type { TaskMove } from "../lib/model/move";
 import { DataFactory, isSharedTrackerUrl, requireProjectFolder } from "../lib/model/rdf";
 import type { ProjectCreation, StoredProject, StoredTask, TaskStore } from "../lib/model/store";
 import { createTask, type TaskDetails, TaskItem } from "../lib/model/task";
-import { createTracker, type TaskTracker } from "../lib/model/tracker";
+import { createTracker, type SavedViewDef, type TaskTracker } from "../lib/model/tracker";
 import { runBulk } from "../lib/views/bulk";
 import { completedHistoryToKeep, completedParentsToKeep } from "../lib/views/clear-completed";
 import { type CompletionPlan, planComplete, planUndo } from "../lib/views/completion";
@@ -1736,17 +1736,51 @@ export class TasksCache {
     return run;
   }
   /** Personal filters always live on the user's Inbox, including when a shared project is open. */
-  saveFilter(name: string, query: FilterQuery, iri?: string) {
+  saveFilter(name: string, query: FilterQuery, iri?: string, original?: SavedViewDef) {
     const payload = serializeFilterQuery(query);
     const inbox = this.snapshot.projects.find((project) => project.url === this.inboxUrl);
     if (!inbox) return Promise.resolve(undefined);
-    let target = "";
-    changeProject(inbox, (tracker) => {
-      target = tracker.defineSavedView(name, payload, iri).iri;
-    });
-    return this.updateProject(inbox, (tracker) => {
-      tracker.defineSavedView(name, payload, target);
-    }).then((project) => project?.tracker.savedViews.find((view) => view.iri === target));
+    // Editors retain their opening definition; Retry must keep the same precondition.
+    const expected = original ?? inbox.tracker.savedViews.find((view) => view.iri === iri);
+    const attempt = (): Promise<SavedViewDef | undefined> =>
+      this.mutate(
+        (state) => {
+          const current = state.projects.find((project) => project.url === this.inboxUrl);
+          return current
+            ? replaceProject(
+                state,
+                changeProject(current, (tracker) => {
+                  tracker.defineSavedView(name, payload, iri);
+                }),
+              )
+            : state;
+        },
+        async () => {
+          const current = await this.store.readProject(this.inboxUrl);
+          if (iri !== undefined) {
+            const existing = current.tracker.savedViews.find((view) => view.iri === iri);
+            if (
+              !expected ||
+              expected.iri !== iri ||
+              !existing ||
+              existing.name !== expected.name ||
+              existing.payload !== expected.payload
+            )
+              throw new ModelError(412, current.url, current.etag);
+          }
+          let saved: SavedViewDef | undefined;
+          const project = await this.store.updateProject(current, (tracker) => {
+            // Creates choose a free slug from this fresh dataset on every attempt.
+            saved = tracker.defineSavedView(name, payload, iri);
+          });
+          return { result: saved, commit: (state) => replaceProject(state, project) };
+        },
+        () => {
+          void attempt();
+        },
+        [inbox.url],
+      );
+    return attempt();
   }
   removeFilter(iri: string) {
     const inbox = this.snapshot.projects.find((project) => project.url === this.inboxUrl);

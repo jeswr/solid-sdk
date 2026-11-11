@@ -222,3 +222,41 @@ it("keeps drafts after a failed write, rolls back the sidebar and supports resub
   await save();
   expect(push).toHaveBeenLastCalledWith("/tasks/filters/retry");
 });
+
+it.each([
+  "Rename",
+  "Edit filter",
+])("rejects a stale %s draft after the tracker refreshes while the editor is open", async (action) => {
+  const original = await cache.saveFilter("Bills", { v: 1, text: "original" });
+  if (!original) throw new Error("Missing filter");
+  await mount(h(TasksSidebar));
+  await menu("Bills", action);
+  await type("name", "My bills");
+  await cache.store.updateProject(await cache.store.readProject(cache.inboxUrl), (tracker) => {
+    tracker.defineSavedView("Remote bills", '{"v":1,"text":"remote"}', original.iri);
+  });
+  await act(() => cache.refreshProjects());
+  const writes = pod.mutations().length;
+  await act(async () => {
+    const finished = new Promise<void>((resolve) => {
+      const unsubscribe = cache.subscribe(() => {
+        if (!cache.getSnapshot().saving.length) {
+          unsubscribe();
+          resolve();
+        }
+      });
+    });
+    document
+      .querySelector(".tsk-filter-form")
+      ?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    await finished;
+  });
+  expect(document.querySelector('[role="alert"]')?.textContent).toContain(
+    "Couldn't save your changes",
+  );
+  expect(field("name").value).toBe("My bills");
+  expect(pod.mutations()).toHaveLength(writes);
+  expect((await cache.store.readProject(cache.inboxUrl)).tracker.savedViews).toEqual([
+    { iri: original.iri, name: "Remote bills", payload: '{"v":1,"text":"remote"}' },
+  ]);
+});

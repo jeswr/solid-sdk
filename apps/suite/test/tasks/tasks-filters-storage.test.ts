@@ -1,5 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { DataFactory, Node, NS, node, serialize } from "../../src/apps/tasks/lib/model/rdf";
 import { savedFilters } from "../../src/apps/tasks/lib/views/filter-query";
 import { frameCache, frameStore } from "./tasks-frame-fixtures";
@@ -115,5 +115,92 @@ describe("tracker saved views", () => {
       `${inbox.url}#view-same-2`,
     ]);
     expect((await cache.store.readProject(inbox.url)).tracker.title).toBe("Inbox");
+  });
+  it("resolves new filter slugs against the freshly read tracker", async () => {
+    const { cache, store, inbox, failures } = await frameCache();
+    const remote = await store.updateProject(inbox, (tracker) => {
+      tracker.defineSavedView("Bills", '{"v":1,"text":"remote"}');
+    });
+    const saved = await cache.saveFilter("Bills", { v: 1, text: "local" });
+    expect(saved?.iri).toBe(`${inbox.url}#view-bills-2`);
+    expect((await store.readProject(inbox.url)).tracker.savedViews).toEqual([
+      ...remote.tracker.savedViews,
+      saved,
+    ]);
+    expect(failures).not.toHaveBeenCalled();
+  });
+  it("chooses another free slug on every Retry after a concurrent create", async () => {
+    const { cache, store, pod, inbox, failures } = await frameCache();
+    const query = { v: 1, text: "local" } as const;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const remote = await store.readProject(inbox.url);
+      remote.tracker.defineSavedView("Bills", `{"v":1,"text":"remote-${attempt}"}`);
+      const body = await serialize(remote.dataset);
+      pod.intercept = (request) => {
+        if (request.url === inbox.url && request.method === "PUT") {
+          pod.intercept = undefined;
+          pod.seed(inbox.url, body);
+        }
+        return undefined;
+      };
+      if (attempt === 0) expect(await cache.saveFilter("Bills", query)).toBeUndefined();
+      else {
+        failures.mock.calls.at(-1)?.[1]();
+        await vi.waitFor(() => expect(cache.getSnapshot().saving).toEqual([]));
+      }
+      expect(failures).toHaveBeenCalledTimes(attempt + 1);
+      expect(failures.mock.calls.at(-1)?.[0]).toMatchObject({ status: 412 });
+      expect((await store.readProject(inbox.url)).tracker.savedViews).toEqual(
+        remote.tracker.savedViews,
+      );
+    }
+    const beforeRetry = await store.readProject(inbox.url);
+    const requestCount = pod.requests.length;
+    failures.mock.calls.at(-1)?.[1]();
+    await vi.waitFor(() => expect(cache.getSnapshot().saving).toEqual([]));
+    const views = (await store.readProject(inbox.url)).tracker.savedViews;
+    expect(views).toEqual([
+      ...beforeRetry.tracker.savedViews,
+      { iri: `${inbox.url}#view-bills-3`, name: "Bills", payload: JSON.stringify(query) },
+    ]);
+    expect(cache.getSnapshot().projects[0]?.tracker.savedViews).toEqual(views);
+    expect(
+      pod.requests
+        .slice(requestCount)
+        .find((request) => request.url === inbox.url && request.method === "PUT")
+        ?.headers.get("If-Match"),
+    ).toBe(beforeRetry.etag);
+    expect(failures).toHaveBeenCalledTimes(2);
+  });
+  it.each([
+    "deleted",
+    "renamed",
+    "requeried",
+  ])("rejects edits and retries when the original filter was %s elsewhere", async (change) => {
+    const { cache, store, pod, inbox, failures } = await frameCache();
+    const original = await cache.saveFilter("Bills", { v: 1, text: "original" });
+    if (!original) throw new Error("Missing filter");
+    const remote = await store.updateProject(await store.readProject(inbox.url), (tracker) => {
+      if (change === "deleted") tracker.removeSavedView(original.iri);
+      else
+        tracker.defineSavedView(
+          change === "renamed" ? "Remote name" : original.name,
+          change === "requeried" ? '{"v":1,"text":"remote"}' : original.payload,
+          original.iri,
+        );
+    });
+    const writes = pod.mutations().length;
+    expect(
+      await cache.saveFilter("My bills", { v: 1, text: "local" }, original.iri),
+    ).toBeUndefined();
+    expect(failures.mock.calls.at(-1)?.[0]).toMatchObject({ status: 412 });
+    failures.mock.calls.at(-1)?.[1]();
+    await vi.waitFor(() => expect(cache.getSnapshot().saving).toEqual([]));
+    expect(failures).toHaveBeenCalledTimes(2);
+    expect(failures.mock.calls.at(-1)?.[0]).toMatchObject({ status: 412 });
+    expect(pod.mutations()).toHaveLength(writes);
+    expect((await store.readProject(inbox.url)).tracker.savedViews).toEqual(
+      remote.tracker.savedViews,
+    );
   });
 });

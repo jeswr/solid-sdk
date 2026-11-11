@@ -35,7 +35,7 @@ export const filterHref = (iri: string) => `/tasks/filters/${iri.split("#view-")
 
 /** Uncontrolled form values remain editable drafts until a validated conditional write. */
 function FilterDialog({
-  filter,
+  filter: initialFilter,
   renameOnly = false,
   onClose,
   returnFocus,
@@ -46,6 +46,12 @@ function FilterDialog({
   returnFocus: () => void;
 }) {
   const tasks = useTasks();
+  const [filter] = useState(initialFilter);
+  const [original] = useState(() =>
+    tasks.projects
+      .find((project) => project.url === tasks.inboxUrl)
+      ?.tracker.savedViews.find((view) => view.iri === filter?.iri),
+  );
   const router = useRouter();
   const id = useId();
   const query = filter?.query ?? { v: 1 };
@@ -100,7 +106,7 @@ function FilterDialog({
             setBusy(true);
             setError(false);
             void tasks.cache
-              .saveFilter(name, next, filter?.iri)
+              .saveFilter(name, next, filter?.iri, original)
               .then((saved) => {
                 if (!saved) {
                   setError(true);
