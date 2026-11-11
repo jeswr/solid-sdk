@@ -1,54 +1,19 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
-import { type Account, type ChannelCapability, foldBindingControls } from "@jeswr/agent-model";
+import { type Account, accountBinding, foldBindingControls } from "@jeswr/agent-model";
 import { type AgentClient, createAgentClient, isLoaded, type Row, type Unreadable } from "./client";
 import type { ProfileSession } from "./profile";
 import { type DisplayControl, loadedRecords, readAccounts, readControl } from "./readers";
 import { createAgentSigner } from "./sign";
 import { createAgentVerifier } from "./verify";
 
-/** The inventory stores provider names; descriptors and mandates use binding identifiers. */
-export function accountBinding(account: Pick<Account, "channel" | "provider">): string {
-  if (account.channel === "email") {
-    if (["google", "google_workspace"].includes(account.provider)) return "gmail";
-    if (account.provider === "microsoft") return "graph-mail";
-  }
-  const aliases: Record<string, string> = {
-    microsoft_teams: "graph-teams",
-    phone_messages: "imessage",
-    matrix_bot: "matrix",
-    signal: "matrix",
-    whatsapp: "matrix",
-    github_notifications: "github",
-  };
-  return Object.hasOwn(aliases, account.channel)
-    ? (aliases[account.channel] as string)
-    : account.provider;
-}
-
-/** Account-specific observations if any exist, otherwise shared ones for the binding. */
-function descriptorCandidates(account: Account, descriptors: readonly ChannelCapability[]) {
-  const matching = descriptors.filter(
-    (descriptor) => descriptor.binding === accountBinding(account),
-  );
-  const specific = matching.filter((descriptor) => descriptor.account === account.id);
-  return specific.length ? specific : matching.filter((d) => d.account === undefined);
-}
-
-/** Prefer account-specific observations; never borrow another account's grants or ingest time. */
-export function accountDescriptor(account: Account, descriptors: readonly ChannelCapability[]) {
-  const candidates = descriptorCandidates(account, descriptors);
-  return candidates.length === 1 ? candidates[0] : undefined;
-}
-
-/** True when several records describe the account and none is chosen silently. */
-export function accountDescriptorConflict(
-  account: Account,
-  descriptors: readonly ChannelCapability[],
-) {
-  return descriptorCandidates(account, descriptors).length > 1;
-}
+// Descriptor selection lives in the SDK so every consumer applies the same precedence.
+export {
+  accountBinding,
+  accountDescriptor,
+  accountDescriptorConflict,
+} from "@jeswr/agent-model";
 
 /** Only a plain profile name is placed in a command; secret-store references never leave the model. */
 export function accountLoginCommand(account: Pick<Account, "id" | "channel" | "credentialRef">) {
