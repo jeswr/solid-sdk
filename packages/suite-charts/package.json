@@ -1,0 +1,51 @@
+{
+  "name": "@jeswr/suite-charts",
+  "version": "0.1.0",
+  "description": "Accessible, dependency-free React SVG charts for Solid Suite apps",
+  "type": "module",
+  "license": "MIT",
+  "securityCritical": false,
+  "sideEffects": [
+    "**/*.css"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./scale": {
+      "types": "./dist/scale.d.ts",
+      "import": "./dist/scale.js"
+    },
+    "./styles.css": "./dist/styles.css"
+  },
+  "files": [
+    "dist",
+    "src",
+    "README.md",
+    "SKILL.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json && node scripts/copy-css.mjs",
+    "lint": "biome check src test scripts vitest.config.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "peerDependencies": {
+    "react": "^19.2.7"
+  },
+  "devDependencies": {
+    "@types/node": "^25.9.2",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.9",
+    "@biomejs/biome": "^2.5.1",
+    "react": "19.2.7",
+    "react-dom": "19.2.7",
+    "@types/react": "19.2.17",
+    "@types/react-dom": "19.2.3",
+    "@testing-library/react": "16.3.2",
+    "@testing-library/dom": "10.4.1",
+    "jsdom": "29.1.1"
+  }
+}
