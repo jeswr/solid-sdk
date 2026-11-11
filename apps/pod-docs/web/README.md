@@ -22,17 +22,18 @@ cannot be read or written, the host reports an error before creating another col
 
 ```
 index.html → src/main.tsx
-  └─ <SessionProvider>            (src/auth/SessionProvider.tsx — the ONE auth seam)
+  └─ <SessionProvider>            (@jeswr/app-session/react)
        └─ <App>                   (src/App.tsx)
-            ├─ logged out → <LoginScreen>          (WebID-first login)
+            ├─ logged out → <LoginScreen>          (@jeswr/app-session/react)
             └─ logged in  → <CollectionBrowser>    (src/CollectionBrowser.tsx)
                               └─ <DocumentBrowser podRoot webId container onContainerChange />
 ```
 
 ### Auth (standalone, no server)
 
-Docs uses one page-lifetime `@jeswr/pod-auth` core and the shared
-`@jeswr/suite-ui/sign-in` card, the same path as Pod Drive. Recent accounts appear
+Docs configures `@jeswr/app-session` in `src/auth/pod-auth.ts` and passes its name and
+legacy credential keys to the shared React provider in `src/main.tsx`. The package owns
+the page-lifetime `@jeswr/pod-auth` core and `@jeswr/suite-ui/sign-in` card, as in Pod Drive. Recent accounts appear
 first; users can also enter an address, choose the home provider or another listed
 provider, or enter a custom provider address. Addresses are resolved through a
 pristine public fetch. A WebID with several providers asks the user to choose a
@@ -62,7 +63,7 @@ Only `callback.html` is registered as an OAuth redirect URI.
 ### How the documents container is derived from the session
 
 `<DocumentBrowser podRoot webId />` needs only a **pod root** + the **WebID**.
-The host derives them in `src/auth/session-derivation.ts`:
+The shared `@jeswr/app-session` `deriveSession` helper derives them:
 
 - **pod root** = the **first `pim:storage`** advertised on the WebID profile (the
   canonical Solid "where my storage lives" signal). Fallback when a profile omits
@@ -139,18 +140,20 @@ NOT re-typechecked here; `src/pod-docs-ui.d.ts` declares the consumed surface),
 ## RECIPE — replicate this host for the other `pod-*` apps
 
 Each `pod-*` repo ships `src/ui` = a framework-agnostic component library with an
-injectable `fetch?:` seam. To give one a deployable SPA, copy this `web/`
-directory into that repo and change **four things**:
+injectable `fetch?:` seam. To give one a deployable SPA, use `@jeswr/app-session`
+for authentication and adapt this host's application wiring:
 
 1. the imported component + the prop it needs (table below);
 2. the Vite alias target (`@jeswr/<pkg>/ui` → `../src/ui/index.ts`) + the
    `src/pod-docs-ui.d.ts` ambient declaration to match that component's props;
-3. the container-derivation in `src/auth/session-derivation.ts` (what URL the
-   component's prop wants — see "derive" column);
+3. the component's storage props (what URL it wants — see "derive" column), the
+   app name, and its obsolete credential keys passed to `SessionProvider`;
 4. the per-subdomain `APP_ORIGIN` and the `client_name` in `gen-clientid.mjs`.
 
-Everything else — `SessionProvider`, `LoginScreen`, the token provider, the
-`gen-clientid` script, the build wiring — is identical.
+Import `SessionProvider`, `useSession` and `LoginScreen` from `@jeswr/app-session/react`.
+Keep environment reads and client identity configuration in the app; see the
+[package guide](../../../packages/app-session/README.md). The `gen-clientid` script
+and build wiring follow the same pattern across hosts.
 
 | Repo | Component (`@jeswr/<pkg>/ui`) | Required prop(s) | Derive the prop from the session as… | `APP_ORIGIN` (prod) |
 |---|---|---|---|---|

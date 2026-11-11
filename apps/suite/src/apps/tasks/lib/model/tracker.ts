@@ -1,7 +1,25 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 import { buildTracker, Tracker, trackerSubject } from "@jeswr/solid-task-model/tracker";
-import { DataFactory, NS, node, requireHttp, requireTitle, SCHEMA, type Store, slug } from "./rdf";
+import {
+  DataFactory,
+  NS,
+  node,
+  requireHttp,
+  requireTitle,
+  SCHEMA,
+  type Store,
+  slug,
+  uniqueSlug,
+} from "./rdf";
+
+export interface SavedViewDef {
+  iri: string;
+  name: string;
+  payload: string;
+}
+const SAVED_VIEW = `${NS.WF}savedView`;
+const VIEW_QUERY = `${NS.WF}viewQuery`;
 
 export interface Category {
   id: string;
@@ -53,6 +71,53 @@ export class TaskTracker extends Tracker {
   }
   private get base() {
     return this.id.split("#")[0];
+  }
+  private get savedViewIris() {
+    return this.extra.iris(SAVED_VIEW);
+  }
+  /** Saved-view links must never grant write access to unrelated tracker configuration. */
+  isOwnSavedView(iri: string): boolean {
+    return (
+      iri.startsWith(`${this.base}#view-`) &&
+      /^[-a-z0-9]+$/.test(iri.slice(`${this.base}#view-`.length))
+    );
+  }
+  get savedViews(): SavedViewDef[] {
+    return [...this.extra.nodes(SAVED_VIEW)]
+      .flatMap((link) => {
+        const iri = link.value;
+        if (link.termType !== "NamedNode" || !this.isOwnSavedView(iri)) return [];
+        const item = node(iri, this.dataset);
+        const name = item.text(`${NS.DCT}title`);
+        const payload = item.text(VIEW_QUERY);
+        return name?.trim() && payload !== undefined ? [{ iri, name, payload }] : [];
+      })
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }
+  defineSavedView(name: string, payload: string, iri?: string): SavedViewDef {
+    requireTitle(name);
+    const prefix = `${this.base}#view-`;
+    const occupied = [...this.dataset]
+      .map((q) => q.subject.value)
+      .concat([...this.extra.nodes(SAVED_VIEW)].map((link) => link.value));
+    const target =
+      iri && this.isOwnSavedView(iri)
+        ? iri
+        : `${prefix}${uniqueSlug(
+            name,
+            occupied.filter((id) => id.startsWith(prefix)).map((id) => id.slice(prefix.length)),
+          )}`;
+    for (const quad of this.dataset.match(DataFactory.namedNode(target))) this.dataset.delete(quad);
+    const item = node(target, this.dataset);
+    item.setText(`${NS.DCT}title`, name.trim());
+    item.setText(VIEW_QUERY, payload);
+    this.savedViewIris.add(target);
+    return { iri: target, name: name.trim(), payload };
+  }
+  removeSavedView(iri: string): void {
+    this.savedViewIris.delete(iri);
+    if (!this.isOwnSavedView(iri)) return;
+    for (const quad of this.dataset.match(DataFactory.namedNode(iri))) this.dataset.delete(quad);
   }
   private dimension(kind: "Section" | "Label") {
     return `${this.base}#${kind}`;
