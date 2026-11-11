@@ -270,11 +270,23 @@ test("scenario 5: sections, drag into a section, the board, Move to section and 
     .click();
   await page.getByRole("menuitem", { name: "Move to section…", exact: true }).click();
   const doneItem = page.getByRole("menuitemradio", { name: "Done", exact: true });
-  if ((page.viewportSize()?.width ?? 0) >= 1280) await doneItem.click();
-  // Below 1280 the submenu opens partly outside the viewport, nested in the scrollable parent
-  // menu (it is not portalled), so a pointer can't reach it reliably. Choose the section from
-  // the keyboard there, the menu's other supported input.
-  else await doneItem.press("Enter");
+  await expect(doneItem).toBeVisible();
+  expect(
+    await doneItem.evaluate((item) => {
+      const submenu = item.closest('[data-slot="dropdown-menu-sub-content"]');
+      const parent = document.querySelector('[data-slot="dropdown-menu-content"]');
+      const bounds = submenu?.getBoundingClientRect();
+      return Boolean(
+        submenu &&
+          parent &&
+          !parent.contains(submenu) &&
+          bounds &&
+          bounds.left >= 8 &&
+          bounds.right <= innerWidth - 8,
+      );
+    }),
+  ).toBe(true);
+  await doneItem.click();
   await expect(
     cardFor(page.getByRole("region", { name: "Done", exact: true }), "Pay rent"),
   ).toBeVisible();
