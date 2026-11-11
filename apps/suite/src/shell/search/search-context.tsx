@@ -2,27 +2,77 @@
 "use client";
 /**
  * One search source per signed-in account, shared by the TopBar search and the
- * /search page. The demo account is indexed from its seed; other accounts start
- * empty until SDK-APP-09 (`useSearch`) supplies server or synced results.
+ * /search page. Demo search uses its seed; pod search owns an ephemeral SDK index.
  */
-import { createContext, type ReactNode, useContext, useEffect, useState } from "react";
+import { createContext, type ReactNode, useContext, useEffect, useRef, useState } from "react";
 import type { SearchSource } from "../lib/search-results";
 import { useAccounts } from "../session/accounts-provider";
+import type { SuiteAccount } from "../session/types";
 import { demoSearchItems } from "./demo-items";
 import { createLocalSearchSource } from "./local-source";
+import { createPodSearchSource } from "./pod-source";
 
 const SearchSourceContext = createContext<SearchSource | null>(null);
 
 export function ShellSearchProvider({ children }: { children: ReactNode }) {
-  const { active } = useAccounts();
+  const accounts = useAccounts();
+  const latest = useRef(accounts);
+  latest.current = accounts;
+  const { active, status } = accounts;
+  const key = JSON.stringify([active?.id, active?.webId, active?.storageUrl, active?.kind, status]);
+  const fetch: typeof globalThis.fetch = async (input, init) => {
+    const usable = () => latest.current.active === active && latest.current.status === "ready";
+    if (!usable()) throw new Error("Sign in to search");
+    const response = await latest.current.fetch(input, init);
+    if (!usable()) throw new Error("Sign in to search");
+    return response;
+  };
   const [source, setSource] = useState<SearchSource>(() => createLocalSearchSource([]));
-  const accountId = active?.id;
-  const demo = active?.kind === "demo";
-  // biome-ignore lint/correctness/useExhaustiveDependencies: a different account gets a fresh index
+  // Only the source is rebuilt per account and session state, never the app beneath it:
+  // consumers drop displayed results whenever the source changes. AUTHORED-BY Claude Opus 5.5
+  return (
+    <>
+      <AccountSearchSource
+        key={key}
+        account={active}
+        ready={status === "ready"}
+        fetch={fetch}
+        onSource={setSource}
+      />
+      <SearchSourceContext.Provider value={source}>{children}</SearchSourceContext.Provider>
+    </>
+  );
+}
+
+function AccountSearchSource({
+  account,
+  ready,
+  fetch,
+  onSource: setSource,
+}: {
+  account: SuiteAccount | null;
+  ready: boolean;
+  fetch: typeof globalThis.fetch;
+  onSource: (source: SearchSource) => void;
+}) {
+  const currentFetch = useRef(fetch);
+  currentFetch.current = fetch;
+  const storageUrl = account?.storageUrl;
+  const demo = account?.kind === "demo";
   useEffect(() => {
     let cancelled = false;
-    // A new account never sees the previous account's index.
+    // A new account or session never sees the previous one's index.
     setSource(createLocalSearchSource([]));
+    const pod =
+      ready && !demo && storageUrl
+        ? createPodSearchSource(storageUrl, (input, init) => currentFetch.current(input, init))
+        : undefined;
+    if (pod) {
+      setSource(pod);
+      void pod.warmed.then(() => {
+        if (!cancelled) setSource({ search: pod.search });
+      });
+    }
     if (demo)
       void import("../../lib/demo-pod/seed")
         .then(({ buildDemoSeed }) => buildDemoSeed(Date.now()))
@@ -34,9 +84,10 @@ export function ShellSearchProvider({ children }: { children: ReactNode }) {
         });
     return () => {
       cancelled = true;
+      pod?.dispose();
     };
-  }, [accountId, demo]);
-  return <SearchSourceContext.Provider value={source}>{children}</SearchSourceContext.Provider>;
+  }, [demo, ready, storageUrl, setSource]);
+  return null;
 }
 
 export function useShellSearchSource(): SearchSource {
