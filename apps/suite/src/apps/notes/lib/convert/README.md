@@ -10,7 +10,7 @@ flags). The exported `DocsDocument` type describes this shared subset, not the
 entire Docs schema. There is no HTML parsing, resource move, persistence or UI.
 
 Supported nodes: `doc`, `paragraph`, `heading` (levels 1–3), `text`, `bulletList`,
-`orderedList`, `listItem`, `taskList`, `taskItem`. Marks: `bold`, `italic`, `link`.
+`orderedList`, `listItem`, `taskList`, `taskItem`, `image`. Marks: `bold`, `italic`, `link`.
 Lists must be nonempty; list/task items start with a paragraph and may contain
 further paragraphs, headings or nested lists. Task-list nesting is limited to
 three levels, following 05-docs §4.7. Overall node depth is limited to 64;
@@ -46,3 +46,11 @@ Extra fields are rejected. Empty text is retained for an in-progress item.
 All operations return fresh arrays and leave inputs untouched. Unchanged items
 retain their object identity; changed flags produce new item objects. Empty bulk
 operations return empty arrays; indexed operations reject empty arrays.
+
+Images retain their pod URLs during conversion. The Notes renderer admits only
+the account’s `notes/media/` and Docs `docs/<document>/assets/` (including legacy
+`pod-docs/`) URLs. JSON conversion requires an absolute HTTP(S) source and explicit
+`alt` (empty means decorative), and preserves nullable title, positive integer
+width/height and an optional validated link. It does not grant access to a URL.
+Notes’ Open in Docs action keeps these URLs readable; permanent deletion checks
+Notes and Docs snapshots and revisions before removing any Notes-owned media.

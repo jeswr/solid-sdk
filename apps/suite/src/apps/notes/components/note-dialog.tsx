@@ -23,6 +23,7 @@ import {
   Bold,
   FileText,
   Heading,
+  ImagePlus,
   Italic,
   Link as LinkIcon,
   List,
@@ -35,7 +36,9 @@ import {
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Hint } from "@/apps/docs/components/common";
-import { validLink } from "@/apps/docs/lib/editor/logic";
+import { ImageUpload } from "@/apps/docs/components/image-upload";
+import { imageTransfer, type RichImageTransfer } from "@/apps/docs/editor/image-transfer";
+import { validateImage, validLink } from "@/apps/docs/lib/editor/logic";
 import { buildDocument, parseDocument } from "@/apps/docs/lib/model/document";
 import { ResourceWriteError } from "@/apps/docs/lib/model/errors";
 import { writeRdf } from "@/apps/docs/lib/model/rdf-io";
@@ -60,6 +63,7 @@ export function NoteDialog({ note }: { note: StoredNote }) {
     refresh,
     getPendingDrafts(session.webId),
   );
+  const [, selectionChanged] = useState(0);
   const [busy, setBusy] = useState(false);
   const actionPending = useRef(false);
   // Keep the destination across failed moves and dismissed confirmations.
@@ -69,6 +73,9 @@ export function NoteDialog({ note }: { note: StoredNote }) {
   const [confirmDocs, setConfirmDocs] = useState(false);
   const [sendingTasks, setSendingTasks] = useState(false);
   const checklist = useMemo(() => checklistItems(draft.body), [draft.body]);
+  const [image, setImage] = useState<{ file: File | null; transfer?: RichImageTransfer }>();
+  const imageInput = useRef<HTMLInputElement>(null);
+  const transfers = useRef<(data: DataTransfer | null, position?: number) => boolean>(() => false);
   const [linkOpen, setLinkOpen] = useState(false);
   const [url, setUrl] = useState("");
   const [linkError, setLinkError] = useState(false);
@@ -82,10 +89,16 @@ export function NoteDialog({ note }: { note: StoredNote }) {
   const editor = useEditor(
     {
       immediatelyRender: false,
-      extensions: notesExtensions(),
+      extensions: notesExtensions(session.fetch, session.storageUrl),
       content: draft.body,
       editable: !readOnly,
       editorProps: {
+        handlePaste: (_view, event) => transfers.current(event.clipboardData),
+        handleDrop: (view, event, _slice, moved) => {
+          if (moved) return false;
+          const position = view.posAtCoords({ left: event.clientX, top: event.clientY })?.pos;
+          return transfers.current(event.dataTransfer, position);
+        },
         attributes: {
           "aria-label": "Note body",
           role: "textbox",
@@ -93,12 +106,39 @@ export function NoteDialog({ note }: { note: StoredNote }) {
           spellcheck: "true",
         },
       },
+      onSelectionUpdate: () => selectionChanged((value) => value + 1),
       onUpdate: ({ editor }) => {
         if (!actionPending.current) handler.current({ body: editor.getHTML() });
       },
     },
     [note.url],
   );
+  const chooseImage = (file: File, transfer?: RichImageTransfer) => {
+    if (readOnly || image) return false;
+    const error = (transfer?.images.map((item) => item.file) ?? [file])
+      .map(validateImage)
+      .find(Boolean);
+    if (error) {
+      toast.error(error);
+      return false;
+    }
+    setImage({ file, ...(transfer ? { transfer } : {}) });
+    return true;
+  };
+  transfers.current = (data, position) => {
+    if (readOnly || image) return true;
+    try {
+      const incoming = imageTransfer(data);
+      if (!incoming) return false;
+      if (position !== undefined) editor?.commands.setTextSelection(position);
+      // Consume rejected local images too: they must never fall through to HTML insertion.
+      chooseImage(incoming.file, incoming.rich);
+      return true;
+    } catch {
+      toast.error("Couldn't read this image. Add it as a file.");
+      return true;
+    }
+  };
   useEffect(() => {
     editor?.setEditable(!readOnly, false);
   }, [editor, readOnly]);
@@ -111,7 +151,7 @@ export function NoteDialog({ note }: { note: StoredNote }) {
     return () => clearInterval(timer);
   }, []);
   const lock = () => {
-    if (actionPending.current) return false;
+    if (image || actionPending.current) return false;
     actionPending.current = true;
     // Apply the DOM/editor lock synchronously, before flush can take its snapshot.
     if (titleInput.current) titleInput.current.readOnly = true;
@@ -213,6 +253,30 @@ export function NoteDialog({ note }: { note: StoredNote }) {
           },
         },
         {
+          id: "image",
+          label: "Add image",
+          icon: <ImagePlus size={16} />,
+          onSelect: () => imageInput.current?.click(),
+        },
+        ...(editor.isActive("image")
+          ? [
+              {
+                id: "image-alt",
+                label: "Edit alt text",
+                icon: <ImagePlus size={16} />,
+                onSelect: () => setImage({ file: null }),
+              },
+              {
+                id: "image-remove",
+                label: "Remove image",
+                icon: <Trash2 size={16} />,
+                onSelect: () => {
+                  editor.chain().focus().deleteSelection().run();
+                },
+              },
+            ]
+          : []),
+        {
           id: "link",
           label: "Link",
           icon: <LinkIcon size={16} />,
@@ -262,6 +326,28 @@ export function NoteDialog({ note }: { note: StoredNote }) {
             if (!actionPending.current) change({ title: event.target.value });
           }}
         />
+        <input
+          ref={imageInput}
+          type="file"
+          hidden
+          aria-label="Choose note image"
+          accept="image/png,image/jpeg,image/gif,image/webp,image/svg+xml"
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            if (file) chooseImage(file);
+            event.target.value = "";
+          }}
+        />
+        {image && editor && (
+          <ImageUpload
+            editor={editor}
+            className="notes-image-upload"
+            file={image.file}
+            transfer={image.transfer}
+            uploadFile={(file) => store.uploadImage(file)}
+            close={() => setImage(undefined)}
+          />
+        )}
         {!readOnly && <Toolbar label="Note formatting" actions={actions} />}
         <Popover open={linkOpen} onOpenChange={setLinkOpen}>
           <PopoverAnchor asChild>

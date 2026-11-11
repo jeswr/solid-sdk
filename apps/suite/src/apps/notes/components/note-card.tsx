@@ -11,8 +11,10 @@ import {
   RotateCcw,
   Trash2,
 } from "lucide-react";
-import { useId, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { cardTextExcerpt } from "../lib/excerpt";
+import { firstNoteImage } from "../lib/images";
+import { NoteCover } from "./note-cover";
 
 /** Spec: a card shows the first six lines; the grapheme cap bounds one very long line. */
 const EXCERPT_LINES = 6;
@@ -25,8 +27,13 @@ import { useNotesContext } from "../state/notes-context";
 import { ColourPicker, ConfirmDialog, LabelChips, LabelPicker } from "./controls";
 
 export function NoteCard({ note }: { note: StoredNote }) {
-  const { prefs, openNote, pin, colour, attempt, mutations, move, create } = useNotesContext();
+  const { prefs, openNote, pin, colour, attempt, mutations, move, create, session } =
+    useNotesContext();
   const id = useId();
+  const [cover, setCover] = useState<ReturnType<typeof firstNoteImage>>();
+  useEffect(() => {
+    setCover(firstNoteImage(note.body, session.storageUrl));
+  }, [note.body, session.storageUrl]);
   const [deleting, setDeleting] = useState<StoredNote>();
   const pending = note.etag === null && note.url.includes("/pending-");
   const [busy, setBusy] = useState(false);
@@ -57,6 +64,7 @@ export function NoteCard({ note }: { note: StoredNote }) {
         onClick={(event) => openNote(note, event.currentTarget)}
         aria-label={`Open ${note.title || "Untitled note"}`}
       >
+        {cover && <NoteCover {...cover} fetchImpl={session.fetch} />}
         <h3 id={id}>{note.title || "Untitled note"}</h3>
         {items.length === 0 && note.body && (
           <p className="notes-excerpt">
