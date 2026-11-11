@@ -504,6 +504,28 @@ it("keeps keyboard focus in the message after picking a reaction and when its la
   expect(view.host.querySelector(".chat-reactions")).toBeNull();
   expect(document.activeElement).toBe(trigger);
 });
+it("never moves focus on later refreshes when the reacted chip survives", async () => {
+  const pod = createDemoPod({ root: ROOT });
+  vi.spyOn(ChatClient.prototype, "react").mockResolvedValue();
+  const active = session(pod);
+  const base = message("survivor");
+  const tree = (reactions: Message["reactions"]) =>
+    h(ChatProvider, {
+      session: active,
+      children: h(Timeline, { ...timelineProps, messages: [{ ...base, reactions }] }),
+    });
+  const view = await mount(tree([{ emoji: "👍", count: 2, reactedByMe: false }]));
+  const chip = view.host.querySelector(".chat-reaction") as HTMLButtonElement;
+  await act(() => chip.focus());
+  await click(chip);
+  // The write's refresh keeps the chip: the focus request is used up.
+  await view.render(tree([{ emoji: "👍", count: 3, reactedByMe: true }]));
+  await act(() => chip.blur());
+  expect(document.activeElement).toBe(document.body);
+  // A later poll refresh must not pull focus into this message.
+  await view.render(tree([{ emoji: "👍", count: 4, reactedByMe: true }]));
+  expect(document.activeElement).toBe(document.body);
+});
 it("collapses a flood of distinct reactions, keeping the reader's own visible", async () => {
   const pod = createDemoPod({ root: ROOT });
   const reactions = Array.from({ length: 30 }, (_, index) => ({
