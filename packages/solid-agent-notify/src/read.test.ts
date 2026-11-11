@@ -116,3 +116,20 @@ test("preserves scope filtering, deduplication and ordering ties", async () => {
   const duplicate = { url: `${inbox}n`, type: "Offer" };
   expect(sortInboxNotifications([duplicate, duplicate])).toEqual([duplicate, duplicate]);
 });
+
+// AUTHORED-BY Claude Opus 5.5
+test.each([
+  ['as:published "2026-11-11T12:00:00.000Z"', undefined],
+  ['as:published "not a date"^^<http://www.w3.org/2001/XMLSchema#dateTime>', undefined],
+  [
+    'as:published "2026-11-11T12:00:00.000Z"^^<http://www.w3.org/2001/XMLSchema#dateTime>',
+    "2026-11-11T12:00:00.000Z",
+  ],
+])("keeps the notification when as:published is untyped or malformed: %s", async (published, expected) => {
+  const dataset = await parseRdf(`${as} <#it> a as:Announce; ${published}.`, "text/turtle", {
+    baseIRI: `${inbox}n`,
+  });
+  const notification = parseInboxNotification(`${inbox}n`, dataset);
+  expect(notification?.type).toBe("Announce");
+  expect(notification?.published).toBe(expected);
+});

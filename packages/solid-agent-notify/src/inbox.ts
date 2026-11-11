@@ -94,6 +94,13 @@ export function parseInboxNotification(
   const subject = findActivitySubject(url, dataset);
   if (!subject) return undefined;
   const doc = new ActivityDoc(subject, dataset, DataFactory);
+  // A missing, untyped or malformed as:published must not hide the notification itself.
+  let published: Date | undefined;
+  try {
+    published = doc.published;
+  } catch {
+    published = undefined;
+  }
   return {
     url,
     type: typeLabel(doc.types),
@@ -102,7 +109,9 @@ export function parseInboxNotification(
     ...(doc.target !== undefined ? { target: doc.target } : {}),
     ...(doc.summary !== undefined ? { summary: doc.summary } : {}),
     ...(doc.content !== undefined ? { content: doc.content } : {}),
-    ...(doc.published !== undefined ? { published: doc.published.toISOString() } : {}),
+    ...(published !== undefined && !Number.isNaN(published.getTime())
+      ? { published: published.toISOString() }
+      : {}),
   };
 }
 
