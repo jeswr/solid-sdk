@@ -656,9 +656,12 @@ describe("Solid shell over pod-auth", () => {
         const account = await h.backend.signIn({ issuer: alice.issuer });
         h.auth.retireIfOwnedBy.mockResolvedValue({ retired: false, reason });
         if (operation === "sign-out") {
-          expect(await h.backend.signOut(account)).toEqual({
-            notice: "Signed out here. A session in another tab may still be active.",
-          });
+          // Only an ownership change implies a live session in another tab.
+          expect(await h.backend.signOut(account)).toEqual(
+            reason === "owner-changed" || reason === "grant-changed"
+              ? { notice: "Signed out here. A session in another tab may still be active." }
+              : undefined,
+          );
           expect(await h.backend.restore()).toBeNull();
           await expect(h.backend.fetchFor(account)(account.storageUrl)).rejects.toThrow(
             "Sign in to continue",
@@ -729,10 +732,145 @@ describe("Solid shell over pod-auth", () => {
       "Sign in to continue",
     );
     expect(h.auth.fetch).not.toHaveBeenCalled();
+    // Signing in again adopts the newer grant for the same account instead of replacing it.
     expect((await h.backend.signIn({ issuer: alice.issuer })).webId).toBe(alice.webId);
-    expect(h.auth.login).toHaveBeenCalledTimes(2);
+    expect(h.auth.login).toHaveBeenCalledOnce();
+    expect(await h.auth.identity()).toEqual(newer);
     expect(h.auth.logout).not.toHaveBeenCalled();
     await expect(oldFetch(account.storageUrl)).rejects.toThrow("Sign in to continue");
+  });
+
+  describe("signs in after a skipped sign-out while another account owns the namespace", () => {
+    const bobIdentity = {
+      ...alice,
+      grantId: "bob-grant",
+      webId: bob.webId,
+      subject: "bob",
+      storages: [bob.storageUrl],
+    } satisfies Identity;
+    async function skippedSignOut() {
+      const h = harness();
+      const account = await h.backend.signIn({ issuer: alice.issuer });
+      // Another tab signed out Alice and signed in as Bob.
+      h.setIdentity(bobIdentity);
+      expect(await h.backend.signOut(account)).toEqual({
+        notice: "Signed out here. A session in another tab may still be active.",
+      });
+      h.auth.login.mockClear();
+      h.auth.restore.mockClear();
+      return h;
+    }
+
+    it.each([
+      { webId: alice.webId },
+      { issuer: "https://other-id.example/" },
+    ])("refuses %o without calling login or replacing the owner", async (hint) => {
+      const h = await skippedSignOut();
+      await expect(h.backend.signIn(hint)).rejects.toEqual(new SignInError("account-active"));
+      expect(h.auth.login).not.toHaveBeenCalled();
+      expect(h.auth.restore).not.toHaveBeenCalled();
+      expect(h.auth.logout).not.toHaveBeenCalled();
+      expect(await h.auth.identity()).toEqual(bobIdentity);
+      expect(await h.backend.restore()).toBeNull();
+    });
+
+    it.each([
+      { webId: bob.webId },
+      { issuer: bob.issuer },
+    ])("adopts the live session that matches %o without login", async (hint) => {
+      const h = await skippedSignOut();
+      const account = await h.backend.signIn(hint);
+      expect(account).toMatchObject({ id: bob.id, webId: bob.webId, storageUrl: bob.storageUrl });
+      expect(h.auth.login).not.toHaveBeenCalled();
+      expect(h.auth.restore).toHaveBeenCalledOnce();
+      expect(await h.auth.identity()).toEqual(bobIdentity);
+      expect(await h.backend.restore()).toEqual(account);
+      expect((await h.backend.fetchFor(account)(account.storageUrl)).ok).toBe(true);
+      // The adopted snapshot retires Bob's grant on sign-out.
+      expect(await h.backend.signOut(account)).toBeUndefined();
+      expect(h.auth.retireIfOwnedBy).toHaveBeenLastCalledWith(bobIdentity);
+      expect(await h.auth.identity()).toBeNull();
+    });
+
+    it("refuses when the remembered session changes to another account before adoption", async () => {
+      const h = await skippedSignOut();
+      h.auth.restore.mockImplementationOnce(async () => {
+        h.setIdentity(alice);
+        return alice;
+      });
+      await expect(h.backend.signIn({ webId: bob.webId })).rejects.toEqual(
+        new SignInError("account-active"),
+      );
+      expect(h.auth.login).not.toHaveBeenCalled();
+      expect(await h.backend.restore()).toBeNull();
+    });
+
+    it("logs in once a remembered session that cannot be restored has gone", async () => {
+      const h = await skippedSignOut();
+      h.auth.restore.mockImplementationOnce(async () => {
+        h.setIdentity(null);
+        return null;
+      });
+      expect((await h.backend.signIn({ webId: bob.webId })).webId).toBe(alice.webId);
+      expect(h.auth.login).toHaveBeenCalledOnce();
+    });
+
+    it("refuses when a remembered session cannot be restored but is still remembered", async () => {
+      const h = await skippedSignOut();
+      h.auth.restore.mockResolvedValueOnce(null);
+      await expect(h.backend.signIn({ webId: bob.webId })).rejects.toEqual(
+        new SignInError("account-active"),
+      );
+      expect(h.auth.login).not.toHaveBeenCalled();
+      expect(await h.auth.identity()).toEqual(bobIdentity);
+    });
+
+    it("cancels while reading the remembered session without restoring or logging in", async () => {
+      const h = await skippedSignOut();
+      const remembered = deferred<Awaited<ReturnType<PodAuth["remembered"]>>>();
+      const entered = deferred<void>();
+      h.auth.remembered.mockImplementationOnce(() => {
+        entered.resolve();
+        return remembered.promise;
+      });
+      const controller = new AbortController();
+      const signingIn = h.backend.signIn({ webId: bob.webId }, { signal: controller.signal });
+      const failure = expect(signingIn).rejects.toEqual(new SignInError("cancelled"));
+      await entered.promise;
+      controller.abort();
+      remembered.resolve([{ webId: bob.webId, issuer: bob.issuer }]);
+      await failure;
+      expect(h.auth.restore).not.toHaveBeenCalled();
+      expect(h.auth.login).not.toHaveBeenCalled();
+    });
+
+    it("fences an adoption that a sign-out overtakes", async () => {
+      const h = await skippedSignOut();
+      const restored = deferred<Identity | null>();
+      const entered = deferred<void>();
+      h.auth.restore.mockImplementationOnce(() => {
+        entered.resolve();
+        return restored.promise;
+      });
+      const signingIn = h.backend.signIn({ webId: bob.webId });
+      const failure = expect(signingIn).rejects.toEqual(new SignInError("cancelled"));
+      await entered.promise;
+      await h.backend.signOut(bob);
+      restored.resolve(bobIdentity);
+      await failure;
+      expect(h.auth.login).not.toHaveBeenCalled();
+      expect(await h.backend.restore()).toBeNull();
+    });
+  });
+
+  it("refuses sign-in over a remembered session that a cold restore did not return", async () => {
+    const h = harness();
+    h.auth.restore.mockResolvedValueOnce(null);
+    h.auth.remembered.mockResolvedValue([{ webId: bob.webId, issuer: bob.issuer }]);
+    await expect(h.backend.signIn({ webId: alice.webId })).rejects.toEqual(
+      new SignInError("account-active"),
+    );
+    expect(h.auth.login).not.toHaveBeenCalled();
   });
 
   it("clears this tab even if retirement rejects after attempting cleanup", async () => {

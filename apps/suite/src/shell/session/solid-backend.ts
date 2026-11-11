@@ -275,6 +275,50 @@ export class SolidBackend implements SessionBackend {
     return restoring;
   }
 
+  /**
+   * Returns null only when no session is remembered, so login cannot overwrite another owner.
+   * A remembered session that matches the sign-in target (WebID for a WebID hint, issuer for a
+   * provider hint) is restored and returned without login; any other session is refused.
+   */
+  async #adoptLiveSession(
+    core: PodAuth,
+    target: Awaited<ReturnType<typeof resolveLoginTarget>>,
+    signal: AbortSignal,
+    started: number,
+  ): Promise<SuiteAccount | null> {
+    const current = (session?: number) => {
+      signal.throwIfAborted();
+      if (started !== this.#version || (session !== undefined && session !== this.#sessionVersion))
+        throw new SignInError("cancelled");
+    };
+    const matches = (owner: { webId: string | null; issuer: string }) =>
+      target.kind === "webid" ? owner.webId === target.webId : owner.issuer === target.issuer;
+    const remembered = await core.remembered();
+    current();
+    if (remembered.length === 0) return null;
+    if (!remembered.every(matches)) throw new SignInError("account-active");
+    const session = this.#sessionVersion;
+    const identity = await core.restore();
+    current(session);
+    if (!identity) {
+      // The remembered session could not be restored. Login may proceed only once it is gone.
+      const remaining = await core.remembered();
+      current(session);
+      if (remaining.length === 0) return null;
+      throw new SignInError("account-active");
+    }
+    if (!matches(identity)) throw new SignInError("account-active");
+    const account = await this.#mapAccount(identity, started, session);
+    current(session);
+    this.#account = account;
+    this.#identity = identity;
+    this.#expired = false;
+    this.#signedOut = false;
+    ++this.#sessionVersion;
+    this.#restoring = Promise.resolve(account);
+    return account;
+  }
+
   async signIn(hint: SignInHint, options: SignInOptions = {}): Promise<SuiteAccount> {
     const input = "issuer" in hint ? hint.issuer : hint.webId;
     const insecure =
@@ -355,6 +399,11 @@ export class SolidBackend implements SessionBackend {
         this.#identity = null;
         this.#expired = false;
         this.#restoring = undefined;
+      } else {
+        // No account is held, for example after a skipped sign-out. A login would install a new
+        // namespace owner and supersede another tab's live session, so adopt or refuse it first.
+        const adopted = await this.#adoptLiveSession(core, target, attempt.signal, started);
+        if (adopted) return adopted;
       }
       attempt.signal.throwIfAborted();
       this.#authorizing = true;
@@ -401,7 +450,12 @@ export class SolidBackend implements SessionBackend {
         identity ?? { webId: account.webId, issuer: account.issuer ?? "" },
         "sign-out",
       );
-      if (!result.retired)
+      // Only an ownership change means another tab holds a live session. Without an owned or
+      // identified grant there is nothing to report.
+      if (
+        !result.retired &&
+        (result.reason === "owner-changed" || result.reason === "grant-changed")
+      )
         return { notice: "Signed out here. A session in another tab may still be active." };
     } finally {
       // The shell row is already removed. Detach this tab even when another tab owns the

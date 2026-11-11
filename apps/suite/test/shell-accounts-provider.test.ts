@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { AccountsProvider, useAccounts } from "../src/shell/session/accounts-provider";
 import type { SessionBackend, SuiteAccount } from "../src/shell/session/types";
@@ -124,6 +125,21 @@ it.each([
     await accounts[operation]();
   });
   expect(accounts.accounts.some((account) => account.id === one.id)).toBe(false);
+  expect(notices.toast).toHaveBeenCalledExactlyOnceWith(notice);
+});
+
+it("shows a repeated skipped-retirement notice once when sign-out-all removes several accounts", async () => {
+  const first = backend(one);
+  const second = backend(two);
+  const notice = "Signed out here. A session in another tab may still be active.";
+  vi.spyOn(first, "signOut").mockResolvedValue({ notice });
+  vi.spyOn(second, "signOut").mockResolvedValue({ notice });
+  await mount(h(AccountsProvider, { backends: [first, second], children: h(Probe) }));
+  await act(async () => {
+    await accounts.signOutAll();
+  });
+  expect(first.signOut).toHaveBeenCalledWith(one);
+  expect(second.signOut).toHaveBeenCalledWith(two);
   expect(notices.toast).toHaveBeenCalledExactlyOnceWith(notice);
 });
 

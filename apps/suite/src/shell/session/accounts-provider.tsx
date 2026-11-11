@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 "use client";
 
 import { toast } from "@jeswr/suite-ui";
@@ -30,8 +31,11 @@ import {
 } from "./types";
 
 function finishSignOut(results: PromiseSettledResult<SignOutResult>[]): void {
+  // Sign-out-all can return the same notice for several accounts; show each message once.
+  const notices = new Set<string>();
   for (const result of results)
-    if (result.status === "fulfilled" && result.value?.notice) toast(result.value.notice);
+    if (result.status === "fulfilled" && result.value?.notice) notices.add(result.value.notice);
+  for (const notice of notices) toast(notice);
   const failure = results.find((result) => result.status === "rejected");
   if (failure?.status === "rejected") throw failure.reason;
 }
