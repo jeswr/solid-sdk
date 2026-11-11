@@ -18,6 +18,10 @@ client. Keep every write conditional. The WAC-only privacy proof checks all mode
 pod-access; readGrants role rows alone cannot prove privacy because partial rights may be absent
 from their projection. Never silently accept ACP, LWS, unreadable/unknown access, a foreign owner,
 or a changed ETag. Never write plan content to an unverified placeholder or alter access controls.
+Prove privacy for the plan and the settings folder's own scope on every load and save. Invalid
+private content is reported (`invalid: true`), never repaired; deletion of exactly the plan needs
+no proof. Never treat Last-Modified as the current time; it only bounds stored timestamps. Saves
+from a draft must be refused when the plan content changed since the draft's base snapshot.
 Read README's non-atomic ACL-check limitation before modifying storage.
 
 Add adversarial tests for every new branch. Keep 100% coverage thresholds. Run lint, dependency-first

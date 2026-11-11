@@ -22,10 +22,15 @@ are generated entities linked inside the same document; no remote contact data i
   and JavaScript's date range. Future activity delays the schedule rather than shortening it.
 - `recordActivity`: immutable update after at least 24 hours; no backward timestamps, no repair
   of malformed plans. The app invokes it only after a trusted pointer or keyboard interaction when a plan already exists.
-  Silent session restoration is not activity. `boundedNow` caps a fast device clock to five minutes
-  beyond server time; the suite advances the load response’s Date (Last-Modified fallback) with a
-  monotonic clock and uses that same bound for heartbeats, warnings and new-plan timestamps.
-  Missing/invalid server time disables heartbeats and warnings until a dated response is observed.
+  Silent session restoration is not activity. Heartbeats, warnings and new-plan timestamps use the
+  device clock. `boundedNow` caps a fast device clock to five minutes beyond server time; the suite
+  applies it only when a plan response exposes a valid `Date` header (cross-origin servers usually
+  hide it), as a wall-clock offset that survives sleep. Last-Modified is never treated as the
+  current time: it is the time of the last write, so a daily user's heartbeat would never advance.
+- `clampStoredTimes(plan, lastModified)`: the load-time sanity bound. No stored timestamp may be
+  later than the resource's own Last-Modified plus five minutes; later ones are clamped (monotonic,
+  so the plan stays valid). `load()` applies it, so a fast clock cannot postpone the schedule.
+- `samePlan(a, b, {ignoreTimes})`: content equality independent of RDF set order.
 - `proposedGrants`: read only, explicit targets with inheritance, never performs I/O. Disabled
   plans can still be previewed. Malformed plans have no proposals.
 - `planPolicy`: standard ODRL read permissions, assignee = exact contact WebID, target = exact
@@ -36,13 +41,21 @@ are generated entities linked inside the same document; no remote contact data i
   This policy is advisory; **it does not authorise an access-control write**.
 
 `createLegacyStore({storage, owner, fetch})` uses `settings/legacy-plan.ttl`. `load()` returns
-null only for a missing resource, otherwise a validated private `{plan, etag}`. A zero-byte
-resource returns `{plan: null, etag}` after the privacy proof. Fill that placeholder with its
-strong ETag; it is never an invalid plan or a create-only retry. Nonempty bodies remain subject
-to generated validation. Raw and RDF reads must have the same ETag. `save(plan, etag)`
-is conditional; use null only for initial creation. `delete(etag)` conditionally removes the plan after the same privacy proof. No automatic conflict retries. New resources
-start empty. Initial saves first verify the settings folder’s future-member access, then verify
-the created resource itself; no plan content is sent until both checks pass. It never edits an ACL.
+null only for a missing resource, otherwise a private `{plan, etag}`. Only a complete 200 response
+with a present, zero-length body is an empty placeholder: it returns `{plan: null, etag}` after the
+privacy proof. Fill it with its strong ETag; it is never a create-only retry. A null body (304,
+shims) or a partial response is an error, never a placeholder. A nonempty body that is not a valid
+plan for this owner and storage (unparsable, failing generated validation, foreign owner/storage)
+returns `{plan: null, etag, invalid: true}` after the privacy proof: nothing is evaluated, and the
+caller may replace it with `save(plan, etag)` or remove it with `delete(etag)`. Raw and RDF reads
+must have the same ETag. Every privacy check covers the plan resource **and the settings folder's
+own resource scope** (its listing), on load and on every save. `save(plan, etag)` is conditional;
+use null only for initial creation. `delete(etag)` conditionally removes exactly the plan resource
+and needs no privacy proof: deleting discloses nothing. When `load()` refuses privacy, the
+`LegacyPrivacyError` carries the resource's strong `etag` (if any) so the plan stays removable. No
+automatic conflict retries. New resources start empty. Initial saves first verify the settings
+folder’s own and future-member access, then verify the created resource itself; no plan content is
+sent until all checks pass. It never edits an ACL.
 
 The first storage adapter supports WAC Solid only. It pins the access model through pod-access
 and reads the advertised own/nearest ancestor ACL with pod-access's conservative WAC reader.
@@ -58,7 +71,11 @@ requests: a server-side ACL change can race a save. Transactional access proofs 
 models need a separately reviewed adapter. A refused first save can leave an **empty** placeholder
 and settings container; it never leaves plan contents there. If a write response supplies no
 reliable strong validator, save reloads the complete private snapshot and its strong ETag before
-returning. A heartbeat that loses a two-tab race reloads the winning snapshot and skips its write.
+returning, and refuses if the reloaded content (timestamps aside) is not what it wrote: another
+writer won, so it never reports success. A heartbeat that loses a two-tab race reloads the winning
+snapshot and skips its write. The suite's editor saves against the snapshot it was edited from:
+when another tab or device changed the content, the session refuses a stale draft and the editor
+remounts on the latest version with a notice.
 Disabled plans may have no contacts; enabled plans still require at least one.
 The facade rejects any raw contact term dropped by the generated optional-set projection, so
 malformed contact links cannot leave a partially accepted plan eligible for evaluation.
@@ -77,7 +94,8 @@ request from trusted inputs and supply the trusted evaluation clock. “Activity
 actual user interaction, never a silent sign-in/session restore or background refresh.
 
 Settings and everything below `<storage>settings/` (including encoded aliases and the plan itself)
-are forbidden targets. Whole-pod scope is a snapshot of explicitly listed top-level containers
+are forbidden targets. Targets with an empty path segment (`a//b/`) or a `;` (raw or `%3B`) in any
+segment are refused, because servers may collapse `//` or strip matrix parameters. Whole-pod scope is a snapshot of explicitly listed top-level containers
 except settings, with one inherited read proposal per container. It excludes the root, root-level
 files, and containers created after the snapshot. The UI lists the folders included in the preview;
 recreate the contact to refresh its scope. A whole-pod root IRI from older plans is refused rather

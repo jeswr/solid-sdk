@@ -103,13 +103,18 @@ describe("owner-only verification", () => {
     await expect(store.save(plan(), null)).rejects.toBeInstanceOf(LegacyPrivacyError);
     await expect(storage.read(url)).rejects.toMatchObject({ code: "not-found" });
   });
-  it("accepts a private own ACL even under a public ancestor and does not edit ACLs", async () => {
+  it("accepts private own ACLs on settings and the plan under a public ancestor and does not edit ACLs", async () => {
     const { storage, store } = await fixture();
     const saved = await store.save(plan(), null);
     await storage.create(
       `${root}settings/`,
       await writeWac(ownerPolicy(owner), url, `${url}.acl`),
       { name: "legacy-plan.ttl.acl", contentType: "text/turtle" },
+    );
+    await storage.create(
+      `${root}settings/`,
+      await writeWac(ownerPolicy(owner, true), `${root}settings/`, `${root}settings/.acl`),
+      { name: ".acl", contentType: "text/turtle" },
     );
     const acl = await storage.read(`${root}.acl`);
     const policy = ownerPolicy(owner, true);
@@ -177,19 +182,58 @@ describe("owner-only verification", () => {
     }
   });
 });
-it("never repairs or evaluates malformed saved data and rejects foreign ownership on load", async () => {
+it("never repairs or evaluates malformed saved data, and reports it as replaceable or deletable", async () => {
+  const { storage, store } = await fixture();
+  const saved = await store.save(plan(), null);
+  const { serializePlan } = await import("../src/model.js");
+  for (const body of [
+    " ",
+    "<<< not turtle",
+    await serializePlan(url, { ...plan(), owner: "https://other.example/#me" }),
+    await serializePlan(url, {
+      ...plan(),
+      storage: "https://other.example/",
+      enabled: false,
+      contacts: [],
+    }),
+  ]) {
+    const before = await storage.head(url);
+    await storage.write(url, body, { contentType: "text/turtle", ifMatch: before.etag! });
+    const etag = (await storage.head(url)).etag!;
+    expect(await store.load()).toEqual({ plan: null, etag, invalid: true });
+  }
+  // Replace: a conditional write with the invalid version's ETag.
+  const invalid = (await store.load())!;
+  const replaced = await store.save(plan(), invalid.etag);
+  expect((await store.load())?.plan).toEqual(plan());
+  // Delete: equally conditional, exactly the plan resource.
+  await storage.write(url, " ", { contentType: "text/turtle", ifMatch: replaced.etag });
+  const remove = vi.spyOn(storage, "delete");
+  await store.delete((await store.load())!.etag);
+  expect(remove).toHaveBeenCalledExactlyOnceWith(url, expect.any(Object));
+  expect(await store.load()).toBeNull();
+  expect(saved.etag).not.toBe(replaced.etag);
+});
+it("refuses invalid content on a pod that fails the privacy proof, without exposing it", async () => {
   const { storage, store } = await fixture();
   const saved = await store.save(plan(), null);
   await storage.write(url, " ", { contentType: "text/turtle", ifMatch: saved.etag });
-  await expect(store.load()).rejects.toThrow("invalid");
-  const fresh = await storage.head(url);
-  const { serializePlan } = await import("../src/model.js");
-  await storage.write(
-    url,
-    await serializePlan(url, { ...plan(), owner: "https://other.example/#me" }),
-    { contentType: "text/turtle", ifMatch: fresh.etag! },
-  );
-  await expect(store.load()).rejects.toThrow("invalid");
+  const rdf = storage.readRdf.bind(storage);
+  vi.spyOn(storage, "readRdf").mockImplementation(async (target, opts) => {
+    if (target !== url) throw new Error("unreadable ACL");
+    return rdf(target, opts);
+  });
+  await expect(store.load()).rejects.toBeInstanceOf(LegacyPrivacyError);
+});
+it("propagates RDF read failures other than not-rdf", async () => {
+  const { storage, store } = await fixture();
+  await store.save(plan(), null);
+  const rdf = storage.readRdf.bind(storage);
+  vi.spyOn(storage, "readRdf").mockImplementation(async (target, opts) => {
+    if (target === url) throw new StorageError("server", { url, method: "GET" });
+    return rdf(target, opts);
+  });
+  await expect(store.load()).rejects.toMatchObject({ code: "server" });
 });
 it("propagates non-404 load and creation errors", async () => {
   const { storage, store } = await fixture();
@@ -223,7 +267,7 @@ it("does not trust redirected creation URLs, nonempty placeholders, or missing v
           ? {
               ...result,
               ...(kind === "nonempty"
-                ? { bytes: async () => new Uint8Array([1]) }
+                ? { body: new Blob([new Uint8Array([1])]).stream() }
                 : { etag: null }),
             }
           : result;
@@ -379,21 +423,58 @@ it.each(["deleted", "emptied"])("refuses when a validator-less write is then %s"
   });
   await expect(store.save(plan(), null)).rejects.toThrow("changed");
 });
-it("deletes conditionally after a privacy proof, without ACL or profile writes", async () => {
+it("deletes exactly the plan conditionally, without ACL or profile writes", async () => {
   const { storage, store } = await fixture();
   const saved = await store.save(plan(), null);
+  const remove = vi.spyOn(storage, "delete");
   await expect(store.delete("*")).rejects.toThrow("strong ETag");
+  await expect(store.delete('W/"weak"')).rejects.toThrow("strong ETag");
+  expect(remove).not.toHaveBeenCalled();
   const current = await store.save({ ...saved.plan, enabled: false, contacts: [] }, saved.etag);
   await expect(store.delete(saved.etag)).rejects.toMatchObject({ code: "precondition-failed" });
-  const remove = vi.spyOn(storage, "delete");
-  const rdf = vi.spyOn(storage, "readRdf").mockRejectedValue(new Error("unreadable ACL"));
-  await expect(store.delete(current.etag)).rejects.toBeInstanceOf(LegacyPrivacyError);
-  expect(remove).not.toHaveBeenCalled();
-  rdf.mockRestore();
+  const write = vi.spyOn(storage, "write");
   await store.delete(current.etag);
-  expect(remove).toHaveBeenCalledExactlyOnceWith(url, { ifMatch: current.etag });
+  expect(remove).toHaveBeenLastCalledWith(url, { ifMatch: current.etag });
+  expect(remove.mock.calls.every(([target]) => target === url)).toBe(true);
+  expect(write).not.toHaveBeenCalled();
   expect(await store.load()).toBeNull();
   expect((await storage.read(`${root}.acl`)).etag).toBeTruthy();
+});
+it("allows deleting a plan whose privacy proof fails, using the ETag from the refusal", async () => {
+  const { storage, store } = await fixture();
+  const saved = await store.save(plan(), null);
+  const acl = await storage.read(`${root}.acl`);
+  const policy = ownerPolicy(owner, true);
+  policy.grants.push({
+    ...policy.grants[0]!,
+    who: [[{ kind: "public" }]],
+    modes: new Set(["read"]),
+  });
+  await storage.write(`${root}.acl`, await writeWac(policy, root, `${root}.acl`), {
+    contentType: "text/turtle",
+    ifMatch: acl.etag!,
+  });
+  const refusal = await store.load().catch((error: unknown) => error);
+  expect(refusal).toBeInstanceOf(LegacyPrivacyError);
+  expect((refusal as LegacyPrivacyError).etag).toBe(saved.etag);
+  expect((refusal as LegacyPrivacyError).message).not.toContain("Alex");
+  await store.delete((refusal as LegacyPrivacyError).etag!);
+  await expect(storage.head(url)).rejects.toMatchObject({ code: "not-found" });
+  // The ACL itself is untouched; the pod is still public until the owner changes it.
+  expect(await (await storage.read(`${root}.acl`)).text()).toContain("xmlns.com/foaf/0.1/Agent");
+});
+it("does not expose a weak or missing ETag on a privacy refusal", async () => {
+  const { storage, store } = await fixture();
+  await store.save(plan(), null);
+  const read = storage.read.bind(storage);
+  vi.spyOn(storage, "read").mockImplementation(async (target, opts) => ({
+    ...(await read(target, opts)),
+    ...(target === url ? { etag: 'W/"weak"' } : {}),
+  }));
+  vi.spyOn(storage, "readRdf").mockRejectedValue(new Error("unreadable ACL"));
+  const refusal = await store.load().catch((error: unknown) => error);
+  expect(refusal).toBeInstanceOf(LegacyPrivacyError);
+  expect((refusal as LegacyPrivacyError).etag).toBeUndefined();
 });
 it("refuses an ACP pod through the WAC model pin before creating a plan", async () => {
   const { storage, store } = await fixture();
@@ -484,9 +565,113 @@ it.each([
           }),
   }));
   if (kind === "stream-failure") await expect(store.load()).rejects.toThrow("broken stream");
-  else if (kind === "no-body") expect((await store.load())?.plan).toBeNull();
+  else if (kind === "no-body") await expect(store.load()).rejects.toThrow("could not be read");
   else {
     expect((await store.load())?.plan).toEqual(plan());
     expect(cancelled).toHaveBeenCalledOnce();
   }
+});
+it.each([
+  ["304", 304, true],
+  ["206", 206, true],
+  ["304 without body", 304, false],
+] as const)("never treats a %s response as an empty placeholder", async (_, status, withBody) => {
+  const { storage, store } = await fixture();
+  const saved = await store.save(plan(), null);
+  const read = storage.read.bind(storage);
+  const cancelled = vi.fn();
+  vi.spyOn(storage, "read").mockImplementation(async (...args) => ({
+    ...(await read(...args)),
+    status,
+    body: withBody ? new ReadableStream<Uint8Array>({ cancel: cancelled }) : null,
+  }));
+  const write = vi.spyOn(storage, "write");
+  await expect(store.load()).rejects.toThrow("could not be read");
+  if (withBody) expect(cancelled).toHaveBeenCalledOnce();
+  // The first-save path applies the same rule to the placeholder it created.
+  await storage.delete(url, { ifMatch: saved.etag });
+  await expect(store.save(plan(), null)).rejects.toThrow("could not be read");
+  expect(write).not.toHaveBeenCalled();
+});
+it("refuses public access to the settings folder itself on load and on later saves", async () => {
+  const { storage, store } = await fixture();
+  const saved = await store.save(plan(), null);
+  const settings = `${root}settings/`;
+  // Public acl:accessTo settings/ (its listing), owner-only acl:default for its members.
+  const policy = ownerPolicy(owner, true);
+  policy.grants.push({
+    ...policy.grants[0]!,
+    appliesTo: "resource",
+    who: [[{ kind: "public" }]],
+    modes: new Set(["read"]),
+  });
+  await storage.create(settings, await writeWac(policy, settings, `${settings}.acl`), {
+    name: ".acl",
+    contentType: "text/turtle",
+  });
+  const write = vi.spyOn(storage, "write");
+  await expect(store.load()).rejects.toBeInstanceOf(LegacyPrivacyError);
+  await expect(store.save(plan(), saved.etag)).rejects.toBeInstanceOf(LegacyPrivacyError);
+  expect(write).not.toHaveBeenCalled();
+  // The same owner-only policy without the public direct grant is accepted.
+  const acl = await storage.read(`${settings}.acl`);
+  await storage.write(
+    `${settings}.acl`,
+    await writeWac(ownerPolicy(owner, true), settings, `${settings}.acl`),
+    { contentType: "text/turtle", ifMatch: acl.etag! },
+  );
+  expect((await store.load())?.plan).toEqual(plan());
+});
+it("clamps stored timestamps later than the resource's Last-Modified plus five minutes", async () => {
+  const { storage, store } = await fixture();
+  const future = new Date("2099-01-01T00:00:00Z");
+  const saved = await store.save(
+    { ...plan(), created: plan().created, modified: future, lastActivity: future },
+    null,
+  );
+  expect(saved.plan.lastActivity).toEqual(future);
+  const bound = (await storage.read(url)).lastModified!.getTime() + 300_000;
+  const loaded = (await store.load())!.plan!;
+  expect(loaded.lastActivity.getTime()).toBe(bound);
+  expect(loaded.modified.getTime()).toBe(bound);
+  expect(loaded.created).toEqual(plan().created);
+  // Past timestamps stay exactly as stored.
+  await store.save(plan(), (await store.load())!.etag);
+  expect((await store.load())?.plan).toEqual(plan());
+});
+it("reports another writer's content after a validator-less write instead of claiming success", async () => {
+  const { storage, store } = await fixture();
+  const saved = await store.save(plan(), null);
+  const { serializePlan } = await import("../src/model.js");
+  const write = storage.write.bind(storage);
+  vi.spyOn(storage, "write").mockImplementation(async (...args) => {
+    const result = await write(...args);
+    // Another tab removes the contact between our write and our reload.
+    await write(url, await serializePlan(url, { ...plan(), enabled: false, contacts: [] }), {
+      contentType: "text/turtle",
+      ifMatch: result.etag!,
+    });
+    return { ...result, etag: null };
+  });
+  await expect(store.save(plan(), saved.etag)).rejects.toThrow("changed in another tab");
+});
+it("accepts a validator-less write whose reload differs only in heartbeat timestamps", async () => {
+  const { storage, store } = await fixture();
+  const saved = await store.save(plan(), null);
+  const { serializePlan } = await import("../src/model.js");
+  const later = new Date("2026-03-01T12:00:00Z");
+  const write = storage.write.bind(storage);
+  vi.spyOn(storage, "write").mockImplementation(async (...args) => {
+    const result = await write(...args);
+    await write(
+      url,
+      await serializePlan(url, { ...plan(), modified: later, lastActivity: later }),
+      {
+        contentType: "text/turtle",
+        ifMatch: result.etag!,
+      },
+    );
+    return { ...result, etag: null };
+  });
+  expect((await store.save(plan(), saved.etag)).plan.lastActivity).toEqual(later);
 });

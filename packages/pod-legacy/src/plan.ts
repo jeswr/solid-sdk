@@ -47,16 +47,71 @@ function container(value: unknown): value is string {
     !/%(?:2f|5c|25)/i.test(url.pathname)
   );
 }
-/** Canonical in-pod folders only; settings and its encoded aliases are always private. */
+/**
+ * Canonical in-pod folders only; settings and its encoded aliases are always private. Empty
+ * segments and `;` (raw or encoded) are refused because servers may collapse `//` or strip
+ * matrix parameters, turning `alice//settings/` or `settings;x/` into a private folder.
+ */
 export function isLegacyTarget(target: unknown, root: string): target is string {
   if (!container(root) || !container(target) || !target.startsWith(root) || target === root)
     return false;
-  const relative = target.slice(root.length);
   try {
-    return decodeURIComponent(relative.split("/")[0] as string).toLowerCase() !== "settings";
+    const segments = target
+      .slice(root.length, -1)
+      .split("/")
+      .map((segment) => decodeURIComponent(segment));
+    return (
+      segments.every((segment) => segment.length > 0 && !segment.includes(";")) &&
+      (segments[0] as string).toLowerCase() !== "settings"
+    );
   } catch {
     return false;
   }
+}
+/**
+ * Plan content equality, independent of RDF set order. `ignoreTimes` skips created, modified and
+ * lastActivity, so a heartbeat or a load-time clamp is not mistaken for a content change.
+ */
+export function samePlan(
+  a: LegacyPlan,
+  b: LegacyPlan,
+  options: { ignoreTimes?: boolean } = {},
+): boolean {
+  const key = (plan: LegacyPlan) =>
+    JSON.stringify([
+      plan.owner,
+      plan.storage,
+      plan.enabled,
+      plan.inactivityMonths,
+      [...new Set(plan.warningDays)].sort((x, y) => x - y),
+      [...new Set(plan.notifyMeBy)].sort(),
+      plan.contacts
+        .map((c) =>
+          JSON.stringify([c.webId, c.displayName, c.scope, c.mode, [...new Set(c.targets)].sort()]),
+        )
+        .sort(),
+      options.ignoreTimes
+        ? []
+        : [plan.created, plan.modified, plan.lastActivity].map((date) => date.getTime()),
+    ]);
+  return key(a) === key(b);
+}
+/**
+ * Load-time sanity bound: no stored timestamp can be later than the resource's own Last-Modified
+ * plus five minutes of skew. Clamping is monotonic, so the order created ≤ modified/lastActivity
+ * is preserved. Last-Modified is never used as the current time. A missing or invalid
+ * Last-Modified leaves the plan unchanged.
+ */
+export function clampStoredTimes(plan: LegacyPlan, lastModified: Date | null): LegacyPlan {
+  if (!validDate(lastModified)) return plan;
+  const bound = lastModified.getTime() + 300_000;
+  const clamp = (date: Date) => new Date(Math.min(date.getTime(), bound));
+  return {
+    ...plan,
+    created: clamp(plan.created),
+    modified: clamp(plan.modified),
+    lastActivity: clamp(plan.lastActivity),
+  };
 }
 /** Fail closed without server time; tolerate at most five minutes of fast local clock. */
 export function boundedNow(now: Date, serverNow: Date): Date {

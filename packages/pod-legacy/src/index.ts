@@ -3,6 +3,7 @@ export { buildPlan, entities, parsePlan, serializePlan } from "./model.js";
 export type { LegacyContact, LegacyPlan, PlanEvaluation, ProposedGrant } from "./plan.js";
 export {
   boundedNow,
+  clampStoredTimes,
   dueDate,
   evaluatePlan,
   isLegacyTarget,
@@ -10,6 +11,7 @@ export {
   planPolicy,
   proposedGrants,
   recordActivity,
+  samePlan,
   validPlan,
 } from "./plan.js";
 export type { LegacySnapshot } from "./storage.js";

@@ -3,6 +3,7 @@ import { evaluate, parsePolicy, policyToTurtle } from "@jeswr/solid-odrl";
 import { describe, expect, it } from "vitest";
 import {
   boundedNow,
+  clampStoredTimes,
   DAY,
   dueDate,
   evaluatePlan,
@@ -12,6 +13,7 @@ import {
   planPolicy,
   proposedGrants,
   recordActivity,
+  samePlan,
   validPlan,
 } from "../src/plan.js";
 import { plan, root } from "./fixture.js";
@@ -239,6 +241,12 @@ it.each([
   `${root}%73ettings/`,
   `${root}SETTINGS/`,
   `${root}%ZZ/`,
+  `${root}alice//settings/`,
+  `${root}Photos//`,
+  `${root}settings;x/`,
+  `${root}Photos/settings;x/`,
+  `${root}Photos%3Bx/`,
+  `${root}Photos/%3b/`,
   "not-an-iri",
 ])("never proposes settings or an unsafe target %s", (target) => {
   expect(isLegacyTarget(target, root)).toBe(false);
@@ -249,6 +257,12 @@ it.each([
     expect(validPlan(p)).toBe(false);
     expect(proposedGrants(p)).toEqual([]);
   }
+});
+it("refuses empty segments and matrix parameters relative to a nested pod root", () => {
+  const nested = `${root}alice/`;
+  expect(isLegacyTarget(`${nested}/settings/`, nested)).toBe(false);
+  expect(isLegacyTarget(`${nested}settings;v=1/`, nested)).toBe(false);
+  expect(isLegacyTarget(`${nested}Photos/`, nested)).toBe(true);
 });
 it("validates roots and preserves unrelated folder names", () => {
   expect(isLegacyTarget(`${root}Photos/`, "invalid")).toBe(false);
@@ -289,4 +303,52 @@ it("ODRL container targets do not authorize descendants or settings", () => {
         { now: new Date("2030-01-01") },
       ).decision,
     ).toBe("notApplicable");
+});
+it("compares plan content independent of set order, optionally ignoring timestamps", () => {
+  const a = plan();
+  const b = plan();
+  b.warningDays = [7, 30, 7];
+  b.notifyMeBy = ["tray", "settings"];
+  b.contacts = [
+    { ...b.contacts[0]!, targets: [...b.contacts[0]!.targets].reverse() },
+    { ...b.contacts[0]!, webId: "https://jo.example/#me" },
+  ];
+  a.contacts = [{ ...b.contacts[1]! }, { ...a.contacts[0]! }];
+  expect(samePlan(a, b)).toBe(true);
+  const later = { ...b, lastActivity: new Date("2026-05-01"), modified: new Date("2026-05-01") };
+  expect(samePlan(a, later)).toBe(false);
+  expect(samePlan(a, later, { ignoreTimes: true })).toBe(true);
+  expect(samePlan(a, { ...b, created: new Date("2025-02-01") }, { ignoreTimes: true })).toBe(true);
+  for (const change of [
+    { enabled: false },
+    { inactivityMonths: 12 },
+    { warningDays: [30] },
+    { notifyMeBy: ["settings"] as LegacyPlan["notifyMeBy"] },
+    { contacts: [a.contacts[0]!] },
+    { contacts: [{ ...a.contacts[0]!, displayName: "Other" }, a.contacts[1]!] },
+    { contacts: [{ ...a.contacts[0]!, targets: [`${root}Photos/`] }, a.contacts[1]!] },
+    { owner: "https://other.example/#me" },
+  ])
+    expect(samePlan(a, { ...a, ...change }, { ignoreTimes: true })).toBe(false);
+});
+it("clamps stored timestamps to Last-Modified plus five minutes, never using it as now", () => {
+  const p = plan();
+  const lastModified = new Date("2026-01-31T11:00:00Z");
+  const bound = new Date(lastModified.getTime() + 300_000);
+  const clamped = clampStoredTimes(p, lastModified);
+  expect(clamped.created).toEqual(p.created);
+  expect(clamped.modified).toEqual(bound);
+  expect(clamped.lastActivity).toEqual(bound);
+  expect(validPlan(clamped)).toBe(true);
+  // Activity a few days before Last-Modified is untouched, so heartbeats still advance.
+  expect(clampStoredTimes(p, new Date("2026-02-03T12:00:00Z"))).toEqual(p);
+  expect(clampStoredTimes(p, new Date("2026-01-31T11:55:00Z"))).toEqual(p);
+  // Monotonic: an all-future record keeps created <= modified/lastActivity.
+  const future = { ...p, created: new Date("2099-01-01"), modified: new Date("2099-02-01") };
+  future.lastActivity = future.modified;
+  const all = clampStoredTimes(future, lastModified);
+  expect([all.created, all.modified, all.lastActivity]).toEqual([bound, bound, bound]);
+  expect(validPlan(all)).toBe(true);
+  expect(clampStoredTimes(p, null)).toBe(p);
+  expect(clampStoredTimes(p, new Date(NaN))).toBe(p);
 });

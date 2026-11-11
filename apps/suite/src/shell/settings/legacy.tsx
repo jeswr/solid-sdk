@@ -20,6 +20,10 @@ import type { SuiteAccount } from "../session/types";
 import { RequiresOnline } from "../sync/requires-online";
 
 type Person = { name: string; webId: string };
+/** The device clock when a supplied time is not a valid Date; never an Invalid Date. */
+function validNow(time: Date | undefined): Date {
+  return time instanceof Date && Number.isFinite(time.getTime()) ? time : new Date();
+}
 export function RecoveryChecklist({
   account,
   issuers,
@@ -81,6 +85,7 @@ export function LegacyEditor({
   onSave,
   onDelete,
   now = () => new Date(),
+  notice = "",
 }: {
   initial: LegacyPlan;
   folders: string[];
@@ -88,6 +93,8 @@ export function LegacyEditor({
   onSave(plan: LegacyPlan): Promise<void>;
   onDelete?: (() => Promise<void>) | undefined;
   now?: () => Date;
+  /** Shown on mount, e.g. after another tab's change replaced the draft. */
+  notice?: string;
 }) {
   const [plan, setPlan] = useState(initial);
   const [webId, setWebId] = useState("");
@@ -95,7 +102,7 @@ export function LegacyEditor({
   const [scope, setScope] = useState<LegacyContact["scope"]>("containers");
   const [targets, setTargets] = useState<string[]>([]);
   const [folderIri, setFolderIri] = useState("");
-  const [message, setMessage] = useState("");
+  const [message, setMessage] = useState(notice);
   const [saving, setSaving] = useState(false);
   const available = [...new Set([...folders, ...targets])].filter((target) =>
     isLegacyTarget(target, plan.storage),
@@ -306,7 +313,7 @@ export function LegacyEditor({
           onClick={() => {
             setSaving(true);
             setMessage("Saving…");
-            void onSave({ ...plan, modified: now() })
+            void onSave({ ...plan, modified: validNow(now()) })
               .then(
                 () => setMessage("Legacy plan saved. Nothing has been shared."),
                 (error: unknown) =>
@@ -349,7 +356,8 @@ export function LegacyEditor({
 }
 export function LegacySettings() {
   const { active } = useAccounts();
-  const { session, loading, error } = useLegacy();
+  const { session, loading, error, withdraw } = useLegacy();
+  const [withdrawing, setWithdrawing] = useState("");
   const env = useSuiteEnvironment();
   const [extra, setExtra] = useState<{
     account: SuiteAccount;
@@ -409,7 +417,7 @@ export function LegacySettings() {
   }, [session]);
   if (!active) return null;
   const data = extra?.account === active ? extra : null;
-  const now = session?.now() ?? new Date();
+  const now = validNow(session?.now());
   const initial: LegacyPlan = session?.snapshot?.plan ?? {
     owner: active.webId,
     storage: active.storageUrl,
@@ -430,16 +438,60 @@ export function LegacySettings() {
         provider={env.NEXT_PUBLIC_SUITE_IDP_ACCOUNT_URL}
       />
       {error && <p role="alert">{error}</p>}
+      {withdraw && (
+        <section aria-label="Delete the unverified legacy plan">
+          <p>
+            You can still delete the saved plan. Deleting does not share anything or change who can
+            access your settings.
+          </p>
+          <RequiresOnline>
+            <Button
+              variant="outline"
+              disabled={withdrawing === "Deleting…"}
+              onClick={() => {
+                setWithdrawing("Deleting…");
+                void withdraw().then(
+                  () => setWithdrawing(""),
+                  (failure: unknown) =>
+                    setWithdrawing(
+                      failure instanceof Error ? failure.message : "Could not delete the plan.",
+                    ),
+                );
+              }}
+            >
+              Delete my legacy plan
+            </Button>
+          </RequiresOnline>
+          <p role="status" aria-live="polite">
+            {withdrawing}
+          </p>
+        </section>
+      )}
       {loading && <p role="status">Loading your private plan…</p>}
+      {session?.snapshot?.invalid && (
+        <Alert>
+          <AlertDescription>
+            Your saved legacy plan could not be read, so nothing is evaluated or shared. Save a new
+            plan below to replace it, or delete it.
+          </AlertDescription>
+        </Alert>
+      )}
       {session && (
         <LegacyEditor
-          key={`${active.id}:${session.snapshot?.plan ? "saved" : "empty"}`}
+          // Remount only when another tab or device changed the content. The draft's base is the
+          // snapshot rendered with it, so a save from a stale draft is refused by the session.
+          key={`${active.id}:${session.revision}`}
           initial={initial}
           folders={data?.folders ?? []}
           people={data?.people ?? []}
-          onSave={session.save}
-          onDelete={session.snapshot ? session.delete : undefined}
+          onSave={(plan) => session.save(plan, session.snapshot)}
+          onDelete={session.snapshot ? () => session.delete(session.snapshot) : undefined}
           now={session.now}
+          notice={
+            session.revision
+              ? "Your legacy plan was changed in another tab or device. The latest saved version is shown; unsaved changes were not kept."
+              : ""
+          }
         />
       )}
     </div>

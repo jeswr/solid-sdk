@@ -5,8 +5,10 @@ import {
   createLegacyStore,
   evaluatePlan,
   type LegacyPlan,
+  LegacyPrivacyError,
   type LegacySnapshot,
   recordActivity,
+  samePlan,
 } from "@jeswr/pod-legacy";
 import { createPodClient, type StorageClient, StorageError } from "@jeswr/storage-client";
 import { createContext, type ReactNode, useContext, useEffect, useRef, useState } from "react";
@@ -21,15 +23,37 @@ interface LegacySession {
   store: ReturnType<typeof createLegacyStore>;
   fetch: typeof fetch;
   snapshot: LegacySnapshot | null;
+  /** Increments only when another tab or device changed the plan's content. */
+  revision: number;
   now(): Date;
-  save(plan: LegacyPlan): Promise<void>;
-  delete(): Promise<void>;
+  /** `base` is the snapshot the draft was edited from; a changed plan refuses the save. */
+  save(plan: LegacyPlan, base: LegacySnapshot | null): Promise<void>;
+  delete(base: LegacySnapshot | null): Promise<void>;
 }
-const Context = createContext<{ session: LegacySession | null; error: string; loading: boolean }>({
-  session: null,
-  error: "",
-  loading: false,
-});
+interface LegacyContextValue {
+  session: LegacySession | null;
+  error: string;
+  loading: boolean;
+  /** Offered when privacy cannot be verified: conditionally deletes exactly the plan resource. */
+  withdraw?: (() => Promise<void>) | undefined;
+}
+const Context = createContext<LegacyContextValue>({ session: null, error: "", loading: false });
+export const LEGACY_CONFLICT =
+  "Your legacy plan was changed in another tab or device. Review the latest version, then save again.";
+
+const blank = (snapshot: LegacySnapshot | null) =>
+  !snapshot || (!snapshot.plan && !snapshot.invalid);
+/**
+ * Same plan content, heartbeat timestamps excluded. A missing resource and an empty placeholder
+ * both hold no plan, so they match each other; two unreadable resources match each other.
+ */
+export function sameContent(a: LegacySnapshot | null, b: LegacySnapshot | null): boolean {
+  if (blank(a) || blank(b)) return blank(a) && blank(b);
+  if (!a?.plan || !b?.plan) return !a?.plan && !b?.plan;
+  return samePlan(a.plan, b.plan, { ignoreTimes: true });
+}
+const conflict = (error: unknown) =>
+  error instanceof StorageError && error.code === "precondition-failed";
 
 /** Account-scoped, abortable activity recording. Merely opening the suite never creates a plan. */
 export function LegacyProvider({ children }: { children: ReactNode }) {
@@ -39,42 +63,51 @@ export function LegacyProvider({ children }: { children: ReactNode }) {
   const account = accounts.active;
   const ready = accounts.status === "ready";
   const [session, setSession] = useState<LegacySession | null>(null);
-  const [failure, setFailure] = useState<{ account: SuiteAccount; message: string } | null>(null);
+  const [failure, setFailure] = useState<{
+    account: SuiteAccount;
+    message: string;
+    withdraw?: (() => Promise<void>) | undefined;
+  } | null>(null);
+  const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     if (!ready || !account) return;
+    void attempt; // A successful withdrawal re-runs the load for the same account.
     const controller = new AbortController();
     const current = () =>
       !controller.signal.aborted &&
       latest.current.active === account &&
       latest.current.isActiveAccount(account.id);
-    let clock: { time: number; observed: number } | undefined;
+    // Server Date minus the device clock, from an exposed Date header on a plan response.
+    // Cross-origin servers usually hide Date; then the device clock is used unbounded.
+    // Last-Modified is never current time: it is only the store's load-time sanity bound.
+    // A wall-clock offset survives sleep, unlike a performance.now() delta.
+    let offset: number | undefined;
     const planUrl = new URL("settings/legacy-plan.ttl", account.storageUrl).href;
-    const now = () =>
-      boundedNow(
-        new Date(),
-        new Date(clock ? clock.time + Math.max(0, performance.now() - clock.observed) : NaN),
-      );
+    const now = () => {
+      const device = new Date();
+      if (offset === undefined) return device;
+      const bounded = boundedNow(device, new Date(device.getTime() + offset));
+      return Number.isFinite(bounded.getTime()) ? bounded : device;
+    };
     const fetch: typeof globalThis.fetch = async (input, init) => {
       if (!current()) throw new Error("The account changed. Sign in again.");
       const result = await latest.current.fetch(input, { ...init, signal: controller.signal });
       if (!current()) throw new Error("The account changed. Sign in again.");
       const target = input instanceof Request ? input.url : String(input);
-      const method = init?.method ?? (input instanceof Request ? input.method : "GET");
-      if (target === planUrl && method.toUpperCase() === "GET") {
+      if (target === planUrl) {
         const date = Date.parse(result.headers.get("date") ?? "");
-        const modified = Date.parse(result.headers.get("last-modified") ?? "");
-        const time = Number.isFinite(date) ? date : modified;
-        clock = Number.isFinite(time) ? { time, observed: performance.now() } : undefined;
+        if (Number.isFinite(date)) offset = date - Date.now();
       }
       return result;
     };
+    let store: ReturnType<typeof createLegacyStore> | undefined;
     void (async () => {
       const { storage } = await createPodClient({
         fetch,
         storage: account.storageUrl,
         signal: controller.signal,
       });
-      const store = createLegacyStore({ storage, fetch, owner: account.webId });
+      store = createLegacyStore({ storage, fetch, owner: account.webId });
       const snapshot = await store.load();
       if (!current()) return;
       if (snapshot?.plan) {
@@ -93,38 +126,58 @@ export function LegacyProvider({ children }: { children: ReactNode }) {
         }
       }
       if (!current()) return;
+      const loaded = store;
+      /** Observe the winner of a conflict; a content change remounts the editor. */
+      const observe = (fresh: LegacySnapshot | null) => {
+        if (!current()) return;
+        if (!sameContent(fresh, opened.snapshot)) opened.revision++;
+        opened.snapshot = fresh;
+        setSession({ ...opened });
+      };
       const opened: LegacySession = {
         account,
         storage,
-        store,
+        store: loaded,
         snapshot,
+        revision: 0,
         fetch,
         now,
-        async save(plan) {
+        async save(plan, base) {
           if (!current()) throw new Error("The account changed. Reload before saving.");
+          // A draft edited from another version must never overwrite what replaced it.
+          if (!sameContent(opened.snapshot, base)) throw new Error(LEGACY_CONFLICT);
           if (!opened.snapshot) {
-            const fresh = await store.load();
+            const fresh = await loaded.load();
             if (fresh?.plan) throw new Error("The legacy plan changed. Reload before saving.");
             opened.snapshot = fresh;
           }
-          // Activity is maintained by this session; an older editor draft must not roll it back.
-          const saved = await store.save(
-            { ...plan, lastActivity: opened.snapshot?.plan?.lastActivity ?? plan.lastActivity },
-            opened.snapshot?.etag ?? null,
-          );
+          let saved: LegacySnapshot & { plan: LegacyPlan };
+          try {
+            // Activity is maintained by this session; an older editor draft must not roll it back.
+            saved = await loaded.save(
+              { ...plan, lastActivity: opened.snapshot?.plan?.lastActivity ?? plan.lastActivity },
+              opened.snapshot?.etag ?? null,
+            );
+          } catch (error) {
+            if (!conflict(error)) throw error;
+            observe(await loaded.load()); // Never retried automatically.
+            throw new Error(LEGACY_CONFLICT);
+          }
           if (!current()) return;
           opened.snapshot = saved;
           setSession({ ...opened });
         },
-        async delete() {
+        async delete(base) {
           if (!current()) throw new Error("The account changed. Reload before deleting.");
+          if (!sameContent(opened.snapshot, base)) throw new Error(LEGACY_CONFLICT);
           if (!opened.snapshot) return;
-          await store.delete(opened.snapshot.etag);
+          await loaded.delete(opened.snapshot.etag);
           if (!current()) return;
           opened.snapshot = null;
           setSession({ ...opened });
         },
       };
+      setFailure((previous) => (previous?.account === account ? null : previous));
       setSession(opened);
       let recording = false;
       const activity = (event: Event) => {
@@ -132,7 +185,7 @@ export function LegacyProvider({ children }: { children: ReactNode }) {
         const updated = recordActivity(opened.snapshot.plan, now());
         if (updated === opened.snapshot.plan) return;
         recording = true;
-        void store
+        void loaded
           .save(updated, opened.snapshot.etag)
           .then(
             (saved) => {
@@ -142,15 +195,8 @@ export function LegacyProvider({ children }: { children: ReactNode }) {
               }
             },
             async (error: unknown) => {
-              if (error instanceof StorageError && error.code === "precondition-failed") {
-                const fresh = await store.load();
-                if (current()) {
-                  opened.snapshot = fresh;
-                  setSession({ ...opened });
-                }
-                return; // Observe the winner; never retry this heartbeat.
-              }
-              throw error;
+              if (!conflict(error)) throw error;
+              observe(await loaded.load()); // Observe the winner; never retry this heartbeat.
             },
           )
           .catch((error: unknown) => {
@@ -175,19 +221,33 @@ export function LegacyProvider({ children }: { children: ReactNode }) {
         { once: true },
       );
     })().catch((error: unknown) => {
-      if (current())
-        setFailure({
-          account,
-          message:
-            error instanceof Error
-              ? error.message
-              : "Could not read your legacy plan. Try reloading.",
-        });
+      if (!current()) return;
+      // Deleting discloses nothing, so a plan that fails the privacy proof stays removable.
+      const etag = error instanceof LegacyPrivacyError ? error.etag : undefined;
+      const unverified = store;
+      setFailure({
+        account,
+        message:
+          error instanceof Error
+            ? error.message
+            : "Could not read your legacy plan. Try reloading.",
+        withdraw:
+          etag && unverified
+            ? async () => {
+                if (!current()) throw new Error("The account changed. Reload before deleting.");
+                await unverified.delete(etag);
+                if (!current()) return;
+                setFailure(null);
+                setAttempt((value) => value + 1);
+              }
+            : undefined,
+      });
     });
     return () => controller.abort();
-  }, [account, ready]);
+  }, [account, ready, attempt]);
   const visible = ready && session?.account === account ? session : null;
-  const error = ready && failure?.account === account ? failure.message : "";
+  const shown = ready && failure?.account === account ? failure : null;
+  const error = shown?.message ?? "";
   useEffect(() => {
     if (!visible?.snapshot?.plan) return;
     const session = visible;
@@ -225,7 +285,14 @@ export function LegacyProvider({ children }: { children: ReactNode }) {
   }, [visible]);
 
   return (
-    <Context.Provider value={{ session: visible, error, loading: ready && !visible && !error }}>
+    <Context.Provider
+      value={{
+        session: visible,
+        error,
+        loading: ready && !visible && !error,
+        withdraw: visible ? undefined : shown?.withdraw,
+      }}
+    >
       {children}
     </Context.Provider>
   );

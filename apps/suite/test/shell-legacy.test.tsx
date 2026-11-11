@@ -4,12 +4,20 @@ import type { LegacyPlan } from "@jeswr/pod-legacy";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, expect, it, vi } from "vitest";
 import { folderName, grantPreview, legacyWarning } from "../src/shell/legacy/presentation";
-import { LegacyEditor, RecoveryChecklist } from "../src/shell/settings/legacy";
-import { h } from "./drive-ui-dom";
+import { LegacyEditor, LegacySettings, RecoveryChecklist } from "../src/shell/settings/legacy";
+import { act, h } from "./drive-ui-dom";
 
-vi.mock("../src/shell/session/accounts-provider", () => ({
-  useAccounts: () => ({ active: null }),
+const shell = vi.hoisted(() => ({
+  active: null as null | Record<string, unknown>,
+  legacy: { session: null, error: "", loading: false } as Record<string, unknown>,
 }));
+vi.mock("../src/shell/session/accounts-provider", () => ({
+  useAccounts: () => ({ active: shell.active }),
+}));
+vi.mock("../src/shell/legacy/provider", () => ({ useLegacy: () => shell.legacy }));
+vi.mock("@/apps/contacts/lib/model/book", () => {
+  throw new Error("no address book in this test");
+});
 const requireUi = createRequire(
   new URL("../../../packages/suite-ui/package.json", import.meta.url),
 );
@@ -228,4 +236,123 @@ it("keeps the plan editable after a delete conflict", async () => {
   expect(
     (screen.getByRole("button", { name: "Save legacy plan" }) as HTMLButtonElement).disabled,
   ).toBe(false);
+});
+const account = {
+  id: "alice",
+  webId: `${root}profile#me`,
+  name: "Alice",
+  storageUrl: root,
+  kind: "solid" as const,
+};
+function session(overrides: Record<string, unknown> = {}) {
+  return {
+    account,
+    storage: {
+      // biome-ignore lint/correctness/useYield: an unreadable listing in this test.
+      async *listAll() {
+        throw new Error("no listing");
+      },
+    },
+    fetch: vi.fn(async () => new Response(null, { status: 404 })),
+    snapshot: { plan: plan(), etag: '"one"' },
+    revision: 0,
+    now: () => new Date("2026-06-01T12:00:00Z"),
+    save: vi.fn(async (_plan: LegacyPlan, _base: unknown) => {}),
+    delete: vi.fn(async (_base: unknown) => {}),
+    ...overrides,
+  };
+}
+function settings(value: Record<string, unknown>) {
+  shell.active = account;
+  shell.legacy = { session: null, error: "", loading: false, ...value };
+  return h(LegacySettings);
+}
+it("remounts the editor with a notice when another tab changed the plan, dropping the stale draft", async () => {
+  const first = session();
+  const view = render(settings({ session: first }));
+  const enabled = () =>
+    (screen.getByLabelText("Enable legacy plan evaluation") as HTMLInputElement).checked;
+  fireEvent.click(screen.getByLabelText("Enable legacy plan evaluation"));
+  expect(enabled()).toBe(false);
+  fireEvent.click(screen.getByRole("button", { name: "Save legacy plan" }));
+  await waitFor(() => expect(first.save).toHaveBeenCalledOnce());
+  // The save carries the snapshot the draft was edited from.
+  expect(first.save.mock.calls[0]).toEqual([
+    expect.objectContaining({ enabled: false }),
+    first.snapshot,
+  ]);
+  // A heartbeat-only update keeps the draft (same revision).
+  fireEvent.click(screen.getByLabelText("Enable legacy plan evaluation"));
+  view.rerender(settings({ session: { ...first, snapshot: { ...first.snapshot, etag: '"hb"' } } }));
+  expect(enabled()).toBe(true);
+  // Another tab's content change bumps the revision: the latest version replaces the draft.
+  const winner = { ...plan(), enabled: false, contacts: [] };
+  const second = session({ snapshot: { plan: winner, etag: '"two"' }, revision: 1 });
+  view.rerender(settings({ session: second }));
+  expect(enabled()).toBe(false);
+  expect(screen.queryByRole("button", { name: "Remove Alex" })).toBeNull();
+  expect(screen.getByRole("status").textContent).toContain("changed in another tab or device");
+  fireEvent.click(screen.getByRole("button", { name: "Delete my legacy plan" }));
+  await waitFor(() => expect(second.delete).toHaveBeenCalledExactlyOnceWith(second.snapshot));
+});
+it("offers replacement or deletion of an unreadable saved plan", async () => {
+  const current = session({ snapshot: { plan: null, etag: '"broken"', invalid: true } });
+  render(settings({ session: current }));
+  expect(screen.getByText(/could not be read, so nothing is evaluated or shared/)).toBeTruthy();
+  // The editor starts from a fresh disabled plan dated by the session clock.
+  fireEvent.click(screen.getByRole("button", { name: "Save legacy plan" }));
+  await waitFor(() => expect(current.save).toHaveBeenCalledOnce());
+  expect(current.save.mock.calls[0]).toEqual([
+    expect.objectContaining({
+      enabled: false,
+      contacts: [],
+      created: new Date("2026-06-01T12:00:00Z"),
+    }),
+    current.snapshot,
+  ]);
+  fireEvent.click(screen.getByRole("button", { name: "Delete my legacy plan" }));
+  await waitFor(() => expect(current.delete).toHaveBeenCalledOnce());
+});
+it("starts a new plan from the device clock when the session clock is invalid", async () => {
+  const current = session({ snapshot: null, now: () => new Date(Number.NaN) });
+  render(settings({ session: current }));
+  fireEvent.change(screen.getByLabelText("Legacy contact WebID"), {
+    target: { value: "https://alex.example/#me" },
+  });
+  fireEvent.change(screen.getByLabelText("Display name"), { target: { value: "Alex" } });
+  fireEvent.change(screen.getByLabelText("Another folder IRI"), {
+    target: { value: `${root}Photos/` },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Include folder IRI" }));
+  fireEvent.click(screen.getByRole("button", { name: "Add legacy contact" }));
+  expect(screen.getByRole("status").textContent).toContain("Contact added");
+  expect(screen.queryByRole("button", { name: "Delete my legacy plan" })).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Save legacy plan" }));
+  await waitFor(() => expect(current.save).toHaveBeenCalledOnce());
+  const saved = current.save.mock.calls[0]![0];
+  for (const time of [saved.created, saved.modified, saved.lastActivity])
+    expect(Number.isFinite(time.getTime())).toBe(true);
+  expect(current.save.mock.calls[0]?.[1]).toBeNull();
+});
+it("offers deletion when privacy cannot be verified and reports its failure", async () => {
+  const withdraw = vi.fn(async (): Promise<void> => {
+    throw new Error("The plan changed. Reload before deleting.");
+  });
+  render(settings({ error: "Make settings private", withdraw }));
+  expect(screen.getByRole("alert").textContent).toContain("Make settings private");
+  expect(screen.queryByRole("button", { name: "Save legacy plan" })).toBeNull();
+  await act(async () => {
+    fireEvent.click(screen.getByRole("button", { name: "Delete my legacy plan" }));
+  });
+  expect(withdraw).toHaveBeenCalledOnce();
+  await waitFor(() =>
+    expect(
+      screen.getByRole("region", { name: "Delete the unverified legacy plan" }).textContent,
+    ).toContain("Reload before deleting"),
+  );
+  withdraw.mockResolvedValueOnce(undefined);
+  await act(async () => {
+    fireEvent.click(screen.getByRole("button", { name: "Delete my legacy plan" }));
+  });
+  expect(withdraw).toHaveBeenCalledTimes(2);
 });
