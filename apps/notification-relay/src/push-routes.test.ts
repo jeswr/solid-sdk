@@ -65,7 +65,7 @@ test("requires a fresh correct device proof for create, update, attach, activate
   for (const [method, path, body] of [
     ["POST", "/push/installations", f.owner.body],
     ["PATCH", `/push/installations/${id}`, { pushToken: "new" }],
-    ["POST", `/push/installations/${id}/activate`, { nonce: f.send.mock.calls[0]?.[1].nonce }],
+    ["POST", `/push/installations/${id}/activate`, { nonce: f.challenges()[0]?.nonce }],
     ["PUT", "/push/registrations/other", f.registration(id)],
     ["DELETE", "/push/registrations/account", undefined],
     ["DELETE", `/push/installations/${id}`, undefined],
@@ -98,12 +98,12 @@ test("creates inactive installations, protects nonce activation, and never sends
     tokenVersion: 1,
   });
   expect(id).toMatch(/^[a-f0-9]{32}$/u);
-  const challenge = f.send.mock.calls[0]?.[1];
+  const challenge = f.challenges()[0];
   expect(challenge?.nonce).toMatch(/^[\w-]{22}$/u);
   expect(challenge).toMatchObject({ v: 1, kind: "challenge", sentAt: epoch });
   expect(installation.challengeHash).not.toBe(challenge?.nonce);
   await f.call("PUT", "/push/registrations/account", f.registration(id));
-  // P6 delivery is absent; a secret URL cannot bypass activation via the legacy inbox.
+  // A guessed secret cannot bypass activation through the push inbox.
   expect((await f.call("POST", "/inbox/account/secret", {})).status).toBe(404);
   expect(f.send).toHaveBeenCalledTimes(1);
   for (const nonce of ["guessed", "", "x".repeat(1000)])
@@ -151,7 +151,7 @@ test("creates inactive installations, protects nonce activation, and never sends
 test("refreshes tokens/keys with the old key, invalidates old nonces and caps challenges at three/hour", async () => {
   const f = await setup();
   const id = await f.create();
-  const firstNonce = f.send.mock.calls[0]?.[1].nonce;
+  const firstNonce = f.challenges()[0]?.nonce;
   expect(
     (await f.call("POST", `/push/installations/${id}/activate`, { nonce: firstNonce })).status,
   ).toBe(204);
@@ -224,7 +224,7 @@ test("refreshes tokens/keys with the old key, invalidates old nonces and caps ch
       await f.call(
         "POST",
         `/push/installations/${id}/activate`,
-        { nonce: f.send.mock.calls.at(-1)?.[1].nonce },
+        { nonce: f.challenges().at(-1)?.nonce },
         { phone: replacement },
       )
     ).status,
@@ -510,6 +510,10 @@ test("admits installations atomically up to capacity and expires ones never atta
         publicOrigin: publicUrl,
         store: f.store,
         now: f.now,
+        verifyResourceToken: f.verify,
+        verifyWebhook: async () => {
+          throw new Error("unused");
+        },
         authorize: async () => {
           throw new Error("unused");
         },
