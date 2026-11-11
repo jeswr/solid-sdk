@@ -456,12 +456,17 @@ export function ancestorGuard(options: {
     if (!creating) await check(destination, allowAbsent);
     return demo;
   };
-  const check = async (url: string, allowAbsent = false): Promise<void> => {
+  const check = async (url: string, allowAbsent = false, repair = true): Promise<void> => {
     try {
       await provisioning.get(url);
       await singleFlight(url, async () => {
         const required = await ledger.get(url);
         if (required) {
+          if (!repair)
+            throw new DriveAccessError(
+              "Protection repair pending",
+              "This folder needs a protection repair. Open it in Drive to retry.",
+            );
           const response = await http(url, { method: "HEAD" });
           // Only a conditional create may start a fresh flight at a vacant URL.
           // Reads and replacements must still refuse unavailable protection.
