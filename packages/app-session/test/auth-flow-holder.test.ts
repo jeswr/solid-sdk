@@ -1,3 +1,4 @@
+// AUTHORED-BY GPT-6.1 Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 /**
  * FIX 1 — the page-lifetime auth singleton must drive the CURRENT mounted
@@ -22,7 +23,7 @@ import {
   authFlowHolder,
   getCodeThroughHolder,
   lazyElementGetCode,
-} from "./auth-flow-holder";
+} from "../src/auth-flow-holder";
 
 afterEach(() => {
   authFlowHolder.current = null;
@@ -280,4 +281,17 @@ it("honors cancellation while a cold element is waiting for registration", async
   );
   controller.abort();
   await expect(result).rejects.toMatchObject({ name: "AbortError" });
+});
+
+it("catches cancellation occurring during the cold registry lookup", async () => {
+  const { whenDefined } = stubCustomElements();
+  const { element } = makeFakeFlowElement();
+  const controller = new AbortController();
+  whenDefined.mockImplementation(() => {
+    controller.abort();
+    return new Promise(() => {});
+  });
+  await expect(
+    lazyElementGetCode(element)(new URL("https://op.example/authorize"), controller.signal),
+  ).rejects.toMatchObject({ name: "AbortError" });
 });
