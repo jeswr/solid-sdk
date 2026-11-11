@@ -18,6 +18,7 @@ import {
   resolveTitle,
   type TitleState,
 } from "../lib/editor/title-merge";
+import { AutomaticVersions } from "../lib/editor/versions";
 import {
   type BuildDocumentInput,
   createDocsStore,
@@ -33,6 +34,7 @@ import {
   incarnationMirror,
   sameIncarnation,
 } from "../lib/model/incarnation";
+import { DocumentVersionStore } from "../lib/model/versions";
 import { copyDocument } from "./copy";
 import { draftMirrorName, withDraftLock } from "./drafts";
 import { baseExtensions } from "./extensions";
@@ -62,6 +64,7 @@ interface PendingRecovery {
 /** One owner for the CRDT, mirrors and serial snapshot queue, independent of React mounts. */
 export class DocumentPersistence {
   doc = new Doc();
+  private readonly automaticVersions = new AutomaticVersions();
   recoveredCopy: string | undefined;
   switchingLog = false;
   private mirrorRestart: Promise<void> | undefined;
@@ -1285,6 +1288,16 @@ export class DocumentPersistence {
         }
       }
       this.state = this.conflict ? "failed" : "saved";
+      if (this.state === "saved" && this.stored && !this.stopped) {
+        void this.automaticVersions.afterSave(
+          new DocumentVersionStore(docContainerUrls(this.stored.url).versions, this.session.fetch),
+          this.doc,
+          this.doc.getXmlFragment("prosemirror").length > 0 &&
+            (wordCount(this.json).words > 0 ||
+              /<(?:img|hr|table|ul|ol|pre|blockquote)\b/.test(this.body)),
+          this.session.webId,
+        );
+      }
       if (this.provider && (this.compactionUpdates >= 200 || this.bytes >= 2 * 1024 * 1024)) {
         this.compactionUpdates = 0;
         this.bytes = 0;

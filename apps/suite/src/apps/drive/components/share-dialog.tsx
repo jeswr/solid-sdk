@@ -71,6 +71,8 @@ export function ShareDialog({
   onClose,
   onSaved,
   onCloseAutoFocus,
+  notice,
+  disabledReason,
 }: {
   item: Pick<DriveItem, "name" | "url">;
   session: SharingSession;
@@ -78,6 +80,8 @@ export function ShareDialog({
   onClose: () => void;
   onSaved: () => void;
   onCloseAutoFocus?: (event: Event) => void;
+  notice?: string;
+  disabledReason?: string | undefined;
 }) {
   const [snapshot, setSnapshot] = useState<SharingSnapshot>();
   const [error, setError] = useState("");
@@ -120,7 +124,7 @@ export function ShareDialog({
   }, [session, item.url, retry]);
 
   const save = async (selection: SharingSelection) => {
-    if (!snapshot || saving) return;
+    if (!snapshot || saving || disabledReason) return;
     setSaving(true);
     setError("");
     try {
@@ -152,7 +156,7 @@ export function ShareDialog({
     }
   };
   const state = snapshot?.state;
-  const blocked = loading || saving || !snapshot?.canManage;
+  const blocked = loading || saving || !!disabledReason || !snapshot?.canManage;
   // Every dismissal route (Done, close button, Escape and outside interaction) shares this guard.
   const close = () => {
     if (!saving) onClose();
@@ -177,6 +181,16 @@ export function ShareDialog({
           <DialogTitle>Share “{item.name}”</DialogTitle>
           <DialogDescription>Choose who can access this item.</DialogDescription>
         </DialogHeader>
+        {notice && (
+          <p role="note" className="su-muted">
+            {notice}
+          </p>
+        )}
+        {disabledReason && (
+          <p role="status" className="su-muted">
+            {disabledReason}
+          </p>
+        )}
         {loading && (
           <p className="su-muted" role="status">
             Loading sharing…
