@@ -1,9 +1,11 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 
 import type { DatasetCore } from "@rdfjs/types";
 import { pkgId } from "./ids.js";
 import type { Nanopublication, Nanopublications, Source } from "./model.js";
-import { graph, NS, RdfNode } from "./rdf.js";
+import { NS, RdfNode } from "./rdf.js";
+import { readNamedGraph as graph } from "./read-graph.js";
 
 /** A referenced source record, scoped to this nanopublication's batch. */
 export interface SourceInfo {
@@ -53,7 +55,7 @@ export function readNanopubProvenance(
   return readProvenance(graph(value.dataset, pkgId("batch", np.batch, "sources")), np);
 }
 
-/** Per-projection cache: batch graphs are copied once, with no stale global cache. */
+/** Per-projection graph views, with no stale global cache. */
 export function createNanopubProvenanceReader(
   value: Nanopublications,
 ): (np: Nanopublication) => FactProvenance {

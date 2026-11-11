@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { serialize } from "@jeswr/rdf-serialize";
+import { NamedGraphDataset } from "@rdfjs/wrapper";
 import { DataFactory as df, Store } from "n3";
 import { expect, it } from "vitest";
 import {
@@ -11,7 +12,7 @@ import {
   readNanopubProvenance,
   serializeNanopublications,
 } from "../src/index.js";
-import { NS } from "../src/rdf.js";
+import { NS, RdfNode } from "../src/rdf.js";
 
 function required<T>(value: T | undefined): T {
   if (value === undefined) throw new Error("Missing fictional fixture");
@@ -53,6 +54,18 @@ async function fixture(batch = "tolerance") {
   );
 }
 const raw = (dataset: Store) => serialize([...dataset], { format: "application/trig" });
+it("preserves term-safety error precedence when a graph also has an invalid literal", async () => {
+  const value = await fixture();
+  const bad = required(value.nanopubs[0]);
+  const contents = new NamedGraphDataset(df.namedNode(bad.assertionId), value.dataset, df);
+  const node = new RdfNode("https://example.org/extra", contents);
+  node
+    .terms(`${NS.schema}value`)
+    .add(df.literal("42", df.namedNode("https://example.org/datatype")));
+  node.terms(`${NS.schema}url`).add(df.namedNode("ftp://example.org/unsupported"));
+  const result = await parseNanopublications(await raw(value.dataset), { invalid: "skip" });
+  expect(result.skipped).toEqual([{ id: bad.id, errorClass: "Error" }]);
+});
 it.each([
   "id",
   "assertionId",

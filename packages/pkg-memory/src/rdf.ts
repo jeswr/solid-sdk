@@ -4,13 +4,7 @@ import { parseRdf } from "@jeswr/fetch-rdf";
 import { safeIri } from "@jeswr/rdf-serialize";
 import type { DatasetCore, Literal, NamedNode, Quad, Term } from "@rdfjs/types";
 import { LiteralAs, NamedNodeAs, SetFrom, TermAs, TermFrom, TermWrapper } from "@rdfjs/wrapper";
-import {
-  DataFactory as df,
-  BlankNode as N3BlankNode,
-  Literal as N3Literal,
-  Parser,
-  Store,
-} from "n3";
+import { DataFactory as df, BlankNode as N3BlankNode, Literal as N3Literal, Store } from "n3";
 import {
   UnsupportedBlankNodeLabelError,
   UnsupportedLiteralCharacterError,
@@ -110,24 +104,48 @@ export class ReferenceStore extends Store {
   }
 }
 
+type Index = Record<number, Record<number, Record<number, null>>>;
+
+/** Force sparse numeric elements before inserting N3's document-wide term IDs.
+ * Small per-graph indexes otherwise acquire large V8 element backing arrays.
+ * The removed sentinel never represents a term, quad or hash input.
+ */
+function sparseIndex<T>(): Record<number, T> {
+  const index = { 2147483647: null };
+  Reflect.deleteProperty(index, 2147483647);
+  return index as unknown as Record<number, T>;
+}
+
+/** N3's insertion hook, retaining its index shape and duplicate semantics. */
+class CompactReferenceStore extends ReferenceStore {
+  protected _addToIndex(index: Index, subject: number, predicate: number, object: number): boolean {
+    let predicates = index[subject];
+    if (!predicates) {
+      predicates = sparseIndex();
+      index[subject] = predicates;
+    }
+    let objects = predicates[predicate];
+    if (!objects) {
+      objects = sparseIndex();
+      predicates[predicate] = objects;
+    }
+    const existed = object in objects;
+    if (!existed) objects[object] = null;
+    return !existed;
+  }
+}
+
 /** Parse through the suite boundary while preserving reference LANGTAG spelling. */
 export async function parseReferenceRdf(
   body: string,
   format: "text/turtle" | "application/trig",
   baseIRI?: string,
 ): Promise<DatasetCore> {
-  const dataset = await parseRdf(body, format, { baseIRI });
-  if (![...dataset].some((q) => q.object.termType === "Literal" && q.object.language))
-    return dataset;
-  // fetch-rdf exposes no factory option. Replay its validated N3 input with a
-  // spelling-preserving factory; the default N3 factory lowercases LANGTAGs.
-  return new ReferenceStore(
-    new Parser({
-      format,
-      baseIRI,
-      factory: referenceFactory,
-    }).parse(body),
-  );
+  return parseRdf(body, format, {
+    baseIRI,
+    factory: referenceFactory,
+    storeFactory: () => new CompactReferenceStore(),
+  });
 }
 
 const supportedLiteralDatatypes = new Set([

@@ -112,6 +112,7 @@ export function budgetFactory(
     if (allocatedCharacters > maxTotalTermLength) throw parseLimit("maxTotalTermLength");
   };
   let quads = 0;
+  const baseFactory = options.factory ?? DataFactory;
   let characters = 0;
   const term = (value: Term): void => {
     if (value.termType === "Quad") {
@@ -129,13 +130,14 @@ export function budgetFactory(
   };
   const factory: RdfDataFactory = {
     ...DataFactory,
+    ...baseFactory,
     namedNode(value) {
       allocate(value);
-      return DataFactory.namedNode(value);
+      return baseFactory.namedNode(value);
     },
     blankNode(value) {
       if (value !== undefined) allocate(value);
-      return DataFactory.blankNode(value);
+      return baseFactory.blankNode(value);
     },
     // jsonld-streaming-parser passes null for an absent language/datatype.
     literal(value, languageOrDatatype) {
@@ -143,17 +145,18 @@ export function budgetFactory(
       if (typeof languageOrDatatype === "string") allocate(languageOrDatatype);
       else if (languageOrDatatype && "termType" in languageOrDatatype)
         allocate(languageOrDatatype.value);
-      return (DataFactory.literal as RdfDataFactory["literal"])(
+      return (baseFactory.literal as RdfDataFactory["literal"]).call(
+        baseFactory,
         value,
         languageOrDatatype ?? undefined,
       );
     },
-    quad(subject, predicate, object, graph = DataFactory.defaultGraph()) {
+    quad(subject, predicate, object, graph = baseFactory.defaultGraph()) {
       check?.();
       checkAbort(signal);
       if (++quads > maxQuads) throw parseLimit("maxQuads");
       for (const part of [subject, predicate, object, graph]) term(part);
-      return DataFactory.quad(subject, predicate, object, graph);
+      return baseFactory.quad(subject, predicate, object, graph);
     },
   };
   return {

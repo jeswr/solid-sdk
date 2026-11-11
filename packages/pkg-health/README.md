@@ -282,3 +282,20 @@ apply the owner's purpose policy before supplying data to a UI or tool, and perf
 any required special-category audit in the application. This reader does not confer
 access rights. Mutations use NanopubStore's existing owner-only protection. Tests use
 fictional example.org identities and the in-memory PodPort; no real person's data.
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+For a local import benchmark, build the packages and run
+`node --expose-gc packages/pkg-health/scripts/bench-import.mjs <file>` from the workspace
+root. Set `PKG_BENCH_OWNER` to the export owner's WebID; the default is the fictional
+`https://example.org/people/avery#me`. Output contains counts, operation time and sampled
+peak `heapUsed` after explicit GC, without fact
+values or parser diagnostics. Timing uses an uninstrumented pass, including automatic
+GC, with no forced GC between import and projection. A separate pass samples
+`heapUsed` after forced GC during store insertion, graph reads and at operation
+boundaries; profiling time is excluded. The peak is sampled, rather than continuous.
+
+Generate a reproducible fictional input with
+`node packages/pkg-health/test/support/synthetic-export.ts /tmp/fictional-health.trig`.
+It builds 4,500 nanopubs across 40 batches using public batch/fact builders and the
+pkg-memory serializer. An optional final argument changes the nanopub count. The CI
+regression uses 600 nanopubs and counts store insertions instead of timing assertions.

@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 
 import { isSafeAbsoluteIri } from "@jeswr/model-runtime";
 import {
@@ -7,9 +8,10 @@ import {
   createNanopubProvenanceReader,
   type FactProvenance,
   type Nanopublications,
+  readNamedGraph,
 } from "@jeswr/pkg-memory";
-import type { DatasetCore } from "@rdfjs/types";
-import { DataFactory as df, Store } from "n3";
+import type { DatasetCore, Term } from "@rdfjs/types";
+import { DataFactory as df } from "n3";
 import { entities } from "./generated/model.js";
 import { health, LABEL, RDF_TYPE, ReadNode, S } from "./read.js";
 import { effectiveTime, readPeriod } from "./temporal.js";
@@ -188,11 +190,13 @@ function project(
   }
 }
 function subjectNodes(graph: DatasetCore): ReadNode[] {
-  const ids = new Map<string, ReadNode>();
+  const ids = new Map<string, Term>();
   for (const q of graph) {
-    ids.set(`${q.subject.termType}:${q.subject.value}`, new ReadNode(q.subject, graph));
+    ids.set(`${q.subject.termType}:${q.subject.value}`, q.subject);
   }
-  return [...ids.values()].sort((a, b) => a.value.localeCompare(b.value));
+  return [...ids.values()]
+    .map((term) => new ReadNode(term, graph))
+    .sort((a, b) => a.value.localeCompare(b.value));
 }
 const observationModels = [
   entities.Observation,
@@ -246,9 +250,9 @@ function linkedOwners(node: ReadNode, kind: HealthFactKind): import("@rdfjs/type
     ].map((q) => q.subject),
   ];
 }
-function foreign(node: ReadNode, owner: string): boolean {
+function foreign(node: ReadNode, owner: string, kinds: readonly HealthFactKind[]): boolean {
   // A health category or one owner link never overrides another subject.
-  const links = [...node.owners, ...kinds(node).flatMap((kind) => linkedOwners(node, kind))];
+  const links = [...node.owners, ...kinds.flatMap((kind) => linkedOwners(node, kind))];
   return links.some((term) => term.termType !== "NamedNode" || term.value !== owner);
 }
 /** Local, read-only projection. Apply purpose policy before supplying data to a consumer. */
@@ -276,15 +280,34 @@ export function projectHealthFacts(
       excludedOtherSubjects: 0,
     };
     const provenance = createNanopubProvenanceReader(value);
-    const assertions = new Map<string, Store>();
+    const assertions = new Map<string, { graph: DatasetCore; nodes: ReadNode[] }>();
+    const kindCache = new WeakMap<ReadNode, HealthFactKind[]>();
+    const kindsOf = (node: ReadNode): HealthFactKind[] => {
+      let result = kindCache.get(node);
+      if (!result) {
+        result = kinds(node);
+        kindCache.set(node, result);
+      }
+      return result;
+    };
+    const foreignCache = new WeakMap<ReadNode, boolean>();
+    const isForeign = (node: ReadNode): boolean => {
+      let result = foreignCache.get(node);
+      if (result === undefined) {
+        result = foreign(node, options.owner, kindsOf(node));
+        foreignCache.set(node, result);
+      }
+      return result;
+    };
     for (const np of classifyNanopublications(value)) {
       const category = np.categories.some((c) => categories.has(c));
-      let graph = assertions.get(np.assertionId);
-      if (!graph) {
-        graph = new Store([...value.dataset.match(null, null, null, df.namedNode(np.assertionId))]);
-        assertions.set(np.assertionId, graph);
+      let assertion = assertions.get(np.assertionId);
+      if (!assertion) {
+        const graph = readNamedGraph(value.dataset, np.assertionId);
+        assertion = { graph, nodes: subjectNodes(graph) };
+        assertions.set(np.assertionId, assertion);
       }
-      const nodes = subjectNodes(graph);
+      const { graph, nodes } = assertion;
       const supporting = nodes.filter(
         (n) =>
           n.term.termType === "NamedNode" &&
@@ -293,15 +316,13 @@ export function projectHealthFacts(
       );
       const qualifies =
         category ||
-        supporting.some(
-          (n) => !foreign(n, options.owner) && n.owners.some((t) => t.value === options.owner),
-        );
-      let excluded = supporting.some((n) => foreign(n, options.owner)),
+        supporting.some((n) => !isForeign(n) && n.owners.some((t) => t.value === options.owner));
+      let excluded = supporting.some(isForeign),
         recognised = false;
       for (const node of nodes) {
-        for (const kind of kinds(node)) {
+        for (const kind of kindsOf(node)) {
           const linked = linkedOwners(node, kind);
-          if (foreign(node, options.owner)) {
+          if (isForeign(node)) {
             excluded = true;
             continue;
           }
@@ -328,10 +349,10 @@ export function projectHealthFacts(
       if (qualifies && !recognised) {
         // Explicit foreign subjects exclude the category fallback too. Never recover their labels.
         const candidates = nodes.filter(
-          (node) => !kinds(node).some((kind) => kind === "note" || kind === "document"),
+          (node) => !kindsOf(node).some((kind) => kind === "note" || kind === "document"),
         );
-        const owned = candidates.filter((n) => n.owners.length && !foreign(n, options.owner));
-        const other = nodes.some((n) => foreign(n, options.owner));
+        const owned = candidates.filter((n) => n.owners.length && !isForeign(n));
+        const other = nodes.some(isForeign);
         if (other) excluded = true;
         if (!other || owned.length) {
           const node =

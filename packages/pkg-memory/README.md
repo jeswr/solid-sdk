@@ -304,3 +304,13 @@ literal parity set is unchanged (double/dateTimeStamp remain excluded).
 batch graph cache. Use it when projecting many nanopubs; the uncached
 `readNanopubProvenance(value, np)` remains available. Neither caches across reads or
 changes graph-scoped evidence semantics.
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+Parsing constructs one reference-aware N3 store through fetch-rdf, preserving language
+spelling without replaying the document. Tolerant import removes orphan graphs from
+that store after validation. Read paths use `readNamedGraph(dataset, name)`: a read-only
+snapshot with a compact subject index, retaining the original graph names. Nested
+matches share its quads; `add` and `delete` throw. Take a fresh snapshot after edits.
+The parsed store uses N3's insertion hook to keep numeric indexes sparse on V8;
+this changes index allocation only, and retains the N3 Store API and reference
+language deduplication. No RDF terms, canonicalization or hash inputs change.

@@ -2,7 +2,8 @@
 // AUTHORED-BY Codex GPT-6
 
 import type { Nanopublication, Nanopublications } from "./model.js";
-import { graph, NS, RdfNode } from "./rdf.js";
+import { NS, RdfNode } from "./rdf.js";
+import { readNamedGraph as graph } from "./read-graph.js";
 
 /** Consumer-facing belief levels from KG DESIGN §4.1. */
 export type Belief = "definitely" | "might" | "mentioned" | "past";
