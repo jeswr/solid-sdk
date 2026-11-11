@@ -94,3 +94,62 @@ it("retries an upload cut off by expiry with the reauthenticated session's clien
   expect(renewed.write).toHaveBeenCalledTimes(1);
   await view.unmount();
 });
+
+// AUTHORED-BY Claude Opus 5.5
+it("starts a retry that waited for a slot with the current client when an older upload finishes", async () => {
+  const { DriveError } = await import("../src/apps/drive/lib/client/client");
+  const folder = "https://pod.example/drive/";
+  const pending = [deferred<void>(), deferred<void>(), deferred<void>()];
+  let started = 0;
+  const retired = {
+    write: vi.fn(async (url: string) => {
+      if (url.endsWith("/expired.txt")) throw new DriveError("unauthenticated", 401, url);
+      await pending[started++]?.promise;
+    }),
+  } as unknown as DriveClient;
+  const renewed = {
+    stat: vi.fn(async (url: string) => {
+      throw new DriveError("not-found", 404, url);
+    }),
+    write: vi.fn(async () => {}),
+  } as unknown as DriveClient;
+  let queue!: ReturnType<typeof useUploadQueue>;
+  function Probe({ client }: { client: DriveClient }) {
+    queue = useUploadQueue(client, () => {});
+    return null;
+  }
+  const view = await mount(h(Probe, { client: retired }));
+  await act(() => queue.enqueue(folder, [new File(["x"], "expired.txt")]));
+  const expired = queue.tasks.find((task) => task.name === "expired.txt");
+  expect(expired?.status).toBe("failed");
+  // Three older uploads hold every slot while the session is renewed.
+  await act(() =>
+    queue.enqueue(
+      folder,
+      ["a.txt", "b.txt", "c.txt"].map((name) => new File(["x"], name)),
+    ),
+  );
+  expect(queue.tasks.filter((task) => task.status === "uploading")).toHaveLength(3);
+
+  await view.render(h(Probe, { client: renewed }));
+  await act(() => queue.retry(expired?.id as string));
+  expect(queue.tasks.find((task) => task.id === expired?.id)?.status).toBe("queued");
+
+  // An older attempt's completion frees a slot and must start the retry with the renewed client.
+  await act(() => pending[0]?.resolve());
+  await vi.waitFor(() =>
+    expect(queue.tasks.find((task) => task.id === expired?.id)?.status).toBe("done"),
+  );
+  expect(renewed.write).toHaveBeenCalledWith(
+    `${folder}expired.txt`,
+    expect.any(Blob),
+    expect.anything(),
+    expect.anything(),
+  );
+  expect(retired.write).toHaveBeenCalledTimes(4);
+  await act(() => {
+    pending[1]?.resolve();
+    pending[2]?.resolve();
+  });
+  await view.unmount();
+});

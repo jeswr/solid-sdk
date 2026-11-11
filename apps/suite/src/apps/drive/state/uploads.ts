@@ -10,7 +10,7 @@ import { DriveOperationInProgressError } from "../lib/client/source-operations";
  * keep both / replace / skip (optionally for every remaining clash).
  */
 
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { DriveAccessError } from "../lib/client/access";
 import type { DriveClient, DriveItem } from "../lib/client/client";
 import { DriveError, DrivePartialFailureError, parentOf } from "../lib/client/client";
@@ -158,6 +158,9 @@ export function useUploadQueue(
 ): UploadQueue {
   const jobs = useRef(new Map<string, Job>());
   const running = useRef(0);
+  // A finishing attempt hands its slot to the latest pump. Its own closure holds the client
+  // it started with, which reauthentication may since have retired.
+  const latestPump = useRef<() => void>(() => {});
   const [tasks, setTasks] = useState<UploadTask[]>([]);
 
   const publish = useCallback(
@@ -270,10 +273,13 @@ export function useUploadQueue(
           folders.add(folder);
         }
         for (const folder of folders) invalidate(folder);
-        pump();
+        latestPump.current();
       });
     }
   }, [client, invalidate, patch]);
+  useLayoutEffect(() => {
+    latestPump.current = pump;
+  }, [pump]);
 
   const enqueue = useCallback(
     (folder: string, files: Iterable<File | DroppedFile>, options?: UploadOptions) => {
