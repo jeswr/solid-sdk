@@ -6,14 +6,9 @@
  * record, and PINNING the validated IP onto the connecting socket (undici's
  * `Agent({ connect: { lookup } })` seam).
  *
- * THE PROBLEM this entry exists to close. The browser-safe guard in `./guard.ts` validates
- * a hostname by DNS-resolving it and requiring every resolved record to be public — but it
- * issues the request through a plain `fetch`, which RE-RESOLVES the hostname at connect time.
- * Between the guard's `dns.lookup` (validate) and the socket's own resolution (connect) a
- * hostile/compromised DNS server can flip the answer from a public IP to a private one
- * (169.254.169.254, 10.x, 127.x, ::1, fc00::/7, …) — the classic DNS-rebinding bypass.
- * `./guard.ts` documents this residual and exposes a `pinningFetch` seam + `requireDnsPinning`
- * posture for closure but ships no actual pinning fetch — THIS module is that fetch.
+ * The root guard pins its validation-time answers by default on Node. This entry adds
+ * connect-time re-resolution and validation, a standalone dispatcher and private CA options.
+ * Both entries share the internal pinned transport and body normalization implementation.
  *
  * HOW it closes the window — resolve-once → validate-all → PIN the IP to connect:
  *   1. We build an `undici.Agent` whose `connect.lookup` is OUR function. undici calls it
@@ -31,7 +26,7 @@
  *      `lookup` only steers the IP. Pinning to an IP does NOT weaken cert checking (we never
  *      set `rejectUnauthorized:false` and never use the IP as the servername).
  *
- * REDIRECTS. We do NOT let undici follow redirects (`maxRedirections: 0`). Redirect
+ * REDIRECTS. We do NOT let undici follow redirects (`redirect: "manual"`). Redirect
  * re-validation + re-pinning is owned by the shared guard in `./guard.ts`: it sets
  * `redirect:"manual"`, re-runs the FULL host classification on each `Location` hop, caps
  * hops, strips cross-origin credentials, and re-issues each hop through THIS pinning fetch.
@@ -43,7 +38,8 @@
  */
 import type { LookupAddress } from "node:dns";
 import { lookup as dnsLookupCb } from "node:dns";
-import { Agent, buildConnector, fetch as undiciFetch } from "undici";
+import * as undici from "undici";
+import { type Agent, buildConnector } from "undici";
 // Import the guard + SsrfError + classifiers from the package ROOT entry (NOT directly from
 // ./guard.js). The build keeps `./index.js` EXTERNAL for the node bundle, so `dist/node.js`
 // references the SAME runtime `SsrfError` class + guard as `dist/index.js` — an error thrown
@@ -57,6 +53,7 @@ import {
   isPublicAddress,
   SsrfError,
 } from "./index.js";
+import { createPinnedTransport, validatingLookup } from "./pinned-transport.js";
 import { normalizeRequest } from "./redirect.js";
 
 // Re-export `GuardOptions` (+ its own transitive public members `DnsLookup` / `ResolvedAddress`)
@@ -169,53 +166,7 @@ export function createValidatingLookup(
   allowLoopback: boolean,
   requireLoopbackOnly: boolean,
 ): ConnectLookup {
-  return (hostname, lookupOptions, callback) => {
-    resolveAll(hostname).then(
-      (addresses) => {
-        if (addresses.length === 0) {
-          callback(
-            new SsrfError(`Host resolved to no addresses: ${hostname}.`) as NodeJS.ErrnoException,
-            [],
-          );
-          return;
-        }
-        for (const a of addresses) {
-          const ok = requireLoopbackOnly
-            ? isLoopbackAddress(a.address)
-            : isPublicAddress(a.address, allowLoopback);
-          if (!ok) {
-            const why = requireLoopbackOnly
-              ? "is not loopback (http: requires loopback-only)"
-              : "is a non-public address";
-            callback(
-              new SsrfError(
-                `Connection refused — ${hostname} resolves to an address that ${why} (${a.address}).`,
-              ) as NodeJS.ErrnoException,
-              [],
-            );
-            return;
-          }
-        }
-        // Hand undici back ONLY the pre-validated addresses (the pin). Return the ARRAY only
-        // when `all === true`; otherwise the single-address form is expected.
-        const wantsAll = lookupOptions?.all === true;
-        if (wantsAll) {
-          callback(null, addresses as LookupAddress[]);
-        } else {
-          const first = addresses[0] as LookupAddress;
-          callback(null, first.address, first.family);
-        }
-      },
-      (err: unknown) => {
-        callback(
-          err instanceof Error
-            ? (err as NodeJS.ErrnoException)
-            : (new SsrfError(`Host did not resolve: ${hostname}.`) as NodeJS.ErrnoException),
-          [],
-        );
-      },
-    );
-  };
+  return validatingLookup(resolveAll, allowLoopback, requireLoopbackOnly);
 }
 
 /**
@@ -307,7 +258,7 @@ export function createPinningDispatcher(
     lookup: createValidatingLookup(resolveAll, allowLoopback, true) as never,
   });
 
-  return new Agent({
+  return new undici.Agent({
     // Custom connect (function form): undici hands us the full connect `Options`, INCLUDING
     // `protocol`, so we (a) REFUSE `http:` outright unless allowLoopback — the scheme gate that
     // fires for every connection incl. an IP-literal target undici would dial without a lookup —
@@ -378,23 +329,11 @@ export function createNodeGuardedFetch(options: NodePinningOptions = {}): typeof
     const { url: urlStr, init: effectiveInit } = normalizeRequest(input, init);
     const requireLoopbackOnly = safeIsHttp(urlStr) && allowLoopback;
     const lookup = createValidatingLookup(resolveAll, allowLoopback, requireLoopbackOnly);
-    const connect: Record<string, unknown> = { lookup };
-    if (ca !== undefined) {
-      connect.ca = ca;
-    }
-    const agent = new Agent({ connect });
-    try {
-      const undiciInit = {
-        ...(effectiveInit ?? {}),
-        // The guard already set redirect:"manual"; reinforce + forbid undici-level redirects.
-        redirect: "manual",
-        maxRedirections: 0,
-        dispatcher: agent,
-      };
-      return (await undiciFetch(urlStr, undiciInit as never)) as unknown as Response;
-    } finally {
-      void agent.close().catch(() => {});
-    }
+    return createPinnedTransport(undici, {
+      hostname: new URL(urlStr).hostname.replace(/^\[|\]$/g, ""),
+      lookup,
+      ca,
+    })(urlStr, effectiveInit);
   }) as typeof globalThis.fetch;
 
   // The guard's own URL-level DNS classification shares the SAME resolver, so a private

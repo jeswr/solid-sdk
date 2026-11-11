@@ -59,10 +59,32 @@ This opt-out restores separate validation/connect DNS lookups; private answers a
 validation time are still refused, but a rebinding answer at connect time can bypass
 that check. `allowUnresolvedHosts` does not disable Node pinning; forcing `dnsLookup: null`
 on a Node server also requires a pinning transport or the explicit weaker opt-out.
-IP-literal requests need no DNS pin. Browser and DNS-less edge defaults are unchanged:
+The built-in transport refuses configured proxy environment variables (`HTTP_PROXY`,
+`HTTPS_PROXY`, `ALL_PROXY` and their lowercase forms), `NODE_USE_ENV_PROXY=1`,
+`--use-env-proxy` (including in `NODE_OPTIONS`), and non-default undici global dispatchers
+such as `ProxyAgent`, `EnvHttpProxyAgent` or an Agent with custom CA/TLS/connect settings.
+A direct pinned Agent would bypass that configuration; a CONNECT proxy resolves the
+upstream hostname itself, so this transport cannot pin that destination. This refusal
+also applies to IP literals, consistently in both entries. A pristine default-configured
+Agent is accepted; unrecognised dispatcher configurations fail closed. To preserve a
+proxy or custom dispatcher, use the root entry with the explicit
+`requireDnsPinning: false` opt-out, or supply a `pinningFetch` that implements the required
+egress and destination policy itself. The Node entry always pins; its `ca` option supplies
+private trust without relying on a global dispatcher.
+
+Bun (`process.versions.bun`) and Deno (`globalThis.Deno`) cannot use the built-in pinning
+transport: hostname requests fail closed even when Node compatibility DNS APIs exist.
+Use an explicitly attested `pinningFetch` or opt out with `requireDnsPinning: false`.
+A hostname response returned without invoking the pinned lookup is also refused.
+IP-literal requests need no DNS lookup. Browser and other DNS-less edge defaults are unchanged:
 browsers use syntactic checks; other DNS-less runtimes require `allowUnresolvedHosts`.
 `assertSafeUrl` only validates a URL and does not create a dispatcher or protect a later
-independent fetch. See the [workspace caller audit](docs/dns-pinning-callers.md).
+independent fetch. It skips transport/pinning requirements, including when passed the same
+options as a custom fetch guard, while retaining URL, address and DNS-less validation policy.
+The shared built-in transport accepts Node-global and npm-undici FormData, preserving multipart
+boundaries, filenames, duplicate fields, caller content-type headers and redirect replay.
+Blob, URLSearchParams and stream bodies retain their Fetch semantics (streams require duplex).
+See the [workspace caller audit](docs/dns-pinning-callers.md).
 
 `beforeDispatch?: () => void` is an optional synchronous authority fence on guard
 construction. It runs after each awaited destination/DNS check, immediately before

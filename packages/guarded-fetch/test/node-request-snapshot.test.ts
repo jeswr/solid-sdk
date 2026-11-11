@@ -1,6 +1,13 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { FormData as UndiciFormData, Request as UndiciRequest } from "undici";
-import { beforeEach, expect, it, vi } from "vitest";
+import {
+  Agent,
+  getGlobalDispatcher,
+  ProxyAgent,
+  setGlobalDispatcher,
+  FormData as UndiciFormData,
+  Request as UndiciRequest,
+} from "undici";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 const { transport } = vi.hoisted(() => ({ transport: vi.fn() }));
 vi.mock("undici", async (importOriginal) => {
@@ -10,12 +17,33 @@ vi.mock("undici", async (importOriginal) => {
     fetch: async (input: string, init: RequestInit) => {
       // Exercise the installed undici Request constructor, whose brand differs
       // from Node's global Request, without opening a socket.
+      const dispatcher = (init as RequestInit & { dispatcher: InstanceType<typeof actual.Agent> })
+        .dispatcher;
+      const optionsKey = Object.getOwnPropertySymbols(dispatcher).find(
+        (key) => key.description === "options",
+      );
+      const options =
+        optionsKey &&
+        (
+          dispatcher as unknown as Record<
+            symbol,
+            { connect: { lookup: (...args: unknown[]) => void } }
+          >
+        )[optionsKey];
+      const hostname = new URL(input).hostname;
+      if (!/^\[?[\d:]+(?:\.\d+)*\]?$/.test(hostname))
+        await new Promise<void>((resolve, reject) => {
+          options?.connect.lookup(hostname, { all: true }, (err: Error | null) =>
+            err ? reject(err) : resolve(),
+          );
+        });
       const request = new actual.Request(input, init as never);
       return (await transport(request)) ?? new Response(await request.text());
     },
   };
 });
 
+import { assertSafeUrl, createGuardedFetch } from "../src/index.js";
 import { createNodeGuardedFetch } from "../src/node.js";
 
 beforeEach(() => {
@@ -176,3 +204,234 @@ for (const [name, RequestImpl] of Object.entries({ native: Request, undici: Undi
     expect(input.bodyUsed).toBe(false);
   });
 }
+
+it("normalizes Node global FormData before installed undici serializes it", async () => {
+  const form = new FormData();
+  form.set("message", "native realm payload");
+  transport.mockImplementation(async (request) => {
+    expect(request.headers.get("content-type")).toMatch(/^multipart\/form-data; boundary=/);
+    expect([...(await request.formData()).entries()]).toEqual([
+      ["message", "native realm payload"],
+    ]);
+    return new Response("ok");
+  });
+  await createNodeGuardedFetch({ resolveAll: async () => [{ address: "1.1.1.1", family: 4 }] })(
+    "https://pod.example/item",
+    { method: "POST", body: form },
+  );
+});
+
+const originalDispatcher = getGlobalDispatcher();
+afterEach(() => {
+  setGlobalDispatcher(originalDispatcher);
+  vi.unstubAllEnvs();
+  vi.unstubAllGlobals();
+});
+
+for (const [entry, factory] of Object.entries({
+  root: () => createGuardedFetch({ dnsLookup: async () => [{ address: "1.1.1.1", family: 4 }] }),
+  node: () =>
+    createNodeGuardedFetch({ resolveAll: async () => [{ address: "1.1.1.1", family: 4 }] }),
+})) {
+  it.each([
+    false,
+    true,
+  ])(`${entry}: native multipart is replayable across a consuming 307 with keepalive %s`, async (keepalive) => {
+    const form = new FormData();
+    form.append("message", "first");
+    form.append("message", "second");
+    form.append("file", new Blob(["file bytes"], { type: "text/plain" }), "fixture.txt");
+    transport.mockImplementation(async (request) => {
+      const parsed = await request.formData();
+      expect(parsed.getAll("message")).toEqual(["first", "second"]);
+      const file = parsed.get("file") as File;
+      expect(file.name).toBe("fixture.txt");
+      expect(file.type).toBe("text/plain");
+      expect(await file.text()).toBe("file bytes");
+      return transport.mock.calls.length === 1
+        ? new Response(null, { status: 307, headers: { location: "/next" } })
+        : new Response("ok");
+    });
+    await factory()("https://pod.example/item", { method: "POST", body: form, keepalive });
+    expect(transport).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([
+    "blob",
+    "search",
+    "stream",
+  ])(`${entry}: installed undici serializes %s bytes and content type`, async (kind) => {
+    const payload = "hello=world+space";
+    const body =
+      kind === "blob"
+        ? new Blob([payload], { type: "application/custom" })
+        : kind === "search"
+          ? new URLSearchParams({ hello: "world space" })
+          : new ReadableStream({
+              start(controller) {
+                controller.enqueue(new TextEncoder().encode(payload));
+                controller.close();
+              },
+            });
+    transport.mockImplementation(async (request) => {
+      expect(request.headers.get("content-type")).toBe(
+        kind === "blob"
+          ? "application/custom"
+          : kind === "search"
+            ? "application/x-www-form-urlencoded;charset=UTF-8"
+            : null,
+      );
+      return new Response(await request.text());
+    });
+    expect(
+      await (
+        await factory()("https://pod.example/item", {
+          method: "POST",
+          body,
+          ...(kind === "stream" ? { duplex: "half" } : {}),
+        } as RequestInit)
+      ).text(),
+    ).toBe(payload);
+  });
+
+  it(`${entry}: preserves caller content-type during FormData normalization`, async () => {
+    const form = new FormData();
+    form.set("message", "value");
+    transport.mockImplementation(async (request) => {
+      expect(request.headers.get("content-type")).toBe("application/custom");
+      expect(await request.text()).toContain('name="message"');
+      return new Response("ok");
+    });
+    await factory()("https://pod.example/item", {
+      method: "POST",
+      body: form,
+      headers: { "content-type": "application/custom" },
+    });
+  });
+
+  it.each([
+    "proxy",
+    "tls",
+    "factory",
+  ])(`${entry}: refuses non-default global %s dispatchers before sending`, async (kind) => {
+    const dispatcher =
+      kind === "proxy"
+        ? new ProxyAgent("http://proxy.invalid")
+        : kind === "tls"
+          ? new Agent({ connect: { ca: "custom CA" } })
+          : new Agent({
+              factory: () => {
+                throw new Error("custom factory");
+              },
+            });
+    setGlobalDispatcher(dispatcher);
+    try {
+      for (const host of ["pod.example", "1.1.1.1"])
+        await expect(factory()(`https://${host}/item`)).rejects.toThrow(
+          /requireDnsPinning: false.*pinningFetch/,
+        );
+      await expect(
+        assertSafeUrl("https://pod.example/", {
+          dnsLookup: async () => [{ address: "1.1.1.1", family: 4 }],
+          requireDnsPinning: true,
+        }),
+      ).resolves.toBeUndefined();
+      expect(transport).not.toHaveBeenCalled();
+    } finally {
+      setGlobalDispatcher(originalDispatcher);
+      await dispatcher.close();
+    }
+  });
+
+  it.each([
+    "HTTPS_PROXY",
+    "https_proxy",
+    "HTTP_PROXY",
+    "http_proxy",
+    "ALL_PROXY",
+    "all_proxy",
+    "NODE_USE_ENV_PROXY",
+    "NODE_OPTIONS",
+    "execArgv",
+  ])(`${entry}: refuses proxy configuration through %s`, async (name) => {
+    if (name === "execArgv")
+      vi.stubGlobal("process", { ...process, execArgv: ["--use-env-proxy"] });
+    else
+      vi.stubEnv(
+        name,
+        name === "NODE_OPTIONS"
+          ? "--use-env-proxy"
+          : name === "NODE_USE_ENV_PROXY"
+            ? "1"
+            : "http://secret:credential@proxy.invalid",
+      );
+    await expect(factory()("https://pod.example/item")).rejects.toThrow(
+      /requireDnsPinning: false.*pinningFetch/,
+    );
+    expect(transport).not.toHaveBeenCalled();
+  });
+}
+
+it("rechecks proxy configuration after the synchronous authority fence", async () => {
+  const dispatcher = new ProxyAgent("http://proxy.invalid");
+  try {
+    await expect(
+      createGuardedFetch({
+        dnsLookup: async () => [{ address: "1.1.1.1", family: 4 }],
+        beforeDispatch: () => setGlobalDispatcher(dispatcher),
+      })("https://pod.example/item"),
+    ).rejects.toThrow(/requireDnsPinning: false.*pinningFetch/);
+    expect(transport).not.toHaveBeenCalled();
+  } finally {
+    setGlobalDispatcher(originalDispatcher);
+    await dispatcher.close();
+  }
+});
+
+it("root's attested pinningFetch can preserve a caller's proxy policy", async () => {
+  const dispatcher = new ProxyAgent("http://proxy.invalid");
+  setGlobalDispatcher(dispatcher);
+  const pinningFetch = vi.fn(async () => new Response("caller pin"));
+  try {
+    await createGuardedFetch({
+      pinningFetch,
+      dnsLookup: async () => [{ address: "1.1.1.1", family: 4 }],
+    })("https://pod.example/item");
+    expect(pinningFetch).toHaveBeenCalledOnce();
+  } finally {
+    setGlobalDispatcher(originalDispatcher);
+    await dispatcher.close();
+  }
+});
+
+it("refuses a custom Agent factory even when it has the default factory's name", async () => {
+  function defaultFactory(): never {
+    throw new Error("custom behavior");
+  }
+  const dispatcher = new Agent({ factory: defaultFactory });
+  setGlobalDispatcher(dispatcher);
+  try {
+    await expect(
+      createGuardedFetch({ dnsLookup: async () => [{ address: "1.1.1.1", family: 4 }] })(
+        "https://pod.example/item",
+      ),
+    ).rejects.toThrow(/requireDnsPinning: false.*pinningFetch/);
+    expect(transport).not.toHaveBeenCalled();
+  } finally {
+    setGlobalDispatcher(originalDispatcher);
+    await dispatcher.close();
+  }
+});
+
+it("refuses an unrecognized global dispatcher without exposing its properties", async () => {
+  const dispatcher = Object.create(null);
+  dispatcher.dispatch = vi.fn();
+  setGlobalDispatcher(dispatcher);
+  await expect(
+    createGuardedFetch({ dnsLookup: async () => [{ address: "1.1.1.1", family: 4 }] })(
+      "https://pod.example/item",
+    ),
+  ).rejects.toThrow(/requireDnsPinning: false.*pinningFetch/);
+  expect(dispatcher.dispatch).not.toHaveBeenCalled();
+  expect(transport).not.toHaveBeenCalled();
+});

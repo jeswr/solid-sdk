@@ -9,11 +9,6 @@ artifacts and dependency directories). Found **204 importing files across 40 pro
 152 production/demo files and 52 test files. No imports were found in `tools/`.
 The complete file inventory is below; manifest/build-script references were also checked.
 
-No workspace production caller needs a Node runtime opt-out for missing undici. Existing
-Node-entry users retain their installed guarded-fetch transport; root default users now
-load guarded-fetch’s existing undici dependency lazily. Inlined Node consumers already
-carry undici explicitly. No dependency, lockfile or root configuration changes are needed.
-
 ## Runtime and action for every importing project
 
 | Project | Runtime, dispatcher availability and action |
@@ -58,85 +53,6 @@ carry undici explicitly. No dependency, lockfile or root configuration changes a
 | `packages/suite-sdk` | Portable scope/normalization/redirect helpers only. No change. |
 | `packages/unstorage-solid` | Portable scope, redirect and snapshot helpers/re-exports only. No change. |
 | `packages/y-solid` | Portable scope/normalization/container helpers/re-exports only. No change. |
-
-## Minimal production caller edits
-
-Only these four source files change outside guarded-fetch:
-
-1. `apps/coeliac/src/lib/fetch/guarded.ts`: explicit browser Fetch-only opt-out.
-2. `apps/issues/src/lib/announce.ts`: explicit authenticated browser discovery opt-out.
-3. `apps/pod-docs/src/type-index.ts`: explicit browser/session identity-read opt-out.
-4. `packages/solid-community-feeds/src/safeFetch.ts`: explicit injected FetchLike opt-out.
-
-Each option is `requireDnsPinning: false` with an adjacent reason. These preserve existing
-browser or caller-owned transport residuals; none is a silent fallback from the new Node
-default. `allowUnresolvedHosts` alone remains insufficient to bypass Node pinning.
-
-Federation-client’s three offline guard/registry test files now attest inert fetch stubs
-or explicitly opt out for stubs that open no sockets; its README and SKILL explain the
-inherited Node behavior. Its production `registry.ts` needs no edit.
-
-## Validation and changed files
-
-The fail-first run of `test/default-pinning.test.ts` failed four cases on the original
-code: both default root APIs reached the simulated private second DNS answer; the
-unattested custom fetch was accepted; and redirect/dispatcher pinning failed. A later
-fail-first case also demonstrated that forcing `dnsLookup: null` on Node bypassed the
-new default; it now fails closed without an explicit weaker opt-out.
-
-Validation completed in this sandbox:
-
-- Guarded-fetch: 804 tests passed across the 18 files without socket fixtures; another
-  43 tests passed in `rr4-regressions.test.ts`, with its two socket cases excluded.
-- The 20 new offline cases cover default/one-shot pins, weaker opt-out, custom-fetch
-  refusal, forced DNS-less Node refusal, redirects, dispatcher override, concurrent
-  pins, immutable DNS records, authority fences, unavailable undici, browser/edge policy
-  and browser bundling. A real root socket-connector regression was also added.
-- Federation-client: 118 relevant guard, registry and built-artifact tests passed.
-- Community-feeds: all 64 safeFetch tests passed.
-- Changed app callers: 10 Coeliac knowledge-fetch, 35 Issues announcement and 112
-  Pod Docs type-index tests passed.
-- Guarded-fetch build, lint, typecheck and both API report checks passed. Federation-client
-  and community-feeds lint/typecheck passed. Dependency builds passed.
-- Real socket fixtures cannot run here: the sandbox rejects `listen(127.0.0.1)` with
-  `EPERM`. `node.test.ts`, `rr8-node-regressions.test.ts` and the two rr4 socket cases
-  still need execution in an environment permitting local listeners.
-- The requested affected gate and `pnpm run gate:full` both exited **1** at root
-  `check:skills`: adding the requested package skill makes `skills/INDEX.md` stale.
-  That index is outside this task's allowed paths and was left untouched. Its refresh
-  command for the supervising session is `pnpm run check:skills --write`.
-
-The working tree changes are limited to these files:
-
-- [apps/coeliac/src/lib/fetch/guarded.ts](../../../apps/coeliac/src/lib/fetch/guarded.ts)
-- [apps/issues/src/lib/announce.ts](../../../apps/issues/src/lib/announce.ts)
-- [apps/pod-docs/src/type-index.ts](../../../apps/pod-docs/src/type-index.ts)
-- [packages/federation-client/README.md](../../../packages/federation-client/README.md)
-- [packages/federation-client/SKILL.md](../../../packages/federation-client/SKILL.md)
-- [packages/federation-client/test/registry.test.ts](../../../packages/federation-client/test/registry.test.ts)
-- [packages/federation-client/test/ssrf-no-regression.adversarial.test.ts](../../../packages/federation-client/test/ssrf-no-regression.adversarial.test.ts)
-- [packages/federation-client/test/ssrf.test.ts](../../../packages/federation-client/test/ssrf.test.ts)
-- [packages/guarded-fetch/README.md](../../../packages/guarded-fetch/README.md)
-- [packages/guarded-fetch/SKILL.md](../../../packages/guarded-fetch/SKILL.md)
-- [packages/guarded-fetch/docs/dns-pinning-callers.md](../../../packages/guarded-fetch/docs/dns-pinning-callers.md)
-- [packages/guarded-fetch/package.json](../../../packages/guarded-fetch/package.json)
-- [packages/guarded-fetch/scripts/build-dist.mjs](../../../packages/guarded-fetch/scripts/build-dist.mjs)
-- [packages/guarded-fetch/src/guard.ts](../../../packages/guarded-fetch/src/guard.ts)
-- [packages/guarded-fetch/src/node.ts](../../../packages/guarded-fetch/src/node.ts)
-- [packages/guarded-fetch/test/before-dispatch.test.ts](../../../packages/guarded-fetch/test/before-dispatch.test.ts)
-- [packages/guarded-fetch/test/browser-bundle.test.ts](../../../packages/guarded-fetch/test/browser-bundle.test.ts)
-- [packages/guarded-fetch/test/default-pinning.test.ts](../../../packages/guarded-fetch/test/default-pinning.test.ts)
-- [packages/guarded-fetch/test/fetch-input.test.ts](../../../packages/guarded-fetch/test/fetch-input.test.ts)
-- [packages/guarded-fetch/test/guard.test.ts](../../../packages/guarded-fetch/test/guard.test.ts)
-- [packages/guarded-fetch/test/node.test.ts](../../../packages/guarded-fetch/test/node.test.ts)
-- [packages/guarded-fetch/test/pinning-unavailable.test.ts](../../../packages/guarded-fetch/test/pinning-unavailable.test.ts)
-- [packages/guarded-fetch/test/refuseRedirects.test.ts](../../../packages/guarded-fetch/test/refuseRedirects.test.ts)
-- [packages/guarded-fetch/test/replacement-body.test.ts](../../../packages/guarded-fetch/test/replacement-body.test.ts)
-- [packages/guarded-fetch/test/request-snapshot.test.ts](../../../packages/guarded-fetch/test/request-snapshot.test.ts)
-- [packages/guarded-fetch/test/rr4-regressions.test.ts](../../../packages/guarded-fetch/test/rr4-regressions.test.ts)
-- [packages/guarded-fetch/test/rr8-regressions.test.ts](../../../packages/guarded-fetch/test/rr8-regressions.test.ts)
-- [packages/guarded-fetch/test/security-regressions.test.ts](../../../packages/guarded-fetch/test/security-regressions.test.ts)
-- [packages/solid-community-feeds/src/safeFetch.ts](../../../packages/solid-community-feeds/src/safeFetch.ts)
 
 ## Complete import inventory
 

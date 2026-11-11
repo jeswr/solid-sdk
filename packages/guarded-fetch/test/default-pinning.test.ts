@@ -8,6 +8,9 @@ const network = vi.hoisted(() => ({
   closes: vi.fn(),
   response: vi.fn(),
   onSend: vi.fn(),
+  lookupHost: undefined as string | undefined,
+  all: true,
+  skipLookup: false,
 }));
 
 vi.mock("node:dns/promises", () => ({ lookup: network.resolve }));
@@ -17,6 +20,8 @@ vi.mock("undici", () => ({
     close = network.closes;
   },
   fetch: socketFetch,
+  getGlobalDispatcher: () => undefined,
+  FormData: globalThis.FormData,
 }));
 
 import { createGuardedFetch, guardedFetch, SsrfError } from "../src/index.js";
@@ -30,13 +35,20 @@ async function socketFetch(input: RequestInfo | URL, init?: RequestInit): Promis
     | { options: { connect: { lookup: (...args: unknown[]) => void } } }
     | undefined;
   network.dispatchers.push(dispatcher);
+  if (network.skipLookup) return new Response("ignored pin");
   const addresses = dispatcher
     ? await new Promise<Array<{ address: string; family: number }>>((resolve, reject) => {
         dispatcher.options.connect.lookup(
-          hostname,
-          { all: true },
-          (error: Error | null, records: Array<{ address: string; family: number }>) =>
-            error ? reject(error) : resolve(records),
+          network.lookupHost ?? hostname,
+          { all: network.all },
+          (
+            error: Error | null,
+            records: string | Array<{ address: string; family: number }>,
+            family: number,
+          ) =>
+            error
+              ? reject(error)
+              : resolve(typeof records === "string" ? [{ address: records, family }] : records),
         );
       })
     : await network.resolve(hostname, { all: true });
@@ -54,6 +66,9 @@ beforeEach(() => {
   network.closes.mockReset().mockResolvedValue(undefined);
   network.response.mockReset();
   network.onSend.mockReset();
+  network.lookupHost = undefined;
+  network.all = true;
+  network.skipLookup = false;
   vi.stubGlobal("fetch", socketFetch);
 });
 
@@ -202,4 +217,35 @@ describe("Node hostname pinning defaults", () => {
     );
     expect(network.reached).toEqual([]);
   });
+});
+
+it("refuses a hostname response if the transport never invoked its pinned lookup", async () => {
+  network.skipLookup = true;
+  await expect(createGuardedFetch()("https://registry.example/")).rejects.toThrow(/lookup/);
+  expect(network.closes).toHaveBeenCalledOnce();
+});
+
+it("refuses an unexpected connection hostname and closes the Agent", async () => {
+  network.lookupHost = "other.example";
+  await expect(createGuardedFetch()("https://registry.example/")).rejects.toThrow(
+    /unexpected connection hostname/,
+  );
+  expect(network.reached).toEqual([]);
+  expect(network.closes).toHaveBeenCalledOnce();
+});
+
+it("returns the single-address callback when all is false", async () => {
+  network.all = false;
+  await createGuardedFetch()("https://registry.example/");
+  expect(network.reached).toEqual(["93.184.216.34"]);
+});
+
+it("closes the Agent when the transport rejects", async () => {
+  network.onSend.mockImplementation(() => {
+    throw new Error("transport rejected");
+  });
+  await expect(createGuardedFetch()("https://registry.example/")).rejects.toThrow(
+    /transport rejected/,
+  );
+  expect(network.closes).toHaveBeenCalledOnce();
 });

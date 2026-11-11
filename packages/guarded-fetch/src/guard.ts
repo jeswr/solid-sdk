@@ -47,6 +47,11 @@
  */
 import { classifyIpLiteral, isLoopbackAddress, isPublicAddress } from "./addresses.js";
 import {
+  pinningRuntimeUnavailable,
+  preparePinnedTransport,
+  validatingLookup,
+} from "./pinned-transport.js";
+import {
   cancelBody,
   isRedirect,
   normalizeRequest,
@@ -165,6 +170,7 @@ export interface GuardOptions {
    * resolver. Regardless of this flag, `localhost` / `*.local` NAMES, private/loopback/
    * metadata IP LITERALS, and `http:` to a non-loopback name are ALWAYS refused. Default
    * `false`. Does not disable Node pinning, even when `dnsLookup: null` is forced.
+   * Bun/Deno also need an explicit pinning opt-out or caller-attested transport.
    */
   readonly allowUnresolvedHosts?: boolean;
   /**
@@ -175,6 +181,8 @@ export interface GuardOptions {
    * validation/connect DNS lookups (DNS rebinding remains possible). IP literals need no
    * pinning. DNS-less browser/edge defaults are unchanged; explicitly setting `true` there
    * requires {@link GuardOptions.allowUnresolvedHosts} to accept the no-resolver residual.
+   * Recognised Bun/Deno runtimes fail closed by default even with Node compatibility APIs;
+   * use `false` or an explicitly attested {@link GuardOptions.pinningFetch} there.
    */
   readonly requireDnsPinning?: boolean;
   /**
@@ -211,52 +219,9 @@ const DEFAULT_MAX_REDIRECTS = 5;
  * (gated by `hasNodeDns()`).
  */
 const NODE_DNS_SPECIFIER = ["node:dns", "promises"].join("/");
-// Keep undici opaque to browser bundlers, just like the DNS probe above. It is an
-// existing runtime dependency; failure to load it on Node must fail closed.
-const NODE_FETCH_SPECIFIER = ["un", "dici"].join("");
-let nodeFetchModule: Promise<typeof import("undici")> | undefined;
-
 interface PinnedTarget {
   readonly hostname: string;
   readonly addresses: ResolvedAddress[];
-}
-
-/** Prepare the Node transport before the synchronous authority fence. */
-async function pinnedTransport(target: PinnedTarget): Promise<typeof globalThis.fetch> {
-  nodeFetchModule ??= import(/* @vite-ignore */ NODE_FETCH_SPECIFIER);
-  const { Agent, fetch } = await nodeFetchModule;
-  return (async (input: RequestInfo | URL, init?: RequestInit) => {
-    const agent = new Agent({
-      connect: {
-        lookup(hostname, options, callback) {
-          // Match dns.lookup's asynchronous callback contract so the connector installs
-          // its socket error handlers before a connection attempt can fail.
-          queueMicrotask(() => {
-            if (hostname !== target.hostname) {
-              callback(new SsrfError("Pinning refused an unexpected connection hostname."), [], 0);
-              return;
-            }
-            // Return fresh records: neither the resolver nor the connector can mutate the pin.
-            const addresses = target.addresses.map((address) => ({ ...address }));
-            if (options.all) callback(null, addresses);
-            else callback(null, addresses[0]?.address ?? "", addresses[0]?.family ?? 0);
-          });
-        },
-      },
-    });
-    try {
-      return (await fetch(
-        input as string,
-        {
-          ...init,
-          redirect: "manual",
-          dispatcher: agent,
-        } as never,
-      )) as unknown as Response;
-    } finally {
-      void agent.close().catch(() => {});
-    }
-  }) as typeof globalThis.fetch;
 }
 
 /**
@@ -310,7 +275,7 @@ export function guardedFetch(
  * config time) before wiring it into a guarded fetch.
  */
 export async function assertSafeUrl(rawUrl: string, options: GuardOptions = {}): Promise<void> {
-  await new SsrfGuard(options).assertAllowed(rawUrl);
+  await new SsrfGuard(options, true).assertAllowed(rawUrl);
 }
 
 /**
@@ -376,11 +341,11 @@ class SsrfGuard {
   private readonly enforcePortGate: boolean;
   private defaultLookup: Promise<DnsLookup> | undefined;
 
-  constructor(options: GuardOptions) {
+  constructor(options: GuardOptions, validateOnly = false) {
     this.beforeDispatch = options.beforeDispatch;
     this.havePinningFetch = options.pinningFetch !== undefined;
     this.haveCustomFetch = options.fetch !== undefined;
-    this.explicitRequireDnsPinning = options.requireDnsPinning === true;
+    this.explicitRequireDnsPinning = !validateOnly && options.requireDnsPinning === true;
     this.isBrowser = isBrowserContext();
     this.fetcher = options.pinningFetch ?? options.fetch ?? globalThis.fetch;
     this.injectedLookup = options.dnsLookup === null ? undefined : (options.dnsLookup ?? undefined);
@@ -398,7 +363,8 @@ class SsrfGuard {
     validateLimit("timeoutMs", this.timeoutMs, false);
     this.allowLoopback = options.allowLoopback ?? false;
     this.allowUnresolvedHosts = options.allowUnresolvedHosts ?? false;
-    this.requireDnsPinning = options.requireDnsPinning ?? hasNodeDns();
+    this.requireDnsPinning =
+      !validateOnly && (options.requireDnsPinning ?? (hasNodeDns() || pinningRuntimeUnavailable()));
     this.hostnameDenylist = options.hostnameDenylist ?? DEFAULT_HOSTNAME_DENYLIST;
     this.allowedContentTypes = options.allowedContentTypes
       ? options.allowedContentTypes.map((t) => t.toLowerCase())
@@ -458,7 +424,18 @@ class SsrfGuard {
       let fetcher = this.fetcher;
       if (target) {
         try {
-          fetcher = await this.waitFor(pinnedTransport(target), currentUrl, controller);
+          fetcher = await this.waitFor(
+            preparePinnedTransport({
+              hostname: target.hostname,
+              lookup: validatingLookup(
+                async () => target.addresses,
+                this.allowLoopback,
+                safeProtocol(currentUrl) === "http:",
+              ),
+            }),
+            currentUrl,
+            controller,
+          );
         } catch (cause) {
           throw new SsrfError(
             `DNS-pinning transport unavailable for ${sanitizeUrl(currentUrl)}: ${message(cause)}`,
@@ -693,7 +670,24 @@ class SsrfGuard {
       this.assertResolvedAddressesAllowed(url, hostname, [
         { address: hostname, family: literalKind },
       ]);
+      // Use the same built-in transport/configuration checks for Node literals: bypassing
+      // DNS does not justify silently ignoring the configured proxy or TLS dispatcher.
+      if (
+        this.requireDnsPinning &&
+        !this.havePinningFetch &&
+        !this.haveCustomFetch &&
+        hasNodeDns() &&
+        !pinningRuntimeUnavailable()
+      ) {
+        return { hostname, addresses: [{ address: hostname, family: literalKind }] };
+      }
       return;
+    }
+
+    if (this.requireDnsPinning && !this.havePinningFetch && pinningRuntimeUnavailable()) {
+      throw new SsrfError(
+        "DNS pinning is unavailable in Bun/Deno; explicitly set requireDnsPinning: false or supply pinningFetch.",
+      );
     }
 
     // HOSTNAME targets (non-literal). Determine the active resolver, separating DNS
