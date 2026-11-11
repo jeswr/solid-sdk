@@ -6,9 +6,9 @@ import { record } from "../graph-mail/rest.js";
 import { json } from "./rest.js";
 
 export const CARD_TYPE = "application/vnd.microsoft.card.adaptive";
-export function card(text: string, compactJws: string) {
+export function card(text: string, compactJws: string, attachmentId = "agent-envelope") {
   return {
-    id: "agent-envelope",
+    id: attachmentId,
     contentType: CARD_TYPE,
     content: canonicalJson({
       // biome-ignore lint/style/useNamingConvention: Adaptive Card schema key

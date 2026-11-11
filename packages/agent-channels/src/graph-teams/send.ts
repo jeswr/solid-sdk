@@ -5,13 +5,13 @@ import { accountId } from "../direct/shared.js";
 import { summaryLines } from "../email/bodies.js";
 import { assertFooter, decodeEmailProposal } from "../email-mime.js";
 import { ChannelParseError, ProviderRejectedError } from "../errors.js";
-import { record, responseBody } from "../graph-mail/rest.js";
+import { record } from "../graph-mail/rest.js";
 import type { OriginFetchOptions } from "../origins.js";
 import { AGENT_FOOTER, TEAMS_CARD } from "../profiles.js";
 import { sendAttempt } from "../provider/attempt.js";
 import type { AccountRef, RenderableProposal, Wire } from "../types.js";
 import { card, envelopes } from "./card.js";
-import { BASE, graphTeamsRest, id, json } from "./rest.js";
+import { BASE, graphTeamsRest, id, json, responseJson } from "./rest.js";
 
 const MEDIA_TYPE = "application/vnd.jeswr.teams-message+json";
 export interface GraphTeamsSendOptions {
@@ -20,6 +20,8 @@ export interface GraphTeamsSendOptions {
   readonly recipients: ReadonlyMap<string, string>;
   readonly verify: (compactJws: string) => Promise<unknown>;
   readonly verifyApproval: (wire: Wire, account: AccountRef) => Promise<boolean>;
+  /** Pure, stable ID derived from the signed content; injectable for fixtures. */
+  readonly attachmentIdFor?: (compactJws: string) => string;
   readonly footer?: string;
   readonly now?: () => number;
   readonly transport?: OriginFetchOptions;
@@ -33,6 +35,8 @@ export function createGraphTeamsSend(
   for (const chat of recipients.values()) id(chat);
   const verify = options.verify;
   const verifyApproval = options.verifyApproval;
+  const attachmentIdFor =
+    options.attachmentIdFor ?? ((compactJws: string) => digestBytes(compactJws).slice(8, 40));
   const now = options.now ?? Date.now;
   const footer = options.footer ?? AGENT_FOOTER;
   assertFooter(footer);
@@ -68,12 +72,23 @@ export function createGraphTeamsSend(
     const text = ["Sent by a software agent.", ...summaryLines(message), footer].join("\n");
     if (/[\p{Cc}\p{Cf}]/u.test(text.replaceAll("\n", "")))
       throw new ChannelParseError("Teams content contains controls");
+    const attachmentId = attachmentIdFor(compactJws);
+    if (typeof attachmentId !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(attachmentId))
+      throw new ChannelParseError("invalid Teams attachment id");
+    const content = `${text
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#39;")
+      // HTML collapses newlines; <br> keeps the visible lines (ingest maps it back to "\n").
+      .replaceAll("\n", "<br>")}<attachment id="${attachmentId}"></attachment>`;
     const bytes = canonicalJson({
       account: account.id,
       chat,
       request: {
-        body: { contentType: "text", content: text },
-        attachments: [card(text, compactJws)],
+        body: { contentType: "html", content },
+        attachments: [card(text, compactJws, attachmentId)],
       },
     });
     if (Buffer.byteLength(bytes) > TEAMS_CARD.maxBytes)
@@ -154,7 +169,9 @@ export function createGraphTeamsSend(
           throw new ProviderRejectedError(`Teams send refused: HTTP ${response.status}`);
         if (!response.ok) throw new Error(`Teams send uncertain: HTTP ${response.status}`);
         try {
-          return { outcome: "accepted", providerRef: id((await responseBody(response)).id) };
+          // Only the ID is needed. Teams responseJson permits the existing 64 KiB
+          // body/card strings and 1 MiB response cap, retaining JSON depth/node bounds.
+          return { outcome: "accepted", providerRef: id((await responseJson(response)).id) };
         } catch {
           throw new Error("Teams send uncertain: invalid acknowledgement");
         }

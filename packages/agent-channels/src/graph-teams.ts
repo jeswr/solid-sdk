@@ -70,6 +70,9 @@ function conversation(path: string): string {
   if (channel) return `teams:channel:${channel[1]}:${channel[2]}`;
   throw new ChannelParseError("invalid Teams conversation");
 }
+function plainText(value: string): string {
+  return value.replace(/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/gu, (c) => (c === "\n" || c === "\t" ? c : ""));
+}
 function parse(item: InboundRawMessage) {
   try {
     const wrapper = json(item.raw);
@@ -80,9 +83,10 @@ function parse(item: InboundRawMessage) {
     if (item.id !== messageId || row.messageType !== "message" || row.deletedDateTime != null)
       throw new Error();
     const body = record(row.body);
-    if (!["html", "text"].includes(body.contentType as string) || typeof body.content !== "string")
+    const contentType = typeof body.contentType === "string" ? body.contentType.toLowerCase() : "";
+    if (!["html", "text"].includes(contentType) || typeof body.content !== "string")
       throw new Error();
-    const textBody = htmlToText(body.content);
+    const textBody = contentType === "html" ? htmlToText(body.content) : plainText(body.content);
     const user = record(record(row.from).user);
     const handle = id(user.id);
     if (
@@ -97,7 +101,7 @@ function parse(item: InboundRawMessage) {
       sender: {
         handle,
         ...(typeof user.displayName === "string"
-          ? { displayName: htmlToText(user.displayName) }
+          ? { displayName: plainText(user.displayName) }
           : {}),
       },
       textBody,

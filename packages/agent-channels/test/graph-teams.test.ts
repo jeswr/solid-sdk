@@ -160,6 +160,39 @@ it("projects HTML and mentions to control-free text, drops closed/unclosed activ
   expect(() => htmlToText(null)).toThrow(ChannelParseError);
 });
 
+it.each([
+  "text",
+  "TEXT",
+  "Text",
+])("preserves %s body text and plain display names while stripping control and bidi characters", (contentType) => {
+  const content = `  2 < 3 &amp; <b>literal</b> "quote" 'apostrophe'\nA\tB\u0001\u202e\u2066\u2028\u2029\u00a0 `;
+  const displayName = "2 < 3 &amp; <b>Name</b>\u0000\u202e";
+  const parsed = reader([]).binding.ingest.parse(
+    item({ body: { contentType, content }, from: { user: { id: "sender-id", displayName } } }),
+  );
+  expect(parsed.textBody).toBe(`  2 < 3 &amp; <b>literal</b> "quote" 'apostrophe'\nA\tB\u00a0 `);
+  expect(parsed.sender?.displayName).toBe("2 < 3 &amp; <b>Name</b>");
+});
+
+it.each([
+  "html",
+  "HTML",
+  "Html",
+])("projects only the %s body as HTML and removes card placeholders", (contentType) => {
+  const parsed = reader([]).binding.ingest.parse(
+    item({
+      body: {
+        contentType,
+        content:
+          '<p>2 &lt; 3 &amp; <b>bold</b><br>A\tB\u0001\u202e</p><attachment id="card-id"></attachment>',
+      },
+      from: { user: { id: "sender-id", displayName: "Literal &amp; <Name>\u202e" } },
+    }),
+  );
+  expect(parsed.textBody).toBe("2 < 3 & bold\nA\tB");
+  expect(parsed.sender?.displayName).toBe("Literal &amp; <Name>");
+});
+
 it("rejects hostile messages without echoing content, and ignores native metadata", () => {
   const r = reader([]);
   for (const bad of [
@@ -172,6 +205,7 @@ it("rejects hostile messages without echoing content, and ignores native metadat
     item({ deletedDateTime: "deleted" }),
     item({ body: null }),
     item({ body: { contentType: "html", content: 12 } }),
+    item({ body: { contentType: null, content: "private" } }),
     item({ body: { contentType: "unsafe", content: "private" } }),
     item({ from: { application: { id: "app" } } }),
     item({ createdDateTime: 42 }),

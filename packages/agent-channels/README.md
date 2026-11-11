@@ -332,8 +332,10 @@ and 30 seconds of cumulative delay and elapsed time per collection request.
 Both seconds and HTTP dates are accepted; excessive or invalid delays stop retries.
 `sleep(milliseconds)` and `now()` are trusted injectable timing seams for tests.
 
-HTML becomes plain text through the shared HTML projector, including `@Display Name`
-for `<at>` mentions and entity decoding after script/style removal. System/deleted
+HTML bodies (case-insensitive content type) become plain text through the shared HTML
+projector, including `@Display Name` for `<at>` mentions and entity decoding after
+script/style removal. Text bodies and display names retain literal markup and entities;
+all paths strip control and bidi characters. System/deleted
 messages and malformed individual messages are skipped. Sender claims come from
 `from.user`; dates, stable message IDs, conversation signals and reply thread keys
 remain unverified. Parsing uses bounded raw JSON, ignores `native` and never follows
@@ -351,19 +353,26 @@ it after changing consent. Channel sends, delivery receipts and guaranteed histo
 are unsupported; owner rate allowances remain zero.
 
 `./graph-teams/send` alone exports `createGraphTeamsSend({ account, recipients,
-verify, verifyApproval, footer?, now?, transport? })`. Trusted actor-to-chat pins
+verify, verifyApproval, attachmentIdFor?, footer?, now?, transport? })`. Trusted actor-to-chat pins
 are snapshotted. The approved canonical JSON wire binds the account, chat and exact
-request. `POST /chats/{id}/messages` receives a text body and an
-`application/vnd.microsoft.card.adaptive` attachment with matching visible text,
+request. `POST /chats/{id}/messages` receives an HTML body containing the visible text
+with `& < > " '` escaped, followed by `<attachment id="…"></attachment>`, and an
+`application/vnd.microsoft.card.adaptive` attachment with the same ID and visible text,
 the required footer, and hidden `data: { envelope }` containing the signed JSON-LD.
-Card content is serialized JSON. The golden fixture normalizes only the test signature.
+Card content is serialized JSON. The attachment ID is derived deterministically from
+the compact JWS; the trusted pure `attachmentIdFor(compactJws)` seam can supply stable
+fixture IDs. Re-rendering checks both the ID and body reference against the approved wire.
+The golden fixture uses an injected ID and normalizes only the test signature.
 
 Real sending requires explicit `dryRun: false`, exact re-rendered bytes, a verified
 current signed message, only the executor's send grant, and current owner approval.
 Expiry and the synchronous authority fence are checked after transport preflight,
 immediately before dispatch. Local pre-dispatch failures retain their cause in
 `SendNotDispatchedError`. Explicit client/rate refusals are `ProviderRejectedError`;
-server/transport failures and invalid acknowledgements remain uncertain. As with
+server/transport failures and invalid acknowledgements remain uncertain. Acknowledgements
+read only the message ID using the Teams JSON parser: its existing 64 KiB body/card
+string and 1 MiB response limits apply, with shared depth/node/array bounds. Malformed
+or oversized responses fail closed. As with
 Graph mail, POST is never retried: there is no provider idempotency key. There is
 no lookup or final-absence claim. Tests use mocked Graph and synthetic signatures.
 Provider contracts: [chat messages](https://learn.microsoft.com/en-us/graph/api/chatmessage-post?view=graph-rest-1.0),
