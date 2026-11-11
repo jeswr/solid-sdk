@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Codex GPT-6
 import { defineModel } from "@jeswr/model-runtime";
 import { createRdfEngine } from "@jeswr/rdf-engine/node";
 import { Parser, Store } from "n3";
@@ -215,6 +216,27 @@ describe("multiple NodeShapes per class admission", () => {
       expect(generate(permuted).artifacts[name], name).toBe(original.artifacts[name]);
   });
 
+  it("orders distinct shape IRIs by code units even when ICU collates them equally", () => {
+    const iris = [`${EX}S`, `${EX}S\u00ad`];
+    const profiles = [iris, [...iris].reverse()].map(
+      (order) =>
+        `${H}${order
+          .map(
+            (iri) => `<${iri}> a sh:NodeShape; sh:targetClass ex:Record;
+            sh:property [ sh:path ex:text; sh:datatype xsd:string; sh:maxCount 1;
+              sh:in (${iri === iris[0] ? '"b" "a"' : '"a" "b"'}) ] .`,
+          )
+          .join("\n")}`,
+    );
+    const original = generate(profiles[0]);
+    for (const profile of profiles) {
+      const merged = normalized(profile).nodeShapes[0];
+      expect(merged?.iri).toBe(iris[0]);
+      expect(merged?.shapeIris).toEqual(iris);
+      expect(generate(profile).artifacts["model.json"]).toBe(original.artifacts["model.json"]);
+    }
+  });
+
   it("anonymous shape identities include literal languages and datatypes", () => {
     const ttl = `${H}[] a sh:NodeShape; sh:targetClass ex:Record; sh:message "same"@en;
       sh:property [ sh:path ex:text; sh:datatype xsd:string; sh:maxCount 1 ] .
@@ -229,6 +251,38 @@ describe("multiple NodeShapes per class admission", () => {
     for (let i = 0; i < 130; i++) chain = `[ <urn:metadata> ${chain} ]`;
     const ttl = `${source()} [] a sh:NodeShape; sh:targetClass ex:Record; <urn:metadata> ${chain} .`;
     expect(() => generate(ttl)).toThrow(/identity inspection exceeds its budget/);
+  });
+
+  it.each([
+    [30, 30],
+    [4, 300],
+  ])(
+    "normalizes %i anonymous NodeShapes with %i properties each",
+    (count, width) => {
+      const properties = Array.from(
+        { length: width },
+        (_, i) => `[ sh:path ex:p${i}; sh:datatype xsd:string; sh:maxCount 1 ]`,
+      ).join(", ");
+      const ttl = `${H}${Array.from(
+        { length: count },
+        () => `[] a sh:NodeShape; sh:targetClass ex:Record; sh:property ${properties} .`,
+      ).join("\n")}`;
+      const merged = normalized(ttl).nodeShapes[0];
+      expect(merged?.shapeIris).toHaveLength(count);
+      expect(merged?.properties).toHaveLength(width);
+      expect(merged?.properties.every((p) => p.sources?.length === count)).toBe(true);
+    },
+    30_000,
+  );
+
+  it("fails closed when a single anonymous identity exceeds the read budget", () => {
+    const properties = Array.from(
+      { length: 2500 },
+      (_, i) => `[ sh:path ex:p${i}; sh:datatype xsd:string; sh:maxCount 1 ]`,
+    ).join(", ");
+    const ttl = `${source()} [] a sh:NodeShape; sh:targetClass ex:Record;
+      sh:property ${properties} .`;
+    expect(() => normalized(ttl)).toThrow(/identity inspection exceeds its budget/);
   });
 
   it("rejects canonical/alternative-path overlaps across merged shapes", () => {

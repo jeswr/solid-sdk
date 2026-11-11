@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Codex GPT-6
 import { readFileSync } from "node:fs";
 import { defineModel } from "@jeswr/model-runtime";
 import { createRdfEngine } from "@jeswr/rdf-engine/node";
@@ -18,6 +19,7 @@ import {
   parseTurtle,
   serializeCanonicalTurtle,
 } from "../../src/index.js";
+import { RDF, SH } from "../../src/rdf.js";
 import { flat } from "../helpers.js";
 
 const EX = "https://example.org/concepts#";
@@ -95,6 +97,72 @@ describe("ontology concept IRI enumeration admission", () => {
     expect(() => generate(source.replace("ex:manual ex:outside", "ex:outside"))).toThrow(
       /enumeration/,
     );
+  });
+
+  it("removes the replaced sh:in list cells from emitted SHACL", () => {
+    const profile = shapesTtl.replace(
+      "sh:class ex:Source",
+      "sh:class ex:Source; sh:in ( ex:manual ex:outside )",
+    );
+    const store = new Store(parseTurtle(generate(profile).artifacts["shapes.ttl"] as string));
+    const heads = store.getQuads(null, `${SH}in`, null, null);
+    expect(heads).toHaveLength(1);
+    const head = heads[0]?.object;
+    if (!head) throw new Error("missing concept enum list");
+    expect(store.getQuads(null, `${RDF}first`, null, null)).toHaveLength(1);
+    expect(store.getQuads(null, `${RDF}rest`, null, null)).toHaveLength(1);
+    expect(store.getQuads(head, `${RDF}first`, null, null)[0]?.object.value).toBe(`${EX}manual`);
+    expect(store.getQuads(head, `${RDF}rest`, null, null)[0]?.object.value).toBe(`${RDF}nil`);
+    expect(store.getQuads(null, null, `${EX}outside`, null)).toHaveLength(0);
+  });
+
+  it.each(["head", "tail"])("preserves a replaced list's shared %s and its suffix", (shared) => {
+    const profile = `${shapesTtl.replace(
+      "sh:class ex:Source",
+      "sh:class ex:Source; sh:in ex:oldHead",
+    )}
+      ex:oldHead <${RDF}first> ex:manual; <${RDF}rest> ex:oldTail .
+      ex:oldTail <${RDF}first> ex:outside; <${RDF}rest> <${RDF}nil> .
+      ex:SummaryShape sh:property ex:OtherProperty .
+      ex:OtherProperty sh:path ex:other; sh:nodeKind sh:IRI;
+        sh:in ${shared === "head" ? "ex:oldHead" : "ex:keptHead"} .
+      ${shared === "tail" ? `ex:keptHead <${RDF}first> ex:clinical; <${RDF}rest> ex:oldTail .` : ""}`;
+    const store = new Store(parseTurtle(generate(profile).artifacts["shapes.ttl"] as string));
+    expect(store.getQuads(`${EX}oldHead`, null, null, null)).toHaveLength(
+      shared === "head" ? 2 : 0,
+    );
+    expect(store.getQuads(`${EX}oldTail`, `${RDF}first`, `${EX}outside`, null)).toHaveLength(1);
+    expect(store.getQuads(`${EX}oldTail`, `${RDF}rest`, `${RDF}nil`, null)).toHaveLength(1);
+  });
+
+  it("keeps Warning concept enums strict in the runtime while emitting Warning sh:in", () => {
+    const result = generate(
+      shapesTtl.replace("sh:class ex:Source", "sh:class ex:Source; sh:severity sh:Warning"),
+    );
+    const field = flat(result.manifest.entities[0]).fields[0];
+    expect(field?.guards?.iriEnum).toBe(true);
+    expect(field?.guards?.requiredFailClosed).toBeUndefined();
+    const store = new Store(parseTurtle(result.artifacts["shapes.ttl"] as string));
+    const property = store.getQuads(null, `${SH}in`, null, null)[0]?.subject;
+    if (!property) throw new Error("missing concept property shape");
+    expect(store.getQuads(property, `${SH}severity`, `${SH}Warning`, null)).toHaveLength(1);
+    expect(store.getQuads(property, `${SH}class`, null, null)).toHaveLength(0);
+    const entity = defineModel(result.manifest).entities.Summary;
+    if (!entity) throw new Error("missing Summary");
+    expect(() => entity.build("https://pod.test/doc", { source: `${EX}outside` })).toThrow(
+      TypeError,
+    );
+    const data = new Store(
+      new Parser().parse(`${H}
+      <https://pod.test/doc> a ex:Summary; ex:source ex:outside .`),
+    );
+    expect(entity.parse("https://pod.test/doc", data)).toEqual({});
+    expect(
+      entity.parse(
+        "https://pod.test/doc",
+        entity.build("https://pod.test/doc", { source: `${EX}manual` }),
+      ),
+    ).toEqual({ source: `${EX}manual` });
   });
 
   it.each([

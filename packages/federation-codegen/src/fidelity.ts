@@ -35,6 +35,7 @@ import {
   isHttpPattern,
   linkTargetConforms,
 } from "./compile.js";
+import { compareStrings } from "./rdf.js";
 import {
   enumValues,
   implicitClassTargets,
@@ -75,7 +76,7 @@ function norm(datatype: string | undefined): string | null {
 }
 
 function sortFields(fields: FieldProjection[]): FieldProjection[] {
-  return fields.slice().sort((a, b) => a.predicate.localeCompare(b.predicate));
+  return fields.slice().sort((a, b) => compareStrings(a.predicate, b.predicate));
 }
 
 function projectShapes(shapes: NormalizedShapes): Map<string, FieldProjection[]> {

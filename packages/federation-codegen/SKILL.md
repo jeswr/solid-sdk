@@ -73,6 +73,9 @@ package, and a drift test running `pnpm run codegen --out <tmp>` with a byte com
   lists in emitted SHACL; never require concept `rdf:type` assertions in pod data.
   Invalid supplied concept writes throw the existing `TypeError`; reads retain normal
   severity-graded drops. Ordinary `sh:in` writes retain their drop-invalid contract.
+  A Warning-graded concept `sh:class` still becomes a strict runtime enum: supplied
+  nonmember writes throw and reads drop nonmembers. Emitted `sh:in` retains
+  `sh:Warning`, so runtime membership enforcement is stricter than the advisory SHACL.
 - Prefix names must match Turtle `PN_PREFIX` (including the empty default prefix).
   Config loading rejects an unsafe or relative `shapesBase`. Every Turtle/N-Triples
   emission goes through `serializeCanonicalTurtle`, checking all NamedNodes,
