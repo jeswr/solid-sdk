@@ -342,6 +342,9 @@ importers:
       '@jeswr/solid-session-restore':
         specifier: workspace:*
         version: link:../../packages/solid-session-restore
+      '@jeswr/storage-client':
+        specifier: workspace:*
+        version: link:../../packages/storage-client
       '@lit/react':
         specifier: ^1.0.8
         version: 1.0.8(@types/react@19.2.17)
