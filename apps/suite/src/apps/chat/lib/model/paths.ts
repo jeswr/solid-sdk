@@ -1,12 +1,34 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
-import { assertWithinPodScope, normalizePodBase } from "@jeswr/guarded-fetch";
+import { assertWithinPodScope, isWithinPodScope, normalizePodBase } from "@jeswr/guarded-fetch";
 import { ChatModelError, httpIri, isoDate, segment } from "./validation";
 
 export function roomContainer(value: string): string {
   const parsed = new URL(httpIri(value));
   if (parsed.search || parsed.hash) throw new ChatModelError("invalid-input");
   return normalizePodBase(value);
+}
+/** Offers name a Chat room container or its canonical index subject, never arbitrary pod paths. */
+export function invitationRoom(value: string, storage?: string): string {
+  const url = new URL(httpIri(value));
+  if (url.search || value.includes("?")) throw new ChatModelError("invalid-input");
+  if (url.pathname.endsWith("/index.ttl") && (!url.hash || url.hash === "#it")) {
+    url.hash = "";
+    url.pathname = url.pathname.slice(0, -"index.ttl".length);
+  }
+  if (!/\/chat\/rooms\/[A-Za-z0-9][A-Za-z0-9_-]{0,127}\/$/.test(url.pathname))
+    throw new ChatModelError("invalid-input");
+  if (url.href.includes("#")) throw new ChatModelError("invalid-input");
+  const room = roomContainer(url.href);
+  if (storage && isWithinPodScope(storage, room)) {
+    const prefix = `${roomContainer(storage)}chat/rooms/`;
+    if (
+      !room.startsWith(prefix) ||
+      !/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}\/$/.test(room.slice(prefix.length))
+    )
+      throw new ChatModelError("invalid-input");
+  }
+  return room;
 }
 export function roomIndex(room: string): string {
   return `${roomContainer(room)}index.ttl`;

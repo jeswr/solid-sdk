@@ -46,7 +46,13 @@ export function NewRoomPage() {
   const [created, setCreated] = useState<Room>();
   const id = useId();
   const creation = useRef<AbortController | null>(null);
-  useEffect(() => () => creation.current?.abort(), []);
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
   const close = () => {
     const room = created?.url ?? backgroundRoom;
     if (room) router.replace(`/chat/r/${encodeRef(room)}`);
@@ -126,44 +132,52 @@ export function NewRoomPage() {
                 )
                   .then(
                     (room) => {
-                      if (controller.signal.aborted) return;
-                      const failed = room.invitations.filter(
+                      const failedInvitations = room.invitations.filter(
                         (invitation) => !invitation.delivered,
-                      ).length;
+                      );
+                      const failed = failedInvitations.length;
+                      // WebIDs do not advertise their storage here. Only offer a fallback for
+                      // accounts within this pod's existing credential boundary.
+                      const canShare = failedInvitations.every((invitation) =>
+                        client.canOpen(invitation.webId),
+                      );
                       if (failed)
                         toast(
-                          `Couldn't notify ${failed} member${failed === 1 ? "" : "s"}. Share the invite link instead.`,
-                          {
-                            action: {
-                              label: "Copy link",
-                              onClick: () => {
-                                void navigator.clipboard
-                                  .writeText(client.inviteLink(room.url, location.origin))
-                                  .then(
-                                    () => toast.success("Invite link copied"),
-                                    () => toast.error("Couldn't copy invite link"),
-                                  );
-                              },
-                            },
-                          },
+                          `Couldn't notify ${failed} member${failed === 1 ? "" : "s"}.${canShare ? " Share the invite link instead." : ""}`,
+                          canShare
+                            ? {
+                                action: {
+                                  label: "Copy link",
+                                  onClick: () => {
+                                    void navigator.clipboard
+                                      .writeText(client.inviteLink(room.url, location.origin))
+                                      .then(
+                                        () => toast.success("Invite link copied"),
+                                        () => toast.error("Couldn't copy invite link"),
+                                      );
+                                  },
+                                },
+                              }
+                            : undefined,
                         );
+                      invalidate();
+                      if (!mounted.current) return;
                       if (
                         (tab === "room" && people.length === 0) ||
                         (tab === "dm" && rooms.data?.some((joined) => joined.url === room.url))
                       )
                         router.replace(`/chat/r/${encodeRef(room.url)}`);
                       else setCreated(room);
-                      invalidate();
                     },
                     () => {
-                      if (!controller.signal.aborted)
+                      if (mounted.current)
                         setError(
                           "Couldn't create this conversation. Check the details and try again.",
                         );
                     },
                   )
                   .finally(() => {
-                    if (!controller.signal.aborted) setBusy(false);
+                    if (mounted.current) setBusy(false);
                   });
               }}
             >

@@ -824,7 +824,10 @@ it("opens a room with no invitees immediately instead of showing the invite step
   expect(document.querySelector('[role="dialog"]')?.textContent).not.toContain("Invite people");
 });
 
-it("offers a non-blocking Copy link toast when a new member cannot be notified", async () => {
+it.each([
+  true,
+  false,
+])("offers a Copy link fallback only for failed members within this pod: %s", async (samePod) => {
   const { toast } = await import("@jeswr/suite-ui");
   const pod = createDemoPod({ root: ROOT });
   const writeText = vi.fn().mockResolvedValue(undefined);
@@ -839,7 +842,7 @@ it("offers a non-blocking Copy link toast when a new member cannot be notified",
     );
     await fill(
       document.querySelector('[role="combobox"]') as HTMLInputElement,
-      "https://bob.example.org/profile/card#me",
+      samePod ? `${ROOT}bob/profile#me` : "https://bob.example.org/profile/card#me",
     );
     await click(document.querySelector(".su-picker-input button") as HTMLElement);
     await click(document.querySelector('button[type="submit"]') as HTMLElement);
@@ -848,8 +851,13 @@ it("offers a non-blocking Copy link toast when a new member cannot be notified",
     if (!notice || !("title" in notice)) throw new Error("Missing delivery notice");
     const title = typeof notice.title === "function" ? notice.title() : notice.title;
     expect(renderToStaticMarkup(h("div", null, title))).toContain(
-      "notify 1 member. Share the invite link instead.",
+      samePod ? "notify 1 member. Share the invite link instead." : "notify 1 member.",
     );
+    if (!samePod) {
+      expect(notice.action).toBeUndefined();
+      expect(renderToStaticMarkup(h("div", null, title))).not.toContain("Share the invite link");
+      return;
+    }
     const action = notice?.action;
     if (!action || typeof action !== "object" || !("onClick" in action))
       throw new Error("Missing toast action");
@@ -867,7 +875,7 @@ it("offers a non-blocking Copy link toast when a new member cannot be notified",
   }
 });
 
-it("aborts room creation on unmount and fences late navigation", async () => {
+it("lets room creation and failure notices finish after unmount, and fences late navigation", async () => {
   const pod = createDemoPod({ root: ROOT });
   const pending = deferred<Awaited<ReturnType<ChatClient["createRoom"]>>>();
   const create = vi.spyOn(ChatClient.prototype, "createRoom").mockReturnValue(pending.promise);
@@ -880,7 +888,7 @@ it("aborts room creation on unmount and fences late navigation", async () => {
   const signal = create.mock.calls[0]?.[0].signal;
   expect(signal?.aborted).toBe(false);
   await view.unmount();
-  expect(signal?.aborted).toBe(true);
+  expect(signal?.aborted).toBe(false);
   await act(() =>
     pending.resolve({
       url: ROOM,
@@ -889,8 +897,13 @@ it("aborts room creation on unmount and fences late navigation", async () => {
       creator: ME,
       created: undefined,
       isDirect: false,
-      invitations: [],
+      invitations: [{ webId: "https://foreign.example/#me", delivered: false }],
     }),
   );
+  const { toast } = await import("@jeswr/suite-ui");
+  const notice = toast.getHistory().at(-1);
+  if (!notice || !("title" in notice)) throw new Error("Missing detached delivery notice");
+  const title = typeof notice.title === "function" ? notice.title() : notice.title;
+  expect(renderToStaticMarkup(h("div", null, title))).toContain("notify 1 member.");
   expect(routing.replace).not.toHaveBeenCalled();
 });

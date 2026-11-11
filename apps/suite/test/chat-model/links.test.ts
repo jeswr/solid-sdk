@@ -2,6 +2,7 @@
 
 import { expect, it } from "vitest";
 import { aclLink } from "../../src/apps/chat/lib/model/links";
+import { invitationRoom } from "../../src/apps/chat/lib/model/paths";
 
 it.each([
   '<.acl>; type="text/turtle"; rel="acl"',
@@ -51,4 +52,33 @@ it.each([
   "<.acl>; rel=acl; @bad=x",
 ])("rejects malformed Link syntax: %s", (header) => {
   expect(() => aclLink(header)).toThrow("invalid-input");
+});
+
+it("normalises room Offers to containers, scoped to the own-pod room directory", () => {
+  const storage = "https://pod.example/alice/";
+  const room = `${storage}chat/rooms/team-1/`;
+  for (const value of [room, `${room}index.ttl`, `${room}index.ttl#it`]) {
+    expect(invitationRoom(value)).toBe(room);
+    expect(invitationRoom(value, storage)).toBe(room);
+  }
+  expect(invitationRoom("http://foreign.example/chat/rooms/team/", storage)).toBe(
+    "http://foreign.example/chat/rooms/team/",
+  );
+  for (const value of [
+    `${storage}nested/chat/rooms/team/`,
+    `${storage}chat/rooms/nested/chat/rooms/team/`,
+    `${room}?`,
+    `${room}?secret=1`,
+    `${room}#`,
+    `${room}#it`,
+    `${room}index.ttl#other`,
+    `${room}index.ttl?`,
+    `${storage}private/`,
+    `${storage}file.pdf`,
+    `${storage}chat/rooms/a%2Fb/`,
+    `${storage}chat/rooms/a/b/`,
+    "https://user:password@pod.example/chat/rooms/team/",
+    "urn:room:1",
+  ])
+    expect(() => invitationRoom(value, storage)).toThrow();
 });

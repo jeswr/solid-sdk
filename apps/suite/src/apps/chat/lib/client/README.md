@@ -31,19 +31,29 @@ preference transport is isolated in `preferences-store.ts` until the SDK prefere
   container. `createRoom({ name, members, signal? })` and `createDirect(webId, { signal? })`
   return `Room & { invitations: { webId, delivered, reason? }[] }`. Delivery uses the session
   fetch, at most four active recipients, and no retries. Failures (including cancellation after
-  creation) are values; the new-room dialog offers a toast with Copy link. Leaving the form
-  aborts its pending work and fences late navigation/toasts. Reopened, competing
-  and resumed DMs return an empty delivery list and never re-invite.
+  creation) are values. Once writes start, cancellation cannot interrupt ACL/index/join;
+  leaving the form lets delivery finish and failures still reach the global toast, while
+  late navigation is fenced. Copy-link fallback is offered only for recipients within this
+  pod's credential boundary. Reopened and competing DMs never re-invite; a resumed,
+  interrupted DM invites its peer after its index and owner join complete.
 - `invitations({ signal? })` reads the current WebID's LDN inbox through pod-access and the
-  session fetch. It reads at most 200 inbox children, keeps Offers with HTTP(S) room containers
+  session fetch. It reads at most 100 inbox children, keeps Offers with HTTP(S) room containers
   or canonical index subjects, omits joined rooms, and returns at most 50 distinct rooms,
   newest first. A missing inbox is empty; inbox listing errors propagate. The sidebar loads
   metadata through `room()`, falls back to “Room invitation” on unavailable indexes (including
   403), and routes to the existing Join flow. Room reads retain the client's pod scope.
-  Actors remain sender claims: labels always say “From <host>”, with no profile requests.
-  Dismissals retain at most 200 container URLs in guarded localStorage keyed by WebID; inbox
+  Actors remain sender claims: labels say “Invitation claims to be from <host>”, with no
+  profile requests. Loaded own-pod rooms ignore claims from senders outside their membership.
+  One model normaliser accepts only HTTP(S) `chat/rooms/<slug>/` containers or their canonical
+  `index.ttl#it` subjects, with no query. Own-pod paths must be directly under the storage's
+  `chat/rooms/`. The tray uses the same normaliser. Join requires loaded room membership.
+  Foreign-pod invitations have no link or metadata fetch; they explain cross-pod support is
+  pending, collapse behind a count above three, and support Dismiss all.
+  Dismissals use the shared account ID set with Chat's key prefix and an identity-checked
+  envelope, retaining at most 200 container URLs in guarded localStorage keyed by WebID; inbox
   resources are never deleted. Sidebar and drawer copies synchronize local dismissals.
-  Mount/revision refreshes and focus refreshes (30-second throttle)
+  A single reader per client retains profile/inbox discovery. Mount, explicit retry/join and
+  focus refreshes (30-second throttle)
   expose failures as a small inline retry. The demo inbox e2e seeds an Offer at fixture level;
   two-user delivery belongs to sst-rn91.
 - `chat.lastRead` lives in `settings/chat-preferences.json`, with schema validation,

@@ -113,7 +113,7 @@ it("sends nothing on failed creation, failed join or pre-abort", async () => {
 });
 it("invites to a DM only when this client creates it", async () => {
   const { client, posts } = fixture();
-  const room = await client.createDirect(BOB);
+  const room = await client.createDirect(BOB, { signal: new AbortController().signal });
   expect(room.invitations).toEqual([{ webId: BOB, delivered: true }]);
   expect(posts[0]?.summary).toBe("Alice started a conversation with you");
   expect((await client.createDirect(BOB)).invitations).toEqual([]);
@@ -167,16 +167,19 @@ it("filters kinds, unsafe objects and joined rooms, deduplicating newest first",
       "urn:room:1",
       "javascript:alert(1)",
       "https://pod.example/file",
-      `${room}index.ttl#bad`,
+      `${ROOT}private/x/`,
+      `${ROOT}nested/chat/rooms/evil/`,
+      `${ROOT}chat/rooms/nested/evil/`,
+      `${room}index.ttl#other`,
       `${room}?secret=1`,
       `${room}index.ttl?secret=1`,
     ].map((url) => offer(url)),
-    offer("http://pod.example/rooms/other/index.ttl"),
+    offer("http://pod.example/chat/rooms/other/index.ttl"),
   ]);
   await client.join(joined);
   expect(await client.invitations()).toEqual([
     { room, actor: ME },
-    { room: "http://pod.example/rooms/other/" },
+    { room: "http://pod.example/chat/rooms/other/" },
   ]);
   expect(fetch.mock.calls.some(([url]) => String(url).includes("elsewhere"))).toBe(false);
 });
@@ -187,7 +190,7 @@ it("caps invitations at 50 and bounds inbox reads", async () => {
   expect(await client.invitations()).toHaveLength(50);
   expect(
     fetch.mock.calls.filter(([url]) => /^https:\/\/8\.8\.8\.8\/inbox\/\d+\.ttl$/.test(String(url))),
-  ).toHaveLength(200);
+  ).toHaveLength(100);
 });
 it("handles missing inboxes, surfaces read errors and cancels reads", async () => {
   expect(await fixture().client.invitations()).toEqual([]);
@@ -216,4 +219,47 @@ it("finishes all bounded deliveries and exposes cancellation during inbox discov
   await expect(
     new ChatClient(transport, ROOT, ME).invitations({ signal: controller.signal }),
   ).rejects.toMatchObject({ name: "AbortError" });
+});
+
+it("reuses one inbox reader and discovery cache across refreshes", async () => {
+  const { client, fetch } = await inboxFixture([offer(`${ROOT}chat/rooms/new/`)]);
+  await client.invitations();
+  await client.invitations();
+  expect(fetch.mock.calls.filter(([url]) => String(url) === `${ROOT}profile`)).toHaveLength(1);
+});
+
+it("finishes room ACL, index and owner join after cancellation once writes have started", async () => {
+  const { fetch } = fixture();
+  const controller = new AbortController();
+  const transport: typeof globalThis.fetch = async (input, init) => {
+    const response = await fetch(input, init);
+    if (String(input).endsWith("/.acl") && init?.method === "PUT") controller.abort();
+    return response;
+  };
+  const client = new ChatClient(transport, ROOT, ME);
+  const room = await client.createRoom({
+    name: "Finish writes",
+    members: [BOB],
+    signal: controller.signal,
+  });
+  expect(room.invitations).toEqual([{ webId: BOB, delivered: false, reason: "aborted" }]);
+  expect((await client.joinedRooms()).map((room) => room.url)).toEqual([room.url]);
+});
+
+it("invites the peer when resuming an interrupted DM", async () => {
+  const { client, pod, posts } = fixture();
+  const room = await client.createDirect(BOB);
+  await client.leave(room.url);
+  await pod.fetch(`${room.url}index.ttl`, { method: "DELETE" });
+  const resumed = await client.createDirect(BOB);
+  expect(resumed.invitations).toEqual([{ webId: BOB, delivered: true }]);
+  expect(posts).toHaveLength(2);
+});
+
+it("isolates simultaneous sidebar/drawer refresh cancellation while sharing discovery", async () => {
+  const { client, fetch } = await inboxFixture([offer(`${ROOT}chat/rooms/new/`)]);
+  const [a, b] = await Promise.all([client.invitations(), client.invitations()]);
+  expect(a).toEqual(b);
+  expect(a).toHaveLength(1);
+  expect(fetch.mock.calls.filter(([url]) => String(url) === `${ROOT}profile`)).toHaveLength(1);
 });

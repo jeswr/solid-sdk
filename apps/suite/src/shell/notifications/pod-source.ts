@@ -3,7 +3,10 @@ import {
   createInboxReader,
   type InboxNotification,
   notificationKind,
+  readInvitations,
+  withAbortSignal,
 } from "@jeswr/pod-access/notify";
+import { invitationRoom } from "../../apps/chat/lib/model/paths";
 import { encodeRef } from "../../lib/refs";
 import {
   type NotificationSource,
@@ -27,20 +30,18 @@ function actorLabel(webId: string): string {
   }
 }
 
-function notificationHref(notification: InboxNotification): string | undefined {
+function notificationHref(
+  notification: InboxNotification,
+  storageUrl?: string,
+): string | undefined {
   const kind = notificationKind(notification);
   const object = kind === "mention" ? notification.target : notification.object;
   if (!object) return undefined;
   try {
     if (kind === "assignment") return `/tasks/inbox?task=${encodeRef(object)}`;
+    if (kind === "invitation") return `/chat/r/${encodeRef(invitationRoom(object, storageUrl))}`;
     const document = new URL(object);
     document.hash = "";
-    if (kind === "invitation") {
-      const room = document.pathname.endsWith("/index.ttl")
-        ? new URL("./", document).href
-        : document.href;
-      return `/chat/r/${encodeRef(room)}`;
-    }
     // The same references used by Drive and shell search; encodeRef permits only http(s).
     return `/drive/${document.pathname.endsWith("/") ? "f" : "p"}/${encodeRef(document.href)}`;
   } catch {
@@ -48,11 +49,14 @@ function notificationHref(notification: InboxNotification): string | undefined {
   }
 }
 
-function suiteNotification(notification: InboxNotification): SuiteNotification {
+function suiteNotification(
+  notification: InboxNotification,
+  storageUrl?: string,
+): SuiteNotification {
   const { kind, title } = presentation[notificationKind(notification)];
   const published = Date.parse(notification.published ?? "");
   const body = notification.content?.trim();
-  const href = notificationHref(notification);
+  const href = notificationHref(notification, storageUrl);
   return {
     id: notification.url,
     kind,
@@ -73,34 +77,39 @@ function suiteNotification(notification: InboxNotification): SuiteNotification {
 /** One reader/discovery cache per authenticated session; disposal fences late responses. */
 export function createPodNotificationSource({
   webId,
+  storageUrl,
   fetch: authenticatedFetch,
   clock,
 }: {
   webId: string;
+  storageUrl?: string;
   fetch: typeof globalThis.fetch;
   clock?: () => number;
 }): NotificationSource & { dispose(): void } {
   const lifetime = new AbortController();
-  const fetch: typeof globalThis.fetch = async (input, init) => {
-    lifetime.signal.throwIfAborted();
-    const signal = init?.signal ? AbortSignal.any([lifetime.signal, init.signal]) : lifetime.signal;
-    signal.throwIfAborted();
-    const response = await authenticatedFetch(input, { ...init, signal });
-    signal.throwIfAborted();
-    return response;
-  };
+  const fetch = withAbortSignal(authenticatedFetch, lifetime.signal);
   const reader = createInboxReader({ fetch, ...(clock ? { clock } : {}) });
   return {
     id: "pod-inbox",
     async list(requestSignal) {
       const signal = AbortSignal.any([lifetime.signal, requestSignal]);
       signal.throwIfAborted();
-      const inbox = await reader.inbox(webId);
-      signal.throwIfAborted();
-      if (!inbox) return [];
-      const notifications = await reader.list(inbox, { signal });
-      signal.throwIfAborted();
-      return notifications.map(suiteNotification);
+      return readInvitations({
+        reader,
+        webId,
+        signal,
+        normalise(notification) {
+          let key = notification.url;
+          if (notificationKind(notification) === "invitation" && notification.object) {
+            try {
+              key = invitationRoom(notification.object, storageUrl);
+            } catch {
+              // Keep malformed notifications in the tray without an actionable room link.
+            }
+          }
+          return { key, value: suiteNotification(notification, storageUrl) };
+        },
+      });
     },
     dispose() {
       lifetime.abort();

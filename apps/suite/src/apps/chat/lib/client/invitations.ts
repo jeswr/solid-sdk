@@ -1,11 +1,12 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import {
-  createInboxReader,
   createNotify,
-  notificationKind,
+  type InboxReader,
+  readInvitations as readInboxInvitations,
   roomInvitation,
+  withAbortSignal,
 } from "@jeswr/pod-access/notify";
-import { httpIri, loadRooms, roomContainer } from "../model";
+import { invitationRoom, loadRooms } from "../model";
 
 export interface InvitationDelivery {
   webId: string;
@@ -17,29 +18,6 @@ export interface Invitation {
   actor?: string;
 }
 
-/** Offers use containers; also accept the canonical index subject from other senders. */
-export function invitationRoom(value: string): string {
-  const url = new URL(httpIri(value));
-  if (url.search) throw new TypeError("Expected a room without a query");
-  if (url.pathname.endsWith("/index.ttl") && (!url.hash || url.hash === "#it")) {
-    url.hash = "";
-    return roomContainer(new URL("./", url).href);
-  }
-  if (!url.pathname.endsWith("/")) throw new TypeError("Expected a room container");
-  return roomContainer(url.href);
-}
-
-/** Preserve the SDK guard's own deadline signal as well as caller cancellation. */
-function transport(fetch: typeof globalThis.fetch, signal?: AbortSignal): typeof globalThis.fetch {
-  return async (input, init) => {
-    signal?.throwIfAborted();
-    const signals = [signal, init?.signal].filter((value): value is AbortSignal => !!value);
-    const response = await fetch(input, { ...init, signal: AbortSignal.any(signals) });
-    signal?.throwIfAborted();
-    return response;
-  };
-}
-
 export async function deliverInvitations(
   fetch: typeof globalThis.fetch,
   actor: string,
@@ -47,7 +25,7 @@ export async function deliverInvitations(
   displayName: string,
   signal?: AbortSignal,
 ): Promise<InvitationDelivery[]> {
-  const notify = createNotify({ fetch: transport(fetch, signal) });
+  const notify = createNotify({ fetch: signal ? withAbortSignal(fetch, signal) : fetch });
   const members = [...new Set(room.members)].filter((member) => member !== actor);
   const results: InvitationDelivery[] = [];
   let cursor = 0;
@@ -83,35 +61,24 @@ export async function deliverInvitations(
 }
 
 export async function readInvitations(
-  fetch: typeof globalThis.fetch,
+  reader: InboxReader,
   joinedFetch: typeof globalThis.fetch,
   storage: string,
   webId: string,
-  signal?: AbortSignal,
+  signal: AbortSignal,
 ): Promise<Invitation[]> {
-  signal?.throwIfAborted();
-  const scoped = transport(fetch, signal);
-  const reader = createInboxReader({ fetch: scoped, maxItems: 200 });
-  const inbox = await reader.inbox(webId);
-  signal?.throwIfAborted();
-  if (!inbox) return [];
-  const notifications = await reader.list(inbox, { ...(signal ? { signal } : {}) });
-  const { rooms } = await loadRooms(transport(joinedFetch, signal), storage);
-  signal?.throwIfAborted();
-  const joined = new Set(rooms);
-  const invitations = new Map<string, Invitation>();
-  // The SDK orders newest first. Keep the first occurrence of each room.
-  for (const item of notifications) {
-    if (notificationKind(item) !== "invitation" || !item.object) continue;
-    let room: string;
-    try {
-      room = invitationRoom(item.object);
-    } catch {
-      continue;
-    }
-    if (joined.has(room) || invitations.has(room)) continue;
-    invitations.set(room, { room, ...(item.actor ? { actor: item.actor } : {}) });
-    if (invitations.size === 50) break;
-  }
-  return [...invitations.values()];
+  signal.throwIfAborted();
+  const { rooms } = await loadRooms(withAbortSignal(joinedFetch, signal), storage);
+  return readInboxInvitations({
+    reader,
+    webId,
+    signal,
+    kind: "invitation",
+    exclude: new Set(rooms),
+    normalise(item) {
+      if (!item.object) return null;
+      const room = invitationRoom(item.object, storage);
+      return { key: room, value: { room, ...(item.actor ? { actor: item.actor } : {}) } };
+    },
+  });
 }

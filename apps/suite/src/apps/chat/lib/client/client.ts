@@ -8,6 +8,7 @@ import {
   isWithinPodScope,
   refuseRedirects,
 } from "@jeswr/guarded-fetch";
+import { createInboxReader, withAbortSignal } from "@jeswr/pod-access/notify";
 import { encodeRef } from "../../../../lib/refs";
 import {
   ChatIoError,
@@ -156,6 +157,9 @@ export class ChatClient {
   private readonly known = new Map<string, Message>();
   private readonly profiles = new Map<string, Promise<string>>();
   private readonly resolvedNames = new Map<string, string>();
+  private invitationSignal = new AbortController().signal;
+  private invitationQueue: Promise<unknown> = Promise.resolve();
+  private readonly inboxReader;
   private joinedCache: JoinedRoom[] | undefined;
   constructor(
     private readonly sessionFetch: typeof globalThis.fetch,
@@ -167,6 +171,10 @@ export class ChatClient {
     this.fetch = createPodScopedFetch(roomContainer(storageUrl), {
       fetch: refuseRedirects(sessionFetch),
       maxRedirects: 0,
+    });
+    this.inboxReader = createInboxReader({
+      fetch: withAbortSignal(sessionFetch, () => this.invitationSignal),
+      maxItems: 100,
     });
     httpIri(webId);
     this.preferences = new PreferencesStore(this.fetch, storageUrl);
@@ -498,8 +506,24 @@ export class ChatClient {
     }
   }
   invitations({ signal }: { signal?: AbortSignal | undefined } = {}) {
-    return readInvitations(this.sessionFetch, this.fetch, this.storageUrl, this.webId, signal);
+    const requestSignal = signal ?? new AbortController().signal;
+    // Sidebar and drawer may read concurrently. Serialize discovery transports so each
+    // caller retains its own cancellation signal while sharing one cached reader.
+    const read = () => {
+      this.invitationSignal = requestSignal;
+      return readInvitations(
+        this.inboxReader,
+        this.fetch,
+        this.storageUrl,
+        this.webId,
+        requestSignal,
+      );
+    };
+    const pending = this.invitationQueue.then(read, read);
+    this.invitationQueue = pending;
+    return pending;
   }
+
   private async invited(room: Room, signal?: AbortSignal): Promise<CreatedRoom> {
     return {
       ...room,
@@ -525,37 +549,22 @@ export class ChatClient {
     const base = slug(name);
     // Deterministic DM addresses are reserved: a named room never occupies one.
     return this.invited(
-      await this.create(
-        /^dm-[a-f\d]{16}$/.test(base) ? `${base}-room` : base,
-        name,
-        members,
-        signal,
-      ),
+      await this.create(/^dm-[a-f\d]{16}$/.test(base) ? `${base}-room` : base, name, members),
       signal,
     );
   }
-  private async create(
-    baseSlug: string,
-    name: string,
-    members: readonly string[],
-    signal?: AbortSignal,
-  ): Promise<Room> {
+  private async create(baseSlug: string, name: string, members: readonly string[]): Promise<Room> {
     for (let suffix = 1; ; suffix++) {
       const extension = suffix === 1 ? "" : `-${suffix}`;
       const candidate = `${baseSlug.slice(0, 48 - extension.length).replace(/-$/, "")}${extension}`;
       let document: Awaited<ReturnType<typeof createModelRoom>>;
       try {
-        document = await createModelRoom(
-          abortableFetch(this.fetch, signal),
-          this.storageUrl,
-          candidate,
-          {
-            name,
-            members,
-            creator: this.webId,
-            created: new Date(),
-          },
-        );
+        document = await createModelRoom(this.fetch, this.storageUrl, candidate, {
+          name,
+          members,
+          creator: this.webId,
+          created: new Date(),
+        });
       } catch (error) {
         if (error instanceof ChatIoError && error.status === 412) continue;
         throw error;
@@ -595,18 +604,14 @@ export class ChatClient {
     const url = `${roomContainer(this.storageUrl)}chat/rooms/${candidate}/`;
     let room: Room;
     let created = false;
+    signal?.throwIfAborted();
     try {
-      const document = await createModelRoom(
-        abortableFetch(this.fetch, signal),
-        this.storageUrl,
-        candidate,
-        {
-          name: "",
-          members: people,
-          creator: this.webId,
-          created: new Date(),
-        },
-      );
+      const document = await createModelRoom(this.fetch, this.storageUrl, candidate, {
+        name: "",
+        members: people,
+        creator: this.webId,
+        created: new Date(),
+      });
       created = true;
       room = roomResult(
         url,
@@ -627,6 +632,7 @@ export class ChatClient {
         );
         const resumed = readRoom(url, document.dataset);
         if (!resumed) throw failure;
+        created = true;
         return roomResult(url, resumed);
       });
       if (!room.isDirect || !people.every((person) => room.members.includes(person)))

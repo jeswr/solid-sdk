@@ -3,7 +3,10 @@
 import { mkdir } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import AxeBuilder from "@axe-core/playwright";
+import { roomInvitation } from "@jeswr/pod-access/notify";
 import { expect, type Page, type TestInfo, test } from "@playwright/test";
+import { Writer } from "n3";
+import { parseChat } from "../../src/apps/chat/lib/model";
 
 const BOB = "https://bob.example.org/profile/card#me";
 test.use({ locale: "en" });
@@ -281,27 +284,49 @@ test("keeps offline sends queued and supports multiline text and the edit shortc
 });
 
 // The demo has one user and an LDN inbox. Seed an Offer through its fixture fetch;
-// actual cross-user delivery is covered by the two-user CSS suite (sst-rn91).
-test("demo inbox offers appear in Chat and dismiss locally", async ({ page }) => {
+// Cross-user delivery remains tracked in the two-user CSS work (sst-rn91).
+test("demo inbox offers open, join and disappear after leaving through the UI", async ({
+  page,
+}) => {
   await createRoom(page, "Invited book club");
   const roomUrl = page.url();
-  await page.evaluate(async () => {
-    const pod = window.__suiteDemoPod;
-    if (!pod) throw new Error("Demo pod fixture is unavailable");
-    const root = "https://alice.demo.pod/";
-    const room = `${root}chat/rooms/invited-book-club/`;
-    const profile = await (await pod.fetch(`${root}profile/card`)).text();
-    if (!profile.includes("inbox")) throw new Error("Demo profile no longer advertises an inbox");
-    const inbox = await pod.fetch(`${root}inbox/`);
-    if (!inbox.ok) throw new Error("Demo inbox cannot be read");
-    await pod.fetch(`${root}chat/rooms.ttl`, { method: "DELETE" });
-    const posted = await pod.fetch(`${root}inbox/`, {
-      method: "POST",
-      headers: { "content-type": "text/turtle" },
-      body: `@prefix as: <https://www.w3.org/ns/activitystreams#>. <#it> a as:Offer; as:object <${room}>; as:actor <https://bob.example.org/profile/card#me>.`,
-    });
-    if (!posted.ok) throw new Error("Demo inbox refused the fixture Offer");
-  });
+  await page.getByRole("button", { name: "Leave room", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Join room", exact: true })).toBeEnabled();
+  const root = "https://alice.demo.pod/";
+  const room = `${root}chat/rooms/invited-book-club/`;
+  const dataset = await parseChat(
+    JSON.stringify({
+      ...roomInvitation(room),
+      "@id": "#it",
+      actor: `${root}profile/card#me`,
+      "@context": {
+        "@vocab": "https://www.w3.org/ns/activitystreams#",
+        type: "@type",
+        object: { "@type": "@id" },
+        actor: { "@type": "@id" },
+      },
+    }),
+    `${root}inbox/invitation`,
+    "application/ld+json",
+  );
+  const writer = new Writer();
+  writer.addQuads([...dataset]);
+  const body = await new Promise<string>((resolve, reject) =>
+    writer.end((error, result) => (error ? reject(error) : resolve(result))),
+  );
+  await page.evaluate(
+    async ({ root, body }) => {
+      const pod = window.__suiteDemoPod;
+      if (!pod) throw new Error("Demo pod fixture is unavailable");
+      const posted = await pod.fetch(`${root}inbox/`, {
+        method: "POST",
+        headers: { "content-type": "text/turtle" },
+        body,
+      });
+      if (!posted.ok) throw new Error("Demo inbox refused the fixture Offer");
+    },
+    { root, body },
+  );
   await page.goto("/chat");
   if ((page.viewportSize()?.width ?? 1280) < 1024)
     await page.getByRole("button", { name: "Open navigation", exact: true }).click();
@@ -309,12 +334,12 @@ test("demo inbox offers appear in Chat and dismiss locally", async ({ page }) =>
   await expect(
     invitations.getByRole("link", { name: "Invited book club", exact: true }),
   ).toHaveAttribute("href", new URL(roomUrl).pathname);
-  await expect(invitations).toContainText("From bob.example.org");
+  await expect(invitations).toContainText("Invitation claims to be from alice.demo.pod");
   await invitations.getByRole("link").click();
-  await expect(page.getByRole("button", { name: "Join room", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Join room", exact: true }).click();
+  await expect(page.getByRole("textbox", { name: "Message", exact: true })).toBeEnabled();
   if ((page.viewportSize()?.width ?? 1280) < 1024)
     await page.getByRole("button", { name: "Open navigation", exact: true }).click();
-  await invitations.getByRole("button", { name: "Dismiss", exact: true }).click();
   await expect(invitations).toBeHidden();
   await page.reload();
   if ((page.viewportSize()?.width ?? 1280) < 1024)

@@ -30,7 +30,7 @@ import { Suspense, useEffect, useId, useRef, useState } from "react";
 import { decodeIdentifierRef, decodeRef } from "@/lib/refs";
 import { usePageRouteParams } from "@/lib/route-params";
 import type { Message } from "../lib/client";
-import { roomContainer } from "../lib/model";
+import { invitationRoom } from "../lib/model";
 import {
   useChat,
   useChatActions,
@@ -268,6 +268,22 @@ export function RoomView({ url, messageId }: { url: string; messageId?: string |
         <IconButton label="Copy invite link" variant="ghost" onClick={copy}>
           <Copy size={18} aria-hidden="true" />
         </IconButton>
+        {isJoined && (
+          <Button
+            variant="ghost"
+            size="sm"
+            disabled={busy}
+            onClick={() => {
+              setBusy(true);
+              void actions
+                .leave(url)
+                .catch(() => toast.error("Couldn't leave this room"))
+                .finally(() => setBusy(false));
+            }}
+          >
+            Leave room
+          </Button>
+        )}
         <IconButton
           label={details ? "Hide details" : "Show details"}
           variant="ghost"
@@ -319,7 +335,9 @@ export function RoomView({ url, messageId }: { url: string; messageId?: string |
               : "Join this conversation to keep it in your room list."}
           </p>
           <Button
-            disabled={busy || isJoined || joined.status !== "ready"}
+            disabled={
+              busy || isJoined || joined.status !== "ready" || room.status !== "ready" || !member
+            }
             onClick={() => {
               setBusy(true);
               void actions
@@ -409,7 +427,7 @@ function RoomRouteContent({ reference }: { reference: string }) {
   let url: string;
   let messageId: string | undefined;
   try {
-    url = roomContainer(decodeRef(reference));
+    url = invitationRoom(decodeRef(reference), client.storageUrl);
   } catch {
     return (
       <div className="chat-state" role="alert">
