@@ -12,7 +12,7 @@ parses WebID profiles. Pass the guarded transport explicitly to every public rea
 `createRelay` takes a verified-ID-token function and guarded fetch for embedding/tests.
 Composition in `config.ts` accepts `outboundFetch` and a shared async `RelayStore`.
 The existing `/register` route still accepts only ID tokens with configured issuer,
-JWKS endpoint and audience trust. Push routes use `createResourceTokenVerifier`:
+JWKS endpoint and audience trust. Push routes use `createResourceTokenVerifier` from `@jeswr/solid-api-auth`:
 discover the issuer, require matching metadata, verify a Solid-audience access token,
 check its WebID's RDF `solid:oidcIssuer` assertions, then enforce every DPoP binding.
 Never bypass the profile assertion or use token claims to choose a route policy.
@@ -48,10 +48,12 @@ bounded to 64 KiB with unknown fields refused; signing JWKs are public P-256 key
 
 `createRelayOutboundFetch` uses the Node guard: DNS-pinned public HTTPS, at most
 three revalidated redirects, 256 KiB and five seconds including body reads. Discovery,
-JWKS and profile caches last ten minutes and share in-flight loads per URL within a verifier.
-Unknown token keys can refresh JWKS once a minute; concurrent refreshes share one fetch.
-Settled loads clear their in-flight promise, including failures, which retain the previous
-cached value and allow later retries under the existing throttle. Remote JSON-LD contexts are refused.
+JWKS and profile coordination lives in `@jeswr/solid-api-auth`; keep only route policy here.
+Caches last ten minutes and share in-flight loads per URL, capped at 1,000 entries/loads each.
+Five-second load deadlines span body reads and release slots even if abort is ignored.
+Unknown keys retry the latest cached JWKS before a coalesced refresh and one-minute cooldown.
+Failed refreshes retain the original cache expiry. Cooldowns expire before oldest eviction;
+a conservative overflow deadline protects evicted live cooldowns against URL churn. Remote JSON-LD contexts are refused.
 Only tests enable `allowLoopbackForTests`; never read it from environment configuration.
 Both deployment entries call `productionRelay`, which requires NODE_ENV=production,
 rejects injected transports, and builds its own guard. Embedding tests may inject a
