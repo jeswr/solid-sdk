@@ -7,7 +7,7 @@ export default async function warmShell(config: FullConfig) {
   if (!baseURL) throw new Error("The live CSS harness requires a suite baseURL");
   // HTTP loopback authentication needs next dev. Compile the routes before browser
   // assertions start so cold webpack work cannot hide a completed popup sign-in.
-  for (const path of ["/home", "/drive", "/signin"]) {
+  for (const path of ["/home", "/drive", "/drive/search?q=warm", "/signin"]) {
     const response = await fetch(new URL(path, baseURL), {
       signal: AbortSignal.timeout(120_000),
     });

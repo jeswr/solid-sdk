@@ -1,6 +1,9 @@
 // AUTHORED-BY Codex
 // AUTHORED-BY Claude Opus 5.5
 import { expect, type Page, test } from "@playwright/test";
+import { seedDemoSession } from "../demo-session";
+
+test.beforeEach(({ page }) => seedDemoSession(page));
 
 const BOB = "https://bob.example.org/profile#me";
 
@@ -99,7 +102,7 @@ test("removes access copied from the folder's default once the file has its own 
     .filter({ has: page.getByText("Work", { exact: true }) });
   await work.focus();
   await page.keyboard.press("Enter");
-  await expect(page.getByRole("heading", { level: 1, name: "Work", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 2, name: "Work", exact: true })).toBeVisible();
   const row = page
     .locator("tr[data-url]")
     .filter({ has: page.getByText("Report.pdf", { exact: true }) });

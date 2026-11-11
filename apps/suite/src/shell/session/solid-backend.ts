@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { fetchRdf } from "@jeswr/fetch-rdf";
 import {
   AmbiguousIssuerError,
@@ -126,11 +127,50 @@ export class SolidBackend implements SessionBackend {
     }
   }
 
-  async #mapAccount(identity: Identity): Promise<SuiteAccount> {
+  async #rejectIdentity(identity: Identity, started: number, session: number): Promise<never> {
+    const currentAttempt = () => started === this.#version && session === this.#sessionVersion;
+    if (currentAttempt()) {
+      this.#restoring = undefined;
+      const core = this.#core();
+      try {
+        // logout purges the shared namespace. Check its pointer and live identity, and fence
+        // every awaited read so stale rejection cannot purge a newer shell/other-tab session.
+        const remembered = await core.remembered();
+        if (currentAttempt()) {
+          const current = await core.identity();
+          if (
+            currentAttempt() &&
+            current &&
+            current.webId === identity.webId &&
+            current.issuer === identity.issuer &&
+            current.subject === identity.subject &&
+            current.clientId === identity.clientId &&
+            current.protocol === identity.protocol &&
+            current.storages.length === identity.storages.length &&
+            current.storages.every((storage, index) => storage === identity.storages[index]) &&
+            remembered.every(
+              (value) => value.webId === identity.webId && value.issuer === identity.issuer,
+            )
+          ) {
+            this.#account = null;
+            this.#expired = false;
+            ++this.#sessionVersion;
+            await core.logout();
+          }
+        }
+      } catch {
+        // pod-auth attempts local cleanup even if revocation fails. Keep the actionable
+        // identity error; failed ownership reads must never trigger an unfenced logout.
+      }
+    }
+    throw new SignInError("invalid-identity");
+  }
+
+  async #mapAccount(identity: Identity, started: number, session: number): Promise<SuiteAccount> {
     // Never invent a pod from the issuer or WebID path, or silently choose among multiple pods.
     const storageUrl = identity.storages[0];
     if (!identity.webId || !storageUrl || identity.storages.length !== 1)
-      throw new SignInError("invalid-identity");
+      return this.#rejectIdentity(identity, started, session);
     const account: SuiteAccount = {
       id: accountId(identity.webId),
       kind: "solid",
@@ -179,7 +219,7 @@ export class SolidBackend implements SessionBackend {
       const session = this.#sessionVersion;
       const identity = await this.#core().restore();
       if (!identity || started !== this.#version || session !== this.#sessionVersion) return null;
-      const account = await this.#mapAccount(identity);
+      const account = await this.#mapAccount(identity, started, session);
       if (started !== this.#version || session !== this.#sessionVersion) return null;
       this.#account = account;
       this.#expired = false;
@@ -268,7 +308,7 @@ export class SolidBackend implements SessionBackend {
       options.signal?.removeEventListener("abort", onAbort);
       this.#authorizing = false;
       const session = this.#sessionVersion;
-      const account = await this.#mapAccount(identity);
+      const account = await this.#mapAccount(identity, started, session);
       if (started !== this.#version || session !== this.#sessionVersion)
         throw new SignInError("cancelled");
       this.#account = account;

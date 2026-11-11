@@ -43,6 +43,8 @@ export interface SuiteShellProps {
   context?: ReactNode;
   actions?: ReactNode;
   details?: ShellFrameProps["details"];
+  /** App-specific search UI and routing, when supplied by an existing app. */
+  search?: ReactNode;
   /** Overrides the account's shared search source (ShellSearchProvider) for this page. */
   searchSource?: SearchSource;
   children: ReactNode;
@@ -55,6 +57,7 @@ function Frame({
   context,
   actions,
   details,
+  search,
   searchSource,
   children,
 }: SuiteShellProps) {
@@ -139,7 +142,7 @@ function Frame({
           account: <div className="shell-mobile-account">{account}</div>,
           bell: <NotificationsBell mobile />,
           offlinePill: <OfflinePill snapshot={sync} onOpen={() => setSyncOpen(true)} />,
-          search: (
+          search: search ?? (
             <GlobalSearch
               source={searchSource ?? shellSource}
               scope={{ app: slug, label: app.name }}

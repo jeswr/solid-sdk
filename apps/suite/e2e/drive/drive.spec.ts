@@ -4,6 +4,10 @@ import { fileURLToPath } from "node:url";
 import AxeBuilder from "@axe-core/playwright";
 import { expect, type Page, type TestInfo, test } from "@playwright/test";
 import { encodeRef } from "../../src/lib/refs";
+import { seedDemoSession } from "../demo-session";
+import { signInDemo } from "./fixtures";
+
+test.beforeEach(({ page }) => seedDemoSession(page));
 
 const DRIVE = "https://alice.demo.pod/drive/";
 const rootNames = ["Archive", "Photos", "Work", "data.ttl", "notes.md"];
@@ -40,7 +44,7 @@ function row(page: Page, name: string) {
 async function root(page: Page) {
   await page.goto("/drive");
   await expect(
-    page.getByRole("heading", { level: 1, name: "My Drive", exact: true }),
+    page.getByRole("heading", { level: 2, name: "My Drive", exact: true }),
   ).toBeVisible();
   await expect(page.locator("tbody .drv-name")).toHaveText(rootNames);
 }
@@ -48,7 +52,7 @@ async function root(page: Page) {
 async function openFolder(page: Page, name: string) {
   await row(page, name).focus();
   await page.keyboard.press("Enter");
-  await expect(page.getByRole("heading", { level: 1, name, exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 2, name, exact: true })).toBeVisible();
   await expect(page.getByRole("status", { name: "Loading", exact: true })).toBeHidden();
 }
 
@@ -67,7 +71,7 @@ async function navigate(page: Page, name: string) {
       .getByRole("link", { name, exact: true })
       .click();
   }
-  await expect(page.getByRole("heading", { level: 1, name, exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 2, name, exact: true })).toBeVisible();
 }
 
 async function accessible(page: Page) {
@@ -128,7 +132,7 @@ test("My Drive lists folders first, opens Work by keyboard, sorts and switches t
   await row(page, "Report.pdf").focus();
   await page.keyboard.press("Alt+ArrowUp");
   await expect(
-    page.getByRole("heading", { level: 1, name: "My Drive", exact: true }),
+    page.getByRole("heading", { level: 2, name: "My Drive", exact: true }),
   ).toBeVisible();
   await expect(row(page, "notes.md")).toBeVisible();
 });
@@ -338,12 +342,12 @@ test("preview arrows change images and Escape restores row focus", async ({ page
 test("direct preview URL renders a page and links back to its folder", async ({ page }) => {
   await page.goto(`/drive/p/${encodeRef(`${DRIVE}Photos/sunset.png`)}`);
   await expect(
-    page.getByRole("heading", { level: 1, name: "sunset.png", exact: true }),
+    page.getByRole("heading", { level: 2, name: "sunset.png", exact: true }),
   ).toBeAttached();
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect(page.getByRole("img", { name: "sunset.png", exact: true })).toBeVisible();
   await page.getByRole("link", { name: "Back to folder", exact: true }).click();
-  await expect(page.getByRole("heading", { level: 1, name: "Photos", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 2, name: "Photos", exact: true })).toBeVisible();
   await expect(row(page, "sunset.png")).toBeVisible();
 });
 
@@ -359,8 +363,10 @@ test("data.ttl previews readable contact values without raw HTTP IRIs", async ({
 });
 
 test("Recent includes notes and the top search box finds Report.pdf", async ({ page }) => {
-  await root(page);
-  await navigate(page, "Recent");
+  await signInDemo(page);
+  await expect(page.locator("tbody .drv-name")).toHaveText(rootNames);
+  await page.goto("/drive/recent");
+  await expect(page.getByRole("heading", { level: 2, name: "Recent", exact: true })).toBeVisible();
   await expect(page).toHaveURL("/drive/recent");
   await expect(row(page, "notes.md")).toBeVisible();
   const search = page.getByRole("searchbox", { name: "Search in Drive", exact: true });
@@ -368,7 +374,7 @@ test("Recent includes notes and the top search box finds Report.pdf", async ({ p
   await search.press("Enter");
   await expect(page).toHaveURL("/drive/search?q=report");
   await expect(
-    page.getByRole("heading", { level: 1, name: 'Results for "report"', exact: true }),
+    page.getByRole("heading", { level: 2, name: 'Results for "report"', exact: true }),
   ).toBeVisible();
   await expect(page.locator("tbody .drv-name")).toHaveText(["Report.pdf"]);
   await expect(row(page, "Report.pdf")).toHaveAttribute("data-url", `${DRIVE}Work/Report.pdf`);

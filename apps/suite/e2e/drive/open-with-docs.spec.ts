@@ -1,6 +1,9 @@
 // AUTHORED-BY Codex GPT-6.1
 import { expect, type Page, test } from "@playwright/test";
 import { encodeRef } from "../../src/lib/refs";
+import { seedDemoSession } from "../demo-session";
+
+test.beforeEach(({ page }) => seedDemoSession(page));
 
 const POD = "https://alice.demo.pod/";
 

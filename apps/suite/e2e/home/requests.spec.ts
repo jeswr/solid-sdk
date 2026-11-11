@@ -8,6 +8,9 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, type Page, test } from "@playwright/test";
 import { Parser } from "n3";
+import { seedDemoSession } from "../demo-session";
+
+test.beforeEach(({ page }) => seedDemoSession(page));
 
 const ROOT = "https://alice.demo.pod/";
 const REQUEST = `${ROOT}inbox/maracoach-activity.ttl`;
@@ -97,7 +100,7 @@ test.describe("scenario 9: requests (accessRequests)", () => {
     await expect(link.locator(".hm-permission-count")).toHaveText("1 pending");
     await link.click();
     await expect(page).toHaveURL("/permissions/requests");
-    await expect(page.getByRole("heading", { level: 1, name: "Requests" })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 2, name: "Requests" })).toBeVisible();
     const row = page.getByRole("listitem", { name: "Request from MaraCoach" });
     await expect(row).toContainText("Activity");
     await expect(row).toContainText("Build your training plan");
@@ -218,13 +221,13 @@ test.describe("scenario 10: requests hidden (no accessRequests)", () => {
 
   test("no Requests tab, and the route redirects to Permissions", async ({ page }) => {
     await page.goto("/permissions");
-    await expect(page.getByRole("heading", { level: 1, name: "Permissions" })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 2, name: "Permissions" })).toBeVisible();
     await expect(page.getByRole("tablist", { name: "Permissions" })).toBeVisible();
     await expect(page.getByRole("link", { name: /^Requests/ })).toHaveCount(0);
     await expect(page.getByRole("tab", { name: /^Requests/ })).toHaveCount(0);
     await page.goto("/permissions/requests");
     await expect(page).toHaveURL("/permissions");
-    await expect(page.getByRole("heading", { level: 1, name: "Permissions" })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 2, name: "Permissions" })).toBeVisible();
     await accessible(page);
   });
 });

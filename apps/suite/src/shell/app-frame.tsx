@@ -2,7 +2,11 @@
 // AUTHORED-BY Codex GPT-6
 "use client";
 import { type ComponentProps, lazy, Suspense } from "react";
-import { SuiteFrame, type SuiteFrameProps } from "@/components/interim-shell/suite-frame";
+import {
+  SearchBox,
+  SuiteFrame,
+  type SuiteFrameProps,
+} from "@/components/interim-shell/suite-frame";
 import { loadGuard, loadShell } from "./app-frame-loaders";
 import { useOptionalAccounts } from "./session/accounts-context";
 
@@ -44,7 +48,17 @@ export function AppFrame(props: Omit<SuiteFrameProps, "app"> & { app: "home" | "
         sidebar={{ label: `${title} navigation`, sections: [], header: props.sidebar }}
         context={props.context}
         actions={props.actions}
-        {...(props.details ? { details: { title: "Details", children: props.details } } : {})}
+        search={props.search ? <SearchBox search={props.search} /> : undefined}
+        {...(props.details
+          ? {
+              details: {
+                title: "Details",
+                children: props.details,
+                open: true,
+                onOpenChange: (open: boolean) => !open && props.onDetailsClose?.(),
+              },
+            }
+          : {})}
       >
         {props.children}
       </Shell>

@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import {
   AmbiguousIssuerError,
   type AuthEvent,
@@ -485,11 +486,97 @@ describe("Solid shell over pod-auth", () => {
     { ...alice, storages: [...alice.storages, "https://second.example/"] },
   ])("does not invent a WebID or storage, or select between pods", async (identity) => {
     const h = harness();
-    h.auth.login.mockResolvedValue(identity);
+    h.auth.login.mockImplementationOnce(async () => {
+      h.setIdentity(identity);
+      return identity;
+    });
     await expect(h.backend.signIn({ issuer: alice.issuer })).rejects.toMatchObject({
       code: "invalid-identity",
     });
+    expect(h.auth.logout).toHaveBeenCalledOnce();
+    expect(await h.backend.restore()).toBeNull();
+    expect(await h.auth.identity()).toBeNull();
     await expect(h.backend.fetchFor(bob)(bob.storageUrl)).rejects.toThrow();
+    expect((await h.backend.signIn({ issuer: alice.issuer })).webId).toBe(alice.webId);
+    expect(h.auth.login).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([
+    { storages: [] },
+    { storages: [...alice.storages, "https://second.example/"] },
+  ])("cleans up a rejected restored identity with $storages without repeating the failure", async ({
+    storages,
+  }) => {
+    const h = harness();
+    h.setIdentity({ ...alice, storages });
+    await expect(h.backend.restore()).rejects.toEqual(new SignInError("invalid-identity"));
+    expect(h.auth.logout).toHaveBeenCalledOnce();
+    expect(await h.backend.restore()).toBeNull();
+    const reload = new SolidBackend({ createAuth: h.createAuth, publicFetch: h.publicFetch });
+    expect(await reload.restore()).toBeNull();
+    expect((await h.backend.signIn({ issuer: alice.issuer })).webId).toBe(alice.webId);
+  });
+
+  it.each([
+    "identity",
+    "remembered",
+  ])("does not purge a newer account found through %s while rejecting a grant", async (replacement) => {
+    const h = harness();
+    const rejected = { ...alice, storages: [] };
+    h.auth.login.mockImplementationOnce(async () => {
+      h.setIdentity(rejected);
+      if (replacement === "identity")
+        h.setIdentity({ ...alice, webId: bob.webId, subject: "bob", storages: [bob.storageUrl] });
+      else h.auth.remembered.mockResolvedValue([{ webId: bob.webId, issuer: bob.issuer }]);
+      return rejected;
+    });
+    await expect(h.backend.signIn({ issuer: alice.issuer })).rejects.toEqual(
+      new SignInError("invalid-identity"),
+    );
+    expect(h.auth.logout).not.toHaveBeenCalled();
+  });
+
+  it("does not purge again if sign-out supersedes rejection during an ownership read", async () => {
+    const h = harness();
+    const rejected = { ...alice, storages: [] };
+    const entered = deferred<void>();
+    const pointer = deferred<Awaited<ReturnType<PodAuth["remembered"]>>>();
+    h.auth.login.mockImplementationOnce(async () => {
+      h.setIdentity(rejected);
+      return rejected;
+    });
+    h.auth.remembered.mockImplementationOnce(() => {
+      entered.resolve();
+      return pointer.promise;
+    });
+    const signingIn = h.backend.signIn({ issuer: alice.issuer });
+    const failure = expect(signingIn).rejects.toEqual(new SignInError("invalid-identity"));
+    await entered.promise;
+    await h.backend.signOut({ ...bob, id: `solid:${alice.webId}`, webId: alice.webId });
+    h.setIdentity({ ...alice, webId: bob.webId, subject: "bob", storages: [bob.storageUrl] });
+    pointer.resolve([{ webId: alice.webId, issuer: alice.issuer }]);
+    await failure;
+    expect(h.auth.logout).toHaveBeenCalledOnce();
+    expect((await h.auth.identity())?.webId).toBe(bob.webId);
+  });
+
+  it("keeps the identity error after failed revocation once pod-auth has cleared local state", async () => {
+    const h = harness();
+    h.auth.login.mockImplementationOnce(async () => {
+      const identity = { ...alice, storages: [] };
+      h.setIdentity(identity);
+      return identity;
+    });
+    h.auth.logout.mockImplementationOnce(async () => {
+      h.setIdentity(null);
+      h.emit("logout");
+      throw new Error("revocation failed");
+    });
+    await expect(h.backend.signIn({ issuer: alice.issuer })).rejects.toEqual(
+      new SignInError("invalid-identity"),
+    );
+    expect(await h.backend.restore()).toBeNull();
+    expect((await h.backend.signIn({ issuer: alice.issuer })).webId).toBe(alice.webId);
   });
 
   it("keeps verified roots and a WebID fallback when profile display reads fail", async () => {
