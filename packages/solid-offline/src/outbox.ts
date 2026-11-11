@@ -151,7 +151,7 @@ interface StoredItem {
   createOptions?: OutboxOperation['createOptions'];
   deleteOptions?: OutboxOperation['deleteOptions'];
   conflict?: ConflictRecord;
-  guard?: OutboxGuard;
+  guard?: { tag: string; assertions?: string };
   request?: RequestDescription;
   createMode?: 'solid' | 'container';
 }
@@ -178,6 +178,7 @@ const underlying = new WeakMap<StorageClient, StorageClient>();
 // Also serialize instances in the same realm, including tests without Web Locks.
 const queues = new WeakMap<IDBFactory, Map<string, Promise<unknown>>>();
 const encoder = new TextEncoder();
+const maxAssertionBytes = 16 * 1024;
 const isRdf = (type: string) =>
   /^(text\/turtle|text\/n3|application\/(ld\+json|rdf\+xml|n-triples|n-quads|trig))(?:\s*;|$)/i.test(
     type,
@@ -321,8 +322,14 @@ function validateTag(tag: unknown): asserts tag is string {
   }
 }
 
-/** Validate before JSON serialization so lossy values and executable accessors cannot pass. */
-function snapshotGuard(value: unknown): OutboxGuard | undefined {
+/**
+ * Enforce depth, value-count and byte budgets while copying; caller object key
+ * enumeration is not bounded. Stored assertions must pass the byte cap before parsing.
+ */
+function snapshotGuard(
+  value: unknown,
+  source: 'caller' | 'stored' = 'caller',
+): OutboxGuard | undefined {
   if (value === undefined) return undefined;
   const invalid = () =>
     new TypeError('[solid-offline] invalid guard: assertions must be plain JSON');
@@ -352,7 +359,8 @@ function snapshotGuard(value: unknown): OutboxGuard | undefined {
   let size = 0;
   const count = (bytes: number) => {
     size += bytes;
-    if (size > 16 * 1024) throw new TypeError('[solid-offline] guard assertions exceed 16 KiB');
+    if (size > maxAssertionBytes)
+      throw new TypeError('[solid-offline] guard assertions exceed 16 KiB');
   };
   // Count JSON escaping and UTF-8 incrementally, without allocating an encoded large string.
   const stringSize = (text: string) => {
@@ -415,8 +423,8 @@ function snapshotGuard(value: unknown): OutboxGuard | undefined {
       }
       entries.push([key, copy(property.value, depth + 1)]);
     }
-    // Only enumerate all own keys after the bounded traversal succeeds, to catch
-    // symbols and hidden properties that for-in deliberately does not visit.
+    // Reject symbols and hidden properties that for-in does not visit. Both for-in
+    // and ownKeys may collect every key of a same-origin caller's object.
     if (Reflect.ownKeys(input).length !== entries.length + (array ? 1 : 0)) throw invalid();
     ancestors.delete(input);
     if (array) {
@@ -425,12 +433,30 @@ function snapshotGuard(value: unknown): OutboxGuard | undefined {
     }
     return Object.fromEntries(entries);
   };
-  return fields.has('assertions') ? { tag, assertions: copy(fields.get('assertions')) } : { tag };
+  if (!fields.has('assertions')) return { tag };
+  let assertions = fields.get('assertions');
+  if (source === 'stored') {
+    // Fail closed on legacy structured-cloned assertions. Check code-unit length
+    // first so even UTF-8 encoding cannot allocate beyond the cap's small multiple.
+    if (typeof assertions !== 'string') throw invalid();
+    if (
+      assertions.length > maxAssertionBytes ||
+      encoder.encode(assertions).byteLength > maxAssertionBytes
+    )
+      throw new TypeError('[solid-offline] guard assertions exceed 16 KiB');
+    try {
+      assertions = JSON.parse(assertions);
+    } catch {
+      // SyntaxError messages can include private assertion bytes.
+      throw invalid();
+    }
+  }
+  return { tag, assertions: copy(assertions) };
 }
 
 function storedGuard(record: StoredItem): OutboxGuard | undefined {
-  const guard = snapshotGuard(record.guard);
-  const metadata = snapshotGuard(record.item.guard);
+  const guard = snapshotGuard(record.guard, 'stored');
+  const metadata = snapshotGuard(record.item.guard, 'stored');
   if (metadata?.tag !== guard?.tag || (metadata && Object.hasOwn(metadata, 'assertions'))) {
     throw new TypeError('[solid-offline] invalid stored guard metadata');
   }
@@ -921,6 +947,10 @@ export function createOutbox(options: {
     conflicts: () => records.flatMap((r) => (r.conflict ? [{ ...r.conflict }] : [])),
     async enqueue(operation) {
       const guard = snapshotGuard(operation.guard);
+      const persistedGuard = guard && {
+        tag: guard.tag,
+        ...(guard.assertions !== undefined ? { assertions: JSON.stringify(guard.assertions) } : {}),
+      };
       operation = {
         ...operation,
         createOptions:
@@ -957,7 +987,7 @@ export function createOutbox(options: {
           keepalive: operation.keepalive ?? operation.createOptions?.keepalive,
           createOptions: operation.createOptions,
           deleteOptions: operation.deleteOptions,
-          guard,
+          guard: persistedGuard,
           request,
           createMode: request.url === request.container ? 'container' : 'solid',
         });

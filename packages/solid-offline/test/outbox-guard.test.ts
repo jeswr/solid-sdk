@@ -131,6 +131,11 @@ describe('guarded delivery', () => {
       deleteOptions: { recursive: true },
       keepalive: true,
     });
+    let persisted: unknown;
+    await stored((record) => {
+      persisted = record.guard;
+    });
+    expect(persisted).toEqual({ tag, assertions: JSON.stringify(assertions) });
     assertions.policies[0] = 'changed';
     body.fill(1);
     original.close();
@@ -655,13 +660,13 @@ describe('guard validation', () => {
     await expect(enqueue(box(), { guard: bad as OutboxGuard })).rejects.toThrow('guard');
   });
   it('bounds UTF-8 serialized assertions at 16 KiB and accepts plain JSON without losing values', async () => {
-    const outbox = box();
+    const original = box();
     await expect(
-      enqueue(outbox, { guard: { tag, assertions: 'x'.repeat(16383) } }),
+      enqueue(original, { guard: { tag, assertions: 'x'.repeat(16383) } }),
     ).rejects.toThrow('16 KiB');
-    await expect(enqueue(outbox, { guard: { tag, assertions: 'é'.repeat(8192) } })).rejects.toThrow(
-      '16 KiB',
-    );
+    await expect(
+      enqueue(original, { guard: { tag, assertions: 'é'.repeat(8192) } }),
+    ).rejects.toThrow('16 KiB');
     const repeated = { shared: true };
     const values: JsonValue[] = [
       null,
@@ -674,9 +679,13 @@ describe('guard validation', () => {
       { values: [1, 's', null], first: repeated, second: repeated },
       Object.create(null),
       'x'.repeat(16382),
+      'é'.repeat(8191),
     ];
-    for (const assertions of values) await enqueue(outbox, { guard: { tag, assertions } });
-    await enqueue(outbox, { guard: { tag } });
+    for (const assertions of values) await enqueue(original, { guard: { tag, assertions } });
+    await enqueue(original, { guard: { tag } });
+    original.close();
+    const outbox = box();
+    await outbox.ready;
     const delivered: (JsonValue | undefined)[] = [];
     outbox.registerDelegate(tag, async (delivery) => {
       delivered.push(delivery.assertions);
@@ -716,30 +725,45 @@ describe('guard validation', () => {
     await expect(enqueue(box(), { guard: { tag, assertions } })).rejects.toThrow('2,000 nodes');
   });
 
-  it('stops a wide object before materializing all its own keys or reading later descriptors', async () => {
+  it.each([
+    'enqueue',
+    'online',
+    'offline',
+  ])('rejects a wide caller object through %s while copying within the budget', async (path) => {
     const assertions = Object.fromEntries(
       Array.from({ length: 100_000 }, (_, i) => [String(i), 0]),
     );
-    const ownKeys = vi.spyOn(Reflect, 'ownKeys');
+    const outbox = box();
+    const client = storage();
+    const delegate = vi.fn<ReplayDelegate>().mockResolvedValue(undefined);
+    outbox.registerDelegate(tag, delegate);
+    vi.stubGlobal('navigator', { onLine: path !== 'offline' });
     const descriptors = vi.spyOn(Object, 'getOwnPropertyDescriptor');
-    await expect(enqueue(box(), { guard: { tag, assertions } })).rejects.toThrow(
-      /2,000 nodes|16 KiB/,
-    );
-    expect(ownKeys.mock.calls.some(([value]) => value === assertions)).toBe(false);
+    const result =
+      path === 'enqueue'
+        ? enqueue(outbox, { guard: { tag, assertions } })
+        : withOutbox(client.client, outbox).write(url, 'hello', {
+            ...writeOptions,
+            offline: 'queue',
+            guard: { tag, assertions },
+          });
+    await expect(result).rejects.toThrow(/2,000 nodes|16 KiB/);
     const visited = descriptors.mock.calls.filter(([value]) => value === assertions);
     expect(visited.length).toBeLessThanOrEqual(2000);
     expect(visited.some(([, key]) => key === '99999')).toBe(false);
+    await outbox.ready;
+    expect(outbox.pending()).toEqual([]);
+    expect(delegate).not.toHaveBeenCalled();
+    expectNoDelivery(client);
   });
 
-  it('bounds top-level guard fields before materializing a wide key list', async () => {
+  it('rejects a caller guard containing many unexpected fields', async () => {
     const malformed = {
       tag,
       assertions: null,
       ...Object.fromEntries(Array.from({ length: 10_000 }, (_, i) => [String(i), 0])),
     };
-    const ownKeys = vi.spyOn(Reflect, 'ownKeys');
     await expect(enqueue(box(), { guard: malformed })).rejects.toThrow('guard');
-    expect(ownKeys.mock.calls.some(([value]) => value === malformed)).toBe(false);
   });
 
   it('ignores inherited enumerable properties without copying them into guards or assertions', async () => {
@@ -776,6 +800,50 @@ describe('guard validation', () => {
   });
 
   it.each([
+    ['ASCII', JSON.stringify('x'.repeat(16383))],
+    ['UTF-8', JSON.stringify('é'.repeat(8192))],
+    ['invalid JSON', 'x'.repeat(16385)],
+  ])('fails oversized stored %s assertions before parsing, including on retry', async (_name, assertions) => {
+    const original = box();
+    await enqueue(original);
+    await stored((record) => {
+      record.guard.assertions = assertions;
+    });
+    original.close();
+    const parse = vi.spyOn(JSON, 'parse');
+    const outbox = box();
+    const delegate = vi.fn<ReplayDelegate>().mockResolvedValue(undefined);
+    outbox.registerDelegate(tag, delegate);
+    await outbox.ready;
+    expect(outbox.pending()).toMatchObject([
+      { status: 'failed', error: expect.stringContaining('16 KiB') },
+    ]);
+    const client = storage();
+    await outbox.replay(client.client);
+    await outbox.retry();
+    expect(outbox.pending()[0]?.status).toBe('failed');
+    expect(parse.mock.calls.some(([input]) => input === assertions)).toBe(false);
+    expect(delegate).not.toHaveBeenCalled();
+    expectNoDelivery(client);
+  });
+
+  it('keeps malformed stored assertion bytes out of public failure metadata', async () => {
+    const original = box();
+    await enqueue(original);
+    const secret = 'private-policy-value';
+    await stored((record) => {
+      record.guard.assertions = secret;
+    });
+    original.close();
+    const outbox = box();
+    await outbox.ready;
+    expect(outbox.pending()).toMatchObject([
+      { status: 'failed', error: expect.stringContaining('invalid stored guard') },
+    ]);
+    expect(JSON.stringify(outbox.pending())).not.toContain(secret);
+  });
+
+  it.each([
     (record: TestStoredItem) => {
       record.guard.tag = 'INVALID';
     },
@@ -784,6 +852,20 @@ describe('guard validation', () => {
     },
     (record: TestStoredItem) => {
       record.guard.assertions = new Date();
+    },
+    (record: TestStoredItem) => {
+      record.guard.assertions = guard.assertions;
+    },
+    (record: TestStoredItem) => {
+      record.guard.assertions = JSON.stringify(Array.from({ length: 2000 }, () => 0));
+    },
+    (record: TestStoredItem) => {
+      let deep: JsonValue = null;
+      for (let i = 0; i < 33; i++) deep = [deep];
+      record.guard.assertions = JSON.stringify(deep);
+    },
+    (record: TestStoredItem) => {
+      record.guard.assertions = `"${'\ud800'.repeat(3000)}"`;
     },
     (record: TestStoredItem) => {
       record.guard.assertions = 'x'.repeat(16383);
@@ -796,6 +878,12 @@ describe('guard validation', () => {
     },
     (record: TestStoredItem) => {
       record.item.guard.tag = 'other';
+    },
+    (record: TestStoredItem) => {
+      record.item.guard.assertions = guard.assertions;
+    },
+    (record: TestStoredItem) => {
+      record.item.guard.assertions = JSON.stringify(guard.assertions);
     },
     (record: TestStoredItem) => {
       Reflect.deleteProperty(record.item, 'guard');

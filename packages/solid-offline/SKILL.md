@@ -117,14 +117,18 @@ separate IndexedDB queue; `localBody(conflictId)` (or item ID) asynchronously re
 - Application policy uses `guard: OutboxGuard` (`{ tag, assertions?: JsonValue }`) on enqueue
   or the decorated write/writeRdf/create/delete options (`QueueOption`). Tags match
   `/^[a-z][a-z0-9.-]{0,63}$/`; assertions are plain JSON, at most 16 KiB serialized UTF-8,
-  depth 32 (assertion root at zero), and 2,000 visited values. Enforce the running byte
-  budget while copying keys/strings (including JSON escaping and punctuation), before full
-  serialization; stop traversal as soon as any budget is exceeded.
-  Check array length against the remaining node budget before enumeration; traverse object
-  properties with a bounded loop before collecting own keys for hidden/symbol rejection.
+  depth 32 (assertion root at zero), and 2,000 visited values. Enforce depth, value-count and
+  running byte budgets during copying, including keys, strings, JSON escaping and punctuation,
+  before full serialization; stop copying as soon as any budget is exceeded. Key enumeration
+  of a same-origin caller's own object is not bounded by these budgets. Check array length
+  against the remaining node budget before enumeration; reject hidden/symbol properties.
   Reject lossy values, accessors, sparse arrays, class instances and cycles before enqueue/online
-  delivery, and revalidate stored guards on every hydration. Invalid records become failed and
-  cannot be delivered by retry or resolution. Snapshot assertions before asynchronous work.
+  delivery. Snapshot assertions before asynchronous work and serialize the validated copy once
+  at enqueue into a canonical JSON string for IndexedDB. On every hydration, check the stored
+  string's UTF-8 byte length (at most 16 KiB) before `JSON.parse`, then revalidate the parsed value
+  with the same depth, value-count and byte budgets. Fail closed on legacy object-valued
+  assertions, since no guarded records have shipped. Invalid records become failed and cannot
+  be delivered by retry or resolution.
 - Register trusted scope separately: `registerGuardPolicy(tag, matches: GuardPolicy)` receives
   only `{ op, url, container? }`, returns idempotent cleanup, rejects duplicate/invalid tags,
   and expires on close. Reinstall policies before replay in every session. Matching policies

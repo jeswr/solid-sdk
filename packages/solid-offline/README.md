@@ -179,13 +179,17 @@ await queuedStorage.write(documentUrl, bytes, {
 
 `OutboxGuard` tags match `/^[a-z][a-z0-9.-]{0,63}$/`. Assertions must be plain JSON
 (`JsonValue`), at most 16 KiB serialized as UTF-8, depth 32 (assertion root at depth zero),
-and 2,000 visited values. The byte budget counts keys, strings, escaping and punctuation
-during copying and stops before full serialization; undefined, non-finite numbers, sparse
-arrays, accessors, class instances and cycles are rejected. Guards are snapshotted at enqueue
-and validated again on hydration. Invalid stored guards become failed items and cannot be sent,
-including through retry. `pending()` exposes only the read-only `guard.tag`, never assertions.
-Array lengths are checked against the remaining value budget before enumeration. Object
-traversal stops at the budget before collecting own keys to reject hidden or symbol properties.
+and 2,000 visited values. Depth, value-count and byte budgets are enforced during copying;
+the byte budget counts keys, strings, escaping and punctuation before full serialization.
+Enumeration of keys on a same-origin caller's own objects is not bounded by these budgets.
+Array lengths are checked against the remaining value budget before enumeration. Undefined,
+non-finite numbers, sparse arrays, accessors, class instances and cycles are rejected.
+Guards are snapshotted at enqueue, with validated assertions serialized once into a canonical
+JSON string for IndexedDB. Hydration checks that string's UTF-8 byte length against 16 KiB
+before `JSON.parse`, then applies the same depth, value-count and byte validation to the
+parsed value. Legacy object-valued assertions fail closed; no guarded records have shipped.
+Invalid stored guards become failed items and cannot be sent, including through retry.
+`pending()` exposes only the read-only `guard.tag`, never assertions.
 
 `registerGuardPolicy(tag, matches: GuardPolicy)` binds a trusted requirement to operations
 described only by `{ op, url, container? }`. On hydration and immediately before delivery,
