@@ -84,27 +84,7 @@ export function createMemoryPod(root = "https://pod.example/") {
           "if-none-match": "*",
         }),
       );
-      let result: WriteResult;
-      try {
-        result = await memory.create(parent, body, options);
-      } catch (error) {
-        if (
-          !(error instanceof StorageError) ||
-          error.code !== "conflict" ||
-          error.status !== 409 ||
-          options.name === undefined ||
-          error.url !== url
-        )
-          throw error;
-        // SDK memory uses 409 for name clashes. Model HTTP Solid's 412 only when
-        // this exact target exists; a file/container path collision remains 409.
-        try {
-          await memory.head(url);
-        } catch {
-          throw error;
-        }
-        throw new StorageError("conflict", { method: "PUT", url, status: 412, cause: error });
-      }
+      const result = await memory.create(parent, body, options);
       await snapshot(result.url);
       return result;
     },

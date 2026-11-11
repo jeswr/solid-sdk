@@ -199,8 +199,19 @@ export function createDaemon(o: DaemonOptions): Daemon {
       const triage = triageSchema.parse(extraction.data);
       await o.workspace.triage(source, triage);
       let result = await o.proposalResults.get(key);
-      if (result) result = checkedProposalResult(result);
-      else {
+      if (result) {
+        result = checkedProposalResult(result);
+        const cachedProposals = result.proposals;
+        const proposals = cachedProposals.map((proposal) => ({
+          ...proposal,
+          id: o.workspace.proposalLocation(proposal.id),
+        }));
+        if (proposals.some((proposal, index) => proposal.id !== cachedProposals[index]?.id)) {
+          result = checkedProposalResult({ calls: result.calls, proposals });
+          // Repair legacy IDs durably before the trusted outbox sees their new locations.
+          await o.proposalResults.put(key, result);
+        }
+      } else {
         const flagged = await o.isFlagged(account.id, thread);
         // A structured part is a processing hint; it never authenticates a sender.
         if (!flagged && !hasStructuredEnvelope(message.jsonLdBlocks)) continue;

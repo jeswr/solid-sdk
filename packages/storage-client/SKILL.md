@@ -79,9 +79,15 @@ and scoped to `description.root`; an LWS storage id never authorises a foreign f
   (+ `/` for containers) is byte-equal to the requested URL. Literal colons, lowercase percent
   escapes changed by re-encoding, malformed escapes, noncanonical URLs, query/fragment and
   kind/slash mismatches give non-retryable `StorageError('bad-request')` before any request.
+  `isExactChildUrl(parent, url)` from the same entry point is the pure, nonthrowing predicate
+  for canonical direct children (resources or trailing-slash containers). It checks URL
+  spelling and containment, not service semantics or permission. `createAt` separately
+  refuses a parent matching the advertised trash endpoint with `bad-request` before `create`,
+  so the body cannot execute as a trash command.
   Scope validation remains in force. Non-Solid clients give `StorageError('unsupported')`:
   LWS cannot promise exact-name creation. A taken HTTP Solid name propagates as `conflict` with
-  status 412; do not treat a real HTTP 409 as an identical-create replay.
+  status 412; Solid memory matches exact target collisions with 412 and message `name taken`.
+  Resource/container path collisions retain 409; do not treat a real HTTP 409 as an identical-create replay.
 
 **LWS RDF patch is read-modify-write by default:** read the RDF and check the caller's initial
 ETag, apply inserts/deletes locally, then PUT with that read's ETag. On 412 the backend re-reads

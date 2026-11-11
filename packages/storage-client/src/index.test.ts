@@ -32,6 +32,7 @@ test("entry points expose the storage client and testing surface", () => {
     "applyJsonPatch",
     "createAt",
     "displayNameOf",
+    "isExactChildUrl",
     "jsonEqual",
     "retryOnConflict",
   ]);

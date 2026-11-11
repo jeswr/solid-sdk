@@ -11,7 +11,7 @@ import { parseRdf } from "@jeswr/fetch-rdf";
 import type { PodAuth } from "@jeswr/pod-auth";
 import { serialize } from "@jeswr/rdf-serialize";
 import { type ReadResult, type StorageClient, StorageError } from "@jeswr/storage-client";
-import { createAt } from "@jeswr/storage-client/helpers";
+import { createAt, isExactChildUrl } from "@jeswr/storage-client/helpers";
 import {
   LiteralFrom,
   NamedNodeAs,
@@ -229,7 +229,7 @@ export class PodWorkspace {
     return `${inbox}${messageSlug(id)}.ttl`;
   }
   proposalLocation(id: string): string {
-    return this.within(id, "proposals/") && id.endsWith(".ttl")
+    return isExactChildUrl(this.url("proposals/"), id) && id.endsWith(".ttl")
       ? id
       : this.url(`proposals/${digestOf(id).slice(8)}.ttl`);
   }

@@ -1,7 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { describe, expect, test, vi } from "vitest";
 import { StorageError } from "./errors.js";
-import { createAt } from "./helpers.js";
+import { createAt, isExactChildUrl } from "./helpers.js";
 import { createLwsBackend } from "./lws.js";
 import { createMemoryStorage } from "./memory.js";
 import { createSolidBackend } from "./solid.js";
@@ -9,7 +9,99 @@ import type { CreateOptions } from "./types.js";
 
 const root = "https://pod.example/owner/";
 
+describe("isExactChildUrl", () => {
+  test.each([
+    "note.ttl",
+    "x%3Ay.ttl",
+    "%E2%98%83.ttl",
+    "draft%20one/",
+  ])("accepts the exact encoded child %s", (name) => {
+    expect(isExactChildUrl(root, `${root}${name}`)).toBe(true);
+  });
+
+  test.each([
+    "x:y.ttl",
+    "x%3ay.ttl",
+    "snow☃.ttl",
+    "%ff.ttl",
+    "%.ttl",
+    "%E2%98.ttl",
+    "%6Eote.ttl",
+    "note%2Ettl",
+    "nested/note.ttl",
+    "",
+    "note.ttl?",
+    "note.ttl#",
+    "../note.ttl",
+    "./note.ttl",
+    "encoded%2Fslash.ttl",
+    "%00.ttl",
+    "%7F.ttl",
+    "%C2%80.ttl",
+  ])("refuses the inexact or indirect child %s", (name) => {
+    expect(isExactChildUrl(root, `${root}${name}`)).toBe(false);
+  });
+
+  test.each([
+    [root, "note.ttl"],
+    [root, "https://foreign.example/note.ttl"],
+    [root, "https://pod.example/owner-sibling/note.ttl"],
+    [root, "https://user:password@pod.example/owner/note.ttl"],
+    ["invalid", `${root}note.ttl`],
+    [root.slice(0, -1), `${root}note.ttl`],
+    [`${root}?`, `${root}note.ttl`],
+    ["https://POD.example/owner/", `${root}note.ttl`],
+  ])("refuses an invalid parent or URL (%s, %s)", (parent, url) => {
+    expect(isExactChildUrl(parent, url)).toBe(false);
+  });
+});
+
 describe("createAt", () => {
+  test.each([
+    "memory",
+    "http",
+  ])("refuses a trash command before create on %s Solid storage", async (backend) => {
+    const memory = createMemoryStorage({ protocol: "solid", root, trash: true });
+    const important = await memory.create(root, "keep", {
+      name: "important.txt",
+      contentType: "text/plain",
+    });
+    const fetch = vi.fn();
+    const storage =
+      backend === "memory"
+        ? memory
+        : createSolidBackend({ root, fetch, features: memory.features });
+    const create = vi.spyOn(storage, "create");
+    await expect(
+      createAt(storage, `${root}.trash/x.json`, JSON.stringify({ resource: important.url }), {
+        contentType: "application/json",
+      }),
+    ).rejects.toMatchObject({ code: "bad-request", retryable: false });
+    expect(create).not.toHaveBeenCalled();
+    expect(fetch).not.toHaveBeenCalled();
+    expect(await (await memory.read(important.url)).text()).toBe("keep");
+    expect((await memory.list(`${root}.trash/`)).items).toEqual([]);
+  });
+
+  test.each([
+    "resource",
+    "container",
+  ] as const)("memory reports an exact %s name collision as 412 name taken", async (kind) => {
+    const storage = createMemoryStorage({ protocol: "solid", root });
+    const url = `${root}note${kind === "container" ? "/" : ".txt"}`;
+    const options = { kind, contentType: "text/plain" };
+    await createAt(storage, url, "original", options);
+    const promise = createAt(storage, url, "replacement", options);
+    await expect(promise).rejects.toMatchObject({
+      code: "conflict",
+      status: 412,
+      method: "PUT",
+      url,
+    });
+    await expect(promise).rejects.toThrow("name taken");
+    if (kind === "resource") expect(await (await storage.read(url)).text()).toBe("original");
+  });
+
   test.each([
     ["note.txt", undefined],
     ["draft%20one.txt", "resource"],

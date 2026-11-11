@@ -1,5 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { recordFromTurtle } from "@jeswr/agent-model";
+import { digestOf, recordFromTurtle } from "@jeswr/agent-model";
 import { exampleRecords } from "@jeswr/agent-model/testing";
 import { StorageError } from "@jeswr/storage-client";
 import { createMemoryStorage } from "@jeswr/storage-client/memory";
@@ -82,15 +82,21 @@ it("the memory fetch adapter distinguishes a taken name (412) from a kind collis
 it.each([
   "x:y.ttl",
   "x%3ay.ttl",
+  "snow☃.ttl",
+  "nested/proposal.ttl",
 ])("refuses proposal URL %s before creating a stray resource", async (name) => {
   const storage = createMemoryPod(root).storage;
   const workspace = new PodWorkspace({ io: vi.fn(), storage, root, ownerWebId, privateTypeIndex });
   await workspace.initialize();
   const create = vi.spyOn(storage, "create");
-  const id = workspace.url(`proposals/${name}`);
-  expect(workspace.proposalLocation(id)).toBe(id);
+  const id = `${workspace.url("proposals/")}${name}`;
+  expect(workspace.proposalLocation(id)).toBe(
+    workspace.url(`proposals/${digestOf(id).slice(8)}.ttl`),
+  );
   const proposal = { ...exampleRecords["action-proposal"], id };
-  await expect(workspace.proposal(proposal)).rejects.toThrow("Proposal write failed");
+  await expect(workspace.proposal(proposal)).rejects.toThrow(
+    "Proposal outside proposals container",
+  );
   expect(create).not.toHaveBeenCalled();
   expect((await storage.list(workspace.url("proposals/"))).items).toEqual([]);
 });

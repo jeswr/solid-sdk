@@ -21,7 +21,7 @@ it("uses only pod-auth client-credentials DPoP fetch for storage and notificatio
   const logout = vi.fn(async () => undefined);
   const auth = { fetch: io, logout };
   mocks.authenticate.mockResolvedValue(auth);
-  mocks.storage.mockResolvedValue({ storage: { root: "https://pod.example/" } });
+  mocks.storage.mockResolvedValue({ storage: { protocol: "solid", root: "https://pod.example/" } });
   mocks.notifications.mockReturnValue({});
   const credentials = {
     issuer: "https://issuer.example/",
@@ -79,7 +79,7 @@ it("uses only pod-auth client-credentials DPoP fetch for storage and notificatio
   });
   expect(mocks.notifications).toHaveBeenCalledWith({
     fetch: io,
-    storage: { root: options.storageRoot },
+    storage: { protocol: "solid", root: options.storageRoot },
   });
   await composition.close();
   expect(logout).toHaveBeenCalledTimes(2);

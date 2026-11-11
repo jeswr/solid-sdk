@@ -363,6 +363,48 @@ it("imports ACL first, deterministically triages, proposes, audits, checkpoints,
   expect(h.pod.resources.get(`${ROOT}agent/descriptors/agent.ttl`)?.body).toContain(AGENT_ID);
 });
 it.each([
+  ["x:y.ttl", false],
+  ["x%3ay.ttl", false],
+  ["snow☃.ttl", false],
+  ["x:y.ttl", true],
+  ["x%3ay.ttl", true],
+  ["snow☃.ttl", true],
+] as const)("completes and replays proposal %s using its digest location (cached=%s)", async (name, cached) => {
+  const h = harness();
+  const id = `${h.workspace.url("proposals/")}${name}`;
+  const expectedId = h.workspace.url(`proposals/${digestOf(id).slice(8)}.ttl`);
+  const source = h.workspace.messageUrl(h.workspace.url("inbox/direct/fixture/"), "seed");
+  const key = digestOf({ account: "fixture", source, digest: h.message.rawSha256 });
+  const result = {
+    proposals: [{ ...exampleRecords["action-proposal"], id }],
+    calls: [measuredCall("proposer")],
+  };
+  if (cached) await h.state.proposalResults.put(key, result);
+  else vi.mocked(h.options.gateway.proposer.propose).mockResolvedValue(result);
+  const project = vi.fn(h.options.proposalWritten);
+  const proposalWritten: DaemonOptions["proposalWritten"] = async (proposal) => {
+    expect(proposal.id).toBe(expectedId);
+    expect((await h.state.proposalResults.get(key))?.proposals[0]?.id).toBe(expectedId);
+    return project(proposal);
+  };
+  const options = { ...h.options, proposalWritten };
+  await createDaemon(options).once();
+  await createDaemon(options).once();
+  expect(h.options.gateway.proposer.propose).toHaveBeenCalledTimes(cached ? 0 : 1);
+  expect(h.state.cursors.get("fixture")).toBe("one");
+  expect((await h.state.proposalResults.get(key))?.proposals[0]?.id).toBe(expectedId);
+  const resource = h.pod.resources.get(expectedId);
+  expect(resource).toBeDefined();
+  expect(await recordFromTurtle(resource?.body ?? "", expectedId)).toMatchObject({
+    id: expectedId,
+  });
+  expect(h.pod.requests.some((request) => request.url === id)).toBe(false);
+  expect(h.ledger.entries().filter((entry) => entry.record.type === "proposal")).toHaveLength(1);
+  expect(h.ledger.entries().filter((entry) => entry.record.type === "model-call")).toHaveLength(1);
+  expect(h.executor.runOutboxOnce).toHaveBeenCalledTimes(2);
+});
+
+it.each([
   "proposal-write",
   "projection",
   "model-audit",

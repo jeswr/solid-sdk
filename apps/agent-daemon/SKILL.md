@@ -19,10 +19,14 @@ tests; its fetch adapter, request records and resource snapshots share the SDK s
 The constructor refuses non-Solid clients. Workspace and memory fetch-adapter creates
 use `createAt` from `@jeswr/storage-client/helpers` so URL encoding mismatches fail
 before creation. Use canonical encoded child names (`x%3Ay.ttl`, not `x:y.ttl` or
-`x%3ay.ttl`). Replay/retry only remapped name-taken 412s; real 409s fail. Container
+`x%3ay.ttl`). `proposalLocation` accepts only IDs passing the shared `isExactChildUrl`
+predicate as direct `.ttl` children of `proposals/`; all other IDs use a deterministic
+digest location. Before outbox projection, repair and persist cached legacy IDs through
+the same rule without invoking the Proposer again.
+Replay/retry only remapped name-taken 412s; real 409s fail. Container
 creation conflicts require a confirming HEAD before provisioning continues.
-The memory adapter translates the SDK memory backend's 409 to HTTP Solid's 412
-only after HEAD confirms that exact named target exists; kind collisions retain 409.
+The memory adapter forwards the SDK memory backend's exact name-taken 412 directly;
+kind collisions retain 409.
 
 Use pod-auth/node client-credentials DPoP fetch for pod access. Keep the trusted
 host composition explicit. No credentials, provider implementations or account

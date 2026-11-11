@@ -3,9 +3,36 @@
 /** Helpers for exact creation, ETag conflicts (ADR-003 §3) and JSON Patch (RFC 6902). */
 import { StorageError } from "./errors.js";
 import { scoped } from "./http.js";
+import { isTrashEndpoint } from "./services.js";
 import type { Body, CreateOptions, Entry, StorageClient, WriteResult } from "./types.js";
 
 export { applyJsonPatch, JsonPatchError, jsonEqual } from "./json-patch.js";
+
+/**
+ * Whether a canonical URL is a direct child whose name round-trips through Solid's
+ * encodeURIComponent creation. Accepts resource and trailing-slash container URLs;
+ * returns false for malformed, unsafe or inexact inputs without making requests.
+ * This checks URL spelling and containment, not service endpoints or caller permission.
+ */
+export function isExactChildUrl(parent: string, url: string): boolean {
+  try {
+    if (new URL(parent).href !== parent || !parent.endsWith("/") || /[?#]/.test(parent))
+      return false;
+    if (scoped(parent, "PUT", url) !== url || /[?#]/.test(url)) return false;
+    const child = url.slice(parent.length).replace(/\/$/, "");
+    const name = decodeURIComponent(child);
+    return (
+      name.length > 0 &&
+      ![...name].some((char) => {
+        const code = char.codePointAt(0) as number;
+        return code < 32 || (code >= 127 && code <= 159);
+      }) &&
+      `${parent}${encodeURIComponent(name)}${url.endsWith("/") ? "/" : ""}` === url
+    );
+  } catch {
+    return false;
+  }
+}
 
 /**
  * Create at a fixed Solid URL with If-None-Match: *. Refuse LWS (`unsupported`) and URLs
@@ -39,15 +66,14 @@ export async function createAt(
   const parent = new URL(target);
   const path = parent.pathname.replace(/\/$/, "");
   const slash = path.lastIndexOf("/");
-  let name: string;
-  try {
-    name = decodeURIComponent(path.slice(slash + 1));
-  } catch {
-    throw invalid();
-  }
   parent.pathname = path.slice(0, slash + 1);
-  const expected = `${parent.href}${encodeURIComponent(name)}${kind === "container" ? "/" : ""}`;
-  if (!name || expected !== url) throw invalid();
+  if (
+    (kind === "container") !== url.endsWith("/") ||
+    !isExactChildUrl(parent.href, url) ||
+    isTrashEndpoint(client, parent.href)
+  )
+    throw invalid();
+  const name = decodeURIComponent(path.slice(slash + 1));
   return client.create(parent.href, body, { ...options, name });
 }
 

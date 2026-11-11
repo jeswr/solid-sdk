@@ -22,14 +22,18 @@ their unconditional semantics (`ifMatch: '*'`), while index edits use the observ
 ETag and proposals use conditional creation. Non-Solid storage is refused at construction.
 Fixed destinations use the shared `createAt` helper, which rejects URL spellings that
 would change on name encoding before any create request (for example `x:y.ttl` and
-`x%3ay.ttl`; `x%3Ay.ttl` is accepted). Only a taken name reported as Solid's remapped
+`x%3ay.ttl`; `x%3Ay.ttl` is accepted). Proposal IDs must pass the shared
+`isExactChildUrl` predicate for a direct `.ttl` child of `proposals/`; other IDs use a
+deterministic digest location. Cached IDs from older runs are repaired and saved before
+outbox projection, preserving replay without another Proposer call.
+Only a taken name reported as Solid's remapped
 412 permits proposal replay or index-create retry; a real 409 remains a write failure.
 After a container-create conflict, a fresh HEAD must confirm the container exists.
 Read bounds and existing CLI error messages are retained.
 `createMemoryPod(root?)` now exposes SDK memory `storage` and a fetch adapter sharing
 that state, with request records and resource snapshots for offline assertions.
-Its named-create adapter reports a verified existing target as Solid's name-taken
-412; collisions between resource and container paths retain 409.
+Its named-create adapter forwards the SDK memory backend's name-taken 412 directly;
+collisions between resource and container paths retain 409.
 
 The deployment supplies the owner-discovered private Type Index URL (already linked
 from the owner's preferences document). Registration preserves existing RDF and

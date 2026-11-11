@@ -16,7 +16,7 @@ Entry points:
 
 - `@jeswr/storage-client`: `createPodClient({ fetch, storage, capabilities?, backend?, clock?, signal? })`, the ADR-003 types (`StorageClient`, `ReadResult`, `Patch`, …), `StorageError` and `toStorageError`. The factory returns `{ storage, description, features }`, choosing Solid or LWS from discovery.
 - `@jeswr/storage-client/errors`: the error model, plus `storageErrorFrom(method, url, response)`, which reads at most 64 KiB of an RFC 9457 body.
-- `@jeswr/storage-client/helpers`: `createAt(client, url, body, options?)`, `retryOnConflict(fn, read, attempts = 3)` and an RFC 6902 `applyJsonPatch`.
+- `@jeswr/storage-client/helpers`: `createAt(client, url, body, options?)`, `isExactChildUrl(parent, url)`, `retryOnConflict(fn, read, attempts = 3)` and an RFC 6902 `applyJsonPatch`.
 - `@jeswr/storage-client/memory`: `createMemoryStorage({ protocol: 'solid' | 'lws', pageSize, moveResource, strictConditional })`, a full in-memory `StorageClient` for tests.
 - `@jeswr/storage-client/solid`: `createSolidBackend({ fetch, root, features?, etagFollowUp? })` and `buildN3Patch({ inserts, deletes, where? })`. Solid moves use copy/delete emulation with rollback; emulated moves drop ACLs and do not copy describedby metadata. ACL-preserving moves use `movePreservingAccess` from `@jeswr/pod-access/roles` (SDK-APP-04): it requires destination caller Control and stages empty placeholders, verified own access, then content before conditional source deletion. See [pod-access move safety and recovery](../pod-access/README.md#moves-that-preserve-sharing).
 - `@jeswr/storage-client/lws`: `createLwsBackend({ fetch, root, storage?, features? })`, the LWS HTTP backend with scoped paging, conditional writes, and RFC 9264 metadata. `storage` defaults to `root`.
@@ -54,9 +54,16 @@ Before calling `create`, it checks that parent + `encodeURIComponent(decodedName
 `x%3ay.ttl` is refused with non-retryable `StorageError('bad-request')`; `x%3Ay.ttl` works.
 Malformed escapes, noncanonical URLs, queries/fragments and kind/slash mismatches are also
 refused before any request, and ordinary storage scope checks still apply.
+The pure `isExactChildUrl(parent, url)` predicate shares this validation for direct resource
+and trailing-slash container children of a canonical parent; malformed inputs return false.
+It checks URL spelling and containment, without checking service endpoints or permission.
+`createAt` also refuses children of the advertised trash endpoint with `bad-request` before
+calling `create`, preventing a fixed-destination create from becoming a trash command.
 LWS is refused with `StorageError('unsupported')` because its POST assigns the identifier.
-HTTP Solid uses named conditional PUT: a taken name propagates as `conflict` with status 412,
-distinct from a real HTTP 409. The helper never retries or overwrites an existing resource.
+HTTP Solid uses named conditional PUT: a taken name propagates as `conflict` with status 412.
+Solid memory creation matches this with 412 and message `name taken` for an exact existing
+target; resource/container path collisions retain 409, distinct from an exact-name replay.
+The helper never retries or overwrites an existing resource.
 
 `head`, `list`, and `listAll` accept `{ revalidate: true }` to revalidate cached HTTP
 responses before using them (`cache: 'no-cache'`). `listAll` applies it to every page.
