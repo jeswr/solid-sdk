@@ -110,6 +110,7 @@ function Grid({
   const dark = useRef(resolvedTheme === "dark");
   const [ready, setReady] = useState(false);
   const [failed, setFailed] = useState(false);
+  const [localMirrorUnavailable, setLocalMirrorUnavailable] = useState(false);
   const [attempt, setAttempt] = useState(0);
   const viewOnly = useRef(readOnly);
   viewOnly.current = readOnly;
@@ -129,6 +130,7 @@ function Grid({
     let collaboration: Awaited<ReturnType<NonNullable<typeof service.collaborate>>> | undefined;
     setFailed(false);
     setReady(false);
+    setLocalMirrorUnavailable(false);
     void (async () => {
       const mount = await loadEngine();
       if (!live || !host.current) return;
@@ -141,6 +143,7 @@ function Grid({
         await collaboration?.destroy();
         return;
       }
+      setLocalMirrorUnavailable(collaboration?.localMirrorUnavailable === true);
       engine = await mount(host.current, {
         collaboration,
         snapshot: latestSnapshot.current.snapshot,
@@ -191,6 +194,7 @@ function Grid({
       <p id="sht-grid-note" className="sr-only">
         This grid is rendered by the spreadsheet engine. Screen reader cell navigation is limited.
       </p>
+      {localMirrorUnavailable && <p role="status">Offline edits won't be kept on this device.</p>}
       {!ready && (
         <div className="sht-grid-loading">
           {failed ? (

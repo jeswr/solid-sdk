@@ -26,7 +26,7 @@ import { registration } from "./registration";
 import { hasStatus, resources, strongEtag } from "./resources";
 
 function isInstanceId(value: unknown): value is string {
-  return typeof value === "string" && value.length > 0;
+  return typeof value === "string" && value.length > 0 && value !== "." && value !== "..";
 }
 
 export function createWorkbookService(options: WorkbookServiceOptions): WorkbookService {
@@ -429,12 +429,25 @@ export function createWorkbookService(options: WorkbookServiceOptions): Workbook
       const transport: typeof fetch = own
         ? options.fetch
         : (input, init) => publicFetch(input, { ...init, credentials: "omit" });
+      const instanceId = isInstanceId(snapshot.id) ? snapshot.id : undefined;
       const collaboration = new WorkbookCollaboration(
-        new URL("collab/", container).href,
+        new URL(instanceId ? `collab/${encodeURIComponent(instanceId)}/` : "collab/", container)
+          .href,
         transport,
         readOnly || !own,
         undefined,
         own ? options.webId : undefined,
+        {
+          workbook: container,
+          async isCurrent() {
+            try {
+              return (await storage.loadSnapshot(container)).value.id === instanceId;
+            } catch (error) {
+              if (hasStatus(error, 404) || hasStatus(error, 410)) return false;
+              throw error;
+            }
+          },
+        },
       );
       await collaboration.open(snapshot);
       collaborations.set(container, collaboration);

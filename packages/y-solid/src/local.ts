@@ -64,5 +64,12 @@ export async function loadPersistedLocalState(doc: Doc, mirror: IndexeddbPersist
 }
 
 export { clearDocument, IndexeddbPersistence, storeState } from "y-indexeddb";
-export { clearLocalMirrors, prepareLocalMirror } from "./local-mirrors.js";
+export {
+  clearLocalMirrors,
+  LocalMirrorError,
+  openLocalMirror,
+  prepareLocalMirror,
+  retireLocalMirror,
+  waitForLocalMirror,
+} from "./local-mirrors.js";
 export { coversUpdates } from "./update-coverage.js";

@@ -77,8 +77,10 @@ import * as Y from "yjs";
 import { type ChartSpec, readCharts, withCharts } from "../src/apps/sheets/lib/charts/spec";
 import { seedSheets } from "../src/apps/sheets/lib/collaboration/model";
 import type { WorkbookCollaboration } from "../src/apps/sheets/lib/collaboration/persistence";
+import { currentCommentAnchor } from "../src/apps/sheets/lib/comments/anchors";
+import { CellCommentStore } from "../src/apps/sheets/lib/comments/store";
 import { mountUniver } from "../src/apps/sheets/lib/engine/univer";
-import { harness } from "./sheets-workbook-helpers";
+import { harness, WEBID } from "./sheets-workbook-helpers";
 
 function initial(): Snapshot {
   return withCharts(
@@ -120,6 +122,7 @@ async function mounted(doc: Y.Doc, snapshot = initial(), readOnly = false) {
     compact: true,
     readOnly,
     collaboration,
+    workbookRevision: '"mount"',
   });
   const injector = headless.current?.univer.__getInjector();
   injector?.get(headless.core.IUniverInstanceService).focusUnit(snapshot.id as string);
@@ -191,6 +194,51 @@ async function pair(snapshot = initial()) {
   };
   return { left, right, sync, dispose };
 }
+
+it("revives a late-discovered deleted comment when another engine undoes the deletion", async () => {
+  const h = await harness();
+  const book = await h.service.create({ title: "Late remote comment" });
+  const store = new CellCommentStore(book.container, h.fetch);
+  const anchor = { sheetId: "data", cell: "B3", deleted: false };
+  const root = await store.create("Keep this comment", WEBID, anchor, undefined, '"mount"');
+  const base = initial();
+  delete base.commentAnchors;
+  const p = await pair(base);
+  try {
+    p.left.engine.registerCommentAnchors?.({ [root.url]: anchor }, "current");
+    h.setHook((call) =>
+      call.method === "GET" && call.url.includes("/comments/")
+        ? new Response(null, { status: 503 })
+        : undefined,
+    );
+    await expect(store.list()).rejects.toThrow();
+    await p.left.structural("row", "remove", 2);
+    p.sync();
+    expect(p.right.data()?.rowCount).toBe(5);
+    h.setHook(() => undefined);
+    const listed = await store.list();
+    expect(listed).toHaveLength(1);
+    p.right.engine.registerCommentAnchors?.(
+      { [root.url]: listed[0]?.root.anchor as typeof anchor },
+      "snapshot",
+      { [root.url]: listed[0]?.root.workbookRevision },
+    );
+    expect(currentCommentAnchor(p.right.engine.snapshot(), root.url, anchor).deleted).toBe(true);
+    await p.left.undo();
+    p.sync();
+    expect(p.right.data()?.cellData?.[2]?.[1]?.v).toBe("Below");
+    for (const replica of [p.left, p.right])
+      expect(currentCommentAnchor(replica.engine.snapshot(), root.url, anchor)).toEqual(anchor);
+    await p.left.redo();
+    p.sync();
+    expect(currentCommentAnchor(p.right.engine.snapshot(), root.url, anchor).deleted).toBe(true);
+    await p.left.undo();
+    p.sync();
+    expect(currentCommentAnchor(p.right.engine.snapshot(), root.url, anchor)).toEqual(anchor);
+  } finally {
+    p.dispose();
+  }
+});
 
 it.each([
   "row",

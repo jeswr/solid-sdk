@@ -540,6 +540,90 @@ it.each([
   }
 });
 
+it.each([
+  false,
+  true,
+])("stops a live old publisher before repair after deletion (recreated=%s)", async (recreated) => {
+  const { IDBFactory, IDBKeyRange } = createRequire(
+    `${process.cwd()}/../../packages/solid-offline/package.json`,
+  )("fake-indexeddb");
+  vi.stubGlobal("indexedDB", new IDBFactory());
+  vi.stubGlobal("IDBKeyRange", IDBKeyRange);
+  const h = await harness();
+  const runtimes: WorkbookCollaboration[] = [];
+  try {
+    const old = await h.service.create({ title: "Live old publisher", snapshot });
+    const publisher = (await h.service.collaborate?.(
+      old.container,
+      old.snapshot,
+      false,
+    )) as WorkbookCollaboration;
+    runtimes.push(publisher);
+    await publisher.sync();
+    expect(publisher.container).toBe(`${old.container}collab/${old.snapshot.id}/`);
+    h.setHook((call) =>
+      call.method === "PUT" && call.url.includes("/collab/")
+        ? new Response(null, { status: 503 })
+        : undefined,
+    );
+    edit(publisher, "Deleted content from the old tab");
+    await publisher.provider.flush();
+    h.setHook(() => undefined);
+    // A second service models a different tab: the old publisher stays alive.
+    await createWorkbookService({ ...h.options, webId: "another-browser" }).remove(old.container);
+    expect(publisher.provider.destroyed).toBe(false);
+    const replacement = recreated
+      ? await h.service.create({ title: "Live old publisher", snapshot })
+      : undefined;
+    const beforeRepair = h.calls.length;
+    await expect(publisher.flush()).rejects.toThrow("deleted or replaced");
+    expect(publisher.provider.destroyed).toBe(true);
+    const repairCalls = h.calls.slice(beforeRepair);
+    expect(
+      repairCalls.some(
+        (call) => call.url.endsWith("workbook.json") && call.init.cache === "no-store",
+      ),
+    ).toBe(true);
+    expect(repairCalls.filter((call) => call.method === "PUT")).toEqual([]);
+    const retired = `${workbookMirrorName(WEBID, old.container, old.snapshot.id as string)}:retired`;
+    const local = new Y.Doc();
+    const { IndexeddbPersistence } = await import("@jeswr/y-solid/local");
+    const mirror = new IndexeddbPersistence(retired, local);
+    try {
+      await mirror.whenSynced;
+      expect(JSON.stringify(sheetStates(local).toJSON())).toContain(
+        "Deleted content from the old tab",
+      );
+    } finally {
+      await mirror.destroy();
+      local.destroy();
+    }
+    if (replacement) {
+      expect(replacement.container).toBe(old.container);
+      const fresh = (await h.service.collaborate?.(
+        replacement.container,
+        replacement.snapshot,
+        false,
+      )) as WorkbookCollaboration;
+      runtimes.push(fresh);
+      expect(fresh.container).not.toBe(publisher.container);
+      expect(JSON.stringify(sheetStates(fresh.doc).toJSON())).not.toContain("Deleted content");
+      const log = new Y.Doc();
+      try {
+        for (const entry of await fresh.provider.store.loadUpdates())
+          Y.applyUpdate(log, entry.update);
+        expect(JSON.stringify(sheetStates(log).toJSON())).not.toContain("Deleted content");
+      } finally {
+        log.destroy();
+      }
+    }
+  } finally {
+    h.setHook(() => undefined);
+    await Promise.all(runtimes.map((runtime) => runtime.destroy().catch(() => {})));
+    vi.unstubAllGlobals();
+  }
+});
+
 it("conditionally upgrades legacy workbook IDs once and returns the saved validator", async () => {
   const h = await harness();
   const book = await h.service.create({ title: "Legacy", snapshot });

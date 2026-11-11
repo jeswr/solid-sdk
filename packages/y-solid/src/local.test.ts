@@ -7,8 +7,12 @@ import {
   clearLocalMirrors,
   coversUpdates,
   hasUnconfirmedLocalState,
+  LocalMirrorError,
   loadPersistedLocalState,
+  openLocalMirror,
   prepareLocalMirror,
+  retireLocalMirror,
+  waitForLocalMirror,
 } from "./local.js";
 
 // Reuse the workspace's installed browser-storage fixture; no new dependency.
@@ -274,4 +278,83 @@ it("archives a late cross-tab update before clearing the superseded mirror", asy
   expect(appended).toBe(true);
   expect((await open("registry:retired")).doc.getText("body").toString()).toBe("First and late");
   expect((await open("next")).doc.getText("body").length).toBe(0);
+});
+
+it("rejects an asynchronous database-open denial before attaching an upstream provider", async () => {
+  const cause = new DOMException("Storage denied", "SecurityError");
+  vi.spyOn(indexedDB, "open").mockImplementation(() => {
+    const request = { error: cause } as IDBOpenDBRequest;
+    queueMicrotask(() => request.onerror?.(new Event("error")));
+    return request;
+  });
+  await expect(prepareLocalMirror("denied", "next")).rejects.toMatchObject({
+    name: "LocalMirrorError",
+    mirrorName: "denied",
+    cause,
+  });
+  await expect(clearLocalMirrors("denied")).rejects.toBeInstanceOf(LocalMirrorError);
+});
+
+it("rejects corrupt persisted hydration without changing the live document", async () => {
+  const { mirror } = await open("corrupt");
+  const database = mirror.db as NonNullable<IndexeddbPersistence["db"]>;
+  await new Promise<void>((resolve) => {
+    const transaction = database.transaction("updates", "readwrite");
+    transaction.objectStore("updates").add(new Uint8Array([255]));
+    transaction.oncomplete = () => resolve();
+  });
+  const live = new Doc();
+  try {
+    live.getText("body").insert(0, "Online state");
+    await expect(openLocalMirror("corrupt", live)).rejects.toBeInstanceOf(LocalMirrorError);
+    expect(live.getText("body").toString()).toBe("Online state");
+  } finally {
+    live.destroy();
+  }
+});
+
+it("contains a hydration transaction abort and closes its database", async () => {
+  const transact = FakeDatabase.prototype.transaction;
+  const close = vi.spyOn(FakeDatabase.prototype, "close");
+  vi.spyOn(FakeDatabase.prototype, "transaction").mockImplementation(function (
+    this: { name: string },
+    ...args: unknown[]
+  ) {
+    const transaction = transact.apply(this, args);
+    if (args[0] === "updates" && args[1] === "readonly") queueMicrotask(() => transaction.abort());
+    return transaction;
+  });
+  await expect(prepareLocalMirror("aborted", "next")).rejects.toBeInstanceOf(LocalMirrorError);
+  expect(close).toHaveBeenCalled();
+});
+
+it.each(
+  [false, true].flatMap((pending) => [false, true].map((active) => ({ pending, active }))),
+)("retires a closed publisher without replacing a newer registry entry (pending=$pending, active=$active)", async ({
+  pending,
+  active,
+}) => {
+  await prepareLocalMirror("registry", "old");
+  const old = await open("old");
+  old.doc.getText("body").insert(0, "Retired content");
+  if (!pending) await confirm(old.mirror);
+  // The current instance can already have become active on another tab.
+  const registry = await open("registry");
+  await registry.mirror.set("activeMirror", active ? "old" : "new");
+  await retireLocalMirror("registry", "old");
+  expect(await registry.mirror.get("activeMirror")).toBe(active ? undefined : "new");
+  expect(JSON.parse(await registry.mirror.get("retiredMirrors"))).toEqual(
+    pending ? ["old:retired"] : [],
+  );
+  if (pending)
+    expect((await open("old:retired")).doc.getText("body").toString()).toBe("Retired content");
+});
+
+it("removes database readiness listeners after a successful hydration", async () => {
+  const { mirror } = await open();
+  const database = mirror.db as NonNullable<IndexeddbPersistence["db"]>;
+  const remove = vi.spyOn(database, "removeEventListener");
+  await waitForLocalMirror(mirror);
+  expect(remove).toHaveBeenCalledWith("error", expect.any(Function));
+  expect(remove).toHaveBeenCalledWith("abort", expect.any(Function));
 });

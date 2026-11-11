@@ -1,17 +1,103 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { clearDocument, IndexeddbPersistence } from "y-indexeddb";
-import { Doc, encodeStateAsUpdate } from "yjs";
+import { applyUpdate, Doc, encodeStateAsUpdate } from "yjs";
 import { hasUnconfirmedLocalState, loadPersistedLocalState } from "./local.js";
 import { coversUpdates } from "./update-coverage.js";
 
+/** Local durability is unavailable; callers may continue with online persistence. */
+export class LocalMirrorError extends Error {
+  constructor(
+    readonly mirrorName: string,
+    cause: unknown,
+  ) {
+    super("Couldn't open the local document mirror", { cause });
+    this.name = "LocalMirrorError";
+  }
+}
+
+/**
+ * y-indexeddb 9.0.12 discards its initialization promise chain. Check the
+ * database and persisted bytes before constructing it to contain storage denial
+ * and corrupt hydration before upstream starts that discarded promise chain.
+ */
+export async function openLocalMirror(name: string, doc: Doc) {
+  let database: IDBDatabase | undefined;
+  const probe = new Doc();
+  try {
+    database = await new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open(name);
+      request.onupgradeneeded = () => {
+        request.result.createObjectStore("updates", { autoIncrement: true });
+        request.result.createObjectStore("custom");
+      };
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    const openedDatabase = database;
+    const updates = await new Promise<Uint8Array[]>((resolve, reject) => {
+      const transaction = openedDatabase.transaction("updates", "readonly");
+      const request = transaction.objectStore("updates").getAll();
+      transaction.oncomplete = () => resolve(request.result);
+      transaction.onerror = transaction.onabort = () => reject(transaction.error);
+    });
+    for (const update of updates) applyUpdate(probe, update);
+  } catch (cause) {
+    throw new LocalMirrorError(name, cause);
+  } finally {
+    database?.close();
+    probe.destroy();
+  }
+  let mirror: IndexeddbPersistence;
+  try {
+    mirror = new IndexeddbPersistence(name, doc);
+  } catch (cause) {
+    throw new LocalMirrorError(name, cause);
+  }
+  await waitForLocalMirror(mirror);
+  return mirror;
+}
+
+/** whenSynced alone never rejects when y-indexeddb fails to open its database. */
+export async function waitForLocalMirror(mirror: IndexeddbPersistence) {
+  let database: Awaited<IndexeddbPersistence["_db"]> | undefined;
+  let finished = false;
+  let failed: (cause: unknown) => void = () => {};
+  const failure = new Promise<never>((_resolve, reject) => {
+    failed = reject;
+  });
+  const databaseError = (event: Event) => failed(event);
+  // Observable<string> permits error events, including adapters that expose
+  // hydration errors. The pinned upstream version only emits "synced".
+  mirror.on("error", failed);
+  const opening = mirror._db.then((db) => {
+    if (finished) return mirror.whenSynced;
+    database = db;
+    db?.addEventListener("error", databaseError);
+    db?.addEventListener("abort", databaseError);
+    return mirror.whenSynced;
+  });
+  try {
+    await Promise.race([mirror.whenSynced, opening, failure]);
+  } catch (cause) {
+    // destroy itself rejects if _db rejected. Preserve the initialization cause.
+    void mirror.destroy().catch(() => {});
+    throw new LocalMirrorError(mirror.name, cause);
+  } finally {
+    finished = true;
+    mirror.off("error", failed);
+    database?.removeEventListener("error", databaseError);
+    database?.removeEventListener("abort", databaseError);
+  }
+}
+
 async function withMirror<T>(name: string, action: (mirror: IndexeddbPersistence) => Promise<T>) {
   const doc = new Doc();
-  const mirror = new IndexeddbPersistence(name, doc);
+  let mirror: IndexeddbPersistence | undefined;
   try {
-    await mirror.whenSynced;
+    mirror = await openLocalMirror(name, doc);
     return await action(mirror);
   } finally {
-    await mirror.destroy();
+    await mirror?.destroy().catch(() => {});
     doc.destroy();
   }
 }
@@ -64,6 +150,17 @@ function retiredNames(value: unknown): string[] {
   return Array.isArray(parsed)
     ? parsed.filter((name): name is string => typeof name === "string")
     : [];
+}
+
+/** Close a superseded publisher first, then retain its unacknowledged edits. */
+export async function retireLocalMirror(namespace: string, name: string) {
+  await withMirror(namespace, async (registry) => {
+    const retired = retiredNames(await registry.get("retiredMirrors"));
+    const archive = await withMirror(name, retire);
+    if (archive) retired.push(archive);
+    await registry.set("retiredMirrors", JSON.stringify([...new Set(retired)]));
+    if ((await registry.get("activeMirror")) === name) await registry.del("activeMirror");
+  });
 }
 
 /** A namespace also quarantines updates from the former, unversioned mirror. */

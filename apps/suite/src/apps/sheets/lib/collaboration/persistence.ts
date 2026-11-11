@@ -3,8 +3,11 @@ import { SolidPersistence, SolidUpdateStore } from "@jeswr/y-solid";
 import {
   clearLocalMirrors,
   hasUnconfirmedLocalState,
-  IndexeddbPersistence,
+  type IndexeddbPersistence,
+  LocalMirrorError,
+  openLocalMirror,
   prepareLocalMirror,
+  retireLocalMirror,
 } from "@jeswr/y-solid/local";
 import * as Y from "yjs";
 import type { Snapshot } from "../contract";
@@ -15,8 +18,13 @@ export function workbookMirrorName(webId: string, workbook: string, instanceId?:
 }
 
 export async function clearWorkbookMirrors(webId: string, workbook: string) {
-  if (typeof indexedDB !== "undefined")
+  try {
+    if (typeof indexedDB === "undefined") return;
     await clearLocalMirrors(workbookMirrorName(webId, workbook));
+  } catch (error) {
+    // Storage denial must not turn a successful pod deletion into a failure.
+    if (!(error instanceof LocalMirrorError)) throw error;
+  }
 }
 
 /** One append-only update log, with an atomic, create-only initial seed. */
@@ -30,6 +38,8 @@ export class WorkbookCollaboration {
   private unwatch: (() => void) | undefined;
   private mirror: IndexeddbPersistence | undefined;
   private confirmedVector = "AA==";
+  private retired: Error | undefined;
+  localMirrorUnavailable = false;
   readOnly: boolean;
 
   constructor(
@@ -38,12 +48,14 @@ export class WorkbookCollaboration {
     readOnly: boolean,
     store = new SolidUpdateStore({ container, fetch }),
     private readonly webId?: string,
+    private readonly instance?: { workbook: string; isCurrent(): Promise<boolean> },
   ) {
     this.container = store.container;
     this.readOnly = readOnly;
     // Defence in depth: even a stray local transaction cannot write as a viewer.
     const append = store.appendUpdate.bind(store);
     store.appendUpdate = (update) => {
+      if (this.retired) return Promise.reject(this.retired);
       if (this.readOnly) return Promise.reject(new Error("This spreadsheet is view only"));
       return append(update);
     };
@@ -76,6 +88,7 @@ export class WorkbookCollaboration {
           container: this.container,
           fetch: (_input, init) => this.fetch(seedUrl, init),
         });
+        await this.assertCurrent();
         try {
           await seedStore.appendUpdate(Y.encodeStateAsUpdate(seed));
         } catch (error) {
@@ -101,24 +114,63 @@ export class WorkbookCollaboration {
     const confirmed = Y.encodeStateAsUpdate(this.doc);
     this.confirmedVector = checkpoint(this.doc).stateVector;
     // Public/shared viewers never consume the owner's pending local updates.
-    if (!this.webId || this.readOnly || typeof indexedDB === "undefined") return;
-    const workbook = new URL("../", this.container).href;
+    if (!this.webId || this.readOnly) return;
+    if (typeof indexedDB === "undefined") {
+      this.localMirrorUnavailable = true;
+      return;
+    }
+    const workbook = this.instance?.workbook ?? new URL("../", this.container).href;
     const instanceId = snapshot.id;
     if (typeof instanceId !== "string" || !instanceId)
       throw new Error("Missing workbook instance identity");
     const name = workbookMirrorName(this.webId, workbook, instanceId);
-    await prepareLocalMirror(workbookMirrorName(this.webId, workbook), name);
-    this.mirror = new IndexeddbPersistence(name, this.doc);
-    await this.mirror.whenSynced;
+    try {
+      await prepareLocalMirror(workbookMirrorName(this.webId, workbook), name);
+      this.mirror = await openLocalMirror(name, this.doc);
+    } catch (error) {
+      if (!(error instanceof LocalMirrorError)) throw error;
+      this.mirror = undefined;
+      this.localMirrorUnavailable = true;
+      return;
+    }
     if (await hasUnconfirmedLocalState(this.mirror, async () => confirmed)) {
       // The mirror may include edits whose earlier append failed before teardown.
-      await this.provider.persistFullState();
+      await this.persistFullState();
     }
     await this.flush();
   }
 
   checkpoint() {
     return { ...checkpoint(this.doc), stateVector: this.confirmedVector };
+  }
+
+  private async assertCurrent() {
+    if (this.retired) throw this.retired;
+    if (this.instance && !(await this.instance.isCurrent())) {
+      this.retired = new Error("This spreadsheet was deleted or replaced");
+      this.stopped = true;
+      this.unwatch?.();
+      this.provider.destroy();
+      const mirror = this.mirror;
+      this.mirror = undefined;
+      try {
+        if (mirror && this.webId) {
+          await mirror.destroy();
+          await retireLocalMirror(
+            workbookMirrorName(this.webId, this.instance.workbook),
+            mirror.name,
+          );
+        }
+      } finally {
+        this.doc.destroy();
+      }
+      throw this.retired;
+    }
+  }
+
+  private async persistFullState() {
+    await this.assertCurrent();
+    return this.provider.persistFullState();
   }
 
   sync() {
@@ -136,6 +188,7 @@ export class WorkbookCollaboration {
   }
 
   async flush() {
+    if (this.retired) throw this.retired;
     const confirmed = Y.encodeStateAsUpdate(this.doc);
     const vector = checkpoint(this.doc).stateVector;
     await this.provider.flush();
@@ -144,7 +197,7 @@ export class WorkbookCollaboration {
       // y-solid reports background append errors through events. Retain all
       // edits in the live doc and repair the log before acknowledging a save.
       const version = this.failureVersion;
-      await this.provider.persistFullState();
+      await this.persistFullState();
       // A later append can fail while this full-state write is in flight. Its
       // edits may postdate the encoded repair, so retain that failure for retry.
       if (this.failureVersion === version) this.failure = undefined;

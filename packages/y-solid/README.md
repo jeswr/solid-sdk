@@ -79,3 +79,14 @@ mirrors are read into isolated documents; only unconfirmed state is retained und
 `<old-name>:retired`. It is never merged into the replacement. Call
 `clearLocalMirrors(namespace)` after closing publishers when the user deletes the
 resource. These helpers require IndexedDB and propagate storage failures.
+
+Use `openLocalMirror(name, doc)` to check database access and validate persisted
+updates before attaching the provider. This contains initialization rejections
+discarded by the pinned y-indexeddb version. `waitForLocalMirror(mirror)`
+races readiness against database-open rejection, hydration rejection, provider
+errors and database error/abort events. Initialization failure destroys the
+provider and rejects with `LocalMirrorError` (including the mirror name and cause).
+An app can then continue online and tell the user that offline edits will not be
+kept on the device. `retireLocalMirror(namespace, instanceName)` archives only
+unconfirmed state after a superseded publisher has closed; the archive stays in
+the namespace registry for later explicit deletion.

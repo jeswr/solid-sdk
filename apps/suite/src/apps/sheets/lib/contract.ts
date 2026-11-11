@@ -9,7 +9,7 @@
  *   One workbook is a container `<storage>/sheets/<slug>/` holding `index.ttl`
  *   (metadata, `schema:SpreadsheetDigitalDocument` + `schema:Dataset`), the
  *   engine snapshot `workbook.json` (metadata, sheet list and a cell checkpoint),
- *   an append-only Yjs `collab/` log (authoritative cells and row/column order),
+ *   an append-only Yjs `collab/<instanceId>/` log (authoritative cells and row/column order),
  *   and, per sheet, a derived canonical `sheets/<n>.csv` plus a
  *   `sheets/<n>.jsonld` column descriptor (`n` is the 1-based sheet position,
  *   see `model/rdf.ts` `workbookLayout`). CSVs and descriptors are rewritten

@@ -587,11 +587,15 @@ export const mountUniver: MountEngine = async (container, options) => {
               const ref = parseA1(anchor.cell);
               const rowId = beforeAxes?.rowIds[(ref.rows as AxisRange).start.index - 1];
               const colId = beforeAxes?.colIds[(ref.columns as AxisRange).start.index - 1];
-              if (rowId && colId)
+              if (rowId && colId) {
                 anchorCheckpoints.get(deleted)?.set(`anchors:${id}`, {
                   rowIds: [rowId],
                   colIds: [colId],
                 });
+                // Remote undo restores by identity, including roots discovered
+                // only after their row/column was removed on another replica.
+                identities.anchors.set(id, { sheetId: anchor.sheetId, rowId, colId });
+              }
             }
             anchor = next;
             const revived = inverse?.anchors[id];
