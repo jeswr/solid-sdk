@@ -1,6 +1,7 @@
 // AUTHORED-BY Claude Opus 4.8
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 /**
  * The MAIN-world injection: defines `window.solid` on every page. This script runs in the
  * page's own JS world (so the page can call it), but it holds NO credential — every
@@ -584,8 +585,29 @@ function installSolidInjection(): void {
     }
   }
 
+  /**
+   * A caller that asks for `credentials: 'omit'` (in `init`, or on a `Request` when `init` does
+   * not override it) has opted out of identity, so the patch must never route it into
+   * authenticated egress (sst-5mya). Apps use this for public reads, and the extension's account
+   * may not be the app's active account. Read once, so a getter cannot answer differently later.
+   */
+  function omitsCredentials(input: RequestInfo | URL, init?: RequestInit): boolean {
+    try {
+      const fromInit = init ? Reflect.get(init, 'credentials') : undefined;
+      if (fromInit !== undefined) return fromInit === 'omit';
+      return (
+        typeof input === 'object' &&
+        !urlLike(input) &&
+        Reflect.get(input as Request, 'credentials') === 'omit'
+      );
+    } catch {
+      // An init or Request whose getter throws is left to native fetch, which reports it.
+      return true;
+    }
+  }
+
   const patchedFetch: typeof fetch = (input, init) => {
-    if (shouldDivert(input)) {
+    if (!omitsCredentials(input, init) && shouldDivert(input)) {
       return solidFetch(input, init, true);
     }
     return PRISTINE_FETCH(input as RequestInfo, init);
