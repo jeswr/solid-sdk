@@ -73,6 +73,7 @@
     "@univerjs/preset-sheets-data-validation": "1.2.0",
     "@univerjs/preset-sheets-filter": "1.2.0",
     "@univerjs/preset-sheets-find-replace": "1.2.0",
+    "@univerjs/preset-sheets-hyper-link": "1.2.0",
     "@univerjs/preset-sheets-sort": "1.2.0",
     "@univerjs/presets": "1.2.0",
     "@univerjs/sheets": "1.2.0",
