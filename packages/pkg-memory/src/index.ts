@@ -21,7 +21,10 @@ export type {
   NanopubEvidence,
   Nanopublication,
   Nanopublications,
+  ParseNanopublicationsOptions,
+  SkippedNanopublication,
   Source,
+  TolerantNanopublications,
   ValidityStatus,
 } from "./model.js";
 export {
@@ -34,7 +37,7 @@ export {
 } from "./model.js";
 export type { PodConditions, PodPort } from "./pod-port.js";
 export type { FactProvenance, SourceInfo } from "./provenance.js";
-export { readNanopubProvenance } from "./provenance.js";
+export { createNanopubProvenanceReader, readNanopubProvenance } from "./provenance.js";
 export type { MemoryPurpose } from "./purpose.js";
 export {
   createDefaultPolicy,

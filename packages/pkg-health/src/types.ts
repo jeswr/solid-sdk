@@ -14,7 +14,9 @@ export type HealthFactKind =
   | "medication"
   | "observation"
   | "immunization"
-  | "encounter";
+  | "encounter"
+  | "note"
+  | "document";
 export interface HealthCode {
   iri?: string;
   value?: string;
@@ -54,12 +56,15 @@ export type HealthFact =
   | (HealthFactBase & {
       kind: "observation";
       value: number | string;
+      interpretation?: "normal" | "abnormal" | "high" | "low";
       unit?: string;
       effectiveTime?: string;
       effectiveTimeMs?: number;
     })
   | (HealthFactBase & { kind: "immunization"; product?: string; date?: string })
-  | (HealthFactBase & { kind: "encounter"; date?: string; recordedBy?: string });
+  | (HealthFactBase & { kind: "encounter"; date?: string; recordedBy?: string })
+  | (HealthFactBase & { kind: "note"; property: string; value: string })
+  | (HealthFactBase & { kind: "document"; name: string; dateCreated?: string });
 export interface HealthGraphView {
   facts: HealthFact[];
   byKind: Record<HealthFactKind, HealthFact[]>;
@@ -76,7 +81,7 @@ export interface ObservationSeries {
   unit?: string;
   points: { x: string; y: number; factId: string }[];
 }
-export type TimelineKind = "condition" | "medication" | "immunization" | "encounter";
+export type TimelineKind = "condition" | "medication" | "immunization" | "encounter" | "documents";
 export interface HealthTimelineItem {
   id: string;
   start?: string;

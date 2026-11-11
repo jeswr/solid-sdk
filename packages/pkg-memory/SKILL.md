@@ -10,6 +10,12 @@ description: Use when building, serializing, parsing or classifying PKG nanopubl
 
 Use `createFactAssertion` for structured facts, `buildNanopublications` for batches,
 `serializeNanopublications` for TriG, and `parseNanopublications` to read it back.
+For imported exports, `parseNanopublications(text, { invalid: "skip", baseIRI? })`
+adds a value-free `skipped: [{ id, errorClass }]` report and retains only whole valid
+envelopes and batch graphs needed by kept nanopubs. Default calls remain atomic;
+syntax and metadata errors still throw. Do not widen the literal parity set during
+projection work. Use `createNanopubProvenanceReader(value)` for per-projection batch
+source graph caching, with no cache surviving into another read.
 The owner WebID is mandatory; never default to a real person's identity.
 
 RDF writes use `@rdfjs/wrapper`, reads use graph-scoped typed accessors, parsing uses

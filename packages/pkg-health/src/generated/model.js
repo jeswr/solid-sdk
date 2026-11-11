@@ -48,6 +48,25 @@ const manifest = {
       ]
     },
     {
+      "name": "Instant",
+      "typeIris": [
+        "http://www.w3.org/2006/time#Instant"
+      ],
+      "subject": {
+        "convention": "self"
+      },
+      "fields": [
+        {
+          "name": "inXSDDateTime",
+          "predicate": "http://www.w3.org/2006/time#inXSDDateTime",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+          "maxCount": 1,
+          "guards": {}
+        }
+      ]
+    },
+    {
       "name": "CodeableConcept",
       "typeIris": [
         "https://jeswr.org/ns/sectors/health#CodeableConcept"
@@ -137,6 +156,13 @@ const manifest = {
       },
       "fields": [
         {
+          "name": "effectiveTime",
+          "predicate": "https://jeswr.org/ns/sectors/health#effectiveTime",
+          "kind": "iri",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
           "name": "hasCode",
           "predicate": "https://jeswr.org/ns/sectors/health#hasCode",
           "kind": "iri",
@@ -171,6 +197,72 @@ const manifest = {
       ]
     },
     {
+      "name": "HeartRateObservation",
+      "typeIris": [
+        "https://jeswr.org/ns/sectors/health#HeartRateObservation"
+      ],
+      "aliasTypeIris": [
+        "https://w3id.org/jeswr/sectors/health#HeartRateObservation"
+      ],
+      "subject": {
+        "convention": "self"
+      },
+      "fields": [
+        {
+          "name": "effectiveTime",
+          "predicate": "https://jeswr.org/ns/sectors/health#effectiveTime",
+          "kind": "iri",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "hasCode",
+          "predicate": "https://jeswr.org/ns/sectors/health#hasCode",
+          "kind": "iri",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "hasUnit",
+          "predicate": "https://jeswr.org/ns/sectors/health#hasUnit",
+          "kind": "iri",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "patient",
+          "predicate": "https://jeswr.org/ns/sectors/health#patient",
+          "kind": "iri",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "unitCode",
+          "predicate": "https://jeswr.org/ns/sectors/health#unitCode",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "numericValue",
+          "predicate": "https://jeswr.org/ns/sectors/health#value",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#decimal",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "name",
+          "predicate": "https://schema.org/name",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "maxCount": 1,
+          "guards": {}
+        }
+      ]
+    },
+    {
       "name": "Immunization",
       "typeIris": [
         "https://jeswr.org/ns/sectors/health#Immunization"
@@ -182,6 +274,13 @@ const manifest = {
         "convention": "self"
       },
       "fields": [
+        {
+          "name": "effectiveTime",
+          "predicate": "https://jeswr.org/ns/sectors/health#effectiveTime",
+          "kind": "iri",
+          "maxCount": 1,
+          "guards": {}
+        },
         {
           "name": "hasCode",
           "predicate": "https://jeswr.org/ns/sectors/health#hasCode",
@@ -294,6 +393,13 @@ const manifest = {
       },
       "fields": [
         {
+          "name": "effectiveTime",
+          "predicate": "https://jeswr.org/ns/sectors/health#effectiveTime",
+          "kind": "iri",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
           "name": "hasCode",
           "predicate": "https://jeswr.org/ns/sectors/health#hasCode",
           "kind": "iri",
@@ -304,9 +410,6 @@ const manifest = {
           "name": "hasUnit",
           "predicate": "https://jeswr.org/ns/sectors/health#hasUnit",
           "kind": "iri",
-          "aliasPredicates": [
-            "https://w3id.org/jeswr/sectors/health#hasUnit"
-          ],
           "maxCount": 1,
           "guards": {}
         },
@@ -321,16 +424,280 @@ const manifest = {
           "name": "unitCode",
           "predicate": "https://jeswr.org/ns/sectors/health#unitCode",
           "kind": "literal",
-          "aliasPredicates": [
-            "https://w3id.org/jeswr/sectors/health#unitCode"
-          ],
           "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "numericValue",
+          "predicate": "https://jeswr.org/ns/sectors/health#value",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#decimal",
           "maxCount": 1,
           "guards": {}
         },
         {
           "name": "name",
           "predicate": "https://schema.org/name",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "maxCount": 1,
+          "guards": {}
+        }
+      ]
+    },
+    {
+      "name": "SleepObservation",
+      "typeIris": [
+        "https://jeswr.org/ns/sectors/health#SleepObservation"
+      ],
+      "aliasTypeIris": [
+        "https://w3id.org/jeswr/sectors/health#SleepObservation"
+      ],
+      "subject": {
+        "convention": "self"
+      },
+      "fields": [
+        {
+          "name": "effectiveTime",
+          "predicate": "https://jeswr.org/ns/sectors/health#effectiveTime",
+          "kind": "iri",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "hasCode",
+          "predicate": "https://jeswr.org/ns/sectors/health#hasCode",
+          "kind": "iri",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "hasUnit",
+          "predicate": "https://jeswr.org/ns/sectors/health#hasUnit",
+          "kind": "iri",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "patient",
+          "predicate": "https://jeswr.org/ns/sectors/health#patient",
+          "kind": "iri",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "unitCode",
+          "predicate": "https://jeswr.org/ns/sectors/health#unitCode",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "numericValue",
+          "predicate": "https://jeswr.org/ns/sectors/health#value",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#decimal",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "name",
+          "predicate": "https://schema.org/name",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "maxCount": 1,
+          "guards": {}
+        }
+      ]
+    },
+    {
+      "name": "StepCountObservation",
+      "typeIris": [
+        "https://jeswr.org/ns/sectors/health#StepCountObservation"
+      ],
+      "aliasTypeIris": [
+        "https://w3id.org/jeswr/sectors/health#StepCountObservation"
+      ],
+      "subject": {
+        "convention": "self"
+      },
+      "fields": [
+        {
+          "name": "effectiveTime",
+          "predicate": "https://jeswr.org/ns/sectors/health#effectiveTime",
+          "kind": "iri",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "hasCode",
+          "predicate": "https://jeswr.org/ns/sectors/health#hasCode",
+          "kind": "iri",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "hasUnit",
+          "predicate": "https://jeswr.org/ns/sectors/health#hasUnit",
+          "kind": "iri",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "patient",
+          "predicate": "https://jeswr.org/ns/sectors/health#patient",
+          "kind": "iri",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "unitCode",
+          "predicate": "https://jeswr.org/ns/sectors/health#unitCode",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "numericValue",
+          "predicate": "https://jeswr.org/ns/sectors/health#value",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#decimal",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "name",
+          "predicate": "https://schema.org/name",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "maxCount": 1,
+          "guards": {}
+        }
+      ]
+    },
+    {
+      "name": "VitalSign",
+      "typeIris": [
+        "https://jeswr.org/ns/sectors/health#VitalSign"
+      ],
+      "aliasTypeIris": [
+        "https://w3id.org/jeswr/sectors/health#VitalSign"
+      ],
+      "subject": {
+        "convention": "self"
+      },
+      "fields": [
+        {
+          "name": "effectiveTime",
+          "predicate": "https://jeswr.org/ns/sectors/health#effectiveTime",
+          "kind": "iri",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "hasCode",
+          "predicate": "https://jeswr.org/ns/sectors/health#hasCode",
+          "kind": "iri",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "hasUnit",
+          "predicate": "https://jeswr.org/ns/sectors/health#hasUnit",
+          "kind": "iri",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "patient",
+          "predicate": "https://jeswr.org/ns/sectors/health#patient",
+          "kind": "iri",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "unitCode",
+          "predicate": "https://jeswr.org/ns/sectors/health#unitCode",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "numericValue",
+          "predicate": "https://jeswr.org/ns/sectors/health#value",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#decimal",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "name",
+          "predicate": "https://schema.org/name",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "maxCount": 1,
+          "guards": {}
+        }
+      ]
+    },
+    {
+      "name": "DigitalDocument",
+      "typeIris": [
+        "https://schema.org/DigitalDocument"
+      ],
+      "subject": {
+        "convention": "self"
+      },
+      "fields": [
+        {
+          "name": "about",
+          "predicate": "https://schema.org/about",
+          "kind": "iri",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "dateCreated",
+          "predicate": "https://schema.org/dateCreated",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "name",
+          "predicate": "https://schema.org/name",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "maxCount": 1,
+          "guards": {}
+        }
+      ]
+    },
+    {
+      "name": "PropertyValue",
+      "typeIris": [
+        "https://schema.org/PropertyValue"
+      ],
+      "subject": {
+        "convention": "self"
+      },
+      "fields": [
+        {
+          "name": "propertyID",
+          "predicate": "https://schema.org/propertyID",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "textValue",
+          "predicate": "https://schema.org/value",
           "kind": "literal",
           "datatype": "http://www.w3.org/2001/XMLSchema#string",
           "maxCount": 1,

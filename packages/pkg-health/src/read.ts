@@ -74,14 +74,25 @@ export class ReadNode extends TermWrapper {
   get observationValue(): number | string | undefined {
     const term = this.literal(...health("value"));
     if (!term) return undefined;
-    if ([`${XSD}decimal`, `${XSD}integer`].includes(term.datatype.value)) {
+    if ([`${XSD}decimal`, `${XSD}integer`, `${XSD}double`].includes(term.datatype.value)) {
       try {
         // The runtime numeric mapper either returns a finite, faithful number or throws.
-        return readLiteral(term) as number;
+        const number = readLiteral(term) as number;
+        return Number.isFinite(number) ? number : term.value;
       } catch {
         return term.value;
       }
     }
-    return term.datatype.value === `${XSD}string` ? term.value : undefined;
+    if (term.datatype.value !== `${XSD}string`) return undefined;
+    const lexical = term.value.trim();
+    // Strict decimal/exponent strings only: no hex, units, empty values or Infinity.
+    if (/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(lexical)) {
+      try {
+        return readLiteral(df.literal(lexical, df.namedNode(`${XSD}decimal`))) as number;
+      } catch {
+        return term.value;
+      }
+    }
+    return term.value;
   }
 }

@@ -85,9 +85,9 @@ describe("chart helpers", () => {
     );
     const result = observationSeries(view);
     expect(view.byKind.observation).toHaveLength(6);
-    expect(result.skipped).toBe(3);
-    expect(result.series).toHaveLength(2);
-    const heart = result.series.find((s) => s.unit === "/min");
+    expect(result.skipped).toBe(2);
+    expect(result.series).toHaveLength(3);
+    const heart = result.series.find((s) => s.unit === "/min" && s.points.length === 2);
     expect(heart?.points.map((p) => p.y)).toEqual([72.5, 75]);
     expect(heart?.points.map((p) => p.x)).toEqual([
       "2025-04-01T10:00:00.000Z",

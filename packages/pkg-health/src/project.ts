@@ -4,14 +4,14 @@ import { isSafeAbsoluteIri } from "@jeswr/model-runtime";
 import {
   type ClassifiedNanopublication,
   classifyNanopublications,
+  createNanopubProvenanceReader,
+  type FactProvenance,
   type Nanopublications,
-  readNanopubProvenance,
 } from "@jeswr/pkg-memory";
 import type { DatasetCore } from "@rdfjs/types";
-import { NamedGraphDataset } from "@rdfjs/wrapper";
 import { DataFactory as df, Store } from "n3";
 import { entities } from "./generated/model.js";
-import { health, RDF_TYPE, ReadNode } from "./read.js";
+import { health, LABEL, RDF_TYPE, ReadNode, S } from "./read.js";
 import { effectiveTime, readPeriod } from "./temporal.js";
 import {
   type HealthCode,
@@ -49,6 +49,8 @@ const models = {
   observation: entities.Observation,
   immunization: entities.Immunization,
   encounter: entities.Encounter,
+  note: entities.PropertyValue,
+  document: entities.DigitalDocument,
 };
 export const FACT_KINDS = Object.freeze(Object.keys(models) as HealthFactKind[]);
 
@@ -78,12 +80,17 @@ function readCode(node: ReadNode): HealthCode | undefined {
     iri,
     value:
       code?.codeValue ??
-      raw.text("https://jeswr.org/ns/core#value", "https://w3id.org/jeswr/core#value"),
+      raw.text(
+        "https://jeswr.org/ns/core#value",
+        "https://w3id.org/jeswr/core#value",
+        "http://www.w3.org/2004/02/skos/core#prefLabel",
+        LABEL,
+      ),
     system: iri ? codingSystem(iri) : "other",
   };
 }
 function base(
-  value: Nanopublications,
+  provenance: FactProvenance,
   np: ClassifiedNanopublication,
   node: ReadNode,
 ): HealthFactBase {
@@ -102,7 +109,7 @@ function base(
     categories: [...np.categories],
     replacedBy: [...np.replacedBy],
     corroboration: np.corroboration,
-    provenance: readNanopubProvenance(value, np),
+    provenance,
   };
 }
 function project(
@@ -110,14 +117,26 @@ function project(
   kind: HealthFactKind,
   node: ReadNode,
 ): HealthFact | undefined {
-  const generated = new models[kind].Wrapper(node.term, node.dataset, df);
-  const result = { ...base, label: generated.name ?? node.label ?? "Health fact" };
+  const result = { ...base, label: node.label ?? base.code?.value ?? humanise(kind) };
   const time = effectiveTime(node);
   switch (kind) {
+    case "note": {
+      const property = node.text(`${S}propertyID`);
+      const value = node.text(`${S}value`);
+      if (property === undefined || value === undefined) return undefined;
+      return { ...result, kind, property, value, label: humanise(property) };
+    }
+    case "document":
+      return {
+        ...result,
+        kind,
+        name: result.label,
+        dateCreated: node.literal(`${S}dateCreated`)?.value,
+      };
     case "condition":
       return { ...result, kind, onset: base.period.start, abatement: base.period.end };
     case "allergy":
-      return { ...result, kind, substance: generated.name ?? node.label };
+      return { ...result, kind, substance: node.label };
     case "medication": {
       const product = node.child(...health("medication"));
       const name =
@@ -128,7 +147,7 @@ function project(
       return {
         ...result,
         kind,
-        label: generated.name ?? product?.label ?? result.label,
+        label: node.label ?? product?.label ?? result.label,
         product: { name: name ?? product?.label ?? "Medication", atcCode },
         dose: node.dose,
         code: base.code ?? (atcCode ? { value: atcCode, system: "atc" } : undefined),
@@ -142,7 +161,12 @@ function project(
         ...result,
         kind,
         value,
-        unit: observation.unitCode ?? observation.hasUnit,
+        unit:
+          observation.unitCode ??
+          node.text(...health("unitCode")) ??
+          observation.hasUnit ??
+          node.link(...health("hasUnit"))?.value,
+        interpretation: typeof value === "string" ? interpretation(value) : undefined,
         effectiveTime: time.value,
         effectiveTimeMs: time.time,
       };
@@ -166,19 +190,66 @@ function project(
 function subjectNodes(graph: DatasetCore): ReadNode[] {
   const ids = new Map<string, ReadNode>();
   for (const q of graph) {
-    if (q.subject.termType === "NamedNode")
-      ids.set(q.subject.value, new ReadNode(q.subject, graph));
+    ids.set(`${q.subject.termType}:${q.subject.value}`, new ReadNode(q.subject, graph));
   }
   return [...ids.values()].sort((a, b) => a.value.localeCompare(b.value));
 }
+const observationModels = [
+  entities.Observation,
+  entities.VitalSign,
+  entities.HeartRateObservation,
+  entities.StepCountObservation,
+  entities.SleepObservation,
+];
 function kinds(node: ReadNode): HealthFactKind[] {
-  return FACT_KINDS.filter(
-    (kind) => new models[kind].Wrapper(node.term, node.dataset, df).isInstance,
+  // Generated entity wrappers require named subjects. Legacy PropertyValue and
+  // document blank nodes use the existing read-only compatibility view.
+  if (node.term.termType === "BlankNode")
+    return (["note", "document"] as const).filter((kind) =>
+      node
+        .terms(RDF_TYPE)
+        .some((term) => term.termType === "NamedNode" && term.value === models[kind].typeIri),
+    );
+  return FACT_KINDS.filter((kind) =>
+    (kind === "observation" ? observationModels : [models[kind]]).some(
+      (model) => new model.Wrapper(node.term, node.dataset, df).isInstance,
+    ),
   );
 }
+export function humanise(value: string): string {
+  const words = value
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replace(/[-_]+/g, " ")
+    .trim();
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
+/** Ordered, whole-word display keywords. Never interpret negated/uncertain results. */
+function interpretation(value: string): "normal" | "abnormal" | "high" | "low" | undefined {
+  const text = value.toLowerCase().replace(/\([^)]*\)/g, "");
+  if (/\b(not|no|possibly|possible|uncertain|unknown)\b/.test(text)) return undefined;
+  if (/\b(high|elevated|raised)\b/.test(text)) return "high";
+  if (/\b(low|decreased|reduced)\b/.test(text)) return "low";
+  if (/\b(abnormal|positive)\b/.test(text)) return "abnormal";
+  if (/\b(normal|negative|unremarkable)\b/.test(text)) return "normal";
+  return undefined;
+}
+function linkedOwners(node: ReadNode, kind: HealthFactKind): import("@rdfjs/types").Term[] {
+  if (kind !== "note" && kind !== "document") return [];
+  return [
+    ...(kind === "document" ? node.terms(`${S}about`) : []),
+    ...[
+      ...node.dataset.match(
+        null,
+        df.namedNode(`${S}${kind === "note" ? "additionalProperty" : "subjectOf"}`),
+        node.term,
+      ),
+    ].map((q) => q.subject),
+  ];
+}
 function foreign(node: ReadNode, owner: string): boolean {
-  // An owner link beside any other/malformed subject does not authorize disclosure.
-  return node.owners.some((term) => term.termType !== "NamedNode" || term.value !== owner);
+  // A health category or one owner link never overrides another subject.
+  const links = [...node.owners, ...kinds(node).flatMap((kind) => linkedOwners(node, kind))];
+  return links.some((term) => term.termType !== "NamedNode" || term.value !== owner);
 }
 /** Local, read-only projection. Apply purpose policy before supplying data to a consumer. */
 export function projectHealthFacts(
@@ -197,21 +268,28 @@ export function projectHealthFacts(
         observation: [],
         immunization: [],
         encounter: [],
+        note: [],
+        document: [],
       },
       unrecognised: [],
       sources: [],
       excludedOtherSubjects: 0,
     };
+    const provenance = createNanopubProvenanceReader(value);
+    const assertions = new Map<string, Store>();
     for (const np of classifyNanopublications(value)) {
       const category = np.categories.some((c) => categories.has(c));
-      const graph = new Store([
-        ...new NamedGraphDataset(df.namedNode(np.assertionId), value.dataset, df),
-      ]);
+      let graph = assertions.get(np.assertionId);
+      if (!graph) {
+        graph = new Store([...value.dataset.match(null, null, null, df.namedNode(np.assertionId))]);
+        assertions.set(np.assertionId, graph);
+      }
       const nodes = subjectNodes(graph);
       const supporting = nodes.filter(
         (n) =>
-          new entities.MedicinalProduct.Wrapper(n.term, graph, df).isInstance ||
-          new entities.CodeableConcept.Wrapper(n.term, graph, df).isInstance,
+          n.term.termType === "NamedNode" &&
+          (new entities.MedicinalProduct.Wrapper(n.term, graph, df).isInstance ||
+            new entities.CodeableConcept.Wrapper(n.term, graph, df).isInstance),
       );
       const qualifies =
         category ||
@@ -222,13 +300,24 @@ export function projectHealthFacts(
         recognised = false;
       for (const node of nodes) {
         for (const kind of kinds(node)) {
+          const linked = linkedOwners(node, kind);
           if (foreign(node, options.owner)) {
             excluded = true;
             continue;
           }
-          if (!category && !node.owners.some((t) => t.value === options.owner)) continue;
+          if (
+            (kind === "note" || kind === "document") &&
+            !linked.some((t) => t.value === options.owner)
+          )
+            continue;
+          if (
+            !category &&
+            kind !== "document" &&
+            !node.owners.some((t) => t.value === options.owner)
+          )
+            continue;
           recognised = true;
-          const metadata = base(value, np, node);
+          const metadata = base(provenance(np), np, node);
           const fact = project(metadata, kind, node);
           if (fact) {
             view.facts.push(fact);
@@ -238,16 +327,19 @@ export function projectHealthFacts(
       }
       if (qualifies && !recognised) {
         // Explicit foreign subjects exclude the category fallback too. Never recover their labels.
-        const owned = nodes.filter((n) => n.owners.length && !foreign(n, options.owner));
+        const candidates = nodes.filter(
+          (node) => !kinds(node).some((kind) => kind === "note" || kind === "document"),
+        );
+        const owned = candidates.filter((n) => n.owners.length && !foreign(n, options.owner));
         const other = nodes.some((n) => foreign(n, options.owner));
         if (other) excluded = true;
         if (!other || owned.length) {
           const node =
             owned[0] ??
-            nodes.find((n) => n.label) ??
-            nodes.find((n) => n.terms(RDF_TYPE).length) ??
-            nodes[0];
-          if (node) view.unrecognised.push(base(value, np, node));
+            candidates.find((n) => n.label) ??
+            candidates.find((n) => n.terms(RDF_TYPE).length) ??
+            candidates[0];
+          if (node) view.unrecognised.push(base(provenance(np), np, node));
         }
       }
       if (excluded) view.excludedOtherSubjects += 1;

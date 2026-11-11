@@ -10,7 +10,7 @@ clinical advice or dependency on a UI framework. Requires Node 24.
 ```ts
 import {
   projectHealthFacts, observationSeries, healthTimeline, classifyBodySystem,
-  forgetHealthFact, correctHealthFact,
+  forgetHealthFact, correctHealthFact, importHealthExport,
 } from "@jeswr/pkg-health";
 
 const view = projectHealthFacts(await store.list(), { owner: ownerWebId });
@@ -23,13 +23,15 @@ await correctHealthFact(store, nanopubId, correctedFact, { clientId, batchId });
 
 `projectHealthFacts(value, { owner, now? })` returns `facts`, `byKind`, `unrecognised`,
 `sources` and `excludedOtherSubjects`. Kinds are condition, allergy, medication,
-observation, immunization and encounter. Each fact carries its nanopub ID, assertion
+observation, immunization, encounter, note and document. Each fact carries its nanopub ID, assertion
 ID, typed subject IRI, label, code, lexical period and parsed epoch milliseconds,
 belief/validity/epistemic metadata, hedge, categories, replacement IDs, corroboration
 and provenance. Conditions expose onset/abatement; medication exposes product and dose;
 observations expose number-or-string value, unit and effective time; immunizations
 and encounters expose a date, and encounters retain the recorder IRI. Decimal doses
-retain their lexical string (including scale). Numeric strings stay strings.
+retain their lexical string (including scale). Plain decimal numeric strings become
+numbers when faithfully representable. Notes expose `property` (the propertyID),
+humanised label and string `value`; documents expose `name` and optional `dateCreated`.
 
 A nanopub can project multiple typed records; its `id` stays the nanopub IRI. Use
 `(id, subject, kind)` when a UI needs a distinct key for each record. `byKind` contains
@@ -40,7 +42,12 @@ A category-only product/code remains in `unrecognised`.
 
 A recognised record qualifies if it has a health category or an explicit owner link
 through canonical/legacy `health:patient`, `fhir:subject` or `schema:subject`.
-Any foreign or malformed subject link on that record excludes it, even beside an
+Notes require a health category and an owner `schema:additionalProperty` link to a
+`schema:PropertyValue`. Documents require `schema:about` owner or owner
+`schema:subjectOf` document. Foreign or malformed links in either direction refuse
+these records, including mixed owner/foreign links; unlinked records never qualify
+through the category fallback. Named and blank note/document subjects are supported.
+Any foreign or malformed subject link on a record excludes it, even beside an
 owner link or a health category. Missing subject links are accepted only with a
 health category. The owner identity is explicit and compared exactly; attribution
 identifies the reporter, so it is never substituted for the patient. The exclusion
@@ -68,7 +75,12 @@ the builder may already have applied its documented RDFlib normalization. `date`
 Partial dates use the first instant of their stated calendar period, and zone-less
 values use UTC. Invalid/unrepresentable dates stay lexical without a parsed time.
 Fractional precision beyond milliseconds stays in the lexical value. Effective time
-supports a literal or an OWL-Time instant/interval beginning, with a bounded read.
+supports a direct literal or an OWL-Time instant/interval beginning, including
+`time:inXSDDate`, `time:inXSDDateTime` and `time:inXSDDateTimeStamp`, with a bounded read.
+`xsd:dateTimeStamp` requires a timezone. The four locally declared sector subtypes
+VitalSign, HeartRateObservation, StepCountObservation and SleepObservation (including
+legacy w3id aliases) project as observations, once even when base types are also present.
+This is a fixed sector inventory, not reasoning over untrusted ontology statements.
 
 `observationSeries(view, { beliefs? })` returns `{ series, skipped }`. Each series is
 `{ id, label, unit?, points: [{ x: ISO, y: number, factId }] }`. Numeric observations
@@ -79,10 +91,84 @@ Time comes from effective time, otherwise the period start. Missing/invalid time
 nonnumeric values increment `skipped` after belief filtering. Points sort by time;
 series sort by ID. No unit conversion or aggregation occurs.
 
-`healthTimeline(view, { beliefs? })` returns condition, medication, immunization and
-encounter arrays of `{ id, start?, end?, label, tone }`. An end or past belief gives
+`healthTimeline(view, { beliefs? })` returns condition, medication, immunization,
+encounter and documents arrays of `{ id, start?, end?, label, tone }`. An end or past belief gives
 `past`; otherwise Current gives `active`; remaining facts are `neutral`. Dates remain
-lexical; absent dates stay absent. These are display tones, not clinical conclusions.
+lexical; the original four lanes retain undated items. The documents lane includes
+only documents with `dateCreated`, using that date. Notes never enter a timeline.
+These are display tones, not clinical conclusions.
+
+Labels and qualitative results
+
+Label order is `schema:name`, `rdfs:label`, linked `health:hasCode` concept
+`core:value` (canonical then legacy), `skos:prefLabel`, `rdfs:label`, then the
+humanised kind (for example “Observation”). Notes use their humanised propertyID.
+Medication product names remain a fallback for statements without their own label.
+Series grouping prefers code IRI, then code system/value, then normalised label.
+
+Observations retain qualitative string results. `interpretation` is optional and
+uses this ordered, case-insensitive whole-word display table. Parenthetical text is
+ignored, so “normal (numeric value not transcribed)” displays as normal. Outside
+parentheses, not/no/possibly/possible/uncertain/unknown suppress interpretation.
+
+| Interpretation | Keywords |
+| --- | --- |
+| high | high, elevated, raised |
+| low | low, decreased, reduced |
+| abnormal | abnormal, positive |
+| normal | normal, negative, unremarkable |
+
+This table does not interpret clinical meaning, ranges, or units. Unmatched text
+stays a string with no interpretation. Numeric decimal/integer/double literals are
+read by datatype; non-finite or inexact numbers remain lexical strings. Decimal
+numeric strings such as “4.2” become numbers; qualitative results never enter series.
+
+Tolerant local import
+
+```ts
+const { value, skipped } = await importHealthExport(trig, { owner: ownerWebId });
+const view = projectHealthFacts(value, { owner: ownerWebId });
+// skipped: { count, reasons: { UnsupportedLiteralCharacterError: 2 } }
+```
+
+The importer delegates to additive pkg-memory `parseNanopublications(text,
+{ invalid: "skip", baseIRI? })`, whose result also has `skipped: [{ id, errorClass }]`.
+Existing parser calls stay atomic, including the string baseIRI overload. Tolerance
+covers literal/term validation only; invalid TriG or malformed nanopub metadata still
+fails, exposed here as a fixed `HealthGraphError`. Each head/assertion/provenance/pubinfo
+envelope is kept or dropped together. A bad shared assertion drops every referencing
+nanopub; a bad batch source/entity graph drops its batch users. Batch graphs survive
+only with a kept user. Unrelated/orphan graphs are omitted. Nothing rewrites hashes,
+terms or literal values. No values or diagnostics enter skip reasons.
+
+The owner must be an explicit safe HTTP(S) IRI. Import retains all valid nanopubs,
+including non-health and foreign claims; apply purpose policy and owner-scoped
+projection before display. pkg-memory's existing RDFlib parity policy still excludes
+`xsd:double` and `xsd:dateTimeStamp`: tolerant import counts/skips these as unsupported
+datatypes, while the projector can read them in an existing `Nanopublications` value.
+
+Fictional demo
+
+```ts
+import { exampleHealthKnowledge } from "@jeswr/pkg-health/testing";
+const demo = await exampleHealthKnowledge({ now: "2026-11-01T12:00:00Z" });
+const view = projectHealthFacts(demo, { owner: "https://example.org/people/avery#me" });
+```
+
+Returns `Promise<Nanopublications>` built exclusively through the public batch/fact
+builders and generated build APIs. The default now is the fixed timestamp above.
+For fixed now, nanopub IDs, values, dates, provenance and projected output are stable;
+RDF blank-node labels allocated by pkg-memory may differ between invocations.
+All identities and resource IRIs are fictional example.org values (plus standard
+vocabulary and builder-generated UUID URNs). The 77 facts span about 18 months:
+eight condition claims (current, historical, hedged, mentioned, contradicted pair,
+superseded/revised pair), three medicines (one stopped, one with a schedule), two
+allergies, one immunization, three encounters, four six-point laboratory series,
+26 weekly resting heart rates, eight notes and two documents. Five sources have
+titles, fictional models and created dates (four Codex threads and one Claude
+session); every claim has a fictional evidence quote. Qualitative demo results are
+omitted for the generator union gap below; numeric rises are a fictional story,
+not treatment guidance.
 
 `forgetHealthFact` delegates to `store.retract`, appending a Retracted revision. It
 never deletes. `correctHealthFact` accepts only the condition, allergy and medication
@@ -113,8 +199,10 @@ The builder only persists each evidence's timestamp/speaker on a message record 
 `message_id` is supplied. For direct document/thread evidence, these per-evidence fields
 cannot be recovered; the reader leaves them absent. It does not mislabel the assertion's
 earliest aggregate provenance time as each quote's timestamp. Missing source metadata
-stays optional. Ambiguous or wrongly typed source scalar fields fail closed. No builder,
-parser, canonicalization or hash inputs were changed to add this view.
+stays optional. Ambiguous or wrongly typed source scalar fields fail closed. The projector uses a per-call provenance reader that copies each batch source graph
+once, and an assertion graph cache. There is no global cache: later projections read
+fresh data. All whole-dataset graph lookups use indexed `match` operations. Regression
+tests count these operations over 4,500 records, without a timing threshold.
 
 Body-system heuristic (display only)
 
@@ -147,16 +235,17 @@ kidney/urinary, reproductive/sexual. This prioritization only stabilizes display
 
 Generator gaps
 
-The generated core has eight assertion/supporting-record shapes with canonical and
-legacy class aliases, schema:MedicalCondition/Drug and FHIR/schema Observation read
-aliases. Distinct predicates (core:value, unitCode, hasUnit, recordedBy) have generated
-canonical-first read aliases. `codegen/pkg-health.shapes.ttl` states every difference
-from the sector profile, including omitted classes, constraints and properties.
+The generated core has fifteen assertion/supporting-record shapes, including all four
+sector observation subtypes, OWL-Time Instant, PropertyValue and DigitalDocument.
+Canonical and legacy aliases, schema:MedicalCondition/Drug and FHIR/schema Observation
+remain supported. `codegen/pkg-health.shapes.ttl` documents the read/build narrowings:
+numeric builds use xsd:decimal; Instant and document creation builds use xsd:dateTime;
+effective-time builds use named Instant links. Mixed imported values remain readable.
 This reader profile accepts incomplete historical records; it is not the sector's
 normative clinical validator.
 
 1. Shared aliases: admission rejects aliased predicates shared by multiple entity
-   owners. patient, hasCode and medication therefore use canonical generated fields
+   owners. patient, hasCode, medication, unitCode and hasUnit therefore use canonical generated fields
    plus a minimal canonical-first typed compatibility view for legacy reads. Owner
    filtering examines all subject predicates and refuses conflicting identities.
 2. BlankNodeOrIRI records: schema:doseSchedule and schema:code can be blank nodes or
@@ -169,7 +258,17 @@ normative clinical validator.
    one admitted field type. The read view handles literal values and one OWL-Time
    interval-beginning/instant traversal. It does not interpret other interval relations.
 
-These cases are documented for follow-up beads by the maintainer (HKG-A1/A2). The
+5. Qualitative demo builds: a second shape for the same Observation class with a
+   string value is rejected (multiple NodeShapes per canonical targetClass); the
+   generator admits no heterogeneous numeric/string field union. The demo therefore
+   omits qualitative results. Imported qualitative observations remain supported and
+   exhaustively tested. No new generator/runtime behaviour is introduced.
+6. Blank subjects: generated entity wrappers require NamedNodes. Imported blank
+   PropertyValue and DigitalDocument records use bounded read-only typed views;
+   demo notes use the existing preference template, which skolemizes the blank node.
+
+The original gaps remain documented for maintainer follow-up (HKG-A1/A2); the
+qualitative demo limitation is the same mixed-value union gap, not a new model workaround. The
 codegen/runtime packages and generated files are never hand-edited. Regenerate with
 `pnpm --filter @jeswr/pkg-health codegen`; the drift test compares every artifact byte
 for byte. Build copies generated JS/declarations into dist. Biome excludes generated

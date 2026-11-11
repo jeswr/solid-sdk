@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 
+import type { DatasetCore } from "@rdfjs/types";
 import { pkgId } from "./ids.js";
 import type { Nanopublication, Nanopublications, Source } from "./model.js";
 import { graph, NS, RdfNode } from "./rdf.js";
@@ -49,7 +50,24 @@ export function readNanopubProvenance(
   value: Nanopublications,
   np: Nanopublication,
 ): FactProvenance {
-  const sources = graph(value.dataset, pkgId("batch", np.batch, "sources"));
+  return readProvenance(graph(value.dataset, pkgId("batch", np.batch, "sources")), np);
+}
+
+/** Per-projection cache: batch graphs are copied once, with no stale global cache. */
+export function createNanopubProvenanceReader(
+  value: Nanopublications,
+): (np: Nanopublication) => FactProvenance {
+  const batches = new Map<string, DatasetCore>();
+  return (np) => {
+    let sources = batches.get(np.batch);
+    if (!sources) {
+      sources = graph(value.dataset, pkgId("batch", np.batch, "sources"));
+      batches.set(np.batch, sources);
+    }
+    return readProvenance(sources, np);
+  };
+}
+function readProvenance(sources: DatasetCore, np: Nanopublication): FactProvenance {
   const node = (id: string) => new RdfNode(id, sources);
   const records = new Map<string, SourceInfo>();
   const evidence = np.evidence.map((ev) => {
