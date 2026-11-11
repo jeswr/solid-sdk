@@ -38,7 +38,8 @@ import {
   useNotificationDigest,
   useNotifications,
 } from "../src/shell/notifications/provider";
-import { SummaryCard } from "../src/shell/notifications/summary-card";
+import { SummaryCard, summaryItems } from "../src/shell/notifications/summary-card";
+import { DIGEST_RETRY_MS } from "../src/shell/notifications/use-digest";
 import { NotificationSummarySettings } from "../src/shell/settings/notification-summary";
 import { PreferencesProvider } from "../src/shell/settings/preferences";
 
@@ -233,6 +234,7 @@ it("keeps the latest failed save ahead of stale storage, bounds receipts and sto
   ]);
   expect(Object.keys(stored.sections[0]?.items[0] ?? {}).sort()).toEqual([
     "id",
+    "key",
     "notificationIds",
     "text",
   ]);
@@ -260,6 +262,11 @@ it("does not repeat a delivery on timer ticks after a failed save over an existi
   render(tree("failed-save", [{ id: "s", list: async () => [n("new")] }]));
   await act(async () => {});
   expect(showDesktopNotification).toHaveBeenCalledOnce();
+  // A stable per-account tag replaces the previous summary; renotify keeps it audible.
+  expect(showDesktopNotification).toHaveBeenCalledWith(
+    expect.objectContaining({ id: "summary-failed-save" }),
+    { renotify: true },
+  );
   await act(async () => vi.advanceTimersByTimeAsync(90000));
   expect(showDesktopNotification).toHaveBeenCalledOnce();
   expect(readDigest("failed-save")?.now).toBe(at.getTime());
@@ -293,13 +300,10 @@ it("refreshes while polling is paused in a hidden tab and includes later-loaded 
 });
 it("waits for a successful fresh core listing and fences pending refreshes on unmount", async () => {
   const late = deferred<SuiteNotification[]>();
-  const list = vi
-    .fn()
-    .mockResolvedValueOnce([n("cached")])
-    .mockReturnValueOnce(late.promise);
+  const list = vi.fn().mockReturnValueOnce(late.promise);
   const view = render(tree("pending", [{ id: "s", list }]));
   await act(async () => {});
-  expect(list).toHaveBeenCalledTimes(2);
+  expect(list).toHaveBeenCalledOnce();
   expect(readDigest("pending")).toBeNull();
   expect(showDesktopNotification).not.toHaveBeenCalled();
   view.unmount();
@@ -307,15 +311,74 @@ it("waits for a successful fresh core listing and fences pending refreshes on un
   expect(readDigest("pending")).toBeNull();
   const failed = vi
     .fn()
-    .mockResolvedValueOnce([n("cached")])
     .mockRejectedValueOnce(new Error("offline"))
     .mockResolvedValue([n("recovered")]);
   render(tree("refresh-failure", [{ id: "s", list: failed }]));
   await act(async () => {});
   expect(readDigest("refresh-failure")).toBeNull();
+  // The failed listing backs off our own retries; a wake after the back-off recovers.
+  await act(async () => window.dispatchEvent(new Event("focus")));
+  expect(failed).toHaveBeenCalledOnce();
+  vi.setSystemTime(new Date(at.getTime() + DIGEST_RETRY_MS));
   await act(async () => window.dispatchEvent(new Event("focus")));
   expect(readDigest("refresh-failure")?.headline).toContain("recovered");
   expect(showDesktopNotification).toHaveBeenCalledOnce();
+});
+it("delivers from a completed poll without a second refresh", async () => {
+  let items = [n("polled")];
+  const list = vi.fn(async () => items);
+  render(tree("poll", [{ id: "s", list }]));
+  await act(async () => {});
+  expect(list).toHaveBeenCalledOnce();
+  expect(readDigest("poll")?.headline).toContain("polled");
+  items = [...items, n("next", { createdAt: new Date("2026-11-11T12:59Z") })];
+  vi.setSystemTime(new Date("2026-11-11T13:00Z"));
+  // Stands in for the scheduler's poll: its completion is the digest's fresh listing.
+  await act(async () => actions.refresh());
+  expect(list).toHaveBeenCalledTimes(2);
+  expect(readDigest("poll")?.headline).toContain("next");
+  expect(showDesktopNotification).toHaveBeenCalledTimes(2);
+});
+it("backs off after a failed listing, retries hidden tabs only on the timer, and recovers", async () => {
+  vi.useFakeTimers({ toFake: ["Date", "setInterval", "clearInterval"] });
+  vi.setSystemTime(at);
+  const list = vi.fn(async (): Promise<SuiteNotification[]> => {
+    throw new Error("offline");
+  });
+  render(tree("outage", [{ id: "s", list }]));
+  await act(async () => {});
+  expect(list).toHaveBeenCalledOnce();
+  await act(async () => window.dispatchEvent(new Event("focus")));
+  expect(list).toHaveBeenCalledOnce();
+  // Hidden: polling pauses, wakes are ignored and the 30 s timer waits out the back-off.
+  Object.defineProperty(document, "visibilityState", { configurable: true, value: "hidden" });
+  await act(async () => document.dispatchEvent(new Event("visibilitychange")));
+  await act(async () => vi.advanceTimersByTimeAsync(DIGEST_RETRY_MS - 30_000));
+  expect(list).toHaveBeenCalledOnce();
+  await act(async () => vi.advanceTimersByTimeAsync(30_000));
+  expect(list).toHaveBeenCalledTimes(2);
+  await act(async () => window.dispatchEvent(new Event("focus")));
+  await act(async () => vi.advanceTimersByTimeAsync(DIGEST_RETRY_MS - 30_000));
+  expect(list).toHaveBeenCalledTimes(2);
+  list.mockResolvedValue([n("back")]);
+  await act(async () => vi.advanceTimersByTimeAsync(30_000));
+  expect(list).toHaveBeenCalledTimes(3);
+  expect(readDigest("outage")?.headline).toContain("back");
+  expect(showDesktopNotification).toHaveBeenCalledOnce();
+  await act(async () => vi.advanceTimersByTimeAsync(DIGEST_RETRY_MS));
+  expect(list).toHaveBeenCalledTimes(3);
+});
+it("a successful poll ends the back-off at once", async () => {
+  const list = vi
+    .fn()
+    .mockRejectedValueOnce(new Error("offline"))
+    .mockResolvedValue([n("polled-back")]);
+  render(tree("poll-recovers", [{ id: "s", list }]));
+  await act(async () => {});
+  expect(readDigest("poll-recovers")).toBeNull();
+  await act(async () => actions.refresh());
+  expect(list).toHaveBeenCalledTimes(2);
+  expect(readDigest("poll-recovers")?.headline).toContain("polled-back");
 });
 it("does not deliver a superseded refresh or refresh concurrently on repeated wakes", async () => {
   const stale = deferred<SuiteNotification[]>();
@@ -326,18 +389,57 @@ it("does not deliver a superseded refresh or refresh concurrently on repeated wa
     .mockResolvedValue([n("fresh")]);
   render(tree("superseded", [{ id: "s", list }]));
   await act(async () => {});
+  expect(readDigest("superseded")?.headline).toContain("cached");
+  vi.setSystemTime(new Date("2026-11-11T13:00Z"));
   await act(async () => {
     window.dispatchEvent(new Event("focus"));
     window.dispatchEvent(new Event("focus"));
   });
   expect(list).toHaveBeenCalledTimes(2);
+  // This listing completes while the digest's own refresh is pending, so it is not used.
   await act(async () => actions.refresh());
   await act(async () => stale.resolve([n("stale")]));
-  expect(readDigest("superseded")).toBeNull();
-  expect(showDesktopNotification).not.toHaveBeenCalled();
+  expect(readDigest("superseded")?.headline).toContain("cached");
+  expect(showDesktopNotification).toHaveBeenCalledOnce();
   await act(async () => window.dispatchEvent(new Event("focus")));
   expect(readDigest("superseded")?.headline).toContain("fresh");
-  expect(showDesktopNotification).toHaveBeenCalledOnce();
+  expect(showDesktopNotification).toHaveBeenCalledTimes(2);
+});
+it("marks every live item in a large group read, even beyond the stored id cap", async () => {
+  let items = Array.from({ length: 30 }, (_, i) => n(`big-${i}`, { title: "Big group" }));
+  const markRead = vi.fn(async (_ids: readonly string[]) => {});
+  render(tree("big-group", [{ id: "s", list: async () => items, markRead }]));
+  await act(async () => {});
+  const stored = readDigest("big-group");
+  expect(stored?.sections[0]?.items[0]?.notificationIds).toHaveLength(20);
+  // A later item in the same group is not in the digest's receipts.
+  items = [...items, n("big-later", { title: "Big group" })];
+  await act(async () => actions.refresh());
+  const card = within(screen.getByRole("region", { name: "Summary" }));
+  fireEvent.click(card.getByRole("button", { name: "Mark all as read" }));
+  await act(async () => {});
+  expect(actions.items.filter((item) => item.id.startsWith("big-") && item.read)).toHaveLength(30);
+  expect(actions.items.find((item) => item.id === "big-later")?.read).toBe(false);
+  expect(markRead).toHaveBeenCalledWith(expect.arrayContaining(["big-0", "big-29"]));
+  expect(markRead.mock.calls[0]?.[0]).toHaveLength(30);
+});
+it("matches legacy snapshots without group keys by their stored ids", () => {
+  const digest = saveDigest(
+    "legacy-card",
+    buildDigest([digestNotification(n("a")), digestNotification(n("b"))], {
+      since: 0,
+      now: at.getTime(),
+    }),
+  );
+  const legacy = {
+    ...digest,
+    sections: digest.sections.map((section) => ({
+      ...section,
+      items: section.items.map(({ key: _key, ...item }) => item),
+    })),
+  };
+  expect(summaryItems(legacy, [n("a"), n("b"), n("c")]).map((item) => item.id)).toEqual(["a", "b"]);
+  expect(summaryItems(digest, [n("a"), n("c")]).map((item) => item.id)).toEqual(["a"]);
 });
 it("ignores optional agent failures and read-save errors when delivering fresh core notifications", async () => {
   let items = [n("pending-read")];

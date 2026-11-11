@@ -4,6 +4,8 @@ import { z } from "zod";
 
 const item = z.object({
   id: z.string(),
+  /** Group key; snapshots from before it was stored fall back to their notificationIds. */
+  key: z.string().optional(),
   notificationIds: z.array(z.string()).max(100),
   text: z.string(),
 });

@@ -180,8 +180,11 @@ makes the call async; failures propagate. Never invoke a remote summariser impli
 
 Delivery adapters pass `digestedIds: []` initially, then the prior digest's `digestedIds`.
 When present, receipts replace the lower timestamp boundary so older, late-loaded items are
-included. Invalid/future times remain excluded. Output `digestedIds` retains the last 500
-distinct receipts across deliveries; persist it per account. Evicted IDs can be included again.
+included back to `since - lateWindow` (default 7 days). Invalid/future times remain excluded.
+Output `digestedIds` is an LRU of at most 500 receipts: every listed record is refreshed, and
+within one listing the least urgent/read/oldest are dropped first, so absent receipts never
+displace listed ones. Persist it per account. Items carry `key` (`digestGroupKey`) for matching
+live records to a group; never match a whole group through the capped `notificationIds`.
 `unread` counts all unread eligible records, including omitted groups, for desktop delivery.
 
 `nextDigestTime(schedule, now, tz = 'UTC')` returns a Date strictly after now, null for off.

@@ -33,6 +33,8 @@ export function classifyUrgency(n: DigestNotification): boolean {
 }
 export interface DigestItem {
   id: string;
+  /** Group identity, from `digestGroupKey`; adapters match live records to a card with it. */
+  key: string;
   notificationIds: string[];
   text: string;
   count: number;
@@ -48,7 +50,7 @@ export interface DigestSection {
 export interface Digest {
   since: number;
   now: number;
-  /** Bounded receipt history, including prior deliveries. */
+  /** Receipts, least recently listed first: prior ones plus every record listed now. */
   digestedIds: string[];
   count: number;
   unread: number;
@@ -60,8 +62,22 @@ export interface Digest {
 export interface DigestOptions {
   since: number;
   now: number;
-  /** When supplied, receipts replace the lower timestamp boundary, admitting late arrivals. */
+  /**
+   * When supplied, receipts replace the lower timestamp boundary, admitting late arrivals
+   * created after `since - lateWindow`.
+   */
   digestedIds?: readonly string[];
+  /** How far before `since` a late arrival may be dated, in milliseconds. Default 7 days. */
+  lateWindow?: number;
+}
+/** Receipts kept across deliveries. Callers persisting `digestedIds` may rely on this bound. */
+export const DIGEST_RECEIPT_LIMIT = 500;
+export const DEFAULT_LATE_WINDOW = 7 * 24 * 60 * 60 * 1000;
+/** Records with equal keys share one digest item. */
+export function digestGroupKey(n: DigestNotification): string {
+  const category = n.category ?? n.kind;
+  const app = category.startsWith("agent-") ? "agent" : n.app;
+  return JSON.stringify([app, n.target?.id ?? n.title, category, !!n.target]);
 }
 const compare = (a: DigestNotification, b: DigestNotification) =>
   Number(classifyUrgency(b)) - Number(classifyUrgency(a)) ||
@@ -108,28 +124,27 @@ export function buildDigest(
   options: DigestOptions & { summarise?: (digest: Digest) => Promise<string> },
 ): Digest | Promise<Digest> {
   // Dedupe first, so duplicated transport copies cannot inflate counts. Newest content wins.
-  const unique = new Map<string, DigestNotification>();
+  // With receipts, the floor only bounds how late an arrival may be; receipts do the rest.
   const digested = options.digestedIds && new Set(options.digestedIds);
+  const floor = digested
+    ? options.since - (options.lateWindow ?? DEFAULT_LATE_WINDOW)
+    : options.since;
+  const listed = new Map<string, DigestNotification>();
   for (const n of notifications) {
-    if (
-      !Number.isFinite(n.time) ||
-      n.time > options.now ||
-      (digested ? digested.has(n.id) : n.time <= options.since)
-    )
-      continue;
-    const old = unique.get(n.id);
+    if (!Number.isFinite(n.time) || n.time > options.now || n.time <= floor) continue;
+    const old = listed.get(n.id);
     if (!old || n.time > old.time || (n.time === old.time && compare(n, old) < 0))
-      unique.set(n.id, n);
+      listed.set(n.id, n);
   }
-  const ordered = [...unique.values()].sort(compare);
+  const byPriority = [...listed.values()].sort(compare);
+  const ordered = digested ? byPriority.filter((n) => !digested.has(n.id)) : byPriority;
   const groups = new Map<string, DigestNotification[]>();
   const agent = { actionsTaken: 0, approvalsWaiting: 0 };
   for (const n of ordered) {
     const category = n.category ?? n.kind;
     if (category === "agent-action") agent.actionsTaken++;
     if (category === "agent-approval") agent.approvalsWaiting++;
-    const app = category.startsWith("agent-") ? "agent" : n.app;
-    const key = JSON.stringify([app, n.target?.id ?? n.title, category, !!n.target]);
+    const key = digestGroupKey(n);
     const group = groups.get(key);
     if (group) group.push(n);
     else groups.set(key, [n]);
@@ -137,7 +152,7 @@ export function buildDigest(
   const sections = new Map<string, DigestSection>();
   let shown = 0;
   let represented = 0;
-  for (const items of groups.values()) {
+  for (const [key, items] of groups) {
     const first = items[0] as DigestNotification;
     const app = (first.category ?? first.kind).startsWith("agent-") ? "agent" : first.app;
     let section = sections.get(app);
@@ -150,6 +165,7 @@ export function buildDigest(
     represented += items.length;
     section.items.push({
       id: first.id,
+      key,
       notificationIds: items.slice(0, 100).map((n) => n.id),
       text: groupText(items),
       count: items.length,
@@ -170,9 +186,14 @@ export function buildDigest(
   const digest: Digest = {
     since: options.since,
     now: options.now,
-    digestedIds: [...new Set([...(options.digestedIds ?? []), ...ordered.map((n) => n.id)])].slice(
-      -500,
-    ),
+    // Least-recently-listed receipts go first. Every listed record is refreshed, ordered so
+    // the cap drops the least urgent, read and oldest; absent receipts never displace them.
+    digestedIds: [
+      ...new Set([
+        ...(options.digestedIds ?? []).filter((id) => !listed.has(id)),
+        ...byPriority.map((n) => n.id).reverse(),
+      ]),
+    ].slice(-DIGEST_RECEIPT_LIMIT),
     count: ordered.length,
     unread: ordered.filter((n) => !n.read).length,
     omitted: ordered.length - represented,

@@ -3,8 +3,11 @@ import { describe, expect, it, vi } from "vitest";
 import {
   buildDigest,
   classifyUrgency,
+  DEFAULT_LATE_WINDOW,
+  DIGEST_RECEIPT_LIMIT,
   type DigestNotification,
   type DigestSchedule,
+  digestGroupKey,
   inQuietHours,
   isDue,
   nextDigestTime,
@@ -66,15 +69,85 @@ describe("digest", () => {
         n("invalid", { time: NaN }),
         n("late", { time: 0 }),
       ],
-      { since: 90, now: 100, digestedIds: previous },
+      { since: 90, now: 100, digestedIds: previous, lateWindow: Infinity },
     );
     expect(digest.count).toBe(2);
     expect(digest.unread).toBe(1);
     expect(digest.digestedIds).toHaveLength(500);
-    expect(digest.digestedIds.slice(-2)).toEqual(["late", "undated"]);
+    // Listed receipts are refreshed: the still-listed old-499 moves to the newest end.
+    expect(digest.digestedIds.slice(-3)).toEqual(["undated", "late", "old-499"]);
     expect(digest.digestedIds).not.toContain("old-0");
+    expect(digest.digestedIds).not.toContain("old-1");
     expect(buildDigest([n("late")], { ...options, digestedIds: digest.digestedIds }).count).toBe(0);
     expect(buildDigest([n("first", { time: 0 })], { ...options, digestedIds: [] }).count).toBe(1);
+  });
+  it("keeps arrivals within the late window before since and drops older ones", () => {
+    const since = DEFAULT_LATE_WINDOW + 1000;
+    const late = n("late", { time: since - DEFAULT_LATE_WINDOW + 1 });
+    const stale = n("stale", { time: since - DEFAULT_LATE_WINDOW });
+    const digest = buildDigest([late, stale], { since, now: since + 1, digestedIds: [] });
+    expect(digest.sections[0]?.items.map((i) => i.id)).toEqual(["late"]);
+    expect(digest.digestedIds).toEqual(["late"]);
+    expect(
+      buildDigest([n("x", { time: 50 })], { since: 60, now: 100, digestedIds: [], lateWindow: 5 })
+        .count,
+    ).toBe(0);
+    expect(
+      buildDigest([n("x", { time: 56 })], { since: 60, now: 100, digestedIds: [], lateWindow: 5 })
+        .count,
+    ).toBe(1);
+  });
+  it("refreshes receipts for listed records so long-lived items are never re-digested", () => {
+    const old = n("old", { time: 1 });
+    let receipts: string[] = buildDigest([old], { since: 0, now: 2, digestedIds: [] }).digestedIds;
+    expect(receipts).toEqual(["old"]);
+    // Twelve deliveries of 100 newer records each, while old stays listed and later ones age out.
+    for (let round = 0; round < 12; round++) {
+      const fresh = Array.from({ length: 100 }, (_, i) =>
+        n(`r${round}-${i}`, { time: 10 + round * 100 + i }),
+      );
+      const now = 10 + round * 100 + 100;
+      const digest = buildDigest([old, ...fresh], {
+        since: now - 100,
+        now,
+        digestedIds: receipts,
+      });
+      expect(digest.count).toBe(100);
+      expect(digest.digestedIds.at(-1)).toBe(`r${round}-99`);
+      receipts = digest.digestedIds;
+      expect(receipts).toContain("old");
+      expect(receipts.length).toBeLessThanOrEqual(DIGEST_RECEIPT_LIMIT);
+    }
+    expect(receipts).toHaveLength(DIGEST_RECEIPT_LIMIT);
+    expect(receipts).not.toContain("r0-0");
+    expect(buildDigest([old], { since: 1300, now: 1310, digestedIds: receipts }).count).toBe(0);
+  });
+  it("retains the newest and most urgent receipts when one listing exceeds the cap", () => {
+    const records = [
+      ...Array.from({ length: 600 }, (_, i) => n(`plain-${i}`, { time: 1 + i })),
+      n("urgent-old", { time: 1, urgent: true }),
+      n("read-new", { time: 700, read: true }),
+    ];
+    const digest = buildDigest(records, { since: 0, now: 1000, digestedIds: ["absent"] });
+    expect(digest.count).toBe(602);
+    expect(digest.digestedIds).toHaveLength(DIGEST_RECEIPT_LIMIT);
+    expect(digest.digestedIds.at(-1)).toBe("urgent-old");
+    expect(digest.digestedIds.at(-2)).toBe("plain-599");
+    expect(digest.digestedIds).not.toContain("absent");
+    expect(digest.digestedIds).not.toContain("read-new");
+    expect(digest.digestedIds).not.toContain("plain-0");
+    expect(digest.digestedIds).toContain("plain-101");
+  });
+  it("exposes each item's group key for matching live records", () => {
+    const comment = n("a", { target: { id: "q4", title: "Q4 plan" } });
+    const digest = buildDigest([comment, n("b", { category: "agent-action" })], options);
+    expect(digest.sections[0]?.items[0]?.key).toBe(digestGroupKey(comment));
+    expect(digestGroupKey(n("other", { target: { id: "q4", title: "Renamed" } }))).toBe(
+      digestGroupKey(comment),
+    );
+    expect(digestGroupKey(n("c", { category: "agent-action", app: "x", title: "b" }))).toBe(
+      digest.sections[1]?.items[0]?.key,
+    );
   });
   it("groups repeats by app, target and category with stable ordering and names", () => {
     const input = [

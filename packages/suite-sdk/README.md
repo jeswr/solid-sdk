@@ -256,9 +256,15 @@ No model or remote service is called by default. Hook failures propagate.
 
 For delivery, pass `digestedIds` (an empty array for the first delivery) to replace the
 lower timestamp boundary with ID receipts. Late arrivals are then included even when their
-creation time precedes `since`; future and invalid times remain excluded. The returned
-`digestedIds` carries the last 500 distinct receipts across deliveries; persist it per account.
-Older evicted IDs can be included again. `unread` counts all unread eligible records,
+creation time precedes `since`, back to `since - lateWindow` (default `DEFAULT_LATE_WINDOW`,
+7 days; `Infinity` disables the floor); future and invalid times remain excluded. The returned
+`digestedIds` holds at most `DIGEST_RECEIPT_LIMIT` (500) receipts, least recently listed
+first: every record in the current listing is refreshed, so a still-listed item keeps its
+receipt however many newer ones arrive. When one listing exceeds the cap, the least urgent,
+read and oldest receipts are dropped first. Persist it per account. Only a record listed
+again after its receipt was evicted, inside the late window, can be included again.
+Each item carries `key`, equal to `digestGroupKey(record)`, so adapters can match live
+records to a card group. `unread` counts all unread eligible records,
 including omitted groups, so delivery adapters can suppress pop-ups for read history.
 
 `nextDigestTime(schedule, now, tz?)` returns the next Date strictly after now, or null for off.

@@ -1,19 +1,37 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 "use client";
+import { digestGroupKey } from "@jeswr/suite-sdk/digest";
 import { Button } from "@jeswr/suite-ui";
 import { useId } from "react";
+import type { SuiteNotification } from "../lib/notifications-model";
+import { digestNotification } from "./digest";
+import type { StoredDigest } from "./digest-store";
 import styles from "./notifications.module.css";
 import { useNotificationDigest, useNotifications } from "./provider";
+
+/**
+ * Live records in the card's groups. Stored id lists are capped, so groups match by key,
+ * limited to the digest's receipts so later arrivals in the same group stay unread.
+ */
+export function summaryItems(
+  digest: StoredDigest,
+  items: readonly SuiteNotification[],
+): SuiteNotification[] {
+  const groups = digest.sections.flatMap((section) => section.items);
+  const keys = new Set(groups.flatMap((group) => (group.key ? [group.key] : [])));
+  const ids = new Set(groups.flatMap((group) => (group.key ? [] : group.notificationIds)));
+  const receipts = new Set(digest.digestedIds);
+  return items.filter(
+    (n) => ids.has(n.id) || (receipts.has(n.id) && keys.has(digestGroupKey(digestNotification(n)))),
+  );
+}
 
 export function SummaryCard() {
   const digest = useNotificationDigest();
   const { items, markRead, markManyRead } = useNotifications();
   const id = useId();
   if (!digest?.count) return null;
-  const ids = new Set(
-    digest.sections.flatMap((section) => section.items.flatMap((item) => item.notificationIds)),
-  );
-  const included = items.filter((n) => ids.has(n.id));
+  const included = summaryItems(digest, items);
   if (!included.length) return null;
   const byId = new Map(included.map((n) => [n.id, n]));
   return (
