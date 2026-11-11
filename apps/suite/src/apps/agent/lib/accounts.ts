@@ -1,7 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
-import { type Account, foldBindingControls } from "@jeswr/agent-model";
+import { type Account, type ChannelCapability, foldBindingControls } from "@jeswr/agent-model";
 import { type AgentClient, createAgentClient, isLoaded, type Row, type Unreadable } from "./client";
 import type { ProfileSession } from "./profile";
 import { type DisplayControl, loadedRecords, readAccounts, readControl } from "./readers";
@@ -25,6 +25,17 @@ export function accountBinding(account: Pick<Account, "channel" | "provider">): 
   return Object.hasOwn(aliases, account.channel)
     ? (aliases[account.channel] as string)
     : account.provider;
+}
+
+/** Prefer account-specific observations; never borrow another account's grants or ingest time. */
+export function accountDescriptor(account: Account, descriptors: readonly ChannelCapability[]) {
+  const matching = descriptors.filter(
+    (descriptor) => descriptor.binding === accountBinding(account),
+  );
+  const specific = matching.filter((descriptor) => descriptor.account === account.id);
+  if (specific.length) return specific.length === 1 ? specific[0] : undefined;
+  const shared = matching.filter((descriptor) => descriptor.account === undefined);
+  return shared.length === 1 ? shared[0] : undefined;
 }
 
 /** Only a plain profile name is placed in a command; secret-store references never leave the model. */

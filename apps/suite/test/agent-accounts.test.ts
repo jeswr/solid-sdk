@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   AccountSettingsQueue,
   accountBinding,
+  accountDescriptor,
   accountLoginCommand,
   overlayAccountControls,
   readAccountSettings,
@@ -34,6 +35,33 @@ const control = {
   restrictions: { ...account.restrictions, read: true },
 };
 afterEach(() => vi.restoreAllMocks());
+
+describe("account capability selection", () => {
+  const shared = { ...exampleRecords["channel-capability"], binding: "gmail" };
+  const own = {
+    ...shared,
+    id: `${shared.id}-own`,
+    account: account.id,
+    grantedScopes: ["mail.read"],
+  };
+  const other = { ...own, id: `${shared.id}-other`, account: `${account.id}-other` };
+  it("uses account-specific observations before shared capabilities, independent of listing order", () => {
+    expect(accountDescriptor(account, [shared, other, own])).toBe(own);
+    expect(accountDescriptor(account, [own, shared])).toBe(own);
+    expect(accountDescriptor(account, [other, shared])).toBe(shared);
+    expect(accountDescriptor(account, [other])).toBeUndefined();
+    expect(accountDescriptor(account, [{ ...own, binding: "matrix" }])).toBeUndefined();
+    expect(accountDescriptor(account, [])).toBeUndefined();
+  });
+  it("does not silently choose between disagreeing descriptor records", () => {
+    expect(
+      accountDescriptor(account, [own, { ...own, id: `${own.id}-duplicate` }, shared]),
+    ).toBeUndefined();
+    expect(
+      accountDescriptor(account, [shared, { ...shared, id: `${shared.id}-duplicate` }]),
+    ).toBeUndefined();
+  });
+});
 
 describe("account binding identifiers", () => {
   it.each([
