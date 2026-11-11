@@ -1,0 +1,7 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
+{
+  "root": false,
+  "extends": "//",
+  "files": { "includes": ["**", "!!src/generated"] }
+}
