@@ -108,6 +108,14 @@ async function fillAlt(value: string) {
     input.dispatchEvent(new Event("input", { bubbles: true }));
   });
 }
+async function waitForImageDialogClose() {
+  // The popover restores focus after unmounting; let that finish before another action.
+  await vi.waitFor(async () => {
+    await act(() => {});
+    expect(document.querySelector('[aria-label="Image alt text"]')).toBeNull();
+    expect(document.activeElement).toBe(mocks.editor?.view.dom);
+  });
+}
 async function selectImage(file = png()) {
   const input = document.querySelector<HTMLInputElement>(
     '[aria-label="Choose note image"]',
@@ -277,6 +285,7 @@ it.each([
   await act(async () => {
     await vi.waitFor(() => expect(mocks.editor?.getHTML()).toContain("/notes/media/"));
   });
+  await waitForImageDialogClose();
   const attrs = mocks.editor?.getJSON().content?.find((node) => node.type === "image")?.attrs;
   expect(attrs?.alt).toBe(decorative ? "" : "A bird");
   expect(attrs?.src).toMatch(/\/notes\/media\/[a-f0-9-]+\.png$/);
@@ -292,6 +301,7 @@ it.each([
   await click(button("Edit alt text"));
   await fillAlt("Updated bird");
   await click(button("Save alt text"));
+  await waitForImageDialogClose();
   expect(mocks.editor?.getHTML()).toContain('alt="Updated bird"');
   await act(() => mocks.editor?.commands.setNodeSelection(imagePosition));
 
@@ -324,11 +334,7 @@ it("pastes and drops images through the same accessible upload dialog", async ()
     expect(event.defaultPrevented).toBe(true);
     await fillAlt("Transferred bird");
     await click(button("Insert image"));
-    await act(async () => {
-      await vi.waitFor(() =>
-        expect(document.querySelector('[aria-label="Image alt text"]')).toBeNull(),
-      );
-    });
+    await waitForImageDialogClose();
   }
   expect(mocks.editor?.getJSON().content?.filter((node) => node.type === "image")).toHaveLength(2);
 });
@@ -413,7 +419,7 @@ it("defers cover fetch until visible, ignores late bytes after unmount and handl
   );
 });
 
-it("deletes an unreferenced image through the card's Delete forever action", async () => {
+it("keeps media through the card's Delete forever action", async () => {
   const s = await fixture(body());
   await s.pod.fetch(SRC, {
     method: "PUT",
@@ -430,34 +436,7 @@ it("deletes an unreferenced image through the card's Delete forever action", asy
   );
   expect(action).toBeDefined();
   await click(action as Element);
-  expect(s.pod.has(SRC)).toBe(false);
-});
-
-it.each([
-  "active",
-  "archived",
-  "trashed",
-  "docs",
-  "legacy",
-])("keeps images referenced by another %s record", async (location) => {
-  const s = await fixture(body());
-  await s.pod.fetch(SRC, { method: "PUT", body: "pixels" });
-  if (location === "docs" || location === "legacy") {
-    const { buildDocument } = await import("../src/apps/docs/lib/model/document");
-    const { writeRdf } = await import("../src/apps/docs/lib/model/rdf-io");
-    const url = `${POD}${location === "legacy" ? "pod-docs" : "docs"}/converted.ttl`;
-    await writeRdf(
-      url,
-      buildDocument(url, { title: "Converted", body: body(), format: "text/html" }),
-      { createOnly: true, fetchImpl: s.pod.fetch },
-    );
-  } else {
-    const copy = await s.store.create({ title: "Copy", body: body() });
-    if (location === "archived") await s.store.archive(copy);
-    if (location === "trashed") await s.store.trash(copy);
-  }
-  const trashed = await s.store.trash(s.note);
-  await s.store.deleteForever(trashed.url, trashed.etag);
+  expect(s.pod.has(trashed.url)).toBe(false);
   expect(s.pod.has(SRC)).toBe(true);
 });
 
@@ -553,105 +532,27 @@ it("round-trips image JSON with explicit alt or decoration and rejects active or
   }
 });
 
-it("cleans media from a removed image's saved revisions when the note is deleted", async () => {
-  const s = await fixture(body());
-  await s.pod.fetch(SRC, { method: "PUT", body: "pixels" });
-  const edited = await s.store.save(s.note, { body: "<p>Image removed</p>" }, s.note.etag);
-  const trashed = await s.store.trash(edited);
-  await s.store.deleteForever(trashed.url, trashed.etag);
-  expect(s.pod.has(SRC)).toBe(false);
-});
-
 it.each([
-  "note-error",
-  "note-malformed",
-  "notes-list-malformed",
-  "docs-list-malformed",
-  "docs-error",
-  "docs-malformed",
-  "doc-read-error",
-])("retains media and quietly reports incomplete reference scans (%s)", async (failure) => {
+  "current body",
+  "saved revision",
+])("deletes only the note and retains media from its %s without scanning references", async (source) => {
   const s = await fixture(body());
   await s.pod.fetch(SRC, { method: "PUT", body: "pixels" });
-  const other = await s.store.create({ title: "Unreadable", body: "<p>Other</p>" });
-  const { buildDocument } = await import("../src/apps/docs/lib/model/document");
-  const { writeRdf } = await import("../src/apps/docs/lib/model/rdf-io");
-  const docUrl = `${POD}docs/unreadable.ttl`;
-  await writeRdf(docUrl, buildDocument(docUrl, { title: "Document", body: "<p>Other</p>" }), {
-    createOnly: true,
-    fetchImpl: s.pod.fetch,
-  });
-  const trashed = await s.store.trash(s.note);
-  const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-  s.fetchImpl.mockImplementation(async (input, init) => {
-    if ((init?.method ?? "GET") === "GET") {
-      if (failure === "notes-list-malformed" && String(input) === `${POD}notes/`)
-        return new Response("", { headers: { "content-type": "text/turtle" } });
-      if (failure === "docs-list-malformed" && String(input) === `${POD}docs/`)
-        return new Response("", { headers: { "content-type": "text/turtle" } });
-      if (failure === "note-error" && String(input) === other.url)
-        return new Response(null, { status: 403 });
-      if (failure === "note-malformed" && String(input) === other.url)
-        return new Response("", { headers: { "content-type": "text/turtle" } });
-      if (failure === "docs-error" && String(input) === `${POD}docs/`)
-        return new Response(null, { status: 403 });
-      if (failure === "docs-malformed" && String(input) === docUrl)
-        return new Response("", { headers: { "content-type": "text/turtle" } });
-      if (failure === "doc-read-error" && String(input) === docUrl) throw new Error("Offline");
-    }
-    return s.pod.fetch(input, init);
-  });
+  const note =
+    source === "saved revision"
+      ? await s.store.save(s.note, { body: "<p>Image removed</p>" }, s.note.etag)
+      : s.note;
+  const trashed = await s.store.trash(note);
+  s.fetchImpl.mockClear();
   await s.store.deleteForever(trashed.url, trashed.etag);
   expect(s.pod.has(trashed.url)).toBe(false);
   expect(s.pod.has(SRC)).toBe(true);
-  expect(warn).toHaveBeenCalledWith("Couldn't clean up note images.");
-});
-
-it.each([
-  "forbidden",
-  "network",
-  "missing",
-])("image cleanup is best effort and tolerates missing files (%s)", async (failure) => {
-  const s = await fixture(body());
-  await s.pod.fetch(SRC, { method: "PUT", body: "pixels" });
-  const trashed = await s.store.trash(s.note);
-  const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-  s.fetchImpl.mockImplementation(async (input, init) => {
-    if (String(input) === SRC && init?.method === "DELETE") {
-      if (failure === "network") throw new Error("Offline");
-      return new Response(null, { status: failure === "missing" ? 404 : 403 });
-    }
-    return s.pod.fetch(input, init);
-  });
-  await s.store.deleteForever(trashed.url, trashed.etag);
-  expect(s.pod.has(trashed.url)).toBe(false);
-  if (failure === "missing") expect(warn).not.toHaveBeenCalled();
-  else expect(warn).toHaveBeenCalledWith("Couldn't clean up a note image.");
-});
-
-it("can still delete a note when its image snapshot cannot be read", async () => {
-  const s = await fixture(body());
-  const trashed = await s.store.trash(s.note);
-  s.fetchImpl.mockImplementation(async (input, init) => {
-    if (String(input) === trashed.url && (init?.method ?? "GET") === "GET")
-      throw new Error("Offline");
-    return s.pod.fetch(input, init);
-  });
-  await s.store.deleteForever(trashed.url, trashed.etag);
-  expect(s.pod.has(trashed.url)).toBe(false);
-});
-
-it("never deletes images owned by Docs or an external host", async () => {
-  const src = `${POD}docs/owned/assets/image.png`;
-  const s = await fixture(body(src) + body("https://foreign.example/x.png"));
-  const trashed = await s.store.trash(s.note);
-  await s.store.deleteForever(trashed.url, trashed.etag);
-  expect(
-    s.fetchImpl.mock.calls.filter(
-      ([input, init]) =>
-        [src, "https://foreign.example/x.png"].includes(String(input)) && init?.method === "DELETE",
-    ),
-  ).toHaveLength(0);
+  expect(s.fetchImpl).toHaveBeenCalledExactlyOnceWith(
+    trashed.url,
+    expect.objectContaining({ method: "DELETE", redirect: "manual" }),
+  );
+  const headers = new Headers(s.fetchImpl.mock.calls[0]?.[1]?.headers);
+  expect(headers.get("if-match")).toBe(trashed.etag);
 });
 
 it("resolves selected Takeout paths without reading missing, oversized, active or mismatched attachments", () => {
@@ -681,45 +582,6 @@ it("resolves selected Takeout paths without reading missing, oversized, active o
   expect(plan.ready[0]?.images).toHaveLength(2);
   expect(plan.attachments).toBe(4);
   expect(plan.ready[0]?.input.body).toBe("");
-});
-
-it("refuses foreign, nested and container links during the Docs reference scan", async () => {
-  const s = await fixture(body());
-  const trashed = await s.store.trash(s.note);
-  const { DataFactory, Store } = await import("n3");
-  const { Container } = await import("@solid/object");
-  const { NamedNodeAs, NamedNodeFrom, SetFrom } = await import("@rdfjs/wrapper");
-  const { serializeTurtle } = await import("../src/apps/docs/lib/model/rdf-io");
-  const dataset = new Store();
-  const url = `${POD}docs/`;
-  const container = new Container(url, dataset, DataFactory);
-  container.type.add("http://www.w3.org/ns/ldp#BasicContainer");
-  const contains = SetFrom.subjectPredicate(
-    container,
-    "http://www.w3.org/ns/ldp#contains",
-    NamedNodeAs.string,
-    NamedNodeFrom.string,
-  );
-  contains.add("https://foreign.example/a.ttl");
-  contains.add(`${url}nested/a.ttl`);
-  contains.add(`${url}container/`);
-  new Container(`${url}container/`, dataset, DataFactory).type.add(
-    "http://www.w3.org/ns/ldp#BasicContainer",
-  );
-  const turtle = await serializeTurtle(dataset);
-  s.fetchImpl.mockImplementation(async (input, init) =>
-    String(input) === url
-      ? new Response(turtle, { headers: { "content-type": "text/turtle" } })
-      : s.pod.fetch(input, init),
-  );
-  await s.store.deleteForever(trashed.url, trashed.etag);
-  expect(
-    s.fetchImpl.mock.calls.filter(([input]) =>
-      ["https://foreign.example/a.ttl", `${url}nested/a.ttl`, `${url}container`].includes(
-        String(input),
-      ),
-    ),
-  ).toHaveLength(0);
 });
 
 it("gives an unnamed attachment-only import a stable filename title", () => {

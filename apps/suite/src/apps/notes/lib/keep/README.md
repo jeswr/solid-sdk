@@ -70,3 +70,11 @@ accepted images to `notes/media/` before creating the note, marking them
 decorative because Takeout supplies no description. Descriptions can be edited
 in Notes. Attachment-only notes are included when image bytes are available.
 Choosing only JSON files cannot import the attachments.
+
+Within one selection, duplicate detection compares the title, body, labels and
+attachment paths and file sizes. Notes with different attachments are imported
+separately. A note whose title, body and labels already match a note in Notes is
+reported as "Already in Notes"; the import leaves that note's images unchanged.
+
+Deleting a note forever leaves its images in `notes/media/`. Orphaned images
+stay there until a later cleanup feature can safely account for shared media.

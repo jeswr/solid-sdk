@@ -5,7 +5,7 @@ import { normalizePodBase, refuseRedirects } from "@jeswr/guarded-fetch";
 import { Container, ContainerDataset } from "@solid/object";
 import { DataFactory, Store } from "n3";
 import { uploadPodImage } from "../../../docs/lib/editor/image-upload";
-import { documentSubject, parseDocument, type Revision } from "../../../docs/lib/model/document";
+import { documentSubject, type Revision } from "../../../docs/lib/model/document";
 import {
   ConcurrencyValidatorError,
   OutOfScopeError,
@@ -20,7 +20,7 @@ import {
   ensureTypeRegistrations,
 } from "../../../docs/lib/model/type-index";
 import { DOCUMENT_CLASS, NS, PREFIXES } from "../../../docs/lib/model/vocab";
-import { noteImages, notesMediaContainer } from "../images";
+import { notesMediaContainer } from "../images";
 import { deleteLabel, mergeLabels } from "../organise/labels";
 import { type NoteAction, reduceNoteState } from "../state";
 import { NoteConflictError, NoteMoveUncertainError } from "./errors";
@@ -32,14 +32,6 @@ import {
   type NoteLocation,
   parseNote,
 } from "./note";
-
-/** The convenience getter finds only nonempty listings; validate the actual subject instead. */
-function checkedContainer(url: string, dataset: ContainerDataset): Container {
-  const container = new Container(url, dataset, DataFactory);
-  if (![`${NS.LDP}Container`, `${NS.LDP}BasicContainer`].some((type) => container.type.has(type)))
-    throw new Error("Unreadable container listing");
-  return container;
-}
 
 export interface StoredNote extends Note {
   etag: string | null;
@@ -102,7 +94,7 @@ export class NotesStore {
     return note && { ...note, etag };
   }
 
-  async list(location: NoteLocation, strict = false): Promise<StoredNote[]> {
+  async list(location: NoteLocation): Promise<StoredNote[]> {
     let listing: ContainerDataset;
     try {
       const { dataset } = await readRdf(this.containers[location], this.fetchImpl);
@@ -111,10 +103,7 @@ export class NotesStore {
       if (error instanceof RdfFetchError && error.status === 404) return [];
       throw error;
     }
-    const container = strict
-      ? checkedContainer(this.containers[location], listing)
-      : listing.container;
-    const children = [...(container?.contains ?? [])].filter(
+    const children = [...(listing.container?.contains ?? [])].filter(
       (resource) => isDirectChild(resource.id, this.containers[location]) && !resource.isContainer,
     );
     const notes: StoredNote[] = [];
@@ -122,11 +111,8 @@ export class NotesStore {
       const batch = await Promise.all(
         children.slice(index, index + 4).map(async (child) => {
           try {
-            const note = await this.read(child.id);
-            if (strict && !note) throw new Error("Unreadable note");
-            return note;
-          } catch (error) {
-            if (strict) throw error;
+            return await this.read(child.id);
+          } catch {
             return undefined;
           }
         }),
@@ -362,62 +348,7 @@ export class NotesStore {
 
   async deleteForever(url: string, etag: string | null): Promise<void> {
     this.scope(url, "trashed");
-    const note = await this.read(url).catch(() => undefined);
     await this.remove(url, etag);
-    if (note)
-      await this.deleteImages(note).catch(() => {
-        console.warn("Couldn't clean up note images.");
-      });
-  }
-
-  private async deleteImages(note: StoredNote): Promise<void> {
-    const media = notesMediaContainer(this.podRoot);
-    const snapshots = (record: { body: string; revisions: readonly Revision[] }) => [
-      record.body,
-      ...record.revisions.map((revision) => revision.body),
-    ];
-    const candidates = new Set(
-      snapshots(note)
-        .flatMap((html) => noteImages(html, this.podRoot))
-        .map((image) => image.src)
-        .filter((src) => isDirectChild(src, media)),
-    );
-    if (!candidates.size) return;
-    const retain = (html: string) => {
-      for (const image of noteImages(html, this.podRoot)) candidates.delete(image.src);
-    };
-    // A failed/partial read cannot establish that a file is unreferenced. Retain it.
-    for (const location of Object.keys(this.containers) as NoteLocation[])
-      for (const other of await this.list(location, true))
-        for (const html of snapshots(other)) retain(html);
-    // Converted notes keep their media URLs. Protect the Docs copies as well.
-    for (const directory of ["docs/", "pod-docs/"]) {
-      const container = new URL(directory, this.podRoot).href;
-      let listing: ContainerDataset;
-      try {
-        const { dataset } = await readRdf(container, this.fetchImpl);
-        listing = new ContainerDataset(dataset, DataFactory);
-      } catch (error) {
-        if (error instanceof RdfFetchError && error.status === 404) continue;
-        throw error;
-      }
-      const resources = checkedContainer(container, listing);
-      for (const child of resources.contains) {
-        if (!isDirectChild(child.id, container)) continue;
-        const { dataset } = await readRdf(child.id, this.fetchImpl);
-        const document = parseDocument(child.id, dataset);
-        if (!document) throw new Error("Unreadable document");
-        for (const html of snapshots(document)) retain(html);
-      }
-    }
-    for (const src of candidates) {
-      try {
-        const response = await this.fetchImpl(src, { method: "DELETE", redirect: "error" });
-        if (!response.ok && response.status !== 404) throw new Error("Image cleanup failed");
-      } catch {
-        console.warn("Couldn't clean up a note image.");
-      }
-    }
   }
 
   async purgeTrash(olderThanDays = 30): Promise<{ deleted: string[]; failed: NoteFailure[] }> {

@@ -141,7 +141,8 @@ export const keepFingerprint = (note: { title: string; body: string; labels: rea
  * Parse a Takeout selection and decide what to import. Only `.json` files are read,
  * notes from Keep's Trash and notes with no text or available images are left out, and a note whose title,
  * body and labels already match an existing note is skipped, so choosing the same files
- * twice does not duplicate them.
+ * twice does not duplicate them. Within the selection, attachment paths and sizes also
+ * distinguish notes that otherwise match.
  */
 export function planKeepImport(
   files: readonly KeepNoteFile[],
@@ -158,7 +159,8 @@ export function planKeepImport(
       attachments: 0,
       adjusted: 0,
     };
-  const seen = new Set(existing.map(keepFingerprint));
+  const existingKeys = new Set(existing.map(keepFingerprint));
+  const seen = new Set<string>();
   const ready: KeepImportItem[] = [];
   const skipped: { fileName: string; reason: string }[] = [];
   let trashed = 0;
@@ -179,6 +181,7 @@ export function planKeepImport(
       trashed++;
       continue;
     }
+    const attachmentKeys: [string, number | null][] = [];
     const images = result.draft.attachments.flatMap((attachment) => {
       const directory = fileName.slice(0, fileName.lastIndexOf("/") + 1);
       const path = (directory + attachment.filePath.replace(/\\/g, "/"))
@@ -186,6 +189,7 @@ export function planKeepImport(
         .filter((part) => part !== ".")
         .join("/");
       const file = media.get(path);
+      attachmentKeys.push([path, file?.size ?? null]);
       if (!file || (file.type && file.type !== attachment.mimetype)) return [];
       const blob = new Blob([file], { type: attachment.mimetype });
       return validateImage(blob) ? [] : [blob];
@@ -204,8 +208,9 @@ export function planKeepImport(
       });
       continue;
     }
-    const key = keepFingerprint(item.input);
-    if (seen.has(key)) {
+    const fingerprint = keepFingerprint(item.input);
+    const key = JSON.stringify([fingerprint, attachmentKeys]);
+    if (existingKeys.has(fingerprint) || seen.has(key)) {
       skipped.push({ fileName, reason: KEEP_SKIP_REASONS.duplicate });
       continue;
     }
