@@ -1167,6 +1167,8 @@ interface Outbox {
     replay(client: StorageClient, options?: ReplayOptions): Promise<void>;
     /** Uses the client supplied to withOutbox or the most recent replay. */
     retry(id?: string): Promise<void>;
+    /** Waits for active replay, then removes one retained item and its conflict. */
+    discard(id: string): Promise<void>;
     resolve(id: string, strategy: 'mine' | 'theirs' | 'both'): Promise<void>;
     on(event: 'change' | 'conflict', listener: () => void): () => void;
     /** Deletes only this WebID's queue. Logout deliberately does not call this. */

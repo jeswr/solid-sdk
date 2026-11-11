@@ -27,6 +27,13 @@ export type {
 export { createOutbox, withOutbox } from "@jeswr/solid-offline/outbox";
 export type { UseOfflineStatusResult } from "@jeswr/solid-offline/react";
 export { useOfflineStatus } from "@jeswr/solid-offline/react";
+export type {
+  IntentChannel,
+  IntentContext,
+  IntentSession,
+  PendingIntent,
+} from "./intent-channel.js";
+export { createIntentChannel } from "./intent-channel.js";
 
 interface Snapshot {
   pending: OutboxItem[];

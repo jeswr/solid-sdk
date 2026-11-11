@@ -38,7 +38,7 @@ Import `@jeswr/solid-offline/worker` from an origin-served service-worker entry.
 
 - Keep the service worker credential-free. Authenticated warming happens in the page through the injected StorageClient. The optional page fetch is used by pod-notifications.
 - Scope Cache API and IndexedDB state by WebID. Anonymous and authenticated identities must never share a cache namespace.
-- Purge both read-cache stores on logout. Preserve the separate write outbox; only its explicit `purge()` discards unsent changes. A failure in one purge path must not prevent attempting the other.
+- Purge both read-cache stores on logout. Preserve the separate write outbox; only explicit `discard(id)` / `purge()` discard unsent changes. A failure in one purge path must not prevent attempting the other.
 - Never cache auth, token, OIDC, notification-subscription, WebSocket-upgrade, opaque, `private`, or `no-store` responses.
 - Cache response bytes only for GET. Treat HEAD as a network passthrough that may confirm existing
   metadata freshness when its ETag matches; never pass a HEAD request to `Cache.put()` and never let
@@ -180,6 +180,11 @@ separate IndexedDB queue; `localBody(conflictId)` (or item ID) asynchronously re
   URL while other URLs proceed. Other failures become failed items with readable errors.
   `retry(id?)` uses the decorated client or latest replay client. Per-item progress is only
   `(0, size)` and successful `(size, size)`; streaming progress is deferred.
+- `discard(id)` removes one retained item, its bytes and its conflict under the replay Web Lock.
+  It waits for an active replay pass; an unknown/already-delivered ID is a no-op that emits
+  `change`. Reject a persisted item still marked `replaying` (interrupted delivery), rather
+  than deleting it. Blocked, failed, waiting and conflicted items are removable. Preserve
+  other items and WebIDs.
 - `resolve(id, 'mine')` must freshly HEAD and use its ETag (never wildcard when absent).
   `theirs` drops local state; `both` creates binary `-conflict-<ms>` or RDF ` (copy)` siblings
   before the extension. Failed resolution retains local bytes. Keep-both rejects deletes.

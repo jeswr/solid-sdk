@@ -25,6 +25,7 @@ function fake() {
     registerDelegate: vi.fn(),
     registerGuardPolicy: vi.fn(),
     localBody: vi.fn(),
+    discard: vi.fn(),
     purge: vi.fn(),
     close: vi.fn(),
     retry: vi.fn().mockResolvedValue(undefined),

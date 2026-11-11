@@ -115,6 +115,8 @@ export interface Outbox {
   replay(client: StorageClient, options?: ReplayOptions): Promise<void>;
   /** Uses the client supplied to withOutbox or the most recent replay. */
   retry(id?: string): Promise<void>;
+  /** Waits for active replay, then removes one retained item and its conflict. */
+  discard(id: string): Promise<void>;
   resolve(id: string, strategy: 'mine' | 'theirs' | 'both'): Promise<void>;
   on(event: 'change' | 'conflict', listener: () => void): () => void;
   /** Deletes only this WebID's queue. Logout deliberately does not call this. */
@@ -1044,6 +1046,17 @@ export function createOutbox(options: {
           await save(record);
         }
         await replay(storage);
+      });
+    },
+    discard(id) {
+      return exclusive(async () => {
+        const record = records.find((entry) => entry.item.id === id);
+        // A persisted replaying record may belong to an interrupted delivery. Never
+        // remove it until replay has settled it, even after acquiring the lock.
+        if (record?.item.status === 'replaying')
+          throw new Error('[solid-offline] cannot discard an item being delivered');
+        if (record) await drop(record);
+        else notify();
       });
     },
     resolve(id, strategy) {

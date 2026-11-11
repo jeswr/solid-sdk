@@ -34,6 +34,32 @@ The notifier cache belongs to the current identity and must reset on lifecycle/a
 Recipient protocol hints describe the recipient, independently of the current identity's protocol.
 Preserve the explicit DNS-pinning requirement for Node transports and all redirect refusals.
 
+## Domain intents (`./offline`)
+
+`createIntentChannel<T>({ tag, destination, matches, decode, deliver, maxBytes? })`
+puts small JSON domain intents on guarded outbox writes. Tags match
+`/^[a-z][a-z0-9.-]{0,63}$/`; use a versioned name such as `chat.message-v1`.
+`submit(session.storage, intent)` validates the JSON round trip before storing bytes and
+returns the queueing write result. The default encoded limit is 64 KiB. The destination
+must belong to the channel's `matches(url)` scope. A delegate performs the domain mutation;
+intent bytes are never delivered as a raw PUT. The write signature's required `ifMatch`
+is a placeholder; the domain delegate obtains the actual validator.
+
+Call `channel.register(session)` in a committed effect keyed on the shell outbox session,
+only after `session.storage` becomes non-null. It installs the replay delegate and a guard
+policy requiring the tag at matching destinations (including named creates), and returns
+idempotent cleanup. If delegate
+registration fails, the policy is rolled back. Re-register on session replacement. Missing
+delegates keep queued items blocked. Delivery rejects other operations/content types,
+invalid UTF-8/JSON/schema, oversized bodies and recomputed destination mismatches before
+calling `deliver(intent, { fetch, webId, storage, signal })`. Use that session fetch or raw
+storage and respect the signal. Decoder errors are replaced with content-free messages.
+
+`await channel.pending(outbox)` hydrates and decodes items with that tag, returning each
+item's ID, intent, status, blocking reason and error. Other tags are skipped. Invalid bodies
+or bindings return an error row without an intent (`PendingIntent<T>`), allowing callers
+to report corrupt items without throwing or inventing a value of `T`.
+
 ## Inbox reading
 
 `useInbox({ clock?, maxItems?, pinningFetch? })` returns `{ status, items, error, refresh }`.

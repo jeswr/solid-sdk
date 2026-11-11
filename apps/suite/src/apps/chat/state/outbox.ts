@@ -1,8 +1,11 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+import type { Outbox, QueueingStorageClient } from "@jeswr/suite-sdk/offline";
 import type { ChatClient, Message } from "../lib/client";
 import { messageSubject } from "../lib/model";
 import { ChatLocalState } from "./local-state";
+import { decodeMessageIntent, type MessageIntent, messageChannel } from "./message-channel";
+
 export interface Outgoing extends Message {
   status?: "sending" | "failed" | undefined;
   localId: string;
@@ -10,78 +13,54 @@ export interface Outgoing extends Message {
   room: string;
   draft: string;
 }
-/** Stable intent IDs and a per-room write queue, independent of React lifecycles. */
+interface Binding {
+  outbox: Outbox;
+  storage: QueueingStorageClient;
+  signal: AbortSignal;
+}
+interface Transient {
+  intent: MessageIntent;
+  entry: Outgoing;
+  attempt?: Promise<void> | undefined;
+}
+/** UI adapter. Durable ordering, failures and replay belong to the shared outbox. */
 export class ChatOutbox {
   private entries: Outgoing[] = [];
   private listeners = new Set<() => void>();
-  private inFlight = new Set<string>();
-  private queues = new Map<string, Promise<void>>();
+  private binding: Binding | null = null;
+  private generation = 0;
+  private durable: Outgoing[] = [];
+  private ids = new Map<string, string>();
+  // Only the optimistic submission gap and demo deliveries live in memory.
+  private transient = new Map<string, Transient>();
+  private importing = Promise.resolve();
   constructor(
     private client: Pick<ChatClient, "send" | "webId">,
-    private online: () => boolean,
+    private demo = false,
     private local = new ChatLocalState(client.webId),
-  ) {
-    for (const room of local.pendingRooms()) {
-      const stored = local.read("outbox", room);
-      if (!Array.isArray(stored)) continue;
-      for (const entry of stored) {
-        if (
-          !entry ||
-          typeof entry.localId !== "string" ||
-          typeof entry.at !== "string" ||
-          typeof entry.draft !== "string" ||
-          !["sending", "failed"].includes(entry.status)
-        )
-          continue;
-        try {
-          this.entries.push(
-            this.outgoing(room, entry.draft, entry.localId, new Date(entry.at), entry.status),
-          );
-        } catch {
-          /* Ignore invalid IDs/timestamps, never send a corrupt intent. */
-        }
-      }
-    }
-  }
+  ) {}
   snapshot = (): Outgoing[] => this.entries;
   subscribe = (listener: () => void): (() => void) => {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
   };
-  private update(entries: Outgoing[]) {
-    const rooms = new Set([...this.entries, ...entries].map((entry) => entry.room));
-    for (const room of rooms)
-      this.local.write(
-        "outbox",
-        room,
-        entries
-          .filter((entry) => entry.room === room && entry.status)
-          .map(({ localId, at, draft, status }) => ({
-            localId,
-            at: at.toISOString(),
-            draft,
-            status,
-          })),
-      );
-    this.entries = entries;
+  private update() {
+    const combined = new Map(this.durable.map((entry) => [entry.id, entry]));
+    for (const [id, item] of this.transient) combined.set(id, item.entry);
+    this.entries = [...combined.values()].sort((a, b) => a.at.getTime() - b.at.getTime());
     for (const listener of this.listeners) listener();
   }
-  private outgoing(
-    room: string,
-    draft: string,
-    localId: string,
-    at: Date,
-    status: "sending" | "failed",
-  ): Outgoing {
+  private outgoing(intent: MessageIntent, status: Outgoing["status"]): Outgoing {
+    const at = new Date(intent.at);
     return {
-      id: messageSubject(room, at, localId),
-      localId,
+      id: messageSubject(intent.room, at, intent.id),
+      localId: intent.id,
       at,
-      room,
-      draft,
-      content: draft,
+      room: intent.room,
+      draft: intent.content,
+      content: intent.content,
       author: this.client.webId,
-      published: at.toISOString(),
+      published: intent.at,
       mediaType: "text/plain",
       updated: undefined,
       tombstone: false,
@@ -90,57 +69,179 @@ export class ChatOutbox {
       status,
     };
   }
+  /** Called only from a committed effect, once the session's storage opens. */
+  connect(binding: Binding): () => void {
+    binding.signal.throwIfAborted();
+    if (binding.outbox.webId !== this.client.webId)
+      throw new Error("Chat outbox identity mismatch");
+    this.binding = binding;
+    const refresh = () => {
+      void this.refresh(binding);
+    };
+    const stop = binding.outbox.on("change", refresh);
+    refresh();
+    // Effect cleanup/re-registration can overlap an asynchronous legacy import.
+    this.importing = this.importing
+      .then(() => this.importLegacy(binding))
+      .catch(() => {
+        /* Retain legacy records on storage failures. */
+      });
+    this.flush();
+    return () => {
+      stop();
+      if (this.binding === binding) {
+        this.binding = null;
+        this.generation++;
+      }
+    };
+  }
+  private async refresh(binding: Binding) {
+    const generation = ++this.generation;
+    try {
+      const pending = await messageChannel.pending(binding.outbox);
+      if (this.binding !== binding || binding.signal.aborted || generation !== this.generation)
+        return;
+      this.ids.clear();
+      this.durable = pending.flatMap((item) => {
+        if (!item.intent) return [];
+        const entry = this.outgoing(
+          item.intent,
+          item.status === "failed" || item.status === "conflict" ? "failed" : "sending",
+        );
+        this.ids.set(entry.id, item.id);
+        return [entry];
+      });
+      this.update();
+    } catch {
+      /* A later change can refresh an unavailable database. */
+    }
+  }
   send = (room: string, draft: string): void => {
-    const item = this.outgoing(room, draft, crypto.randomUUID(), new Date(), "sending");
-    this.update([...this.entries, item]);
+    const intent = decodeMessageIntent({
+      room,
+      id: crypto.randomUUID(),
+      at: new Date().toISOString(),
+      content: draft,
+    });
+    const entry = this.outgoing(intent, "sending");
+    const item = { intent, entry };
+    this.transient.set(entry.id, item);
+    this.update();
     this.attempt(item);
   };
-  private attempt(item: Outgoing) {
-    if (!this.online() || this.inFlight.has(item.id)) return;
-    this.inFlight.add(item.id);
-    this.update(
-      this.entries.map((entry) => (entry.id === item.id ? { ...entry, status: "sending" } : entry)),
-    );
-    const queue = (this.queues.get(item.room) ?? Promise.resolve()).then(async () => {
+  private attempt(item: Transient) {
+    const binding = this.binding;
+    if (item.attempt || (!this.demo && !binding) || (this.demo && navigator.onLine === false))
+      return;
+    item.entry = { ...item.entry, status: "sending" };
+    this.update();
+    item.attempt = (async () => {
       try {
-        if (!this.online()) return;
-        const message = await this.client.send(item.room, item.draft, {
-          id: item.localId,
-          at: item.at,
-        });
-        this.update(
-          this.entries.map((entry) =>
-            entry.id === item.id
-              ? { ...item, ...message, room: item.room, status: undefined }
-              : entry,
-          ),
-        );
+        if (this.demo) {
+          const message = await this.client.send(item.intent.room, item.intent.content, {
+            id: item.intent.id,
+            at: new Date(item.intent.at),
+          });
+          item.entry = { ...item.entry, ...message, status: undefined };
+        } else if (binding) {
+          const result = await messageChannel.submit(binding.storage, item.intent);
+          if (result.queued) {
+            // Once persisted, the outbox owns it even if an effect disconnected
+            // during submission. Reconnecting must never resubmit this intent.
+            this.transient.delete(item.entry.id);
+            if (this.binding?.outbox === binding.outbox && !binding.signal.aborted)
+              await this.refresh(this.binding);
+          } else item.entry = { ...item.entry, status: undefined };
+        }
       } catch {
-        this.update(
-          this.entries.map((entry) =>
-            entry.id === item.id
-              ? { ...entry, status: this.online() ? "failed" : "sending" }
-              : entry,
-          ),
-        );
+        if (!binding || (this.binding === binding && !binding.signal.aborted))
+          item.entry = {
+            ...item.entry,
+            status: this.demo && navigator.onLine === false ? "sending" : "failed",
+          };
       } finally {
-        this.inFlight.delete(item.id);
+        item.attempt = undefined;
+        if (
+          this.demo ||
+          (this.binding?.outbox === binding?.outbox && !binding?.signal.aborted && this.binding)
+        )
+          this.update();
       }
-    });
-    this.queues.set(item.room, queue);
+    })();
   }
   flush = (): void => {
-    for (const item of this.entries) if (item.status === "sending") this.attempt(item);
+    // Shell replay owns durable work. Only not-yet-submitted or demo entries need flushing.
+    for (const item of this.transient.values())
+      if (item.entry.status === "sending") this.attempt(item);
   };
   retry = (id: string): void => {
-    const item = this.entries.find((entry) => entry.id === id);
-    if (item) this.attempt(item);
+    const durableId = this.ids.get(id);
+    if (durableId && this.binding) void this.binding.outbox.retry(durableId).catch(() => {});
+    else {
+      const item = this.transient.get(id);
+      if (item) this.attempt(item);
+    }
   };
   discard = (id: string): void => {
-    this.update(this.entries.filter((entry) => entry.id !== id));
+    const durableId = this.ids.get(id);
+    const binding = this.binding;
+    if (durableId && binding) void binding.outbox.discard(durableId).catch(() => {});
+    else {
+      this.transient.delete(id);
+      this.update();
+    }
   };
   acknowledge = (ids: ReadonlySet<string>): void => {
-    const remaining = this.entries.filter((entry) => !ids.has(entry.id));
-    if (remaining.length !== this.entries.length) this.update(remaining);
+    let changed = false;
+    for (const id of ids) changed = this.transient.delete(id) || changed;
+    if (changed) this.update();
   };
+  private async importLegacy(binding: Binding) {
+    const run = () => this.importLegacyLocked(binding);
+    // A separate migration lock prevents two tabs importing the same legacy entry.
+    // Never take the outbox's own lock here: submit may need to enqueue under it.
+    if (typeof navigator !== "undefined" && navigator.locks)
+      await navigator.locks.request(`solid-suite:chat:legacy:${this.client.webId}`, run);
+    else await run();
+  }
+  private async importLegacyLocked(binding: Binding) {
+    await binding.outbox.ready;
+    for (const room of this.local.pendingRooms()) {
+      const stored = this.local.read("outbox", room);
+      const remaining = Array.isArray(stored) ? [...stored] : [];
+      while (remaining.length) {
+        if (this.binding !== binding || binding.signal.aborted) return;
+        const entry = remaining[0];
+        let intent: MessageIntent | undefined;
+        try {
+          if (!entry || !["sending", "failed"].includes(entry.status))
+            throw new Error("Invalid legacy entry");
+          intent = decodeMessageIntent({
+            room,
+            id: entry.localId,
+            at: entry.at,
+            content: entry.draft,
+          });
+        } catch {
+          /* Drop invalid legacy data without submitting it. */
+        }
+        if (intent) {
+          const id = messageSubject(room, new Date(intent.at), intent.id);
+          const existing = await messageChannel.pending(binding.outbox);
+          if (this.binding !== binding || binding.signal.aborted) return;
+          if (
+            !existing.some(
+              (item) =>
+                item.intent &&
+                messageSubject(item.intent.room, new Date(item.intent.at), item.intent.id) === id,
+            )
+          )
+            await messageChannel.submit(binding.storage, intent);
+        }
+        remaining.shift();
+        this.local.write("outbox", room, remaining);
+      }
+      this.local.write("outbox", room, []);
+    }
+  }
 }

@@ -157,6 +157,12 @@ the client supplied by `withOutbox` or the most recent `replay`. Progress is rep
 in bytes at start `(0, size)` and successful completion `(size, size)`; streaming upload
 progress is a later improvement. Deletes have size zero.
 
+`discard(id)` removes one retained item, its body and any associated conflict, including
+blocked and failed items. It takes the same Web Lock as replay and waits for active replay
+to finish before inspecting the item. A successfully delivered or unknown ID is a no-op;
+an interrupted record still marked `replaying` is rejected until replay settles it. Every
+successful call emits `change`. Other items and WebIDs are untouched.
+
 For application policy checks, pass `guard: { tag, assertions? }` to `enqueue` or to the
 decorated `write`, `writeRdf`, `create`, and `delete` options alongside `offline: 'queue'`:
 

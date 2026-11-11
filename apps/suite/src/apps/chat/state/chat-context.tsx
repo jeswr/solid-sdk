@@ -13,9 +13,11 @@ import {
   useSyncExternalStore,
 } from "react";
 import type { PodSession } from "@/lib/session/pod-session";
+import { useOutboxSession } from "@/shell/sync/outbox-session";
 import { ChatClient, classifyChatError, type JoinedRoom, type Message } from "../lib/client";
 import type { ReadPreferences } from "../lib/model";
 import { ChatLocalState } from "./local-state";
+import { messageChannel } from "./message-channel";
 import { ChatOutbox, type Outgoing } from "./outbox";
 
 export type { Outgoing } from "./outbox";
@@ -55,6 +57,7 @@ interface ChatContextValue {
 }
 const Context = createContext<ChatContextValue | null>(null);
 export function ChatProvider({ session, children }: { session: ChatSession; children: ReactNode }) {
+  const outboxSession = useOutboxSession();
   const publicFetch = publicFetchOf(session);
   const client = useMemo(
     () => new ChatClient(session.fetch, session.storageUrl, session.webId, publicFetch),
@@ -63,14 +66,30 @@ export function ChatProvider({ session, children }: { session: ChatSession; chil
   const [revision, setRevision] = useState(0);
   const local = useMemo(() => new ChatLocalState(session.webId), [session.webId]);
   const queue = useMemo(
-    () => new ChatOutbox(client, () => navigator.onLine !== false, local),
-    [client, local],
+    () => new ChatOutbox(client, session.mode === "demo", local),
+    [client, local, session.mode],
   );
   const outbox = useSyncExternalStore(queue.subscribe, queue.snapshot, queue.snapshot);
+  useEffect(() => {
+    if (!outboxSession?.storage || outboxSession.account.webId !== session.webId) return;
+    const unregister = messageChannel.register(outboxSession);
+    const disconnect = queue.connect({
+      outbox: outboxSession.outbox,
+      storage: outboxSession.storage,
+      signal: outboxSession.signal,
+    });
+    // A prior shell replay may have stopped at no-delegate before Chat mounted.
+    if (navigator.onLine !== false) void outboxSession.adapter.reconnected().catch(() => {});
+    return () => {
+      disconnect();
+      unregister();
+    };
+  }, [outboxSession, outboxSession?.storage, queue, session.webId]);
   const rooms = useRef<string[]>([]);
   const [details, setDetails] = useState(false);
   const [currentRoom, setCurrentRoom] = useState<string>();
   const invalidate = useCallback(() => setRevision((value) => value + 1), []);
+  useEffect(() => queue.subscribe(invalidate), [queue, invalidate]);
   const trackRooms = useCallback((joined: JoinedRoom[]) => {
     rooms.current = joined.map((room) => room.url);
   }, []);

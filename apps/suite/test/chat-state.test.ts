@@ -1,5 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+import { createMemoryStorage } from "@jeswr/storage-client/memory";
+import { createOutbox, type Outbox, withOutbox } from "@jeswr/suite-sdk/offline";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { ChatClient, type Room } from "../src/apps/chat/lib/client";
 import {
@@ -12,12 +14,19 @@ import {
   useSend,
 } from "../src/apps/chat/state/chat-context";
 import { createDemoPod } from "../src/lib/demo-pod/pod";
+import type { useOutboxSession } from "../src/shell/sync/outbox-session";
 import { act, deferred, h, mount } from "./drive-ui-dom";
+
+const mocks = vi.hoisted(() => ({ outbox: null as ReturnType<typeof useOutboxSession> }));
+vi.mock("@/shell/sync/outbox-session", () => ({ useOutboxSession: () => mocks.outbox }));
+const boxes: Outbox[] = [];
 
 const ROOT = "https://alice.example/";
 const ME = `${ROOT}profile#me`;
 beforeEach(() => localStorage.clear());
 afterEach(() => {
+  mocks.outbox = null;
+  for (const outbox of boxes.splice(0)) outbox.close();
   vi.restoreAllMocks();
   vi.useRealTimers();
 });
@@ -31,6 +40,42 @@ function session(pod: ReturnType<typeof createDemoPod>, subscribe = true): ChatS
     reset: async () => {},
     ...(subscribe ? { subscribe: pod.subscribe } : {}),
   };
+}
+function durableSession(pod: ReturnType<typeof createDemoPod>) {
+  const outbox = createOutbox({ webId: ME });
+  boxes.push(outbox);
+  const storage = createMemoryStorage({ root: ROOT, protocol: "solid" });
+  const signal = new AbortController().signal;
+  const replays: Promise<void>[] = [];
+  const reconnected = () => {
+    const replay = outbox.replay(storage, { signal });
+    replays.push(replay);
+    return replay;
+  };
+  mocks.outbox = {
+    account: { webId: ME },
+    outbox,
+    storage: withOutbox(storage, outbox),
+    signal,
+    adapter: { reconnected },
+    registerGuardPolicy: outbox.registerGuardPolicy,
+    registerReplayDelegate(tag, factory) {
+      return outbox.registerDelegate(
+        tag,
+        factory({ fetch: pod.fetch, storageUrl: ROOT, storage, webId: ME, signal }),
+      );
+    },
+  } as NonNullable<ReturnType<typeof useOutboxSession>>;
+  const active: ChatSession = {
+    mode: "solid",
+    fetch: pod.fetch,
+    publicFetch: pod.fetch,
+    storageUrl: ROOT,
+    webId: ME,
+    displayName: "Alice",
+    subscribe: pod.subscribe,
+  };
+  return { session: active, outbox, reconnected, replays };
 }
 it("loads rooms, pages backwards while retaining the current snapshot, and merges live edits", async () => {
   const pod = createDemoPod({ root: ROOT });
@@ -100,7 +145,7 @@ it("uses the filtered change channel and polls every 30 seconds when subscribe i
   expect(list).toHaveBeenCalledTimes(before + 1);
   await poll.unmount();
 });
-it("queues offline hook sends and flushes them on online", async () => {
+it("rehydrates durable offline hook sends and lets shell replay deliver them on reconnect", async () => {
   const pod = createDemoPod({ root: ROOT });
   const client = new ChatClient(pod.fetch, ROOT, ME);
   const room = await client.createRoom({ name: "Offline", members: [] });
@@ -110,16 +155,21 @@ it("queues offline hook sends and flushes them on online", async () => {
     sender = useSend(room.url);
     return h("p", null, sender.data.map((m) => m.status ?? "sent").join(","));
   }
-  const view = await mount(h(ChatProvider, { session: session(pod), children: h(Probe) }));
+  const durable = durableSession(pod);
+  const view = await mount(h(ChatProvider, { session: durable.session, children: h(Probe) }));
   await act(() => sender.send("Queued"));
   expect(view.host.textContent).toBe("sending");
   const pending = sender.data[0];
   await view.unmount();
-  const reopened = await mount(h(ChatProvider, { session: session(pod), children: h(Probe) }));
+  const reopened = await mount(h(ChatProvider, { session: durable.session, children: h(Probe) }));
   expect(sender.data[0]).toEqual(pending);
   vi.spyOn(navigator, "onLine", "get").mockReturnValue(true);
-  await act(() => window.dispatchEvent(new Event("online")));
-  expect(reopened.host.textContent).toBe("sent");
+  await act(async () => {
+    window.dispatchEvent(new Event("online"));
+    await durable.reconnected();
+  });
+  expect(reopened.host.textContent).toBe("");
+  expect(durable.outbox.pending()).toEqual([]);
   expect((await client.messages(room.url)).messages[0]?.content).toBe("Queued");
 });
 
@@ -133,12 +183,15 @@ it("rehydrates and flushes pending sends when Chat remounts already online", asy
     sender = useSend(room.url);
     return null;
   }
-  const view = await mount(h(ChatProvider, { session: session(pod), children: h(Probe) }));
+  const durable = durableSession(pod);
+  const view = await mount(h(ChatProvider, { session: durable.session, children: h(Probe) }));
   await act(() => sender.send("Survives Drive"));
   const pending = sender.data[0];
   await view.unmount();
   online.mockReturnValue(true);
-  await mount(h(ChatProvider, { session: session(pod), children: h(Probe) }));
+  await mount(h(ChatProvider, { session: durable.session, children: h(Probe) }));
+  await act(() => Promise.all(durable.replays));
+  expect(durable.outbox.pending()).toEqual([]);
   expect((await client.messages(room.url)).messages[0]).toMatchObject({
     id: pending?.id,
     published: pending?.published,
