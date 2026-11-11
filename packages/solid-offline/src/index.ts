@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 /** @jeswr/solid-offline — credential-free worker + authenticated page-side storage. */
 import {
   createNotifications,
@@ -45,6 +46,7 @@ export {
   shellBucketComplete,
   shellCacheName,
 } from './app-shell.js';
+export { CACHE_PROVENANCE_HEADER, cacheProvenance } from './cache-policy.js';
 export type { InvalidateDeps, InvalidateOutcome, SweepResult } from './invalidation.js';
 export { handleNotification, resyncSweep } from './invalidation.js';
 export type { CacheStorageLike, PurgeDeps, PurgeResult } from './logout.js';
@@ -151,7 +153,26 @@ export function createOfflineClient(config: OfflineClientConfig = {}): OfflineCl
   // enough on its own because the `statechange` listener on an installing worker
   // can still fire on activation. The guard covers every such path.
   let closed = false;
+  let replayAbort: AbortController | undefined;
+  let onOnline: (() => void) | undefined;
+  if (config.outbox && config.outbox.webId !== config.webId) {
+    throw new Error('[solid-offline] outbox WebID must match the active client');
+  }
   const listeners = new Set<UpdatedListener>();
+
+  function replayOutbox(): Promise<void> {
+    if (closed || !config.outbox || !config.storage) return Promise.resolve();
+    replayAbort ??= new AbortController();
+    return config.outbox.replay(config.storage, { signal: replayAbort.signal });
+  }
+
+  function listenForReconnect(): void {
+    if (closed || onOnline || !config.outbox || !config.storage) return;
+    onOnline = () => {
+      void replayOutbox().catch(() => undefined);
+    };
+    if (typeof window !== 'undefined') window.addEventListener('online', onOnline);
+  }
 
   /**
    * The page's fetch the warmer + notifications client should use: `config.fetch`
@@ -340,6 +361,7 @@ export function createOfflineClient(config: OfflineClientConfig = {}): OfflineCl
       fetch: _pageFetch,
       storage: _storage,
       notificationsClient: _notificationsClient,
+      outbox: _outbox,
       ...cloneableConfig
     } = config;
     let backend = config.storageBackend;
@@ -374,13 +396,14 @@ export function createOfflineClient(config: OfflineClientConfig = {}): OfflineCl
   }
 
   async function register(): Promise<ServiceWorkerRegistration | undefined> {
+    // A (re-)register after a previous close() re-opens this identity's client.
+    closed = false;
     if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) {
-      // Non-browser / unsupported context: no-op, the app still works online.
+      listenForReconnect();
+      await replayOutbox();
+      // No worker in this context; page-side replay remains available.
       return undefined;
     }
-
-    // A (re-)register after a previous close() re-opens the client for posting.
-    closed = false;
 
     ensureChannel();
 
@@ -438,6 +461,8 @@ export function createOfflineClient(config: OfflineClientConfig = {}): OfflineCl
       }
     }
 
+    listenForReconnect();
+    await replayOutbox();
     return registration;
   }
 
@@ -506,6 +531,10 @@ export function createOfflineClient(config: OfflineClientConfig = {}): OfflineCl
     // controllerchange) that fires during/after teardown short-circuits in
     // postConfig and cannot re-scope the SW to this departed identity.
     closed = true;
+    replayAbort?.abort();
+    replayAbort = undefined;
+    if (onOnline && typeof window !== 'undefined') window.removeEventListener('online', onOnline);
+    onOnline = undefined;
     listeners.clear();
     channel?.close();
     channel = undefined;

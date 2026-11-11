@@ -17,6 +17,7 @@ export function WorkbookServiceProvider({
     () =>
       createWorkbookService({
         fetch: session.fetch,
+        publicFetch: session.mode === "demo" ? session.fetch : session.publicFetch,
         podRoot: session.storageUrl,
         webId: session.webId,
       }),

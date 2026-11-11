@@ -3,6 +3,7 @@
 
 import type { ChangeType, NotificationsClient } from '@jeswr/pod-notifications';
 import type { StorageClient } from '@jeswr/storage-client';
+import type { Outbox } from './outbox.js';
 
 /**
  * Public + internal types for solid-offline (P0/P1).
@@ -96,6 +97,8 @@ export interface AppShellConfig {
 export interface OfflineClientConfig {
   /** Page-side storage client, created with the authenticated page fetch. */
   storage?: StorageClient;
+  /** Page-only write queue for this WebID; retained across logout. */
+  outbox?: Outbox;
   /** Optional shared notification client; otherwise created from storage + fetch. */
   notificationsClient?: NotificationsClient;
   /** Serialized storage root used by the credential-free worker for invalidation. */

@@ -173,8 +173,10 @@ Solid read side (ADR-003 §6):
   `list()` before pagination checks aborts, so even an already-aborted signal cannot expose raw
   container credentials in errors. Pagination receives only the canonical container and cursors.
 - `readRdf` accepts `text/turtle, application/ld+json;q=0.9`, maps 304 to `notModified`, and
-  reports a non-RDF or unparsable body as `not-rdf`. `metadata` reads the `describedby` document as
-  RDF (`unsupported` when none is advertised).
+  reports a non-RDF or unparsable body as `not-rdf`. On both HTTP backends, its GET also maps
+  406 or 501 to `not-rdf`, preserving status, URL, method and problem details; other operations
+  retain their usual HTTP error mapping. `metadata` reads the `describedby` document as RDF
+  (`unsupported` when none is advertised).
 - `Link` and WAC-Allow parsing reuse `@jeswr/storage-capabilities` (`parseLinkHeaders`,
   `parseWacAllow`). Both backends parse authoritative Link headers with explicit overflow rejection:
   at most **64 KiB UTF-8 per combined field value**, **1,024 nonempty members** (including malformed

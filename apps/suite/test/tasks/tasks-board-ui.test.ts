@@ -92,6 +92,32 @@ const settle = () =>
   });
 
 describe("project board", () => {
+  it("orders children among flat cards and keeps their parent when moved from the menu", async () => {
+    const { inbox, store, pod } = await project(["Root", "Other"]);
+    const root = viewOf("Root");
+    const created = await cache.createTask(inbox, { title: "Child", parent: root.id });
+    if (!created) throw new Error("Missing child");
+    const child = await cache.updateTask(created, (task) => {
+      task.rank = 3;
+    });
+    if (!child) throw new Error("Missing ranked child");
+    const { host } = await mount(h(BoardView, { projectUrl: inbox.url }));
+    const order = () => [...host.querySelectorAll(".tsk-card-title")].map((el) => el.textContent);
+    expect(order()).toEqual(["Root", "Other", "Child"]);
+    await key(
+      host.querySelector<HTMLElement>("button[aria-label=\"Actions for 'Child'\"]") as HTMLElement,
+      "Enter",
+    );
+    pod.requests.length = 0;
+    await click(byText('[role="menuitem"]', "Move up"));
+    await settle();
+    expect(order()).toEqual(["Root", "Child", "Other"]);
+    expect(status(host)).toBe("Moved 'Child' to No section, position 2.");
+    expect((await store.readTask(child.url)).task.parent).toBe(root.id);
+    expect(pod.mutations()).toHaveLength(1);
+    expect(pod.mutations()[0]?.headers.get("If-Match")).toBe(child.etag);
+  });
+
   it("renders section columns in order with a leading No section column and priority cards", async () => {
     const { inbox } = await project(["Loose"], ["Doing", "Done"]);
     const doing = cache.getSnapshot().projects[0]?.tracker.sections[0]?.id as string;

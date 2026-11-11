@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 import type { Editor } from "@tiptap/react";
 import { Parser, Store } from "n3";
@@ -521,4 +522,26 @@ it("offers Add to Tasks only for notes with unchecked checklist items", async ()
   expect(
     [...document.querySelectorAll("button")].some((b) => b.textContent?.trim() === "Add to Tasks"),
   ).toBe(false);
+});
+
+it("keeps pod image URLs when opening an image note in Docs", async () => {
+  const original = {
+    ...note(),
+    body: '<p>Body</p><img src="https://pod.example/notes/media/bird.png" alt="A bird">',
+  };
+  const documentUrl = "https://pod.example/docs/converted-image.ttl";
+  mocks.createDoc.mockResolvedValue({ url: documentUrl });
+  await mount(h(NoteDialog, { note: original }));
+  await click(button("Open in Docs"));
+  await click(button("Open in Docs?"));
+  expect(mocks.createDoc).toHaveBeenCalledExactlyOnceWith({
+    title: original.title,
+    body: original.body,
+    format: "text/html",
+  });
+  expect(mocks.context.move).toHaveBeenCalledWith(
+    expect.objectContaining({ body: original.body }),
+    "trash",
+  );
+  expect(mocks.push).toHaveBeenCalledWith(`/docs/d/${encodeRef(documentUrl)}`);
 });

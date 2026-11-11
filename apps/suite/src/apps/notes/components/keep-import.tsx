@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 5.5
 "use client";
 import {
@@ -43,14 +44,17 @@ async function readSelection(list: FileList) {
   const files: KeepNoteFile[] = [];
   const oversized: { fileName: string; reason: string }[] = [];
   let ignored = 0;
+  const media = new Map<string, File>();
   for (const file of Array.from(list)) {
     const fileName = file.webkitRelativePath || file.name;
-    if (!/\.json$/i.test(file.name)) ignored++;
-    else if (file.size > MAX_KEEP_NOTE_BYTES)
+    if (!/\.json$/i.test(file.name)) {
+      media.set(fileName, file);
+      ignored++;
+    } else if (file.size > MAX_KEEP_NOTE_BYTES)
       oversized.push({ fileName, reason: KEEP_SKIP_REASONS.NOTE_TOO_LARGE });
     else files.push({ fileName, json: await file.text() });
   }
-  return { files, oversized, ignored };
+  return { files, oversized, ignored, media };
 }
 
 export function KeepImportDialog({ open, close }: { open: boolean; close: () => void }) {
@@ -68,17 +72,23 @@ export function KeepImportDialog({ open, close }: { open: boolean; close: () => 
     if (!list?.length) return;
     setPhase({ kind: "choose", reading: true });
     try {
-      const { files, oversized, ignored } = await readSelection(list);
+      const { files, oversized, ignored, media } = await readSelection(list);
       const plan = planKeepImport(
         files,
         notes.filter((note) => note.location !== "trashed"),
+        media,
       );
       setPhase({
         kind: "review",
         plan: {
           ...plan,
           skipped: [...oversized, ...plan.skipped],
-          ignored: plan.ignored + ignored,
+          ignored: Math.max(
+            0,
+            plan.ignored +
+              ignored -
+              plan.ready.reduce((sum, item) => sum + (item.images?.length ?? 0), 0),
+          ),
         },
       });
     } catch {
@@ -108,7 +118,15 @@ export function KeepImportDialog({ open, close }: { open: boolean; close: () => 
       // mutations reload every note after each write, which a large import can't afford.
       let note: StoredNote;
       try {
-        note = await store.create(item.input);
+        let body = item.input.body;
+        for (const file of item.images ?? []) {
+          const src = await store.uploadImage(file);
+          const image = document.createElement("img");
+          image.src = src;
+          image.alt = "";
+          body += image.outerHTML;
+        }
+        note = await store.create({ ...item.input, body });
         imported++;
       } catch {
         failed.push(item);
@@ -165,7 +183,9 @@ export function KeepImportDialog({ open, close }: { open: boolean; close: () => 
         <DialogTitle>Import from Google Keep</DialogTitle>
         <DialogDescription>
           Choose the Keep folder from your Google Takeout download, or the note files inside it.
-          Notes keeps their text, checklists, labels, colours, pins and archive state.
+          Notes keeps their text, checklists, labels, colours, pins and archive state. Images
+          included in a Keep folder are imported as decorative; you can add descriptions in the
+          note.
         </DialogDescription>
         {phase.kind === "choose" && (
           <div className="notes-keep-choose">
@@ -229,7 +249,7 @@ export function KeepImportDialog({ open, close }: { open: boolean; close: () => 
               {phase.plan.attachments > 0 && (
                 <li>
                   {plural(phase.plan.attachments, "image or recording", "images or recordings")}{" "}
-                  will stay in Takeout. Notes can't store attachments yet.
+                  will stay in Takeout. Choose the Keep folder to include supported images.
                 </li>
               )}
               {phase.plan.adjusted > 0 && (

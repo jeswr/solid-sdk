@@ -3,7 +3,7 @@
 "use client";
 import { Button, ErrorState, Skeleton } from "@jeswr/suite-ui";
 import { Search, StickyNote } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { NoteConflictError } from "../lib/model/errors";
 import { selectNotes } from "../lib/model/query";
 import type { StoredNote } from "../lib/model/store";
@@ -17,49 +17,72 @@ export function NotesGrid({
   label,
   query = "",
 }: {
-  view?: "active" | "archived" | "trashed" | "label" | "search";
+  view?: "active" | "archived" | "trashed" | "label" | "search" | "reminders";
   label?: string;
   query?: string;
 }) {
   const { notes, prefs, active, archived, trashed, refresh, store } = useNotesContext();
+  const [now, setNow] = useState(Date.now);
+  const hasReminders = notes.some((note) => note.location !== "trashed" && !!note.reminder);
+  useEffect(() => {
+    if (!hasReminders) return;
+    const update = () => setNow(Date.now());
+    update();
+    const timer = setInterval(update, 60_000);
+    document.addEventListener("visibilitychange", update);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", update);
+    };
+  }, [hasReminders]);
   const [emptying, setEmptying] = useState<StoredNote[]>();
   const location = view === "archived" || view === "trashed" ? view : "active";
   const resource = location === "archived" ? archived : location === "trashed" ? trashed : active;
   const searching = view === "search";
-  const loading = searching
+  const combined = searching || view === "reminders";
+  const loading = combined
     ? (active.loading && !active.data) || (archived.loading && !archived.data)
     : resource.loading && !resource.data;
-  const error = searching ? active.error || archived.error : resource.error;
+  const error = combined ? active.error || archived.error : resource.error;
   const selected = selectNotes(notes, prefs, {
-    location,
+    location: view === "reminders" ? "reminders" : location,
     ...(label === undefined ? {} : { labels: [label] }),
     query: searching ? query : "",
+    now,
   });
   if (searching) {
     const archive = selectNotes(notes, prefs, { location: "archived", query });
     selected.others.push(...archive.others);
   }
-  const count = selected.pinned.length + selected.others.length;
+  const sections = selected.sections ?? [
+    { title: "Pinned", notes: selected.pinned },
+    { title: selected.pinned.length ? "Others" : "Notes", notes: selected.others },
+  ];
+  const count = sections.reduce((sum, section) => sum + section.notes.length, 0);
   const title =
-    view === "archived"
-      ? "Archive"
-      : view === "trashed"
-        ? "Trash"
-        : view === "label"
-          ? label
-          : searching
-            ? "Search notes"
-            : "Notes";
+    view === "reminders"
+      ? "Reminders"
+      : view === "archived"
+        ? "Archive"
+        : view === "trashed"
+          ? "Trash"
+          : view === "label"
+            ? label
+            : searching
+              ? "Search notes"
+              : "Notes";
   const empty =
-    view === "archived"
-      ? "Your archived notes appear here"
-      : view === "trashed"
-        ? "No notes in Trash"
-        : view === "label"
-          ? "No notes with this label"
-          : searching
-            ? "No matching notes"
-            : "Notes you add appear here";
+    view === "reminders"
+      ? "Notes with reminders appear here"
+      : view === "archived"
+        ? "Your archived notes appear here"
+        : view === "trashed"
+          ? "No notes in Trash"
+          : view === "label"
+            ? "No notes with this label"
+            : searching
+              ? "No matching notes"
+              : "Notes you add appear here";
   return (
     <div className="notes-workspace" data-view={prefs.view}>
       <header className="notes-page-heading">
@@ -103,34 +126,20 @@ export function NotesGrid({
           <h2>{empty}</h2>
         </div>
       ) : (
-        <>
-          {selected.pinned.length > 0 && (
-            <section aria-labelledby="notes-pinned">
-              <h2 id="notes-pinned" className="notes-section-heading">
-                Pinned
+        sections
+          .filter((section) => section.notes.length > 0)
+          .map((section) => (
+            <section key={section.title} aria-label={section.title}>
+              <h2 className={section.title === "Notes" ? "sr-only" : "notes-section-heading"}>
+                {section.title}
               </h2>
               <div className="notes-grid">
-                {selected.pinned.map((note) => (
-                  <NoteCard key={note.url} note={note} />
+                {section.notes.map((note) => (
+                  <NoteCard key={note.url} note={note} now={new Date(now)} />
                 ))}
               </div>
             </section>
-          )}
-          {selected.others.length > 0 && (
-            <section aria-label={selected.pinned.length ? undefined : "Notes"}>
-              {selected.pinned.length > 0 ? (
-                <h2 className="notes-section-heading">Others</h2>
-              ) : (
-                <h2 className="sr-only">Notes</h2>
-              )}
-              <div className="notes-grid">
-                {selected.others.map((note) => (
-                  <NoteCard key={note.url} note={note} />
-                ))}
-              </div>
-            </section>
-          )}
-        </>
+          ))
       )}
       {emptying && (
         <ConfirmDialog
