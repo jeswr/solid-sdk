@@ -1,7 +1,8 @@
 // AUTHORED-BY Codex GPT-6
 import { NS } from "@jeswr/suite-vocab";
 import { DataFactory, Store } from "n3";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { parseCsv } from "../core/csv.js";
 import { fileImport, type MemoryPod, memoryFile, TEST_POD_ROOT } from "../core/testing.js";
 import { CLASSES } from "../core/vocab.js";
 import { transactionKey } from "./csv.js";
@@ -11,6 +12,7 @@ import {
   parseBankCsv,
 } from "./file-adapter.js";
 import { HSBC, MONZO, OFX, REVOLUT, REVOLUT_HEADER, REVOLUT_ROWS } from "./fixtures.js";
+import { genericBankRowParser } from "./generic-csv.js";
 import { BANK, BankInvoice } from "./vocab.js";
 
 function bankDocuments(pod: MemoryPod): string[] {
@@ -32,6 +34,27 @@ const GENERIC =
   "Posting Date,Payee,Value,Currency\n20/07/2026,Synthetic shop,GBP -12.50,USD\n07/21/26,,(3.20),EUR\ninvalid,Synthetic credit,£+001.20,GBP\n2026-07-01,invalid,missing,GBP";
 
 describe("generic CSV compatibility", () => {
+  it.each([
+    ["Date,Description,Amount,Currency", "01/07/2026,Synthetic shop,-5.25,GBP"],
+    ["Date,Type,Description,Amount,Balance", "01/07/2026,Card,Synthetic shop,-5.25,100"],
+    ["Date,Name,Amount,Unknown", "01/07/2026,Synthetic shop,-5.25,x"],
+    ["Transaction ID,Date,Name,Amount", "synthetic-1,01/07/2026,Synthetic shop,-5.25"],
+    ["Emoji,Date,Name,Amount", ",01/07/2026,Synthetic shop,-5.25"],
+  ])("retains origin/main generic parsing and Invoice IDs for %s", async (header, row) => {
+    const text = `${header}\n${row}`;
+    const { headers, rows } = parseCsv(text);
+    const expected = rows.map(genericBankRowParser(headers));
+    expect(parseBankCsv(text)).toEqual(expected);
+    const { pod, report } = await fileImport(bankStatementsFileAdapter, new File([text], "a.csv"));
+    expect(report.unsupported).toBeUndefined();
+    expect(bankDocuments(pod)).toEqual([]);
+    const [invoice] = invoices(pod.dataset(DOC));
+    expect(invoice?.value).toBe(`${DOC}#txn-synthetic-shop-0464cda1`);
+    expect(invoice?.totalPaymentDue).toBe("-5.25");
+    expect(invoice?.dateCreated?.toISOString()).toBe("2026-07-01T00:00:00.000Z");
+    expect(invoice?.priceCurrency).toBeUndefined();
+  });
+
   it("preserves the original aliases, lenient dates/amounts and exact Invoice IDs", async () => {
     const expected = [
       { date: new Date("2026-07-20T00:00:00Z"), description: "Synthetic shop", amount: "-12.50" },
@@ -93,6 +116,100 @@ describe("generic CSV compatibility", () => {
 });
 
 describe("isolated bank account documents", () => {
+  it("counts matching Invoice descriptions, exact decimal amounts and dates only", async () => {
+    const old =
+      "Date,Description,Amount\n01/07/2026,Synthetic shop,-005.2500\n02/07/2026,Synthetic shop,-5.25\n01/07/2026,Other shop,-5.25\n01/07/2026,Synthetic shop,-5.24\n01/07/2026,Synthetic shop,-5.25";
+    const { pod } = await fileImport(bankStatementsFileAdapter, memoryFile("old.csv", old));
+    const before = pod.get(DOC);
+    const { report } = await fileImport(bankStatementsFileAdapter, memoryFile("new.csv", MONZO), {
+      pod,
+    });
+    expect(report.unsupported).toEqual([
+      "2 transactions from this statement also exist in the older shared bank document; remove them there or re-import that document with a generic/OFX file to avoid double counts.",
+    ]);
+    expect(pod.get(DOC)).toBe(before);
+    expect(invoices(bankDataset(pod))).toHaveLength(1);
+  });
+
+  it("propagates the generic 100,000 source-row truncation warning to the run report", async () => {
+    const text = `Date,Description,Amount\n${"2026-01-01,Invalid,missing\n".repeat(100_000)}2026-01-01,Outside cap,1`;
+    const { pod, report } = await fileImport(
+      bankStatementsFileAdapter,
+      new File([text], "long.csv"),
+    );
+    expect(report.unsupported).toEqual([
+      "Generic bank CSV truncated to the first 100000 source rows.",
+    ]);
+    expect(invoices(pod.dataset(DOC))).toEqual([]);
+    expect(bankDocuments(pod)).toEqual([]);
+  });
+
+  it.each([
+    MONZO,
+    `${REVOLUT_HEADER}\n${REVOLUT_ROWS[0]}`,
+  ])("warns about previous-release rows without changing the shared document (%#)", async (text) => {
+    const { headers, rows } = parseCsv(text);
+    const legacy = rows.map(genericBankRowParser(headers));
+    const previousRelease = {
+      ...bankStatementsFileAdapter,
+      async importFile(_file, ctx) {
+        const store = new Store();
+        for (const [i, txn] of legacy.entries()) {
+          if (!txn) continue;
+          const inv = new BankInvoice(
+            `${ctx.resolve("finance/bank-transactions.ttl")}#old-${i}`,
+            store,
+            DataFactory,
+          ).mark();
+          inv.name = txn.description;
+          inv.totalPaymentDue = txn.amount;
+          inv.dateCreated = txn.date;
+        }
+        await ctx.write({
+          slug: "finance/bank-transactions.ttl",
+          category: "finance",
+          forClass: CLASSES.Invoice,
+          dataset: store,
+        });
+      },
+    } satisfies typeof bankStatementsFileAdapter;
+    const { pod } = await fileImport(previousRelease, memoryFile("old.csv", text));
+    const before = pod.get(DOC);
+    const etag = (await pod.fetch(DOC)).headers.get("etag");
+    const read = vi.spyOn(pod, "fetch");
+    const { report } = await fileImport(bankStatementsFileAdapter, memoryFile("new.csv", text), {
+      pod,
+    });
+    expect(read.mock.calls.filter(([url]) => url === DOC)).toHaveLength(1);
+    expect(report.unsupported).toEqual([
+      "1 transactions from this statement also exist in the older shared bank document; remove them there or re-import that document with a generic/OFX file to avoid double counts.",
+    ]);
+    expect(pod.get(DOC)).toBe(before);
+    expect((await pod.fetch(DOC)).headers.get("etag")).toBe(etag);
+    expect(invoices(bankDataset(pod))).toHaveLength(1);
+    expect(report.written.every(({ url }) => url !== DOC)).toBe(true);
+  });
+
+  it.each([
+    undefined,
+    "Stable",
+  ])("adding/changing accountLabel %s creates a new account document", async (accountLabel) => {
+    const { pod, report } = await fileImport(
+      createBankStatementsFileAdapter({ accountLabel }),
+      memoryFile("first.csv", MONZO),
+    );
+    const firstUrl = report.written[0]?.url ?? "";
+    const before = pod.get(firstUrl);
+    const { report: later } = await fileImport(
+      createBankStatementsFileAdapter({ accountLabel: "Changed" }),
+      memoryFile("next.csv", MONZO),
+      { pod },
+    );
+    expect(later.written[0]?.url).not.toBe(firstUrl);
+    expect(pod.get(firstUrl)).toBe(before);
+    expect(bankDocuments(pod)).toHaveLength(2);
+  });
+
   it.each([
     false,
     true,

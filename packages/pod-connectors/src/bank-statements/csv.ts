@@ -79,6 +79,11 @@ const HEADERS = {
     "notes",
   ],
 } as const;
+const DISTINCTIVE_HEADERS = {
+  revolut: ["product", "state", "started date", "completed date"],
+  monzo: ["transaction id", "emoji"],
+  starling: ["counter party", "amount (gbp)", "spending category"],
+} as const;
 const normaliseHeader = (value: string) => value.trim().replace(/\s+/g, " ").toLowerCase();
 
 export class UnrecognisedBankCsvError extends Error {
@@ -149,6 +154,8 @@ export class BankCsvParser {
   private rows = 0;
   private genericRow?: ReturnType<typeof genericBankRowParser>;
   private genericRows = 0;
+  private truncated = false;
+  private legacyRow?: (cells: readonly string[]) => Transaction | undefined;
   private readonly occurrences = new Map<string, number>();
   private readonly formatter: Intl.DateTimeFormat;
   constructor(
@@ -156,6 +163,7 @@ export class BankCsvParser {
     private readonly maxRows: number,
     private readonly skip: () => void,
     private readonly synchronous = false,
+    private readonly onBankRow?: (txn: Transaction, legacy?: Transaction) => void,
   ) {
     validateBankOptions(options);
     this.formatter = bankDateFormatter(options.timeZone);
@@ -163,14 +171,16 @@ export class BankCsvParser {
       throw new RangeError("Bank row limit must be a nonnegative safe integer");
   }
   skippedRecord(): void {
-    this.countRow();
-    this.skip();
+    if (this.countRow()) this.skip();
   }
   get isGeneric(): boolean {
     return this.format === "generic";
   }
+  get isTruncated(): boolean {
+    return this.truncated;
+  }
   private genericRecord(record: string): Transaction | undefined {
-    this.countRow();
+    if (!this.countRow()) return undefined;
     if (this.genericRows >= this.maxRows) return undefined;
     const cells = parseCsvRows(
       record,
@@ -186,11 +196,17 @@ export class BankCsvParser {
     if (txn) this.genericRows++;
     return txn;
   }
-  private countRow(): void {
+  private countRow(): boolean {
     // The synchronous generic helper keeps its historical result limit; every
     // source row still consumes the hard budget, even after that result limit.
     const cap = this.synchronous && this.isGeneric ? MAX_ROWS : Math.min(MAX_ROWS, this.maxRows);
-    if (++this.rows > cap) throw new Error("Bank statement row cap exceeded; split the export");
+    if (this.rows >= cap) {
+      if (!this.isGeneric) throw new Error("Bank statement row cap exceeded; split the export");
+      this.truncated = true;
+      return false;
+    }
+    this.rows++;
+    return true;
   }
   record(record: string): Transaction | undefined {
     if (this.isGeneric) return this.genericRecord(record);
@@ -222,6 +238,9 @@ export class BankCsvParser {
         bankCsvCells(record.replace(/^\uFEFF/, ""));
         this.format = format;
         this.headers = headers;
+        const parseLegacy = genericBankRowParser(cells);
+        this.legacyRow = (values) =>
+          parseLegacy(Object.fromEntries(cells.map((header, i) => [header, values[i] ?? ""])));
         return undefined;
       }
       if (!format) {
@@ -229,10 +248,10 @@ export class BankCsvParser {
         const nearMiss = banks
           .map((bank) => ({
             bank,
-            shared: HEADERS[bank].filter((header) => names.has(header)).length,
+            shared: DISTINCTIVE_HEADERS[bank].filter((header) => names.has(header)).length,
           }))
           .sort((left, right) => right.shared - left.shared)
-          .find(({ shared }) => shared >= 3)?.bank;
+          .find(({ shared }) => shared >= 2)?.bank;
         if (nearMiss) throw new UnrecognisedBankCsvError(cells, nearMiss);
       }
       if (!format && !this.options.csvFormat) {
@@ -335,6 +354,7 @@ export class BankCsvParser {
       ]),
       accountLabel: label,
     };
+    this.onBankRow?.(txn, this.legacyRow?.(cells));
     if (bank !== "hsbc-uk") return txn;
     const key = transactionKey(txn);
     const occurrence = this.occurrences.get(key) ?? 0;
@@ -363,6 +383,7 @@ export function parseBankCsv(
     if (record.trim()) {
       const txn = parser.record(record);
       if (txn) result.push(txn);
+      if (parser.isTruncated) return result;
     }
     if (text[i] === "\r" && text[i + 1] === "\n") i++;
     start = i + 1;

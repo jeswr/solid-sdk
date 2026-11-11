@@ -210,6 +210,96 @@ describe("known bank CSV exports", () => {
 });
 
 describe("fail-closed bank detection and bounds", () => {
+  it("reads the legacy document only for bank imports and omits warnings when absent", async () => {
+    const ctx = { ...context(), read: vi.fn(async () => undefined) };
+    const outcome = await bankStatementsFileAdapter.importFile(memoryFile("a.csv", MONZO), ctx);
+    expect(ctx.read).toHaveBeenCalledExactlyOnceWith("finance/bank-transactions.ttl");
+    expect(outcome?.unsupported).toBeUndefined();
+    ctx.read.mockClear();
+    await bankStatementsFileAdapter.importFile(
+      memoryFile("pending.csv", `${REVOLUT_HEADER}\n${REVOLUT_ROWS[2]}`),
+      ctx,
+    );
+    expect(ctx.read).toHaveBeenCalledExactlyOnceWith("finance/bank-transactions.ttl");
+    ctx.read.mockClear();
+    await bankStatementsFileAdapter.importFile(
+      memoryFile("generic.csv", "Description,Amount\nShop,1"),
+      ctx,
+    );
+    await bankStatementsFileAdapter.importFile(memoryFile("a.ofx", OFX), ctx);
+    expect(ctx.read).not.toHaveBeenCalled();
+  });
+
+  it("ignores non-Invoices and incomplete or nonmatching legacy values", async () => {
+    const store = new Store();
+    const other = new BankInvoice("https://pod.test/other", store, DataFactory);
+    other.name = "Synthetic shop";
+    other.totalPaymentDue = "-5.25";
+    other.dateCreated = new Date("2026-07-01T00:00:00Z");
+    for (const [i, name, amount, date] of [
+      [0, undefined, "-5.25", "2026-07-01"],
+      [1, "Synthetic shop", undefined, "2026-07-01"],
+      [2, "Synthetic shop", "-5.25", "2026-07-02"],
+      [3, "Synthetic shop", "-5.24", "2026-07-01"],
+      [4, "Other", "-5.25", "2026-07-01"],
+      [5, "Synthetic shop", "invalid", "2026-07-01"],
+    ] as const) {
+      const row = new BankInvoice(`https://pod.test/invoice-${i}`, store, DataFactory).mark();
+      row.name = name;
+      row.totalPaymentDue = amount;
+      row.dateCreated = new Date(date);
+    }
+    const ctx = { ...context(), read: vi.fn(async () => store) };
+    const before = store.size;
+    const outcome = await bankStatementsFileAdapter.importFile(memoryFile("a.csv", MONZO), ctx);
+    expect(outcome?.unsupported).toBeUndefined();
+    expect(store.size).toBe(before);
+    expect(ctx.remove).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    "quads",
+    "characters",
+    "invoices",
+  ])("bounds legacy comparison by %s through custom reader ports", async (bound) => {
+    const store = new Store();
+    if (bound === "quads") Object.defineProperty(store, "size", { value: 1_600_001 });
+    else if (bound === "characters") {
+      new BankInvoice("https://pod.test/large", store, DataFactory).name = "x".repeat(1024);
+      const quad = required(store.getQuads(null, null, null, null)[0]);
+      vi.spyOn(store, Symbol.iterator).mockImplementation(function* () {
+        for (let i = 0; i < 65536; i++) yield quad;
+      });
+    } else {
+      for (let i = 0; i <= 100_000; i++)
+        new BankInvoice(`https://pod.test/i-${i}`, store, DataFactory).mark();
+    }
+    const ctx = { ...context(), read: vi.fn(async () => store) };
+    const outcome = await bankStatementsFileAdapter.importFile(memoryFile("a.csv", MONZO), ctx);
+    expect(outcome?.unsupported).toEqual([
+      "The older shared bank document exceeds the comparison limit; check it manually for duplicate transactions.",
+    ]);
+    expect(ctx.write).toHaveBeenCalledOnce();
+    expect(ctx.remove).not.toHaveBeenCalled();
+  });
+
+  it("honours cancellation during the legacy read before any bank write", async () => {
+    const abort = new AbortController();
+    const reason = new Error("Cancelled legacy comparison");
+    const ctx = {
+      ...context(),
+      signal: abort.signal,
+      read: vi.fn(async () => {
+        abort.abort(reason);
+        return undefined;
+      }),
+    };
+    await expect(
+      bankStatementsFileAdapter.importFile(memoryFile("a.csv", MONZO), ctx),
+    ).rejects.toBe(reason);
+    expect(ctx.write).not.toHaveBeenCalled();
+  });
+
   it("admits exact field/digit bounds and rejects invalid row budgets", () => {
     const text = `${REVOLUT_HEADER}\n${REVOLUT_ROWS[3].replace("Synthetic saving", "x".repeat(MAX_BANK_FIELD_CHARS))}`;
     expect(parseBankCsv(text)).toHaveLength(1);
@@ -269,10 +359,13 @@ describe("fail-closed bank detection and bounds", () => {
     [REVOLUT.replace("Completed Date", "Posting Date"), "Revolut"],
     [REVOLUT.replace("Type,Product", "Product,Type"), "Revolut"],
     [`${REVOLUT_HEADER},Extra\n${REVOLUT_ROWS[0]},ignored`, "Revolut"],
-    [MONZO.replace("Transaction ID", "Unknown ID"), "Monzo"],
     [MONZO.replace(",Local currency", ""), "Monzo"],
     [STARLING.replace("Balance (GBP)", "Closing balance"), "Starling"],
-    ["Date,Name,Amount,Unknown\n01/07/2026,Shop,1,x", "Monzo"],
+    ["Product,State\nCurrent,COMPLETED", "Revolut"],
+    ["Started Date,Completed Date\n2026-07-01,2026-07-01", "Revolut"],
+    ["Transaction ID,Emoji\nid,x", "Monzo"],
+    ["Counter Party,Amount (GBP)\nShop,1", "Starling"],
+    ["Amount (GBP),Spending Category\n1,Shopping", "Starling"],
   ])("rejects near-miss bank headers before any data writes (%#)", async (text, bank) => {
     const message = `looks like ${bank} but the columns differ`;
     expect(() => parseBankCsv(text)).toThrow(message);
@@ -290,10 +383,11 @@ describe("fail-closed bank detection and bounds", () => {
   ])("counts every generic source row, including skipped/malformed rows (%#)", async (row) => {
     const ctx = context(2);
     const text = `Date,Description,Amount\n${row}\n${row}\n2026-01-01,Third,1`;
-    await expect(bankStatementsFileAdapter.importFile(streamed(text, 7), ctx)).rejects.toThrow(
-      "row cap",
-    );
-    expect(ctx.write).not.toHaveBeenCalled();
+    const outcome = await bankStatementsFileAdapter.importFile(streamed(text, 7), ctx);
+    expect(outcome?.unsupported).toEqual([
+      "Generic bank CSV truncated to the first 2 source rows.",
+    ]);
+    expect(ctx.write).toHaveBeenCalledOnce();
   });
 
   it("enforces the 100,000 generic source-row ceiling and counts oversized records", async () => {
@@ -301,16 +395,40 @@ describe("fail-closed bank detection and bounds", () => {
     const atCap = `${header}\n${"2026-01-01,Invalid,missing\n".repeat(100_000)}`;
     expect(parseBankCsv(atCap)).toEqual([]);
     const ctx = context(200_000);
-    await expect(
-      bankStatementsFileAdapter.importFile(streamed(`${atCap}2026-01-01,Extra,1`, 65536), ctx),
-    ).rejects.toThrow("row cap");
-    expect(() => parseBankCsv(`${atCap}2026-01-01,Extra,1`)).toThrow("row cap");
+    const outcome = await bankStatementsFileAdapter.importFile(
+      streamed(`${atCap}2026-01-01,Extra,1`, 65536),
+      ctx,
+    );
+    expect(outcome?.unsupported).toEqual([
+      "Generic bank CSV truncated to the first 100000 source rows.",
+    ]);
+    expect(parseBankCsv(`${atCap}2026-01-01,Extra,1`)).toEqual([]);
     const parser = new BankCsvParser({}, 1, () => {});
     parser.record(header);
     parser.skippedRecord();
-    expect(() => parser.record("2026-01-01,Valid,1")).toThrow("row cap");
-    expect(ctx.write).not.toHaveBeenCalled();
+    expect(parser.record("2026-01-01,Valid,1")).toBeUndefined();
+    expect(ctx.write).toHaveBeenCalledOnce();
   });
+
+  it("imports the first 100,000 valid generic rows and warns only on overflow", async () => {
+    const atCap = `Date,Description,Amount\n${"2026-01-01,Keep,1\n".repeat(100_000)}`;
+    const text = `${atCap}2026-01-01,Discard,2`;
+    expect(parseBankCsv(text)).toHaveLength(100_000);
+    const ctx = context();
+    const outcome = await bankStatementsFileAdapter.importFile(streamed(text, 65536), ctx);
+    expect(outcome?.unsupported).toEqual([
+      "Generic bank CSV truncated to the first 100000 source rows.",
+    ]);
+    const doc = vi.mocked(ctx.write).mock.calls[0]?.[0];
+    const rows = invoices(new Store(doc?.dataset));
+    expect(rows).toHaveLength(100_000);
+    expect(rows.every((row) => row.name === "Keep")).toBe(true);
+    const small = await bankStatementsFileAdapter.importFile(
+      memoryFile("exact.csv", "Description,Amount\nKeep,1\nKeep,1"),
+      context(2),
+    );
+    expect(small?.unsupported).toBeUndefined();
+  }, 20_000);
 
   it("validates host options and snapshots them", async () => {
     expect(() => createBankStatementsFileAdapter({ csvFormat: "hsbc-uk" })).toThrow("accountLabel");

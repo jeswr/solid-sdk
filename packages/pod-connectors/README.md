@@ -234,8 +234,10 @@ they must enforce their own streaming limits. Legacy Takeout JSON still has the 
 `createBankStatementsFileAdapter(options)`. CSV detection uses normalized headers,
 never the filename: Revolut account statements, Monzo transaction exports and
 Starling GBP statements. Known bank headers must match exactly after normalization.
-A header sharing three or more normalized column names with a known bank is rejected
-with "looks like <bank> but the columns differ" if it does not match. Known banks
+A header containing two or more distinctive columns of one bank is rejected
+with "looks like <bank> but the columns differ" if it does not match: Revolut's
+Product, State, Started Date and Completed Date; Monzo's Transaction ID and Emoji;
+Starling's Counter Party, Amount (GBP) and Spending Category. Known banks
 take precedence over the original generic CSV importer. Other headers retain
 that importer's date/description/amount aliases, separate debit/credit support,
 lenient value/date parsing, row-index-derived IDs and snapshot replacement behavior.
@@ -263,6 +265,8 @@ const adapter = createBankStatementsFileAdapter({
 overlapping imports. Revolut defaults to one account per Product/Currency. Monzo
 and Starling default to one account per bank/currency; provide labels when importing
 multiple accounts.
+Changing or adding an `accountLabel` later creates a new per-account document;
+keep labels stable to avoid duplicate transactions across documents.
 
 Generic CSV and OFX/QFX retain `finance/bank-transactions.ttl` under the connector
 container, with their original IDs, datatypes and replacement snapshots. Revolut,
@@ -277,6 +281,16 @@ amount is `Amount - Fee` using exact decimal arithmetic, including negative fees
 (fee refunds). Nonzero fees are retained as plain text such as `"0.50 GBP"` on
 `schema:feesAndCommissionsSpecification`, whose range is Text/URL. Zero fees are
 omitted. Only COMPLETED Revolut rows import; other states count in `report.skipped`.
+
+When upgrading from the generic-only importer, recognised-bank imports read the
+older shared document through the existing reader port and compare Invoice
+descriptions, amounts and dates, including the old generic representation of
+Monzo/Revolut rows. Matching transactions produce this run-report warning in
+`unsupported`: "N transactions from this statement also exist in the older shared bank document; remove them there or re-import that document with a generic/OFX file to avoid double counts."
+Nothing is deleted automatically. The comparison is bounded to 100,000 Invoices,
+1,600,000 quads and 64 MiB of term characters; exceeding a bound reports that the
+older shared document needs a manual duplicate check.
+
 No exchange rate is inferred:
 Monzo local amounts/currencies do not replace the account amount/currency.
 
@@ -308,6 +322,8 @@ rows, 1,024 CSV columns, 64 KiB header characters, 4 MiB logical CSV records,
 16 KiB characters per bank-specific CSV field and 64 digits per bank-specific amount.
 OFX/QFX retain the original imported-row limit and the shared scanner caps transactions at 64 KiB bytes. Exceeding the bank-specific row/file cap fails before saving
 transaction data; oversized/malformed records are skipped at safe boundaries.
+Generic CSV imports truncate to the first 100,000 source rows and return a warning
+in `report.unsupported`; skipped and malformed rows consume that allowance too.
 Unterminated quoted CSV fails. Formula prefixes remain inert literal data.
 Parsing and validation finish before the first data write, and cancellation closes
 the input reader and prevents subsequent Pod operations through the shared runner.

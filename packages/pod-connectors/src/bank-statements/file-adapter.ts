@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 /** Bank CSV exports and OFX/QFX share the existing Finance Invoice layout. */
+import { NS } from "@jeswr/suite-vocab";
 import { DataFactory, Store } from "n3";
 import {
   type FileImportAdapter,
@@ -22,7 +23,7 @@ import {
   validateBankOptions,
 } from "./csv.js";
 import { ofxTransactions } from "./ofx-stream.js";
-import { amountKey } from "./values.js";
+import { amountKey, normaliseAmount } from "./values.js";
 import { BankAccount, BankInvoice } from "./vocab.js";
 import { vocabMap } from "./vocab-map.js";
 
@@ -69,13 +70,33 @@ export function createBankStatementsFileAdapter(
       let skipped = 0;
       let records = 0;
       let shared = false;
+      let recognised = false;
+      const warnings: string[] = [];
+      const incoming = new Set<string>();
       const skip = () => {
         skipped++;
       };
       try {
-        for await (const txn of streamBankTransactions(file, config, ctx, skip, () => {
-          shared = true;
-        })) {
+        for await (const txn of streamBankTransactions(
+          file,
+          config,
+          ctx,
+          skip,
+          () => {
+            shared = true;
+          },
+          () =>
+            warnings.push(
+              `Generic bank CSV truncated to the first ${Math.min(ctx.maxRows, MAX_ROWS)} source rows.`,
+            ),
+          (txn, legacy) => {
+            recognised = true;
+            for (const row of [txn, legacy]) {
+              const key = row && comparisonKey(row.description, row.amount, row.date);
+              if (key) incoming.add(key);
+            }
+          },
+        )) {
           ctx.signal?.throwIfAborted();
           // The scanner counts malformed/pending rows too; this also bounds OFX records.
           if (++records > Math.min(ctx.maxRows, MAX_ROWS))
@@ -118,8 +139,9 @@ export function createBankStatementsFileAdapter(
           return { unsupported: [error.message], skipped };
         throw error;
       }
+      if (recognised) warnings.push(...(await legacyWarnings(ctx, incoming)));
       // Generic CSV and OFX retain the original shared replacement snapshot,
-      // including an empty snapshot. New bank formats never access that document.
+      // including an empty snapshot. Bank imports only read it for upgrade warnings.
       if (shared && !stores.has(SLUG)) stores.set(SLUG, new Store());
       for (const [slug, dataset] of stores) {
         ctx.signal?.throwIfAborted();
@@ -133,7 +155,7 @@ export function createBankStatementsFileAdapter(
         });
       }
       // Return skipped even for pending-only statements (no fabricated empty snapshot).
-      return { skipped };
+      return { skipped, unsupported: warnings.length ? warnings : undefined };
     },
   };
 }
@@ -151,6 +173,8 @@ async function* streamBankTransactions(
   ctx: FileImportContext,
   skip: () => void,
   onGeneric: () => void,
+  onTruncated: () => void,
+  onBank: (txn?: Transaction, legacy?: Transaction) => void,
 ): AsyncGenerator<Transaction> {
   const source = fileText(file);
   let prefix = "";
@@ -171,13 +195,19 @@ async function* streamBankTransactions(
     }
     // Contents win over extension: a renamed CSV must not enter the OFX scanner.
     if (!/^\s*(?:OFXHEADER|<OFX|<\?xml|<STMTTRN>)/i.test(prefix)) {
-      const parser = new BankCsvParser(options, ctx.maxRows, skip);
+      const parser = new BankCsvParser(options, ctx.maxRows, skip, false, onBank);
       for await (const record of csvRecords(chunks(), () => parser.skippedRecord())) {
         ctx.signal?.throwIfAborted();
         const txn = parser.record(record);
         if (parser.isGeneric) onGeneric();
+        else onBank();
+        if (parser.isTruncated) {
+          onTruncated();
+          return;
+        }
         if (txn) yield txn;
       }
+      if (parser.isTruncated) onTruncated();
       return;
     }
     onGeneric();
@@ -192,6 +222,61 @@ async function* streamBankTransactions(
   } finally {
     await source.return(undefined);
   }
+}
+
+/** Compare values, never source IDs: previous releases used generic row-index IDs. */
+function comparisonKey(
+  description: string | undefined,
+  amount: string | undefined,
+  date?: Date,
+): string | undefined {
+  const decimal = amount === undefined ? undefined : normaliseAmount(amount);
+  if (!description || decimal === undefined || (date && Number.isNaN(date.getTime())))
+    return undefined;
+  return JSON.stringify([description, amountKey(decimal), date?.toISOString().slice(0, 10) ?? ""]);
+}
+
+async function legacyWarnings(
+  ctx: FileImportContext,
+  incoming: ReadonlySet<string>,
+): Promise<string[]> {
+  ctx.signal?.throwIfAborted();
+  const stored = await ctx.read(SLUG);
+  ctx.signal?.throwIfAborted();
+  if (!stored || !incoming.size) return [];
+  const capped = [
+    "The older shared bank document exceeds the comparison limit; check it manually for duplicate transactions.",
+  ];
+  // Bound custom reader ports too, before retaining subjects or constructing keys.
+  if (stored.size > MAX_ROWS * 16) return capped;
+  let chars = 0;
+  for (const quad of stored) {
+    chars +=
+      quad.subject.value.length +
+      quad.predicate.value.length +
+      quad.object.value.length +
+      quad.graph.value.length;
+    if (chars > MAX_FILE_BYTES) return capped;
+  }
+  const seen = new Set<string>();
+  let matches = 0;
+  for (const { subject } of stored.match(
+    null,
+    DataFactory.namedNode(`${NS.RDF}type`),
+    DataFactory.namedNode(CLASSES.Invoice),
+  )) {
+    if (seen.has(subject.value)) continue;
+    if (seen.size >= MAX_ROWS) return capped;
+    seen.add(subject.value);
+    const invoice = new BankInvoice(subject, stored, DataFactory);
+    const key = comparisonKey(invoice.name, invoice.totalPaymentDue, invoice.dateCreated);
+    if (key && incoming.has(key)) matches++;
+  }
+  return matches
+    ? [
+        `${matches} transactions from this statement also exist in the older shared bank document; remove them there or re-import that document with a generic/OFX file to avoid double counts.`,
+      ]
+    : [];
 }
 
 /** Parse the OFX/QFX `<STMTTRN>` blocks. */
