@@ -1,14 +1,43 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+import { isColour } from "./parse.js";
 import { type Bounds, ELEMENT_TYPES, type Point, type Scene, type SceneElement } from "./types.js";
 export function isRenderable(e: SceneElement): boolean {
   return (
-    !e.isDeleted && e.type !== "image" && (ELEMENT_TYPES as readonly string[]).includes(e.type)
+    !e.isDeleted &&
+    e.type !== "image" &&
+    (ELEMENT_TYPES as readonly string[]).includes(e.type) &&
+    isColour(e.strokeColor) &&
+    isColour(e.backgroundColor)
   );
 }
 export function rotatePoint([x, y]: Point, [cx, cy]: Point, angle: number): Point {
   const c = Math.cos(angle),
     s = Math.sin(angle);
   return [cx + (x - cx) * c - (y - cy) * s, cy + (x - cx) * s + (y - cy) * c];
+}
+/** Unrotated bounds relative to the element origin, including negative path points. */
+export function localBounds(e: SceneElement): Bounds {
+  if (!e.points?.length) return { x: 0, y: 0, width: e.width, height: e.height };
+  const xs = e.points.map((p) => p[0]),
+    ys = e.points.map((p) => p[1]);
+  const x = Math.min(...xs),
+    y = Math.min(...ys);
+  return { x, y, width: Math.max(...xs) - x, height: Math.max(...ys) - y };
+}
+export function elementCentre(e: SceneElement): Point {
+  const b = localBounds(e);
+  return [e.x + b.x + b.width / 2, e.y + b.y + b.height / 2];
+}
+export function resizeHandle(e: SceneElement, handle: string): Point {
+  const b = localBounds(e);
+  return rotatePoint(
+    [
+      e.x + b.x + (handle.includes("w") ? 0 : b.width),
+      e.y + b.y + (handle.includes("n") ? 0 : b.height),
+    ],
+    elementCentre(e),
+    e.angle,
+  );
 }
 export function elementBounds(e: SceneElement): Bounds {
   if (!(ELEMENT_TYPES as readonly string[]).includes(e.type))
@@ -21,9 +50,7 @@ export function elementBounds(e: SceneElement): Bounds {
         [e.x, e.y + e.height],
         [e.x + e.width, e.y + e.height],
       ];
-  const rotated = points.map((p) =>
-    rotatePoint(p, [e.x + e.width / 2, e.y + e.height / 2], e.angle),
-  );
+  const rotated = points.map((p) => rotatePoint(p, elementCentre(e), e.angle));
   const xs = rotated.map((p) => p[0]),
     ys = rotated.map((p) => p[1]);
   const x = Math.min(...xs),
@@ -66,7 +93,7 @@ function distanceToSegment([x, y]: Point, [ax, ay]: Point, [bx, by]: Point): num
 }
 export function hitTest(e: SceneElement, point: Point, tolerance = 6): boolean {
   if (!isRenderable(e)) return false;
-  const p = rotatePoint(point, [e.x + e.width / 2, e.y + e.height / 2], -e.angle);
+  const p = rotatePoint(point, elementCentre(e), -e.angle);
   const x = p[0] - e.x,
     y = p[1] - e.y;
   const t = Math.max(0, tolerance) + e.strokeWidth / 2;

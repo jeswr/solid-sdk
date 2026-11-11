@@ -1,16 +1,32 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
-import { ELEMENT_TYPES, type Scene, serializeScene, updateElements } from "@jeswr/excalidraw-scene";
+import {
+  duplicateElements,
+  ELEMENT_TYPES,
+  LIMITS,
+  type Scene,
+  serializeScene,
+  text,
+  updateElements,
+} from "@jeswr/excalidraw-scene";
 export interface History {
   past: Scene[];
   present: Scene;
   future: Scene[];
+  serialised?: string;
 }
 export function history(scene: Scene): History {
-  return { past: [], present: scene, future: [] };
+  return { past: [], present: scene, future: [], serialised: serializeScene(scene) };
 }
 export function commit(state: History, scene: Scene): History {
-  if (serializeScene(state.present) === serializeScene(scene)) return state;
-  return { past: [...state.past.slice(-49), state.present], present: scene, future: [] };
+  if (state.present === scene) return state;
+  const serialised = serializeScene(scene);
+  if ((state.serialised ?? serializeScene(state.present)) === serialised) return state;
+  return {
+    past: [...state.past.slice(-49), state.present],
+    present: scene,
+    future: [],
+    serialised,
+  };
 }
 /** Undo restores content but revisions still advance, as required for Excalidraw reconciliation. */
 function restored(current: Scene, target: Scene): Scene {
@@ -62,4 +78,31 @@ export function applyStyle(
   patch: Parameters<typeof updateElements>[2],
 ) {
   return updateElements(scene, ids, patch);
+}
+
+/** Check the combined scene before duplication or React state updates. */
+export function pasteScene(scene: Scene, copied: Scene): { scene: Scene; ids: string[] } {
+  const selected = copied.elements.filter((e) => !e.isDeleted);
+  if (scene.elements.length + selected.length > LIMITS.elements)
+    throw new TypeError("Too many elements (maximum 5,000)");
+  return duplicateElements(
+    copied,
+    selected.map((e) => e.id),
+    24,
+    { preview: true },
+    { ...scene, files: { ...scene.files, ...copied.files } },
+  );
+}
+
+/** Re-measure using the stored font, rather than the toolbar's creation defaults. */
+export function editText(scene: Scene, id: string, value: string): Scene {
+  const original = scene.elements.find((e) => e.id === id);
+  if (!original) return scene;
+  const replacement = text(original.x, original.y, value, { fontSize: original.fontSize ?? 24 });
+  return updateElements(
+    scene,
+    [id],
+    { text: value, originalText: value, width: replacement.width, height: replacement.height },
+    { preview: true },
+  );
 }

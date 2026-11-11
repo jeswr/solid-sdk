@@ -25,3 +25,12 @@ Duplication remaps selected groups, bindings and bound text references, dropping
 geometry between the editor and reusable `sceneToSvg`. `sceneToSvgContent` supplies safe fragments
 for an existing SVG viewport. All text and attribute values are escaped, paint colours are checked,
 and exports contain no files, external links, scripts, foreignObject or user-provided SVG markup.
+
+Legacy imports may omit `updated` (read as zero) and start with a UTF-8 BOM. Unsupported
+CSS paint strings are preserved losslessly but their elements are not rendered; unsupported
+canvas backgrounds are omitted from SVG. Linear rotation uses the points’ bounding-box centre.
+`resizeHandle` and `resizeFromHandle` share those anchors with editor controls.
+
+Transient app-owned operations may set `Revision.preview`; consumers must validate once at
+commit with `serializeScene`. SVG emitters always sanitise their inputs. See [SKILL.md](./SKILL.md).
+The security-critical package gate enforces 100% branch coverage and typechecks tests.

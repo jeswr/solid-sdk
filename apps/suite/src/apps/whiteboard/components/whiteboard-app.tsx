@@ -1,24 +1,45 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
 "use client";
-import { Button, EmptyState, ErrorState, LoadingSkeleton, Toaster, toast } from "@jeswr/suite-ui";
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import {
+  Button,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogTitle,
+  EmptyState,
+  ErrorState,
+  LoadingSkeleton,
+  Toaster,
+  toast,
+} from "@jeswr/suite-ui";
+import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { type PodSession, PodSessionProvider, usePodSessionState } from "@/lib/session/pod-session";
 import { AppFrame, AppHeading, AppSessionGuard } from "@/shell/app-frame";
+import { useOptionalAccounts } from "@/shell/session/accounts-context";
 import { useConnectionState } from "@/shell/sync/connection-state";
 import { seedSamples } from "../demo/sample";
-import { readDrafts, writeDrafts } from "../lib/drafts";
+import { activateDraftOwner, readDrafts, writeDrafts } from "../lib/drafts";
 import {
   type Board,
   disconnectedBoards,
+  isConflict,
   openWhiteboards,
   type WhiteboardRepository,
 } from "../lib/repository";
+import type { BoardAutosave } from "../state/autosave";
 import { mergeBoardFields } from "../state/board-fields";
 import { BoardList } from "./board-list";
 import { BoardEditor } from "./editor";
 
 function SessionGate() {
   const state = usePodSessionState();
+  useEffect(() => {
+    try {
+      if (state.status === "ready") activateDraftOwner(localStorage, state.session.webId);
+      else if (state.status === "signed-out") activateDraftOwner(localStorage, null);
+    } catch {}
+  }, [state]);
   if (state.status === "ready")
     return (
       <Boards key={`${state.session.webId}:${state.session.storageUrl}`} session={state.session} />
@@ -44,6 +65,11 @@ function Boards({ session }: { session: PodSession }) {
     [repository, setRepository] = useState<WhiteboardRepository | null>(null),
     [boot, setBoot] = useState<"loading" | "error" | "ready">("loading"),
     [attempt, setAttempt] = useState(0);
+  const [conflicted, setConflicted] = useState<Board | null>(null);
+  const [otherVersion, setOtherVersion] = useState<Board | null>(null);
+  // Keep disposed editors reachable until their teardown flush settles.
+  const writers = useRef(new Map<string, BoardAutosave>());
+  const deleting = useRef(new Set<string>());
   const pendingFields = useRef(new Map<string, Set<"scene" | "title">>());
   const dirty = useRef(new Map<string, Board>()),
     queue = useRef(Promise.resolve()),
@@ -76,6 +102,10 @@ function Boards({ session }: { session: PodSession }) {
         if (active && repo.unreadable.length)
           toast.warning(
             "Some boards could not be opened. They are still in your pod; try reloading or import a saved copy.",
+          );
+        if (active && repo.truncated)
+          toast.warning(
+            "Showing the first 100 boards. The remaining boards are still in your pod.",
           );
         // Resume new boards retained during an interrupted create, before merging the listing.
         for (const [id, draft] of dirty.current) {
@@ -115,6 +145,7 @@ function Boards({ session }: { session: PodSession }) {
     };
   }, [session, attempt]);
   const retain = (board: Board, pending: boolean, field: "scene" | "title" = "scene") => {
+    if (deleting.current.has(board.id)) return;
     const fields = pendingFields.current.get(board.id) ?? new Set<"scene" | "title">();
     if (pending) fields.add(field);
     else fields.delete(field);
@@ -159,6 +190,15 @@ function Boards({ session }: { session: PodSession }) {
     setBoards((current) =>
       current.map((b) => (b.id === board.id ? mergeBoardFields(b, board, "metadata") : b)),
     );
+  const showConflict = (board: Board) => {
+    setConflicted(board);
+    setOtherVersion(null);
+    void repository
+      ?.read(board.descriptor)
+      .then(setOtherVersion, () =>
+        toast.error("Couldn't load the other version. Export your local copy before reloading."),
+      );
+  };
   const task = (work: () => Promise<void>) => {
     const next = queue.current.then(work);
     queue.current = next.catch(() => {
@@ -201,9 +241,15 @@ function Boards({ session }: { session: PodSession }) {
   };
   const remove = (board: Board) => {
     if (!repository) return;
+    const writer = writers.current.get(board.id);
+    deleting.current.add(board.id);
     setBoards((current) => current.filter((b) => b.id !== board.id));
     setSelected(null);
-    retain(board, false);
+    dirty.current.delete(board.id);
+    pendingFields.current.delete(board.id);
+    try {
+      writeDrafts(localStorage, session.webId, session.storageUrl, [...dirty.current.values()]);
+    } catch {}
     let undone = false;
     toast("Board deleted", {
       action: {
@@ -215,9 +261,13 @@ function Boards({ session }: { session: PodSession }) {
       },
     });
     void task(async () => {
-      await repository.remove(board);
-      retain(board, false);
-    }).catch(() => {
+      const saved = writer ? mergeBoardFields(board, await writer.finish(), "canvas") : board;
+      await repository.remove(saved);
+      writers.current.delete(board.id);
+    }).catch((error) => {
+      if (isConflict(error)) showConflict(board);
+      deleting.current.delete(board.id);
+      retain(board, true);
       if (live.current)
         setBoards((current) =>
           current.some((b) => b.id === board.id) ? current : [board, ...current],
@@ -233,7 +283,9 @@ function Boards({ session }: { session: PodSession }) {
       const saved = await repository.rename(board, title);
       retain(saved, false, "title");
       if (live.current) updateMetadata(saved);
-    }).catch(() => {});
+    }).catch((error) => {
+      if (isConflict(error)) showConflict(optimistic);
+    });
   };
   const board = boards.find((b) => b.id === selected);
   const sidebar = (
@@ -254,6 +306,7 @@ function Boards({ session }: { session: PodSession }) {
       <BoardEditor
         key={`${board.id}:${repository ? "pod" : "local"}`}
         board={board}
+        onWriter={(writer) => writers.current.set(board.id, writer)}
         repository={repository ?? disconnectedBoards}
         onBack={() => setSelected(null)}
         onChange={update}
@@ -309,11 +362,58 @@ function Boards({ session }: { session: PodSession }) {
           </p>
         )}
         {content}
+        <Dialog
+          open={conflicted !== null}
+          onOpenChange={(open) => {
+            if (!open) setConflicted(null);
+          }}
+        >
+          <DialogContent
+            showCloseButton={false}
+            onEscapeKeyDown={(event) => event.preventDefault()}
+            onInteractOutside={(event) => event.preventDefault()}
+          >
+            <DialogTitle>This board changed elsewhere</DialogTitle>
+            <DialogDescription>
+              Keep your drawing as a separate board, or reload the version from your pod.
+            </DialogDescription>
+            <DialogFooter>
+              <Button
+                variant="outline"
+                disabled={!otherVersion}
+                onClick={() => {
+                  if (otherVersion) update(otherVersion, true);
+                  setConflicted(null);
+                }}
+              >
+                Reload board
+              </Button>
+              <Button
+                disabled={!otherVersion}
+                onClick={() => {
+                  if (conflicted) create(`${conflicted.title} — copy`, conflicted.scene);
+                  if (otherVersion) update(otherVersion, true);
+                  setConflicted(null);
+                }}
+              >
+                Keep a copy
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </AppFrame>
   );
 }
 export function WhiteboardApp() {
+  const accounts = useOptionalAccounts();
+  // This observer sits outside AppSessionGuard, which hides its children on sign-out.
+  useLayoutEffect(() => {
+    try {
+      if (accounts?.status === "signed-out") activateDraftOwner(localStorage, null);
+      else if (accounts?.active) activateDraftOwner(localStorage, accounts.active.webId);
+    } catch {}
+  }, [accounts?.status, accounts?.active]);
   return (
     <AppSessionGuard>
       <PodSessionProvider>

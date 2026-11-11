@@ -1,5 +1,12 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
-import { addElement, emptyScene, rectangle, serializeScene, text } from "@jeswr/excalidraw-scene";
+import {
+  addElement,
+  DEFAULT_STYLE,
+  emptyScene,
+  rectangle,
+  serializeScene,
+  text,
+} from "@jeswr/excalidraw-scene";
 import type { TypeIndex } from "@jeswr/pod-type-index";
 import { DRAW_SCENE_IRI, serializeScene as descriptor } from "@jeswr/solid-drawing";
 import { StorageError } from "@jeswr/storage-client";
@@ -83,7 +90,7 @@ describe("whiteboard pod orchestration", () => {
     });
     expect(isConflict(await repository.save(board, scene()).catch((e) => e))).toBe(true);
     expect(isConflict(new Error())).toBe(false);
-    await expect(repository.save({ ...next, etag: null }, scene())).rejects.toThrow("safe version");
+    await expect(repository.save({ ...next, etag: null }, scene())).resolves.toBeDefined();
     await expect(
       repository.rename({ ...board, descriptorEtag: 'W/"weak"' }, "x"),
     ).rejects.toThrow();
@@ -120,7 +127,7 @@ describe("whiteboard pod orchestration", () => {
     }));
     const b = await repository.create("");
     expect(b.title).toBe("Untitled board");
-    expect(b.etag).toBe(null);
+    expect(b.etag).toBeTruthy();
   });
   it("does not hide access failures as an empty collection", async () => {
     const { repository, storage } = await fixture();
@@ -161,8 +168,9 @@ describe("whiteboard pod orchestration", () => {
       yield { ...b, url: root + "whiteboards/blob.excalidraw" };
       for (let i = 0; i < 101; i++) yield b;
     });
-    vi.spyOn(repository, "read").mockResolvedValue({} as Board);
-    await expect(repository.list()).rejects.toThrow("100 boards");
+    vi.spyOn(repository, "read").mockResolvedValue({ title: "Board" } as Board);
+    expect(await repository.list()).toHaveLength(100);
+    expect(repository.truncated).toBe(true);
   });
   it("opens the real SDK client on the demo pod", async () => {
     const pod = createDemoPod({ root: DEMO_ROOT, seed: await buildDemoSeed(Date.now()) });
@@ -295,7 +303,7 @@ describe("history, viewport, drafts and export", () => {
     expect(writeDrafts(storage, "me", root, [b])).toBe(true);
     expect(readDrafts(storage, "me", root)).toEqual([b]);
     expect(readDrafts(storage, "other", root)).toEqual([]);
-    const k = [...map.keys()][0] as string;
+    const k = [...map.keys()].find((k) => k.startsWith("whiteboard.drafts.v1:")) as string;
     const raw = JSON.parse(map.get(k) as string);
     raw.owner = "other";
     map.set(k, JSON.stringify(raw));
@@ -303,7 +311,7 @@ describe("history, viewport, drafts and export", () => {
     map.set(k, "broken");
     expect(readDrafts(storage, "me", root)).toEqual([]);
     writeDrafts(storage, "me", root, []);
-    expect(map.size).toBe(0);
+    expect([...map.keys()].filter((k) => k.startsWith("whiteboard.drafts.v1:"))).toHaveLength(0);
     expect(
       writeDrafts(
         {
@@ -464,4 +472,246 @@ it("settles canvas and metadata writes without overwriting each other's fields",
     etag: saved.etag,
   });
   expect(mergeBoardFields(old, renamed, "all")).toBe(renamed);
+});
+
+// AUTHORED-BY Codex (GPT-6.1 Sol)
+describe("review regressions", () => {
+  it("isolates missing, denied, offline and out-of-pod boards from healthy entries", async () => {
+    const { repository, storage } = await fixture();
+    const good = await repository.create("Healthy");
+    const missing = await repository.create("Missing blob");
+    await storage.delete(missing.blob, { ifMatch: missing.etag as string });
+    const denied = await repository.create("Denied");
+    const offline = await repository.create("Offline");
+    const outside = `${repository.container}outside.ttl`;
+    await storage.create(
+      repository.container,
+      await descriptor(outside, { sceneDocument: "https://evil.example/scene" }),
+      { name: "outside.ttl", contentType: "text/turtle" },
+    );
+    const read = storage.read.bind(storage);
+    const reads = vi.spyOn(storage, "read").mockImplementation((url, options) => {
+      if (url === denied.descriptor) throw new StorageError("forbidden", { url, method: "GET" });
+      if (url === offline.blob) throw new Error("offline");
+      return read(url, options);
+    });
+    expect((await repository.list()).map((b) => b.id)).toEqual([good.id]);
+    expect(repository.unreadable.sort()).toEqual(
+      [missing.id, denied.id, offline.id, outside].sort(),
+    );
+    expect(reads.mock.calls.some(([url]) => url.startsWith("https://evil.example/"))).toBe(false);
+  });
+  it("a 101st created board leaves the first page usable", async () => {
+    const { repository } = await fixture();
+    for (let i = 0; i < 101; i++) await repository.create(`Board ${i}`);
+    expect(await repository.list()).toHaveLength(100);
+    expect(repository.truncated).toBe(true);
+    expect(repository.unreadable).toEqual([]);
+  });
+  it("recovers missing write validators from matching GET bodies for create, save and rename", async () => {
+    const { repository, storage } = await fixture();
+    const create = storage.create.bind(storage),
+      write = storage.write.bind(storage);
+    vi.spyOn(storage, "create").mockImplementation(async (...args) => ({
+      ...(await create(...args)),
+      etag: null,
+      etagSource: "response",
+    }));
+    vi.spyOn(storage, "write").mockImplementation(async (...args) => ({
+      ...(await write(...args)),
+      etag: null,
+      etagSource: "response",
+    }));
+    let b = await repository.create("A", scene());
+    b = await repository.save(b, emptyScene());
+    b = await repository.save(b, scene());
+    b = await repository.rename(b, "B");
+    b = await repository.rename(b, "C");
+    expect(b.etag).toBeTruthy();
+    expect(b.descriptorEtag).toBeTruthy();
+    await repository.remove(b);
+    expect(await repository.list()).toEqual([]);
+  });
+  it("routes mismatching follow-up bytes to autosave conflict without adopting another writer's ETag", async () => {
+    const { repository, storage } = await fixture();
+    const b = await repository.create("A", scene());
+    const write = storage.write.bind(storage);
+    vi.spyOn(storage, "write").mockImplementationOnce(async (...args) => {
+      const result = await write(...args);
+      await write(b.blob, serializeScene(scene()), {
+        contentType: "application/json",
+        ifMatch: result.etag as string,
+      });
+      return { ...result, etag: '"other-writer"', etagSource: "follow-up" };
+    });
+    const changed = vi.fn();
+    const writer = new BoardAutosave(repository, b, changed, 60000);
+    writer.update(emptyScene());
+    await writer.flush();
+    expect(changed.mock.calls.at(-1)?.[0]).toBe("conflict");
+    await expect(writer.finish()).rejects.toThrow("before deleting");
+    writer.dispose();
+  });
+  it("commits descriptor deletion even when orphan cleanup fails", async () => {
+    const { repository, storage } = await fixture();
+    const b = await repository.create("A");
+    const remove = storage.delete.bind(storage);
+    vi.spyOn(storage, "delete").mockImplementation(async (url, options) => {
+      if (url === b.blob) throw new Error("offline");
+      return remove(url, options);
+    });
+    await expect(repository.remove(b)).resolves.toBeUndefined();
+    expect(await repository.list()).toEqual([]);
+    expect(await storage.read(b.blob)).toBeDefined();
+  });
+  it("awaits an in-flight autosave and its latest ETag before deletion", async () => {
+    const { repository, storage } = await fixture();
+    const b = await repository.create("A", scene());
+    const save = repository.save.bind(repository);
+    const gate = Promise.withResolvers<void>();
+    vi.spyOn(repository, "save").mockImplementationOnce(async (...args) => {
+      await gate.promise;
+      return save(...args);
+    });
+    const remove = vi.spyOn(storage, "delete");
+    const writer = new BoardAutosave(repository, b, vi.fn(), 60000);
+    writer.update(emptyScene());
+    const flight = writer.flush();
+    const deleting = writer.finish().then((saved) => repository.remove(saved));
+    writer.dispose();
+    expect(remove).not.toHaveBeenCalled();
+    gate.resolve();
+    await Promise.all([flight, deleting]);
+    expect(await repository.list()).toEqual([]);
+  });
+  it("rejects combined paste overflow before committing and validates only the new snapshot", async () => {
+    const { pasteScene } = await import("../src/apps/whiteboard/state/history");
+    const full = {
+      ...emptyScene(),
+      elements: Array.from(
+        { length: 5000 },
+        (_, i) => ({ id: `${i}`, type: "future" }) as Board["scene"]["elements"][number],
+      ),
+    };
+    const state = history(full);
+    expect(() => pasteScene(full, scene())).toThrow("5,000");
+    expect(state.present).toBe(full);
+    let reads = 0;
+    const base = emptyScene();
+    Object.defineProperty(base, "probe", {
+      enumerable: true,
+      get: () => {
+        reads++;
+        return 1;
+      },
+    });
+    const h = history(base);
+    reads = 0;
+    commit(h, scene());
+    expect(reads).toBe(0);
+  });
+  it("stores a fixed palette regardless of theme", async () => {
+    const { PALETTE, paletteColour } = await import("../src/apps/whiteboard/lib/palette");
+    vi.stubGlobal("getComputedStyle", () => {
+      throw new Error("theme read");
+    });
+    expect(paletteColour("--foreground")).toBe(DEFAULT_STYLE.strokeColor);
+    for (const c of PALETTE) expect(paletteColour(c.token)).toMatch(/^#[\da-f]{6}$/);
+    expect(paletteColour("none")).toBe("transparent");
+  });
+  it("purges signed-out and other WebID drafts and fences late writes", async () => {
+    const { activateDraftOwner } = await import("../src/apps/whiteboard/lib/drafts");
+    const map = new Map<string, string>();
+    const storage = {
+      get length() {
+        return map.size;
+      },
+      key: (i: number) => [...map.keys()][i] ?? null,
+      getItem: (k: string) => map.get(k) ?? null,
+      setItem: (k: string, v: string) => {
+        map.set(k, v);
+      },
+      removeItem: (k: string) => {
+        map.delete(k);
+      },
+    };
+    const { repository } = await fixture();
+    const b = await repository.create("Private", scene());
+    activateDraftOwner(storage, "alice");
+    writeDrafts(storage, "alice", root, [b]);
+    activateDraftOwner(storage, "bob");
+    expect(readDrafts(storage, "bob", root)).toEqual([]);
+    expect(writeDrafts(storage, "alice", root, [b])).toBe(false);
+    expect([...map.values()].join()).not.toContain("Private");
+    writeDrafts(storage, "bob", root, [b]);
+    activateDraftOwner(storage, null);
+    expect(writeDrafts(storage, "bob", root, [b])).toBe(false);
+    expect([...map.values()].join()).not.toContain("Private");
+  });
+});
+
+it("re-measures edited text at its original font size", async () => {
+  const { editText } = await import("../src/apps/whiteboard/state/history");
+  const s = addElement(emptyScene(), text(0, 0, "Before", { id: "large", fontSize: 48 }));
+  const edited = editText(s, "large", "After\nSecond line");
+  expect(edited.elements[0]).toMatchObject({ fontSize: 48, height: 120, width: 11 * 48 * 0.65 });
+  expect(editText(s, "absent", "x")).toBe(s);
+});
+
+it("includes the visible zoom percentage in its accessible name and describes Shift selection", async () => {
+  const React = await import("react");
+  const { renderToStaticMarkup } = await import("react-dom/server");
+  const { BoardEditor } = await import("../src/apps/whiteboard/components/editor");
+  const { repository } = await fixture();
+  const board = await repository.create("Labels");
+  const markup = renderToStaticMarkup(
+    React.createElement(BoardEditor, {
+      board,
+      repository,
+      onBack: () => {},
+      onChange: () => {},
+      retain: () => {},
+      onCopy: () => {},
+      hasDraft: false,
+    }),
+  );
+  expect(markup).toContain('aria-label="Reset zoom, 100%"');
+  expect(markup).toContain("Shift to select multiple shapes");
+});
+
+it("never adopts a mismatching descriptor version after a rename", async () => {
+  const { repository, storage } = await fixture();
+  const b = await repository.create("A");
+  const write = storage.write.bind(storage);
+  vi.spyOn(storage, "write").mockImplementationOnce(async (...args) => {
+    const saved = await write(...args);
+    await write(
+      b.descriptor,
+      await descriptor(b.descriptor, { ...b.metadata, title: "Concurrent title" }),
+      { contentType: "text/turtle", ifMatch: saved.etag as string },
+    );
+    return { ...saved, etag: null, etagSource: "response" };
+  });
+  const error = await repository.rename(b, "My title").catch((e) => e);
+  expect(isConflict(error)).toBe(true);
+  expect((await repository.read(b.id)).title).toBe("Concurrent title");
+});
+
+it("pastes into a separate destination without counting clipboard originals twice", async () => {
+  const { pasteScene } = await import("../src/apps/whiteboard/state/history");
+  const source = {
+    ...emptyScene(),
+    elements: Array.from(
+      { length: 3000 },
+      (_, i) => ({ id: `source-${i}`, type: "future" }) as Board["scene"]["elements"][number],
+    ),
+    files: { source: "kept" },
+  };
+  const target = { ...scene(), files: { target: "kept" } };
+  const pasted = pasteScene(target, source);
+  expect(pasted.scene.elements).toHaveLength(3001);
+  expect(pasted.ids).toHaveLength(3000);
+  expect(pasted.scene.files).toEqual({ source: "kept", target: "kept" });
+  expect(target.elements).toHaveLength(1);
+  expect(() => commit(history(target), pasted.scene)).not.toThrow();
 });

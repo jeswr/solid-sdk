@@ -30,6 +30,7 @@ import {
   reorderElements,
   resizeElement,
   rotatePoint,
+  type SceneElement,
   sceneBounds,
   sceneToSvg,
   serializeScene,
@@ -94,8 +95,6 @@ describe("bounded lossless JSON", () => {
     { width: -1 },
     { height: 1e9 },
     { angle: Infinity },
-    { strokeColor: "url(https://evil.test)" },
-    { backgroundColor: 'red" onload="x' },
     { strokeWidth: -1 },
     { opacity: 101 },
     { opacity: -1 },
@@ -128,7 +127,7 @@ describe("bounded lossless JSON", () => {
     expect(() => validateScene({ ...emptyScene(), elements: [e, e] })).toThrow();
     expect(() => parseScene(encode({ ...emptyScene(), files: [] }))).toThrow();
     expect(() =>
-      validateScene({ ...emptyScene(), appState: { viewBackgroundColor: "url(x)" } }),
+      validateScene({ ...emptyScene(), appState: { viewBackgroundColor: 42 } }),
     ).toThrow();
     expect(() => createElement("image", 0, 0, 1, 1, { fileId: 42 as unknown as string })).toThrow();
     expect(() => line(0, 0, [[1, 2, 3] as unknown as [number, number]])).toThrow();
@@ -460,4 +459,153 @@ it("makes malformed Unicode safe for XML and data URI thumbnails", () => {
 it("rejects malformed hexadecimal colours", () => {
   expect(isColour("#12345")).toBe(false);
   expect(isColour("#1234567")).toBe(false);
+});
+
+// AUTHORED-BY Codex (GPT-6.1 Sol)
+describe("review import and geometry regressions", () => {
+  it("defaults missing legacy timestamps without changing untouched bytes", () => {
+    const element = { ...rectangle(0, 0, 10, 10) } as Record<string, unknown>;
+    delete element.updated;
+    const json = JSON.stringify({ ...emptyScene(), elements: [element] });
+    const parsed = parseScene(json);
+    expect(parsed.elements[0]?.updated).toBe(0);
+    expect(serializeScene(parsed)).toBe(json);
+  });
+  it.each([
+    "hsl(120deg 50% 50%)",
+    "lab(50% 40 30)",
+    "hwb(90 10% 10%)",
+    "color-mix(in srgb, red, blue)",
+    "url(https://evil.example)",
+    'red" onload="evil()',
+  ])("preserves unsupported paint %s and omits it from SVG", (colour) => {
+    const input = JSON.stringify({
+      ...emptyScene(),
+      appState: { viewBackgroundColor: colour },
+      elements: [{ ...rectangle(0, 0, 10, 10), strokeColor: colour }],
+    });
+    const parsed = parseScene(input);
+    expect(serializeScene(parsed)).toBe(input);
+    expect(sceneToSvg(parsed, { background: true })).not.toContain(colour);
+    expect(isRenderable(parsed.elements[0] as SceneElement)).toBe(false);
+  });
+  it("imports BOM-prefixed text and streamed UTF-8", async () => {
+    const { parseSceneStream } = await import("../src/index.js");
+    const source = `\uFEFF${JSON.stringify(emptyScene())}`;
+    expect(serializeScene(parseScene(source))).toBe(source);
+    const stream = new Response(source).body;
+    expect(serializeScene(await parseSceneStream(stream))).toBe(source);
+  });
+  it("matches Excalidraw point-centred rotation for a negative-point arrow", async () => {
+    const { elementCentre, resizeHandle, resizeFromHandle } = await import("../src/index.js");
+    // Relative points (0,0), (-100,-50), rotated 90 degrees around world (150,175).
+    const e = arrow(
+      200,
+      200,
+      [
+        [0, 0],
+        [-100, -50],
+      ],
+      { id: "rotated", angle: Math.PI / 2 },
+    );
+    expect(elementCentre(e)).toEqual([150, 175]);
+    const b = elementBounds(e);
+    expect(b.x).toBeCloseTo(125);
+    expect(b.y).toBeCloseTo(125);
+    expect(b.width).toBeCloseTo(50);
+    expect(b.height).toBeCloseTo(100);
+    expect(hitTest(e, [125, 225], 0)).toBe(true);
+    expect(hitTest(e, [175, 125], 0)).toBe(true);
+    expect(hitTest(e, [225, 125], 0)).toBe(false);
+    expect(sceneToSvg(addElement(emptyScene(), e))).toContain("rotate(90 -50 -25)");
+    const fixed = resizeHandle(e, "nw");
+    const resized = resizeFromHandle(addElement(emptyScene(), e), e.id, "se", [75, 325])
+      .elements[0] as SceneElement;
+    const after = resizeHandle(resized, "nw");
+    expect(after[0]).toBeCloseTo(fixed[0]);
+    expect(after[1]).toBeCloseTo(fixed[1]);
+    expect(resizeHandle(resized, "se")[0]).toBeCloseTo(75);
+    expect(resizeHandle(resized, "se")[1]).toBeCloseTo(325);
+  });
+});
+
+it("exercises complexity caps on JSON text, wide objects and aggregate pending values", () => {
+  expect(() => parseScene(`[${"0,".repeat(LIMITS.nodes + 1)}0]`)).toThrow("complexity");
+  expect(() =>
+    validateScene(Object.fromEntries(Array.from({ length: LIMITS.nodes + 1 }, (_, i) => [i, 0]))),
+  ).toThrow("complexity");
+  expect(() => validateScene(Array.from({ length: 10000 }, () => Array(30).fill(0)))).toThrow(
+    "complexity",
+  );
+  for (const patch of [{ strokeColor: null }, { backgroundColor: 7 }])
+    expect(() =>
+      validateScene({ ...emptyScene(), elements: [{ ...rectangle(0, 0, 1, 1), ...patch }] }),
+    ).toThrow("colour");
+});
+
+it("covers app-owned previews, optional bindings, and degenerate resizing", async () => {
+  const { resizeFromHandle, resizeHandle, localBounds } = await import("../src/index.js");
+  const preview = { preview: true };
+  const s = board();
+  expect(addElement(s, rectangle(0, 0, 1, 1), preview).elements).toHaveLength(2);
+  expect(reorderElements(s, ["one"], "back", preview).elements).toHaveLength(1);
+  expect(duplicateElements(s, ["one"], 0, preview).ids).toHaveLength(1);
+  expect(resizeFromHandle(s, "missing", "nw", [0, 0])).toBe(s);
+  const box = s.elements[0] as NonNullable<(typeof s.elements)[0]>;
+  const resized = resizeFromHandle(s, "one", "nw", [0, 0], preview).elements[0] as typeof box;
+  expect(resizeHandle(resized, "se")).toEqual(resizeHandle(box, "se"));
+  expect(localBounds({ ...box, points: [] }).width).toBe(100);
+  const unbound = addElement(
+    emptyScene(),
+    rectangle(0, 0, 1, 1, {
+      id: "unbound",
+      startBinding: {},
+      endBinding: { elementId: "unbound" },
+      containerId: "outside",
+    }),
+  );
+  expect(duplicateElements(unbound, ["unbound"]).scene.elements[1]?.containerId).toBe(null);
+  const degenerate = addElement(emptyScene(), { ...text(0, 0, "x", { id: "text" }), height: 0 });
+  expect(resizeElement(degenerate, "text", 20, 40).elements[0]?.fontSize).toBe(24);
+  // Runtime fallback for a legacy caller that constructs text without fontSize.
+  expect(
+    resizeElement(
+      {
+        ...degenerate,
+        elements: degenerate.elements.map((e) => {
+          const v = { ...e };
+          delete v.fontSize;
+          return v;
+        }),
+      },
+      "text",
+      20,
+      40,
+    ).elements[0]?.fontSize,
+  ).toBe(24);
+});
+
+it("excludes non-rendered items from box selections", () => {
+  expect(
+    elementsInBox(addElement(emptyScene(), imageReference(0, 0, 10, 10, "image")), {
+      x: -20,
+      y: -20,
+      width: 100,
+      height: 100,
+    }),
+  ).toEqual([]);
+});
+
+it("bounds transient additions before rendering", () => {
+  const e = rectangle(0, 0, 1, 1);
+  expect(() =>
+    addElement({ ...emptyScene(), elements: Array(5000).fill(e) }, e, { preview: true }),
+  ).toThrow("elements");
+});
+
+it("starts revisions when explicitly editing an opaque future element without version fields", () => {
+  const s = parseScene(
+    '{"type":"excalidraw","version":2,"appState":{},"files":{},"elements":[{"id":"future","type":"future"}]}',
+  );
+  expect(updateElements(s, ["future"], { vendor: "edited" }).elements[0]?.version).toBe(1);
 });

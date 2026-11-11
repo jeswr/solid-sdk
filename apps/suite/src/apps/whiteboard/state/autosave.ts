@@ -55,6 +55,12 @@ export class BoardAutosave {
     this.flight = null;
     if (this.pending && !this.blocked) await this.flush(keepalive);
   }
+  /** Drain pending writes before the descriptor is deleted; never delete after a failed flush. */
+  async finish(): Promise<Board> {
+    await this.flush();
+    if (this.pending || this.blocked) throw new Error("Save this board before deleting it");
+    return this.board;
+  }
   retry() {
     this.blocked = false;
     return this.flush();

@@ -2,6 +2,7 @@
 
 export * from "./geometry.js";
 export * from "./operations.js";
+export * from "./palette.js";
 export * from "./parse.js";
 export * from "./svg.js";
 export * from "./types.js";

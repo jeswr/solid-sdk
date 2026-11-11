@@ -50,6 +50,8 @@ export interface Bounds {
   height: number;
 }
 export interface Revision {
+  /** App-owned previews must be validated at commit, before persistence. */
+  preview?: boolean;
   now?: number;
   nonce?: number;
 }

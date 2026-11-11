@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+import { elementCentre, localBounds, rotatePoint } from "./geometry.js";
 import { validateScene } from "./parse.js";
 import {
   DEFAULT_STYLE,
@@ -154,9 +155,10 @@ function changed(e: SceneElement, patch: Partial<SceneElement>, revision: Revisi
     updated: revision.now ?? Date.now(),
   };
 }
-export function addElement(scene: Scene, element: SceneElement): Scene {
+export function addElement(scene: Scene, element: SceneElement, revision: Revision = {}): Scene {
+  if (scene.elements.length >= LIMITS.elements) throw new TypeError("Too many elements");
   const next = { ...scene, elements: [...scene.elements, element] };
-  validateScene(next);
+  if (!revision.preview) validateScene(next);
   return next;
 }
 export function updateElements(
@@ -172,7 +174,7 @@ export function updateElements(
       : e,
   );
   const next = { ...scene, elements };
-  validateScene(next);
+  if (!revision.preview) validateScene(next);
   return next;
 }
 export const deleteElements = (scene: Scene, ids: readonly string[], revision?: Revision) =>
@@ -191,7 +193,7 @@ export function resizeElement(
   id: string,
   width: number,
   height: number,
-  revision?: Revision,
+  revision: Revision = {},
 ): Scene {
   if (!Number.isFinite(width) || !Number.isFinite(height) || width < 0 || height < 0)
     throw new TypeError("Invalid dimensions");
@@ -239,7 +241,7 @@ export function reorderElements(
     ...scene,
     elements: direction === "front" ? [...rest, ...chosen] : [...chosen, ...rest],
   };
-  validateScene(next);
+  if (!revision.preview) validateScene(next);
   return next;
 }
 export function groupElements(
@@ -260,9 +262,10 @@ export function duplicateElements(
   ids: readonly string[],
   offset = 24,
   revision: Revision = {},
+  destination: Scene = scene,
 ): { scene: Scene; ids: string[] } {
   const chosen = scene.elements.filter((e) => ids.includes(e.id) && !e.isDeleted);
-  if (scene.elements.length + chosen.length > LIMITS.elements)
+  if (destination.elements.length + chosen.length > LIMITS.elements)
     throw new TypeError("Too many elements");
   const mapping = new Map(chosen.map((e) => [e.id, newId()]));
   const groups = new Map(chosen.flatMap((e) => e.groupIds ?? []).map((g) => [g, newId()]));
@@ -274,7 +277,7 @@ export function duplicateElements(
       const binding = copy[key] as { elementId?: string } | null;
       if (binding)
         copy[key] = mapping.has(binding.elementId ?? "")
-          ? { ...binding, elementId: mapping.get(binding.elementId ?? "") }
+          ? { ...binding, elementId: mapping.get(binding.elementId as string) }
           : null;
     }
     copy.boundElements = Array.isArray(copy.boundElements)
@@ -299,7 +302,38 @@ export function duplicateElements(
       seed: randomNonce(),
     };
   });
-  const next = { ...scene, elements: [...scene.elements, ...copies] };
-  validateScene(next);
+  const next = { ...destination, elements: [...destination.elements, ...copies] };
+  if (!revision.preview) validateScene(next);
   return { scene: next, ids: copies.map((e) => e.id) };
+}
+
+/** Resize around the opposite rotated handle, using point bounds for linear elements. */
+export function resizeFromHandle(
+  scene: Scene,
+  id: string,
+  handle: string,
+  point: Point,
+  revision: Revision = {},
+): Scene {
+  const e = scene.elements.find((e) => e.id === id);
+  if (!e) return scene;
+  const b = localBounds(e),
+    centre = elementCentre(e);
+  const p = rotatePoint(point, centre, -e.angle);
+  const anchor: Point = [
+    e.x + b.x + (handle.includes("w") ? b.width : 0),
+    e.y + b.y + (handle.includes("n") ? b.height : 0),
+  ];
+  const width = Math.abs(p[0] - anchor[0]),
+    height = Math.abs(p[1] - anchor[1]);
+  const scaled = resizeElement(scene, id, width, height, { ...revision, preview: true });
+  const resized = scaled.elements.find((item) => item.id === id) as SceneElement;
+  const rb = localBounds(resized);
+  const nextCentre = rotatePoint([(p[0] + anchor[0]) / 2, (p[1] + anchor[1]) / 2], centre, e.angle);
+  return updateElements(
+    scaled,
+    [id],
+    { x: nextCentre[0] - rb.x - rb.width / 2, y: nextCentre[1] - rb.y - rb.height / 2 },
+    revision,
+  );
 }

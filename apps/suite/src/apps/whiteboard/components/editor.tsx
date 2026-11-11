@@ -7,15 +7,18 @@ import {
   duplicateElements,
   type ElementType,
   elementsInBox,
+  emptyScene,
   groupElements,
   hitElement,
-  isColour,
   isRenderable,
   linear,
   moveElements,
+  newId,
   type Point,
   reorderElements,
   resizeElement,
+  resizeFromHandle,
+  resizeHandle,
   type Scene,
   type SceneElement,
   sceneBounds,
@@ -58,12 +61,13 @@ import {
   Undo2,
   Ungroup,
 } from "lucide-react";
-import { type PointerEvent, useEffect, useRef, useState } from "react";
+import { memo, type PointerEvent, useEffect, useRef, useState } from "react";
 import { downloadBoard, scenePng } from "../lib/export";
+import { PALETTE, paletteColour } from "../lib/palette";
 import type { Board, BoardAccess } from "../lib/repository";
 import { canvasPoint, dragBox, INITIAL_VIEW, type Viewport, zoomAt } from "../lib/viewport";
 import { BoardAutosave, type SaveState } from "../state/autosave";
-import { commit, history, redo, undo } from "../state/history";
+import { commit, editText, history, pasteScene, redo, undo } from "../state/history";
 
 type Tool = "select" | "hand" | "eraser" | Exclude<ElementType, "image">;
 const TOOLS = [
@@ -78,14 +82,18 @@ const TOOLS = [
   { id: "text", label: "Text", key: "T", icon: Type },
   { id: "eraser", label: "Eraser", key: "E", icon: Eraser },
 ] as const;
-const PALETTE = [
-  { name: "Ink", token: "--foreground" },
-  { name: "Ocean", token: "--primary" },
-  { name: "Leaf", token: "--success" },
-  { name: "Berry", token: "--chart-4" },
-  { name: "Coral", token: "--destructive" },
-  { name: "Sunshine", token: "--warning" },
-];
+
+const SceneShape = memo(function SceneShape({ element }: { element: SceneElement }) {
+  // Each changed element crosses the sanitiser; unchanged immutable elements keep their SVG.
+  let markup = "";
+  try {
+    markup = sceneToSvgContent({ ...emptyScene(), elements: [element] });
+  } catch {
+    // Invalid transient geometry stays out of markup; commit reports the validation error.
+  }
+  // biome-ignore lint/security/noDangerouslySetInnerHtml lint/style/useNamingConvention: escaped SDK SVG only.
+  return <g dangerouslySetInnerHTML={{ __html: markup }} />;
+});
 interface Gesture {
   kind: "draw" | "move" | "box" | "pan" | "resize" | "erase";
   start: Point;
@@ -105,6 +113,7 @@ export function BoardEditor({
   retain,
   onCopy,
   hasDraft,
+  onWriter,
 }: {
   board: Board;
   repository: BoardAccess;
@@ -113,6 +122,7 @@ export function BoardEditor({
   retain: (b: Board, pending: boolean) => void;
   onCopy: (scene: Scene) => void;
   hasDraft: boolean;
+  onWriter?: (writer: BoardAutosave) => void;
 }) {
   const [state, setState] = useState(() => history(board.scene)),
     [preview, setPreview] = useState<Scene | null>(null),
@@ -159,6 +169,9 @@ export function BoardEditor({
         }
       }),
   );
+  useEffect(() => {
+    onWriter?.(writer);
+  }, [writer, onWriter]);
   const initialBoard = useRef(board);
   const first = useRef(true);
   useEffect(() => {
@@ -209,15 +222,17 @@ export function BoardEditor({
     return () => canvas.removeEventListener("wheel", wheel);
   }, []);
   const scene = preview ?? state.present;
-  const edit = (next: Scene) => {
-    setState((s) => commit(s, next));
+  const edit = (makeScene: () => Scene) => {
+    try {
+      const next = commit(current.current, makeScene());
+      current.current = next;
+      setState(next);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Couldn't edit this board");
+    }
     setPreview(null);
   };
-  const colour = (token: string) => {
-    if (token === "none") return "transparent";
-    const value = root.current ? getComputedStyle(root.current).getPropertyValue(token).trim() : "";
-    return isColour(value) ? value : "black";
-  };
+  const colour = paletteColour;
   const style = (): Partial<SceneElement> => ({
     strokeColor: colour(stroke),
     backgroundColor: colour(fill),
@@ -225,42 +240,30 @@ export function BoardEditor({
     opacity,
   });
   const changeStyle = (patch: Partial<SceneElement>) => {
-    if (selection.length) edit(updateElements(state.present, selection, patch));
+    if (selection.length)
+      edit(() => updateElements(state.present, selection, patch, { preview: true }));
   };
   const selected = scene.elements.filter((e) => selection.includes(e.id) && !e.isDeleted),
     bounds = selected.length ? sceneBounds(scene, selection) : null;
-  const duplicate = () => {
-    const copy = duplicateElements(state.present, selection);
-    edit(copy.scene);
-    setSelection(copy.ids);
-  };
+  const duplicate = () =>
+    edit(() => {
+      const copy = duplicateElements(current.current.present, selection, 24, { preview: true });
+      setSelection(copy.ids);
+      return copy.scene;
+    });
   const copy = () => {
     clipboard.current = {
       ...state.present,
       elements: state.present.elements.filter((e) => selection.includes(e.id) && !e.isDeleted),
     };
   };
-  const paste = () => {
-    const copied = clipboard.current;
-    if (!copied) return;
-    const combined = {
-      ...state.present,
-      files: { ...state.present.files, ...copied.files },
-      elements: [...state.present.elements],
-    };
-    const temp = duplicateElements(
-      copied,
-      copied.elements.map((e) => e.id),
-    );
-    edit({
-      ...combined,
-      elements: [
-        ...combined.elements,
-        ...temp.scene.elements.filter((e) => temp.ids.includes(e.id)),
-      ],
+  const paste = () =>
+    edit(() => {
+      if (!clipboard.current) return current.current.present;
+      const copied = pasteScene(current.current.present, clipboard.current);
+      setSelection(copied.ids);
+      return copied.scene;
     });
-    setSelection(temp.ids);
-  };
   const screen = (event: { clientX: number; clientY: number }): Point => {
     const box = root.current?.getBoundingClientRect();
     return [event.clientX - (box?.left ?? 0), event.clientY - (box?.top ?? 0)];
@@ -310,7 +313,7 @@ export function BoardEditor({
     const hit = hitElement(state.present, p, 6 / view.zoom);
     if (tool === "eraser") {
       gesture.current = { ...base, kind: "erase" };
-      if (hit) setPreview(deleteElements(state.present, [hit.id]));
+      if (hit) setPreview(deleteElements(state.present, [hit.id], { preview: true }));
       return;
     }
     if (tool === "select") {
@@ -371,7 +374,7 @@ export function BoardEditor({
       return;
     }
     if (g.kind === "move") {
-      setPreview(moveElements(g.scene, g.ids, dx, dy));
+      setPreview(moveElements(g.scene, g.ids, dx, dy, { preview: true }));
       return;
     }
     if (g.kind === "box") {
@@ -382,18 +385,11 @@ export function BoardEditor({
     }
     if (g.kind === "erase") {
       const hit = hitElement(preview ?? g.scene, p, 6 / view.zoom);
-      if (hit) setPreview(deleteElements(preview ?? g.scene, [hit.id]));
+      if (hit) setPreview(deleteElements(preview ?? g.scene, [hit.id], { preview: true }));
       return;
     }
     if (g.kind === "resize" && g.element) {
-      const e = g.element;
-      const left = g.handle?.includes("w"),
-        top = g.handle?.includes("n");
-      const anchor: Point = [left ? e.x + e.width : e.x, top ? e.y + e.height : e.y];
-      const box = dragBox(anchor, p);
-      let next = resizeElement(g.scene, e.id, box.width, box.height);
-      next = updateElements(next, [e.id], { x: box.x, y: box.y });
-      setPreview(next);
+      setPreview(resizeFromHandle(g.scene, g.element.id, g.handle ?? "se", p, { preview: true }));
       return;
     }
     if (g.element) {
@@ -414,7 +410,7 @@ export function BoardEditor({
           height: Math.abs(dy),
         });
       } else e = { ...e, ...dragBox(g.start, p) };
-      setPreview(addElement(g.scene, e));
+      setPreview(addElement(g.scene, e, { preview: true }));
       setSelection([e.id]);
     }
   };
@@ -429,7 +425,7 @@ export function BoardEditor({
     gesture.current = null;
     setMarquee(null);
     if (preview) {
-      edit(preview);
+      edit(() => preview);
       if (g?.kind === "draw") setTool("select");
     }
   };
@@ -604,7 +600,11 @@ export function BoardEditor({
                 const element = selected[0];
                 const value = Number(event.target.value);
                 if (element && value > 0 && value <= 10000)
-                  edit(resizeElement(state.present, element.id, value, element.height));
+                  edit(() =>
+                    resizeElement(state.present, element.id, value, element.height, {
+                      preview: true,
+                    }),
+                  );
               }}
             />
             <span aria-hidden="true">×</span>
@@ -618,7 +618,11 @@ export function BoardEditor({
                 const element = selected[0];
                 const value = Number(event.target.value);
                 if (element && value > 0 && value <= 10000)
-                  edit(resizeElement(state.present, element.id, element.width, value));
+                  edit(() =>
+                    resizeElement(state.present, element.id, element.width, value, {
+                      preview: true,
+                    }),
+                  );
               }}
             />
           </label>
@@ -636,7 +640,9 @@ export function BoardEditor({
             label="Group selection"
             variant="ghost"
             disabled={selection.length < 2}
-            onClick={() => edit(groupElements(state.present, selection))}
+            onClick={() =>
+              edit(() => groupElements(state.present, selection, newId(), { preview: true }))
+            }
           >
             <Group size={17} />
           </IconButton>
@@ -644,7 +650,9 @@ export function BoardEditor({
             label="Ungroup selection"
             variant="ghost"
             disabled={!selection.length}
-            onClick={() => edit(groupElements(state.present, selection, null))}
+            onClick={() =>
+              edit(() => groupElements(state.present, selection, null, { preview: true }))
+            }
           >
             <Ungroup size={17} />
           </IconButton>
@@ -652,7 +660,9 @@ export function BoardEditor({
             label="Bring to front"
             variant="ghost"
             disabled={!selection.length}
-            onClick={() => edit(reorderElements(state.present, selection, "front"))}
+            onClick={() =>
+              edit(() => reorderElements(state.present, selection, "front", { preview: true }))
+            }
           >
             <ArrowUp size={17} />
           </IconButton>
@@ -660,7 +670,9 @@ export function BoardEditor({
             label="Send to back"
             variant="ghost"
             disabled={!selection.length}
-            onClick={() => edit(reorderElements(state.present, selection, "back"))}
+            onClick={() =>
+              edit(() => reorderElements(state.present, selection, "back", { preview: true }))
+            }
           >
             <ArrowDown size={17} />
           </IconButton>
@@ -669,7 +681,7 @@ export function BoardEditor({
             variant="ghost"
             disabled={!selection.length}
             onClick={() => {
-              edit(deleteElements(state.present, selection));
+              edit(() => deleteElements(state.present, selection, { preview: true }));
               setSelection([]);
             }}
           >
@@ -691,8 +703,23 @@ export function BoardEditor({
         tabIndex={0}
         className={`wb-canvas wb-tool-${tool}`}
         style={{ backgroundColor: scene.appState.viewBackgroundColor }}
-        onPointerDown={begin}
-        onPointerMove={motion}
+        onPointerDown={(event) => {
+          try {
+            begin(event);
+          } catch {
+            gesture.current = null;
+            toast.error("Couldn’t draw this shape. Check the board limits.");
+          }
+        }}
+        onPointerMove={(event) => {
+          try {
+            motion(event);
+          } catch {
+            gesture.current = null;
+            setPreview(null);
+            toast.error("Couldn’t draw this shape. Check the board limits.");
+          }
+        }}
         onPointerUp={finish}
         onPointerCancel={() => {
           gesture.current = null;
@@ -736,7 +763,7 @@ export function BoardEditor({
           }
           if (key === "delete" || key === "backspace") {
             event.preventDefault();
-            edit(deleteElements(state.present, selection));
+            edit(() => deleteElements(state.present, selection, { preview: true }));
             setSelection([]);
             return;
           }
@@ -777,7 +804,7 @@ export function BoardEditor({
                 80,
                 style(),
               );
-              edit(addElement(state.present, element));
+              edit(() => addElement(state.present, element, { preview: true }));
               setSelection([element.id]);
               setTool("select");
             }
@@ -792,12 +819,13 @@ export function BoardEditor({
           const delta = arrows[key];
           if (delta) {
             event.preventDefault();
-            edit(
+            edit(() =>
               moveElements(
                 state.present,
                 selection,
                 delta[0] * (event.shiftKey ? 10 : 1),
                 delta[1] * (event.shiftKey ? 10 : 1),
+                { preview: true },
               ),
             );
             return;
@@ -820,8 +848,9 @@ export function BoardEditor({
         >
           <title>{board.title}</title>
           <g transform={`translate(${view.x} ${view.y}) scale(${view.zoom})`}>
-            {/* biome-ignore lint/security/noDangerouslySetInnerHtml lint/style/useNamingConvention: only the validated, escaped DOM-free SDK SVG emitter supplies this fragment. */}
-            <g dangerouslySetInnerHTML={{ __html: sceneToSvgContent(scene) }} />
+            {scene.elements.filter(isRenderable).map((element) => (
+              <SceneShape key={element.id} element={element} />
+            ))}
             {bounds && (
               <g className="wb-selection">
                 <rect
@@ -839,8 +868,8 @@ export function BoardEditor({
                     <rect
                       key={h}
                       data-resize={h}
-                      x={(h.includes("w") ? bounds.x : bounds.x + bounds.width) - 5 / view.zoom}
-                      y={(h.includes("n") ? bounds.y : bounds.y + bounds.height) - 5 / view.zoom}
+                      x={resizeHandle(selected[0] as SceneElement, h)[0] - 5 / view.zoom}
+                      y={resizeHandle(selected[0] as SceneElement, h)[1] - 5 / view.zoom}
                       width={10 / view.zoom}
                       height={10 / view.zoom}
                       fill="var(--surface)"
@@ -870,7 +899,7 @@ export function BoardEditor({
       </div>
       <footer className="wb-editor-foot">
         <p id="wb-help">
-          V select · H pan · drag or Enter to draw · Shift for more shapes · ⌘/Ctrl Z undo
+          V select · H pan · drag or Enter to draw · Shift to select multiple shapes · ⌘/Ctrl Z undo
         </p>
         <div className="wb-zoom">
           <IconButton label="Zoom out" size="icon-sm" variant="ghost" onClick={() => zoom(1 / 1.2)}>
@@ -879,7 +908,7 @@ export function BoardEditor({
           <Button
             size="sm"
             variant="ghost"
-            aria-label="Reset zoom"
+            aria-label={`Reset zoom, ${Math.round(view.zoom * 100)}%`}
             onClick={() => setView(INITIAL_VIEW)}
           >
             {Math.round(view.zoom * 100)}%
@@ -924,18 +953,14 @@ export function BoardEditor({
               onClick={() => {
                 if (textEntry?.value.trim()) {
                   if (textEntry.id) {
-                    const replacement = text(...textEntry.point, textEntry.value, style());
-                    edit(
-                      updateElements(state.present, [textEntry.id], {
-                        text: replacement.text ?? "",
-                        originalText: replacement.text ?? "",
-                        width: replacement.width,
-                        height: replacement.height,
-                      }),
-                    );
+                    edit(() => editText(state.present, textEntry.id as string, textEntry.value));
                   } else
-                    edit(
-                      addElement(state.present, text(...textEntry.point, textEntry.value, style())),
+                    edit(() =>
+                      addElement(
+                        state.present,
+                        text(...textEntry.point, textEntry.value, style()),
+                        { preview: true },
+                      ),
                     );
                 }
                 setTextEntry(null);

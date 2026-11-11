@@ -25,9 +25,17 @@
     "build": "pnpm -w exec tsc -p packages/excalidraw-scene/tsconfig.build.json",
     "typecheck": "pnpm -w exec tsc -p packages/excalidraw-scene/tsconfig.json --noEmit",
     "lint": "pnpm -w exec biome check packages/excalidraw-scene/src packages/excalidraw-scene/test",
-    "test": "pnpm -w exec vitest run --root packages/excalidraw-scene --config vitest.config.ts"
+    "test": "pnpm -w exec vitest run --root packages/excalidraw-scene --config vitest.config.ts --coverage"
   },
   "engines": {
     "node": ">=24"
+  },
+  "securityCritical": true,
+  "devDependencies": {
+    "@biomejs/biome": "2.5.3",
+    "@types/node": "25.9.5",
+    "@vitest/coverage-v8": "^4.1.10",
+    "typescript": "6.0.3",
+    "vitest": "4.1.10"
   }
 }

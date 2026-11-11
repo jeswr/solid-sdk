@@ -3,14 +3,28 @@ import { parseScene, serializeScene } from "@jeswr/excalidraw-scene";
 import type { Board } from "./repository";
 /** Only unsaved whiteboard snapshots, scoped to the active account and pod. */
 export interface DraftStorage {
+  readonly length?: number;
+  key?(index: number): string | null;
   getItem(key: string): string | null;
   setItem(key: string, value: string): void;
   removeItem(key: string): void;
+}
+const PREFIX = "whiteboard.drafts.v1:";
+const OWNER_KEY = "whiteboard.drafts.owner";
+/** Called on sign-out/account changes; stale asynchronous saves cannot restore another account's drafts. */
+export function activateDraftOwner(storage: DraftStorage, owner: string | null): void {
+  const keep = owner === null ? null : `${PREFIX}${encodeURIComponent(owner)}:`;
+  for (let i = (storage.length ?? 0) - 1; i >= 0; i--) {
+    const name = storage.key?.(i);
+    if (name?.startsWith(PREFIX) && (!keep || !name.startsWith(keep))) storage.removeItem(name);
+  }
+  storage.setItem(OWNER_KEY, owner ?? "");
 }
 const key = (owner: string, root: string) =>
   `whiteboard.drafts.v1:${encodeURIComponent(owner)}:${encodeURIComponent(root)}`;
 export function readDrafts(storage: DraftStorage, owner: string, root: string): Board[] {
   try {
+    activateDraftOwner(storage, owner);
     const raw = storage.getItem(key(owner, root));
     if (!raw || raw.length > 16 * 1024 * 1024) return [];
     const envelope = JSON.parse(raw);
@@ -56,6 +70,8 @@ export function writeDrafts(
   boards: Board[],
 ): boolean {
   try {
+    const active = storage.getItem(OWNER_KEY);
+    if (!owner || (active !== null && active !== owner)) return false;
     if (!boards.length) storage.removeItem(key(owner, root));
     else
       storage.setItem(

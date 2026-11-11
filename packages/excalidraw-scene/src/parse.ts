@@ -42,8 +42,7 @@ export function validateScene(value: unknown): asserts value is Scene {
   const stack: { value: unknown; depth: number }[] = [{ value, depth: 0 }];
   const seen = new Set<object>();
   while (stack.length) {
-    const entry = stack.pop();
-    if (!entry) break;
+    const entry = stack.pop() as { value: unknown; depth: number };
     if (++count > LIMITS.nodes || entry.depth > LIMITS.depth) fail("document complexity limit");
     const v = entry.value;
     if (typeof v === "number" && !Number.isFinite(v)) fail("non-finite number");
@@ -76,7 +75,7 @@ export function validateScene(value: unknown): asserts value is Scene {
   if (value.elements.length > LIMITS.elements) fail("too many elements");
   if (
     value.appState.viewBackgroundColor !== undefined &&
-    !isColour(value.appState.viewBackgroundColor)
+    typeof value.appState.viewBackgroundColor !== "string"
   )
     fail("invalid background colour");
   const ids = new Set<string>();
@@ -103,7 +102,8 @@ export function validateScene(value: unknown): asserts value is Scene {
       )
         fail(`invalid ${key}`);
     if ((e.width as number) < 0 || (e.height as number) < 0) fail("negative dimensions");
-    if (!isColour(e.strokeColor) || !isColour(e.backgroundColor)) fail("invalid element colour");
+    if (typeof e.strokeColor !== "string" || typeof e.backgroundColor !== "string")
+      fail("invalid element colour");
     if (
       typeof e.strokeWidth !== "number" ||
       e.strokeWidth < 0 ||
@@ -154,14 +154,24 @@ export function validateScene(value: unknown): asserts value is Scene {
 export function parseScene(json: string): Scene {
   if (typeof json !== "string") fail("expected JSON text");
   preflight(json);
+  const source = json;
+  json = json.replace(/^\uFEFF/, "");
   let value: unknown;
   try {
     value = JSON.parse(json);
   } catch {
     return fail("malformed JSON");
   }
+  if (record(value) && Array.isArray(value.elements))
+    for (const element of value.elements)
+      if (
+        record(element) &&
+        (ELEMENT_TYPES as readonly unknown[]).includes(element.type) &&
+        element.updated === undefined
+      )
+        element.updated = 0;
   validateScene(value);
-  originals.set(value, { source: json, canonical: JSON.stringify(value) });
+  originals.set(value, { source, canonical: JSON.stringify(value) });
   return value;
 }
 export function serializeScene(scene: Scene): string {
