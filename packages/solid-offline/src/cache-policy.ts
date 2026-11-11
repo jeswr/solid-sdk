@@ -81,6 +81,7 @@ export interface ResponseLike {
   headers: HeadersLike;
   /** Cross-origin opaque responses have type 'opaque' and an unreadable body/headers. */
   type?: string;
+  redirected?: boolean;
 }
 
 /** The subset of the Headers API we rely on (so tests can pass a plain mock). */
@@ -98,6 +99,8 @@ export type CacheDecisionReason =
   | 'never-cache-endpoint'
   | 'opaque-cross-origin'
   | 'vary-star'
+  | 'unsafe-variant'
+  | 'partial-response'
   | 'error-status';
 
 export interface CacheDecision {
@@ -126,7 +129,16 @@ export function isCacheableMethod(method: string): boolean {
 export function isNeverCacheEndpoint(url: string): boolean {
   let path: string;
   try {
-    path = new URL(url).pathname.toLowerCase();
+    const parsed = new URL(url);
+    if (!['http:', 'https:'].includes(parsed.protocol) || parsed.username || parsed.password)
+      return true;
+    if (
+      [...parsed.searchParams.keys()].some((key) =>
+        /^(?:access_token|refresh_token|id_token|token|code|client_secret|dpop)$/i.test(key),
+      )
+    )
+      return true;
+    path = decodeURIComponent(parsed.pathname).toLowerCase();
   } catch {
     // Unparseable URL → be conservative, do not cache.
     return true;
@@ -144,7 +156,7 @@ function parseCacheControl(value: string | null): { noStore: boolean; private: b
   const directives = value
     .toLowerCase()
     .split(',')
-    .map((d) => d.trim());
+    .map((d) => d.trim().split('=')[0]?.trim());
   return {
     noStore: directives.includes('no-store'),
     private: directives.includes('private'),
@@ -173,7 +185,7 @@ export function requestCacheDirective(req: RequestLike): 'no-store' | 'no-cache'
   const directives = cc
     .toLowerCase()
     .split(',')
-    .map((d) => d.trim());
+    .map((d) => d.trim().split('=')[0]?.trim());
   if (directives.includes('no-store')) return 'no-store';
   if (directives.includes('no-cache')) return 'no-cache';
   return 'default';
@@ -194,6 +206,12 @@ export function classifyResponse(req: RequestLike, res: ResponseLike): CacheDeci
   if (isNeverCacheEndpoint(req.url)) {
     return { cacheable: false, reason: 'never-cache-endpoint', negative: false };
   }
+  if (res.redirected) return { cacheable: false, reason: 'never-cache-endpoint', negative: false };
+
+  if (res.status === 206 || req.headers.get('range'))
+    return { cacheable: false, reason: 'partial-response', negative: false };
+  if (unsafeVary(res.headers.get('vary')))
+    return { cacheable: false, reason: 'unsafe-variant', negative: false };
 
   // Opaque cross-origin: type 'opaque' (and status 0) — headers/ETag unreadable,
   // so we cannot honour never-authoritative. Skip.
@@ -265,6 +283,9 @@ export function canonicalAccept(accept: string | null): string {
  */
 export function computeVaryKey(req: RequestLike, res: ResponseLike): string {
   const vary = res.headers.get('vary');
+  // Never materialize credential values in persistent keys, even if called
+  // independently of classifyResponse.
+  if (unsafeVary(vary)) return 'uncacheable';
   if (!vary) {
     // No Vary → still normalize Accept so RDF variants collapse to one entry.
     return `accept=${canonicalAccept(req.headers.get('accept'))}`;
@@ -295,6 +316,25 @@ export function computeVaryKey(req: RequestLike, res: ResponseLike): string {
     parts.push(`accept=${canonicalAccept(req.headers.get('accept'))}`);
   }
   return parts.join('&');
+}
+
+function unsafeVary(vary: string | null): boolean {
+  return (vary ?? '')
+    .split(',')
+    .some((field) =>
+      /authorization|authentication|dpop|cookie|token|secret|api[-_]?key/i.test(field),
+    );
+}
+
+/** Request-only gate shared by worker and page; auth transports stay outside. */
+export function isPodCacheRequest(request: RequestLike, within: (url: string) => boolean): boolean {
+  return (
+    isCacheableMethod(request.method) &&
+    !isNeverCacheEndpoint(request.url) &&
+    !request.headers.get('range') &&
+    !request.headers.get('upgrade') &&
+    within(request.url)
+  );
 }
 
 /** The composite cache key = (url, varyKey). */
