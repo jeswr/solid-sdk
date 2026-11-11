@@ -15,12 +15,14 @@ export function ColourPicker({
   open,
   onOpenChange,
   onSelect,
+  selectChecked = false,
   children,
 }: {
   colour: string | undefined;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSelect: (colour: string | undefined) => void;
+  selectChecked?: boolean;
   children: ReactNode;
 }) {
   const noneId = useId();
@@ -65,6 +67,9 @@ export function ColourPicker({
               aria-label={colour.name}
               title={colour.name}
               style={projectColourStyle(colour.hex)}
+              onClick={() => {
+                if (selectChecked && selectedColour === colour.hex) onSelect(colour.hex);
+              }}
             />
           ))}
           <label className="tsk-no-colour" htmlFor={noneId}>

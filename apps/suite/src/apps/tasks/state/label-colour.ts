@@ -15,12 +15,12 @@ export async function setLabelColour(
   const selected = projectColour(colour);
   if (colour !== undefined && !selected) throw new TypeError("Unknown label colour.");
   const write = async (targets: ReturnType<typeof labelTargets>) => {
-    const result = await runBulk(targets, async ({ project, labelIds }) => {
+    const result = await runBulk(targets, async ({ project }) => {
       const saved = await cache.updateProject(
         project,
         (tracker) => {
           for (const label of tracker.labels)
-            if (labelIds.includes(label.id))
+            if (label.name.toLowerCase() === key.toLowerCase())
               node(label.id, tracker.dataset).setText(`${SCHEMA}color`, selected?.hex);
         },
         undefined,

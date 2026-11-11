@@ -11,6 +11,7 @@ import {
 import { Ellipsis } from "lucide-react";
 import { useState } from "react";
 import { unionLabels } from "../lib/model/tracker";
+import { projectColour } from "../lib/views/project-colours";
 import { setLabelColour } from "../state/label-colour";
 import { useTasks } from "../state/tasks-context";
 import { labelTargets } from "../state/view-actions";
@@ -20,13 +21,17 @@ import { ColourPicker } from "./colour-picker";
 export function LabelColourPicker({ name, menu = false }: { name: string; menu?: boolean }) {
   const tasks = useTasks();
   const [open, setOpen] = useState(false);
-  const colour = unionLabels(tasks.projects.map((project) => project.tracker)).get(
-    name.toLowerCase(),
-  )?.[0]?.color;
+  const labels =
+    unionLabels(tasks.projects.map((project) => project.tracker)).get(name.toLowerCase()) ?? [];
+  const colour = labels[0]?.color;
+  const inconsistent = labels.some(
+    (label) => projectColour(label.color)?.hex !== projectColour(colour)?.hex,
+  );
   const disabled = !labelTargets(name, tasks.projects).some(({ project }) => project.etag);
   return (
     <ColourPicker
       colour={colour}
+      selectChecked={inconsistent}
       open={open}
       onOpenChange={setOpen}
       onSelect={(colour) => {

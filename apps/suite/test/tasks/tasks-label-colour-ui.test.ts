@@ -112,6 +112,30 @@ it("operates the label menu and shared swatches with the keyboard, saves all tra
   expect(document.querySelector('[role="radiogroup"]')).toBeNull();
 });
 
+it("unifies disagreeing label colours when the checked swatch is activated, then treats reselection as a no-op", async () => {
+  const { host } = await mount(h(LabelColourPicker, { name: "BiLlS" }));
+  const trigger = host.querySelector("button");
+  if (!trigger) throw new Error("Missing Colour");
+  await click(trigger);
+  await settle(() => expect(document.querySelector('[role="radiogroup"]')).toBeTruthy());
+  const swatch = document.querySelector<HTMLElement>('[role="radio"][aria-checked="true"]');
+  if (!swatch) throw new Error("Missing checked swatch");
+  expect(swatch.getAttribute("aria-label")).toBe(PROJECT_COLOURS[8].name);
+  const update = vi.spyOn(cache, "updateProject");
+  try {
+    await click(swatch);
+    await settle(() => expect(cache.getSnapshot().saving).toEqual([]));
+    for (const project of cache.getSnapshot().projects)
+      expect((await cache.store.readProject(project.url)).tracker.labels[0]?.color).toBe(blue);
+    expect(update).toHaveBeenCalledTimes(2);
+    update.mockClear();
+    await click(swatch);
+    expect(update).not.toHaveBeenCalled();
+  } finally {
+    update.mockRestore();
+  }
+});
+
 function Views() {
   const state = useSyncExternalStore(cache.subscribe, cache.getSnapshot);
   const project = state.projects.find((project) => project.url === homeUrl);

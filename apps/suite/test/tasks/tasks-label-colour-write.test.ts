@@ -2,7 +2,7 @@
 import { toast } from "@jeswr/suite-ui";
 import { PROJECT_COLOURS } from "@jeswr/suite-ui/tokens";
 import { expect, it, vi } from "vitest";
-import { DataFactory, SCHEMA } from "../../src/apps/tasks/lib/model/rdf";
+import { DataFactory, NS, node, SCHEMA } from "../../src/apps/tasks/lib/model/rdf";
 import { labelColour } from "../../src/apps/tasks/lib/views/label-colours";
 import { setLabelColour } from "../../src/apps/tasks/state/label-colour";
 import { frameCache } from "./tasks-frame-fixtures";
@@ -132,4 +132,53 @@ it("keeps successful projects on partial failure and offers one failure toast th
       .map((write) => write.url),
   ).toEqual([home.url]);
   errorToast.mockRestore();
+});
+
+it("retries a conflicting colour change by name after a remote rename creates a replacement label", async () => {
+  const { cache, inbox, home, store, pod, failures } = await fixture();
+  const cachedHome = cache.getSnapshot().projects.find((project) => project.url === home.url);
+  const current = await store.readProject(home.url);
+  const original = current.tracker.labels.find((label) => label.name === "BILLS");
+  if (!original) throw new Error("Missing Bills");
+  const remote = await store.updateProject(current, (tracker) => {
+    node(original.id, tracker.dataset).setText(`${NS.RDFS}label`, "History");
+    tracker.defineCategory("Label", "BiLlS", undefined, red);
+  });
+  const replacement = remote.tracker.labels.find((label) => label.name === "BiLlS");
+  expect(replacement?.id).not.toBe(original.id);
+  const errorToast = vi.spyOn(toast, "error");
+  try {
+    const start = pod.mutations().length;
+    const result = await setLabelColour("bills", blue, { cache });
+    expect(result.done.map(({ project }) => project.url)).toEqual([inbox.url]);
+    expect(result.failed.map(({ item }) => item.project.url)).toEqual([home.url]);
+    expect(
+      pod
+        .mutations()
+        .slice(start)
+        .find((write) => write.url === home.url)
+        ?.headers.get("If-Match"),
+    ).toBe(cachedHome?.etag);
+    expect(cachedHome?.etag).not.toBe(remote.etag);
+    expect(failures).not.toHaveBeenCalled();
+    expect(errorToast).toHaveBeenCalledOnce();
+    const retry = errorToast.mock.calls[0]?.[1]?.action;
+    if (!retry || typeof retry !== "object" || !("onClick" in retry))
+      throw new Error("Missing Retry");
+    const retryStart = pod.mutations().length;
+    retry.onClick({} as Parameters<typeof retry.onClick>[0]);
+    await vi.waitFor(async () => {
+      const stored = await store.readProject(home.url);
+      expect(stored.tracker.labels.find((label) => label.id === replacement?.id)?.color).toBe(blue);
+      expect(stored.tracker.labels.find((label) => label.id === original.id)).toMatchObject({
+        name: "History",
+        color: red,
+      });
+    });
+    const writes = pod.mutations().slice(retryStart);
+    expect(writes.map((write) => write.url)).toEqual([home.url]);
+    expect(writes[0]?.headers.get("If-Match")).toBe(remote.etag);
+  } finally {
+    errorToast.mockRestore();
+  }
 });
