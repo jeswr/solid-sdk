@@ -210,6 +210,9 @@ describe("real headless Univer rule persistence through the app adapter", () => 
       const saved = engine.snapshot();
       expect(resource(saved, validationName)).toEqual({ data: expectedValidation });
       expect(resource(saved, formattingName)).toEqual({ data: expectedFormatting });
+      // Load the original first, so restoring the edits below proves load() replaced the models.
+      engine.load(structuredClone(initial));
+      expect(rulesInModels()).toEqual({ validation: validationRules, formatting: formattingRules });
       engine.load(JSON.parse(JSON.stringify(saved)));
       expect(rulesInModels()).toEqual({
         validation: expectedValidation,
