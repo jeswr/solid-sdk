@@ -62,3 +62,10 @@ Keep development tool versions aligned with the root manifest. The pinned pnpm 1
 `ignore-scripts` requires local tool declarations for filtered scripts.
 
 Validate changes with this package's `lint`, `build`, `typecheck`, and `test` scripts.
+
+
+SDK-APP-05 registration integration lives in `integration/registration.test.ts` and runs with
+`pnpm run test:registration` after dependency-first builds. It reuses cssTarget.start(), drives
+real CSS password/OIDC UI controls without mocking the protocol engine, and checks RDF names
+plus authenticated private-pod access. Preserve its anonymous 401/403 witness and finally cleanup.
+It is a separate socket-based lane per ADR-009, with no skips or environment opt-in flag.

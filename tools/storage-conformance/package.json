@@ -30,7 +30,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "biome check .",
     "test": "vitest run",
-    "conformance": "node dist/cli.js"
+    "conformance": "node dist/cli.js",
+    "test:registration": "vitest run --config vitest.registration.config.ts"
   },
   "license": "MIT",
   "devDependencies": {

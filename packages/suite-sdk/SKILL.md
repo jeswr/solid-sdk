@@ -1,13 +1,13 @@
 ---
 name: suite-sdk
-description: Use when working on @jeswr/suite-sdk notifications, server/local search, LocalIndex feeders, useSearch, useNotify, or useInbox integration with PodAuthProvider.
+description: Use when working on @jeswr/suite-sdk registration, notifications, server/local search, LocalIndex feeders, useSearch, useNotify, or useInbox integration with PodAuthProvider.
 ---
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 <!-- AUTHORED-BY Codex GPT-6 -->
 
 # @jeswr/suite-sdk
 
-The root exposes SDK-APP-07's `useNotify()`, `useInbox()` and notification builders. SDK-APP-09's
+The root exposes SDK-APP-05's `useRegistration()` and SDK-APP-07's `useNotify()`, `useInbox()` and notification builders. SDK-APP-09's
 search facade lives at `@jeswr/suite-sdk/search`; application shell wiring is separate.
 Do not infer that the other planned SDK facade APIs are implemented.
 
@@ -69,3 +69,19 @@ values may be inline objects. Abort on replacement/unmount and ignore late succe
 even when the supplied implementation ignores its signal. Do not add app shell integration here.
 
 Run `lint`, dependency-first `build`, `typecheck` and `test`; coverage thresholds are 100%.
+
+## Registration (`SDK-APP-05`)
+
+`useRegistration({ accountApi, podHost?, fetch?, allowInsecureLoopback? })` delegates the entire
+`@jeswr/pod-auth/registration` API to the current PodAuthProvider core. With no options it uses
+accountApi:null. Read pod-auth's registration contract for preview, async availability/username
+checks, password-only methods, per-call signal/onStep, Identity and typed partial progress.
+The optional fetch is pristine, not the provider's credentialed fetch; only profile writes use
+that authenticated fetch. The hook does not own credentials or another auth session.
+
+Activate actions only in committed layout effects. Retained actions and late probe results must
+fail after session/lifecycle/options changes or unmount, including logout while already anonymous.
+Abort registration work and fence every dispatch/settlement. Its own matching login is an expected
+transition for that one run, allowing the protected profile write and Identity result, while old
+retained actions still lose authority. Logout, expiry, restore or an unrelated login abort the run.
+Keep StrictMode/suspended-render, cancellation and own-login tests at 100% coverage.
