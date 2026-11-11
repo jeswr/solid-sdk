@@ -2,6 +2,7 @@
 
 import { Authorization } from "@solid/object";
 import { projectMoveData } from "../detail/task-data";
+import { TaskCommentStore } from "./comments";
 import { InboxAclRecoveryError, ModelError } from "./errors";
 import { RdfIO, type Resource, requireEtag } from "./io";
 import { TaskMove } from "./move";
@@ -64,6 +65,9 @@ export interface StoreOptions {
 }
 /** Hook-free port of Pod Manager's one-resource-per-item productivity store. */
 export class TaskStore {
+  comments(project: StoredProject, task: StoredTask): TaskCommentStore {
+    return new TaskCommentStore(project, task, this.options.webId, this.options.fetch);
+  }
   readonly projects: string;
   private readonly io: RdfIO;
   private readonly index: TypeIndex;

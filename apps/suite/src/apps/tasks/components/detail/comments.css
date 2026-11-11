@@ -1,0 +1,40 @@
+/* AUTHORED-BY Codex GPT-6.1-Sol */
+.tsk-comments {
+  margin-block: var(--space-6);
+}
+.tsk-comments h3 {
+  font-size: var(--text-base);
+  font-weight: 600;
+}
+.tsk-comments ol {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.tsk-comments ol ol {
+  margin-inline-start: var(--space-4);
+  border-inline-start: 1px solid var(--border-strong);
+  padding-inline-start: var(--space-2);
+}
+.tsk-comments > ol > li {
+  border-bottom: 1px solid var(--border-strong);
+  padding-block: var(--space-3);
+}
+.tsk-comment-message header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  font-size: var(--text-xs);
+  color: var(--foreground-muted);
+}
+.tsk-comment-message p {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.tsk-comments [role="alert"] {
+  color: var(--destructive);
+}
+.tsk-comments :focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
