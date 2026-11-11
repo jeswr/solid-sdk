@@ -17,6 +17,7 @@ import {
   type McpHttpHandler,
   type McpHttpOptions,
   protectedResourceMetadataUrl,
+  TemporarilyUnavailable,
 } from "../src/http.js";
 
 const RESOURCE = "https://mcp.example/mcp";
@@ -333,6 +334,53 @@ describe("authentication and methods", () => {
     expect(response.status).toBe(401);
     expect(response.headers.get("www-authenticate")).toBe(`Bearer resource_metadata="${METADATA}"`);
     expect(await response.text()).not.toContain("private diagnostic");
+  });
+
+  it.each([
+    undefined,
+    ORIGIN,
+  ])("returns a retryable 503 for unavailable authentication (origin %s)", async (origin) => {
+    const { handler, server } = setup({
+      authenticate: async () => {
+        throw new TemporarilyUnavailable("private pod diagnostic");
+      },
+    });
+    const response = await handler(request(origin ? { Origin: origin } : {}));
+    expect(response.status).toBe(503);
+    expect(response.headers.get("retry-after")).toBe("5");
+    expect(response.headers.has("www-authenticate")).toBe(false);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(response.headers.get("vary")).toBe("Origin");
+    expect(response.headers.get("access-control-allow-origin")).toBe(origin ?? null);
+    expect(await response.json()).toEqual({
+      jsonrpc: "2.0",
+      error: { code: -32000, message: "Temporarily unavailable" },
+      id: null,
+    });
+    expect(server).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    new Error("private diagnostic"),
+    { name: "TemporarilyUnavailable" },
+    "TemporarilyUnavailable",
+  ])("keeps other authentication exceptions as 401: %s", async (error) => {
+    const { handler, server } = setup({
+      authenticate: () => {
+        throw error;
+      },
+    });
+    const response = await handler(request({ Origin: ORIGIN }));
+    expect(response.status).toBe(401);
+    expect(response.headers.get("www-authenticate")).toBe(`Bearer resource_metadata="${METADATA}"`);
+    expect(response.headers.has("retry-after")).toBe(false);
+    expect(response.headers.get("access-control-allow-origin")).toBe(ORIGIN);
+    expect(await response.json()).toEqual({
+      jsonrpc: "2.0",
+      error: { code: -32000, message: "Unauthorized" },
+      id: null,
+    });
+    expect(server).not.toHaveBeenCalled();
   });
 
   it.each(["GET", "DELETE", "PUT", "HEAD"])("authenticates then rejects %s", async (method) => {

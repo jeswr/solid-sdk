@@ -189,6 +189,12 @@ export class AuthorizationServer {
     };
   }
 
+  /** Retire a grant's entire pod session; unknown IDs are harmless and retries are safe. */
+  async revokeGrant(grantId: string): Promise<void> {
+    const grant = await this.stores.grants.get(grantId);
+    if (grant) await this.revokeSessionGrant(grant);
+  }
+
   private async authorizationResponse(
     params: URLSearchParams,
     complete: (authorization: Authorization, client: Client) => Promise<Response>,
@@ -283,18 +289,31 @@ export class AuthorizationServer {
         iss: this.issuer,
       });
     const id = opaque();
+    const issuedAt = this.now();
     const grant: Grant = {
       id,
       clientId: authorization.clientId,
       session: identity,
       resource: authorization.resource,
       scope: authorization.scope,
-      expiresAt: this.now() + GRANT_TTL,
+      expiresAt: issuedAt + GRANT_TTL,
       revoked: false,
       refreshAllowed: client.grant_types.includes("refresh_token"),
     };
     this.jwt.assertSize(grant);
     await this.stores.grants.put(id, grant);
+    try {
+      await this.options.grantCreated?.(
+        structuredClone({ grant, client, redirectUri: authorization.redirectUri, issuedAt }),
+      );
+    } catch {
+      try {
+        await this.revokeSessionGrant(grant);
+      } catch {
+        // Never issue a code or expose cleanup failures through the trusted redirect.
+      }
+      throw new OAuthError("server_error", 500);
+    }
     const code = opaque();
     await this.stores.codes.put(digest(code), {
       authorization,
@@ -358,7 +377,7 @@ export class AuthorizationServer {
         ? await this.stores.codes.consume(hash)
         : await this.stores.refreshTokens.consume(hash);
     if (!used?.firstUse) {
-      await this.revokeGrant(grant);
+      await this.revokeSessionGrant(grant);
       throw new OAuthError("invalid_grant");
     }
     if (expiresAt <= this.now()) throw new OAuthError("invalid_grant");
@@ -398,11 +417,11 @@ export class AuthorizationServer {
         if (!(error instanceof OAuthError)) throw error;
       }
     }
-    if (grant && grant.clientId === clientId) await this.revokeGrant(grant);
+    if (grant && grant.clientId === clientId) await this.revokeSessionGrant(grant);
     return new Response(null, { status: 200, headers: { "cache-control": "no-store" } });
   }
 
-  private async revokeGrant(grant: Grant): Promise<void> {
+  private async revokeSessionGrant(grant: Grant): Promise<void> {
     // Deny every bound grant durably before either grant-local or broker cleanup can fail.
     await this.stores.grants.revokeSession(grant.session.id);
     await this.stores.grants.revoke(grant.id);
