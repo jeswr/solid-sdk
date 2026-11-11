@@ -157,8 +157,10 @@ it("previews a separate read-only snapshot, restores in one collaborative edit a
   fireEvent.click(button("Restore this version"));
   updates.length = 0;
   fireEvent.click(button("Restore"));
+  // hidden: the open confirm dialog marks the panel aria-hidden, so without it the heading
+  // "disappears" as soon as the dialog opens and this wait can pass before restore finishes.
   await waitFor(() =>
-    expect(screen.queryByRole("heading", { name: "Version history" })).toBeNull(),
+    expect(screen.queryByRole("heading", { name: "Version history", hidden: true })).toBeNull(),
   );
   expect(create).toHaveBeenCalledWith(runtime.doc, {
     kind: "automatic",
