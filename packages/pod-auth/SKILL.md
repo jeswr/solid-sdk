@@ -27,7 +27,7 @@ refresh CAS and durable retirement. Signing keys are imported non-extractable; b
 | --- | --- |
 | `@jeswr/pod-auth` | `createPodAuth`, credential-bounded fetch, UI hooks and session lifecycle |
 | `@jeswr/pod-auth/react` | Optional `PodAuthProvider` / `usePodAuth` lifecycle mirror |
-| `@jeswr/pod-auth/node` | `forClientCredentials` and `forCid` agent factories; `createNodeOidcClient` for server brokers |
+| `@jeswr/pod-auth/node` | `forClientCredentials` and `forCid` agent factories; `createNodeOidcClient` and `storageDescriptionRoots` (LWS realm checks) for server brokers |
 | `@jeswr/pod-auth/testing` | Node-only mock OP, mock LWS AS and memory store |
 | `@jeswr/pod-auth/directory` | Provider metadata, WebID/provider address resolution and recent providers |
 | `@jeswr/pod-auth/registration` | CSS v7 self-registration, previews, progress and typed partial failures |

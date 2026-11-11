@@ -267,10 +267,14 @@ export function solidWrites(
     response: Response,
     signal?: AbortSignal,
   ): Promise<WriteResult> {
+    const own = response.headers.get("etag");
+    const observed = await etag(url, own, signal);
     return {
       url,
-      etag: await etag(url, response.headers.get("etag"), signal),
+      etag: observed,
       created: response.status === 201,
+      ...(own !== null ? { etagSource: "response" as const } : {}),
+      ...(own === null && observed !== null ? { etagSource: "follow-up" as const } : {}),
     };
   }
   // The segment is already encoded. Never decode it, even when moving a non-UTF-8 name.

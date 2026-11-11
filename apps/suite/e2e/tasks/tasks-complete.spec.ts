@@ -340,6 +340,69 @@ test("delayed Delete supports Undo, expires after eight seconds, and flushes on 
   await accessible(page);
 });
 
+test("Delete completed tasks confirms, undoes the batch, and keeps open sub-tasks", async ({
+  page,
+}) => {
+  let doneUrl = "";
+  let childUrl = "";
+  let keptUrl = "";
+  await seed(page, async (store) => {
+    const home = await store.createProject("Home");
+    const kept = await store.createTask(home, {
+      title: "Keep parent",
+      state: "closed",
+      endedAt: now,
+    });
+    keptUrl = kept.url;
+    await store.createTask(home, { title: "Still open", state: "open", parent: kept.task.id });
+    const done = await store.createTask(home, {
+      title: "Done parent",
+      state: "closed",
+      endedAt: now,
+    });
+    doneUrl = done.url;
+    childUrl = (
+      await store.createTask(home, {
+        title: "Done child",
+        state: "closed",
+        endedAt: now,
+        parent: done.task.id,
+      })
+    ).url;
+  });
+  await page.goto("/tasks/completed");
+  await page.getByRole("button", { name: "Home", exact: true }).click();
+  const remove = page.getByRole("button", { name: "Delete completed tasks", exact: true });
+  await remove.click();
+  const confirm = page.getByRole("alertdialog", { name: "Delete 3 completed tasks?", exact: true });
+  await expect(confirm).toContainText(
+    "They'll be removed from Home. You can undo this for a few seconds.",
+  );
+  await accessible(page);
+  await confirm.getByRole("button", { name: "Cancel", exact: true }).click();
+  await expect(remove).toBeFocused();
+  await remove.press("Enter");
+  await confirm.getByRole("button", { name: "Delete", exact: true }).click();
+  const notice = undoToast(page, "Deleted 2 tasks");
+  await expect(notice).toContainText("Kept 1 open sub-task");
+  await expect(rowFor(page, "Done parent")).toBeHidden();
+  await expect(rowFor(page, "Done child")).toBeHidden();
+  expect((await (await durablePod(page)).fetch(doneUrl)).status).toBe(200);
+  await notice.getByRole("button", { name: "Undo", exact: true }).click();
+  await expect(rowFor(page, "Done parent")).toBeVisible();
+  await expect(rowFor(page, "Done child")).toBeVisible();
+  await remove.click();
+  await confirm.getByRole("button", { name: "Delete", exact: true }).click();
+  await expect(notice).toBeVisible();
+  await page.mouse.move(0, 0);
+  await page.clock.fastForward(8100);
+  await expect.poll(async () => (await (await durablePod(page)).fetch(doneUrl)).status).toBe(404);
+  expect((await (await durablePod(page)).fetch(childUrl)).status).toBe(404);
+  expect((await (await durablePod(page)).fetch(keptUrl)).status).toBe(200);
+  await expect(rowFor(page, "Keep parent")).toBeVisible();
+  await accessible(page);
+});
+
 test("a hovered delete toast keeps Undo usable beyond eight seconds", async ({ page }) => {
   let url = "";
   await seed(page, async (store, inbox) => {

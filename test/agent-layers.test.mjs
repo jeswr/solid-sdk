@@ -55,6 +55,48 @@ function scan(path, source) {
 }
 
 describe("agent layer boundaries (DESIGN §2.2)", () => {
+  it("permits the pilot interview SDK only in the suite feedback server and manifest", () => {
+    const manifest = JSON.stringify({
+      name: "@jeswr/app-suite",
+      dependencies: { "@anthropic-ai/sdk": "1.4.0" },
+    });
+    const check = (path, source, extra = {}) =>
+      checkAgentLayers(
+        workspace({
+          "apps/suite/package.json": manifest,
+          [path]: source,
+          ...extra,
+        }),
+      );
+    expect(
+      check("apps/suite/src/feedback/server.ts", 'import Anthropic from "@anthropic-ai/sdk";'),
+    ).toEqual([]);
+    for (const path of [
+      "apps/suite/src/feedback/feedback-page.tsx",
+      "apps/suite/src/feedback/other.ts",
+      "apps/suite/src/app/api/feedback/turn/route.ts",
+      "apps/suite/src/apps/agent/sdk.ts",
+      "apps/other/src/feedback/server.ts",
+    ])
+      expect(check(path, 'import "@anthropic-ai/sdk";').join("\n")).toContain("gateway-only");
+    for (const target of [
+      "openai",
+      "@anthropic-ai/claude-agent-sdk",
+      "@anthropic-ai/sdk/resources",
+    ]) {
+      expect(
+        check("apps/suite/src/feedback/server.ts", `import "${target}";`).join("\n"),
+      ).toContain("gateway-only");
+    }
+    expect(
+      check("apps/suite/src/feedback/server.ts", 'import "@anthropic-ai/sdk";', {
+        "apps/suite/package.json": JSON.stringify({
+          name: "@jeswr/other",
+          dependencies: { "@anthropic-ai/sdk": "1.4.0" },
+        }),
+      }).join("\n"),
+    ).toContain("gateway-only");
+  });
   it("permits the gh child-process edge only in the GitHub binding", () => {
     const source = 'import { execFile } from "child_process";';
     expect(scan("packages/agent-channels/src/github.ts", source)).toEqual([]);

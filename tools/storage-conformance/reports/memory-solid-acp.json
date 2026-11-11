@@ -216,6 +216,12 @@
     "reason": null
   },
   {
+    "test": "SC-ROLES-movePreservingAccess",
+    "status": "pass",
+    "feature": "move",
+    "reason": null
+  },
+  {
     "test": "SC-TRASH-roundtrip",
     "status": "pass",
     "feature": "trash",

@@ -137,6 +137,7 @@ const variations: Record<RecordType, fc.Arbitrary<unknown>> = {
         "DispatchNow",
         "RevokeMandate",
         "Forget",
+        "Archive",
       ),
       target: iri,
       binding: nonempty,
@@ -540,6 +541,27 @@ describe("malformed and ambiguous records fail closed", () => {
     expect(await recordFromTurtle(golden, control.id)).toEqual(expected);
     expect(await recordToTurtle(expected)).toBe(golden.replace(/^# AUTHORED-BY Codex GPT-6\n/, ""));
   });
+  it("round trips the Archive golden fixture, targeting the inbound message it hides", async () => {
+    const control = exampleRecords["control-statement"];
+    const archive = {
+      type: "control-statement" as const,
+      id: control.id,
+      kind: "Archive" as const,
+      target: exampleRecords["inbound-message"].id,
+      attributedTo: control.attributedTo,
+      createdAt: control.createdAt,
+      expires: control.expires,
+      proof: control.proof,
+    };
+    const golden = readFileSync(
+      new URL("../../test/fixtures/archive.ttl", import.meta.url),
+      "utf8",
+    );
+    expect(await recordFromTurtle(golden, control.id)).toEqual(archive);
+    expect(await recordToTurtle(archive)).toBe(golden.replace(/^# AUTHORED-BY [^\n]*\n/, ""));
+    const { target: _target, ...untargeted } = archive;
+    expect(() => toRdf(untargeted)).toThrow(/requires target/);
+  });
   it("keeps binding restrictions optional, typed, account-targeted and exclusive to SetBindingState", async () => {
     const control = exampleRecords["control-statement"];
     const restrictionsOnly = { ...control, bindingState: undefined };
@@ -567,7 +589,14 @@ describe("malformed and ambiguous records fail closed", () => {
         datatype: { value: "http://www.w3.org/2001/XMLSchema#boolean" },
       });
     }
-    for (const kind of ["Halt", "Resume", "DispatchNow", "RevokeMandate", "Forget"] as const) {
+    for (const kind of [
+      "Halt",
+      "Resume",
+      "DispatchNow",
+      "RevokeMandate",
+      "Forget",
+      "Archive",
+    ] as const) {
       expect(() => toRdf({ ...control, kind })).toThrow(/only with SetBindingState/);
       const store = new Store([...dataset]);
       store.deleteMatches(root.subjectTerm, DataFactory.namedNode(agent("controlKind")));

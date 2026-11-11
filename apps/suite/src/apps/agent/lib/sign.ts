@@ -38,7 +38,8 @@ export function createAgentSigner(
       > = {},
     ) {
       const at = now();
-      const id = `${client.paths.control}${at.getTime()}-${kind}-${crypto.randomUUID()}.trig`;
+      const container = kind === "Archive" ? client.paths.archive : client.paths.control;
+      const id = `${container}${at.getTime()}-${kind}-${crypto.randomUUID()}.trig`;
       const claims: ControlStatementClaims = {
         ...fields,
         id,
@@ -46,7 +47,7 @@ export function createAgentSigner(
         attributedTo: session.webId,
         createdAt: at.toISOString(),
         expires: new Date(
-          at.getTime() + (["Halt", "Resume"].includes(kind) ? 365 : 1) * 86400000,
+          at.getTime() + (["Halt", "Resume", "Archive"].includes(kind) ? 365 : 1) * 86400000,
         ).toISOString(),
       };
       const document = await withApprovalKey(session, (key) =>

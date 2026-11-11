@@ -6,6 +6,7 @@ import { serialize } from "@jeswr/rdf-serialize";
 import { DatasetWrapper } from "@rdfjs/wrapper";
 import { ContainerDataset } from "@solid/object";
 import { DataFactory } from "n3";
+import { validateCommentSnapshot } from "../comments/anchors";
 import { type Column, csvToGrid, type Grid, gridToCsv } from "./grid";
 import {
   httpIri,
@@ -164,7 +165,9 @@ export function createSheetStorage(fetch: typeof globalThis.fetch, podRoot: stri
     },
     async loadSnapshot(container: string): Promise<Stored<Snapshot>> {
       const result = await read(workbookLayout(container).snapshot, "application/json");
-      const snapshot: Snapshot = JSON.parse(result.value);
+      let snapshot: Snapshot = JSON.parse(result.value);
+      if (snapshot !== null && typeof snapshot === "object" && !Array.isArray(snapshot))
+        snapshot = validateCommentSnapshot(snapshot);
       // Optional chart metadata is untrusted independently of the workbook's cells.
       // Sanitize it before strict JSON validation, which rejects overflowing numbers.
       const value =
@@ -178,6 +181,7 @@ export function createSheetStorage(fetch: typeof globalThis.fetch, podRoot: stri
       return { ...result, value };
     },
     async saveSnapshot(container: string, snapshot: Snapshot, condition: Precondition) {
+      snapshot = validateCommentSnapshot(snapshot);
       if (snapshot.charts !== undefined)
         snapshot = (await import("../charts/spec")).validateChartSnapshot(snapshot);
       return write(

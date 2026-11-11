@@ -21,6 +21,7 @@ import { TaskListFocus } from "../../state/list-focus";
 import { useTasksPreferences } from "../../state/preferences";
 import { useTasks } from "../../state/tasks-context";
 import { BulkToolbar } from "../bulk-toolbar";
+import { LabelFilterBar } from "../label-filter-bar";
 import { ProjectDot } from "../project-dot";
 import { TaskList } from "../task-list";
 import { projectHref, useViewMode } from "../view-toggle";
@@ -129,6 +130,7 @@ export function ProjectView({
           )}
         </h1>
       </header>
+      <LabelFilterBar projectUrl={url} />
       <BulkToolbar />
       {renderAsync({
         loading:

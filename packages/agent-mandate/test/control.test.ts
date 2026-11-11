@@ -82,6 +82,7 @@ it.each([
   "DispatchNow",
   "RevokeMandate",
   "Forget",
+  "Archive",
 ] as const)("round trips %s with a non-extractable P-256 key and model-compatible claims", async (kind) => {
   const { restrictions, ...base } = statement;
   const claims = { ...base, kind, ...(kind === "SetBindingState" ? { restrictions } : {}) };
@@ -144,6 +145,7 @@ it.each([
   "DispatchNow",
   "RevokeMandate",
   "Forget",
+  "Archive",
 ] as const)("refuses restrictions on %s at issue and when validly signed by another implementation", async (kind) => {
   await expect(issueControlStatement({ ...statement, kind }, key, NOW)).rejects.toThrow(
     /only with/,

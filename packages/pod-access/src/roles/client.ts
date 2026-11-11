@@ -117,6 +117,70 @@ function project(snapshot: Snapshot, options: RolesOptions, comments?: Snapshot)
 export async function grantsWithRoles(url: string, options: RolesOptions): Promise<RoleGrant[]> {
   return (await readGrants(url, options)).grants;
 }
+/** Internal move snapshot: project own policy independently, refusing lossy role round trips. */
+export async function moveGrants(url: string, options: RolesOptions) {
+  const snapshot = await load(url, options);
+  const own = { ...snapshot, documents: snapshot.own ? [snapshot.own] : [] };
+  const grants = project(own, options);
+  for (const row of rows(own).values()) {
+    const projected = grants.find((g) => agentKey(g.agent) === agentKey(row.agent));
+    const mapped =
+      projected &&
+      rolesToModes(projected.role, options.kind ?? "resource", {
+        ...options,
+        model: snapshot.model,
+      });
+    const modes = new Set(
+      mapped ? [...mapped.resource, ...(mapped.acr.length ? ["control" as const] : [])] : [],
+    );
+    const original = new Set(row.modes);
+    if (original.has("write")) original.add("append");
+    if (!sameModes(original, modes))
+      throw roleError("unsupported", url, "Own permissions cannot round-trip through roles");
+  }
+  return {
+    grants,
+    ownUrl: snapshot.ownUrl,
+    ownEtag: snapshot.own ? snapshot.own.etag : undefined,
+    resourceEtag: snapshot.resourceEtag,
+  };
+}
+/** Internal move preflight: establish direct caller Control, including ESS ACR management. */
+export async function moveDestination(url: string, options: SetGrantsOptions) {
+  const snapshot = await load(url, options);
+  const me = agentKey({ type: "webid", id: options.webId });
+  if (!rows(snapshot).get(me)?.modes.has("control"))
+    throw roleError("owner-lockout", url, "Destination requires caller manager/Control access");
+  return snapshot;
+}
+/** Internal read-only full-set preflight for a not-yet-created child; no endpoint is guessed. */
+export async function planMoveGrants(
+  url: string,
+  parent: string,
+  grants: RoleGrant[],
+  options: SetGrantsOptions,
+  own = true,
+): Promise<void> {
+  for (const grant of grants) validateMetadata(grant);
+  const destination = await load(parent, options);
+  const me = agentKey({ type: "webid", id: options.webId });
+  const inheritedControl = rows(destination, destination.documents, true)
+    .get(me)
+    ?.modes.has("control");
+  const ownControl = grants.some(
+    (grant) => agentKey(grant.agent) === me && grant.role === "manager",
+  );
+  if (!(ownControl || ((!own || destination.model === "acp") && inheritedControl)))
+    throw roleError("owner-lockout", url, "Moved item must retain caller manager/Control access");
+  if (!own) return;
+  await prepare(url, grants, options, {
+    ...destination,
+    resource: url,
+    own: undefined,
+    // This advertised endpoint is used only to validate the generated policy, never persisted.
+    ownUrl: destination.ownUrl,
+  });
+}
 function validators(snapshot: Snapshot) {
   return [
     snapshot.resource,
@@ -183,15 +247,17 @@ function editableRows(snapshot: Snapshot): Map<string, Row> {
 async function plan(
   snapshot: Snapshot,
   desired: Map<string, Row>,
-  options: GrantMutationOptions,
+  options: GrantMutationOptions & Pick<SetGrantsOptions, "ownOnly">,
   agent?: AgentRef,
 ): Promise<Write | undefined> {
-  const before = editableRows(snapshot);
+  const before = options.ownOnly && !snapshot.own ? new Map<string, Row>() : editableRows(snapshot);
   const keys = new Set([...before.keys(), ...desired.keys()]);
   const changes = [...keys].filter(
     (key) => !sameModes(before.get(key)?.modes ?? new Set(), desired.get(key)?.modes ?? new Set()),
   );
-  if (!changes.length) return undefined;
+  // Moves must also preserve an existing empty own ACR. An empty ACP selection still
+  // inherits controls; WAC's empty selection is refused by the lockout check below.
+  if (!changes.length && !(options.ownOnly && !snapshot.own)) return undefined;
   const me = agentKey({ type: "webid", id: options.webId });
   // Require direct, independently established management; public/group/client access
   // must not be the only safeguard against the caller locking themselves out.
@@ -226,7 +292,7 @@ async function plan(
   const source = snapshot.documents[0];
   const dataset = snapshot.own
     ? new Store([...snapshot.own.dataset])
-    : snapshot.model === "wac" && source
+    : snapshot.model === "wac" && source && !options.ownOnly
       ? materialize(source.dataset, source.resource, snapshot.resource, source.url)
       : new Store();
   if (snapshot.model === "wac") {
@@ -306,8 +372,9 @@ async function prepare(
   url: string,
   grants: RoleGrant[],
   options: SetGrantsOptions,
+  baseline?: Snapshot,
 ): Promise<Write[]> {
-  const snapshot = await load(url, options);
+  const snapshot = baseline ?? (await load(url, options));
   const comments = options.commentsContainer
     ? await load(options.commentsContainer, options)
     : undefined;
@@ -324,12 +391,13 @@ async function prepare(
     if (token !== version(snapshot, options, comments))
       throw roleError("conflict", url, "Grant snapshot is stale or does not cover this URL");
   }
-  const current = editableRows(snapshot);
+  const current =
+    options.ownOnly && !snapshot.own ? new Map<string, Row>() : editableRows(snapshot);
   const projected = project(snapshot, options, comments);
   const inherited = projected.filter((g) => g.inherited);
   const explicit = new Set(grants.filter((g) => !g.inherited).map((g) => agentKey(g.agent)));
   const desired = new Map<string, Row>();
-  if (snapshot.model === "wac") {
+  if (snapshot.model === "wac" && !options.ownOnly) {
     const own = snapshot.own;
     const retained = own
       ? {

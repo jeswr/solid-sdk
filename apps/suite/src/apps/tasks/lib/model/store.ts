@@ -88,14 +88,19 @@ export class TaskStore {
     if (!tracker.isTracker) throw new TypeError("Expected a wf:Tracker.");
     return { ...resource, tracker };
   }
-  async listProjects(onError?: (url: string, error: unknown) => void): Promise<StoredProject[]> {
-    const urls = new Set((await this.io.list(this.projects)).filter((url) => url.endsWith(".ttl")));
+  async listProjects(
+    onError?: (url: string, error: unknown) => void,
+    { strict = false } = {},
+  ): Promise<StoredProject[]> {
+    const urls = new Set(
+      (await this.io.list(this.projects, { strict })).filter((url) => url.endsWith(".ttl")),
+    );
     if (this.options.typeIndex !== false)
       for (const reg of await this.index.locations(`${NS.WF}Tracker`)) {
         if (reg.kind === "instance") urls.add(documentUrl(reg.location));
         else {
           try {
-            const listed = await this.io.list(reg.location);
+            const listed = await this.io.list(reg.location, { strict });
             for (const url of listed.filter((member) => member.endsWith(".ttl"))) urls.add(url);
           } catch (error) {
             if (!onError) throw error;
@@ -106,7 +111,7 @@ export class TaskStore {
     const projects: StoredProject[] = [];
     for (const url of urls) {
       try {
-        const resource = await this.readListedResource(url);
+        const resource = strict ? await this.io.read(url) : await this.readListedResource(url);
         if (!resource) continue;
         const tracker = new TaskTracker(`${resource.url}#this`, resource.dataset, DataFactory);
         if (tracker.isTracker) projects.push({ ...resource, tracker });
