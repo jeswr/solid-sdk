@@ -191,6 +191,16 @@ export type CsvImportResult =
   | { status: "blocked"; reason: "comments-loading" | "read-only" };
 
 export interface SheetEngine {
+  sortRange?(options: {
+    scope: "range" | "sheet";
+    column: number;
+    ascending: boolean;
+    header: boolean;
+  }): boolean;
+  hasFilter?(): boolean;
+  toggleFilter?(): Promise<boolean>;
+  clearFilter?(): Promise<boolean>;
+  findReplace?(): Promise<void>;
   /** Hold editing independently of access permissions while missing anchors load. */
   setCommentsLoading?(loading: boolean): void;
   /** Listed selectors replay only history after their recorded workbook ETag. */
