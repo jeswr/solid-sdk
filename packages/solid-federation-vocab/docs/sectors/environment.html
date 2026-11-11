@@ -1,0 +1,38 @@
+<!doctype html>
+<!-- AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate -->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>jeswr.org/ns/sectors/environment# — Solid Federation Sector Ontology</title>
+    <style>
+      :root { color-scheme: light dark; }
+      body { font-family: system-ui, sans-serif; line-height: 1.6; max-width: 64rem; margin: 2rem auto; padding: 0 1rem; }
+      code { background: rgba(127,127,127,0.15); padding: 0.1em 0.35em; border-radius: 4px; }
+      .warn { border-left: 4px solid #d97706; padding: 0.5rem 1rem; background: rgba(217,119,6,0.08); border-radius: 4px; }
+      table { border-collapse: collapse; width: 100%; }
+      th, td { text-align: left; padding: 0.4rem 0.6rem; border-bottom: 1px solid rgba(127,127,127,0.3); vertical-align: top; }
+      a { color: #2563eb; }
+    </style>
+  </head>
+  <body>
+    <h1><code>https://jeswr.org/ns/sectors/environment#</code></h1>
+    <p>Prefix <code>envr:</code> · a gUFO-based ontology in the @jeswr Solid federation; imports the <a href="../core.html">Solid Core</a>.</p>
+    <p class="warn">⚠️ <strong>Experimental</strong> — AI-agent-generated (Claude Opus 4.8, @jeswr PSS agent); under active development, not production-hardened.</p>
+    <p>Other representations: <a href="environment.ttl">Turtle</a> · <a href="environment-context.jsonld">JSON-LD context</a> · <a href="../">index</a></p>
+    <h2>Terms (10)</h2>
+    <table>
+      <tr><th>Term</th><th>Label</th><th>Comment / definition</th></tr>
+      <tr><td><code>envr:AirQualityIndex</code></td><td>Air quality index</td><td>Device-reported air quality index; values from different device algorithms are not necessarily comparable.</td></tr>
+      <tr><td><code>envr:AirTemperature</code></td><td>Air temperature</td><td>Temperature of the air in the feature of interest.</td></tr>
+      <tr><td><code>envr:CO2Concentration</code></td><td>Carbon dioxide concentration</td><td>Molar fraction of carbon dioxide in room air, reported in parts per million.</td></tr>
+      <tr><td><code>envr:FanSpeedLevel</code></td><td>Fan speed level</td><td>Device-reported numeric fan speed setting, not a rotational velocity. The feature of interest is the purifier.</td></tr>
+      <tr><td><code>envr:FilterLifeRemaining</code></td><td>Filter life remaining</td><td>Device-estimated remaining filter life as a percentage. The feature of interest is the purifier.</td></tr>
+      <tr><td><code>envr:PM10MassConcentration</code></td><td>PM10 mass concentration</td><td>Mass concentration of airborne particles with aerodynamic diameter at most 10 micrometres.</td></tr>
+      <tr><td><code>envr:PM2_5MassConcentration</code></td><td>PM2.5 mass concentration</td><td>Mass concentration of airborne particles with aerodynamic diameter at most 2.5 micrometres.</td></tr>
+      <tr><td><code>envr:RelativeHumidity</code></td><td>Relative humidity</td><td>Relative humidity of the air in the feature of interest, expressed as a percentage.</td></tr>
+      <tr><td><code>envr:sector</code></td><td>Environment sector</td><td>Indoor environment monitoring and numeric purifier state.</td></tr>
+      <tr><td><code>envr:VOCIndex</code></td><td>VOC index</td><td>Device-reported volatile organic compound index; the device algorithm determines its scale.</td></tr>
+    </table>
+  </body>
+</html>

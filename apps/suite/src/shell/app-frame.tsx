@@ -2,12 +2,13 @@
 // AUTHORED-BY Codex GPT-6
 "use client";
 import { type AppSlug, suiteApps } from "@jeswr/suite-ui";
-import { type ComponentProps, lazy, Suspense } from "react";
+import { type ComponentProps, lazy, type ReactNode, Suspense } from "react";
 import {
   SearchBox,
   SuiteFrame,
   type SuiteFrameProps,
 } from "@/components/interim-shell/suite-frame";
+import { type PodSession, usePodSessionState } from "@/lib/session/pod-session";
 import { loadGuard, loadShell } from "./app-frame-loaders";
 import { useOptionalAccounts } from "./session/accounts-context";
 
@@ -34,6 +35,31 @@ export function AppSessionGuard({ children }: { children: React.ReactNode }) {
   ) : (
     children
   );
+}
+
+/** Render session states consistently while each app supplies its own content. */
+export function PodSessionGate({
+  loading,
+  signedOut,
+  error,
+  children,
+}: {
+  loading: ReactNode;
+  signedOut: ReactNode;
+  error: (cause: unknown) => ReactNode;
+  children: (session: PodSession) => ReactNode;
+}) {
+  const state = usePodSessionState();
+  switch (state.status) {
+    case "loading":
+      return loading;
+    case "signed-out":
+      return signedOut;
+    case "error":
+      return error(state.error);
+    case "ready":
+      return children(state.session);
+  }
 }
 
 /** Apps retain their sidebar and details; the shell owns global navigation and account UI. */

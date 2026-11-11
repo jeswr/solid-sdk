@@ -1,0 +1,19 @@
+# expect: http://www.w3.org/ns/sosa/resultTime
+# AUTHORED-BY Codex GPT-6.1-Sol
+# AUTHORED-BY Codex GPT-6
+<https://example.org/fixtures/environment/day.ttl#reading> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/sosa/Observation> .
+<https://example.org/fixtures/environment/day.ttl#reading> <http://www.w3.org/ns/sosa/madeBySensor> <https://example.org/fixtures/environment/sensor> .
+<https://example.org/fixtures/environment/day.ttl#reading> <http://www.w3.org/ns/sosa/observedProperty> <https://jeswr.org/ns/sectors/environment#CO2Concentration> .
+<https://example.org/fixtures/environment/day.ttl#reading> <http://www.w3.org/ns/sosa/hasFeatureOfInterest> <https://example.org/fixtures/environment/room> .
+<https://example.org/fixtures/environment/day.ttl#reading> <http://www.w3.org/ns/sosa/hasResult> <https://example.org/fixtures/environment/day.ttl#reading--result> .
+<https://example.org/fixtures/environment/sensor> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/sosa/Sensor> .
+<https://example.org/fixtures/environment/sensor> <http://www.w3.org/2000/01/rdf-schema#label> "Synthetic monitor" .
+<https://example.org/fixtures/environment/sensor> <https://schema.org/manufacturer> "IKEA" .
+<https://example.org/fixtures/environment/sensor> <https://schema.org/model> "ALPSTUGA" .
+<https://example.org/fixtures/environment/sensor> <http://www.w3.org/ns/sosa/isHostedBy> <https://example.org/fixtures/environment/platform> .
+<https://example.org/fixtures/environment/room> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/sosa/FeatureOfInterest> .
+<https://example.org/fixtures/environment/room> <http://www.w3.org/2000/01/rdf-schema#label> "Office" .
+<https://example.org/fixtures/environment/day.ttl#reading--result> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://qudt.org/schema/qudt/QuantityValue> .
+<https://example.org/fixtures/environment/day.ttl#reading--result> <http://qudt.org/schema/qudt/numericValue> 650.5 .
+<https://example.org/fixtures/environment/day.ttl#reading--result> <http://qudt.org/schema/qudt/unit> <http://qudt.org/vocab/unit/PPM> .
+<https://example.org/fixtures/environment/platform> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/sosa/Platform> .
