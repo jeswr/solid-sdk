@@ -40,6 +40,9 @@ Chartsheets and dialogsheets are ignored. Charts, images, comments, validation,
 conditional formatting, pivot tables, macros and external links are not carried
 over. Macro-enabled files (.xlsm) are rejected. Font styling, fills, rich text
 formatting, hidden state, print settings and other workbook metadata are omitted.
+Cell hyperlink relationships are also omitted in both directions. Their visible labels
+remain plain text; Univer's internal hyperlink delimiters are stripped on export. Imported
+hyperlink targets, including unsafe schemes, are never turned into clickable links.
 The 1904 date system is not supported; those workbooks are rejected.
 
 Import rejects DTDs, malformed XML, unsafe relationship targets, duplicate cell
