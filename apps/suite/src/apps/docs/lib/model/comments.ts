@@ -11,9 +11,9 @@ import {
 } from "@rdfjs/wrapper";
 import { Container } from "@solid/object";
 import { DataFactory, Store } from "n3";
-import { ConcurrencyValidatorError, ResourceDeleteError, ResourceWriteError } from "./errors";
+import { ResourceWriteError } from "./errors";
 import { isDirectChild } from "./layout";
-import { readRdf, writeRdf } from "./rdf-io";
+import { deleteRdf, readRdf, writeRdf } from "./rdf-io";
 import { DCT, OA, PD, RDF_TYPE } from "./vocab";
 
 export interface CommentAnchor {
@@ -39,6 +39,10 @@ export interface CommentThread {
   replies: DocumentComment[];
 }
 const changed = () => new Error("This comment changed; try again.");
+/** Quote context kept per side (capture stores 32 code points). */
+const CONTEXT = 32;
+const MAX_QUOTE = 10_000;
+const MAX_POSITION = 1_024;
 
 class Annotation extends TermWrapper {
   string(predicate: string) {
@@ -93,7 +97,16 @@ class Annotation extends TermWrapper {
         !end
       )
         throw new Error("Malformed comment anchor");
-      anchor = { exact, prefix, suffix, start, end };
+      // Other users write these: bound them so anchor resolution stays cheap.
+      if (exact.length > MAX_QUOTE || start.length > MAX_POSITION || end.length > MAX_POSITION)
+        throw new Error("Malformed comment anchor");
+      anchor = {
+        exact,
+        prefix: Array.from(prefix).slice(-CONTEXT).join(""),
+        suffix: Array.from(suffix).slice(0, CONTEXT).join(""),
+        start,
+        end,
+      };
     }
     return {
       url,
@@ -268,25 +281,20 @@ export class DocumentCommentStore {
   }
   private async remove(entry: DocumentComment) {
     this.location(entry.url);
-    if (!entry.etag || !/^"[\x21\x23-\x7e\x80-\xff]*"$/.test(entry.etag))
-      throw new ConcurrencyValidatorError(entry.url);
-    const result = await this.http(entry.url, {
-      method: "DELETE",
-      redirect: "error",
-      headers: { "if-match": entry.etag },
-    });
-    if (!result.ok && result.status !== 404 && result.status !== 410)
-      throw new ResourceDeleteError(entry.url, result.status);
+    await deleteRdf(entry.url, this.http, entry.etag);
   }
   async delete(entry: DocumentComment, actor: string) {
     const { comment } = await this.read(entry.url);
     this.own(comment, actor);
     if (comment.etag !== entry.etag) throw changed();
-    if (comment.kind === "root") {
-      const thread = (await this.list()).find(({ root }) => root.url === entry.url);
-      if (thread) await Promise.allSettled(thread.replies.map((reply) => this.remove(reply)));
-    }
+    const thread =
+      comment.kind === "root"
+        ? (await this.list()).find(({ root }) => root.url === entry.url)
+        : undefined;
+    // The root goes first and conditionally: if it changed meanwhile, nothing is
+    // deleted. Replies follow best effort; list() already hides orphaned replies.
     await this.remove(entry);
+    if (thread) await Promise.allSettled(thread.replies.map((reply) => this.remove(reply)));
   }
 }
 export function commentError(error: unknown): string {

@@ -340,7 +340,14 @@ function HydratedEditor({ runtime }: { runtime: DocumentPersistence }) {
     }
   };
   handlers.current.key = (event) => {
-    if ((event.ctrlKey || event.metaKey) && event.altKey && event.code === "KeyM" && !history) {
+    if (
+      (event.ctrlKey || event.metaKey) &&
+      event.altKey &&
+      event.code === "KeyM" &&
+      // Windows reports AltGr as Ctrl+Alt; AltGr+M types a character (µ).
+      !event.getModifierState("AltGraph") &&
+      !history
+    ) {
       event.preventDefault();
       comments.add();
       return true;

@@ -164,7 +164,7 @@ it("conditionally resolves, retries a 412 once on fresh data, removes resolution
   const reply = await store.reply(root, "reply", actor);
   await expect(store.setResolved(reply, true, actor)).rejects.toThrow("Invalid comment target");
 });
-it("edits and deletes only the stored author, uses ETags, and cascades replies best effort before the root", async () => {
+it("edits and deletes only the stored author, uses ETags, and deletes a root first, conditionally, then its replies best effort", async () => {
   const { store, http, pod } = setup();
   const root = await store.create("Root", actor, anchor);
   const first = await store.reply(root, "Own", actor);
@@ -188,8 +188,23 @@ it("edits and deletes only the stored author, uses ETags, and cascades replies b
   const deleted = http.mock.calls
     .filter(([, init]) => init?.method === "DELETE")
     .map(([url]) => String(url));
-  expect(deleted.slice(-2)).toEqual([second.url, root.url]);
+  expect(deleted.slice(-2)).toEqual([root.url, second.url]);
   expect(await store.list()).toEqual([]);
+  // A root that changed after the read keeps every reply: nothing is deleted.
+  const kept = await store.create("Kept", actor, anchor);
+  const keptReply = await store.reply(kept, "Reply", other);
+  http.mockImplementation((input, init) =>
+    String(input) === kept.url && init?.method === "DELETE"
+      ? Promise.resolve(new Response(null, { status: 412 }))
+      : pod.fetch(input, init),
+  );
+  http.mockClear();
+  await expect(store.delete(kept, actor)).rejects.toMatchObject({ status: 412 });
+  expect(
+    http.mock.calls.filter(([, init]) => init?.method === "DELETE").map(([url]) => String(url)),
+  ).toEqual([kept.url]);
+  expect((await store.list())[0]?.replies.map(({ url }) => url)).toEqual([keptReply.url]);
+  for (const url of [keptReply.url, kept.url]) await pod.fetch(url, { method: "DELETE" });
   const vanished = await store.create("Gone", actor, anchor);
   http.mockImplementation((input, init) =>
     init?.method === "DELETE"
@@ -264,4 +279,27 @@ it("orders same-time roots by IRI, propagates a retry failure, and deletes when 
     new DocumentCommentStore(container, document, noTag).delete({ ...b, etag: null }, actor),
   ).rejects.toThrow("strong ETag");
   expect(commentError(new ResourceWriteError(container, 500))).toContain("500");
+});
+
+// AUTHORED-BY Claude Opus 5.5
+it("bounds untrusted quote selectors and rejects oversized anchors", async () => {
+  const { store, pod } = setup();
+  const root = await store.create("Root", actor, {
+    ...anchor,
+    prefix: "p".repeat(5_000),
+    suffix: "s".repeat(5_000),
+  });
+  const [thread] = await store.list();
+  expect(thread?.root.anchor?.prefix).toBe("p".repeat(32));
+  expect(thread?.root.anchor?.suffix).toBe("s".repeat(32));
+  await pod.fetch(root.url, { method: "DELETE" });
+  for (const oversized of [
+    { exact: "x".repeat(10_001) },
+    { start: "A".repeat(1_025) },
+    { end: "A".repeat(1_025) },
+  ]) {
+    const entry = await store.create("Big", actor, { ...anchor, ...oversized });
+    expect(await store.list()).toEqual([]);
+    await pod.fetch(entry.url, { method: "DELETE" });
+  }
 });

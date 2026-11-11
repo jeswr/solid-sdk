@@ -184,6 +184,7 @@ function CommentMessage({
 export function CommentsSidebar({
   threads,
   active,
+  focusRequest,
   composer,
   reason,
   error,
@@ -199,6 +200,7 @@ export function CommentsSidebar({
 }: {
   threads: CommentThread[];
   active: string | undefined;
+  focusRequest?: { url: string } | undefined;
   composer: CommentAnchor | undefined;
   reason: string | undefined;
   error: string | undefined;
@@ -221,10 +223,10 @@ export function CommentsSidebar({
   useEffect(() => {
     const thread = [
       ...(panel.current as HTMLElement).querySelectorAll<HTMLElement>("article"),
-    ].find((item) => item.dataset.thread === active);
+    ].find((item) => item.dataset.thread === focusRequest?.url);
     thread?.scrollIntoView({ block: "nearest" });
     thread?.focus({ preventScroll: true });
-  }, [active]);
+  }, [focusRequest]);
   return (
     <aside
       ref={panel}

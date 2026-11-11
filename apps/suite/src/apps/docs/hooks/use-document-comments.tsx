@@ -33,6 +33,8 @@ export function useDocumentComments(runtime: DocumentPersistence, editor: Editor
   const [open, setOpen] = useState(false);
   const [threads, setThreads] = useState<CommentThread[]>([]);
   const [active, setActive] = useState<string>();
+  // A new object per highlight click, so re-clicking the active thread refocuses it.
+  const [focusRequest, setFocusRequest] = useState<{ url: string }>();
   const [composer, setComposer] = useState<CommentAnchor>();
   const [error, setError] = useState<string>();
   const [loadError, setLoadError] = useState<string>();
@@ -89,6 +91,7 @@ export function useDocumentComments(runtime: DocumentPersistence, editor: Editor
   }, [open, refresh]);
   const activate = useCallback((url: string) => {
     setActive(url);
+    setFocusRequest({ url });
     setOpen(true);
   }, []);
   const visible = threads
@@ -160,6 +163,8 @@ export function useDocumentComments(runtime: DocumentPersistence, editor: Editor
       return true;
     } catch (cause) {
       setError(commentError(cause));
+      // Pick up fresh ETags, so "try again" after a concurrent change can succeed.
+      await refresh();
       return false;
     } finally {
       pending.current = false;
@@ -196,6 +201,7 @@ export function useDocumentComments(runtime: DocumentPersistence, editor: Editor
       <CommentsSidebar
         threads={visible}
         active={active}
+        focusRequest={focusRequest}
         composer={composer}
         reason={reason}
         error={error ?? loadError}

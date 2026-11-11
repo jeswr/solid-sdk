@@ -56,8 +56,18 @@ test("anchors, replies, resolves, reopens and persists a comment after editing b
   await expect(thread).toContainText("Agreed");
   await body.focus();
   await page.keyboard.press("Control+Home");
-  await page.keyboard.type("Introduction. ");
+  // A second "word" before the anchor: the highlight must stay on the original one.
+  await page.keyboard.type("A word first. ");
+  await expect(highlight).toHaveCount(1);
   await expect(highlight).toHaveText("word");
+  expect(
+    await highlight.evaluate((element) => {
+      const range = document.createRange();
+      range.setStart(element.closest("p") as Node, 0);
+      range.setEndBefore(element);
+      return range.toString();
+    }),
+  ).toBe("A word first. Before ");
   await highlight.click();
   await expect(thread).toBeFocused();
   await thread.getByRole("button", { name: "Resolve", exact: true }).click();
@@ -71,7 +81,7 @@ test("anchors, replies, resolves, reopens and persists a comment after editing b
   await expect(highlight).toHaveText("word");
   await expect(page.getByRole("button", { name: "Comments (1 open)", exact: true })).toBeVisible();
   await page.reload();
-  await expect(body).toContainText("Introduction. Before word after");
+  await expect(body).toContainText("A word first. Before word after");
   await expect(highlight).toHaveText("word");
   await page.getByRole("button", { name: "Comments (1 open)", exact: true }).click();
   await expect(panel.getByRole("article")).toContainText("Check this word");

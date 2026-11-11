@@ -58,23 +58,30 @@ export function quoteRange(doc: Node, anchor: CommentAnchor): CommentRange | und
   });
   let best: CommentRange | undefined;
   let bestScore = -1;
-  for (
-    let index = text.indexOf(anchor.exact);
-    index !== -1;
-    index = text.indexOf(anchor.exact, index + 1)
-  ) {
-    const before = text.slice(0, index);
-    const after = text.slice(index + anchor.exact.length);
+  const { exact, prefix, suffix } = anchor;
+  for (let index = text.indexOf(exact); index !== -1; index = text.indexOf(exact, index + 1)) {
+    // Linear common-context lengths, compared in place (no per-match slices).
     let score = 0;
-    for (let n = 1; n <= anchor.prefix.length && before.endsWith(anchor.prefix.slice(-n)); n++)
+    while (
+      score < prefix.length &&
+      score < index &&
+      text[index - 1 - score] === prefix[prefix.length - 1 - score]
+    )
       score++;
-    for (let n = 1; n <= anchor.suffix.length && after.startsWith(anchor.suffix.slice(0, n)); n++)
-      score++;
+    const after = index + exact.length;
+    let tail = 0;
+    while (
+      tail < suffix.length &&
+      after + tail < text.length &&
+      text[after + tail] === suffix[tail]
+    )
+      tail++;
+    score += tail;
     if (score > bestScore) {
       bestScore = score;
       best = {
         from: positions[index] as number,
-        to: (positions[index + anchor.exact.length - 1] as number) + 1,
+        to: (positions[index + exact.length - 1] as number) + 1,
       };
     }
   }
@@ -86,30 +93,36 @@ export function resolveCommentAnchor(
 ): CommentRange | undefined {
   const sync = ySyncPluginKey.getState(state);
   if (sync?.binding) {
+    let from: number | null = null;
+    let to: number | null = null;
     try {
-      const from = relativePositionToAbsolutePosition(
+      from = relativePositionToAbsolutePosition(
         sync.doc,
         sync.type,
         decode(anchor.start),
         sync.binding.mapping,
       );
-      const to = relativePositionToAbsolutePosition(
+      to = relativePositionToAbsolutePosition(
         sync.doc,
         sync.type,
         decode(anchor.end),
         sync.binding.mapping,
       );
+    } catch {
+      /* Invalid or retired Yjs identities fall back to the text quote. */
+    }
+    if (from !== null && to !== null) {
+      // Both positions still resolve, so they are authoritative: a collapsed or
+      // blank range means the commented text was deleted. Never move the
+      // highlight to another occurrence of the same words.
       if (
-        from !== null &&
-        to !== null &&
         from >= 0 &&
         to > from &&
         to <= state.doc.content.size &&
         state.doc.textBetween(from, to).trim()
       )
         return { from, to };
-    } catch {
-      /* Invalid or retired Yjs identities fall back to the text quote. */
+      return undefined;
     }
   }
   return quoteRange(state.doc, anchor);

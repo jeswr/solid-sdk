@@ -102,7 +102,7 @@ it("falls back for invalid or foreign identities, ranks context, prefers the fir
   const foreignAnchor = captureCommentAnchor(foreign.editor.state);
   expect(resolveCommentAnchor(editor.state, foreignAnchor)).toBeTruthy();
 });
-it("caps quote contexts at 32 Unicode characters and falls back when positions collapse or are out of bounds", () => {
+it("caps quote contexts at 32 Unicode characters and treats collapsed positions as deleted text and falls back only when positions no longer resolve", () => {
   const { editor } = setup(`${"x".repeat(40)} word ${"y".repeat(40)}`);
   editor.commands.setTextSelection({ from: 42, to: 46 });
   const anchor = captureCommentAnchor(editor.state);
@@ -110,7 +110,8 @@ it("caps quote contexts at 32 Unicode characters and falls back when positions c
   expect(Array.from(anchor.suffix)).toHaveLength(32);
   const sync = ySyncPluginKey.getState(editor.state);
   const collapsed = { ...anchor, end: anchor.start };
-  expect(resolveCommentAnchor(editor.state, collapsed)).toEqual({ from: 42, to: 46 });
+  expect(resolveCommentAnchor(editor.state, collapsed)).toBeUndefined();
+  expect(resolveCommentAnchor(editor.state, { ...anchor, end: "!" })).toEqual({ from: 42, to: 46 });
   if (!sync) throw new Error("Missing sync");
   const mapping = new Map(sync.binding.mapping);
   sync.binding.mapping.clear();
@@ -166,4 +167,20 @@ it("renders only anchored decorations, activates by click, and never adds marks 
     plugins: [plugin],
   });
   expect(commentKey.getState(state)?.comments).toEqual([]);
+});
+
+// AUTHORED-BY Claude Opus 5.5
+it("never moves a comment to another occurrence when its own text is deleted", () => {
+  const { editor } = setup("Wrong word tail. Before word after");
+  const second = editor.state.doc.textContent.lastIndexOf("word") + 1;
+  editor.commands.setTextSelection({ from: second, to: second + 4 });
+  const anchor = captureCommentAnchor(editor.state);
+  expect(resolveCommentAnchor(editor.state, anchor)).toEqual({ from: second, to: second + 4 });
+  editor.commands.deleteRange({ from: second, to: second + 4 });
+  expect(resolveCommentAnchor(editor.state, anchor)).toBeUndefined();
+  // Without usable Yjs positions the quote still finds the best-matching context.
+  expect(quoteRange(editor.state.doc, { ...anchor, prefix: "Wrong ", suffix: " tail" })).toEqual({
+    from: 7,
+    to: 11,
+  });
 });
