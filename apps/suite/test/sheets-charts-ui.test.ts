@@ -190,6 +190,39 @@ it("shows unavailable source charts and permits deletion, including untitled cha
   expect(document.querySelector("article")).toBeNull();
 });
 
+it("shows explicit deleted and oversized source states and lets the editor repair them", async () => {
+  const data = withCharts(source(), [{ ...spec, range: null }]);
+  const f = fixture(data);
+  const ui = await mount(h(ChartWorkspace, { engine: f.engine, snapshot: data }));
+  expect(document.querySelector('[role="status"]')?.textContent).toContain("Data range deleted");
+  await click(button("Edit chart"));
+  expect(field("Data range (A1)").value).toBe("");
+  await fill("Data range (A1)", "A1:B3");
+  await submit();
+  expect(document.querySelector('[role="status"]')).toBeNull();
+  expect(document.querySelector("svg desc")?.textContent).toContain("10 to 20");
+  const oversized = withCharts(source(), [{ ...spec, range: "A1:T501" }]);
+  const sheet = (oversized.sheets as Record<string, Snapshot>).data as Snapshot;
+  sheet.rowCount = 1000;
+  sheet.columnCount = 26;
+  await f.changed(oversized);
+  expect(document.querySelector('[role="status"]')?.textContent).toContain(
+    "Range too large to chart",
+  );
+  expect(readCharts(f.engine.snapshot()).charts[0]?.range).toBe("A1:T501");
+  await click(button("Edit chart"));
+  await fill("Chart title", "Still saved");
+  await submit();
+  expect(readCharts(f.engine.snapshot()).charts[0]).toMatchObject({
+    title: "Still saved",
+    range: "A1:T501",
+  });
+  expect(document.querySelector('[role="status"]')?.textContent).toContain(
+    "Range too large to chart",
+  );
+  await ui.unmount();
+});
+
 it("handles a loading engine, no selection, fallback subscriptions and the chart limit", async () => {
   const ui = await mount(h(ChartWorkspace, { engine: null, snapshot: source() }));
   expect(button("Insert chart").disabled).toBe(true);

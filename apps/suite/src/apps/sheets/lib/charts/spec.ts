@@ -1,7 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { z } from "zod";
 import type { Snapshot } from "../model/snapshot";
-import { chartSource, parseChartRange } from "./range";
+import { chartSheet, chartSource, parseChartRange } from "./range";
 
 export const chartTypes = ["column", "bar", "line", "pie", "scatter"] as const;
 export const chartSpecSchema = z.object({
@@ -18,7 +18,8 @@ export const chartSpecSchema = z.object({
       } catch {
         return false;
       }
-    }, "Enter a rectangular A1 range"),
+    }, "Enter a rectangular A1 range")
+    .nullable(),
   title: z.string().max(200),
   legend: z.boolean(),
   series: z.enum(["columns", "rows"]),
@@ -44,8 +45,15 @@ export function readCharts(
     const parsed = chartSpecSchema.safeParse(entry);
     try {
       if (!parsed.success || charts.some((chart) => chart.id === parsed.data.id)) throw new Error();
-      if (validateSource)
-        parsed.data.range = chartSource(snapshot, parsed.data.sheetId, parsed.data.range).range.a1;
+      if (validateSource) {
+        if (parsed.data.range === null) chartSheet(snapshot, parsed.data.sheetId);
+        else
+          parsed.data.range = chartSource(
+            snapshot,
+            parsed.data.sheetId,
+            parsed.data.range,
+          ).range.a1;
+      }
       charts.push(parsed.data);
     } catch {
       issues.push(`Ignored invalid chart entry ${index + 1}`);

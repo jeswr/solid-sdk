@@ -9,6 +9,9 @@ import UniverPresetSheetsDataValidationEnUS from "@univerjs/preset-sheets-data-v
 import {
   CommandType,
   createUniver,
+  type ICommandInfo,
+  ICommandService,
+  type IMutationInfo,
   type IWorkbookData,
   LocaleType,
   mergeLocales,
@@ -19,9 +22,10 @@ import {
   InsertRowMutation,
   RemoveColMutation,
   RemoveRowMutation,
+  SheetInterceptorService,
 } from "@univerjs/sheets";
 import { shiftChartRanges } from "../charts/range";
-import { readCharts, withCharts } from "../charts/spec";
+import { type ChartSpec, readCharts, withCharts } from "../charts/spec";
 import type { MountEngine, Snapshot } from "../contract";
 import { serializeSnapshot } from "../model/snapshot";
 import type { StructuralEdit } from "../refs/model";
@@ -51,6 +55,17 @@ const CHART_REFERENCE_MUTATIONS = new Map<string, Pick<StructuralEdit, "axis" | 
   [RemoveRowMutation.id, { axis: "row", kind: "delete" }],
   [RemoveColMutation.id, { axis: "column", kind: "delete" }],
 ]);
+const CHART_REFERENCE_COMMANDS = new Set([
+  "sheet.command.insert-row",
+  "sheet.command.insert-col",
+  "sheet.command.remove-row",
+  "sheet.command.remove-col",
+]);
+const RESTORE_CHART_SOURCES = "sheets.mutation.restore-chart-sources";
+interface ChartSources {
+  unitId: string;
+  sources: Pick<ChartSpec, "id" | "range">[];
+}
 
 export const mountUniver: MountEngine = async (container, options) => {
   const { univer, univerAPI } = createUniver({
@@ -100,6 +115,49 @@ export const mountUniver: MountEngine = async (container, options) => {
       for (const listener of valueListeners) listener();
     });
   };
+  const injector = univer.__getInjector();
+  const chartMutation = injector.get(ICommandService).registerCommand({
+    id: RESTORE_CHART_SOURCES,
+    type: CommandType.MUTATION,
+    handler: (_accessor, params: ChartSources) => {
+      if (params.unitId !== workbook.getId() || charts === undefined) return false;
+      const sources = new Map(params.sources.map((source) => [source.id, source.range]));
+      // Only restore references. Later title/style edits and explicit chart deletion survive undo.
+      charts = withCharts(
+        {},
+        readCharts({ charts }).charts.map((chart) =>
+          sources.has(chart.id)
+            ? { ...chart, range: sources.get(chart.id) as ChartSpec["range"] }
+            : chart,
+        ),
+      ).charts;
+      return true;
+    },
+  });
+  const captureSources = (command: ICommandInfo): IMutationInfo[] => {
+    const params = command.params as IInsertRowMutationParams | undefined;
+    if (
+      !CHART_REFERENCE_COMMANDS.has(command.id) ||
+      params?.unitId !== workbook.getId() ||
+      charts === undefined
+    )
+      return [];
+    const sources = readCharts({ charts })
+      .charts.filter((chart) => chart.sheetId === params.subUnitId)
+      .map(({ id, range }) => ({ id, range }));
+    return sources.length
+      ? [{ id: RESTORE_CHART_SOURCES, params: { unitId: params.unitId, sources } }]
+      : [];
+  };
+  const interceptors = injector.get(SheetInterceptorService);
+  // Capture before and after the actual mutations, including filtered row deletions.
+  // Univer appends these to the same history entry, after its own cell restoration.
+  const chartUndo = interceptors.interceptCommand({
+    getMutations: (command) => ({ undos: captureSources(command), redos: [] }),
+  });
+  const chartRedo = interceptors.interceptAfterCommand({
+    getMutations: (command) => ({ undos: [], redos: captureSources(command) }),
+  });
   const calculation = univerAPI.getFormula().calculationResultApplied(() => {
     if (!disposed && !loading) for (const listener of valueListeners) listener();
   });
@@ -221,6 +279,9 @@ export const mountUniver: MountEngine = async (container, options) => {
       ++generation;
       subscription.dispose();
       calculation.dispose();
+      chartUndo.dispose();
+      chartRedo.dispose();
+      chartMutation.dispose();
       listeners.clear();
       valueListeners.clear();
       univer.dispose();

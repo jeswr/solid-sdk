@@ -77,7 +77,6 @@ describe("chart A1 sources", () => {
     "A1,B2",
     "A:A",
     "1:2",
-    "A1:A10001",
     "A1:B2:C3",
     "A9007199254740992",
   ])("rejects invalid or unbounded range %s", (range) => {
@@ -99,6 +98,22 @@ describe("chart A1 sources", () => {
     const empty = source();
     delete (empty.sheets as Record<string, Snapshot>).data?.cellData;
     expect(chartValues(empty, "data", "A1")).toEqual([[null]]);
+  });
+  it("separates persisted source validity from the rendering limit and retains deleted sources", () => {
+    const data = source();
+    const sheet = (data.sheets as Record<string, Snapshot>).data as Snapshot;
+    sheet.rowCount = 10001;
+    expect(parseChartRange("A1:A10001").endRow).toBe(10000);
+    expect(readCharts(withCharts(data, [{ ...spec, range: "A1:A10001" }]), true)).toEqual({
+      charts: [{ ...spec, range: "A1:A10001" }],
+      issues: [],
+    });
+    expect(() => chartValues(data, "data", "A1:A10001")).toThrow("Range too large to chart");
+    expect(chartValues(data, "data", "A1:A10000")).toHaveLength(10000);
+    expect(() => chartValues(data, "data", null)).toThrow("Data range deleted");
+    const deleted = withCharts(data, [{ ...spec, range: null }]);
+    expect(readCharts(deleted, true)).toEqual({ charts: [{ ...spec, range: null }], issues: [] });
+    expect(readCharts({ ...deleted, sheets: {} }, true).charts).toEqual([]);
   });
 });
 

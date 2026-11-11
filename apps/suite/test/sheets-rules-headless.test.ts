@@ -49,6 +49,7 @@ const headless = await vi.hoisted(async () => {
 // No DOM, canvas or browser globals are stubbed.
 vi.mock("@univerjs/presets", () => ({
   CommandType: headless.core.CommandType,
+  ICommandService: headless.core.ICommandService,
   LocaleType: headless.core.LocaleType,
   mergeLocales: headless.core.mergeLocales,
   createUniver: () => {
@@ -56,6 +57,7 @@ vi.mock("@univerjs/presets", () => ({
     return headless.current;
   },
 }));
+vi.mock("@univerjs/sheets", () => headless.sheets);
 vi.mock("@univerjs/preset-sheets-core", () => ({ UniverSheetsCorePreset: () => ({}) }));
 vi.mock("@univerjs/preset-sheets-data-validation", () => ({
   UniverSheetsDataValidationPreset: () => ({}),
@@ -262,7 +264,7 @@ const chartSnapshot = () => {
   ]);
 };
 
-describe("chart references through real Univer structural mutations", () => {
+describe("chart references through real Univer structural command history", () => {
   it.each([
     ["row", "insert", 0, 1, "A2:B5"],
     ["row", "insert", 2, 2, "A1:B6"],
@@ -280,32 +282,46 @@ describe("chart references through real Univer structural mutations", () => {
     ["column", "delete", 0, 2, null],
   ] as const)("%s %s at %i, count %i keeps the source at %s", async (axis, kind, index, count, expected) => {
     const initial = chartSnapshot();
+    const h = await harness();
+    const book = await h.service.create({ title: "Chart history", snapshot: initial });
+    let version = book.version;
     const engine = await mountUniver({} as HTMLElement, {
-      snapshot: initial,
+      snapshot: book.snapshot,
       dark: false,
       compact: true,
     });
     try {
       const current = headless.current as ReturnType<typeof headless.create>;
+      current.univer
+        .__getInjector()
+        .get(headless.core.IUniverInstanceService)
+        .focusUnit(book.snapshot.id as string);
       const commands = current.univer.__getInjector().get(headless.core.ICommandService);
-      const { InsertRowMutation, RemoveRowMutation, InsertColMutation, RemoveColMutation } =
+      const { InsertRowCommand, RemoveRowCommand, InsertColCommand, RemoveColCommand } =
         headless.sheets;
-      const mutation =
+      const command =
         axis === "row"
           ? kind === "insert"
-            ? InsertRowMutation
-            : RemoveRowMutation
+            ? InsertRowCommand
+            : RemoveRowCommand
           : kind === "insert"
-            ? InsertColMutation
-            : RemoveColMutation;
+            ? InsertColCommand
+            : RemoveColCommand;
+      const saveAndReopen = async () => {
+        await h.service.save(book.container, engine.snapshot(), version);
+        const reopened = await h.service.open(book.container);
+        version = reopened.version;
+        return reopened.snapshot;
+      };
       const changed = vi.fn(() => readCharts(engine.snapshot()).charts);
       const valuesChanged = vi.fn(() => readCharts(engine.snapshot()).charts);
       engine.onChange(changed);
       engine.onValuesChange?.(valuesChanged);
       expect(
-        await commands.executeCommand(mutation.id, {
+        await commands.executeCommand(command.id, {
           unitId: engine.snapshot().id,
           subUnitId: "data",
+          direction: axis === "row" ? headless.core.Direction.UP : headless.core.Direction.LEFT,
           range:
             axis === "row"
               ? { startRow: index, endRow: index + count - 1, startColumn: 0, endColumn: 25 }
@@ -321,7 +337,14 @@ describe("chart references through real Univer structural mutations", () => {
       expect(changed.mock.results.at(-1)?.value).toEqual(actual);
       expect(valuesChanged.mock.results.at(-1)?.value).toEqual(actual);
       if (expected === null) {
-        expect(actual.map((spec) => spec.id)).toEqual(["other"]);
+        expect(actual).toEqual([
+          { ...chart, range: null },
+          { ...chart, id: "absolute", range: null },
+          readCharts(initial).charts[2],
+        ]);
+        expect(() => chartValues(saved, "data", actual[0]?.range as null)).toThrow(
+          "Data range deleted",
+        );
       } else {
         expect(actual[0]?.range).toBe(expected);
         expect(actual[1]?.range).toBe(expected.replace(/([A-Z]+)(\d+)/g, "$$$1$$$2"));
@@ -345,8 +368,73 @@ describe("chart references through real Univer structural mutations", () => {
         }
         expect(chartValues(saved, "data", expected)).toEqual(cells);
       }
-      engine.load(JSON.parse(JSON.stringify(saved)));
+      expect(readCharts(await saveAndReopen()).charts).toEqual(actual);
+      expect(await current.univerAPI.undo()).toBe(true);
+      expect(readCharts(engine.snapshot()).charts).toEqual(readCharts(initial).charts);
+      expect(chartValues(engine.snapshot(), "data", chart.range)).toEqual(chartCells);
+      expect(readCharts(await saveAndReopen()).charts).toEqual(readCharts(initial).charts);
+      expect(await current.univerAPI.redo()).toBe(true);
       expect(readCharts(engine.snapshot()).charts).toEqual(actual);
+      engine.load(await saveAndReopen());
+      expect(readCharts(engine.snapshot()).charts).toEqual(actual);
+    } finally {
+      engine.dispose();
+    }
+  });
+
+  it("keeps a 10,000-cell source when insertion exceeds the rendering budget, including undo, redo and reopening", async () => {
+    const initial = withCharts(snapshot("Month,Value\nJan,10\nFeb,20\nMar,30"), [
+      { ...chart, range: "A1:T500" },
+    ]);
+    const h = await harness();
+    const book = await h.service.create({ title: "Chart limit", snapshot: initial });
+    let version = book.version;
+    const engine = await mountUniver({} as HTMLElement, {
+      snapshot: book.snapshot,
+      dark: false,
+      compact: true,
+    });
+    try {
+      const current = headless.current as ReturnType<typeof headless.create>;
+      current.univer
+        .__getInjector()
+        .get(headless.core.IUniverInstanceService)
+        .focusUnit(book.snapshot.id as string);
+      const commands = current.univer.__getInjector().get(headless.core.ICommandService);
+      const expectSource = async (range: string, oversized: boolean) => {
+        const assert = (data: Snapshot) => {
+          expect(readCharts(data, true)).toEqual({ charts: [{ ...chart, range }], issues: [] });
+          if (oversized)
+            expect(() => chartValues(data, "data", range)).toThrow("Range too large to chart");
+          else {
+            const values = chartValues(data, "data", range);
+            expect(values).toHaveLength(500);
+            expect(values[0]).toHaveLength(20);
+            expect(values.slice(0, 4).map((row) => row.slice(0, 2))).toEqual(chartCells);
+          }
+        };
+        assert(engine.snapshot());
+        await h.service.save(book.container, engine.snapshot(), version);
+        const reopened = await h.service.open(book.container);
+        version = reopened.version;
+        assert(reopened.snapshot);
+        return reopened.snapshot;
+      };
+      await expectSource("A1:T500", false);
+      expect(
+        await commands.executeCommand(headless.sheets.InsertRowCommand.id, {
+          unitId: book.snapshot.id,
+          subUnitId: "data",
+          direction: headless.core.Direction.UP,
+          range: { startRow: 2, endRow: 2, startColumn: 0, endColumn: 25 },
+        }),
+      ).toBe(true);
+      await expectSource("A1:T501", true);
+      expect(await current.univerAPI.undo()).toBe(true);
+      await expectSource("A1:T500", false);
+      expect(await current.univerAPI.redo()).toBe(true);
+      engine.load(await expectSource("A1:T501", true));
+      await expectSource("A1:T501", true);
     } finally {
       engine.dispose();
     }
@@ -379,6 +467,93 @@ describe("chart references through real Univer structural mutations", () => {
       engine.load(reopened.snapshot);
       expect(readCharts(engine.snapshot()).charts).toEqual([chart]);
       expect(chartValues(engine.snapshot(), chart.sheetId, chart.range)).toEqual(chartCells);
+    } finally {
+      engine.dispose();
+    }
+  });
+
+  it("restores exact sources across multiple history entries while preserving later chart edits and deletion", async () => {
+    const initial = chartSnapshot();
+    const engine = await mountUniver({} as HTMLElement, {
+      snapshot: initial,
+      dark: false,
+      compact: true,
+    });
+    try {
+      const current = headless.current as ReturnType<typeof headless.create>;
+      const injector = current.univer.__getInjector();
+      injector.get(headless.core.IUniverInstanceService).focusUnit(initial.id as string);
+      const commands = injector.get(headless.core.ICommandService);
+      const remove = async (count: number) =>
+        expect(
+          await commands.executeCommand(headless.sheets.RemoveRowCommand.id, {
+            unitId: initial.id,
+            subUnitId: "data",
+            range: { startRow: 0, endRow: count - 1, startColumn: 0, endColumn: 5 },
+          }),
+        ).toBe(true);
+      await remove(1);
+      await remove(3);
+      // Another structural edit must also retain the already deleted source.
+      await remove(1);
+      expect(readCharts(engine.snapshot()).charts[0]?.range).toBeNull();
+      const edited = readCharts(engine.snapshot())
+        .charts.filter((spec) => spec.id !== "absolute")
+        .map((spec) => ({ ...spec, title: "Edited later", legend: false }));
+      engine.setCharts?.(withCharts({}, edited).charts);
+      const expected = (range: string | null) => [
+        { ...chart, range, title: "Edited later", legend: false },
+        { ...readCharts(initial).charts[2], title: "Edited later", legend: false },
+      ];
+      for (const range of [null, "A1:B3", "A1:B4"]) {
+        expect(await current.univerAPI.undo()).toBe(true);
+        expect(readCharts(engine.snapshot()).charts).toEqual(expected(range));
+      }
+      expect(chartValues(engine.snapshot(), "data", chart.range)).toEqual(chartCells);
+      for (const range of ["A1:B3", null, null]) {
+        expect(await current.univerAPI.redo()).toBe(true);
+        expect(readCharts(engine.snapshot()).charts).toEqual(expected(range));
+      }
+    } finally {
+      engine.dispose();
+    }
+  });
+
+  it("ignores stale source restores after load and supports commands on sheets without charts", async () => {
+    const engine = await mountUniver({} as HTMLElement, {
+      snapshot: chartSnapshot(),
+      dark: false,
+      compact: true,
+    });
+    try {
+      const commands = headless.current?.univer.__getInjector().get(headless.core.ICommandService);
+      expect(
+        await commands?.executeCommand("sheets.mutation.restore-chart-sources", {
+          unitId: "previous-workbook",
+          sources: [{ id: "chart", range: null }],
+        }),
+      ).toBe(false);
+      engine.load(snapshot("A,B\n1,2", true));
+      expect(
+        await commands?.executeCommand("sheets.mutation.restore-chart-sources", {
+          unitId: engine.snapshot().id,
+          sources: [{ id: "chart", range: null }],
+        }),
+      ).toBe(false);
+      const insert = async () =>
+        expect(
+          await commands?.executeCommand(headless.sheets.InsertRowCommand.id, {
+            unitId: engine.snapshot().id,
+            subUnitId: "other",
+            direction: headless.core.Direction.UP,
+            range: { startRow: 0, endRow: 0, startColumn: 0, endColumn: 25 },
+          }),
+        ).toBe(true);
+      await insert();
+      expect(engine.snapshot().charts).toBeUndefined();
+      engine.setCharts?.(withCharts({}, [chart]).charts);
+      await insert();
+      expect(readCharts(engine.snapshot()).charts).toEqual([chart]);
     } finally {
       engine.dispose();
     }

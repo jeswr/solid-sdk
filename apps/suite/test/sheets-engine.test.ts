@@ -48,7 +48,16 @@ const mock = vi.hoisted(() => {
       return subscription;
     }),
   };
-  const univer = { dispose: vi.fn() };
+  const chartHistory = {
+    registerCommand: vi.fn(() => ({ dispose: vi.fn() })),
+    interceptCommand: vi.fn(() => ({ dispose: vi.fn() })),
+    interceptAfterCommand: vi.fn(() => ({ dispose: vi.fn() })),
+  };
+  const univer = {
+    dispose: vi.fn(),
+    // biome-ignore lint/style/useNamingConvention: match Univer's injector access method
+    __getInjector: () => ({ get: () => chartHistory }),
+  };
   return {
     api,
     univer,
@@ -82,6 +91,7 @@ vi.mock("@univerjs/preset-sheets-conditional-formatting/locales/en-US", () => ({
 }));
 vi.mock("@univerjs/presets", () => ({
   CommandType: { MUTATION: 1 },
+  ICommandService: "commands",
   createUniver: mock.create,
   LocaleType: { EN_US: "en-US" },
   mergeLocales: mock.mergeLocales,

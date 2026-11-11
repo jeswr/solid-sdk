@@ -88,11 +88,14 @@ function ChartCard({
   onEdit: () => void;
 }) {
   let values: unknown[][] = [];
-  let missing = false;
+  let error = "";
   try {
     values = chartValues(snapshot, spec.sheetId, spec.range);
-  } catch {
-    missing = true;
+  } catch (failure) {
+    error =
+      spec.range === null || (failure as Error).message.startsWith("Range too large to chart")
+        ? (failure as Error).message
+        : "The source sheet or range is no longer available. Edit or delete this chart.";
   }
   return (
     <article className="sht-chart-card" aria-label={spec.title || "Untitled chart"}>
@@ -102,11 +105,7 @@ function ChartCard({
           Edit chart
         </Button>
       </div>
-      {missing && (
-        <p role="status">
-          The source sheet or range is no longer available. Edit or delete this chart.
-        </p>
-      )}
+      {error && <p role="status">{error}</p>}
       <ChartSvg spec={spec} values={values} />
     </article>
   );
@@ -255,7 +254,7 @@ export function ChartWorkspace({
               <label htmlFor={`${id}-range`}>Data range (A1)</label>
               <input
                 id={`${id}-range`}
-                value={draft.range}
+                value={draft.range ?? ""}
                 aria-invalid={!!error}
                 aria-describedby={error ? `${id}-error` : undefined}
                 onChange={(event) => {

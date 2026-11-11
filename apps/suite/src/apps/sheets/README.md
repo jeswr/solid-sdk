@@ -22,7 +22,7 @@ Charts (SHT-05) are app-owned SVGs in a scrollable strip below the grid. This av
 coupling their position and keyboard controls to Univer's canvas coordinates or its Pro
 chart plugin. The editor and chart renderer are lazy chunks; the list page loads neither.
 Insert chart uses the active selection. The chart editor supports column, bar, line, pie
-and scatter charts, a bounded A1 range on the original sheet (optionally sheet-qualified),
+and scatter charts, an A1 range on the original sheet (optionally sheet-qualified),
 a title, legend, and series from rows or columns. Text edges are detected as headers;
 blank/non-numeric cells are gaps, and numeric text is accepted. Pie uses positive values
 from the first series; scatter pairs the first numeric series with each remaining series.
@@ -34,5 +34,9 @@ results, and the editor uses native labelled keyboard controls.
 entries: [...] }`. Zod validates the collection and each entry on save/load; invalid entries
 (including unknown versions, duplicate IDs, and missing/out-of-bounds sources) are ignored
 and reported as content-free console warnings. Legacy snapshots need no migration.
+Row/column commands record exact chart sources in Univer's undo/redo history. Fully deleted
+sources stay saved with `range: null` and show “Data range deleted”; undo restores the original
+source, including deleted boundaries. Source validity is independent of the rendering budget:
+ranges above 10,000 cells remain saved and show “Range too large to chart” until reduced.
 Charts follow the existing guarded autosave and conflict flow. XLSX import/export behavior
 is unchanged: charts are **not exported to XLSX**, and imported Excel charts are not read.
