@@ -109,14 +109,14 @@ test("test IdP: sign up through Drive, then sign in again with the same account"
     await expect(popup.getByRole("heading", { name: "Your account is ready" })).toBeVisible();
 
     // Continue must resume the app's sign-in (a form button), not leave it for another site.
-    // Soft, so the existing-account step below still runs and reports on its own.
+    // Soft so the existing-account step below still runs; the test still fails if this does.
     const resume = popup.getByRole("button", { name: "Continue" });
     const resumable = (await resume.count()) === 1;
     expect
       .soft(
         resumable,
         "'Your account is ready' has no resume button: Continue leaves the sign-in, so the app " +
-          "never hears back (fixed by prod-solid-server#202; needs a solid-test redeploy)",
+          "never hears back (regression of prod-solid-server#202)",
       )
       .toBe(true);
     if (resumable) {
