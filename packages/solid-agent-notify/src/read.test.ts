@@ -201,15 +201,11 @@ test("ignores unrelated foreign subjects before finding untyped display content"
 
 test("reserved sidecar suffixes cannot be bypassed with percent encodings", async () => {
   const { isReadMarker } = await import("./inbox.js");
-  for (const url of [
-    "bad URL",
-    `${inbox}n.read.ttl`,
-    `${inbox}n.read%2Ettl`,
-    `${inbox}n%252Eread.ttl`,
-    `${inbox}%zz`,
-  ])
+  for (const url of ["bad URL", `${inbox}n.read.ttl`, `${inbox}n.read%2Ettl`, `${inbox}%zz`])
     expect(isReadMarker(url)).toBe(true);
   expect(isReadMarker(`${inbox}n`)).toBe(false);
+  expect(isReadMarker(`${inbox}n%25done`)).toBe(false);
+  expect(isReadMarker(`${inbox}n%252Eread.ttl`)).toBe(false);
   expect(isReadMarker("https://pod.example/a%25/inbox/n")).toBe(false);
 });
 
@@ -221,4 +217,38 @@ test("a malformed foreign rdf:type does not hide an untyped or recognizable acti
     const ds = await parseRdf(body, "text/turtle", { baseIRI: `${inbox}n` });
     expect(parseInboxNotification(`${inbox}n`, ds)?.summary).toBe("Legacy");
   }
+});
+
+test("auxiliary resources and LDP containers never become notifications through the self-subject fallback", async () => {
+  const { isAuxiliaryResource } = await import("./inbox.js");
+  expect(isAuxiliaryResource("bad URL")).toBe(true);
+  expect(isAuxiliaryResource(`${inbox}%zz`)).toBe(true);
+  for (const name of [
+    ".acl",
+    ".acr",
+    ".meta",
+    ".hidden",
+    "n.acl",
+    "n.acr",
+    "n.meta",
+    "%2Eacl",
+    "n%2Emeta",
+    "n.ACL",
+  ]) {
+    const url = `${inbox}${name}`;
+    const ds = await parseRdf('<> <http://purl.org/dc/terms/title> "Metadata".', "text/turtle", {
+      baseIRI: url,
+    });
+    expect(findActivitySubject(url, ds)).toBeUndefined();
+    expect(parseInboxNotification(url, ds)).toBeUndefined();
+    expect(isDirectChild(url, inbox)).toBe(false);
+  }
+  for (const type of ["Container", "BasicContainer", "DirectContainer", "IndirectContainer"]) {
+    const url = `${inbox}slashless`;
+    const ds = await parseRdf(`<> a <http://www.w3.org/ns/ldp#${type}>.`, "text/turtle", {
+      baseIRI: url,
+    });
+    expect(parseInboxNotification(url, ds)).toBeUndefined();
+  }
+  expect(parseInboxNotification(`${inbox}folder/`, new Store())).toBeUndefined();
 });

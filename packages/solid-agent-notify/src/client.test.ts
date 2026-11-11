@@ -441,3 +441,47 @@ test("discovery policy caches cannot promote development or DNS-less results to 
     await createNotifyClient({ fetch, webId: localId })(localId, { ...activity, actor: localId }),
   ).toEqual({ delivered: false, inbox: null, reason: "network" });
 });
+
+test.each([
+  201, 415, 403,
+])("415 retries once with the exact dataset as JSON-LD (retry status %s)", async (status) => {
+  const fetch = transport();
+  let posts = 0;
+  fetch.mockImplementation(async (_url, init) => {
+    if (init?.method !== "POST") return profile();
+    return new Response("receiver response", { status: ++posts === 1 ? 415 : status });
+  });
+  const clock = vi.fn(() => 42);
+  const notify = createNotifyClient({ fetch, webId: activity.actor, clock });
+  const result = await notify(webId, {
+    ...activity,
+    summary: 'Quoted "text"',
+    content: "💡",
+    provenance: true,
+  });
+  expect(result).toEqual(
+    status === 201
+      ? { delivered: true, inbox }
+      : { delivered: false, inbox, status, reason: status === 403 ? "forbidden" : "network" },
+  );
+  expect(posts).toBe(2);
+  const turtle = fetch.mock.calls[1][1];
+  const jsonld = fetch.mock.calls[2][1];
+  expect(new Headers(jsonld?.headers).get("content-type")).toBe("application/ld+json");
+  const first = await parseRdf(String(turtle?.body), "text/turtle", { baseIRI: `${inbox}n` });
+  const second = await parseRdf(String(jsonld?.body), "application/ld+json", {
+    baseIRI: `${inbox}n`,
+  });
+  const values = (ds: typeof first) =>
+    [...ds]
+      .map((q) => [
+        q.predicate.value,
+        q.object.termType,
+        q.object.value,
+        q.object.termType === "Literal" ? [q.object.datatype.value, q.object.language] : [],
+        q.graph.value,
+      ])
+      .sort();
+  expect(values(second)).toEqual(values(first));
+  expect([...second].every((q) => q.subject.termType === "BlankNode")).toBe(true);
+});

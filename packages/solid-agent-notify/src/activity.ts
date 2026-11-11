@@ -9,7 +9,9 @@
  * terms); {@link buildActivity} turns it into an n3 `Store`; {@link ActivityDoc}
  * is the typed view used both to write (send) and read (inbox parse).
  */
+
 import { safeHttpIri, serialize } from "@jeswr/rdf-serialize";
+import type { BlankNode } from "@rdfjs/types";
 import {
   LiteralAs,
   LiteralFrom,
@@ -171,13 +173,21 @@ export class ActivityDoc extends TermWrapper {
  * a type, and free-text summary/content. We never sweep in arbitrary internal pod
  * URLs, so a notification cannot exfiltrate private resource locations.
  *
- * @throws TypeError if `subject` is neither a safe `#`-fragment nor an http(s) IRI.
+ * A supplied RDF/JS BlankNode keeps the dataset independent of the receiver URL
+ * when serializing it as either Turtle or JSON-LD.
+ *
+ * @throws TypeError if a string `subject` is neither a safe `#`-fragment nor an http(s) IRI.
  */
-export function buildActivity(notification: ActivityNotification, subject = "#it"): Store {
+export function buildActivity(
+  notification: ActivityNotification,
+  subject: string | BlankNode = "#it",
+): Store {
   const store = new Store();
-  const doc = new ActivityDoc(safeSubjectIri(subject), store, DataFactory).setType(
-    notification.type,
-  );
+  const doc = new ActivityDoc(
+    typeof subject === "string" ? DataFactory.namedNode(safeSubjectIri(subject)) : subject,
+    store,
+    DataFactory,
+  ).setType(notification.type);
   // Object-position IRIs: canonicalise (Turtle IRI-injection guard) and DROP the
   // triple when the value is not a safe http(s) IRI — never write a raw string.
   doc.actor = safeHttpIri(notification.actor);

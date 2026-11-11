@@ -5,6 +5,7 @@ import { httpsIri, inboxDiscovery } from "./client-discovery.js";
 import {
   containerMembers,
   type InboxNotification,
+  isInboxContainer,
   isReadMarker,
   parseInboxNotification,
   sortInboxNotifications,
@@ -110,6 +111,7 @@ export function createInboxReader(options: InboxReaderOptions): InboxReader {
           try {
             const { dataset } = await fetchRdf(member, { fetch: fetcher, signal });
             checkAbort(signal);
+            if (isInboxContainer(member, dataset)) continue;
             const item = parseInboxNotification(member, dataset);
             if (item) items.push(item);
             else if (options.includeUnknownActivities)

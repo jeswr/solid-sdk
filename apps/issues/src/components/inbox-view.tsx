@@ -2,6 +2,7 @@
 // AUTHORED-BY Claude Opus 4.8
 "use client";
 
+import { isLoopbackHostname } from "@jeswr/pod-access/notify";
 import { AlertCircle, ArrowUpRight, Bell, Inbox as InboxIcon, RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Badge } from "@/components/ui/badge";
@@ -49,7 +50,7 @@ export function InboxView({
         ownStorage,
         undefined,
         500,
-        ["localhost", "127.0.0.1", "[::1]"].includes(location.hostname),
+        process.env.NODE_ENV !== "production" && isLoopbackHostname(location.hostname),
       );
       if (seq !== loadSeq.current) return;
       setNotifications(result.notifications);

@@ -215,7 +215,8 @@ Activities support `Announce`, `Offer`, `Accept`, `Reject`, `Create`, `Invite` a
 `actor` is required, with optional `object`, `target`, `summary` and `content`.
 The client binds `actor` to the authenticated `webId` supplied at construction and refuses
 mismatches as `invalid-actor`. It builds a typed RDF/JS dataset and serializes with n3.Writer
-as `text/turtle`, using the relative named subject `#it`. Non-HTTPS optional object/target
+as `text/turtle`, using a blank activity subject. HTTP 415 retries once with context-free
+`application/ld+json` serialized from the same RDF dataset. Non-HTTPS optional object/target
 links are omitted. Issue drafts include PROV-O attribution and generation time.
 Delivery failures resolve as values: `no-inbox`, `lws-no-ldn`, `invalid-target`,
 `profile-unreadable`, `forbidden` (inbox 401/403), or `network`. HTTP failures retain `status`.
@@ -269,7 +270,7 @@ URL different from the requested document if a caller transport ignored manual r
 
 `createInboxManager({ webId, storageRoots, fetch, pinningFetch?, clock?, maxItems? })`
 discovers the owner's inbox, returning `null` if absent or outside the active storage roots
-(or query-addressed). Supply trusted roots from the authenticated session. The returned
+(or query-addressed or equal to a storage root). Supply trusted roots from the authenticated session. The returned
 `{ inboxUrl, list, listPage, markRead, dismiss }` pins all writes to direct children of that inbox:
 
 ```ts
@@ -285,8 +286,13 @@ if (inbox) {
 }
 ```
 
-Read state uses same-container `<notification>.read.ttl` sidecars. Sidecars remain in
-`members` for read state but are never fetched or counted against the notification budget.
+Read state uses exactly named same-container `<notification>.read.ttl` sidecars. The manager
+fetches sidecars only for displayed notifications (at most six requests active) and requires
+the expected `#it` subject, `as:read true`, exact notification `as:object`, and owner WebID
+`as:actor`. Sender activities, malformed/unreadable markers, and encoded filename aliases
+cannot establish read state. Sidecars do not consume the notification fetch budget.
+Legacy markers without the owner actor remain unread until `markRead` rewrites them.
+Names containing a literal percent sign remain ordinary notifications.
 The manager fetches up to `MAX_INBOX_ITEMS`, sorts newest first, then applies its optional
 display `maxItems` (default the package maximum). `listPage()` returns notifications and
 `truncated`; apps must surface that flag, since a bounded listing may omit newer items.
@@ -298,15 +304,19 @@ not merge existing data and require no HEAD or ETag. Dismissal tolerates 404 and
 its sidecar best effort. Strong ETag preconditions remain required for read-modify-write
 operations elsewhere in this package. Only direct notification children of the owner's
 inbox are valid mutation targets; read markers cannot be supplied as notification targets.
+Dot-prefixed names and `.acl`/`.acr`/`.meta` suffixes are excluded from mutations and listings;
+LDP containers are never parsed as notifications, including the unknown-activity fallback.
 Foreign/outside/nested/query/fragment/credentialed/encoded-delimiter targets fail before I/O.
 
 Production delivery permits public HTTPS on port 443 only. All branches reject single-label
 hosts, empty DNS labels, trailing dots, private/reserved IPs, userinfo and redirects.
 Own-storage GET/HEAD may use any HTTPS port when `ownStorageRoots` comes from the trusted
-session. This never relaxes foreign reads or POST/PUT/DELETE port checks. `devLoopback: true`
+session. The manager also permits direct-child marker PUT and notification/marker DELETE
+on that same own-storage port; foreign requests and POST retain port 443. `devLoopback: true`
 is an explicit app opt-in for HTTP(S) on exactly localhost, 127.0.0.1 or [::1], on any port;
 it never permits general HTTP or another private host. Issues enables it only when the app
-itself runs on one of those loopback hosts. Node public hostnames still require DNS pinning;
+is a development build served on one of those loopback hosts. The exported
+`isLoopbackHostname(hostname)` shares the exact host policy with apps. Node public hostnames still require DNS pinning;
 browsers retain the documented DNS limitation.
 
 `notificationKind(notification)` classifies builder round-trips as `share` (Announce with

@@ -294,3 +294,59 @@ test("the shared deadline also bounds DNS validation before dispatch", async () 
     vi.useRealTimers();
   }
 });
+
+test.each([
+  false,
+  true,
+])("rejects a rebuilt response with an empty URL and redirected=true (listing=%s)", async (listing) => {
+  const fetch = vi.fn<typeof globalThis.fetch>().mockImplementation(async () => {
+    const rebuilt = new Response("redirected body");
+    Object.defineProperty(rebuilt, "redirected", { value: true });
+    expect(rebuilt.url).toBe("");
+    return rebuilt;
+  });
+  await expect(
+    clientFetch({ fetch }, listing ? { truncated: false } : undefined)("https://8.8.8.8/inbox/"),
+  ).rejects.toThrow("redirect");
+  expect(fetch.mock.calls[0][1]?.redirect).toBe("manual");
+});
+
+test("redirected responses with no body also fail closed", async () => {
+  const response = new Response(null, { status: 204 });
+  Object.defineProperty(response, "redirected", { value: true });
+  await expect(
+    clientFetch({ fetch: async () => response })("https://8.8.8.8/inbox/"),
+  ).rejects.toThrow("redirect");
+});
+
+test("own-inbox port exception permits only scoped marker PUT and child DELETE", async () => {
+  const fetch = vi.fn<typeof globalThis.fetch>().mockImplementation(async () => new Response(null));
+  const root = "https://8.8.8.8:8443/alice/";
+  const ownInboxUrl = `${root}inbox/`;
+  const request = clientFetch({ fetch, ownStorageRoots: [root], ownInboxUrl });
+  for (const [name, method] of [
+    ["n.read.ttl", "PUT"],
+    ["n", "DELETE"],
+    ["n.read.ttl", "DELETE"],
+  ])
+    await expect(request(`${ownInboxUrl}${name}`, { method })).resolves.toHaveProperty(
+      "status",
+      200,
+    );
+  for (const [url, method] of [
+    [ownInboxUrl, "DELETE"],
+    [`${ownInboxUrl}nested/n`, "DELETE"],
+    [`${root}other/n`, "DELETE"],
+    [`${ownInboxUrl}.acl`, "DELETE"],
+    [`${ownInboxUrl}n.acr`, "DELETE"],
+    [`${ownInboxUrl}n`, "PUT"],
+    [`${ownInboxUrl}n#fragment`, "DELETE"],
+    [`${ownInboxUrl}n?query`, "DELETE"],
+    [`${ownInboxUrl}n.read.ttl`, "PATCH"],
+    [ownInboxUrl, "POST"],
+    ["https://8.8.8.8:8443/bob/inbox/n", "DELETE"],
+    ["https://8.8.8.8:9443/alice/inbox/n", "DELETE"],
+  ])
+    await expect(request(url, { method })).rejects.toThrow();
+  expect(fetch).toHaveBeenCalledTimes(3);
+});

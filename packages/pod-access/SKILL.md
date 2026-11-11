@@ -146,10 +146,12 @@ response URL if the caller transport ignored manual redirects.
 
 `createInboxManager({ webId, storageRoots, fetch, pinningFetch?, clock?, maxItems? })`
 discovers the owner's inbox and returns null unless it is inside a trusted active storage
-root and has no query. Roots come from the authenticated session, never notification RDF.
+root (strictly below it) and has no query. Roots come from the authenticated session, never notification RDF.
 The manager exposes `inboxUrl`, `list()`, `markRead(url)` and `dismiss(url)`. Listing adds
-`read` from the existence of `<notification>.read.ttl` in the same container and hides these
-reserved sidecars. Direct children only: reject foreign origins, nesting, credentials,
+`read` only after fetching the exactly named `<notification>.read.ttl` sidecar and checking
+its `#it` subject, `as:read true`, exact notification object and owner actor. It hides reserved
+sidecars while preserving ordinary names containing `%`. Unreadable/malformed/sender markers
+leave notifications unread. Fetch at most six sidecars concurrently, only for displayed items. Direct children only: reject foreign origins, nesting, credentials,
 queries/fragments and encoded slash/backslash before I/O. Mark-read PUT and notification DELETE are unconditional and idempotent; no HEAD or ETag is
 required. Only read-modify-write operations require strong ETag preconditions. Missing
 resources dismiss idempotently and sidecar cleanup is best effort. The manager fetches up to
@@ -160,13 +162,18 @@ Listing 401/403 errors must propagate to app error states. `includeUnknownActivi
 retains even empty readable RDF as unknown notifications; Issues opts in and exposes no
 invented ActivityStreams type IRI.
 
-Delivery uses a typed RDF/JS dataset and n3.Writer Turtle with a named relative `#it` subject.
+Delivery uses a typed RDF/JS dataset and n3.Writer Turtle with a blank activity subject.
+HTTP 415 retries once with JSON-LD serialized from that same dataset.
 Read activity subjects as RDF/JS terms, including blank nodes. Issue drafts add PROV-O
 attribution and generation time. Optional non-HTTPS object/target links are omitted.
 Delivery results distinguish invalid targets, unreadable profiles, network failures and real
 HTTP status. All runtime branches refuse dotless hosts, empty labels and trailing dots.
 Public delivery is HTTPS/443; trusted `ownStorageRoots` only relaxes HTTPS ports for scoped
-GET/HEAD. Explicit `devLoopback` admits HTTP(S) on localhost/127.0.0.1/[::1] only, any port.
+GET/HEAD; the manager also permits marker PUT and child DELETE strictly within its own inbox.
+Dot-prefixed and `.acl`/`.acr`/`.meta` resources are excluded from mutations and listings;
+LDP containers cannot enter the unknown-activity fallback. Exported `isLoopbackHostname`
+shares the host policy with apps, which must also gate their opt-in on development builds.
+Explicit `devLoopback` admits HTTP(S) on localhost/127.0.0.1/[::1] only, any port.
 Never propagate a development-discovered cache entry into a strict transport policy.
 
 `notificationKind(n)` maps Announce share summaries before

@@ -25,6 +25,7 @@ const AS = "https://www.w3.org/ns/activitystreams#";
 afterEach(() => {
   cleanup();
   readInbox.mockReset();
+  vi.unstubAllEnvs();
 });
 
 describe("InboxView", () => {
@@ -106,5 +107,17 @@ it("retains the limit warning even when no children in the partial listing are r
   render(<InboxView webId={WEBID} ownStorageUrls={OWN} />);
   await waitFor(() =>
     expect(screen.getByRole("status").textContent).toContain("Your inbox is large"),
+  );
+});
+
+it.each([
+  "production",
+  "development",
+])("loopback opt-in requires a development build (%s)", async (mode) => {
+  vi.stubEnv("NODE_ENV", mode);
+  readInbox.mockResolvedValue({ notifications: [], truncated: false });
+  render(<InboxView webId={WEBID} ownStorageUrls={OWN} />);
+  await waitFor(() =>
+    expect(readInbox).toHaveBeenCalledWith(WEBID, OWN, undefined, 500, mode !== "production"),
   );
 });

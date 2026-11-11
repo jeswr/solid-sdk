@@ -3,6 +3,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 
 import { RdfFetchError } from "@jeswr/fetch-rdf";
+import { isLoopbackHostname } from "@jeswr/pod-access/notify";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Announcer } from "@/lib/announce";
@@ -243,8 +244,9 @@ export function useIssues(
   // the pod write always succeeds even if the notify fails; a failure surfaces as
   // a non-intrusive toast, never a thrown error into the mutation.
   const devLoopback =
+    process.env.NODE_ENV !== "production" &&
     typeof location !== "undefined" &&
-    ["localhost", "127.0.0.1", "[::1]"].includes(location.hostname);
+    isLoopbackHostname(location.hostname);
   const announcer = useMemo(
     () =>
       creator

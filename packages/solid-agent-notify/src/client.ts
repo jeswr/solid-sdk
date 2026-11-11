@@ -1,4 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+import { serialize } from "@jeswr/rdf-serialize";
+import { DataFactory } from "n3";
 import { buildActivity, serializeTurtle } from "./activity.js";
 import { httpsIri, inboxDiscovery } from "./client-discovery.js";
 
@@ -7,7 +9,7 @@ export { isDirectChild as isInboxChild, isReadMarker, READ_SUFFIX } from "./inbo
 export type { InboxPage, InboxReader, InboxReaderOptions } from "./inbox-client.js";
 export { createInboxReader, MAX_INBOX_ITEMS } from "./inbox-client.js";
 export type { ClientTransportOptions } from "./security/clientFetch.js";
-export { clientFetch as createNotifyFetch } from "./security/clientFetch.js";
+export { clientFetch as createNotifyFetch, isLoopbackHostname } from "./security/clientFetch.js";
 
 import {
   type ClientTransportOptions,
@@ -32,6 +34,7 @@ export interface NotifyResult {
   inbox: string | null;
   status?: number;
   reason?:
+    | "unauthenticated"
     | "no-inbox"
     | "forbidden"
     | "lws-no-ldn"
@@ -74,26 +77,38 @@ export function createNotifyClient(options: NotifyOptions): Notify {
       if (!VERBS.has(activity.type)) throw new TypeError("Unsupported activity type");
       if (activity.actor !== webId) return { delivered: false, inbox, reason: "invalid-actor" };
       httpsIri(webId, options.devLoopback);
-      const body = await serializeTurtle(
-        buildActivity({
+      // A blank subject preserves the exact dataset across Turtle and JSON-LD;
+      // its identity does not depend on a receiver-assigned resource URL.
+      const dataset = buildActivity(
+        {
           ...activity,
           actor: webId,
           object: optionalHttps(activity.object, options.devLoopback),
           target: optionalHttps(activity.target, options.devLoopback),
           published: new Date(clock()),
-        }),
+        },
+        DataFactory.blankNode("it"),
       );
+      const body = await serializeTurtle(dataset);
       if ((await options.recipientProtocol?.(agentWebId)) === "lws") {
         return { delivered: false, inbox, reason: "lws-no-ldn" };
       }
       const discovery = await discover(agentWebId);
       inbox = discovery.inbox;
       if (inbox === null) return { delivered: false, ...discovery };
-      const response = await fetcher(inbox, {
+      let response = await fetcher(inbox, {
         method: "POST",
         headers: { "content-type": "text/turtle" },
         body,
       });
+      if (response.status === 415) {
+        await response.body?.cancel();
+        response = await fetcher(inbox, {
+          method: "POST",
+          headers: { "content-type": "application/ld+json" },
+          body: await serialize([...dataset], { format: "application/ld+json" }),
+        });
+      }
       return response.ok
         ? { delivered: true, inbox }
         : {

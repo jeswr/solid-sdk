@@ -31,15 +31,18 @@ DNS-pinning path, which requires Node ≥ 22.19.0.)
 > `ignore-scripts=true`. Maintainers change source here and use the workspace's
 > mirror-publishing workflow; mirrors are never hand-edited. npm publishing remains deferred.
 
-## Caller-fetch Turtle client
+## Caller-fetch notification client
 
 `solid-agent-notify/client` exposes `createNotifyClient({ webId, fetch, clock?, recipientProtocol?,
 pinningFetch? })`. Its returned `notify(agentWebId, activity)` discovers exactly one `ldp:inbox`
 on the recipient's exact WebID subject using fetch-rdf, caches positive/negative discovery for
-ten minutes per transport/clock scope, and POSTs a typed RDF/JS ActivityStreams dataset serialized by n3.Writer as Turtle (`text/turtle`) with named subject `#it` through the caller's fetch.
+ten minutes per transport/clock scope, and POSTs a typed RDF/JS ActivityStreams dataset serialized by n3.Writer as Turtle (`text/turtle`) with a blank activity subject through the caller's fetch.
 Activities carry `type: 'Announce'|'Offer'|'Accept'|'Reject'|'Create'|'Invite'|'Update'`, `actor`,
 and optional `object`, `target`, `summary` and `content`; the POSTed body also carries `published` (the send time from `clock`, default
 `Date.now`, as an ISO string) so readers can date and order items. Results are `{delivered, inbox, reason?}`; delivery failures never throw.
+On HTTP 415, the client retries once with `application/ld+json`, serialized from the same
+RDF dataset by the existing rdf-serialize dependency; no remote contexts are emitted. A
+second 415 is returned with its status.
 The session `webId` binds the actor; mismatches return `invalid-actor`. Non-HTTPS optional
 object/target links are omitted. Reasons are `no-inbox`, `forbidden` (inbox 401/403),
 `lws-no-ldn`, `invalid-target`, `profile-unreadable`, and `network`. HTTP failures retain `status`.
@@ -49,12 +52,17 @@ The client entry avoids the root API's Node transport/config imports. Its egress
 caps, and eight-second deadlines. Node hostname destinations require an authenticated
 `pinningFetch` explicitly asserted to pin DNS; supplying only an ordinary caller fetch fails
 closed. Browsers use the shared guard's syntactic policy because sockets cannot be pinned there.
-The fetch implementation must honor manual redirects; a changed final response URL is also
-refused as a backstop. `createNotifyFetch({ fetch, pinningFetch? })` exposes this same boundary
+`refuseRedirects` is the primary redirect control; the fetch implementation must honor manual
+redirects. A changed final response URL or `redirected: true` (even with an empty URL on a
+rebuilt Response) is also refused as a backstop. The redirected flag is checked before
+body capping rebuilds the response. `createNotifyFetch({ fetch, pinningFetch? })` exposes this same boundary
 for SDK notification management and linked-resource reads. Activity IRIs require HTTPS. All branches reject single-label hosts, empty labels and trailing
 dots. `devLoopback: true` explicitly admits HTTP(S) only on localhost, 127.0.0.1 and [::1], any
 port. `ownStorageRoots` from the trusted session permits other HTTPS ports only for scoped
-GET/HEAD; foreign reads and all writes retain port 443. Discovery caches isolate these policies.
+GET/HEAD. With a trusted `ownInboxUrl` strictly inside those roots, direct-child marker PUT
+and child DELETE also use the own-storage port. Foreign requests and POST retain port 443.
+`isLoopbackHostname(hostname)` exports the exact host check; apps must also require a
+development build before opting in. Discovery caches isolate these policies.
 
 Known LWS recipients can be short-circuited with `recipientProtocol(webId) => 'lws'`; LWS profile
 media types also return `lws-no-ldn`. The sender's protocol never determines the recipient's.

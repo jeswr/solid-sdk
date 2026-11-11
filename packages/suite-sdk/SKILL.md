@@ -32,6 +32,7 @@ Read `packages/pod-access/SKILL.md` for notification API details. Use `PodAuthPr
 `@jeswr/pod-auth/react`; never create another auth session or modify credentials in this facade.
 The notifier cache belongs to the current identity and must reset on lifecycle/account changes.
 Bind notifications to the session WebID; an explicit activity actor cannot replace it.
+Missing session WebIDs return `reason: "unauthenticated"` without sending.
 Recipient protocol hints describe the recipient, independently of the current identity's protocol.
 Preserve the explicit DNS-pinning requirement for Node transports and all redirect refusals.
 

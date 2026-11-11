@@ -7,6 +7,12 @@ import {
   refuseRedirects,
   SsrfError,
 } from "@jeswr/guarded-fetch";
+import { isDirectChild, isReadMarker } from "../inbox.js";
+
+/** Exact loopback hostname policy shared by discovery, transport and app opt-ins. */
+export function isLoopbackHostname(hostname: string): boolean {
+  return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "[::1]";
+}
 
 /** Caller-owned authenticated transport. Node hostname targets require explicit DNS pinning. */
 export interface ClientTransportOptions {
@@ -18,6 +24,8 @@ export interface ClientTransportOptions {
   devLoopback?: boolean;
   /** Trusted session storage roots: only GET/HEAD within these roots may use other HTTPS ports. */
   ownStorageRoots?: readonly string[];
+  /** Trusted discovered own inbox: also permit direct-child marker PUT and child DELETE. */
+  ownInboxUrl?: string;
 }
 
 /** A destination refused before authenticated I/O. */
@@ -69,7 +77,13 @@ export function clientFetch(
   const roots = [...(options.ownStorageRoots ?? [])];
   const transport = options.pinningFetch ?? options.fetch;
   const bounded: typeof fetch = async (input, init) => {
-    const response = await transport(input, init);
+    // refuseRedirects is the primary control. Check the original response before
+    // body capping rebuilds it and loses redirected metadata (including empty URLs).
+    const response = await refuseRedirects(transport)(input, init);
+    if (response.redirected) {
+      await response.body?.cancel();
+      throw new TypeError("Notification transport followed a redirect");
+    }
     return listing ? listingResponse(response, listing) : response;
   };
   return async (input, init) => {
@@ -79,17 +93,20 @@ export function clientFetch(
     } catch {
       throw new NotifyTargetError("Expected an absolute notification URL");
     }
+    const destination = expected.href;
     expected.hash = "";
     const host = expected.hostname;
-    const loopback =
-      options.devLoopback === true &&
-      (host === "localhost" || host === "127.0.0.1" || host === "[::1]");
+    const loopback = options.devLoopback === true && isLoopbackHostname(host);
     const method = (
       init?.method ?? (input instanceof Request ? input.method : "GET")
     ).toUpperCase();
-    const ownRead =
-      (method === "GET" || method === "HEAD") &&
-      roots.some((root) => isWithinPodScope(root, expected.href));
+    const ownRequest =
+      roots.some((root) => isWithinPodScope(root, expected.href)) &&
+      (method === "GET" ||
+        method === "HEAD" ||
+        (options.ownInboxUrl !== undefined &&
+          isDirectChild(destination, options.ownInboxUrl) &&
+          (method === "DELETE" || (method === "PUT" && isReadMarker(expected.href)))));
     let dispatched = false;
     const policy = {
       beforeDispatch: () => {
@@ -99,7 +116,7 @@ export function clientFetch(
       requireDnsPinning: !loopback,
       allowUnresolvedHosts: browser,
       allowLoopback: loopback,
-      enforcePortGate: !ownRead,
+      enforcePortGate: !ownRequest,
       maxRedirects: 0,
       maxBytes: MAX_RESPONSE_BYTES,
       timeoutMs: 8_000,

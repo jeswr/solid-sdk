@@ -5,6 +5,7 @@ import type { NotifyResult } from "./client.js";
 import {
   type ClientTransportOptions,
   clientFetch,
+  isLoopbackHostname,
   NotifyTargetError,
 } from "./security/clientFetch.js";
 
@@ -15,10 +16,7 @@ const LDP_INBOX = DataFactory.namedNode("http://www.w3.org/ns/ldp#inbox");
 /** Require an absolute HTTPS destination without credentials; preserve RDF identity lexically. */
 export function httpsIri(value: string, devLoopback = false): string {
   const url = new URL(value);
-  const localHttp =
-    devLoopback &&
-    url.protocol === "http:" &&
-    ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname);
+  const localHttp = devLoopback && url.protocol === "http:" && isLoopbackHostname(url.hostname);
   if (
     (!localHttp && url.protocol !== "https:") ||
     url.username ||

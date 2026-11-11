@@ -74,7 +74,7 @@ test("wraps the real sender and delivers the byte-stable assignment with the cal
   const ds = await parseRdf(String(fetch.mock.calls[1]?.[1]?.body), "text/turtle", {
     baseIRI: `${inbox}n`,
   });
-  expect([...ds].every((q) => q.subject.value === `${inbox}n#it`)).toBe(true);
+  expect([...ds].every((q) => q.subject.termType === "BlankNode")).toBe(true);
 });
 
 test("wraps inbox discovery and reading, and classifies each real builder round-trip", async () => {
@@ -187,6 +187,26 @@ test("issue announcements preserve Issues' recipient target and summary as plain
 const owner = "https://8.8.8.8/profile#me";
 const ownInbox = "https://8.8.8.8/inbox/";
 const item = `${ownInbox}n`;
+async function markerBody(notification: string, actor = owner, read = true): Promise<string> {
+  const { OptionalAs, LiteralFrom, NamedNodeFrom, TermWrapper } = await import("@rdfjs/wrapper");
+  const { Store, DataFactory } = await import("n3");
+  const { serialize } = await import("@jeswr/rdf-serialize");
+  const doc = new TermWrapper(`${notification}.read.ttl#it`, new Store(), DataFactory);
+  OptionalAs.object(
+    doc,
+    "https://www.w3.org/ns/activitystreams#actor",
+    actor,
+    NamedNodeFrom.string,
+  );
+  OptionalAs.object(doc, "https://www.w3.org/ns/activitystreams#read", read, LiteralFrom.boolean);
+  OptionalAs.object(
+    doc,
+    "https://www.w3.org/ns/activitystreams#object",
+    notification,
+    NamedNodeFrom.string,
+  );
+  return serialize([...doc.dataset]);
+}
 function rdf(body: string): Response {
   return new Response(body, { headers: { "content-type": "text/turtle" } });
 }
@@ -215,7 +235,12 @@ test("discovers only an owner's scoped inbox; missing, foreign and query inboxes
       fetch: async () => rdf(""),
     }),
   ).toBeNull();
-  for (const inbox of ["https://1.1.1.1/inbox/", `${ownInbox}?query`, "https://8.8.8.8/a%2fb/"]) {
+  for (const inbox of [
+    "https://1.1.1.1/inbox/",
+    `${ownInbox}?query`,
+    "https://8.8.8.8/a%2fb/",
+    "https://8.8.8.8/",
+  ]) {
     const { box, fetch } = await manager(() => {
       throw new Error("Must not fetch inbox");
     }, inbox);
@@ -224,8 +249,9 @@ test("discovers only an owner's scoped inbox; missing, foreign and query inboxes
   }
 });
 
-test("reads marker existence from the listing, filters sidecars, and retains unread notifications", async () => {
-  const { box } = await manager((url) => {
+test("reads verified marker content from the listing, filters sidecars, and retains unread notifications", async () => {
+  const { box } = await manager(async (url) => {
+    if (url === `${item}.read.ttl`) return rdf(await markerBody(item));
     if (url === ownInbox)
       return rdf(
         `<${ownInbox}> <http://www.w3.org/ns/ldp#contains> <${item}>, <${item}.read.ttl>, <${ownInbox}unread>.`,
@@ -251,7 +277,9 @@ test.each([
   "https://user:pass@8.8.8.8/inbox/n",
   `${item}.read.ttl`,
   `${item}.read%2Ettl`,
-  `${item}%252Eread.ttl`,
+  ...[".acl", ".acr", ".meta", ".hidden", "n.acl", "n.acr", "n.meta", "%2Eacl", "n%2Eacr"].map(
+    (name) => `${ownInbox}${name}`,
+  ),
 ])("refuses mark-read and dismiss outside the notification scope: %s", async (url) => {
   const { box, fetch } = await manager(() => {
     throw new Error("No I/O permitted");
@@ -278,6 +306,7 @@ test("repeated mark-read overwrites the own sidecar without HEAD or validators",
     expect(new Headers(init?.headers).has("if-none-match")).toBe(false);
     const dataset = await parseRdf(String(init?.body), "text/turtle");
     expect([...dataset].map((q) => [q.predicate.value, q.object.value])).toEqual([
+      ["https://www.w3.org/ns/activitystreams#actor", owner],
       ["https://www.w3.org/ns/activitystreams#read", "true"],
       ["https://www.w3.org/ns/activitystreams#object", item],
     ]);
@@ -374,6 +403,7 @@ test("manager reads beyond 50 notifications, ignores sidecars in its budget and 
         "<https://8.8.8.8/profile#me> <http://www.w3.org/ns/ldp#inbox> <https://8.8.8.8/inbox/>.",
       );
     if (url === ownInbox) return rdf(listing);
+    if (String(url).endsWith(".read.ttl")) return rdf(await markerBody(String(url).slice(0, -9)));
     const child = new TermWrapper(`${url}#it`, new Store(), DataFactory);
     const { OptionalAs, LiteralFrom } = await import("@rdfjs/wrapper");
     OptionalAs.object(
@@ -401,7 +431,7 @@ test("manager reads beyond 50 notifications, ignores sidecars in its budget and 
   expect(page.notifications[0].url).toBe(`${ownInbox}59`);
   expect(page.notifications.every((item) => item.read)).toBe(true);
   expect(page.truncated).toBe(false);
-  expect(fetch.mock.calls.some(([url]) => String(url).endsWith(".read.ttl"))).toBe(false);
+  expect(fetch.mock.calls.filter(([url]) => String(url).endsWith(".read.ttl"))).toHaveLength(60);
   const limited = await createInboxManager({
     fetch,
     webId: owner,
@@ -428,4 +458,93 @@ test.each([
     createInboxManager({ fetch, webId: owner, storageRoots: ["https://8.8.8.8/"], maxItems }),
   ).rejects.toThrow(TypeError);
   expect(fetch).not.toHaveBeenCalled();
+});
+
+test("a sender's reserved Slug cannot mark a notification read; malformed or mismatched markers fail closed", async () => {
+  let marker = await markerBody(item, "https://sender.example/#me");
+  const { box } = await manager((url) => {
+    if (url === ownInbox)
+      return rdf(
+        `<${ownInbox}> <http://www.w3.org/ns/ldp#contains> <${item}>, <${item}.read.ttl>.`,
+      );
+    if (url === `${item}.read.ttl`) return rdf(marker);
+    return rdf("<#it> a <https://www.w3.org/ns/activitystreams#Announce>.");
+  });
+  expect.assert(box);
+  for (const body of [
+    marker,
+    "",
+    "broken { RDF",
+    await markerBody(item, owner, false),
+    await markerBody(`${ownInbox}other`),
+    '<#it> <https://www.w3.org/ns/activitystreams#read> "invalid".',
+    "<#it> <https://www.w3.org/ns/activitystreams#read> true; <https://www.w3.org/ns/activitystreams#object> <other>.",
+  ]) {
+    marker = body;
+    expect((await box.list())[0].read).toBe(false);
+  }
+  marker = await markerBody(item);
+  expect((await box.list())[0].read).toBe(true);
+});
+
+test("unreadable markers and encoded marker aliases cannot establish read state", async () => {
+  for (const markerUrl of [`${item}.read.ttl`, `${item}.read%2Ettl`]) {
+    const { box } = await manager((url) => {
+      if (url === ownInbox)
+        return rdf(`<${ownInbox}> <http://www.w3.org/ns/ldp#contains> <${item}>, <${markerUrl}>.`);
+      if (url === markerUrl) return new Response(null, { status: 403 });
+      return rdf("<#it> a <https://www.w3.org/ns/activitystreams#Announce>.");
+    });
+    expect((await box.list())[0].read).toBe(false);
+  }
+});
+
+test("manager permits idempotent mutations on its own non-443 HTTPS inbox only", async () => {
+  const { createInboxManager } = await import("./notify.js");
+  const root = "https://8.8.8.8:8443/alice/";
+  const inbox = `${root}inbox/`;
+  const fetch = vi.fn<typeof globalThis.fetch>().mockImplementation(async (url, init) => {
+    if (String(url) === "https://8.8.8.8/profile")
+      return rdf(`<${owner}> <http://www.w3.org/ns/ldp#inbox> <${inbox}>.`);
+    if (url === inbox) return rdf("");
+    return new Response(null, { status: init?.method === "PUT" ? 201 : 204 });
+  });
+  const box = await createInboxManager({ fetch, webId: owner, storageRoots: [root] });
+  expect.assert(box);
+  expect(await box.list()).toEqual([]);
+  await box.markRead(`${inbox}n%25done`);
+  await box.dismiss(`${inbox}n%25done`);
+  expect(fetch.mock.calls.slice(2).map(([url, init]) => [url, init?.method])).toEqual([
+    [`${inbox}n%25done.read.ttl`, "PUT"],
+    [`${inbox}n%25done`, "DELETE"],
+    [`${inbox}n%25done.read.ttl`, "DELETE"],
+  ]);
+  for (const url of [
+    root,
+    `${root}other/n`,
+    `${inbox}nested/n`,
+    `${inbox}.acl`,
+    "https://8.8.8.8:9443/alice/inbox/n",
+  ]) {
+    await expect(box.markRead(url)).rejects.toThrow();
+    await expect(box.dismiss(url)).rejects.toThrow();
+  }
+  expect(fetch).toHaveBeenCalledTimes(5);
+});
+
+test("an inbox equal to a storage root is refused even when another trusted root contains it", async () => {
+  const { createInboxManager } = await import("./notify.js");
+  for (const storageRoot of [ownInbox, ownInbox.slice(0, -1)]) {
+    const fetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockResolvedValue(rdf(`<${owner}> <http://www.w3.org/ns/ldp#inbox> <${ownInbox}>.`));
+    expect(
+      await createInboxManager({
+        fetch,
+        webId: owner,
+        storageRoots: ["https://8.8.8.8/", storageRoot],
+      }),
+    ).toBeNull();
+    expect(fetch).toHaveBeenCalledOnce();
+  }
 });

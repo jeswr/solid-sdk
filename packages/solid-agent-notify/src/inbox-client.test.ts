@@ -441,3 +441,51 @@ test("unknown-activity opt-in retains even empty readable RDF documents", async 
     { url: `${inbox}foreign-subject`, type: "Notification" },
   ]);
 });
+
+test.each([
+  false,
+  true,
+])("listing skips auxiliary resources and containers even for unknown activities (%s)", async (includeUnknownActivities) => {
+  const excluded = [
+    ".acl",
+    ".acr",
+    ".meta",
+    ".hidden",
+    "n.acl",
+    "n.acr",
+    "n.meta",
+    "%2Ehidden",
+    "n%2Eacl",
+    "folder/",
+  ];
+  const fetch = vi.fn<typeof globalThis.fetch>().mockImplementation(async (input) => {
+    const url = String(input);
+    if (url === inbox)
+      return listing([...excluded, "slashless", "ok%25done"].map((name) => `${inbox}${name}`));
+    if (url.endsWith("slashless")) return turtle("<> a <http://www.w3.org/ns/ldp#BasicContainer>.");
+    return note();
+  });
+  expect(await createInboxReader({ fetch, includeUnknownActivities }).list(inbox)).toEqual([
+    { url: `${inbox}ok%25done`, type: "Announce", summary: "hello" },
+  ]);
+  expect(fetch.mock.calls.map(([url]) => url)).toEqual([
+    inbox,
+    `${inbox}slashless`,
+    `${inbox}ok%25done`,
+  ]);
+});
+
+test("containers identified by listing metadata are skipped before member I/O", async () => {
+  const fetch = vi
+    .fn<typeof globalThis.fetch>()
+    .mockResolvedValueOnce(
+      turtle(
+        `<${inbox}> <http://www.w3.org/ns/ldp#contains> <${inbox}folder>, <${inbox}note>. <${inbox}folder> a <http://www.w3.org/ns/ldp#Container>.`,
+      ),
+    )
+    .mockImplementation(async () => note());
+  const page = await createInboxReader({ fetch, includeUnknownActivities: true }).listPage(inbox);
+  expect(page.members).toEqual([`${inbox}note`]);
+  expect(page.notifications).toHaveLength(1);
+  expect(fetch.mock.calls.map(([url]) => url)).toEqual([inbox, `${inbox}note`]);
+});

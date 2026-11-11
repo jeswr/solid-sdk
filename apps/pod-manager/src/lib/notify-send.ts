@@ -1,7 +1,12 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 /** Pod Manager's UI error adapter; discovery, serialization and delivery live in the SDK. */
 import { createNotify, type NotificationDraft } from "@jeswr/pod-access/notify";
-import { InvalidTargetError, NoInboxError, NotificationSendError } from "./errors.js";
+import {
+  InvalidTargetError,
+  NoInboxError,
+  NotificationSendError,
+  ProfileUnreadableError,
+} from "./errors.js";
 
 export type ActivityType = NotificationDraft["type"];
 export interface SendNotificationArgs {
@@ -25,6 +30,7 @@ export async function sendNotification(
     summary: args.summary?.trim() || undefined,
     content: args.content?.trim() || undefined,
   };
+  // Both the configured WebID and activity actor come from the session.
   const result = await createNotify({
     webId: args.actorWebId,
     fetch: fetchImpl ?? globalThis.fetch,
@@ -33,11 +39,9 @@ export async function sendNotification(
     actor: args.actorWebId,
   });
   if (result.delivered && result.inbox) return { inbox: result.inbox };
-  if (
-    result.reason === "no-inbox" ||
-    result.reason === "lws-no-ldn" ||
-    result.reason === "profile-unreadable"
-  ) {
+  if (result.reason === "profile-unreadable")
+    throw new ProfileUnreadableError(args.recipientWebId, result.status);
+  if (result.reason === "no-inbox" || result.reason === "lws-no-ldn") {
     throw new NoInboxError(args.recipientWebId);
   }
   if (result.reason === "invalid-target")

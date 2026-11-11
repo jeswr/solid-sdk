@@ -2,7 +2,12 @@
 
 import { parseRdf } from "@jeswr/fetch-rdf";
 import { expect, test, vi } from "vitest";
-import { InvalidTargetError, NoInboxError, NotificationSendError } from "./errors.js";
+import {
+  InvalidTargetError,
+  NoInboxError,
+  NotificationSendError,
+  ProfileUnreadableError,
+} from "./errors.js";
 import { sendNotification } from "./notify-send.js";
 
 const recipient = "https://8.8.8.8/profile#me";
@@ -100,9 +105,15 @@ test.each([
   });
 });
 
-test.each([401, 403, 404, 500])("unreadable HTTP %s profiles adapt to no inbox", async (status) => {
+test.each([
+  401, 403, 404, 500,
+])("unreadable HTTP %s profiles retain a distinct error and status", async (status) => {
   const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(new Response(null, { status }));
-  await expect(sendNotification(args, fetch)).rejects.toBeInstanceOf(NoInboxError);
+  await expect(sendNotification(args, fetch)).rejects.toMatchObject({
+    name: "ProfileUnreadableError",
+    status,
+    webId: recipient,
+  });
 });
 
 test("network failures remain distinct from an HTTP rejection", async () => {
@@ -127,4 +138,13 @@ test("non-HTTPS object and target are omitted without rejecting the send", async
       (q) => q.predicate.value.endsWith("#object") || q.predicate.value.endsWith("#target"),
     ),
   ).toBe(false);
+});
+
+test("malformed readable profiles remain distinct from a readable profile with no inbox", async () => {
+  const fetch = vi
+    .fn<typeof globalThis.fetch>()
+    .mockResolvedValue(
+      new Response("broken { RDF", { headers: { "content-type": "text/turtle" } }),
+    );
+  await expect(sendNotification(args, fetch)).rejects.toBeInstanceOf(ProfileUnreadableError);
 });

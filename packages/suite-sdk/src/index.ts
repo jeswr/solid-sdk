@@ -73,7 +73,7 @@ export function useNotify(options: Omit<NotifyOptions, "fetch" | "webId"> = {}):
       : null;
     const action: NotifyAction = async (agentWebId, activity) => {
       const actor = activity.actor ?? identity?.webId;
-      if (!actor || !notify) return { delivered: false, inbox: null, reason: "network" };
+      if (!actor || !notify) return { delivered: false, inbox: null, reason: "unauthenticated" };
       return notify(agentWebId, { ...activity, actor });
     };
     return { session, action };

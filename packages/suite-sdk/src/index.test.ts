@@ -162,7 +162,7 @@ test("resets the cache on account switch and same-account logout/login", async (
   expect(await action(recipient, draft)).toEqual({
     delivered: false,
     inbox: null,
-    reason: "network",
+    reason: "unauthenticated",
   });
   expect(fetch).toHaveBeenCalledTimes(4);
   await emit("login", bob);
@@ -177,13 +177,13 @@ test("refuses explicit actors when the authenticated CID identity has no WebID",
   expect(await action(recipient, draft)).toEqual({
     delivered: false,
     inbox: null,
-    reason: "network",
+    reason: "unauthenticated",
   });
   expect(fetch).not.toHaveBeenCalled();
   expect(await action(recipient, { ...draft, actor: "https://alice.example/#me" })).toEqual({
     delivered: false,
     inbox: null,
-    reason: "network",
+    reason: "unauthenticated",
   });
 });
 

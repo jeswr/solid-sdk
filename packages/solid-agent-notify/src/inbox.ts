@@ -13,10 +13,38 @@ export function isReadMarker(url: string): boolean {
   try {
     const path = new URL(url).pathname;
     const name = decodeURIComponent(path.slice(path.lastIndexOf("/") + 1));
-    return name.endsWith(READ_SUFFIX) || name.includes("%");
+    return name.endsWith(READ_SUFFIX);
   } catch {
     return true;
   }
+}
+
+/** Auxiliary access/metadata resources are never notification or mutation targets. */
+export function isAuxiliaryResource(url: string): boolean {
+  try {
+    const path = new URL(url).pathname;
+    const name = decodeURIComponent(path.slice(path.lastIndexOf("/") + 1)).toLowerCase();
+    return (
+      name.startsWith(".") || [".acl", ".acr", ".meta"].some((suffix) => name.endsWith(suffix))
+    );
+  } catch {
+    return true;
+  }
+}
+
+/** A slashless LDP container must not become an unknown notification either. */
+export function isInboxContainer(
+  url: string,
+  dataset: import("@rdfjs/types").DatasetCore,
+): boolean {
+  return ["Container", "BasicContainer", "DirectContainer", "IndirectContainer"].some(
+    (type) =>
+      dataset.match(
+        DataFactory.namedNode(url),
+        DataFactory.namedNode(RDF_TYPE),
+        DataFactory.namedNode(`http://www.w3.org/ns/ldp#${type}`),
+      ).size > 0,
+  );
 }
 
 /** A notification as a reader consumes it (plain, serialisable — no RDF terms). */
@@ -69,7 +97,8 @@ export function isDirectChild(url: string, container: string): boolean {
   if (
     !isWithinPodScope(container, url, { allowRoot: false }) ||
     parsed.search !== "" ||
-    parsed.hash !== ""
+    parsed.hash !== "" ||
+    isAuxiliaryResource(url)
   ) {
     return false;
   }
@@ -86,6 +115,13 @@ export function findActivitySubject(
   url: string,
   dataset: import("@rdfjs/types").DatasetCore,
 ): NamedNode | BlankNode | undefined {
+  if (
+    isAuxiliaryResource(url) ||
+    new URL(url).pathname.endsWith("/") ||
+    isInboxContainer(url, dataset)
+  ) {
+    return undefined;
+  }
   for (const q of dataset.match(null, DataFactory.namedNode(RDF_TYPE), null)) {
     if (q.object.termType === "NamedNode" && q.object.value.startsWith(AS)) {
       return q.subject as NamedNode | BlankNode;
@@ -162,7 +198,7 @@ export function containerMembers(
       continue;
     }
     // Confused-deputy guard: only dereference genuine direct children of THIS inbox.
-    if (isDirectChild(abs, inboxUrl)) out.add(abs);
+    if (isDirectChild(abs, inboxUrl) && !isInboxContainer(abs, dataset)) out.add(abs);
   }
   return [...out];
 }
