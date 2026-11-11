@@ -1,9 +1,7 @@
-// AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex (GPT-6.1 Sol)
 import type { Metadata } from "next";
-import { PlannedApp } from "@/apps/planned/planned-app";
-
+import { TripsApp } from "@/apps/trips/components/trips-app";
 export const metadata: Metadata = { title: "Trips · Solid Suite" };
-
 export default function Page() {
-  return <PlannedApp app="trips" />;
+  return <TripsApp />;
 }

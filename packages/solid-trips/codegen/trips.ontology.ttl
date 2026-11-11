@@ -1,0 +1,71 @@
+# AUTHORED-BY Codex (GPT-6.1 Sol)
+# Admission projection: broad schema:Thing domains avoid asserting a global domain
+# from the first use of a shared schema.org property. SHACL owns local datatypes.
+@prefix schema: <http://schema.org/> .
+@prefix dct: <http://purl.org/dc/terms/> .
+@prefix prov: <http://www.w3.org/ns/prov#> .
+@prefix trips: <https://jeswr.org/ns/trips#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+schema:Trip a owl:Class ; rdfs:label "Trip" ; skos:definition "Schema.org Trip projection for travel records." .
+schema:Organization a owl:Class ; rdfs:label "Organization" ; skos:definition "Schema.org Organization projection for travel records." .
+schema:Person a owl:Class ; rdfs:label "Person" ; skos:definition "Schema.org Person projection for travel records." .
+schema:Airport a owl:Class ; rdfs:label "Airport" ; skos:definition "Schema.org Airport projection for travel records." .
+schema:Place a owl:Class ; rdfs:label "Place" ; skos:definition "Schema.org Place projection for travel records." .
+schema:Flight a owl:Class ; rdfs:label "Flight" ; skos:definition "Schema.org Flight projection for travel records." .
+schema:TrainTrip a owl:Class ; rdfs:label "TrainTrip" ; skos:definition "Schema.org TrainTrip projection for travel records." .
+schema:BusTrip a owl:Class ; rdfs:label "BusTrip" ; skos:definition "Schema.org BusTrip projection for travel records." .
+schema:LodgingBusiness a owl:Class ; rdfs:label "LodgingBusiness" ; skos:definition "Schema.org LodgingBusiness projection for travel records." .
+schema:FoodEstablishment a owl:Class ; rdfs:label "FoodEstablishment" ; skos:definition "Schema.org FoodEstablishment projection for travel records." .
+schema:Event a owl:Class ; rdfs:label "Event" ; skos:definition "Schema.org Event projection for travel records." .
+schema:Car a owl:Class ; rdfs:label "Car" ; skos:definition "Schema.org Car projection for travel records." .
+schema:FlightReservation a owl:Class ; rdfs:label "FlightReservation" ; skos:definition "Schema.org FlightReservation projection for travel records." .
+schema:TrainReservation a owl:Class ; rdfs:label "TrainReservation" ; skos:definition "Schema.org TrainReservation projection for travel records." .
+schema:BusReservation a owl:Class ; rdfs:label "BusReservation" ; skos:definition "Schema.org BusReservation projection for travel records." .
+schema:LodgingReservation a owl:Class ; rdfs:label "LodgingReservation" ; skos:definition "Schema.org LodgingReservation projection for travel records." .
+schema:FoodEstablishmentReservation a owl:Class ; rdfs:label "FoodEstablishmentReservation" ; skos:definition "Schema.org FoodEstablishmentReservation projection for travel records." .
+schema:EventReservation a owl:Class ; rdfs:label "EventReservation" ; skos:definition "Schema.org EventReservation projection for travel records." .
+schema:RentalCarReservation a owl:Class ; rdfs:label "RentalCarReservation" ; skos:definition "Schema.org RentalCarReservation projection for travel records." .
+schema:name a owl:DatatypeProperty ; rdfs:label "name" ; skos:definition "schema:name as used in the Trips profile." ; rdfs:domain schema:Thing ; rdfs:range rdfs:Resource .
+schema:startDate a owl:DatatypeProperty ; rdfs:label "startDate" ; skos:definition "schema:startDate as used in the Trips profile." ; rdfs:domain schema:Thing ; rdfs:range rdfs:Resource .
+schema:endDate a owl:DatatypeProperty ; rdfs:label "endDate" ; skos:definition "schema:endDate as used in the Trips profile." ; rdfs:domain schema:Thing ; rdfs:range rdfs:Resource .
+schema:touristDestination a owl:DatatypeProperty ; rdfs:label "touristDestination" ; skos:definition "schema:touristDestination as used in the Trips profile." ; rdfs:domain schema:Thing ; rdfs:range rdfs:Resource .
+schema:description a owl:DatatypeProperty ; rdfs:label "description" ; skos:definition "schema:description as used in the Trips profile." ; rdfs:domain schema:Thing ; rdfs:range rdfs:Resource .
+schema:image a owl:ObjectProperty ; rdfs:label "image" ; skos:definition "schema:image as used in the Trips profile." ; rdfs:domain schema:Thing ; rdfs:range rdfs:Resource .
+schema:subjectOf a owl:ObjectProperty ; rdfs:label "subjectOf" ; skos:definition "schema:subjectOf as used in the Trips profile." ; rdfs:domain schema:Thing ; rdfs:range rdfs:Resource .
+dct:created a owl:DatatypeProperty ; rdfs:label "created" ; skos:definition "dct:created as used in the Trips profile." ; rdfs:domain schema:Thing ; rdfs:range rdfs:Resource .
+dct:modified a owl:DatatypeProperty ; rdfs:label "modified" ; skos:definition "dct:modified as used in the Trips profile." ; rdfs:domain schema:Thing ; rdfs:range rdfs:Resource .
+trips:archived a owl:DatatypeProperty ; rdfs:label "archived" ; skos:definition "trips:archived as used in the Trips profile." ; rdfs:domain schema:Thing ; rdfs:range rdfs:Resource .
+schema:iataCode a owl:DatatypeProperty ; rdfs:label "iataCode" ; skos:definition "schema:iataCode as used in the Trips profile." ; rdfs:domain schema:Thing ; rdfs:range rdfs:Resource .
+schema:address a owl:DatatypeProperty ; rdfs:label "address" ; skos:definition "schema:address as used in the Trips profile." ; rdfs:domain schema:Thing ; rdfs:range rdfs:Resource .
+schema:flightNumber a owl:DatatypeProperty ; rdfs:label "flightNumber" ; skos:definition "schema:flightNumber as used in the Trips profile." ; rdfs:domain schema:Thing ; rdfs:range rdfs:Resource .
+schema:departureTime a owl:DatatypeProperty ; rdfs:label "departureTime" ; skos:definition "schema:departureTime as used in the Trips profile." ; rdfs:domain schema:Thing ; rdfs:range rdfs:Resource .
+schema:arrivalTime a owl:DatatypeProperty ; rdfs:label "arrivalTime" ; skos:definition "schema:arrivalTime as used in the Trips profile." ; rdfs:domain schema:Thing ; rdfs:range rdfs:Resource .
+schema:departureAirport a owl:ObjectProperty ; rdfs:label "departureAirport" ; skos:definition "schema:departureAirport as used in the Trips profile." ; rdfs:domain schema:Thing ; rdfs:range rdfs:Resource .
+schema:arrivalAirport a owl:ObjectProperty ; rdfs:label "arrivalAirport" ; skos:definition "schema:arrivalAirport as used in the Trips profile." ; rdfs:domain schema:Thing ; rdfs:range rdfs:Resource .
+schema:trainNumber a owl:DatatypeProperty ; rdfs:label "trainNumber" ; skos:definition "schema:trainNumber as used in the Trips profile." ; rdfs:domain schema:Thing ; rdfs:range rdfs:Resource .
+schema:departureStation a owl:ObjectProperty ; rdfs:label "departureStation" ; skos:definition "schema:departureStation as used in the Trips profile." ; rdfs:domain schema:Thing ; rdfs:range rdfs:Resource .
+schema:arrivalStation a owl:ObjectProperty ; rdfs:label "arrivalStation" ; skos:definition "schema:arrivalStation as used in the Trips profile." ; rdfs:domain schema:Thing ; rdfs:range rdfs:Resource .
+schema:busNumber a owl:DatatypeProperty ; rdfs:label "busNumber" ; skos:definition "schema:busNumber as used in the Trips profile." ; rdfs:domain schema:Thing ; rdfs:range rdfs:Resource .
+schema:departureBusStop a owl:ObjectProperty ; rdfs:label "departureBusStop" ; skos:definition "schema:departureBusStop as used in the Trips profile." ; rdfs:domain schema:Thing ; rdfs:range rdfs:Resource .
+schema:arrivalBusStop a owl:ObjectProperty ; rdfs:label "arrivalBusStop" ; skos:definition "schema:arrivalBusStop as used in the Trips profile." ; rdfs:domain schema:Thing ; rdfs:range rdfs:Resource .
+schema:location a owl:ObjectProperty ; rdfs:label "location" ; skos:definition "schema:location as used in the Trips profile." ; rdfs:domain schema:Thing ; rdfs:range rdfs:Resource .
+schema:reservationNumber a owl:DatatypeProperty ; rdfs:label "reservationNumber" ; skos:definition "schema:reservationNumber as used in the Trips profile." ; rdfs:domain schema:Thing ; rdfs:range rdfs:Resource .
+schema:reservationStatus a owl:ObjectProperty ; rdfs:label "reservationStatus" ; skos:definition "schema:reservationStatus as used in the Trips profile." ; rdfs:domain schema:Thing ; rdfs:range rdfs:Resource .
+schema:provider a owl:ObjectProperty ; rdfs:label "provider" ; skos:definition "schema:provider as used in the Trips profile." ; rdfs:domain schema:Thing ; rdfs:range rdfs:Resource .
+schema:underName a owl:ObjectProperty ; rdfs:label "underName" ; skos:definition "schema:underName as used in the Trips profile." ; rdfs:domain schema:Thing ; rdfs:range rdfs:Resource .
+schema:dateModified a owl:DatatypeProperty ; rdfs:label "dateModified" ; skos:definition "schema:dateModified as used in the Trips profile." ; rdfs:domain schema:Thing ; rdfs:range rdfs:Resource .
+prov:wasDerivedFrom a owl:ObjectProperty ; rdfs:label "wasDerivedFrom" ; skos:definition "prov:wasDerivedFrom as used in the Trips profile." ; rdfs:domain schema:Thing ; rdfs:range rdfs:Resource .
+trips:trust a owl:DatatypeProperty ; rdfs:label "trust" ; skos:definition "trips:trust as used in the Trips profile." ; rdfs:domain schema:Thing ; rdfs:range rdfs:Resource .
+schema:reservationFor a owl:ObjectProperty ; rdfs:label "reservationFor" ; skos:definition "schema:reservationFor as used in the Trips profile." ; rdfs:domain schema:Thing ; rdfs:range rdfs:Resource .
+schema:checkinTime a owl:DatatypeProperty ; rdfs:label "checkinTime" ; skos:definition "schema:checkinTime as used in the Trips profile." ; rdfs:domain schema:Thing ; rdfs:range rdfs:Resource .
+schema:checkoutTime a owl:DatatypeProperty ; rdfs:label "checkoutTime" ; skos:definition "schema:checkoutTime as used in the Trips profile." ; rdfs:domain schema:Thing ; rdfs:range rdfs:Resource .
+schema:startTime a owl:DatatypeProperty ; rdfs:label "startTime" ; skos:definition "schema:startTime as used in the Trips profile." ; rdfs:domain schema:Thing ; rdfs:range rdfs:Resource .
+schema:endTime a owl:DatatypeProperty ; rdfs:label "endTime" ; skos:definition "schema:endTime as used in the Trips profile." ; rdfs:domain schema:Thing ; rdfs:range rdfs:Resource .
+schema:pickupTime a owl:DatatypeProperty ; rdfs:label "pickupTime" ; skos:definition "schema:pickupTime as used in the Trips profile." ; rdfs:domain schema:Thing ; rdfs:range rdfs:Resource .
+schema:dropoffTime a owl:DatatypeProperty ; rdfs:label "dropoffTime" ; skos:definition "schema:dropoffTime as used in the Trips profile." ; rdfs:domain schema:Thing ; rdfs:range rdfs:Resource .
+schema:pickupLocation a owl:ObjectProperty ; rdfs:label "pickupLocation" ; skos:definition "schema:pickupLocation as used in the Trips profile." ; rdfs:domain schema:Thing ; rdfs:range rdfs:Resource .
+schema:dropoffLocation a owl:ObjectProperty ; rdfs:label "dropoffLocation" ; skos:definition "schema:dropoffLocation as used in the Trips profile." ; rdfs:domain schema:Thing ; rdfs:range rdfs:Resource .
