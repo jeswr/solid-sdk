@@ -2,19 +2,16 @@
 import { DataFactory } from "n3";
 import { assert, expect, it } from "vitest";
 import { documentSubject } from "../src/apps/docs/lib/model/document";
-import { readRdf, writeRdf } from "../src/apps/docs/lib/model/rdf-io";
+import { writeRdf } from "../src/apps/docs/lib/model/rdf-io";
 import { privateAcl } from "../src/apps/drive/lib/client/access";
-import { NoteConflictError } from "../src/apps/notes/lib/model/errors";
+import { NoteConflictError, NoteMoveBlockedError } from "../src/apps/notes/lib/model/errors";
 import { buildNote } from "../src/apps/notes/lib/model/note";
 import { createNotesStore } from "../src/apps/notes/lib/model/store";
-import { copyNoteAccess, readNoteAccess } from "../src/apps/notes/lib/move-access";
-import { NoteSharingAdapter } from "../src/apps/notes/lib/sharing";
 import { SheetResource } from "../src/apps/sheets/lib/model";
 import { harness, POD, WEBID } from "./sheets-workbook-helpers";
 
 const ACL = "http://www.w3.org/ns/auth/acl#";
 const BOB = "https://pod.example/bob/#me";
-const signal = () => new AbortController().signal;
 async function fixture() {
   const f = await harness();
   const store = createNotesStore(f.options);
@@ -41,64 +38,54 @@ async function fixture() {
   return { ...f, store, note, session };
 }
 
-it("preserves sharing through archive, trash, restore and unarchive before removing each source", async () => {
-  const f = await fixture();
-  let source = f.note;
-  for (const action of ["archive", "trash", "restore", "unarchive"] as const) {
-    f.calls.length = 0;
-    const moved = await f.store[action](source);
-    expect(moved.url).not.toBe(source.url);
-    expect(f.pod.has(source.url)).toBe(false);
-    const policy = await readRdf(`${moved.url}.acl`, f.fetch);
-    const reader = new SheetResource(`${f.note.url}.acl#reader`, policy.dataset, DataFactory);
-    for (const predicate of ["accessTo", "default", "defaultForNew"]) {
-      expect(reader.links(ACL + predicate).has(moved.url)).toBe(true);
-      expect(reader.links(ACL + predicate).has(source.url)).toBe(false);
-    }
-    expect(reader.links(`${ACL}accessTo`).has(`${moved.url}.acl`)).toBe(true);
-    const state = await new NoteSharingAdapter(moved, f.session).load(moved.url, signal());
-    expect(state.people).toContainEqual({ webId: BOB, role: "viewer" });
-    expect(state.general).toEqual({ mode: "link", role: "viewer" });
-    expect(moved.labels).toEqual(["Shared label"]);
-    expect(
-      f.calls.findIndex((call) => call.method === "PUT" && call.url === `${moved.url}.acl`),
-    ).toBeLessThan(
-      f.calls.findIndex((call) => call.method === "DELETE" && call.url === source.url),
-    );
-    source = moved;
-  }
-});
-
 it.each([
   "archive",
   "unarchive",
   "trash",
   "restore",
-] as const)("aborts %s when copying access fails and keeps the shared source", async (action) => {
-  const f = await fixture();
-  const source =
-    action === "unarchive"
-      ? await f.store.archive(f.note)
-      : action === "restore"
-        ? await f.store.trash(f.note)
-        : f.note;
+  "deleteForever",
+] as const)("refuses %s for an own ACL before any write or deletion", async (action) => {
+  const f = await harness();
+  const store = createNotesStore(f.options);
+  let note = await store.create({ title: "Shared", body: "Private body" });
+  if (action === "unarchive") note = await store.archive(note);
+  if (action === "restore" || action === "deleteForever") note = await store.trash(note);
+  await writeRdf(`${note.url}.acl`, privateAcl(note.url, WEBID), {
+    createOnly: true,
+    fetchImpl: f.fetch,
+  });
+  const before = await (await f.pod.fetch(note.url)).text();
   f.calls.length = 0;
-  f.setHook((call) =>
-    call.method === "PUT" && call.url.endsWith(".acl")
-      ? new Response(null, { status: 500 })
-      : undefined,
-  );
-  await expect(f.store[action](source)).rejects.toMatchObject({ status: 500 });
-  expect(f.pod.has(source.url)).toBe(true);
-  expect(
-    (await new NoteSharingAdapter(source, f.session).load(source.url, signal())).people,
-  ).toContainEqual({ webId: BOB, role: "viewer" });
-  expect(f.calls.some((call) => call.method === "DELETE" && call.url === source.url)).toBe(false);
-  const destination = f.calls.find(
-    (call) => call.method === "PUT" && !call.url.endsWith(".acl"),
-  )?.url;
-  expect(destination).toBeTruthy();
-  expect(f.pod.has(destination as string)).toBe(false);
+  const operation =
+    action === "deleteForever" ? store.deleteForever(note.url, note.etag) : store[action](note);
+  await expect(operation).rejects.toMatchObject({
+    name: "NoteMoveBlockedError",
+    url: note.url,
+    message: "Stop sharing this note before archiving or deleting it.",
+  });
+  expect(f.calls.some((call) => call.method === "PUT" || call.method === "DELETE")).toBe(false);
+  expect(await (await f.pod.fetch(note.url)).text()).toBe(before);
+  expect(f.pod.has(`${note.url}.acl`)).toBe(true);
+});
+
+it("moves an unshared note through every location without writing any ACL", async () => {
+  const f = await harness();
+  const store = createNotesStore(f.options);
+  let note = await store.create({ title: "Unshared", body: "Body", labels: ["Work"] });
+  for (const action of ["archive", "trash", "restore", "unarchive"] as const) {
+    f.calls.length = 0;
+    const source = note;
+    note = await store[action](note);
+    expect(note.url).not.toBe(source.url);
+    expect(note).toMatchObject({ body: source.body, labels: source.labels });
+    expect(f.pod.has(source.url)).toBe(false);
+    expect(f.calls.filter((call) => call.url.endsWith(".acl")).map((call) => call.method)).toEqual([
+      "GET",
+    ]);
+    expect(f.calls.find((call) => call.method === "DELETE")?.headers.get("if-match")).toBe(
+      source.etag,
+    );
+  }
 });
 
 it("keeps shared labels and reminders in one conditional note write under concurrent saves", async () => {
@@ -157,8 +144,9 @@ it("a failed note PUT leaves body, labels and reminders together at their previo
 });
 
 it("allocates a unique archive destination without overwriting another note's labels or reminder", async () => {
-  const f = await fixture();
-  const first = await f.store.archive(f.note);
+  const base = await harness();
+  const f = { ...base, store: createNotesStore(base.options) };
+  const first = await f.store.archive(await f.store.create({ title: "Shared" }));
   const second = await f.store.create({
     title: "Shared",
     labels: ["Second"],
@@ -200,56 +188,71 @@ it.each([
   "extended-relation",
   "changed-endpoint",
   "unreadable-policy",
-])("keeps the source when own access cannot be captured (%s)", async (failure) => {
+  "missing-link",
+  "duplicate-link",
+  "acp",
+  "network",
+  "malformed-policy",
+  "policy-error",
+])("refuses an unknown ACL state (%s) without any writes", async (failure) => {
   const f = await fixture();
   f.calls.length = 0;
   f.setHook((call) => {
     if (call.url === f.note.url && call.method === "HEAD") {
+      if (failure === "network") throw new Error("Offline");
       if (failure === "head-failure") return new Response(null, { status: 503 });
+      if (failure === "missing-link") return new Response(null);
       if (failure === "extended-relation")
         return new Response(null, { headers: { link: `<${f.note.url}.acl>; rel="acl other"` } });
       if (failure === "changed-endpoint")
         return new Response(null, { headers: { link: `<${f.note.url}.other>; rel="acl"` } });
+      if (failure === "duplicate-link")
+        return new Response(null, {
+          headers: { link: `<${f.note.url}.acl>; rel="acl", <${f.note.url}.other>; rel="acl"` },
+        });
+      if (failure === "acp")
+        return new Response(null, {
+          headers: {
+            link: `<${f.note.url}.acl>; rel="acl", <${f.note.url}.acr>; rel="http://www.w3.org/ns/solid/acp#accessControl"`,
+          },
+        });
     }
-    if (failure === "unreadable-policy" && call.url === `${f.note.url}.acl`)
-      return new Response(null, { status: 403 });
+    if (call.url === `${f.note.url}.acl`) {
+      if (failure === "unreadable-policy") return new Response(null, { status: 403 });
+      if (failure === "policy-error") return new Response(null, { status: 500 });
+      if (failure === "malformed-policy")
+        return new Response("malformed {{{", { headers: { "content-type": "text/turtle" } });
+    }
   });
-  await expect(f.store.archive(f.note)).rejects.toThrow();
+  await expect(f.store.archive(f.note)).rejects.toBeInstanceOf(NoteMoveBlockedError);
   expect(f.pod.has(f.note.url)).toBe(true);
   expect(f.calls.some((call) => call.method === "PUT" || call.method === "DELETE")).toBe(false);
 });
 
-it("never overwrites an existing destination ACL", async () => {
-  const f = await fixture();
-  const destination = `${POD}notes/archive/shared.ttl`;
-  await writeRdf(destination, buildNote(destination, { title: "Existing" }), {
+it("reports refused expired notes and still deletes unshared expired notes", async () => {
+  const f = await harness();
+  const store = createNotesStore(f.options);
+  const shared = await store.trash(await store.create({ title: "Shared" }));
+  const unknown = await store.trash(await store.create({ title: "Unknown" }));
+  const unshared = await store.trash(await store.create({ title: "Unshared" }));
+  await writeRdf(`${shared.url}.acl`, privateAcl(shared.url, WEBID), {
     createOnly: true,
     fetchImpl: f.fetch,
   });
-  await writeRdf(`${destination}.acl`, privateAcl(destination, BOB), {
-    createOnly: true,
-    fetchImpl: f.fetch,
-  });
-  const before = await (await f.pod.fetch(`${destination}.acl`)).text();
-  const access = await readNoteAccess(f.note.url, f.fetch);
-  assert(access);
+  f.setDate(new Date("2027-01-01T00:00:00Z"));
+  f.setHook((call) =>
+    call.url === `${unknown.url}.acl` ? new Response(null, { status: 403 }) : undefined,
+  );
   f.calls.length = 0;
-  await expect(copyNoteAccess(access, f.note.url, destination, f.fetch)).rejects.toMatchObject({
-    code: "conflict",
-  });
-  expect(f.pod.has(f.note.url)).toBe(true);
-  expect(f.pod.has(destination)).toBe(true);
-  expect(f.calls.some((call) => call.method === "PUT")).toBe(false);
-  expect(await (await f.pod.fetch(`${destination}.acl`)).text()).toBe(before);
-});
-
-it("reports cleanup failure after a failed ACL copy while keeping the source", async () => {
-  const f = await fixture();
-  f.setHook((call) => {
-    if ((call.method === "PUT" && call.url.endsWith(".acl")) || call.method === "DELETE")
-      return new Response(null, { status: 500 });
-  });
-  await expect(f.store.archive(f.note)).rejects.toBeInstanceOf(AggregateError);
-  expect(f.pod.has(f.note.url)).toBe(true);
-  expect(f.pod.has(`${POD}notes/archive/shared.ttl`)).toBe(true);
+  const result = await store.purgeTrash();
+  expect(result.deleted).toEqual([unshared.url]);
+  expect(result.failed).toEqual([
+    { url: shared.url, error: expect.any(NoteMoveBlockedError) },
+    { url: unknown.url, error: expect.any(NoteMoveBlockedError) },
+  ]);
+  expect(f.pod.has(shared.url)).toBe(true);
+  expect(f.pod.has(unknown.url)).toBe(true);
+  expect(f.calls.filter((call) => call.method === "DELETE").map((call) => call.url)).toEqual([
+    unshared.url,
+  ]);
 });

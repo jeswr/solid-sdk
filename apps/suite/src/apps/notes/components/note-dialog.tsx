@@ -45,6 +45,7 @@ import { createDocsStore, type StoredDocument } from "@/apps/docs/lib/model/stor
 import { PREFIXES } from "@/apps/docs/lib/model/vocab";
 import { encodeRef } from "@/lib/refs";
 import { notesExtensions } from "../editor/extensions";
+import { NoteMoveBlockedError } from "../lib/model/errors";
 import type { StoredNote } from "../lib/model/store";
 import { checklistItems } from "../lib/ui/checklist";
 import { getPendingDrafts } from "../state/draft-registry";
@@ -69,6 +70,7 @@ export function NoteDialog({ note }: { note: StoredNote }) {
     move,
     mutations,
     refreshSharing,
+    reportError,
   } = useNotesContext();
   const { draft, change, flush, resolve, accept, status, modified, viewOnly } = useNoteDraft(
     note,
@@ -196,8 +198,9 @@ export function NoteDialog({ note }: { note: StoredNote }) {
     if (!lock()) return Promise.resolve();
     return flush()
       .then(work)
-      .catch(() => {
-        toast.error("Couldn't complete that action. Your note is still here.");
+      .catch((error) => {
+        if (error instanceof NoteMoveBlockedError) reportError(error);
+        else toast.error("Couldn't complete that action. Your note is still here.");
         unlock();
       });
   };
@@ -629,6 +632,7 @@ export function NoteDialog({ note }: { note: StoredNote }) {
           close={() => setConfirmDocs(false)}
           confirm={() =>
             act(async (saved) => {
+              await store.assertMovable(saved);
               let conversion = conversions.current.get(saved.url);
               const input = {
                 title: saved.title || "Untitled document",

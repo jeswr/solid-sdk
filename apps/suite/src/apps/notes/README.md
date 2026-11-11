@@ -26,10 +26,19 @@ Labels and reminders remain in the note's RDF. On a shared note, collaborators
 can see and edit its labels and reminders. Pin and colour remain local preferences.
 All note fields use the note's original ETag in a single conditional write.
 
-Archive, unarchive, Trash and restore copy a note's own ACL to the new resource,
-rewriting its access targets before deleting the source. If copying access fails,
-the move stops and keeps the source. The share link changes when a shared note is
-archived (and on other moves); copy and send the new link from Share.
+Archive, unarchive, Trash, restore and permanent deletion refuse notes with an own
+ACL, including owner-only ACLs. They also refuse when access discovery fails or
+the ACL state is unknown. Notes shows “Stop sharing this note before archiving or
+deleting it.” with a Share action. Only a fresh 404 from the discovered conventional
+own ACL permits the operation; Notes never copies ACLs during a move. Removing
+collaborators or restricting a link may leave an own ACL, which must be removed in
+the pod before the note can move. Unshared notes retain the existing conditional
+move and rollback behaviour.
+
+Batch archive/Trash actions, Keep import, empty Trash and automatic Trash expiry
+check each note separately. Other notes continue, and refused notes are reported
+individually with Share actions. An imported note that cannot be archived stays in
+Notes, keeping its pin and colour at that address.
 
 Shared links follow Sheets' origin boundary: a canonical note URL on another pod
 on the current storage's origin opens through anonymous, redirect-refusing reads.

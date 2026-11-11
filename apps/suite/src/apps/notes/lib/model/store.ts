@@ -4,6 +4,7 @@ import { RdfFetchError } from "@jeswr/fetch-rdf";
 import { normalizePodBase, refuseRedirects } from "@jeswr/guarded-fetch";
 import { Container, ContainerDataset } from "@solid/object";
 import { DataFactory, Store } from "n3";
+import { wacOnlyFetch } from "../../../../shell/share/verified-wac-adapter";
 import { uploadPodImage } from "../../../docs/lib/editor/image-upload";
 import { documentSubject, type Revision } from "../../../docs/lib/model/document";
 import {
@@ -21,12 +22,16 @@ import {
 } from "../../../docs/lib/model/type-index";
 import { DOCUMENT_CLASS, NS, PREFIXES } from "../../../docs/lib/model/vocab";
 import { notesMediaContainer } from "../images";
-import { copyNoteAccess, readNoteAccess } from "../move-access";
 import { deleteLabel, mergeLabels } from "../organise/labels";
 import { createBrowserFiredStore, type FiredReminderStore } from "../reminders/fired-store";
 import { reminderKey } from "../reminders/scheduler";
 import { type NoteAction, reduceNoteState } from "../state";
-import { NoteConflictError, NoteMoveUncertainError, NotePermissionError } from "./errors";
+import {
+  NoteConflictError,
+  NoteMoveBlockedError,
+  NoteMoveUncertainError,
+  NotePermissionError,
+} from "./errors";
 import {
   type BuildNoteInput,
   buildNote,
@@ -329,11 +334,10 @@ export class NotesStore {
       action,
     );
     if (state.status === note.location) return note;
-    this.validator(note.url, note.etag);
     const sourceEtag = note.etag;
+    await this.assertMovable(note);
     await this.ensureContainers();
     const filename = new URL(note.url).pathname.split("/").at(-1) as string;
-    const access = await readNoteAccess(note.url, this.fetchImpl);
     const moved = await this.allocate(this.containers[state.status], filename, (url) => {
       // Relink every entity, including foreign/imported IDs, without carrying a
       // predecessor back into the old resource. No content revision is added by a move.
@@ -356,19 +360,6 @@ export class NotesStore {
       new NoteDoc(documentSubject(url), dataset, DataFactory).modified = this.now();
       return dataset;
     });
-    try {
-      if (access) await copyNoteAccess(access, note.url, moved.url, this.fetchImpl);
-    } catch (error) {
-      try {
-        await this.remove(moved.url, moved.etag);
-      } catch (cleanup) {
-        throw new AggregateError(
-          [error, cleanup],
-          "Access copy failed and its new note could not be removed",
-        );
-      }
-      throw error;
-    }
     this.recordOverdueIdentity(note, moved);
     try {
       await this.remove(note.url, sourceEtag);
@@ -425,9 +416,34 @@ export class NotesStore {
     return this.move(note, { type: "restore" });
   }
 
+  /** Preflight conversions before they create content in another app. Moves check again. */
+  async assertMovable(note: StoredNote): Promise<void> {
+    this.scope(note.url, note.location);
+    this.validator(note.url, note.etag);
+    await this.assertUnshared(note.url);
+  }
+
   async deleteForever(url: string, etag: string | null): Promise<void> {
     this.scope(url, "trashed");
+    this.validator(url, etag);
+    await this.assertUnshared(url);
     await this.remove(url, etag);
+  }
+
+  /** Only a fresh, discovered own-ACL 404 permits moving or deleting a note. */
+  private async assertUnshared(url: string): Promise<void> {
+    try {
+      const http = wacOnlyFetch(this.fetchImpl);
+      const head = await http(url, { method: "HEAD", cache: "no-store" });
+      const links = [...(head.headers.get("link") ?? "").matchAll(/<([^>]+)>\s*;\s*rel="acl"/g)];
+      if (head.ok && links.length === 1 && links[0]?.[1] === `${url}.acl`) {
+        const acl = await http(`${url}.acl`, { cache: "no-store" });
+        if (acl.status === 404) return;
+      }
+    } catch (cause) {
+      throw new NoteMoveBlockedError(url, { cause });
+    }
+    throw new NoteMoveBlockedError(url);
   }
 
   async purgeTrash(olderThanDays = 30): Promise<{ deleted: string[]; failed: NoteFailure[] }> {
