@@ -51,20 +51,22 @@ export function StatusPill({ status }: { status: AgentStatus }) {
     <div className="agent-status">
       {status.demo && <small>Demo agent</small>}
       <AgentControl
-        stopped={status.state === "stopped"}
+        stopped={status.ownerHalted === true}
         unknown={status.controlLimit === true}
-        triggerLabel={`Agent status: ${labels[status.state]}`}
+        triggerLabel={`Agent status: ${labels[status.state]}${status.demo ? " (demo)" : ""}`}
         trigger={
-          <StatusDot
-            status={
-              status.state === "running"
-                ? "success"
-                : status.state === "stopped"
-                  ? "warning"
-                  : "neutral"
-            }
-            label={labels[status.state]}
-          />
+          <span aria-live="polite">
+            <StatusDot
+              status={
+                status.state === "running"
+                  ? "success"
+                  : status.state === "stopped"
+                    ? "warning"
+                    : "neutral"
+              }
+              label={labels[status.state]}
+            />
+          </span>
         }
       />
       {status.controlLimit && (

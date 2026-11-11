@@ -32,7 +32,8 @@ export interface CliHost {
   run(signal: AbortSignal): Promise<void>;
   once(signal?: AbortSignal): Promise<void>;
   halt(): Promise<void>;
-  resume(): Promise<void>;
+  /** True when HALT was cleared; false when it was already absent. */
+  resume(): Promise<boolean>;
   status(): Promise<unknown>;
   accounts(): Promise<readonly { id: string; binding: string; enabled: boolean }[]>;
   login(profile: string): Promise<void>;
@@ -195,10 +196,13 @@ export async function runCli(
         await host.halt();
         io.print("halted");
         break;
-      case "resume":
-        await host.resume();
-        io.print("local stop cleared; signed controls and permissions still apply");
+      case "resume": {
+        const cleared = await host.resume();
+        io.print(
+          `${cleared ? "local stop cleared" : "no local stop was present"}; signed controls and permissions still apply`,
+        );
         break;
+      }
       case "status":
         io.print(scrubLog(JSON.stringify(await host.status())));
         break;

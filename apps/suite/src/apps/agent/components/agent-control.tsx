@@ -94,6 +94,7 @@ export function AgentControl({
       >
         <AlertDialogContent
           className="agent-app"
+          aria-busy={busy}
           onCloseAutoFocus={(event) => {
             event.preventDefault();
             triggerRef.current?.focus();
@@ -123,6 +124,7 @@ export function AgentControl({
           <div className="agent-row">
             <AlertDialogCancel disabled={busy}>Cancel</AlertDialogCancel>
             <Button
+              aria-busy={busy}
               disabled={busy || (resume && confirmation !== "RESUME")}
               onClick={() => void confirm()}
             >

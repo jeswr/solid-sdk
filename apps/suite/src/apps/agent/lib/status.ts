@@ -5,6 +5,8 @@ export interface AgentStatus {
   lastSeen?: string;
   controlLimit?: boolean;
   demo?: boolean;
+  /** Only a verified, current owner Halt can select the Resume control. */
+  ownerHalted?: boolean;
 }
 export function agentStatus({
   heartbeatAt,
@@ -38,7 +40,7 @@ export function agentStatus({
       (a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt) || (a.kind === "Halt" ? -1 : 1),
     )[0];
   const seen = heartbeatAt === undefined ? {} : { lastSeen: heartbeatAt };
-  if (latest?.kind === "Halt") return { state: "stopped", ...seen };
+  if (latest?.kind === "Halt") return { state: "stopped", ownerHalted: true, ...seen };
   const at = Date.parse(heartbeatAt ?? "");
   return {
     state:

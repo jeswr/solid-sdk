@@ -97,8 +97,8 @@ export function createProcessLease(directory: string): ProcessLease {
 }
 export function createLocalState(directory: string) {
   new CredentialStore({ dir: directory });
-  // Serialize CLI writers across processes. Verification stays outside this short
-  // filesystem critical section; a concurrent halt replaces the checked identity.
+  // Only Resume takes the lock. Halt must work even after a crashed lock holder.
+  // The dispatch fence treats the lock as stopped while HALT is being removed.
   const mutateHalt = async (work: () => Promise<void>) => {
     const path = join(directory, "halt.lock");
     let lock: Awaited<ReturnType<typeof open>> | undefined;
@@ -112,11 +112,27 @@ export function createLocalState(directory: string) {
       }
     }
     if (!lock) throw new Error("Local stop is locked");
+    let release = false;
     try {
+      // Persist the dispatch fence before temporarily moving HALT.
+      await syncDirectory(directory);
       await work();
+      release = true;
     } finally {
       await lock.close();
-      await unlink(path);
+      if (!release) {
+        try {
+          await lstat(join(directory, "HALT"));
+          await syncDirectory(directory);
+          release = true;
+        } catch {
+          // Recovery could not establish a durable HALT. Retain the lock fence.
+        }
+      }
+      if (release) {
+        await unlink(path);
+        await syncDirectory(directory);
+      }
     }
   };
   const proposalResults: ProposalResults = {
@@ -147,29 +163,33 @@ export function createLocalState(directory: string) {
     },
   };
   const halted = async () => {
-    try {
-      await lstat(join(directory, "HALT"));
-      return true;
-    } catch (error) {
-      if (missing(error)) return false;
-      throw error;
+    for (const name of ["HALT", "halt.lock"]) {
+      try {
+        await lstat(join(directory, name));
+        return true;
+      } catch (error) {
+        if (!missing(error)) throw error;
+      }
     }
+    return false;
   };
   return {
     checkpoints,
     proposalResults,
     halted,
     assertNotHalted() {
-      try {
-        lstatSync(join(directory, "HALT"));
-      } catch (error) {
-        if (missing(error)) return;
-        throw error;
+      for (const name of ["HALT", "halt.lock"]) {
+        try {
+          lstatSync(join(directory, name));
+        } catch (error) {
+          if (missing(error)) continue;
+          throw error;
+        }
+        throw new Error("Local stop active");
       }
-      throw new Error("Local stop active");
     },
     async halt() {
-      await mutateHalt(() => writePrivate(directory, "HALT", "halted\n"));
+      await writePrivate(directory, "HALT", "halted\n");
     },
     /** The trusted host verifies a fresh owner Resume before removing the local stop. */
     async resume(authorize: (haltedAt: number) => Promise<boolean>) {
@@ -178,7 +198,7 @@ export function createLocalState(directory: string) {
       try {
         halted = await lstat(path);
       } catch (error) {
-        if (missing(error)) return;
+        if (missing(error)) return false;
         throw error;
       }
       if (!halted.isFile() || !(await authorize(halted.mtimeMs)))
@@ -192,9 +212,36 @@ export function createLocalState(directory: string) {
           current.ctimeMs !== halted.ctimeMs
         )
           throw new Error("HALT changed during resume");
-        await unlink(path);
-        await syncDirectory(directory);
+        // Rename first so we can inspect the identity actually removed. A Halt
+        // can replace the file between the identity check above and this rename.
+        const removed = join(directory, `${randomUUID()}.halt`);
+        await rename(path, removed);
+        try {
+          const moved = await lstat(removed);
+          if (
+            moved.ino !== halted.ino ||
+            moved.dev !== halted.dev ||
+            moved.mtimeMs !== halted.mtimeMs
+          )
+            throw new Error("HALT changed during resume");
+          await unlink(removed);
+          try {
+            await lstat(path);
+          } catch (error) {
+            if (!missing(error)) throw error;
+            await syncDirectory(directory);
+            return;
+          }
+          throw new Error("HALT changed during resume");
+        } catch (error) {
+          // Keep any new Halt, or restore one if the renamed file was newer or
+          // a filesystem failure prevented us from establishing absence.
+          await writePrivate(directory, "HALT", "halted\n");
+          await unlink(removed).catch(() => {});
+          throw error;
+        }
       });
+      return true;
     },
     async status() {
       let leasePresent = false;

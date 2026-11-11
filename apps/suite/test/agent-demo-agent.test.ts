@@ -68,6 +68,9 @@ it("refreshes a stale demo heartbeat through the workspace and stops on session 
   const view = await mount(tree(f.session));
   await until(() => Boolean(view.host.textContent?.includes("Agent running")));
   expect(view.host.textContent).toContain("Demo agent");
+  expect(
+    view.host.querySelector('button[aria-label="Agent status: Agent running (demo)"]'),
+  ).not.toBeNull();
   for (let tick = 0; tick < 4; tick++) {
     await act(() => vi.advanceTimersByTime(DEMO_HEARTBEAT_MS));
     await until(() => writes(f.io).length === tick + 2);

@@ -4,16 +4,26 @@ import { MemoryLedger } from "@jeswr/agent-audit";
 import { CredentialStore, noTransport } from "@jeswr/agent-credentials";
 import { issueControlStatement, verifyControlStatement } from "@jeswr/agent-mandate/control";
 import type { ControlStatement } from "@jeswr/agent-model";
-import { lstat, mkdtemp, rm, symlink, utimes, writeFile } from "fs/promises";
+import { lstat, mkdtemp, rename, rm, symlink, unlink, utimes, writeFile } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
 import { afterEach, expect, it, vi } from "vitest";
 import { createCliHost, runCli } from "../src/cli.js";
 import { createLocalState } from "../src/local.js";
 
+vi.mock("fs/promises", async (original) => {
+  const fs = await original<typeof import("fs/promises")>();
+  return { ...fs, rename: vi.fn(fs.rename), unlink: vi.fn(fs.unlink) };
+});
+
 const directories: string[] = [];
 afterEach(async () => {
   vi.useRealTimers();
+  vi.mocked(rename).mockReset();
+  vi.mocked(unlink).mockReset();
+  const fs = await vi.importActual<typeof import("fs/promises")>("fs/promises");
+  vi.mocked(rename).mockImplementation(fs.rename);
+  vi.mocked(unlink).mockImplementation(fs.unlink);
   for (const directory of directories.splice(0))
     await rm(directory, { recursive: true, force: true });
 });
@@ -89,9 +99,15 @@ it("awp halt and resume require a fresh real signed owner Resume before clearing
   // Signed Resume alone leaves HALT effective until the explicit local command.
   expect(await f.local.halted()).toBe(true);
   expect(await runCli(["resume"], host, io)).toBe(0);
+  expect(io.print).toHaveBeenLastCalledWith(
+    "local stop cleared; signed controls and permissions still apply",
+  );
   expect(await createLocalState(f.directory).halted()).toBe(false);
   expect(() => f.local.assertNotHalted()).not.toThrow();
   expect(await runCli(["resume"], host, io)).toBe(0);
+  expect(io.print).toHaveBeenLastCalledWith(
+    "no local stop was present; signed controls and permissions still apply",
+  );
   expect(f.compose).not.toHaveBeenCalled();
 });
 
@@ -158,5 +174,66 @@ it("preserves a new halt arriving during Resume verification and refuses HALT sy
   expect(() => f.local.assertNotHalted()).toThrow("Local stop active");
   await rm(path);
   await writeFile(join(f.directory, "halt.lock"), "stale lock", { mode: 0o600 });
-  await expect(f.local.halt()).rejects.toThrow("locked");
+  await expect(f.local.halt()).resolves.toBeUndefined();
+  expect((await lstat(path)).mode & 0o777).toBe(0o600);
+  expect(await f.local.halted()).toBe(true);
+  expect(() => f.local.assertNotHalted()).toThrow("Local stop active");
+});
+
+it.each(["before removal", "after unlink"])("a Halt racing Resume %s wins", async (when) => {
+  const f = await fixture();
+  const otherProcess = createLocalState(f.directory);
+  const path = join(f.directory, "HALT");
+  await f.local.halt();
+  const fs = await vi.importActual<typeof import("fs/promises")>("fs/promises");
+  let raced = false;
+  if (when === "before removal") {
+    vi.mocked(rename).mockImplementation(async (from, to) => {
+      if (from === path && !raced) {
+        raced = true;
+        await otherProcess.halt();
+      }
+      return fs.rename(from, to);
+    });
+  } else {
+    vi.mocked(unlink).mockImplementation(async (file) => {
+      await fs.unlink(file);
+      if (String(file).endsWith(".halt") && !raced) {
+        raced = true;
+        // Even while HALT is temporarily absent, dispatch stays stopped.
+        expect(await otherProcess.halted()).toBe(true);
+        expect(() => otherProcess.assertNotHalted()).toThrow("Local stop active");
+        await otherProcess.halt();
+      }
+    });
+  }
+  await expect(f.local.resume(async () => true)).rejects.toThrow("HALT changed");
+  expect(raced).toBe(true);
+  expect((await lstat(path)).mode & 0o777).toBe(0o600);
+  expect(await otherProcess.halted()).toBe(true);
+  expect(() => otherProcess.assertNotHalted()).toThrow("Local stop active");
+});
+
+it("retains the dispatch fence if a filesystem failure prevents restoring a racing Halt", async () => {
+  const f = await fixture();
+  const path = join(f.directory, "HALT");
+  await f.local.halt();
+  const fs = await vi.importActual<typeof import("fs/promises")>("fs/promises");
+  let moved = false;
+  vi.mocked(rename).mockImplementation(async (from, to) => {
+    if (from === path) {
+      await f.local.halt();
+      moved = true;
+    } else if (to === path && moved) {
+      throw new Error("disk failed");
+    }
+    return fs.rename(from, to);
+  });
+  await expect(f.local.resume(async () => true)).rejects.toThrow("disk failed");
+  await expect(lstat(path)).rejects.toMatchObject({ code: "ENOENT" });
+  expect(await f.local.halted()).toBe(true);
+  expect(() => f.local.assertNotHalted()).toThrow("Local stop active");
+  vi.mocked(rename).mockImplementation(fs.rename);
+  await expect(f.local.halt()).resolves.toBeUndefined();
+  expect((await lstat(path)).mode & 0o777).toBe(0o600);
 });

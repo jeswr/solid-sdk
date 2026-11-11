@@ -115,7 +115,8 @@ The executor refuses every queued action on the next notification or reconciliat
 pass (at most 30 seconds by default). Revoking the current permission also refuses
 all actions. These checks run again before every send, including after token waits.
 
-`awp halt` writes and fsyncs `HALT` in the host's configured private state directory
+`awp halt` atomically writes and fsyncs a mode-0600 `HALT` without taking a lock,
+so a crashed Resume lock holder cannot prevent a new stop. It uses the host's configured private state directory
 (on macOS, use `~/Library/Application Support/jeswr-agent`). Its presence overrides
 every signed Resume, and the executor checks it on every gate pass. Heartbeats
 continue every 60 seconds and report `running`, `paused` (no current valid permission),
@@ -129,7 +130,16 @@ adapter. The command removes HALT only after a current verified Resume newer tha
 the file, with no newer Halt, and fsyncs the directory. Missing verification,
 expired/future statements, symlinks and a file replaced during verification fail
 closed. Clearing the file never replaces the executor's signed-control and
-permission checks. Resume is idempotent when the file is already absent.
+permission checks. Resume is idempotent when the file is already absent, and reports
+whether it cleared a stop or found none. Resume serializes through `halt.lock`;
+the executor stays stopped while that lock exists. A Halt racing removal wins.
+After a crashed Resume, establish that the lock holder has stopped before removing
+the leftover `halt.lock`; `awp halt` remains available throughout recovery.
+
+The Resume must be signed **after** the local stop. Its browser timestamp is compared
+strictly with HALT's modification time on the agent's computer. Clock skew between
+devices can delay or refuse resume; refusal is the safe direction. Correct the clocks
+and sign a new Resume if needed. The command also refuses future-dated statements.
 
 To unload the macOS service independently of pod access:
 

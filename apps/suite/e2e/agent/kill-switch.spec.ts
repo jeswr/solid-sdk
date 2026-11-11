@@ -1,5 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+import { serialize } from "@jeswr/rdf-serialize";
 import { expect, test } from "@playwright/test";
+import { AGENT, metadataNode, PROV } from "../../src/apps/agent/lib/paths";
 import {
   loadedRecords,
   readControl,
@@ -26,7 +28,7 @@ test("settings and status menu stop every queued action; Resume confirms, signs,
   let dialog = page.getByRole("alertdialog");
   await dialog.getByRole("button", { name: "Stop the agent", exact: true }).click();
   await expect(
-    page.getByRole("button", { name: "Agent status: Stopped", exact: true }),
+    page.getByRole("button", { name: "Agent status: Stopped (demo)", exact: true }),
   ).toBeVisible();
   expect(loadedRecords(await readControl(daemon.client, verifier))).toEqual(
     expect.arrayContaining([expect.objectContaining({ kind: "Halt", verification: "verified" })]),
@@ -56,20 +58,22 @@ test("settings and status menu stop every queued action; Resume confirms, signs,
   await dialog.getByRole("button", { name: "Resume", exact: true }).click();
   await expect(stop).toBeFocused();
   await expect(
-    page.getByRole("button", { name: "Agent status: Agent running", exact: true }),
+    page.getByRole("button", { name: "Agent status: Agent running (demo)", exact: true }),
   ).toBeVisible();
   expect(loadedRecords(await readControl(daemon.client, verifier))).toEqual(
     expect.arrayContaining([expect.objectContaining({ kind: "Resume", verification: "verified" })]),
   );
-  await page.getByRole("button", { name: "Agent status: Agent running", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Agent status: Agent running (demo)", exact: true })
+    .click();
   await page.getByRole("menuitem", { name: "Stop the agent", exact: true }).click();
   await dialog.getByRole("button", { name: "Stop the agent", exact: true }).click();
   await expect(
-    page.getByRole("button", { name: "Agent status: Stopped", exact: true }),
+    page.getByRole("button", { name: "Agent status: Stopped (demo)", exact: true }),
   ).toBeVisible();
   const first = proposals[0];
   await expect(
-    page.getByRole("button", { name: "Agent status: Stopped", exact: true }),
+    page.getByRole("button", { name: "Agent status: Stopped (demo)", exact: true }),
   ).toBeFocused();
   if (!first) throw new Error("Missing proposal fixture");
   expect(await daemon.tick(first)).toBe("halted");
@@ -91,7 +95,38 @@ test("the labelled demo agent keeps its heartbeat fresh beyond the offline thres
       })
       .toBeLessThanOrEqual(60_000);
     await expect(
-      page.getByRole("button", { name: "Agent status: Agent running", exact: true }),
+      page.getByRole("button", { name: "Agent status: Agent running (demo)", exact: true }),
     ).toBeVisible();
   }
+});
+
+test("an unsigned stopped heartbeat changes the live label while Stop remains available", async ({
+  page,
+}) => {
+  await setupAgentKey(page);
+  await page.clock.install();
+  await page.clock.pauseAt((await page.evaluate(() => Date.now())) + 1000);
+  const daemon = daemonDouble(page);
+  const heartbeat = await daemon.client.graph(daemon.client.paths.heartbeat);
+  const node = metadataNode(heartbeat.dataset, daemon.client.paths.heartbeat);
+  node.setText(`${AGENT}state`, "stopped");
+  node.setText(
+    `${PROV}generatedAtTime`,
+    new Date(await page.evaluate(() => Date.now())).toISOString(),
+  );
+  await daemon.client.replace(
+    daemon.client.paths.heartbeat,
+    await serialize([...heartbeat.dataset], { format: "text/turtle" }),
+    heartbeat.etag as string,
+  );
+  await page.clock.runFor(500);
+  const trigger = page.getByRole("button", { name: "Agent status: Stopped (demo)", exact: true });
+  await expect(trigger).toBeVisible();
+  await expect(trigger.getByRole("status")).toHaveText("Stopped");
+  await expect(trigger.locator('[aria-live="polite"]')).toBeVisible();
+  await expect(page.getByRole("button", { name: "Stop the agent", exact: true })).toBeVisible();
+  await page.clock.resume();
+  await trigger.click();
+  await expect(page.getByRole("menuitem", { name: "Stop the agent", exact: true })).toBeVisible();
+  await expect(page.getByRole("menuitem", { name: "Resume", exact: true })).toHaveCount(0);
 });

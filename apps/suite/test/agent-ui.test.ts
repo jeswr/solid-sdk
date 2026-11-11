@@ -3,11 +3,15 @@
 import { issueApproval } from "@jeswr/agent-mandate/approval";
 import { issueControlStatement } from "@jeswr/agent-mandate/control";
 import { recordToTurtle } from "@jeswr/agent-model";
+import { serialize } from "@jeswr/rdf-serialize";
+import { Store } from "n3";
 import { afterEach, expect, it, vi } from "vitest";
 import type { Row } from "../src/apps/agent/lib/client";
 import { collection, isComplete } from "../src/apps/agent/lib/collections";
 import type { Query } from "../src/apps/agent/lib/hooks";
 import { AgentWorkspaceProvider } from "../src/apps/agent/lib/hooks";
+import { setupApprovalKey } from "../src/apps/agent/lib/keys";
+import { AGENT, metadataNode, PROV, RDF } from "../src/apps/agent/lib/paths";
 import type { PendingApproval } from "../src/apps/agent/lib/queue";
 import { loadedRecords } from "../src/apps/agent/lib/readers";
 import { demoApprovalKey } from "../src/apps/agent/lib/seed";
@@ -23,7 +27,7 @@ vi.mock("next/navigation", () => ({
 }));
 vi.mock("next/link", () => ({ default: "a" }));
 vi.mock("../src/apps/agent/components/approval-key-setup-sheet", () => ({
-  useApprovalDevice: () => ({ requireKey: vi.fn() }),
+  useApprovalDevice: () => ({ requireKey: vi.fn((action: () => void) => action()) }),
 }));
 
 import { ActivityScreen } from "../src/apps/agent/components/activity";
@@ -31,6 +35,7 @@ import { ActivityScreen } from "../src/apps/agent/components/activity";
 import { ApprovalsScreen } from "../src/apps/agent/components/approvals";
 import { ChatScreen } from "../src/apps/agent/components/chat";
 import { InboxScreen } from "../src/apps/agent/components/inbox";
+import { SettingsScreen } from "../src/apps/agent/components/settings";
 import { AgentSidebar } from "../src/apps/agent/components/sidebar";
 import { QueryRows } from "../src/apps/agent/components/states";
 import { StatusPill, useDaemonStatus } from "../src/apps/agent/components/status-pill";
@@ -415,6 +420,96 @@ it("ticks real-session status every five seconds, refreshes on visibility and ac
   vi.useRealTimers();
 });
 
+it.each([
+  "none",
+  "Resume",
+  "Halt",
+] as const)("a stopped heartbeat leaves Stop available unless the verified owner control is Halt (%s)", async (kind) => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(NOW);
+  const f = await fixture();
+  const url = `${BASE}control/heartbeat.ttl`;
+  const store = new Store();
+  const node = metadataNode(store, url);
+  node.setIri(`${RDF}type`, `${AGENT}Heartbeat`);
+  node.setText(`${PROV}generatedAtTime`, new Date(NOW).toISOString());
+  node.setText(`${AGENT}state`, "stopped");
+  await f.pod.fetch(url, {
+    method: "PUT",
+    headers: { "content-type": "text/turtle" },
+    body: await serialize([...store], { format: "text/turtle" }),
+  });
+  if (kind !== "none") {
+    const id = `${BASE}control/latest.trig`;
+    await f.pod.fetch(id, {
+      method: "PUT",
+      headers: { "content-type": "application/trig" },
+      body: await issueControlStatement(
+        {
+          id,
+          kind,
+          attributedTo: DEMO_WEBID,
+          createdAt: new Date(NOW - 1).toISOString(),
+          expires: new Date(NOW + 60_000).toISOString(),
+        },
+        await demoApprovalKey(),
+        new Date(NOW - 1),
+      ),
+    });
+  }
+  const view = await mount(f.tree(h(SettingsScreen)));
+  await until(() => Boolean(view.host.querySelector('[aria-label="Agent status: Stopped"]')));
+  const label = kind === "Halt" ? "Resume" : "Stop the agent";
+  expect(
+    [...view.host.querySelectorAll("button")].some((button) => button.textContent === label),
+  ).toBe(true);
+  const statusLabel = view.host.querySelector('[role="status"]');
+  expect(statusLabel?.textContent).toBe("Stopped");
+  expect(statusLabel?.closest("[aria-live]")?.getAttribute("aria-live")).toBe("polite");
+  const trigger = view.host.querySelector<HTMLButtonElement>(
+    '[aria-label="Agent status: Stopped"]',
+  );
+  await act(() =>
+    trigger?.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, button: 0 })),
+  );
+  await until(() => Boolean(document.querySelector('[role="menuitem"]')));
+  expect(document.querySelector('[role="menuitem"]')?.textContent).toBe(label);
+  await view.unmount();
+});
+
+it("announces a pending stop save and returns focus after it completes", async () => {
+  const f = await fixture();
+  await setupApprovalKey(f.session);
+  const pending = deferred<void>();
+  vi.spyOn(f.session, "fetch").mockImplementation(async (input, init) => {
+    if (String(input).startsWith(`${BASE}control/`) && init?.method === "PUT")
+      await pending.promise;
+    return f.pod.fetch(input, init);
+  });
+  const view = await mount(f.tree(h(SettingsScreen)));
+  await until(() => Boolean(view.host.textContent?.includes("Agent offline")));
+  const trigger = [...view.host.querySelectorAll("button")].find(
+    (button) => button.textContent === "Stop the agent",
+  );
+  if (!trigger) throw new Error("Missing Stop");
+  await click(trigger);
+  await until(() => Boolean(document.querySelector('[role="alertdialog"]')));
+  const save = [
+    ...document.querySelectorAll<HTMLButtonElement>('[role="alertdialog"] button'),
+  ].find((button) => button.textContent === "Stop the agent");
+  if (!save) throw new Error("Missing confirmation");
+  await click(save);
+  await until(() => save.textContent === "Saving…");
+  expect(save.getAttribute("aria-busy")).toBe("true");
+  expect(document.querySelector('[role="alertdialog"]')?.getAttribute("aria-busy")).toBe("true");
+  await act(() => pending.resolve());
+  await until(
+    () => !document.querySelector('[role="alertdialog"]') && document.activeElement === trigger,
+  );
+  expect(document.activeElement).toBe(trigger);
+  await view.unmount();
+});
+
 it("recomputes proposal and approval expiry and the sidebar waiting count without pod changes", async () => {
   vi.useFakeTimers({ toFake: ["Date", "setInterval", "clearInterval"] });
   vi.setSystemTime(NOW);
@@ -593,7 +688,8 @@ it("retains a new verified denial after 500 older approvals with larger random U
     ),
   });
   const view = await mount(f.tree(h(ApprovalsScreen, { id: "send-reply" })));
-  await until(() => Boolean(view.host.textContent?.includes("Denied")));
+  // Verifying 501 real signatures takes longer under coverage on shared runners.
+  await until(() => Boolean(view.host.textContent?.includes("Denied")), 20_000);
   expect(view.host.textContent).not.toContain("Too many approval records");
   expect(
     [...view.host.querySelectorAll<HTMLButtonElement>("button")].find(

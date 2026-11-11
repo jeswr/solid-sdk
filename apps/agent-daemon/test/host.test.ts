@@ -196,7 +196,7 @@ function host(): CliHost {
     run: vi.fn(async () => undefined),
     once: vi.fn(async () => undefined),
     halt: vi.fn(async () => undefined),
-    resume: vi.fn(async () => undefined),
+    resume: vi.fn(async () => false),
     status: vi.fn(async () => ({ halted: true })),
     accounts: vi.fn(async () => [{ id: "fixture", binding: "direct", enabled: false }]),
     login: vi.fn(async () => undefined),
