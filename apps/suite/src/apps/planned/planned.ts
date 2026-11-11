@@ -6,8 +6,6 @@ import type { AppSlug } from "@jeswr/suite-ui";
  * line here when it replaces the placeholder, so directories can say "Coming soon" instead of "Early".
  */
 export const plannedApps: ReadonlySet<AppSlug> = new Set<AppSlug>([
-  "bookmarks",
-
   "insights",
 
   "forms",
