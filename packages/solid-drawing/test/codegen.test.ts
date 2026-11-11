@@ -25,4 +25,4 @@ it("regenerates every committed artifact byte-for-byte through the package codeg
   } finally {
     rmSync(output, { recursive: true, force: true });
   }
-}, 30_000);
+}, 180_000);

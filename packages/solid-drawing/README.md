@@ -78,19 +78,24 @@ are narrowed to `xsd:string` only in the codegen profile, with public reads carr
 the facade. `drawing.ttl`, `drawing.shacl.ttl`, their subpath exports and the Node-only
 `/shape` helpers continue to expose the unchanged published package profile.
 
-Generator/runtime limitations handled here:
+Generator/runtime limitations handled here include three generator gaps. These are
+tracked as beads (see W2 handover):
 
-- Closed admission requires a concrete literal datatype; it cannot project the published
-  `sh:nodeKind sh:Literal` without one. The generated version/background fields use
+- Union cardinality across canonical and legacy aliases: the generator cannot select
+  the drawing oracle's union policy for runtime singleton projection. The facade
+  rejects/drops conflicts using generated alias metadata, including mistyped legacy
+  values. The generated SHACL checks the union.
+- `sh:nodeKind sh:Literal` with no datatype / typed lexical carry: closed admission
+  requires a concrete literal datatype. The generated version/background fields use
   `xsd:string`; the facade's typed view preserves other literals' lexical values.
-- Runtime singleton aliases use canonical-first selection rather than the drawing
-  oracle's union cardinality. The facade rejects/drops conflicts using generated alias
-  metadata, including mistyped legacy values. The generated SHACL checks the union.
-- Runtime `iriScheme` guards normalize URLs, whereas drawing preserves lexical RDF
-  identity. The facade keeps the existing write guards; config omits scheme guards.
-  Reads retain safe absolute IRIs of any scheme, as before.
-- Generated dateTime fields project `Date`, with no lexical-string mode. The facade
-  converts with the runtime's strict reader/writer, preserving the public string type.
+- A lexical mode for `xsd:dateTime`: generated fields project `Date`. The facade
+  validates strings with the runtime's strict XSD validator and uses its writer,
+  preserving the public string type. Zoneless strings are interpreted as UTC on both
+  read and write, including lexical re-reads that bypass the runtime's local-time Date.
+
+Runtime `iriScheme` guards normalize URLs, whereas drawing preserves lexical RDF
+identity. The facade keeps the existing write guards; config omits scheme guards.
+Reads retain safe absolute IRIs of any scheme, as before.
 
 From the workspace root:
 
@@ -119,7 +124,7 @@ Every behavior change from the hand-written model is pinned in
 | Change | Pinned test |
 | --- | --- |
 | Malformed, impossible or out-of-JS-range `xsd:dateTime` timestamps drop on both read and write. Previously any lexical form with that datatype was retained/written. | `drops malformed typed timestamps on reads and writes` |
-| Timestamp strings use canonical UTC with millisecond precision. Offsets and missing zones normalize to UTC, excess fractional digits truncate; expanded/negative years use valid XSD spelling. Previously timestamp strings retained their original lexical spelling. | `projects timestamp strings to canonical UTC at millisecond precision` |
+| Timestamp strings use canonical UTC with millisecond precision. Offsets normalize to UTC; missing zones are interpreted as UTC regardless of the host time zone. Excess fractional digits truncate; expanded/negative years use valid XSD spelling. Re-serialising a scene (for example after a title edit) rewrites existing timestamps to UTC with milliseconds. Previously timestamp strings retained their original lexical spelling. | `projects timestamp strings to canonical UTC at millisecond precision`; `interprets zoneless timestamps as UTC on reads and writes in %s` |
 | Types reaching the canonical or legacy Scene class through data-graph `rdfs:subClassOf` now count as scenes, using the runtime's bounded, cycle-safe walk. | `recognises data-graph subclasses of %sScene` |
 | DEL/C1 controls (U+007F–U+009F) in subjects or required canvas IRIs throw; optional IRI writes/reads drop them, and an unsafe required IRI rejects the read. The old scene model accepted these lexemes. The exported IRI helpers remain unchanged. | `rejects C1 controls in subjects/required IRIs and drops them in optional IRI writes` |
 | Unsafe or relative IRI field values on read now drop; an invalid required canvas link rejects the scene. Previously raw NamedNode values were returned. | `drops unsafe or relative IRI reads and rejects an unsafe required canvas link` |

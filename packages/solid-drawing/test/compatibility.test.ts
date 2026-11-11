@@ -41,6 +41,77 @@ function graph(body: string): Store {
 const descriptor = (body: string) =>
   graph(`<#it> a draw:Scene ; draw:sceneDocument <${CANVAS}> ; ${body} .`);
 
+async function withTimeZone(zone: string, run: () => Promise<void>): Promise<void> {
+  const previous = process.env.TZ;
+  process.env.TZ = zone;
+  try {
+    await run();
+  } finally {
+    if (previous === undefined) delete process.env.TZ;
+    else process.env.TZ = previous;
+  }
+}
+
+it.each([
+  "America/New_York",
+  "Asia/Kolkata",
+])("interprets zoneless timestamps as UTC on reads and writes in %s", async (zone) => {
+  await withTimeZone(zone, async () => {
+    // Prove TZ affects Date construction in this worker before exercising the facade.
+    expect(new Date("2026-06-21T10:00:00").getTimezoneOffset()).toBe(
+      zone === "America/New_York" ? 240 : -330,
+    );
+    for (const [lexical, expected] of [
+      ["2026-06-21T10:00:00", "2026-06-21T10:00:00.000Z"],
+      ["2026-03-08T02:30:00", "2026-03-08T02:30:00.000Z"],
+      ["2026-11-01T01:30:00.123456", "2026-11-01T01:30:00.123Z"],
+      ["10000-01-01T00:00:00", "10000-01-01T00:00:00.000Z"],
+      ["-0001-01-01T00:00:00", "-0001-01-01T00:00:00.000Z"],
+      ["275760-09-13T00:00:00", "275760-09-13T00:00:00.000Z"],
+    ] as const) {
+      const data = { sceneDocument: CANVAS, created: lexical, modified: lexical };
+      const canonical = { ...data, created: expected, modified: expected };
+      const input = descriptor(
+        `dct:created "${lexical}"^^xsd:dateTime ; dct:modified "${lexical}"^^xsd:dateTime`,
+      );
+      const parsed = parseScene(RES, input);
+      expect(parsed).toEqual(canonical);
+      const built = buildScene(RES, data);
+      expect(parseScene(RES, built)).toEqual(canonical);
+      expect(
+        [...built].filter((q) => q.object.termType === "Literal").map((q) => q.object.value),
+      ).toEqual([expected, expected]);
+      const ttl = await serializeScene(RES, data);
+      expect(await parseSceneTtl(RES, ttl)).toEqual(canonical);
+      expect(
+        new Parser()
+          .parse(ttl)
+          .filter((q) => q.object.termType === "Literal")
+          .map((q) => q.object.value),
+      ).toEqual([expected, expected]);
+      if (!parsed) throw new Error("expected a scene");
+      expect(
+        await parseSceneTtl(RES, await serializeScene(RES, { ...parsed, title: "edit" })),
+      ).toEqual({ ...canonical, title: "edit" });
+    }
+    for (const invalid of ["yesterday", "2026-02-30T10:00:00", "999999-01-01T00:00:00"]) {
+      expect(
+        parseScene(
+          RES,
+          descriptor(
+            `dct:created "${invalid}"^^xsd:dateTime ; dct:modified "${invalid}"^^xsd:dateTime`,
+          ),
+        ),
+      ).toEqual({ sceneDocument: CANVAS });
+      const data = { sceneDocument: CANVAS, created: invalid, modified: invalid };
+      expect(parseScene(RES, buildScene(RES, data))).toEqual({ sceneDocument: CANVAS });
+      expect(await parseSceneTtl(RES, await serializeScene(RES, data))).toEqual({
+        sceneDocument: CANVAS,
+      });
+    }
+  });
+});
+
 it("drops malformed typed timestamps on reads and writes", async () => {
   for (const invalid of [
     "yesterday",
