@@ -70,6 +70,39 @@ test("exchanges the verified server ID token for LWS Bearer access and reuses/re
   expect(lws.exchanges).toHaveLength(3);
 });
 
+test("LWS asks the broker's trust policy before sending the ID token anywhere", async () => {
+  let lws;
+  const bindings = [];
+  const f = await fixture(
+    (_, op) => {
+      lws = lwsStorage(op);
+      return lws.fetch;
+    },
+    {
+      lws: true,
+      trustAuthorizationServer: (binding) => {
+        bindings.push(binding);
+        return false;
+      },
+    },
+  );
+  await f.login();
+  await expect(f.client.fetch(`${POD_ROOT}note.txt`)).rejects.toThrow(
+    "No trusted LWS authorization server",
+  );
+  expect(
+    bindings.map(({ authorizationServer, realm, resource }) => [
+      authorizationServer.href,
+      realm.href,
+      resource.href,
+    ]),
+  ).toEqual([["https://lws.example/", "https://pod.example/storage", `${POD_ROOT}note.txt`]]);
+  expect(lws.exchanges).toHaveLength(0);
+  expect(lws.requests.some((request) => request.url.startsWith("https://lws.example/"))).toBe(
+    false,
+  );
+});
+
 test.each([
   "missing",
   "expired",

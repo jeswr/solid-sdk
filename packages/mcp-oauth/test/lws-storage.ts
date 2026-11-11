@@ -5,6 +5,9 @@ import { POD_CLIENT, POD_ISSUER, POD_ROOT, POD_WEBID, podIssuer } from "./pod-is
 
 export const LWS_STORAGE = "https://pod.example/storage";
 const issuer = "https://lws.example/";
+export const LWS_AUTHORIZATION_SERVER = issuer;
+/** An authorization server no session vouches for; it answers anything it is sent. */
+export const FOREIGN_AUTHORIZATION_SERVER = "https://attacker.example/";
 const metadataPrefix = "https://pod.example/.well-known/oauth-protected-resource";
 
 /** Private offline LWS storage, with independently verified OIDC subject credentials. */
@@ -16,6 +19,8 @@ export function lwsStorage(op = podIssuer()) {
   const rejected = new Set<string>();
   const controls = {
     wrongResource: false,
+    authorizationServers: [issuer],
+    tokenEndpoint: `${issuer}exchange`,
     onDiscovery: undefined as (() => Promise<void>) | undefined,
     onExchange: undefined as (() => Promise<void>) | undefined,
   };
@@ -23,13 +28,20 @@ export function lwsStorage(op = podIssuer()) {
     const request = new Request(input, init);
     requests.push(request.clone());
     const url = new URL(request.url);
+    if (request.url === `${FOREIGN_AUTHORIZATION_SERVER}.well-known/lws-configuration`)
+      return Response.json({
+        issuer: FOREIGN_AUTHORIZATION_SERVER,
+        token_endpoint: `${FOREIGN_AUTHORIZATION_SERVER}exchange`,
+      });
+    if (request.url.startsWith(FOREIGN_AUTHORIZATION_SERVER))
+      return Response.json({ access_token: "stolen", token_type: "Bearer", expires_in: 300 });
     if (request.url.startsWith(metadataPrefix)) {
       expect(request.headers.has("authorization")).toBe(false);
       return Response.json({
         resource: controls.wrongResource
           ? `${POD_ROOT}other`
           : `https://pod.example${url.pathname.slice(new URL(metadataPrefix).pathname.length)}${url.search}`,
-        authorization_servers: [issuer],
+        authorization_servers: controls.authorizationServers,
       });
     }
     if (request.url === LWS_STORAGE)
@@ -41,7 +53,7 @@ export function lwsStorage(op = podIssuer()) {
       });
     if (request.url === `${issuer}.well-known/lws-configuration`) {
       await controls.onDiscovery?.();
-      return Response.json({ issuer, token_endpoint: `${issuer}exchange` });
+      return Response.json({ issuer, token_endpoint: controls.tokenEndpoint });
     }
     if (request.url === `${issuer}exchange`) {
       expect(request.headers.has("authorization")).toBe(false);
