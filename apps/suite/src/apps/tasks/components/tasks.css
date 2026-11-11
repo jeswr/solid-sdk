@@ -445,6 +445,11 @@
 }
 
 /* AUTHORED-BY Codex GPT-6.1-Sol */
+.tsk-attachment-count {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
 .tsk-composer {
   display: grid;
   gap: 12px;

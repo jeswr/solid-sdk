@@ -26,6 +26,7 @@ import { toTaskView } from "../../lib/views/types";
 import { completeTask, deleteTask } from "../../state/actions";
 import { useTasks } from "../../state/tasks-context";
 import { TaskProgress, TreeToggle, useCollapsedTasks } from "../tree-controls";
+import { TaskAttachments } from "./attachments";
 import { ProjectFields, TaskProperties } from "./fields";
 
 function descriptionNodes(text: string) {
@@ -454,6 +455,7 @@ export function TaskDetail({
           </button>
         )}
       </section>
+      <TaskAttachments key={stored.url} stored={stored} />
       <TaskProperties
         stored={stored}
         project={project}
