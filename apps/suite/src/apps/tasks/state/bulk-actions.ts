@@ -2,6 +2,7 @@
 import { toast } from "@jeswr/suite-ui";
 import type { StoredProject, StoredTask } from "../lib/model/store";
 import { type BulkResult, bulkSummary, runBulk } from "../lib/views/bulk";
+import { descendantsFirst } from "../lib/views/clear-completed";
 import type { CompletionPlan } from "../lib/views/completion";
 import { type PriorityLevel, priorityValue, type TaskView } from "../lib/views/types";
 import { rescheduleToDay } from "../lib/views/upcoming";
@@ -194,9 +195,65 @@ export async function labelTasks(
  * one toast offers a single Undo for the batch, and the deletes are issued
  * when that toast closes.
  */
-export function deleteTasks(views: readonly TaskView[], tasks: BulkTasks): number {
+export function deleteTasks(
+  views: readonly TaskView[],
+  tasks: BulkTasks,
+  options: { completedOnly?: boolean; description?: () => string | undefined } = {},
+): number {
   const deletes = pendingDeletes(tasks.cache);
   const toastId = crypto.randomUUID();
+  const committing: { view: TaskView; item: StoredTask }[] = [];
+  const commit = async (entries: typeof committing) => {
+    const refreshed = options.completedOnly ? await tasks.cache.refreshCompletedDeletion() : [];
+    const fresh = new Map(refreshed?.map((view) => [view.url, view]));
+    if (options.completedOnly)
+      entries = descendantsFirst(
+        entries.map((entry) => ({
+          ...entry,
+          id: entry.view.id,
+          parentId: fresh.get(entry.view.url)?.parentId,
+        })),
+      );
+    const skipped = new Set<string>();
+    const result = await runBulk(
+      entries,
+      async ({ view, item }) => {
+        if (!refreshed) {
+          tasks.cache.hideTask(view.url, false);
+          throw new Error("Couldn't refresh tasks before deletion");
+        }
+        const deleting = tasks.cache.deleteTask(item, {
+          silent: true,
+          completedOnly: options.completedOnly ?? false,
+        });
+        // Install the optimistic removal before releasing the delayed-delete visibility.
+        tasks.cache.hideTask(view.url, false);
+        const saved = await deleting;
+        if (saved === undefined) throw new Error("Couldn't delete this task");
+        if (!saved) skipped.add(view.url);
+      },
+      { concurrency: 4 },
+    );
+    const description = [
+      options.description?.(),
+      skipped.size ? `Kept ${skipped.size} changed ${skipped.size === 1 ? "task" : "tasks"}` : "",
+      result.failed.length
+        ? `Failed: ${result.failed.map(({ item }) => item.view.title).join(", ")}`
+        : "",
+    ]
+      .filter(Boolean)
+      .join(". ");
+    const message = bulkSummary("Deleted", result.done.length - skipped.size, result.failed.length);
+    if (result.failed.length)
+      toast.error(message, {
+        description,
+        action: {
+          label: "Retry",
+          onClick: () => void commit(result.failed.map(({ item }) => item)),
+        },
+      });
+    else toast.success(message, { description });
+  };
   const scheduled = views.filter((view) => {
     const item = tasks.cache
       .getSnapshot()
@@ -207,11 +264,12 @@ export function deleteTasks(views: readonly TaskView[], tasks: BulkTasks): numbe
         view.url,
         () => tasks.cache.hideTask(view.url, true),
         () => {
-          toast.dismiss(toastId);
-          // Unhide only after the cache has installed its optimistic remove transform.
-          const deleting = tasks.cache.deleteTask(item);
-          tasks.cache.hideTask(view.url, false);
-          void deleting;
+          committing.push({ view, item });
+          if (committing.length === 1)
+            queueMicrotask(() => {
+              toast.dismiss(toastId);
+              void commit(committing.splice(0));
+            });
         },
         () => tasks.cache.hideTask(view.url, false),
       )
@@ -228,6 +286,7 @@ export function deleteTasks(views: readonly TaskView[], tasks: BulkTasks): numbe
     {
       id: toastId,
       duration: UNDO_WINDOW,
+      description: options.description?.(),
       action: {
         label: "Undo",
         onClick: () => {
@@ -239,4 +298,36 @@ export function deleteTasks(views: readonly TaskView[], tasks: BulkTasks): numbe
     },
   );
   return scheduled.length;
+}
+
+/** Clear completed resources, retaining ancestry and all recurring-task history. */
+export function deleteCompletedTasks(project: StoredProject, tasks: BulkTasks): number {
+  const views = tasks.cache.getSnapshot().views;
+  const completed = views.filter(
+    (view) => view.projectUrl === project.url && view.state === "closed",
+  );
+  const candidates = new Set(completed.map((view) => view.id));
+  const { parents, history } = tasks.cache.completedDeletionPlan(candidates);
+  const description = () => {
+    const { openSubtasks, history } = tasks.cache.completedDeletionPlan(candidates);
+    const kept = openSubtasks.size;
+    return (
+      [
+        kept
+          ? `Kept ${kept} open ${kept === 1 ? "sub-task and its" : "sub-tasks and their"} completed ancestors`
+          : "",
+        history.size ? `Kept ${history.size} items needed by repeating tasks` : "",
+      ]
+        .filter(Boolean)
+        .join(". ") || undefined
+    );
+  };
+  const count = deleteTasks(
+    completed.filter((view) => !parents.has(view.id) && !history.has(view.id)),
+    tasks,
+    { completedOnly: true, description },
+  );
+  if (!count && completed.length)
+    toast.success("No completed tasks deleted", { description: description() });
+  return count;
 }

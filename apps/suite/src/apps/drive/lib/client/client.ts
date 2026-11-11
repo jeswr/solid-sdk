@@ -512,6 +512,8 @@ export function createSolidDriveClient(options: {
   fetch: typeof globalThis.fetch;
   confirmAccess?: ConfirmAccess;
   webId?: string;
+  /** Automatic listings may repair recorded protection unless provisioning is disabled. */
+  provision?: boolean;
   onPrivateFolder?: (url: string) => void;
   onProtectionChange?: (url: string) => void;
 }): DriveClient {
@@ -636,7 +638,7 @@ export function createSolidDriveClient(options: {
   };
 
   const list: DriveClient["list"] = async (url, opts) => {
-    await provision.check(url);
+    await provision.check(url, false, options.provision !== false);
     return Promise.all(
       (await listing(url, opts)).items.map(async (item) => ({
         ...item,

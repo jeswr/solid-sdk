@@ -1,5 +1,6 @@
 // AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex
+// AUTHORED-BY Codex GPT-6
 "use client";
 import { DriveDeletePendingError } from "../lib/client/deletion";
 import { DriveOperationInProgressError } from "../lib/client/source-operations";
@@ -9,7 +10,7 @@ import { DriveOperationInProgressError } from "../lib/client/source-operations";
  * keep both / replace / skip (optionally for every remaining clash).
  */
 
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { DriveAccessError } from "../lib/client/access";
 import type { DriveClient, DriveItem } from "../lib/client/client";
 import { DriveError, DrivePartialFailureError, parentOf } from "../lib/client/client";
@@ -20,6 +21,12 @@ import type { DroppedFile } from "./dropped-files";
 
 export type UploadStatus = "queued" | "uploading" | "done" | "conflict" | "failed" | "skipped";
 export type UploadChoice = ConflictChoice | "upload";
+
+export interface UploadOptions {
+  onChange?: (task: UploadTask) => void;
+  /** Native intake has already neutralised active types; never infer them again from a name. */
+  preserveContentType?: boolean;
+}
 
 export interface UploadTask {
   readonly id: string;
@@ -35,7 +42,7 @@ export interface UploadTask {
 
 export interface UploadQueue {
   readonly tasks: readonly UploadTask[];
-  enqueue(folder: string, files: Iterable<File | DroppedFile>): void;
+  enqueue(folder: string, files: Iterable<File | DroppedFile>, options?: UploadOptions): void;
   resolve(id: string, choice: UploadChoice, applyToAll?: boolean): void;
   retry(id: string): void;
   cancel(id: string): void;
@@ -73,6 +80,8 @@ interface SavedJob {
 }
 
 interface Job {
+  onChange: ((task: UploadTask) => void) | undefined;
+  contentType: string | undefined;
   task: UploadTask;
   file: File;
   root: string;
@@ -149,6 +158,9 @@ export function useUploadQueue(
 ): UploadQueue {
   const jobs = useRef(new Map<string, Job>());
   const running = useRef(0);
+  // A finishing attempt hands its slot to the latest pump. Its own closure holds the client
+  // it started with, which reauthentication may since have retired.
+  const latestPump = useRef<() => void>(() => {});
   const [tasks, setTasks] = useState<UploadTask[]>([]);
 
   const publish = useCallback(
@@ -160,6 +172,7 @@ export function useUploadQueue(
       const job = jobs.current.get(id);
       if (!job) return;
       job.task = { ...job.task, ...change };
+      job.onChange?.(job.task);
       publish();
     },
     [publish],
@@ -224,6 +237,7 @@ export function useUploadQueue(
             job.task.name,
             policy === "upload" ? "fail" : policy,
             target,
+            job.contentType,
           );
           forgetJob(job);
           patch(
@@ -259,13 +273,16 @@ export function useUploadQueue(
           folders.add(folder);
         }
         for (const folder of folders) invalidate(folder);
-        pump();
+        latestPump.current();
       });
     }
   }, [client, invalidate, patch]);
+  useLayoutEffect(() => {
+    latestPump.current = pump;
+  }, [pump]);
 
   const enqueue = useCallback(
-    (folder: string, files: Iterable<File | DroppedFile>) => {
+    (folder: string, files: Iterable<File | DroppedFile>, options?: UploadOptions) => {
       const batch = newBatch();
       for (const source of files) {
         const file = "path" in source ? source.file : source;
@@ -299,6 +316,8 @@ export function useUploadQueue(
           conflictSeen = true;
         }
         const job: Job = {
+          onChange: options?.onChange,
+          contentType: options?.preserveContentType ? file.type : undefined,
           file,
           root: folder,
           policy: resumed ? "confirm" : "fail",
@@ -325,6 +344,7 @@ export function useUploadQueue(
           job.task = { ...job.task, status: "failed", error: describe(error) };
         }
         jobs.current.set(id, job);
+        job.onChange?.(job.task);
       }
       publish();
       pump();
@@ -348,6 +368,7 @@ export function useUploadQueue(
           if (applyToAll) job.batch.choices.set(group, choice);
           job.policy = choice;
           job.task = { ...job.task, status: "queued" };
+          job.onChange?.(job.task);
         }
       }
       publish();
