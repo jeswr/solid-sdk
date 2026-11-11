@@ -140,6 +140,7 @@ export function registerChatTools(
   const id = z.string().regex(/^[a-zA-Z0-9_-]{1,200}$/);
   const account = z
     .string()
+    .max(256)
     .refine((value) => {
       try {
         normalizeChatAccount(value);
@@ -148,12 +149,15 @@ export function registerChatTools(
         return false;
       }
     }, "Invalid chat account label")
+    .describe(
+      "Optional owner-chosen account label (1-64 characters). With an account, conversationId is the SOURCE conversation id; the stored id is derived from both, so never pass an id returned by chat_list here.",
+    )
     .optional();
   server.registerTool(
     "chat_save",
     {
       description:
-        "Save an owner-only AS2 conversation. Requires readOnly:false. Message IDs are immutable; first title wins.",
+        "Save an owner-only AS2 conversation. Requires readOnly:false. Message IDs are immutable; first title wins. When `account` is set, conversationId must be the source conversation id (the stored id is derived from account and source id); to append to a stored conversation, resend the same source id and account.",
       inputSchema: {
         provider,
         conversationId: id,
