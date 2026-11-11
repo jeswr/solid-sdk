@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Codex GPT-6
 import { createGuardedFetch } from "@jeswr/guarded-fetch";
 import { createBitstringStatusResolver, createWebIdKeyResolver } from "@jeswr/solid-vc";
 import { createWalletRepository } from "@jeswr/solid-wallet";
@@ -12,6 +13,15 @@ export async function openWallet(session: PodSession) {
   if (session.mode === "demo") {
     await cache.set(session.storageUrl, {
       version: 3,
+      // The built-in demo pod advertises these WAC links on HEAD; its OPTIONS
+      // response has no discovery headers. This is feature metadata only:
+      // checkOwnerOnly still reads and validates every governing ACL.
+      probe: {
+        url: session.storageUrl,
+        observedAt: Date.now(),
+        aclLink: new URL(".acl", session.storageUrl).href,
+        evidence: [],
+      },
       description: {
         protocol: "solid",
         id: session.storageUrl,

@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Codex GPT-6
 "use client";
 import {
   expiryStatus,
@@ -18,8 +19,8 @@ import {
   Label,
   LoadingSkeleton,
 } from "@jeswr/suite-ui";
-import { FileCheck2, FileText, Plus, ShieldCheck, Star } from "lucide-react";
-import { useId, useState } from "react";
+import { FileCheck2, FileText, Plus, Star } from "lucide-react";
+import { useEffect, useId, useState } from "react";
 import { AppHeading } from "@/shell/app-frame";
 import { useConnectionState } from "@/shell/sync/connection-state";
 import { useWallet } from "../state/wallet-context";
@@ -47,6 +48,29 @@ export function WalletHome() {
     setUndo({ run, token: state.getSnapshot().undo?.token ?? 0 });
     setSelected(undefined);
   }
+  useEffect(() => {
+    if (!undo || undo.token !== snapshot.undo?.token) return;
+    const handleUndo = (event: KeyboardEvent) => {
+      const target = event.target;
+      if (
+        event.key.toLowerCase() !== "z" ||
+        !(event.ctrlKey || event.metaKey) ||
+        event.shiftKey ||
+        event.altKey
+      )
+        return;
+      if (
+        target instanceof HTMLElement &&
+        (target.closest("input, textarea, select") || target.isContentEditable)
+      )
+        return;
+      event.preventDefault();
+      undo.run();
+      setUndo(undefined);
+    };
+    document.addEventListener("keydown", handleUndo);
+    return () => document.removeEventListener("keydown", handleUndo);
+  }, [undo, snapshot.undo?.token]);
   return (
     <>
       <header className="wallet-header">
@@ -61,7 +85,7 @@ export function WalletHome() {
             onClick={() => setForm({ mode: "credential" })}
             disabled={!online}
           >
-            <ShieldCheck size={17} aria-hidden="true" /> Add credential
+            <FileText size={17} aria-hidden="true" /> Add credential
           </Button>
           <Button onClick={() => setForm({ mode: "manual" })} disabled={!online}>
             <Plus size={17} aria-hidden="true" /> Add document
@@ -78,6 +102,13 @@ export function WalletHome() {
         <p role="status" className="wallet-notice">
           You're offline. Loaded details remain available. Reconnect before saving or deleting
           documents.
+        </p>
+      )}
+      {!!snapshot.skippedRecords && (
+        <p role="status" className="wallet-notice">
+          {snapshot.skippedRecords} unreadable{" "}
+          {snapshot.skippedRecords === 1 ? "document" : "documents"} skipped. Other documents are
+          shown below.
         </p>
       )}
       <div className="wallet-stat">
@@ -182,11 +213,7 @@ export function WalletHome() {
                     <article className="wallet-card" key={item.url}>
                       <div className="wallet-card-top">
                         <span className="wallet-card-icon">
-                          {item.credential ? (
-                            <ShieldCheck size={24} aria-hidden="true" />
-                          ) : (
-                            <FileText size={24} aria-hidden="true" />
-                          )}
+                          <FileText size={24} aria-hidden="true" />
                         </span>
                         <IconButton
                           label={
@@ -225,15 +252,25 @@ export function WalletHome() {
                       <p>{item.identifier ? `•••• ${item.identifier.slice(-4)}` : ""}</p>
                       <div className="wallet-card-bottom">
                         <span data-expiry={status}>
-                          {status === "expiring-soon"
-                            ? "Expiring soon"
-                            : status === "no-expiry"
-                              ? "No expiry date"
-                              : status === "expired"
-                                ? "Expired"
-                                : "Valid"}
+                          {item.credential || item.kind === "verifiable-credential"
+                            ? item.expires
+                              ? `Expires ${item.expires.toISOString().slice(0, 10)}`
+                              : "No expiry date"
+                            : status === "expiring-soon"
+                              ? "Expiring soon"
+                              : status === "no-expiry"
+                                ? "No expiry date"
+                                : status === "expired"
+                                  ? "Expired"
+                                  : "Valid"}
                         </span>
-                        <span>{busy ? "Saving…" : item.expires?.toISOString().slice(0, 10)}</span>
+                        <span>
+                          {busy
+                            ? "Saving…"
+                            : item.credential || item.kind === "verifiable-credential"
+                              ? "Unverified claims"
+                              : item.expires?.toISOString().slice(0, 10)}
+                        </span>
                       </div>
                     </article>
                   );
@@ -251,6 +288,7 @@ export function WalletHome() {
           <span>Document deleted</span>
           <Button
             size="sm"
+            aria-keyshortcuts="Control+Z Meta+Z"
             variant="outline"
             onClick={() => {
               undo.run();
@@ -259,6 +297,7 @@ export function WalletHome() {
           >
             Undo
           </Button>
+          <span className="wallet-muted">Ctrl/⌘ Z</span>
         </div>
       )}
       {detail && (

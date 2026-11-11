@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Codex GPT-6
 "use client";
 import {
   credentialFileText,
@@ -166,12 +167,14 @@ export function ItemForm({
               <Label htmlFor={`${prefix}-vc-name`}>Name (optional)</Label>
               <Input
                 id={`${prefix}-vc-name`}
+                maxLength={1000}
                 value={name}
                 onChange={(event) => setName(event.target.value)}
               />
               <Label htmlFor={`${prefix}-json`}>Credential JSON-LD</Label>
               <Textarea
                 id={`${prefix}-json`}
+                maxLength={MAX_CREDENTIAL_BYTES}
                 rows={10}
                 value={source}
                 onChange={(event) => setSource(event.target.value)}

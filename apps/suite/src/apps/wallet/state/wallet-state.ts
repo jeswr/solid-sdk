@@ -1,10 +1,12 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Codex GPT-6
 import type { WalletItemData, WalletRecord, WalletRepository } from "@jeswr/solid-wallet";
 export interface WalletSnapshot {
   phase: "loading" | "ready" | "error";
   items: WalletRecord[];
   busy: readonly string[];
   error?: unknown;
+  skippedRecords?: number;
   undo?: { item: WalletRecord; token: number } | undefined;
 }
 /** One state object per mounted account. An item has at most one outstanding mutation. */
@@ -17,7 +19,7 @@ export function createWalletState(
   let readVersion = 0;
   let undoToken = 0;
   const listeners = new Set<() => void>();
-  const deletionTimers = new Set<ReturnType<typeof setTimeout>>();
+  const deletionTimers = new Map<ReturnType<typeof setTimeout>, () => void>();
   const publish = (next: WalletSnapshot) => {
     if (active) {
       snapshot = next;
@@ -32,9 +34,12 @@ export function createWalletState(
     if (!active || snapshot.busy.length) return;
     const version = ++readVersion;
     try {
-      const items = await repository.list();
+      let skippedRecords = 0;
+      const items = await repository.list(() => {
+        ++skippedRecords;
+      });
       if (active && version === readVersion && snapshot.busy.length === 0)
-        publish({ ...snapshot, phase: "ready", items, error: undefined });
+        publish({ ...snapshot, phase: "ready", items, skippedRecords, error: undefined });
     } catch (error) {
       if (active && version === readVersion)
         publish({ phase: "error", items: [], busy: [], error });
@@ -57,11 +62,9 @@ export function createWalletState(
     });
     try {
       const fileUrl = file ? await repository.upload(file) : data.file;
-      if (!active) throw new Error("This Wallet session has ended");
       const credential = credentialSource
         ? await repository.storeCredential(credentialSource)
         : data.credential;
-      if (!active) throw new Error("This Wallet session has ended");
       const saved = await repository.save({ ...data, file: fileUrl, credential }, existing);
       publish({
         ...snapshot,
@@ -78,7 +81,7 @@ export function createWalletState(
         ],
         busy: snapshot.busy.filter((id) => id !== url),
       });
-      if (active) onFailure(error);
+      onFailure(error);
       throw error;
     }
   }
@@ -92,9 +95,9 @@ export function createWalletState(
       busy: [...snapshot.busy, item.url],
       undo: { item, token },
     });
-    const timer = setTimeout(() => {
-      deletionTimers.delete(timer);
-      if (!active) return;
+    const commitDelete = () => {
+      if (!deletionTimers.delete(timer)) return;
+      clearTimeout(timer);
       if (snapshot.undo?.token === token) publish({ ...snapshot, undo: undefined });
       void repository.remove(item).then(
         () => {
@@ -106,11 +109,12 @@ export function createWalletState(
             items: [...snapshot.items, item],
             busy: snapshot.busy.filter((id) => id !== item.url),
           });
-          if (active) onFailure(error);
+          onFailure(error);
         },
       );
-    }, 8000);
-    deletionTimers.add(timer);
+    };
+    const timer = setTimeout(commitDelete, 8000);
+    deletionTimers.set(timer, commitDelete);
     return () => {
       if (!deletionTimers.has(timer) || !active) return;
       clearTimeout(timer);
@@ -126,7 +130,7 @@ export function createWalletState(
   function dispose() {
     active = false;
     ++readVersion;
-    for (const timer of deletionTimers) clearTimeout(timer);
+    for (const commitDelete of deletionTimers.values()) commitDelete();
     deletionTimers.clear();
     listeners.clear();
   }

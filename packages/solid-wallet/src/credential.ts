@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Codex GPT-6
 import {
   canonicalNQuads,
   credentialToJsonLd,
@@ -88,7 +89,7 @@ export async function parseCredential(source: string): Promise<VerifiableCredent
   return candidate;
 }
 export type CredentialCheck = {
-  state: "verified" | "invalid" | "expired" | "revoked" | "unknown";
+  state: "verified" | "invalid" | "expired" | "revoked" | "suspended" | "not-yet-valid" | "unknown";
   title: string;
   reason: string;
 };
@@ -101,23 +102,35 @@ export function verificationDisplay(result: VerificationResult, issuer: string):
         "Signature, issuer key control, dates and any supplied revocation status checked. This does not establish that the issuer is a trusted authority.",
     };
   const codes = result.errors.map((error) => error.code);
-  const state = codes.includes("STATUS_REVOKED")
-    ? "revoked"
-    : codes.includes("EXPIRED")
-      ? "expired"
-      : codes.includes("INVALID_SIGNATURE")
-        ? "invalid"
-        : "unknown";
+  const invalid = [
+    "INVALID_SIGNATURE",
+    "ISSUER_MISMATCH",
+    "MALFORMED",
+    "NO_PROOF",
+    "UNKNOWN_CRYPTOSUITE",
+  ];
+  const state = codes.some((code) => invalid.includes(code))
+    ? "invalid"
+    : codes.includes("STATUS_REVOKED")
+      ? "revoked"
+      : codes.includes("STATUS_SUSPENDED")
+        ? "suspended"
+        : codes.includes("EXPIRED")
+          ? "expired"
+          : codes.includes("NOT_YET_VALID")
+            ? "not-yet-valid"
+            : "unknown";
+  const titles = {
+    invalid: "Signature invalid / not from this issuer",
+    revoked: "Revoked",
+    suspended: "Suspended",
+    expired: "Expired",
+    "not-yet-valid": "Not yet valid",
+    unknown: "Could not check",
+  };
   return {
     state,
-    title:
-      state === "revoked"
-        ? "Revoked"
-        : state === "expired"
-          ? "Expired"
-          : state === "invalid"
-            ? "Signature invalid"
-            : "Could not check",
+    title: titles[state],
     reason:
       result.errors.map((error) => error.message).join("; ") ||
       "The verifier did not return a complete result.",

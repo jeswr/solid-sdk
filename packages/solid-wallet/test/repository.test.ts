@@ -1,29 +1,18 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Codex GPT-6
 
-import type { RoleGrant } from "@jeswr/pod-access/roles";
 import type { TypeIndex } from "@jeswr/pod-type-index";
 import { type Entry, StorageError } from "@jeswr/storage-client";
 import { createMemoryStorage } from "@jeswr/storage-client/memory";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import {
-  createWalletRepository,
-  limitedText,
-  ownerOnly,
-  WalletPrivacyError,
-} from "../src/index.js";
+import { createWalletRepository, limitedText, WalletPrivacyError } from "../src/index.js";
 
 const owner = "https://pod.example/profile#me";
 const permissions = vi.hoisted(() => ({ read: vi.fn(), write: vi.fn() }));
+vi.mock("@jeswr/pod-access", () => ({ checkOwnerOnly: permissions.read }));
 vi.mock("@jeswr/pod-access/roles", () => ({
-  readGrants: permissions.read,
   setGrants: permissions.write,
 }));
-const manager: RoleGrant = {
-  agent: { type: "webid", id: owner },
-  role: "manager",
-  inherited: false,
-  source: "acl",
-};
 const data = {
   name: "Test passport",
   kind: "passport" as const,
@@ -37,20 +26,8 @@ function fixture(protocol: "solid" | "lws" = "solid") {
   return { storage, typeIndex, repository };
 }
 beforeEach(() => {
-  permissions.read.mockReset().mockResolvedValue({ grants: [manager], version: "v" });
+  permissions.read.mockReset().mockResolvedValue({ private: true });
   permissions.write.mockReset().mockResolvedValue({ applied: [], failed: [] });
-});
-it("recognises only unconstrained owner manager grants", () => {
-  expect(ownerOnly([manager], owner)).toBe(true);
-  for (const grants of [
-    [],
-    [{ ...manager, role: "viewer" as const }],
-    [manager, { ...manager, agent: { type: "public" as const } }],
-    [{ ...manager, purpose: "purpose" }],
-    [{ ...manager, expiresAt: new Date() }],
-    [{ ...manager, agent: { type: "webid" as const, id: "https://elsewhere.example/#me" } }],
-  ])
-    expect(ownerOnly(grants, owner)).toBe(false);
 });
 it("provisions empty folders through pod-access and registers only the private index", async () => {
   const { repository, typeIndex } = fixture();
@@ -66,7 +43,7 @@ it("provisions empty folders through pod-access and registers only the private i
 });
 it("refuses shared, unknown and unsupported access before records are written", async () => {
   const { repository } = fixture();
-  permissions.read.mockResolvedValue({ grants: [] });
+  permissions.read.mockResolvedValue({ private: false, reasons: [] });
   await expect(repository.initialise()).rejects.toBeInstanceOf(WalletPrivacyError);
   const other = fixture();
   permissions.write.mockResolvedValue({ failed: [{}] });
@@ -91,9 +68,11 @@ it("creates, reads, conditionally updates and deletes independent records", asyn
   const updated = await repository.save({ ...item, name: "Updated" }, item);
   expect((await repository.read(updated.url)).name).toBe("Updated");
   await expect(repository.save(data, item)).rejects.toMatchObject({ code: "precondition-failed" });
-  await expect(repository.save(data, { ...updated, etag: null })).rejects.toThrow(/version/);
-  await expect(repository.remove({ ...updated, etag: null })).rejects.toThrow(/Reload/);
-  await repository.remove(updated);
+  const noVersion = { ...updated, etag: null };
+  await repository.save(data, noVersion);
+  await expect(repository.remove(noVersion)).rejects.toMatchObject({ code: "precondition-failed" });
+  const latest = await repository.read(updated.url);
+  await repository.remove({ ...latest, etag: null });
   expect(await repository.list()).toEqual([]);
 });
 it("rejects invalid metadata and non-wallet item addresses", async () => {
@@ -196,11 +175,8 @@ it("checks linked preferences and index access during real private registration"
   );
   await repository.initialise();
   const write = vi.spyOn(storage, "writeRdf");
-  permissions.read.mockImplementation(async (url: string) => ({
-    grants: url.endsWith("privateTypeIndex.ttl")
-      ? [{ ...manager, agent: { type: "public" } }]
-      : [manager],
-    version: "v",
+  permissions.read.mockImplementation(async ({ url }: { url: string }) => ({
+    private: !url.endsWith("privateTypeIndex.ttl"),
   }));
   await expect(repository.initialise()).rejects.toBeInstanceOf(WalletPrivacyError);
   expect(write).not.toHaveBeenCalled();
@@ -306,4 +282,164 @@ it("validates byte budgets and preserves a BOM in bounded reads", async () => {
     await expect(limitedText(null, limit)).rejects.toThrow(/byte limit/);
   expect(await limitedText(new Blob(["\uFEFF{}\n"]).stream())).toBe("\uFEFF{}\n");
   expect(await limitedText(new Blob([]).stream(), 0)).toBe("");
+});
+
+it("skips and reports empty or unrelated RDF records while preserving valid items", async () => {
+  const { repository, storage } = fixture();
+  await repository.initialise();
+  const good = await repository.save(data);
+  const empty = await storage.create(repository.base, "", {
+    name: "empty.ttl",
+    contentType: "text/turtle",
+  });
+  const stray = await storage.create(repository.base, '<> <https://schema.org/name> "Other app".', {
+    name: "stray.ttl",
+    contentType: "text/turtle",
+  });
+  const report = vi.fn();
+  expect(await repository.list(report)).toEqual([expect.objectContaining(good)]);
+  expect(report.mock.calls.map(([url]) => url).sort()).toEqual([empty.url, stray.url].sort());
+});
+it("cleans up its empty resource after a failed first metadata write", async () => {
+  const { repository, storage } = fixture();
+  await repository.initialise();
+  vi.spyOn(storage, "write").mockRejectedValueOnce(new Error("first write failed"));
+  await expect(repository.save(data)).rejects.toThrow("first write failed");
+  const files = [];
+  for await (const entry of storage.listAll(repository.base))
+    if (entry.url.endsWith(".ttl")) files.push(entry.url);
+  expect(files).toEqual([]);
+});
+it("recovers missing PUT validators through HEAD for subsequent edits and deletes", async () => {
+  const { repository, storage } = fixture();
+  await repository.initialise();
+  const write = storage.write.bind(storage);
+  vi.spyOn(storage, "write").mockImplementation(async (...args) => ({
+    ...(await write(...args)),
+    etag: null,
+  }));
+  const head = vi.spyOn(storage, "head");
+  const saved = await repository.save(data);
+  expect(saved.etag).toBeTruthy();
+  expect(head).toHaveBeenCalledWith(saved.url);
+  const updated = await repository.save({ ...data, name: "Edited" }, saved);
+  expect(updated.etag).toBeTruthy();
+  await repository.remove(updated);
+  expect(await repository.list()).toEqual([]);
+});
+
+it("skips non-RDF and vanished entries but propagates access and transport failures", async () => {
+  const { repository, storage } = fixture();
+  await repository.initialise();
+  const item = await repository.save(data);
+  const read = vi.spyOn(storage, "readRdf");
+  for (const code of ["not-rdf", "not-found"] as const) {
+    read.mockRejectedValueOnce(new StorageError(code, { method: "GET", url: item.url }));
+    expect(await repository.list()).toEqual([]);
+  }
+  for (const error of [
+    new StorageError("forbidden", { method: "GET", url: item.url }),
+    new Error("offline"),
+  ]) {
+    read.mockRejectedValueOnce(error);
+    await expect(repository.list()).rejects.toBe(error);
+  }
+});
+it("uses stable create-only names and rejects unsafe or non-Turtle names", async () => {
+  const { repository } = fixture();
+  await repository.initialise();
+  for (const name of ["../bad.ttl", "bad.json", "a/b.ttl", ""])
+    await expect(repository.save(data, undefined, name)).rejects.toThrow(/filename/);
+  const saved = await repository.save(data, undefined, "demo-passport.ttl");
+  expect(saved.url).toBe(`${repository.base}demo-passport.ttl`);
+  await expect(repository.save(data, undefined, "demo-passport.ttl")).rejects.toMatchObject({
+    code: "conflict",
+  });
+});
+it("retains a committed save if follow-up HEAD has no validator, and retries before later mutations", async () => {
+  const { repository, storage } = fixture();
+  await repository.initialise();
+  const write = storage.write.bind(storage);
+  vi.spyOn(storage, "write").mockImplementationOnce(async (...args) => ({
+    ...(await write(...args)),
+    etag: null,
+  }));
+  const head = storage.head.bind(storage);
+  vi.spyOn(storage, "head").mockImplementation(async (...args) => ({
+    ...(await head(...args)),
+    etag: null,
+  }));
+  const saved = await repository.save(data);
+  expect(saved.etag).toBeNull();
+  expect((await repository.read(saved.url)).name).toBe(data.name);
+  await expect(repository.save(data, saved)).rejects.toThrow(/no version/);
+  await expect(repository.remove(saved)).rejects.toThrow(/no version/);
+  vi.mocked(storage.head).mockRestore();
+  await repository.remove(saved);
+});
+it("refuses a validator that changes between HEAD and reading metadata", async () => {
+  const { repository, storage } = fixture();
+  await repository.initialise();
+  const saved = await repository.save(data);
+  const head = storage.head.bind(storage);
+  const { walletItem } = await import("../src/index.js");
+  vi.spyOn(storage, "head").mockImplementationOnce(async (url) => {
+    const result = await head(url);
+    await storage.write(url, await walletItem.serialize(url, { ...data, name: "Concurrent" }), {
+      contentType: "text/turtle",
+      ifMatch: result.etag as string,
+    });
+    return result;
+  });
+  await expect(repository.remove({ ...saved, etag: null })).rejects.toMatchObject({
+    code: "precondition-failed",
+  });
+  expect((await repository.read(saved.url)).name).toBe("Concurrent");
+});
+it("never cleans up a concurrently changed resource or a committed write with a lost response", async () => {
+  const { repository, storage } = fixture();
+  await repository.initialise();
+  const write = storage.write.bind(storage);
+  vi.spyOn(storage, "write").mockImplementationOnce(async (...args) => {
+    await write(...args);
+    throw new Error("response lost");
+  });
+  await expect(repository.save(data)).rejects.toThrow("response lost");
+  expect(await repository.list()).toHaveLength(1);
+  const read = storage.read.bind(storage);
+  const { walletItem } = await import("../src/index.js");
+  vi.spyOn(storage, "read").mockImplementationOnce(async (url) => {
+    const result = await read(url);
+    await write(url, await walletItem.serialize(url, { ...data, name: "Concurrent" }), {
+      contentType: "text/turtle",
+      ifMatch: result.etag as string,
+    });
+    return read(url);
+  });
+  await expect(repository.save(data)).rejects.toThrow(/changed before/);
+  expect((await repository.list()).map((item) => item.name).sort()).toEqual([
+    "Concurrent",
+    data.name,
+  ]);
+});
+
+it("does not adopt a backend follow-up ETag belonging to a concurrent writer", async () => {
+  const { repository, storage } = fixture();
+  await repository.initialise();
+  const write = storage.write.bind(storage);
+  const { walletItem } = await import("../src/index.js");
+  vi.spyOn(storage, "write").mockImplementationOnce(async (...args) => {
+    const own = await write(...args);
+    const other = await write(
+      own.url,
+      await walletItem.serialize(own.url, { ...data, name: "Someone else's edit" }),
+      { contentType: "text/turtle", ifMatch: own.etag as string },
+    );
+    return { ...other, etagSource: "follow-up" };
+  });
+  const saved = await repository.save(data);
+  expect(saved.etag).toBeNull();
+  await expect(repository.save(data, saved)).rejects.toMatchObject({ code: "precondition-failed" });
+  await expect(repository.remove(saved)).rejects.toMatchObject({ code: "precondition-failed" });
+  expect((await repository.read(saved.url)).name).toBe("Someone else's edit");
 });

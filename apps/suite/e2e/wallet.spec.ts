@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Codex GPT-6
 import AxeBuilder from "@axe-core/playwright";
 import { credentialToJsonLd, generateKeyPairForSuite, issue } from "@jeswr/solid-vc";
 import { expect, test } from "@playwright/test";
@@ -70,7 +71,10 @@ for (const width of [375, 768, 1280])
       .getByRole("dialog")
       .getByRole("button", { name: "Delete document", exact: true })
       .click();
-    await page.getByRole("button", { name: "Undo", exact: true }).click();
+    const undo = page.getByRole("button", { name: "Undo", exact: true });
+    await expect(undo).toHaveAttribute("aria-keyshortcuts", "Control+Z Meta+Z");
+    await undo.focus();
+    await page.keyboard.press("Control+z");
     await expect(page.getByRole("button", { name: "Meadow rail pass", exact: true })).toBeVisible();
     await page.reload();
     await expect(page.getByRole("button", { name: "Meadow rail pass", exact: true })).toBeVisible();
@@ -85,6 +89,12 @@ for (const width of [375, 768, 1280])
 test("re-verifies the signed fictional credential and imports the exact JSON-LD through paste and file upload", async ({
   page,
 }) => {
+  const credentialCard = page
+    .locator("article")
+    .filter({ hasText: "Woodland first aid credential" });
+  await expect(credentialCard).toContainText("Expires 2027-11-11");
+  await expect(credentialCard).toContainText("Unverified claims");
+  await expect(credentialCard.locator(".lucide-shield-check")).toHaveCount(0);
   await page.getByRole("button", { name: "Woodland first aid credential", exact: true }).click();
   await expect(page.getByRole("heading", { name: /^Verified by / })).toBeVisible();
   await expect(page.getByRole("region", { name: "Credential verification" })).toContainText(
@@ -94,6 +104,8 @@ test("re-verifies the signed fictional credential and imports the exact JSON-LD 
   await page.keyboard.press("Escape");
   await page.getByRole("button", { name: "Add credential", exact: true }).click();
   const add = page.getByRole("dialog", { name: "Add credential", exact: true });
+  await expect(add.getByLabel("Name (optional)")).toHaveAttribute("maxlength", "1000");
+  await expect(add.getByLabel("Credential JSON-LD")).toHaveAttribute("maxlength", "262144");
   await add.getByLabel("Credential JSON-LD").fill("{broken");
   await add.getByRole("button", { name: "Save credential", exact: true }).click();
   await expect(add.getByRole("alert")).toBeVisible();

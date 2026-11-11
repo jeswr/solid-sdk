@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Codex GPT-6
 
 import type { WalletRecord, WalletRepository } from "@jeswr/solid-wallet";
 import { afterEach, expect, it, vi } from "vitest";
@@ -112,7 +113,7 @@ it("undoes delayed deletion without a pod write, then deletes after the undo win
   expect(repository.remove).toHaveBeenCalledOnce();
   expect(state.getSnapshot().items).toEqual([]);
 });
-it("restores a failed deletion and cancels pending deletions on session disposal", async () => {
+it("restores a failed deletion and flushes pending deletions on session disposal", async () => {
   vi.useFakeTimers();
   const { state, repository, failed } = fixture();
   await state.refresh();
@@ -125,7 +126,7 @@ it("restores a failed deletion and cancels pending deletions on session disposal
   state.dispose();
   undo();
   await vi.advanceTimersByTimeAsync(8001);
-  expect(repository.remove).toHaveBeenCalledOnce();
+  expect(repository.remove).toHaveBeenCalledTimes(2);
   await expect(state.save(item, item)).rejects.toThrow(/session has ended/);
 });
 it("ignores a refresh that finishes after account disposal", async () => {
@@ -175,7 +176,7 @@ it("does not refresh while saving or after disposal, and ignores stale failures"
   finish({ ...item, name: "New" });
   await saving;
 });
-it("stops a mutation between attachment, credential and metadata writes after disposal", async () => {
+it("finishes mutations across attachment and credential boundaries after disposal", async () => {
   for (const stage of ["upload", "storeCredential"] as const) {
     const { state, repository, failed } = fixture();
     await state.refresh();
@@ -192,11 +193,11 @@ it("stops a mutation between attachment, credential and metadata writes after di
       stage === "upload" ? new Blob(["x"]) : undefined,
       stage === "storeCredential" ? "vc" : undefined,
     );
-    const rejected = expect(saving).rejects.toThrow(/session has ended/);
+    const completed = expect(saving).resolves.toMatchObject({ name: item.name });
     state.dispose();
     finish("https://pod.example/wallet/resource");
-    await rejected;
-    expect(repository.save).not.toHaveBeenCalled();
+    await completed;
+    expect(repository.save).toHaveBeenCalledOnce();
     expect(failed).not.toHaveBeenCalled();
   }
 });
@@ -243,7 +244,7 @@ it("preserves the newest undo when an earlier deletion settles or is undone", as
   await vi.advanceTimersByTimeAsync(8001);
   expect(other.repository.remove).toHaveBeenCalledTimes(2);
 });
-it("ignores a dequeued delete callback and a delete failure delivered after disposal", async () => {
+it("flushes pending deletes exactly once and reports failures delivered after disposal", async () => {
   vi.useFakeTimers();
   const { state, repository, failed } = fixture();
   await state.refresh();
@@ -252,7 +253,7 @@ it("ignores a dequeued delete callback and a delete failure delivered after disp
   const callback = timers.mock.calls.at(-1)?.[0];
   state.dispose();
   if (typeof callback === "function") callback();
-  expect(repository.remove).not.toHaveBeenCalled();
+  expect(repository.remove).toHaveBeenCalledOnce();
   timers.mockRestore();
   const other = fixture();
   await other.state.refresh();
@@ -268,6 +269,36 @@ it("ignores a dequeued delete callback and a delete failure delivered after disp
   other.state.dispose();
   fail(new Error("late failure"));
   await Promise.resolve();
-  expect(other.failed).not.toHaveBeenCalled();
+  expect(other.failed).toHaveBeenCalledWith(new Error("late failure"));
   expect(failed).not.toHaveBeenCalled();
+});
+
+it("reports failures from saves finishing after disposal without publishing to a new view", async () => {
+  const { state, repository, failed } = fixture();
+  await state.refresh();
+  let reject: (error: unknown) => void = () => {};
+  vi.mocked(repository.upload).mockImplementationOnce(
+    () =>
+      new Promise((_resolve, fail) => {
+        reject = fail;
+      }),
+  );
+  const saving = state.save(item, item, new Blob(["x"]));
+  const rejected = expect(saving).rejects.toThrow("upload failed");
+  const changed = vi.fn();
+  state.subscribe(changed);
+  state.dispose();
+  reject(new Error("upload failed"));
+  await rejected;
+  expect(failed).toHaveBeenCalledWith(new Error("upload failed"));
+  expect(changed).not.toHaveBeenCalled();
+});
+it("reports skipped invalid records alongside successfully loaded documents", async () => {
+  const { state, repository } = fixture();
+  vi.mocked(repository.list).mockImplementationOnce(async (report) => {
+    report?.("https://pod.example/wallet/broken.ttl");
+    return [item];
+  });
+  await state.refresh();
+  expect(state.getSnapshot()).toMatchObject({ phase: "ready", items: [item], skippedRecords: 1 });
 });

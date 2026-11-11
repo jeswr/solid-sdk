@@ -1,10 +1,12 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Codex GPT-6
 import {
   credentialToJsonLd,
   generateKeyPairForSuite,
   issue,
   publishVerificationMethod,
 } from "@jeswr/solid-vc";
+import { StorageError } from "@jeswr/storage-client";
 import type { PodSession } from "@/lib/session/pod-session";
 import { openWallet } from "../lib/data/client";
 
@@ -65,7 +67,7 @@ async function seed(session: PodSession, now: Date) {
   });
   const source = JSON.stringify({ ...credentialToJsonLd(signed), proof: signed.proof }, null, 2);
   const credential = await repository.storeCredential(source);
-  for (const data of [
+  const samples = [
     {
       ...common,
       name: "Rowan's passport",
@@ -99,8 +101,23 @@ async function seed(session: PodSession, now: Date) {
       credential,
       expires: date(365),
     },
-  ])
-    await repository.save(data);
+  ];
+  for (const data of samples) {
+    const name = `demo-${data.kind}.ttl`;
+    try {
+      await repository.read(new URL(name, repository.base).href);
+      continue;
+    } catch (error) {
+      if (!(error instanceof StorageError) || error.code !== "not-found") throw error;
+    }
+    try {
+      await repository.save(data, undefined, name);
+    } catch (error) {
+      // Another seed may have won the create-only deterministic name.
+      if (!(error instanceof StorageError) || error.code !== "conflict") throw error;
+      await repository.read(new URL(name, repository.base).href);
+    }
+  }
   await storage.create(repository.credentials, "seeded", {
     name: "demo-seeded.txt",
     contentType: "text/plain",

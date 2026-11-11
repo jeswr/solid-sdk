@@ -1,8 +1,10 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Codex GPT-6
 import { assertWithinPodScope } from "@jeswr/guarded-fetch";
-import { type RoleGrant, readGrants, setGrants } from "@jeswr/pod-access/roles";
+import { checkOwnerOnly, type OwnerOnlyOptions } from "@jeswr/pod-access";
+import { setGrants } from "@jeswr/pod-access/roles";
 import { createTypeIndex, type TypeIndex } from "@jeswr/pod-type-index";
-import { type StorageClient, StorageError } from "@jeswr/storage-client";
+import { type StorageClient, StorageError, type WriteResult } from "@jeswr/storage-client";
 import { MAX_CREDENTIAL_BYTES, parseCredential } from "./credential.js";
 import { WALLET_CLASS, type WalletItemData, walletItem } from "./model.js";
 export interface WalletRecord extends WalletItemData {
@@ -16,17 +18,6 @@ export class WalletPrivacyError extends Error {
     );
     this.name = "WalletPrivacyError";
   }
-}
-export function ownerOnly(grants: readonly RoleGrant[], owner: string): boolean {
-  return (
-    grants.some(
-      (row) => row.agent.type === "webid" && row.agent.id === owner && row.role === "manager",
-    ) &&
-    grants.every(
-      (row) =>
-        row.agent.type === "webid" && row.agent.id === owner && !row.expiresAt && !row.purpose,
-    )
-  );
 }
 export async function limitedText(
   body: ReadableStream<Uint8Array> | null,
@@ -65,6 +56,8 @@ export function createWalletRepository(options: {
   fetch: typeof fetch;
   webId: string;
   typeIndex?: TypeIndex;
+  /** Supply only from independently trusted deployment configuration. */
+  acpDialect?: OwnerOnlyOptions["acpDialect"];
 }) {
   const { storage, fetch: transport, webId } = options;
   const base = new URL("wallet/", storage.root).href;
@@ -82,11 +75,11 @@ export function createWalletRepository(options: {
     ...storage,
     async readRdf(url, readOptions) {
       const result = await storage.readRdf(url, readOptions);
-      if (url !== profileDocument.href) await privateAccess(url, false);
+      if (url !== profileDocument.href) await privateAccess(url);
       return result;
     },
     async writeRdf(url, dataset, writeOptions) {
-      if (url !== profileDocument.href) await privateAccess(url, false);
+      if (url !== profileDocument.href) await privateAccess(url);
       return storage.writeRdf(url, dataset, writeOptions);
     },
     async create(parent, body, createOptions) {
@@ -102,9 +95,18 @@ export function createWalletRepository(options: {
       profile: webId,
       fetch: transport,
     });
-  async function privateAccess(url: string, folder = true) {
-    const snapshot = await readGrants(url, { ...roles, kind: folder ? "folder" : "resource" });
-    if (!ownerOnly(snapshot.grants, webId)) throw new WalletPrivacyError();
+  async function privateAccess(url: string) {
+    if (
+      !(
+        await checkOwnerOnly({
+          storage,
+          url,
+          ownerWebId: webId,
+          ...(options.acpDialect ? { acpDialect: options.acpDialect } : {}),
+        })
+      ).private
+    )
+      throw new WalletPrivacyError();
   }
   async function container(parent: string, name: string): Promise<string> {
     const expected = new URL(`${name}/`, parent).href;
@@ -161,52 +163,113 @@ export function createWalletRepository(options: {
     await privateAccess(settings);
     await index.register(WALLET_CLASS, { container: base }, { index: "private" });
   }
-  async function list(): Promise<WalletRecord[]> {
+  async function list(onInvalidRecord?: (url: string) => void): Promise<WalletRecord[]> {
     await assertPrivate();
     const items: WalletRecord[] = [];
+    let scanned = 0;
     for await (const entry of storage.listAll(base, { maxBytes: 2_097_152 })) {
       if (entry.kind === "container" || !entry.url.endsWith(".ttl")) continue;
-      if (items.length >= 500)
+      if (++scanned > 500)
         throw new Error(
           "This wallet has more than 500 documents; the list could not be loaded completely",
         );
-      items.push(await read(itemUrl(entry.url)));
+      const url = itemUrl(entry.url);
+      try {
+        items.push(await read(url));
+      } catch (error) {
+        if (
+          !(error instanceof TypeError) &&
+          !(error instanceof StorageError && ["not-rdf", "not-found"].includes(error.code))
+        )
+          throw error;
+        onInvalidRecord?.(url);
+      }
     }
     return items;
   }
-  async function save(data: WalletItemData, existing?: WalletRecord): Promise<WalletRecord> {
+  // A missing mutation validator requires a fresh HEAD, bound to matching metadata.
+  // Never attach another writer's version to our older local representation.
+  async function version(item: WalletRecord): Promise<string> {
+    if (item.etag) return item.etag;
+    const head = await storage.head(item.url);
+    if (!head.etag)
+      throw new Error("This item has no version; reload it before editing or deleting");
+    const current = await read(item.url);
+    if (
+      current.etag !== head.etag ||
+      (await walletItem.serialize(item.url, current)) !==
+        (await walletItem.serialize(item.url, item))
+    )
+      throw new StorageError("precondition-failed", { method: "HEAD", url: item.url });
+    return head.etag;
+  }
+  async function savedRecord(
+    data: WalletItemData,
+    result: Pick<WriteResult, "url" | "etag" | "etagSource">,
+  ): Promise<WalletRecord> {
+    const item = { ...data, url: result.url, etag: result.etag };
+    if (!item.etag || result.etagSource === "follow-up") {
+      item.etag = null;
+      // The PUT has already committed; a failed follow-up must not roll it back in the UI.
+      try {
+        item.etag = await version(item);
+      } catch {
+        /* Retry validation before the next mutation. */
+      }
+    }
+    return item;
+  }
+  async function save(
+    data: WalletItemData,
+    existing?: WalletRecord,
+    name?: string,
+  ): Promise<WalletRecord> {
     const validationUrl = new URL("validation.ttl", base).href;
     if (!walletItem.parse(validationUrl, walletItem.build(validationUrl, data)))
       throw new TypeError("This document needs a name, valid kind and timestamps");
     await assertPrivate();
     const id = existing?.url;
     if (id) {
-      await privateAccess(itemUrl(id), false);
-      if (!existing.etag) throw new Error("This item has no version; reload it before editing");
+      await privateAccess(itemUrl(id));
+      const etag = await version(existing);
       const result = await storage.write(id, await walletItem.serialize(id, data), {
         contentType: "text/turtle",
-        ifMatch: existing.etag,
+        ifMatch: etag,
       });
-      return { ...data, url: result.url, etag: result.etag };
+      return savedRecord(data, result);
     }
+    if (name !== undefined && !/^[a-zA-Z0-9_-]+\.ttl$/.test(name))
+      throw new TypeError("Choose a wallet item filename ending in .ttl");
     const created = await storage.create(base, null, {
-      name: `${crypto.randomUUID()}.ttl`,
+      name: name ?? `${crypto.randomUUID()}.ttl`,
       contentType: "text/turtle",
     });
-    const current = await storage.read(created.url);
-    if (!current.etag || (await current.bytes()).length !== 0)
-      throw new Error("The new record changed before it could be saved");
-    const result = await storage.write(created.url, await walletItem.serialize(created.url, data), {
-      contentType: "text/turtle",
-      ifMatch: current.etag,
-    });
-    return { ...data, url: result.url, etag: result.etag };
+    let emptyEtag: string | undefined;
+    try {
+      const current = await storage.read(created.url);
+      if (!current.etag || (await current.bytes()).length !== 0)
+        throw new Error("The new record changed before it could be saved");
+      emptyEtag = current.etag;
+      const result = await storage.write(
+        created.url,
+        await walletItem.serialize(created.url, data),
+        {
+          contentType: "text/turtle",
+          ifMatch: emptyEtag,
+        },
+      );
+      return savedRecord(data, result);
+    } catch (error) {
+      // Delete only the exact empty version we observed, never a concurrent update
+      // or a successfully committed PUT whose response was lost.
+      if (emptyEtag) await storage.delete(created.url, { ifMatch: emptyEtag }).catch(() => {});
+      throw error;
+    }
   }
   async function remove(item: WalletRecord) {
     await assertPrivate();
-    await privateAccess(itemUrl(item.url), false);
-    if (!item.etag) throw new Error("Reload this item before deleting it");
-    await storage.delete(item.url, { ifMatch: item.etag });
+    await privateAccess(itemUrl(item.url));
+    await storage.delete(item.url, { ifMatch: await version(item) });
     // Blobs and VC resources stay available for undo. Permanent orphan cleanup is separate.
   }
   async function upload(file: Blob) {

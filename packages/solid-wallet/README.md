@@ -1,4 +1,5 @@
 <!-- AUTHORED-BY Codex (GPT-6.1 Sol) -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 # @jeswr/solid-wallet
 
 Generated document-vault metadata and a private Solid repository for Suite Wallet.
@@ -30,7 +31,8 @@ day. Missing expiry is `no-expiry`. `sortItems`, `groupItems`, `filterItems`, an
 through solid-vc and compares canonical RDF against the supported public
 verification projection, refusing lossy contexts or claims. `checkCredential`
 checks signatures and returns an explicit explanation for verified, invalid,
-expired, revoked and unknown results. Callers must supply issuer key control and
+expired, not-yet-valid, suspended, revoked and unknown results. Authentication failures
+take precedence over dates and status supplied by an untrusted credential. Callers must supply issuer key control and
 status resolution; Suite does so with solid-vc's WebID and Bitstring Status List
 resolvers on its credential-free public transport. Verification is not an
 endorsement of the issuing authority. Unsupported DID resolvers, proofs and
@@ -42,16 +44,22 @@ Turtle resource. Credentials are byte-exact `application/ld+json` resources capp
 at 256 KiB, preserving any UTF-8 BOM; invalid UTF-8 is refused. JPEG/PNG/WebP/PDF uploads and streamed previews are capped at 10 MiB.
 New items use server-returned URLs; edits and deletes use observed ETags. Preview
 links and credential links are restricted to their respective wallet containers.
-The list is limited to 500 records and fails rather than truncating.
+The list is limited to 500 candidate records and fails rather than truncating.
+`list(onInvalidRecord?)` skips invalid, non-RDF and vanished records and reports
+each skipped URL to its caller; access and transport errors still fail the list.
+A failed first metadata write conditionally removes only its observed empty version.
+`save(data, existing?, name?)` accepts a stable `.ttl` filename for create-only
+seeds; existing records still require a matching version. Missing PUT validators
+are recovered through HEAD and a matching metadata read, preserving conflict checks.
 
-The repository uses pod-access's role API to check effective owner-only access,
+The repository uses pod-access's fail-closed `checkOwnerOnly` to check owner-only access,
 including inherited resource and member rules, before listing or writing.
 New empty containers receive owner-only access; existing shared or unsupported
 permissions block further use and are never silently replaced. Type Index
 registration is private and delegated to pod-type-index. Settings, linked
 preferences and custom private indexes must also have owner-only access.
-WAC and the roles API's default CSS ACP dialect are supported; other deployments
-fail closed. Access checks and writes are separate requests, so server-side access
+WAC is supported. ACP requires the optional `acpDialect` from independently trusted
+deployment configuration. Suite supplies none and fails closed on ACP deployments. Access checks and writes are separate requests, so server-side access
 changes between them remain possible. The demo pod does not enforce permissions;
 its ACL documents exercise this same code path without providing real isolation.
 
@@ -59,8 +67,9 @@ The app retains loaded data in memory while offline, requires a connection for
 writes, and rolls back failed optimistic changes. There is no durable document
 cache or outbox. Deletion has an eight-second undo window before its conditional
 pod delete. Attachments and original credentials remain for undo and recovery;
-permanent orphan cleanup is deferred. Closing the view during the undo window
-cancels the pending deletion, retaining the original document.
+permanent orphan cleanup is deferred. Closing the view flushes pending deletes immediately and lets in-flight saves finish
+against their original session. Failures still reach the failure callback; detached
+views receive no state updates.
 
 Deferred: expiry notifications/Calendar integration; credential presentation
 (OID4VP/share links); QR codes; Apple/Google pass import; encryption at rest;

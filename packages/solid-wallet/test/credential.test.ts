@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Codex GPT-6
 
 import {
   credentialToJsonLd,
@@ -85,7 +86,7 @@ describe("credential admission and verification", () => {
     const changed = source.replace("Fictional course", "Altered course");
     expect(await checkCredential(changed, opts)).toMatchObject({
       state: "invalid",
-      title: "Signature invalid",
+      title: "Signature invalid / not from this issuer",
     });
     expect(await checkCredential(source, { ...opts, now: new Date("2028-01-01") })).toMatchObject({
       state: "expired",
@@ -127,21 +128,49 @@ describe("credential admission and verification", () => {
     await expect(parseCredential(JSON.stringify(doc))).rejects.toThrow();
   });
 });
-it.each([
-  ["STATUS_REVOKED", "revoked", "Revoked"],
-  ["EXPIRED", "expired", "Expired"],
-  ["INVALID_SIGNATURE", "invalid", "Signature invalid"],
-  ["STATUS_SUSPENDED", "unknown", "Could not check"],
-  ["STATUS_UNREACHABLE", "unknown", "Could not check"],
-  ["UNKNOWN_CRYPTOSUITE", "unknown", "Could not check"],
-  ["NO_PROOF", "unknown", "Could not check"],
-] as const)("explains %s", (code, state, title) => {
+const displays = {
+  MALFORMED: ["invalid", "Signature invalid / not from this issuer"],
+  NO_PROOF: ["invalid", "Signature invalid / not from this issuer"],
+  UNKNOWN_CRYPTOSUITE: ["invalid", "Signature invalid / not from this issuer"],
+  INVALID_SIGNATURE: ["invalid", "Signature invalid / not from this issuer"],
+  ISSUER_MISMATCH: ["invalid", "Signature invalid / not from this issuer"],
+  EXPIRED: ["expired", "Expired"],
+  NOT_YET_VALID: ["not-yet-valid", "Not yet valid"],
+  STATUS_REVOKED: ["revoked", "Revoked"],
+  STATUS_SUSPENDED: ["suspended", "Suspended"],
+  STATUS_UNREACHABLE: ["unknown", "Could not check"],
+  PROOF_PURPOSE_MISMATCH: ["unknown", "Could not check"],
+  UNTRUSTED_ISSUER: ["unknown", "Could not check"],
+  RELATED_RESOURCE_MISSING: ["unknown", "Could not check"],
+  RELATED_RESOURCE_MISMATCH: ["unknown", "Could not check"],
+} satisfies Record<VerificationErrorCode, readonly [string, string]>;
+it.each(Object.entries(displays))("explains %s", (code, [state, title]) => {
   expect(
     verificationDisplay(
       { verified: false, errors: [{ code: code as VerificationErrorCode, message: "Why" }] },
       "issuer",
     ),
   ).toEqual({ state, title, reason: "Why" });
+});
+it.each([
+  "INVALID_SIGNATURE",
+  "ISSUER_MISMATCH",
+  "MALFORMED",
+  "NO_PROOF",
+  "UNKNOWN_CRYPTOSUITE",
+] as const)("prioritises %s over untrusted dates and status", (code) => {
+  const errors = ["STATUS_REVOKED", "STATUS_SUSPENDED", "EXPIRED", "NOT_YET_VALID", code].map(
+    (code) => ({ code: code as VerificationErrorCode, message: code }),
+  );
+  expect(verificationDisplay({ verified: false, errors }, "issuer").state).toBe("invalid");
+});
+it("labels an expired forgery as invalid", async () => {
+  expect(
+    await checkCredential(source.replace("Fictional course", "Forged course"), {
+      resolveKey: () => key.publicKey,
+      now: new Date("2028-01-01"),
+    }),
+  ).toMatchObject({ state: "invalid" });
 });
 it("supplies a reason for an empty error result", () =>
   expect(verificationDisplay({ verified: false, errors: [] }, "issuer").reason).not.toBe(""));
