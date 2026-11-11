@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { buildMeal, buildSymptom, storeToTurtle } from "@jeswr/solid-health-diary";
 import { expect, it } from "vitest";
@@ -128,6 +129,116 @@ it("reports corrupt legacy records and caches them like month records until inva
   expect(await pod.diary.list(undefined, { cached: true })).toHaveLength(2);
   pod.diary.invalidate();
   expect(await pod.diary.list(undefined, { cached: true })).toHaveLength(3);
+});
+it("prunes UTC legacy history outside the widened range and bounds every listing to six GETs", async () => {
+  const pod = await legacyFixture();
+  pod.resources.delete(pod.url);
+  pod.resources.delete(pod.symptomUrl);
+  for (const kind of ["meals", "symptoms"]) {
+    for (const year of [2023, 2024, 2025, 2026]) {
+      const parent = `${BASE}diary/${kind}/${year}/`;
+      pod.resources.set(parent, { body: "", etag: '"1"', type: "text/turtle", container: true });
+      for (const month of ["01", "02", "03", "04", "05", "06"]) {
+        const folder = `${parent}${month}/`;
+        pod.resources.set(folder, { body: "", etag: '"1"', type: "text/turtle", container: true });
+        for (let i = 0; i < 8; i++) pod.put(`${folder}old-${i}.ttl`, "");
+      }
+    }
+  }
+  // Enough modern documents to exercise the same pool as the legacy walk.
+  for (let i = 0; i < 12; i++) pod.put(`${BASE}diary/2026-11/empty-${i}.ttl`, "");
+  let active = 0,
+    maximum = 0;
+  const fetch: typeof globalThis.fetch = async (input, init) => {
+    active++;
+    maximum = Math.max(maximum, active);
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 1));
+      return await pod.fetch(input, init);
+    } finally {
+      active--;
+    }
+  };
+  const diary = createDiaryStore(fetch, storage, OWNER);
+  const range = { start: new Date("2026-11-09T00:00:00Z"), end: new Date("2026-11-16T00:00:00Z") };
+  expect(await diary.list(range, { cached: true })).toEqual([]);
+  expect(pod.calls).toHaveLength(21); // root, modern month + 13 docs, two legacy root/year/month paths
+  expect(maximum).toBe(6);
+  expect(pod.calls.every(({ url }) => !/\/(202[345]|0[1-6])\//.test(url))).toBe(true);
+  maximum = 0;
+  await diary.list();
+  expect(maximum).toBe(6);
+});
+it("keeps legacy months across suite saves/removes and invalidates only the notified legacy path or Retry", async () => {
+  const pod = createDemoPod({ root: storage });
+  const folder = `${storage}health/diary/meals/2026/11/`,
+    url = `${folder}legacy.ttl`;
+  for (const path of [
+    "health/diary/",
+    "health/diary/meals/",
+    "health/diary/meals/2026/",
+    "health/diary/meals/2026/11/",
+  ]) {
+    await pod.fetch(`${storage}${path}`, {
+      method: "PUT",
+      headers: { "content-type": "text/turtle" },
+      body: "",
+    });
+  }
+  await pod.fetch(url, {
+    method: "PUT",
+    headers: { "content-type": "text/turtle" },
+    body: await storeToTurtle(buildMeal(url, { startTime: at, items: [{ name: "Bread" }] })),
+  });
+  const gets: string[] = [];
+  const fetch: typeof globalThis.fetch = (input, init) => {
+    if (!init?.method || init.method === "GET") gets.push(String(input));
+    return pod.fetch(input, init);
+  };
+  const diary = createDiaryStore(fetch, storage, OWNER);
+  const list = () => diary.list(undefined, { cached: true });
+  await list();
+  expect(gets.filter((value) => value === url)).toHaveLength(1);
+  const saved = await diary.save(
+    { kind: "meal", at, foods: ["Rice"], ingredients: "", tags: [], note: "" },
+    "modern",
+  );
+  diary.invalidate(diary.base); // the provider's refresh after a suite mutation/notification
+  await list();
+  await diary.remove(saved);
+  await list();
+  expect(gets.filter((value) => value === url)).toHaveLength(1);
+  diary.invalidate(`${diary.base}symptoms/`);
+  await list();
+  expect(gets.filter((value) => value === url)).toHaveLength(1);
+  diary.invalidate(folder);
+  await list();
+  expect(gets.filter((value) => value === url)).toHaveLength(2);
+  diary.invalidate();
+  await list();
+  expect(gets.filter((value) => value === url)).toHaveLength(3);
+});
+it("widens legacy UTC buckets across month and year boundaries", async () => {
+  const pod = await legacyFixture();
+  const url = `${BASE}diary/meals/2025/12/boundary.ttl`;
+  for (const folder of [`${BASE}diary/meals/2025/`, `${BASE}diary/meals/2025/12/`]) {
+    pod.resources.set(folder, { body: "", etag: '"1"', type: "text/turtle", container: true });
+  }
+  pod.put(
+    url,
+    await storeToTurtle(
+      buildMeal(url, {
+        startTime: new Date("2026-01-01T00:30:00Z"),
+        items: [{ name: "Midnight snack" }],
+      }),
+    ),
+  );
+  expect(
+    await pod.diary.list({
+      start: new Date("2026-01-01T00:00:00Z"),
+      end: new Date("2026-01-02T00:00:00Z"),
+    }),
+  ).toMatchObject([{ url }]);
 });
 it("defaults preferences off with gluten, persists them privately and isolates storage roots", async () => {
   const pod = createDemoPod({ root: storage });

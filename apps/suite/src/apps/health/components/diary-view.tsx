@@ -29,6 +29,7 @@ export function DiaryView() {
   const queryDate = query.get("date");
   const queryMode = query.get("mode");
   const mode = useDiaryMode();
+  const modeUnavailable = mode.loading || mode.readError;
   const { forVisit } = mode;
   useEffect(() => {
     if (queryMode === "coeliac") forVisit();
@@ -87,8 +88,14 @@ export function DiaryView() {
           <p className="hlt-muted">Your meals and symptoms, day by day. Private to you.</p>
         </div>
         <div className="hlt-diary-actions">
-          <Button onClick={() => setForm({ kind: "meal" })}>Log meal</Button>
-          <Button variant="outline" onClick={() => setForm({ kind: "symptom" })}>
+          <Button disabled={modeUnavailable} onClick={() => setForm({ kind: "meal" })}>
+            Log meal
+          </Button>
+          <Button
+            disabled={modeUnavailable}
+            variant="outline"
+            onClick={() => setForm({ kind: "symptom" })}
+          >
             Log symptom
           </Button>
           <Link
@@ -139,7 +146,11 @@ export function DiaryView() {
             <EmptyState
               title={entries.length ? "No entries this week" : "Start your diary"}
               body="Log meals and symptoms to keep a personal timeline. Try another week or clear your filters."
-              primaryAction={<Button onClick={() => setForm({ kind: "meal" })}>Log meal</Button>}
+              primaryAction={
+                <Button disabled={modeUnavailable} onClick={() => setForm({ kind: "meal" })}>
+                  Log meal
+                </Button>
+              }
             />
           ) : (
             days.map((day) => (
@@ -203,7 +214,7 @@ export function DiaryView() {
                                 <Button
                                   size="sm"
                                   variant="outline"
-                                  disabled={busy.includes(entry.url)}
+                                  disabled={modeUnavailable || busy.includes(entry.url)}
                                   onClick={() => setForm({ kind: entry.kind, entry })}
                                   aria-label={`Edit ${diaryLabel(entry)}`}
                                 >
@@ -237,7 +248,9 @@ export function DiaryView() {
           )}
         </>
       )}
-      {form && <DiarySheet {...form} onClose={() => setForm(null)} />}
+      {form && !modeUnavailable && (
+        <DiarySheet key={mode.trigger} {...form} onClose={() => setForm(null)} />
+      )}
     </div>
   );
 }

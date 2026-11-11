@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Fable 5
 /**
  * Executes the real `public/sw.js` in a headless mock ServiceWorkerGlobalScope
@@ -19,7 +20,8 @@ const ORIGIN = "https://coeliac.example";
 class FakeCache {
   store = new Map<string, Response>();
   private key(req: unknown): string {
-    const url = typeof req === "string" ? new URL(req, `${ORIGIN}/`).href : (req as { url: string }).url;
+    const url =
+      typeof req === "string" ? new URL(req, `${ORIGIN}/`).href : (req as { url: string }).url;
     const u = new URL(url);
     u.search = "";
     return u.href;
@@ -131,7 +133,7 @@ async function runLifecycle(type: "install" | "activate"): Promise<void> {
   await Promise.all(waits);
 }
 
-const SHELL_CACHE = "coeliac-shell-v1";
+const SHELL_CACHE = "coeliac-shell-v2";
 
 beforeEach(() => {
   fakeSelf.caches = new FakeCacheStorage();
@@ -147,9 +149,10 @@ describe("service worker — install/activate", () => {
   it("precaches every shell route and calls skipWaiting", async () => {
     await runLifecycle("install");
     const cache = await fakeSelf.caches.open(SHELL_CACHE);
-    for (const route of ["/", "/log", "/symptoms", "/genetics", "/community"]) {
+    for (const route of ["/log", "/symptoms", "/genetics", "/community"]) {
       expect(await cache.match(`${ORIGIN}${route}`)).toBeDefined();
     }
+    expect(await cache.match(`${ORIGIN}/`)).toBeUndefined();
     expect(fakeSelf.skipWaiting).toHaveBeenCalled();
   });
 
@@ -162,17 +165,17 @@ describe("service worker — install/activate", () => {
     await runLifecycle("install");
     const cache = await fakeSelf.caches.open(SHELL_CACHE);
     expect(await cache.match(`${ORIGIN}/log`)).toBeUndefined();
-    expect(await cache.match(`${ORIGIN}/`)).toBeDefined();
+    expect(await cache.match(`${ORIGIN}/symptoms`)).toBeDefined();
     expect(fakeSelf.skipWaiting).toHaveBeenCalled();
   });
 
   it("evicts old shell-cache generations on activate and claims clients", async () => {
-    await fakeSelf.caches.open("coeliac-shell-v0");
+    await fakeSelf.caches.open("coeliac-shell-v1");
     await fakeSelf.caches.open(SHELL_CACHE);
     await fakeSelf.caches.open("some-unrelated-cache");
     await runLifecycle("activate");
     const remaining = await fakeSelf.caches.keys();
-    expect(remaining).not.toContain("coeliac-shell-v0");
+    expect(remaining).not.toContain("coeliac-shell-v1");
     expect(remaining).toContain(SHELL_CACHE);
     expect(remaining).toContain("some-unrelated-cache");
     expect(fakeSelf.clients.claim).toHaveBeenCalled();
@@ -231,10 +234,10 @@ describe("service worker — instant offline load (UX invariant #3)", () => {
       mode: "navigate",
     });
     expect(intercepted).toBe(true);
-    expect(await response!.text()).toBe(`body:${ORIGIN}/log`);
+    expect(await response?.text()).toBe(`body:${ORIGIN}/log`);
   });
 
-  it("falls back to the '/' shell for an un-cached route while offline", async () => {
+  it("falls back to the '/log' shell for an un-cached route while offline", async () => {
     await runLifecycle("install");
     fakeSelf.fetch = vi.fn(async () => {
       throw new Error("offline");
@@ -244,7 +247,7 @@ describe("service worker — instant offline load (UX invariant #3)", () => {
       method: "GET",
       mode: "navigate",
     });
-    expect(await response!.text()).toBe(`body:${ORIGIN}/`);
+    expect(await response?.text()).toBe(`body:${ORIGIN}/log`);
   });
 
   it("returns a 503 offline document when nothing is cached at all", async () => {
@@ -256,7 +259,7 @@ describe("service worker — instant offline load (UX invariant #3)", () => {
       method: "GET",
       mode: "navigate",
     });
-    expect(response!.status).toBe(503);
+    expect(response?.status).toBe(503);
   });
 
   it("serves same-origin static assets cache-first", async () => {
@@ -265,24 +268,24 @@ describe("service worker — instant offline load (UX invariant #3)", () => {
     fakeSelf.fetch = vi.fn(async () => new Response("JS-V1", { status: 200 }));
     const first = await dispatchFetch({ url: asset, method: "GET" });
     expect(first.intercepted).toBe(true);
-    expect(await first.response!.text()).toBe("JS-V1");
+    expect(await first.response?.text()).toBe("JS-V1");
     // Second request: cache-first returns the cached copy even if the network changed.
     fakeSelf.fetch = vi.fn(async () => new Response("JS-V2", { status: 200 }));
     const second = await dispatchFetch({ url: asset, method: "GET" });
-    expect(await second.response!.text()).toBe("JS-V1");
+    expect(await second.response?.text()).toBe("JS-V1");
   });
 });
 
 describe("service worker — purge-shell message", () => {
   it("drops the shell cache on a purge-shell message", async () => {
     await runLifecycle("install");
-    expect((await fakeSelf.caches.keys())).toContain(SHELL_CACHE);
+    expect(await fakeSelf.caches.keys()).toContain(SHELL_CACHE);
     const handler = listeners.get("message");
     if (!handler) throw new Error("no message listener");
     const waits: Promise<unknown>[] = [];
     handler({ data: { type: "purge-shell" }, waitUntil: (p: Promise<unknown>) => waits.push(p) });
     await Promise.all(waits);
-    expect((await fakeSelf.caches.keys())).not.toContain(SHELL_CACHE);
+    expect(await fakeSelf.caches.keys()).not.toContain(SHELL_CACHE);
   });
 
   it("ignores unknown / malformed messages", async () => {

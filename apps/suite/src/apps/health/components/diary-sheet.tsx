@@ -35,7 +35,9 @@ export function DiarySheet({
   const mode = useDiaryMode();
   const selectedExposure =
     entry?.kind === "meal"
-      ? entry.exposures?.find((value) => value.trigger === mode.trigger)
+      ? entry.exposures?.find(
+          (value) => value.trigger === mode.trigger && value.note === MANUAL_EXPOSURE_NOTE,
+        )
       : undefined;
   const [exposed, setExposed] = useState(
     !!selectedExposure && selectedExposure.exposureLevel !== "absent",
@@ -157,7 +159,9 @@ export function DiarySheet({
                       ? [
                           ...(entry?.kind === "meal"
                             ? (entry.exposures ?? []).filter(
-                                (value) => value.trigger !== mode.trigger,
+                                (value) =>
+                                  value.trigger !== mode.trigger ||
+                                  value.note !== MANUAL_EXPOSURE_NOTE,
                               )
                             : []),
                           ...(exposed

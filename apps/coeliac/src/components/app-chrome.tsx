@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
 "use client";
 /**
@@ -11,9 +12,9 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { useSession } from "@/lib/session/context";
+import { suiteDiaryUrl } from "@/lib/suite-url";
 
 const NAV_ITEMS: ReadonlyArray<{ href: string; label: string }> = [
-  { href: "/", label: "Home" },
   { href: "/log", label: "Log food" },
   { href: "/symptoms", label: "Symptoms" },
   { href: "/insights", label: "Insights" },
@@ -37,10 +38,13 @@ export function AppChrome({ children }: { children: ReactNode }) {
   return (
     <div className="app">
       <header className="app__header">
-        <Link href="/" className="app__brand">
-          Coeliac Diary
-        </Link>
+        <a href={suiteDiaryUrl()} className="app__brand" rel="noopener noreferrer">
+          Open in Health
+        </a>
         <nav className="app__nav" aria-label="Primary">
+          <a href={suiteDiaryUrl()} rel="noopener noreferrer">
+            Open in Health
+          </a>
           {NAV_ITEMS.map(({ href, label }) => (
             <Link
               key={href}
@@ -60,8 +64,8 @@ export function AppChrome({ children }: { children: ReactNode }) {
       <main className="app__main">{children}</main>
       <footer className="app__footer">
         <p>
-          Decision support, not diagnosis. This app never diagnoses a disease — see a doctor.
-          Your diary lives in your own Solid pod.
+          Decision support, not diagnosis. This app never diagnoses a disease — see a doctor. Your
+          diary lives in your own Solid pod.
         </p>
       </footer>
     </div>
