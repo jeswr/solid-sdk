@@ -141,6 +141,21 @@ it("refuses to adopt the validator of a placeholder that changed before it was r
   expect(await (await f.pod.fetch(target)).text()).toBe("someone else's bytes");
 });
 
+it("certifies an empty placeholder read-back whose response has no body", async () => {
+  const { f, puts, client } = await cssLikePod();
+  f.after(async (url, method, response) => {
+    if (url === target && method === "PUT" && response.status === 201)
+      response.headers.delete("etag");
+    if (url === target && method === "GET" && puts.length === 1)
+      return new Response(null, { status: 200, headers: response.headers });
+    return response;
+  });
+  await uploadFile(client, PRIVATE, new Blob(["secret contents"]), "report.txt");
+  expect(await (await f.pod.fetch(target)).text()).toBe("secret contents");
+  expect(puts).toHaveLength(2);
+  expect(puts[1]?.ifMatch).toMatch(/^"/);
+});
+
 it.each([
   ["a weak validator", (response: Response) => response.headers.set("etag", 'W/"weak"')],
   ["no validator", (response: Response) => response.headers.delete("etag")],
@@ -203,7 +218,8 @@ it.each([
   const error = await uploadFile(
     client,
     PRIVATE,
-    new Blob(["new contents"]),
+    // Same media type as the other writer, so only the bytes can differ.
+    new Blob(["new contents"], { type: "text/plain" }),
     "secret",
     "replace",
     selected,
