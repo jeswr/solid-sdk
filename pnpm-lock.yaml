@@ -1499,6 +1499,9 @@ importers:
       '@jeswr/pod-connectors':
         specifier: workspace:*
         version: link:../../packages/pod-connectors
+      '@jeswr/solid-mail':
+        specifier: workspace:*
+        version: link:../../packages/solid-mail
       '@rdfjs/wrapper':
         specifier: ^0.34.0
         version: 0.34.0

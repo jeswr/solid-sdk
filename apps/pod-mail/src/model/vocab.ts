@@ -1,5 +1,6 @@
 // AUTHORED-BY Claude Opus 4.8
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 /** Byte-identical shared IRIs; the standalone app retains its older predicate surface. */
 export {
   Classes,
@@ -14,9 +15,9 @@ export {
   SIOC,
   SOLID,
   XSD,
-} from "@jeswr/pod-connectors/mail/constants";
+} from "@jeswr/solid-mail";
 
-import { Predicates as shared } from "@jeswr/pod-connectors/mail/constants";
+import { Predicates as shared } from "@jeswr/solid-mail";
 
 export const Predicates = {
   type: shared.type,
