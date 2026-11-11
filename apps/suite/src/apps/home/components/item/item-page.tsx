@@ -225,12 +225,10 @@ export function ItemPage({ domain, itemRef }: { domain: string; itemRef: string 
           <div className="flex flex-wrap items-center gap-2">
             {demo ? <DemoDataBadge /> : null}
             {!onlyDemo &&
-              (provenance?.kind === "you" || provenance?.kind === "app" ? (
-                <p className="hm-you">
-                  {provenance.kind === "you" ? "Added by you" : `Added by ${provenance.label}`}
-                </p>
+              (provenance?.kind === "you" ? (
+                <p className="hm-you">Added by you</p>
               ) : (
-                <ProvenanceBadge source={provenance?.label ?? "source"} />
+                <ProvenanceBadge className="hm-provenance" source={provenance?.label ?? "source"} />
               ))}
           </div>
           {!online || state.cached ? (

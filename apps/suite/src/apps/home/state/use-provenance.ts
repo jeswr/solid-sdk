@@ -11,7 +11,7 @@ import {
 } from "../lib/model/provenance";
 import type { HomeSession } from "./use-domain-items";
 
-// Cards and detail reads in this Home session share agent lookups, never the pod transport.
+// Session scope shares only in-flight public lookups and the 20-agent admission budget.
 const resolvers = new WeakMap<HomeSession, ReturnType<typeof createIdentityResolver>>();
 
 export function useProvenance(item: DomainItem, session: HomeSession): Provenance;
@@ -34,9 +34,16 @@ export function useProvenance(item: DomainItem | undefined, session: HomeSession
       resolve = createIdentityResolver();
       resolvers.set(session, resolve);
     }
-    void resolve(item.dataset, item.subject, session.webId).then((identities) => {
-      if (live) setResolved({ item, session, identities });
-    });
+    const pending = resolve(item.dataset, item.subject, session.webId);
+    if (!pending) return;
+    void pending
+      .then((identities) => {
+        if (live) setResolved({ item, session, identities });
+      })
+      .catch(() => {
+        if (live)
+          setResolved({ item, session, identities: identitiesIn(item.dataset, item.subject) });
+      });
     return () => {
       live = false;
     };

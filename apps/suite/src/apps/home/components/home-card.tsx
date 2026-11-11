@@ -113,12 +113,10 @@ export function HomeCard({
               <div className="flex min-w-0 flex-wrap items-center gap-2">
                 {demo ? <DemoDataBadge /> : null}
                 {!onlyDemo &&
-                  (provenance.kind === "you" || provenance.kind === "app" ? (
-                    <span className="hm-you">
-                      {provenance.kind === "you" ? "Added by you" : `Added by ${provenance.label}`}
-                    </span>
+                  (provenance.kind === "you" ? (
+                    <span className="hm-you">Added by you</span>
                   ) : (
-                    <ProvenanceBadge source={provenance.label} />
+                    <ProvenanceBadge className="hm-provenance" source={provenance.label} />
                   ))}
               </div>
               <DropdownMenu>

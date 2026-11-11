@@ -2,7 +2,12 @@
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
 // Host patterns ported from PM docs/typed-data-views.md §2.1 and typed-views/sources.ts.
-import { adapterContainerUrl } from "@jeswr/pod-connectors";
+import {
+  classifyIpLiteral,
+  isDeniedHostname,
+  normalizeHostForClassification,
+} from "@jeswr/guarded-fetch";
+import { adapterContainerUrl, allCatalogEntries } from "@jeswr/pod-connectors";
 import { DEMO_CONNECTOR, NS } from "@jeswr/suite-vocab";
 import type { DatasetCore, Term } from "@rdfjs/types";
 import { isClientIdDocument, resolveClientName } from "../permissions";
@@ -82,51 +87,113 @@ function providedBy(connector: Connector): Provenance {
   return { kind: "source", label: connector.label, logoId: connector.id };
 }
 
+const RESERVED_NAMES = new Set(
+  [
+    "you",
+    "me",
+    DEMO_CONNECTOR.label,
+    ...CONNECTORS.map(({ label }) => label),
+    ...allCatalogEntries().map(({ name }) => name),
+  ].map((name) => name.toLowerCase()),
+);
+
+/** Every graph/client name crosses this boundary; reserved labels belong to Home alone. */
+export function externalName(name: string | undefined, fallback: string): string {
+  const clean = (name ?? "")
+    // biome-ignore lint/suspicious/noControlCharactersInRegex: Strip untrusted control characters.
+    .replace(/[\u0000-\u001f\u007f-\u009f\u200e\u200f\u202a-\u202e\u2066-\u2069]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!clean || /http/i.test(clean) || RESERVED_NAMES.has(clean.toLowerCase())) return fallback;
+  const characters = Array.from(clean);
+  return characters.length > 60 ? `${characters.slice(0, 59).join("")}…` : clean;
+}
+
+/** Syntactic browser check, with shared IP/name classifiers; no DNS lookup is possible here. */
+export function publicAgentUrl(iri: string): boolean {
+  const url = httpUrl(iri);
+  if (url?.protocol !== "https:" || url.port) return false;
+  const host = normalizeHostForClassification(url.hostname).replace(/\.$/, "");
+  return (
+    host.includes(".") &&
+    classifyIpLiteral(host) === 0 &&
+    !isDeniedHostname(host, ["localhost", ".local", ".internal"])
+  );
+}
+
+/** Include generating activities for loaded labels, and their associated agents for lookup. */
+function agentsIn(dataset: DatasetCore, subject: string | Term) {
+  const node = subjectOf(dataset, subject);
+  return [
+    ...node
+      .iris(`${NS.PROV}wasAttributedTo`)
+      .map((iri) => ({ iri, generated: false, associated: false })),
+    ...node.iris(`${NS.PROV}wasGeneratedBy`).flatMap((iri) => [
+      { iri, generated: true, associated: false },
+      ...subjectOf(dataset, iri)
+        .iris(`${NS.PROV}wasAssociatedWith`)
+        .map((agent) => ({
+          iri: agent,
+          generated: true,
+          associated: true,
+        })),
+    ]),
+  ];
+}
+
 /** Resolve only names already present in the loaded item graph; never dereference an agent. */
 export function identitiesIn(
   dataset: DatasetCore,
   subject: string | Term,
 ): NonNullable<ProvenanceContext["identities"]> {
-  const node = subjectOf(dataset, subject);
   const identities = new Map<string, { kind: "app" | "person"; label: string }>();
-  for (const predicate of ["wasAttributedTo", "wasGeneratedBy"]) {
-    for (const iri of node.iris(NS.PROV + predicate)) {
-      const label = subjectOf(dataset, iri).name?.trim();
-      if (!label || /http/i.test(label)) continue;
-      identities.set(iri, { kind: isPerson(dataset, iri) ? "person" : "app", label });
-    }
+  for (const { iri } of agentsIn(dataset, subject)) {
+    const name = subjectOf(dataset, iri).name;
+    if (name === undefined) continue;
+    const label = externalName(name, httpUrl(iri)?.hostname ?? "someone else");
+    identities.set(iri, { kind: isPerson(dataset, iri) ? "person" : "app", label });
   }
   return identities;
 }
 
-/** One resolver per Home load: repeated agents share even an in-flight metadata lookup. */
+/**
+ * One resolver per Home session. On item effects, fetch at most one Client ID document
+ * for a graph-typed software agent or an agent associated with its generating activity.
+ * Only public-looking HTTPS hosts on port 443, without userinfo or IP literals, qualify;
+ * self, demo, people, fragments and graph-named agents are never fetched. At most 20
+ * distinct agents qualify per session. Browser hostname checks do not resolve DNS.
+ * Requests use Permissions' credential-free, redirect-refusing, timed resolver and cache;
+ * Home retains only in-flight work and the set of agents admitted to this session's budget.
+ * No pending lookup means undefined, allowing the hook to avoid a redundant state update.
+ */
 export function createIdentityResolver(publicFetch: typeof fetch = globalThis.fetch) {
-  const clients = new Map<string, Promise<string>>();
-  return async (dataset: DatasetCore, subject: string | Term, userWebId?: string) => {
+  const inFlight = new Map<string, ReturnType<typeof resolveClientName>>();
+  const admitted = new Set<string>();
+  return (dataset: DatasetCore, subject: string | Term, userWebId?: string) => {
     const identities = new Map(identitiesIn(dataset, subject));
-    const node = subjectOf(dataset, subject);
-    await Promise.all(
-      ["wasAttributedTo", "wasGeneratedBy"].flatMap((predicate) =>
-        node.iris(NS.PROV + predicate).map(async (iri) => {
-          if (iri === userWebId || iri === DEMO_CONNECTOR.iri || identities.has(iri)) return;
-          const url = httpUrl(iri);
-          const typed = typedAgent(dataset, iri);
-          if (!url || typed === "person" || (typed === undefined && url.hash)) return;
-          let name = clients.get(iri);
-          if (!name) {
-            name = isClientIdDocument(iri)
-              ? resolveClientName(iri, publicFetch).then((metadata) => {
-                  const label = metadata.name?.trim();
-                  return label && !/http/i.test(label) ? label : url.hostname;
-                })
-              : Promise.resolve(url.hostname);
-            clients.set(iri, name);
-          }
-          identities.set(iri, { kind: "app", label: await name });
-        }),
-      ),
-    );
-    return identities;
+    for (const { iri, associated } of agentsIn(dataset, subject)) {
+      if (iri === userWebId || iri === DEMO_CONNECTOR.iri || identities.has(iri)) continue;
+      if (isPerson(dataset, iri)) continue;
+      if (
+        !associated &&
+        !subjectOf(dataset, iri).types.some((type) => SOFTWARE_TYPES.includes(type))
+      )
+        continue;
+      if (!publicAgentUrl(iri) || !isClientIdDocument(iri)) continue;
+      const url = new URL(iri);
+      if (url.hash || (!admitted.has(iri) && admitted.size >= 20)) continue;
+      admitted.add(iri);
+      let lookup = inFlight.get(iri);
+      if (!lookup) {
+        lookup = resolveClientName(iri, publicFetch).finally(() => inFlight.delete(iri));
+        inFlight.set(iri, lookup);
+      }
+      return lookup.then((metadata) => {
+        identities.set(iri, { kind: "app", label: externalName(metadata.name, url.hostname) });
+        return identities;
+      });
+    }
+    return undefined;
   };
 }
 
@@ -146,7 +213,6 @@ const SOFTWARE_TYPES = [
   "http://schema.org/SoftwareApplication",
   // ActivityStreams actors that are not people (bots, AI agents).
   "https://www.w3.org/ns/activitystreams#Application",
-  "https://www.w3.org/ns/activitystreams#Service",
 ];
 /**
  * What the loaded graph says an attributed agent is, without fetching its profile: a person
@@ -155,7 +221,13 @@ const SOFTWARE_TYPES = [
  */
 function typedAgent(dataset: DatasetCore, iri: string): "person" | "app" | undefined {
   if (isPerson(dataset, iri)) return "person";
-  if (subjectOf(dataset, iri).types.some((type) => SOFTWARE_TYPES.includes(type))) return "app";
+  if (
+    subjectOf(dataset, iri).types.some(
+      (type) =>
+        SOFTWARE_TYPES.includes(type) || type === "https://www.w3.org/ns/activitystreams#Service",
+    )
+  )
+    return "app";
   return undefined;
 }
 
@@ -207,37 +279,28 @@ function sourceOf(
     const connector = connectorForUrl(value);
     if (connector) return providedBy(connector);
   }
-  for (const predicate of ["wasAttributedTo", "wasGeneratedBy"]) {
-    for (const iri of node.iris(NS.PROV + predicate)) {
-      if (iri === context.userWebId || (demo && iri === DEMO_CONNECTOR.iri)) continue;
-      attributedToAnother = true;
-      const identity = context.identities?.get(iri);
-      // A person's WebID is labelled with that profile's name, never as an app.
-      if (identity?.label.trim() && !/http/i.test(identity.label))
-        return { kind: identity.kind, label: identity.label.trim() };
-      const typed = typedAgent(dataset, iri);
-      if (identity?.kind === "person" || typed === "person") attributedToPerson = true;
-      else if (
-        // An activity (wasGeneratedBy) is no person, and a resolved or typed app stays one.
-        predicate === "wasAttributedTo" &&
-        identity?.kind !== "app" &&
-        typed === undefined &&
-        (httpUrl(iri)?.hash.length ?? 0) > 1
-      )
-        // A fragment IRI is the usual shape of a WebID, a person's or an agent's alike.
-        attributedToSomeone = true;
-    }
+  for (const { iri, generated, associated } of agentsIn(dataset, subject)) {
+    if (iri === context.userWebId || (demo && iri === DEMO_CONNECTOR.iri)) continue;
+    attributedToAnother = true;
+    const identity = context.identities?.get(iri);
+    const typed = typedAgent(dataset, iri);
+    const url = httpUrl(iri);
+    // A person's WebID is labelled with that profile's name, never as an app.
+    if (identity)
+      return {
+        kind: identity.kind,
+        label: externalName(identity.label, url?.hostname ?? "someone else"),
+      };
+    if (typed === "person") attributedToPerson = true;
+    else if (url && (typed === "app" || associated)) return { kind: "app", label: url.hostname };
+    else if (!generated && typed === undefined && url) attributedToSomeone = true;
   }
-  const url = httpUrl(containerUrl);
-  if (url && (context.storage === undefined || inStorage(containerUrl, context.storage))) {
-    const relative =
-      context.storage === undefined
-        ? url.pathname
-        : url.pathname.slice(new URL(context.storage).pathname.length);
-    const segments = relative.split("/");
-    const index = segments.indexOf("integrations");
-    const id = index >= 0 && segments.length > index + 2 ? segments[index + 1] : undefined;
-    const connector = CONNECTORS.find((connector) => connector.id === id);
+  // Folder attribution uses the same exact connector import roots as the demo marker.
+  const storage = context.storage;
+  if (storage && inStorage(storage, storage)) {
+    const connector = CONNECTORS.find((connector) =>
+      inStorage(containerUrl, adapterContainerUrl(storage, connector.id)),
+    );
     if (connector) return providedBy(connector);
   }
   if (attributedToPerson) return { kind: "person", label: "another person" };

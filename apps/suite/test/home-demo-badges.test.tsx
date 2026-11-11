@@ -1,9 +1,10 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { Provenance } from "@jeswr/pod-connectors/core/provenance";
-import { MusicRecording } from "@jeswr/pod-connectors/core/vocab";
+import { MusicRecording, PodThing } from "@jeswr/pod-connectors/core/vocab";
 import { DataFactory, Store, Writer } from "n3";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { DomainItem } from "../src/apps/home/lib/model/discovery";
+import * as permissions from "../src/apps/home/lib/permissions";
 import type { HomeSession } from "../src/apps/home/state/use-domain-items";
 import { useProvenance } from "../src/apps/home/state/use-provenance";
 import { createDemoPod } from "../src/lib/demo-pod/pod";
@@ -32,16 +33,29 @@ const subject = DataFactory.namedNode(`${url}#it`);
 beforeEach(() => localStorage.clear());
 afterEach(() => vi.restoreAllMocks());
 
-async function setup(marker: boolean, legacy: boolean, agent?: string) {
+async function setup(
+  marker: boolean,
+  legacy: boolean,
+  agent?: string,
+  options: { name?: string; person?: boolean; outside?: boolean } = {},
+) {
+  const itemUrl = options.outside ? `${root}notes/song.ttl` : url;
+  const itemSubject = options.outside ? DataFactory.namedNode(`${itemUrl}#it`) : subject;
   const dataset = new Store();
-  const song = new MusicRecording(subject, dataset, DataFactory).mark();
+  const song = new MusicRecording(itemSubject, dataset, DataFactory).mark();
   song.name = "Sample song";
   song.sourceUrl = "https://open.spotify.com/track/sample";
   if (agent) {
     song.sourceUrl = undefined;
-    new Provenance(subject, dataset, DataFactory).attributedTo.add(agent);
+    new Provenance(itemSubject, dataset, DataFactory).attributedTo.add(agent);
+    const app = new PodThing(agent, dataset, DataFactory);
+    app.types.add(
+      options.person ? "https://schema.org/Person" : "http://www.w3.org/ns/prov#SoftwareAgent",
+    );
+    if (options.name) app.name = options.name;
   }
-  if (marker) new Provenance(subject, dataset, DataFactory).attributedTo.add(DEMO_CONNECTOR.iri);
+  if (marker)
+    new Provenance(itemSubject, dataset, DataFactory).attributedTo.add(DEMO_CONNECTOR.iri);
   const writer = new Writer();
   writer.addQuads([...dataset]);
   const body = await new Promise<string>((resolve, reject) =>
@@ -49,7 +63,7 @@ async function setup(marker: boolean, legacy: boolean, agent?: string) {
   );
   const pod = createDemoPod({
     root,
-    seed: [{ path: url.slice(root.length), contentType: "text/turtle", body }],
+    seed: [{ path: itemUrl.slice(root.length), contentType: "text/turtle", body }],
   });
   current.session = {
     mode: "demo",
@@ -74,10 +88,10 @@ async function setup(marker: boolean, legacy: boolean, agent?: string) {
     );
   return {
     ...classificationForType("songs"),
-    url,
-    subject,
+    url: itemUrl,
+    subject: itemSubject,
     title: "Sample song",
-    containerUrl: `${root}integrations/spotify/music/`,
+    containerUrl: options.outside ? `${root}notes/` : `${root}integrations/spotify/music/`,
     dataset,
     etag: null,
   };
@@ -147,7 +161,7 @@ describe.each(["card", "detail"] as const)("Home %s app provenance", (surface) =
       label: "ui-rejected.example",
       fetches: 0,
     },
-  ])("shows Added by $label with the public client resolver", async ({
+  ])("shows a badge for $label with the public client resolver", async ({
     agent,
     name,
     label,
@@ -170,7 +184,13 @@ describe.each(["card", "detail"] as const)("Home %s app provenance", (surface) =
           })
         : h(ItemPage, { domain: "media", itemRef: encodeRef(url) }),
     );
-    await vi.waitFor(() => expect(view.host.textContent).toContain(`Added by ${label}`));
+    await vi.waitFor(() =>
+      expect(view.host.querySelector(".hm-provenance")?.textContent).toContain(
+        `Provided by ${label}`,
+      ),
+    );
+    expect(view.host.querySelector(".hm-you")).toBeNull();
+    expect(view.host.textContent).not.toContain("Added by you");
     expect(publicFetch).toHaveBeenCalledTimes(fetches);
     if (fetches)
       expect(publicFetch).toHaveBeenCalledWith(
@@ -199,6 +219,9 @@ it("shares lookups between cards and ignores late names after switching items or
   const session = current.session as HomeSession;
   const dataset = new Store();
   new Provenance(subject, dataset, DataFactory).attributedTo.add(newClient);
+  new PodThing(newClient, dataset, DataFactory).types.add(
+    "http://www.w3.org/ns/prov#SoftwareAgent",
+  );
   const newItem = { ...oldItem, dataset };
   const view = await mount(h(ProvenanceProbe, { session }));
   expect(view.host.textContent).toBe("No item");
@@ -218,5 +241,97 @@ it("shares lookups between cards and ignores late names after switching items or
   await act(async () => delayed.resolve(Response.json({ client_name: "Stale app" })));
   expect(view.host.textContent).toBe("Current app");
   expect(publicFetch).toHaveBeenCalledTimes(2);
+  await view.unmount();
+});
+
+describe.each(["card", "detail"] as const)("Home %s attribution styling", (surface) => {
+  it.each([
+    { name: "you", person: false },
+    { name: "You", person: true },
+    { name: "Me", person: false },
+    { name: "Spotify", person: false },
+    { name: "Demo data", person: false },
+    { name: "Name\u202e app", person: false },
+    { name: "Person Name", person: true },
+    { name: "A".repeat(90), person: false },
+  ])("uses a sanitised external badge for graph name $name", async ({ name, person }) => {
+    const agent = "https://hostile-name.example/client";
+    const publicFetch = vi.spyOn(globalThis, "fetch");
+    const item = await setup(false, false, agent, { name, person, outside: true });
+    const view = await mount(
+      surface === "card"
+        ? h(HomeCard, {
+            item,
+            view: { types: [], title: item.title, properties: [] },
+            storage: root,
+            webId,
+          })
+        : h(ItemPage, { domain: "media", itemRef: encodeRef(item.url) }),
+    );
+    const expected = ["you", "me", "spotify", "demo data"].includes(name.toLowerCase())
+      ? "hostile-name.example"
+      : name.length > 60
+        ? `${"A".repeat(59)}…`
+        : name.replace("\u202e", "");
+    await vi.waitFor(() =>
+      expect(view.host.querySelector(".hm-provenance")?.textContent).toContain(
+        `Provided by ${expected}`,
+      ),
+    );
+    expect(view.host.querySelector(".hm-you")).toBeNull();
+    expect(view.host.textContent).not.toContain("Added by you");
+    expect(publicFetch).not.toHaveBeenCalled();
+    await view.unmount();
+  });
+
+  it("reserves Added by you for the current user's attribution", async () => {
+    const item = await setup(false, false, webId, { outside: true });
+    const view = await mount(
+      surface === "card"
+        ? h(HomeCard, {
+            item,
+            view: { types: [], title: item.title, properties: [] },
+            storage: root,
+            webId,
+          })
+        : h(ItemPage, { domain: "media", itemRef: encodeRef(item.url) }),
+    );
+    await vi.waitFor(() =>
+      expect(view.host.querySelector(".hm-you")?.textContent).toBe("Added by you"),
+    );
+    expect(view.host.querySelector(".hm-provenance")).toBeNull();
+    await view.unmount();
+  });
+});
+
+it("avoids a second hook render when there is no agent to resolve", async () => {
+  const item = await setup(false, false);
+  const render = vi.fn();
+  function Probe() {
+    render();
+    const provenance = useProvenance(item, current.session as HomeSession);
+    return h("span", {}, provenance.label);
+  }
+  const publicFetch = vi.spyOn(globalThis, "fetch");
+  const view = await mount(h(Probe));
+  expect(view.host.textContent).toBe("Spotify");
+  expect(render).toHaveBeenCalledTimes(1);
+  expect(publicFetch).not.toHaveBeenCalled();
+  await view.unmount();
+});
+
+it("falls back to the host for a rejected lookup and ignores late rejections", async () => {
+  const item = await setup(false, false, "https://reject-name.example/client.jsonld");
+  const session = current.session as HomeSession;
+  const delayed = deferred<permissions.ClientMetadata>();
+  vi.spyOn(permissions, "resolveClientName")
+    .mockRejectedValueOnce(new Error("Rejected"))
+    .mockReturnValueOnce(delayed.promise);
+  const view = await mount(h(ProvenanceProbe, { item, session }));
+  expect(view.host.textContent).toBe("reject-name.example");
+  await view.render(h(ProvenanceProbe, { item: { ...item }, session }));
+  await view.render(h(ProvenanceProbe, { session }));
+  await act(async () => delayed.reject(new Error("Late rejection")));
+  expect(view.host.textContent).toBe("No item");
   await view.unmount();
 });
