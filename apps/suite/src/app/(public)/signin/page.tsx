@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
 "use client";
 /**
@@ -17,6 +18,7 @@ import {
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useSolidExtension } from "@/lib/session/extension-session";
+import { preloadAppFrame } from "@/shell/app-frame-loaders";
 import { useSuiteEnvironment } from "@/shell/environment";
 import { safeNext } from "@/shell/lib/next";
 import { RECENT_PROVIDERS_KEY, recentProviders } from "@/shell/lib/preferences";
@@ -43,12 +45,19 @@ type Pending = { kind: "webid" | "provider" | "account" | "custom"; key: string 
 
 function SignIn() {
   const env = useSuiteEnvironment();
-  const { signIn, signInWith, backendKinds, accounts, active } = useAccounts();
+  const { signIn, signInWith, backendKinds, accounts, active, status } = useAccounts();
   const extension = useSolidExtension();
   const router = useRouter();
   const params = useSearchParams();
   const next = params.get("next");
   const adding = params.get("add") === "1" && active;
+  useEffect(() => {
+    // Keep the callback transition responsive while the provider owns the popup.
+    router.prefetch(safeNext(next));
+    void preloadAppFrame().catch(() => {
+      /* Navigation can retry a failed preload. */
+    });
+  }, [next, router]);
   const registration = useRegistration();
   const [recent, setRecent] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -124,59 +133,65 @@ function SignIn() {
           {SIGNUP_UNAVAILABLE_NOTE}
         </p>
       )}
-      <SignInCard
-        title="Sign in to Solid Suite"
-        subtitle="Use your Account ID, or choose where your account lives."
-        providers={providers}
-        recentProviders={recent}
-        recentAccounts={recentAccounts}
-        pending={pending}
-        error={error}
-        onCancel={() => attempt.current?.abort()}
-        onWebId={(input) =>
-          void submit(hintForField("webid", input), { kind: "webid", key: input })
-        }
-        onCustomProvider={(input) =>
-          void submit(hintForField("provider", input), { kind: "custom", key: input })
-        }
-        onProvider={(provider) =>
-          void submit({ issuer: provider.issuer }, { kind: "provider", key: provider.id })
-        }
-        onAccount={(account) =>
-          void submit({ webId: account.webId }, { kind: "account", key: account.webId })
-        }
-        footer={
-          <div className="shell-public-actions">
-            {useExtension && (
-              <Button
-                variant="outline"
-                onClick={async () => {
-                  try {
-                    await signInWith("extension", { webId: extension.webId ?? "" });
-                    router.replace(safeNext(next));
-                  } catch {
-                    setError("The Solid browser extension didn't sign you in. Please try again.");
-                  }
-                }}
-              >
-                Use the Solid extension
-              </Button>
-            )}
-            <DemoButton next={next} />
-            <p className="shell-public-footer">
-              {registration.available && (
-                <>
-                  <span>
-                    New here? <a href="/signup">Create an account</a>
-                  </span>
-                  <span aria-hidden="true"> · </span>
-                </>
+      <fieldset
+        disabled={status === "loading"}
+        style={{ border: 0, margin: 0, padding: 0, minWidth: 0 }}
+      >
+        <legend className="suite-sr-only">Sign-in methods</legend>
+        <SignInCard
+          title="Sign in to Solid Suite"
+          subtitle="Use your Account ID, or choose where your account lives."
+          providers={providers}
+          recentProviders={recent}
+          recentAccounts={recentAccounts}
+          pending={pending}
+          error={error}
+          onCancel={() => attempt.current?.abort()}
+          onWebId={(input) =>
+            void submit(hintForField("webid", input), { kind: "webid", key: input })
+          }
+          onCustomProvider={(input) =>
+            void submit(hintForField("provider", input), { kind: "custom", key: input })
+          }
+          onProvider={(provider) =>
+            void submit({ issuer: provider.issuer }, { kind: "provider", key: provider.id })
+          }
+          onAccount={(account) =>
+            void submit({ webId: account.webId }, { kind: "account", key: account.webId })
+          }
+          footer={
+            <div className="shell-public-actions">
+              {useExtension && (
+                <Button
+                  variant="outline"
+                  onClick={async () => {
+                    try {
+                      await signInWith("extension", { webId: extension.webId ?? "" });
+                      router.replace(safeNext(next));
+                    } catch {
+                      setError("The Solid browser extension didn't sign you in. Please try again.");
+                    }
+                  }}
+                >
+                  Use the Solid extension
+                </Button>
               )}
-              <PodExplainer />
-            </p>
-          </div>
-        }
-      />
+              <DemoButton next={next} />
+              <p className="shell-public-footer">
+                {registration.available && (
+                  <>
+                    <span>
+                      New here? <a href="/signup">Create an account</a>
+                    </span>
+                    <span aria-hidden="true"> · </span>
+                  </>
+                )}
+                <PodExplainer />
+              </p>
+            </div>
+          }
+        />
+      </fieldset>
     </>
   );
 }

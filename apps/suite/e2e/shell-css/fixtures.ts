@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import AxeBuilder from "@axe-core/playwright";
 import { test as base, expect, type Locator, type Page } from "@playwright/test";
 
@@ -30,6 +31,7 @@ export async function accessible(page: Page) {
 /** Traverse the real tab order, including in the CSS login form. */
 export async function tabTo(page: Page, target: Locator) {
   await expect(target).toBeVisible();
+  await expect(target).toBeEnabled();
   for (let step = 0; step < 40; step++) {
     if (await target.evaluate((element) => element === document.activeElement)) return;
     await page.keyboard.press("Tab");

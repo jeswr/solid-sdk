@@ -1,6 +1,8 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex
 "use client";
+
 /**
  * File preview (04-drive §2.7, §4.6): the full-screen preview dialog over a
  * listing (←/→ step through the folder's files) and the same viewer as a page
@@ -39,6 +41,7 @@ import {
   useState,
 } from "react";
 import { encodeRef } from "@/lib/refs";
+import { AppHeading } from "@/shell/app-frame";
 import type { DriveClient, DriveItem } from "../lib/client/client";
 import { resolveContentType } from "../lib/files/resolve-content-type";
 import { parseCsvPreview, previewKind } from "../lib/view/view";
@@ -577,7 +580,7 @@ export function PreviewPage({
       aria-label="File preview"
       tabIndex={-1}
     >
-      <h1 className="sr-only">{item.name}</h1>
+      <AppHeading className="sr-only">{item.name}</AppHeading>
       <PreviewHeader
         item={item}
         leading={

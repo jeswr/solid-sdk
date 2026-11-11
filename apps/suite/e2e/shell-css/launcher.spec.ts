@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { accessible, expect, tabTo, test } from "./fixtures";
 
 for (const keyboardOnly of [false, true]) {
@@ -37,6 +38,8 @@ for (const keyboardOnly of [false, true]) {
 
 test("scenario 4: Cmd/Ctrl+K opens the launcher with the current app marked", async ({ page }) => {
   await page.goto("/home");
+  // A document load finishes before the DPoP-bound refresh restores the interactive shell.
+  await expect(page.getByRole("button", { name: "Toggle sidebar", exact: true })).toBeVisible();
   await page.keyboard.press("ControlOrMeta+k");
   const launcher = page.getByRole("dialog", { name: "Apps", exact: true });
   await expect(launcher).toBeVisible();

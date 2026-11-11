@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 // Opt-in local CSS harness. Loopback HTTP auth requires a development build:
 //   SUITE_TEST_CAPS='{}' pnpm test:e2e:css
 // This suite is not wired into CI.
@@ -31,6 +32,7 @@ export default defineConfig({
   ...base,
   testDir: "./e2e/shell-css",
   testIgnore: [],
+  globalSetup: "./e2e/shell-css/global-setup.ts",
   outputDir: "../../artifacts/playwright/SH-11",
   use: { ...base.use, baseURL },
   webServer: [

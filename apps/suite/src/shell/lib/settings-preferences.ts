@@ -1,5 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { z } from "zod";
+import { START_PAGE } from "./next";
 
 export const preferencesSchema = z.object({
   theme: z.enum(["system", "light", "dark"]).catch("system"),
@@ -7,7 +9,7 @@ export const preferencesSchema = z.object({
   fontScale: z.enum(["90", "100", "110"]).catch("100"),
   motion: z.enum(["system", "reduce"]).catch("system"),
   appColours: z.boolean().catch(true),
-  startPage: z.enum(["/home", "/drive", "/docs", "/tasks", "/permissions"]).catch("/drive"),
+  startPage: z.enum(["/home", "/drive", "/docs", "/tasks", "/permissions"]).catch(START_PAGE),
   notifications: z
     .object({
       shared: z.boolean().catch(true),

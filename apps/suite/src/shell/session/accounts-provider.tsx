@@ -1,15 +1,8 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 "use client";
 
-import {
-  createContext,
-  type ReactNode,
-  useCallback,
-  useContext,
-  useEffect,
-  useRef,
-  useState,
-} from "react";
+import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import {
   ACCOUNTS_KEY,
   type AccountsAction,
@@ -21,6 +14,7 @@ import {
 } from "../lib/accounts-store";
 import { suiteEnv } from "../lib/env";
 import { clearRecentItems } from "../lib/recent-items";
+import { AccountsContext } from "./accounts-context";
 import { DemoBackend, demoAccount } from "./demo-backend";
 import { SolidBackend } from "./solid-backend";
 import {
@@ -53,7 +47,6 @@ export interface AccountsContextValue {
   reauth(): Promise<SuiteAccount>;
   fetch: typeof fetch;
 }
-const AccountsContext = createContext<AccountsContextValue | null>(null);
 
 export function AccountsProvider({
   children,
@@ -248,8 +241,4 @@ export function AccountsProvider({
   );
 }
 
-export function useAccounts(): AccountsContextValue {
-  const value = useContext(AccountsContext);
-  if (!value) throw new Error("useAccounts requires AccountsProvider");
-  return value;
-}
+export { useAccounts } from "./accounts-context";

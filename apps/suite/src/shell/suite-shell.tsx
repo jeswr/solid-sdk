@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
 "use client";
 import {
@@ -165,7 +166,19 @@ function Frame({
  */
 function ReadyShortcuts() {
   const { status } = useAccounts();
-  return status === "ready" ? <GlobalShortcuts /> : null;
+  return status === "ready" ? (
+    <GlobalShortcuts
+      paletteLabel="Open apps"
+      onOpenPalette={() => {
+        // The rail and mobile tab bar own their launchers. Activate the visible
+        // native trigger so keyboard and pointer entry share focus and cleanup.
+        const triggers = document.querySelectorAll<HTMLButtonElement>(
+          '[data-slot="app-launcher-trigger"]',
+        );
+        [...triggers].find((trigger) => trigger.getClientRects().length > 0)?.click();
+      }}
+    />
+  ) : null;
 }
 
 export function SuiteShell(props: SuiteShellProps) {

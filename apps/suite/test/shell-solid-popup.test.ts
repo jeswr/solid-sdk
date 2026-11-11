@@ -1,9 +1,15 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
+import { readFileSync } from "node:fs";
+import { runInNewContext } from "node:vm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { openSolidLoginPopup } from "../src/shell/session/solid-popup";
 
 const redirect = "https://suite.example/auth/callback.html";
 const callback = `${redirect}?code=example-code&state=example-state&iss=https%3A%2F%2Fid.example%2F`;
+const callbackHtml = readFileSync(new URL("../public/auth/callback.html", import.meta.url), "utf8");
+const callbackScript = /<script>([\s\S]*?)<\/script>/u.exec(callbackHtml)?.[1];
+if (!callbackScript) throw new Error("Missing callback bridge script");
 function harness() {
   const popup = { closed: false, location: { href: "about:blank" }, close: vi.fn() };
   const listeners = new Set<(event: MessageEvent<unknown>) => void>();
@@ -37,6 +43,52 @@ afterEach(() => {
 });
 
 describe("Solid authorization popup", () => {
+  it("lets the validated opener close even when callback delivery misses a cancellation poll", async () => {
+    const h = harness();
+    const controller = openSolidLoginPopup(redirect);
+    const code = controller.getCode(
+      new URL("https://id.example/authorize"),
+      new AbortController().signal,
+    );
+    void code.catch(() => {});
+    const close = vi.fn(() => {
+      h.popup.closed = true;
+    });
+    runInNewContext(callbackScript, {
+      window: {
+        close,
+        opener: {
+          location: { origin: "https://suite.example" },
+          postMessage: (data: unknown, origin: string) => {
+            expect(origin).toBe("https://suite.example");
+            setTimeout(() => h.send({ data }), 500);
+          },
+        },
+      },
+      location: { href: callback, origin: "https://suite.example" },
+    });
+    await vi.advanceTimersByTimeAsync(250);
+    expect(h.listeners.size).toBe(1);
+    expect(h.popup.closed).toBe(false);
+    await vi.advanceTimersByTimeAsync(250);
+    await expect(code).resolves.toBe(callback);
+    expect(close).not.toHaveBeenCalled();
+    expect(h.popup.close).toHaveBeenCalledOnce();
+  });
+
+  it("never posts a callback to a foreign opener", () => {
+    const postMessage = vi.fn();
+    const replace = vi.fn();
+    const setItem = vi.fn();
+    runInNewContext(callbackScript, {
+      window: { opener: { location: { origin: "https://attacker.example" }, postMessage } },
+      location: { href: callback, origin: "https://suite.example", replace },
+      sessionStorage: { setItem },
+    });
+    expect(postMessage).not.toHaveBeenCalled();
+    expect(setItem).toHaveBeenCalledWith("suite.auth.callback", callback);
+    expect(replace).toHaveBeenCalledWith("/signin?callback=1");
+  });
   it("opens synchronously and reports popup blocking", () => {
     const h = harness();
     openSolidLoginPopup(redirect);

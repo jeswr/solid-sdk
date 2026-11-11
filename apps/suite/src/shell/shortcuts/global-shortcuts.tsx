@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 "use client";
 import { useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
@@ -34,12 +35,14 @@ function GoToShortcut({ letter, name, href }: { letter: string; name: string; hr
 }
 export function GlobalShortcuts({
   onOpenPalette,
+  paletteLabel = "Command palette",
   onOpenHelp,
   createActions,
   recent,
   onSearch,
 }: {
   onOpenPalette?: () => void;
+  paletteLabel?: string;
   onOpenHelp?: () => void;
   createActions?: readonly PaletteCreateAction[];
   recent?: readonly PaletteRecent[];
@@ -83,7 +86,7 @@ export function GlobalShortcuts({
   useShortcut({
     id: "global.palette",
     keys: "Cmd/Ctrl+K",
-    label: "Command palette",
+    label: paletteLabel,
     group: "Global",
     run: () => (onOpenPalette ? onOpenPalette() : setPaletteOpen((value) => !value)),
   });

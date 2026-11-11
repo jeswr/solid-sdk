@@ -12,6 +12,11 @@ if (
   throw new Error("Demo fixtures must be disabled for deployment builds");
 
 const config: NextConfig = {
+  // The live OIDC harness needs next dev for HTTP loopback. Keep its warmed route
+  // entries alive so eviction/recompilation cannot Fast Refresh the opener mid-login.
+  ...(process.env.SUITE_E2E === "1" && process.env.NODE_ENV === "development"
+    ? { onDemandEntries: { maxInactiveAge: 30 * 60_000, pagesBufferLength: 8 } }
+    : {}),
   ...(process.env.NEXT_PUBLIC_SUITE_TARGET === "native"
     ? ({ output: "export", trailingSlash: true, images: { unoptimized: true } } as const)
     : {}),

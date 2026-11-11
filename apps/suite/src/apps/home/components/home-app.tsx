@@ -1,16 +1,17 @@
 // AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6
 "use client";
+
 /**
  * The frame for Home, Permissions and Connect services (03-home-permissions).
- * Like Drive, it runs against the session's injected `fetch` (the in-browser
- * demo pod until sign-in lands) inside the interim suite frame.
+ * Like Drive, it uses the shell account's injected fetch and shared frame;
+ * standalone previews retain the interim frame and session adapter.
  */
 
 import { Toaster } from "@jeswr/suite-ui";
 import { createContext, type ReactNode, useContext } from "react";
-import { SuiteFrame } from "@/components/interim-shell/suite-frame";
 import { type PodSession, PodSessionProvider, usePodSessionState } from "@/lib/session/pod-session";
+import { AppFrame, AppHeading, AppSessionGuard } from "@/shell/app-frame";
 import { useDomainItems } from "../state/use-domain-items";
 import { HomeSidebar } from "./home-sidebar";
 
@@ -35,7 +36,7 @@ function SessionGate({ children }: { children: ReactNode }) {
   if (state.status === "error") {
     return (
       <div className="hm-boot" role="alert">
-        <h1>Can't open your pod</h1>
+        <AppHeading>Can't open your pod</AppHeading>
         <p>This browser couldn't open the demo pod's storage.</p>
       </div>
     );
@@ -44,7 +45,7 @@ function SessionGate({ children }: { children: ReactNode }) {
   if (state.status === "signed-out") {
     return (
       <div className="hm-boot">
-        <h1>Home</h1>
+        <AppHeading>Home</AppHeading>
         <p role="status">Sign in to open your pod</p>
       </div>
     );
@@ -56,18 +57,20 @@ function HomeFrame({ session, children }: { session: PodSession; children: React
   const { counts } = useDomainItems(session);
   return (
     <HomeSessionContext value={session}>
-      <SuiteFrame app="home" sidebar={<HomeSidebar counts={counts} />}>
+      <AppFrame app="home" sidebar={<HomeSidebar counts={counts} />}>
         {children}
-      </SuiteFrame>
+      </AppFrame>
     </HomeSessionContext>
   );
 }
 
 export function HomeApp({ children }: { children: ReactNode }) {
   return (
-    <PodSessionProvider>
-      <SessionGate>{children}</SessionGate>
-      <Toaster position="bottom-center" />
-    </PodSessionProvider>
+    <AppSessionGuard>
+      <PodSessionProvider>
+        <SessionGate>{children}</SessionGate>
+        <Toaster position="bottom-center" />
+      </PodSessionProvider>
+    </AppSessionGuard>
   );
 }

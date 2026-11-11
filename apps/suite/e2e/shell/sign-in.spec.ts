@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { mkdir } from "node:fs/promises";
 import AxeBuilder from "@axe-core/playwright";
 import { expect, type Page, test } from "@playwright/test";
@@ -99,7 +100,7 @@ test("pod explainer opens with the keyboard and returns focus", async ({ page })
 test("demo lands on the start page and the shell keeps the session", async ({ page }, info) => {
   await page.goto("/signin");
   await page.getByRole("button", { name: "Try it with a demo pod" }).click();
-  await expect(page).toHaveURL(/\/drive(\/my)?$/);
+  await expect(page).toHaveURL(/\/home$/);
   await page.goto("/search");
   await expect(page.getByRole("heading", { name: "Search", exact: true, level: 1 })).toBeVisible();
   await expect(
@@ -113,7 +114,7 @@ test("demo lands on the start page and the shell keeps the session", async ({ pa
   ).toBeVisible();
   await accessible(page);
   await page.goto("/");
-  await expect(page).toHaveURL(/\/drive(\/my)?$/);
+  await expect(page).toHaveURL(/\/home$/);
 });
 
 test("session guard keeps a safe return route", async ({ page }) => {
@@ -129,7 +130,7 @@ test("unsafe next cannot redirect the demo outside the suite", async ({ page }) 
   await page.goto("/signin?next=//evil.example");
   await accessible(page);
   await page.getByRole("button", { name: "Try it with a demo pod" }).click();
-  await expect(page).toHaveURL(/\/drive(\/my)?$/);
+  await expect(page).toHaveURL(/\/home$/);
   await accessible(page);
 });
 
@@ -174,11 +175,14 @@ test("expired sessions keep content inert until reauthentication or signout", as
 });
 
 test("invalid Drive reference renders the not-found page", async ({ page }) => {
+  await page.goto("/signin");
+  await page.getByRole("button", { name: "Try it with a demo pod" }).click();
+  await expect(page).toHaveURL(/\/home$/);
   await page.goto("/drive/f/not-a-ref");
   await expect(
     page.getByRole("heading", { name: "We couldn't find that page", exact: true }),
   ).toBeVisible();
-  await expect(page.getByRole("link", { name: "Go to Drive" })).toHaveAttribute("href", "/drive");
+  await expect(page.getByRole("link", { name: "Go to Home" })).toHaveAttribute("href", "/home");
   await expect(page.getByRole("link", { name: "Search", exact: true })).toHaveAttribute(
     "href",
     "/search",
