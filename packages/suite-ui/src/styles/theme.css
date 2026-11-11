@@ -85,6 +85,18 @@
   --color-app-permissions-soft: var(--app-permissions-soft);
   --color-presence-permissions: var(--presence-permissions);
   --color-glyph: var(--glyph);
+  --color-project-red: var(--project-red);
+  --color-project-orange: var(--project-orange);
+  --color-project-amber: var(--project-amber);
+  --color-project-yellow: var(--project-yellow);
+  --color-project-lime: var(--project-lime);
+  --color-project-green: var(--project-green);
+  --color-project-teal: var(--project-teal);
+  --color-project-cyan: var(--project-cyan);
+  --color-project-blue: var(--project-blue);
+  --color-project-violet: var(--project-violet);
+  --color-project-purple: var(--project-purple);
+  --color-project-pink: var(--project-pink);
   --color-card: var(--card);
   --color-card-foreground: var(--card-foreground);
   --color-popover: var(--popover);

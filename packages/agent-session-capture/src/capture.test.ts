@@ -623,7 +623,7 @@ describe("capture with real ChatWriter and client credentials", () => {
     expect(stored).not.toMatch(
       /FAKE_QUEUE_SECRET|FAKE_CONTINUATION|FAKE_LAST|fixture-secret|DROP_/,
     );
-    expect(stored).toContain("[REDACTED ENV]");
+    expect(stored).toContain('API_TOKEN=\\"[REDACTED]');
     // Re-running offline does not duplicate the local snapshot.
     await runCapture(["claude", "--transcript", transcript], {
       ...options,
