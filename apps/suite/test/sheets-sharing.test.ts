@@ -32,8 +32,8 @@ describe("workbook container sharing", () => {
     ).toBe("*");
     await adapter.setPerson(book.container, READER, "viewer");
     await pod.fetch(`${book.container}versions/one.json`, { method: "PUT", body: "{}" });
-    // An identity-aware WAC transport over the existing demo pod: own ACL first,
-    // then nearest ancestor defaults. The plain demo pod itself does not enforce WAC.
+    // Match the production credential boundary: Bob's credentials cover his
+    // storage, never Alice's sibling pod, even on the same origin.
     const readerFetch: typeof fetch = async (input, init) => {
       const target = String(input);
       let resource = target;
@@ -44,7 +44,8 @@ describe("workbook container sharing", () => {
           const dataset = await parseRdf(await acl.text(), "text/turtle");
           const grants = [...new AclResource(dataset, DataFactory).authorizations].filter(
             (rule) =>
-              rule.agent.has(READER) &&
+              ((target.startsWith("https://pod.example/bob/") && rule.agent.has(READER)) ||
+                rule.agentClass.has("http://xmlns.com/foaf/0.1/Agent")) &&
               (inherited ? rule.default === resource : rule.accessTo === resource),
           );
           const writing = init?.method === "PUT";
@@ -63,9 +64,15 @@ describe("workbook container sharing", () => {
       ...options,
       podRoot: "https://pod.example/bob/",
       fetch: readerFetch,
+      publicFetch: readerFetch,
       webId: READER,
     });
     await expect(reader.open(book.container)).rejects.toThrow();
+    await expect(reader.openShared(book.container)).rejects.toThrow(
+      "opening private workbooks shared from another pod is not supported yet",
+    );
+    expect((await readerFetch(`${book.container}workbook.json`)).status).toBe(403);
+    await adapter.setGeneral(book.container, { mode: "link", role: "viewer" });
     const opened = await reader.openShared(book.container);
     expect(opened.readOnly).toBe(true);
     expect(opened.snapshot).toEqual(book.snapshot);
@@ -84,6 +91,7 @@ describe("workbook container sharing", () => {
       (await readerFetch(`${book.container}workbook.json`, { method: "PUT", body: "{}" })).status,
     ).toBe(403);
     await adapter.setPerson(book.container, READER, null);
+    await adapter.setGeneral(book.container, { mode: "restricted" });
     expect((await readerFetch(`${book.container}workbook.json`)).status).toBe(403);
     await adapter.setGeneral(book.container, { mode: "link", role: "viewer" });
     expect((await adapter.load(book.container, signal())).general).toEqual({
@@ -218,10 +226,54 @@ describe("workbook container sharing", () => {
   });
 
   it.each([
+    false,
+    true,
+  ])("refuses a changed ACL endpoint on fresh discovery (mixed policy %s)", async (mixed) => {
+    const { adapter, book, pod, calls, setHook } = await setup();
+    await adapter.load(book.container, signal());
+    const alternate = `${book.container}permissions.ttl`;
+    const policy = privateAcl(book.container, WEBID);
+    if (mixed)
+      new SheetResource(`${alternate}#policy`, policy, DataFactory)
+        .links(`${ACP}accessControl`)
+        .add(`${book.container}.acr`);
+    await pod.fetch(alternate, {
+      method: "PUT",
+      headers: { "content-type": "text/turtle" },
+      body: await serializeTurtle(policy),
+    });
+    let heads = 0;
+    setHook((call) =>
+      call.method === "HEAD" && call.url === book.container
+        ? new Response(null, {
+            headers: {
+              link: `<${++heads === 1 ? `${book.container}.acl` : alternate}>; rel="acl"`,
+            },
+          })
+        : undefined,
+    );
+    calls.length = 0;
+    await expect(adapter.load(book.container, signal())).rejects.toMatchObject({
+      code: "unsupported",
+    });
+    await expect(adapter.setPerson(book.container, READER, "viewer")).rejects.toMatchObject({
+      code: "unsupported",
+    });
+    await expect(
+      adapter.setGeneral(book.container, { mode: "link", role: "viewer" }),
+    ).rejects.toMatchObject({ code: "unsupported" });
+    expect(heads).toBe(2);
+    expect(calls.some((call) => call.method === "PUT")).toBe(false);
+  });
+
+  it.each([
     "missing",
     "duplicate",
     "foreign",
     "head-failure",
+    "unquoted",
+    "unrelated",
+    "no-relation",
   ])("rejects %s ACL discovery", async (kind) => {
     const { adapter, book, setHook } = await setup();
     setHook((call) =>
@@ -229,13 +281,19 @@ describe("workbook container sharing", () => {
         ? new Response(null, {
             status: kind === "head-failure" ? 403 : 200,
             headers:
-              kind === "missing"
+              kind === "missing" || kind === "head-failure"
                 ? {}
                 : {
                     link:
-                      kind === "foreign"
-                        ? '<https://foreign.example/.acl>; rel="acl"'
-                        : `<${book.container}.acl>; rel="acl", <${book.container}.acl>; rel="acl"`,
+                      kind === "unquoted"
+                        ? `<${book.container}.acl>; rel=acl`
+                        : kind === "unrelated"
+                          ? `<${book.container}.acl>; rel="alternate"`
+                          : kind === "no-relation"
+                            ? `<${book.container}.acl>; title="Permissions"`
+                            : kind === "foreign"
+                              ? '<https://foreign.example/.acl>; rel="acl"'
+                              : `<${book.container}.acl>; rel="acl", <${book.container}.acl>; rel="acl"`,
                   },
           })
         : undefined,
@@ -243,6 +301,26 @@ describe("workbook container sharing", () => {
     await expect(adapter.load(book.container, signal())).rejects.toMatchObject({
       code: "unsupported",
     });
+  });
+
+  it("refuses ACL creation when demo verification discovers a changed endpoint", async () => {
+    const { adapter, book, calls, setHook } = await setup();
+    let heads = 0;
+    setHook((call) =>
+      call.method === "HEAD" && call.url === book.container
+        ? new Response(null, {
+            headers: {
+              link: `<${++heads === 1 ? `${book.container}.acl` : `${book.container}permissions.ttl`}>; rel="acl"`,
+              "X-Solid-Demo-Access-Control": "none",
+            },
+          })
+        : undefined,
+    );
+    calls.length = 0;
+    await expect(adapter.load(book.container, signal())).rejects.toMatchObject({
+      code: "unsupported",
+    });
+    expect(calls.some((call) => call.method === "PUT")).toBe(false);
   });
 
   it.each([

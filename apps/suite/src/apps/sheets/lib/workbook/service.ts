@@ -25,6 +25,7 @@ import { hasStatus, resources, strongEtag } from "./resources";
 export function createWorkbookService(options: WorkbookServiceOptions): WorkbookService {
   const root = new URL("sheets/", options.podRoot).href;
   const storage = createSheetStorage(options.fetch, options.podRoot);
+  const publicFetch = options.publicFetch ?? globalThis.fetch;
   const io = resources(storage);
   const now = options.now ?? (() => new Date());
   const register = registration(options, root);
@@ -178,11 +179,17 @@ export function createWorkbookService(options: WorkbookServiceOptions): Workbook
 
   async function openShared(container: string): Promise<OpenedWorkbook> {
     const url = assertSharedWorkbook(root, container);
-    // The existing session fetch retains its credential policy. This read-only
-    // transport additionally bounds requests to the validated workbook, with no redirects.
+    // Sessions cannot authorize a foreign workbook. Public reads never use session
+    // credentials, and the storage transport bounds them to this URL with no redirects.
+    const anonymous: typeof fetch = (input, init) =>
+      publicFetch(input, { ...init, credentials: "omit" });
     try {
-      return await read(url, createSheetStorage(options.fetch, url), true);
+      return await read(url, createSheetStorage(anonymous, url), true);
     } catch (error) {
+      if (error instanceof WorkbookNotFoundError && error.reason === "forbidden")
+        throw new WorkbookLinkError(
+          "You need access from the owner's pod; opening private workbooks shared from another pod is not supported yet",
+        );
       if (error instanceof RedirectRefusedError)
         throw new WorkbookLinkError(
           "This shared spreadsheet redirects to another address. Open a direct workbook link.",

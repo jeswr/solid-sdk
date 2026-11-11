@@ -96,11 +96,13 @@ export function createPendingSaves() {
         };
       },
       schedule,
-      setReadOnly() {
-        opened = { ...opened, readOnly: true };
+      setReadOnly(readOnly = true) {
+        if (!readOnly && !opened.readOnly) return;
+        opened = { ...opened, readOnly };
         // Stop timers and capture the engine getter without discarding its pending edit.
-        queue.setOnline(false);
-        void queue.flush();
+        // Restored Write resumes with the registry's current connectivity.
+        queue.setOnline(readOnly ? false : online);
+        if (readOnly) void queue.flush();
       },
       rename(next: string) {
         if (opened.readOnly) return;

@@ -39,6 +39,7 @@ describe("workbook editor lifecycle", () => {
     await ownerEntry.flush();
     const recipient = createWorkbookService({
       ...options,
+      publicFetch: options.fetch,
       podRoot: "https://pod.example/bob/",
       webId: "https://pod.example/bob/profile/card#me",
     });
@@ -372,4 +373,65 @@ it("retains edits, title and unload protection through repeated view-only naviga
   expect(save).toHaveBeenCalledTimes(1);
   expect(pendingSaves.get(book.container)?.dirty).toBe(true);
   pendingSaves.drop(book.container);
+});
+
+it.each([
+  true,
+  false,
+])("restores Write on reopen without losing retained edits (online %s)", async (online) => {
+  const { service, book, pod, setHook } = await setup();
+  const save = vi.spyOn(service, "save");
+  const first = await mount(h(Editor, { container: book.container }));
+  const local = snapshot("Retained after revocation");
+  let revoked = true;
+  setHook(async (call) => {
+    if (call.method === "PUT" && revoked) return new Response(null, { status: 403 });
+    if (call.method !== "GET") return undefined;
+    const response = await pod.fetch(call.url, call.init);
+    const headers = new Headers(response.headers);
+    headers.set("wac-allow", `user="${revoked ? "read" : "read write"}",public=""`);
+    return new Response(response.body, { status: response.status, headers });
+  });
+  await act(async () => {
+    state.scheduleSave(() => local);
+    state.rename("Retained title");
+    await state.flush();
+  });
+  expect(state.readOnly).toBe(true);
+  await first.unmount();
+  const pending = pendingSaves.get(book.container);
+  const view = await mount(h(Editor, { container: book.container }));
+  expect(state.readOnly).toBe(true);
+  expect(state.workbook?.snapshot).toEqual(local);
+  await view.unmount();
+  expect(save).toHaveBeenCalledTimes(1);
+  if (!online) {
+    vi.spyOn(window.navigator, "onLine", "get").mockReturnValue(false);
+    window.dispatchEvent(new Event("offline"));
+  }
+  revoked = false;
+  const writable = await mount(h(Editor, { container: book.container }));
+  expect(state.readOnly).toBe(false);
+  expect(state.workbook?.snapshot).toEqual(local);
+  expect(state.metadata?.title).toBe("Retained title");
+  expect(pendingSaves.get(book.container)).toBe(pending);
+  await act(async () => {
+    if (!online) {
+      await state.retry();
+      expect(save).toHaveBeenCalledTimes(1);
+      vi.spyOn(window.navigator, "onLine", "get").mockReturnValue(true);
+      window.dispatchEvent(new Event("online"));
+    }
+    await state.retry();
+    await state.flush();
+  });
+  expect(state.status).toBe("saved");
+  expect((await service.open(book.container)).snapshot).toEqual(local);
+  expect((await service.open(book.container)).metadata.title).toBe("Retained title");
+  await act(async () => {
+    state.scheduleSave(() => snapshot("Writable again"));
+    await state.flush();
+  });
+  expect((await service.open(book.container)).snapshot).toEqual(snapshot("Writable again"));
+  await writable.unmount();
 });

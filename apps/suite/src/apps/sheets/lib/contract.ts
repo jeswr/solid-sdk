@@ -99,7 +99,7 @@ export class WorkbookNotFoundError extends Error {
   }
 }
 
-/** Rejected before any request carrying the session's credentials. */
+/** Unsafe shared link or a shared resource that cannot be opened anonymously. */
 export class WorkbookLinkError extends Error {
   constructor(
     message = "Shared spreadsheets must use a container URL on the same origin as your pod.",
@@ -133,7 +133,7 @@ export interface WorkbookService {
   /** Imports a browser-read Excel workbook, preserving supported formats and formulas. */
   createFromXlsx(input: { title: string; data: Uint8Array }): Promise<OpenedWorkbook>;
   open(container: string): Promise<OpenedWorkbook>;
-  /** Same-origin shared links only; always view-only, with no redirects or foreign writes. */
+  /** Public same-origin shared links only; anonymous and view-only, with no redirects. */
   openShared(container: string): Promise<OpenedWorkbook>;
   /**
    * Writes `workbook.json` with If-Match `base.snapshotEtag` (a freshly read ETag
@@ -164,6 +164,8 @@ export interface WorkbookService {
 
 export interface WorkbookServiceOptions {
   readonly fetch: typeof globalThis.fetch;
+  /** Pristine, credential-free transport for public shared workbooks. Defaults to global fetch. */
+  readonly publicFetch?: typeof globalThis.fetch;
   /** Storage root (ends in `/`). */
   readonly podRoot: string;
   readonly webId: string;

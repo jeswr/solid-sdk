@@ -9,6 +9,7 @@ import type {
   WorkbookService,
 } from "../src/apps/sheets/lib/contract";
 import { pendingSaves } from "../src/apps/sheets/lib/pending-saves";
+import { createWorkbookService } from "../src/apps/sheets/lib/workbook";
 import { act, click, deferred, h, key, mount } from "./drive-ui-dom";
 import { harness, snapshot } from "./sheets-workbook-helpers";
 
@@ -121,6 +122,28 @@ it.each([
   );
   expect(calls).toEqual([]);
   expect(mocks.mount).not.toHaveBeenCalled();
+  await editor.unmount();
+});
+
+it.each([
+  401, 403,
+])("explains unsupported private recipient access (%s) before mounting a grid", async (status) => {
+  const { book, options } = await setup();
+  const publicFetch = vi.fn<typeof fetch>(async (_input, init) => {
+    expect(init?.credentials).toBe("omit");
+    return new Response(null, { status });
+  });
+  mocks.service = createWorkbookService({
+    ...options,
+    podRoot: "https://pod.example/bob/",
+    publicFetch,
+  });
+  const editor = await mount(h(SheetEditor, { container: book.container }));
+  expect(editor.host.querySelector('[role="alert"]')?.textContent).toContain(
+    "You need access from the owner's pod; opening private workbooks shared from another pod is not supported yet",
+  );
+  expect(mocks.mount).not.toHaveBeenCalled();
+  expect(publicFetch).toHaveBeenCalledTimes(2);
   await editor.unmount();
 });
 

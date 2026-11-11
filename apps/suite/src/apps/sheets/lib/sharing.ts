@@ -21,14 +21,27 @@ class WorkbookSharingError extends ShareError {
 /** Check every discovery/read, including the superclass's fresh ACL read. */
 function wacOnlyFetch(transport: typeof fetch): typeof fetch {
   const http = refuseRedirects(transport);
+  const endpoints = new Map<string, string>();
   return async (input, init) => {
     const response = await http(input, init);
     if ((response.headers.get("link") ?? "").includes(ACP)) throw new WorkbookSharingError();
-    if (
-      response.ok &&
-      (init?.method ?? "GET") === "GET" &&
-      new URL(String(input)).pathname.endsWith(".acl")
-    ) {
+    if (response.ok && init?.method === "HEAD") {
+      const links = [...(response.headers.get("link") ?? "").matchAll(/<([^>]+)>\s*([^,]*)/g)];
+      const targets = links.filter((match) => {
+        const rel = (match[2] as string).match(/;\s*rel\s*=\s*(?:"([^"]*)"|([^;\s,]+))/i);
+        return (rel?.[1] ?? rel?.[2] ?? "").split(/\s+/).includes("acl");
+      });
+      const resource = String(input);
+      const target = targets[0]?.[1];
+      if (targets.length !== 1 || !target) throw new WorkbookSharingError();
+      const endpoint = new URL(target, resource).href;
+      const previous = endpoints.get(resource);
+      if (previous !== undefined && previous !== endpoint) throw new WorkbookSharingError();
+      endpoints.set(resource, endpoint);
+    }
+    // This transport reads access-policy RDF, including inherited and freshly
+    // discovered documents. ACL Link targets need not have an .acl suffix.
+    if (response.ok && (init?.method ?? "GET") === "GET") {
       const dataset = await parseRdf(
         await response.clone().text(),
         response.headers.get("content-type"),
@@ -72,7 +85,9 @@ export class WorkbookSharingAdapter extends WacSharingAdapter {
     if (existing.status === 404) {
       // Creating an ACL must not silently revoke inherited collaborators. Only a
       // verified owner-only policy (or the isolated demo backend) can be narrowed here.
-      if (!(await ensurePrivateTasksAccess(this.session, container, this.session.webId))) {
+      if (
+        !(await ensurePrivateTasksAccess({ ...this.session, fetch }, container, this.session.webId))
+      ) {
         try {
           await verifyPrivateIndexAccess(
             container,

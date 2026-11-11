@@ -1,5 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { WorkbookLinkError } from "../src/apps/sheets/lib/contract";
 import { createWorkbookService } from "../src/apps/sheets/lib/workbook";
 import { harness, snapshot } from "./sheets-workbook-helpers";
@@ -10,6 +10,7 @@ async function setup() {
   const book = await owner.service.create({ title: "Alice's spreadsheet", snapshot: snapshot() });
   const reader = createWorkbookService({
     ...owner.options,
+    publicFetch: owner.fetch,
     podRoot: RECIPIENT,
     webId: `${RECIPIENT}profile/card#me`,
   });
@@ -18,6 +19,36 @@ async function setup() {
 }
 
 describe("shared workbook credential boundary", () => {
+  it.each([
+    401, 403,
+  ])("explains private foreign access (%s) and opens public workbooks anonymously", async (status) => {
+    const { book, pod, options } = await setup();
+    let publicRead = false;
+    const publicFetch = vi.fn<typeof fetch>(async (input, init) => {
+      expect(init?.credentials).toBe("omit");
+      expect(init?.redirect).toBe("manual");
+      expect(new Headers(init?.headers).has("authorization")).toBe(false);
+      return publicRead ? pod.fetch(input, init) : new Response(null, { status });
+    });
+    const sessionFetch = vi.fn<typeof fetch>(async () => {
+      throw new Error("Foreign reads must use the public transport");
+    });
+    const reader = createWorkbookService({
+      ...options,
+      podRoot: RECIPIENT,
+      fetch: sessionFetch,
+      publicFetch,
+    });
+    await expect(reader.openShared(book.container)).rejects.toMatchObject({
+      name: "WorkbookLinkError",
+      message:
+        "You need access from the owner's pod; opening private workbooks shared from another pod is not supported yet",
+    });
+    publicRead = true;
+    expect((await reader.openShared(book.container)).snapshot).toEqual(book.snapshot);
+    expect(sessionFetch).not.toHaveBeenCalled();
+    expect(publicFetch).toHaveBeenCalledTimes(4);
+  });
   it("reads another pod on the storage origin as view-only even with Write hints, without discovery or writes", async () => {
     const { reader, book, pod, calls, setHook } = await setup();
     setHook(async (call) => {
@@ -91,10 +122,12 @@ describe("shared workbook credential boundary", () => {
     const opening = reader.openShared(book.container);
     if (status === 500)
       await expect(opening).rejects.toMatchObject({ name: "SheetStorageError", status });
+    else if (status === 401 || status === 403)
+      await expect(opening).rejects.toMatchObject({ name: "WorkbookLinkError" });
     else
       await expect(opening).rejects.toMatchObject({
         name: "WorkbookNotFoundError",
-        reason: status === 401 || status === 403 ? "forbidden" : "missing",
+        reason: "missing",
       });
     expect(
       calls.every((call) => call.method === "GET" && call.url.startsWith(book.container)),
