@@ -1,5 +1,6 @@
 // AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { beforeEach, expect, it, vi } from "vitest";
 import { MAX_GENERATIONS, plannedTasks, sendToTasks } from "../src/apps/notes/lib/tasks-handoff";
 import { NS, node, Store, serialize } from "../src/apps/tasks/lib/model/rdf";
@@ -33,6 +34,7 @@ const items = [
   { text: "Call Sam", checked: false },
 ];
 const conflict = Object.assign(new Error("exists"), { status: 412 });
+const missing = Object.assign(new Error("missing"), { status: 404 });
 const inbox = {
   url: "inbox",
   tracker: { stateStore: "https://pod.example/tasks/projects/inbox/" },
@@ -48,9 +50,17 @@ const sink = (
     { task: { rank: Number.NaN } },
   ]),
   createTask: vi.fn(async () => ({})),
-  readTask: vi.fn(async () => ({ task: { title: "Buy milk", state: "open" } })),
+  readTask: vi.fn().mockRejectedValue(missing),
   ...overrides,
 });
+
+// A competing write arrives after the fresh probe and before the conditional create.
+const collision =
+  (readTask: Fn, result: { task: { title: string; state: string } } | Error) => async () => {
+    if (result instanceof Error) readTask.mockRejectedValueOnce(result);
+    else readTask.mockResolvedValueOnce(result);
+    throw conflict;
+  };
 
 function button(text: string): HTMLButtonElement {
   const found = [...document.querySelectorAll<HTMLButtonElement>("button")].find(
@@ -92,15 +102,12 @@ it("plans stable ids per note, item and repeat, for unchecked nonempty items", (
 });
 
 it("appends open tasks after the Inbox's last rank and counts existing ones", async () => {
-  const store = sink({
-    createTask: vi
-      .fn()
-      .mockResolvedValueOnce({})
-      .mockRejectedValueOnce(conflict)
-      .mockRejectedValueOnce(new Error("offline"))
-      .mockRejectedValueOnce("odd"),
-    readTask: vi.fn(async () => ({ task: { title: "Task 2", state: "open" } })),
-  });
+  const store = sink();
+  store.createTask
+    .mockResolvedValueOnce({})
+    .mockImplementationOnce(collision(store.readTask, { task: { title: "Task 2", state: "open" } }))
+    .mockRejectedValueOnce(new Error("offline"))
+    .mockRejectedValueOnce("odd");
   const tasks = [1, 2, 3, 4].map((n) => ({ id: `t${n}`, title: `Task ${n}` }));
   const result = await sendToTasks(store as never, tasks, session.webId);
   expect(store.listTasks).toHaveBeenCalledWith(inbox.tracker.stateStore);
@@ -141,20 +148,24 @@ it("adds the items, then offers to open Tasks", async () => {
 });
 
 it("reports items already in Tasks instead of duplicating them", async () => {
-  const store = sink({ createTask: vi.fn().mockRejectedValueOnce(conflict).mockResolvedValue({}) });
+  const store = sink();
+  store.createTask.mockImplementationOnce(
+    collision(store.readTask, { task: { title: "Buy milk", state: "open" } }),
+  );
   const ui = await dialog(store);
   await click(button("Add 2 tasks"));
   expect(mocks.toast.success.mock.lastCall?.[0]).toBe(
     "Added 1 task to your Tasks Inbox (1 already there)",
   );
   await ui.unmount();
-  const again = sink({
-    createTask: vi.fn().mockRejectedValue(conflict),
-    readTask: vi
-      .fn()
-      .mockResolvedValueOnce({ task: { title: "Buy milk", state: "open" } })
-      .mockResolvedValueOnce({ task: { title: "Call Sam", state: "open" } }),
-  });
+  const again = sink();
+  again.createTask
+    .mockImplementationOnce(
+      collision(again.readTask, { task: { title: "Buy milk", state: "open" } }),
+    )
+    .mockImplementationOnce(
+      collision(again.readTask, { task: { title: "Call Sam", state: "open" } }),
+    );
   const second = await dialog(again);
   await click(button("Add 2 tasks"));
   expect(mocks.toast.success.mock.lastCall?.[0]).toBe(
@@ -241,24 +252,15 @@ it("can't be dismissed while adding, and cancels otherwise", async () => {
 it("probes an item's later addresses past completed or different tasks", async () => {
   const open = (title: string) => ({ task: { title, state: "open" } });
   const closed = (title: string) => ({ task: { title, state: "closed" } });
-  const store = sink({
-    createTask: vi
-      .fn()
-      .mockRejectedValueOnce(conflict) // a: open, same title
-      .mockRejectedValueOnce(conflict) // b: closed
-      .mockResolvedValueOnce({}) // b-2: free
-      .mockRejectedValueOnce(conflict) // c: another title
-      .mockRejectedValueOnce(conflict) // c-2: open, same title
-      .mockRejectedValueOnce(conflict) // d: unreadable
-      .mockRejectedValueOnce(new Error("offline")), // e: fails
-    readTask: vi
-      .fn()
-      .mockResolvedValueOnce(open("Same"))
-      .mockResolvedValueOnce(closed("Done"))
-      .mockResolvedValueOnce(open("Other"))
-      .mockResolvedValueOnce(open("Renamed"))
-      .mockRejectedValueOnce(new Error("offline")),
-  });
+  const store = sink();
+  store.createTask
+    .mockImplementationOnce(collision(store.readTask, open("Same"))) // a: open, same title
+    .mockImplementationOnce(collision(store.readTask, closed("Done"))) // b: closed
+    .mockResolvedValueOnce({}) // b-2: free
+    .mockImplementationOnce(collision(store.readTask, open("Other"))) // c: another title
+    .mockImplementationOnce(collision(store.readTask, open("Renamed"))) // c-2: open, same title
+    .mockImplementationOnce(collision(store.readTask, new Error("offline"))) // d: unreadable
+    .mockRejectedValueOnce(new Error("offline")); // e: fails
   const tasks = ["Same", "Done", "Renamed", "Unreadable", "Offline"].map((title, n) => ({
     id: "abcde"[n] as string,
     title,
@@ -274,7 +276,9 @@ it("probes an item's later addresses past completed or different tasks", async (
     "d",
     "e",
   ]);
-  expect(store.readTask.mock.calls[3]?.[0]).toBe(`${inbox.tracker.stateStore}c-2.ttl`);
+  expect(
+    store.readTask.mock.calls.filter(([url]) => url === `${inbox.tracker.stateStore}c-2.ttl`),
+  ).toHaveLength(2);
   expect(result).toEqual({ created: 1, existing: 2, failed: [tasks[3], tasks[4]] });
 });
 
@@ -297,16 +301,22 @@ it("matches the full bounded address exactly, with an open state and the same ti
     url: `${inbox.tracker.stateStore}${id}.ttl`,
     task: { title, state },
   });
+  const resources = [
+    listed("a", "First", "closed"),
+    listed("a-2", "Edited"),
+    listed(`a-${MAX_GENERATIONS}`, "First"),
+    listed("b-1", "Second"),
+    listed(`b-${MAX_GENERATIONS + 1}`, "Second"),
+    listed("b-2-extra", "Second"),
+    { ...listed("b", "Second"), url: "https://other.example/b.ttl" },
+  ];
   const store = sink({
-    listTasks: vi.fn(async () => [
-      listed("a", "First", "closed"),
-      listed("a-2", "Edited"),
-      listed(`a-${MAX_GENERATIONS}`, "First"),
-      listed("b-1", "Second"),
-      listed(`b-${MAX_GENERATIONS + 1}`, "Second"),
-      listed("b-2-extra", "Second"),
-      { ...listed("b", "Second"), url: "https://other.example/b.ttl" },
-    ]),
+    listTasks: vi.fn(async () => resources),
+    readTask: vi.fn(async (url) => {
+      const found = resources.find((item) => item.url === url);
+      if (!found) throw missing;
+      return found;
+    }),
   });
   const result = await sendToTasks(
     store as never,
@@ -318,6 +328,39 @@ it("matches the full bounded address exactly, with an open state and the same ti
   );
   expect(result).toEqual({ created: 1, existing: 1, failed: [] });
   expect(store.createTask.mock.calls.map((call) => call[2])).toEqual(["b"]);
+  expect(store.readTask).toHaveBeenCalledTimes(2 * MAX_GENERATIONS);
+});
+
+it("treats gone generations as free addresses during the fresh probe", async () => {
+  const store = sink({
+    readTask: vi.fn().mockRejectedValue(Object.assign(new Error("gone"), { status: 410 })),
+  });
+  expect(
+    await sendToTasks(store as never, [{ id: "a", title: "Buy milk" }], session.webId),
+  ).toEqual({ created: 1, existing: 0, failed: [] });
+});
+
+it.each([
+  new TypeError("Unexpected RDF response"),
+  Object.assign(new Error("Access denied"), { status: 403 }),
+  "offline",
+])("keeps fresh probe failures retryable without blocking other items: %s", async (error) => {
+  const store = sink({
+    readTask: vi.fn(async (url) => {
+      if (url === `${inbox.tracker.stateStore}a.ttl`) throw error;
+      throw missing;
+    }),
+  });
+  const tasks = [
+    { id: "a", title: "Buy milk" },
+    { id: "b", title: "Call Sam" },
+  ];
+  expect(await sendToTasks(store as never, tasks, session.webId)).toEqual({
+    created: 1,
+    existing: 0,
+    failed: [tasks[0]],
+  });
+  expect(store.createTask.mock.calls.map((call) => call[2])).toEqual(["b"]);
 });
 
 it.each([
@@ -325,10 +368,8 @@ it.each([
   Object.assign(new Error("Access denied"), { status: 403 }),
   Object.assign(new Error("Deleted during read"), { status: 404 }),
 ])("keeps read failures retryable instead of treating them as foreign resources: %s", async (error) => {
-  const store = sink({
-    createTask: vi.fn().mockRejectedValue(conflict),
-    readTask: vi.fn().mockRejectedValue(error),
-  });
+  const store = sink();
+  store.createTask.mockImplementationOnce(collision(store.readTask, error));
   const tasks = [{ id: "a", title: "Buy milk" }];
   expect(await sendToTasks(store as never, tasks, session.webId)).toEqual({
     created: 0,
@@ -387,6 +428,73 @@ it("finds a committed later generation after a lost response and deletion of an 
       .slice(writes)
       .some((request) => request.url === `${base}.ttl`),
   ).toBe(false);
+});
+
+it("rechecks later items after another tab creates a generation and the earlier task is deleted", async () => {
+  const pod = new Pod();
+  const tasks = plannedTasks(
+    [
+      { text: "Call Sam", checked: false },
+      { text: "Buy milk", checked: false },
+    ],
+    "groceries.ttl",
+  );
+  const stateStore = `${storage}tasks/projects/inbox/`;
+  const slowUrl = `${stateStore}${tasks[0]?.id}.ttl`;
+  const base = `${stateStore}${tasks[1]?.id}`;
+  const started = deferred<void>();
+  const resume = deferred<void>();
+  const options = {
+    storage,
+    webId,
+    typeIndex: false,
+    ensurePrivateTasksAccess: pod.ensurePrivateIndexAccess,
+  };
+  const tabA = new TaskStore({
+    ...options,
+    fetch: (async (input, init) => {
+      const response = await pod.fetch(input, init);
+      if (init?.method === "PUT" && String(input) === slowUrl) {
+        started.resolve();
+        await resume.promise;
+      }
+      return response;
+    }) as typeof fetch,
+  });
+  const tabB = new TaskStore({ ...options, fetch: pod.fetch });
+  const target = tasks.slice(1);
+  expect(await sendToTasks(tabB, target, webId)).toEqual({ created: 1, existing: 0, failed: [] });
+  const completed = await tabB.updateTask(await tabB.readTask(`${base}.ttl`), (task) => {
+    task.state = "closed";
+  });
+
+  const sending = sendToTasks(tabA, tasks, webId);
+  await started.promise;
+  try {
+    expect(await sendToTasks(tabB, target, webId)).toEqual({
+      created: 1,
+      existing: 0,
+      failed: [],
+    });
+    await tabB.deleteTask(completed);
+  } finally {
+    resume.resolve();
+  }
+  const requests = pod.requests.length;
+  expect(await sending).toEqual({ created: 1, existing: 1, failed: [] });
+  const freshReads = pod.requests
+    .slice(requests)
+    .filter((request) => request.method === "GET" && request.url.startsWith(base));
+  expect(freshReads.map((request) => request.url)).toContain(`${base}-2.ttl`);
+  expect(freshReads.every((request) => request.headers.get("Cache-Control") === "no-cache")).toBe(
+    true,
+  );
+  expect(
+    (await tabB.listTasks(stateStore))
+      .filter((item) => item.task.title === "Buy milk" && item.task.state === "open")
+      .map((item) => item.url),
+  ).toEqual([`${base}-2.ttl`]);
+  expect(pod.files.has(`${base}.ttl`)).toBe(false);
 });
 
 it("skips a foreign resource without overwriting it, and finds the created task on retry", async () => {

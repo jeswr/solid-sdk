@@ -1,5 +1,6 @@
 // AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import type { ChecklistItem } from "./capture";
 
 /** The part of the Tasks store a checklist hand-off needs. */
@@ -11,6 +12,7 @@ export interface TaskSink<Project extends { tracker: { stateStore?: string | und
       task: { rank?: number | undefined; title?: string | undefined; state: string };
     }[]
   >;
+  /** Read the current resource without reusing a cached task or listing snapshot. */
   readTask(url: string): Promise<{ task: { title?: string | undefined; state: string } }>;
   createTask(
     project: Project,
@@ -70,10 +72,13 @@ export const MAX_GENERATIONS = 50;
  * Append the planned tasks to the Tasks Inbox after its last ranked task. Each item has a
  * series of addresses: its planned id, then `<id>-2`, `<id>-3`, … A task found at one
  * (412) counts as already there when it is still open with the same title; a completed
- * or different task, or a foreign resource, moves on to the next address. The Inbox listing
- * is checked across all generations before creating, so deleting an earlier generation
- * cannot hide an open task at a later one. No extra RDF identity field is needed. An item
+ * or different task, or a foreign resource, moves on to the next address. Each item's
+ * generations are read afresh immediately before creating, so deleting an earlier generation
+ * cannot hide an already open task at a later one. No extra RDF identity field is needed. An item
  * completed in Tasks can be sent again. Inbox setup errors are thrown for the caller to classify.
+ * Remaining race: two tabs converting the same item at the same instant after a deletion can
+ * still create two open tasks if one creates a later generation between the other's probe and
+ * its conditional create.
  */
 export async function sendToTasks<Project extends { tracker: { stateStore?: string | undefined } }>(
   store: TaskSink<Project>,
@@ -84,7 +89,6 @@ export async function sendToTasks<Project extends { tracker: { stateStore?: stri
   const stateStore = inbox.tracker.stateStore;
   if (!stateStore) throw new TypeError("Inbox has no stateStore.");
   const current = await store.listTasks(stateStore);
-  const byUrl = new Map(current.map((item) => [item.url, item.task]));
   const ranks = current
     .map((item) => item.task.rank)
     .filter((rank): rank is number => rank !== undefined && Number.isFinite(rank));
@@ -96,19 +100,27 @@ export async function sendToTasks<Project extends { tracker: { stateStore?: stri
     const ids = Array.from({ length: MAX_GENERATIONS }, (_, index) =>
       index === 0 ? task.id : `${task.id}-${index + 1}`,
     );
-    if (
-      ids.some((id) => {
-        const found = byUrl.get(`${stateStore}${id}.ttl`);
-        return found?.state === "open" && found.title === task.title;
-      })
-    ) {
-      existing++;
-      continue;
-    }
-    rank += 1;
-    const data = { title: task.title, state: "open" as const, creator, rank };
     let outcome: "created" | "existing" | "failed" = "failed";
     try {
+      // TaskStore reads bypass caches; the batch listing is only used for ranks.
+      const open = await Promise.all(
+        ids.map(async (id) => {
+          try {
+            const found = await store.readTask(`${stateStore}${id}.ttl`);
+            return found.task.state === "open" && found.task.title === task.title;
+          } catch (error) {
+            if (status(error) === 404 || status(error) === 410) return false;
+            if (error instanceof TypeError && error.message === "Expected a wf:Task.") return false;
+            throw error;
+          }
+        }),
+      );
+      if (open.some(Boolean)) {
+        existing++;
+        continue;
+      }
+      rank += 1;
+      const data = { title: task.title, state: "open" as const, creator, rank };
       for (const id of ids) {
         try {
           await store.createTask(inbox, data, id);
