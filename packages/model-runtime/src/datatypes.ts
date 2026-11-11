@@ -251,6 +251,12 @@ export function isXsdDateTime(value: string): boolean {
   return timezoneValid(tz);
 }
 
+/** True for an `xsd:dateTimeStamp`: a valid dateTime with a mandatory timezone. */
+export function isXsdDateTimeStamp(value: string): boolean {
+  const m = XSD_DATETIME_RE.exec(value);
+  return m !== null && m[0] === value && m[8] !== undefined && isXsdDateTime(value);
+}
+
 /** True for a lexically-valid `xsd:date` (XSD 1.1) — calendar-checked like dateTime. */
 export function isXsdDate(value: string): boolean {
   const m = XSD_DATE_RE.exec(value);
@@ -264,7 +270,8 @@ export function isXsdDate(value: string): boolean {
 }
 
 /**
- * A datatype-EXACT, lexically-validated reader for `xsd:dateTime` / `xsd:date` —
+ * A datatype-EXACT, lexically-validated reader for `xsd:dateTime`, `xsd:dateTimeStamp`
+ * and `xsd:date` —
  * the date counterpart of {@link floatingAs}. The term must be a `Literal` typed
  * EXACTLY the field's declared datatype (an `xsd:date` literal does not surface
  * through a dateTime field, nor a look-alike `xsd:string`), its lexical form must
@@ -285,7 +292,11 @@ export function isXsdDate(value: string): boolean {
  */
 function dateAs(datatypeIri: string): (term: TermWrapper) => Date {
   const isDate = datatypeIri === `${XSD}date`;
-  const lexicalValid = isDate ? isXsdDate : isXsdDateTime;
+  const lexicalValid = isDate
+    ? isXsdDate
+    : datatypeIri === `${XSD}dateTimeStamp`
+      ? isXsdDateTimeStamp
+      : isXsdDateTime;
   return (term) => {
     const t = term as unknown as { termType: string; value: string; datatype?: { value: string } };
     if (t.termType !== "Literal") throw new Error("date/dateTime: term is not a Literal");
@@ -368,7 +379,7 @@ function dateFrom(value: Date, factory: DataFactory): Term {
 }
 
 /**
- * A datatype-preserving `from` for `xsd:dateTime`: writes the UTC instant
+ * A datatype-preserving `from` for `xsd:dateTime` / `xsd:dateTimeStamp`: writes the UTC instant
  * (`year-MM-DDTHH:MM:SS.mmmZ`, the year in XSD form via {@link utcDateLexical}) — a
  * VALID `xsd:dateTime` lexical for EVERY time-valid `Date`. `LiteralFrom.dateTime`
  * (a bare `toISOString()`) emits the ECMAScript expanded-year form for a wide or
@@ -380,15 +391,17 @@ function dateFrom(value: Date, factory: DataFactory): Term {
  * `toISOString()`. The reader translates the validated XSD year to ECMAScript
  * syntax, allowing expanded and negative years to round-trip too.
  */
-function dateTimeFrom(value: Date, factory: DataFactory): Term {
-  const hours = String(value.getUTCHours()).padStart(2, "0");
-  const minutes = String(value.getUTCMinutes()).padStart(2, "0");
-  const seconds = String(value.getUTCSeconds()).padStart(2, "0");
-  const millis = String(value.getUTCMilliseconds()).padStart(3, "0");
-  return factory.literal(
-    `${utcDateLexical(value)}T${hours}:${minutes}:${seconds}.${millis}Z`,
-    factory.namedNode(`${XSD}dateTime`),
-  );
+function dateTimeFrom(datatypeIri: string): (value: Date, factory: DataFactory) => Term {
+  return (value, factory) => {
+    const hours = String(value.getUTCHours()).padStart(2, "0");
+    const minutes = String(value.getUTCMinutes()).padStart(2, "0");
+    const seconds = String(value.getUTCSeconds()).padStart(2, "0");
+    const millis = String(value.getUTCMilliseconds()).padStart(3, "0");
+    return factory.literal(
+      `${utcDateLexical(value)}T${hours}:${minutes}:${seconds}.${millis}Z`,
+      factory.namedNode(datatypeIri),
+    );
+  };
 }
 
 /** The largest finite magnitude representable as an IEEE-754 single (`xsd:float`). */
@@ -507,13 +520,14 @@ export function literalMapper(datatypeIri: string): DatatypeMapper {
     case `${XSD}boolean`:
       return { as: booleanAs, from: LiteralFrom.boolean, jsType: "boolean" };
     case `${XSD}dateTime`:
+    case `${XSD}dateTimeStamp`:
       // Datatype-CHECKED + XSD-lexically-validated read (a malformed literal DROPS
       // fail-closed via tryRead — never an `Invalid Date`); the write emits a valid
       // xsd:dateTime lexical for EVERY time-valid Date (LiteralFrom.dateTime's bare
       // toISOString emits the malformed `+`-signed ECMAScript expanded-year form).
       return {
         as: dateAs(iri),
-        from: dateTimeFrom as DatatypeMapper["from"],
+        from: dateTimeFrom(iri) as DatatypeMapper["from"],
         jsType: "date",
       };
     case `${XSD}date`:
@@ -631,6 +645,7 @@ export const VALIDATED_DATATYPES: readonly string[] = Object.freeze([
   `${XSD}language`,
   `${XSD}boolean`,
   `${XSD}dateTime`,
+  `${XSD}dateTimeStamp`,
   `${XSD}date`,
   `${XSD}integer`,
   `${XSD}int`,

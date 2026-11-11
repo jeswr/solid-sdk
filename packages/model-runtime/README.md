@@ -100,6 +100,21 @@ Whitespace-normalizing types conservatively require normalized spelling; invalid
 forms drop without sanitization. Dates translate validated XSD years to ECMAScript syntax
 on read, so expanded, negative and zero years round-trip within the JS Date range.
 
+### Date datatypes
+
+| Exact RDF datatype | JS type | Read lexical / write lexical |
+|---|---|---|
+| `xsd:date` | `Date` | Calendar date; nonzero timezone offsets drop. Writes the UTC calendar date with `Z`. |
+| `xsd:dateTime` | `Date` | Timezone optional; zoneless values read as UTC. Writes the UTC instant with `Z`. |
+| `xsd:dateTimeStamp` | `Date` | Timezone mandatory (`Z` or an offset within ±14:00). Writes the UTC instant with `Z`. |
+
+`isXsdDateTimeStamp` is exported alongside `isXsdDateTime`. Both check calendar,
+time and offset validity, including `24:00:00` end-of-day. DateTimeStamp uses the
+dateTime reader's expanded-year conversion and representability limits. Malformed,
+zoneless or unrepresentable stamps drop according to field severity; Invalid Date
+writes drop. Datatype matching is exact: dateTime and dateTimeStamp literals cannot
+satisfy each other's fields. Sets apply the same guards to every member.
+
 ## Read-only IRI aliases
 
 A flat entity or composite **node** may declare `aliasTypeIris: string[]`; a flat field

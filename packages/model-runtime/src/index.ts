@@ -27,6 +27,7 @@ export {
   isKnownDatatype,
   isXsdDate,
   isXsdDateTime,
+  isXsdDateTimeStamp,
   isXsdDuration,
   type JsType,
   literalMapper,
