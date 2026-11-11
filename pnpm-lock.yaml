@@ -445,6 +445,9 @@ importers:
 
   apps/extension:
     dependencies:
+      '@jeswr/fetch-rdf':
+        specifier: workspace:*
+        version: link:../../packages/fetch-rdf
       '@jeswr/solid-elements':
         specifier: workspace:*
         version: link:../../packages/solid-elements
