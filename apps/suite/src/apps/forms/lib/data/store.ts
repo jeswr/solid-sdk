@@ -8,7 +8,10 @@ export interface FormResponse {
 }
 export interface FormsStore {
   readonly validate: FormRuntime["validate"];
-  listForms(): Promise<FormModel[]>;
+  listForms(): Promise<{ forms: FormModel[]; skipped: string[] }>;
+  /** Only absolute HTTPS shape URLs (HTTP loopback in development), without
+   * userinfo, at most 4096 characters. Foreign storage origins MUST be read via
+   * a pristine unauthenticated fetch with credentials omitted and no redirects. */
   loadForm(shape: string): Promise<FormModel>;
   saveForm(form: FormModel): Promise<FormModel>;
   listResponses(form: FormModel): Promise<FormResponse[]>;

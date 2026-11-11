@@ -4,13 +4,21 @@ import { Button, EmptyState, ErrorState, LoadingSkeleton, toast } from "@jeswr/s
 import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import type { FormResponse } from "../lib/data/store";
+import { formUrl } from "../lib/form-url";
 import type { FormModel } from "../lib/runtime";
 import { useForms } from "../state/forms-context";
 import { AnswerForm } from "./answer-form";
 
 export function FillView() {
   const shape = useSearchParams().get("form");
-  const { controller } = useForms();
+  const { controller, session } = useForms();
+  let address: URL | undefined;
+  try {
+    if (shape) address = formUrl(shape);
+  } catch {
+    /* Refused below, before any store read. */
+  }
+  const valid = !!address;
   const [form, setForm] = useState<FormModel>();
   const [error, setError] = useState(false);
   const [attempt, setAttempt] = useState(0);
@@ -22,7 +30,7 @@ export function FillView() {
     setForm(undefined);
     setError(false);
     setSaved(undefined);
-    if (shape)
+    if (shape && valid)
       void controller.store.loadForm(shape).then(
         (result) => {
           if (live) setForm(result);
@@ -34,12 +42,20 @@ export function FillView() {
     return () => {
       live = false;
     };
-  }, [shape, controller, attempt]);
+  }, [shape, valid, controller, attempt]);
   if (!shape)
     return (
       <EmptyState
         title="This form link is incomplete"
         body="Ask the author for a fill link that includes a form address."
+        secondaryAction={<a href="/forms">Return to your forms</a>}
+      />
+    );
+  if (!address)
+    return (
+      <EmptyState
+        title="This form address isn't safe to open"
+        body="Ask the author for a complete HTTPS form link without a username or password."
         secondaryAction={<a href="/forms">Return to your forms</a>}
       />
     );
@@ -68,6 +84,11 @@ export function FillView() {
     );
   return (
     <section className="fm-fill">
+      {address.origin !== new URL(session.storageUrl).origin && (
+        <p className="fm-notice">
+          This form is hosted at {address.origin}. It was opened without your pod credentials.
+        </p>
+      )}
       <p className="fm-notice">
         Your answers belong to you. Saving creates a response in your pod; it doesn't send your
         answers to the author yet.

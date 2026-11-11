@@ -91,23 +91,70 @@ describe("optimistic forms controller", () => {
     );
     expect(controller.getSnapshot().failed).toBe(true);
   });
-  it("ignores stale list completion and list errors while a save is newer", async () => {
+  it("merges a late list beneath saved edits and keeps several other forms", async () => {
     const backing = store();
-    const read = deferred<ReturnType<typeof sampleForms>["forms"]>();
+    const read = deferred<Awaited<ReturnType<ReturnType<typeof store>["listForms"]>>>();
     vi.spyOn(backing, "listForms").mockImplementationOnce(() => read.promise);
     const controller = new FormsController(backing, vi.fn());
     const loading = controller.load();
     await controller.save({ ...form, label: "New" });
-    read.resolve([form]);
+    const others = [1, 2, 3].map((n) => ({
+      ...form,
+      shape: `${root}forms/${n}#form`,
+      label: `Form ${n}`,
+    }));
+    read.resolve({ forms: [form, ...others], skipped: ["https://pod.example/empty"] });
     await loading;
-    expect(controller.getSnapshot().forms[0]?.label).toBe("New");
-    const bad = deferred<ReturnType<typeof sampleForms>["forms"]>();
+    expect(controller.getSnapshot().forms.find((item) => item.shape === form.shape)?.label).toBe(
+      "New",
+    );
+    expect(controller.getSnapshot().forms).toHaveLength(4);
+    expect(controller.getSnapshot().skipped).toEqual(["https://pod.example/empty"]);
+    const bad = deferred<Awaited<ReturnType<ReturnType<typeof store>["listForms"]>>>();
     vi.spyOn(backing, "listForms").mockImplementationOnce(() => bad.promise);
     const retry = controller.load();
     await controller.save({ ...form, label: "Newest" });
     bad.reject(new Error("offline"));
     await retry;
     expect(controller.getSnapshot().status).toBe("ready");
+  });
+  it("merges list results under a pending edit, then rolls back to that baseline on failure", async () => {
+    const backing = store();
+    const read = deferred<Awaited<ReturnType<typeof backing.listForms>>>();
+    const write = deferred<typeof form>();
+    vi.spyOn(backing, "listForms").mockReturnValueOnce(read.promise);
+    vi.spyOn(backing, "saveForm").mockReturnValueOnce(write.promise);
+    const controller = new FormsController(backing, vi.fn());
+    const loading = controller.load();
+    const saving = controller.save({ ...form, label: "Draft" }).catch(() => {});
+    read.resolve({ forms: sampleForms(root).forms, skipped: [] });
+    await loading;
+    expect(controller.getSnapshot().forms).toHaveLength(2);
+    expect(controller.getSnapshot().forms.find((item) => item.shape === form.shape)?.label).toBe(
+      "Draft",
+    );
+    write.reject(new Error("offline"));
+    await saving;
+    expect(controller.getSnapshot().forms.find((item) => item.shape === form.shape)?.label).toBe(
+      form.label,
+    );
+  });
+  it("discards superseded list reads and errors, while retaining only the latest list", async () => {
+    const backing = store();
+    const read = deferred<Awaited<ReturnType<typeof backing.listForms>>>();
+    const bad = deferred<Awaited<ReturnType<typeof backing.listForms>>>();
+    vi.spyOn(backing, "listForms")
+      .mockReturnValueOnce(read.promise)
+      .mockReturnValueOnce(bad.promise);
+    const controller = new FormsController(backing, vi.fn());
+    const a = controller.load();
+    const b = controller.load();
+    await controller.load();
+    read.resolve({ forms: [], skipped: [] });
+    bad.reject(new Error("offline"));
+    await Promise.all([a, b]);
+    expect(controller.getSnapshot().status).toBe("ready");
+    expect(controller.getSnapshot().forms).toHaveLength(2);
   });
   it("reports a load error and recovers on retry", async () => {
     const backing = store();

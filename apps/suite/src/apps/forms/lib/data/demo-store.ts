@@ -7,6 +7,9 @@ import type { DemoSnapshot, FormsStore } from "./store";
 /** Demo JSON stays in the demo pod, never a real user's storage. */
 export async function openDemoFormsStore(session: PodSession): Promise<FormsStore> {
   if (session.mode !== "demo") throw new Error("The demo store requires a demo session");
+  return openSnapshot(session, 0);
+}
+async function openSnapshot(session: PodSession, retries: number): Promise<FormsStore> {
   const url = new URL("forms/demo.json", session.storageUrl).href;
   const response = await session.fetch(url, { redirect: "error" });
   if (!response.ok && response.status !== 404) throw new Error("Couldn't open demo forms");
@@ -31,7 +34,11 @@ export async function openDemoFormsStore(session: PodSession): Promise<FormsStor
       headers: { "content-type": "application/json", "if-none-match": "*" },
       body: JSON.stringify(initial),
     });
-    if (created.status === 412) return openDemoFormsStore(session);
+    if (created.status === 412) {
+      if (retries === 3)
+        throw new Error("Couldn't seed demo forms after three retries. Reload to try again.");
+      return openSnapshot(session, retries + 1);
+    }
     if (!created.ok) throw new Error("Couldn't seed demo forms");
     etag = created.headers.get("etag");
   } else {

@@ -29,7 +29,7 @@ const session = (fetch: typeof globalThis.fetch): PodSession => ({
 describe("memory forms store", () => {
   it("seeds two fictional forms and isolated responses, with defensive copies", async () => {
     const store = createMemoryFormsStore(root, fixture);
-    const list = await store.listForms();
+    const { forms: list } = await store.listForms();
     list[0]?.fields.pop();
     expect((await store.loadForm(form.shape)).fields).toHaveLength(4);
     expect(await store.listResponses(form)).toHaveLength(2);
@@ -52,7 +52,7 @@ describe("memory forms store", () => {
     const b = store.saveForm({ ...form, label: "Saved" });
     await caught;
     await b;
-    expect(await store.listForms()).toHaveLength(2);
+    expect((await store.listForms()).forms).toHaveLength(2);
     expect((await store.loadForm(form.shape)).label).toBe("Saved");
     expect(store.validate(form, values).valid).toBe(true);
     expect(persist).toHaveBeenCalledTimes(2);
@@ -100,7 +100,15 @@ describe("demo pod snapshots", () => {
       .mockResolvedValueOnce(new Response(null, { status: 404 }))
       .mockResolvedValueOnce(new Response(null, { status: 412 }))
       .mockResolvedValueOnce(Response.json(fixture, { headers: { etag: '"1"' } }));
-    expect(await (await openDemoFormsStore(session(fetch))).listForms()).toHaveLength(2);
+    expect((await (await openDemoFormsStore(session(fetch))).listForms()).forms).toHaveLength(2);
+  });
+  it("bounds competing seed creation to three retries", async () => {
+    const fetch = vi.fn(
+      async (_url, init?: RequestInit) =>
+        new Response(null, { status: init?.method === "PUT" ? 412 : 404 }),
+    );
+    await expect(openDemoFormsStore(session(fetch))).rejects.toThrow("three retries");
+    expect(fetch).toHaveBeenCalledTimes(8);
   });
   it("refuses unversioned writes and retains the previous snapshot after conflict", async () => {
     const missing = await openDemoFormsStore(
@@ -141,14 +149,16 @@ describe.each([
     const readShapes = vi.fn(async (shape: string) =>
       storage.readRdf(shape.split("#")[0] ?? shape),
     );
+    const publicFetch = vi.fn();
     const store = createPodFormsStore({
       storage,
       formsContainer: forms.url,
       responsesContainer: responses.url,
       runtime,
       readShapes,
+      publicFetch,
     });
-    return { storage, store, runtime, readShapes, forms, responses };
+    return { storage, store, runtime, readShapes, publicFetch, forms, responses };
   }
   it("respects server-assigned identifiers and uses runtime conversion on every write", async () => {
     const { storage, store, runtime } = await setup();
@@ -157,11 +167,11 @@ describe.each([
     expect(runtime.formToShapes).toHaveBeenCalledWith(
       expect.objectContaining({ shape: saved.shape }),
     );
-    expect(await store.listForms()).toHaveLength(1);
+    expect((await store.listForms()).forms).toHaveLength(1);
     expect(await store.listResponses(saved)).toEqual([]);
     // A second queued save may still carry the provisional shape from the designer.
     await store.saveForm({ ...form, label: "New" });
-    expect(await store.listForms()).toHaveLength(1);
+    expect((await store.listForms()).forms).toHaveLength(1);
     const response = await store.submit(saved, values);
     expect(runtime.build).toHaveBeenCalledWith(saved, response.subject, values);
     expect(runtime.parse).toHaveBeenCalled();
@@ -177,27 +187,151 @@ describe.each([
     const create = vi.spyOn(storage, "create");
     await expect(store.submit(form, {})).rejects.toThrow("Review");
     expect(create).not.toHaveBeenCalled();
-    const read = storage.read.bind(storage);
-    vi.spyOn(storage, "read").mockImplementation(async (...args) => ({
-      ...(await read(...args)),
-      bytes: async () => new Uint8Array([1]),
-    }));
-    await expect(store.saveForm(form)).rejects.toThrow("reserve");
+    if (protocol === "lws") {
+      const read = storage.read.bind(storage);
+      const readSpy = vi.spyOn(storage, "read").mockImplementationOnce(async (...args) => ({
+        ...(await read(...args)),
+        bytes: async () => new Uint8Array([1]),
+      }));
+      await expect(store.saveForm(form)).rejects.toThrow("reserve");
+      readSpy.mockImplementationOnce(async (...args) => ({ ...(await read(...args)), etag: null }));
+      await expect(store.saveForm(form)).rejects.toThrow("reserve");
+      await store.saveForm(form);
+      expect(create).toHaveBeenCalledOnce();
+    } else {
+      await store.saveForm(form);
+      expect(create).toHaveBeenCalledWith(
+        expect.any(String),
+        "",
+        expect.objectContaining({ name: expect.stringMatching(/\.ttl$/) }),
+      );
+    }
   });
-  it("passes an empty response body through the runtime's fail-closed parser", async () => {
+  it("reads response RDF through content negotiation", async () => {
     const { storage, store, runtime } = await setup();
-    const read = storage.read.bind(storage);
-    vi.spyOn(storage, "read").mockImplementation(async (...args) => ({
-      ...(await read(...args)),
-      body: null,
-    }));
-    await store.submit(form, values);
+    const read = vi.spyOn(storage, "readRdf");
+    const response = await store.submit(form, values);
+    expect(read).toHaveBeenCalledWith(response.subject.split("#")[0]);
     expect(runtime.parse).toHaveBeenCalledWith(
       form,
-      expect.any(String),
+      response.subject,
       expect.objectContaining({ size: 0 }),
     );
   });
+  it("skips empty, invalid and unreadable documents without hiding good forms", async () => {
+    const { storage, store, runtime, forms } = await setup();
+    const good = await store.saveForm(form);
+    const empty = await storage.create(forms.url, "", { contentType: "text/turtle" });
+    const invalid = await storage.create(forms.url, "This is not RDF", {
+      contentType: "text/turtle",
+    });
+    vi.mocked(runtime.compileForm).mockImplementation((_graph, shape) => {
+      if (shape === `${empty.url}#form`) throw new Error("No shape in empty document");
+      return { ...form, shape };
+    });
+    expect(await store.listForms()).toEqual({
+      forms: [{ ...form, shape: good.shape }],
+      skipped: expect.arrayContaining([empty.url, invalid.url]),
+    });
+    expect((await store.listForms()).skipped).toHaveLength(2);
+  });
+  it("reuses the same document after a failed form write", async () => {
+    const { storage, store } = await setup();
+    const create = vi.spyOn(storage, "create");
+    const write = vi.spyOn(storage, "write");
+    if (protocol === "solid") create.mockRejectedValueOnce(new Error("offline"));
+    else write.mockRejectedValueOnce(new Error("offline"));
+    await expect(store.saveForm(form)).rejects.toThrow("offline");
+    await store.saveForm(form);
+    expect((await store.listForms()).forms).toHaveLength(1);
+    if (protocol === "solid")
+      expect(create.mock.calls[0]?.[2]?.name).toBe(create.mock.calls[1]?.[2]?.name);
+    else {
+      expect(create).toHaveBeenCalledOnce();
+      expect(write.mock.calls[0]?.[0]).toBe(write.mock.calls[1]?.[0]);
+    }
+  });
+  it("reuses failed response reservations and allocates anew only after success", async () => {
+    const { store, runtime } = await setup();
+    vi.mocked(runtime.serialize).mockRejectedValueOnce(new Error("offline"));
+    await expect(store.submit(form, values)).rejects.toThrow("offline");
+    const response = await store.submit(form, values);
+    expect(vi.mocked(runtime.build).mock.calls[0]?.[1]).toBe(response.subject);
+    expect((await store.submit(form, values)).subject).not.toBe(response.subject);
+  });
+  it("rejects hostile URLs before either transport and isolates foreign origin credentials", async () => {
+    const { store, readShapes, publicFetch } = await setup();
+    for (const hostile of [
+      "javascript:alert(1)",
+      "data:text/plain,hi",
+      "http://192.168.1.2/form",
+      "https://me:secret@evil.example/form",
+      "/form",
+      "#form",
+      "//evil.example/form",
+      `https://evil.example/${"x".repeat(4096)}`,
+    ])
+      await expect(store.loadForm(hostile)).rejects.toThrow();
+    expect(readShapes).not.toHaveBeenCalled();
+    expect(publicFetch).not.toHaveBeenCalled();
+    publicFetch.mockResolvedValueOnce(
+      new Response("", { headers: { "content-type": "text/turtle" } }),
+    );
+    await store.loadForm("https://8.8.8.8/form#form");
+    expect(readShapes).not.toHaveBeenCalled();
+    expect(publicFetch).toHaveBeenCalledWith(
+      "https://8.8.8.8/form",
+      expect.objectContaining({ credentials: "omit", redirect: "manual" }),
+    );
+    const headers = new Headers(publicFetch.mock.calls[0]?.[1]?.headers);
+    expect(headers.has("authorization")).toBe(false);
+    expect(headers.has("dpop")).toBe(false);
+    publicFetch.mockResolvedValueOnce(
+      new Response(null, { status: 302, headers: { location: root } }),
+    );
+    await expect(store.loadForm("https://8.8.8.8/form#form")).rejects.toThrow();
+    expect(publicFetch).toHaveBeenCalledTimes(2);
+    await expect(store.loadForm("https://192.168.1.2/form")).rejects.toThrow();
+    expect(publicFetch).toHaveBeenCalledTimes(2);
+  });
+  it("refuses follow-up validators after a successful write whose readback fails", async () => {
+    const { storage, store, readShapes } = await setup();
+    const saved = await store.saveForm(form);
+    const write = storage.write.bind(storage);
+    const mutation = vi.spyOn(storage, "write").mockImplementationOnce(async (...args) => ({
+      ...(await write(...args)),
+      etagSource: "follow-up",
+    }));
+    readShapes.mockRejectedValueOnce(new Error("Readback failed"));
+    await expect(store.saveForm(saved)).rejects.toThrow("Readback failed");
+    await expect(store.saveForm(saved)).rejects.toThrow("Reload");
+    expect(mutation).toHaveBeenCalledOnce();
+    // Explicit reload obtains a content-bound ETag and makes editing safe again.
+    await store.loadForm(saved.shape);
+    await store.saveForm(saved);
+  });
+  if (protocol === "solid") {
+    it("refuses an unexpected named-create address", async () => {
+      const { storage, store } = await setup();
+      const create = storage.create.bind(storage);
+      vi.spyOn(storage, "create").mockImplementationOnce(async (...args) => ({
+        ...(await create(...args)),
+        url: `${root}unexpected.ttl`,
+      }));
+      await expect(store.saveForm(form)).rejects.toThrow("Unexpected Solid document address");
+    });
+    it("requires reload when a named-create readback fails without a response validator", async () => {
+      const { storage, store, readShapes } = await setup();
+      const create = storage.create.bind(storage);
+      vi.spyOn(storage, "create").mockImplementationOnce(async (...args) => ({
+        ...(await create(...args)),
+        etagSource: "follow-up",
+      }));
+      readShapes.mockRejectedValueOnce(new Error("Readback failed"));
+      await expect(store.saveForm(form)).rejects.toThrow("Readback failed");
+      await expect(store.saveForm(form)).rejects.toThrow("Reload");
+    });
+  }
   it("refuses missing versions and surfaces stale conditional writes", async () => {
     const { storage, store, readShapes } = await setup();
     const saved = await store.saveForm(form);

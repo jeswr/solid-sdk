@@ -142,7 +142,11 @@ export function AnswerForm({
               describedBy={`${id}-help ${id}-issues`}
               change={(value) => {
                 setValues((current) => ({ ...current, [field.key]: value }));
-                setResult(undefined);
+                setResult((current) => {
+                  if (!current) return current;
+                  const issues = current.issues.filter((issue) => issue.key !== field.key);
+                  return { valid: !issues.some((issue) => issue.severity === "violation"), issues };
+                });
               }}
             />
             <p id={`${id}-help`} className="fm-muted">

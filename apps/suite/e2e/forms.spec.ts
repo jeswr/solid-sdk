@@ -30,6 +30,20 @@ test("Forms demo: design, reorder by keyboard, preview, fill, responses, CSV and
     .getByRole("article", { name: "Question 2", exact: true })
     .getByLabel("Question title", { exact: true })
     .fill("Your favourite tree");
+  await page.getByRole("button", { name: "Move question 2 up", exact: true }).click();
+  const movedTitle = page
+    .getByRole("article", { name: "Question 1", exact: true })
+    .getByLabel("Question title", { exact: true });
+  await expect(movedTitle).toBeFocused();
+  await expect(
+    page.getByRole("status").filter({ hasText: "Your favourite tree moved to position 1 of 2." }),
+  ).toHaveAttribute("aria-live", "polite");
+  await page.getByRole("button", { name: "Move question 1 down", exact: true }).click();
+  await expect(
+    page
+      .getByRole("article", { name: "Question 2", exact: true })
+      .getByLabel("Question title", { exact: true }),
+  ).toBeFocused();
   const grip = page.getByRole("button", { name: "Reorder question 2", exact: true });
   await grip.focus();
   await page.keyboard.press("Space");
@@ -58,6 +72,10 @@ test("Forms demo: design, reorder by keyboard, preview, fill, responses, CSV and
   await page.getByRole("button", { name: "Save response to my pod", exact: true }).click();
   await expect(page.getByRole("alert")).toContainText("Review the highlighted answers");
   await page.getByLabel("Your favourite tree (required)", { exact: true }).fill("Rowan");
+  await expect(page.getByRole("alert")).toContainText("Review the highlighted answers");
+  await expect(
+    page.getByLabel("Your favourite flower (required)", { exact: true }),
+  ).toHaveAttribute("aria-invalid", "true");
   await page.getByLabel("Your favourite flower (required)", { exact: true }).fill("Cornflower");
   await page.getByRole("button", { name: "Save response to my pod", exact: true }).click();
   await expect(

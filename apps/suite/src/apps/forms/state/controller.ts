@@ -5,18 +5,26 @@ import type { FormModel } from "../lib/runtime";
 export interface FormsState {
   status: "loading" | "ready" | "error";
   forms: FormModel[];
+  skipped: string[];
   pending: number;
   failed: boolean;
 }
 
 /** Account-scoped optimistic form list; writes settle in their submission order. */
 export class FormsController {
-  private state: FormsState = { status: "loading", forms: [], pending: 0, failed: false };
+  private state: FormsState = {
+    status: "loading",
+    forms: [],
+    skipped: [],
+    pending: 0,
+    failed: false,
+  };
   private listeners = new Set<() => void>();
   private queue = Promise.resolve();
   private confirmed: FormModel[] = [];
   private edits: { token: object; form: FormModel }[] = [];
   private generation = 0;
+  private savedDuringRead = new Map<string, FormModel>();
   constructor(
     readonly store: FormsStore,
     private reportError: () => void,
@@ -37,24 +45,31 @@ export class FormsController {
   }
   async load() {
     const generation = ++this.generation;
+    this.savedDuringRead.clear();
     this.publish({ status: "loading" });
     try {
-      const forms = await this.store.listForms();
+      const { forms, skipped } = await this.store.listForms();
       if (generation !== this.generation) return;
-      this.confirmed = forms;
-      this.publish({ status: "ready" });
+      const merged = new Map(forms.map((form) => [form.shape, form]));
+      for (const [original, saved] of this.savedDuringRead) {
+        merged.delete(original);
+        merged.set(saved.shape, saved);
+      }
+      this.confirmed = [...merged.values()];
+      this.publish({ status: "ready", skipped });
     } catch {
-      if (generation === this.generation) this.publish({ status: "error" });
+      if (generation === this.generation)
+        this.publish({ status: this.confirmed.length ? "ready" : "error" });
     }
   }
   save(form: FormModel): Promise<FormModel> {
-    ++this.generation; // An older list read cannot overwrite local intent.
     const edit = { token: {}, form: structuredClone(form) };
     this.edits.push(edit);
     this.publish({ failed: false, status: "ready" });
     const task = this.queue.then(async () => {
       try {
         const saved = await this.store.saveForm(edit.form);
+        this.savedDuringRead.set(form.shape, saved);
         this.confirmed = [
           ...this.confirmed.filter(
             (item) => item.shape !== form.shape && item.shape !== saved.shape,

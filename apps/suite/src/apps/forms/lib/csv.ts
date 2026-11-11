@@ -14,7 +14,7 @@ export function answerText(value: FormValue | FormValue[] | undefined): string {
 /** RFC 4180: always quote, double embedded quotes, and end records with CRLF. */
 export function responsesCsv(form: FormModel, responses: readonly FormResponse[]): string {
   const cell = (value: string) => {
-    const safe = /^[\s]*[=+\-@]/.test(value) ? `'${value}` : value;
+    const safe = /^[\s]*[=+\-@|＝＋－＠]/.test(value) ? `'${value}` : value;
     return `"${safe.replaceAll('"', '""')}"`;
   };
   const rows = [

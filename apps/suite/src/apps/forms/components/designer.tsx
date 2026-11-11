@@ -30,7 +30,7 @@ import {
   toast,
 } from "@jeswr/suite-ui";
 import { ArrowDown, ArrowUp, Copy, GripVertical, Trash2 } from "lucide-react";
-import { useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import {
   designerIssues,
   duplicateQuestion,
@@ -48,12 +48,33 @@ function QuestionEditor({
   form,
   index,
   change,
+  announce,
 }: {
   field: FieldDescriptor;
   form: FormModel;
   index: number;
   change: (form: FormModel) => void;
+  announce: (message: string) => void;
 }) {
+  const moved = useRef<"up" | "down" | null>(null);
+  const title = useRef<HTMLInputElement>(null);
+  const up = useRef<HTMLButtonElement>(null);
+  const down = useRef<HTMLButtonElement>(null);
+  useLayoutEffect(() => {
+    const direction = moved.current;
+    if (!direction) return;
+    const control = direction === "up" ? up.current : down.current;
+    const atBoundary = direction === "up" ? index === 0 : index === form.fields.length - 1;
+    (atBoundary ? title.current : control)?.focus();
+    announce(
+      `${field.label || "Question"} moved to position ${index + 1} of ${form.fields.length}.`,
+    );
+    moved.current = null;
+  }, [index, field.label, form.fields.length, announce]);
+  const move = (direction: "up" | "down") => {
+    moved.current = direction;
+    change(moveQuestion(form, index, index + (direction === "up" ? -1 : 1)));
+  };
   const { attributes, listeners, setNodeRef, transform, transition } = useSortable({
     id: field.key,
   });
@@ -103,18 +124,20 @@ function QuestionEditor({
             <GripVertical />
           </IconButton>
           <IconButton
+            ref={up}
             variant="ghost"
             label={`Move question ${index + 1} up`}
             disabled={index === 0}
-            onClick={() => change(moveQuestion(form, index, index - 1))}
+            onClick={() => move("up")}
           >
             <ArrowUp />
           </IconButton>
           <IconButton
+            ref={down}
             variant="ghost"
             label={`Move question ${index + 1} down`}
             disabled={index === form.fields.length - 1}
-            onClick={() => change(moveQuestion(form, index, index + 1))}
+            onClick={() => move("down")}
           >
             <ArrowDown />
           </IconButton>
@@ -139,6 +162,7 @@ function QuestionEditor({
       <div className="fm-field">
         <Label htmlFor={`${field.key}-label`}>Question title</Label>
         <Input
+          ref={title}
           id={`${field.key}-label`}
           value={field.label ?? ""}
           onChange={(event) => update({ label: event.target.value })}
@@ -268,16 +292,20 @@ export function Designer({
 }) {
   const { controller } = useForms();
   const [draft, setDraft] = useState(initial);
+  const currentDraft = useRef(initial);
   const [issues, setIssues] = useState<string[]>([]);
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(0);
   const [status, setStatus] = useState("");
+  const [announcement, announce] = useState("");
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
   const change = (form: FormModel) => {
-    setDraft({ ...form, fields: form.fields.map((field, order) => ({ ...field, order })) });
+    const next = { ...form, fields: form.fields.map((field, order) => ({ ...field, order })) };
+    currentDraft.current = next;
+    setDraft(next);
     setDirty(true);
     setStatus("Unsaved changes");
     setIssues([]);
@@ -310,14 +338,12 @@ export function Designer({
                 .save(submitted)
                 .then(
                   (saved) => {
-                    setDraft((current) => {
-                      if (current === submitted) {
-                        setDirty(false);
-                        setStatus("Saved");
-                        return saved;
-                      }
-                      return current;
-                    });
+                    if (currentDraft.current === submitted) {
+                      currentDraft.current = saved;
+                      setDraft(saved);
+                      setDirty(false);
+                      setStatus("Saved");
+                    }
                     onSaved(saved);
                     toast.success("Form saved");
                   },
@@ -332,11 +358,15 @@ export function Designer({
       </div>
       {issues.length > 0 && (
         <div role="alert" className="fm-validation">
-          {issues.map((issue) => (
-            <p key={issue}>{issue}</p>
+          {issues.map((issue, index) => (
+            // biome-ignore lint/suspicious/noArrayIndexKey: a replaced validation snapshot, never reordered
+            <p key={index}>{issue}</p>
           ))}
         </div>
       )}
+      <p role="status" aria-live="polite" className="sr-only">
+        {announcement}
+      </p>
       <div className="fm-designer">
         <section className="fm-stack" aria-label="Form designer">
           <div className="fm-card">
@@ -418,6 +448,7 @@ export function Designer({
                   form={draft}
                   index={index}
                   change={change}
+                  announce={announce}
                 />
               ))}
             </SortableContext>

@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
 import { createFakeRuntime } from "../fake-runtime";
+import { formUrl } from "../form-url";
 import type { FormModel } from "../runtime";
 import type { DemoSnapshot, FormsStore } from "./store";
 
@@ -28,8 +29,9 @@ export function createMemoryFormsStore(
   };
   return {
     validate: runtime.validate,
-    listForms: async () => structuredClone(snapshot.forms),
+    listForms: async () => ({ forms: structuredClone(snapshot.forms), skipped: [] }),
     async loadForm(shape) {
+      formUrl(shape);
       const model = snapshot.forms.find((form) => form.shape === shape);
       if (!model) throw new Error("Form not found");
       return runtime.compileForm({ model }, shape);

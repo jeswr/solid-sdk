@@ -121,6 +121,23 @@ describe("JSON-only runtime double", () => {
 });
 
 describe("designer operations", () => {
+  it("deduplicates repeated question and boundary messages", () => {
+    const question = field("text", {
+      label: "",
+      minLength: 5,
+      maxLength: 2,
+      minInclusive: 10,
+      maxInclusive: 1,
+    });
+    const issues = designerIssues({
+      ...newForm(shape),
+      fields: [question, { ...question, key: "other" }],
+    });
+    expect(issues).toEqual([
+      "Give every question a title.",
+      "Question: check the minimum and maximum.",
+    ]);
+  });
   it("creates all question kinds with appropriate datatype and a unique path", () => {
     for (const kind of [
       "text",
@@ -213,13 +230,24 @@ describe("CSV export", () => {
   it("quotes RFC 4180 cells and prevents formula injection in headers and values", () => {
     const question = field("text", { label: "=Header" });
     const form = model(question);
-    const rows = ["=SUM(A1)", "+1", "-1", "@A1", "\t=1", 'hello, "friend"\r\nnext', ""].map(
-      (value, index) => ({
-        subject: `https://pod.example/${index}`,
-        form: shape,
-        values: { q_answer: value },
-      }),
-    );
+    const rows = [
+      "=SUM(A1)",
+      "+1",
+      "-1",
+      "@A1",
+      "|1",
+      "＝1",
+      "＋1",
+      "－1",
+      "＠A1",
+      "\t=1",
+      'hello, "friend"\r\nnext',
+      "",
+    ].map((value, index) => ({
+      subject: `https://pod.example/${index}`,
+      form: shape,
+      values: { q_answer: value },
+    }));
     const csv = responsesCsv(form, rows);
     expect(csv).toContain('"Response URL","\'=Header"\r\n');
     for (const value of ["=SUM(A1)", "+1", "-1", "@A1", "\t=1"])

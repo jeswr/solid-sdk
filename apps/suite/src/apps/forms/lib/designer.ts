@@ -104,7 +104,7 @@ export function designerIssues(form: FormModel): string[] {
     )
       issues.push(`${label}: lengths must be whole numbers of zero or more.`);
   }
-  return issues;
+  return [...new Set(issues)];
 }
 export function fillLink(origin: string, shape: string): string {
   return `${origin}/forms/f?form=${encodeURIComponent(shape)}`;

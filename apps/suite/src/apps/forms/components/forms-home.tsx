@@ -45,6 +45,11 @@ export function FormsHome() {
             ? "A form couldn't be saved. Open its draft and try again."
             : `${state.forms.length} forms in your pod`}
       </p>
+      {state.skipped.length > 0 && (
+        <p className="fm-muted">
+          {state.skipped.length} resources couldn't be opened as forms and were skipped.
+        </p>
+      )}
       {state.status === "loading" ? (
         <LoadingSkeleton preset="grid" label="Loading forms…" />
       ) : state.status === "error" ? (
@@ -72,7 +77,7 @@ export function FormsHome() {
                 {form.description || "A new conversation, ready to begin."}
               </p>
               <div className="fm-actions">
-                <Button aria-label={`Design ${form.label}`} onClick={() => setEditing(form)}>
+                <Button aria-label={`Design form: ${form.label}`} onClick={() => setEditing(form)}>
                   Design form
                 </Button>
                 <Button variant="outline" onClick={() => setResponses(form)}>

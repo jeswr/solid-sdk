@@ -10,6 +10,7 @@ import {
   EmptyState,
   ErrorState,
   LoadingSkeleton,
+  toast,
 } from "@jeswr/suite-ui";
 import { useEffect, useState } from "react";
 import { answerText, responsesCsv } from "../lib/csv";
@@ -55,17 +56,29 @@ export function ResponsesView({ form, close }: { form: FormModel; close: () => v
           </Button>
           <Button
             disabled={!responses?.length}
-            onClick={() => {
+            onClick={async () => {
               if (!responses) return;
               const blob = new Blob([responsesCsv(form, responses)], {
                 type: "text/csv;charset=utf-8",
               });
-              const url = URL.createObjectURL(blob);
-              const link = document.createElement("a");
-              link.href = url;
-              link.download = "form-responses.csv";
-              link.click();
-              setTimeout(() => URL.revokeObjectURL(url), 1000);
+              try {
+                if (process.env.NEXT_PUBLIC_SUITE_TARGET === "native") {
+                  const { saveNatively } = await import("@/lib/native/save-file");
+                  await saveNatively(blob, "form-responses.csv", "text/csv");
+                } else {
+                  const url = URL.createObjectURL(blob);
+                  try {
+                    const link = document.createElement("a");
+                    link.href = url;
+                    link.download = "form-responses.csv";
+                    link.click();
+                  } finally {
+                    setTimeout(() => URL.revokeObjectURL(url), 30_000);
+                  }
+                }
+              } catch {
+                toast.error("Couldn't export your responses. Try again.");
+              }
             }}
           >
             Export CSV
@@ -142,7 +155,6 @@ export function ResponsesView({ form, close }: { form: FormModel; close: () => v
           )}
         </DialogContent>
       </Dialog>
-      ;
     </section>
   );
 }
