@@ -4,23 +4,30 @@ import { Button, FilterChips } from "@jeswr/suite-ui";
 import { CircleCheck } from "lucide-react";
 import { useState } from "react";
 import { type CompletedGroup, completedGroups } from "../../lib/views/completed";
+import { filterDateRange } from "../../lib/views/date-ranges";
 import { useNow } from "../../state/clock";
 import { useTasks } from "../../state/tasks-context";
 import { DeleteCompletedButton } from "../delete-completed";
 import { CrossProjectView } from "./cross-project-view";
+import { DateRangeControl, useTaskDateRange } from "./date-range-control";
+import { GroupedTasks } from "./grouped-tasks";
 import { ViewGroup } from "./view-group";
 
 export function CompletedView() {
   const tasks = useTasks();
   const now = useNow();
   const [projectUrl, setProjectUrl] = useState<string>();
-  const [page, setPage] = useState(0);
+  const { range, change } = useTaskDateRange("completed", now);
+  const [pagination, setPagination] = useState({ page: 0, from: range.from, to: range.to });
+  const page = pagination.from === range.from && pagination.to === range.to ? pagination.page : 0;
+  const setPage = (page: number) => setPagination({ page, from: range.from, to: range.to });
+  const ranged = filterDateRange(tasks.views, range, "completed");
   const project = tasks.projects.find((item) => item.url === projectUrl);
   const groups: CompletedGroup[] = [];
   let hasMore = false;
   for (let index = 0; index <= page; index++) {
     const result = completedGroups(
-      tasks.views,
+      ranged,
       { ...(projectUrl ? { projectUrl } : {}), page: index },
       now,
     );
@@ -32,7 +39,7 @@ export function CompletedView() {
     }
   }
   const rows = groups.flatMap((group) => group.tasks);
-  const count = tasks.views.filter(
+  const count = ranged.filter(
     (task) => task.state === "closed" && (!projectUrl || task.projectUrl === projectUrl),
   ).length;
   return (
@@ -45,28 +52,33 @@ export function CompletedView() {
       emptyIcon={<CircleCheck size={24} strokeWidth={1.5} aria-hidden="true" />}
       actions={project && <DeleteCompletedButton project={project} />}
       toolbar={
-        <FilterChips
-          label="Filter by project"
-          options={[
-            { id: "all", label: "All projects" },
-            ...tasks.projects.map((project) => ({
-              id: project.url,
-              label: project.tracker.title ?? "Project",
-            })),
-          ]}
-          value={[projectUrl ?? "all"]}
-          resultCount={count}
-          onChange={(value) => {
-            const next = value.at(-1);
-            setProjectUrl(next && next !== "all" ? next : undefined);
-            setPage(0);
-          }}
-        />
+        <>
+          <DateRangeControl kind="completed" now={now} range={range} onChange={change} />
+          <FilterChips
+            label="Filter by project"
+            options={[
+              { id: "all", label: "All projects" },
+              ...tasks.projects.map((project) => ({
+                id: project.url,
+                label: project.tracker.title ?? "Project",
+              })),
+            ]}
+            value={[projectUrl ?? "all"]}
+            resultCount={count}
+            onChange={(value) => {
+              const next = value.at(-1);
+              setProjectUrl(next && next !== "all" ? next : undefined);
+              setPage(0);
+            }}
+          />
+        </>
       }
     >
-      {groups.map((group) => (
-        <ViewGroup key={group.dayKey ?? "earlier"} title={group.label} rows={group.tasks} />
-      ))}
+      <GroupedTasks rows={rows}>
+        {groups.map((group) => (
+          <ViewGroup key={group.dayKey ?? "earlier"} title={group.label} rows={group.tasks} />
+        ))}
+      </GroupedTasks>
       {hasMore && (
         <Button
           type="button"

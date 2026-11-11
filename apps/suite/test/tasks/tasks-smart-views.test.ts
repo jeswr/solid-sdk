@@ -17,7 +17,16 @@ vi.mock("@/lib/refs", async () => import("../../src/lib/refs"));
 vi.mock("next/navigation", () => ({
   usePathname: () => "/tasks/today",
   useRouter: () => ({ push: vi.fn(), replace }),
-  useSearchParams: () => new URLSearchParams(),
+  useSearchParams: () =>
+    new URLSearchParams(
+      useSyncExternalStore(
+        (listener) => {
+          window.addEventListener("popstate", listener);
+          return () => window.removeEventListener("popstate", listener);
+        },
+        () => window.location.search,
+      ),
+    ),
 }));
 vi.mock("@jeswr/suite-ui", async (original) => ({
   ...(await original<Record<string, unknown>>()),
@@ -114,6 +123,12 @@ async function labels() {
 }
 beforeEach(async () => {
   localStorage.clear();
+  window.history.replaceState(null, "", "/tasks/today");
+  const replaceState = window.history.replaceState.bind(window.history);
+  vi.spyOn(window.history, "replaceState").mockImplementation((...args) => {
+    replaceState(...args);
+    window.dispatchEvent(new Event("popstate"));
+  });
   vi.stubGlobal("matchMedia", window.matchMedia);
   vi.stubGlobal("HTMLFormElement", window.HTMLFormElement);
   vi.stubGlobal("DocumentFragment", window.DocumentFragment);
@@ -306,7 +321,7 @@ describe("Upcoming", () => {
     }
   });
 
-  it("honours weekStart, shifts seven days, shows overdue only from Today, and opens a day composer", async () => {
+  it("honours weekStart for This week, shifts the range seven days, and opens a day composer", async () => {
     // The composer's due chip words dates against the real clock ("Tomorrow"); pin it to `now`.
     vi.useFakeTimers({ toFake: ["Date"], now });
     onTestFinished(() => {
@@ -319,6 +334,11 @@ describe("Upcoming", () => {
     await cache.createTask(inbox, { title: "Future", allDay: "2026-11-16" });
     const { host } = await mount(h("main", null, h(UpcomingView)));
     expect(host.querySelectorAll(".tsk-day-cell")).toHaveLength(7);
+    const rangeSelect = host.querySelector("select") as HTMLSelectElement;
+    await act(() => {
+      rangeSelect.value = "week";
+      rangeSelect.dispatchEvent(new Event("change", { bubbles: true }));
+    });
     expect(host.querySelector(".tsk-day-cell")?.getAttribute("data-day-key")).toBe("2026-11-01");
     expect(
       host.querySelector('.tsk-day-cell[data-day-key="2026-11-02"]')?.getAttribute("aria-label"),
@@ -327,15 +347,15 @@ describe("Upcoming", () => {
     expect([...host.querySelectorAll("h2")].map((heading) => heading.textContent)).not.toContain(
       "Overdue",
     );
-    expect(region(host, "Later").querySelector("[hidden]")).not.toBeNull();
-    await click(button("Later", host));
-    expect(titles(region(host, "Later"))).toEqual(["Future"]);
+    expect(titles(host)).not.toContain("Future");
+    expect(titles(host)).not.toContain("Late");
     await click(host.querySelector('[aria-label="Next week"]') as Element);
     expect(host.querySelector(".tsk-day-cell")?.getAttribute("data-day-key")).toBe("2026-11-08");
     await click(host.querySelector('[aria-label="Previous week"]') as Element);
     expect(host.querySelector(".tsk-day-cell")?.getAttribute("data-day-key")).toBe("2026-11-01");
     await click(button("Today", host));
-    expect(titles(region(host, "Overdue"))).toEqual(["Late"]);
+    expect(host.querySelector(".tsk-day-cell")?.getAttribute("data-day-key")).toBe("2026-11-02");
+    expect(titles(host)).not.toContain("Late");
     const cell = host.querySelector('.tsk-day-cell[data-day-key="2026-11-04"]') as HTMLElement;
     cell.scrollIntoView = vi.fn();
     await click(cell);

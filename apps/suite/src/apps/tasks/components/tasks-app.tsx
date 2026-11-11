@@ -46,8 +46,10 @@ function TasksChrome({ children }: { children: ReactNode }) {
   const { preferences, dispatch } = useTasksPreferences();
   const [sharing, setSharing] = useState(false);
   const pathname = useRoutePathname();
-  // Smart views have fixed grouping/order; only project lists consume the sort preference.
-  const supportsSort = pathname === "/tasks/inbox" || /^\/tasks\/p\/[^/]+$/.test(pathname);
+  const projectList = pathname === "/tasks/inbox" || /^\/tasks\/p\/[^/]+$/.test(pathname);
+  const supportsSort =
+    projectList ||
+    /^\/tasks\/(today|upcoming|completed|l\/[^/]+|filters(?:\/[^/]+)?)$/.test(pathname);
   const params = useSearchParams();
   const label = useRouteParams<{ label: string }>("/tasks/l/[label]")?.label;
   const listRef = useRouteParams<{ ref: string }>("/tasks/p/[ref]")?.ref;
@@ -262,7 +264,7 @@ function TasksChrome({ children }: { children: ReactNode }) {
                   Share
                 </Button>
               )}
-              {supportsSort && <SortMenu viewId={pathname} />}
+              {supportsSort && <SortMenu viewId={pathname} crossProject={!projectList} />}
               {projectUrl && (
                 <ViewToggle
                   projectUrl={projectUrl}
