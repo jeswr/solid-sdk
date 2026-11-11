@@ -313,3 +313,29 @@ it.each([
   expect(mocks.push).not.toHaveBeenCalled();
   await ui.unmount();
 });
+
+it("exposes the Data and Edit menus on the mounted Sheets editor", async () => {
+  const service = mocks.service as WorkbookService;
+  const book = await service.create({ title: "Data tools", snapshot: snapshot() });
+  const ui = await mount(h(SheetEditor, { container: book.container }));
+  await vi.waitFor(() => expect(mocks.mount).toHaveBeenCalled());
+  const engine = await mocks.mount.mock.results[0]?.value;
+  if (!engine) throw new Error("Missing engine");
+  engine.findReplace = vi.fn(async () => {});
+  engine.toggleFilter = vi.fn(async () => true);
+  await key(button("Data"), "ArrowDown");
+  const filter = [...document.querySelectorAll('[role="menuitem"]')].find(
+    (item) => item.textContent === "Create a filter",
+  );
+  if (!filter) throw new Error("Missing filter menu");
+  await click(filter);
+  expect(engine.toggleFilter).toHaveBeenCalledOnce();
+  await key(button("Edit"), "ArrowDown");
+  const find = [...document.querySelectorAll('[role="menuitem"]')].find(
+    (item) => item.textContent === "Find and replace",
+  );
+  if (!find) throw new Error("Missing find menu");
+  await click(find);
+  expect(engine.findReplace).toHaveBeenCalledOnce();
+  await ui.unmount();
+});

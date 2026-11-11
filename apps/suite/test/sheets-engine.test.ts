@@ -131,6 +131,25 @@ vi.mock("@univerjs/preset-sheets-conditional-formatting", () => ({
 vi.mock("@univerjs/preset-sheets-conditional-formatting/locales/en-US", () => ({
   default: { conditionalFormatting: "Conditional formatting" },
 }));
+vi.mock("@univerjs/preset-sheets-sort", () => ({
+  UniverSheetsSortPreset: () => ({ plugins: ["sort"] }),
+  SortRangeCommand: { id: "sheet.command.sort-range" },
+  SortType: { ASC: "asc", DESC: "desc" },
+}));
+vi.mock("@univerjs/preset-sheets-filter", () => ({
+  UniverSheetsFilterPreset: () => ({ plugins: ["filter"] }),
+  SHEET_FILTER_SNAPSHOT_ID: "SHEET_FILTER_PLUGIN",
+  FILTER_MUTATIONS: new Set(),
+}));
+vi.mock("@univerjs/preset-sheets-find-replace", () => ({
+  UniverSheetsFindReplacePreset: () => ({ plugins: ["find-replace"] }),
+  OpenReplaceDialogOperation: { id: "ui.operation.open-replace-dialog" },
+}));
+vi.mock("@univerjs/preset-sheets-sort/locales/en-US", () => ({ default: { sort: "Sort" } }));
+vi.mock("@univerjs/preset-sheets-filter/locales/en-US", () => ({ default: { filter: "Filter" } }));
+vi.mock("@univerjs/preset-sheets-find-replace/locales/en-US", () => ({
+  default: { find: "Find" },
+}));
 vi.mock("@univerjs/core", async (original) => ({
   ...(await original<typeof import("@univerjs/core")>()),
   ICommandService: "command-service",
@@ -183,6 +202,9 @@ describe("Univer engine adapter", () => {
       { core: "Core" },
       { dataValidation: "Data validation" },
       { conditionalFormatting: "Conditional formatting" },
+      { sort: "Sort" },
+      { filter: "Filter" },
+      { find: "Find" },
     );
     expect(mock.create).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -190,12 +212,18 @@ describe("Univer engine adapter", () => {
           { plugins: ["core"] },
           { plugins: ["data-validation"] },
           { plugins: ["conditional-formatting"] },
+          { plugins: ["sort"] },
+          { plugins: ["filter"] },
+          { plugins: ["find-replace"] },
         ],
         locales: {
           "en-US": {
             core: "Core",
             dataValidation: "Data validation",
             conditionalFormatting: "Conditional formatting",
+            sort: "Sort",
+            filter: "Filter",
+            find: "Find",
           },
         },
       }),
@@ -749,5 +777,34 @@ it.each([
   await Promise.resolve();
   expect(engine.snapshot().charts).toEqual(next);
   expect(change).toHaveBeenCalledOnce();
+  engine.dispose();
+});
+
+it("omits local filters when a legacy view-only snapshot has no filter baseline", async () => {
+  const engine = await (await loadEngine())({} as HTMLElement, {
+    snapshot: initial(),
+    dark: false,
+    compact: true,
+    readOnly: true,
+  });
+  const data = mock.api.createWorkbook.mock.calls.at(-1)?.[0];
+  if (!data) throw new Error("Missing workbook");
+  data.resources = [{ name: "SHEET_FILTER_PLUGIN", data: "local" }];
+  expect(engine.snapshot().resources).toEqual([]);
+  engine.dispose();
+});
+
+it("restores authoritative filter resources if a view-only engine omits them", async () => {
+  const resources = [{ name: "SHEET_FILTER_PLUGIN", data: "saved" }];
+  const engine = await (await loadEngine())({} as HTMLElement, {
+    snapshot: { ...initial(), resources },
+    dark: false,
+    compact: true,
+    readOnly: true,
+  });
+  const data = mock.api.createWorkbook.mock.calls.at(-1)?.[0];
+  if (!data) throw new Error("Missing workbook");
+  delete data.resources;
+  expect(engine.snapshot().resources).toEqual(resources);
   engine.dispose();
 });
