@@ -33,7 +33,7 @@ import {
   TooltipProvider,
   toast,
 } from "@jeswr/suite-ui";
-import { useEffect, useId, useRef, useState } from "react";
+import { type ReactNode, useEffect, useId, useRef, useState } from "react";
 import {
   generalAccessOptions,
   grantExpires,
@@ -62,7 +62,8 @@ export interface ShareDialogProps {
   caps: ShareCapabilities;
   suiteHref: string;
   contacts?: SharingPerson[];
-  notice?: string;
+  notice?: ReactNode;
+  additionalAction?: { label: string; run: () => Promise<void> };
   onPeopleAdded?: (count: number) => void;
   useProfile?: (webId: string) => SharingProfile;
 }
@@ -121,6 +122,7 @@ function SharingContent({
   useProfile = emptyProfile,
   mobile,
   notice,
+  additionalAction,
 }: ShareDialogProps & { mobile: boolean }) {
   const id = useId();
   const online = !useNeedsConnection().disabled;
@@ -601,7 +603,12 @@ function SharingContent({
           )}
         </>
       )}
-      {notice && <p className="text-sm text-muted-foreground">{notice}</p>}
+      {notice && <div className="text-sm text-muted-foreground">{notice}</div>}
+      {additionalAction && (
+        <Button disabled={disabled} onClick={() => void act("additional", additionalAction.run)}>
+          {additionalAction.label}
+        </Button>
+      )}
       <footer className={styles.footer}>
         <Button
           variant="outline"

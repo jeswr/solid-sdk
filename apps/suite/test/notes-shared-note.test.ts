@@ -32,6 +32,7 @@ it.each([
   encodeRef("https://pod.example/bob/notes/a%252Fprivate.ttl"),
   encodeRef("https://pod.example/bob/notes/a%20b.ttl"),
   encodeRef("https://pod.example/bob/docs/a.ttl"),
+  encodeRef("https://pod.example/bob/notes/extensionless"),
   encodeRef("https://pod.example/bob/notes/a.acl.ttl"),
   encodeRef("https://pod.example/bob/notes/media/image.png"),
   encodeRef("https://pod.example/bob/notes/a/b.ttl"),
@@ -42,11 +43,11 @@ it.each([
   );
   expect(fetch).not.toHaveBeenCalled();
 });
-it("reads public notes anonymously as view only and does not expose owner fields", async () => {
+it("reads public notes anonymously as view only with their shared labels and reminders", async () => {
   const dataset = buildNote(URL, {
     title: "Public",
     body: "<p>Text</p>",
-    labels: ["Private"],
+    labels: ["Shared"],
     reminder: "2027-01-01T10:00:00Z",
   });
   const fetch = vi.fn(
@@ -59,9 +60,9 @@ it("reads public notes anonymously as view only and does not expose owner fields
   expect(note).toMatchObject({
     title: "Public",
     body: "<p>Text</p>",
-    labels: [],
-    reminder: undefined,
-    reminderId: undefined,
+    labels: ["Shared"],
+    reminder: "2027-01-01T10:00:00.000Z",
+    reminderId: expect.any(String),
     readOnly: true,
     etag: '"public"',
   });
@@ -127,4 +128,21 @@ it.each([
     return new Response(response.body, { status: response.status, headers });
   });
   expect((await store.read(note.url))?.readOnly).toBe(expected);
+});
+
+it.each([
+  "",
+  "archive/",
+  ".trash/",
+])("routes owned extensionless notes in %s through the store's scope", async (part) => {
+  const fixture = await harness();
+  const store = createNotesStore(fixture.options);
+  const url = `${POD}notes/${part}extensionless`;
+  await fixture.pod.fetch(url, {
+    method: "PUT",
+    body: await serializeTurtle(buildNote(url, { title: "Extensionless" })),
+    headers: { "content-type": "text/turtle" },
+  });
+  expect(noteLink(encodeRef(url), POD)).toEqual({ url, ownerRoot: POD, foreign: false });
+  expect((await store.read(url))?.title).toBe("Extensionless");
 });

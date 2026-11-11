@@ -13,22 +13,23 @@ collaborators must be managed at their source. ACP discovery, mixed-policy RDF,
 unsupported policy shapes and changed ACL endpoints refuse sharing changes.
 These checks live in the small shell `VerifiedWacSharingAdapter`, also used by Sheets.
 
-Referenced `notes/media/` images receive read grants before the note grant is
-written. Images can appear in several notes, so their existing grants are never
-removed or downgraded. The dialog explains that removing a collaborator or
-restricting the note leaves image grants in place. Newly attached images receive
-the note's existing reader and public grants before saving the new body. A note
-referencing Docs assets must move those images into Notes media before sharing.
-No container-wide grant or preference ACL is changed.
+Images under the owner's `notes/media/` referenced by the note are listed in the
+Share dialog. Saving sharing changes grants read-only access to only those listed
+images; opening the dialog and ordinary note saves never grant collaborator or
+public image access. Images added later need the owner to open Share again and
+save sharing changes or choose Share listed images for the existing audience.
+Images can appear in several notes, so existing image grants are additive and
+never removed or downgraded when a collaborator is removed or the note is restricted.
+Other images, including Docs assets, are not granted access by Notes sharing.
 
-Before opening sharing, labels and reminders move from the note's RDF into an
-owner-only `settings/notes/<encoded-note-url>.ttl` resource. Its effective privacy
-is verified before writing; unverified or shared inheritance refuses preparation.
-The note links to that resource with `rdfs:seeAlso`, and subsequent reads and saves
-keep owner fields there. Archive and Trash retain this separation. Pin and colour
-remain the owner's existing local preferences. Preference writes and note writes
-are separate conditional operations; recovery retains the pending note if either
-fails. Private preference resources are retained when a note moves or is deleted.
+Labels and reminders remain in the note's RDF. On a shared note, collaborators
+can see and edit its labels and reminders. Pin and colour remain local preferences.
+All note fields use the note's original ETag in a single conditional write.
+
+Archive, unarchive, Trash and restore copy a note's own ACL to the new resource,
+rewriting its access targets before deleting the source. If copying access fails,
+the move stops and keeps the source. The share link changes when a shared note is
+archived (and on other moves); copy and send the new link from Share.
 
 Shared links follow Sheets' origin boundary: a canonical note URL on another pod
 on the current storage's origin opens through anonymous, redirect-refusing reads.
@@ -36,7 +37,8 @@ The view never acquires a writer or consumes another account's pending drafts.
 Public notes work without credentials. Private foreign notes explain that access
 from the owner's pod is needed and that opening private notes shared from another
 pod is not supported yet (sst-imb.57.1). Cross-origin, auxiliary and ambiguous URLs
-are refused with an explanation.
+are refused with an explanation for foreign links. Owned notes use the existing
+Notes scope rules, including extensionless note URLs.
 
 An explicit `WAC-Allow` without Write opens an own-pod note as View only. A 403 on
 autosave switches the mounted editor to View only and stops debounce, reconnect,

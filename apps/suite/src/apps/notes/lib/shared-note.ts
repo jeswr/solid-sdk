@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { RedirectRefusedError, refuseRedirects } from "@jeswr/guarded-fetch";
+import { normalizePodBase, RedirectRefusedError, refuseRedirects } from "@jeswr/guarded-fetch";
 import { decodeRef, encodeRef } from "@/lib/refs";
+import { isDirectChild } from "../../docs/lib/model/layout";
 import { readRdf } from "../../docs/lib/model/rdf-io";
 import { parseNote } from "./model/note";
 import type { StoredNote } from "./model/store";
@@ -13,6 +14,13 @@ export function noteLink(reference: string, podRoot: string) {
   try {
     const resource = decodeRef(reference);
     const url = new URL(resource);
+    const root = normalizePodBase(podRoot);
+    if (
+      ["notes/", "notes/archive/", "notes/.trash/"].some((path) =>
+        isDirectChild(resource, new URL(path, root).href),
+      )
+    )
+      return { url: resource, ownerRoot: root, foreign: false };
     if (
       url.origin !== new URL(podRoot).origin ||
       url.username ||
@@ -52,9 +60,6 @@ export async function readSharedNote(
     return {
       note: {
         ...note,
-        labels: [],
-        reminder: undefined,
-        reminderId: undefined,
         etag,
         readOnly: true,
       },

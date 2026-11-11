@@ -247,8 +247,6 @@ export function NoteCard({ note, now = new Date() }: { note: StoredNote; now?: D
       )}
       {sharing && (
         <ShareNote
-          store={store}
-          onPrepared={() => void refresh()}
           note={sharing}
           session={session}
           onClose={() => {

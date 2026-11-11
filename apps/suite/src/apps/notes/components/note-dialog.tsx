@@ -606,11 +606,6 @@ export function NoteDialog({ note }: { note: StoredNote }) {
       </DialogContent>
       {sharing && (
         <ShareNote
-          store={store}
-          onPrepared={(saved) => {
-            accept(saved);
-            void refresh();
-          }}
           note={sharing}
           session={session}
           onClose={() => {

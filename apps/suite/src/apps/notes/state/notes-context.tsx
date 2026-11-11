@@ -31,7 +31,6 @@ function useNotesValue(session: PodSession) {
         fetch: session.fetch,
         podRoot: session.storageUrl,
         webId: session.webId,
-        mode: session.mode,
       }),
     [session],
   );

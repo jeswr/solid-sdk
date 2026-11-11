@@ -473,8 +473,8 @@ describe("notes store", () => {
   it("keeps both copies when a 502 cannot be verified", async () => {
     const s = await fixture();
     const note = await s.store.create();
-    s.intercept(async (url) =>
-      url === note.url ? new Response(null, { status: 502 }) : undefined,
+    s.intercept(async (url, init) =>
+      url === note.url && init?.method !== "HEAD" ? new Response(null, { status: 502 }) : undefined,
     );
     await expect(s.store.archive(note)).rejects.toBeInstanceOf(NoteMoveUncertainError);
     expect(s.pod.has(note.url)).toBe(true);
@@ -519,7 +519,7 @@ describe("notes store", () => {
     const s = await fixture();
     const note = await s.store.create({ body: "Original body" });
     s.intercept(async (url, init) => {
-      if (url !== note.url) return;
+      if (url !== note.url || init?.method === "HEAD") return;
       if (init?.method === "DELETE") throw new TypeError("Lost response");
       const response = await s.pod.fetch(url, init);
       const headers = new Headers(response.headers);
@@ -556,7 +556,7 @@ describe("notes store", () => {
     const s = await fixture();
     const note = await s.store.create();
     s.intercept(async (url, init) => {
-      if (url !== note.url) return;
+      if (url !== note.url || init?.method === "HEAD") return;
       if (init?.method === "DELETE") throw new TypeError("Lost response");
       if (failure === "transport") throw new TypeError("Offline");
       return new Response(null, { status: 503 });
@@ -772,7 +772,7 @@ it("rolls back the stale destination on a concurrent source edit without a verif
   const edited = await s.store.save(original, { body: "New content" }, original.etag);
   s.calls.length = 0;
   await expect(s.store.archive(original)).rejects.toBeInstanceOf(NoteConflictError);
-  expect(s.calls.filter((call) => call.method === "GET")).toEqual([]);
+  expect(s.calls.filter((call) => call.method === "GET" && call.url === original.url)).toEqual([]);
   expect(await s.store.read(original.url)).toEqual({
     ...edited,
     readOnly: false,
@@ -803,7 +803,9 @@ it.each([
         ? RedirectRefusedError
         : ResourceDeleteError,
   );
-  expect(s.calls.filter((call) => call.method === "GET")).toHaveLength(failure === "http" ? 0 : 1);
+  expect(s.calls.filter((call) => call.method === "GET" && call.url === original.url)).toHaveLength(
+    failure === "http" ? 0 : 1,
+  );
   expect(s.pod.has(original.url)).toBe(true);
   expect(s.pod.has(`${ROOT}archive/note.ttl`)).toBe(false);
 });
@@ -816,7 +818,9 @@ it("verifies a transport that rejects without an Error and rolls back its uncomm
     if (url === original.url && init?.method === "DELETE") return Promise.reject();
   });
   await expect(s.store.archive(original)).rejects.toBeUndefined();
-  expect(s.calls.filter((call) => call.method === "GET")).toHaveLength(1);
+  expect(s.calls.filter((call) => call.method === "GET" && call.url === original.url)).toHaveLength(
+    1,
+  );
   expect(s.pod.has(original.url)).toBe(true);
   expect(s.pod.has(`${ROOT}archive/note.ttl`)).toBe(false);
 });

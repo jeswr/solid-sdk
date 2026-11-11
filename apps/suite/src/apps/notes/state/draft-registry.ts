@@ -19,7 +19,6 @@ const stored = draft.extend({
   created: optionalText,
   modified: optionalText,
   creator: optionalText,
-  privatePreferences: optionalText,
   revisions: z.array(
     z.object({
       id: z.string(),
