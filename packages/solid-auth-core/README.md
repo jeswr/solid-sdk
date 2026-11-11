@@ -66,6 +66,11 @@ under that policy. Neither wrapper attaches SDK tokens to `mode: "no-cors"` requ
 and direct `upgrade()` calls leave them unchanged. Browser-filtered caller credential
 headers do not force manual redirects; these requests retain the caller's policy.
 
+After token refresh and DPoP proof signing, credential attachment rechecks that the same
+session is live and the request origin is still allowed. Logout, account switching, or
+origin revocation during either operation returns the original request without adding
+SDK credentials, retaining the caller's redirect policy.
+
 Derived requests preserve the caller's referrer, referrer policy, mode, credentials,
 cache, integrity, keepalive, abort signal, and priority where supported, on passthrough,
 fallback, credential attachment, and every followed hop. Only the URL, redirect policy,

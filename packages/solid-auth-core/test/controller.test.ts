@@ -14,6 +14,7 @@
 //     restore actually gets a refresh token for dynamically-registered clients).
 
 import type { SessionStore } from "@jeswr/solid-session-restore";
+import * as DPoP from "dpop";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { SolidAuthController as LoginController } from "../src/types.js";
 import { FOREIGN, POD, spoofedRequests } from "./request-fixtures.js";
@@ -3219,6 +3220,94 @@ describe("createSolidAuth — the token provider (origin gate + refresh)", () =>
     expect(auth).toBeNull();
     expect(controller.webId).toBeNull();
   });
+});
+
+describe("createSolidAuth — session changes during proof signing (sst-8xm.9.15)", () => {
+  for (const route of ["authenticatedFetch", "global fetch"] as const) {
+    for (const phase of ["initial", "nonce retry", "refresh retry"] as const) {
+      for (const change of ["logout", "account switch", "unchanged"] as const) {
+        it(`${route} revalidates ${change} during ${phase} proof signing`, async () => {
+          const originalFetch = globalThis.fetch;
+          const sent: Request[] = [];
+          loginExpiresIn = 3600; // The initial upgrade must not refresh.
+          const controller = createSolidAuth({
+            authFlow,
+            callbackUri: "https://app.example/callback",
+            clientId: "https://app.example/clientid.jsonld",
+            store: new RecordingStore(),
+            allowedOrigins: [new URL(POD).origin], // Both accounts admit the target.
+            patchGlobalFetch: route === "global fetch",
+            publicFetch: async (input, init) => {
+              sent.push(new Request(input, init));
+              return sent.length === 1 && phase !== "initial"
+                ? new Response(null, {
+                    status: 401,
+                    headers: {
+                      "DPoP-Nonce": "resource-nonce",
+                      "WWW-Authenticate":
+                        phase === "nonce retry"
+                          ? 'DPoP error="use_dpop_nonce"'
+                          : 'DPoP error="invalid_token"',
+                    },
+                  })
+                : new Response("ok");
+            },
+          });
+          let releaseProof!: () => void;
+          const proofGate = new Promise<void>((resolve) => {
+            releaseProof = resolve;
+          });
+          let signingStarted!: () => void;
+          const signing = new Promise<void>((resolve) => {
+            signingStarted = resolve;
+          });
+          try {
+            await controller.login("https://alice.pod.example/profile/card#me");
+            const signer = vi.mocked(DPoP.generateProof);
+            if (phase !== "initial") signer.mockResolvedValueOnce("initial-proof");
+            signer.mockImplementationOnce(async () => {
+              signingStarted();
+              await proofGate;
+              return "delayed-proof";
+            });
+            const requestFetch =
+              route === "global fetch" ? globalThis.fetch : controller.authenticatedFetch;
+            const pending = requestFetch(POD, { redirect: "error" });
+            await signing;
+            expect(sent).toHaveLength(phase === "initial" ? 0 : 1);
+            if (change === "logout") {
+              const listener = vi.fn();
+              controller.onSessionChange(listener);
+              await controller.logout();
+              expect(listener).toHaveBeenCalledWith({ webId: null });
+              expect(controller.webId).toBeNull();
+            } else if (change === "account switch") {
+              webIdClaim = "https://bob.pod.example/profile/card#me";
+              loginAccessToken = "bob-access-token";
+              await controller.login(webIdClaim);
+              expect(controller.webId).toBe(webIdClaim);
+            }
+            releaseProof();
+            expect((await pending).status).toBe(200);
+            const outgoing = sent.at(-1);
+            expect(outgoing?.headers.get("Authorization")).toBe(
+              change === "unchanged"
+                ? `DPoP ${phase === "refresh retry" ? "refreshed-access-token" : "access-token"}`
+                : null,
+            );
+            expect(outgoing?.headers.get("DPoP")).toBe(
+              change === "unchanged" ? "delayed-proof" : null,
+            );
+            expect(outgoing?.redirect).toBe(change === "unchanged" ? "manual" : "error");
+            expect(refreshGrantCalls).toBe(phase === "refresh retry" ? 1 : 0);
+          } finally {
+            releaseProof();
+            globalThis.fetch = originalFetch;
+          }
+        });
+      }
+    }
+  }
 });
 
 describe("createSolidAuth — resource-server DPoP nonce (RFC 9449 §8, Medium fix)", () => {

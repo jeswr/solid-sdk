@@ -3288,23 +3288,30 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
       }
       session = current;
     }
-    const headers = new Headers(request.headers);
-    headers.set(
-      "DPoP",
-      await DPoP.generateProof(
-        session.dpopKey,
-        // RFC 9449 §4.2: the `htu` claim is the request URI WITHOUT query + fragment.
-        // Pass a normalized htu (query/hash stripped) so a protected request like
-        // `…?q=…#frag` produces a valid proof the RS will accept.
-        htuOf(href),
-        request.method,
-        // RFC 9449 §8: embed the resource server's cached `nonce` (from a prior
-        // `use_dpop_nonce` 401 / a rotated `DPoP-Nonce` response header) so a server
-        // that REQUIRES a nonce accepts the proof; `undefined` for servers that don't.
-        this.#nonceFor(href),
-        session.accessToken,
-      ),
+    const proof = await DPoP.generateProof(
+      session.dpopKey,
+      // RFC 9449 §4.2: the `htu` claim is the request URI WITHOUT query + fragment.
+      // Pass a normalized htu (query/hash stripped) so a protected request like
+      // `…?q=…#frag` produces a valid proof the RS will accept.
+      htuOf(href),
+      request.method,
+      // RFC 9449 §8: embed the resource server's cached `nonce` (from a prior
+      // `use_dpop_nonce` 401 / a rotated `DPoP-Nonce` response header) so a server
+      // that REQUIRES a nonce accepts the proof; `undefined` for servers that don't.
+      this.#nonceFor(href),
+      session.accessToken,
     );
+    // Signing also yields: logout, account switching, or a changed origin policy
+    // must prevent credentials from being attached when the proof completes.
+    if (
+      this.#getSession() !== session ||
+      requestHref(request) !== href ||
+      !this.#allowed(session, href)
+    ) {
+      return request;
+    }
+    const headers = new Headers(request.headers);
+    headers.set("DPoP", proof);
     headers.set("Authorization", `DPoP ${session.accessToken}`);
     let upgraded = deriveRequest(request, { headers });
     // Header guards can discard attempted credentials during construction. Only
