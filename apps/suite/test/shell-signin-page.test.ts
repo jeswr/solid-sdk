@@ -31,7 +31,7 @@ vi.mock("../src/shell/registration/use-registration", () => ({
 vi.mock("../src/shell/public/demo-button", () => ({ DemoButton: () => null }));
 vi.mock("../src/shell/public/pod-explainer", () => ({ PodExplainer: () => null }));
 
-import SignInPage from "../src/app/(public)/signin/page";
+import SignInPage from "../src/shell/public/sign-in-page";
 
 beforeEach(() => {
   fixture.status = "loading";
