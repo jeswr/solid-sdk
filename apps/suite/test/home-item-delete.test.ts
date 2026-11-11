@@ -79,6 +79,29 @@ it("refuses individual deletion in a shared history, including stale cards, and 
   }
 });
 
+// Deleting an imported book used to delete the blank-node note sharing its document.
+it("protects a named imported record beside a blank-node primary record", async () => {
+  const { session, controller, pod, fetch } = await setup();
+  const target = `${root}notes/reading.ttl`;
+  const notes = `@prefix s: <https://schema.org/>. @prefix prov: <http://www.w3.org/ns/prov#>.
+    [] a s:NoteDigitalDocument; s:name "Reading notes"; s:text "Chapter one"; s:dateCreated "2026-11-01".
+    <#book> a s:Book; s:name "A book"; prov:wasGeneratedBy <runs.ttl#run>.`;
+  await pod.fetch(target, {
+    method: "PUT",
+    headers: { "content-type": "text/turtle" },
+    body: notes,
+  });
+  try {
+    const { item } = await readItem(session, target, `${target}#book`);
+    expect(itemActions(item, root).map((action) => action.id)).not.toContain("delete");
+    expect(await controller.remove(item, vi.fn())).toBe(false);
+    expect(fetch.mock.calls.some(([, init]) => init?.method === "DELETE")).toBe(false);
+    expect(await (await pod.fetch(target)).text()).toBe(notes);
+  } finally {
+    controller.dispose();
+  }
+});
+
 it("protects every record when shared document subjects use URL aliases", async () => {
   const { session, controller, pod, fetch } = await setup();
   const target = `${root}integrations/netflix/media/viewing-history.ttl`;

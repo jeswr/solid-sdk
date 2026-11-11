@@ -98,6 +98,55 @@ export function resourceUrl(value: string): string {
 }
 
 /**
+ * The records a document's cards show, in order: named local records stamped with
+ * provenance by a connector, then the document's own primary record unless it is one of
+ * those or connector scaffolding (a provenance activity). Blank-node collections keep
+ * primary-subject discovery. Deletion protection uses the same list, so a card's delete
+ * never removes a sibling card's record.
+ */
+export function documentRecords(
+  dataset: DatasetCore,
+  url: string,
+  webId?: string,
+  limit = Number.POSITIVE_INFINITY,
+): { node: ReturnType<typeof subjectOf>; classification: Classification }[] {
+  const records: { node: ReturnType<typeof subjectOf>; classification: Classification }[] = [];
+  const imported = new Set<string>();
+  const scaffolding = new Set<string>();
+  const generatedBy = DataFactory.namedNode(`${NS.PROV}wasGeneratedBy`);
+  const profile = webId !== undefined && url === resourceUrl(webId);
+  for (const { subject, object } of dataset.match(null, generatedBy)) {
+    scaffolding.add(object.value);
+    // One past the limit lets the caller report truncation.
+    if (records.length > limit) break;
+    if (
+      profile ||
+      subject.termType !== "NamedNode" ||
+      subject.value === url ||
+      resourceUrl(subject.value) !== url ||
+      imported.has(subject.value)
+    )
+      continue;
+    const node = subjectOf(dataset, subject);
+    const classification = classifySubject(node, webId);
+    if (!classification.dataType) continue;
+    imported.add(subject.value);
+    records.push({ node, classification });
+  }
+  const primary = profile && webId ? subjectOf(dataset, webId) : primarySubject(dataset, url);
+  if (primary) {
+    const term = TermAs.term(primary);
+    if (
+      dataset.match(term).size > 0 &&
+      !imported.has(term.value) &&
+      !(imported.size && scaffolding.has(term.value))
+    )
+      records.push({ node: primary, classification: classifySubject(primary, webId) });
+  }
+  return records;
+}
+
+/**
  * Merge Type Index hits and suite containers, classify records, dedupe document/subject/type.
  * Known folders may not exist (404); permission, network and parse failures are retained.
  * Integrations are walked recursively; ordinary folders contribute direct non-container children.
@@ -169,43 +218,9 @@ export async function discoverDomainItems(
             });
         }
       };
-      // Connector collections stamp records with provenance. Only named local records
-      // get individual cards; blank-node collections keep primary-subject discovery.
-      const imported = new Set<string>();
-      if (!webId || url !== resourceUrl(webId)) {
-        for (const { subject } of dataset.match(
-          null,
-          DataFactory.namedNode(`${NS.PROV}wasGeneratedBy`),
-        )) {
-          if (
-            subject.termType !== "NamedNode" ||
-            subject.value === url ||
-            resourceUrl(subject.value) !== url ||
-            imported.has(subject.value)
-          )
-            continue;
-          const node = subjectOf(dataset, subject);
-          const classified = classifySubject(node, webId);
-          if (!classified.dataType) continue;
-          imported.add(subject.value);
-          add(node, classified);
-          if (truncated) break;
-        }
-      }
-      // The document's own primary record (a note holding an imported reference, say)
-      // still gets its card unless it is one of the imported records already shown.
-      const node =
-        webId && url === resourceUrl(webId)
-          ? subjectOf(dataset, webId)
-          : primarySubject(dataset, url);
-      if (
-        !truncated &&
-        node &&
-        dataset.match(TermAs.term(node)).size > 0 &&
-        !imported.has(TermAs.term(node).value)
-      ) {
-        const classified = classifySubject(node, webId);
-        if (!imported.size || classified.dataType) add(node, classified);
+      for (const { node, classification } of documentRecords(dataset, url, webId, limit)) {
+        add(node, classification);
+        if (truncated) break;
       }
       document = { dataset, etag, items, truncated };
       documents.set(url, document);

@@ -2,8 +2,9 @@
 // AUTHORED-BY Claude Opus 5.5
 import { RdfFetchError } from "@jeswr/fetch-rdf";
 import { NS } from "@jeswr/suite-vocab";
+import { TermAs } from "@rdfjs/wrapper";
 import { classifySubject } from "../lib/model/classify";
-import { type DomainItem, resourceUrl } from "../lib/model/discovery";
+import { type DomainItem, documentRecords, resourceUrl } from "../lib/model/discovery";
 import { inStorage, readResource, subjectOf } from "../lib/model/rdf";
 import type { HomeSession } from "./use-domain-items";
 
@@ -48,6 +49,14 @@ export function protectedDocument(item: DomainItem, storage: string, webId?: str
   // Contact details are always an aggregate of the profile's own linked nodes.
   if (item.dataType?.id === "contact-details") return true;
   if (WELL_KNOWN.some((path) => url === resourceUrl(new URL(path, storage).href))) return true;
+  // Any other card discovery shows for this document (blank-node records included).
+  if (
+    item.dataType?.id !== "files" &&
+    documentRecords(item.dataset, url, webId, 1).some(
+      ({ node }) => !TermAs.term(node).equals(item.subject),
+    )
+  )
+    return true;
   for (const quad of item.dataset) {
     if (INFRASTRUCTURE_PREDICATES.has(quad.predicate.value)) return true;
     if (quad.predicate.value === `${NS.RDF}type` && INFRASTRUCTURE_TYPES.has(quad.object.value))

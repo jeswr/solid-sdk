@@ -333,6 +333,29 @@ describe("domain discovery", () => {
     expect(result.items.map((item) => item.title).sort()).toEqual(["A book", "Reading notes"]);
   });
 
+  // An untyped primary note used to vanish from Other once an imported record was found.
+  it("keeps an uncategorised primary record beside imported records, but not provenance runs", async () => {
+    const url = `${STORAGE}misc/reading.ttl`;
+    const result = await discoverDomainItems("all", {
+      storage: STORAGE,
+      fetch: fixtureFetch({
+        [url]: `<#it> schema:name "Untitled note"; schema:text "Some thoughts".
+          <#book> a schema:Book; schema:name "A book"; prov:wasGeneratedBy <#run>.`,
+      }),
+      typeIndex: [{ forClass: `${NS.SCHEMA}Book`, instance: url }],
+    });
+    expect(result.items.map((item) => item.title).sort()).toEqual(["A book", "Untitled note"]);
+    const scaffolded = await discoverDomainItems("all", {
+      storage: STORAGE,
+      fetch: fixtureFetch({
+        [url]: `<#run> a prov:Activity; schema:name "Import run"; schema:startTime "2026-11-01T00:00:00Z"; schema:endTime "2026-11-01T00:01:00Z".
+          <#book> a schema:Book; schema:name "A book"; prov:wasGeneratedBy <#run>.`,
+      }),
+      typeIndex: [{ forClass: `${NS.SCHEMA}Book`, instance: url }],
+    });
+    expect(scaffolded.items.map((item) => item.title)).toEqual(["A book"]);
+  });
+
   it("uses only the primary subject for connector collections independently of the WebID", async () => {
     const fetch = fixtureFetch({
       [`${STORAGE}collection.ttl`]:
