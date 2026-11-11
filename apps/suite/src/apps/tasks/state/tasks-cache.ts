@@ -9,7 +9,7 @@ import { DataFactory, isSharedTrackerUrl, requireProjectFolder } from "../lib/mo
 import type { ProjectCreation, StoredProject, StoredTask, TaskStore } from "../lib/model/store";
 import { createTask, type TaskDetails, TaskItem } from "../lib/model/task";
 import { createTracker, type TaskTracker } from "../lib/model/tracker";
-import { completedParentsToKeep } from "../lib/views/clear-completed";
+import { completedHistoryToKeep, completedParentsToKeep } from "../lib/views/clear-completed";
 import { type CompletionPlan, planComplete, planUndo } from "../lib/views/completion";
 import { type DropPosition, positionForDrop } from "../lib/views/positions";
 import { compareTasks } from "../lib/views/project-groups";
@@ -916,35 +916,89 @@ export class TasksCache {
     this.unresolvedMoves.set(item.url, { target: target.url, run });
     return run();
   }
+  /** Include hidden rows: Undo visibility must never change recurrence or ancestry planning. */
+  completedDeletionPlan(candidates?: ReadonlySet<string>) {
+    const tasks = Object.values(this.baseline.tasks).flatMap((load) =>
+      load.items.map(({ task }) => {
+        const rule = task.recurrence;
+        return {
+          id: task.id,
+          parentId: task.parent,
+          state: task.state === "closed" ? ("closed" as const) : ("open" as const),
+          derivedFrom: task.clonedFrom,
+          bounded: rule?.count !== undefined || rule?.until !== undefined,
+        };
+      }),
+    );
+    const history = completedHistoryToKeep(tasks, candidates);
+    return { ...completedParentsToKeep(tasks, candidates, history), history };
+  }
+  /** Strict refresh shares the write queue; failed reads cannot authorize destructive planning. */
+  refreshCompletedDeletion(): Promise<TaskView[] | undefined> {
+    return this.mutate(
+      (state) => state,
+      async () => {
+        const tasks = { ...this.baseline.tasks };
+        const views: TaskView[] = [];
+        for (const project of this.baseline.projects) {
+          const current = this.project(project.url);
+          const items = await this.store.listTasks(current.tracker.stateStore as string, {
+            strict: true,
+          });
+          const projected = projectTasks(current, items);
+          tasks[current.url] = { status: "ready", ...projected };
+          views.push(...projected.views);
+        }
+        return { result: views, commit: (state) => ({ ...state, tasks }) };
+      },
+      () => {},
+      [],
+      () => {},
+    );
+  }
   deleteTask(
     item: StoredTask,
     options: { silent?: boolean; completedOnly?: boolean } = {},
   ): Promise<boolean | undefined> {
-    const project = this.baseline.projects.find((project) =>
-      this.baseline.tasks[project.url]?.items.some((task) => task.url === item.url),
-    );
+    const project = this.baseline.projects.find((project) => {
+      const folder = project.tracker.stateStore;
+      return (
+        this.baseline.tasks[project.url]?.items.some((task) => task.url === item.url) ||
+        (folder !== undefined && item.url.startsWith(folder))
+      );
+    });
     if (!project) return Promise.resolve(undefined);
     const remove: Patch = (state) => replaceTask(state, project.url, item.url);
     return this.mutate(
       remove,
       async () => {
-        const current = this.task(project.url, item.url);
+        const current = this.baseline.tasks[project.url]?.items.find(
+          (task) => task.url === item.url,
+        );
+        // Retry may follow reconciliation of a committed DELETE whose response was lost.
+        if (!current) {
+          if (await this.optionalTask(item.url)) throw new ModelError(409, item.url);
+          return { result: true, commit: remove };
+        }
         if (options.completedOnly) {
-          const ancestry = Object.values(this.baseline.tasks).flatMap((load) =>
-            load.items.map(({ task }) => ({
-              id: task.id,
-              parentId: task.parent,
-              state: task.state === "closed" ? ("closed" as const) : ("open" as const),
-            })),
-          );
-          // Re-check after queued edits: a task may be reopened or gain an open child during Undo.
+          // Descendants settle first. Any remaining child (including a failed DELETE)
+          // protects its ancestors, as does history required by an open bounded series.
           if (
             current.task.state !== "closed" ||
-            completedParentsToKeep(ancestry, new Set([current.task.id])).parents.size
+            Object.values(this.baseline.tasks).some((load) =>
+              load.items.some(({ task }) => task.parent === current.task.id),
+            ) ||
+            this.completedDeletionPlan(new Set([current.task.id])).history.has(current.task.id)
           )
             return { result: false, commit: (state) => state };
         }
-        await this.store.deleteTask(current);
+        try {
+          await this.store.deleteTask(current);
+        } catch (error) {
+          // A transport failure or error response can follow a successful deletion.
+          // Only a confirmed 404/410 makes that ambiguous outcome successful.
+          if (await this.optionalTask(current.url)) throw error;
+        }
         return { result: true, commit: remove };
       },
       () => {

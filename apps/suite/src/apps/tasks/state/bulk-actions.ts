@@ -2,7 +2,7 @@
 import { toast } from "@jeswr/suite-ui";
 import type { StoredProject, StoredTask } from "../lib/model/store";
 import { type BulkResult, bulkSummary, runBulk } from "../lib/views/bulk";
-import { completedParentsToKeep } from "../lib/views/clear-completed";
+import { descendantsFirst } from "../lib/views/clear-completed";
 import type { CompletionPlan } from "../lib/views/completion";
 import { type PriorityLevel, priorityValue, type TaskView } from "../lib/views/types";
 import { rescheduleToDay } from "../lib/views/upcoming";
@@ -204,10 +204,24 @@ export function deleteTasks(
   const toastId = crypto.randomUUID();
   const committing: { view: TaskView; item: StoredTask }[] = [];
   const commit = async (entries: typeof committing) => {
+    const refreshed = options.completedOnly ? await tasks.cache.refreshCompletedDeletion() : [];
+    const fresh = new Map(refreshed?.map((view) => [view.url, view]));
+    if (options.completedOnly)
+      entries = descendantsFirst(
+        entries.map((entry) => ({
+          ...entry,
+          id: entry.view.id,
+          parentId: fresh.get(entry.view.url)?.parentId,
+        })),
+      );
     const skipped = new Set<string>();
     const result = await runBulk(
       entries,
       async ({ view, item }) => {
+        if (!refreshed) {
+          tasks.cache.hideTask(view.url, false);
+          throw new Error("Couldn't refresh tasks before deletion");
+        }
         const deleting = tasks.cache.deleteTask(item, {
           silent: true,
           completedOnly: options.completedOnly ?? false,
@@ -286,23 +300,30 @@ export function deleteTasks(
   return scheduled.length;
 }
 
-/** All completed resources in the project, including recurring occurrence history and descendants. */
+/** Clear completed resources, retaining ancestry and history still needed by bounded series. */
 export function deleteCompletedTasks(project: StoredProject, tasks: BulkTasks): number {
   const views = tasks.cache.getSnapshot().views;
   const completed = views.filter(
     (view) => view.projectUrl === project.url && view.state === "closed",
   );
   const candidates = new Set(completed.map((view) => view.id));
-  const { parents } = completedParentsToKeep(views, candidates);
+  const { parents, history } = tasks.cache.completedDeletionPlan(candidates);
   const description = () => {
-    const kept = completedParentsToKeep(tasks.cache.getSnapshot().views, candidates).openSubtasks
-      .size;
-    return kept
-      ? `Kept ${kept} open ${kept === 1 ? "sub-task and its" : "sub-tasks and their"} completed ancestors`
-      : undefined;
+    const { openSubtasks, history } = tasks.cache.completedDeletionPlan(candidates);
+    const kept = openSubtasks.size;
+    return (
+      [
+        kept
+          ? `Kept ${kept} open ${kept === 1 ? "sub-task and its" : "sub-tasks and their"} completed ancestors`
+          : "",
+        history.size ? `Kept ${history.size} items needed by repeating tasks` : "",
+      ]
+        .filter(Boolean)
+        .join(". ") || undefined
+    );
   };
   const count = deleteTasks(
-    completed.filter((view) => !parents.has(view.id)),
+    completed.filter((view) => !parents.has(view.id) && !history.has(view.id)),
     tasks,
     { completedOnly: true, description },
   );

@@ -279,3 +279,225 @@ it("rechecks refreshed edits before deletion so reopened tasks and new open chil
   expect(pod.requests.filter((request) => request.method === "DELETE")).toEqual([]);
   expect(cache.getSnapshot().views).toHaveLength(3);
 });
+
+it.each([
+  "reopened",
+  "new",
+])("refreshes a %s open child during Undo without a cache refresh", async (change) => {
+  const parent = await create("Parent");
+  const child =
+    change === "reopened"
+      ? await create("Child", { title: "Child", parent: parent.task.id })
+      : undefined;
+  deleteCompletedTasks(project, api());
+  const closing = notice();
+  const open = child
+    ? await cache.store.updateTask(child, (task) => {
+        task.state = "open";
+      })
+    : await cache.store.createTask(project, {
+        title: "Child",
+        state: "open",
+        parent: parent.task.id,
+      });
+  await act(() => closing.onAutoClose?.());
+  await vi.waitFor(() =>
+    expect(success).toHaveBeenLastCalledWith("Deleted 0 tasks", expect.anything()),
+  );
+  expect(pod.requests.filter((request) => request.method === "DELETE")).toEqual([]);
+  expect(pod.files.has(parent.url)).toBe(true);
+  expect((await cache.store.readTask(open.url)).task.parent).toBe(parent.task.id);
+  expect(notice().description).toContain("Kept 1 open sub-task");
+});
+
+it.each([
+  "reopen",
+  "edit",
+])("settles descendants first and keeps all ancestors after a child DELETE conflicts (%s)", async (change) => {
+  const root = await create("Root");
+  const parent = await create("Parent", { title: "Parent", parent: root.task.id });
+  const child = await create("Child", { title: "Child", parent: parent.task.id });
+  const sibling = await create("Sibling", { title: "Sibling", parent: root.task.id });
+  deleteCompletedTasks(project, api());
+  const closing = notice();
+  pod.intercept = async (request) => {
+    if (request.method === "DELETE" && request.url === child.url) {
+      await cache.store.updateTask(child, (task) => {
+        if (change === "reopen") task.state = "open";
+        else task.title = "Edited elsewhere";
+      });
+    }
+    return undefined;
+  };
+  await act(() => closing.onAutoClose?.());
+  await vi.waitFor(() => expect(error).toHaveBeenCalledOnce());
+  expect([root, parent, child].every((item) => pod.files.has(item.url))).toBe(true);
+  expect(pod.files.has(sibling.url)).toBe(false);
+  expect(
+    pod.requests.filter((request) => request.method === "DELETE").map((request) => request.url),
+  ).toEqual([child.url, sibling.url]);
+  expect(notice(error).description).toContain(
+    change === "reopen" ? "Kept 1 open sub-task" : "Kept 2 changed tasks",
+  );
+});
+
+it("deletes a completed subtree in descendant order", async () => {
+  const parent = await create("Parent");
+  const child = await create("Child", { title: "Child", parent: parent.task.id });
+  const grandchild = await create("Grandchild", { title: "Grandchild", parent: child.task.id });
+  deleteCompletedTasks(project, api());
+  await act(() => notice().onAutoClose?.());
+  await vi.waitFor(() =>
+    expect(success).toHaveBeenLastCalledWith("Deleted 3 tasks", expect.anything()),
+  );
+  expect(
+    pod.requests.filter((request) => request.method === "DELETE").map((request) => request.url),
+  ).toEqual([grandchild.url, child.url, parent.url]);
+  expect(cache.getSnapshot().views).toEqual([]);
+});
+
+it("keeps the subtree if its refresh fails and refreshes again on Retry", async () => {
+  const parent = await create("Parent");
+  const child = await create("Child", { title: "Child", parent: parent.task.id });
+  deleteCompletedTasks(project, api());
+  pod.intercept = (request) =>
+    request.method === "GET" && request.url === parent.url
+      ? new Response(null, { status: 503 })
+      : undefined;
+  await act(() => notice().onAutoClose?.());
+  await vi.waitFor(() => expect(error).toHaveBeenCalledOnce());
+  expect(pod.requests.filter((request) => request.method === "DELETE")).toEqual([]);
+  expect([parent, child].every((item) => pod.files.has(item.url))).toBe(true);
+  expect(cache.getSnapshot().tasks[project.url]?.status).toBe("error");
+  pod.intercept = undefined;
+  await act(() => notice(error).action?.onClick());
+  await vi.waitFor(() =>
+    expect(success).toHaveBeenLastCalledWith("Deleted 2 tasks", expect.anything()),
+  );
+  expect(cache.getSnapshot().views).toEqual([]);
+});
+
+it.each([
+  "count",
+  "until",
+])("retains history for an open %s-bounded series through pending deletion, Undo, and reload", async (bound) => {
+  const recurring = await create("Repeating", {
+    title: "Repeating",
+    state: "open",
+    due: now,
+    recurrence: {
+      frequency: "DAILY",
+      ...(bound === "count" ? { count: 2 } : { until: new Date("2026-10-26T12:00:00Z") }),
+    },
+  });
+  await cache.completeTask(recurring, now);
+  const history = cache.getSnapshot().views.find((view) => view.derivedFrom === recurring.task.id);
+  expect(history).toBeDefined();
+  await create("Done");
+  expect(deleteCompletedTasks(project, api())).toBe(1);
+  expect(notice().description).toContain("Kept 1 items needed by repeating tasks");
+  expect(cache.getSnapshot().views.some((view) => view.url === history?.url)).toBe(true);
+  const deleting = notice();
+  const pending = cache
+    .getSnapshot()
+    .tasks[project.url]?.items.find((item) => item.url === recurring.url) as StoredTask;
+  const completion = await cache.completeTask(pending, now);
+  if (!completion) throw new Error("Missing completion plan");
+  expect(completion.kind).toBe("close");
+  expect(await cache.undoCompletion(pending, completion)).toBe(true);
+  await act(() => deleting.action?.onClick());
+  expect(deleteCompletedTasks(project, api())).toBe(1);
+  await act(() => notice().onAutoClose?.());
+  await vi.waitFor(() =>
+    expect(success).toHaveBeenLastCalledWith("Deleted 1 task", expect.anything()),
+  );
+  await cache.loadTasks(project, true);
+  const current = cache
+    .getSnapshot()
+    .tasks[project.url]?.items.find((item) => item.url === recurring.url) as StoredTask;
+  expect((await cache.completeTask(current, now))?.kind).toBe("close");
+  expect((await cache.store.readTask(recurring.url)).task.state).toBe("closed");
+  expect(deleteCompletedTasks(project, api())).toBe(2);
+  await act(() => notice().onAutoClose?.());
+  await vi.waitFor(() =>
+    expect(success).toHaveBeenLastCalledWith("Deleted 2 tasks", expect.anything()),
+  );
+  expect(cache.getSnapshot().views).toEqual([]);
+});
+
+it("rechecks recurrence bounds changed remotely during Undo", async () => {
+  const recurring = await create("Repeating", {
+    title: "Repeating",
+    state: "open",
+    due: now,
+    recurrence: { frequency: "DAILY" },
+  });
+  await cache.completeTask(recurring, now);
+  expect(deleteCompletedTasks(project, api())).toBe(1);
+  const closing = notice();
+  await cache.store.updateTask(await cache.store.readTask(recurring.url), (task) => {
+    task.recurrence = { frequency: "DAILY", count: 2 };
+  });
+  await act(() => closing.onAutoClose?.());
+  await vi.waitFor(() =>
+    expect(success).toHaveBeenLastCalledWith("Deleted 0 tasks", expect.anything()),
+  );
+  expect(notice().description).toContain("Kept 1 items needed by repeating tasks");
+  expect(pod.requests.filter((request) => request.method === "DELETE")).toEqual([]);
+  const current = cache
+    .getSnapshot()
+    .tasks[project.url]?.items.find((item) => item.url === recurring.url) as StoredTask;
+  expect((await cache.completeTask(current, now))?.kind).toBe("close");
+});
+
+it.each([
+  [false, true],
+  [true, true],
+  [true, false],
+])("confirms a committed DELETE after response loss (failed confirmation: %s, tracker link: %s) and retries idempotently", async (failConfirmation, trackerLink) => {
+  let item = await create("Done");
+  if (!trackerLink)
+    item = (await cache.updateTask(item, (task) => {
+      task.project = undefined;
+    })) as StoredTask;
+  let deleted = false;
+  let failedRead = false;
+  pod.intercept = (request) => {
+    if (request.method === "DELETE" && request.url === item.url) {
+      pod.files.delete(item.url);
+      deleted = true;
+      throw new TypeError("Response lost");
+    }
+    if (
+      deleted &&
+      failConfirmation &&
+      !failedRead &&
+      request.method === "GET" &&
+      request.url === item.url
+    ) {
+      failedRead = true;
+      return new Response(null, { status: 503 });
+    }
+    return undefined;
+  };
+  deleteCompletedTasks(project, api());
+  await act(() => notice().onAutoClose?.());
+  if (failConfirmation) {
+    await vi.waitFor(() => expect(error).toHaveBeenCalledOnce());
+    expect(cache.getSnapshot().views).toEqual([]);
+    await act(() => notice(error).action?.onClick());
+  }
+  await vi.waitFor(() =>
+    expect(success).toHaveBeenLastCalledWith("Deleted 1 task", expect.anything()),
+  );
+  expect(error).toHaveBeenCalledTimes(failConfirmation ? 1 : 0);
+  expect(pod.requests.filter((request) => request.method === "DELETE")).toHaveLength(1);
+  expect(pod.requests.find((request) => request.method === "DELETE")?.headers.get("If-Match")).toBe(
+    item.etag,
+  );
+  expect(
+    pod.requests
+      .slice(pod.requests.findIndex((request) => request.method === "DELETE") + 1)
+      .some((request) => request.method === "GET" && request.url === item.url),
+  ).toBe(true);
+});
