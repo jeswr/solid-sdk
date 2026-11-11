@@ -159,9 +159,13 @@ it("rejects unsafe subjects and types and drops invalid IRI field writes", () =>
   expect([...message.types]).toEqual([Classes.EmailMessage]);
 });
 
-it("rejects a typed blank-node subject when mailbox enumeration constructs its wrapper", async () => {
-  const mailbox = await document(`[] a schema:EmailMessage ; schema:headline "Hi" .`);
-  expect(() => [...mailbox.messages]).toThrow(TypeError);
+it("skips a typed blank-node subject during mailbox enumeration and keeps the valid ones", async () => {
+  const mailbox = await document(`
+    [] a schema:EmailMessage ; schema:headline "Blank" .
+    <#message> a schema:EmailMessage ; schema:headline "Hi" .
+  `);
+  expect([...mailbox.messages].map((m) => m.value)).toEqual([M]);
+  expect(mailbox.findMessage(M)?.subjectLine).toBe("Hi");
 });
 
 it("filters unsafe raw IRI values on read without mutating the original dataset", () => {

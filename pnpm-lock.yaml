@@ -5020,6 +5020,9 @@ importers:
       '@jeswr/federation-codegen':
         specifier: workspace:*
         version: link:../federation-codegen
+      '@jeswr/pod-connectors':
+        specifier: workspace:*
+        version: link:../pod-connectors
       '@rdfjs/types':
         specifier: ^2.0.1
         version: 2.0.1

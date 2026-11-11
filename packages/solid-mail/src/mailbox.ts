@@ -20,21 +20,50 @@ import { Message } from "./message.js";
 import { Thread } from "./thread.js";
 import { Classes } from "./vocab.js";
 
+const RDF_TYPE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
+
 /** A mail document (a container of message/thread/folder subjects). */
 export class MailboxDataset extends DatasetWrapper {
   /** Every `schema:EmailMessage` subject in the document. */
   get messages(): Iterable<Message> {
-    return this.instancesOf(Classes.EmailMessage, Message);
+    return this.usableInstancesOf(Classes.EmailMessage, Message);
   }
 
   /** Every conversation/thread subject in the document. */
   get threads(): Iterable<Thread> {
-    return this.instancesOf(Classes.Conversation, Thread);
+    return this.usableInstancesOf(Classes.Conversation, Thread);
   }
 
   /** Every folder/collection subject in the document. */
   get folders(): Iterable<Folder> {
-    return this.instancesOf(Classes.Folder, Folder);
+    return this.usableInstancesOf(Classes.Folder, Folder);
+  }
+
+  /**
+   * Like `instancesOf`, but a typed subject the generated wrapper refuses (a blank node
+   * or an unsafe IRI) is skipped instead of aborting the whole enumeration, so one
+   * malformed item in a pod document never hides the valid ones.
+   */
+  private *usableInstancesOf<T>(
+    klass: string,
+    Wrapper: new (subject: string, dataset: MailboxDataset, factory: typeof this.factory) => T,
+  ): Iterable<T> {
+    const seen = new Set<string>();
+    for (const quad of this.match(
+      undefined,
+      this.factory.namedNode(RDF_TYPE),
+      this.factory.namedNode(klass),
+    )) {
+      if (quad.subject.termType !== "NamedNode" || seen.has(quad.subject.value)) continue;
+      seen.add(quad.subject.value);
+      let wrapper: T;
+      try {
+        wrapper = new Wrapper(quad.subject.value, this, this.factory);
+      } catch {
+        continue;
+      }
+      yield wrapper;
+    }
   }
 
   /** Wrap (or mint) a message at the given subject IRI in this dataset. */

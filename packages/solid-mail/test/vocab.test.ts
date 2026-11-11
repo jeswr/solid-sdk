@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+
+import * as shared from "@jeswr/pod-connectors/mail/constants";
 import { expect, it } from "vitest";
-import * as shared from "../../pod-connectors/src/mail/constants.js";
 import * as vocab from "../src/vocab.js";
 
 it("keeps every app vocabulary export byte-identical to pod-connectors constants", () => {

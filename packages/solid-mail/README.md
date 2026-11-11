@@ -88,8 +88,9 @@ pinned in `test/compatibility.test.ts`:
   datatypes, fractional and unsafe integers drop. Negative integers remain valid,
   preserving the old API's lack of a non-negative size rule.
 - Constructors reject relative/unsafe IRIs and non-NamedNode terms with
-  `TypeError`, including during enumeration of a blank-node subject with a mail
-  type. Invalid IRI fields drop on read/write (clearing a scalar on write);
+  `TypeError`. Mailbox enumeration (`messages`, `threads`, `folders` and the
+  `find*` helpers) skips a typed blank-node or unsafe subject instead, so one bad
+  item never hides the valid ones. Invalid IRI fields drop on read/write (clearing a scalar on write);
   invalid type-set additions throw. Safe absolute IRIs preserve their exact
   lexical spelling.
 
