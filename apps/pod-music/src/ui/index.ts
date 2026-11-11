@@ -7,9 +7,8 @@
 // (`@jeswr/pod-music`). React is a *peer* dependency so a data-layer-only
 // consumer never pulls it in. The view never touches RDF/fetch directly — it
 // drives the data layer (MusicStore) through `useMusicLibrary`, and takes the
-// authenticated fetch as an injected seam (post-#18 the create-solid-app shell
-// patches the global fetch; until then a stub fetch makes it unit-testable
-// today — see useMusicLibrary.ts).
+// authenticated fetch as an injected seam. Hosts pass pod-auth's `auth.fetch`;
+// omitted fetch uses the unauthenticated global transport.
 
 export {
   errorMessage,

@@ -56,7 +56,7 @@ import { MusicStore } from "@jeswr/pod-music";
 
 const store = new MusicStore({ base: "https://alice.example/music/" });
 //                     ^ pass an authenticated `fetch` (e.g. from
-//                       @solid/reactive-authentication) for protected pods.
+//                       @jeswr/pod-auth's auth.fetch) for protected pods.
 
 // write a track
 const track = store.newTrack(`${store.layout.tracks}arabesque`);
@@ -115,16 +115,11 @@ it in (and the build externalises it).
   monotonic request-id guard ensures a slow earlier load can never overwrite a
   newer section switch, and a base-prop change resets all state (incl. loading) to
   the new pod.
-- **Auth is an injectable seam.** The `fetch` prop/option is the authenticated
-  fetch; omit it and the ambient global is used. In production that global is the
-  one `@solid/reactive-authentication`'s `registerGlobally()` patches (wired once
-  in the `create-solid-app` shell's `<SolidAuthProvider>`), so a plain fetch
-  upgrades on a 401 with a DPoP token. That wiring is **#18-gated**
-  (`create-solid-app` S2;
-  [reactive-authentication#18](https://github.com/solid-contrib/reactive-authentication/issues/18)).
-  The view is deliberately unaware of it: it works **today** against a stubbed
-  fetch in unit tests and later against the real session **with no code change** —
-  there is no hard-wired login flow.
+- **Auth is an injectable seam.** Pass `@jeswr/pod-auth`'s bounded `auth.fetch`
+  through the `fetch` prop/option for protected pods. Omit it and the data layer
+  uses the unauthenticated global fetch. The view owns no login flow. The
+  standalone `web/` host passes this fetch to both Type Index discovery and the
+  library, and preserves global fetch.
 
 ## Gate
 

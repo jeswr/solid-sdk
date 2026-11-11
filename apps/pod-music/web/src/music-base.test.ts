@@ -1,47 +1,7 @@
-// AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
-//
-// Tests for the music-specific session derivation: the pod-root derivation
-// (verbatim from the host-shell template) plus the music-base resolution that is
-// UNIQUE to pod-music (its <MusicLibrary base> wants the music CONTAINER, not a
-// bare pod root, so the host resolves it via the data layer's Type-Index helper
-// with a conventional `${podRoot}music/` fallback + a banner flag).
+// AUTHORED-BY GPT-6.1 Sol
+import { deriveSession } from "@jeswr/app-session";
 import { describe, expect, it } from "vitest";
-import type { Profile } from "./profile";
-import {
-  deriveSession,
-  discoverMusicBase,
-  musicBaseFromTracksContainer,
-} from "./session-derivation";
-
-function profile(overrides: Partial<Profile> = {}): Profile {
-  return {
-    webId: "https://alice.example/profile/card#me",
-    name: "Alice",
-    storages: [],
-    oidcIssuers: ["https://idp.example/"],
-    ...overrides,
-  };
-}
-
-describe("deriveSession — pod-root derivation", () => {
-  it("uses the first pim:storage when advertised", () => {
-    const s = deriveSession(profile({ storages: ["https://alice.example/storage/"] }));
-    expect(s.podRoot).toBe("https://alice.example/storage/");
-    expect(s.podRootIsFallback).toBe(false);
-    expect(s.webId).toBe("https://alice.example/profile/card#me");
-  });
-
-  it("adds a trailing slash to a slashless storage", () => {
-    const s = deriveSession(profile({ storages: ["https://alice.example/storage"] }));
-    expect(s.podRoot).toBe("https://alice.example/storage/");
-  });
-
-  it("falls back to the WebID origin when no pim:storage is advertised", () => {
-    const s = deriveSession(profile({ storages: [] }));
-    expect(s.podRoot).toBe("https://alice.example/");
-    expect(s.podRootIsFallback).toBe(true);
-  });
-});
+import { discoverMusicBase, musicBaseFromTracksContainer } from "./music-base";
 
 describe("musicBaseFromTracksContainer — parent of a registered tracks/ container", () => {
   it("strips a trailing tracks/ segment to yield the music base", () => {
@@ -69,7 +29,12 @@ describe("musicBaseFromTracksContainer — parent of a registered tracks/ contai
 });
 
 describe("discoverMusicBase — Type Index first, conventional fallback", () => {
-  const session = deriveSession(profile({ storages: ["https://alice.example/storage/"] }));
+  const session = deriveSession({
+    webId: "https://alice.example/#me",
+    name: "Alice",
+    storages: ["https://alice.example/storage/"],
+    oidcIssuers: [],
+  });
 
   it("resolves the music base from a Type-Index tracks registration", async () => {
     const store = {

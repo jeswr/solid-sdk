@@ -1,23 +1,6 @@
 {
   "window": 120,
   "clusters": {
-    "0036e5c7e90b3ae9840066a99cb639659966921f26f387928089781242a6e0d0": {
-      "tokens": 125,
-      "locations": [
-        {
-          "file": "apps/pod-mail/web/src/auth/SessionProvider.tsx",
-          "startLine": 1047,
-          "endLine": 1100,
-          "tokens": 125
-        },
-        {
-          "file": "apps/pod-music/web/src/auth/SessionProvider.tsx",
-          "startLine": 1046,
-          "endLine": 1092,
-          "tokens": 125
-        }
-      ]
-    },
     "014737296a50d9e6a37070c10747b71d5c17b25fa1905ebbaae8a370b09a643d": {
       "tokens": 127,
       "locations": [
@@ -31,12 +14,6 @@
           "file": "apps/pod-health/web/src/auth/webid-token-provider.ts",
           "startLine": 486,
           "endLine": 572,
-          "tokens": 127
-        },
-        {
-          "file": "apps/pod-music/web/src/auth/webid-token-provider.ts",
-          "startLine": 461,
-          "endLine": 547,
           "tokens": 127
         }
       ]
@@ -88,12 +65,6 @@
           "file": "apps/pod-chat/web/src/auth/webid-token-provider.ts",
           "startLine": 1397,
           "endLine": 1438,
-          "tokens": 125
-        },
-        {
-          "file": "apps/pod-music/web/src/auth/webid-token-provider.ts",
-          "startLine": 1511,
-          "endLine": 1553,
           "tokens": 125
         },
         {
@@ -170,12 +141,6 @@
           "startLine": 1008,
           "endLine": 1092,
           "tokens": 229
-        },
-        {
-          "file": "apps/pod-music/web/src/auth/SessionProvider.tsx",
-          "startLine": 1007,
-          "endLine": 1091,
-          "tokens": 229
         }
       ]
     },
@@ -242,12 +207,6 @@
         },
         {
           "file": "apps/pod-money/web/src/LoginScreen.tsx",
-          "startLine": 9,
-          "endLine": 65,
-          "tokens": 287
-        },
-        {
-          "file": "apps/pod-music/web/src/LoginScreen.tsx",
           "startLine": 9,
           "endLine": 65,
           "tokens": 287
@@ -320,12 +279,6 @@
           "startLine": 482,
           "endLine": 562,
           "tokens": 137
-        },
-        {
-          "file": "apps/pod-music/web/src/auth/webid-token-provider.ts",
-          "startLine": 468,
-          "endLine": 548,
-          "tokens": 137
         }
       ]
     },
@@ -354,12 +307,6 @@
           "file": "apps/pod-mail/web/src/auth/SessionProvider.tsx",
           "startLine": 997,
           "endLine": 1050,
-          "tokens": 166
-        },
-        {
-          "file": "apps/pod-music/web/src/auth/SessionProvider.tsx",
-          "startLine": 996,
-          "endLine": 1049,
           "tokens": 166
         }
       ]
@@ -395,12 +342,6 @@
           "file": "apps/pod-money/web/src/auth/webid-token-provider.ts",
           "startLine": 1377,
           "endLine": 1435,
-          "tokens": 306
-        },
-        {
-          "file": "apps/pod-music/web/src/auth/webid-token-provider.ts",
-          "startLine": 1353,
-          "endLine": 1411,
           "tokens": 306
         },
         {
@@ -451,35 +392,6 @@
         }
       ]
     },
-    "0a75906bc199a3324ac2af06cc25db07b93b5a0df254704ea5ad84ef6e69d31b": {
-      "tokens": 121,
-      "locations": [
-        {
-          "file": "apps/app-store/web/src/auth/SessionProvider.tsx",
-          "startLine": 320,
-          "endLine": 354,
-          "tokens": 121
-        },
-        {
-          "file": "apps/pod-money/web/src/auth/SessionProvider.tsx",
-          "startLine": 710,
-          "endLine": 744,
-          "tokens": 121
-        },
-        {
-          "file": "apps/pod-music/web/src/auth/SessionProvider.tsx",
-          "startLine": 331,
-          "endLine": 365,
-          "tokens": 121
-        },
-        {
-          "file": "apps/pod-photos/web/src/auth/SessionProvider.tsx",
-          "startLine": 297,
-          "endLine": 331,
-          "tokens": 121
-        }
-      ]
-    },
     "0ac6c3cf7c92dd9c6fc1fff3fb82cbe5e6400981d89a257d07c6e43292044014": {
       "tokens": 143,
       "locations": [
@@ -493,12 +405,6 @@
           "file": "apps/pod-money/web/src/auth/webid-token-provider.ts",
           "startLine": 1595,
           "endLine": 1649,
-          "tokens": 143
-        },
-        {
-          "file": "apps/pod-music/web/src/auth/webid-token-provider.ts",
-          "startLine": 1574,
-          "endLine": 1628,
           "tokens": 143
         },
         {
@@ -586,23 +492,6 @@
           "startLine": 1543,
           "endLine": 1600,
           "tokens": 185
-        }
-      ]
-    },
-    "0c10349be82a15feecd1bb6d29dd6f676030bd1f7fd482ade0b2d8a23f320da7": {
-      "tokens": 207,
-      "locations": [
-        {
-          "file": "apps/pod-chat/web/src/auth/webid-token-provider.ts",
-          "startLine": 563,
-          "endLine": 705,
-          "tokens": 207
-        },
-        {
-          "file": "apps/pod-music/web/src/auth/webid-token-provider.ts",
-          "startLine": 575,
-          "endLine": 710,
-          "tokens": 207
         }
       ]
     },
@@ -736,12 +625,6 @@
           "file": "apps/pod-health/web/src/auth/SessionProvider.tsx",
           "startLine": 1446,
           "endLine": 1486,
-          "tokens": 135
-        },
-        {
-          "file": "apps/pod-music/web/src/auth/SessionProvider.tsx",
-          "startLine": 1212,
-          "endLine": 1252,
           "tokens": 135
         }
       ]
@@ -936,12 +819,6 @@
           "tokens": 120
         },
         {
-          "file": "apps/pod-music/web/src/auth/webid-token-provider.ts",
-          "startLine": 359,
-          "endLine": 395,
-          "tokens": 120
-        },
-        {
           "file": "apps/pod-photos/web/src/auth/webid-token-provider.ts",
           "startLine": 358,
           "endLine": 394,
@@ -1044,12 +921,6 @@
           "startLine": 997,
           "endLine": 1032,
           "tokens": 120
-        },
-        {
-          "file": "apps/pod-music/web/src/auth/SessionProvider.tsx",
-          "startLine": 996,
-          "endLine": 1031,
-          "tokens": 120
         }
       ]
     },
@@ -1133,12 +1004,6 @@
           "tokens": 131
         },
         {
-          "file": "apps/pod-music/web/src/auth/webid-token-provider.ts",
-          "startLine": 1382,
-          "endLine": 1414,
-          "tokens": 131
-        },
-        {
           "file": "apps/pod-photos/web/src/auth/webid-token-provider.ts",
           "startLine": 1313,
           "endLine": 1345,
@@ -1183,12 +1048,6 @@
           "file": "apps/pod-money/web/src/auth/SessionProvider.tsx",
           "startLine": 717,
           "endLine": 753,
-          "tokens": 127
-        },
-        {
-          "file": "apps/pod-music/web/src/auth/SessionProvider.tsx",
-          "startLine": 338,
-          "endLine": 374,
           "tokens": 127
         },
         {
@@ -1259,12 +1118,6 @@
           "file": "apps/pod-money/web/src/auth/webid-token-provider.ts",
           "startLine": 1440,
           "endLine": 1572,
-          "tokens": 430
-        },
-        {
-          "file": "apps/pod-music/web/src/auth/webid-token-provider.ts",
-          "startLine": 1416,
-          "endLine": 1548,
           "tokens": 430
         },
         {
@@ -1373,23 +1226,6 @@
         }
       ]
     },
-    "211e1367513bc76e2010534d2963e57a75e06eae25e7c67cc121b0672abf6f64": {
-      "tokens": 179,
-      "locations": [
-        {
-          "file": "apps/app-store/web/src/auth/webid-token-provider.ts",
-          "startLine": 952,
-          "endLine": 992,
-          "tokens": 179
-        },
-        {
-          "file": "apps/pod-music/web/src/auth/webid-token-provider.ts",
-          "startLine": 1184,
-          "endLine": 1216,
-          "tokens": 179
-        }
-      ]
-    },
     "217275fe9797511d9cb9a83e3fff270508bf800a9df5fd0d2403f852cb5e037e": {
       "tokens": 141,
       "locations": [
@@ -1481,12 +1317,6 @@
           "tokens": 134
         },
         {
-          "file": "apps/pod-music/web/src/auth/autologin-plan.ts",
-          "startLine": 108,
-          "endLine": 134,
-          "tokens": 134
-        },
-        {
           "file": "apps/pod-photos/web/src/auth/autologin-plan.ts",
           "startLine": 108,
           "endLine": 134,
@@ -1512,19 +1342,19 @@
       ]
     },
     "24031577484473e9043f89753402852a66affd400cfa60ee1a26cc70e3c3dc49": {
-      "tokens": 161,
+      "tokens": 254,
       "locations": [
         {
           "file": "apps/pod-health/web/src/auth/SessionProvider.tsx",
           "startLine": 1039,
-          "endLine": 1118,
-          "tokens": 161
+          "endLine": 1150,
+          "tokens": 254
         },
         {
           "file": "apps/pod-mail/web/src/auth/SessionProvider.tsx",
           "startLine": 920,
-          "endLine": 1000,
-          "tokens": 161
+          "endLine": 1032,
+          "tokens": 254
         }
       ]
     },
@@ -1547,12 +1377,6 @@
           "file": "apps/pod-health/web/src/auth/SessionProvider.tsx",
           "startLine": 1467,
           "endLine": 1524,
-          "tokens": 167
-        },
-        {
-          "file": "apps/pod-music/web/src/auth/SessionProvider.tsx",
-          "startLine": 1233,
-          "endLine": 1290,
           "tokens": 167
         }
       ]
@@ -1731,23 +1555,6 @@
         }
       ]
     },
-    "2cece567574bf99f0aef341cfcfaf3153da9f484f6d82e265e79b85dbc2a6604": {
-      "tokens": 126,
-      "locations": [
-        {
-          "file": "apps/pod-chat/web/src/auth/webid-token-provider.ts",
-          "startLine": 437,
-          "endLine": 532,
-          "tokens": 126
-        },
-        {
-          "file": "apps/pod-music/web/src/auth/webid-token-provider.ts",
-          "startLine": 451,
-          "endLine": 546,
-          "tokens": 126
-        }
-      ]
-    },
     "2de5108199111928116664ac4846533a0fda3d743e0a8b63045442a09067ab57": {
       "tokens": 191,
       "locations": [
@@ -1761,12 +1568,6 @@
           "file": "apps/pod-mail/web/src/auth/SessionProvider.tsx",
           "startLine": 678,
           "endLine": 751,
-          "tokens": 191
-        },
-        {
-          "file": "apps/pod-music/web/src/auth/SessionProvider.tsx",
-          "startLine": 593,
-          "endLine": 664,
           "tokens": 191
         }
       ]
@@ -2081,25 +1882,25 @@
       ]
     },
     "3313b7222954155ba69ef0747aa5c8363934c07b8a30db7a696f84ecdba00091": {
-      "tokens": 120,
+      "tokens": 122,
       "locations": [
         {
           "file": "apps/app-store/web/src/auth/SessionProvider.tsx",
           "startLine": 310,
           "endLine": 354,
-          "tokens": 120
+          "tokens": 122
         },
         {
           "file": "apps/pod-money/web/src/auth/SessionProvider.tsx",
           "startLine": 700,
           "endLine": 744,
-          "tokens": 120
+          "tokens": 122
         },
         {
           "file": "apps/pod-photos/web/src/auth/SessionProvider.tsx",
           "startLine": 287,
           "endLine": 331,
-          "tokens": 120
+          "tokens": 122
         }
       ]
     },
@@ -2192,23 +1993,6 @@
           "startLine": 742,
           "endLine": 772,
           "tokens": 144
-        }
-      ]
-    },
-    "359159062f4e5b39a21f6f0553f6017c7dfbc9e7dde80680138044af95d3b20f": {
-      "tokens": 184,
-      "locations": [
-        {
-          "file": "apps/pod-chat/web/src/auth/webid-token-provider.ts",
-          "startLine": 1398,
-          "endLine": 1479,
-          "tokens": 184
-        },
-        {
-          "file": "apps/pod-music/web/src/auth/webid-token-provider.ts",
-          "startLine": 1512,
-          "endLine": 1592,
-          "tokens": 184
         }
       ]
     },
@@ -2317,23 +2101,6 @@
           "startLine": 1726,
           "endLine": 1784,
           "tokens": 153
-        }
-      ]
-    },
-    "3acec869bfd4e445dfb3ef7d88fac94cdd11ccd63b2300df92c0515ac767d8a0": {
-      "tokens": 131,
-      "locations": [
-        {
-          "file": "apps/pod-chat/web/src/auth/SessionProvider.tsx",
-          "startLine": 1117,
-          "endLine": 1173,
-          "tokens": 131
-        },
-        {
-          "file": "apps/pod-music/web/src/auth/SessionProvider.tsx",
-          "startLine": 1049,
-          "endLine": 1108,
-          "tokens": 131
         }
       ]
     },
@@ -2558,23 +2325,6 @@
         }
       ]
     },
-    "451e66b2dc508a497d8a46ab0b1a824849f8bf6c205c0f76f573bb816ecaf483": {
-      "tokens": 131,
-      "locations": [
-        {
-          "file": "apps/app-store/web/src/auth/webid-token-provider.ts",
-          "startLine": 926,
-          "endLine": 952,
-          "tokens": 131
-        },
-        {
-          "file": "apps/pod-music/web/src/auth/webid-token-provider.ts",
-          "startLine": 1155,
-          "endLine": 1184,
-          "tokens": 131
-        }
-      ]
-    },
     "457fd4ecb35cbfc5faa0f4f1bf20ff4dc80cfd1b412f1a8d472899552897ef51": {
       "tokens": 139,
       "locations": [
@@ -2666,12 +2416,6 @@
           "tokens": 120
         },
         {
-          "file": "apps/pod-music/web/src/auth/webid-token-provider.ts",
-          "startLine": 251,
-          "endLine": 296,
-          "tokens": 120
-        },
-        {
           "file": "apps/pod-photos/web/src/auth/webid-token-provider.ts",
           "startLine": 251,
           "endLine": 296,
@@ -2710,40 +2454,6 @@
           "startLine": 607,
           "endLine": 685,
           "tokens": 242
-        }
-      ]
-    },
-    "49bd1e43b141bbc7bb986734fa2a77301c1d522fb96e82dc8a244f4fe277074b": {
-      "tokens": 179,
-      "locations": [
-        {
-          "file": "apps/pod-chat/web/src/auth/SessionProvider.tsx",
-          "startLine": 337,
-          "endLine": 402,
-          "tokens": 179
-        },
-        {
-          "file": "apps/pod-mail/web/src/auth/SessionProvider.tsx",
-          "startLine": 508,
-          "endLine": 575,
-          "tokens": 179
-        }
-      ]
-    },
-    "4b044a846a4da74716dc7fe21d7d0bf39e908c3e793dd335757b1a5b9da905fb": {
-      "tokens": 132,
-      "locations": [
-        {
-          "file": "apps/pod-money/web/src/auth/webid-token-provider.ts",
-          "startLine": 1587,
-          "endLine": 1643,
-          "tokens": 132
-        },
-        {
-          "file": "apps/pod-music/web/src/auth/webid-token-provider.ts",
-          "startLine": 1566,
-          "endLine": 1622,
-          "tokens": 132
         }
       ]
     },
@@ -2800,12 +2510,6 @@
           "file": "apps/pod-money/web/src/auth/webid-token-provider.ts",
           "startLine": 1729,
           "endLine": 1794,
-          "tokens": 122
-        },
-        {
-          "file": "apps/pod-music/web/src/auth/webid-token-provider.ts",
-          "startLine": 1748,
-          "endLine": 1817,
           "tokens": 122
         }
       ]
@@ -2894,12 +2598,6 @@
           "tokens": 146
         },
         {
-          "file": "apps/pod-music/web/src/auth/webid-token-provider.ts",
-          "startLine": 1292,
-          "endLine": 1360,
-          "tokens": 146
-        },
-        {
           "file": "apps/pod-photos/web/src/auth/webid-token-provider.ts",
           "startLine": 1223,
           "endLine": 1291,
@@ -2965,31 +2663,31 @@
       ]
     },
     "5306bac36076953c6f8bbe514153517701ef18f228ca47ed9556bf52ba0b36d7": {
-      "tokens": 183,
+      "tokens": 193,
       "locations": [
         {
           "file": "apps/pod-chat/web/src/auth/SessionProvider.tsx",
           "startLine": 1232,
-          "endLine": 1289,
-          "tokens": 183
+          "endLine": 1291,
+          "tokens": 193
         },
         {
           "file": "apps/pod-health/web/src/auth/SessionProvider.tsx",
           "startLine": 1412,
-          "endLine": 1469,
-          "tokens": 183
+          "endLine": 1471,
+          "tokens": 193
         },
         {
           "file": "apps/pod-money/web/src/auth/SessionProvider.tsx",
           "startLine": 1451,
-          "endLine": 1508,
-          "tokens": 183
+          "endLine": 1510,
+          "tokens": 193
         },
         {
           "file": "apps/pod-photos/web/src/auth/SessionProvider.tsx",
           "startLine": 1256,
-          "endLine": 1313,
-          "tokens": 183
+          "endLine": 1315,
+          "tokens": 193
         }
       ]
     },
@@ -3048,41 +2746,6 @@
           "startLine": 64,
           "endLine": 99,
           "tokens": 123
-        }
-      ]
-    },
-    "548b46b81819c57633127233af854c469940aef3b6a12f8750365f588ed43182": {
-      "tokens": 145,
-      "locations": [
-        {
-          "file": "apps/app-store/web/src/auth/SessionProvider.tsx",
-          "startLine": 1382,
-          "endLine": 1434,
-          "tokens": 145
-        },
-        {
-          "file": "apps/pod-chat/web/src/auth/SessionProvider.tsx",
-          "startLine": 1311,
-          "endLine": 1354,
-          "tokens": 145
-        },
-        {
-          "file": "apps/pod-health/web/src/auth/SessionProvider.tsx",
-          "startLine": 1491,
-          "endLine": 1543,
-          "tokens": 145
-        },
-        {
-          "file": "apps/pod-money/web/src/auth/SessionProvider.tsx",
-          "startLine": 1535,
-          "endLine": 1587,
-          "tokens": 145
-        },
-        {
-          "file": "apps/pod-photos/web/src/auth/SessionProvider.tsx",
-          "startLine": 1366,
-          "endLine": 1409,
-          "tokens": 145
         }
       ]
     },
@@ -3194,12 +2857,6 @@
           "tokens": 147
         },
         {
-          "file": "apps/pod-music/web/src/auth/session-derivation.ts",
-          "startLine": 67,
-          "endLine": 103,
-          "tokens": 147
-        },
-        {
           "file": "apps/pod-photos/web/src/auth/session-derivation.ts",
           "startLine": 43,
           "endLine": 79,
@@ -3289,25 +2946,19 @@
       ]
     },
     "596d3f581b4af62305b7b4951995e9a8685b3fc9332d0232b77fc795e0158504": {
-      "tokens": 124,
+      "tokens": 184,
       "locations": [
         {
           "file": "apps/pod-chat/web/src/auth/SessionProvider.tsx",
           "startLine": 335,
-          "endLine": 391,
-          "tokens": 124
+          "endLine": 402,
+          "tokens": 184
         },
         {
           "file": "apps/pod-mail/web/src/auth/SessionProvider.tsx",
           "startLine": 506,
-          "endLine": 564,
-          "tokens": 124
-        },
-        {
-          "file": "apps/pod-music/web/src/auth/SessionProvider.tsx",
-          "startLine": 341,
-          "endLine": 392,
-          "tokens": 124
+          "endLine": 575,
+          "tokens": 184
         }
       ]
     },
@@ -3466,12 +3117,6 @@
         },
         {
           "file": "apps/pod-money/web/src/auth/login-result.ts",
-          "startLine": 56,
-          "endLine": 101,
-          "tokens": 128
-        },
-        {
-          "file": "apps/pod-music/web/src/auth/login-result.ts",
           "startLine": 56,
           "endLine": 101,
           "tokens": 128
@@ -3732,12 +3377,6 @@
           "tokens": 252
         },
         {
-          "file": "apps/pod-music/web/src/auth/webid-token-provider.ts",
-          "startLine": 979,
-          "endLine": 1093,
-          "tokens": 252
-        },
-        {
           "file": "apps/pod-photos/web/src/auth/webid-token-provider.ts",
           "startLine": 742,
           "endLine": 856,
@@ -3863,12 +3502,6 @@
           "file": "apps/pod-money/web/src/auth/webid-token-provider.ts",
           "startLine": 736,
           "endLine": 803,
-          "tokens": 136
-        },
-        {
-          "file": "apps/pod-music/web/src/auth/webid-token-provider.ts",
-          "startLine": 976,
-          "endLine": 1043,
           "tokens": 136
         },
         {
@@ -4417,12 +4050,6 @@
           "startLine": 1525,
           "endLine": 1570,
           "tokens": 127
-        },
-        {
-          "file": "apps/pod-music/web/src/auth/SessionProvider.tsx",
-          "startLine": 1247,
-          "endLine": 1292,
-          "tokens": 127
         }
       ]
     },
@@ -4826,12 +4453,6 @@
           "tokens": 126
         },
         {
-          "file": "apps/pod-music/web/src/auth/webid-token-provider.ts",
-          "startLine": 1568,
-          "endLine": 1623,
-          "tokens": 126
-        },
-        {
           "file": "apps/pod-photos/web/src/auth/webid-token-provider.ts",
           "startLine": 1515,
           "endLine": 1570,
@@ -4881,12 +4502,6 @@
           "file": "apps/pod-money/web/src/auth/webid-token-provider.ts",
           "startLine": 1148,
           "endLine": 1179,
-          "tokens": 130
-        },
-        {
-          "file": "apps/pod-music/web/src/auth/webid-token-provider.ts",
-          "startLine": 1143,
-          "endLine": 1171,
           "tokens": 130
         },
         {
@@ -5039,12 +4654,6 @@
           "file": "apps/pod-mail/web/src/auth/SessionProvider.tsx",
           "startLine": 1189,
           "endLine": 1250,
-          "tokens": 178
-        },
-        {
-          "file": "apps/pod-music/web/src/auth/SessionProvider.tsx",
-          "startLine": 1217,
-          "endLine": 1273,
           "tokens": 178
         }
       ]
@@ -5371,23 +4980,6 @@
         }
       ]
     },
-    "854ec7fb96823cf3ad231205a0b2daee1a37c188ccabafd9e3507f75b4ceedbd": {
-      "tokens": 243,
-      "locations": [
-        {
-          "file": "apps/pod-health/web/src/auth/SessionProvider.tsx",
-          "startLine": 822,
-          "endLine": 926,
-          "tokens": 243
-        },
-        {
-          "file": "apps/pod-music/web/src/auth/SessionProvider.tsx",
-          "startLine": 629,
-          "endLine": 733,
-          "tokens": 243
-        }
-      ]
-    },
     "85c49dad1dc135e7a904589d51f1da804c95c10e82fa2914c9aeebd97bf9111d": {
       "tokens": 214,
       "locations": [
@@ -5451,41 +5043,6 @@
         }
       ]
     },
-    "873eb5a79f27d2fac3dc483de1dd4a70648778f38f2f282e238b968178593149": {
-      "tokens": 129,
-      "locations": [
-        {
-          "file": "apps/pod-chat/web/src/auth/SessionProvider.tsx",
-          "startLine": 1253,
-          "endLine": 1291,
-          "tokens": 129
-        },
-        {
-          "file": "apps/pod-health/web/src/auth/SessionProvider.tsx",
-          "startLine": 1433,
-          "endLine": 1471,
-          "tokens": 129
-        },
-        {
-          "file": "apps/pod-money/web/src/auth/SessionProvider.tsx",
-          "startLine": 1472,
-          "endLine": 1510,
-          "tokens": 129
-        },
-        {
-          "file": "apps/pod-music/web/src/auth/SessionProvider.tsx",
-          "startLine": 1199,
-          "endLine": 1237,
-          "tokens": 129
-        },
-        {
-          "file": "apps/pod-photos/web/src/auth/SessionProvider.tsx",
-          "startLine": 1277,
-          "endLine": 1315,
-          "tokens": 129
-        }
-      ]
-    },
     "875d2e270d7c13c432be9ae66dec080c5eb9071b127f88e03618c3565781ba32": {
       "tokens": 147,
       "locations": [
@@ -5522,12 +5079,6 @@
           "file": "apps/pod-money/web/src/auth/webid-token-provider.ts",
           "startLine": 853,
           "endLine": 894,
-          "tokens": 126
-        },
-        {
-          "file": "apps/pod-music/web/src/auth/webid-token-provider.ts",
-          "startLine": 1093,
-          "endLine": 1133,
           "tokens": 126
         },
         {
@@ -5996,12 +5547,6 @@
           "startLine": 734,
           "endLine": 793,
           "tokens": 131
-        },
-        {
-          "file": "apps/pod-music/web/src/auth/webid-token-provider.ts",
-          "startLine": 974,
-          "endLine": 1033,
-          "tokens": 131
         }
       ]
     },
@@ -6145,23 +5690,6 @@
         }
       ]
     },
-    "9546724e25c25aedeaa70916e46d0a54f5fe9149186376cdfaf7c38014d6cfb9": {
-      "tokens": 126,
-      "locations": [
-        {
-          "file": "apps/pod-music/web/src/auth/webid-token-provider.ts",
-          "startLine": 1289,
-          "endLine": 1356,
-          "tokens": 126
-        },
-        {
-          "file": "apps/pod-photos/web/src/auth/webid-token-provider.ts",
-          "startLine": 1220,
-          "endLine": 1287,
-          "tokens": 126
-        }
-      ]
-    },
     "959276174d0a54916a6463dee2e2c04378132bb75d61b80f2d8935586549e839": {
       "tokens": 121,
       "locations": [
@@ -6175,12 +5703,6 @@
           "file": "apps/pod-money/web/src/auth/webid-token-provider.ts",
           "startLine": 589,
           "endLine": 648,
-          "tokens": 121
-        },
-        {
-          "file": "apps/pod-music/web/src/auth/webid-token-provider.ts",
-          "startLine": 575,
-          "endLine": 635,
           "tokens": 121
         },
         {
@@ -6284,12 +5806,6 @@
           "file": "apps/pod-money/web/src/auth/webid-token-provider.ts",
           "startLine": 500,
           "endLine": 585,
-          "tokens": 150
-        },
-        {
-          "file": "apps/pod-music/web/src/auth/webid-token-provider.ts",
-          "startLine": 486,
-          "endLine": 571,
           "tokens": 150
         },
         {
@@ -6489,12 +6005,6 @@
           "tokens": 129
         },
         {
-          "file": "apps/pod-music/web/src/auth/webid-token-provider.ts",
-          "startLine": 1384,
-          "endLine": 1416,
-          "tokens": 129
-        },
-        {
           "file": "apps/pod-photos/web/src/auth/webid-token-provider.ts",
           "startLine": 1315,
           "endLine": 1347,
@@ -6521,12 +6031,6 @@
           "file": "apps/pod-mail/web/src/auth/SessionProvider.tsx",
           "startLine": 670,
           "endLine": 724,
-          "tokens": 145
-        },
-        {
-          "file": "apps/pod-music/web/src/auth/SessionProvider.tsx",
-          "startLine": 585,
-          "endLine": 639,
           "tokens": 145
         }
       ]
@@ -6568,23 +6072,6 @@
           "startLine": 10,
           "endLine": 35,
           "tokens": 153
-        }
-      ]
-    },
-    "9e3a466b98451d5e25098c7fa034c509c03b5e642505792635218a8f925823d9": {
-      "tokens": 164,
-      "locations": [
-        {
-          "file": "apps/pod-health/web/src/auth/SessionProvider.tsx",
-          "startLine": 770,
-          "endLine": 826,
-          "tokens": 164
-        },
-        {
-          "file": "apps/pod-music/web/src/auth/SessionProvider.tsx",
-          "startLine": 578,
-          "endLine": 633,
-          "tokens": 164
         }
       ]
     },
@@ -6871,12 +6358,6 @@
           "tokens": 121
         },
         {
-          "file": "apps/pod-music/web/src/auth/SessionProvider.tsx",
-          "startLine": 1049,
-          "endLine": 1092,
-          "tokens": 121
-        },
-        {
           "file": "apps/pod-photos/web/src/auth/SessionProvider.tsx",
           "startLine": 1112,
           "endLine": 1158,
@@ -6933,12 +6414,6 @@
           "startLine": 892,
           "endLine": 975,
           "tokens": 163
-        },
-        {
-          "file": "apps/pod-music/web/src/auth/webid-token-provider.ts",
-          "startLine": 1093,
-          "endLine": 1154,
-          "tokens": 163
         }
       ]
     },
@@ -6955,12 +6430,6 @@
           "file": "apps/pod-money/web/src/auth/webid-token-provider.ts",
           "startLine": 560,
           "endLine": 603,
-          "tokens": 145
-        },
-        {
-          "file": "apps/pod-music/web/src/auth/webid-token-provider.ts",
-          "startLine": 546,
-          "endLine": 589,
           "tokens": 145
         },
         {
@@ -7184,12 +6653,6 @@
           "tokens": 166
         },
         {
-          "file": "apps/pod-music/web/src/auth/webid-token-provider.ts",
-          "startLine": 1738,
-          "endLine": 1816,
-          "tokens": 166
-        },
-        {
           "file": "apps/pod-photos/web/src/auth/webid-token-provider.ts",
           "startLine": 1645,
           "endLine": 1730,
@@ -7228,12 +6691,6 @@
           "file": "apps/pod-money/web/src/auth/webid-token-provider.ts",
           "startLine": 1613,
           "endLine": 1703,
-          "tokens": 333
-        },
-        {
-          "file": "apps/pod-music/web/src/auth/webid-token-provider.ts",
-          "startLine": 1592,
-          "endLine": 1682,
           "tokens": 333
         },
         {
@@ -7332,12 +6789,6 @@
           "file": "apps/pod-money/web/src/auth/SessionProvider.tsx",
           "startLine": 710,
           "endLine": 745,
-          "tokens": 122
-        },
-        {
-          "file": "apps/pod-music/web/src/auth/SessionProvider.tsx",
-          "startLine": 331,
-          "endLine": 366,
           "tokens": 122
         },
         {
@@ -7813,12 +7264,6 @@
           "startLine": 198,
           "endLine": 279,
           "tokens": 129
-        },
-        {
-          "file": "apps/pod-music/web/src/auth/SessionProvider.tsx",
-          "startLine": 211,
-          "endLine": 292,
-          "tokens": 129
         }
       ]
     },
@@ -7881,12 +7326,6 @@
           "file": "apps/pod-mail/web/src/auth/SessionProvider.tsx",
           "startLine": 198,
           "endLine": 282,
-          "tokens": 121
-        },
-        {
-          "file": "apps/pod-music/web/src/auth/SessionProvider.tsx",
-          "startLine": 211,
-          "endLine": 295,
           "tokens": 121
         },
         {
@@ -8008,12 +7447,6 @@
           "file": "apps/pod-money/web/src/auth/webid-token-provider.ts",
           "startLine": 562,
           "endLine": 639,
-          "tokens": 191
-        },
-        {
-          "file": "apps/pod-music/web/src/auth/webid-token-provider.ts",
-          "startLine": 548,
-          "endLine": 625,
           "tokens": 191
         },
         {
@@ -8349,12 +7782,6 @@
           "tokens": 130
         },
         {
-          "file": "apps/pod-music/web/src/auth/webid-token-provider.ts",
-          "startLine": 1154,
-          "endLine": 1182,
-          "tokens": 130
-        },
-        {
           "file": "apps/pod-photos/web/src/auth/webid-token-provider.ts",
           "startLine": 1092,
           "endLine": 1119,
@@ -8622,12 +8049,6 @@
           "tokens": 179
         },
         {
-          "file": "apps/pod-music/web/src/auth/webid-token-provider.ts",
-          "startLine": 533,
-          "endLine": 586,
-          "tokens": 179
-        },
-        {
           "file": "apps/pod-photos/web/src/auth/webid-token-provider.ts",
           "startLine": 549,
           "endLine": 602,
@@ -8636,43 +8057,37 @@
       ]
     },
     "d2629a13b066a6ab20e6e4dc8628ac368a3e13a4956fcf4cf645e022ed576a10": {
-      "tokens": 140,
+      "tokens": 166,
       "locations": [
         {
           "file": "apps/app-store/web/src/auth/SessionProvider.tsx",
           "startLine": 1377,
-          "endLine": 1422,
-          "tokens": 140
+          "endLine": 1434,
+          "tokens": 166
         },
         {
           "file": "apps/pod-chat/web/src/auth/SessionProvider.tsx",
           "startLine": 1306,
-          "endLine": 1351,
-          "tokens": 140
+          "endLine": 1354,
+          "tokens": 166
         },
         {
           "file": "apps/pod-health/web/src/auth/SessionProvider.tsx",
           "startLine": 1486,
-          "endLine": 1531,
-          "tokens": 140
+          "endLine": 1543,
+          "tokens": 166
         },
         {
           "file": "apps/pod-money/web/src/auth/SessionProvider.tsx",
           "startLine": 1530,
-          "endLine": 1575,
-          "tokens": 140
-        },
-        {
-          "file": "apps/pod-music/web/src/auth/SessionProvider.tsx",
-          "startLine": 1252,
-          "endLine": 1297,
-          "tokens": 140
+          "endLine": 1587,
+          "tokens": 166
         },
         {
           "file": "apps/pod-photos/web/src/auth/SessionProvider.tsx",
           "startLine": 1361,
-          "endLine": 1406,
-          "tokens": 140
+          "endLine": 1409,
+          "tokens": 166
         }
       ]
     },
@@ -8701,12 +8116,6 @@
           "file": "apps/pod-money/web/src/auth/webid-token-provider.ts",
           "startLine": 1409,
           "endLine": 1486,
-          "tokens": 241
-        },
-        {
-          "file": "apps/pod-music/web/src/auth/webid-token-provider.ts",
-          "startLine": 1385,
-          "endLine": 1462,
           "tokens": 241
         },
         {
@@ -8925,12 +8334,6 @@
           "file": "apps/pod-money/web/src/auth/webid-token-provider.ts",
           "startLine": 1328,
           "endLine": 1394,
-          "tokens": 187
-        },
-        {
-          "file": "apps/pod-music/web/src/auth/webid-token-provider.ts",
-          "startLine": 1304,
-          "endLine": 1370,
           "tokens": 187
         },
         {
@@ -9168,12 +8571,6 @@
           "tokens": 145
         },
         {
-          "file": "apps/pod-music/web/src/auth/SessionProvider.tsx",
-          "startLine": 338,
-          "endLine": 379,
-          "tokens": 145
-        },
-        {
           "file": "apps/pod-photos/web/src/auth/SessionProvider.tsx",
           "startLine": 304,
           "endLine": 345,
@@ -9211,12 +8608,6 @@
           "file": "apps/pod-health/web/src/auth/webid-token-provider.ts",
           "startLine": 746,
           "endLine": 827,
-          "tokens": 144
-        },
-        {
-          "file": "apps/pod-music/web/src/auth/webid-token-provider.ts",
-          "startLine": 947,
-          "endLine": 1028,
           "tokens": 144
         }
       ]
@@ -9415,12 +8806,6 @@
           "tokens": 143
         },
         {
-          "file": "apps/pod-music/web/src/App.tsx",
-          "startLine": 112,
-          "endLine": 170,
-          "tokens": 143
-        },
-        {
           "file": "apps/pod-photos/web/src/App.tsx",
           "startLine": 94,
           "endLine": 152,
@@ -9616,12 +9001,6 @@
           "startLine": 804,
           "endLine": 893,
           "tokens": 230
-        },
-        {
-          "file": "apps/pod-music/web/src/auth/webid-token-provider.ts",
-          "startLine": 1044,
-          "endLine": 1133,
-          "tokens": 230
         }
       ]
     },
@@ -9684,12 +9063,6 @@
           "file": "apps/pod-money/web/src/auth/webid-token-provider.ts",
           "startLine": 1535,
           "endLine": 1573,
-          "tokens": 123
-        },
-        {
-          "file": "apps/pod-music/web/src/auth/webid-token-provider.ts",
-          "startLine": 1511,
-          "endLine": 1552,
           "tokens": 123
         },
         {
@@ -9943,23 +9316,6 @@
         }
       ]
     },
-    "f252c018f83c6b063581a69d02f1037ea59b62475b46acb1479ac9fe09203f8c": {
-      "tokens": 231,
-      "locations": [
-        {
-          "file": "apps/pod-chat/web/src/auth/webid-token-provider.ts",
-          "startLine": 1008,
-          "endLine": 1065,
-          "tokens": 231
-        },
-        {
-          "file": "apps/pod-music/web/src/auth/webid-token-provider.ts",
-          "startLine": 1113,
-          "endLine": 1170,
-          "tokens": 231
-        }
-      ]
-    },
     "f2e89320623e2835755aedc1e6f7e12afdc0fa9c01c5165bf637b19f89c5def3": {
       "tokens": 140,
       "locations": [
@@ -9980,23 +9336,6 @@
           "startLine": 28,
           "endLine": 46,
           "tokens": 140
-        }
-      ]
-    },
-    "f41cbf8689fefd0205ccc98c2de92a560e07a5e3f2f147130e64625f7894f19e": {
-      "tokens": 129,
-      "locations": [
-        {
-          "file": "apps/pod-chat/web/src/auth/webid-token-provider.ts",
-          "startLine": 1135,
-          "endLine": 1182,
-          "tokens": 129
-        },
-        {
-          "file": "apps/pod-music/web/src/auth/webid-token-provider.ts",
-          "startLine": 1259,
-          "endLine": 1304,
-          "tokens": 129
         }
       ]
     },
@@ -10035,12 +9374,6 @@
         },
         {
           "file": "apps/pod-money/web/src/auth/login-ux.ts",
-          "startLine": 13,
-          "endLine": 56,
-          "tokens": 179
-        },
-        {
-          "file": "apps/pod-music/web/src/auth/login-ux.ts",
           "startLine": 13,
           "endLine": 56,
           "tokens": 179
@@ -10225,23 +9558,6 @@
         }
       ]
     },
-    "f70f1326d2779bf3a8b0c9f10e750d4edd9775f52127240804b908fdef8b0daa": {
-      "tokens": 123,
-      "locations": [
-        {
-          "file": "apps/pod-chat/web/src/App.tsx",
-          "startLine": 88,
-          "endLine": 140,
-          "tokens": 123
-        },
-        {
-          "file": "apps/pod-music/web/src/App.tsx",
-          "startLine": 112,
-          "endLine": 164,
-          "tokens": 123
-        }
-      ]
-    },
     "f73269e2d4d47ebe86497475b11ec1a6727de5cf58a03cb2024d3bfce761eadd": {
       "tokens": 207,
       "locations": [
@@ -10279,23 +9595,6 @@
           "startLine": 141,
           "endLine": 169,
           "tokens": 147
-        }
-      ]
-    },
-    "f8086899553ff4693a304256caec93613d6d6154a26b0ad3528e662ccd1faa52": {
-      "tokens": 185,
-      "locations": [
-        {
-          "file": "apps/pod-chat/web/src/auth/webid-token-provider.ts",
-          "startLine": 813,
-          "endLine": 907,
-          "tokens": 185
-        },
-        {
-          "file": "apps/pod-music/web/src/auth/webid-token-provider.ts",
-          "startLine": 918,
-          "endLine": 1012,
-          "tokens": 185
         }
       ]
     },
@@ -10342,46 +9641,6 @@
           "startLine": 131,
           "endLine": 170,
           "tokens": 186
-        }
-      ]
-    },
-    "f9dce4542b4912496ee7fcb4f5f950ef345e7376bd08d104824df5bcea4e4c4d": {
-      "tokens": 212,
-      "locations": [
-        {
-          "file": "apps/pod-health/web/src/auth/SessionProvider.tsx",
-          "startLine": 1066,
-          "endLine": 1150,
-          "tokens": 212
-        },
-        {
-          "file": "apps/pod-mail/web/src/auth/SessionProvider.tsx",
-          "startLine": 948,
-          "endLine": 1032,
-          "tokens": 212
-        },
-        {
-          "file": "apps/pod-music/web/src/auth/SessionProvider.tsx",
-          "startLine": 947,
-          "endLine": 1031,
-          "tokens": 212
-        }
-      ]
-    },
-    "fa4a7b4eb62abe619163be314148bef9a3ce88ce3278bd11e5e9e9a909bbf390": {
-      "tokens": 121,
-      "locations": [
-        {
-          "file": "apps/pod-chat/web/src/auth/SessionProvider.tsx",
-          "startLine": 186,
-          "endLine": 287,
-          "tokens": 121
-        },
-        {
-          "file": "apps/pod-music/web/src/auth/SessionProvider.tsx",
-          "startLine": 221,
-          "endLine": 318,
-          "tokens": 121
         }
       ]
     },
@@ -10505,12 +9764,6 @@
           "startLine": 1474,
           "endLine": 1518,
           "tokens": 145
-        },
-        {
-          "file": "apps/pod-music/web/src/auth/SessionProvider.tsx",
-          "startLine": 1201,
-          "endLine": 1245,
-          "tokens": 145
         }
       ]
     },
@@ -10602,12 +9855,6 @@
           "file": "apps/pod-mail/web/src/auth/SessionProvider.tsx",
           "startLine": 208,
           "endLine": 292,
-          "tokens": 124
-        },
-        {
-          "file": "apps/pod-music/web/src/auth/SessionProvider.tsx",
-          "startLine": 221,
-          "endLine": 305,
           "tokens": 124
         }
       ]

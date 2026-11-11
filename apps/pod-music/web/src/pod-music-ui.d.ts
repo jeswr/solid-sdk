@@ -21,8 +21,8 @@ declare module "@jeswr/pod-music/ui" {
      */
     base: string;
     /**
-     * The authenticated fetch for pod reads. Omit to use the ambient global fetch
-     * (patched by @solid/reactive-authentication in a real session).
+     * The authenticated fetch for pod reads (the host passes `auth.fetch`).
+     * Omit to use the unauthenticated global fetch.
      */
     fetch?: typeof fetch;
     /** The section to open first. Defaults to `"tracks"`. */

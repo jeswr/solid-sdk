@@ -94,19 +94,12 @@ describe("resolveOriginValue — origin precedence", () => {
 });
 
 describe("clientIdDocument — redirect_uris", () => {
-  const ORIGIN = "https://music.example";
-
-  // FIX-1 (HIGH): autologin's full-page redirect uses the APP ROOT (`${origin}/`)
-  // as redirect_uri, so the client document MUST register it alongside the popup's
-  // callback.html — a compliant OP rejects an unregistered redirect_uri.
-  it("registers BOTH the popup callback.html AND the app-root redirect_uri", () => {
-    const doc = clientIdDocument(ORIGIN);
-    expect(doc.redirect_uris).toContain(`${ORIGIN}/callback.html`);
-    expect(doc.redirect_uris).toContain(`${ORIGIN}/`);
-  });
-
-  it("client_id is the byte-exact clientid.jsonld URL on this origin", () => {
-    expect(clientIdDocument(ORIGIN).client_id).toBe(`${ORIGIN}/clientid.jsonld`);
+  it("registers only the popup callback.html redirect target", () => {
+    const doc = clientIdDocument("https://music.example");
+    expect(doc.redirect_uris).toEqual(["https://music.example/callback.html"]);
+    // client_id is byte-exact the served URL, and the doc stays a public client.
+    expect(doc.client_id).toBe("https://music.example/clientid.jsonld");
+    expect(doc.token_endpoint_auth_method).toBe("none");
   });
 });
 
@@ -132,7 +125,6 @@ describe("GitHub Pages client identity", () => {
     expect(doc.client_uri).toBe("https://jeswr.github.io/solid-sdk/pod-music/");
     expect(doc.redirect_uris).toEqual([
       "https://jeswr.github.io/solid-sdk/pod-music/callback.html",
-      "https://jeswr.github.io/solid-sdk/pod-music/",
     ]);
   });
   it.each([
