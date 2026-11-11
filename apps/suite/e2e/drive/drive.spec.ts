@@ -59,12 +59,13 @@ async function openFolder(page: Page, name: string) {
 async function navigate(page: Page, name: string) {
   // The sidebar is a drawer at both 375 and 768px.
   if ((page.viewportSize()?.width ?? 1280) < 1024) {
-    await page.getByRole("button", { name: "Open navigation", exact: true }).click();
+    await page.getByRole("button", { name: "Toggle sidebar", exact: true }).click();
     await page
-      .getByRole("dialog", { name: "Navigation", exact: true })
+      .getByRole("dialog", { name: "Drive navigation", exact: true })
       .getByRole("link", { name, exact: true })
       .click();
-    await expect(page.getByRole("dialog", { name: "Navigation", exact: true })).toBeHidden();
+    await page.getByRole("button", { name: "Close drive navigation", exact: true }).click();
+    await expect(page.getByRole("dialog", { name: "Drive navigation", exact: true })).toBeHidden();
   } else {
     await page
       .getByRole("navigation", { name: "Drive", exact: true })

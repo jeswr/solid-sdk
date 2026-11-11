@@ -27,7 +27,7 @@ import { DriveSidebar, NewMenu } from "./sidebar";
 import { UploadDock } from "./upload-dock";
 
 function DriveChrome({ children }: { children: ReactNode }) {
-  const { client, driveRoot, rootError, changes, invalidate } = useDrive();
+  const { client, driveRoot, rootError, retryRoot, changes, invalidate } = useDrive();
   const ui = useDriveUi();
   const [usage, setUsage] = useState<number>();
   const [usageFailed, setUsageFailed] = useState(false);
@@ -152,7 +152,7 @@ function DriveChrome({ children }: { children: ReactNode }) {
               ? rootError.message
               : errorMessage(rootError, "The storage didn't respond.")}
           </p>
-          <Button variant="outline" onClick={() => location.reload()}>
+          <Button variant="outline" onClick={retryRoot}>
             Retry
           </Button>
         </div>

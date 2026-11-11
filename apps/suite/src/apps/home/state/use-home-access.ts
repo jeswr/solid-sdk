@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6
 "use client";
 import { useEffect, useState } from "react";
 import { loadPermissions, type PermissionsSnapshot } from "../lib/permissions";
@@ -21,6 +22,8 @@ export function useHomeAccess(session: HomeSession, version: number) {
       storage: session.storageUrl,
       webId: session.webId,
       signal: controller.signal,
+      // Docs stores its CRDT updates below the fourth container level.
+      maxDepth: 8,
     }).then(
       (snapshot) => {
         if (!controller.signal.aborted)

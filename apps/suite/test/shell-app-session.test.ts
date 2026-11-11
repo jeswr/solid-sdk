@@ -1,5 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+
+import { StrictMode, useEffect } from "react";
 import { afterEach, expect, it, vi } from "vitest";
 import { PodSessionProvider, usePodSessionState } from "../src/lib/session/pod-session";
 import { AccountsContext } from "../src/shell/session/accounts-context";
@@ -51,6 +53,25 @@ function session() {
   return state.session;
 }
 afterEach(() => vi.restoreAllMocks());
+
+it("allows descendant reads during Strict Mode effect replay and fences real unmounts", async () => {
+  const value = accounts();
+  const reads: Promise<Response>[] = [];
+  function Reader() {
+    const current = usePodSessionState();
+    useEffect(() => {
+      if (current.status === "ready") reads.push(current.session.fetch(alice.webId));
+    }, [current]);
+    return null;
+  }
+  const mounted = await mount(
+    h(StrictMode, null, h(AccountsContext, { value }, h(PodSessionProvider, null, h(Reader)))),
+  );
+  expect(reads).toHaveLength(2);
+  expect((await Promise.all(reads)).every((response) => response.ok)).toBe(true);
+  expect(value.fetch).toHaveBeenCalledTimes(2);
+  await mounted.unmount();
+});
 
 it("uses the authenticated account and bounded fetch, with credential-free public reads", async () => {
   const value = accounts();

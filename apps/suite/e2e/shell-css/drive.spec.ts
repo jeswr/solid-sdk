@@ -6,6 +6,13 @@ test("Drive keeps its search route and details state in the authenticated shell"
 }) => {
   await page.goto("/drive");
   await expect(page.getByRole("heading", { level: 1, name: "Drive", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 2, name: "My Drive", exact: true })).toBeVisible({
+    timeout: 30_000,
+  });
+  // A shell/app heading can render before discovery finishes. Require a real listing.
+  await expect(page.getByRole("heading", { name: "Your Drive is empty", exact: true })).toBeVisible(
+    { timeout: 30_000 },
+  );
   const search = page.getByRole("searchbox", { name: "Search in Drive", exact: true });
   await search.fill("report");
   await search.press("Enter");

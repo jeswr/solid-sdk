@@ -13,6 +13,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -94,7 +95,9 @@ function ShellPodSessionProvider({
   latest.current = accounts;
   const account = accounts.active;
   const mounted = useRef(true);
-  useEffect(() => {
+  // Restore liveness before descendants start passive reads during Strict Mode's
+  // effect replay. Cleanup still fences requests after a real unmount.
+  useLayoutEffect(() => {
     mounted.current = true;
     return () => {
       mounted.current = false;
