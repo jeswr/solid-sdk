@@ -1,7 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 
-import { CanceledError, ICommandService } from "@univerjs/core";
+import { CanceledError, ICommandService, Rectangle } from "@univerjs/core";
 import { UniverSheetsConditionalFormattingPreset } from "@univerjs/preset-sheets-conditional-formatting";
 import UniverPresetSheetsConditionalFormattingEnUS from "@univerjs/preset-sheets-conditional-formatting/locales/en-US";
 import { UniverSheetsCorePreset } from "@univerjs/preset-sheets-core";
@@ -443,7 +443,15 @@ export const mountUniver: MountEngine = async (container, options) => {
       const sort = injector.get(SheetsSortService);
       if (!sort.singleCheck(location))
         return { status: "blocked", reason: "Select at least two data rows to sort." };
-      if (!sort.mergeCheck(location))
+      // Native mergeCheck ignores partially overlapping merges, including merges
+      // that cross from the excluded header into the data rows.
+      const crossesMergeBoundary = sheet.getMergedRanges().some((merged) => {
+        const merge = merged.getRange();
+        return (
+          Rectangle.intersects(location.range, merge) && !Rectangle.contains(location.range, merge)
+        );
+      });
+      if (crossesMergeBoundary || !sort.mergeCheck(location))
         return {
           status: "blocked",
           reason: "Merged cells must be the same size to sort this range.",

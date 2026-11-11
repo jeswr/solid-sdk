@@ -200,6 +200,80 @@ describe("real Univer data tools", () => {
   });
 
   it.each([
+    {
+      boundary: "header into data",
+      selection: "A1:B4",
+      merge: { startRow: 0, endRow: 1, startColumn: 0, endColumn: 0 },
+      scope: "range",
+      header: true,
+    },
+    {
+      boundary: "whole-sheet header into data",
+      selection: "A1:B4",
+      merge: { startRow: 0, endRow: 1, startColumn: 0, endColumn: 0 },
+      scope: "sheet",
+      header: true,
+    },
+    {
+      boundary: "top of selection",
+      selection: "B2:C4",
+      merge: { startRow: 0, endRow: 1, startColumn: 1, endColumn: 1 },
+      scope: "range",
+      header: false,
+    },
+    {
+      boundary: "bottom of selection",
+      selection: "B2:C4",
+      merge: { startRow: 3, endRow: 4, startColumn: 1, endColumn: 1 },
+      scope: "range",
+      header: false,
+    },
+    {
+      boundary: "left of selection",
+      selection: "B2:C4",
+      merge: { startRow: 1, endRow: 1, startColumn: 0, endColumn: 1 },
+      scope: "range",
+      header: false,
+    },
+    {
+      boundary: "right of selection",
+      selection: "B2:C4",
+      merge: { startRow: 1, endRow: 1, startColumn: 2, endColumn: 3 },
+      scope: "range",
+      header: false,
+    },
+  ] as const)("rejects a merge crossing $boundary without changing the snapshot", async ({
+    selection,
+    merge,
+    scope,
+    header,
+  }) => {
+    const data = snapshot("Name,Score\nZoe,3\nAmy,1\nBob,2");
+    const sheet = (data as unknown as IWorkbookData).sheets.data;
+    if (!sheet) throw new Error("Missing data sheet");
+    sheet.mergeData = [merge];
+    sheet.rowCount = 5;
+    sheet.columnCount = 4;
+    const f = await mount(data);
+    const dispatched = vi.fn();
+    const subscription = f.commands.onCommandExecuted(dispatched);
+    try {
+      f.sheet().setActiveRange(f.sheet().getRange(selection));
+      dispatched.mockClear();
+      const before = f.engine.snapshot();
+      expect(f.engine.sortRange?.({ scope, column: 1, ascending: true, header })).toEqual({
+        status: "blocked",
+        reason: "Merged cells must be the same size to sort this range.",
+      });
+      expect(dispatched).not.toHaveBeenCalled();
+      expect(f.engine.snapshot()).toEqual(before);
+    } finally {
+      subscription.dispose();
+      f.engine.dispose();
+    }
+  });
+
+  it.each([
     { startRow: 0, header: false },
     { startRow: 1, header: true },
     { startRow: 1, header: false },
