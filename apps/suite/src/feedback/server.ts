@@ -36,6 +36,16 @@ const anthropicClient = (key: string): InterviewClient => ({
       .join("");
   },
 });
+// Input is validated before storage runs, so any storage failure is upstream (502), never
+// a 400 that would let the client treat a possibly committed record as unsaved.
+const upstream = <T>(work: Promise<T>) =>
+  work.catch((error: unknown) => {
+    if (error instanceof FeedbackError) throw error;
+    throw new FeedbackError(
+      502,
+      "We couldn't save or process that feedback. Your feedback is still here. You can download a copy.",
+    );
+  });
 export function createFeedbackHandlers(options: {
   env: FeedbackEnv;
   client?: InterviewClient;
@@ -194,7 +204,8 @@ export function createFeedbackHandlers(options: {
         const file = new File([bytes as Uint8Array<ArrayBuffer>], "recording", {
           type: request.headers.get("content-type") ?? "",
         });
-        return json(await storage().upload(await validateAudio(file), submissionId));
+        const audio = await validateAudio(file);
+        return json(await upstream(storage().upload(audio, submissionId)));
       });
     },
     submit(request: Request) {
@@ -209,7 +220,7 @@ export function createFeedbackHandlers(options: {
         const receipts = verifyReceipts(data.receipts, data.submissionId, env);
         if (submission.transcript.some((m) => m.audio?.some((i) => i >= receipts.length)))
           throw new FeedbackError(400, "A recording is missing from the feedback.");
-        return json(await storage().save(submission, receipts, data.submissionId));
+        return json(await upstream(storage().save(submission, receipts, data.submissionId)));
       });
     },
   };

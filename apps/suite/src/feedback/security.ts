@@ -147,8 +147,9 @@ export const rateLimiter = createLimiter();
 
 // Shared by uploads and submissions, even though each request creates a fresh store.
 export function createGithubBackoff(now = () => Date.now()) {
-  const until = { core: 0, search: 0 };
-  function check(resource: "core" | "search" = "core") {
+  const until = { core: 0, search: 0, secondary: 0 };
+  // "secondary" is checked before every GitHub call, admitted submissions included.
+  function check(resource: keyof typeof until = "core") {
     if (until[resource] > now())
       throw new FeedbackError(
         503,
@@ -188,7 +189,7 @@ export function createGithubBackoff(now = () => Date.now()) {
       const deadline = Math.max(...(deadlines.length ? deadlines : [t + 60_000]));
       // A primary low budget is per resource; secondary limits can span endpoints,
       // so they pause both buckets.
-      for (const bucket of secondary ? (["core", "search"] as const) : [resource])
+      for (const bucket of secondary ? (["core", "search", "secondary"] as const) : [resource])
         until[bucket] = Math.max(until[bucket], deadline);
       // Only an actual rate-limit failure interrupts an admitted submission;
       // ordinary responses (including the label fallback) can still finish.

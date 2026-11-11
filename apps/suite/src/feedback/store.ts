@@ -40,6 +40,9 @@ export function createGithubStore(
     body?: unknown,
     options: { api?: string; signal?: AbortSignal } = {},
   ) => {
+    // A secondary limit pauses every call; an interrupted save resumes on retry.
+    githubBackoff.check("secondary");
+    // Transport failures are upstream errors (502), never invalid input (400).
     const response = await transport(`${options.api ?? base}${path}`, {
       method,
       redirect: "error",
@@ -51,6 +54,8 @@ export function createGithubStore(
         "Content-Type": "application/json",
       },
       ...(body ? { body: JSON.stringify(body) } : {}),
+    }).catch((error: unknown) => {
+      throw error instanceof FeedbackError ? error : failure();
     });
     await githubBackoff.observe(response);
     return response;
@@ -58,7 +63,9 @@ export function createGithubStore(
   const read = async (path: string, method = "GET", body?: unknown) => {
     const response = await call(path, method, body);
     if (!response.ok) throw failure();
-    return response.json();
+    return response.json().catch(() => {
+      throw failure();
+    });
   };
   let repository: Promise<{ branch: string }> | undefined;
   const metadata = () => {

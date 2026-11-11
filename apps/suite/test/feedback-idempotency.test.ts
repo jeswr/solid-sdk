@@ -345,3 +345,52 @@ it("returns a successful final issue response at budget 49 and blocks later call
   expect(await retry.json()).toEqual({ reference: 123 });
   expect(api.issues).toHaveLength(1);
 });
+
+// A transport TypeError after the commit used to map to 400, so the client unfroze and
+// edited a record that GitHub had already stored.
+it("maps a transport failure after the record commit to 502 and resumes on retry", async () => {
+  const api = github();
+  const h = await client();
+  api.holdIssue(async () => {
+    throw new TypeError("fetch failed");
+  });
+  expect((await h.submit()).status).toBe(502);
+  api.holdIssue(async () => {});
+  const retry = await h.submit();
+  expect(retry.status).toBe(200);
+  expect(api.records).toHaveLength(1);
+  expect(api.issues).toHaveLength(1);
+});
+
+it("stops an admitted save at its next GitHub call when another request hits a secondary limit", async () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date("2026-11-11T12:00:00Z"));
+  const api = feedbackGithub();
+  const h = await client();
+  const { githubBackoff } = await import("../src/feedback/security");
+  let tripped = false;
+  vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+    const response = await api.transport(input, init);
+    if (!tripped && String(input).endsWith("/git/commits")) {
+      tripped = true;
+      // Another request's response reports a secondary limit while this save is in flight.
+      await githubBackoff
+        .observe(
+          Response.json(
+            { message: "You have exceeded a secondary rate limit." },
+            { status: 403, headers: { "retry-after": "60" } },
+          ),
+        )
+        .catch(() => undefined);
+    }
+    return response;
+  });
+  expect((await h.submit()).status).toBe(503);
+  const calls = api.calls.map(({ url, method }) => `${method} ${url}`);
+  expect(calls.at(-1)).toMatch(/POST .*\/git\/commits$/);
+  expect(api.issues).toHaveLength(0);
+  vi.advanceTimersByTime(60_000);
+  expect((await h.submit()).status).toBe(200);
+  expect(api.records).toHaveLength(1);
+  expect(api.issues).toHaveLength(1);
+});
