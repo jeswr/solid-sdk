@@ -317,6 +317,45 @@ describe.each(["portable", "fetch"])("owner-only agent boundary: %s", (adapter) 
     });
     expect(result.isError, text(result)).not.toBe(true);
   });
+
+  it("refuses writes to ancestor ACL, ACR and metadata resources that govern protected areas", async () => {
+    const f = await fixture(adapter);
+    const governing = [
+      `${ROOT}.acl`,
+      `${ROOT}.acr`,
+      `${ROOT}.meta`,
+      `${ROOT}agent/.acl`,
+      `${ROOT}agent/.acr`,
+      `${ROOT}agent/.meta`,
+      `${ROOT}agent.acl`,
+      `${ROOT}AGENT/.ACL`,
+      `${ROOT}agent;p/.acl`,
+      `${ROOT}agent/%2eacl`,
+      `${ROOT}agent/x/../.acl`,
+      `${ROOT}private/.acl`,
+      `${ROOT}private.meta`,
+    ];
+    for (const url of governing) {
+      const result = await f.client.callTool({
+        name: "pod_write",
+        arguments: { url, content: "tamper", contentType: "text/turtle" },
+      });
+      expect(text(result), url).toBe(PERSONAL_DATA_DENIED);
+      await expect(new PodOutput(f.pod).delete(url), url).rejects.toThrow(PERSONAL_DATA_DENIED);
+    }
+    expect(f.portable.write).not.toHaveBeenCalled();
+    expect(f.portable.delete).not.toHaveBeenCalled();
+    expect(f.fetch).not.toHaveBeenCalled();
+    // Auxiliary resources of unrelated siblings are not refused by the agent boundary.
+    for (const url of [
+      `${ROOT}agent/notes.txt.acl`,
+      `${ROOT}agent/notes/.acl`,
+      `${ROOT}public/.acl`,
+      `${ROOT}agent-other.meta`,
+    ]) {
+      expect(() => requireGenericPodAccess(f.pod, url, true), url).not.toThrow();
+    }
+  });
 });
 
 describe.each(PROTECTED_AGENT_CONTAINERS)("aliases into %s", (area) => {

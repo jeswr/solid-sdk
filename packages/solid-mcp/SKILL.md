@@ -43,6 +43,8 @@ Also reserve `agent/context/`, `agent/memory/` (including `health/`) and
 `agent/accounts/` for all generic access. Keep the protected agent prefixes in
 `agent-layout.ts`, sharing the context container with `SHARED_CONTEXT_PATH`.
 Ancestor listings remain available but omit protected members and their metadata.
+Generic writes to an ACL, ACR or `.meta` resource of the root, of an ancestor of a
+protected area or of the area itself are refused (they govern the area by inheritance).
 Check redirects and final aliases, slashless containers, case variants, repeated
 percent encoding and normalized dot segments at the shared output/operation
 boundary. Only memoryContext and audit may opt into internal personal access;

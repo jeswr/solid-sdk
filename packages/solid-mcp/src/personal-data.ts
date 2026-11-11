@@ -65,6 +65,28 @@ function normalizedPath(path: string): string {
   return `/${segments.join("/")}`;
 }
 
+/** Auxiliary-resource suffixes whose content can govern access to their subject. */
+const AUXILIARY_SUFFIXES = [".acl", ".acr", ".meta"] as const;
+
+/**
+ * Whether `path` (normalized) is an ACL/ACR/metadata resource of the root, of an ancestor of
+ * `prefix`, or of `prefix` itself: both `container/.acl` and the slashless `container.acl` forms.
+ */
+function auxiliaryGovernsPrefix(path: string, prefix: string): boolean {
+  const segments = path.split("/").filter(Boolean);
+  const last = segments.pop();
+  if (last === undefined) return false;
+  let subject: string[];
+  if ((AUXILIARY_SUFFIXES as readonly string[]).includes(last)) subject = segments;
+  else {
+    const suffix = AUXILIARY_SUFFIXES.find((value) => last.endsWith(value));
+    if (suffix === undefined) return false;
+    subject = [...segments, last.slice(0, -suffix.length)];
+  }
+  const subjectPath = `/${subject.filter(Boolean).join("/")}`;
+  return subjectPath === "/" || prefix === subjectPath || prefix.startsWith(`${subjectPath}/`);
+}
+
 /** No URL or backend-supplied value may enter this diagnostic. */
 export function requireGenericPodAccess(
   pod: PodPort,
@@ -90,7 +112,9 @@ export function requireGenericPodAccess(
             // Protect slashless container ACL/metadata aliases too.
             within(path, prefix) ||
             // Replacing/deleting an ancestor can destroy the protected subtree.
-            (mutation && prefix.startsWith(`${path}/`)),
+            (mutation && prefix.startsWith(`${path}/`)) ||
+            // An ancestor's ACL/ACR/metadata governs the protected subtree by inheritance.
+            (mutation && auxiliaryGovernsPrefix(path, prefix)),
         )
       )
         throw new Error();

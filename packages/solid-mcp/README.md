@@ -232,6 +232,9 @@ Generic access reserves the personal-data subtree `private/pkg/`, derived from
 `NanopubStore`'s storage layout, and the owner-only agent containers
 `agent/context/`, `agent/memory/` (including `health/`) and `agent/accounts/`.
 The agent prefixes share one layout definition with the shared-context path.
+Generic writes and deletes of an ACL, ACR or `.meta` resource that governs a protected
+area (the pod root's, an ancestor's, or the area's own, in `/.acl` and slashless `.acl`
+forms) are refused, because a protected area inherits its ancestors' access rules.
 The personal-data area includes nanopublications, policy, locks, audit
 logs and their local ACLs. `context_read` is the only read path for the shared
 context and applies card-number redaction. The internal personal-tool and audit
