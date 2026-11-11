@@ -130,6 +130,12 @@ export {
   type SharingDuration,
 } from "./sharing/duration-chips.js";
 export {
+  type SharingGeneralAccess,
+  type SharingGrantRestrictions,
+  shareRoleRank,
+  sharingGrantPolicy,
+} from "./sharing/grant-policy.js";
+export {
   PeoplePicker,
   type PeoplePickerProps,
   type SharingPerson,

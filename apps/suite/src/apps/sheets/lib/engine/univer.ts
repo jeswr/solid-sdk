@@ -1,13 +1,31 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 
-import { CanceledError, ICommandService } from "@univerjs/core";
+import { CanceledError, ICommandService, Rectangle } from "@univerjs/core";
 import { UniverSheetsConditionalFormattingPreset } from "@univerjs/preset-sheets-conditional-formatting";
 import UniverPresetSheetsConditionalFormattingEnUS from "@univerjs/preset-sheets-conditional-formatting/locales/en-US";
 import { UniverSheetsCorePreset } from "@univerjs/preset-sheets-core";
 import UniverPresetSheetsCoreEnUS from "@univerjs/preset-sheets-core/locales/en-US";
 import { UniverSheetsDataValidationPreset } from "@univerjs/preset-sheets-data-validation";
 import UniverPresetSheetsDataValidationEnUS from "@univerjs/preset-sheets-data-validation/locales/en-US";
+import {
+  FILTER_MUTATIONS,
+  SHEET_FILTER_SNAPSHOT_ID,
+  UniverSheetsFilterPreset,
+} from "@univerjs/preset-sheets-filter";
+import UniverPresetSheetsFilterEnUS from "@univerjs/preset-sheets-filter/locales/en-US";
+import {
+  OpenReplaceDialogOperation,
+  UniverSheetsFindReplacePreset,
+} from "@univerjs/preset-sheets-find-replace";
+import UniverPresetSheetsFindReplaceEnUS from "@univerjs/preset-sheets-find-replace/locales/en-US";
+import {
+  SheetsSortService,
+  SortRangeCommand,
+  SortType,
+  UniverSheetsSortPreset,
+} from "@univerjs/preset-sheets-sort";
+import UniverPresetSheetsSortEnUS from "@univerjs/preset-sheets-sort/locales/en-US";
 import {
   CommandType,
   createUniver,
@@ -44,6 +62,30 @@ const PERSISTED_FORMULA_MUTATIONS = new Set([
 // names it explicitly. CF viewport and style caches update without mutations.
 const RECOMPUTE_MUTATIONS = new Set(["sheet.mutation.data-validation-formula-mark-dirty"]);
 
+const FILTER_COMMANDS = new Set([
+  "sheet.command.smart-toggle-filter",
+  "sheet.command.set-filter-range",
+  "sheet.command.remove-sheet-filter",
+  "sheet.command.set-filter-criteria",
+  "sheet.command.clear-filter-criteria",
+  "sheet.command.re-calc-filter",
+]);
+const isFilterCommand = (id: string) => FILTER_COMMANDS.has(id);
+
+// Univer also uses COMMAND for navigation that does not edit cells or history.
+const NAVIGATION_COMMANDS = new Set([
+  "sheet.command.scroll-to-cell",
+  "sheet.command.set-worksheet-activate",
+  "sheet.command.select-range",
+  "sheet.command.move-selection",
+  "sheet.command.move-selection-enter-tab",
+  "sheet.command.expand-selection",
+  "sheet.command.select-all",
+  "sheet.command.set-scroll-relative",
+  "sheet.command.scroll-view",
+  "sheet.command.scroll-view-reset",
+]);
+
 interface StructuralOperation {
   chartSources?: {
     sheetId: string;
@@ -67,6 +109,9 @@ export const mountUniver: MountEngine = async (container, options) => {
         UniverPresetSheetsCoreEnUS,
         UniverPresetSheetsDataValidationEnUS,
         UniverPresetSheetsConditionalFormattingEnUS,
+        UniverPresetSheetsSortEnUS,
+        UniverPresetSheetsFilterEnUS,
+        UniverPresetSheetsFindReplaceEnUS,
       ),
     },
     darkMode: options.dark,
@@ -85,6 +130,9 @@ export const mountUniver: MountEngine = async (container, options) => {
       }),
       UniverSheetsDataValidationPreset(),
       UniverSheetsConditionalFormattingPreset(),
+      UniverSheetsSortPreset(),
+      UniverSheetsFilterPreset(),
+      UniverSheetsFindReplacePreset(),
     ],
   });
   let workbook = univerAPI.createWorkbook(options.snapshot as Partial<IWorkbookData>);
@@ -93,6 +141,8 @@ export const mountUniver: MountEngine = async (container, options) => {
   const chartRevisions = new Map<string, number>();
   let readOnly = options.readOnly ?? false;
   let commentsLoading = options.commentsLoading ?? false;
+  // View filters never become authoritative, even when Write is later restored.
+  let filterBaseline = options.snapshot.resources;
   const setEditable = () => workbook.setEditable(!readOnly && !commentsLoading);
   setEditable();
   const selections = new Set<(anchor: CellAnchor | undefined) => void>();
@@ -155,9 +205,18 @@ export const mountUniver: MountEngine = async (container, options) => {
   const commands = injector.get(ICommandService);
   // setEditable does not guard native history replay. Cancel user commands before
   // they can mutate the workbook or consume undo/redo history while anchors load.
-  // Operations (navigation) and background calculation mutations can still run.
+  // Navigation operations/commands and background calculation mutations can still run.
   const loadingGuard = commands.beforeCommandExecuted((command) => {
-    if (commentsLoading && command.type === CommandType.COMMAND) throw new CanceledError();
+    if (command.type !== CommandType.COMMAND) return;
+    if (commentsLoading && !isFilterCommand(command.id) && !NAVIGATION_COMMANDS.has(command.id))
+      throw new CanceledError();
+    if (
+      readOnly &&
+      (/^sheet\.command\.(sort-|reorder-range|replace)/.test(command.id) ||
+        /^ui\.command\.replace-/.test(command.id) ||
+        /^univer\.command\.(undo|redo)$/.test(command.id))
+    )
+      throw new CanceledError();
   });
   const interceptors = injector.get(SheetInterceptorService);
   const structuralMutation = "sheets.mutation.structural-metadata";
@@ -254,6 +313,14 @@ export const mountUniver: MountEngine = async (container, options) => {
   });
   const subscription = univerAPI.addEvent(univerAPI.Event.CommandExecuted, (event) => {
     if (
+      readOnly &&
+      !loading &&
+      FILTER_MUTATIONS.has(event.id) &&
+      event.params?.unitId === workbook.getId()
+    ) {
+      for (const listener of valueListeners) listener();
+    }
+    if (
       event.type !== CommandType.MUTATION ||
       readOnly ||
       loading ||
@@ -289,6 +356,26 @@ export const mountUniver: MountEngine = async (container, options) => {
   });
   const snapshot = (): Snapshot => {
     const data: Snapshot = JSON.parse(JSON.stringify(workbook.save()));
+    if (readOnly && (data.resources !== undefined || filterBaseline !== undefined)) {
+      const resources = Array.isArray(data.resources) ? data.resources : [];
+      const baseline = Array.isArray(filterBaseline) ? filterBaseline : [];
+      data.resources = [
+        ...resources.filter(
+          (resource) =>
+            resource &&
+            typeof resource === "object" &&
+            !Array.isArray(resource) &&
+            resource.name !== SHEET_FILTER_SNAPSHOT_ID,
+        ),
+        ...baseline.filter(
+          (resource) =>
+            resource &&
+            typeof resource === "object" &&
+            !Array.isArray(resource) &&
+            resource.name === SHEET_FILTER_SNAPSHOT_ID,
+        ),
+      ];
+    }
     delete data.commentAnchors;
     Object.assign(data, anchors.snapshot());
     // Univer drops unknown top-level metadata when saving its canvas model.
@@ -301,6 +388,7 @@ export const mountUniver: MountEngine = async (container, options) => {
     serializeSnapshot(data);
     loading = true;
     charts = data.charts;
+    filterBaseline = data.resources;
     editedSinceLoad = false;
     ++generation;
     queued = false;
@@ -324,6 +412,78 @@ export const mountUniver: MountEngine = async (container, options) => {
     }
   };
   return {
+    sortRange(config) {
+      if (readOnly) return { status: "blocked", reason: "This spreadsheet is view only." };
+      if (commentsLoading)
+        return { status: "blocked", reason: "Wait for comments to finish loading before sorting." };
+      const sheet = workbook.getActiveSheet();
+      const range =
+        config.scope === "sheet"
+          ? sheet.getDataRange().getRange()
+          : sheet.getActiveRange()?.getRange();
+      if (
+        !range ||
+        !Number.isInteger(config.column) ||
+        config.column < range.startColumn ||
+        config.column > range.endColumn ||
+        range.endRow < range.startRow + Number(config.header)
+      )
+        return {
+          status: "blocked",
+          reason: "Select a range with data and enter a column within it.",
+        };
+      // Validate and dispatch only the data rows. Passing the merged header to
+      // SortRangeCommand makes its merge handling skip the unmerged data rows.
+      const location = {
+        unitId: workbook.getId(),
+        subUnitId: sheet.getSheetId(),
+        range: { ...range, startRow: range.startRow + Number(config.header) },
+      };
+      // Match the four checks performed by Univer's native sort UI.
+      const sort = injector.get(SheetsSortService);
+      if (!sort.singleCheck(location))
+        return { status: "blocked", reason: "Select at least two data rows to sort." };
+      // Native mergeCheck ignores partially overlapping merges, including merges
+      // that cross from the excluded header into the data rows.
+      const crossesMergeBoundary = sheet.getMergedRanges().some((merged) => {
+        const merge = merged.getRange();
+        return (
+          Rectangle.intersects(location.range, merge) && !Rectangle.contains(location.range, merge)
+        );
+      });
+      if (crossesMergeBoundary || !sort.mergeCheck(location))
+        return {
+          status: "blocked",
+          reason: "Merged cells must be the same size to sort this range.",
+        };
+      if (!sort.formulaCheck(location))
+        return { status: "blocked", reason: "Ranges containing array formulas cannot be sorted." };
+      if (!sort.emptyCheck(location))
+        return { status: "blocked", reason: "Select a range with data to sort." };
+      const sorted = commands.syncExecuteCommand(SortRangeCommand.id, {
+        ...location,
+        hasTitle: false,
+        orderRules: [
+          { colIndex: config.column, type: config.ascending ? SortType.ASC : SortType.DESC },
+        ],
+      });
+      return sorted
+        ? { status: "sorted" }
+        : { status: "blocked", reason: "Couldn't sort this range." };
+    },
+    hasFilter: () => workbook.getActiveSheet().getFilter() !== null,
+    async toggleFilter() {
+      return commands.executeCommand("sheet.command.smart-toggle-filter");
+    },
+    async clearFilter() {
+      return commands.executeCommand("sheet.command.clear-filter-criteria", {
+        unitId: workbook.getId(),
+        subUnitId: workbook.getActiveSheet().getSheetId(),
+      });
+    },
+    async findReplace() {
+      await commands.executeCommand(OpenReplaceDialogOperation.id);
+    },
     setCharts(value) {
       if (readOnly || commentsLoading) return;
       const previous = new Map(
@@ -475,7 +635,11 @@ export const mountUniver: MountEngine = async (container, options) => {
       univerAPI.toggleDarkMode(dark);
     },
     setReadOnly(value) {
+      const previous = readOnly;
+      const data = snapshot();
       readOnly = value;
+      if (!previous && value) filterBaseline = data.resources;
+      if (previous && !value) load(data, false);
       ++generation;
       queued = false;
       setEditable();
