@@ -211,3 +211,19 @@ test("both native proof signers share one relay-verified interop fixture", () =>
   ])
     expect(read(signer)).toContain('installation-proof+jwt\\"}"');
 });
+
+test("relay and both native decryptors share the exact encrypted challenge and activity fixtures", () => {
+  const files = [
+    "../notification-relay/src/push-payload-interop.test.ts",
+    "android/app/src/test/java/org/jeswr/suite/PushPayloadInteropTest.java",
+    "ios/App/AppTests/PushCryptoTests.swift",
+  ].map(read);
+  for (const name of ["challengeCiphertext", "activityCiphertext"]) {
+    const fixtures = files.map(
+      (source) => source.match(new RegExp(`${name} =\\s*"([A-Za-z0-9_-]+)"`, "u"))?.[1],
+    );
+    expect(fixtures[0]).toMatch(/^[A-Za-z0-9_-]{820}$/u);
+    expect(fixtures[1]).toBe(fixtures[0]);
+    expect(fixtures[2]).toBe(fixtures[0]);
+  }
+});

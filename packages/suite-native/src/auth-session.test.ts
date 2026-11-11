@@ -439,15 +439,29 @@ describe("callback-URL mode (pod-auth ui.getCode)", () => {
     ).rejects.toBeInstanceOf(AuthorizationRequestError);
   });
 
-  test("keeps the state, redirect and error checks", async () => {
+  test("keeps the state and redirect checks", async () => {
     await expect(run(`${REDIRECT}?code=c&state=s2&${ISS}`)).rejects.toBeInstanceOf(
       StateMismatchError,
     );
     await expect(
       run(`org.jeswr.evil:/oauth/callback?code=c&state=s1&${ISS}`),
     ).rejects.toBeInstanceOf(AuthorizationRequestError);
-    await expect(run(`${REDIRECT}?error=access_denied&state=s1&${ISS}`)).rejects.toBeInstanceOf(
-      AuthorizationError,
+  });
+
+  test("hands an error callback to pod-auth, so its issuer check runs first (sst-o1zg)", async () => {
+    const denied = `${REDIRECT}?error=access_denied&state=s1&${ISS}`;
+    await expect(run(denied)).resolves.toBe(new URL(denied).href);
+    // State, a single iss and a resolver's issuer are still enforced before handing it over.
+    await expect(run(`${REDIRECT}?error=access_denied&state=s2&${ISS}`)).rejects.toBeInstanceOf(
+      StateMismatchError,
     );
+    await expect(run(`${REDIRECT}?error=access_denied&state=s1`)).rejects.toBeInstanceOf(
+      AuthorizationRequestError,
+    );
+    await expect(
+      run(`${REDIRECT}?error=access_denied&state=s1&iss=https://evil.example/`, {
+        resolveIssuer,
+      }),
+    ).rejects.toBeInstanceOf(AuthorizationRequestError);
   });
 });

@@ -7,7 +7,8 @@ import type { NotesPreferences } from "./prefs";
 import { noteText } from "./text";
 
 export interface NotesFilter {
-  location: NoteLocation;
+  location: NoteLocation | "reminders";
+  now?: number;
   labels?: readonly string[] | undefined;
   labelMode?: LabelFilterMode | undefined;
   query?: string | undefined;
@@ -17,7 +18,31 @@ export function selectNotes<T extends Note>(
   notes: readonly T[],
   prefs: NotesPreferences,
   filter: NotesFilter,
-): { pinned: T[]; others: T[] } {
+): { pinned: T[]; others: T[]; sections?: { title: string; notes: T[] }[] } {
+  if (filter.location === "reminders") {
+    const now = filter.now ?? Date.now();
+    const reminders = notes.filter(
+      (note) => note.location !== "trashed" && Number.isFinite(Date.parse(note.reminder ?? "")),
+    );
+    return {
+      pinned: [],
+      others: [],
+      sections: [
+        {
+          title: "Upcoming",
+          notes: reminders
+            .filter((note) => Date.parse(note.reminder as string) > now)
+            .sort((a, b) => Date.parse(a.reminder as string) - Date.parse(b.reminder as string)),
+        },
+        {
+          title: "Past",
+          notes: reminders
+            .filter((note) => Date.parse(note.reminder as string) <= now)
+            .sort((a, b) => Date.parse(b.reminder as string) - Date.parse(a.reminder as string)),
+        },
+      ],
+    };
+  }
   const projected = filterNotesByLabels(
     notes.filter((note) => note.location === filter.location),
     filter.labels ?? [],

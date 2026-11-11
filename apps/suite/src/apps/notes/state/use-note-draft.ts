@@ -3,7 +3,7 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { NoteConflictError } from "../lib/model/errors";
-import type { NoteChanges, NotesStore, StoredNote } from "../lib/model/store";
+import type { NotesStore, StoredNote } from "../lib/model/store";
 import type { DraftRegistry } from "./draft-registry";
 import type { NoteDraft, PendingDrafts } from "./pending-drafts";
 
@@ -15,6 +15,11 @@ export function useNoteDraft(
   pending: PendingDrafts & Partial<Pick<DraftRegistry, "recover">>,
 ) {
   const baseline = useRef(pending.get(note.url)?.note ?? note);
+  const superseded = useRef(new Set<string | null>());
+  const adopt = useCallback((saved: StoredNote) => {
+    if (baseline.current.etag !== saved.etag) superseded.current.add(baseline.current.etag);
+    baseline.current = saved;
+  }, []);
   const [draft, setDraft] = useState<NoteDraft>(
     () =>
       pending.get(note.url)?.draft ?? { title: note.title, body: note.body, labels: note.labels },
@@ -26,6 +31,25 @@ export function useNoteDraft(
     pending.get(note.url)?.status ?? "saved",
   );
   const [modified, setModified] = useState(note.modified ?? note.created);
+  useEffect(() => {
+    // A refreshed resource can acknowledge a card/other writer's non-text save.
+    // The store stamps request starts and acknowledged writes with local generations.
+    // RDF modification dates may move backwards when another client's clock is slow.
+    // Never replace a durable dirty draft or an in-flight writer's baseline.
+    if (
+      pending.get(note.url) ||
+      superseded.current.has(note.etag) ||
+      (note.localGeneration !== undefined &&
+        baseline.current.localGeneration !== undefined &&
+        note.localGeneration < baseline.current.localGeneration)
+    )
+      return;
+    adopt(note);
+    const value = { title: note.title, body: note.body, labels: note.labels };
+    current.current = value;
+    setDraft(value);
+    setModified(note.modified ?? note.created);
+  }, [note, pending, adopt]);
   const save = useCallback<NotesStore["save"]>((...args) => store.save(...args), [store]);
   const flush = useCallback(() => pending.flush(baseline.current, save), [pending, save]);
   useEffect(() => {
@@ -34,7 +58,7 @@ export function useNoteDraft(
       if (url !== note.url) return;
       const entry = pending.get(url);
       if (saved) {
-        baseline.current = saved;
+        adopt(saved);
         setModified(saved.modified);
         void callback.current();
       }
@@ -58,8 +82,8 @@ export function useNoteDraft(
       // This writer stays alive after unmount and uses each acknowledged ETag in order.
       void flush().catch(() => {});
     };
-  }, [pending, save, flush, note.url, store]);
-  const change = (patch: NoteChanges) => {
+  }, [pending, save, flush, note.url, store, adopt]);
+  const change = (patch: Partial<NoteDraft>) => {
     pending.change(
       baseline.current,
       { ...current.current, ...patch, labels: [...(patch.labels ?? current.current.labels)] },
@@ -77,7 +101,7 @@ export function useNoteDraft(
     try {
       const latest = await store.read(baseline.current.url);
       if (!latest) throw new Error("Missing note");
-      baseline.current = latest;
+      adopt(latest);
       pending.resolve(latest, keepMine);
       if (keepMine) await flush();
     } catch (error) {
@@ -88,5 +112,11 @@ export function useNoteDraft(
       );
     }
   };
-  return { draft, change, flush, resolve, status, modified };
+  // Non-draft actions run after flush while the editor is locked. Adopt their
+  // acknowledged resource before another text edit can start a conditional write.
+  const accept = (saved: StoredNote) => {
+    adopt(saved);
+    setModified(saved.modified);
+  };
+  return { draft, change, flush, resolve, accept, status, modified };
 }

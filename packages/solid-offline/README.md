@@ -85,6 +85,33 @@ the worker transport boundary. A low-level injected storage without that HTTP ev
 conservatively evicts changed bytes instead of inventing cacheable responses.
 React/status surfaces, BroadcastChannel updates, and `purgeForWebId` retain their contracts.
 
+## Response cache provenance
+
+For readable pod GET responses inside the configured storage root, the worker sets
+`X-Solid-Offline-Cache` (`CACHE_PROVENANCE_HEADER`):
+
+| Value | Meaning |
+| --- | --- |
+| `miss` | Network bytes, stored when HTTP cache policy permits. Includes readable `no-store`/`private` responses and network fallbacks. |
+| `hit` | Cached bytes confirmed by a synchronous conditional 304, or a cached 403/404 still within its bounded negative TTL (including offline). |
+| `stale` | Provisional cached bytes served offline or immediately while background revalidation is pending, skipped, or fails. |
+
+An immediate SWR response stays `stale` even if its background revalidation later succeeds;
+its header describes the bytes at serving time. Ordinary offline positive-cache reads remain
+`stale`. The legacy `X-Offline: stale` marker is retained on those offline reads.
+Headers are added to cloned responses; stored entries are never tagged or mutated.
+Out-of-scope requests, HEAD, and app-shell responses are unchanged. Opaque/opaque-redirect
+and status-zero responses pass through unchanged because browsers hide their headers.
+
+```ts
+import { cacheProvenance, CACHE_PROVENANCE_HEADER } from '@jeswr/solid-offline';
+
+const provenance = cacheProvenance(response); // 'hit' | 'miss' | 'stale' | null
+const fromCache = provenance === 'hit' || provenance === 'stale';
+const stale = provenance === 'stale';
+// null means the response has no recognized marker; the body remains unread.
+```
+
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 
 ## Write outbox

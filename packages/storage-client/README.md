@@ -39,6 +39,10 @@ are never accepted or fetched, and malformed or directional literals reject with
 Turtle and N-Triples output behavior is unchanged. JSON-LD RDF patches still return 415.
 The Solid and LWS HTTP backends support mutations; their JSON-LD writes remain unsupported.
 
+`readRdf` reports `StorageError('not-rdf')` for non-RDF or unparsable bodies and for HTTP
+406 or 501 responses to its GET on both backends, preserving the status, URL, method and
+problem details; other operations retain their usual HTTP error mapping.
+
 All mutations except `create` require `ifMatch`. A name is exact on Solid and a hint on LWS.
 See [SKILL.md](SKILL.md) for app usage and fixture workflows.
 

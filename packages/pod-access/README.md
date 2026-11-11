@@ -414,8 +414,23 @@ This check covers resource, member and ACR management policies in own, ancestor 
 documents, for reads and every mutation.
 
 `setGrants` applies the full requested **explicit** set to each resource, preserving
-container defaults, unrelated targets and annotations. Inherited rows are read-only and
-must match their governing source. They never overwrite an explicit selection for the same
+unrelated targets and annotations. With `kind: "folder"` and a trailing-slash URL, each
+changed grant covers both the folder and its members: WAC writes `acl:accessTo` and
+`acl:default` on the same authorization; ACP links a matching policy through
+`acp:accessControl` and `acp:memberAccessControl`. Removal clears both scopes.
+`addGrant` and `removeGrant` use the same folder scope. Non-folder operations retain their
+resource-only behavior. Descendants' own access documents are never rewritten.
+
+Existing folder permissions must match between resource and member scope, after combining
+each principal's modes in the own document. A resource-only, members-only, or differently
+scoped permission causes a typed `RoleError` with code `partial-scope`: `readGrants` rejects,
+and mutations report the refusal in `failed` without a PUT, including no-op selections.
+This conservative boundary prevents an ordinary role row from silently widening or narrowing
+legacy folder access. Only ESS own-ACR management (`acp:access` or own-ACR
+`acp:accessControl`) is exempt from this comparison. Member management through
+`acp:memberAccess` or own-ACR `acp:memberAccessControl` remains scoped and causes
+`partial-scope`, even when the same policy also grants own-ACR management.
+Inherited rows are read-only and must match their governing source. They never overwrite an explicit selection for the same
 principal, regardless of row order. An unchanged role selection preserves that principal's
 existing modes, including chatroom Write and partial ACP contributions completed by
 inheritance. A changed role is mapped using the requested kind and implementation.
