@@ -73,8 +73,5 @@
   },
   "apps/suite/src/lib/demo-pod/seed.ts": {
     "rdf-factory": 21
-  },
-  "apps/suite/src/shell/share/wac-adapter.ts": {
-    "rdf-factory": 1
   }
 }
