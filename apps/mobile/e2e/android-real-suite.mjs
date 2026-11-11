@@ -1,3 +1,4 @@
+// AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6
 import assert from "node:assert/strict";
 import { execFile, fork, spawn } from "node:child_process";
@@ -25,8 +26,11 @@ const APP = "org.jeswr.suite";
 const CHROME = "com.android.chrome";
 const MAIN = `${APP}/.MainActivity`;
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+// The latest fixed poll label. Labels are source literals, so they are safe to print in CI logs.
+let lastWait = "";
 
 async function poll(label, probe, timeout = 30000) {
+  lastWait = label;
   const end = Date.now() + timeout;
   while (Date.now() < end) {
     try {
@@ -131,7 +135,15 @@ async function collectLogcat(serial, secrets = []) {
       [...(serial ? ["-s", serial] : []), "logcat", "-d", "-v", "threadtime"],
       { timeout: 30000, maxBuffer: 32 * 1024 * 1024 },
     );
-    await writeFile(join(artifacts, "logcat-real-suite.txt"), redactLogcat(stdout, secrets));
+    const redacted = redactLogcat(stdout, secrets);
+    await writeFile(join(artifacts, "logcat-real-suite.txt"), redacted);
+    // Mirror the app/WebView tail into the job log; the artifact store may be unreachable.
+    const tail = redacted
+      .split("\n")
+      .filter((line) => /Capacitor|chromium|Console|AndroidRuntime|org\.jeswr\.suite/.test(line))
+      .filter((line) => !line.includes("[redacted sensitive log line]"))
+      .slice(-80);
+    for (const line of tail) console.log(`MOB-07 logcat: ${line}`);
   } catch {
     await writeFile(join(artifacts, "logcat-real-suite.txt"), "Logcat collection unavailable\n");
   }
@@ -186,8 +198,35 @@ async function trustedRun(tlsDir) {
       entry.status = "failed";
       // Only fixed labels enter diagnostics. Subprocess/CDP errors can contain passwords/codes.
       entry.error = `Scenario failed or timed out: ${name}`;
+      entry.lastWait = lastWait;
+      entry.pages = await pageDiagnostics();
+      // CI artifacts are not always reachable, so print the same fixed-label summary.
+      console.log(
+        `MOB-07 diagnostics: ${JSON.stringify({ lastWait, login, serverEvidence, pages: entry.pages })}`,
+      );
       throw new Error(entry.error);
     }
+  }
+  /** Paths, headings and button labels only: no query, fragment, input value or page text. */
+  async function pageDiagnostics() {
+    const pages = {};
+    for (const [name, client] of [
+      ["app", app],
+      ["browser", browser],
+    ]) {
+      if (!client) continue;
+      try {
+        pages[name] = await client.evaluate(`({
+          path: location.pathname,
+          headings: [...document.querySelectorAll('h1,h2')].map(h => h.textContent.trim().slice(0, 80)).slice(0, 6),
+          buttons: [...document.querySelectorAll('button')].filter(b => b.getClientRects().length).map(b => b.textContent.trim().slice(0, 40)).slice(0, 12),
+          alerts: [...document.querySelectorAll('[role="alert"],.error')].map(a => a.textContent.trim().slice(0, 160)).slice(0, 4),
+        })`);
+      } catch {
+        pages[name] = "unavailable";
+      }
+    }
+    return pages;
   }
   async function connect(port, socket, select) {
     if (!forwards.includes(port)) {
@@ -218,7 +257,7 @@ async function trustedRun(tlsDir) {
     );
   }
   async function clickText(client, text) {
-    await poll("enabled button", () =>
+    await poll(`enabled button ${text}`, () =>
       client.evaluate(`(() => {
       const b = [...document.querySelectorAll('button')].find(b => b.textContent.trim() === ${JSON.stringify(text)} && !b.disabled && b.getClientRects().length);
       if (!b) return false; b.click(); return true;
