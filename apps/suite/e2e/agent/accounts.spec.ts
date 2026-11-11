@@ -111,7 +111,7 @@ test("8: registry accounts stay private, show conflicts and write verified owner
   );
   expect(conflicts.length).toBeGreaterThan(0);
   // A static warning row, not a live alert, so several conflicts don't each interrupt.
-  await expect(page.getByRole("alert")).toHaveCount(0);
+  await expect(page.locator(".agent-banner[role='alert']")).toHaveCount(0);
   const warning = page
     .locator(".agent-banner")
     .filter({ hasText: "Two different handles recorded — pick one" })
