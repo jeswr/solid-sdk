@@ -211,7 +211,8 @@ class HealthInput {
     private readonly template: "observation" | "immunization" | "encounter",
     owner: string,
   ) {
-    this.identifiers = new Set([owner]);
+    this.identifiers = new Set();
+    this.iri(owner);
   }
 
   invalid(): never {
@@ -240,10 +241,10 @@ class HealthInput {
     return Object.fromEntries(keys.map((key) => [key, this.own(value, key)]));
   }
 
-  iri(value: unknown): string {
+  iri(value: unknown, clinicalCode = false): string {
     const identifier = safeHttpIri(value);
-    if (typeof value === "string" && snomedIri(value)) return this.distinct(value);
     if (identifier === undefined || identifier !== value) return this.invalid();
+    if (clinicalCode && snomedIri(identifier)) return this.distinct(identifier);
     let text = identifier;
     for (let round = 0; round < 4; round += 1) {
       let decoded: string;
@@ -310,12 +311,14 @@ class HealthInput {
 
   code(value: unknown): ImmunizationValue["vaccine"] {
     const code = this.snapshot(value, ["id", "system", "code", "display"]);
-    const id = this.iri(code.id);
     const display = this.optionalText(code.display);
-    if (code.code === undefined && code.system === undefined) return { id, display };
+    if (code.code === undefined && code.system === undefined)
+      return { id: this.iri(code.id), display };
     const system = this.iri(code.system);
+    const snomed = system.startsWith(SNOMED_PREFIX);
+    const id = this.iri(code.id, snomed);
     // A SNOMED CT identifier carries its own check digit, so it is not mistaken for a card.
-    if (system.startsWith(SNOMED_PREFIX) && typeof code.code === "string" && sctid(code.code))
+    if (snomed && typeof code.code === "string" && (sctid(code.code) || snomedIri(code.code)))
       return { id, display, code: code.code, system };
     return { id, display, code: this.literal(code.code, "string"), system };
   }
@@ -340,7 +343,6 @@ class HealthInput {
 
 function observationSnapshot(fact: Fact, owner: string) {
   const input = new HealthInput("observation", owner);
-  if (input.own(fact, "template") !== "observation") return input.invalid();
   const v = input.snapshot(input.own(fact, "value"), [
     "id",
     "code",
@@ -362,7 +364,6 @@ function observationSnapshot(fact: Fact, owner: string) {
 
 function immunizationSnapshot(fact: Fact, owner: string): ImmunizationValue {
   const input = new HealthInput("immunization", owner);
-  if (input.own(fact, "template") !== "immunization") return input.invalid();
   const v = input.snapshot(input.own(fact, "value"), ["id", "vaccine", "occurrence"]);
   return {
     id: input.iri(v.id),
@@ -420,7 +421,8 @@ const VERHOEFF_P = [
  * (second- and third-last digits) of 00-05 or 10-15, and a valid Verhoeff check digit.
  */
 function sctid(text: string): boolean {
-  if (!/^[1-9][0-9]{5,17}$/.test(text) || !/(?:0[0-5]|1[0-5])[0-9]$/.test(text)) return false;
+  if (!/^[1-9][0-9]{5,17}(?![\s\S])/.test(text) || !/(?:0[0-5]|1[0-5])[0-9](?![\s\S])/.test(text))
+    return false;
   let check = 0;
   for (let i = 0; i < text.length; i += 1) {
     const digit = text.charCodeAt(text.length - 1 - i) - 48;
@@ -433,13 +435,12 @@ function sctid(text: string): boolean {
 
 /** `http://snomed.info/id/<sctid>`, exactly. */
 function snomedIri(text: string): boolean {
-  const match = /^http:\/\/snomed\.info\/id\/([0-9]+)$/.exec(text);
+  const match = /^http:\/\/snomed\.info\/id\/([0-9]+)(?![\s\S])/.exec(text);
   return match !== null && sctid(match[1] as string);
 }
 
 function encounterSnapshot(fact: Fact, owner: string): EncounterValue {
   const input = new HealthInput("encounter", owner);
-  if (input.own(fact, "template") !== "encounter") return input.invalid();
   const v = input.snapshot(input.own(fact, "value"), ["id", "period", "serviceProvider"]);
   const bounds = input.snapshot(v.period, ["start", "end"]);
   const start = input.temporal(bounds.start);
@@ -520,6 +521,30 @@ function period(node: RdfNode, value: Period): void {
 export function createFactAssertion(about: string, fact: Fact): Store {
   const owner = safeHttpIri(about);
   if (owner === undefined) throw new Error("Expected owner WebID");
+  let template: Fact["template"];
+  try {
+    template = fact.template;
+  } catch {
+    throw new Error("Invalid fact template");
+  }
+  if (template === "observation" || template === "immunization" || template === "encounter") {
+    const input = new HealthInput(template, owner);
+    try {
+      if (!Object.hasOwn(fact, "template")) return input.invalid();
+    } catch {
+      return input.invalid();
+    }
+    // Dispatch and the health readers share this header snapshot, reading caller fields once.
+    fact = { template, value: input.own(fact, "value") } as Fact;
+  } else {
+    const original = fact;
+    fact = {
+      template,
+      get value() {
+        return original.value;
+      },
+    } as Fact;
+  }
   const store = new Store();
   const person = new RdfNode(owner, store);
   const type = `${NS.rdf}type`;

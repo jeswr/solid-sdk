@@ -11,24 +11,31 @@ import SHACLValidator from "rdf-validate-shacl";
 import { describe, expect, it, vi } from "vitest";
 import {
   buildNanopublications,
+  containsCardNumber,
+  createDefaultPolicy,
   createFactAssertion,
   type EncounterValue,
   type Fact,
   type HealthCode,
   type HealthTemporalValue,
   type ImmunizationValue,
+  isSpecialCategory,
   type ObservationValue,
   parseAssertion,
   parseNanopublications,
+  purposeFilter,
   serializeNanopublications,
 } from "../src/index.js";
 import * as rdf from "../src/rdf.js";
-import { graph, NS, RdfNode } from "../src/rdf.js";
+import { graph, LEGACY_HEALTH_NS, NS, RdfNode } from "../src/rdf.js";
 import { exampleBuildOptions } from "../src/testing.js";
 
 const options = exampleBuildOptions();
 const owner = options.owner;
 const pan = "4111 1111 1111 1111";
+// Synthetic identifiers with valid Verhoeff checks; the latter two also pass full Luhn.
+const snomedIds = ["999000041000000102", "400000010001", "400000000000002008"];
+const snomedSystems = ["http://snomed.info/sct", "http://snomed.info/sct/83821000000107"];
 const day: HealthTemporalValue = { value: "2026-11-01", datatype: "date" };
 const instant: HealthTemporalValue = { value: "2026-11-01T09:00:00Z", datatype: "dateTime" };
 const code: HealthCode = {
@@ -129,11 +136,11 @@ describe("health fact graphs", () => {
     [-0, "-0"],
     [-12.5, "-12.5"],
     [1e21, `1${"0".repeat(21)}`],
-    [-1.2345e21, `-12345${"0".repeat(17)}`],
+    [-12345.5, "-12345.5"],
     [1e-7, "0.0000001"],
     [-1.25e-7, "-0.000000125"],
     [Number.MIN_VALUE, `0.${"0".repeat(323)}5`],
-    [Number.MAX_VALUE, `17976931348623157${"0".repeat(292)}`],
+    [1234567.25, "1234567.25"],
   ])("encodes %s with the package's fixed-point decimal policy", (value, expected) => {
     const store = assertion("observation", { ...observation, value });
     const measured = store.getQuads(observation.id, `${NS.health}value`, null, null)[0]?.object;
@@ -152,6 +159,30 @@ describe("health fact graphs", () => {
       df.literal(decimal, df.namedNode(`${NS.xsd}decimal`)),
     );
   });
+
+  for (const template of ["observation", "immunization"] as const) {
+    it(`${template}: accepts long SNOMED codes and exact concept IRIs under SNOMED systems`, () => {
+      const field = template === "observation" ? "code" : "vaccine";
+      for (const system of snomedSystems) {
+        for (const digits of snomedIds) {
+          for (const value of [digits, `http://snomed.info/id/${digits}`]) {
+            const id = `http://snomed.info/id/${digits}`;
+            const data = assertion(template, {
+              ...examples[template],
+              [field]: { id, code: value, system },
+            });
+            const product = new RdfNode(id, data);
+            const concept =
+              template === "observation"
+                ? product
+                : new RdfNode(product.one(`${NS.core}identifiedBy`), data);
+            expect(concept.oneText(`${NS.core}value`)).toBe(value);
+            expect(concept.oneIri(`${NS.core}inScheme`)).toBe(system);
+          }
+        }
+      }
+    });
+  }
 
   it("accepts HTTP identifiers, percent-encoded safe slugs, and a coded vaccine without display", () => {
     expect(
@@ -293,6 +324,108 @@ describe("health template refusal boundaries", () => {
     );
   }
 
+  it("refuses card numbers in numeric and lexical decimals without echoing their digits", () => {
+    for (const value of [
+      400000010001,
+      4111111111111111,
+      -4111111111111111,
+      41111111.11111111,
+      -1.2345e21,
+      Number.MAX_VALUE,
+      ...[
+        "400000010001",
+        "4111111111111111",
+        "-4111111111111111",
+        "41111111.11111111",
+        pan,
+        "4111-1111-1111-1111",
+        "４１１１１１１１１１１１１１１１",
+      ].map((decimal) => ({ decimal })),
+    ]) {
+      // Include syntactically valid decimals as well as malformed separated forms.
+      if (typeof value === "object") expect(containsCardNumber(value.decimal)).toBe(true);
+      refuses("observation", { ...observation, value });
+    }
+  });
+
+  for (const template of ["observation", "immunization"] as const) {
+    it(`${template}: limits the SNOMED exemption to exact, checksum-valid clinical codes`, () => {
+      const field = template === "observation" ? "code" : "vaccine";
+      const base = examples[template];
+      for (const digits of snomedIds) {
+        expect(containsCardNumber(digits)).toBe(true);
+        for (const system of [
+          code.system,
+          "https://dmd.nhs.uk",
+          "http://snomed.info.example.org/sct",
+        ]) {
+          for (const value of [digits, `http://snomed.info/id/${digits}`])
+            refuses(template, { ...base, [field]: { ...code, code: value, system } });
+          refuses(template, {
+            ...base,
+            [field]: { ...code, id: `http://snomed.info/id/${digits}`, system },
+          });
+        }
+      }
+      for (const digits of [
+        "4111111111111111",
+        "40000001000199",
+        "0400000010001",
+        "4000000100010000000",
+      ]) {
+        expect(containsCardNumber(digits)).toBe(true);
+        for (const system of snomedSystems) {
+          for (const value of [digits, `http://snomed.info/id/${digits}`]) {
+            refuses(template, { ...base, [field]: { ...code, code: value, system } });
+            refuses(template, {
+              ...base,
+              [field]: { ...code, id: `http://snomed.info/id/${digits}`, system },
+            });
+          }
+        }
+      }
+      for (const value of [
+        "400000010001\n",
+        "400000010001 ",
+        "400000010001x",
+        "+400000010001",
+        "http://snomed.info/id/400000010001\n",
+        "https://snomed.info/id/400000010001",
+        "http://snomed.info/id/400000010001?x",
+        "http://snomed.info/id/400000010001#x",
+      ])
+        refuses(template, { ...base, [field]: { ...code, code: value, system: snomedSystems[0] } });
+      refuses(template, {
+        ...base,
+        [field]: {
+          id: "http://snomed.info/id/400000010001",
+          code: "400000010001",
+          system: snomedSystems[0],
+          display: pan,
+        },
+      });
+    });
+  }
+
+  it("scans owner, event, scheme, uncoded vaccine and provider IRIs without a SNOMED exemption", () => {
+    const id = "http://snomed.info/id/400000010001";
+    for (const template of templates) {
+      refuses(template, { ...examples[template], id });
+      for (const webId of [
+        id,
+        "https://example.org/4111111111111111#me",
+        "https://example.org/%34%31%31%31%31%31%31%31%31%31%31%31%31%31%31%31#me",
+      ])
+        expect(() => createFactAssertion(webId, fact(template, examples[template]))).toThrow(
+          new Error(`Invalid ${template}`),
+        );
+    }
+    refuses("encounter", { ...encounter, serviceProvider: id });
+    refuses("immunization", { ...immunization, vaccine: { id } });
+    refuses("observation", { ...observation, code: { ...code, system: id } });
+    refuses("immunization", { ...immunization, vaccine: { ...code, system: id } });
+  });
+
   for (const template of templates) {
     it(`${template}: refuses invalid roots, keys, IRIs and throwing getters/proxies`, () => {
       for (const value of invalidObjects) refuses(template, value);
@@ -335,7 +468,8 @@ describe("health template refusal boundaries", () => {
       "bad\u2028",
     ])
       refuses("observation", { ...observation, value });
-    for (const kind of [null, 42, "unknown", pan]) refuses("observation", { ...observation, kind });
+    for (const kind of [null, 42, "unknown", "lab\n", "measurement ", "__proto__", pan])
+      refuses("observation", { ...observation, kind });
     for (const unitCode of [null, 42, pan, "bad\u2028"])
       refuses("observation", { ...observation, unitCode });
   });
@@ -455,7 +589,7 @@ describe("health template refusal boundaries", () => {
     }
     expect(() =>
       createFactAssertion(owner, Object.create({ template: "observation", value: observation })),
-    ).toThrow("Unknown fact template");
+    ).toThrow(new Error("Invalid observation"));
     for (const key of ["id", "code", "system"]) {
       refuses("observation", {
         ...observation,
@@ -525,9 +659,9 @@ describe("health template refusal boundaries", () => {
     const dt = (value: string): HealthTemporalValue => ({ value, datatype: "dateTime" });
     const date = (value: string): HealthTemporalValue => ({ value, datatype: "date" });
     for (const [start, end] of [
-      [date("2026-11-02"), day],
-      [dt("2026-11-02T00:00:00Z"), day],
-      [day, dt("2026-10-31T23:59:59.999999Z")],
+      [date("2026-11-04"), day],
+      [dt("2026-11-02T14:00:00Z"), day],
+      [day, dt("2026-10-31T09:59:59.999999Z")],
       [dt("2026-11-01T09:00:00Z"), dt("2026-11-01T10:00:00+02:00")],
       [dt("2026-11-01T09:00:00.000002Z"), dt("2026-11-01T09:00:00.000001Z")],
       [dt("2026-11-01T24:00:00Z"), dt("2026-11-01T23:59:59Z")],
@@ -542,10 +676,89 @@ describe("health template refusal boundaries", () => {
       [dt("2026-11-01T23:00:00-02:00"), date("2026-11-02")],
       [dt("2026-11-01T24:00:00.000Z"), dt("2026-11-02T00:00:00Z")],
       [dt("0001-01-01T00:00:00Z"), dt("0001-01-01T00:00:00.000001Z")],
+      [date("2026-11-02"), day],
+      [dt("2026-11-02T00:00:00Z"), day],
+      [day, dt("2026-10-31T23:59:59.999999Z")],
     ])
       expect(assertion("encounter", { ...encounter, period: { start, end } }).size).toBeGreaterThan(
         0,
       );
+  });
+
+  it("compares timezone-free dates over their full day widened by +/-14 hours", () => {
+    const date: HealthTemporalValue = { value: "2026-01-02", datatype: "date" };
+    for (const value of [
+      "2026-01-01T20:00:00-10:00", // 06:00Z on Jan 2
+      "2026-01-01T20:00:00+10:00", // earliest start: 10:00Z on Jan 1
+    ]) {
+      const end: HealthTemporalValue = { value, datatype: "dateTime" };
+      const data = assertion("encounter", { ...encounter, period: { start: date, end } });
+      expect(data.getObjects(null, `${NS.time}inXSDDate`, null)).toEqual([
+        df.literal(date.value, df.namedNode(`${NS.xsd}date`)),
+      ]);
+    }
+    refuses("encounter", {
+      ...encounter,
+      period: {
+        start: date,
+        end: {
+          value: "2026-01-01T19:59:59.999999+10:00",
+          datatype: "dateTime",
+        },
+      },
+    });
+    const latest = "2026-01-03T13:59:59.999999Z";
+    expect(
+      assertion("encounter", {
+        ...encounter,
+        period: {
+          start: { value: latest, datatype: "dateTime" },
+          end: date,
+        },
+      }).size,
+    ).toBeGreaterThan(0);
+    refuses("encounter", {
+      ...encounter,
+      period: {
+        start: { value: "2026-01-03T14:00:00Z", datatype: "dateTime" },
+        end: date,
+      },
+    });
+  });
+
+  it("refuses inherited template headers and throwing dispatch getters/proxies cleanly", () => {
+    for (const template of templates) {
+      const inherited = Object.assign(Object.create({ template }), { value: examples[template] });
+      expect(() => createFactAssertion(owner, inherited)).toThrow(new Error(`Invalid ${template}`));
+      const base = fact(template, examples[template]);
+      const error = new Error(pan);
+      for (const malicious of [
+        Object.defineProperty({ ...base }, "template", {
+          get() {
+            throw error;
+          },
+        }),
+        new Proxy(base, {
+          get(target, key) {
+            if (key === "template") throw error;
+            return Reflect.get(target, key);
+          },
+        }),
+      ])
+        expect(() => createFactAssertion(owner, malicious)).toThrow(
+          new Error("Invalid fact template"),
+        );
+      expect(() =>
+        createFactAssertion(
+          owner,
+          new Proxy(base, {
+            getOwnPropertyDescriptor() {
+              throw error;
+            },
+          }),
+        ),
+      ).toThrow(new Error(`Invalid ${template}`));
+    }
   });
 
   it("lets programming errors surface from snapshot helpers and RDF builds", () => {
@@ -588,17 +801,50 @@ describe("health template refusal boundaries", () => {
       expect(isomorphic([...assertion(template, value)], [...assertion(template)])).toBe(true);
       let reads = 0;
       const nextValue = swapping(examples[template]);
-      const top = Object.defineProperty({ template }, "value", {
-        get: () => {
-          expect(reads++).toBe(0);
-          return nextValue;
+      const headerReads = new Set<PropertyKey>();
+      const top = new Proxy(
+        Object.defineProperty({ template }, "value", {
+          get: () => {
+            expect(reads++).toBe(0);
+            return nextValue;
+          },
+        }),
+        {
+          get(target, key) {
+            expect(headerReads.has(key), `re-read header ${String(key)}`).toBe(false);
+            headerReads.add(key);
+            return Reflect.get(target, key);
+          },
         },
-      });
+      );
       expect(
         isomorphic([...createFactAssertion(owner, top as Fact)], [...assertion(template)]),
       ).toBe(true);
       expect(reads).toBe(1);
     }
+  });
+
+  it("snapshots dispatch even when an older template getter changes to a health template", () => {
+    let reads = 0;
+    const changing = {
+      get template() {
+        return reads++ === 0 ? "email" : "observation";
+      },
+      value: "avery@example.org",
+    } as Fact;
+    const data = createFactAssertion(owner, changing);
+    expect(
+      isomorphic(
+        [...data],
+        [
+          ...createFactAssertion(owner, {
+            template: "email",
+            value: "avery@example.org",
+          }),
+        ],
+      ),
+    ).toBe(true);
+    expect(reads).toBe(1);
   });
 });
 
@@ -651,6 +897,106 @@ async function combinedHealthShapes(): Promise<Store> {
 }
 
 describe("health nanopublications and profile conformance", () => {
+  it("adds MedicalHealth to every health event regardless of caller-supplied categories", async () => {
+    const client = "https://example.org/agents/test";
+    for (const categories of [undefined, [], ["pd:Contact"], ["pd:Health"], ["pd:MedicalHealth"]]) {
+      const built = await buildNanopublications(
+        {
+          batch_id: "health-categories",
+          worker: { agent_id: client, agent_label: "Synthetic" },
+          claims: [
+            ...templates.map((template) => ({
+              id: template,
+              epistemic: "Documented" as const,
+              categories,
+              assertion: assertion(template),
+            })),
+            {
+              id: "lab",
+              epistemic: "Documented",
+              categories,
+              assertion: assertion("observation", {
+                ...observation,
+                kind: "lab",
+                value: "Negative",
+              }),
+            },
+          ],
+        },
+        options,
+      );
+      const parsed = await parseNanopublications(await serializeNanopublications(built));
+      for (const np of parsed.nanopubs) {
+        expect(np.categories).toEqual(
+          [
+            ...new Set([
+              ...(categories ?? []).map((category) => NS.pd + category.slice(3)),
+              `${NS.pd}MedicalHealth`,
+            ]),
+          ].sort(),
+        );
+        expect(isSpecialCategory("pd:MedicalHealth")).toBe(true);
+        expect(
+          new RdfNode(np.assertionId, graph(parsed.dataset, np.provenanceId))
+            .terms(`${NS.dpv}hasPersonalData`)
+            .has(df.namedNode(`${NS.pd}MedicalHealth`)),
+        ).toBe(true);
+        expect(
+          purposeFilter(
+            createDefaultPolicy("https://example.org/policy", owner),
+            "ServiceProvision",
+            client,
+          )(np),
+        ).toBe(false);
+        const contactOnly = {
+          id: "https://example.org/policy",
+          type: "Set" as const,
+          permissions: [
+            { type: "permission" as const, action: "read" as const, target: `${NS.pd}Contact` },
+          ],
+        };
+        expect(purposeFilter(contactOnly, "ServiceProvision", client)(np)).toBe(false);
+      }
+    }
+  });
+
+  it("tags exact clinical RDF classes across namespaces and preserves assertion contents", async () => {
+    const inputs = [];
+    for (const namespace of [NS.health, LEGACY_HEALTH_NS]) {
+      for (const name of ["Observation", "Immunization", "Encounter"]) {
+        const data = new Store();
+        new RdfNode("https://example.org/event", data).link(`${NS.rdf}type`, namespace + name);
+        inputs.push(data);
+      }
+    }
+    const nonclinical = new Store();
+    new RdfNode("https://example.org/unrelated", nonclinical)
+      .text(`${NS.rdf}type`, `${NS.health}Observation`)
+      .link(`${NS.rdf}type`, `${NS.health}ObservationLike`);
+    const built = await buildNanopublications(
+      {
+        batch_id: "health-rdf-categories",
+        worker: { agent_id: "https://example.org/agents/test", agent_label: "Synthetic" },
+        claims: [...inputs, nonclinical].map((data, i) => ({
+          id: String(i),
+          epistemic: "Documented",
+          assertion: data,
+        })),
+      },
+      options,
+    );
+    for (const np of built.nanopubs) {
+      const index = Number(np.identifier.split("/").at(-1));
+      expect(np.categories).toEqual(index < inputs.length ? [`${NS.pd}MedicalHealth`] : []);
+      expect(
+        isomorphic(
+          [...graph(built.dataset, np.assertionId)],
+          [...([...inputs, nonclinical][index] as Store)],
+        ),
+      ).toBe(true);
+    }
+  });
+
   it("builds, serializes and parses all three templates with stable graphs and provenance", async () => {
     const built = await buildNanopublications(
       {

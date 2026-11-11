@@ -38,6 +38,7 @@ const parsed = await parseNanopublications(trig);
 are explicit entity IRIs. Nested preferences, codes and dose schedules use blank
 nodes, canonically skolemized on build. Temporal bounds retain their declared
 `date`, `dateTime`, `gYearMonth`, or `gYear` precision.
+Template dispatch reads the template once, so a getter cannot change the selected branch.
 
 `paymentCard` records a blank-node `schema:PaymentCard` that the owner
 `schema:owns`, with `schema:brand`, the last four digits as a
@@ -96,23 +97,45 @@ without an ontology reasoner. `HealthTemporalValue` accepts only `date` and
 is refused and every date-time must carry `Z` or a valid ±hh:mm timezone.
 Date-times retain the package's microsecond normalization. Encounter endpoints
 are compared as UTC instants at that precision. A date-only bound denotes the
-whole UTC calendar day: its earliest instant is used for a start and its latest
-instant for an end. An end before the earliest possible start is refused; mixed
-precision on the same UTC day is accepted. Nested times and vaccine codes are
-blank nodes, skolemized on build.
+whole calendar day with no timezone. Following XSD's indeterminate comparison,
+its possible UTC range is widened by ±14 hours: from 10:00Z on the preceding
+day through 13:59:59.999999Z on the following day. The earliest possible start
+and latest possible end are compared; only an interval reversed throughout these
+ranges is refused. For example, a start of `2026-01-02` and an end of
+`2026-01-01T20:00:00+10:00` are accepted at the earliest-start boundary.
+Nested times and vaccine codes are blank nodes, skolemized on build.
 
 Every input field is read once from its own properties into a snapshot; inherited
 fields are ignored. Unknown keys, wrong types, invalid times, non-finite numbers
-and detected card numbers in free text are refused. Entity IRIs must be unchanged
+and detected card numbers in text or decimal values are refused. Numbers are
+scanned after expansion to fixed-point decimal; `{ decimal }` lexical forms are
+scanned before validation. This includes Luhn-valid 12–19 digit windows across
+the decimal point or other separators, so some large clinical values are refused.
+The `kind` and temporal datatype fields use closed enums. Entity IRIs must be unchanged
 HTTP(S) IRIs accepted by `safeHttpIri`; all entity, concept, vaccine, coding-system
-and provider identifiers must differ from each other and from the owner. IRIs are
-percent-decoded up to four rounds and NFKC-normalized before card-number scanning;
-malformed or residual percent escapes are refused. Snapshot refusals use fixed
+and provider identifiers must differ from each other and from the owner. The owner
+and all supplied IRIs are percent-decoded up to four rounds and NFKC-normalized
+before card-number scanning;
+malformed or residual percent escapes are refused. The sole exemption is clinical
+coding under an `http://snomed.info/` system: a Verhoeff-valid SNOMED CT identifier
+(6–18 ASCII digits, no leading zero, partition 00–05 or 10–15), either as digits
+or an exact `http://snomed.info/id/<id>` code or concept/product IRI. Other identifier
+roles and coding systems receive no exemption. This includes dm+d's
+`https://dmd.nhs.uk` system; a SNOMED UK drug-extension system under
+`http://snomed.info/` follows the SNOMED rule. Snapshot refusals use fixed
 messages (`Invalid observation`, `Invalid immunization`, `Invalid encounter`);
-programming errors during graph construction surface unchanged. Tests resolve the
+inherited health-template headers are refused, and an unreadable template getter
+or proxy produces `Invalid fact template` without exposing its thrown value.
+Programming errors during graph construction surface unchanged. Tests resolve the
 vocabulary through its package, compose the health and imported Core shapes using
 the fixture gate's local `owl:imports` traversal, assert zero MUST Violations for
 complete and minimal variants, and check the Encounter `recordedBy` SHOULD Warning.
+
+`buildNanopublications` always adds `pd:MedicalHealth` to the provenance categories
+of assertions explicitly typed as Observation, Immunization or Encounter in the
+canonical or legacy health namespace. Caller-supplied categories are retained;
+omitting or mislabelling them cannot bypass special-category authorization for
+these templates. Assertion contents and their identifiers remain unchanged.
 
 `findCardNumbers` and `containsCardNumber` expose the detector. It flags every
 Luhn-valid window of 12 to 19 digits that does not start with 0, in linear time.
