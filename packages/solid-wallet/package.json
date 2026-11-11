@@ -1,0 +1,45 @@
+{
+  "name": "@jeswr/solid-wallet",
+  "version": "0.1.0",
+  "description": "Generated document vault model, expiry helpers and private pod repository for Wallet.",
+  "type": "module",
+  "license": "MIT",
+  "author": "Jesse Wright",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "codegen",
+    "codegen.config.json",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "pnpm -w exec tsc -p packages/solid-wallet/tsconfig.build.json && node scripts/copy-generated.mjs",
+    "codegen": "node node_modules/@jeswr/federation-codegen/dist/cli.js gen --ontology codegen/wallet.ttl --shapes codegen/wallet.shacl.ttl --config codegen.config.json --out src/generated",
+    "lint": "pnpm -w exec biome check packages/solid-wallet/src packages/solid-wallet/scripts packages/solid-wallet/test packages/solid-wallet/codegen.config.json packages/solid-wallet/package.json packages/solid-wallet/vitest.config.ts",
+    "typecheck": "pnpm -w exec tsc --noEmit -p packages/solid-wallet/tsconfig.json",
+    "test": "pnpm -w exec vitest run --root packages/solid-wallet"
+  },
+  "dependencies": {
+    "@jeswr/model-runtime": "workspace:*",
+    "@jeswr/storage-client": "workspace:*",
+    "@jeswr/pod-access": "workspace:*",
+    "@jeswr/pod-type-index": "workspace:*",
+    "@jeswr/solid-vc": "workspace:*",
+    "@jeswr/guarded-fetch": "workspace:*"
+  },
+  "devDependencies": {
+    "@jeswr/federation-codegen": "workspace:*"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "securityCritical": true
+}

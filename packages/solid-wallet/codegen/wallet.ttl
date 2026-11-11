@@ -1,0 +1,25 @@
+# AUTHORED-BY Codex (GPT-6.1 Sol)
+@prefix wallet: <https://jeswr.org/ns/wallet#> .
+@prefix schema: <https://schema.org/> .
+@prefix dct: <http://purl.org/dc/terms/> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+
+<https://jeswr.org/ns/wallet> a owl:Ontology ; rdfs:label "Wallet profile ontology"@en ; rdfs:comment "Local projection of DigitalDocument metadata; external terms retain their standard meanings."@en .
+schema:DigitalDocument a owl:Class ; rdfs:label "Digital document"@en ; rdfs:comment "A digital record of an important document or credential."@en .
+# Reuses schema:name; constraints belong to wallet.shacl.ttl, not this external vocabulary.
+wallet:itemKind a owl:DatatypeProperty ; rdfs:label "kind"@en ; rdfs:comment "Wallet record kind."@en ; rdfs:domain schema:DigitalDocument ; rdfs:range xsd:string .
+# Reuses schema:identifier; constraints belong to wallet.shacl.ttl, not this external vocabulary.
+wallet:issuerName a owl:DatatypeProperty ; rdfs:label "issuerName"@en ; rdfs:comment "Wallet record issuerName."@en ; rdfs:domain schema:DigitalDocument ; rdfs:range xsd:string .
+# Reuses schema:validFrom; constraints belong to wallet.shacl.ttl, not this external vocabulary.
+# Reuses schema:expires; constraints belong to wallet.shacl.ttl, not this external vocabulary.
+wallet:holderName a owl:DatatypeProperty ; rdfs:label "holderName"@en ; rdfs:comment "Wallet record holderName."@en ; rdfs:domain schema:DigitalDocument ; rdfs:range xsd:string .
+# Reuses schema:description; constraints belong to wallet.shacl.ttl, not this external vocabulary.
+# Reuses schema:keywords; constraints belong to wallet.shacl.ttl, not this external vocabulary.
+# Reuses schema:associatedMedia; constraints belong to wallet.shacl.ttl, not this external vocabulary.
+wallet:credential a owl:ObjectProperty ; rdfs:label "credential"@en ; rdfs:comment "Wallet record credential."@en ; rdfs:domain schema:DigitalDocument ; rdfs:range rdfs:Resource .
+# Reuses dct:created; constraints belong to wallet.shacl.ttl, not this external vocabulary.
+# Reuses dct:modified; constraints belong to wallet.shacl.ttl, not this external vocabulary.
+wallet:favourite a owl:DatatypeProperty ; rdfs:label "favourite"@en ; rdfs:comment "Wallet record favourite."@en ; rdfs:domain schema:DigitalDocument ; rdfs:range xsd:boolean .

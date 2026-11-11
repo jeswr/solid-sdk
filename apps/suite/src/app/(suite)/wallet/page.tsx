@@ -1,9 +1,8 @@
-// AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex (GPT-6.1 Sol)
 import type { Metadata } from "next";
-import { PlannedApp } from "@/apps/planned/planned-app";
-
+import { WalletApp } from "@/apps/wallet/components/wallet-app";
+import "@/apps/wallet/components/wallet.css";
 export const metadata: Metadata = { title: "Wallet · Solid Suite" };
-
 export default function Page() {
-  return <PlannedApp app="wallet" />;
+  return <WalletApp />;
 }
