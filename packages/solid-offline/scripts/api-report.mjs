@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate; see docs/MODEL-PROVENANCE.md
 /**
@@ -167,6 +168,7 @@ function normalizeChunkHashes(text) {
 
 function buildReport() {
   const lines = [];
+  lines.push('<!-- // AUTHORED-BY Codex GPT-6 -->');
   lines.push('## API Report — `@jeswr/solid-offline`');
   lines.push('');
   lines.push(
