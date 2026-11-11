@@ -10,9 +10,21 @@ import {
   type PodAuthOptions,
 } from "@jeswr/pod-auth";
 import { NotALoginAddressError, type resolveLoginTarget } from "@jeswr/pod-auth/directory";
+import {
+  type AuthSessionPlugin,
+  createNativeCodeDriver,
+  MOBILE_REDIRECT_URI,
+  USER_CANCELLED,
+} from "@jeswr/suite-native";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { SolidBackend } from "../src/shell/session/solid-backend";
+import { CLIENT_ID_URL } from "../src/lib/urls";
+import { SolidBackend, type SolidBackendOptions } from "../src/shell/session/solid-backend";
 import { SignInError, type SuiteAccount } from "../src/shell/session/types";
+
+const nativeBindings = vi.hoisted(() => ({
+  authSessionPlugin: { authenticate: vi.fn(), cancel: vi.fn(async () => {}) },
+}));
+vi.mock("@jeswr/suite-native/capacitor", () => nativeBindings);
 
 const alice = {
   webId: "https://pod.example/alice/profile#me",
@@ -37,7 +49,7 @@ function deferred<T>() {
   });
   return { promise, resolve };
 }
-function harness() {
+function harness(options: SolidBackendOptions = {}) {
   let identity: Identity | null = null;
   let config!: PodAuthOptions;
   const listeners = new Map<AuthEventType, Set<(event: AuthEvent) => void>>();
@@ -90,7 +102,13 @@ function harness() {
     close: vi.fn(),
   };
   const openPopup = vi.fn(() => popup);
-  const backend = new SolidBackend({ createAuth, resolveTarget, publicFetch, openPopup });
+  const backend = new SolidBackend({
+    createAuth,
+    resolveTarget,
+    publicFetch,
+    openPopup,
+    ...options,
+  });
   return {
     backend,
     auth,
@@ -109,6 +127,272 @@ function harness() {
 
 beforeEach(() => {
   vi.stubGlobal("location", new URL("https://suite.example/"));
+});
+
+const nativeCallback = `${MOBILE_REDIRECT_URI}?code=example&state=example&iss=https%3A%2F%2Fid.example%2F`;
+function nativeAuthorizationUrl(prompt = "consent") {
+  const url = new URL("https://id.example/authorize");
+  url.search = new URLSearchParams({
+    client_id: CLIENT_ID_URL,
+    redirect_uri: MOBILE_REDIRECT_URI,
+    response_type: "code",
+    code_challenge: "example",
+    code_challenge_method: "S256",
+    state: "example",
+    prompt,
+  }).toString();
+  return url;
+}
+function nativeHarness(options: SolidBackendOptions = {}) {
+  const plugin = {
+    authenticate: vi.fn<AuthSessionPlugin["authenticate"]>(async () => ({ url: nativeCallback })),
+    cancel: vi.fn<AuthSessionPlugin["cancel"]>(async () => {}),
+  };
+  const loadPlugin = vi.fn<() => Promise<AuthSessionPlugin>>(async () => plugin);
+  const createDriver = vi.fn(createNativeCodeDriver);
+  return {
+    ...harness({
+      isNativeApp: () => true,
+      loadAuthSessionPlugin: loadPlugin,
+      createNativeCodeDriver: createDriver,
+      ...options,
+    }),
+    plugin,
+    loadPlugin,
+    createDriver,
+  };
+}
+
+describe("native Solid shell over pod-auth", () => {
+  it("loads the registered SuiteAuthSession binding by default", async () => {
+    vi.stubGlobal("Capacitor", { isNativePlatform: () => true, getPlatform: () => "android" });
+    const h = harness();
+    nativeBindings.authSessionPlugin.authenticate.mockResolvedValue({ url: nativeCallback });
+    h.auth.login.mockImplementation(async (_hint, options) => {
+      if (!options?.signal) throw new Error("Expected a login signal");
+      expect(await h.config().ui.getCode(nativeAuthorizationUrl(), options.signal)).toBe(
+        nativeCallback,
+      );
+      return alice;
+    });
+    await h.backend.signIn({ issuer: alice.issuer });
+    expect(nativeBindings.authSessionPlugin.authenticate).toHaveBeenCalledExactlyOnceWith({
+      url: nativeAuthorizationUrl().href,
+      callbackScheme: "org.jeswr.suite",
+    });
+    expect(h.openPopup).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    "capacitor://localhost/",
+    "https://localhost/",
+    "http://localhost:3210/",
+    "https://suite.example/",
+  ])("uses the public mobile identity and scheme callback from %s", async (origin) => {
+    vi.stubGlobal("location", new URL(origin));
+    const h = nativeHarness();
+    h.auth.login.mockImplementation(async (_hint, options) => {
+      if (!options?.signal) throw new Error("Expected a login signal");
+      expect(await h.config().ui.getCode(nativeAuthorizationUrl(), options.signal)).toBe(
+        nativeCallback,
+      );
+      const identity = { ...alice, clientId: CLIENT_ID_URL };
+      h.setIdentity(identity);
+      return identity;
+    });
+    await h.backend.signIn({ issuer: alice.issuer });
+    expect(h.config()).toMatchObject({
+      clientId: CLIENT_ID_URL,
+      redirectUri: MOBILE_REDIRECT_URI,
+      allowInsecureLoopback: false,
+    });
+    expect(CLIENT_ID_URL).toBe(
+      "https://solid-suite.vercel.app/.well-known/solid-client-id-mobile.jsonld",
+    );
+    expect(h.resolveTarget).toHaveBeenCalledWith(
+      alice.issuer,
+      expect.objectContaining({ allowInsecureLoopback: false }),
+    );
+    expect(h.createDriver).toHaveBeenCalledExactlyOnceWith({
+      plugin: h.plugin,
+      redirectUri: MOBILE_REDIRECT_URI,
+      returns: "callback",
+    });
+    expect(h.plugin.authenticate).toHaveBeenCalledExactlyOnceWith({
+      url: nativeAuthorizationUrl().href,
+      callbackScheme: "org.jeswr.suite",
+    });
+    expect(h.openPopup).not.toHaveBeenCalled();
+    expect(h.popup.getCode).not.toHaveBeenCalled();
+    expect(h.popup.close).not.toHaveBeenCalled();
+    await expect(
+      h.config().ui.getCode(nativeAuthorizationUrl(), new AbortController().signal),
+    ).rejects.toEqual(new SignInError("cancelled"));
+    expect(h.plugin.authenticate).toHaveBeenCalledOnce();
+  });
+
+  it("rejects HTTP loopback providers even in a development WebView", async () => {
+    vi.stubGlobal("location", new URL("https://localhost/"));
+    const h = nativeHarness();
+    await expect(h.backend.signIn({ issuer: "http://localhost:3000/" })).rejects.toEqual(
+      new SignInError("invalid-url"),
+    );
+    expect(h.createAuth).not.toHaveBeenCalled();
+    expect(h.loadPlugin).not.toHaveBeenCalled();
+    expect(h.openPopup).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { prompt: "consent", signingIn: false },
+    { prompt: "none", signingIn: false },
+    { prompt: "consent", signingIn: true },
+    { prompt: "none", signingIn: true },
+  ])("blocks restore prompt=$prompt (inside sign-in: $signingIn)", async ({
+    prompt,
+    signingIn,
+  }) => {
+    const h = nativeHarness();
+    h.auth.restore.mockImplementation(async () => {
+      await expect(
+        h.config().ui.getCode(nativeAuthorizationUrl(prompt), new AbortController().signal),
+      ).rejects.toEqual(new SignInError("cancelled"));
+      return null;
+    });
+    if (signingIn) await h.backend.signIn({ issuer: alice.issuer });
+    else expect(await h.backend.restore()).toBeNull();
+    expect(h.auth.restore).toHaveBeenCalledOnce();
+    expect(h.auth.login).toHaveBeenCalledTimes(signingIn ? 1 : 0);
+    expect(h.loadPlugin).not.toHaveBeenCalled();
+    expect(h.createDriver).not.toHaveBeenCalled();
+    expect(h.plugin.authenticate).not.toHaveBeenCalled();
+    expect(h.openPopup).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    "none",
+    "consent none",
+  ])("blocks prompt=%s even during explicit authorization", async (prompt) => {
+    const h = nativeHarness();
+    h.auth.login.mockImplementation(async (_hint, options) => {
+      if (!options?.signal) throw new Error("Expected a login signal");
+      await h.config().ui.getCode(nativeAuthorizationUrl(prompt), options.signal);
+      return alice;
+    });
+    await expect(h.backend.signIn({ issuer: alice.issuer })).rejects.toEqual(
+      new SignInError("cancelled"),
+    );
+    expect(h.loadPlugin).not.toHaveBeenCalled();
+    expect(h.createDriver).not.toHaveBeenCalled();
+    expect(h.plugin.authenticate).not.toHaveBeenCalled();
+    expect(h.openPopup).not.toHaveBeenCalled();
+  });
+
+  it("expires on background authorization without reaching the native driver", async () => {
+    const h = nativeHarness();
+    const expired = vi.fn();
+    h.backend.onExpired(expired);
+    const account = await h.backend.signIn({ issuer: alice.issuer });
+    h.auth.fetch.mockImplementation(async () => {
+      await h.config().ui.getCode(nativeAuthorizationUrl(), new AbortController().signal);
+      return new Response();
+    });
+    await expect(h.backend.fetchFor(account)(account.storageUrl)).rejects.toEqual(
+      new SignInError("cancelled"),
+    );
+    expect(expired).toHaveBeenCalledOnce();
+    expect(h.loadPlugin).not.toHaveBeenCalled();
+    expect(h.plugin.authenticate).not.toHaveBeenCalled();
+    expect(h.openPopup).not.toHaveBeenCalled();
+    expect(h.auth.logout).not.toHaveBeenCalled();
+  });
+
+  it("maps a dismissed system browser to cancelled", async () => {
+    const h = nativeHarness();
+    h.plugin.authenticate.mockRejectedValue({ code: USER_CANCELLED });
+    h.auth.login.mockImplementation(async (_hint, options) => {
+      if (!options?.signal) throw new Error("Expected a login signal");
+      await h.config().ui.getCode(nativeAuthorizationUrl(), options.signal);
+      return alice;
+    });
+    await expect(h.backend.signIn({ issuer: alice.issuer })).rejects.toEqual(
+      new SignInError("cancelled"),
+    );
+    expect(h.plugin.authenticate).toHaveBeenCalledOnce();
+    expect(h.openPopup).not.toHaveBeenCalled();
+    expect(h.auth.logout).not.toHaveBeenCalled();
+  });
+
+  it("aborts the native driver without logging out or opening a popup", async () => {
+    const h = nativeHarness();
+    const entered = deferred<void>();
+    const callback = deferred<{ url: string }>();
+    h.plugin.authenticate.mockImplementation(() => {
+      entered.resolve();
+      return callback.promise;
+    });
+    h.auth.login.mockImplementation(async (_hint, options) => {
+      if (!options?.signal) throw new Error("Expected a login signal");
+      await h.config().ui.getCode(nativeAuthorizationUrl(), options.signal);
+      return alice;
+    });
+    const cancel = new AbortController();
+    const signingIn = h.backend.signIn({ issuer: alice.issuer }, { signal: cancel.signal });
+    const rejected = expect(signingIn).rejects.toEqual(new SignInError("cancelled"));
+    await entered.promise;
+    cancel.abort();
+    await rejected;
+    callback.resolve({ url: nativeCallback });
+    expect(h.plugin.cancel).toHaveBeenCalledOnce();
+    expect(h.openPopup).not.toHaveBeenCalled();
+    expect(h.auth.logout).not.toHaveBeenCalled();
+  });
+
+  it("does not open a late-loaded plugin after cancellation", async () => {
+    const h = nativeHarness();
+    const entered = deferred<void>();
+    const loaded = deferred<AuthSessionPlugin>();
+    h.loadPlugin.mockImplementationOnce(async () => {
+      entered.resolve();
+      return loaded.promise;
+    });
+    h.auth.login.mockImplementation(async (_hint, options) => {
+      if (!options?.signal) throw new Error("Expected a login signal");
+      await h.config().ui.getCode(nativeAuthorizationUrl(), options.signal);
+      return alice;
+    });
+    const cancel = new AbortController();
+    const signingIn = h.backend.signIn({ issuer: alice.issuer }, { signal: cancel.signal });
+    const rejected = expect(signingIn).rejects.toEqual(new SignInError("cancelled"));
+    await entered.promise;
+    cancel.abort();
+    loaded.resolve(h.plugin);
+    await rejected;
+    expect(h.plugin.authenticate).not.toHaveBeenCalled();
+    expect(h.openPopup).not.toHaveBeenCalled();
+    expect(h.auth.logout).not.toHaveBeenCalled();
+  });
+
+  it("keeps the web popup path without loading native bindings", async () => {
+    const h = nativeHarness({ isNativeApp: () => false });
+    h.auth.login.mockImplementation(async (_hint, options) => {
+      if (!options?.signal) throw new Error("Expected a login signal");
+      expect(await h.config().ui.getCode(nativeAuthorizationUrl(), options.signal)).toContain(
+        "/auth/callback.html?",
+      );
+      return alice;
+    });
+    await h.backend.signIn({ issuer: alice.issuer });
+    expect(h.config()).toMatchObject({
+      clientId: alice.clientId,
+      redirectUri: "https://suite.example/auth/callback.html",
+      allowInsecureLoopback: false,
+    });
+    expect(h.openPopup).toHaveBeenCalledExactlyOnceWith("https://suite.example/auth/callback.html");
+    expect(h.popup.getCode).toHaveBeenCalledOnce();
+    expect(h.popup.close).toHaveBeenCalledOnce();
+    expect(h.loadPlugin).not.toHaveBeenCalled();
+    expect(h.createDriver).not.toHaveBeenCalled();
+  });
 });
 afterEach(() => {
   vi.unstubAllGlobals();
