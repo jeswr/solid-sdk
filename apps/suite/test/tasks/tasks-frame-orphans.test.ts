@@ -146,6 +146,57 @@ describe("recurring completion recovery after reload", () => {
     expect(cache.getSnapshot().views.find((item) => item.url === original.url)?.due).toEqual(now);
   });
 
+  it.each([
+    false,
+    true,
+  ])("retries failed completion recovery on every Skip (refresh: %s)", async (refresh) => {
+    const result = await recurring(3);
+    const orphan = await copy(result, "orphan");
+    const { cache, store, original, failures, notices } = await reload(result);
+    result.pod.intercept = (request) =>
+      request.method === "PUT" ? new Response(null, { status: 403 }) : undefined;
+
+    expect(await cache.skipTask(original, now)).toBeUndefined();
+    expect(notices).toHaveBeenCalledExactlyOnceWith(
+      "Couldn't check this task's history. Try again.",
+    );
+    if (refresh) await cache.loadTasks(result.inbox, true);
+
+    expect(await cache.skipTask(original, now)).toBeUndefined();
+    expect(notices).toHaveBeenCalledTimes(2);
+    expect(notices).toHaveBeenLastCalledWith("Couldn't check this task's history. Try again.");
+    expect(failures).toHaveBeenCalledTimes(2);
+    expect(result.pod.mutations().map((request) => [request.method, request.url])).toEqual([
+      ["PUT", original.url],
+      ["PUT", original.url],
+    ]);
+    expect((await store.readTask(original.url)).etag).toBe(original.etag);
+    expect((await store.readTask(orphan.url)).etag).toBe(orphan.etag);
+
+    result.pod.intercept = undefined;
+    const skipped = new Date("2026-11-03T12:00:00Z");
+    expect(await cache.skipTask(original, now)).toMatchObject({
+      kind: "advance",
+      previous: { dueDate: next },
+      original: { dueDate: skipped },
+    });
+    const updated = await store.readTask(original.url);
+    expect(updated.task.dueDate).toEqual(skipped);
+    expect(updated.task.state).toBe("open");
+    expect([...updated.task.completionOperations]).toEqual([orphan.url]);
+    expect((await store.readTask(orphan.url)).etag).toBe(orphan.etag);
+    expect(cache.getSnapshot().views).toHaveLength(2);
+    expect(result.pod.mutations().map((request) => [request.method, request.url])).toEqual([
+      ["PUT", original.url],
+      ["PUT", original.url],
+      ["PUT", original.url],
+      ["PUT", original.url],
+    ]);
+    expect(result.pod.mutations().every((request) => request.headers.has("If-Match"))).toBe(true);
+    expect(notices).toHaveBeenCalledTimes(2);
+    expect(failures).toHaveBeenCalledTimes(2);
+  });
+
   it("adopts a committed occurrence with a lost response, then completes the second occurrence", async () => {
     const result = await recurring();
     const { pod, inbox } = result;

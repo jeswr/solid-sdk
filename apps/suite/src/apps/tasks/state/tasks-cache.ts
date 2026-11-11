@@ -1187,8 +1187,9 @@ export class TasksCache {
     let current = Object.values(this.snapshot.tasks)
       .flatMap((load) => load.items)
       .find((task) => task.url === item.url);
-    if (!current || this.unresolvedCompletions.has(item.url)) return undefined;
-    const recovery = this.recoverPersistedCompletion(current, now);
+    if (!current) return undefined;
+    const unresolved = this.unresolvedCompletions.get(item.url);
+    const recovery = unresolved ? unresolved() : this.recoverPersistedCompletion(current, now);
     if (recovery) {
       if (!(await recovery)) {
         this.onNotice("Couldn't check this task's history. Try again.");
