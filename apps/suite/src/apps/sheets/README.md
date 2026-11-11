@@ -163,3 +163,11 @@ independent of the rendering budget: ranges above 10,000 cells remain saved and 
 Chart controls and the adapter also block chart changes while comments load.
 Charts follow the existing guarded autosave and conflict flow. XLSX import/export behavior
 is unchanged: charts are **not exported to XLSX**, and imported Excel charts are not read.
+
+Drive’s **Open with Sheets** creates a new workbook from a pod CSV through
+`WorkbookService.createFromCsv`, the same parser used by Sheets’ CSV import.
+The source file stays untouched; its filename without `.csv` supplies the title.
+Drive bounds downloads to 50 MB and refuses redirects and URLs outside the active pod.
+In Drive, a workbook container appears as one Spreadsheet using its metadata title
+and opens in Sheets. Drive keeps recursive trash/delete, but hides folder rename/move
+because those operations cannot safely preserve the workbook’s title and editor scope.

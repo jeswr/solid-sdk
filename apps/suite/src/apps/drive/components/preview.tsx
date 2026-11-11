@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex
@@ -29,6 +30,7 @@ import {
   FileText,
   Info,
   Star,
+  Table2,
   X,
 } from "lucide-react";
 import Link from "next/link";
@@ -47,6 +49,7 @@ import { resolveContentType } from "../lib/files/resolve-content-type";
 import { parseCsvPreview, previewKind } from "../lib/view/view";
 import { useDrive } from "../state/drive-context";
 import { useOpenWithDocs } from "../state/open-with-docs";
+import { useOpenWithSheets } from "../state/open-with-sheets";
 import { useLiveResource, useResourceVersion } from "../state/resource";
 import { useRecordSharedOpen } from "../state/shared";
 import { captureDriveFocusRemoval, useDriveActions, useDriveUi } from "../state/ui";
@@ -373,6 +376,33 @@ function OpenWithDocsButton({ item }: { item: DriveItem }) {
   );
 }
 
+/** Google Drive's "Open with Sheets": opens a Docs document or converts the file into one. */
+function OpenWithSheetsButton({ item }: { item: DriveItem }) {
+  const control = useOpenWithSheets(item);
+  if (!control) return null;
+  const reason = control.kind === "convert" ? control.disabledReason : undefined;
+  const button = (
+    <Button
+      variant="outline"
+      size="sm"
+      className="drv-open-with"
+      disabled={reason !== undefined || control.pending}
+      aria-busy={control.pending || undefined}
+      onClick={() => void control.run()}
+    >
+      <Table2 aria-hidden="true" size={16} />
+      <span>Open with Sheets</span>
+    </Button>
+  );
+  return reason ? (
+    <OnlineGate online={false} reason={reason}>
+      {button}
+    </OnlineGate>
+  ) : (
+    button
+  );
+}
+
 function PreviewHeader({
   item,
   leading,
@@ -396,6 +426,7 @@ function PreviewHeader({
       <span className="drv-preview-title">{item.name}</span>
       <div className="drv-preview-actions">
         <OpenWithDocsButton item={item} />
+        <OpenWithSheetsButton item={item} />
         <IconButton label="Download" variant="ghost" onClick={() => void actions.download(item)}>
           <Download aria-hidden="true" size={18} />
         </IconButton>

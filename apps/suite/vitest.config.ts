@@ -172,6 +172,7 @@ export default defineConfig({
         "src/apps/drive/lib/view/**/*.ts",
         "src/apps/drive/lib/open-with/**/*.ts",
         "src/apps/drive/state/open-with-docs.ts",
+        "src/apps/drive/state/open-with-sheets.ts",
         "src/apps/mail/lib/address/**/*.ts",
         "src/apps/music/lib/data/**/*.ts",
         "src/apps/health/lib/data/**/*.ts",

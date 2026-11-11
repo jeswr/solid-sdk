@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
 "use client";
@@ -252,7 +253,9 @@ function DriveShareBatch({
           ) : null}
           {listing.status === "ready" ? (
             listing.items
-              .filter((item) => item.kind === "folder" && !item.name.startsWith("."))
+              .filter(
+                (item) => item.kind === "folder" && !item.workbook && !item.name.startsWith("."),
+              )
               .map((item) => (
                 <Button variant="outline" key={item.url} onClick={() => setChosen(item.url)}>
                   Open folder {item.name}
