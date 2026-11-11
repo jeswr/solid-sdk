@@ -4,7 +4,7 @@ description: Use when implementing or changing the solid-offline service-worker 
 ---
 <!-- AUTHORED-BY Codex GPT-5 -->
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
-<!-- AUTHORED-BY Codex GPT-6 -->
+<!-- // AUTHORED-BY Codex GPT-6 -->
 
 # Work with `@jeswr/solid-offline`
 
@@ -34,6 +34,31 @@ await offline.logout();
 
 Import `@jeswr/solid-offline/worker` from an origin-served service-worker entry. Import React-only helpers from `@jeswr/solid-offline/react`; React is an optional peer and must not leak into the core entry point.
 
+## Native page adapter
+
+`createPageCache({ webId, storageRoot, fetch, usable, onEvent? })` wraps the bounded
+session fetch without a worker. Use it only for native targets; keep the web worker.
+It uses `handleFetch` with `strategy: 'network-first'`, the shared IndexedDB body and
+metadata stores, `handleNotification`, `resyncSweep` and `purgeForWebId`. Do not fork
+those decisions in apps. The default worker delivery remains SWR for compatibility.
+
+Create/start only after commit. `usable()` must include the live account and session
+version, not just rendered state. Check around every await and never fallback from
+session errors, aborts, HTTP failures or explicit freshness to cached success.
+`start()` owns root and bounded hot-resource subscriptions; invoke again on reconnect
+if setup failed. `notify(frame)`/`resync()` also accept externally owned notifications.
+Relay `updated` events to session subscribers. `close()` fences permanently and retains
+reads; `logout()` fences immediately then purges both bodies and metadata, preserving
+outbox writes. On switches and all logout paths, call/await this purge; coordinate
+replacement adapters with pending cleanup. Surface blocked/error purge outcomes.
+
+Bound each persisted body to 25 MiB using declared size and a bounded reader; leave
+the caller stream available on overflow. Never await cancellation of its tee branch.
+Store bodies beside metadata in the same IndexedDB database for worker and page.
+Namespaces include full WebIDs to prevent hash collisions. Never persist Requests,
+credential-valued Vary keys or sensitive response headers. Purge legacy hash-only
+stores too; never serve their abandoned bytes. The new namespace starts empty.
+
 ## Security and correctness rules
 
 - Keep the service worker credential-free. Authenticated warming happens in the page through the injected StorageClient. The optional page fetch is used by pod-notifications.
@@ -59,7 +84,7 @@ Import `@jeswr/solid-offline/worker` from an origin-served service-worker entry.
 
 ## Status and React integration
 
-Use `offline.status` or `createStatusSurface()` as a stable `subscribe`/`getSnapshot` store. `useOfflineStatus` and `useOfflineResource` should remain thin `useSyncExternalStore` adapters; caching policy stays in the service worker.
+Use `offline.status` or `createStatusSurface()` as a stable `subscribe`/`getSnapshot` store. `useOfflineStatus` and `useOfflineResource` should remain thin `useSyncExternalStore` adapters; caching policy stays in the shared engine, with worker and page drivers.
 
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 The worker broadcasts `OfflineEvent` messages containing only URL, event, and an opaque

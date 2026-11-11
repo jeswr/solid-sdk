@@ -1,5 +1,6 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate; see docs/MODEL-PROVENANCE.md
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 /**
  * Shared byte-cache ↔ metadata COHERENCE primitives (internal).
  *
@@ -70,7 +71,12 @@ export interface CoherenceByteCache {
 
 /** Project a `Response` onto the header-only shape the policy functions read. */
 export function resLike(response: Response): ResponseLike {
-  return { status: response.status, headers: response.headers, type: response.type };
+  return {
+    status: response.status,
+    headers: response.headers,
+    type: response.type,
+    redirected: response.redirected,
+  };
 }
 
 /**
@@ -117,7 +123,28 @@ export async function putCanonicalBytes(
   response: Response,
 ): Promise<void> {
   const varyKey = computeVaryKey(rl, resLike(response));
-  await cache.put(keyRequest(rl.url, varyKey), response.clone());
+  const copy = response.clone();
+  const headers = new Headers(copy.headers);
+  for (const name of [
+    'authorization',
+    'proxy-authorization',
+    'dpop',
+    'cookie',
+    'set-cookie',
+    'authentication-info',
+    'proxy-authentication-info',
+    'x-solid-offline-cache',
+    'x-offline',
+  ])
+    headers.delete(name);
+  await cache.put(
+    keyRequest(rl.url, varyKey),
+    new Response(copy.body, {
+      status: copy.status,
+      statusText: copy.statusText,
+      headers,
+    }),
+  );
 }
 
 /**

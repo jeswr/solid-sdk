@@ -1,8 +1,12 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 "use client";
 
 import type { ConflictRecord, Outbox, OutboxItem } from "@jeswr/solid-offline/outbox";
 import { useMemo, useSyncExternalStore } from "react";
+
+export type { PageCache, PageCacheOptions } from "@jeswr/solid-offline";
+export { cacheProvenance, createPageCache, purgeForWebId } from "@jeswr/solid-offline";
 
 export { mergeRdf } from "@jeswr/solid-offline/merge";
 export type {

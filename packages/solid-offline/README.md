@@ -1,6 +1,6 @@
 <!-- AUTHORED-BY Codex GPT-5 -->
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
-<!-- AUTHORED-BY Codex GPT-6 -->
+<!-- // AUTHORED-BY Codex GPT-6 -->
 
 # @jeswr/solid-offline
 
@@ -69,7 +69,7 @@ transport already injected into `storage`, and cache state is scoped by WebID.
 Warming uses `storage.head`, `read`, and paginated `listAll`; explicit `warm.seeds` are
 combined with profile/type-index seeds inside the storage boundary. For a WebID outside
 that boundary, supply explicit seeds (or a pre-fetched profile to the low-level warmer).
-Large binary members remain lazy. Existing SW cache names and metadata schemas are retained.
+Large binary members remain lazy. Pod bodies and metadata now share the account-scoped IndexedDB database; the Cache API remains for public app-shell assets.
 
 Notifications use `@jeswr/pod-notifications` for transport selection, polling, scope checks,
 and reconnect. Pass an existing `notificationsClient` to share the app's client; otherwise
@@ -84,6 +84,55 @@ HTTP cache policy remains authoritative: invalidation retains original response 
 the worker transport boundary. A low-level injected storage without that HTTP evidence
 conservatively evicts changed bytes instead of inventing cacheable responses.
 React/status surfaces, BroadcastChannel updates, and `purgeForWebId` retain their contracts.
+
+## Native page cache (MOB-P3e)
+
+```ts
+import { createPageCache } from '@jeswr/solid-offline';
+
+const offline = createPageCache({
+  webId: account.webId,
+  storageRoot: account.storageUrl,
+  fetch: authenticatedFetch,
+  usable: () => isCurrentLiveAccount(account),
+  onEvent: event => { /* Re-read views on event.event === 'updated'. */ },
+});
+await offline.start(); // Optional built-in pod-notifications subscriptions.
+const response = await offline.fetch(resourceUrl);
+// On logout or account switch, fence immediately and await shared cleanup:
+const purge = await offline.logout();
+if (purge.dbBlocked || purge.errors.length) { /* Surface incomplete cleanup. */ }
+```
+
+This driver needs IndexedDB and no service worker or Cache API. It uses the worker's
+`handleFetch`, cache policy, canonical keys, metadata builder, notification handler,
+ETag sweep and `purgeForWebId`; it does not implement a second cache policy.
+Native reads are network-first with conditional ETag validation. The existing worker
+keeps its default stale-while-revalidate delivery mode over the same engine and store.
+Offline or a transport TypeError may return provisional bytes marked
+`X-Solid-Offline-Cache: stale` and `X-Offline: stale`. HTTP failures, cancellation,
+session errors and explicit freshness requests never become stale successes.
+`no-store` bypasses reads and writes even offline. HEAD stays a network passthrough;
+mutations, ranges, auth endpoints and requests outside the storage boundary bypass caching.
+Redirected, opaque, credential-varying, private and no-store responses are not stored.
+Neither request credentials nor sensitive response headers are persisted.
+
+`usable()` is mandatory: pass the session's live account/generation fence, including
+changes React has not committed. It is checked around network and disk awaits and before
+delivery. `close()` permanently fences this adapter and releases subscriptions/DB handles,
+but retains its reads for reopening by the same identity. `logout()` fences synchronously,
+then deletes the same database (bodies and metadata) as the worker; it retains the outbox.
+The database namespace includes the full encoded WebID, so 32-bit hash collisions cannot
+cross accounts. Old hash-only databases and Cache API copies are also purged on logout.
+Old stores are not migrated or served; the first online read populates the new namespace.
+
+`start()` watches the root plus up to 49 read resources using pod-notifications; resource
+subscriptions cover edits that Solid container subscriptions cannot observe. It reconciles
+on setup, first-live and resync. Call it again on reconnect if initial setup failed/offline.
+You may instead feed normalized changes through `notify(frame)` and call `resync()` yourself.
+`indexedDB`, `isOnline`, `now` and `notificationsClient` are injectable test seams. Individual bodies are limited to 25 MiB (declared and streamed); larger reads stay
+network-only. Cache storage failure preserves an available network answer; offline disk failures fail closed.
+Actual WebView persistence and service-worker lifecycle still require device/browser checks.
 
 ## Response cache provenance
 

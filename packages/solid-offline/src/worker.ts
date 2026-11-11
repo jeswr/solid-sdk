@@ -34,12 +34,12 @@ import {
   sameShellConfig,
   shellBucketComplete,
 } from './app-shell.js';
-import { withCacheProvenance } from './cache-policy.js';
+import { isPodCacheRequest, withCacheProvenance } from './cache-policy.js';
 import { handleNotification, type InvalidateDeps, resyncSweep } from './invalidation.js';
 import { MetadataStore } from './metadata-store.js';
-import { cacheNameForWebId, isScopeChange } from './scope.js';
+import { isScopeChange } from './scope.js';
 import { createPolicyStorage } from './storage.js';
-import { type Broadcaster, type ByteCache, handleFetch, type SwrDeps } from './swr.js';
+import { type Broadcaster, handleFetch, type SwrDeps } from './swr.js';
 import type { AppShellConfig, OfflineClientConfig, PageToWorkerMessage } from './types.js';
 import { WARM_REQUEST_HEADER, type WarmStartMessage, WorkerWarmSession } from './warm-transport.js';
 
@@ -223,15 +223,6 @@ function resetMeta(): void {
   void prev?.then((store) => store.close()).catch(() => undefined);
 }
 
-/**
- * The WebID-scoped Cache API name (§7). Derived from `configuredWebId` so the
- * bytes cache matches the metadata DB scope and logout-purge can drop exactly
- * one identity's cache. Falls back to the anonymous scope before config arrives.
- */
-function cacheName(): string {
-  return cacheNameForWebId(configuredWebId);
-}
-
 function getChannel(): BroadcastChannel {
   if (!channel) {
     channel = new BroadcastChannel(channelName);
@@ -345,8 +336,10 @@ self.addEventListener('message', (event: ExtendableMessageEvent) => {
       webIdConfigured = true;
       // WebId scope changed → close + drop the store handle so we re-open the
       // newly-scoped DB, and drop the channel so a renamed channel is re-opened.
-      resetMeta();
     }
+    // Logout deletes the database and closes our connection via versionchange.
+    // Even a same-account login must reopen that handle, not reuse a closed DB.
+    resetMeta();
     event.source?.postMessage({ type: 'ready' });
   } else if (data.type === 'ping') {
     event.source?.postMessage({ type: 'pong' });
@@ -386,10 +379,9 @@ function keepAlive(event: ExtendableMessageEvent, task: () => Promise<void>): vo
  * SWR path adds `isOnline` on top (see `respond`).
  */
 async function baseDeps(): Promise<Omit<SwrDeps, 'isOnline'>> {
-  const cache = await self.caches.open(cacheName());
   const meta = await getMeta();
   return {
-    cache: cache as unknown as ByteCache,
+    cache: meta.bytes,
     meta,
     fetch: (input, init) => self.fetch(input as RequestInfo, init),
     broadcast: getChannel() as unknown as Broadcaster,
@@ -519,8 +511,9 @@ self.addEventListener('fetch', (event: FetchEvent) => {
   if (
     !request.headers.has(WARM_REQUEST_HEADER) &&
     (!storageRoot ||
-      !createSolidBackend({ root: storageRoot, fetch: self.fetch.bind(self) }).isWithinStorage(
-        request.url,
+      !isPodCacheRequest(
+        request,
+        createSolidBackend({ root: storageRoot, fetch: self.fetch.bind(self) }).isWithinStorage,
       ))
   )
     return;
@@ -602,6 +595,10 @@ async function respondShellAsset(event: FetchEvent): Promise<Response> {
 }
 
 async function respond(event: FetchEvent): Promise<Response> {
+  const generation = invalidationGeneration;
+  const check = () => {
+    if (generation !== invalidationGeneration) throw new Error('Offline account changed');
+  };
   const networkResponse = (response: Response) =>
     event.request.method === 'GET' ? withCacheProvenance(response, 'miss') : response;
   const warming = warmSessions.get(event.clientId);
@@ -628,17 +625,27 @@ async function respond(event: FetchEvent): Promise<Response> {
       ...(await baseDeps()),
       isOnline: () => self.navigator.onLine,
     };
+    check();
+    const fetch = deps.fetch;
+    deps.fetch = async (input, init) => {
+      check();
+      const response = await fetch(input, init);
+      check();
+      return response;
+    };
     if (guarded) {
       const transport = deps.fetch;
       deps.fetch = (input, init) => guarded.fetch(new Request(input, init), transport);
     }
     const result = await handleFetch(request, deps);
+    check();
     // Keep background revalidation alive past the response if the SW supports it.
     if (result.revalidation && typeof event.waitUntil === 'function') {
       event.waitUntil(result.revalidation.then(() => undefined));
     }
     return result.response;
   } catch {
+    check();
     // A warming failure must never retry outside the transport budget.
     if (guarded) return networkResponse(new Response(null, { status: 413 }));
     // Never-authoritative: on any engine error, fall back to the live network so

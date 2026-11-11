@@ -61,6 +61,8 @@ export interface SwrDeps {
   now(): number;
   /** Returns whether the browser believes it is online. */
   isOnline(): boolean;
+  /** Native pages and ADR-006 readers await the origin before consulting bytes. */
+  strategy?: 'network-first';
 }
 
 /** Outcome classifier for tests + observability. */
@@ -141,9 +143,23 @@ export async function handleFetch(request: Request, deps: SwrDeps): Promise<Hand
   if (request.cache === 'no-store') directive = 'no-store';
   else if (directive === 'default' && (request.cache === 'no-cache' || request.cache === 'reload'))
     directive = 'no-cache';
-  if (deps.isOnline() && directive !== 'default') {
+  if (directive === 'no-store' || (deps.isOnline() && directive !== 'default')) {
     return handleDirective(directive, request, rl, deps);
   }
+
+  if (deps.strategy === 'network-first' && deps.isOnline()) {
+    try {
+      return await forcedRevalidate(request, rl, deps);
+    } catch (error) {
+      // Explicit freshness, abort and session failures must never become stale
+      // success. Only transport TypeErrors admit an offline fallback.
+      if (directive !== 'default' || request.signal.aborted || !(error instanceof TypeError))
+        throw error;
+      return handleCachePath(request, rl, { ...deps, isOnline: () => false });
+    }
+  }
+  if (deps.strategy === 'network-first' && directive === 'no-cache')
+    throw new Error('Offline read requires revalidation');
 
   // 4. The normal metadata-first stale-while-revalidate cache path.
   return handleCachePath(request, rl, deps);
@@ -292,6 +308,7 @@ async function forcedRevalidate(
     const result = await finalizeForced(rl, fresh, deps);
     if (
       (fresh.status >= 200 && fresh.status < 300) ||
+      fresh.status === 401 ||
       fresh.status === 403 ||
       fresh.status === 404
     ) {
@@ -392,7 +409,10 @@ async function finalizeForced(
   // 1xx/3xx (or any non-authoritative blip): don't touch the cache; hand the
   // network answer back as-is. Only 2xx/403/404 are authoritative about content.
   const authoritative =
-    (fresh.status >= 200 && fresh.status < 300) || fresh.status === 403 || fresh.status === 404;
+    (fresh.status >= 200 && fresh.status < 300) ||
+    fresh.status === 401 ||
+    fresh.status === 403 ||
+    fresh.status === 404;
   if (!authoritative) {
     return {
       response: withCacheProvenance(fresh, 'miss'),
@@ -622,7 +642,7 @@ async function revalidate(
         // corrective), then go through `classifyResponse`: a cacheable 403/404 leaves a
         // single negative entry (offline parity, #8); a no-store/private 403/404 caches
         // nothing. Either way no stale positive variant survives.
-        if (fresh.status === 403 || fresh.status === 404) {
+        if (fresh.status === 401 || fresh.status === 403 || fresh.status === 404) {
           const decision = classifyResponse(rl, resLike(fresh));
           await purgeAllVariants(rl.url, deps);
           if (decision.cacheable) {
