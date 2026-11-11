@@ -3,11 +3,18 @@
 import { createIdTokenVerifier } from "./auth.js";
 import { nodeHandler } from "./node.js";
 import { createRelayOutboundFetch, isTestOutboundFetch } from "./outbound.js";
-import type { PushSink } from "./push.js";
+import { configuredDelivery } from "./push-config.js";
+import type { DeliveryOptions } from "./push-delivery.js";
+import type { PushSink } from "./push-payload.js";
 import { createRelay } from "./relay.js";
 import type { RelayStore } from "./store.js";
 
-type RelayDependencies = { outboundFetch?: typeof fetch; store?: RelayStore; pushSink?: PushSink };
+type RelayDependencies = {
+  outboundFetch?: typeof fetch;
+  store?: RelayStore;
+  pushSink?: PushSink;
+  onInvalid?: DeliveryOptions["onInvalid"];
+};
 
 /** Deployment configuration is explicit and fails closed when trust is missing. */
 export function configuredRelay(
@@ -18,13 +25,14 @@ export function configuredRelay(
   if (!publicUrl || !env.RELAY_ID_TOKEN_AUDIENCE || !env.RELAY_TRUSTED_ISSUERS)
     throw new Error("Configure relay public URL, ID token audience and trusted issuers");
   const fetch = dependencies.outboundFetch ?? createRelayOutboundFetch();
+  const deliverySink = configuredDelivery(env, dependencies.onInvalid, fetch);
   const relay = createRelay({
     publicUrl,
     fetch,
     allowInsecureLoopback: isTestOutboundFetch(fetch),
     mobileClientId: env.RELAY_MOBILE_CLIENT_ID,
     store: dependencies.store,
-    pushSink: dependencies.pushSink,
+    pushSink: dependencies.pushSink ?? deliverySink,
     verifyIdToken: createIdTokenVerifier({
       audience: env.RELAY_ID_TOKEN_AUDIENCE,
       issuers: JSON.parse(env.RELAY_TRUSTED_ISSUERS),
@@ -32,7 +40,16 @@ export function configuredRelay(
     }),
     allowedOrigins: env.RELAY_ALLOWED_ORIGINS?.split(","),
   });
-  return { ...relay, handler: nodeHandler(relay, publicUrl) };
+  return {
+    ...relay,
+    handler: nodeHandler(relay, publicUrl),
+    /** Integrator: set deliverySink.options.onInvalid = push.invalidate when composing routes. */
+    deliverySink,
+    close() {
+      relay.close();
+      deliverySink?.close();
+    },
+  };
 }
 
 /** Both deployment entry points use this gate; production never accepts a test transport. */
