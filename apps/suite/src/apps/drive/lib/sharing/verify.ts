@@ -1,9 +1,10 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 5.5
 // Independent re-read of the access documents the SDK role layer just fetched. The SDK's
 // readGrants drops every principal whose modes map to no role (public Read+Append, Write
-// without Read, …) and reads a folder's own rules without its acl:default /
-// acp:memberAccessControl rules. Neither may let Drive claim that access is narrower than
-// it is, so this module re-derives the raw effective modes with the SDK's neutral readers
+// without Read, …). Unequal folder/member scope is refused by the role layer.
+// Drive still independently checks every projected principal so its access summary cannot
+// claim narrower access than the raw rules, using the SDK's neutral readers
 // (readWac/readAcp) and refuses anything the role projection did not account for.
 import { parseRdf } from "@jeswr/fetch-rdf";
 import { type Mode, readAcp, readWac, type Subject } from "@jeswr/pod-access";
