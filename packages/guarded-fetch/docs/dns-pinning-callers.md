@@ -39,12 +39,12 @@ The complete file inventory is below; manifest/build-script references were also
 | `packages/pod-connectors` | Portable and Node scope, redirect and snapshot helpers only. No SSRF transport constructed. No change. |
 | `packages/rxdb-solid` | Portable scope and snapshot helpers/re-exports only. No change. |
 | `packages/solid-agent-card` | Lazy Node default already pinned. Node chunk and inline build already declare/externalize undici. No change. |
-| `packages/solid-agent-notify` | Node egress already pinned. Browser authenticated client explicitly requires a `pinningFetch` on Node and accepts unresolved hosts only in a real browser. Address shim is utility-only. No change. |
+| `packages/solid-agent-notify` | Node egress already pinned. Browser authenticated client explicitly requires a `pinningFetch` on Node and accepts unresolved hosts only in a real browser. Address shim is utility-only. Round 2 adds `pinningFetch: transport` to the redirect-test mock (inert, no sockets). |
 | `packages/solid-api-auth` | Lazy Node WebID fetch already pinned; inline build already declares/externalizes undici. No change. |
 | `packages/solid-community-feeds` | Default is already Node-pinned. Injected FetchLike has no dispatcher contract and owns its SSRF policy; its existing DNS-less exception now explicitly sets `requireDnsPinning: false` with a reason. Validator remains real-DNS and creates no socket. |
 | `packages/solid-components` | Lazy root remote-shape fetch now automatically pins on Node; browsers retain their DNS-less policy. Guarded-fetch stays an optional external peer, so its own undici dependency resolves in Node. Data writer loads scope helpers only. No change. |
-| `packages/solid-dav-bridge` | Lazy Node remote fetch already pinned; ingestion uses scope helpers. Guarded-fetch dependency supplies undici. No change. |
-| `packages/solid-granary` | Lazy Node remote fetch already pinned; guarded-fetch dependency supplies undici. No change. |
+| `packages/solid-dav-bridge` | Lazy Node remote fetch already pinned; ingestion uses scope helpers. Guarded-fetch dependency supplies undici. Round 2 attests both inert redirect fixture transports. |
+| `packages/solid-granary` | Lazy Node remote fetch already pinned; guarded-fetch dependency supplies undici. Round 2 attests the inert redirect fixture transport. |
 | `packages/solid-mcp` | Node client-credentials uses `assertSafeUrl` for validation and `createPinningDispatcher` for transport. Undici available; standalone validation does not need a dispatcher. Other imports are scope/container helpers. No change. |
 | `packages/solid-memory` | Portable scope helpers only. No change. |
 | `packages/solid-pod-guard` | Lazy Node owner fetches already pinned; guarded-fetch dependency supplies undici. No change. |
@@ -53,6 +53,94 @@ The complete file inventory is below; manifest/build-script references were also
 | `packages/suite-sdk` | Portable scope/normalization/redirect helpers only. No change. |
 | `packages/unstorage-solid` | Portable scope, redirect and snapshot helpers/re-exports only. No change. |
 | `packages/y-solid` | Portable scope/normalization/container helpers/re-exports only. No change. |
+
+## Round 2: effective proxies and custom-fetch decisions
+
+Re-audited 2026-11-11 with `rg` across **every** package/app/tool importing the root entry,
+including federation-client's local re-export and fixture re-exports. Inspected guard factory
+calls with the TypeScript parser, including object spreads and dynamic imports. No tool
+constructs a custom root guard. Plain scope/redirect/snapshot helpers do not invoke SSRF
+transports and require no pinning attestation.
+
+The Node entry has always owned its per-request Agent, so global dispatchers remain outside
+its policy. Both entries now refuse only **effective** environment proxies: a URL selected
+for the target scheme with `NODE_USE_ENV_PROXY=1` or `--use-env-proxy` in `NODE_OPTIONS` /
+`process.execArgv`, after target-specific `NO_PROXY` exclusions. Bare HTTP(S)/ALL_PROXY values
+are inert. The root additionally checks non-default global dispatchers. Proxy refusals on
+the Node entry direct callers to the **root** entry for opt-out/custom pinning; the Node
+entry itself cannot opt out. This restores ordinary Node callers (mcp-oauth, mcp-server,
+notification-relay, solid-vc, solid-pod-guard, agent-channels, solid-agent-notify and the other
+Node rows below) in environments that merely export proxy URLs.
+
+Every custom root SSRF transport is accounted for here. Test transports are inert and open
+no sockets; their attestation exercises guard policy without pretending an arbitrary
+production authenticated fetch pins DNS.
+
+| Caller(s), relative to workspace root | Decision |
+| --- | --- |
+| `packages/solid-agent-notify/src/security/guardedFetch.redirect.test.ts` | **Fixed:** the Node-entry mock passes `pinningFetch: transport` alongside its injected `fetch` and DNS. All redirect assertions must reach the fixture. |
+| `packages/solid-granary/test/remote.test.ts` | **Fixed:** attests the inert redirect fixture with `pinningFetch`. |
+| `packages/solid-dav-bridge/test/remote.test.ts` | **Fixed:** both redirect fixtures use `pinningFetch`, retaining cross-origin credential stripping and metadata refusal. |
+| `packages/federation-client/src/registry.ts` (`guardedFetchFor`) | Keep strict Node default; callers of `discoverFromRegistry` / `resolveStorageSpecVersion` with custom `fetch` must pass `guard.pinningFetch`, or explicitly accept rebinding via `guard.requireDnsPinning: false`. Never attest `options.fetch` automatically. The package README/SKILL already document this contract. |
+| `packages/federation-client/test/registry.test.ts` | Existing `STUB_GUARD` explicitly opts inert RDF fixtures out with a no-socket reason. |
+| `packages/federation-client/test/ssrf.test.ts`, `test/ssrf-no-regression.adversarial.test.ts` | Existing `pinningFetch` fixtures; plain `fetch` cases deliberately test refusal, IP literals, or explicit weaker opt-outs. |
+| `packages/federation-client/test/ssrf-dns-fallback.test.ts` | Existing plain-fetch cases exercise DNS-less refusal, positively identified browsers, and public IP literals. These are deliberate policy cases; no blanket attestation or opt-out. |
+| `packages/solid-agent-notify/src/security/clientFetch.ts` | Requires explicit `options.pinningFetch` on Node; plain authenticated fetch remains refused. Do not auto-attest it. Browser-only unresolved policy is unchanged. |
+| `packages/agent-channels/src/origins.ts` | Existing outer `pinningFetch` delegates to its Node-pinned inner transport. |
+| `packages/agent-channels/test/origins.test.ts`, `test/send-authority.test.ts`, `test/graph-mail.test.ts` (and `test/fixtures/matrix.ts` re-export) | Existing inert `pinningFetch` fixtures; retained. |
+| `packages/agent-executor/test/channels.test.ts` | Existing inert `pinningFetch` fixture; retained. This consumer reaches the root factory through the channel fixture seam. |
+| `packages/mcp-oauth/src/clients.test.ts` | Existing inert `pinningFetch` fixture; retained. |
+| `apps/notification-relay/src/outbound.test.ts` | Custom transport targets only IP literals, which have no DNS rebinding window. Existing `requireDnsPinning: true` is retained. |
+| `packages/solid-community-feeds/src/safeFetch.ts` | Existing `INJECTED_FETCH_GUARD_OPTIONS.requireDnsPinning: false` documents that injected FetchLike owns DNS/SSRF policy and cannot consume an undici dispatcher. Default remains Node-pinned. |
+| `apps/coeliac/src/lib/fetch/guarded.ts` | Existing explicit `requireDnsPinning: false`: browser-owned DNS and Fetch-only transport. |
+| `apps/issues/src/lib/announce.ts` | Existing explicit browser opt-out; `guardOptions` can supply Node pinning when used outside a browser. |
+| `apps/pod-docs/src/type-index.ts` | Existing explicit opt-out: portable browser/session transport owns DNS and opaque redirects. |
+
+Default root transports in `agent-model-gateway` and `solid-components` inject no custom
+`fetch`, so they keep built-in pinning. All `/node` imports retain mandatory pinning.
+
+### Round 2 validation
+
+Ran each caller file separately with `--coverage.enabled=false --maxWorkers=1
+--no-file-parallelism` on Node 24; where a package had no local Vitest bin, used the root
+runner with `--root <project>`. Dependency-first Turbo builds were attempted before testing.
+
+| Project | Individually run files and outcome |
+| --- | --- |
+| `guarded-fetch` | `test/node-request-snapshot.test.ts`: **108 passed**, including pristine installed/default Node dispatchers, inactive/active proxy variables, all three activation sources, NO_PROXY domains/ports/IP literals, redirects, and changes at the authority fence. The 19 files without socket-binding requirements pass **913 tests** in total. |
+| `solid-agent-notify` | `src/security/guardedFetch.redirect.test.ts` **8**, `src/security/clientFetch.test.ts` **3**, `src/client.test.ts` **56**, `src/inbox-client.test.ts` **36**: all pass. |
+| `solid-dav-bridge`, `solid-granary` | Each `test/remote.test.ts`: **17 passed**. |
+| `federation-client` | `test/registry.test.ts` **16**, `test/ssrf.test.ts` **87**, `test/ssrf-dns-fallback.test.ts` **8**, `test/ssrf-no-regression.adversarial.test.ts` **5**, `test/node-dist.test.ts` **2**: all pass. |
+| `mcp-oauth` | `src/clients.test.ts`: **60 passed**. |
+| `notification-relay` | `src/outbound.test.ts`: **4 passed**. |
+| `solid-community-feeds` | `test/safeFetch.test.ts`: **64 passed**. |
+| `issues` | `src/lib/announce.test.ts`: **35 passed**. |
+| `coeliac` | `src/lib/off/off.test.ts` **9**, `src/lib/knowledge/fetch.test.ts` **10**: both pass. |
+| `pod-docs` | `src/type-index.test.ts` **44**, `src/type-index-browser.test.ts` **33**, `src/type-index-identity.test.ts` **35**: all pass. |
+| `solid-components` | `test/shacl-view-fetch.test.ts`: **25 passed**. |
+| `agent-channels` | `test/origins.test.ts`: **41 passed**, 10 socket tests fail because this sandbox denies `listen` with EPERM. `test/send-authority.test.ts` and `test/graph-mail.test.ts` cannot collect without the package's built exports. |
+| `agent-executor` | `test/channels.test.ts` cannot collect without built `@jeswr/agent-channels/discord/send` exports. |
+| `agent-model-gateway` | `test/gateway.test.ts` cannot collect without built `@jeswr/agentic-legacy-bridge/metadata` exports. |
+
+Fail-first evidence: the new offline proxy/dispatcher expectations initially produced
+**42 failures / 48 passes** against the previous transport. The notify redirect mock
+initially failed all **8** tests before pinning attestation; DAV and Granary each had
+**1 failing / 16 passing** remote tests. These files now pass. The real socket regression
+suite cannot start here (`listen EPERM`); its IPv6-only case now skips specifically when
+binding `::1` reports EAFNOSUPPORT, EADDRNOTAVAIL or EPROTONOSUPPORT.
+
+The broad dependency build stops at the existing `packages/ldp-container/src/listing.ts:37`
+TS2339 (`ListingMemberWrapper.types`), leaving some downstream artifacts unavailable.
+These blocked caller files still need a run in CI with built workspace exports and socket
+binding enabled.
+
+Edited-code Biome checks and guarded-fetch typecheck pass. The requested
+`pnpm turbo run lint build typecheck test --filter=...@jeswr/guarded-fetch --concurrency=4
+--output-logs=errors-only` exits **2** at the unrelated `@jeswr/app-session` build
+(TS2688: missing `@testing-library/jest-dom`, package node_modules absent).
+The required `pnpm run gate:full` also exits **2**, at `@jeswr/suite-charts`' missing
+React/JSX dependencies. No out-of-scope source or dependency changes were made for these
+checkout failures.
 
 ## Complete import inventory
 

@@ -426,6 +426,7 @@ class SsrfGuard {
         try {
           fetcher = await this.waitFor(
             preparePinnedTransport({
+              url: currentUrl,
               hostname: target.hostname,
               lookup: validatingLookup(
                 async () => target.addresses,

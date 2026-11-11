@@ -25,13 +25,21 @@ A caller-supplied `fetch` cannot prove that it honours a dispatcher. Require the
 `pinningFetch` attestation for Node hostname requests, or an explicit
 `requireDnsPinning: false` with a comment explaining why the weaker validation/connect
 posture is necessary. Do not brand an arbitrary authenticated fetch as pinning.
-The built-in transport must refuse proxy environment variables (HTTP_PROXY, HTTPS_PROXY,
-ALL_PROXY and lowercase forms), NODE_USE_ENV_PROXY=1 / --use-env-proxy, and non-default global
-undici dispatchers, including ProxyAgent and custom CA/TLS/connect options. Apply the same
-configuration refusal to Node IP literals. A direct Agent must not silently bypass egress
-policy; CONNECT proxies cannot pin the upstream destination. Tell callers to use the root
-entry with `requireDnsPinning: false`, or provide their own attested `pinningFetch`.
-A pristine default-configured Agent is accepted; unknown dispatcher shapes fail closed.
+The built-in transport must refuse an effective environment proxy for the target:
+HTTP_PROXY, HTTPS_PROXY, ALL_PROXY and lowercase forms count only with NODE_USE_ENV_PROXY=1
+or --use-env-proxy in process.execArgv / NODE_OPTIONS. Honour target scheme, NO_PROXY/no_proxy
+hostname/domain/port exclusions and redirect targets. Isolate proxy environment variables
+with vi.stubEnv in transport tests. Bare proxy variables and activation without a proxy URL
+must not refuse requests. Apply these checks to Node IP literals too.
+The root entry additionally refuses non-default global undici dispatchers, including
+ProxyAgent and custom CA/TLS/connect options. The Node entry has always used its own Agent;
+it ignores global dispatchers and checks only effective environment proxy policy.
+A direct Agent must not silently bypass effective env egress policy; CONNECT proxies cannot
+pin the upstream destination. Tell callers to use the root entry with
+requireDnsPinning: false, or provide their own attested pinningFetch to the root entry.
+The Node entry always pins: its refusal must not suggest setting requireDnsPinning: false
+there. A pristine default-configured Agent is accepted; unknown root dispatcher shapes fail
+closed. Keep the installed-undici default-dispatcher regression as an upgrade canary.
 Use the Node entry's explicit `ca` option for private trust. Keep multipart uploads replayable:
 copy foreign FormData into undici's realm without changing caller headers or stream/duplex rules.
 

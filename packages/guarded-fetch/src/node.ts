@@ -330,6 +330,8 @@ export function createNodeGuardedFetch(options: NodePinningOptions = {}): typeof
     const requireLoopbackOnly = safeIsHttp(urlStr) && allowLoopback;
     const lookup = createValidatingLookup(resolveAll, allowLoopback, requireLoopbackOnly);
     return createPinnedTransport(undici, {
+      url: urlStr,
+      entry: "node",
       hostname: new URL(urlStr).hostname.replace(/^\[|\]$/g, ""),
       lookup,
       ca,

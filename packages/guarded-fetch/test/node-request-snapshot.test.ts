@@ -43,11 +43,25 @@ vi.mock("undici", async (importOriginal) => {
   };
 });
 
-import { assertSafeUrl, createGuardedFetch } from "../src/index.js";
+import { assertSafeUrl, createGuardedFetch, SsrfError } from "../src/index.js";
 import { createNodeGuardedFetch } from "../src/node.js";
 
 beforeEach(() => {
   transport.mockReset();
+  for (const name of [
+    "HTTP_PROXY",
+    "http_proxy",
+    "HTTPS_PROXY",
+    "https_proxy",
+    "ALL_PROXY",
+    "all_proxy",
+    "NO_PROXY",
+    "no_proxy",
+    "NODE_USE_ENV_PROXY",
+    "NODE_OPTIONS",
+  ])
+    vi.stubEnv(name, undefined);
+  vi.stubGlobal("process", Object.assign(Object.create(process), { execArgv: [] }));
 });
 
 it.each([
@@ -313,7 +327,7 @@ for (const [entry, factory] of Object.entries({
     "proxy",
     "tls",
     "factory",
-  ])(`${entry}: refuses non-default global %s dispatchers before sending`, async (kind) => {
+  ])(`${entry}: handles non-default global %s dispatchers according to the entry policy`, async (kind) => {
     const dispatcher =
       kind === "proxy"
         ? new ProxyAgent("http://proxy.invalid")
@@ -326,17 +340,33 @@ for (const [entry, factory] of Object.entries({
             });
     setGlobalDispatcher(dispatcher);
     try {
-      for (const host of ["pod.example", "1.1.1.1"])
-        await expect(factory()(`https://${host}/item`)).rejects.toThrow(
-          /requireDnsPinning: false.*pinningFetch/,
-        );
+      for (const host of ["pod.example", "1.1.1.1"]) {
+        const request = factory()(`https://${host}/item`);
+        if (entry === "root")
+          await expect(request).rejects.toThrow(/requireDnsPinning: false.*pinningFetch/);
+        else expect((await request).status).toBe(200);
+      }
       await expect(
         assertSafeUrl("https://pod.example/", {
           dnsLookup: async () => [{ address: "1.1.1.1", family: 4 }],
           requireDnsPinning: true,
         }),
       ).resolves.toBeUndefined();
-      expect(transport).not.toHaveBeenCalled();
+      expect(transport).toHaveBeenCalledTimes(entry === "root" ? 0 : 2);
+    } finally {
+      setGlobalDispatcher(originalDispatcher);
+      await dispatcher.close();
+    }
+  });
+
+  it("accepts a pristine default dispatcher (undici upgrade canary)", async () => {
+    // Also check Node's bundled dispatcher after native Fetch initializes it.
+    expect(await (await globalThis.fetch("data:text/plain,ok")).text()).toBe("ok");
+    expect((await factory()("https://pod.example/item")).status).toBe(200);
+    const dispatcher = new Agent();
+    setGlobalDispatcher(dispatcher);
+    try {
+      expect((await factory()("https://pod.example/item")).status).toBe(200);
     } finally {
       setGlobalDispatcher(originalDispatcher);
       await dispatcher.close();
@@ -344,31 +374,150 @@ for (const [entry, factory] of Object.entries({
   });
 
   it.each([
-    "HTTPS_PROXY",
-    "https_proxy",
     "HTTP_PROXY",
     "http_proxy",
+    "HTTPS_PROXY",
+    "https_proxy",
     "ALL_PROXY",
     "all_proxy",
-    "NODE_USE_ENV_PROXY",
-    "NODE_OPTIONS",
-    "execArgv",
-  ])(`${entry}: refuses proxy configuration through %s`, async (name) => {
-    if (name === "execArgv")
-      vi.stubGlobal("process", { ...process, execArgv: ["--use-env-proxy"] });
-    else
-      vi.stubEnv(
-        name,
-        name === "NODE_OPTIONS"
-          ? "--use-env-proxy"
-          : name === "NODE_USE_ENV_PROXY"
-            ? "1"
-            : "http://secret:credential@proxy.invalid",
+  ])("ignores inactive proxy configuration through %s", async (name) => {
+    vi.stubEnv(name, "http://secret:credential@proxy.invalid:8080");
+    expect((await factory()("https://pod.example/item")).status).toBe(200);
+  });
+
+  it.each([
+    "HTTP_PROXY",
+    "http_proxy",
+    "HTTPS_PROXY",
+    "https_proxy",
+    "ALL_PROXY",
+    "all_proxy",
+  ])("refuses active %s for hostnames and IP literals", async (name) => {
+    vi.stubEnv("NODE_USE_ENV_PROXY", "1");
+    vi.stubEnv(name, "http://secret:credential@proxy.invalid:8080");
+    for (const host of ["pod.example", "1.1.1.1", "[2606:4700:4700::1111]"]) {
+      await expect(factory()(`https://${host}/item`)).rejects.toThrow(
+        /configured proxy|effective environment proxy/,
       );
-    await expect(factory()("https://pod.example/item")).rejects.toThrow(
-      /requireDnsPinning: false.*pinningFetch/,
+    }
+    expect(transport).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    "1.1.1.1:443",
+    "[2606:4700:4700::1111]:443",
+  ])("honours NO_PROXY=%s for IP literals", async (literal) => {
+    vi.stubEnv("NODE_USE_ENV_PROXY", "1");
+    vi.stubEnv("HTTPS_PROXY", "http://proxy.invalid:8080");
+    vi.stubEnv("NO_PROXY", literal);
+    expect((await factory()(`https://${literal}/item`)).status).toBe(200);
+  });
+
+  it.each([
+    "env",
+    "options",
+    "argv",
+  ])("ignores %s proxy activation without a proxy URL", async (activation) => {
+    if (activation === "env") vi.stubEnv("NODE_USE_ENV_PROXY", "1");
+    else if (activation === "options") vi.stubEnv("NODE_OPTIONS", "--use-env-proxy");
+    else
+      vi.stubGlobal(
+        "process",
+        Object.assign(Object.create(process), { execArgv: ["--use-env-proxy"] }),
+      );
+    expect((await factory()("https://pod.example/item")).status).toBe(200);
+  });
+
+  it.each([
+    "env",
+    "options",
+    "argv",
+  ])("refuses an effective proxy activated through %s before opening a socket", async (activation) => {
+    vi.stubEnv("HTTP_PROXY", "http://secret:credential@proxy.invalid:8080");
+    if (activation === "env") vi.stubEnv("NODE_USE_ENV_PROXY", "1");
+    else if (activation === "options") vi.stubEnv("NODE_OPTIONS", "--use-env-proxy");
+    else
+      vi.stubGlobal(
+        "process",
+        Object.assign(Object.create(process), { execArgv: ["--use-env-proxy"] }),
+      );
+    const count = transport.mock.calls.length;
+    const error = await factory()("https://pod.example/item").catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(Error);
+    expect(String(error)).not.toMatch(/secret|credential/);
+    expect(String(error)).toMatch(
+      entry === "node" ? /Node entry.*root entry/ : /requireDnsPinning: false.*pinningFetch/,
+    );
+    expect(transport).toHaveBeenCalledTimes(count);
+  });
+
+  it.each([
+    "*",
+    "POD.EXAMPLE",
+    ".example",
+    "*.example",
+    "other.test, pod.example",
+    "other.test pod.example",
+    "port",
+  ])("honours NO_PROXY=%s for this target", async (exclusion) => {
+    vi.stubEnv("NODE_USE_ENV_PROXY", "1");
+    vi.stubEnv("HTTP_PROXY", "http://secret:credential@proxy.invalid:8080");
+    vi.stubEnv("NO_PROXY", exclusion === "port" ? "pod.example:443" : exclusion);
+    expect((await factory()("https://pod.example/item")).status).toBe(200);
+  });
+
+  it.each([
+    "other.test",
+    "inned.test",
+    "pod.example.invalid",
+    "port",
+  ])("does not bypass the proxy for NO_PROXY=%s", async (exclusion) => {
+    vi.stubEnv("NODE_USE_ENV_PROXY", "1");
+    vi.stubEnv("HTTP_PROXY", "http://secret:credential@proxy.invalid:8080");
+    vi.stubEnv("NO_PROXY", exclusion === "port" ? "pod.example:444" : exclusion);
+    const count = transport.mock.calls.length;
+    await expect(factory()("https://pod.example/item")).rejects.toBeInstanceOf(SsrfError);
+    expect(transport).toHaveBeenCalledTimes(count);
+  });
+
+  it("honours lowercase no_proxy precedence", async () => {
+    vi.stubEnv("NODE_USE_ENV_PROXY", "1");
+    vi.stubEnv("http_proxy", "http://secret:credential@proxy.invalid:8080");
+    vi.stubEnv("NO_PROXY", "other.test");
+    vi.stubEnv("no_proxy", "pod.example");
+    expect((await factory()("https://pod.example/item")).status).toBe(200);
+  });
+
+  it("rechecks effective proxy configuration after the authority fence", async () => {
+    const options = {
+      dnsLookup: async () => [{ address: "1.1.1.1", family: 4 }],
+      resolveAll: async () => [{ address: "1.1.1.1", family: 4 }],
+      beforeDispatch: () => {
+        vi.stubEnv("NODE_USE_ENV_PROXY", "1");
+        vi.stubEnv("HTTPS_PROXY", "http://proxy.invalid:8080");
+      },
+    };
+    const guarded =
+      entry === "node" ? createNodeGuardedFetch(options) : createGuardedFetch(options);
+    await expect(guarded("https://pod.example/item")).rejects.toThrow(
+      /configured proxy|effective environment proxy/,
     );
     expect(transport).not.toHaveBeenCalled();
+  });
+
+  it("rechecks NO_PROXY for each redirect target", async () => {
+    vi.stubEnv("NODE_USE_ENV_PROXY", "1");
+    vi.stubEnv("HTTP_PROXY", "http://secret:credential@proxy.invalid:8080");
+    vi.stubEnv("NO_PROXY", "pod.example");
+    transport.mockResolvedValueOnce(
+      new Response(null, {
+        status: 302,
+        headers: { location: "https://other.example/" },
+      }),
+    );
+    const count = transport.mock.calls.length;
+    await expect(factory()("https://pod.example/redirect")).rejects.toBeInstanceOf(SsrfError);
+    expect(transport).toHaveBeenCalledTimes(count + 1);
   });
 }
 

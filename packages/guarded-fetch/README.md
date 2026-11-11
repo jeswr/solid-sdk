@@ -59,18 +59,25 @@ This opt-out restores separate validation/connect DNS lookups; private answers a
 validation time are still refused, but a rebinding answer at connect time can bypass
 that check. `allowUnresolvedHosts` does not disable Node pinning; forcing `dnsLookup: null`
 on a Node server also requires a pinning transport or the explicit weaker opt-out.
-The built-in transport refuses configured proxy environment variables (`HTTP_PROXY`,
-`HTTPS_PROXY`, `ALL_PROXY` and their lowercase forms), `NODE_USE_ENV_PROXY=1`,
-`--use-env-proxy` (including in `NODE_OPTIONS`), and non-default undici global dispatchers
-such as `ProxyAgent`, `EnvHttpProxyAgent` or an Agent with custom CA/TLS/connect settings.
-A direct pinned Agent would bypass that configuration; a CONNECT proxy resolves the
-upstream hostname itself, so this transport cannot pin that destination. This refusal
-also applies to IP literals, consistently in both entries. A pristine default-configured
-Agent is accepted; unrecognised dispatcher configurations fail closed. To preserve a
-proxy or custom dispatcher, use the root entry with the explicit
-`requireDnsPinning: false` opt-out, or supply a `pinningFetch` that implements the required
-egress and destination policy itself. The Node entry always pins; its `ca` option supplies
-private trust without relying on a global dispatcher.
+Environment proxy URLs (`HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY` and lowercase forms)
+are effective only with `NODE_USE_ENV_PROXY=1` or `--use-env-proxy` in `process.execArgv`
+or `NODE_OPTIONS`. Bare proxy variables do not block requests. The built-in transport
+refuses an effective proxy for the target scheme unless `NO_PROXY` (lowercase `no_proxy`
+takes precedence) excludes that target. Exclusions support `*`, case-insensitive host/domain
+names, leading `.` / `*.` and optional ports; redirects are checked against their own target.
+A direct pinned Agent would bypass an effective proxy; a CONNECT proxy resolves the
+upstream hostname itself, so this transport cannot pin that destination. These checks
+also apply to IP literals.
+
+The root entry additionally refuses non-default undici global dispatchers such as
+`ProxyAgent`, `EnvHttpProxyAgent` or an Agent with custom CA/TLS/connect settings, rather
+than silently discarding that configuration. A pristine default-configured Agent is
+accepted; unrecognised dispatcher configurations fail closed. The Node entry has always
+used its own Agent and continues to ignore the global dispatcher; only effective environment
+proxies block it. Use its `ca` option for private trust. To preserve a proxy or custom global
+dispatcher, switch to the root entry with the explicit `requireDnsPinning: false` opt-out,
+or supply the root entry with a `pinningFetch` that implements the required egress and
+destination policy itself. The Node entry always pins and cannot opt out.
 
 Bun (`process.versions.bun`) and Deno (`globalThis.Deno`) cannot use the built-in pinning
 transport: hostname requests fail closed even when Node compatibility DNS APIs exist.

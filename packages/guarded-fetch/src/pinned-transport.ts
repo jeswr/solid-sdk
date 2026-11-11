@@ -9,6 +9,8 @@ type Transport = Pick<
   "Agent" | "fetch" | "FormData" | "getGlobalDispatcher"
 >;
 interface PinOptions {
+  readonly url: string;
+  readonly entry?: "node";
   readonly hostname: string;
   readonly lookup: ConnectLookup;
   readonly ca?: string | Buffer | Array<string | Buffer>;
@@ -25,7 +27,11 @@ export function pinningRuntimeUnavailable(): boolean {
   );
 }
 
-function configurationRefusal(): SsrfError {
+function configurationRefusal(entry?: "node"): SsrfError {
+  if (entry === "node")
+    return new SsrfError(
+      "DNS pinning in the Node entry cannot preserve an effective environment proxy. Use the root entry with requireDnsPinning: false, or supply pinningFetch to the root entry.",
+    );
   return new SsrfError(
     "DNS pinning cannot preserve a configured proxy or non-default global dispatcher (including TLS settings). Explicitly set requireDnsPinning: false or supply pinningFetch.",
   );
@@ -79,25 +85,44 @@ function dispatcherGlobals(): { legacy: unknown; current: unknown } {
   };
 }
 
+/** Match undici's env-proxy hostname/domain/port exclusions, without opening a proxy. */
+function hasEffectiveEnvProxy(url: URL): boolean {
+  if (typeof process === "undefined") return false;
+  const env = process.env ?? {};
+  const enabled =
+    env.NODE_USE_ENV_PROXY === "1" ||
+    /(?:^|\s|")--use-env-proxy(?=\s|$|")/.test(env.NODE_OPTIONS ?? "") ||
+    process.execArgv?.includes("--use-env-proxy");
+  if (!enabled) return false;
+  const httpProxy = env.http_proxy ?? env.HTTP_PROXY;
+  const proxy =
+    (url.protocol === "https:" ? (env.https_proxy ?? env.HTTPS_PROXY) || httpProxy : httpProxy) ||
+    (env.all_proxy ?? env.ALL_PROXY);
+  if (!proxy) return false;
+
+  const noProxy = env.no_proxy ?? env.NO_PROXY ?? "";
+  if (noProxy === "*") return false;
+  const hostname = url.hostname.toLowerCase();
+  const port = Number(url.port) || (url.protocol === "https:" ? 443 : 80);
+  return !noProxy.split(/[,\s]/).some((exclusion) => {
+    if (!exclusion) return false;
+    const parsed = exclusion.match(/^(.+):(\d+)$/);
+    if (parsed && Number(parsed[2]) !== port) return false;
+    const host = (parsed ? parsed[1] : exclusion)?.replace(/^\*?\./, "").toLowerCase();
+    return Boolean(host && (hostname === host || hostname.endsWith(`.${host}`)));
+  });
+}
+
 /** Check before loading undici too: its initialization can replace the legacy dispatcher. */
-function assertCompatibleConfiguration(transport?: Transport): void {
+function assertCompatibleConfiguration(options: PinOptions, transport?: Transport): void {
   if (pinningRuntimeUnavailable()) {
     throw new SsrfError(
       "DNS pinning is unavailable in Bun/Deno; explicitly set requireDnsPinning: false or supply pinningFetch.",
     );
   }
-  if (typeof process !== "undefined") {
-    const env = process.env ?? {};
-    if (
-      ["HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy", "ALL_PROXY", "all_proxy"].some(
-        (key) => Boolean(env[key]),
-      ) ||
-      env.NODE_USE_ENV_PROXY === "1" ||
-      /(?:^|\s)--use-env-proxy(?:\s|$)/.test(env.NODE_OPTIONS ?? "") ||
-      process.execArgv?.includes("--use-env-proxy")
-    )
-      throw configurationRefusal();
-  }
+  if (hasEffectiveEnvProxy(new URL(options.url))) throw configurationRefusal(options.entry);
+  // The Node entry has always owned its Agent; global dispatchers are not its policy.
+  if (options.entry === "node") return;
   const { legacy, current } = dispatcherGlobals();
   const active = transport?.getGlobalDispatcher();
   if (
@@ -120,10 +145,10 @@ function assertCompatibleConfiguration(transport?: Transport): void {
 export async function preparePinnedTransport(
   options: PinOptions,
 ): Promise<typeof globalThis.fetch> {
-  assertCompatibleConfiguration();
+  assertCompatibleConfiguration(options);
   transportModule ??= import(/* @vite-ignore */ UNDICI_SPECIFIER);
   const transport = await transportModule;
-  assertCompatibleConfiguration(transport);
+  assertCompatibleConfiguration(options, transport);
   return createPinnedTransport(transport, options);
 }
 
@@ -133,7 +158,7 @@ export function createPinnedTransport(
   options: PinOptions,
 ): typeof globalThis.fetch {
   return (async (input: RequestInfo | URL, init?: RequestInit) => {
-    assertCompatibleConfiguration(transport);
+    assertCompatibleConfiguration(options, transport);
     let lookupCalled = false;
     const lookup: ConnectLookup = (hostname, lookupOptions, callback) => {
       // Keep dns.lookup's asynchronous callback contract, including mismatch refusals.

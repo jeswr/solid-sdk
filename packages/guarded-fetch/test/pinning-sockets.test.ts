@@ -8,7 +8,7 @@ import {
   ProxyAgent,
   setGlobalDispatcher,
 } from "undici";
-import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { createGuardedFetch, type DnsLookup, SsrfError } from "../src/index.js";
 import { createNodeGuardedFetch } from "../src/node.js";
 
@@ -21,6 +21,10 @@ let requests = 0;
 beforeAll(async () => {
   server = createServer(async (req, res) => {
     requests += 1;
+    if (req.url === "/redirect") {
+      res.writeHead(302, { location: `http://other.test:${port}/` }).end();
+      return;
+    }
     const chunks = [];
     for await (const chunk of req) chunks.push(chunk);
     res.setHeader("content-type", "application/json");
@@ -31,6 +35,23 @@ beforeAll(async () => {
     server.listen(0, "127.0.0.1", resolve);
   });
   port = (server.address() as AddressInfo).port;
+});
+
+beforeEach(() => {
+  for (const name of [
+    "HTTP_PROXY",
+    "http_proxy",
+    "HTTPS_PROXY",
+    "https_proxy",
+    "ALL_PROXY",
+    "all_proxy",
+    "NO_PROXY",
+    "no_proxy",
+    "NODE_USE_ENV_PROXY",
+    "NODE_OPTIONS",
+  ])
+    vi.stubEnv(name, undefined);
+  vi.stubGlobal("process", Object.assign(Object.create(process), { execArgv: [] }));
 });
 
 afterEach(() => {
@@ -127,39 +148,64 @@ for (const [entry, factory] of Object.entries(factories)) {
     it.each([
       "hostname",
       "literal",
-    ])("refuses a global CONNECT proxy for a %s without opening a direct socket", async (target) => {
+    ])("handles a global CONNECT proxy for a %s according to the entry policy", async (target) => {
       const proxy = new ProxyAgent(`http://127.0.0.1:${port}`);
       setGlobalDispatcher(proxy);
       const count = requests;
       try {
-        await expect(
-          factory()(`http://${target === "hostname" ? "pinned.test" : "127.0.0.1"}:${port}/`),
-        ).rejects.toThrow(/requireDnsPinning: false.*pinningFetch/);
-        expect(requests).toBe(count);
+        const request = factory()(
+          `http://${target === "hostname" ? "pinned.test" : "127.0.0.1"}:${port}/`,
+        );
+        if (entry === "root") {
+          await expect(request).rejects.toThrow(/requireDnsPinning: false.*pinningFetch/);
+          expect(requests).toBe(count);
+        } else {
+          expect((await request).status).toBe(200);
+          expect(requests).toBe(count + 1);
+        }
       } finally {
         setGlobalDispatcher(originalDispatcher);
         await proxy.close();
       }
     });
 
-    it("refuses global Agent TLS settings instead of discarding them", async () => {
+    it("handles global Agent TLS settings according to the entry policy", async () => {
       const dispatcher = new Agent({ connect: { ca: "fixture CA" } });
       setGlobalDispatcher(dispatcher);
       const count = requests;
       try {
-        await expect(factory()(`http://pinned.test:${port}/`)).rejects.toBeInstanceOf(SsrfError);
-        expect(requests).toBe(count);
+        const request = factory()(`http://pinned.test:${port}/`);
+        if (entry === "root") {
+          await expect(request).rejects.toBeInstanceOf(SsrfError);
+          expect(requests).toBe(count);
+        } else {
+          expect((await request).status).toBe(200);
+          expect(requests).toBe(count + 1);
+        }
       } finally {
         setGlobalDispatcher(originalDispatcher);
         await dispatcher.close();
       }
     });
 
-    it("refuses a configured environment-proxy dispatcher", async () => {
+    it("handles a configured environment-proxy dispatcher according to the entry policy", async () => {
       const dispatcher = new EnvHttpProxyAgent({ httpProxy: `http://127.0.0.1:${port}` });
       setGlobalDispatcher(dispatcher);
       try {
-        await expect(factory()(`http://pinned.test:${port}/`)).rejects.toThrow(/requireDnsPinning/);
+        const request = factory()(`http://pinned.test:${port}/`);
+        if (entry === "root") await expect(request).rejects.toThrow(/requireDnsPinning/);
+        else expect((await request).status).toBe(200);
+      } finally {
+        setGlobalDispatcher(originalDispatcher);
+        await dispatcher.close();
+      }
+    });
+
+    it("accepts a pristine default dispatcher (undici upgrade canary)", async () => {
+      const dispatcher = new Agent();
+      setGlobalDispatcher(dispatcher);
+      try {
+        expect((await factory()(`http://pinned.test:${port}/`)).status).toBe(200);
       } finally {
         setGlobalDispatcher(originalDispatcher);
         await dispatcher.close();
@@ -167,22 +213,106 @@ for (const [entry, factory] of Object.entries(factories)) {
     });
 
     it.each([
-      "NODE_USE_ENV_PROXY",
-      "NODE_OPTIONS",
+      "HTTP_PROXY",
+      "http_proxy",
       "HTTPS_PROXY",
       "https_proxy",
-    ])("refuses proxy configuration through %s", async (name) => {
-      vi.stubEnv(
-        name,
-        name === "NODE_USE_ENV_PROXY"
-          ? "1"
-          : name === "NODE_OPTIONS"
-            ? "--use-env-proxy"
-            : "http://proxy.invalid:8080",
-      );
+      "ALL_PROXY",
+      "all_proxy",
+    ])("ignores inactive proxy configuration through %s", async (name) => {
+      vi.stubEnv(name, "http://proxy.invalid:8080");
+      expect((await factory()(`http://pinned.test:${port}/`)).status).toBe(200);
+    });
+
+    it.each([
+      "env",
+      "options",
+      "argv",
+    ])("ignores %s proxy activation without a proxy URL", async (activation) => {
+      if (activation === "env") vi.stubEnv("NODE_USE_ENV_PROXY", "1");
+      else if (activation === "options") vi.stubEnv("NODE_OPTIONS", "--use-env-proxy");
+      else
+        vi.stubGlobal(
+          "process",
+          Object.assign(Object.create(process), { execArgv: ["--use-env-proxy"] }),
+        );
+      expect((await factory()(`http://pinned.test:${port}/`)).status).toBe(200);
+    });
+
+    it.each([
+      "env",
+      "options",
+      "argv",
+    ])("refuses an effective proxy activated through %s before opening a socket", async (activation) => {
+      vi.stubEnv("HTTP_PROXY", "http://proxy.invalid:8080");
+      if (activation === "env") vi.stubEnv("NODE_USE_ENV_PROXY", "1");
+      else if (activation === "options") vi.stubEnv("NODE_OPTIONS", "--use-env-proxy");
+      else
+        vi.stubGlobal(
+          "process",
+          Object.assign(Object.create(process), { execArgv: ["--use-env-proxy"] }),
+        );
       const count = requests;
-      await expect(factory()(`http://pinned.test:${port}/`)).rejects.toThrow(/requireDnsPinning/);
+      const error = await factory()(`http://pinned.test:${port}/`).catch((e: unknown) => e);
+      expect(error).toBeInstanceOf(SsrfError);
+      expect(String(error)).toMatch(
+        entry === "node" ? /Node entry.*root entry/ : /requireDnsPinning: false.*pinningFetch/,
+      );
       expect(requests).toBe(count);
+    });
+
+    it.each([
+      "*",
+      "PINNED.TEST",
+      ".test",
+      "*.test",
+      "other.test, pinned.test",
+      "other.test pinned.test",
+      "port",
+    ])("honours NO_PROXY=%s for this target", async (exclusion) => {
+      vi.stubEnv("NODE_USE_ENV_PROXY", "1");
+      vi.stubEnv("HTTP_PROXY", "http://proxy.invalid:8080");
+      vi.stubEnv("NO_PROXY", exclusion === "port" ? `pinned.test:${port}` : exclusion);
+      expect((await factory()(`http://pinned.test:${port}/`)).status).toBe(200);
+    });
+
+    it.each([
+      "other.test",
+      "inned.test",
+      "pinned.test.invalid",
+      "port",
+    ])("does not bypass the proxy for NO_PROXY=%s", async (exclusion) => {
+      vi.stubEnv("NODE_USE_ENV_PROXY", "1");
+      vi.stubEnv("HTTP_PROXY", "http://proxy.invalid:8080");
+      vi.stubEnv("NO_PROXY", exclusion === "port" ? `pinned.test:${port + 1}` : exclusion);
+      const count = requests;
+      await expect(factory()(`http://pinned.test:${port}/`)).rejects.toBeInstanceOf(SsrfError);
+      expect(requests).toBe(count);
+    });
+
+    it("honours lowercase no_proxy precedence", async () => {
+      vi.stubEnv("NODE_USE_ENV_PROXY", "1");
+      vi.stubEnv("http_proxy", "http://proxy.invalid:8080");
+      vi.stubEnv("NO_PROXY", "other.test");
+      vi.stubEnv("no_proxy", "pinned.test");
+      expect((await factory()(`http://pinned.test:${port}/`)).status).toBe(200);
+    });
+
+    it("ignores HTTPS_PROXY for an HTTP target", async () => {
+      vi.stubEnv("NODE_USE_ENV_PROXY", "1");
+      vi.stubEnv("HTTPS_PROXY", "http://proxy.invalid:8080");
+      expect((await factory()(`http://pinned.test:${port}/`)).status).toBe(200);
+    });
+
+    it("rechecks NO_PROXY for each redirect target", async () => {
+      vi.stubEnv("NODE_USE_ENV_PROXY", "1");
+      vi.stubEnv("HTTP_PROXY", "http://proxy.invalid:8080");
+      vi.stubEnv("NO_PROXY", "pinned.test");
+      const count = requests;
+      await expect(factory()(`http://pinned.test:${port}/redirect`)).rejects.toBeInstanceOf(
+        SsrfError,
+      );
+      expect(requests).toBe(count + 1);
     });
   });
 }
@@ -206,12 +336,24 @@ it("root's explicit weaker opt-out uses the configured global dispatcher", async
   }
 });
 
-it("connects over a real IPv6-only AAAA pin", async () => {
+it("connects over a real IPv6-only AAAA pin", async (context) => {
   const ipv6 = createServer((_req, res) => res.end("ipv6"));
-  await new Promise<void>((resolve, reject) => {
-    ipv6.once("error", reject);
-    ipv6.listen(0, "::1", resolve);
-  });
+  try {
+    await new Promise<void>((resolve, reject) => {
+      ipv6.once("error", reject);
+      ipv6.listen(0, "::1", resolve);
+    });
+  } catch (error) {
+    if (
+      ["EAFNOSUPPORT", "EADDRNOTAVAIL", "EPROTONOSUPPORT"].includes(
+        (error as NodeJS.ErrnoException).code ?? "",
+      )
+    ) {
+      context.skip("IPv6 loopback is unavailable on this host");
+      return;
+    }
+    throw error;
+  }
   try {
     const resolve = async () => [{ address: "::1", family: 6 }];
     for (const factory of Object.values(factories)) {
