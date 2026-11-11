@@ -1,0 +1,26 @@
+{
+  "$comment": "AUTHORED-BY Codex GPT-6.1-Sol",
+  "mcpServers": {
+    "solid-pod": {
+      "type": "http",
+      "url": "${SOLID_MCP_URL}"
+    },
+    "solid-pod-local": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@jeswr/solid-mcp"
+      ],
+      "env": {
+        "SOLID_MCP_POD_ROOT": "${SOLID_MCP_POD_ROOT}",
+        "SOLID_MCP_WEBID": "${SOLID_MCP_WEBID}",
+        "SOLID_MCP_READONLY": "${SOLID_MCP_READONLY}",
+        "SOLID_MCP_CLIENT_ID": "${SOLID_MCP_CLIENT_ID}",
+        "SOLID_MCP_CLIENT_SECRET": "${SOLID_MCP_CLIENT_SECRET}",
+        "SOLID_MCP_OIDC_ISSUER": "${SOLID_MCP_OIDC_ISSUER}",
+        "SOLID_MCP_TOKEN_URL": "${SOLID_MCP_TOKEN_URL}"
+      }
+    }
+  }
+}

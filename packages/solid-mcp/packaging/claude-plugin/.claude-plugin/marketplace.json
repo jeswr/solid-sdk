@@ -1,0 +1,16 @@
+{
+  "name": "solid-suite",
+  "owner": {
+    "name": "Jesse Wright"
+  },
+  "metadata": {
+    "description": "Prepared Solid suite marketplace. AUTHORED-BY Codex GPT-6.1-Sol"
+  },
+  "plugins": [
+    {
+      "name": "solid-pod",
+      "source": "./plugins/solid-pod",
+      "description": "Scoped Solid pod MCP tools and optional session capture."
+    }
+  ]
+}

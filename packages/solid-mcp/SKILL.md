@@ -104,3 +104,22 @@ the target, with no unscoped, malformed or unknown rules; otherwise leave the AC
 untouched and return the fixed protection diagnostic. Read existing ACLs with strong
 ETags and mutate with `If-Match` / `If-None-Match: *`. Test ports explicitly advertise
 WAC metadata via `test/wac-memory-pod.ts`.
+
+## Packaging (prepared, not published)
+
+Keep `packaging/server.json` as the sole registry source. Read `packaging/README.md`
+before changing descriptors or builder/validator scripts. Use the vendored registry
+2025-12-11 and MCPB v0.3 schemas offline. `packaging:check` derives environment names
+from `cli-config.ts`, checks the real loader and compares both tool inventories to
+an actual in-memory MCP `tools/list`, including aliases and read-only hints.
+Run it after a fresh build. The package tests exercise it after the gate builds.
+
+The MCPB UI deliberately requires an issuer-based credential group; omit optional
+empty env strings, keep secrets sensitive and read-only true. `packaging:build`
+reuses the build, fully bundles the CLI's remaining runtime dependencies, refuses
+non-builtin external imports and writes a deterministic ZIP under ignored
+`packaging/out/`. Smoke-test that archive outside the workspace without node_modules.
+Never ship packaging through `files`. Plugin hooks use the capture README's stdin
+interface, with the requested ten-second timeout. The ChatGPT JSON is our own
+planning descriptor, not an OpenAI schema. These are local preparation artifacts;
+do not publish, submit, upload, deploy or enable anything as part of this work.

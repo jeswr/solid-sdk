@@ -536,3 +536,16 @@ The public exports `loadCliConfig(env?, home?)`, `createCliFetch(config, fetch?)
 and `createChatPodPort(config)` let `@jeswr/agent-session-capture` reuse the stdio
 configuration, DPoP login, pod scope and WAC discovery behavior. The chat adapter
 keeps write permission checks; callers must supply `readOnly: false` explicitly.
+
+## Packaging (prepared, not published)
+
+[`packaging/`](./packaging/README.md) contains the single registry `server.json`,
+an MCPB v0.3 manifest, a copyable Claude Code marketplace and our own ChatGPT
+planning descriptor/checklist. Nothing is published, submitted, uploaded or enabled.
+After building workspace prerequisites, `pnpm run build && pnpm run packaging:check`
+validates offline against vendored schemas and a real server's `tools/list`.
+`pnpm run packaging:build` rebuilds and produces the deterministic, self-contained
+Node >=24 `packaging/out/solid-mcp-<version>.mcpb` locally. The output is ignored,
+and `files` excludes all packaging artifacts from npm and mirrors. Tests run the
+validator and isolated bundle startup. See the packaging README for configuration
+choices, deferred npm distribution and the hooks' stdin/timeout behavior.
