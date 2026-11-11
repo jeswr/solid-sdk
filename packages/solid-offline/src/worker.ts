@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 /// <reference lib="webworker" />
 /**
  * `solid-offline/worker` — the service-worker script (P0 install/intercept
@@ -33,6 +34,7 @@ import {
   sameShellConfig,
   shellBucketComplete,
 } from './app-shell.js';
+import { withCacheProvenance } from './cache-policy.js';
 import { handleNotification, type InvalidateDeps, resyncSweep } from './invalidation.js';
 import { MetadataStore } from './metadata-store.js';
 import { cacheNameForWebId, isScopeChange } from './scope.js';
@@ -512,6 +514,17 @@ self.addEventListener('fetch', (event: FetchEvent) => {
     }
   }
 
+  // Pod caching/provenance applies only inside the configured storage boundary.
+  // Marked warming reads are scoped by their acknowledged session in `respond`.
+  if (
+    !request.headers.has(WARM_REQUEST_HEADER) &&
+    (!storageRoot ||
+      !createSolidBackend({ root: storageRoot, fetch: self.fetch.bind(self) }).isWithinStorage(
+        request.url,
+      ))
+  )
+    return;
+
   event.respondWith(respond(event));
 });
 
@@ -589,6 +602,8 @@ async function respondShellAsset(event: FetchEvent): Promise<Response> {
 }
 
 async function respond(event: FetchEvent): Promise<Response> {
+  const networkResponse = (response: Response) =>
+    event.request.method === 'GET' ? withCacheProvenance(response, 'miss') : response;
   const warming = warmSessions.get(event.clientId);
   const marked = event.request.headers.has(WARM_REQUEST_HEADER);
   const guarded =
@@ -598,7 +613,7 @@ async function respond(event: FetchEvent): Promise<Response> {
     )
       ? warming
       : undefined;
-  if (marked && !guarded) return new Response(null, { status: 413 });
+  if (marked && !guarded) return networkResponse(new Response(null, { status: 413 }));
   const headers = new Headers(event.request.headers);
   headers.delete(WARM_REQUEST_HEADER);
   // Warming must finish fresh reads before closing its guard. Foreground reads
@@ -608,16 +623,15 @@ async function respond(event: FetchEvent): Promise<Response> {
   const request = marked ? new Request(event.request, { headers }) : event.request;
   // The SWR engine's deps are the shared base + the online flag (the only field
   // the invalidation pipeline doesn't need).
-  const deps: SwrDeps = {
-    ...(await baseDeps()),
-    isOnline: () => self.navigator.onLine,
-  };
-
-  if (guarded) {
-    const transport = deps.fetch;
-    deps.fetch = (input, init) => guarded.fetch(new Request(input, init), transport);
-  }
   try {
+    const deps: SwrDeps = {
+      ...(await baseDeps()),
+      isOnline: () => self.navigator.onLine,
+    };
+    if (guarded) {
+      const transport = deps.fetch;
+      deps.fetch = (input, init) => guarded.fetch(new Request(input, init), transport);
+    }
     const result = await handleFetch(request, deps);
     // Keep background revalidation alive past the response if the SW supports it.
     if (result.revalidation && typeof event.waitUntil === 'function') {
@@ -626,9 +640,9 @@ async function respond(event: FetchEvent): Promise<Response> {
     return result.response;
   } catch {
     // A warming failure must never retry outside the transport budget.
-    if (guarded) return new Response(null, { status: 413 });
+    if (guarded) return networkResponse(new Response(null, { status: 413 }));
     // Never-authoritative: on any engine error, fall back to the live network so
     // the page still gets an authoritative answer.
-    return self.fetch(event.request);
+    return networkResponse(await self.fetch(event.request));
   }
 }
