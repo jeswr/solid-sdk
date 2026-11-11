@@ -248,6 +248,8 @@ await manager.logout() // aborts in-flight upgrades and fences writes in every t
   to the instance are revoked (RFC 7009) when the server supports it, after local cleanup releases the fence
   lock. Each revocation has a five-second deadline and aborts on timeout; failures reject logout after local
   state is cleared. Logout does not end the session at the identity provider.
+- `OidcSession.identity()` returns `undefined` if logout supersedes its session while a cache or durable
+  store read is pending. Store failures still reject the lookup; reading identity never starts a login.
 - Namespaces isolate applications, client configurations and accounts; they are a convention, not a security
   boundary against same-origin scripts. Non-extractable keys prevent export, not use, by malicious same-origin
   JavaScript ([OAuth 2.0 for Browser-Based Applications](https://www.rfc-editor.org/rfc/rfc10017.html)).
@@ -335,3 +337,6 @@ current verified OIDC ID token (URI `sub` and matching client `azp`) for a stora
 Bearer token. Exchanged tokens stay in
 memory; a missing or expired ID token fails closed. The broker must enforce resource scope
 and session liveness on its injected transport, including discovery, exchange and Bearer retries.
+Pass `trustAuthorizationServer` to decide which authorization servers may receive the ID token;
+without it, any server listed in a resource's RFC 9728 metadata is trusted, so brokers should
+always set it.

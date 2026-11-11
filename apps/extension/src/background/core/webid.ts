@@ -1,7 +1,8 @@
 // AUTHORED-BY Claude Opus 4.8
+// AUTHORED-BY Codex GPT-6
 /**
- * WebID profile parsing — issuer resolution + display profile, via proper RDF (N3.js),
- * never regex over Turtle. The house rule (suite-wide) is to parse RDF with N3/@solid
+ * WebID profile parsing — issuer resolution + display profile, via @jeswr/fetch-rdf,
+ * never regex over Turtle. The house rule (suite-wide) is to parse RDF with shared
  * libraries, not hand-rolled string matching; a profile can be in any Turtle shape
  * (prefixed, full-IRI, multi-subject) that a regex would miss or mis-parse.
  *
@@ -10,7 +11,10 @@
  * the caller can choose (single → use directly; many → the user picks; none → error).
  */
 
-import { DataFactory, Parser, Store } from 'n3';
+import { parseRdfSync } from '@jeswr/fetch-rdf';
+import { Agent } from '@solid/object';
+import { DataFactory, type Store } from 'n3';
+import { BUFFERED_RDF_LIMITS } from './rdf-limits';
 
 const SOLID_OIDC_ISSUER = 'http://www.w3.org/ns/solid/terms#oidcIssuer';
 const FOAF_NAME = 'http://xmlns.com/foaf/0.1/name';
@@ -30,10 +34,7 @@ export interface WebIdProfile {
 /** Parse a WebID Turtle document into a {@link Store}, baselined to the document URL. */
 function parse(webId: string, turtle: string): Store {
   const baseIRI = webId.split('#')[0];
-  const parser = new Parser({ baseIRI });
-  const store = new Store();
-  store.addQuads(parser.parse(turtle));
-  return store;
+  return parseRdfSync(turtle, { ...BUFFERED_RDF_LIMITS, baseIRI });
 }
 
 function objectsFor(store: Store, subject: string, predicate: string): string[] {
@@ -87,11 +88,24 @@ function issuersFor(store: Store, subject: string): string[] {
  */
 export function parseWebIdProfile(webId: string, turtle: string): WebIdProfile {
   const store = parse(webId, turtle);
+  const agent = new Agent(DataFactory.namedNode(webId), store, DataFactory);
 
+  // The old reader accepts any term's lexical value. Preserve that fallback if a
+  // typed accessor rejects a malformed name, independently for each predicate.
+  const nameField = (read: () => string | undefined, predicate: string): string | undefined => {
+    try {
+      return read();
+    } catch {
+      return objectsFor(store, webId, predicate)[0];
+    }
+  };
+
+  // Agent.oidcIssuer rejects the entire set on a literal; filter each object instead.
   const issuers = [...new Set(issuersFor(store, webId))];
 
   const name =
-    objectsFor(store, webId, FOAF_NAME)[0] ?? objectsFor(store, webId, VCARD_FN)[0] ?? null;
+    nameField(() => agent.foafName, FOAF_NAME) ?? nameField(() => agent.vcardFn, VCARD_FN) ?? null;
+  // Agent.photoUrl expects a literal; this reader also accepts IRI/blank-node photos.
   const photoUrl =
     objectsFor(store, webId, FOAF_IMG)[0] ?? objectsFor(store, webId, VCARD_PHOTO)[0] ?? null;
 

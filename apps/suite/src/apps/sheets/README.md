@@ -6,6 +6,22 @@ The service in `lib/workbook/index.ts` stores guarded snapshots and derived CSV/
 projections on the active pod.
 The demo session uses the same service against the browser's persistent demo pod.
 
+The Data menu sorts the selected range or whole sheet A–Z / Z–A by a column, with
+an optional header row. It also creates/removes a range filter and clears its criteria.
+The column header filter controls offer values and conditions. Filter resources round-trip
+in `workbook.json`; CSV exports and JSON-LD column inference always include every row.
+Sorting changes cell contents, so comment anchors, drafts and chart source addresses stay
+fixed. Filtered rows remain present and never enter the row-deletion pipeline.
+
+Edit → Find and replace opens Univer's search dialog with match case, whole cell,
+values/formulas and current sheet/all sheets options. Ctrl/Cmd+H opens it anywhere in the
+editor; Ctrl/Cmd+F opens it from the grid, leaving browser Find available elsewhere.
+View-only users can find and filter locally; sort and replacement commands are blocked.
+Local viewer filters are omitted from snapshots used for copying/downloading and saving,
+and discarded when Write is restored. That transition also clears local undo history.
+The initial comments-loading lock blocks sort and replacement; find and filter remain
+available.
+
 The editor and list menu open the shell's sharing dialog for the workbook container.
 WAC grants update both `acl:accessTo` and `acl:default`, covering metadata, the engine
 snapshot, sheet projections and versions that inherit this policy. Existing member ACLs

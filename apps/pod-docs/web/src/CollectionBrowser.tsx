@@ -1,8 +1,9 @@
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex GPT-6.1-Sol
+
+import { allowInsecureLoopback } from "@jeswr/app-session";
 import { DocumentBrowser } from "@jeswr/pod-docs/ui";
 import { useState } from "react";
-import { allowInsecureLoopback } from "./auth/pod-auth";
 
 type Selection = { webId: string; podRoot: string; container: string };
 const keyFor = (webId: string, podRoot: string) =>
@@ -64,7 +65,7 @@ export function CollectionBrowser({
       container={selection.container}
       onContainerChange={remember}
       fetch={fetch}
-      allowInsecureLoopback={allowInsecureLoopback()}
+      allowInsecureLoopback={allowInsecureLoopback(import.meta.env.DEV)}
     />
   );
 }

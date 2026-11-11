@@ -199,7 +199,19 @@ export type CsvImportResult =
   | { status: "imported" }
   | { status: "blocked"; reason: "comments-loading" | "read-only" };
 
+export type SortResult = { status: "sorted" } | { status: "blocked"; reason: string };
+
 export interface SheetEngine {
+  sortRange?(options: {
+    scope: "range" | "sheet";
+    column: number;
+    ascending: boolean;
+    header: boolean;
+  }): SortResult;
+  hasFilter?(): boolean;
+  toggleFilter?(): Promise<boolean>;
+  clearFilter?(): Promise<boolean>;
+  findReplace?(): Promise<void>;
   /** Hold editing independently of access permissions while missing anchors load. */
   setCommentsLoading?(loading: boolean): void;
   /** Listed selectors replay only history after their recorded workbook ETag. */
