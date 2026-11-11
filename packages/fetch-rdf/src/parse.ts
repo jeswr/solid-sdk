@@ -39,7 +39,7 @@ import { RdfFetchError } from "./errors.js";
 import { SUPPORTED_RDF_MEDIA_TYPES } from "./media-types.js";
 import { abortable, abortError, checkAbort, isAbortError } from "./operation.js";
 import { redactUrl } from "./redact.js";
-import type { ParseRdfOptions, RdfMediaType } from "./types.js";
+import type { ParseRdfOptions, ParseRdfSyncOptions, RdfMediaType } from "./types.js";
 
 export { SUPPORTED_RDF_MEDIA_TYPES } from "./media-types.js";
 
@@ -70,6 +70,52 @@ interface QuadTransform {
   write(chunk: string): boolean;
   end(chunk?: string): void;
   destroy(error?: Error): void;
+}
+
+/**
+ * Parse buffered N3-family RDF without changing a synchronous caller's contract.
+ * JSON-LD and streams require {@link parseRdf}. Omitted format retains n3's
+ * permissive syntax detection; an explicit format restricts accepted syntax.
+ */
+export function parseRdfSync(body: string, options: ParseRdfSyncOptions = {}): Store {
+  const { format, baseIRI } = options;
+  try {
+    options.check?.();
+    checkAbort(options.signal);
+    if (utf8Length(body) > limit(options.maxBytes, DEFAULT_MAX_BYTES, "maxBytes"))
+      throw parseLimit("maxBytes");
+    if (format !== undefined && !N3_FAMILY.has(format)) {
+      throw new RdfFetchError(`Unsupported synchronous RDF media type: "${format}".`, {
+        contentType: format,
+      });
+    }
+    return parseBufferedN3(body, options, options.signal ?? new AbortController().signal);
+  } catch (cause) {
+    if (options.signal?.aborted) throw abortError(options.signal);
+    throw parseError(cause, format ?? "text/turtle", format ?? "text/turtle", baseIRI);
+  }
+}
+
+/** Shared by the promise API and synchronous consumers; enforce checks during insertion too. */
+function parseBufferedN3(body: string, options: ParseRdfSyncOptions, signal: AbortSignal): Store {
+  const budget = budgetFactory(options, signal, options.check);
+  const parser = new Parser({
+    format: options.format,
+    baseIRI: options.baseIRI,
+    factory: budget.factory,
+  });
+  budget.start();
+  const quads = parser.parse(body);
+  const store = new Store();
+  for (const quad of quads) {
+    options.check?.();
+    checkAbort(signal);
+    store.addQuad(quad);
+    options.onQuad?.(quad);
+  }
+  options.check?.();
+  checkAbort(signal);
+  return store;
 }
 
 /**
@@ -190,19 +236,23 @@ function parseDefault(
   signal: AbortSignal,
   maxBytes: number,
 ): Promise<Store> {
+  if (N3_FAMILY.has(mediaType) && typeof body === "string") {
+    // Keep buffered N3 settlement within a consumer's microtask flush. The
+    // factory enforces budgets before the synchronous parser retains each quad.
+    return Promise.resolve(
+      parseBufferedN3(
+        body,
+        { ...options, format: mediaType as ParseRdfSyncOptions["format"] },
+        signal,
+      ),
+    );
+  }
   const baseIRI = options.baseIRI;
   const budget = budgetFactory(options, signal);
   const factory = budget.factory;
   const checkChunk = JSON_LD_FAMILY.has(mediaType)
     ? jsonDepthScanner(limit(options.maxJsonDepth, DEFAULT_MAX_JSON_DEPTH, "maxJsonDepth"))
     : undefined;
-  if (N3_FAMILY.has(mediaType) && typeof body === "string") {
-    // Keep buffered N3 settlement within a consumer's microtask flush. The
-    // factory enforces budgets before the synchronous parser retains each quad.
-    const parser = new Parser({ format: mediaType, baseIRI, factory });
-    budget.start();
-    return Promise.resolve(new Store(parser.parse(body)));
-  }
   let parser: QuadTransform;
   let rejectFailure!: (error: unknown) => void;
   const failure = new Promise<never>((_resolve, reject) => {
