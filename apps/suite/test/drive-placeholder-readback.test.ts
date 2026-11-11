@@ -79,6 +79,7 @@ it("never rolls back with a read-back validator that an identical concurrent wri
   const { f, puts, client } = await cssLikePod(existing);
   let raced = false;
   let failCheck = false;
+  let identityChecked = false;
   f.after(async (url, method, response) => {
     if (url !== existing) return response;
     if (method === "PUT" && response.ok && !raced) {
@@ -95,26 +96,38 @@ it("never rolls back with a read-back validator that an identical concurrent wri
     return response;
   });
   f.intercept(async (url, init) => {
-    // The post-write identity check fails after the read-back certified the bytes.
+    // One intercept records every PUT (it replaces cssLikePod's recorder) and fails only
+    // the first post-write identity HEAD, so a leaked receipt could still roll back.
+    if (url === existing && init?.method === "PUT")
+      puts.push({
+        ifMatch: new Headers(init.headers).get("if-match"),
+        body: init.body instanceof Blob ? await init.body.text() : String(init.body ?? ""),
+      });
     if (
       failCheck &&
       url === existing &&
       init?.method === "HEAD" &&
       new Headers(init.headers).has("if-match")
-    )
+    ) {
+      failCheck = false;
+      identityChecked = true;
       return new Response(null, { status: 503 });
+    }
     return undefined;
   });
   const selected = await client.stat(existing);
   const error = await uploadFile(
     client,
     PRIVATE,
-    new Blob(["new contents"]),
+    // Same bytes and media type as the other writer, so the read-back certifies.
+    new Blob(["new contents"], { type: "text/plain" }),
     "secret",
     "replace",
     selected,
   ).catch((cause: unknown) => cause);
   expect(raced).toBe(true);
+  // The read-back certified the other writer's validator and the identity check used it.
+  expect(identityChecked).toBe(true);
   expect(error).toBeInstanceOf(DrivePartialFailureError);
   // Compensation saw no receipt: the other writer's update is not reverted.
   expect(await (await f.pod.fetch(existing)).text()).toBe("new contents");
