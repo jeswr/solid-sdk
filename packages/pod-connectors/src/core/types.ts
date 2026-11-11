@@ -226,6 +226,13 @@ export interface ImportOutcome {
    * the UI. Omitted (undefined) when nothing was skipped.
    */
   readonly skipped?: number;
+  /**
+   * Discards private resume state (a full-sync journal) that `cursor` supersedes. The runner
+   * calls it once, after the run has recorded provenance and reported its successful state,
+   * while the run still holds the connector. Best-effort: a failure or a caller cancellation
+   * leaves that state in place, so it must be safe to resume from it again.
+   */
+  readonly commit?: () => Promise<void>;
 }
 
 /** One recorded fixture route for the typed fake fetch.

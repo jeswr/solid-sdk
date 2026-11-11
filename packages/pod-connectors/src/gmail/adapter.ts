@@ -13,6 +13,7 @@ import { createGoogleOAuthConfig, GOOGLE_SCOPES } from "../adapters/google/oauth
 import { ResponseTooLargeError, RunBudgetExceededError } from "../core/budget.js";
 import { IntegrationSyncError } from "../core/errors.js";
 import { getJson } from "../core/fixture-fetch.js";
+import { SourceTimeoutError } from "../core/source-timeout.js";
 import type { ImportContext, ImportOutcome, IntegrationAdapter } from "../core/types.js";
 import { accountRoot, messageSlug, SYSTEM_FOLDERS } from "../mail/paths.js";
 import { MAIL_CLASSES, MailMessage } from "../mail/vocab.js";
@@ -99,7 +100,8 @@ export const gmailAdapter: IntegrationAdapter = {
     for (const folder of labels.values()) known.set(folder.key, folder);
     await sync.finish([...known.values()]);
     ctx.progress({ label: "Done", done: sync.done, total: sync.done });
-    return { cursor, skipped: sync.skipped || undefined };
+    // The journal outlives this call: the runner clears it only after reporting the cursor.
+    return { cursor, skipped: sync.skipped || undefined, commit: sync.commit };
   },
 };
 
@@ -144,6 +146,7 @@ class Sync {
     const resumed = new Set(journal.completed);
     for (const slug of journal.seen) this.seen.add(slug);
     let restarted = false;
+    let unsaved = false;
     try {
       for (;;) {
         const params = new URLSearchParams({ maxResults: "100", includeSpamTrash: "true" });
@@ -185,13 +188,20 @@ class Sync {
           // count before filtering, and incomplete payloads are retried even if RDF exists.
           this.ctx.budget.items(1);
           if (slug) journal.remember(slug);
-          await this.store(id);
-          if (slug) journal.complete(slug);
+          if ((await this.store(id)) && slug) {
+            journal.complete(slug);
+            unsaved = true;
+          }
         }
         journal.pageToken = page?.nextPageToken || undefined;
+        // After the last page too, when it completed payloads: a failure or cancel during
+        // the sweep or the final membership flush then resumes without refetching them.
+        if (journal.pageToken || unsaved) {
+          await this.mail.flush();
+          await journal.save();
+          unsaved = false;
+        }
         if (!journal.pageToken) break;
-        await this.mail.flush();
-        await journal.save();
       }
     } catch (error) {
       if (
@@ -234,9 +244,15 @@ class Sync {
 
   async finish(known: readonly MailFolder[]): Promise<void> {
     await this.mail.flush(known);
-    // Keep the journal until message bytes, sweep cleanup and all memberships are committed.
-    await this.journal?.clear();
   }
+
+  /**
+   * Runner-invoked once the run has reported its cursor. Keeping the journal until then means
+   * a run that fails after the sweep (a Pod error or a cancel) resumes from completed IDs.
+   */
+  readonly commit = async (): Promise<void> => {
+    await this.journal?.clear();
+  };
 
   /** Replays history pages from `start`; returns the mailbox historyId to persist. */
   async history(start: string): Promise<string> {
@@ -284,10 +300,11 @@ class Sync {
     return latest;
   }
 
-  private async store(id: unknown): Promise<void> {
+  /** False when the message must be retried by a resumed run (a source timeout). */
+  private async store(id: unknown): Promise<boolean> {
     if (!validId(id)) {
       this.skipped++;
-      return;
+      return true;
     }
     let message: GmailMessage;
     try {
@@ -300,17 +317,24 @@ class Sync {
       );
     } catch (error) {
       // Deleted between listing and fetching: a deletion, not a failure.
-      if (error instanceof IntegrationSyncError && error.status === 404) return this.remove(id);
-      if (error instanceof ResponseTooLargeError) {
-        // Over the message cap: keep any stored copy (not swept) and skip it.
+      if (error instanceof IntegrationSyncError && error.status === 404) {
+        await this.remove(id);
+        return true;
+      }
+      // Over the message cap, or a stalled response: keep any stored copy (not swept) and
+      // skip it, counted in `skipped`. A timed-out message is not journalled as complete.
+      if (error instanceof ResponseTooLargeError || error instanceof SourceTimeoutError) {
         this.seen.add(messageSlug(this.account, `gmail-${id}`));
         this.skipped++;
-        return;
+        return !(error instanceof SourceTimeoutError);
       }
       throw error;
     }
     const labelIds = Array.isArray(message?.labelIds) ? message.labelIds : [];
-    if (labelIds.includes("SPAM")) return this.remove(id);
+    if (labelIds.includes("SPAM")) {
+      await this.remove(id);
+      return true;
+    }
     const source = webUrl(id);
     // Anything kept from here on is not swept by a full sync, even if it cannot be re-read.
     this.seen.add(messageSlug(this.account, `gmail-${id}`));
@@ -320,12 +344,12 @@ class Sync {
       message.raw.length > (MAX_RAW_BYTES * 4) / 3 + 4
     ) {
       this.skipped++;
-      return;
+      return true;
     }
     const raw = decodeBase64Url(message.raw);
     if (!raw) {
       this.skipped++;
-      return;
+      return true;
     }
     const folders = labelIds.flatMap((label) => this.labels.get(label) ?? []);
     if (!labelIds.some((label) => ["INBOX", "SENT", "DRAFT", "TRASH"].includes(label)))
@@ -347,11 +371,12 @@ class Sync {
       // One malformed message must not block the mailbox.
       if (!(error instanceof MailParseError)) throw error;
       this.skipped++;
-      return;
+      return true;
     }
     this.done++;
     if (this.done % 25 === 0)
       this.ctx.progress({ label: `Saved ${this.done} messages…`, done: this.done });
+    return true;
   }
 
   private async remove(id: string): Promise<void> {

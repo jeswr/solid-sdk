@@ -1,3 +1,4 @@
+// AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createGithubAdapter } from "../github/adapter.js";
@@ -288,4 +289,114 @@ it("preserves caller cancellation if it lands during duration-failure cleanup", 
   await vi.advanceTimersByTimeAsync(11);
   expect(await outcome).toBe(reason);
   expect(pod.urls().some((url) => url.endsWith("_provenance.ttl"))).toBe(false);
+});
+
+describe("deadline after the adapter resolves", () => {
+  const original = ALL_ADAPTERS[0];
+  if (!original) throw new Error("Missing fixture");
+  const writer = (pod: ReturnType<typeof createMemoryPod>) =>
+    createFetchPodWriter({
+      adapterId: original.metadata.id,
+      webId: TEST_WEBID,
+      profileDocumentUrl: TEST_PROFILE_DOC,
+      podRoot: TEST_POD_ROOT,
+      fetch: pod.fetch,
+    });
+
+  it("still reports success, then runs commit after onState", async () => {
+    fakeClock();
+    const pod = createMemoryPod();
+    const order: string[] = [];
+    const report = await runImport({
+      adapter: {
+        ...original,
+        async import(ctx) {
+          await vi.advanceTimersByTimeAsync(20);
+          // Progress reports no longer fail on the deadline, only on caller cancellation.
+          ctx.progress({ label: "Done", done: 1 });
+          return {
+            cursor: "next",
+            commit: async () => {
+              order.push("commit");
+            },
+          };
+        },
+      },
+      mode: "live",
+      limits: { maxDurationMs: 10 },
+      sourceAuth: { fetch: async () => new Response("{}") },
+      podWriter: writer(pod),
+      onState: () => order.push("state"),
+    });
+    expect(report.cursor).toBe("next");
+    expect(order).toEqual(["state", "commit"]);
+    expect(pod.urls().some((url) => url.endsWith("_provenance.ttl"))).toBe(true);
+  });
+
+  it("ignores a failing commit and skips it after a caller cancel", async () => {
+    const pod = createMemoryPod();
+    const controller = new AbortController();
+    const report = await runImport({
+      adapter: {
+        ...original,
+        async import() {
+          return { cursor: "next", commit: async () => Promise.reject(new Error("storage down")) };
+        },
+      },
+      mode: "live",
+      sourceAuth: { fetch: async () => new Response("{}") },
+      podWriter: writer(pod),
+    });
+    expect(report.cursor).toBe("next");
+    const commit = vi.fn();
+    await expect(
+      runImport({
+        adapter: {
+          ...original,
+          async import() {
+            return { cursor: "next", commit };
+          },
+        },
+        mode: "live",
+        signal: controller.signal,
+        sourceAuth: { fetch: async () => new Response("{}") },
+        podWriter: writer(pod),
+        onProgress: () => undefined,
+        onState: (state) => {
+          if (state.lastOutcome === "success") controller.abort(new Error("late cancel"));
+        },
+      }),
+    ).resolves.toMatchObject({ cursor: "next" });
+    // The cancel landed after the run was committed: commit still runs, though any Pod I/O in it is refused.
+    expect(commit).toHaveBeenCalledOnce();
+  });
+
+  it("fails as cancelled when the caller cancels before the state is reported", async () => {
+    const pod = createMemoryPod();
+    const controller = new AbortController();
+    const commit = vi.fn();
+    const reason = new Error("cancel during registration");
+    const podWriter = writer(pod);
+    const register = podWriter.registerType.bind(podWriter);
+    podWriter.registerType = async (requests) => {
+      const result = await register(requests);
+      controller.abort(reason);
+      return result;
+    };
+    await expect(
+      runImport({
+        adapter: {
+          ...original,
+          async import() {
+            return { cursor: "next", commit };
+          },
+        },
+        mode: "live",
+        signal: controller.signal,
+        sourceAuth: { fetch: async () => new Response("{}") },
+        podWriter,
+      }),
+    ).rejects.toBe(reason);
+    expect(commit).not.toHaveBeenCalled();
+  });
 });

@@ -1,3 +1,4 @@
+// AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 /**
@@ -52,7 +53,13 @@ export interface RunImportOptions extends ConnectorStateOptions {
    * stops the write that follows. Pass the same signal to `createFetchPodWriter` to check it
    * before every HTTP request inside a port and to abort requests in flight. A run cancelled
    * before it resolves is reported as cancelled, even when the cancel lands while the final
-   * provenance write is in flight (that write may still complete).
+   * provenance write is in flight (that write may still complete). Once the run has reported
+   * its state through `onState`, it resolves successfully; a cancel then only stops the
+   * adapter's best-effort `ImportOutcome.commit` cleanup.
+   *
+   * The run deadline (`limits.maxDurationMs`) bounds source work only. It permits Pod
+   * checkpoint writes after it expires, and once the adapter has resolved it no longer fails
+   * the run: registration and provenance still complete so the new cursor is reported.
    *
    * A cancelled run records no activity. Documents and items it already wrote keep
    * `prov:wasGeneratedBy` naming its activity IRI, which `_provenance.ttl` never describes:
@@ -139,6 +146,8 @@ export async function runImport(opts: RunImportOptions): Promise<ImportReport> {
     timeout?.removeEventListener("abort", expire);
     throw error;
   }
+  // Set once adapter.import resolves: source work is over, so the run deadline no longer applies.
+  let imported = false;
   try {
     budget.checkTime();
     const outcome = await adapter.import({
@@ -147,8 +156,9 @@ export async function runImport(opts: RunImportOptions): Promise<ImportReport> {
       cursor: opts.cursor ?? opts.state?.cursor,
       resolve: (slug) => opts.podWriter.resolve(slug),
       read: checked(session.read),
+      // Progress stops only on caller cancellation; the deadline is enforced on source I/O.
       progress: (p) => {
-        signal?.throwIfAborted();
+        opts.signal?.throwIfAborted();
         opts.onProgress?.(p);
       },
       write: checked(session.write),
@@ -158,16 +168,27 @@ export async function runImport(opts: RunImportOptions): Promise<ImportReport> {
       scopes: opts.scopes,
       limits,
     });
-    budget.checkTime();
-    signal?.throwIfAborted();
+    imported = true;
+    // The adapter has committed its data and checkpoints. The source deadline is not a
+    // reason to discard them: only the caller's cancellation stops finalisation now.
+    opts.signal?.throwIfAborted();
     const { indexUrl } = await podWriter.registerType(session.registrations());
-    signal?.throwIfAborted();
-    await session.finish();
-    // A cancel during the final provenance write is still a cancel: never report success.
-    signal?.throwIfAborted();
-    budget.checkTime();
-    const state = session.state(outcome);
-    opts.onState?.(state);
+    opts.signal?.throwIfAborted();
+    let state: ConnectorState | undefined;
+    await session.finish(async () => {
+      // A cancel during the final provenance write is still a cancel: never report success.
+      opts.signal?.throwIfAborted();
+      state = session.state(outcome);
+      opts.onState?.(state);
+      // The run is committed and its cursor reported. Only now may the adapter discard
+      // private resume state that the cursor supersedes; a failure or cancel leaves it.
+      try {
+        await outcome.commit?.();
+      } catch {
+        /* Best-effort: the reported checkpoint stands. */
+      }
+    });
+    if (!state) throw new IntegrationSyncError(id, "Import did not report its state.");
     return {
       adapterId: id,
       mode,
@@ -193,7 +214,7 @@ export async function runImport(opts: RunImportOptions): Promise<ImportReport> {
     opts.onState?.(session.state());
     // A cancel can surface as an adapter or write error; callers match the abort reason.
     if (opts.signal?.aborted) throw opts.signal.reason;
-    throw signal.aborted ? signal.reason : error;
+    throw !imported && signal.aborted ? signal.reason : error;
   } finally {
     sourceApi.close();
     timeout?.removeEventListener("abort", expire);

@@ -1,3 +1,4 @@
+// AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { NS } from "@jeswr/suite-vocab";
 import {
@@ -53,5 +54,20 @@ export class DriveMetadata extends PodThing {
   }
   set contentSkipped(value: string | undefined) {
     OptionalAs.object(this, `${DRIVE_VOCAB}contentSkipped`, value, LiteralFrom.string);
+  }
+}
+
+/**
+ * Files whose content download timed out. Incremental change listings omit unmodified files,
+ * so the adapter keeps their metadata subjects here and re-attempts them on the next run.
+ */
+export class DriveContentRetry extends PodThing {
+  get files(): Set<string> {
+    return SetFrom.subjectPredicate(
+      this,
+      `${SCHEMA}hasPart`,
+      NamedNodeAs.string,
+      NamedNodeFrom.string,
+    );
   }
 }

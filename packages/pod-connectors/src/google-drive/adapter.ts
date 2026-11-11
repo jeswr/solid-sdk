@@ -1,3 +1,4 @@
+// AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6.1-Sol
 /** Drive → deterministic metadata documents and owned, bounded binary copies. */
 import { Container } from "@solid/object";
@@ -17,12 +18,15 @@ import {
   type DriveFileList,
   GOOGLE_APPS,
 } from "./fixtures.js";
-import { DriveMetadata } from "./vocab.js";
+import { DriveContentRetry, DriveMetadata } from "./vocab.js";
 import { vocabMap } from "./vocab-map.js";
 
 const ID = "google-drive";
 const FIELDS =
   "id,name,mimeType,parents,size,md5Checksum,modifiedTime,createdTime,ownedByMe,webViewLink,trashed";
+/** Persisted ids of files whose content download timed out, retried by the next run. */
+const RETRY = "drive/_content-retry.ttl";
+const MAX_RETRY_FILES = 10_000;
 const REPRESENTATION = /^content(?:-[a-f0-9]{24})?(?:\.(?:pdf|txt))?$/;
 const EXPORTABLE = new Set(
   ["document", "spreadsheet", "presentation", "drawing"].map((type) => `${GOOGLE_APPS}${type}`),
@@ -43,6 +47,17 @@ const validId = (id: unknown): id is string => {
   } catch {
     return false;
   } // Reject lone surrogates before path/IRI construction.
+};
+/** The file id of a canonical `drive/files/<pathId>/` directory name, never a traversal or URL. */
+const idOf = (relative: string): string | undefined => {
+  if (!/^[^/]+\/$/.test(relative)) return undefined;
+  let id: string;
+  try {
+    id = decodeURIComponent(relative.slice(0, -1).replace(/~/g, "%"));
+  } catch {
+    return undefined;
+  }
+  return validId(id) && root(id) === `drive/files/${relative}` ? id : undefined;
 };
 const token = (value: unknown): string | undefined =>
   typeof value === "string" && value.length > 0 ? value : undefined;
@@ -99,9 +114,11 @@ export function createGoogleDriveAdapter({
       ctx.progress({ label: "Reading your Drive…", done: 0 });
       const sync = new Sync(ctx, maxBytes);
       let snapshot: Snapshot | undefined;
+      let incremental = false;
       if (ctx.cursor) {
         try {
           snapshot = await sync.changes(ctx.cursor);
+          incremental = true;
         } catch (error) {
           if (
             !(error instanceof IntegrationSyncError) ||
@@ -116,6 +133,12 @@ export function createGoogleDriveAdapter({
         if (file) await sync.store(file);
         else await sync.remove(id);
       }
+      // A change listing omits files that timed out earlier but have not changed since; a
+      // full listing has already re-attempted every listed file.
+      const retry = await sync.loadRetry();
+      if (incremental)
+        for (const id of retry.ids) if (!snapshot.files.has(id)) await sync.retryContent(id);
+      await sync.saveRetry(retry);
       ctx.progress({ label: "Done", done: snapshot.files.size, total: snapshot.files.size });
       return { cursor: snapshot.cursor, skipped: sync.skipped || undefined };
     },
@@ -129,6 +152,8 @@ interface Snapshot {
 }
 class Sync {
   skipped = 0;
+  /** Files whose content timed out in this run. */
+  private readonly timedOut = new Set<string>();
   private readonly api: typeof fetch;
   constructor(
     private readonly ctx: ImportContext,
@@ -181,21 +206,76 @@ class Sync {
     for (const child of new Container(base, listing, DataFactory).contains) {
       if (!child.value.startsWith(base)) continue;
       const relative = child.value.slice(base.length);
-      if (!/^[^/]+\/$/.test(relative)) continue;
-      let id: string;
-      try {
-        id = decodeURIComponent(relative.slice(0, -1).replace(/~/g, "%"));
-      } catch {
-        continue;
-      }
-      // Follow only a canonical adapter path, never a listing-supplied traversal or URL.
-      if (!validId(id) || root(id) !== `${slug}${relative}` || files.has(id)) continue;
+      const id = idOf(relative);
+      if (id === undefined || files.has(id)) continue;
       const metaSlug = `${root(id)}meta.ttl`;
       const existing = await this.ctx.read(metaSlug);
       if (!existing) continue;
       const item = new DriveMetadata(`${this.ctx.resolve(metaSlug)}#it`, existing, DataFactory);
       if (item.identifier === id) files.set(id, undefined);
     }
+  }
+
+  async loadRetry(): Promise<{ ids: Set<string>; stored: boolean }> {
+    const stored = await this.ctx.read(RETRY);
+    const ids = new Set<string>();
+    if (!stored) return { ids, stored: false };
+    const base = this.ctx.resolve("drive/files/");
+    const suffix = "meta.ttl#it";
+    for (const iri of new DriveContentRetry(`${this.ctx.resolve(RETRY)}#it`, stored, DataFactory)
+      .files) {
+      if (!iri.startsWith(base) || !iri.endsWith(suffix)) continue;
+      const id = idOf(iri.slice(base.length, -suffix.length));
+      if (id !== undefined) ids.add(id);
+      if (ids.size > MAX_RETRY_FILES)
+        throw new IntegrationSyncError(ID, "The Drive content retry list is too long.");
+    }
+    return { ids, stored: true };
+  }
+
+  /** Re-reads one previously timed-out file's metadata and stores it, downloading again. */
+  async retryContent(id: string): Promise<void> {
+    let file: unknown;
+    try {
+      file = await this.json(
+        `${DRIVE_API}/files/${encodeURIComponent(id)}?${new URLSearchParams({ fields: FIELDS })}`,
+      );
+    } catch (error) {
+      // Gone since the change listing: its removal arrives with the next change page.
+      if (error instanceof IntegrationSyncError && error.status === 404) return;
+      throw error;
+    }
+    this.ctx.budget.items(1);
+    if (!record(file) || file.id !== id) {
+      this.skipped++;
+      return;
+    }
+    if (file.trashed === true) await this.remove(id);
+    else await this.store(file as unknown as DriveFile);
+  }
+
+  /** Persists this run's timed-out files; the list is replaced, never accumulated. */
+  async saveRetry(previous: { ids: ReadonlySet<string>; stored: boolean }): Promise<void> {
+    const ids = this.timedOut;
+    if (ids.size === previous.ids.size && [...ids].every((id) => previous.ids.has(id))) return;
+    if (ids.size === 0) {
+      if (previous.stored) await this.ctx.remove(RETRY);
+      return;
+    }
+    if (ids.size > MAX_RETRY_FILES)
+      throw new IntegrationSyncError(ID, "Too many Drive downloads timed out.");
+    const dataset = new Store();
+    const list = new DriveContentRetry(`${this.ctx.resolve(RETRY)}#it`, dataset, DataFactory);
+    list.types.add(CLASSES.Dataset);
+    for (const id of [...ids].sort())
+      list.files.add(`${this.ctx.resolve(`${root(id)}meta.ttl`)}#it`);
+    await this.ctx.write({
+      slug: RETRY,
+      category: "documents",
+      forClass: CLASSES.Dataset,
+      dataset,
+      skipRegistration: true,
+    });
   }
 
   async changes(start: string): Promise<Snapshot> {
@@ -289,6 +369,8 @@ class Sync {
     for (const id of arr(file.parents))
       if (validId(id)) item.parents.add(`${this.ctx.resolve(`${root(id)}meta.ttl`)}#it`);
     const content = folder ? [] : await this.content(file, item, old, path, mimeType);
+    if (item.contentSkipped === "timeout") this.timedOut.add(file.id);
+    else this.timedOut.delete(file.id);
     const staged: string[] = [];
     try {
       for (const doc of content) {

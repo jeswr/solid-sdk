@@ -52,8 +52,10 @@ Every source request receives the combined run deadline and caller cancellation.
 have a 60-second timeout; bodies have a 60-second per-chunk idle timeout and a finite absolute
 allowance of 60 seconds plus one second per 256 KiB of the reader cap or smaller valid declared
 length. `readBytes` supplies that cap to the source wrapper, including Gmail raw and Drive
-content. Source deadline expiry permits Pod checkpoint writes; explicit caller cancellation
-still stops all Pod ports. Preserve effective
+content. Source deadline expiry permits Pod checkpoint writes; once `adapter.import`
+resolves the deadline no longer fails the run (no post-adapter `checkTime()`; `ctx.progress`
+throws only on caller cancel), so registration and provenance report the cursor. Explicit
+caller cancellation still stops all Pod ports. Preserve effective
 Request/init signals, including Drive's per-download controller. Fetches and reader waits
 must reject even if a custom transport ignores its signal. Cap Spotify Retry-After waits to
 `budget.remainingMs`. `RunBudget.request()` and all other charges check the deadline; exhausted
@@ -66,8 +68,11 @@ memberships then save a private account-local journal with page token, completed
 history id and seen-message manifest. Skip completed IDs; never resume by row offset or
 assume a message RDF write alone means its bytes and memberships succeeded. An HTTP 400 for
 a saved token restarts the listing once, rebuilding seen IDs and retaining completed IDs.
-Do not refetch completed raw payloads or double-charge list/raw messages. Keep the
-journal until the final sweep and memberships commit. Return its original history id so
+Do not refetch completed raw payloads or double-charge list/raw messages. Save the journal
+after the last page when it completed IDs, and clear it only through `ImportOutcome.commit`,
+which the runner calls after provenance and `onState` (best-effort, holding the connector
+claim); never delete it inside `import`. Raw-message `SourceTimeoutError` is skipped and
+counted like `ResponseTooLargeError`, but is not journalled as complete. Return its original history id so
 mutations during partial runs replay next time. Bound retained reconciliation identifiers
 across retries (2,000,000 identifiers / 16 MiB UTF-8 text). Test consecutive request-, item-, byte- and
 duration-capped runs, incomplete message retries and final removal of vanished mail.
@@ -77,6 +82,8 @@ run byte budget, because content is committed per file. The central wrapper exem
 successful Drive representation endpoints; JSON and inspected error bodies remain metered.
 Downloads still consume requests and deadlines. Only a source response timeout becomes
 `contentSkipped: "timeout"`; run budget failures and caller cancellation must propagate.
+Timed-out file ids persist in `drive/_content-retry.ttl`; incremental runs re-read and retry
+those their change list omits, and every successful run replaces the list.
 Preserve unchanged-representation reuse and
 test that request-capped retries make progress with content larger than the run JSON allowance.
 

@@ -1,3 +1,4 @@
+// AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { createHash } from "node:crypto";
 import { Container, Resource } from "@solid/object";
@@ -1396,6 +1397,97 @@ it("records a timed-out file as metadata and completes the remaining Drive scan"
     expect(await outcome).toMatchObject({ report: { cursor: "1000" } });
     expect(metadata(BINARY.id).contentSkipped).toBe("timeout");
     expect(metadata(DOC.id).encodings.size).toBe(2);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("retries a timed-out file on the next incremental run although the change list omits it", async () => {
+  vi.useFakeTimers();
+  try {
+    const { run, metadata, pod } = setup();
+    const retryUrl = `${ROOT}drive/_content-retry.ttl`;
+    const first = run(full([BINARY, DOC]), {
+      media: { ...CONTENT, [mediaUrl(BINARY.id)]: () => new Promise<Response>(() => {}) },
+    });
+    const outcome = first.result.then(
+      (report) => ({ report }),
+      (error: unknown) => ({ error }),
+    );
+    await vi.waitFor(() =>
+      expect(first.api.mock.calls.some(([input]) => String(input) === mediaUrl(BINARY.id))).toBe(
+        true,
+      ),
+    );
+    await vi.advanceTimersByTimeAsync(60_001);
+    const { report } = (await outcome) as { report: { state: ConnectorState } };
+    expect(metadata(BINARY.id).contentSkipped).toBe("timeout");
+    expect(pod.get(retryUrl)).toBeDefined();
+    vi.useRealTimers();
+    // Nothing changed at the source: the change list is empty, yet the file is re-read.
+    const fileUrl = `${DRIVE_API}/files/${encodeURIComponent(BINARY.id)}`;
+    const second = run(
+      [changes({ changes: [], newStartPageToken: "1001" }), { url: fileUrl, json: BINARY }],
+      {
+        media: CONTENT,
+        state: report.state,
+      },
+    );
+    expect((await second.result).cursor).toBe("1001");
+    expect(second.api.mock.calls.some(([input]) => String(input).startsWith(`${fileUrl}?`))).toBe(
+      true,
+    );
+    expect(metadata(BINARY.id).contentSkipped).toBeUndefined();
+    expect(pod.bytes(contentUrl(BINARY))).toBeDefined();
+    expect(pod.get(retryUrl)).toBeUndefined();
+    // Once retried, later runs no longer re-read the file.
+    const third = run([changes({ changes: [], newStartPageToken: "1002" })], {
+      state: (await second.result).state,
+    });
+    await third.result;
+    expect(third.api.mock.calls.some(([input]) => String(input).startsWith(`${fileUrl}?`))).toBe(
+      false,
+    );
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("drops a retried file that has since disappeared and keeps one that times out again", async () => {
+  vi.useFakeTimers();
+  try {
+    const { run, pod } = setup();
+    const retryUrl = `${ROOT}drive/_content-retry.ttl`;
+    const stalled = { ...CONTENT, [mediaUrl(BINARY.id)]: () => new Promise<Response>(() => {}) };
+    const timedRun = async (routes: FixtureRoute[], state?: ConnectorState) => {
+      const pending = run(routes, { media: stalled, state });
+      const outcome = pending.result.then((report) => report);
+      await vi.waitFor(() =>
+        expect(
+          pending.api.mock.calls.some(([input]) => String(input) === mediaUrl(BINARY.id)),
+        ).toBe(true),
+      );
+      await vi.advanceTimersByTimeAsync(60_001);
+      return outcome;
+    };
+    const fileUrl = `${DRIVE_API}/files/${encodeURIComponent(BINARY.id)}`;
+    const first = await timedRun(full([BINARY, DOC]));
+    const second = await timedRun(
+      [changes({ changes: [], newStartPageToken: "1001" }), { url: fileUrl, json: BINARY }],
+      first.state,
+    );
+    expect(second.cursor).toBe("1001");
+    expect(pod.get(retryUrl)).toBeDefined();
+    vi.useRealTimers();
+    const third = run(
+      [
+        changes({ changes: [], newStartPageToken: "1002" }),
+        { url: fileUrl, json: { error: {} }, status: 404 },
+      ],
+      { state: second.state },
+    );
+    expect((await third.result).cursor).toBe("1002");
+    expect(pod.get(retryUrl)).toBeUndefined();
   } finally {
     vi.useRealTimers();
   }

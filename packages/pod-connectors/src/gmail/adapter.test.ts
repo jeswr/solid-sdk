@@ -1140,3 +1140,222 @@ it("still charges duplicate completed IDs returned again within the same run", a
     }),
   ).rejects.toMatchObject({ resource: "items" });
 });
+
+describe("Gmail finalisation keeps the journal until the cursor is reported", () => {
+  const journalUrl = `${ACCOUNT}_full-sync.ttl`;
+  const many = (prefix: string, n: number) =>
+    Array.from({ length: n }, (_, i) => ({
+      ...(MESSAGES.m1 as GmailMessage),
+      id: `${prefix}-${i}`,
+      threadId: `${prefix}-${i}`,
+    }));
+  const source = (messages: GmailMessage[], onRaw: (id: string) => Promise<void> | void) => {
+    const routes = fixtureFetch("gmail", [
+      ...base,
+      { url: `${GMAIL_API}/messages`, json: { messages } },
+      ...messages.map(fetched),
+    ]);
+    const ids: string[] = [];
+    const api: typeof fetch = async (input, init) => {
+      const id = new URL(String(input)).pathname.split("/messages/")[1];
+      if (id) {
+        ids.push(id);
+        await onRaw(id);
+      }
+      return routes(input, init);
+    };
+    return { api, ids };
+  };
+
+  // Ports the round-3 delta-review probe: the deadline used to land after the sweep and the
+  // journal deletion, failing the run with neither a cursor nor a journal to resume from.
+  it("succeeds with the cursor when the deadline expires during the finish phase", async () => {
+    vi.useFakeTimers();
+    vi.spyOn(AbortSignal, "timeout").mockImplementation((ms) => {
+      const controller = new AbortController();
+      setTimeout(() => controller.abort(new DOMException("Timed out", "TimeoutError")), ms);
+      return controller.signal;
+    });
+    try {
+      const { pod, podWriter, transport } = setup();
+      const messages = many("finish", 6);
+      let slowSource = true;
+      const { api, ids } = source(messages, async () => {
+        if (slowSource) await vi.advanceTimersByTimeAsync(40);
+      });
+      const run = () =>
+        runImport({
+          adapter: gmailAdapter,
+          mode: "live",
+          podWriter,
+          sourceAuth: { fetch: api },
+          limits: { maxDurationMs: 150 },
+        });
+      await expect(run()).rejects.toMatchObject({ resource: "duration" });
+      expect(pod.get(journalUrl)).toBeDefined();
+      // Second run: the source is fast, but the final folder flush outlasts the deadline.
+      slowSource = false;
+      let slowed = 0;
+      transport(async (input, init) => {
+        if (init?.method === "PUT" && String(input) === folder("system:inbox")) {
+          slowed++;
+          await vi.advanceTimersByTimeAsync(400);
+        }
+        return pod.fetch(input, init);
+      });
+      const report = await run();
+      expect(slowed).toBeGreaterThan(0);
+      expect(report.cursor).toBe("1000");
+      expect(report.state?.cursor).toBe("1000");
+      expect(pod.get(journalUrl)).toBeUndefined();
+      expect(members(pod, folder("system:inbox"))).toHaveLength(messages.length);
+      // Only the payload in flight when run 1's deadline fired is fetched twice.
+      expect(ids.length - new Set(ids).size).toBeLessThanOrEqual(1);
+      expect(new Set(ids).size).toBe(messages.length);
+    } finally {
+      vi.restoreAllMocks();
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps the journal when the caller cancels during finish; the next run refetches nothing", async () => {
+    const { pod, podWriter, transport } = setup();
+    const messages = many("cancel", 4);
+    const { api, ids } = source(messages, () => undefined);
+    const controller = new AbortController();
+    // Cancel once listing is done: during the sweep that precedes the final flush.
+    transport((input, init) => {
+      if ((init?.method ?? "GET") === "GET" && String(input) === `${ACCOUNT}messages/`)
+        controller.abort(new Error("user cancelled"));
+      return pod.fetch(input, init);
+    });
+    const onState = vi.fn();
+    await expect(
+      runImport({
+        adapter: gmailAdapter,
+        mode: "live",
+        podWriter,
+        sourceAuth: { fetch: api },
+        signal: controller.signal,
+        onState,
+      }),
+    ).rejects.toThrow("user cancelled");
+    expect(onState).not.toHaveBeenCalledWith(expect.objectContaining({ lastOutcome: "success" }));
+    expect(pod.get(journalUrl)).toBeDefined();
+    expect(ids).toEqual(messages.map((m) => m.id));
+    transport(pod.fetch);
+    const report = await runImport({
+      adapter: gmailAdapter,
+      mode: "live",
+      podWriter,
+      sourceAuth: { fetch: api },
+    });
+    expect(report.cursor).toBe("1000");
+    expect(ids).toEqual(messages.map((m) => m.id));
+    expect(pod.get(journalUrl)).toBeUndefined();
+    expect(members(pod, folder("system:inbox"))).toHaveLength(messages.length);
+  });
+
+  it("reports the cursor even when clearing the journal fails afterwards", async () => {
+    const { pod, podWriter, transport } = setup();
+    const { api } = source(many("keep", 2), () => undefined);
+    const onState = vi.fn();
+    transport((input, init) =>
+      init?.method === "DELETE" && String(input) === journalUrl
+        ? Promise.resolve(new Response(null, { status: 500 }))
+        : pod.fetch(input, init),
+    );
+    const report = await runImport({
+      adapter: gmailAdapter,
+      mode: "live",
+      podWriter,
+      sourceAuth: { fetch: api },
+      onState,
+    });
+    expect(report.cursor).toBe("1000");
+    expect(onState).toHaveBeenCalledWith(
+      expect.objectContaining({ cursor: "1000", lastOutcome: "success" }),
+    );
+    expect(pod.get(journalUrl)).toBeDefined();
+  });
+
+  it("skips and counts a raw message whose response times out, keeping its stored copy", async () => {
+    const { pod, podWriter, run } = setup();
+    await run(GMAIL_FIXTURES).result;
+    vi.useFakeTimers();
+    vi.spyOn(AbortSignal, "timeout").mockImplementation((ms) => {
+      const controller = new AbortController();
+      setTimeout(() => controller.abort(new DOMException("Timed out", "TimeoutError")), ms);
+      return controller.signal;
+    });
+    try {
+      const routes = fixtureFetch("gmail", GMAIL_FIXTURES);
+      const api: typeof fetch = async (input, init) => {
+        if (String(input).startsWith(`${GMAIL_API}/messages/m1?`)) {
+          // The header timeout fires while the transport stalls.
+          await vi.advanceTimersByTimeAsync(61_000);
+          return new Promise<Response>(() => undefined);
+        }
+        return routes(input, init);
+      };
+      const report = await runImport({
+        adapter: gmailAdapter,
+        mode: "live",
+        podWriter,
+        sourceAuth: { fetch: api },
+      });
+      expect(report.skipped).toBe(1);
+      expect(report.state?.counts.skipped).toBe(1);
+      expect(pod.get(LUNCH_1)).toBeDefined();
+      expect(pod.get(LUNCH_2)).toBeDefined();
+      expect(pod.get(RECEIPT)).toBeDefined();
+    } finally {
+      vi.restoreAllMocks();
+      vi.useRealTimers();
+    }
+  });
+
+  it("retries a timed-out message when an interrupted full sync resumes", async () => {
+    vi.useFakeTimers();
+    vi.spyOn(AbortSignal, "timeout").mockImplementation((ms) => {
+      const controller = new AbortController();
+      setTimeout(() => controller.abort(new DOMException("Timed out", "TimeoutError")), ms);
+      return controller.signal;
+    });
+    try {
+      const { pod, podWriter } = setup();
+      const messages = many("stall", 3);
+      let stall = true;
+      const { api, ids } = source(messages, async (id) => {
+        if (stall && id.startsWith("stall-0")) {
+          await vi.advanceTimersByTimeAsync(61_000);
+          await new Promise(() => undefined);
+        }
+      });
+      await expect(
+        runImport({
+          adapter: gmailAdapter,
+          mode: "live",
+          podWriter,
+          sourceAuth: { fetch: api },
+          limits: { maxItems: 9 }, // profile + 6 labels + two rows
+        }),
+      ).rejects.toMatchObject({ resource: "items" });
+      expect(pod.get(msg("gmail-stall-1"))).toBeDefined();
+      stall = false;
+      await runImport({
+        adapter: gmailAdapter,
+        mode: "live",
+        podWriter,
+        sourceAuth: { fetch: api },
+      });
+      // stall-0 timed out and is retried; stall-1 was completed and is not refetched.
+      expect(ids.filter((id) => id.startsWith("stall-0"))).toHaveLength(2);
+      expect(ids.filter((id) => id.startsWith("stall-1"))).toHaveLength(1);
+      expect(pod.get(msg("gmail-stall-0"))).toBeDefined();
+    } finally {
+      vi.restoreAllMocks();
+      vi.useRealTimers();
+    }
+  });
+});

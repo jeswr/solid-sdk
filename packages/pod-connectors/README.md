@@ -88,8 +88,13 @@ still stop. Pending fetches and reads reject even when an injected transport ign
 cancellation; their signals are aborted and bodies cancelled. Spotify caps Retry-After
 waits to the remaining run time. Each JSON response retains its 32 MiB cap (Gmail raw-message
 JSON uses its existing larger per-message cap). The run deadline stops source work while
-allowing completed data and private journals to finish saving to the Pod. Explicit caller
-cancellation still refuses every subsequent source and Pod operation.
+allowing completed data and private journals to finish saving to the Pod. Once the adapter
+has returned, the deadline no longer fails the run: Type Index registration and provenance
+complete and the new cursor is reported (Pod finalisation is not bounded by `maxDurationMs`).
+Explicit caller cancellation still refuses every subsequent source and Pod operation, and
+progress reports stop only on cancellation. An adapter may return `ImportOutcome.commit` to
+discard private resume state; the runner calls it after recording provenance and reporting
+the successful state through `onState`, and ignores its failure.
 
 Pass any subset through `runImport({ ..., limits: { maxRequests: 500, maxItems: 10_000,
 maxBytes: 64 * 1024 * 1024, maxDurationMs: 300_000 } })`. Values must be non-negative safe
@@ -106,15 +111,20 @@ its raw payload count as one message. Limits apply to source traffic; Pod reads,
 provenance use their existing storage protections.
 
 Gmail journals a full sync's page token, completed message IDs, initial history id and
-seen-message manifest inside its account container after each continuing page and after a
-request/item/byte/duration budget failure. Completed message bytes and memberships are saved
+seen-message manifest inside its account container after each continuing page, after the
+last page when it completed messages, and after a request/item/byte/duration budget failure. Completed message bytes and memberships are saved
 before the journal. Retries skip completed IDs instead of refetching raw payloads or charging
 their rows again; incomplete message writes are retried. Row positions are never used, so
 deletions cannot shift an unprocessed message past the resume point. A saved page token
 rejected with HTTP 400 restarts the listing once and rebuilds the seen manifest, retaining
 completed IDs for reuse. The final sweep uses the retained manifest, and the original history id ensures
 mailbox mutations during these runs replay afterward. Successful history state remains
-unchanged until the complete scan and reconciliation succeed. Budgets must fit the profile,
+unchanged until the complete scan and reconciliation succeed. The journal is removed only
+by the runner's `commit` step, after the cursor has been reported; a run that fails or is
+cancelled during the sweep or final membership flush leaves it, so the next run refetches no
+completed payload. A raw message that exceeds its cap or whose response times out is
+skipped and counted in `skipped`, keeping any stored copy; a timed-out message is not
+journalled as complete, so a resumed full sync retries it. Budgets must fit the profile,
 labels, one listing page and at least one message. The journal's reconciliation manifest is
 bounded independently at 2,000,000 identifiers and 16 MiB of UTF-8 identifier text.
 
@@ -123,7 +133,10 @@ Drive's `createGoogleDriveAdapter({ maxBytes })` retains its separate per-file c
 run byte allowance; inspected error bodies still do. Requests, records, response deadlines
 and the total deadline apply to downloads too. A per-response timeout saves metadata with
 `contentSkipped: "timeout"` and continues to the next file; run exhaustion and caller
-cancellation still fail the import. A request-capped retry reuses already-linked
+cancellation still fail the import. Timed-out files are listed in `drive/_content-retry.ttl`
+(their metadata subjects, at most 10,000) and an incremental run re-reads each one that its
+change list omits (`files/<id>`, one request and one item) and downloads it again; a 404
+drops it, and the list is rewritten or removed after every successful run. A request-capped retry reuses already-linked
 unchanged representations and progresses to the remaining files.
 
 Exhaustion throws `RunBudgetExceededError`, a subtype of `IntegrationSyncError`, exported
