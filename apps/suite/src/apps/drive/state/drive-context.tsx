@@ -210,6 +210,7 @@ export function DriveProvider({
         fetch: session.fetch,
         confirmAccess,
         webId: session.webId,
+        provision,
         onProtectionChange: invalidate,
         onPrivateFolder: (url) =>
           toast(`${nameOf(url)} was restored as private`, {
@@ -217,7 +218,7 @@ export function DriveProvider({
               "Its original access was unknown. Only you can access this folder and new files in it.",
           }),
       }),
-    [session, confirmAccess, invalidate],
+    [session, confirmAccess, invalidate, provision],
   );
 
   useEffect(() => session.subscribe((url) => invalidate(url)), [session, invalidate]);

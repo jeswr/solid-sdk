@@ -10,6 +10,8 @@ import { Button } from "@jeswr/suite-ui";
 import Link from "next/link";
 import { type ReactNode, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { type PodSession, PodSessionProvider, usePodSessionState } from "@/lib/session/pod-session";
+import { useOptionalAccounts } from "@/shell/session/accounts-context";
+import { ReauthDialog } from "@/shell/session/reauth-dialog";
 import { nativeShareIntake, type ShareIntake } from "@/shell/share/intake";
 import { nameOf, parentOf } from "../lib/client/client";
 import { DriveProvider, useDrive, useFolder } from "../state/drive-context";
@@ -284,6 +286,8 @@ function ShareSession({ intake, batch }: { intake: ShareIntake; batch: ShareBatc
 }
 
 export function ShareScreen({ intake = nativeShareIntake }: { intake?: ShareIntake }) {
+  const accounts = useOptionalAccounts();
+  const expired = accounts?.status === "expired";
   const [native, setNative] = useState(false);
   const snapshot = useSyncExternalStore(
     intake.subscribe,
@@ -298,18 +302,21 @@ export function ShareScreen({ intake = nativeShareIntake }: { intake?: ShareInta
   const batch = native ? snapshot.batches[0] : undefined;
   return (
     <ShareFrame>
-      {batch ? (
-        <PodSessionProvider>
-          <ShareSession intake={intake} batch={batch} />
-        </PodSessionProvider>
-      ) : snapshot.error && native ? (
-        <>
-          <p role="alert">Couldn't read pending shares.</p>
-          <Button onClick={() => void intake.refresh()}>Retry</Button>
-        </>
-      ) : (
-        <p>Nothing to save</p>
-      )}
+      <div inert={expired}>
+        {batch ? (
+          <PodSessionProvider>
+            <ShareSession intake={intake} batch={batch} />
+          </PodSessionProvider>
+        ) : snapshot.error && native ? (
+          <>
+            <p role="alert">Couldn't read pending shares.</p>
+            <Button onClick={() => void intake.refresh()}>Retry</Button>
+          </>
+        ) : (
+          <p>Nothing to save</p>
+        )}
+      </div>
+      {expired && <ReauthDialog />}
     </ShareFrame>
   );
 }

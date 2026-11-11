@@ -1,9 +1,14 @@
 // AUTHORED-BY Codex GPT-6
+// Radix reads DOM availability at import time.
+import "./drive-ui-dom";
 import { createRequire } from "node:module";
 import { createShareInbox, type ShareBatch, type ShareIntakePlugin } from "@jeswr/suite-native";
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { ShareBatchView, ShareScreen } from "../src/apps/drive/components/share-screen";
 import type { UploadQueue, UploadTask } from "../src/apps/drive/state/uploads";
+import type { PodSession } from "../src/lib/session/types";
+import { AccountsContext } from "../src/shell/session/accounts-context";
+import type { AccountsContextValue } from "../src/shell/session/accounts-provider";
 import { createShareIntake } from "../src/shell/share/intake";
 import { act, deferred, h } from "./drive-ui-dom";
 
@@ -14,11 +19,27 @@ const { cleanup, fireEvent, render, screen, waitFor } = requireUi(
   "@testing-library/react",
 ) as typeof import("../../../packages/suite-ui/node_modules/@testing-library/react");
 afterEach(cleanup);
-const session = vi.hoisted(() => ({ status: "signed-out" }));
+const session = vi.hoisted(() => ({
+  status: "signed-out",
+  session: undefined as PodSession | undefined,
+}));
+const drive = vi.hoisted(() => vi.fn());
+const actions = vi.hoisted(() => ({ saveLink: vi.fn(), saveText: vi.fn() }));
+beforeEach(() => {
+  session.status = "signed-out";
+  session.session = undefined;
+  vi.clearAllMocks();
+});
 vi.mock("../src/lib/session/pod-session", () => ({
   PodSessionProvider: ({ children }: { children: React.ReactNode }) => children,
   usePodSessionState: () => session,
 }));
+vi.mock("../src/apps/drive/state/drive-context", () => ({
+  DriveProvider: ({ children }: { children: React.ReactNode }) => children,
+  useDrive: drive,
+  useFolder: () => ({ status: "ready", items: [] }),
+}));
+vi.mock("../src/apps/drive/state/share-actions", () => ({ createShareActions: () => actions }));
 const file: ShareBatch["items"][number] = {
   kind: "file",
   name: "report.txt",
@@ -231,6 +252,9 @@ it("keeps shares pending when signed out, and shows an empty state on the web", 
   vi.stubGlobal("Capacitor", native);
   const view = render(h(ShareScreen, { intake: test.intake }));
   await screen.findByRole("link", { name: "Sign in" });
+  expect(screen.getByRole("link", { name: "Sign in" }).getAttribute("href")).toBe(
+    "/signin?next=%2Fshare",
+  );
   expect(test.plugin.acknowledge).not.toHaveBeenCalled();
   view.unmount();
   vi.stubGlobal("Capacitor", undefined);
@@ -238,4 +262,62 @@ it("keeps shares pending when signed out, and shows an empty state on the web", 
   render(h(ShareScreen, { intake: test.intake }));
   expect(screen.getByText("Nothing to save")).toBeTruthy();
   expect(test.plugin.getPending).not.toHaveBeenCalled();
+});
+
+it("makes an expired share inert, offers shell reauthentication, and keeps the pending batch and progress", async () => {
+  const test = await fixture([text]);
+  vi.stubGlobal("Capacitor", { isNativePlatform: () => true, getPlatform: () => "ios" });
+  const account = {
+    id: "solid:alice",
+    kind: "solid" as const,
+    name: "Alice",
+    webId: "https://pod.example/profile#me",
+    storageUrl: "https://pod.example/",
+  };
+  const reauth = vi.fn(async () => account);
+  const accounts = {
+    status: "ready",
+    active: account,
+    reauth,
+    signOut: vi.fn(),
+  } as unknown as AccountsContextValue;
+  session.status = "ready";
+  session.session = {
+    mode: "solid",
+    displayName: account.name,
+    webId: account.webId,
+    storageUrl: account.storageUrl,
+    fetch: vi.fn(),
+    publicFetch: vi.fn(),
+    subscribe: () => () => {},
+  };
+  drive.mockReturnValue({ driveRoot: "https://pod.example/drive/", uploads: test.uploads });
+  actions.saveText.mockRejectedValueOnce(new Error("offline"));
+  const tree = (value: AccountsContextValue) =>
+    h(AccountsContext, { value }, h(ShareScreen, { intake: test.intake }));
+  const view = render(tree(accounts));
+  fireEvent.click(await screen.findByRole("button", { name: "New note from text" }));
+  await screen.findByRole("button", { name: "Retry New note from text" });
+  const pending = test.intake.getSnapshot();
+
+  view.rerender(tree({ ...accounts, status: "expired" }));
+  const dialog = await screen.findByRole("alertdialog");
+  expect(dialog.textContent).toContain("Your session ended — sign in again to continue");
+  const content = view.container.querySelector("[inert]");
+  expect(content?.textContent).toContain(text.kind === "text" ? text.text : "");
+  expect(test.intake.getSnapshot().batches).toBe(pending.batches);
+  expect(test.intake.getSnapshot().progress).toBe(pending.progress);
+  expect(test.plugin.acknowledge).not.toHaveBeenCalled();
+  expect(test.plugin.readChunk).not.toHaveBeenCalled();
+  expect(test.uploads.enqueue).not.toHaveBeenCalled();
+
+  fireEvent.click(screen.getByRole("button", { name: "Sign in again" }));
+  await waitFor(() => expect(reauth).toHaveBeenCalledOnce());
+  view.rerender(tree(accounts));
+  expect(screen.queryByRole("alertdialog")).toBeNull();
+  expect(view.container.querySelector("[inert]")).toBeNull();
+  expect(screen.getByRole("button", { name: "Retry New note from text" })).toBeTruthy();
+  expect(actions.saveText).toHaveBeenCalledOnce();
+  expect(test.intake.getSnapshot().batches).toBe(pending.batches);
+  expect(test.plugin.acknowledge).not.toHaveBeenCalled();
 });
