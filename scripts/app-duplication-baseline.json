@@ -717,8 +717,8 @@
         },
         {
           "file": "apps/suite/src/apps/photos/lib/model/photograph.ts",
-          "startLine": 164,
-          "endLine": 183,
+          "startLine": 180,
+          "endLine": 199,
           "tokens": 121
         }
       ]
@@ -1367,8 +1367,8 @@
         },
         {
           "file": "apps/suite/src/apps/photos/lib/model/photograph.ts",
-          "startLine": 183,
-          "endLine": 199,
+          "startLine": 199,
+          "endLine": 215,
           "tokens": 136
         }
       ]
@@ -1574,8 +1574,8 @@
         },
         {
           "file": "apps/suite/src/apps/photos/lib/model/photograph.ts",
-          "startLine": 177,
-          "endLine": 195,
+          "startLine": 193,
+          "endLine": 211,
           "tokens": 141
         }
       ]
@@ -1594,6 +1594,23 @@
           "startLine": 44,
           "endLine": 73,
           "tokens": 155
+        }
+      ]
+    },
+    "25c1f743b672f1e344ed73bf5bac7e125da0c5d696f3b703e152c604d141c755": {
+      "tokens": 120,
+      "locations": [
+        {
+          "file": "apps/suite/src/apps/docs/lib/model/type-index.ts",
+          "startLine": 67,
+          "endLine": 85,
+          "tokens": 120
+        },
+        {
+          "file": "apps/suite/src/apps/photos/lib/model/photograph.ts",
+          "startLine": 107,
+          "endLine": 128,
+          "tokens": 120
         }
       ]
     },
@@ -1957,8 +1974,8 @@
         },
         {
           "file": "apps/suite/src/apps/photos/lib/model/photograph.ts",
-          "startLine": 175,
-          "endLine": 191,
+          "startLine": 191,
+          "endLine": 207,
           "tokens": 125
         },
         {
@@ -2045,14 +2062,14 @@
         },
         {
           "file": "apps/suite/src/apps/photos/lib/model/photograph.ts",
-          "startLine": 150,
-          "endLine": 169,
+          "startLine": 166,
+          "endLine": 185,
           "tokens": 120
         },
         {
           "file": "apps/suite/src/apps/photos/lib/model/photograph.ts",
-          "startLine": 208,
-          "endLine": 227,
+          "startLine": 224,
+          "endLine": 243,
           "tokens": 120
         }
       ]
@@ -2131,8 +2148,8 @@
         },
         {
           "file": "apps/suite/src/apps/photos/lib/model/photograph.ts",
-          "startLine": 347,
-          "endLine": 367,
+          "startLine": 371,
+          "endLine": 391,
           "tokens": 143
         }
       ]
@@ -3328,8 +3345,8 @@
         },
         {
           "file": "apps/suite/src/apps/photos/lib/model/photograph.ts",
-          "startLine": 184,
-          "endLine": 204,
+          "startLine": 200,
+          "endLine": 220,
           "tokens": 143
         },
         {
@@ -3391,8 +3408,8 @@
         },
         {
           "file": "apps/suite/src/apps/photos/lib/model/photograph.ts",
-          "startLine": 189,
-          "endLine": 207,
+          "startLine": 205,
+          "endLine": 223,
           "tokens": 141
         }
       ]
@@ -3965,8 +3982,8 @@
         },
         {
           "file": "apps/suite/src/apps/photos/lib/model/photograph.ts",
-          "startLine": 195,
-          "endLine": 219,
+          "startLine": 211,
+          "endLine": 235,
           "tokens": 187
         }
       ]
@@ -4114,8 +4131,8 @@
         },
         {
           "file": "apps/suite/src/apps/photos/lib/model/photograph.ts",
-          "startLine": 184,
-          "endLine": 201,
+          "startLine": 200,
+          "endLine": 217,
           "tokens": 124
         },
         {
@@ -4214,12 +4231,6 @@
           "file": "apps/pod-photos/src/photos/photograph.ts",
           "startLine": 83,
           "endLine": 104,
-          "tokens": 122
-        },
-        {
-          "file": "apps/suite/src/apps/photos/lib/model/photograph.ts",
-          "startLine": 91,
-          "endLine": 112,
           "tokens": 122
         },
         {
@@ -4497,14 +4508,14 @@
         },
         {
           "file": "apps/suite/src/apps/photos/lib/model/photograph.ts",
-          "startLine": 92,
-          "endLine": 112,
+          "startLine": 108,
+          "endLine": 128,
           "tokens": 121
         },
         {
           "file": "apps/suite/src/apps/photos/lib/model/photograph.ts",
-          "startLine": 170,
-          "endLine": 189,
+          "startLine": 186,
+          "endLine": 205,
           "tokens": 121
         },
         {
@@ -5269,19 +5280,19 @@
       ]
     },
     "83d2fb03383a3de16934e8789d1fb1bb25a9c1d9c15e3841f39bed96d866b5f4": {
-      "tokens": 259,
+      "tokens": 172,
       "locations": [
         {
           "file": "apps/pod-photos/src/photos/photograph.ts",
           "startLine": 55,
-          "endLine": 97,
-          "tokens": 259
+          "endLine": 82,
+          "tokens": 172
         },
         {
           "file": "apps/suite/src/apps/photos/lib/model/photograph.ts",
-          "startLine": 63,
-          "endLine": 105,
-          "tokens": 259
+          "startLine": 66,
+          "endLine": 93,
+          "tokens": 172
         }
       ]
     },
@@ -5684,8 +5695,8 @@
         },
         {
           "file": "apps/suite/src/apps/photos/lib/model/photograph.ts",
-          "startLine": 166,
-          "endLine": 185,
+          "startLine": 182,
+          "endLine": 201,
           "tokens": 138
         },
         {
@@ -5809,12 +5820,6 @@
           "file": "apps/pod-photos/src/photos/photograph.ts",
           "startLine": 78,
           "endLine": 101,
-          "tokens": 140
-        },
-        {
-          "file": "apps/suite/src/apps/photos/lib/model/photograph.ts",
-          "startLine": 86,
-          "endLine": 109,
           "tokens": 140
         }
       ]
@@ -6236,8 +6241,8 @@
         },
         {
           "file": "apps/suite/src/apps/photos/lib/model/photograph.ts",
-          "startLine": 233,
-          "endLine": 263,
+          "startLine": 249,
+          "endLine": 279,
           "tokens": 125
         }
       ]
@@ -6681,8 +6686,8 @@
         },
         {
           "file": "apps/suite/src/apps/photos/lib/model/photograph.ts",
-          "startLine": 163,
-          "endLine": 183,
+          "startLine": 179,
+          "endLine": 199,
           "tokens": 136
         }
       ]
@@ -7015,12 +7020,6 @@
           "startLine": 78,
           "endLine": 97,
           "tokens": 120
-        },
-        {
-          "file": "apps/suite/src/apps/photos/lib/model/photograph.ts",
-          "startLine": 86,
-          "endLine": 105,
-          "tokens": 120
         }
       ]
     },
@@ -7127,8 +7126,8 @@
         },
         {
           "file": "apps/suite/src/apps/photos/lib/model/photograph.ts",
-          "startLine": 155,
-          "endLine": 181,
+          "startLine": 171,
+          "endLine": 197,
           "tokens": 173
         }
       ]
@@ -7518,14 +7517,14 @@
         },
         {
           "file": "apps/suite/src/apps/photos/lib/model/photograph.ts",
-          "startLine": 96,
-          "endLine": 116,
+          "startLine": 112,
+          "endLine": 132,
           "tokens": 132
         },
         {
           "file": "apps/suite/src/apps/photos/lib/model/photograph.ts",
-          "startLine": 174,
-          "endLine": 190,
+          "startLine": 190,
+          "endLine": 206,
           "tokens": 132
         },
         {
@@ -7724,8 +7723,8 @@
         },
         {
           "file": "apps/suite/src/apps/photos/lib/model/photograph.ts",
-          "startLine": 175,
-          "endLine": 192,
+          "startLine": 191,
+          "endLine": 208,
           "tokens": 122
         },
         {
@@ -7994,8 +7993,8 @@
         },
         {
           "file": "apps/suite/src/apps/photos/lib/model/photograph.ts",
-          "startLine": 169,
-          "endLine": 189,
+          "startLine": 185,
+          "endLine": 205,
           "tokens": 141
         },
         {
@@ -8419,8 +8418,8 @@
         },
         {
           "file": "apps/suite/src/apps/photos/lib/model/photograph.ts",
-          "startLine": 167,
-          "endLine": 186,
+          "startLine": 183,
+          "endLine": 202,
           "tokens": 122
         },
         {
@@ -8883,8 +8882,8 @@
         },
         {
           "file": "apps/suite/src/apps/photos/lib/model/photograph.ts",
-          "startLine": 190,
-          "endLine": 224,
+          "startLine": 206,
+          "endLine": 240,
           "tokens": 235
         }
       ]
@@ -9000,12 +8999,6 @@
           "file": "apps/pod-photos/src/photos/photograph.ts",
           "startLine": 83,
           "endLine": 103,
-          "tokens": 120
-        },
-        {
-          "file": "apps/suite/src/apps/photos/lib/model/photograph.ts",
-          "startLine": 91,
-          "endLine": 111,
           "tokens": 120
         },
         {
@@ -9263,12 +9256,6 @@
           "file": "apps/pod-photos/src/photos/photograph.ts",
           "startLine": 80,
           "endLine": 102,
-          "tokens": 137
-        },
-        {
-          "file": "apps/suite/src/apps/photos/lib/model/photograph.ts",
-          "startLine": 88,
-          "endLine": 110,
           "tokens": 137
         }
       ]
@@ -9820,8 +9807,8 @@
         },
         {
           "file": "apps/suite/src/apps/photos/lib/model/photograph.ts",
-          "startLine": 178,
-          "endLine": 197,
+          "startLine": 194,
+          "endLine": 213,
           "tokens": 140
         },
         {
@@ -10087,8 +10074,8 @@
         },
         {
           "file": "apps/suite/src/apps/photos/lib/model/photograph.ts",
-          "startLine": 151,
-          "endLine": 171,
+          "startLine": 167,
+          "endLine": 187,
           "tokens": 139
         }
       ]
@@ -10293,8 +10280,8 @@
         },
         {
           "file": "apps/suite/src/apps/photos/lib/model/photograph.ts",
-          "startLine": 141,
-          "endLine": 169,
+          "startLine": 157,
+          "endLine": 185,
           "tokens": 147
         }
       ]
@@ -10327,8 +10314,8 @@
         },
         {
           "file": "apps/suite/src/apps/photos/lib/model/photograph.ts",
-          "startLine": 181,
-          "endLine": 198,
+          "startLine": 197,
+          "endLine": 214,
           "tokens": 122
         },
         {
