@@ -1,7 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 import { createHash } from "node:crypto";
-import { AclResource } from "@solid/object";
+import { AclResource, Authorization, Group } from "@solid/object";
 import { DataFactory, Store } from "n3";
 import { expect, it, vi } from "vitest";
 import { ChatClient } from "../src/apps/chat/lib/client";
@@ -50,6 +50,7 @@ const input = { name: "Team", creator: ALICE, created: AT, members: [BOB] };
 function wacPod() {
   const pod = createDemoPod({ root: ROOT });
   const acls = new Map<string, Store>();
+  const existing = new Set<string>();
   const calls: { actor: string; url: string; method: string }[] = [];
   let fault: ((url: string, method: string) => Response | undefined) | undefined;
   const as =
@@ -78,11 +79,16 @@ function wacPod() {
               ? rule.canReadWriteAcl
               : method === "GET" || method === "HEAD"
                 ? rule.canRead
-                : rule.canWrite),
+                : rule.canWrite ||
+                  (rule.canAppend &&
+                    ((method === "PUT" && !existing.has(url)) ||
+                      (method === "PATCH" && /^INSERT DATA/.test(String(init.body)))))),
         );
       }
       if (!allowed) return new Response(null, { status: 403 });
       const response = await pod.fetch(target, init);
+      if (response.ok && method === "PUT") existing.add(url);
+      if (response.ok && method === "DELETE") existing.delete(url);
       if (response.ok && method === "PUT" && control)
         acls.set(resource, await parseChat(String(init.body), url));
       return response;
@@ -237,7 +243,7 @@ it("lets members send/edit/delete/task only in their own day and permits explici
     (c) =>
       c.actor === BOB && (c.method === "PUT" || c.method === "PATCH") && !c.url.endsWith(".acl"),
   );
-  expect(writes.slice(2).every((c) => c.url.startsWith(bob))).toBe(true);
+  expect(writes.every((c) => c.url.startsWith(bob))).toBe(true);
   await expect(
     sendMessage(pod.as(EVE), ROOM, { id: "x", author: EVE, content: "No", at: AT }),
   ).rejects.toThrow();
@@ -349,7 +355,10 @@ it("uses member days for the client, search, unread counts, reaction toggles, fi
     expect((await owner.search("garden", { timeZone: "UTC" })).results).toHaveLength(1);
     const container = await memberContainer(room.url, BOB);
     await pod.as(BOB)(`${container}photo.png`, { method: "PUT", body: "image" });
-    expect(await loadRoomFiles(pod.as(ALICE), room.url)).toEqual([`${container}photo.png`]);
+    expect(await loadRoomFiles(pod.as(ALICE), room.url)).toEqual({
+      files: [`${container}photo.png`],
+      dropped: 0,
+    });
     await expect(bob.moderate(room.url, message.id)).rejects.toThrow("not-author");
     await owner.moderate(room.url, message.id);
     expect((await owner.messages(room.url)).messages[0]?.deleted).toBe(true);
@@ -362,30 +371,45 @@ it("uses member days for the client, search, unread counts, reaction toggles, fi
 });
 
 it("retains the v1 wire model, append ACLs, shared events and author claims", async () => {
-  const pod = createDemoPod({ root: ROOT });
-  await saveChat(pod.fetch, ROOT, roomIndex(ROOM), buildRoom(ROOM, input), { ifNoneMatch: "*" });
-  const sent = await sendMessage(pod.fetch, ROOM, {
+  const pod = wacPod();
+  await createRoom(pod.as(ALICE), ROOT, "team", input);
+  const index = await loadChat(pod.as(ALICE), ROOM, roomIndex(ROOM));
+  const acl = await loadChat(pod.as(ALICE), ROOM, `${ROOM}.acl`);
+  await saveChat(
+    pod.as(ALICE),
+    ROOT,
+    `${ROOM}.acl`,
+    buildRoomAcl(ROOM, `${ROOM}.acl`, ALICE, [BOB]),
+    { ifMatch: acl.etag as string },
+  );
+  await saveChat(pod.as(ALICE), ROOT, index.url, buildRoom(ROOM, input), {
+    ifMatch: index.etag as string,
+  });
+  const sent = await sendMessage(pod.as(BOB), ROOM, {
     id: "v1",
     author: BOB,
     content: "Claim",
     at: AT,
   });
+  await expect(
+    saveMessageEdit(pod.as(BOB), ROOM, `${sent.url}#v1`, BOB, "Denied", AT),
+  ).rejects.toMatchObject({ status: 403 });
   expect(sent.url).toBe(dayUrl(ROOM, AT));
-  await react(pod.fetch, ROOM, {
+  await react(pod.as(BOB), ROOM, {
     id: "like",
     message: `${sent.url}#v1`,
-    actor: ALICE,
+    actor: BOB,
     emoji: "👍",
     at: AT,
   });
-  expect((await loadMessages(pod.fetch, ROOM, AT, AT, 1)).messages[0]?.author).toBe(BOB);
+  expect((await loadMessages(pod.as(BOB), ROOM, AT, AT, 1)).messages[0]?.author).toBe(BOB);
   expect(
     [
       ...new AclResource(buildRoomAcl(ROOM, `${ROOM}.acl`, ALICE, [BOB]), DataFactory)
         .authorizations,
     ].find((rule) => rule.agent.has(BOB))?.canAppend,
   ).toBe(true);
-  await expect(removeMessage(pod.fetch, ROOM, `${sent.url}#v1`, ALICE, AT)).rejects.toThrow(
+  await expect(removeMessage(pod.as(ALICE), ROOM, `${sent.url}#v1`, ALICE, AT)).rejects.toThrow(
     "not-author",
   );
 });
@@ -458,7 +482,9 @@ it("bounds a v2 page to six concurrent member-day reads, treats 404 as empty, an
     String(target) === roomIndex(ROOM)
       ? new Response(descriptor, { headers: { "content-type": "text/turtle" } })
       : new Response(null, { status: 403 });
-  await expect(loadMessages(denied, ROOM, AT, AT, 1)).rejects.toMatchObject({ status: 403 });
+  await expect(loadMessages(denied, ROOM, AT, AT, 1, { reader: ALICE })).rejects.toMatchObject({
+    status: 403,
+  });
 });
 
 it("rejects foreign/cross-day Likes and checks LongChat makers, literal authors, and authorless events", async () => {
@@ -559,4 +585,401 @@ it("toggles cross-member client reactions in the actor day, rejects forged targe
   await client.react(ROOM, own.id, "👍");
   await client.react(ROOM, own.id, "👍");
   expect((await client.messages(ROOM)).messages[0]?.reactions).toEqual([]);
+});
+
+const badMemberResponses = [
+  {
+    name: "invalid RDF",
+    response: () =>
+      new Response("this is not Turtle", { headers: { "content-type": "text/turtle" } }),
+  },
+  {
+    name: "unsupported media type",
+    response: () =>
+      new Response("binary", { headers: { "content-type": "application/octet-stream" } }),
+  },
+  {
+    name: "parser budget",
+    response: () =>
+      new Response(`${"[".repeat(130)}0${"]".repeat(130)}`, {
+        headers: { "content-type": "application/ld+json" },
+      }),
+  },
+  ...[403, 404, 410].map((status) => ({
+    name: String(status),
+    response: () => new Response(null, { status }),
+  })),
+];
+
+it.each(
+  badMemberResponses,
+)("isolates another member's $name day across timeline, reactions, unread and search", async ({
+  response,
+  name,
+}) => {
+  vi.useFakeTimers();
+  vi.setSystemTime(AT);
+  try {
+    const pod = wacPod();
+    await createRoom(pod.as(ALICE), ROOT, "team", input);
+    const client = new ChatClient(pod.as(ALICE), ROOT, ALICE);
+    await client.join(ROOM);
+    const message = await client.send(ROOM, "Healthy garden", { at: AT });
+    await client.react(ROOM, message.id, "👍");
+    const day = dayUrl(await memberContainer(ROOM, BOB), AT);
+    pod.fail((url, method) => (url === day && method === "GET" ? response() : undefined));
+    if (name === "parser budget")
+      await expect(loadChat(pod.as(ALICE), ROOM, day)).rejects.toMatchObject({
+        code: "PARSE_LIMIT",
+      });
+    const page = await client.messages(ROOM, { before: AT, since: AT, days: 1 });
+    expect(page.dropped).toBe(1);
+    expect(page.messages.map((m) => m.id)).toEqual([message.id]);
+    expect(page.messages[0]?.reactions).toEqual([{ emoji: "👍", count: 1, reactedByMe: true }]);
+    expect(await client.unreadCounts([{ url: ROOM }])).toEqual({ [ROOM]: 0 });
+    const search = await client.search("garden", { days: 1, timeZone: "UTC" });
+    expect(search.results.map((result) => result.message.id)).toEqual([message.id]);
+    expect(search.skipped).toEqual([]);
+    expect(search.droppedRecords).toBe(1);
+    const own = new ChatClient(pod.as(BOB), ROOT, BOB);
+    if (name === "404")
+      expect((await own.messages(ROOM, { before: AT, since: AT, days: 1 })).dropped).toBe(0);
+    else await expect(own.messages(ROOM, { before: AT, since: AT, days: 1 })).rejects.toThrow();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it.each(
+  badMemberResponses,
+)("isolates $name member file listings at each date depth, retaining own errors", async ({
+  response,
+}) => {
+  for (const depth of ["", "2026/", "2026/11/"]) {
+    const pod = wacPod();
+    await createRoom(pod.as(ALICE), ROOT, "team", input);
+    const alice = await memberContainer(ROOM, ALICE);
+    const bob = await memberContainer(ROOM, BOB);
+    for (const [actor, container] of [
+      [ALICE, alice],
+      [BOB, bob],
+    ]) {
+      await sendMessage(pod.as(actor as string), ROOM, {
+        author: actor as string,
+        id: "one",
+        content: "Hello",
+        at: AT,
+      });
+      await pod.as(actor as string)(`${container}2026/11/photo.png`, {
+        method: "PUT",
+        body: "image",
+      });
+    }
+    pod.fail((url, method) =>
+      method === "GET" && url === `${bob}${depth}` ? response() : undefined,
+    );
+    expect(await loadRoomFiles(pod.as(ALICE), ROOM, { reader: ALICE })).toEqual({
+      files: [`${alice}2026/11/photo.png`],
+      dropped: 1,
+    });
+    await expect(loadRoomFiles(pod.as(BOB), ROOM, { reader: BOB })).rejects.toThrow();
+  }
+});
+
+it("propagates index, authentication, server, network and own parsing failures", async () => {
+  const pod = wacPod();
+  await createRoom(pod.as(ALICE), ROOT, "team", input);
+  const bob = await memberContainer(ROOM, BOB);
+  for (const status of [401, 503]) {
+    pod.fail((url, method) =>
+      url.startsWith(bob) && method === "GET"
+        ? new Response("failure", { status, headers: { "content-type": "text/turtle" } })
+        : undefined,
+    );
+    await expect(
+      loadMessages(pod.as(ALICE), ROOM, AT, AT, 1, { reader: ALICE }),
+    ).rejects.toMatchObject({ status });
+    await expect(loadRoomFiles(pod.as(ALICE), ROOM, { reader: ALICE })).rejects.toMatchObject({
+      status,
+    });
+  }
+  const network: typeof fetch = (url, init) => {
+    if (String(url).startsWith(bob)) throw new Error("offline");
+    return pod.as(ALICE)(url, init);
+  };
+  pod.fail(undefined);
+  await expect(loadMessages(network, ROOM, AT, AT, 1, { reader: ALICE })).rejects.toThrow(
+    "Network error",
+  );
+  pod.fail((url) => (url === roomIndex(ROOM) ? badMemberResponses[0]?.response() : undefined));
+  await expect(loadMessages(pod.as(ALICE), ROOM, AT, AT, 1)).rejects.toThrow();
+  await expect(loadRoomFiles(pod.as(ALICE), ROOM)).rejects.toThrow();
+});
+
+it("refuses to resume creation under a legacy Append ACL before writing member containers or index", async () => {
+  const pod = wacPod();
+  await createRoom(pod.as(ALICE), ROOT, "team", input);
+  await pod.as(ALICE)(roomIndex(ROOM), { method: "DELETE" });
+  const acl = await loadChat(pod.as(ALICE), ROOM, `${ROOM}.acl`);
+  await saveChat(pod.as(ALICE), ROOT, acl.url, buildRoomAcl(ROOM, acl.url, ALICE, [BOB]), {
+    ifMatch: acl.etag as string,
+  });
+  const before = pod.calls.length;
+  await expect(createRoom(pod.as(ALICE), ROOT, "team", input, { resume: true })).rejects.toThrow(
+    "existing root ACL grants members Append",
+  );
+  expect(
+    pod.calls
+      .slice(before)
+      .filter((c) => c.method === "PUT")
+      .map((c) => c.url),
+  ).toEqual([ROOM, `${ROOM}.acl`]);
+  expect((await pod.as(ALICE)(roomIndex(ROOM))).status).toBe(404);
+});
+
+it("refuses an interrupted direct message with a legacy root ACL", async () => {
+  const pod = wacPod();
+  const client = new ChatClient(pod.as(ALICE), ROOT, ALICE);
+  const room = await client.createDirect(BOB);
+  await client.leave(room.url);
+  await pod.as(ALICE)(roomIndex(room.url), { method: "DELETE" });
+  const acl = await loadChat(pod.as(ALICE), room.url, `${room.url}.acl`);
+  await saveChat(pod.as(ALICE), ROOT, acl.url, buildRoomAcl(room.url, acl.url, ALICE, [BOB]), {
+    ifMatch: acl.etag as string,
+  });
+  await expect(client.createDirect(BOB)).rejects.toThrow("existing root ACL grants members Append");
+  expect((await pod.as(ALICE)(roomIndex(room.url))).status).toBe(404);
+});
+
+it("preserves member-bound cached messages and reactions, reading index and target once per toggle", async () => {
+  const pod = wacPod();
+  await createRoom(pod.as(ALICE), ROOT, "team", input);
+  const alice = new ChatClient(pod.as(ALICE), ROOT, ALICE);
+  const bob = new ChatClient(pod.as(BOB), ROOT, BOB);
+  const target = await alice.send(ROOM, "Alice", { at: AT });
+  const own = await bob.send(ROOM, "Bob", { at: AT });
+  await alice.react(ROOM, own.id, "❤️");
+  await bob.messages(ROOM, { before: AT, since: AT, days: 1 });
+  const day = await loadChat(pod.as(BOB), ROOM, own.id.split("#")[0] as string);
+  const forged = appendMessage(
+    day.dataset,
+    ROOM,
+    { id: "injected", author: ALICE, content: "Forgery", at: AT },
+    await memberContainer(ROOM, BOB),
+  );
+  await saveChat(pod.as(ALICE), ROOT, day.url, forged, { ifMatch: day.etag as string });
+  const cache = (bob as unknown as { known: Map<string, { reactions: unknown[] }> }).known;
+  for (const message of [target, target, own, own]) {
+    const before = pod.calls.length;
+    await bob.react(ROOM, message.id, "👍");
+    const gets = pod.calls.slice(before).filter((c) => c.method === "GET");
+    expect(gets.filter((c) => c.url === roomIndex(ROOM))).toHaveLength(1);
+    expect(gets.filter((c) => c.url === message.id.split("#")[0])).toHaveLength(1);
+    expect(cache.has(`${day.url}#injected`)).toBe(false);
+    const cached = cache.get(message.id)?.reactions;
+    const fresh = (await bob.messages(ROOM, { before: AT, since: AT, days: 1 })).messages.find(
+      (m) => m.id === message.id,
+    )?.reactions;
+    expect(cached).toEqual(fresh);
+    expect(cache.get(own.id)?.reactions).toContainEqual({
+      emoji: "❤️",
+      count: 1,
+      reactedByMe: false,
+    });
+  }
+});
+
+it("lets a v1 Append member append layout descriptors, documenting the legacy trust boundary", async () => {
+  const pod = wacPod();
+  await createRoom(pod.as(ALICE), ROOT, "team", input);
+  const acl = await loadChat(pod.as(ALICE), ROOT, `${ROOM}.acl`);
+  await saveChat(pod.as(ALICE), ROOT, acl.url, buildRoomAcl(ROOM, acl.url, ALICE, [BOB]), {
+    ifMatch: acl.etag as string,
+  });
+  const index = await loadChat(pod.as(ALICE), ROOT, roomIndex(ROOM));
+  await saveChat(pod.as(ALICE), ROOT, index.url, buildRoom(ROOM, input), {
+    ifMatch: index.etag as string,
+  });
+  const body = await serializeChat(await buildRoomV2(ROOM, input), "application/n-triples");
+  expect(
+    (
+      await pod.as(BOB)(index.url, {
+        method: "PATCH",
+        headers: { "content-type": "application/sparql-update" },
+        body: `INSERT DATA {\n${body}\n}`,
+      })
+    ).ok,
+  ).toBe(true);
+  expect(
+    (await readRoomLayout(ROOM, (await loadChat(pod.as(ALICE), ROOM, index.url)).dataset))
+      ?.memberContainers,
+  ).toHaveLength(2);
+});
+
+it.each([
+  "unread",
+  "search",
+  "pages",
+])("shares the six-read bound across rooms during %s", async (operation) => {
+  vi.useFakeTimers();
+  vi.setSystemTime(AT);
+  try {
+    const rooms = Array.from({ length: 3 }, (_, i) => ({
+      url: `${ROOT}chat/rooms/r-${i}/`,
+      name: `Room ${i}`,
+      members: [ALICE, BOB],
+      creator: ALICE,
+      created: AT.toISOString(),
+      isDirect: false,
+    }));
+    const indexes = new Map(
+      await Promise.all(
+        rooms.map(
+          async ({ url }) =>
+            [
+              roomIndex(url),
+              await serializeChat(
+                await buildRoomV2(url, {
+                  ...input,
+                  members: Array.from({ length: 8 }, (_, i) => `https://member-${i}.example/#me`),
+                }),
+              ),
+            ] as const,
+        ),
+      ),
+    );
+    let active = 0;
+    let peak = 0;
+    let release!: () => void;
+    let ready!: () => void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const six = new Promise<void>((resolve) => {
+      ready = resolve;
+    });
+    const fetch: typeof globalThis.fetch = async (url) => {
+      const index = indexes.get(String(url));
+      if (index) return new Response(index, { headers: { "content-type": "text/turtle" } });
+      if (String(url).endsWith("/preferences")) return new Response(null, { status: 404 });
+      if (!String(url).includes("/members/")) return new Response(null, { status: 404 });
+      active++;
+      peak = Math.max(peak, active);
+      if (active === 6) ready();
+      await held;
+      active--;
+      return new Response(null, { status: 404 });
+    };
+    const client = new ChatClient(fetch, ROOT, ALICE);
+    vi.spyOn(client, "joinedRooms").mockResolvedValue(rooms);
+    const pending =
+      operation === "unread"
+        ? client.unreadCounts(rooms)
+        : operation === "search"
+          ? client.search("hello", { days: 1, timeZone: "UTC" })
+          : Promise.all(
+              rooms.map(({ url }) => client.messages(url, { before: AT, since: AT, days: 1 })),
+            );
+    await six;
+    expect(peak).toBe(6);
+    release();
+    await pending;
+    expect(peak).toBe(6);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("stops queued day and file reads after a fatal failure, and never starts the next unread room", async () => {
+  const descriptor = await serializeChat(
+    await buildRoomV2(ROOM, {
+      ...input,
+      members: Array.from({ length: 19 }, (_, i) => `https://member-${i}.example/#me`),
+    }),
+  );
+  for (const files of [false, true]) {
+    let started = 0;
+    const fetch: typeof globalThis.fetch = async (url) => {
+      if (String(url) === roomIndex(ROOM))
+        return new Response(descriptor, { headers: { "content-type": "text/turtle" } });
+      started++;
+      return new Response(null, { status: 503 });
+    };
+    await expect(
+      files ? loadRoomFiles(fetch, ROOM) : loadMessages(fetch, ROOM, AT, AT, 1),
+    ).rejects.toMatchObject({ status: 503 });
+    expect(started).toBe(6);
+  }
+  const client = new ChatClient(async () => new Response(null, { status: 404 }), ROOT, ALICE);
+  const messages = vi.spyOn(client, "messages").mockRejectedValue(new Error("fatal"));
+  await expect(client.unreadCounts([{ url: ROOM }, { url: `${ROOM}next/` }])).rejects.toThrow(
+    "fatal",
+  );
+  expect(messages).toHaveBeenCalledTimes(1);
+});
+
+it("bounds the member-key cache while retaining deterministic hashes and cache hits", async () => {
+  const digest = vi.spyOn(crypto.subtle, "digest");
+  try {
+    const webId = "https://cache-first.example/#me";
+    const first = await memberContainer(ROOM, webId);
+    expect(await memberContainer(ROOM, webId)).toBe(first);
+    expect(digest).toHaveBeenCalledTimes(1);
+    for (let i = 0; i < 256; i++) await memberContainer(ROOM, `https://cache-${i}.example/#me`);
+    expect(await memberContainer(ROOM, webId)).toBe(first);
+    expect(digest).toHaveBeenCalledTimes(258);
+  } finally {
+    digest.mockRestore();
+  }
+});
+
+it.each([
+  "write",
+  "public",
+  "group",
+])("fails closed on resumed %s grants to other agents", async (grant) => {
+  const pod = wacPod();
+  await createRoom(pod.as(ALICE), ROOT, "team", input);
+  await pod.as(ALICE)(roomIndex(ROOM), { method: "DELETE" });
+  const acl = await loadChat(pod.as(ALICE), ROOM, `${ROOM}.acl`);
+  const rule = new Authorization(`${acl.url}#extra`, acl.dataset, DataFactory);
+  rule.type.add(`${NS.ACL}Authorization`);
+  rule.accessTo = ROOM;
+  rule.default = ROOM;
+  if (grant === "write") {
+    rule.agent.add(BOB);
+    rule.canWrite = true;
+  } else {
+    rule.canAppend = true;
+    if (grant === "public") rule.accessibleToAny = true;
+    else rule.agentGroup = new Group(`${ROOT}group#it`, acl.dataset, DataFactory);
+  }
+  await saveChat(pod.as(ALICE), ROOT, acl.url, acl.dataset, { ifMatch: acl.etag as string });
+  await expect(createRoom(pod.as(ALICE), ROOT, "team", input, { resume: true })).rejects.toThrow(
+    "existing root ACL",
+  );
+});
+
+it("rejects raw reaction events with missing or mismatched member bindings", async () => {
+  const bob = await memberContainer(ROOM, BOB);
+  const alice = await memberContainer(ROOM, ALICE);
+  const target = `${dayUrl(alice, AT)}#message`;
+  const dataset = new Store();
+  for (const [document, actor] of [
+    [dayUrl(bob, AT), ALICE],
+    [`${ROOM}outside.ttl`, BOB],
+  ]) {
+    const node = new ChatNode(`${document}#like`, dataset, DataFactory);
+    node.types.add(`${NS.AS}Like`);
+    node.setIri(`${NS.AS}attributedTo`, actor as string);
+    node.setIri(`${NS.AS}object`, target);
+    node.setText(`${NS.AS}content`, "👍");
+    node.setDate(`${NS.AS}published`, AT);
+  }
+  expect(
+    readReactions(dataset, undefined, new Set([target]), [
+      { url: bob, owner: BOB },
+      { url: alice, owner: ALICE },
+    ]).size,
+  ).toBe(0);
 });

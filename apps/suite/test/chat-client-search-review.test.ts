@@ -80,7 +80,7 @@ it("accepts RDF NamedNodes without letting a URN note break the HTTP message res
   });
   const result = await client.search("hello", { timeZone: "UTC" });
   expect(result.results.map(({ message }) => message.id)).toEqual([valid.id]);
-  expect(result.droppedRecords).toBe(0);
+  expect(result.droppedRecords).toBe(1);
   expect((await client.messages(joined.url)).dropped).toBe(1);
 });
 

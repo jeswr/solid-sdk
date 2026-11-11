@@ -18,6 +18,7 @@ export async function memberContainer(room: string, webId: string): Promise<stri
       .slice(0, 16)
       .map((b) => b.toString(16).padStart(2, "0"))
       .join("");
+    if (memberKeys.size >= 256) memberKeys.delete(memberKeys.keys().next().value as string);
     memberKeys.set(webId, key);
   }
   return `${roomContainer(room)}members/${key}/`;

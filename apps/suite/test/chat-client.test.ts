@@ -382,7 +382,7 @@ it("lists only safe room files for Drive without fetching link previews", async 
       async () => new Response(body, { headers: { "content-type": "text/turtle" } }),
       room.url,
     ),
-  ).toEqual([`${room.url}good.png`]);
+  ).toEqual({ files: [`${room.url}good.png`], dropped: 0 });
 });
 it("allows the empty DM name while preserving invalid-name and leave validation", async () => {
   const room = `${ROOT}chat/rooms/dm/`;

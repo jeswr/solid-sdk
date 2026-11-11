@@ -13,7 +13,7 @@ for AS2 and LongChat messages. No hooks, React, shell or suite-sdk imports.
   the caller's `chat/rooms.ttl#it` collection; they confer no remote access.
 - `dayUrl`, `dayPage`: UTC `yyyy/mm/dd.ttl`, inclusive backwards date cursor,
   explicit lower bound and bounded number of days. Missing days are empty;
-  errors other than 404 propagate. Each returned document keeps its validator.
+  v1 errors other than 404 propagate. Each returned document keeps its validator.
 - `appendMessage`: caller supplies a stable ID, timestamp and author. Returns
   a copy, rejects duplicate subjects. `sendMessage` creates missing year/month
   containers, creates a missing day with If-None-Match, or PATCHes only the new
@@ -89,11 +89,17 @@ no vocabulary terms are minted. Only the exact computed URL with one owner and
 the declared room space is accepted. Readers check every author claim, including
 LongChat `foaf:maker`, and bind subjects to the fetched document. An authorless
 message inherits its container owner; malformed or mismatched claims are dropped.
-The page's `dropped` counter reports rejected messages and events for debugging,
-without UI. Fetches fan out across member days with at most six concurrent reads;
-404 is empty, other failures propagate. Merge order remains publication time then ID.
+The page's `dropped` counter reports rejected messages and events for debugging;
+search also includes these drops in its skipped-records count. One shared client
+limiter bounds member reads across rooms to six concurrent requests. For another member's resources,
+403/404/410, invalid RDF, unsupported content types and parser-budget failures are empty
+and each increments `dropped`. The reader's own days retain strict errors (404 remains
+empty); index, network and other HTTP failures propagate. Merge order remains
+publication time then ID.
 Search, unread counts and history use those same pages. Files are discovered inside
-validated member containers and their date containers, with six concurrent walks.
+validated member containers and their date containers through the same limiter.
+`loadRoomFiles` returns `{ files, dropped }`, counting isolated member-listing failures;
+the client files API returns the file list. Own listing failures remain strict.
 
 Send, own edit/delete and task overlays write only the actor's member day. Likes
 and Undos live in the reactor's container on the target message's day (not the
@@ -105,10 +111,21 @@ events use conditional INSERT DATA with one conflict retry. Edits/tombstones use
 copy-on-write PUT with a strong If-Match. `removeMessage` is the explicit owner
 moderation operation and preserves the original author.
 
-In v2, authorship is bound by the pod server's access control as configured by the
-room owner. The owner can write in any member container for moderation and is the
-trust root. A member cannot forge another member's messages or reactions under
-these ACLs. LongChat/SolidOS clients do not read v2 member containers (v1 paths were
+The trust root is whoever controls the storage hosting the room. The index's creator
+is a claim, not proof of storage control; this client does not check `pim:storage`.
+With the documented v2 ACLs enforced by that storage, members cannot forge other
+members' messages or reactions. The storage controller and the ACL's owner can write
+in every member container, including for moderation. LongChat/SolidOS clients do not
+read v2 member containers (v1 paths were
 already not SolidOS-shaped). Existing v1 rooms retain shared days, member
 Read/Append, owner-only client edit/delete, and claimed authorship: client-side
 author checks hold only between honest v1 clients.
+
+A v1 member has Append on the room and can append SIOC descriptors to the index,
+making clients read that room as v2. V1 authorship was already only a claim; v2
+layout detection trusts the index writer and does not upgrade legacy ACL guarantees.
+Resuming creation with no index refuses an existing root ACL granting other agents
+Append or Write, before creating member containers or publishing a v2 index.
+
+The SIOC member-container accessors remain in `layout.ts` until they move to the
+generated model under sst-m3nr.

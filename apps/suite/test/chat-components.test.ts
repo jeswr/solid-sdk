@@ -856,7 +856,19 @@ it("offers own Edit/Delete in v2 member rooms and explicit Remove message to the
   expect(menu.textContent).toContain("Edit");
   expect(menu.textContent).toContain("Delete");
   expect(menu.textContent).not.toContain("Remove message");
-  await key(menu, "Escape");
+  await click(
+    [...menu.querySelectorAll('[role="menuitem"]')].find(
+      (node) => node.textContent === "Delete",
+    ) as HTMLElement,
+  );
+  const ownTitle = document.querySelector('[role="alertdialog"] h2') as HTMLElement;
+  expect(ownTitle.textContent).toBe("Delete message?");
+  await click(
+    [...document.querySelectorAll('[role="alertdialog"] button')].find(
+      (node) => node.textContent === "Cancel",
+    ) as HTMLElement,
+  );
+  expect(ownTitle.textContent).toBe("Delete message?");
   await view.unmount();
   const ownerView = await mount(
     h(ChatProvider, {

@@ -4,8 +4,9 @@ import { fetchRdf, RdfFetchError } from "@jeswr/fetch-rdf";
 import { assertWithinPodScope, createPodScopedFetch, refuseRedirects } from "@jeswr/guarded-fetch";
 import type { MessageTask } from "@jeswr/solid-chat-interop";
 import type { DatasetCore } from "@rdfjs/types";
-import { Container } from "@solid/object";
+import { AclResource, Container } from "@solid/object";
 import { DataFactory, Store } from "n3";
+import { type ConcurrentMapper, createConcurrentMapper } from "../../../../lib/parallel";
 import {
   buildRoomV2,
   memberContainer,
@@ -25,7 +26,13 @@ import {
 } from "./messages";
 import { dayPage, dayUrl, joinedRoomsUrl, roomContainer, roomIndex } from "./paths";
 import { ChatNode, NS, serializeChat } from "./rdf";
-import { appendReaction, appendUndo, type ReactionInput, type UndoInput } from "./reactions";
+import {
+  appendReaction,
+  appendUndo,
+  type ReactionContext,
+  type ReactionInput,
+  type UndoInput,
+} from "./reactions";
 import {
   buildRoomAcl,
   type ChatRoom,
@@ -100,6 +107,39 @@ async function optionalChat(
   } catch (error) {
     if (!(error instanceof RdfFetchError && error.status === 404)) throw error;
     return { url, dataset: new Store(), etag: null };
+  }
+}
+export interface MemberReadOptions {
+  reader?: string;
+  map?: ConcurrentMapper;
+}
+/** Only foreign member resources are isolated; index, own and transport failures stay strict. */
+export async function loadMemberChat(
+  fetch: typeof globalThis.fetch,
+  base: string,
+  url: string,
+  owner: string | undefined,
+  reader?: string,
+  optional = true,
+): Promise<{ document: ChatDocument; dropped: number }> {
+  try {
+    return { document: await loadChat(fetch, base, url), dropped: 0 };
+  } catch (error) {
+    const foreign = owner !== undefined && owner !== reader;
+    if (error instanceof RdfFetchError) {
+      if (
+        foreign &&
+        (error.status === 403 ||
+          error.status === 404 ||
+          error.status === 410 ||
+          (error.status === undefined && error.contentType !== undefined) ||
+          error.code === "PARSE_LIMIT")
+      )
+        return { document: { url, dataset: new Store(), etag: null }, dropped: 1 };
+      if (optional && error.status === 404)
+        return { document: { url, dataset: new Store(), etag: null }, dropped: 0 };
+    }
+    throw error;
   }
 }
 export async function ensureContainer(
@@ -210,11 +250,16 @@ export async function sendMessage(
   const base = roomContainer(room);
   // Validate the entire message before any network side effects.
   appendMessage(new Store(), room, input);
-  const container = ownContainer(room, await roomLayout(fetch, room), input.author);
+  const layout = await roomLayout(fetch, room);
+  const container = ownContainer(room, layout, input.author);
   const delta = appendMessage(new Store(), room, input, container);
   const url = dayUrl(container, input.at);
   const { document, condition } = await optionalCondition(fetch, base, url);
-  const dataset = appendMessage(document.dataset, room, input, container);
+  const current =
+    layout?.memberContainers === undefined
+      ? document.dataset
+      : memberDocument(document.dataset, url, input.author).dataset;
+  const dataset = appendMessage(current, room, input, container);
   if ("ifNoneMatch" in condition) {
     await ensureDayParents(fetch, base, url);
     return { url, dataset, etag: await saveChat(fetch, base, url, dataset, condition) };
@@ -248,11 +293,12 @@ export async function loadMessages(
   before: Date,
   since: Date,
   days: number,
+  { reader, map = createConcurrentMapper() }: MemberReadOptions = {},
 ) {
   const page = dayPage(room, before, since, days);
-  const layout = await roomLayout(fetch, room);
+  const [layout] = await map([room], (url) => roomLayout(fetch, url));
   const containers = layout?.memberContainers;
-  const urls =
+  const urls: (string | { url: string; owner: string })[] =
     containers === undefined
       ? page.urls
       : page.urls.flatMap((url) =>
@@ -261,28 +307,24 @@ export async function loadMessages(
             owner: member.owner,
           })),
         );
-  const documents: ChatDocument[] = [];
   let dropped = 0;
-  let cursor = 0;
-  await Promise.all(
-    Array.from({ length: Math.min(6, urls.length) }, async () => {
-      while (cursor < urls.length) {
-        const index = cursor++;
-        const target = urls[index] as string | { url: string; owner: string };
-        const document = await optionalChat(
-          fetch,
-          roomContainer(room),
-          typeof target === "string" ? target : target.url,
-        );
-        if (typeof target !== "string") {
-          const checked = memberDocument(document.dataset, document.url, target.owner);
-          document.dataset = checked.dataset;
-          dropped += checked.dropped;
-        }
-        documents[index] = document;
-      }
-    }),
-  );
+  const documents = await map(urls, async (target) => {
+    const loaded = await loadMemberChat(
+      fetch,
+      roomContainer(room),
+      typeof target === "string" ? target : target.url,
+      typeof target === "string" ? undefined : target.owner,
+      reader,
+    );
+    const document = loaded.document;
+    dropped += loaded.dropped;
+    if (typeof target !== "string") {
+      const checked = memberDocument(document.dataset, document.url, target.owner);
+      document.dataset = checked.dataset;
+      dropped += checked.dropped;
+    }
+    return document;
+  });
   const messages = documents.flatMap((doc) => readMessages(doc.dataset));
   messages.sort(
     (a, b) => (a.published ?? "").localeCompare(b.published ?? "") || a.id.localeCompare(b.id),
@@ -295,69 +337,105 @@ async function appendEvent(
   room: string,
   message: string,
   change: (dataset: Store) => Store | null,
-  resource?: string,
+  resource: string | undefined,
+  initial: { document: ChatDocument; condition: WriteCondition },
 ): Promise<ChatDocument> {
   const url = resource ?? messageResource(room, message);
   const base = roomContainer(room);
   for (let attempt = 0; ; attempt++) {
     try {
-      const { document, condition } = await optionalCondition(fetch, base, url);
+      const { document, condition } =
+        attempt === 0 ? initial : await optionalCondition(fetch, base, url);
       const delta = change(document.dataset);
-      if (!delta) return document;
-      if (resource !== undefined && "ifNoneMatch" in condition) {
-        await ensureDayParents(fetch, base, url);
-        return {
-          url,
-          dataset: delta,
-          etag: await saveChat(fetch, base, url, delta, { ifNoneMatch: "*" }),
-        };
+      if (delta === null) {
+        return document;
+      } else {
+        if (resource !== undefined && "ifNoneMatch" in condition) {
+          await ensureDayParents(fetch, base, url);
+          return {
+            url,
+            dataset: delta,
+            etag: await saveChat(fetch, base, url, delta, { ifNoneMatch: "*" }),
+          };
+        }
+        const etag = await insertData(fetch, base, url, delta, {
+          ifMatch: strongEtag(document.etag),
+        });
+        return { url, dataset: new Store([...document.dataset, ...delta]), etag };
       }
-      const etag = await insertData(fetch, base, url, delta, {
-        ifMatch: strongEtag(document.etag),
-      });
-      return { url, dataset: new Store([...document.dataset, ...delta]), etag };
     } catch (error) {
       if (!(error instanceof ChatIoError && error.status === 412) || attempt === 1) throw error;
     }
   }
+}
+export interface ReactionRead {
+  condition: WriteCondition;
+  context: ReactionContext | undefined;
+  document: ChatDocument;
+  target: ChatDocument;
 }
 export async function reactionDocument(
   fetch: typeof globalThis.fetch,
   room: string,
   subject: string,
   actor: string,
-) {
-  const target = messageResource(room, subject);
+): Promise<ReactionRead> {
+  const targetUrl = messageResource(room, subject);
   const layout = await roomLayout(fetch, room);
-  if (layout?.memberContainers === undefined) return undefined;
-  const container = ownContainer(room, layout, actor);
-  const member = layout.memberContainers.find((member) => target.startsWith(member.url));
-  if (!member) throw new ChatModelError("missing-message");
-  const document = await loadChat(fetch, room, target);
-  const messages = readMessages(memberDocument(document.dataset, target, member.owner).dataset);
-  const url = `${container}${target.slice(member.url.length)}`;
-  return { document: url, messages, containers: layout.memberContainers };
+  const containers = layout?.memberContainers;
+  const member = containers?.find((member) => targetUrl.startsWith(member.url));
+  if (containers !== undefined && !member) throw new ChatModelError("missing-message");
+  const targetState = await optionalCondition(fetch, room, targetUrl);
+  const target = targetState.document;
+  if (member) target.dataset = memberDocument(target.dataset, target.url, member.owner).dataset;
+  if (containers === undefined) return { target, ...targetState, context: undefined };
+  const url = `${ownContainer(room, layout, actor)}${targetUrl.slice((member as { url: string }).url.length)}`;
+  const { document, condition } =
+    url === targetUrl ? targetState : await optionalCondition(fetch, room, url);
+  document.dataset = memberDocument(document.dataset, url, actor).dataset;
+  return {
+    target,
+    document,
+    condition,
+    context: {
+      document: url,
+      messages: readMessages(target.dataset),
+      containers,
+    },
+  };
 }
-export async function react(fetch: typeof globalThis.fetch, room: string, input: ReactionInput) {
-  messageResource(room, input.message);
-  const context = await reactionDocument(fetch, room, input.message, input.actor);
+export async function react(
+  fetch: typeof globalThis.fetch,
+  room: string,
+  input: ReactionInput,
+  resolved?: ReactionRead,
+) {
+  const state = resolved ?? (await reactionDocument(fetch, room, input.message, input.actor));
+  const { context } = state;
   return appendEvent(
     fetch,
     room,
     input.message,
     (dataset) => appendReaction(dataset, room, input, context),
     context?.document,
+    state,
   );
 }
-export async function unreact(fetch: typeof globalThis.fetch, room: string, input: UndoInput) {
-  messageResource(room, input.message);
-  const context = await reactionDocument(fetch, room, input.message, input.actor);
+export async function unreact(
+  fetch: typeof globalThis.fetch,
+  room: string,
+  input: UndoInput,
+  resolved?: ReactionRead,
+) {
+  const state = resolved ?? (await reactionDocument(fetch, room, input.message, input.actor));
+  const { context } = state;
   return appendEvent(
     fetch,
     room,
     input.message,
     (dataset) => appendUndo(dataset, room, input, context),
     context?.document,
+    state,
   );
 }
 async function mutate(
@@ -515,7 +593,24 @@ export async function createRoom(
       if (!(error instanceof RdfFetchError && error.status === 404)) throw error;
     }
   }
-  await create(aclUrl, buildRoomAcl(room, aclUrl, input.creator, input.members, "v2"));
+  const rootAcl = await create(
+    aclUrl,
+    buildRoomAcl(room, aclUrl, input.creator, input.members, "v2"),
+  );
+  if (rootAcl === null) {
+    const existing = await loadChat(fetch, base, aclUrl);
+    for (const rule of new AclResource(existing.dataset, DataFactory).authorizations) {
+      if (
+        (rule.canAppend || rule.canWrite) &&
+        ([...rule.agent].some((agent) => agent !== input.creator) ||
+          rule.agentClass.size > 0 ||
+          rule.agentGroup !== undefined)
+      )
+        throw new Error(
+          "Cannot resume a v2 room: the existing root ACL grants members Append or Write. Repair the room ACL before retrying.",
+        );
+    }
+  }
   await ensureContainer(fetch, base, `${room}members/`);
   for (const member of new Set([input.creator, ...input.members])) {
     const container = await memberContainer(room, member);

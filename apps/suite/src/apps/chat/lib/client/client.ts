@@ -8,7 +8,7 @@ import {
   isWithinPodScope,
   refuseRedirects,
 } from "@jeswr/guarded-fetch";
-import { Store } from "n3";
+import { createConcurrentMapper, mapConcurrent } from "../../../../lib/parallel";
 import { encodeRef } from "../../../../lib/refs";
 import {
   ChatIoError,
@@ -18,11 +18,11 @@ import {
   createRoom as createModelRoom,
   deleteOwnMessage,
   httpIri,
-  loadChat,
   loadMessages,
   loadRoom,
   loadRooms,
   type MemberContainer,
+  memberDocument,
   messageResource,
   type Reaction,
   react,
@@ -38,6 +38,7 @@ import {
   saveMessageEdit,
   saveMessageTask,
   sendMessage,
+  strongEtag,
   unreact,
 } from "../model";
 import { copyMessageTask, loadProfileName, loadRoomFiles } from "../model/extras";
@@ -155,6 +156,8 @@ function abortableFetch(
 export class ChatClient {
   readonly fetch: typeof globalThis.fetch;
   readonly preferences: PreferencesStore;
+  private readonly readMap = createConcurrentMapper();
+  private readonly reactionSources = new Map<string, Map<string, Reaction[]>>();
   private readonly known = new Map<string, Message>();
   private readonly profiles = new Map<string, Promise<string>>();
   private readonly resolvedNames = new Map<string, string>();
@@ -221,10 +224,12 @@ export class ChatClient {
     if (!room) throw new ChatModelError("invalid-input");
     return roomResult(url, room);
   }
-  private remember(messages: ChatMessage[], reactions = new Map<string, Reaction[]>()): Message[] {
+  private remember(messages: ChatMessage[], reactions?: Map<string, Reaction[]>): Message[] {
     return messages.map((message) => {
       const result = displayMessage(message);
-      result.reactions = aggregateReactions(reactions.get(message.id) ?? [], this.webId);
+      result.reactions = reactions
+        ? aggregateReactions(reactions.get(message.id) ?? [], this.webId)
+        : (this.known.get(message.id)?.reactions ?? []);
       this.known.set(result.id, result);
       return result;
     });
@@ -243,17 +248,18 @@ export class ChatClient {
       signal?: AbortSignal | undefined;
     } = {},
   ): Promise<{ messages: Message[]; next: Date | null; dropped?: number }> {
-    const page = await loadMessages(abortableFetch(this.fetch, signal), url, before, since, days);
+    const page = await loadMessages(abortableFetch(this.fetch, signal), url, before, since, days, {
+      reader: this.webId,
+      map: this.readMap,
+    });
     const reactions = new Map<string, Reaction[]>();
     const known = new Set(page.messages.map((message) => message.id));
-    for (const document of page.documents)
-      for (const [message, found] of readReactions(
-        document.dataset,
-        document.url,
-        known,
-        page.memberContainers,
-      ))
+    for (const document of page.documents) {
+      const source = readReactions(document.dataset, document.url, known, page.memberContainers);
+      this.reactionSources.set(document.url, source);
+      for (const [message, found] of source)
         reactions.set(message, [...(reactions.get(message) ?? []), ...found]);
+    }
     return {
       messages: this.remember(page.messages, reactions),
       next: page.next,
@@ -332,6 +338,7 @@ export class ChatClient {
             const page = await this.messages(room.url, { before, days: budget, since, signal });
             signal?.throwIfAborted();
             pages[index] = page;
+            result.droppedRecords += page.dropped ?? 0;
             result.searchedRooms++;
             if (page.next) reasons.add("days");
           } catch {
@@ -428,58 +435,64 @@ export class ChatClient {
       // sendMessage re-reads the day, merging the append against the winner.
       document = await send();
     }
-    const messages = this.remember(
-      readMessages(document.dataset),
-      readReactions(document.dataset, document.url),
-    );
+    const messages = this.remember(readMessages(document.dataset));
     return messages.find((message) => message.id === `${document.url}#${id}`) as Message;
   }
   async react(room: string, subject: string, emoji: string): Promise<void> {
     assertWithinPodScope(this.storageUrl, roomContainer(room));
-    const url = messageResource(room, subject);
-    let document: Awaited<ReturnType<typeof loadChat>>;
+    messageResource(room, subject);
+    let resolved: Awaited<ReturnType<typeof reactionDocument>>;
     try {
-      document = await loadChat(this.fetch, room, url);
+      resolved = await reactionDocument(this.fetch, room, subject, this.webId);
     } catch (error) {
-      if (error instanceof RdfFetchError && error.status === 404)
+      if (error instanceof ChatModelError && error.code === "missing-message")
         throw new ChatClientError("missing-message");
       throw error;
     }
-    const message = readMessages(document.dataset).find((message) => message.id === subject);
+    const { context, target } = resolved;
+    let { document } = resolved;
+    const message = readMessages(target.dataset).find((message) => message.id === subject);
     if (!message || message.tombstone || message.deletedAt !== undefined)
       throw new ChatClientError("missing-message");
-    const context = await reactionDocument(this.fetch, room, subject, this.webId);
-    if (context) {
-      if (!context.messages.some((message) => message.id === subject))
-        throw new ChatClientError("missing-message");
-      try {
-        document = await loadChat(this.fetch, room, context.document);
-      } catch (error) {
-        if (!(error instanceof RdfFetchError && error.status === 404)) throw error;
-        document = { url: context.document, dataset: new Store(), etag: null };
-      }
-    }
     const mine = (
-      readReactions(
-        document.dataset,
-        context?.document ?? url,
-        new Set([subject]),
-        context?.containers,
-      ).get(subject) ?? []
+      readReactions(document.dataset, document.url, new Set([subject]), context?.containers).get(
+        subject,
+      ) ?? []
     ).filter((reaction) => reaction.actorId === this.webId && reaction.emoji === emoji);
     const input = { message: subject, actor: this.webId, at: new Date() };
     if (mine.length) {
       for (const reaction of mine) {
-        document = await unreact(this.fetch, room, {
-          ...input,
-          id: crypto.randomUUID(),
-          reaction: reaction.id,
-        });
+        document = await unreact(
+          this.fetch,
+          room,
+          {
+            ...input,
+            id: crypto.randomUUID(),
+            reaction: reaction.id,
+          },
+          { ...resolved, document, condition: { ifMatch: strongEtag(document.etag) } },
+        );
       }
     } else {
-      document = await react(this.fetch, room, { ...input, id: crypto.randomUUID(), emoji });
+      document = await react(
+        this.fetch,
+        room,
+        { ...input, id: crypto.randomUUID(), emoji },
+        resolved,
+      );
     }
-    this.remember(readMessages(document.dataset), readReactions(document.dataset, url));
+    if (context)
+      document.dataset = memberDocument(document.dataset, document.url, this.webId).dataset;
+    const messages = [...readMessages(target.dataset), ...readMessages(document.dataset)];
+    const known = new Set([...this.known.keys(), ...messages.map((message) => message.id)]);
+    this.reactionSources.set(
+      document.url,
+      readReactions(document.dataset, document.url, known, context?.containers),
+    );
+    const reactions = new Map<string, Reaction[]>();
+    for (const source of this.reactionSources.values())
+      for (const [id, found] of source) reactions.set(id, [...(reactions.get(id) ?? []), ...found]);
+    this.remember(messages, reactions);
   }
   private own(subject: string): void {
     if (this.known.get(subject)?.author !== this.webId)
@@ -647,8 +660,9 @@ export class ChatClient {
   }
   async unreadCounts(rooms: readonly { url: string }[]): Promise<Record<string, number>> {
     const { data } = await this.preferences.read();
-    const pairs = await Promise.all(
-      rooms.map(async ({ url }) => {
+    const pairs = await mapConcurrent(
+      rooms,
+      async ({ url }) => {
         const page = await this.messages(url);
         const messages = page.messages
           .filter(
@@ -676,7 +690,8 @@ export class ChatClient {
             this.webId,
           ).unreadCount,
         ] as const;
-      }),
+      },
+      1,
     );
     return Object.fromEntries(pairs);
   }
@@ -698,7 +713,7 @@ export class ChatClient {
     }
     return pending;
   }
-  files(room: string) {
-    return loadRoomFiles(this.fetch, room);
+  async files(room: string) {
+    return (await loadRoomFiles(this.fetch, room, { reader: this.webId, map: this.readMap })).files;
   }
 }

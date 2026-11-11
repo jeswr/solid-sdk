@@ -145,6 +145,7 @@ export function RoomView({ url, messageId }: { url: string; messageId?: string |
   const { session, client, details, setDetails, setCurrentRoom } = useChat();
   const [editing, setEditing] = useState<Message>();
   const [deleting, setDeleting] = useState<Message>();
+  const [deleteModeration, setDeleteModeration] = useState(false);
   const [task, setTask] = useState<Message>();
   const [busy, setBusy] = useState(false);
   const [deleteError, setDeleteError] = useState("");
@@ -303,6 +304,7 @@ export function RoomView({ url, messageId }: { url: string; messageId?: string |
           onEdit={setEditing}
           onDelete={(message) => {
             setDeleteError("");
+            setDeleteModeration(message.author !== session.webId);
             setDeleting(message);
           }}
           onTask={setTask}
@@ -358,7 +360,7 @@ export function RoomView({ url, messageId }: { url: string; messageId?: string |
         <AlertDialogContent className="chat-dialog">
           <AlertDialogHeader>
             <AlertDialogTitle>
-              {deleting?.author !== session.webId ? "Remove message?" : "Delete message?"}
+              {deleteModeration ? "Remove message?" : "Delete message?"}
             </AlertDialogTitle>
             <AlertDialogDescription>
               The message text will be replaced with “Message deleted”. Replies keep their place.
@@ -385,11 +387,7 @@ export function RoomView({ url, messageId }: { url: string; messageId?: string |
                   .finally(() => setBusy(false));
               }}
             >
-              {busy
-                ? "Deleting…"
-                : deleting?.author !== session.webId
-                  ? "Remove message"
-                  : "Delete message"}
+              {busy ? "Deleting…" : deleteModeration ? "Remove message" : "Delete message"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
