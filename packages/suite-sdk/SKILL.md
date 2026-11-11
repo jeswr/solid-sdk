@@ -67,9 +67,9 @@ they are not LWS logical `up` links. Pagination reflects the current index and i
 
 `createSearchFeeder(index).resource(url, dataset)` is the plain async dataset callback for
 cached RDF; `.container(url, entries)` replaces a separate synthetic graph from a **complete**
-successful StorageClient listing. Build synthetic quads using rdf-engine's shared n3
-DataFactory, never string-built Turtle. Include decoded member names and listing metadata so
-binary names and recents work without fetching binary bytes. Do not pass an incomplete page
+successful StorageClient listing. Build synthetic quads through ldp-container's typed
+`buildListingDataset` accessors, preserving the shared n3 terms. Include decoded member names
+and listing metadata so binary names and recents work without fetching binary bytes. Do not pass an incomplete page
 as a complete listing. `containerSearchDataset(url, entries)` exposes the same RDF/JS builder.
 The current solid-offline `onVisit` is observability only and has no dataset; the page's cache
 pipeline calls the feeder after parsing, and calls `.container` after collecting all listAll

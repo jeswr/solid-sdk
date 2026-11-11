@@ -118,7 +118,8 @@ await feeder.container(driveUrl, entries); // only after every page succeeds
 
 Resources replace their own named graphs. Container feeds replace separate synthetic graphs
 with `ldp:contains`, decoded filename `dct:title`, `dct:modified`, `stat:size`, `dct:format`,
-and the listing's RDF types. `containerSearchDataset(containerUrl, entries)` also exposes
+and the listing's RDF types, built through `@jeswr/ldp-container`'s typed metadata accessors.
+`containerSearchDataset(containerUrl, entries)` also exposes
 the RDF/JS quads directly. A complete replacement removes old listing members while retaining
 cached resource graphs; remove those separately with `index.remove(resourceUrl)` on deletion.
 

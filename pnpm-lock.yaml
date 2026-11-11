@@ -3510,6 +3510,12 @@ importers:
       '@jeswr/guarded-fetch':
         specifier: workspace:*
         version: link:../guarded-fetch
+      '@jeswr/rdf-serialize':
+        specifier: workspace:*
+        version: link:../rdf-serialize
+      '@jeswr/suite-vocab':
+        specifier: workspace:*
+        version: link:../suite-vocab
       '@solid/object':
         specifier: ^0.6.0
         version: 0.6.0
@@ -5726,6 +5732,9 @@ importers:
       '@jeswr/guarded-fetch':
         specifier: workspace:*
         version: link:../guarded-fetch
+      '@jeswr/ldp-container':
+        specifier: workspace:*
+        version: link:../ldp-container
       '@jeswr/pod-access':
         specifier: workspace:*
         version: link:../pod-access

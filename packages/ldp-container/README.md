@@ -45,3 +45,11 @@ it does not select a subject from the dataset.
 
 Import scope guards directly from `@jeswr/guarded-fetch`. Callers retain application-specific
 filters, compatibility guards, any stricter read limits, and sorting.
+
+`buildListingDataset(containerUrl, entries)` builds a synthetic RDF/JS `Quad[]` through
+`@solid/object` accessors. Each `ListingMetadata` supplies `url`, `title`, `modified: Date | null`,
+`size: number | null`, `contentType: string | null`, and `types: readonly string[]`.
+It emits `ldp:contains`, `dct:title`, optional `dct:modified` (`xsd:dateTime`), `posix:size`
+(`xsd:integer`), `dct:format`, and only the supplied `rdf:type` IRIs. Null fields are omitted;
+zero and empty strings are preserved. It performs no I/O, URL validation, or scope checks:
+callers validate identifiers and select the complete listing before replacing a cached graph.
