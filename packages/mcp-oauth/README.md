@@ -133,10 +133,14 @@ eight-second deadline. An injected `fetch` must supply equivalent network protec
 
 Vault CAS operations atomically consume callbacks and claim refresh ownership across workers.
 Concurrent refresh ownership/CAS contention throws `PodRefreshRetryableError` (`retryable: true`)
-instead of redeeming a rotating refresh token twice. Claims carry `claimedAt` and have a 60-second
-maximum refresh deadline, shared by discovery and token requests. Reads and `isActive` retire older
-claims (and legacy claims without a timestamp); no worker ever takes over a claim or retries its
-potentially spent token. A crashed worker therefore forces a new login after that deadline.
+instead of redeeming a rotating refresh token twice. Claims carry `claimedAt` and an opaque random
+per-attempt `claimId`, and have a 60-second maximum refresh deadline, shared by discovery and token
+requests. Release and finalization CAS expect the exact claim bytes, so the `claimId` fences them:
+a retry after a write that committed but reported failure can never release or finalize another
+worker's claim, even one made in the same second from identical session data. Reads and `isActive`
+retire older claims (and legacy claims without a timestamp); legacy claims without a `claimId` are
+never matched by a new worker and age out the same way. No worker ever takes over a claim or
+retries its potentially spent token. A crashed worker therefore forces a new login after that deadline.
 
 Discovery failures and explicit DNS/connect failures (`ENOTFOUND`, `EAI_AGAIN`, `ECONNREFUSED`,
 `UND_ERR_CONNECT_TIMEOUT`) release ownership by CAS to the original credential. OAuth error

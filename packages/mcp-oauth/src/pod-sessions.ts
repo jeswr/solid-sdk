@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 import { fetchRdf } from "@jeswr/fetch-rdf";
 import { isWithinPodScope } from "@jeswr/guarded-fetch";
 import { createNodeGuardedFetch, refuseRedirects } from "@jeswr/guarded-fetch/node";
@@ -89,6 +90,8 @@ interface StoredPodSession {
   accessExpiresAt: number;
   refreshing: boolean;
   claimedAt?: number;
+  /** Opaque per-attempt owner fence; legacy claims without one only age out. */
+  claimId?: string;
 }
 
 /** The caller can retry this request while the durable pod session remains active. */
@@ -445,7 +448,10 @@ export function createPodSessionProvider(options: PodSessionProviderOptions): Po
           if (value.refreshing)
             throw new PodRefreshRetryableError("Pod refresh is already claimed; retry request");
           const claimedAt = now();
-          const claimed = encode({ ...value, refreshing: true, claimedAt });
+          // Session data and a second-resolution timestamp can repeat across workers. The
+          // random claimId makes these bytes unique, so the release and finalization CAS
+          // (including a retry after a committed-then-rejected write) only match this claim.
+          const claimed = encode({ ...value, refreshing: true, claimedAt, claimId: opaque() });
           if (!(await vault.compareAndSwap(sessionKey(id), bytes, claimed)))
             throw new PodRefreshRetryableError("Pod session conflict; retry request");
           let refreshed = false;

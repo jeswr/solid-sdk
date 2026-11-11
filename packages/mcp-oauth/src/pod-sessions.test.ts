@@ -246,6 +246,143 @@ describe("Solid-OIDC pod broker", () => {
     expect(await restored.isActive(session.id)).toBe(false);
   });
 
+  const unavailableTokenEndpoint = (f: ReturnType<typeof brokerFixture>) =>
+    createPodSessionProvider({
+      ...f.options,
+      fetch: async (input, init) => {
+        const request = new Request(input, init);
+        if (request.url.endsWith("/token"))
+          return Response.json({ error: "temporarily_unavailable" }, { status: 503 });
+        return f.op.fetch(request);
+      },
+    });
+  const blockTokenRequests = (f: ReturnType<typeof brokerFixture>) => {
+    let entered!: () => void;
+    let finish!: () => void;
+    const claimed = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const released = new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+    f.op.controls.onToken = async () => {
+      entered();
+      await released;
+    };
+    return { claimed, finish };
+  };
+  const decode = (bytes: Uint8Array) => JSON.parse(Buffer.from(bytes).toString("utf8"));
+
+  it("never lets a committed-then-rejected release retry free a newer same-second claim", async () => {
+    const f = brokerFixture();
+    const { session } = await f.login();
+    const key = `session:${session.id}`;
+    const original = (await f.vault.get(key)) as Uint8Array;
+    const newer = await createPodSessionProvider(f.options).fetchFor(session.id);
+    const blocked = blockTokenRequests(f);
+    let running: Promise<Response> | undefined;
+    const swap = f.vault.compareAndSwap.bind(f.vault);
+    vi.spyOn(f.vault, "compareAndSwap").mockImplementation(async (id, expected, secret, ttl) => {
+      const result = await swap(id, expected, secret, ttl);
+      if (running === undefined && id === key && Buffer.from(secret).equals(original)) {
+        // The release commits but its acknowledgement is lost; the clock has not moved, so a
+        // newer worker claims the restored credential within the same second before the retry.
+        running = newer(`${POD_ROOT}notes`);
+        await blocked.claimed;
+        throw new Error("release acknowledgement lost");
+      }
+      return result;
+    });
+    await expect(
+      (await unavailableTokenEndpoint(f).fetchFor(session.id))(`${POD_ROOT}notes`),
+    ).rejects.toMatchObject({ retryable: true });
+    expect(decode((await f.vault.get(key)) as Uint8Array)).toMatchObject({
+      refreshing: true,
+      claimedAt: f.options.now(),
+    });
+    blocked.finish();
+    expect((await (running as Promise<Response>)).status).toBe(200);
+    f.op.controls.onToken = undefined;
+    expect(decode((await f.vault.get(key)) as Uint8Array)).toMatchObject({ refreshing: false });
+    expect(await f.provider.isActive(session.id)).toBe(true);
+  });
+
+  it("fences same-second claims so a stale release or finalization cannot touch another owner's", async () => {
+    const f = brokerFixture();
+    const { session } = await f.login();
+    const key = `session:${session.id}`;
+    const original = (await f.vault.get(key)) as Uint8Array;
+    const claims: Uint8Array[] = [];
+    const swap = f.vault.compareAndSwap.bind(f.vault);
+    vi.spyOn(f.vault, "compareAndSwap").mockImplementation(async (id, expected, secret, ttl) => {
+      if (id === key && decode(secret).refreshing) claims.push(secret);
+      return swap(id, expected, secret, ttl);
+    });
+    await expect(
+      (await unavailableTokenEndpoint(f).fetchFor(session.id))(`${POD_ROOT}notes`),
+    ).rejects.toMatchObject({ retryable: true });
+    expect(await f.vault.get(key)).toEqual(original);
+    const blocked = blockTokenRequests(f);
+    const running = (await createPodSessionProvider(f.options).fetchFor(session.id))(
+      `${POD_ROOT}notes`,
+    );
+    await blocked.claimed;
+    const [first, second] = claims as [Uint8Array, Uint8Array];
+    expect(claims).toHaveLength(2);
+    expect(decode(first).claimedAt).toBe(decode(second).claimedAt);
+    expect(typeof decode(first).claimId).toBe("string");
+    expect(typeof decode(second).claimId).toBe("string");
+    expect(Buffer.from(first).equals(second)).toBe(false);
+    // The first worker's delayed release and finalization expect its own claim, not this one.
+    expect(await f.vault.compareAndSwap(key, first, original)).toBe(false);
+    const finalized = { ...decode(first), refreshing: false, refreshToken: "stale-rotation" };
+    expect(await f.vault.compareAndSwap(key, first, Buffer.from(JSON.stringify(finalized)))).toBe(
+      false,
+    );
+    expect(await f.vault.get(key)).toEqual(second);
+    blocked.finish();
+    expect((await running).status).toBe(200);
+    f.op.controls.onToken = undefined;
+    expect(await f.provider.isActive(session.id)).toBe(true);
+  });
+
+  it("retires instead of finalizing over a same-second claim that replaced its own", async () => {
+    const f = brokerFixture();
+    const { session } = await f.login();
+    const key = `session:${session.id}`;
+    const original = (await f.vault.get(key)) as Uint8Array;
+    const owner = await createPodSessionProvider(f.options).fetchFor(session.id);
+    const newer = await createPodSessionProvider(f.options).fetchFor(session.id);
+    let entered!: () => void;
+    let finish!: () => void;
+    const newerClaimed = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const newerReleased = new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+    let running: Promise<Response> | undefined;
+    f.op.controls.onToken = async () => {
+      if (running === undefined) {
+        // A stray release restores the credential under the owner, and a newer worker
+        // claims it again within the same second while the owner's refresh is in flight.
+        await f.vault.put(key, original);
+        running = newer(`${POD_ROOT}notes`);
+        await newerClaimed;
+        return;
+      }
+      entered();
+      await newerReleased;
+    };
+    await expect(owner(`${POD_ROOT}notes`)).rejects.toThrow("Pod session was revoked");
+    expect(await f.store.get(key)).toBe("deleted");
+    f.op.controls.tokenError = true;
+    finish();
+    await expect(running as Promise<Response>).rejects.toThrow();
+    expect(await f.provider.isActive(session.id)).toBe(false);
+    expect(f.op.captured.filter((r) => r.url.startsWith(POD_ROOT))).toHaveLength(0);
+  });
+
   it("detaches the refresh deadline from the cached resource client", async () => {
     const f = brokerFixture();
     const { session } = await f.login();

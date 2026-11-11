@@ -26,8 +26,10 @@ the public Solid Client ID Document, and HTTP composition.
   ownership before contacting the issuer. Return PodRefreshRetryableError (retryable: true) on
   contention and provably unsent failures or retryable OAuth error responses; release only via CAS
   to the original bytes. Retire other OAuth 4xx, uncertain sent outcomes, malformed refreshed claims,
-  identity mismatch and final rotation persistence failure. Claims carry claimedAt and expire after
-  60 seconds: readSession/isActive must retire them, never take over a potentially spent token.
+  identity mismatch and final rotation persistence failure. Claims carry claimedAt and a random
+  per-attempt claimId that fences release and finalization CAS (never drop it: same-second claims
+  are otherwise byte-identical), and expire after 60 seconds: readSession/isActive must retire
+  them, never take over a potentially spent token.
   Release and vault deletion use eight attempts with bounded backoff, including after throws.
   Never restore a spent refresh token. Crashed refreshes fail closed and require new login.
 - Recheck broker `isActive` during MCP verification/issuance and before resource fetches;
