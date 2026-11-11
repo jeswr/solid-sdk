@@ -1,3 +1,4 @@
+// AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 import {
@@ -751,7 +752,8 @@ export function createProviders(
           [metadata.token_endpoint, metadata.registration_endpoint].some((endpoint) => {
             if (typeof endpoint !== "string") return false;
             const url = new URL(endpoint);
-            return url.origin === destination.origin && url.pathname === destination.pathname;
+            // Compare hosts without a DNS trailing dot: "issuer.example." is the same server.
+            return sameServer(url, destination) && url.pathname === destination.pathname;
           })
         )
           throw new Error("OIDC credential endpoints cannot be extra resources");
@@ -863,4 +865,10 @@ export function createProviders(
     hint = selected;
     sessionRequest = request;
   }
+}
+
+/** Same scheme, port and host, treating a DNS trailing dot as the host it names. */
+function sameServer(a: URL, b: URL): boolean {
+  const host = (url: URL) => url.hostname.replace(/\.$/, "");
+  return a.protocol === b.protocol && a.port === b.port && host(a) === host(b);
 }

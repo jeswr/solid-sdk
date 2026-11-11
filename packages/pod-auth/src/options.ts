@@ -1,3 +1,4 @@
+// AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 import type { FetchAccount, FetchForOptions, Identity, PodAuthOptions } from "./types.js";
@@ -18,7 +19,9 @@ export function extraResourceOrigins(options?: FetchForOptions): readonly string
   return origins.map((value: unknown) => {
     if (typeof value !== "string") throw new TypeError("Invalid resource origin");
     const url = secureUrl(value, false, "resource origin");
-    if (value !== url.origin || url.hostname.includes("*"))
+    // A DNS trailing dot names the same host under a different origin string, which would
+    // let a credential-endpoint exclusion and the allowlist disagree about one server.
+    if (value !== url.origin || url.hostname.includes("*") || url.hostname.endsWith("."))
       throw new TypeError("Resource origins must be canonical HTTPS origins");
     return value;
   });

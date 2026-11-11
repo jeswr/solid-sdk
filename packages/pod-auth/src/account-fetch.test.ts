@@ -109,6 +109,7 @@ test("selectors, options and explicit origins fail closed before any network", a
     "https://relay.example:443",
     "https://*.relay.example",
     "https://relay*.example",
+    "https://relay.example.",
     "https://*",
     " https://relay.example",
     "https:\\relay.example",
@@ -547,6 +548,20 @@ test("credential endpoints remain excluded when the issuer advertises a differen
   const before = f.transport.mock.calls.length;
   await expect(scoped(relay + "/token")).rejects.toThrow("OIDC credential endpoints");
   await expect(scoped(relay + "/register")).rejects.toThrow("OIDC credential endpoints");
+  expect(f.transport).toHaveBeenCalledTimes(before);
+});
+
+// AUTHORED-BY Claude Opus 5.5
+test("credential endpoints advertised with a DNS trailing dot stay excluded", async () => {
+  const f = fixture({
+    tokenEndpoint: `${relay}./token`,
+    registrationEndpoint: `${relay}./register`,
+  });
+  await f.auth.login();
+  const scoped = f.auth.fetchFor(f.account, { extraResourceOrigins: [relay] });
+  const before = f.transport.mock.calls.length;
+  await expect(scoped(`${relay}/token`)).rejects.toThrow("OIDC credential endpoints");
+  await expect(scoped(`${relay}/register`)).rejects.toThrow("OIDC credential endpoints");
   expect(f.transport).toHaveBeenCalledTimes(before);
 });
 
