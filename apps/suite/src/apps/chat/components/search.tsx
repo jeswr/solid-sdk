@@ -4,8 +4,9 @@ import { Button, LoadingSkeleton } from "@jeswr/suite-ui";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { type ReactNode, useCallback, useEffect } from "react";
-import { encodeRef } from "@/lib/refs";
+import { encodeIdentifierRef, encodeRef } from "@/lib/refs";
 import { AppHeading } from "@/shell/app-frame";
+import type { ChatSearchRoom } from "../lib/client";
 import { SearchError, type SearchSnippet } from "../lib/search";
 import { useAsync, useChat } from "../state/chat-context";
 import { ChatFailure, PersonName } from "./chat-app";
@@ -22,6 +23,15 @@ function Snippet({ snippet }: { snippet: SearchSnippet }) {
   parts.push(snippet.text.slice(cursor));
   return <p className="chat-search-snippet">{parts}</p>;
 }
+/** Direct messages are named after the other person, as in the sidebar. */
+function SearchRoomName({ room, fallback }: { room: ChatSearchRoom; fallback: string }) {
+  const { session } = useChat();
+  if (room.isDirect) {
+    const other = room.members.find((member) => member !== session.webId) ?? session.webId;
+    return <PersonName webId={other} />;
+  }
+  return <>{room.name || fallback}</>;
+}
 export function ChatSearchRoute() {
   const params = useSearchParams();
   return <ChatSearchPage query={params.get("q") ?? ""} />;
@@ -30,7 +40,7 @@ function resultHref(room: string, message: string) {
   let href = "/chat";
   try {
     href = `/chat/r/${encodeRef(room)}`;
-    return `${href}?message=${encodeRef(message)}`;
+    return `${href}?message=${encodeIdentifierRef(message)}`;
   } catch {
     return href;
   }
@@ -112,7 +122,12 @@ export function ChatSearchPage({ query }: { query: string }) {
                 <p>
                   Couldn't search {data.skipped.length}{" "}
                   {data.skipped.length === 1 ? "room" : "rooms"}:{" "}
-                  {data.skipped.map(({ name }) => name || "Untitled room").join(", ")}
+                  {data.skipped.map((room, index) => (
+                    <span key={room.url}>
+                      {index > 0 && ", "}
+                      <SearchRoomName room={room} fallback="Untitled room" />
+                    </span>
+                  ))}
                 </p>
                 <Button variant="outline" onClick={search.retry}>
                   Retry search
@@ -126,7 +141,9 @@ export function ChatSearchPage({ query }: { query: string }) {
                 {data.results.map(({ room, message, snippet }) => (
                   <li key={message.id}>
                     <Link className="chat-search-result" href={resultHref(room.url, message.id)}>
-                      <strong>{room.name || "Untitled conversation"}</strong>
+                      <strong>
+                        <SearchRoomName room={room} fallback="Untitled conversation" />
+                      </strong>
                       <span className="chat-search-meta">
                         <span>
                           <PersonName webId={message.author ?? ""} />
