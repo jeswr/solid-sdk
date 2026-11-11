@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { NS } from "@jeswr/suite-vocab";
 import { strToU8, zipSync } from "fflate";
 import { DataFactory } from "n3";
@@ -25,16 +26,24 @@ import type { ConnectorState, FixtureRoute } from "../core/types.js";
 import { CLASSES, ExerciseAction } from "../core/vocab.js";
 import { fileAdapterById } from "../file-adapters.js";
 import { zipDirectory } from "../google-takeout/zip-reader.js";
+import { writeResource } from "../pod/resource.js";
 import { createRegistry } from "../registry.js";
 import { createWhoopAdapter, whoopAdapter } from "./adapter.js";
-import { MAX_WHOOP_FILE_BYTES, whoopFileAdapter } from "./file-adapter.js";
-import { CYCLE, RECOVERY, SLEEP, WHOOP_FIXTURES, WORKOUT } from "./fixtures.js";
+import { createWhoopFileAdapter, MAX_WHOOP_FILE_BYTES, whoopFileAdapter } from "./file-adapter.js";
+import {
+  CYCLE,
+  MILLISECOND_WHOOP_FIXTURES,
+  RECOVERY,
+  SLEEP,
+  WHOOP_FIXTURES,
+  WORKOUT,
+} from "./fixtures.js";
 import { API, MAX_RECORDS, METRICS, sourceId, timestamp } from "./model.js";
 import { HEALTH, HealthNode } from "./vocab.js";
 
 const ROOT = `${TEST_POD_ROOT}integrations/whoop/`;
 const MONTH = `${ROOT}health/observations/2026-06.ttl`;
-const WORKOUTS = `${ROOT}health/workouts.ttl`;
+const WORKOUTS = `${ROOT}health/workouts/2026-06.ttl`;
 const SLEEPS_CSV = `Sleep onset,Wake onset,Cycle timezone,Asleep duration (min),Light sleep duration (min),Deep (SWS) duration (min),REM duration (min),Respiratory rate (rpm),Sleep performance %
 2026-06-07 22:00:00,2026-06-08 06:00:00,+0000,450,240,120,90,14,90`;
 const CYCLES_CSV = `Cycle start time,Cycle end time,Cycle timezone,Recovery score %,Resting heart rate (bpm),Heart rate variability (ms),Skin temp (celsius),Blood oxygen %,Day Strain,Energy burned (cal),Average HR (bpm),Max HR (bpm)
@@ -96,7 +105,6 @@ describe("WHOOP catalogue and OAuth", () => {
       "read:cycles",
       "read:sleep",
       "read:workout",
-      "read:profile",
       "offline",
     ]);
   });
@@ -218,9 +226,9 @@ describe("WHOOP mappings and identity", () => {
     });
     const pod = createMemoryPod();
     if (order === "CSV first") await fileImport(whoopFileAdapter, file, { pod });
-    await demoImport(whoopAdapter, { pod });
+    await sparseImport(whoopAdapter, MILLISECOND_WHOOP_FIXTURES, { pod });
     await fileImport(whoopFileAdapter, file, { pod });
-    await demoImport(whoopAdapter, { pod });
+    await sparseImport(whoopAdapter, MILLISECOND_WHOOP_FIXTURES, { pod });
     expect(typed(pod, MONTH, HEALTH.Observation)).toHaveLength(12);
     expect(typed(pod, MONTH, HEALTH.Sleep)).toHaveLength(1);
     expect(typed(pod, WORKOUTS, CLASSES.ExerciseAction)).toHaveLength(1);
@@ -480,12 +488,19 @@ describe("WHOOP API traversal and failures", () => {
     expect(pod.get(MONTH)).toBeUndefined();
   });
   it("shares request/item budgets across collections instead of resetting each endpoint", async () => {
-    await expect(
-      demoImport(createWhoopAdapter({ maxRequests: 3, maxItems: 20, maxBytes: 10000 })),
-    ).rejects.toThrow(/request budget/);
-    await expect(
-      demoImport(createWhoopAdapter({ maxRequests: 20, maxItems: 3, maxBytes: 10000 })),
-    ).rejects.toThrow(/item budget/);
+    const requestBounded = await demoImport(
+      createWhoopAdapter({ maxRequests: 3, maxItems: 20, maxBytes: 10000 }),
+    );
+    expect(requestBounded.report.warnings?.length).toBe(1);
+    const adapter = createWhoopAdapter({ maxRequests: 20, maxItems: 3, maxBytes: 10000 });
+    const first = await demoImport(adapter);
+    expect(first.report.warnings).toEqual(["WHOOP import partial, re-run to continue."]);
+    expect(typed(first.pod, MONTH, HEALTH.Sleep)).toHaveLength(1);
+    expect(first.pod.get(WORKOUTS)).toBeUndefined();
+    const second = await demoImport(adapter, { pod: first.pod, cursor: first.report.cursor });
+    expect(second.report.warnings).toBeUndefined();
+    expect(second.report.cursor).toBe("2026-06-08T08:00:00.000Z");
+    expect(typed(first.pod, WORKOUTS, CLASSES.ExerciseAction)).toHaveLength(1);
   });
   it("keeps the prior cursor on an empty increment", async () => {
     const { report } = await sparseImport(
@@ -534,15 +549,24 @@ describe("WHOOP hostile files and cancellation", () => {
       }),
     ).rejects.toThrow(/limit/);
   });
-  it("rejects the upload byte cap and row cap before storing partial results", async () => {
+  it("rejects the upload byte cap but saves a partial row-budget batch", async () => {
     const file = memoryFile("sleeps.csv", SLEEPS_CSV);
     await expect(
       fileImport(whoopFileAdapter, { ...file, size: MAX_WHOOP_FILE_BYTES + 1 }),
     ).rejects.toThrow(/limit/);
     const text = `${SLEEPS_CSV.split("\n")[0]}\n${`${SLEEPS_CSV.split("\n")[1]}\n`.repeat(MAX_RECORDS + 1)}`;
     const pod = createMemoryPod();
-    await expect(csv(text, "sleeps.csv", pod)).rejects.toThrow(/cap/);
-    expect(pod.get(MONTH)).toBeUndefined();
+    const { report } = await csv(text, "sleeps.csv", pod);
+    expect(report.warnings).toEqual(["WHOOP import partial, re-run to continue."]);
+    expect(typed(pod, MONTH, HEALTH.Sleep)).toHaveLength(1);
+    const next = await runFileImport({
+      adapter: whoopFileAdapter,
+      file: memoryFile("sleeps.csv", text),
+      podWriter: writer(pod),
+      state: report.state,
+    });
+    expect(next.warnings).toBeUndefined();
+    expect(next.cursor).not.toBe(report.cursor);
   });
   it("skips oversized logical records without retaining them", async () => {
     const row = `${SLEEPS_CSV.split("\n")[1]}${"x".repeat(4 * 1024 * 1024)}`;
@@ -713,5 +737,359 @@ describe("WHOOP defensive scalar validation", () => {
   });
   it("keeps the mapped metric inventory explicit", () => {
     expect(Object.keys(METRICS)).toHaveLength(12);
+  });
+});
+
+describe("WHOOP review regressions", () => {
+  it.each([
+    "CSV first",
+    "API first",
+  ])("matches whole seconds within +/-60 seconds: %s", async (order) => {
+    for (const delta of [-60, 0, 60, 61]) {
+      const pod = createMemoryPod();
+      const at = new Date(Date.parse(SLEEP.start) + delta * 1000 + 777).toISOString();
+      const fixtures = routes("activity/sleep", { records: [{ ...SLEEP, start: at }] });
+      if (order === "CSV first") await csv(SLEEPS_CSV, "sleeps.csv", pod);
+      await sparseImport(whoopAdapter, fixtures, { pod });
+      await csv(SLEEPS_CSV, "sleeps.csv", pod);
+      const expected = delta === 61 ? 2 : 1;
+      expect(typed(pod, MONTH, HEALTH.Sleep)).toHaveLength(expected);
+      const data = pod.dataset(MONTH);
+      expect(
+        new HealthNode(`${MONTH}#sleep-${SLEEP.id}`, data, DataFactory).startTime?.toISOString(),
+      ).toBe(at);
+      if (expected === 1)
+        expect([...data].some((q) => q.subject.value.includes("#sleep-csv-"))).toBe(false);
+    }
+  });
+  it("uses resting HR LOINC 40443-4 and leaves source field codes without an invented scheme", async () => {
+    const { pod } = await demoImport(whoopAdapter);
+    const data = pod.dataset(MONTH);
+    const resting = new HealthNode(
+      `${MONTH}#recovery-101/metric/restingHR/code`,
+      data,
+      DataFactory,
+    );
+    expect(data.getQuads(resting.value, HEALTH.codeValue, null, null)[0]?.object.value).toBe(
+      "40443-4",
+    );
+    expect(resting.linked(HEALTH.inScheme)).toBe("http://loinc.org");
+    for (const metric of ["hrv", "temperature", "oxygen"]) {
+      const code = new HealthNode(`${MONTH}#recovery-101/metric/${metric}/code`, data, DataFactory);
+      expect(code.linked(HEALTH.inScheme)).toBeUndefined();
+      expect(data.countQuads(code.value, HEALTH.codeValue, null, null)).toBe(1);
+    }
+    expect([...data].some((q) => q.object.value === "https://developer.whoop.com")).toBe(false);
+  });
+  it.each([
+    1, 2, 3, 4,
+  ])("accepts up to three minutes of rounded stage overage (%s min)", async (minutes) => {
+    const { pod, report } = await csv(SLEEPS_CSV.replace(",240,", `,${240 + minutes},`));
+    expect(typed(pod, MONTH, HEALTH.Sleep)).toHaveLength(minutes <= 3 ? 1 : 0);
+    expect(report.skipped ?? 0).toBe(minutes <= 3 ? 0 : 1);
+  });
+  it("still rejects stage totals exceeding the actual sleep interval", async () => {
+    const { report } = await csv(SLEEPS_CSV.replace(",450,240,120,90,", ",480,272,120,90,"));
+    expect(report.skipped).toBe(1);
+  });
+  it.each([
+    "api",
+    "file",
+  ])("shards %s workouts by month and keeps native or CSV ids on reimport", async (source) => {
+    const pod = createMemoryPod();
+    const july = `${ROOT}health/workouts/2026-07.ttl`;
+    const run = () =>
+      source === "api"
+        ? sparseImport(
+            whoopAdapter,
+            routes("activity/workout", {
+              records: [
+                WORKOUT,
+                {
+                  ...WORKOUT,
+                  id: "july",
+                  start: "2026-07-08T08:00:00.123Z",
+                  end: "2026-07-08T08:30:00.123Z",
+                },
+              ],
+            }),
+            { pod },
+          )
+        : fileImport(
+            whoopFileAdapter,
+            memoryFile(
+              "workouts.csv",
+              `${WORKOUTS_CSV}\n${WORKOUTS_CSV.split("\n")[1]?.replaceAll("2026-06", "2026-07")}`,
+            ),
+            { pod },
+          );
+    await run();
+    const before = [
+      typed(pod, WORKOUTS, CLASSES.ExerciseAction),
+      typed(pod, july, CLASSES.ExerciseAction),
+    ];
+    expect(before.map((ids) => ids.length)).toEqual([1, 1]);
+    expect(pod.get(`${ROOT}health/workouts.ttl`)).toBeUndefined();
+    await run();
+    expect([
+      typed(pod, WORKOUTS, CLASSES.ExerciseAction),
+      typed(pod, july, CLASSES.ExerciseAction),
+    ]).toEqual(before);
+  });
+  it("resumes inside API pages without losing records and advances the high-water cursor only after all kinds", async () => {
+    const pod = createMemoryPod();
+    const adapter = createWhoopAdapter({ maxItems: 2, maxRequests: 50 });
+    const sleeps = Array.from({ length: 5 }, (_, index) => ({
+      ...SLEEP,
+      id: `night-${index}`,
+      start: `2026-06-0${index + 1}T22:00:00.777Z`,
+      end: `2026-06-0${index + 2}T06:00:00.777Z`,
+    })).reverse();
+    const requests: URL[] = [];
+    const transport: typeof fetch = async (input) => {
+      const url = new URL(String(input));
+      requests.push(url);
+      if (url.pathname.endsWith("/sleep"))
+        return Response.json(
+          url.searchParams.has("nextToken")
+            ? { records: sleeps.slice(3) }
+            : { records: sleeps.slice(0, 3), next_token: "next/+page" },
+        );
+      return Response.json({ records: [] });
+    };
+    let cursor: string | undefined;
+    for (let run = 0; run < 3; run++) {
+      const report = await runImport({
+        adapter,
+        mode: "live",
+        sourceAuth: { fetch: transport },
+        podWriter: writer(pod),
+        cursor,
+      });
+      cursor = report.cursor;
+      expect(typed(pod, MONTH, HEALTH.Sleep)).toHaveLength(Math.min((run + 1) * 2, 5));
+      expect(Boolean(report.warnings?.length)).toBe(run < 2);
+    }
+    expect(cursor).toBe(sleeps[0]?.start);
+    expect(requests.every((url) => !url.searchParams.has("start"))).toBe(true);
+    expect(requests.some((url) => url.searchParams.get("nextToken") === "next/+page")).toBe(true);
+  });
+  it("resolves recovery cycle timestamps after a batch ends in cycle traversal", async () => {
+    const pod = createMemoryPod();
+    const adapter = createWhoopAdapter({ maxItems: 1, maxRequests: 50 });
+    const transport: typeof fetch = async (input) => {
+      const url = new URL(String(input));
+      if (url.pathname.endsWith("/cycle/101")) return Response.json(CYCLE);
+      const fixture = WHOOP_FIXTURES.find((route) => new URL(route.url).pathname === url.pathname);
+      return Response.json(fixture?.json ?? { records: [] });
+    };
+    let cursor: string | undefined;
+    for (let i = 0; i < 4; i++) {
+      const report = await runImport({
+        adapter,
+        mode: "live",
+        sourceAuth: { fetch: transport },
+        podWriter: writer(pod),
+        cursor,
+      });
+      cursor = report.cursor;
+    }
+    expect(cursor).toBe("2026-06-08T08:00:00.000Z");
+    expect(
+      new HealthNode(`${MONTH}#recovery-101/metric/restingHR`, pod.dataset(MONTH), DataFactory)
+        .measuredValue,
+    ).toBe(52);
+    expect(typed(pod, MONTH, HEALTH.Sleep)).toHaveLength(1);
+    expect(typed(pod, WORKOUTS, CLASSES.ExerciseAction)).toHaveLength(1);
+  });
+  it("treats the default 10000 source item cap as a resumable boundary even with malformed rows", async () => {
+    const pod = createMemoryPod();
+    const transport: typeof fetch = async (input) => {
+      const url = new URL(String(input));
+      if (!url.pathname.endsWith("/cycle")) return Response.json({ records: [] });
+      const offset = Number(url.searchParams.get("nextToken") ?? 0);
+      return Response.json({
+        records: Array(Math.min(25, 10001 - offset)).fill(null),
+        ...(offset + 25 < 10001 ? { next_token: String(offset + 25) } : {}),
+      });
+    };
+    const first = await runImport({
+      adapter: whoopAdapter,
+      mode: "live",
+      sourceAuth: { fetch: transport },
+      podWriter: writer(pod),
+    });
+    expect(first.skipped).toBe(10000);
+    expect(first.warnings).toEqual(["WHOOP import partial, re-run to continue."]);
+    const second = await runImport({
+      adapter: whoopAdapter,
+      mode: "live",
+      sourceAuth: { fetch: transport },
+      podWriter: writer(pod),
+      state: first.state,
+    });
+    expect(second.skipped).toBe(1);
+    expect(second.warnings).toBeUndefined();
+  });
+  it.each([
+    "csv",
+    "zip",
+  ])("finishes a bounded %s export newest-first over several runs", async (format) => {
+    const pod = createMemoryPod();
+    const adapter = createWhoopFileAdapter(2);
+    const text = `${SLEEPS_CSV.split("\n")[0]}\n${[1, 3, 2, 5, 4]
+      .map((day) =>
+        SLEEPS_CSV.split("\n")[1]
+          ?.replace("2026-06-07", `2026-06-0${day}`)
+          .replace("2026-06-08", `2026-06-0${day + 1}`),
+      )
+      .join("\n")}`;
+    const file =
+      format === "csv" ? memoryFile("sleeps.csv", text) : archive({ "sleeps.csv": text });
+    let state: ConnectorState | undefined;
+    for (let i = 0; i < 3; i++) {
+      const report = await runFileImport({ adapter, file, podWriter: writer(pod), state });
+      state = report.state;
+      expect(typed(pod, MONTH, HEALTH.Sleep)).toHaveLength(Math.min(2 * (i + 1), 5));
+      expect(Boolean(report.warnings?.length)).toBe(i < 2);
+      if (i === 0) {
+        const times = typed(pod, MONTH, HEALTH.Sleep).map((id) =>
+          new HealthNode(`${id}/time`, pod.dataset(MONTH), DataFactory).dateTime?.toISOString(),
+        );
+        expect(times).toEqual(
+          expect.arrayContaining(["2026-06-05T22:00:00.000Z", "2026-06-04T22:00:00.000Z"]),
+        );
+      }
+    }
+    const done = await runFileImport({ adapter, file, podWriter: writer(pod), state });
+    expect(done.written).toHaveLength(0);
+    // A different export must start fresh, even when its filename and size match.
+    const changed = await runFileImport({
+      adapter,
+      file: memoryFile("sleeps.csv", text.replaceAll("2026-06", "2026-07")),
+      podWriter: writer(pod),
+      state,
+    });
+    expect(changed.warnings?.length).toBe(1);
+    expect(typed(pod, `${ROOT}health/observations/2026-07.ttl`, HEALTH.Sleep)).toHaveLength(2);
+  });
+  it("keeps physiological rows atomic when the file record budget has one slot left", async () => {
+    const pod = createMemoryPod();
+    const adapter = createWhoopFileAdapter(3);
+    const text = `${CYCLES_CSV}\n${CYCLES_CSV.split("\n")[1]?.replaceAll("2026-06-08", "2026-06-07").replaceAll("2026-06-09", "2026-06-08")}`;
+    const file = memoryFile("physiological_cycles.csv", text);
+    const first = await runFileImport({ adapter, file, podWriter: writer(pod) });
+    expect(first.warnings?.length).toBe(1);
+    expect(typed(pod, MONTH, CLASSES.Dataset)).toHaveLength(2);
+    const second = await runFileImport({
+      adapter,
+      file,
+      podWriter: writer(pod),
+      state: first.state,
+    });
+    expect(second.warnings).toBeUndefined();
+    expect(typed(pod, MONTH, CLASSES.Dataset)).toHaveLength(4);
+  });
+});
+
+describe("WHOOP matching at month boundaries", () => {
+  it.each(["CSV first", "API first"])("reconciles adjacent monthly shards: %s", async (order) => {
+    const pod = createMemoryPod();
+    const text = SLEEPS_CSV.replace("2026-06-07 22:00:00", "2026-06-30 23:59:30").replace(
+      "2026-06-08 06:00:00",
+      "2026-07-01 08:00:00",
+    );
+    const fixtures = routes("activity/sleep", {
+      records: [{ ...SLEEP, start: "2026-07-01T00:00:00.777Z", end: "2026-07-01T08:00:00.777Z" }],
+    });
+    if (order === "CSV first") await csv(text, "sleeps.csv", pod);
+    await sparseImport(whoopAdapter, fixtures, { pod });
+    await csv(text, "sleeps.csv", pod);
+    expect(typed(pod, MONTH, HEALTH.Sleep)).toHaveLength(0);
+    expect(typed(pod, `${ROOT}health/observations/2026-07.ttl`, HEALTH.Sleep)).toHaveLength(1);
+    expect(pod.get(MONTH)).not.toContain("#sleep-csv-");
+  });
+});
+
+describe("WHOOP resumed recovery request bounds", () => {
+  it("saves recovery progress when cycle lookups consume the request budget", async () => {
+    const pod = createMemoryPod();
+    const adapter = createWhoopAdapter({ maxRequests: 3, maxItems: 10 });
+    const transport: typeof fetch = async (input) => {
+      const path = new URL(String(input)).pathname;
+      const cycleId = /\/cycle\/(\d+)$/.exec(path)?.[1];
+      if (cycleId) return Response.json({ ...CYCLE, id: Number(cycleId) });
+      if (path.endsWith("/recovery"))
+        return Response.json({
+          records: [101, 102, 103, 104].map((id) => ({ ...RECOVERY, cycle_id: id })),
+        });
+      return Response.json({ records: [] });
+    };
+    let cursor: string | undefined = JSON.stringify({ v: 1, position: { index: 1, offset: 0 } });
+    const first = await runImport({
+      adapter,
+      mode: "live",
+      podWriter: writer(pod),
+      cursor,
+      sourceAuth: { fetch: transport },
+    });
+    expect(first.warnings?.length).toBe(1);
+    expect(typed(pod, MONTH, HEALTH.HeartRate)).toHaveLength(2);
+    cursor = first.cursor;
+    const second = await runImport({
+      adapter,
+      mode: "live",
+      podWriter: writer(pod),
+      cursor,
+      sourceAuth: { fetch: transport },
+    });
+    expect(typed(pod, MONTH, HEALTH.HeartRate)).toHaveLength(4);
+    const third = await runImport({
+      adapter,
+      mode: "live",
+      podWriter: writer(pod),
+      cursor: second.cursor,
+      sourceAuth: { fetch: transport },
+    });
+    expect(third.warnings).toBeUndefined();
+    expect(third.cursor).toBe("2026-06-08T06:00:00.000Z");
+  });
+  it("skips a deleted recovery cycle and retains its saved timestamp rather than inventing a date", async () => {
+    const pod = createMemoryPod();
+    const report = await runImport({
+      adapter: whoopAdapter,
+      mode: "live",
+      podWriter: writer(pod),
+      cursor: JSON.stringify({
+        v: 1,
+        newest: "2026-06-08T06:00:00.000Z",
+        position: { index: 1, offset: 0 },
+      }),
+      sourceAuth: {
+        fetch: async (input) => {
+          const path = new URL(String(input)).pathname;
+          if (path.endsWith("/cycle/101")) return new Response(null, { status: 404 });
+          return Response.json({ records: path.endsWith("/recovery") ? [RECOVERY] : [] });
+        },
+      },
+    });
+    expect(report.skipped).toBe(1);
+    expect(report.cursor).toBe("2026-06-08T06:00:00.000Z");
+    expect(typed(pod, MONTH, HEALTH.HeartRate)).toHaveLength(0);
+  });
+});
+
+describe("WHOOP legacy duplicate cleanup", () => {
+  it("removes an already-stored CSV duplicate when a file import finds the API winner", async () => {
+    const { pod } = await csv(SLEEPS_CSV);
+    const oldCsv = pod.dataset(MONTH);
+    await sparseImport(whoopAdapter, MILLISECOND_WHOOP_FIXTURES, { pod });
+    const mixed = pod.dataset(MONTH);
+    mixed.addQuads([...oldCsv]);
+    await writeResource(MONTH, mixed, { fetchImpl: pod.fetch });
+    expect(typed(pod, MONTH, HEALTH.Sleep)).toHaveLength(2);
+    await csv(SLEEPS_CSV, "sleeps.csv", pod);
+    expect(typed(pod, MONTH, HEALTH.Sleep)).toHaveLength(1);
+    expect(pod.get(MONTH)).not.toContain("#sleep-csv-");
   });
 });

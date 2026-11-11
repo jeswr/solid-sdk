@@ -66,7 +66,6 @@ const scopeLabels: Readonly<Record<string, string>> = {
   "read:cycles": "Daily activity and energy",
   "read:sleep": "Sleep and stages",
   "read:workout": "Workouts",
-  "read:profile": "Your WHOOP profile",
   offline: "Keep the connection available",
 };
 export function scopeLabel(scope: string): string {

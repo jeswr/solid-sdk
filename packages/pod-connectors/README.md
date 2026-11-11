@@ -230,15 +230,16 @@ they must enforce their own streaming limits. Legacy Takeout JSON still has the 
 
 ## WHOOP
 
-`./adapters/whoop` exports `whoopAdapter`, `createWhoopAdapter(limits?)` and
-`whoopFileAdapter`. Both appear under **one** health catalogue id, `whoop`, like Garmin.
+`./adapters/whoop` exports `whoopAdapter`, `createWhoopAdapter(limits?)`,
+`whoopFileAdapter` and `createWhoopFileAdapter(maxRecords?)`. Both paths appear under **one**
+health catalogue id, `whoop`, like Garmin.
 Hosts inject `createRegistry({ whoop: { clientId, tokenProxyUrl } })` and a separate
 `SourceAuth`. Code exchange defaults to the shared confidential-client token proxy;
 a Node host may instead inject its client secret for direct exchange. Client id alone
 keeps the connector in demo mode. Public secretless exchange is not assumed.
 The Tier A OAuth path uses the shared authorization-code/S256 PKCE engine with WHOOP's
 `/oauth/oauth2/auth` and `/oauth/oauth2/token` endpoints. Scopes are `read:recovery`,
-`read:cycles`, `read:sleep`, `read:workout`, `read:profile` and `offline`. Tokens remain
+`read:cycles`, `read:sleep`, `read:workout` and `offline`. Tokens remain
 host-owned and in memory; automatic refresh is not implemented by this adapter.
 Provider behavior is exercised with synthetic v2-shaped fixtures only, without live
 verification of client registration or token exchange.
@@ -257,7 +258,13 @@ Each drains `next_token` (also accepting `nextToken` in fixtures) through the `n
 query parameter. Tokens are opaque, URL-encoded, capped and checked for cycles. Collection
 envelopes fail closed; malformed individual records are skipped. Recoveries join their
 cycle id to a cycle start time; no time is fabricated for an unmatched recovery.
-Only scored records are imported. The ISO cursor is the newest imported start time.
+Only scored records are imported. After traversal completes, the ISO cursor is the newest
+imported start time. A batch stopped by the item or request budget saves an opaque cursor
+with its collection, page token, row offset, original start filter and high-water time.
+Pass `report.cursor` (or `report.state`) into the next run until traversal completes;
+the high-water timestamp alone would skip older pages. Resumed recoveries resolve missing
+cycle dates through the [documented `cycle/<id>` endpoint](https://developer.whoop.com/api/);
+absent cycles are skipped, never assigned invented dates.
 With `ctx.scopes`, only granted collections are requested; recovery also requires cycles
 to resolve its timestamp. Withheld collections leave their stored records untouched.
 Subsequent requests use `start` with a seven-day overlap to replay delayed scores/updates.
@@ -265,39 +272,57 @@ WHOOP's start filter is not an updated-since feed: changes to older events, or p
 unmatched recoveries outside that overlap, require a cursor-free import. Full and incremental
 imports both preserve unrelated historical records; source deletions are not inferred.
 
-The destination layout is `health/observations/YYYY-MM.ttl` plus `health/workouts.ttl`,
-inside the WHOOP connector container. Observation values, CodeableConcepts, OWL-Time instants,
+The destination layout is `health/observations/YYYY-MM.ttl` plus `health/workouts/YYYY-MM.ttl`,
+inside the WHOOP connector container. The Type Index registers the observation and workout
+classes against `health/observations/` and `health/workouts/`, respectively, so readers can
+discover all monthly documents. Observation values, CodeableConcepts, OWL-Time instants,
 QUDT units, UCUM codes and local person subjects follow the Health app's Apple Health model.
 Resting HR and total asleep duration use its existing HeartRateObservation/SleepObservation
-classes and LOINC codes. HRV retains **RMSSD** (never relabelled as Apple's SDNN), skin
+classes and LOINC codes (resting heart rate **40443-4**, asleep duration **93832-4**). HRV
+retains **RMSSD** (never relabelled as Apple's SDNN), skin
 temperature, SpO2, respiratory rate, energy and reported light/deep/REM durations use generic
-health:Observation with source field codes under the WHOOP coding-system URL. Sleep stages
+health:Observation with literal source field codes and no invented `inScheme`. Sleep stages
 remain separate reported totals, with no invented stage chronology and no SleepObservation
 subtype that would double-count the total. API kilojoules and CSV dietary calories normalize
 to kJ; workouts also carry schema:ExerciseAction energy/duration/name like Garmin.
 
 The connector's Apple Health adapter currently imports only workouts; the Health app's
-observation reader currently charts six metric kinds. Compatible HR and sleep observations
-use that reader's exact representation, while other WHOOP values are retained as canonical
-observations for readers supporting those codes. Hosts must route/discover the WHOOP container;
+observation reader currently charts six metric kinds. Total sleep uses that reader's exact
+representation; resting HR retains its distinct
+40443-4 concept, which the current heart-rate chart (8867-4) does not include. Other WHOOP
+values are retained as canonical observations for readers supporting those codes. Hosts must
+route/discover the WHOOP container;
 this change does not add metric cards or change the Health app's fixed storage root.
 The health sector has no recovery score, strain or sleep performance terms. These scores
 are omitted and listed in `report.unsupported` for both paths; no new vocabulary IRIs are minted.
 
 API fragments use native WHOOP ids; CSV fragments use `(start instant, record kind)`.
-A later API record removes its matching CSV description and deterministic helper nodes.
-CSV records never replace an API record for that same kind/instant. Duplicate rows and
-reimports are idempotent. Distinct native ids at the same instant remain distinct.
+Matching compares UTC start times at whole-second precision with an inclusive ±60 second
+tolerance and the same record kind, including adjacent monthly shards. An API record removes
+matching CSV descriptions and deterministic helper nodes. CSV records never replace a matching
+API record. Duplicate rows and reimports are idempotent. Distinct native ids at the same instant remain distinct.
 Monthly shards are selected by UTC start; a provider correction moving an event to another
-month cannot remove its old shard copy without a separate reconciliation inventory.
+month outside the CSV matching tolerance cannot remove its old shard copy without a separate
+reconciliation inventory.
 All writes use retained ETags and the shared bounded provenance pipeline.
 
 WHOOP limits are 64 MiB per upload, 16 MiB per archive CSV, 100 ZIP entries, 10,000
-source rows and 10,000 normalized records (a physiological row may yield two), and
-500,000 RDF quads per destination. Default API limits are 2,000 requests, 10,000 source
-items and 64 MiB cumulative JSON bytes; `createWhoopAdapter(limits)` accepts tighter host
+processed source rows per batch and 10,000 normalized records (a physiological row may yield
+two), and 500,000 RDF quads per destination. Byte-bounded CSV contents are scanned for sort
+keys; a bounded heap selects the newest rows first, then they are parsed and written in
+monthly groups. The file path saves a SHA-256 content-bound cursor in `report.cursor` and
+`report.state`; pass either to the next `runFileImport` with the same export. Re-selecting it
+in Suite resumes automatically. The Node CLI also resumes pending WHOOP batches on ordinary
+reruns and prints their warning; a completed API traversal retains the normal `--since`
+behavior. Duplicate and malformed rows consume the batch's row budget;
+physiological rows stay atomic when only one record slot remains. A changed export restarts
+from its newest rows. Both API and file reports include a **“WHOOP import partial, re-run to
+continue.”** warning when another batch remains. `createWhoopFileAdapter(maxRecords)` accepts
+a smaller record budget (minimum 2). CSV sleep stages allow up to three minutes of rounding
+overage over the asleep total, while still requiring stages and total to fit the interval.
+Default API limits are 2,000 requests, 10,000 source items and 64 MiB cumulative JSON bytes; `createWhoopAdapter(limits)` accepts tighter host
 budgets. The shared 32 MiB JSON response and 4 MiB logical CSV record limits also apply.
-Source input is staged before data writes; invalid pages, CRCs, limits, HTTP 401/429 and
+Source input is staged before data writes; invalid pages, CRCs, byte/quad limits, HTTP 401/429 and
 cancellation never advance the checkpoint. 429 is surfaced for host scheduling without
 retrying. Synthetic tests cover both orders of CSV/API deduplication, pagination, hostile
 headers/archives/records, budgets, provenance and cancellation. No new dependencies.

@@ -64,6 +64,8 @@ export interface ImportFile {
 
 /** What a file-import adapter hands the runner to write (mirrors the OAuth ctx). */
 export interface FileImportContext {
+  /** Host-owned checkpoint for adapters that support bounded file batches. */
+  readonly cursor?: string;
   /** Importing user's WebID, supplied by the host's PodWriter. */
   readonly webId?: string;
   /** Resolve a slug to the absolute pod URL it will be written at (for fragment IRIs). */
@@ -117,12 +119,13 @@ export interface FileImportAdapter {
   importFile(file: ImportFile, ctx: FileImportContext): Promise<void | FileImportOutcome>;
 }
 
-export interface FileImportOutcome extends Pick<ImportOutcome, "skipped"> {
+export interface FileImportOutcome extends Pick<ImportOutcome, "skipped" | "cursor" | "warnings"> {
   readonly unsupported?: readonly string[];
 }
 
 export interface RunFileImportOptions extends ConnectorStateOptions {
   adapter: FileImportAdapter;
+  cursor?: string;
   file: ImportFile;
   podWriter: PodWriter;
   onProgress?: (p: ImportProgress) => void;
@@ -174,6 +177,7 @@ export async function runFileImport(opts: RunFileImportOptions): Promise<ImportR
     const outcome = await adapter.importFile(file, {
       webId: opts.podWriter.webId,
       maxRows: MAX_ROWS,
+      cursor: opts.cursor ?? opts.state?.cursor,
       resolve: (slug) => opts.podWriter.resolve(slug),
       progress: (p) => {
         signal?.throwIfAborted();
@@ -195,7 +199,9 @@ export async function runFileImport(opts: RunFileImportOptions): Promise<ImportR
       session.written.length === 0 &&
       !removed &&
       !outcome?.skipped &&
-      !outcome?.unsupported?.length
+      !outcome?.unsupported?.length &&
+      !outcome?.warnings?.length &&
+      !outcome?.cursor
     ) {
       throw new IntegrationSyncError(
         id,
@@ -207,7 +213,7 @@ export async function runFileImport(opts: RunFileImportOptions): Promise<ImportR
     await session.finish();
     // A cancel during the final provenance write is still a cancel: never report success.
     signal?.throwIfAborted();
-    const state = session.state({ skipped });
+    const state = session.state({ skipped, cursor: outcome?.cursor });
     opts.onState?.(state);
     return {
       adapterId: id,
@@ -218,6 +224,8 @@ export async function runFileImport(opts: RunFileImportOptions): Promise<ImportR
       skipped: skipped || undefined,
       state,
       unsupported: outcome?.unsupported,
+      warnings: outcome?.warnings,
+      cursor: state.cursor,
     };
   } catch (error) {
     // Partial writes already link to this run. Record it when storage is available and the

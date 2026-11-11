@@ -56,3 +56,17 @@ export const WHOOP_FIXTURES: readonly FixtureRoute[] = [
   { url: `${API}/activity/sleep`, json: { records: [SLEEP], next_token: null } },
   { url: `${API}/activity/workout`, json: { records: [WORKOUT], next_token: null } },
 ];
+
+// AUTHORED-BY Codex GPT-6
+/** Real v2 precision: exports omit the millisecond component. */
+export const MILLISECOND_WHOOP_FIXTURES: readonly FixtureRoute[] = WHOOP_FIXTURES.map((route) => ({
+  ...route,
+  json: {
+    records: (route.json as { records: Record<string, unknown>[] }).records.map((row) => ({
+      ...row,
+      ...(typeof row.start === "string" ? { start: row.start.replace("Z", ".777Z") } : {}),
+      ...(typeof row.end === "string" ? { end: row.end.replace("Z", ".777Z") } : {}),
+    })),
+    next_token: null,
+  },
+}));

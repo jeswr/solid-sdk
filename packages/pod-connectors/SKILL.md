@@ -261,9 +261,14 @@ and the README's WHOOP section before changing it. Reuse the Takeout ZIP reader;
 CSV normalized-header collision checks, explicit-offset timestamps, native-id/CSV-start
 reconciliation and API-over-file precedence. Source rows and normalized records are capped
 independently, including duplicate and malformed rows. Stage all source parsing before writes.
-One RunBudget covers every API page; the ISO start cursor replays seven days, not an
-updated-since feed. Never invent a recovery time when its cycle is missing.
+One RunBudget covers every API page. Item/request exhaustion commits a bounded batch and
+returns a warning plus an opaque collection/page/offset cursor; only a completed traversal
+returns the ISO start cursor, which replays seven days rather than an updated-since feed.
+File batches use content-bound host-owned cursors and select newest-first with a bounded
+heap; preserve the byte caps while scanning sort keys and the row/record caps while parsing
+selected rows, including duplicates and malformed rows. Physiological rows remain atomic. Never invent a recovery time when its cycle is missing.
 
+Workouts live in monthly `health/workouts/YYYY-MM.ttl` documents with stable id fragments.
 Health observations use existing sector terms and the Health app's monthly model; HRV is
 RMSSD, not SDNN. Sleep stage totals are generic observations so total sleep is counted once.
 Workouts retain ExerciseAction. Recovery score, strain and sleep performance have no sector

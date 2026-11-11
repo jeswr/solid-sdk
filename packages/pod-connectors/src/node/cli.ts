@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 
 import { constants, createReadStream } from "node:fs";
 import { open } from "node:fs/promises";
@@ -201,7 +202,9 @@ export async function runCli(args: readonly string[], options: CliOptions = {}):
         createSourceAuth(command.id, adapter, token, sourceFetch);
     }
     let next: ConnectorState | undefined;
-    const state = previous && !command.since ? { ...previous, cursor: undefined } : previous;
+    const pendingWhoopBatch = command.id === "whoop" && previous?.cursor?.startsWith('{"v":1,');
+    const resume = command.since || file !== undefined || pendingWhoopBatch;
+    const state = previous && !resume ? { ...previous, cursor: undefined } : previous;
     const shared = {
       podWriter,
       state,
@@ -211,14 +214,15 @@ export async function runCli(args: readonly string[], options: CliOptions = {}):
       ...(options.signal && { signal: options.signal }),
     };
     try {
-      if (file) await runFileImport({ ...shared, adapter: fileAdapter as FileImportAdapter, file });
-      else
-        await runImport({
-          ...shared,
-          adapter: adapter as NonNullable<typeof adapter>,
-          mode: "live",
-          sourceAuth,
-        });
+      const report = file
+        ? await runFileImport({ ...shared, adapter: fileAdapter as FileImportAdapter, file })
+        : await runImport({
+            ...shared,
+            adapter: adapter as NonNullable<typeof adapter>,
+            mode: "live",
+            sourceAuth,
+          });
+      for (const warning of report.warnings ?? []) stderr(`${warning}\n`);
     } catch {
       if (next) {
         // A full import still preserves the last successful checkpoint on failure.

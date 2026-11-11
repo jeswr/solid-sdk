@@ -10,6 +10,18 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace: vi.fn() }),
 }));
 
+// Exercise the Tier B flow with its real adapter made available by the host.
+vi.mock("../src/apps/home/components/connect/config", async (original) => {
+  const config = await original<typeof import("../src/apps/home/components/connect/config")>();
+  const { catalogue } = await import("../src/apps/home/lib/connect/catalogue");
+  return {
+    ...config,
+    entries: catalogue(config.registry, true).map((entry) =>
+      entry.id === "garmin" ? { ...entry, status: "demo" } : entry,
+    ),
+  };
+});
+
 import { ConnectFlow } from "../src/apps/home/components/connect/flow";
 
 beforeEach(() => {
@@ -45,4 +57,24 @@ it("offers a real WHOOP export import beside its demo/API connection", async () 
     .map((key) => localStorage.getItem(key))
     .join("\n");
   expect(saved).toContain('"mode":"file"');
+});
+
+// AUTHORED-BY Codex GPT-6
+it("lists only the WHOOP scopes used by the import", async () => {
+  const { host } = await mount(h(ConnectFlow, { service: "whoop" }));
+  expect(host.querySelectorAll('input[type="checkbox"]')).toHaveLength(5);
+  expect(host.textContent).not.toContain("Your WHOOP profile");
+});
+
+it.each([
+  ["whoop", "WHOOP"],
+  ["garmin", "Garmin"],
+])("returns from file mode to the %s connection", async (service, name) => {
+  const { host } = await mount(h(ConnectFlow, { service }));
+  await click(button(host, "Continue"));
+  await click(button(host, "Import an export file"));
+  expect(host.querySelector('input[type="file"]')).not.toBeNull();
+  await click(button(host, `Use ${name} connection`));
+  expect(host.querySelector('input[type="file"]')).toBeNull();
+  expect(button(host, "Import an export file")).toBeDefined();
 });

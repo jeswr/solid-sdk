@@ -74,6 +74,7 @@ export interface ImportReport {
   skipped?: number;
   /** Unsupported source fields, products or formats. */
   unsupported?: readonly string[];
+  warnings?: readonly string[];
   /** The type-index document used/created. */
   indexUrl: string;
 }
@@ -139,6 +140,7 @@ export async function runImport(opts: RunImportOptions): Promise<ImportReport> {
       categories: [...new Set(session.written.map((w) => w.category))],
       cursor: state.cursor,
       skipped: outcome.skipped,
+      ...(outcome.warnings ? { warnings: outcome.warnings } : {}),
       ...(outcome.unsupported ? { unsupported: outcome.unsupported } : {}),
       indexUrl,
       state,

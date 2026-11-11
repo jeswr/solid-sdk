@@ -183,6 +183,7 @@ function ServiceFlow({ entry }: { entry: ConnectorEntry }) {
                 file: fileWithSignal(file, abort.signal),
                 podWriter: writer,
                 onProgress,
+                ...(cursor ? { cursor } : {}),
                 signal: abort.signal,
               })
             : await runImport({
@@ -303,6 +304,7 @@ function ServiceFlow({ entry }: { entry: ConnectorEntry }) {
                 importedDomains.map((domain) => domain.label).join(", ") || "your pod",
               ),
               skippedCopy(report.skipped ?? 0),
+              ...(report.warnings ?? []),
             ]
               .filter(Boolean)
               .join(". ")
@@ -370,6 +372,9 @@ function ServiceFlow({ entry }: { entry: ConnectorEntry }) {
                       importedDomains.map((domain) => domain.label).join(", ") || "your pod",
                     )}
                   </h2>
+                  {report.warnings?.map((warning) => (
+                    <p key={warning}>{warning}</p>
+                  ))}
                   {!!report.skipped && <p>{skippedCopy(report.skipped)}</p>}
                   {report.unsupported?.length ? (
                     <p>Some parts of this export aren't supported yet.</p>
@@ -484,7 +489,7 @@ function ServiceFlow({ entry }: { entry: ConnectorEntry }) {
                   </h2>
                   {notice && <p>{notice}</p>}
                   <p>{fileAdapter.fileHint}</p>
-                  {entry.tier === "A" && (
+                  {(entry.tier === "A" || entry.tier === "B") && adapter && (
                     <button
                       type="button"
                       className="hm-connect-button"
