@@ -72,10 +72,18 @@ export function PermissionsScreen({ history = false }: { history?: boolean }) {
     };
   });
   const previous = useAgentQuery(client.paths.mandates, (c) => mandateHistory(c, session));
+  const data = query.status === "ready" ? query.data : undefined;
   const form = useForm<EditorValues>({
     resolver: zodResolver(editorSchema),
-    defaultValues: editorDefaults(),
+    defaultValues: editorDefaults(new Date(), data?.mandate),
   });
+  const { resetField, getFieldState } = form;
+  useEffect(() => {
+    if (data && !getFieldState("memoryScope").isDirty)
+      resetField("memoryScope", {
+        defaultValue: editorDefaults(new Date(), data.mandate).memoryScope,
+      });
+  }, [data, resetField, getFieldState]);
   const [template, setTemplate] = useState("custom");
   const [preview, setPreview] = useState<{ mandate: Mandate; turtle: string } | undefined>();
   const [busy, setBusy] = useState(false);
@@ -83,7 +91,6 @@ export function PermissionsScreen({ history = false }: { history?: boolean }) {
   const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
   const [pending, setPending] = useState<PendingRevocation | undefined>();
-  const data = query.status === "ready" ? query.data : undefined;
   const accountHashes =
     data?.accounts.flatMap((a) => (a.channelHandleHash ? [a.channelHandleHash] : [])) ?? [];
   const bindings = [...new Set(data?.accounts.map(accountBinding) ?? [])];
@@ -96,7 +103,7 @@ export function PermissionsScreen({ history = false }: { history?: boolean }) {
       ));
   const chooseTemplate = (name: string) => {
     form.reset({
-      ...editorDefaults(),
+      ...editorDefaults(new Date(), data?.mandate),
       bindings: name === "tests" ? ["gmail"] : bindings,
       recipients: accountHashes,
       BookAppointment: name === "meetings" ? "auto" : "ask",
@@ -129,6 +136,8 @@ export function PermissionsScreen({ history = false }: { history?: boolean }) {
           data.emailBindings,
         );
       } else mandate = buildEditorMandate(values, options);
+      if (data.mandate?.memoryScope !== undefined)
+        mandate = { ...mandate, memoryScope: values.memoryScope };
       setPreview({ mandate, turtle: await previewMandate(mandate, client) });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Couldn't preview your permissions. Try again.");

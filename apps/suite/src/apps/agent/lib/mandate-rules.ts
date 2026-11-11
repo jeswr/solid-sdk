@@ -62,7 +62,7 @@ export const editorSchema = z
       ctx.addIssue({ code: "custom", path: ["confirm"], message: "Type CONFIRM to allow this" });
   });
 export type EditorValues = z.infer<typeof editorSchema>;
-export function editorDefaults(now = new Date()): EditorValues {
+export function editorDefaults(now = new Date(), current?: Mandate): EditorValues {
   return {
     bindings: [],
     recipients: [],
@@ -76,7 +76,11 @@ export function editorDefaults(now = new Date()): EditorValues {
     currency: "GBP",
     until: new Date(now.getTime() + 30 * DAY).toISOString().slice(0, 10),
     confirm: "",
-    memoryScope: [MEMORY_CATEGORIES[0].id],
+    memoryScope: current
+      ? MEMORY_CATEGORIES.filter((category) => memoryScope(current).includes(category.id)).map(
+          (category) => category.id,
+        )
+      : [MEMORY_CATEGORIES[0].id],
   };
 }
 export function testsTemplate(options: Parameters<typeof defaultMandate>[0]): Mandate {
@@ -281,7 +285,7 @@ export function reissueMandate(m: Mandate, id: string, now = new Date()): Mandat
   return {
     ...m,
     id,
-    validFrom: now.toISOString(),
+    validFrom: new Date(Math.max(Date.parse(m.validFrom), now.getTime())).toISOString(),
     autonomous: { ...m.autonomous, id: `${id}/autonomous` },
     withApproval: { ...m.withApproval, id: `${id}/with-approval` },
   };
@@ -296,38 +300,42 @@ export async function removePermission(
   const rules = m[set].permissions ?? [];
   if (!Number.isInteger(index) || !rules[index]) throw new Error("This permission has changed.");
   const selected = rules[index];
+  const automatic = m.autonomous.permissions ?? [];
+  const overlapping = automatic.filter((rule) => rule.action === selected.action);
   // Removing an unsupported rule can erase an indeterminate result and unblock unrelated actions.
   // Ask the shared engine about an unrelated action to detect that global blocker first.
-  if (
-    !Object.keys(actionNames).some((action) => selected.action === `${AGENT}${action}`) ||
-    (
-      await solidOdrlEngine.evaluate(
-        { id: "urn:permission-removal-check", permissions: [selected] },
-        {
-          agent: m.subject,
-          action: "urn:permission-removal-check:unrelated",
-          target: m.subject,
-          at: now.toISOString(),
-        },
-      )
-    ).effect !== "not-applicable"
-  )
-    throw new Error("Edit this rule in agent permissions first.");
+  for (const rule of [selected, ...overlapping]) {
+    if (
+      !Object.keys(actionNames).some((action) => rule.action === `${AGENT}${action}`) ||
+      (
+        await solidOdrlEngine.evaluate(
+          { id: "urn:permission-removal-check", permissions: [rule] },
+          {
+            agent: m.subject,
+            action: "urn:permission-removal-check:unrelated",
+            target: m.subject,
+            at: now.toISOString(),
+          },
+        )
+      ).effect !== "not-applicable"
+    )
+      throw new Error("Edit this rule in agent permissions first.");
+  }
   const next = reissueMandate(m, id, now);
   const remaining = rules.filter((_, i) => i !== index);
-  const autonomous = set === "autonomous" ? remaining : (m.autonomous.permissions ?? []);
   return {
     ...next,
-    // An overlapping automatic rule must not defeat the promised ask-first consequence.
+    // Automatic overlaps must not defeat the reduction: demote them for an automatic rule,
+    // or drop them when removing an ask-first rule. Preserve every retained rule's scope.
     autonomous: {
       ...next.autonomous,
-      permissions: autonomous.filter((rule) => rule.action !== selected.action),
+      permissions: automatic.filter((rule) => rule.action !== selected.action),
     },
     withApproval: {
       ...next.withApproval,
       permissions: [
         ...(set === "withApproval" ? remaining : (m.withApproval.permissions ?? [])),
-        ...autonomous.filter((rule) => rule.action === selected.action),
+        ...(set === "autonomous" ? overlapping : []),
       ],
     },
   };

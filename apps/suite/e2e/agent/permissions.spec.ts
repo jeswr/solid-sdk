@@ -254,10 +254,10 @@ test("Home reviews and signs memory scope and rule removal through the Permissio
           ?.memoryScope,
     )
     .toEqual([]);
-  await row.getByRole("switch", { name: /Remove permission ask first: send messages/ }).click();
-  await expect(
-    review.getByText("The agent will ask you before doing this", { exact: true }),
-  ).toBeVisible();
+  await row
+    .getByRole("switch", { name: "Ask first: send messages (rule 1)", checked: true })
+    .click();
+  await expect(review.getByText("The agent won't do this at all.", { exact: true })).toBeVisible();
   await review.getByText("Technical details", { exact: true }).click();
   await expect(review.locator("pre")).toContainText("Agreement");
   await review.getByRole("button", { name: "Sign and activate", exact: true }).click();
@@ -268,8 +268,15 @@ test("Home reviews and signs memory scope and rule removal through the Permissio
           ?.withApproval.permissions,
     )
     .toEqual([]);
-  await expect(row.getByRole("switch", { name: /Remove permission/ })).toHaveCount(0);
+  await expect(row.getByRole("switch", { name: /send messages/ })).toHaveCount(0);
   await accessible(page, info, "home-agent-rules-reduced");
+  await page.goto("/agent/permissions");
+  await expect(page.getByRole("checkbox", { name: "Preferences", exact: true })).not.toBeChecked();
+  await page.getByRole("button", { name: "Tests between my accounts", exact: true }).click();
+  await expect(page.getByRole("checkbox", { name: "Preferences", exact: true })).not.toBeChecked();
+  await page.getByRole("button", { name: "Preview permissions", exact: true }).click();
+  await page.getByRole("button", { name: "Sign and activate", exact: true }).click();
+  await expect(page.getByText("Your permissions have been saved.", { exact: true })).toBeVisible();
   await page.goto("/home");
   const banner = page.getByRole("region", { name: "Agent personalisation", exact: true });
   await expect(
@@ -291,6 +298,88 @@ test("Home reviews and signs memory scope and rule removal through the Permissio
   await page.reload();
   await expect(banner.getByText("Preferences", { exact: true })).toBeVisible();
   await accessible(page, info, "home-personalise-on");
+});
+
+test("Home demotes automatic rules to ask-first and includes the agent in permission search results", async ({
+  page,
+}, info) => {
+  await open(page);
+  await page.getByRole("button", { name: "Tests between my accounts", exact: true }).click();
+  await page
+    .getByRole("group", { name: "Send messages", exact: true })
+    .getByLabel("Do it without asking", { exact: true })
+    .check();
+  await page.getByRole("button", { name: "Preview permissions", exact: true }).click();
+  await page.getByRole("button", { name: "Sign and activate", exact: true }).click();
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "Set up this device", exact: true })
+    .click();
+  await expect(page.getByText("Your permissions have been saved.", { exact: true })).toBeVisible();
+  const daemon = daemonDouble(page);
+  const source = await loadVerifiedMandate(daemon.client, {
+    fetch: daemon.fetch,
+    webId: DEMO_WEBID,
+  });
+  expect(source?.autonomous.permissions).toHaveLength(1);
+  await page.goto("/permissions");
+  await page.getByRole("tab", { name: "Apps", exact: true }).click();
+  const search = page.getByRole("textbox", { name: "Search permissions", exact: true });
+  await search.fill("agent");
+  const row = page.getByRole("region", { name: "Your agent permissions", exact: true });
+  const automatic = row.getByRole("switch", {
+    name: "Without asking: send messages (rule 1)",
+    exact: true,
+  });
+  await expect(automatic).toBeChecked();
+  await expect(page.getByRole("button", { name: "Clear filters", exact: true })).toHaveCount(0);
+  await automatic.click();
+  const review = page.getByRole("alertdialog");
+  await expect(
+    review.getByText("The agent will ask you before doing this", { exact: true }),
+  ).toBeVisible();
+  await review.getByRole("button", { name: "Cancel", exact: true }).click();
+  await expect(automatic).toBeFocused();
+  await automatic.click();
+  await review.getByRole("button", { name: "Sign and activate", exact: true }).click();
+  await expect
+    .poll(
+      async () =>
+        (await loadVerifiedMandate(daemon.client, { fetch: daemon.fetch, webId: DEMO_WEBID }))
+          ?.autonomous.permissions,
+    )
+    .toEqual([]);
+  const current = await loadVerifiedMandate(daemon.client, {
+    fetch: daemon.fetch,
+    webId: DEMO_WEBID,
+  });
+  expect(current?.withApproval.permissions).toEqual(
+    expect.arrayContaining([...(source?.autonomous.permissions ?? [])]),
+  );
+  await expect(row.getByRole("switch", { name: /Ask first: send messages/ })).toBeChecked();
+  await search.fill("no-such-app");
+  await expect(row).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Clear filters", exact: true })).toBeVisible();
+  await accessible(page, info, "home-agent-search");
+});
+
+test("Home hides the agent block without an agent identity", async ({ page }) => {
+  await seedDemoSession(page);
+  await page.goto("/home");
+  const banner = page.getByRole("region", { name: "Agent personalisation", exact: true });
+  await expect(banner).toBeVisible();
+  await daemonDouble(page).fetch("https://alice.demo.pod/agent/descriptors/agent.ttl", {
+    method: "DELETE",
+  });
+  await expect(banner).toHaveCount(0);
+  await expect(page.getByText("Checking your agent's permissions…", { exact: true })).toHaveCount(
+    0,
+  );
+  await page.goto("/permissions");
+  await page.getByRole("tab", { name: "Apps", exact: true }).click();
+  await expect(
+    page.getByRole("region", { name: "Your agent permissions", exact: true }),
+  ).toHaveCount(0);
 });
 
 test("editor previews selected memory, free meetings and autonomous-spend confirmation", async ({

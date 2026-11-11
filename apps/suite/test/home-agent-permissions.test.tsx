@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // @vitest-environment jsdom
 import { defaultMandate } from "@jeswr/agent-mandate/issue";
+import { solidOdrlEngine } from "@jeswr/agent-mandate/verify";
 import { exampleRecords } from "@jeswr/agent-model/testing";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import {
@@ -11,10 +12,16 @@ import {
 } from "../../../packages/suite-ui/node_modules/@testing-library/react";
 import userEvent from "../../../packages/suite-ui/node_modules/@testing-library/user-event";
 import * as device from "../src/apps/agent/components/approval-key-setup-sheet";
+import { PermissionsScreen } from "../src/apps/agent/components/permissions";
 import * as hooks from "../src/apps/agent/lib/hooks";
 import { MEMORY_CATEGORIES } from "../src/apps/agent/lib/mandate-rules";
 import * as mandates from "../src/apps/agent/lib/mandates";
-import { AgentPermissionControls } from "../src/apps/home/components/permissions/home-agent-permissions";
+import {
+  AgentPermissionControls,
+  HomeAgentPermissions,
+} from "../src/apps/home/components/permissions/home-agent-permissions";
+
+vi.mock("../src/apps/home/components/home-app", () => ({ useHomeSession: () => ({}) }));
 
 const HASH = `sha256:${"a".repeat(64)}`;
 const current = () =>
@@ -62,13 +69,16 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-it("previews removing a rule, explains the consequence, and returns focus on cancel", async () => {
+it("names the enabled switch after its rule, explains removal, and returns focus on cancel", async () => {
   const user = userEvent.setup();
   render(<AgentPermissionControls rules />);
-  const toggle = screen.getByRole("switch", { name: /Remove permission ask first: send messages/ });
+  const toggle = screen.getByRole("switch", {
+    name: "Ask first: send messages (rule 1)",
+    checked: true,
+  });
   await user.click(toggle);
   expect(await screen.findByRole("alertdialog")).toBeTruthy();
-  expect(screen.getByText("The agent will ask you before doing this")).toBeTruthy();
+  expect(screen.getByText("The agent won't do this at all.")).toBeTruthy();
   expect(toggle.getAttribute("aria-checked")).toBe("true");
   await user.click(screen.getByRole("button", { name: "Cancel" }));
   await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
@@ -78,7 +88,7 @@ it("previews removing a rule, explains the consequence, and returns focus on can
 it("removes only the reviewed rule using the verified source as a concurrency guard", async () => {
   const user = userEvent.setup();
   render(<AgentPermissionControls rules />);
-  await user.click(screen.getByRole("switch", { name: /Remove permission/ }));
+  await user.click(screen.getByRole("switch", { name: /Ask first: send messages/ }));
   await user.click(await screen.findByRole("button", { name: "Sign and activate" }));
   await screen.findByText("Your permissions have been saved.");
   expect(mandates.activateMandate).toHaveBeenCalledWith(
@@ -94,6 +104,165 @@ it("removes only the reviewed rule using the verified source as a concurrency gu
     mandate,
   );
   expect(reload).toHaveBeenCalled();
+});
+it("demotes an automatic rule through the real reduction helper before signing", async () => {
+  const user = userEvent.setup();
+  const automatic = mandate.withApproval.permissions ?? [];
+  mandate = {
+    ...mandate,
+    autonomous: { ...mandate.autonomous, permissions: automatic },
+    withApproval: { ...mandate.withApproval, permissions: [] },
+  };
+  render(<AgentPermissionControls rules />);
+  await user.click(
+    screen.getByRole("switch", { name: "Without asking: send messages (rule 1)", checked: true }),
+  );
+  await screen.findByText("The agent will ask you before doing this");
+  await user.click(screen.getByRole("button", { name: "Sign and activate" }));
+  await screen.findByText("Your permissions have been saved.");
+  expect(mandates.activateMandate).toHaveBeenCalledWith(
+    client,
+    session,
+    expect.objectContaining({
+      autonomous: expect.objectContaining({ permissions: [] }),
+      withApproval: expect.objectContaining({ permissions: automatic }),
+      prohibitions: mandate.prohibitions,
+      limits: mandate.limits,
+    }),
+    expect.any(Date),
+    mandate,
+  );
+});
+it("explains when an unsupported rule must be edited and leaves it active", async () => {
+  const user = userEvent.setup();
+  mandate = {
+    ...mandate,
+    withApproval: {
+      ...mandate.withApproval,
+      permissions: [{ type: "permission", action: "urn:unsupported" }],
+    },
+  };
+  render(<AgentPermissionControls rules />);
+  const toggle = screen.getByRole("switch", {
+    name: "Ask first: other action (rule 1)",
+    checked: true,
+  });
+  await user.click(toggle);
+  expect((await screen.findByRole("alert")).textContent).toBe(
+    "Edit this rule in agent permissions first.",
+  );
+  expect(toggle.getAttribute("aria-checked")).toBe("true");
+  expect((toggle as HTMLButtonElement).disabled).toBe(false);
+  expect(mandates.previewMandate).not.toHaveBeenCalled();
+  expect(mandates.activateMandate).not.toHaveBeenCalled();
+});
+it("disables every switch and announces progress throughout preparation and signing", async () => {
+  const user = userEvent.setup();
+  const evaluate = solidOdrlEngine.evaluate;
+  let finishRemoval!: () => void;
+  const removal = new Promise<void>((resolve) => {
+    finishRemoval = resolve;
+  });
+  vi.spyOn(solidOdrlEngine, "evaluate").mockImplementation(async (policy, intent) => {
+    if (policy.id === "urn:permission-removal-check") await removal;
+    return evaluate(policy, intent);
+  });
+  let finishPreview!: (value: string) => void;
+  vi.mocked(mandates.previewMandate).mockReturnValue(
+    new Promise((resolve) => {
+      finishPreview = resolve;
+    }),
+  );
+  render(<AgentPermissionControls rules />);
+  const toggle = screen.getByRole("switch", { name: /Ask first: send messages/ });
+  await user.click(toggle);
+  await screen.findByText("Updating your permissions…");
+  for (const control of screen.getAllByRole("switch"))
+    expect((control as HTMLButtonElement).disabled).toBe(true);
+  await user.click(toggle);
+  expect(mandates.previewMandate).not.toHaveBeenCalled();
+  finishRemoval();
+  await waitFor(() => expect(mandates.previewMandate).toHaveBeenCalledTimes(1));
+  expect(mandates.previewMandate).toHaveBeenCalledTimes(1);
+  finishPreview("Read-only preview");
+  const activate = await screen.findByRole("button", { name: "Sign and activate" });
+  let finishSave!: () => void;
+  vi.mocked(mandates.activateMandate).mockReturnValue(
+    new Promise((resolve) => {
+      finishSave = () => resolve({} as never);
+    }),
+  );
+  await user.click(activate);
+  expect(
+    ((await screen.findByRole("button", { name: "Signing…" })) as HTMLButtonElement).disabled,
+  ).toBe(true);
+  for (const control of screen.getAllByRole("switch", { hidden: true }))
+    expect((control as HTMLButtonElement).disabled).toBe(true);
+  finishSave();
+  await screen.findByText("Your permissions have been saved.");
+  expect(
+    (screen.getByRole("switch", { name: /Ask first: send messages/ }) as HTMLButtonElement)
+      .disabled,
+  ).toBe(false);
+});
+
+it.each([
+  { memoryScope: [] },
+  { memoryScope: [MEMORY_CATEGORIES[1].id] },
+])("seeds editor memory from current permissions and preserves it through templates: %j", async ({
+  memoryScope,
+}) => {
+  const user = userEvent.setup();
+  mandate = { ...mandate, memoryScope };
+  const data = {
+    mandate,
+    agent: mandate.subject,
+    accounts: [{ ...exampleRecords.account, channelHandleHash: HASH }],
+    emailBindings: ["gmail"],
+    sentHashes: [HASH],
+  };
+  vi.mocked(hooks.useAgentQuery).mockReturnValue({ status: "loading", reload });
+  const view = render(<PermissionsScreen />);
+  vi.mocked(hooks.useAgentQuery).mockReturnValue({ status: "ready", data, reload });
+  view.rerender(<PermissionsScreen />);
+  expect((screen.getByRole("checkbox", { name: "Preferences" }) as HTMLInputElement).checked).toBe(
+    false,
+  );
+  expect((screen.getByRole("checkbox", { name: "Health" }) as HTMLInputElement).checked).toBe(
+    memoryScope.length > 0,
+  );
+  for (const template of [
+    "Schedule meetings autonomously under £0",
+    "Reply to people I've emailed before (ask first)",
+    "Tests between my accounts",
+  ]) {
+    await user.click(screen.getByRole("button", { name: template }));
+    expect(
+      (screen.getByRole("checkbox", { name: "Preferences" }) as HTMLInputElement).checked,
+    ).toBe(false);
+    expect((screen.getByRole("checkbox", { name: "Health" }) as HTMLInputElement).checked).toBe(
+      memoryScope.length > 0,
+    );
+    await user.click(screen.getByRole("button", { name: "Preview permissions" }));
+    await screen.findByRole("heading", { name: "Review your permissions" });
+    expect(mandates.previewMandate).toHaveBeenLastCalledWith(
+      expect.objectContaining({ memoryScope }),
+      client,
+    );
+    await user.click(screen.getByRole("button", { name: "Back to edit" }));
+  }
+});
+
+it.each(["workspace", "identity"])("hides Home's agent block without an agent %s", (missing) => {
+  vi.spyOn(hooks, "AgentWorkspaceProvider").mockImplementation(({ children, fallback }) =>
+    missing === "workspace"
+      ? fallback({ status: "error", error: new Error("No workspace"), reload })
+      : children,
+  );
+  vi.mocked(hooks.useAgentQuery).mockReturnValue({ status: "ready", data: undefined, reload });
+  const view = render(<HomeAgentPermissions />);
+  expect(view.container.textContent).toBe("");
+  expect(screen.queryByRole("switch")).toBeNull();
 });
 it("Personalise OFF signs an empty memory scope; ON names preferences in the review", async () => {
   const user = userEvent.setup();

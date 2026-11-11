@@ -292,6 +292,14 @@ describe("permission editor safety and policy evaluation", () => {
     });
     expect(editorSchema.safeParse(values()).success).toBe(true);
   });
+  it("seeds memory from verified permissions, including explicit OFF and legacy preferences", () => {
+    expect(editorDefaults(NOW, mandate()).memoryScope).toEqual([MEMORY_CATEGORIES[0].id]);
+    expect(editorDefaults(NOW, { ...mandate(), memoryScope: [] }).memoryScope).toEqual([]);
+    const scope = [MEMORY_CATEGORIES[1].id];
+    const defaults = editorDefaults(NOW, { ...mandate(), memoryScope: scope });
+    expect(defaults.memoryScope).toEqual(scope);
+    expect(defaults.memoryScope).not.toBe(scope);
+  });
   it.each([
     { bindings: [] },
     { recipients: [] },
@@ -2129,11 +2137,14 @@ describe("Home permission reductions and signed memory scope", () => {
       "Memory it may use: none",
     );
   });
-  it("removes exactly one permission while retaining limits, bans, expiry and other conditions", async () => {
+  it("demotes automatic permission while retaining limits, bans, expiry and other conditions", async () => {
     const m = buildEditorMandate(values({ SendMessage: "auto" }), options());
     const next = await removePermission(m, "autonomous", 0, at("mandates/reduced.trig"), NOW);
     expect(next.autonomous.permissions).toEqual([]);
-    expect(next.withApproval.permissions).toEqual(m.withApproval.permissions);
+    expect(next.withApproval.permissions).toEqual([
+      ...(m.withApproval.permissions ?? []),
+      ...(m.autonomous.permissions ?? []),
+    ]);
     expect(next.prohibitions).toBe(m.prohibitions);
     expect(next.limits).toBe(m.limits);
     expect(next.memoryScope).toBe(m.memoryScope);
@@ -2174,6 +2185,10 @@ describe("Home permission reductions and signed memory scope", () => {
     await activateMandate(client, session, reduced, NOW, current);
     current = await loadVerifiedMandate(client, session, NOW);
     expect(current?.memoryScope).toEqual([]);
+    expect(await evaluateIntent(current, proposalIntent(proposal(), AGENT_ID, NOW))).toEqual({
+      decision: "confirm-required",
+      reason: "owner-approval",
+    });
     expect(await proposalBadge(current, proposal(), NOW)).toBe("Ask first");
     expect(await proposalBadge(current, proposal({ action: `${AGENT}Transfer` }), NOW)).toBe(
       "Never",
@@ -2273,9 +2288,15 @@ it("removal never unblocks unknown policy semantics or leaves overlapping automa
   expect(await proposalBadge(reduced, proposal({ action: `${AGENT}Remember` }), NOW)).toBe(
     "Allowed",
   );
-  expect(reduced.withApproval.permissions).toHaveLength(2);
+  expect(reduced.withApproval.permissions).toHaveLength(3);
   const approvalRemoved = await removePermission(source, "withApproval", 0, "urn:reduced", NOW);
   expect(await proposalBadge(approvalRemoved, proposal(), NOW)).toBe("Ask first");
+  expect(
+    await evaluateIntent(approvalRemoved, proposalIntent(proposal(), source.subject, NOW)),
+  ).toEqual({
+    decision: "confirm-required",
+    reason: "no-matching-rule",
+  });
   const noApproval = await removePermission(
     { ...source, withApproval: { id: "urn:ask" } },
     "autonomous",
@@ -2283,7 +2304,7 @@ it("removal never unblocks unknown policy semantics or leaves overlapping automa
     "urn:reduced",
     NOW,
   );
-  expect(noApproval.withApproval.permissions).toHaveLength(1);
+  expect(noApproval.withApproval.permissions).toHaveLength(2);
   for (const rule of [
     permission("Unknown"),
     permission("SendMessage", [{ leftOperand: "urn:unknown", operator: "eq", rightOperand: 1 }]),
@@ -2306,4 +2327,86 @@ it("removal never unblocks unknown policy semantics or leaves overlapping automa
     NOW,
   );
   expect(emptyAuto.autonomous.permissions).toEqual([]);
+});
+
+it.each([
+  "autonomous",
+  "withApproval",
+] as const)("turning off a %s rule never broadens authority across scope and validity boundaries", async (set) => {
+  const rule: Rule = {
+    ...permission("SendMessage"),
+    target: "urn:recipient",
+    constraints: [
+      { leftOperand: `${AGENT}recipientSet`, operator: "eq", rightOperand: HASH },
+      { leftOperand: `${AGENT}binding`, operator: "eq", rightOperand: "gmail" },
+      { leftOperand: `${AGENT}costExceeds`, operator: "lteq", rightOperand: 0 },
+      { leftOperand: "dateTime", operator: "gteq", rightOperand: NOW.toISOString() },
+    ],
+  };
+  const source: Mandate = {
+    ...mandate(),
+    autonomous: { id: "urn:auto", permissions: set === "autonomous" ? [rule] : [] },
+    withApproval: { id: "urn:ask", permissions: set === "withApproval" ? [rule] : [] },
+  };
+  const next = await removePermission(source, set, 0, "urn:reduced", NOW);
+  expect(next.autonomous.permissions).toEqual([]);
+  expect(next.withApproval.permissions).toEqual(set === "autonomous" ? [rule] : []);
+  const intent = {
+    ...proposalIntent(proposal(), source.subject, NOW),
+    target: "urn:recipient",
+  };
+  expect(await evaluateIntent(next, intent)).toEqual({
+    decision: "confirm-required",
+    reason: set === "autonomous" ? "owner-approval" : "no-matching-rule",
+  });
+  const authority = (decision: Awaited<ReturnType<typeof evaluateIntent>>) =>
+    decision.decision === "permit" ? 2 : decision.reason === "owner-approval" ? 1 : 0;
+  for (const action of ["SendMessage", "Remember", "Transfer"])
+    for (const binding of ["gmail", "graph-mail"])
+      for (const recipient of [HASH, OTHER_HASH])
+        for (const target of ["urn:recipient", "urn:other"])
+          for (const cost of [0, 1]) {
+            const probe = {
+              ...intent,
+              action: `${AGENT}${action}`,
+              target,
+              attributes: {
+                [`${AGENT}binding`]: binding,
+                [`${AGENT}recipientSet`]: recipient,
+                [`${AGENT}costExceeds`]: cost,
+              },
+            };
+            expect(authority(await evaluateIntent(next, probe))).toBeLessThanOrEqual(
+              authority(await evaluateIntent(source, probe)),
+            );
+          }
+  for (const at of [source.validUntil, new Date(NOW.getTime() - DAY).toISOString()])
+    expect(authority(await evaluateIntent(next, { ...intent, at }))).toBe(0);
+  const future = { ...source, validFrom: new Date(NOW.getTime() + DAY).toISOString() };
+  const futureNext = await removePermission(future, set, 0, "urn:future", NOW);
+  expect(futureNext.validFrom).toBe(future.validFrom);
+  expect(await evaluateIntent(futureNext, intent)).toEqual({
+    decision: "refuse-all",
+    reason: "mandate-not-yet-valid",
+  });
+  expect(source[set].permissions).toEqual([rule]);
+});
+
+it("keeps an unsupported overlapping automatic rule from being removed or demoted", async () => {
+  const source = {
+    ...mandate(),
+    autonomous: {
+      id: "urn:auto",
+      permissions: [
+        permission("SendMessage"),
+        permission("SendMessage", [
+          { leftOperand: "urn:unknown", operator: "eq", rightOperand: 1 },
+        ]),
+      ],
+    },
+  };
+  for (const set of ["autonomous", "withApproval"] as const)
+    await expect(removePermission(source, set, 0, "urn:next", NOW)).rejects.toThrow(
+      "Edit this rule in agent permissions first.",
+    );
 });

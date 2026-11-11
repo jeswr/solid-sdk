@@ -38,6 +38,7 @@ import {
   loadVerifiedMandate,
   PendingRevocation,
   previewMandate,
+  readAgentIdentity,
 } from "../../../agent/lib/mandates";
 import { AGENT } from "../../../agent/lib/paths";
 import { loadedRecords, readAccounts } from "../../../agent/lib/readers";
@@ -65,9 +66,11 @@ function permissionScope(rule: Rule, accounts: readonly Account[]): string {
 export function HomeAgentPermissions({
   rules = false,
   search = "",
+  onMatchChange,
 }: {
   rules?: boolean;
   search?: string;
+  onMatchChange?: ((matches: boolean) => void) | undefined;
 }) {
   const session = useHomeSession();
   const [online, setOnline] = useState(
@@ -82,36 +85,41 @@ export function HomeAgentPermissions({
       window.removeEventListener("offline", update);
     };
   }, []);
-  if (!online) return <p role="status">Reconnect to check or change your agent's permissions.</p>;
+  if (!online) return null;
   return (
-    <AgentWorkspaceProvider
-      session={session}
-      fallback={(query) => (
-        <p role="status">
-          {query.status === "error"
-            ? "Couldn't check your agent's permissions."
-            : "Checking your agent's permissions…"}
-          {query.status === "error" && (
-            <Button variant="outline" onClick={query.reload}>
-              Retry
-            </Button>
-          )}
-        </p>
-      )}
-    >
-      <ApprovalDeviceProvider>
-        <AgentPermissionControls rules={rules} search={search} />
-      </ApprovalDeviceProvider>
+    <AgentWorkspaceProvider session={session} fallback={() => null}>
+      <AgentPermissionPresence rules={rules} search={search} onMatchChange={onMatchChange} />
     </AgentWorkspaceProvider>
+  );
+}
+
+function AgentPermissionPresence({
+  rules,
+  search,
+  onMatchChange,
+}: {
+  rules: boolean;
+  search: string;
+  onMatchChange?: ((matches: boolean) => void) | undefined;
+}) {
+  const { client } = useAgentWorkspace();
+  const identity = useAgentQuery(client.paths.agentIntroduction, readAgentIdentity);
+  if (identity.status !== "ready" || !identity.data) return null;
+  return (
+    <ApprovalDeviceProvider>
+      <AgentPermissionControls rules={rules} search={search} onMatchChange={onMatchChange} />
+    </ApprovalDeviceProvider>
   );
 }
 
 export function AgentPermissionControls({
   rules = false,
   search = "",
+  onMatchChange,
 }: {
   rules?: boolean;
   search?: string;
+  onMatchChange?: ((matches: boolean) => void) | undefined;
 }) {
   const { client, session } = useAgentWorkspace();
   const controlsId = useId();
@@ -142,7 +150,7 @@ export function AgentPermissionControls({
   const [pending, setPending] = useState<PendingRevocation>();
   const heading = useRef<HTMLHeadingElement>(null);
   const trigger = useRef<HTMLElement | null>(null);
-  const prepare = async (next: Mandate, warning: string) => {
+  const prepare = async (makeNext: () => Mandate | Promise<Mandate>, warning: string) => {
     if (!mandate || inFlight.current) return;
     trigger.current = document.activeElement as HTMLElement;
     inFlight.current = true;
@@ -150,6 +158,15 @@ export function AgentPermissionControls({
     setError("");
     setSaved(false);
     try {
+      let next: Mandate;
+      try {
+        next = await makeNext();
+      } catch (failure) {
+        setError(
+          failure instanceof Error ? failure.message : "Couldn't change this rule. Try again.",
+        );
+        return;
+      }
       setReview({ source: mandate, next, warning, turtle: await previewMandate(next, client) });
     } catch {
       setError("Couldn't preview your permissions. Try again.");
@@ -212,6 +229,10 @@ export function AgentPermissionControls({
       .join(" ")
       .toLowerCase()
       .includes(search.trim().toLowerCase());
+  useEffect(() => {
+    onMatchChange?.(matches);
+  }, [matches, onMatchChange]);
+  useEffect(() => () => onMatchChange?.(false), [onMatchChange]);
   if (!matches) return null;
   return (
     <section
@@ -261,10 +282,10 @@ export function AgentPermissionControls({
               onCheckedChange={(checked) => {
                 if (mandate)
                   void prepare(
-                    {
+                    () => ({
                       ...reissueMandate(mandate, newId()),
                       memoryScope: checked ? [MEMORY_CATEGORIES[0].id] : [],
-                    },
+                    }),
                     checked
                       ? "Your agent will use your saved preferences to personalise."
                       : "Your agent will stop using saved information to personalise.",
@@ -278,8 +299,9 @@ export function AgentPermissionControls({
             <>
               <h3>Permission rules</h3>
               <p>
-                Turn a rule off to remove it. Any other automatic rules for the same action will ask
-                first too. Other limits and bans still apply.
+                Turn an automatic rule off to ask first instead. Turn an ask-first rule off to stop
+                that action. This also turns off other automatic rules for the same action. Other
+                limits and bans still apply.
               </p>
               <ul>
                 {permissionRules.map(({ set, rule, index }) => (
@@ -287,13 +309,14 @@ export function AgentPermissionControls({
                     <label className="hm-agent-toggle" htmlFor={`${controlsId}-${set}-${index}`}>
                       <Switch
                         id={`${controlsId}-${set}-${index}`}
-                        aria-label={`Remove permission ${set === "autonomous" ? "without asking" : "ask first"}: ${actionNames[rule.action.slice(AGENT.length) as keyof typeof actionNames] ?? "other action"}, rule ${index + 1}`}
                         checked
                         disabled={busy || !!pending}
                         onCheckedChange={() => {
-                          void removePermission(mandate, set, index, newId()).then(
-                            (next) => prepare(next, "The agent will ask you before doing this"),
-                            (failure: Error) => setError(failure.message),
+                          void prepare(
+                            () => removePermission(mandate, set, index, newId()),
+                            set === "autonomous"
+                              ? "The agent will ask you before doing this"
+                              : "The agent won't do this at all.",
                           );
                         }}
                       />
@@ -315,6 +338,7 @@ export function AgentPermissionControls({
         </>
       )}
       {error && <p role="alert">{error}</p>}
+      {busy && <p role="status">Updating your permissions…</p>}
       {pending && (
         <Button disabled={busy} onClick={() => run(pending.retry)}>
           Try again
