@@ -1,0 +1,18 @@
+@prefix schema: <https://schema.org/>.
+@prefix exif: <http://www.w3.org/2003/12/exif/ns#>.
+@prefix geo: <http://www.w3.org/2003/01/geo/wgs84_pos#>.
+@prefix dct: <http://purl.org/dc/terms/>.
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#>.
+
+<https://pod.example/photos/albums/a.ttl#it> a schema:ImageGallery;
+    schema:name "Holiday";
+    schema:description "Our photos";
+    schema:image <https://pod.example/photos/items/a.ttl#it>;
+    schema:dateCreated "2026-01-01T00:00:00.000Z"^^xsd:dateTime;
+    schema:itemListElement <https://pod.example/photos/albums/a.ttl#member-1>, <https://pod.example/photos/albums/a.ttl#member-2>.
+<https://pod.example/photos/albums/a.ttl#member-1> a schema:ListItem;
+    schema:item <https://pod.example/photos/items/a.ttl#it>;
+    schema:position 1.
+<https://pod.example/photos/albums/a.ttl#member-2> a schema:ListItem;
+    schema:item <https://pod.example/photos/items/b.ttl#it>;
+    schema:position 2.

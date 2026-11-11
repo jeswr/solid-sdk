@@ -40,6 +40,7 @@
   },
   "dependencies": {
     "@jeswr/fetch-rdf": "workspace:*",
+    "@jeswr/solid-photos": "workspace:*",
     "@rdfjs/wrapper": "^0.34.0",
     "@solid/object": "^0.6.0",
     "n3": "^1.21.0"
