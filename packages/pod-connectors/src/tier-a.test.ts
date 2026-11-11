@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+import { DEMO_CONNECTOR } from "@jeswr/suite-vocab";
 import type { Quad } from "@rdfjs/types";
 import { DataFactory, Store, Writer } from "n3";
 import { describe, expect, it } from "vitest";
@@ -84,9 +85,14 @@ async function replay(
   return { pod, report, calls };
 }
 
-/** Stable Turtle: omit run-specific activity links, retain source provenance and all mapped data. */
+/** Stable mappings omit activity links and demo metadata; dedicated attribution tests cover them. */
 async function stableTurtle(dataset: Store): Promise<string> {
-  const quads = [...dataset].filter((q) => q.predicate.value !== `${PROV}wasGeneratedBy`);
+  const quads = [...dataset].filter(
+    (q) =>
+      q.predicate.value !== `${PROV}wasGeneratedBy` &&
+      q.subject.value !== DEMO_CONNECTOR.iri &&
+      !(q.predicate.value === `${PROV}wasAttributedTo` && q.object.value === DEMO_CONNECTOR.iri),
+  );
   quads.sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b), "en"));
   const output = new Writer();
   output.addQuads(quads as Quad[]);
@@ -104,6 +110,7 @@ for (const adapter of adapters) {
         for (const quad of first.pod.dataset(doc.url)) before.add(quad);
         const subjects = new Set([...first.pod.dataset(doc.url)].map((q) => q.subject.value));
         for (const subject of subjects) {
+          if (!subject.startsWith(root(adapter))) continue;
           const item = new Provenance(subject, first.pod.dataset(doc.url), DataFactory);
           expect(item.derivedFrom.size).toBeGreaterThan(0);
           expect(item.generatedBy.size).toBe(1);

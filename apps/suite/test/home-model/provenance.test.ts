@@ -30,6 +30,7 @@ describe("Home §5.3 provenance", () => {
   };
 
   it("recognises demo attribution without saved connections or an agent description", () => {
+    const subject = `${STORAGE}integrations/custom/item.ttl#it`;
     const dataset = new Store();
     new ItemProvenance(subject, dataset, DataFactory).attributedTo.add(DEMO_CONNECTOR.iri);
     expect(provenanceOf(dataset, subject, STORAGE, context)).toEqual({
@@ -39,7 +40,20 @@ describe("Home §5.3 provenance", () => {
     });
   });
 
+  it("keeps live connector items without a demo marker unflagged", () => {
+    const subject = `${STORAGE}integrations/spotify/item.ttl#it`;
+    const dataset = new Store();
+    new MusicRecording(subject, dataset, DataFactory).mark().sourceUrl =
+      "https://open.spotify.com/track/live";
+    expect(provenanceOf(dataset, subject, STORAGE, context)).toEqual({
+      kind: "source",
+      label: "Spotify",
+      logoId: "spotify",
+    });
+  });
+
   it("keeps real source and agent provenance alongside the demo flag", () => {
+    const subject = `${STORAGE}integrations/custom/item.ttl#it`;
     for (const [source, expected] of [
       [true, { kind: "source", label: "Spotify", logoId: "spotify" }],
       [false, { kind: "app", label: "MyHealth" }],
@@ -56,6 +70,7 @@ describe("Home §5.3 provenance", () => {
   });
 
   it("keeps container provenance and scopes demo attribution to the item subject", () => {
+    const subject = `${STORAGE}integrations/spotify/item.ttl#it`;
     const dataset = new Store();
     new ItemProvenance(subject, dataset, DataFactory).attributedTo.add(DEMO_CONNECTOR.iri);
     new MusicRecording(`${STORAGE}item.ttl#other`, dataset, DataFactory).mark();
@@ -69,6 +84,61 @@ describe("Home §5.3 provenance", () => {
       kind: "you",
       label: "Added by you",
     });
+  });
+
+  it("recognises an imported named-node subject when no storage context is available", () => {
+    const subject = DataFactory.namedNode(`${STORAGE}integrations/custom/item.ttl#it`);
+    const dataset = new Store();
+    new ItemProvenance(subject, dataset, DataFactory).attributedTo.add(DEMO_CONNECTOR.iri);
+    expect(provenanceOf(dataset, subject, STORAGE)).toEqual({
+      kind: "source",
+      label: DEMO_CONNECTOR.label,
+      demo: true,
+    });
+  });
+
+  it("ignores forged demo markers outside the connector import root", () => {
+    for (const subject of [
+      `${STORAGE}notes/mine.ttl#it`,
+      `${STORAGE}notes/integrations/spotify/mine.ttl#it`,
+      `${STORAGE}integrations/spotify`,
+      `${STORAGE}integrations/spotify-elsewhere.ttl#it`,
+      `${STORAGE}integrations/spotify/%2e%2e/notes/mine.ttl#it`,
+      `${STORAGE}integrations/spotify/mine.ttl?elsewhere`,
+      "https://foreign.example/integrations/spotify/mine.ttl#it",
+      DataFactory.blankNode("forged-demo"),
+    ]) {
+      const dataset = new Store();
+      new ItemProvenance(
+        typeof subject === "string" ? DataFactory.namedNode(subject) : subject,
+        dataset,
+        DataFactory,
+      ).attributedTo.add(DEMO_CONNECTOR.iri);
+      expect(provenanceOf(dataset, subject, STORAGE, context)).toEqual({
+        kind: "you",
+        label: "Added by you",
+      });
+    }
+  });
+
+  it("ignores identifier-shaped identity labels without hiding named apps", () => {
+    const dataset = new Store();
+    const item = new ItemProvenance(subject, dataset, DataFactory);
+    const identifier = "https://identifier.example/agent";
+    item.attributedTo.add(identifier);
+    item.generatedBy.add(app);
+    new PodThing(identifier, dataset, DataFactory).name = "https://identifier.example/agent";
+    new PodThing(app, dataset, DataFactory).name = "MyHealth";
+    expect([...identitiesIn(dataset, subject)]).toEqual([
+      [app, { kind: "app", label: "MyHealth" }],
+    ]);
+  });
+
+  it("ignores demo markers with an invalid storage context", () => {
+    const subject = `${STORAGE}integrations/spotify/item.ttl#it`;
+    const dataset = new Store();
+    new ItemProvenance(subject, dataset, DataFactory).attributedTo.add(DEMO_CONNECTOR.iri);
+    expect(provenanceOf(dataset, subject, STORAGE, { storage: "invalid" }).demo).toBeUndefined();
   });
 
   it("rule 1: recognises connector sources ahead of attributed agents and folders", async () => {

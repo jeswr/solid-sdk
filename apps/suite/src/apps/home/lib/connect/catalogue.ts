@@ -4,11 +4,7 @@ import { type createRegistry, fileAdapterById } from "@jeswr/pod-connectors";
 import { NS } from "@jeswr/suite-vocab";
 import { classificationForSourceClass } from "../model/classify";
 
-/** Stable attribution shared by demo imports and Home, independent of saved connections. */
-export const DEMO_CONNECTOR = {
-  iri: `${NS.AGENT}demo-connector`,
-  label: "Demo data",
-} as const;
+export { DEMO_CONNECTOR } from "@jeswr/suite-vocab";
 
 export interface ConnectorEntry {
   id: string;

@@ -2,9 +2,9 @@
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
 // Host patterns ported from PM docs/typed-data-views.md §2.1 and typed-views/sources.ts.
-import { NS } from "@jeswr/suite-vocab";
+import { adapterContainerUrl } from "@jeswr/pod-connectors";
+import { DEMO_CONNECTOR, NS } from "@jeswr/suite-vocab";
 import type { DatasetCore, Term } from "@rdfjs/types";
-import { DEMO_CONNECTOR } from "../connect/catalogue";
 import { httpUrl, inStorage, subjectOf } from "./rdf";
 
 export interface Provenance {
@@ -134,6 +134,16 @@ export function provenanceOf(
   context: ProvenanceContext = {},
 ): Provenance {
   const source = sourceOf(dataset, subject, containerUrl, context);
+  const value = typeof subject === "string" ? subject : subject.value;
+  const url = httpUrl(value);
+  if (!url) return source;
+  const [, prefix = "", id = ""] = /^(.*\/)integrations\/([^/]+)\//.exec(url.pathname) ?? [];
+  if (
+    !id ||
+    (context.storage !== undefined && !inStorage(value, context.storage)) ||
+    !inStorage(value, adapterContainerUrl(context.storage ?? new URL(prefix, url).href, id))
+  )
+    return source;
   if (!subjectOf(dataset, subject).iris(`${NS.PROV}wasAttributedTo`).includes(DEMO_CONNECTOR.iri))
     return source;
   return source.kind === "you"
