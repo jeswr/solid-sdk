@@ -24,9 +24,11 @@ for AS2 and LongChat messages. No hooks, React, shell or suite-sdk imports.
   aliases; tombstones erase bodies and task overlay, preserving author/time/id.
   Task overlays use the SAME message subject and existing wf:Task vocabulary.
   The corresponding I/O functions re-read the original day and conditionally PUT.
-- `appendReaction` / `appendUndo`: return only a new `as:Like` / `as:Undo`
+- `appendReaction` / `appendUndo` (hand-written for now; generating this model in
+  `@jeswr/solid-chat-interop` is bead sst-v8od): return only a new `as:Like` / `as:Undo`
   subject in the target message's day, retaining the sanitised emoji in `as:content`.
-  Reactions are emoji only (`isReactionEmoji`: at most 32 UTF-16 units). `appendUndo`
+  Reactions are emoji only (`isReactionEmoji`: at most 32 UTF-16 units; digits, `#` and `*`
+  only inside keycap sequences, so `👍999` is refused). `appendUndo`
   returns `null` when the same author already undid the Like, so a race with
   another tab is not an error. `readReactions(dataset, document)` ignores
   malformed, non-emoji and cross-document events, and events stored in any
