@@ -79,16 +79,30 @@ export const safeIri = safeHttpIri;
 // biome-ignore lint/suspicious/noControlCharactersInRegex: intentional — we strip the control range from untrusted text before it is persisted.
 const TEXT_CONTROL_CHARS = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/g;
 
+// AUTHORED-BY Codex GPT-6.1-Sol
+// Keep only emoji ZWJs between pictographs (with an optional selector/modifier in either
+// order), and complete black-flag tag sequences. Match those sequences before other Cf.
+const TEXT_FORMAT_CHARS =
+  /(\p{Extended_Pictographic}(?:\uFE0F\p{Emoji_Modifier}?|\p{Emoji_Modifier}\uFE0F?)?(?:\u200D\p{Extended_Pictographic}(?:\uFE0F\p{Emoji_Modifier}?|\p{Emoji_Modifier}\uFE0F?)?)+|\u{1F3F4}[\u{E0020}-\u{E007E}]+\u{E007F})|\p{Cf}/gu;
+
 /**
  * Sanitise an untrusted text literal (a chat body / title / media type) destined
  * for a pod resource by stripping smuggling-prone control characters
- * ({@link TEXT_CONTROL_CHARS}). Bodies are stored as PLAIN TEXT literals only —
+ * ({@link TEXT_CONTROL_CHARS}) and Unicode format characters, except emoji ZWJ
+ * sequences and complete subdivision-flag tags ({@link TEXT_FORMAT_CHARS}).
+ * Bodies are stored as PLAIN TEXT literals only —
  * this keeps a hostile foreign message from persisting a raw `ESC`/`DEL`/C1
  * control sequence into the serialised RDF. `undefined` passes through unchanged
  * so an optional field stays absent.
  */
 export function sanitizeText<T extends string | undefined>(value: T): T {
-  return (value === undefined ? undefined : value.replace(TEXT_CONTROL_CHARS, "")) as T;
+  return (
+    value === undefined
+      ? undefined
+      : value
+          .replace(TEXT_CONTROL_CHARS, "")
+          .replace(TEXT_FORMAT_CHARS, (_match, emoji) => emoji ?? "")
+  ) as T;
 }
 
 /**

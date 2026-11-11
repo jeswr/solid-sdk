@@ -138,7 +138,12 @@ non-symlink files of at most **16 MiB**. Hook input is limited to **64 KiB**.
 Before queueing or uploading, text is redacted for private-key PEM blocks (including
 unfinished blocks), `sk-` and GitHub tokens, AWS access-key IDs, JWTs,
 `Authorization:`/`Proxy-Authorization:` lines, and shell/.env assignments including
-multiline quoted values. Queue replay redacts again. Source IDs are hashed; titles
+multiline quoted values. All title/message and content-part boundaries are checked
+with separator-free 512-code-unit windows before queueing, timestamp filtering or
+100-message import batches. Replay checks complete snapshots before one-message saves.
+The shared normalizer removes Unicode format characters except admitted emoji ZWJs
+and complete subdivision-flag tags; see the exact [redaction rule](../solid-chat-interop/README.md#redaction).
+Queue replay redacts again. Source IDs are hashed; titles
 are fixed provider labels. Pattern redaction does not identify every possible
 secret format, so use project opt-out for sensitive work.
 

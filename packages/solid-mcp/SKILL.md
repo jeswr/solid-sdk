@@ -55,6 +55,9 @@ Use fetch-rdf and typed wrappers for RDF reads, rdf-serialize for serialization.
 Tests use fake fetch and portable pods only. Run lint, build, typecheck and test;
 exercise canonical tools and aliases, read-only enforcement and SSRF regressions.
 The stdio CLI must keep stdout exclusively for MCP messages.
+Chat save/export use the shared normalization and adjacent-field boundary rules in
+[solid-chat-interop](../solid-chat-interop/SKILL.md); do not pre-redact individual fields
+before that conversation-aware pass, since a marker can hide a split token's prefix.
 
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 Memory tools use `NanopubStore` through the current PodPort and PodOutput. Trusted

@@ -25,6 +25,34 @@ const codexMeta = (id: unknown, extra = {}) => ({
 
 describe("real-shaped redacted JSONL", () => {
   it.each([
+    "claude",
+    "codex",
+  ] as const)("redacts credentials split across %s capture blocks and rows", (provider) => {
+    const texts = ["AKIA0000", "000000000000 Safe ghp_fixture", "Token123"];
+    const blocks = (values: string[]) => values.map((text) => ({ type: "text", text }));
+    const rows =
+      provider === "claude"
+        ? [
+            claudeRow({ role: "assistant", content: blocks(texts.slice(0, 2)) }, { uuid: "a" }),
+            claudeRow({ role: "user", content: blocks(texts.slice(2)) }, { uuid: "b" }),
+          ]
+        : [
+            codexRow({
+              type: "message",
+              role: "assistant",
+              id: "a",
+              content: blocks(texts.slice(0, 2)),
+            }),
+            codexRow({ type: "message", role: "user", id: "b", content: blocks(texts.slice(2)) }),
+          ];
+    const parser = provider === "claude" ? parseClaudeTranscript : parseCodexTranscript;
+    expect(parser(jsonl(rows)).conversation.messages.map((message) => message.text)).toEqual([
+      "[REDACTED]",
+      "[REDACTED] Safe [REDACTED]",
+      "[REDACTED]",
+    ]);
+  });
+  it.each([
     ["claude", parseClaudeTranscript, ["user", "assistant", "tool", "assistant"]],
     ["codex", parseCodexTranscript, ["user", "tool", "tool", "assistant"]],
   ] as const)("captures %s text and tool names without hidden data or mirror events", (name, parser, roles) => {
@@ -54,10 +82,7 @@ describe("real-shaped redacted JSONL", () => {
       ),
     ]);
     const parsed = parseClaudeTranscript(input);
-    expect(parsed.conversation.messages.map((m) => m.text)).toEqual([
-      "[REDACTED TOKEN]",
-      "[REDACTED TOKEN]",
-    ]);
+    expect(parsed.conversation.messages.map((m) => m.text)).toEqual(["[REDACTED]", "[REDACTED]"]);
     expect(JSON.stringify(parsed)).not.toMatch(/sk-|ghp_/);
   });
 

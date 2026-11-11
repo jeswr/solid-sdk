@@ -452,6 +452,12 @@ All four tools use `@jeswr/solid-chat-interop`'s reusable `ChatWriter` and requi
   conversation as a Markdown transcript to paste into another account. Titles and
   text are redacted again on export, and each message sits in its own code fence.
 
+Save and export share `solid-chat-interop`'s [redaction rules](../solid-chat-interop/README.md#redaction):
+strip unsafe Unicode format characters while retaining admitted emoji sequences, and
+check title → message and message → message boundaries with separator-free 512-code-unit
+windows. Covered value pieces become `[REDACTED]` while surrounding code stays. The
+conservative join can include the next field's first word after a token-ending field.
+
 Storage is `<podRoot>private/chats/<provider>/<conversationId>/`, with owner-only
 WAC ACLs written before chat content and create-only message PUTs using
 `If-None-Match: *`. First title and message contents win; retrying an existing ID

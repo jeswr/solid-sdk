@@ -27,6 +27,13 @@ remote bodies and credentials, including on startup/auth failures.
 
 The JSONL parsers retain text and tool names only. Drop arguments, results, reasoning,
 images and duplicate Codex event mirrors. Redact before queueing and again on replay.
+Use `redactSecretFields` from `@jeswr/solid-chat-interop` on title and all ordered
+messages/chunks before filtering or splitting saves. Retain source parts until the
+boundary checks finish: redacting a partial token first can hide its prefix. Replay
+checks the whole snapshot before one-message saves; export imports check before
+100-message batches. Preserve existing redaction coverage when mapping boundary ranges.
+The shared normalizer strips Cf except emoji ZWJs and complete subdivision-flag tags;
+follow the exact rule in [the chat skill](../solid-chat-interop/SKILL.md).
 Keep opaque stable IDs and never use raw session IDs as paths. Reuse ChatWriter for
 AS2, owner-only ACL-first writes and create-only idempotence. Reuse MCP-12's config
 loader and DPoP fetch; do not duplicate auth or weaken config permissions/read-only

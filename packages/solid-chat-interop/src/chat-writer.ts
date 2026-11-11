@@ -15,9 +15,9 @@ import {
 import { AclResource, Authorization } from "@solid/object";
 import { DataFactory, Store } from "n3";
 import { buildAs2Message, parseAs2Message } from "./as2.js";
-import { safeHttpIri, sanitizeText } from "./iri.js";
+import { safeHttpIri } from "./iri.js";
 import { storeToTurtle } from "./reconcile.js";
-import { redactSecrets } from "./redact.js";
+import { redactSecretFields } from "./redact.js";
 import { AS_COLLECTION, AS_NAME, DCT, RDF_TYPE } from "./vocab.js";
 
 /** Structural subset of DESIGN §3 PodPort; implementations enforce pod scope. */
@@ -195,15 +195,17 @@ export class ChatWriter {
   ): Promise<{ url: string; saved: number; skipped: number }> {
     const url = this.conversationUrl(conversation.provider, conversation.conversationId);
     // Validate and serialize everything before the first write.
+    const fields = redactSecretFields([
+      conversation.title,
+      ...conversation.messages.map((message) => message.text),
+    ]);
     const messages = await Promise.all(
-      conversation.messages.map(async (message) => {
+      conversation.messages.map(async (message, index) => {
         if (!CHAT_ROLES.includes(message.role)) throw new TypeError("Unsupported chat role");
         // Redact before deriving the ID, so no stored value or name depends on a secret.
         const normalized = {
           ...message,
-          // Strip control characters first: one inside a credential would defeat the pattern
-          // and then be removed by the AS2 serializer, storing the plaintext secret.
-          text: redactSecrets(sanitizeText(message.text)),
+          text: fields[index + 1] as string,
           createdAt: timestamp(message.createdAt),
         };
         const id = await messageId(normalized);
@@ -227,7 +229,7 @@ export class ChatWriter {
     const room = new ChatDoc(`${url}_conversation.ttl#it`, metadata, DataFactory);
     room.types.add(AS_COLLECTION);
     room.identifier = conversation.conversationId;
-    room.title = redactSecrets(sanitizeText(conversation.title));
+    room.title = fields[0];
     const roomTurtle = await storeToTurtle(metadata);
     for (const container of [this.base, `${this.base}${conversation.provider}/`, url]) {
       const containerStore = new Store();

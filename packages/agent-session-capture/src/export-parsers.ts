@@ -1,8 +1,12 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import type { ChatConversation, ChatMessage } from "@jeswr/solid-chat-interop";
+import {
+  type ChatConversation,
+  type ChatMessage,
+  redactSecretFields,
+} from "@jeswr/solid-chat-interop";
 import { MAX_BYTES } from "./io.js";
 import { digest, record } from "./parsers.js";
-import { redactSecrets } from "./redact.js";
+import { redactConversation } from "./redact.js";
 
 const MAX_CONVERSATIONS = 10000;
 const MAX_MESSAGES = 100000;
@@ -26,8 +30,8 @@ function string(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value : undefined;
 }
 
-function parts(values: unknown): string {
-  if (!Array.isArray(values)) return "";
+function parts(values: unknown): string[] {
+  if (!Array.isArray(values)) return [];
   if (values.length > MAX_PARTS) throw new Error("Export content exceeds limit");
   return values
     .map((value) => {
@@ -37,9 +41,7 @@ function parts(values: unknown): string {
         ? block.text
         : "";
     })
-    .filter(Boolean)
-    .join("\n")
-    .trim();
+    .filter(Boolean);
 }
 
 function parse(text: string, provider: "chatgpt" | "claude"): ChatConversation[] {
@@ -59,6 +61,7 @@ function parse(text: string, provider: "chatgpt" | "claude"): ChatConversation[]
     // Separate Claude.ai exports from Claude Code hooks, even if a source ID is reused.
     const conversationId = digest([`${provider}-export`, sourceId]);
     const messages: ChatMessage[] = [];
+    const contents = new Map<string, string[]>();
     const seen = new Set<string>();
     const entries =
       provider === "chatgpt"
@@ -73,7 +76,7 @@ function parse(text: string, provider: "chatgpt" | "claude"): ChatConversation[]
       const role = provider === "chatgpt" ? record(message.author).role : message.sender;
       if (role !== "user" && role !== "human" && role !== "assistant") continue;
       if (message.channel === "analysis" || message.channel === "reasoning") continue;
-      let text: string;
+      let chunks: string[];
       let stamp: string | undefined;
       if (provider === "chatgpt") {
         if (message.recipient !== undefined && message.recipient !== "all") continue;
@@ -84,31 +87,52 @@ function parse(text: string, provider: "chatgpt" | "claude"): ChatConversation[]
           content.content_type !== "multimodal_text"
         )
           continue;
-        text = parts(content.parts);
+        chunks = parts(content.parts);
         stamp = seconds(message.create_time);
       } else {
         if (Array.isArray(message.content) && message.content.length > MAX_PARTS)
           throw new Error("Export content exceeds limit");
-        text =
+        chunks =
           Array.isArray(message.content) && message.content.length > 0
             ? parts(message.content.filter((block) => record(block).type === "text"))
-            : (string(message.text) ?? "");
+            : [string(message.text) ?? ""];
         stamp = iso(message.created_at);
       }
+      const text = chunks.join("\n").trim();
       if (!text) continue;
       const id = digest([conversationId, string(message.id) ?? string(message.uuid) ?? key]);
       if (seen.has(id)) continue;
       seen.add(id);
+      contents.set(id, chunks);
       messages.push({
         id,
         role: role === "assistant" ? "assistant" : "user",
-        text: redactSecrets(text),
+        text,
         createdAt: stamp ?? created ?? EPOCH,
       });
     }
     messages.sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt));
-    if (messages.length > 0)
-      result.push({ provider, conversationId, title: redactSecrets(title.trim()), messages });
+    if (messages.length > 0) {
+      // Keep source parts until all adjacent boundaries (including message/batch joins)
+      // have been checked. Redacting each part early can hide a token's prefix.
+      const fields = [title.trim()];
+      for (const message of messages) {
+        for (const chunk of contents.get(message.id as string) as string[]) fields.push(chunk);
+      }
+      const redacted = redactSecretFields(fields);
+      let offset = 1;
+      for (const message of messages) {
+        const count = (contents.get(message.id as string) as string[]).length;
+        message.text = redacted
+          .slice(offset, offset + count)
+          .join("\n")
+          .trim();
+        offset += count;
+      }
+      result.push(
+        redactConversation({ provider, conversationId, title: redacted[0] as string, messages }),
+      );
+    }
   }
   return result;
 }

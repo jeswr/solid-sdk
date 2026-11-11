@@ -6,7 +6,7 @@ import { DataFactory, Store } from "n3";
 import { describe, expect, it } from "vitest";
 import { type ChatConversation, type ChatPodPort, ChatWriter } from "./chat-writer.js";
 import { parseAs2, storeToTurtle } from "./reconcile.js";
-import { redactSecrets } from "./redact.js";
+import { redactSecretFields } from "./redact.js";
 
 const ROOT = "https://alice.example/pod/";
 const OWNER = `${ROOT}profile/card#me`;
@@ -75,6 +75,74 @@ function conversation(overrides: Partial<ChatConversation> = {}): ChatConversati
 }
 
 describe("ChatWriter", () => {
+  it.each([
+    [
+      "Before AKIA0000",
+      "000000000000 After",
+      "Safe",
+      "Before [REDACTED]",
+      "[REDACTED] After",
+      "Safe",
+    ],
+    [
+      "Safe",
+      "Before ghp_fixture",
+      "Token123 After",
+      "Safe",
+      "Before [REDACTED]",
+      "[REDACTED] After",
+    ],
+  ])("redacts title/message and message/message joins before IDs or writes %#", async (title, first, second, a, b, c) => {
+    const pod = new MemoryPod();
+    const writer = new ChatWriter(pod);
+    const raw = conversation({
+      title,
+      messages: [
+        { role: "user", text: first, createdAt: DAY1 },
+        { role: "assistant", text: second, createdAt: DAY2 },
+      ],
+    });
+    await writer.save(raw);
+    const got = await writer.get("claude", "thread-1");
+    expect([got.title, ...got.messages.map((message) => message.text)]).toEqual([a, b, c]);
+    const fields = redactSecretFields([title, first, second]);
+    expect(
+      await writer.save({
+        ...raw,
+        title: fields[0] as string,
+        messages: raw.messages.map((message, index) => ({
+          ...message,
+          text: fields[index + 1] as string,
+        })),
+      }),
+    ).toMatchObject({ saved: 0, skipped: 2 });
+    expect(raw.title).toBe(title);
+    expect(raw.messages[0]?.text).toBe(first);
+  });
+
+  it("normalizes format characters before persistence and preserves admitted emoji", async () => {
+    const pod = new MemoryPod();
+    const writer = new ChatWriter(pod);
+    const emoji = "👨‍👩‍👧‍👦 👩🏽‍💻 🏴\u{E0067}\u{E0062}\u{E0065}\u{E006E}\u{E0067}\u{E007F}";
+    await writer.save(
+      conversation({
+        title: `${emoji} gh\u200Bp_fixture`,
+        messages: [
+          {
+            id: "msg-1",
+            role: "user",
+            text: `${emoji} sk\u2060-fixture\uFEFF-token`,
+            createdAt: DAY1,
+          },
+        ],
+      }),
+    );
+    const got = await writer.get("claude", "thread-1");
+    expect(got.title).toBe(`${emoji} [REDACTED TOKEN]`);
+    expect(got.messages[0]?.text).toBe(`${emoji} [REDACTED TOKEN]`);
+    for (const write of pod.writes)
+      expect(decoder.decode(write.body)).not.toMatch(/[\u200B\u2060\uFEFF]/u);
+  });
   it("writes canonical AS2 and preserves immutable message IDs on re-save", async () => {
     const pod = new MemoryPod();
     const writer = new ChatWriter(pod);
@@ -159,18 +227,20 @@ describe("ChatWriter", () => {
         expect(write.url).not.toContain(secret);
       }
     const got = await writer.get("claude", "thread-1");
-    expect(got.title).toBe("Deploy with [REDACTED TOKEN]");
+    // Separator-free joins also cover the following word after a token-ending title.
+    expect(got.title).toBe("Deploy with [REDACTED]");
     expect(got.messages.map((m) => m.text)).toEqual([
-      "Use [REDACTED TOKEN]\n[REDACTED PRIVATE KEY]\nthanks",
-      "[REDACTED AUTHORIZATION]",
+      "[REDACTED] [REDACTED TOKEN]\n[REDACTED PRIVATE KEY]\nthanks",
+      "[REDACTED]",
     ]);
     // Input a capture caller already redacted maps to the same derived ID, so it is a replay.
     const preRedacted = new ChatWriter(pod);
+    const fields = redactSecretFields([raw.title, ...raw.messages.map((m) => m.text)]);
     expect(
       await preRedacted.save({
         ...raw,
-        title: redactSecrets(raw.title),
-        messages: raw.messages.map((m) => ({ ...m, text: redactSecrets(m.text) })),
+        title: fields[0] as string,
+        messages: raw.messages.map((m, index) => ({ ...m, text: fields[index + 1] as string })),
       }),
     ).toMatchObject({ saved: 0, skipped: 2 });
   });

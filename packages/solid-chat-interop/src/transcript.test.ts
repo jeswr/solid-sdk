@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6.1-Sol
 import { describe, expect, it } from "vitest";
 import { renderTranscript } from "./transcript.js";
 
@@ -6,6 +7,35 @@ const DAY1 = "2026-10-24T12:00:00.000Z";
 const DAY2 = "2026-10-25T12:00:00.000Z";
 
 describe("renderTranscript", () => {
+  it.each([
+    ["AKIA0000", "000000000000", "Safe"],
+    ["Safe", "ghp_fixture", "Token123"],
+  ])("redacts legacy title/message and message/message splits %#", (title, first, second) => {
+    const out = renderTranscript({
+      provider: "codex",
+      conversationId: "c",
+      title,
+      messages: [
+        { role: "user", text: first, createdAt: DAY1 },
+        { role: "assistant", text: second, createdAt: DAY2 },
+      ],
+    });
+    expect(out).not.toMatch(/AKIA|00000000|ghp|Token123/);
+    expect(out.match(/REDACTED/g)).toHaveLength(2);
+    expect(out).toContain("Safe");
+  });
+
+  it("normalizes old format-character splits while retaining emoji bytes", () => {
+    const emoji = "👨‍👩‍👧‍👦 👩🏽‍💻 🏴\u{E0067}\u{E0062}\u{E0065}\u{E006E}\u{E0067}\u{E007F}";
+    const out = renderTranscript({
+      provider: "claude",
+      conversationId: "c",
+      title: `${emoji} g\u200Bhp_fixture`,
+      messages: [{ role: "user", text: `${emoji} sk\u2060-fixture`, createdAt: DAY1 }],
+    });
+    expect(out).not.toMatch(/fixture|[\u200B\u2060]/u);
+    expect(out.split(emoji)).toHaveLength(3);
+  });
   it("renders a title, provenance line and one fenced section per message", () => {
     expect(
       renderTranscript({
@@ -65,7 +95,7 @@ describe("renderTranscript", () => {
     });
     expect(out).not.toContain("sk-fixture-export-token");
     expect(out).not.toContain("ghp_fixtureExportToken1");
-    expect(out).toContain("[REDACTED TOKEN]");
+    expect(out).toContain("[REDACTED]");
   });
 
   it.each([

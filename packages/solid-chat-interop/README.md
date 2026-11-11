@@ -164,6 +164,38 @@ Unquoted value boundaries depend on syntax:
 - Code, object keys, YAML, JSON and CLI flags retain the code delimiters: whitespace,
   `;`, `,`, `)`, `}` and `]`, with escaped whitespace and continuations included.
 
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+
+`redactSecretFields(fields)` normalizes and redacts an ordered array without mutating it.
+The writer and transcript renderer use title → message 1 → message 2 order. After
+per-field redaction, adjacent fields are checked using the last 512 UTF-16 code units
+of the left field and the first 512 of the right, joined without a separator. A detection
+spanning that join replaces each covered value piece with `[REDACTED]`; names, quotes
+and surrounding code stay. Normalized source windows are also checked so an earlier
+per-field marker cannot hide a prefix while exposing its continuation. Existing
+redactions remain covered when their source ranges overlap a boundary redaction.
+Capture/import callers must apply this before queueing or splitting saves into batches.
+
+The boundary pass is linear in total input size plus field count and collects all
+matches before replacing them. It checks adjacent pairs only, within the 512-code-unit
+windows: credentials requiring three fields or more distant context are outside this
+policy. Separator-free detection errs toward redaction: a complete token at one field's
+end can also cover the next field's first word. A caller that has already redacted each
+source field independently cannot recover a hidden prefix; pass the complete original
+field array to this helper before discarding source text.
+
+Before detection, the shared text normalizer strips C0/C1 controls except tab/CR/LF,
+and every Unicode General_Category=Cf character except emoji ZWJs and subdivision-flag
+tags. U+200D survives only between Extended_Pictographic characters, each optionally
+followed by U+FE0F and/or a skin-tone modifier (either order). Tags U+E0020–U+E007F
+survive only in a complete sequence immediately following U+1F3F4, through the first
+U+E007F. Orphan, interrupted and unfinished tags are removed. Family/profession emoji,
+skin-tone variants and the England flag retain their exact bytes. Zero-width spaces,
+word joiners, BOMs, soft hyphens and bidi controls are removed before persistence
+and again on export, so they cannot split credential patterns.
+
+Package-specific agent guidance lives in [SKILL.md](SKILL.md).
+
 The existing PEM private-key, `sk-`, GitHub, AWS key-ID, JWT and `Authorization:`
 header rules run first with their existing markers. Redaction is pure, emits no
 diagnostics containing input, and produces a fixpoint, so derived message IDs stay

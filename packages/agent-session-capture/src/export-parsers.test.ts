@@ -19,6 +19,41 @@ const claude = (extra: object = {}) =>
   JSON.stringify([{ uuid: "chat", chat_messages: [{ sender: "human", text: "Hello" }], ...extra }]);
 
 describe("bounded export parsers", () => {
+  it.each([
+    "chatgpt",
+    "claude",
+  ])("redacts %s title, message and content-part boundaries", (provider) => {
+    const parts = ["000000000000 Safe ghp", "_fixtureToken123 Safe ghp_fixture"];
+    const parsed =
+      provider === "chatgpt"
+        ? parseChatgptExport(
+            chat(message(), {
+              title: "AKIA0000",
+              mapping: {
+                a: { message: message({ id: "a", content: { parts } }) },
+                b: { message: message({ id: "b", content: { parts: ["Token123"] } }) },
+              },
+            }),
+          )
+        : parseClaudeExport(
+            claude({
+              name: "AKIA0000",
+              chat_messages: [
+                {
+                  uuid: "a",
+                  sender: "human",
+                  content: parts.map((text) => ({ type: "text", text })),
+                },
+                { uuid: "b", sender: "assistant", text: "Token123" },
+              ],
+            }),
+          );
+    expect(parsed[0]?.title).toBe("[REDACTED]");
+    expect(parsed[0]?.messages.map((message) => message.text)).toEqual([
+      "[REDACTED] Safe [REDACTED]\n[REDACTED] Safe [REDACTED]",
+      "[REDACTED]",
+    ]);
+  });
   it("ports all ChatGPT mapping branches in timestamp order, with opaque IDs and text only", async () => {
     const text = await fixture("chatgpt");
     const parsed = parseChatgptExport(text);
@@ -101,8 +136,8 @@ describe("bounded export parsers", () => {
         }),
       ),
     ]) {
-      expect(parsed[0]?.title).toBe("[REDACTED TOKEN]");
-      expect(parsed[0]?.messages[0]?.text).toBe("[REDACTED TOKEN]");
+      expect(parsed[0]?.title).toBe("[REDACTED]");
+      expect(parsed[0]?.messages[0]?.text).toBe("[REDACTED]");
     }
   });
   it("uses deterministic dates and source identity fallbacks, and de-duplicates message IDs", () => {

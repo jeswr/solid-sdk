@@ -259,8 +259,9 @@ describe("MCP chat tools over the scoped fetch port", () => {
           arguments: { provider: "claude", conversationId: input.conversationId },
         }),
       );
-      expect(got.title).toBe("Key [REDACTED TOKEN]");
-      expect(got.messages[0].text).toBe("My key is [REDACTED TOKEN]");
+      // With no separator, the title's token also covers the next field's first word.
+      expect(got.title).toBe("Key [REDACTED]");
+      expect(got.messages[0].text).toBe("[REDACTED] key is [REDACTED TOKEN]");
       const exported = json(
         await client.callTool({
           name: "chat_export",
@@ -268,8 +269,8 @@ describe("MCP chat tools over the scoped fetch port", () => {
         }),
       );
       expect(exported.url).toBe(`${ROOT}private/chats/claude/session-1/`);
-      expect(exported.markdown).toContain("# Key \\[REDACTED TOKEN\\]");
-      expect(exported.markdown).toContain("```\nMy key is [REDACTED TOKEN]\n```");
+      expect(exported.markdown).toContain("# Key \\[REDACTED\\]");
+      expect(exported.markdown).toContain("```\n[REDACTED] key is [REDACTED TOKEN]\n```");
       expect(exported.markdown).not.toContain(token);
     } finally {
       await client.close();
