@@ -246,6 +246,28 @@ describe("ChatWriter", () => {
   });
 
   it.each([
+    ["prose ".repeat(156), "-----END PRIVATE KEY-----\nAfter"],
+    ["connect to https://bob:pw@db.example.com", "@alice can you check?"],
+    ["see https://example.com:8080", "@alice thanks"],
+  ])("keeps IDs stable before appended footer/mention: %s", async (text, next) => {
+    const writer = new ChatWriter(new MemoryPod());
+    const first = { role: "user" as const, text, createdAt: DAY1 };
+    const input = conversation({ title: "My title", messages: [first] });
+    expect(await writer.save(input)).toMatchObject({ saved: 1, skipped: 0 });
+    const before = await writer.get("claude", "thread-1");
+    expect(
+      await writer.save({
+        ...input,
+        messages: [first, { role: "assistant", text: next, createdAt: DAY2 }],
+      }),
+    ).toMatchObject({ saved: 1, skipped: 1 });
+    const after = await writer.get("claude", "thread-1");
+    expect(after.title).toBe("My title");
+    expect(after.messages).toHaveLength(2);
+    expect(after.messages[0]).toEqual(before.messages[0]);
+  });
+
+  it.each([
     "sk-abc",
     "ghp_fixtureToken",
     "github_pat_fixtureToken",

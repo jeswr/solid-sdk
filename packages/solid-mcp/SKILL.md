@@ -60,10 +60,15 @@ Chat save/export use the shared normalization and adjacent-field boundary rules 
 before that conversation-aware pass, since a marker can hide a split token's prefix.
 Boundary replacement preserves per-field markers, keeping IDs stable on incremental
 saves when the earlier message was already fully detected. URL password context
-includes `@`; orphan private-key END lines redact the entire field prefix. Windows
+includes `@` only while the left field remains in userinfo; complete authorities and
+numeric ports cannot absorb later @mentions. Orphan private-key END lines redact their
+own field prefix only. Recognized PEM BEGIN headers, including PGP PRIVATE KEY BLOCK,
+carry through arbitrary body lengths and later fields until END or conversation end. Windows
 stop at code-point boundaries, lone surrogates are stripped, and flag tags follow
 the subdivision grammar. Checks are pairwise: secrets requiring three fields are
-outside the bounded policy.
+outside the bounded policy, except bodies following a recognized PEM BEGIN. Split
+PEM delimiters themselves retain the adjacent-pair/window bound. Variation selectors
+are stripped except FE0E/FE0F on emoji bases/modifiers or within complete keycaps.
 
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 Memory tools use `NanopubStore` through the current PodPort and PodOutput. Trusted

@@ -144,11 +144,18 @@ with separator-free 512-code-unit windows before queueing, timestamp filtering o
 The shared normalizer removes Unicode format characters except admitted emoji ZWJs
 and subdivision flags (two tag lowercase country letters, then 1–4 tag lowercase
 letters/digits, then the terminator), and strips lone surrogates. Window edges retain
-whole code points. Capture reuses the shared `redactConversation`; existing markers
+whole code points. Variation selectors are stripped except FE0E/FE0F on emoji
+bases/modifiers and complete keycaps. Capture reuses the shared `redactConversation`;
+export parsers pass `{ chunks }` in message order, leaving raw-chunk checking,
+newline assembly, trimming and final conversation redaction to that helper. Existing markers
 stay byte-for-byte stable across repeated passes. URL password detection includes the
-trailing `@` across a join. An orphan private-key END line redacts the field prefix,
-including long PEM bodies split after BEGIN. Adjacent-pair checks cannot detect a
-secret requiring three fields or context beyond 512 code units; see the exact
+trailing `@` across a join only while the left field still ends in userinfo; a complete
+authority or numeric port cannot absorb a later `@mention`. An orphan private-key END
+line redacts only its own field prefix. Recognized BEGIN headers (including PGP PRIVATE
+KEY BLOCK) carry redaction through entire later fields to their first END or the
+conversation end, even for long bodies without END. Other adjacent-pair checks cannot
+detect a secret requiring three fields or context beyond 512 code units; split PEM
+delimiters themselves retain that bound. See the exact
 [redaction rule](../solid-chat-interop/README.md#redaction).
 Queue replay redacts again. Source IDs are hashed; titles
 are fixed provider labels. Pattern redaction does not identify every possible

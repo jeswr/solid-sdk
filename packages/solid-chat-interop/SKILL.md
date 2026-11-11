@@ -18,11 +18,13 @@ The 10 November value-only decision preserves assignment names, operators, quote
 surrounding code. Use `[REDACTED]` for values and boundary pieces; retain existing
 per-field PEM/token/header markers. Reuse the detectors in `src/redact.ts`.
 
-Normalization strips lone surrogates (Cs), C0/C1 controls except tab/CR/LF, then every Unicode
-General_Category=Cf character except:
+Normalization strips variation selectors U+FE00–U+FE0F and U+E0100–U+E01EF except
+FE0E/FE0F on an emoji base/modifier or in a complete keycap. A selector following a
+bare digit is removed. It also strips lone surrogates (Cs), C0/C1 controls except
+tab/CR/LF, then every Unicode General_Category=Cf character except:
 
-- U+200D between two Extended_Pictographic characters, with optional U+FE0F and/or an
-  emoji modifier following each pictograph (either modifier/selector order).
+- U+200D between two Extended_Pictographic characters, with optional U+FE0E/U+FE0F
+  and/or an emoji modifier following each pictograph (either modifier/selector order).
 - Subdivision flags: U+1F3F4, exactly two tag lowercase letters (U+E0061–U+E007A),
   then 1–4 tag lowercase letters or digits (U+E0030–U+E0039), then U+E007F.
   England/Scotland/Wales survive. Strip all other U+E0000–U+E007F tags and other Cf;
@@ -31,11 +33,18 @@ General_Category=Cf character except:
 `redactSecretFields` takes fields in persistence order: title, messages, or source chunks.
 `redactConversation` is the shared title/messages mapping used by save, transcript export
 and capture; preserve all other conversation/message metadata and do not mutate input.
+Its optional `{ chunks }` takes one readonly chunk array per message in message order;
+refuse a length mismatch. Check raw chunks together, join each message with newlines
+and trim, then check the assembled conversation again. Empty chunk arrays produce empty
+text. Export importers must use this helper rather than maintain their own field mapping.
 After per-field redaction it inspects each adjacent 512-code-unit suffix/prefix with no
 separator, snapping edges inward to code-point boundaries. Replace only values covered
 by detections whose full context spans the join (including a URL password's trailing `@`,
-even when its value is wholly on the left). It also checks
-normalized source windows, because an earlier per-field marker can hide a token prefix.
+even when its value is wholly on the left). A right-hand `@` cannot extend a left
+authority already containing a userinfo `@`. Dotted hostnames, localhost
+and bracketed IPv6 ending in ports (1–5 digits, 0–65535) are complete authorities
+at a join too; larger numeric credentials still redact. It also checks normalized
+source windows, because an earlier per-field marker can hide a token prefix.
 Carry source ranges through existing replacements; never reconstruct plaintext from an
 already-redacted value. Collect all boundary ranges before applying them.
 Ignore zero-width boundary spans. Preserve existing markers byte-for-byte, including
@@ -48,8 +57,12 @@ Recheck edited fields with the per-field detectors: removing a boundary fragment
 expose an assignment formerly hidden inside another detector's syntax.
 
 Redact orphan private-key END lines from the field start through the last END delimiter,
-even without a previous field. This conservative per-field rule covers long PEM bodies
-split after BEGIN, beyond the fixed boundary window. Keep following text after END.
+even without a previous field. Apply this conservative rule only to whole fields,
+never to a boundary window's left suffix. Keep following text after END. Both PEM
+rules accept an optional ` BLOCK`, including PGP private keys. Once a BEGIN header
+is recognized (whole or across one join), carry redaction through all subsequent
+fields until its first END or the conversation end. Bodies are not window-limited;
+BEGIN and END delimiters still require one field or one bounded join.
 
 Apply this to a complete capture/import conversation before queueing, filtering, or
 splitting into one-message saves or batches. Retain source chunks until these checks
@@ -57,8 +70,11 @@ finish. Repeating only per-field redaction loses the context needed by the next 
 Existing stored records remain create-only; transcript export supplies legacy protection.
 
 Keep work linear in input size plus field count. Never join whole conversation prefixes
-or scan beyond the fixed windows. This bounded, adjacent-pair policy does not detect
-credentials requiring three fields or context farther than 512 code units from a join.
+or scan beyond the fixed windows for ordinary detectors. PEM continuation scans each
+whole field once and keeps only open/closed state plus a bounded delimiter suffix.
+Use lazy Int32Array offset maps in boundary windows; never allocate objects per code unit.
+The bounded, adjacent-pair policy does not detect credentials requiring three fields
+or context farther than 512 code units from a join, except recognized PEM-body continuation.
 Separator-free detection is conservative: a token at a field's end may consume the first
 word of the next field. Ordinary joins without a detector match remain unchanged.
 

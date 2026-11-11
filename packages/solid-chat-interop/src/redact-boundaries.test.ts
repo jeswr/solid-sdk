@@ -386,11 +386,13 @@ describe("adjacent credential boundaries", () => {
     const original = RegExp.prototype.exec;
     const measure = (count: number, length: number) => {
       const lengths: number[] = [];
+      const continuationLengths: number[] = [];
       const spy = vi.spyOn(RegExp.prototype, "exec").mockImplementation(function (
         this: RegExp,
         input,
       ) {
         if (this.source.startsWith("-----BEGIN")) lengths.push(input.length);
+        if (this.source.startsWith("-----(BEGIN|END)")) continuationLengths.push(input.length);
         return original.call(this, input);
       });
       try {
@@ -402,6 +404,12 @@ describe("adjacent credential boundaries", () => {
       expect(lengths.filter((size) => size !== length).every((size) => size <= 1024)).toBe(true);
       expect(lengths.reduce((sum, size) => sum + size, 0)).toBe(
         count * length + 2 * (count - 1) * 1024,
+      );
+      // PEM continuation scans each field plus one bounded suffix. Doubling field
+      // count or body length cannot turn it into scans of accumulating prefixes.
+      expect(continuationLengths).toHaveLength(count);
+      expect(continuationLengths.reduce((sum, size) => sum + size, 0)).toBe(
+        count * length + (count - 1) * 512,
       );
     };
     measure(10, 1200);

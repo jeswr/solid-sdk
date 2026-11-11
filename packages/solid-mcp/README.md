@@ -460,10 +460,16 @@ conservative join can include the next field's first word after a token-ending f
 Existing per-field markers keep their spelling during boundary replacement, so
 appending a turn preserves an already detected message's content-derived ID.
 A trailing `@` in the next field can prove a URL password wholly in the previous
-field. Orphan private-key END lines redact the field prefix even for long bodies.
+field only while that field still ends in userinfo. Complete authorities and numeric
+ports cannot absorb a later `@mention`. Orphan private-key END lines redact their own
+field prefix only. Recognized BEGIN headers, including PGP PRIVATE KEY BLOCK, carry
+redaction through entire later fields until their first END or the conversation end,
+covering long or truncated bodies. Variation selectors are removed except FE0E/FE0F
+on emoji bases/modifiers or in complete keycaps.
 Windows stop at complete code points; lone surrogates and malformed subdivision
 tags are removed. Checks cover adjacent pairs only: credentials requiring three
-fields or context beyond 512 code units remain outside this policy.
+fields or context beyond 512 code units remain outside this policy, except bodies
+following a recognized PEM BEGIN. Split delimiters themselves retain the window bound.
 
 Storage is `<podRoot>private/chats/<provider>/<conversationId>/`, with owner-only
 WAC ACLs written before chat content and create-only message PUTs using

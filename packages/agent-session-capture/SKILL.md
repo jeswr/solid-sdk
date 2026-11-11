@@ -28,17 +28,23 @@ remote bodies and credentials, including on startup/auth failures.
 The JSONL parsers retain text and tool names only. Drop arguments, results, reasoning,
 images and duplicate Codex event mirrors. Redact before queueing and again on replay.
 Use the shared `redactConversation` from `@jeswr/solid-chat-interop` for title and
-ordered messages; use `redactSecretFields` for source chunks before rejoining them.
+ordered messages; pass `{ chunks }` with one source-chunk array per message for exports.
+The helper owns boundary checking, newline assembly, trimming and the final conversation
+pass; do not duplicate field mapping or pre-redact chunks in the parser.
 Run both before filtering or splitting saves. Retain source parts until the
 boundary checks finish: redacting a partial token first can hide its prefix. Replay
 checks the whole snapshot before one-message saves; export imports check before
 100-message batches. Preserve existing redaction coverage when mapping boundary ranges.
 Boundary checks preserve marker text and ignore empty spans; URL `@` context can
-redact a password wholly on the left. Orphan private-key END lines redact from the
-field start, including long bodies beyond the window. The pairwise limit remains:
-a secret spanning three fields is not caught, nor is context beyond 512 code units.
+redact a password wholly on the left while that field is still inside userinfo; existing
+authorities and numeric ports cannot absorb a later @mention. Orphan private-key END
+lines redact from their own field start, never a preceding field. Recognized BEGIN
+headers carry redaction through arbitrarily long bodies and subsequent fields to
+the first END or conversation end, including PGP PRIVATE KEY BLOCK. Other detectors
+retain the pairwise/512-code-unit limit, as do split PEM delimiters themselves.
 The shared normalizer strips lone surrogates and Cf except emoji ZWJs and valid
-subdivision tags (two country letters, then 1–4 lowercase letters/digits);
+subdivision tags (two country letters, then 1–4 lowercase letters/digits). It also strips
+variation selectors except FE0E/FE0F on emoji bases/modifiers or in complete keycaps;
 follow the exact rule in [the chat skill](../solid-chat-interop/SKILL.md).
 Keep opaque stable IDs and never use raw session IDs as paths. Reuse ChatWriter for
 AS2, owner-only ACL-first writes and create-only idempotence. Reuse MCP-12's config

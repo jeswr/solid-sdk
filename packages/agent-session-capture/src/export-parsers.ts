@@ -1,9 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import {
-  type ChatConversation,
-  type ChatMessage,
-  redactSecretFields,
-} from "@jeswr/solid-chat-interop";
+import type { ChatConversation, ChatMessage } from "@jeswr/solid-chat-interop";
 import { MAX_BYTES } from "./io.js";
 import { digest, record } from "./parsers.js";
 import { redactConversation } from "./redact.js";
@@ -115,22 +111,11 @@ function parse(text: string, provider: "chatgpt" | "claude"): ChatConversation[]
     if (messages.length > 0) {
       // Keep source parts until all adjacent boundaries (including message/batch joins)
       // have been checked. Redacting each part early can hide a token's prefix.
-      const fields = [title.trim()];
-      for (const message of messages) {
-        for (const chunk of contents.get(message.id as string) as string[]) fields.push(chunk);
-      }
-      const redacted = redactSecretFields(fields);
-      let offset = 1;
-      for (const message of messages) {
-        const count = (contents.get(message.id as string) as string[]).length;
-        message.text = redacted
-          .slice(offset, offset + count)
-          .join("\n")
-          .trim();
-        offset += count;
-      }
       result.push(
-        redactConversation({ provider, conversationId, title: redacted[0] as string, messages }),
+        redactConversation(
+          { provider, conversationId, title: title.trim(), messages },
+          { chunks: messages.map((message) => contents.get(message.id as string) as string[]) },
+        ),
       );
     }
   }

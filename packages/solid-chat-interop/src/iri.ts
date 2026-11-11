@@ -82,15 +82,17 @@ const TEXT_CONTROL_CHARS = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F
 // AUTHORED-BY Codex GPT-6.1-Sol
 // Keep only emoji ZWJs between pictographs (with an optional selector/modifier in either
 // order), and subdivision tags: two country letters, then 1–4 letters/digits.
-// Match those sequences before stripping all other Cf and lone surrogates (Cs).
+// Match those sequences before stripping all other Cf, lone surrogates (Cs) and
+// variation selectors. FE0E/FE0F survive only on an emoji base (or its modifier).
 const TEXT_FORMAT_CHARS =
-  /(\p{Extended_Pictographic}(?:\uFE0F\p{Emoji_Modifier}?|\p{Emoji_Modifier}\uFE0F?)?(?:\u200D\p{Extended_Pictographic}(?:\uFE0F\p{Emoji_Modifier}?|\p{Emoji_Modifier}\uFE0F?)?)+|\u{1F3F4}[\u{E0061}-\u{E007A}]{2}[\u{E0030}-\u{E0039}\u{E0061}-\u{E007A}]{1,4}\u{E007F})|[\p{Cf}\p{Cs}\u{E0000}-\u{E007F}]/gu;
+  /(\u{1F3F4}[\u{E0061}-\u{E007A}]{2}[\u{E0030}-\u{E0039}\u{E0061}-\u{E007A}]{1,4}\u{E007F}|\p{Extended_Pictographic}(?:[\uFE0E\uFE0F]\p{Emoji_Modifier}?|\p{Emoji_Modifier}[\uFE0E\uFE0F]?)?(?:\u200D\p{Extended_Pictographic}(?:[\uFE0E\uFE0F]\p{Emoji_Modifier}?|\p{Emoji_Modifier}[\uFE0E\uFE0F]?)?)*|[#*0-9][\uFE0E\uFE0F]\u20E3)|[\p{Cf}\p{Cs}\u{E0000}-\u{E007F}]|[\uFE00-\uFE0F\u{E0100}-\u{E01EF}]/gu;
 
 /**
  * Sanitise an untrusted text literal (a chat body / title / media type) destined
  * for a pod resource by stripping smuggling-prone control characters
  * ({@link TEXT_CONTROL_CHARS}), lone surrogates and Unicode format/tag characters, except emoji ZWJ
- * sequences and complete subdivision-flag tags ({@link TEXT_FORMAT_CHARS}).
+ * sequences and complete subdivision-flag tags ({@link TEXT_FORMAT_CHARS}). Strip
+ * variation selectors except FE0E/FE0F on emoji bases/modifiers or complete keycaps.
  * Bodies are stored as PLAIN TEXT literals only —
  * this keeps a hostile foreign message from persisting a raw `ESC`/`DEL`/C1
  * control sequence into the serialised RDF. `undefined` passes through unchanged
