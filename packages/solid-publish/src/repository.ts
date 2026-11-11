@@ -1,6 +1,6 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
 // AUTHORED-BY Codex GPT-6
-import { readWac } from "@jeswr/pod-access";
+import { checkOwnerOnly } from "@jeswr/pod-access";
 import { isRoleError, type RoleGrant, readGrants, setGrants } from "@jeswr/pod-access/roles";
 import { createTypeIndex } from "@jeswr/pod-type-index";
 import {
@@ -84,6 +84,7 @@ export function publishRepository(
   storage: StorageClient,
   fetch: typeof globalThis.fetch,
   owner: string,
+  onWarning: (message: string) => void = console.warn,
 ): PublishRepository {
   if (storage.protocol !== "solid")
     throw new PublicationError("Publish needs a Solid pod with stable public file paths.");
@@ -107,9 +108,12 @@ export function publishRepository(
     try {
       expected = await readGrants(url, options);
     } catch (error) {
-      if (error instanceof TypeError || (isRoleError(error) && error.code === "unsupported"))
+      if (isRoleError(error) && error.code === "unsupported")
         throw new UnsupportedPublishAccessError();
-      throw error;
+      throw new PublicationError(
+        `Couldn't read permissions for ${url}. Check your connection and the pod's ACL discovery, then retry.`,
+        { cause: error },
+      );
     }
     const grants = [
       manager,
@@ -131,42 +135,17 @@ export function publishRepository(
         { cause: result.failed[0]?.error },
       );
   }
-  // Read raw WAC modes, including partial/unmapped grants that the roles projection drops.
-  // Sources created by Publish have their own ACL; missing/ambiguous ACLs cannot prove privacy.
   async function assertOwnerOnly(url: string) {
-    const head = await createSolidBackend({ fetch, root: storage.root }).head(url);
-    const links = head.links.get("acl") ?? [];
-    const acl = links[0]?.target;
-    if (links.length !== 1 || !acl || !storage.isWithinStorage(acl))
-      throw new PublicationError("Couldn't verify owner-only source permissions.");
-    const policy = readWac((await storage.readRdf(acl)).dataset, url, acl, undefined, true);
-    if (
-      !policy.grants.length ||
-      policy.grants.some(
-        (grant) =>
-          grant.who.length === 0 ||
-          grant.who.some(
-            (clause) =>
-              clause.length !== 1 || clause[0]?.kind !== "agent" || clause[0].webId !== owner,
-          ),
-      )
-    )
+    const result = await checkOwnerOnly({ storage, url, ownerWebId: owner });
+    if (!result.private)
       throw new PublicationError(
-        "Publish needs owner-only sources. Remove source sharing before publishing.",
+        `Couldn't verify owner-only permissions for ${url}: ${result.reasons
+          .map(
+            ({ subject, modes, reason }) =>
+              `${reason} (${subject}${modes.length ? `: ${modes.join(", ")}` : ""})`,
+          )
+          .join("; ")}. Check this resource's access rules before publishing.`,
       );
-    for (const scope of url.endsWith("/") ? ["resource", "members"] : ["resource"]) {
-      const modes = new Set(
-        policy.grants
-          .filter((g) => g.appliesTo === scope || g.appliesTo === "both")
-          .flatMap((g) => [...g.modes]),
-      );
-      if (
-        !["read", "write", "control"].every((mode) =>
-          modes.has(mode as "read" | "write" | "control"),
-        )
-      )
-        throw new PublicationError("Couldn't verify owner-only source permissions.");
-    }
   }
   async function container(parent: string, name: string, privateSource = false): Promise<string> {
     const url = new URL(`${name}/`, parent).href;
@@ -223,7 +202,13 @@ export function publishRepository(
       throw new InvalidDocumentError(
         "A Publish document is invalid. Your pod data has been left in place.",
       );
-    return { url, etag: validator(result.etag), data: data as T };
+    try {
+      return { url, etag: validator(result.etag), data: data as T };
+    } catch (cause) {
+      throw new InvalidDocumentError(`The Publish document at ${url} has no safe version.`, {
+        cause,
+      });
+    }
   }
   async function privateCreate(
     parent: string,
@@ -285,7 +270,19 @@ export function publishRepository(
       if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(key) || key.length > 80) continue;
       urls.add(new URL("site.ttl", entry.url).href);
     }
-    for (const url of await index.find(SITE_CLASS)) {
+    let hints: string[] = [];
+    try {
+      hints = await index.find(SITE_CLASS);
+    } catch (cause) {
+      if (cause instanceof StorageError && cause.code === "unauthenticated")
+        throw new PublicationError("Your pod session has expired. Reconnect to open Publish.", {
+          cause,
+        });
+      onWarning(
+        "Couldn't read the private Type Index. Publish is showing sites found in its source folder.",
+      );
+    }
+    for (const url of hints) {
       // Discovery hints never widen this app's write boundary.
       try {
         siteKey({ url } as StoredSite);
@@ -301,10 +298,13 @@ export function publishRepository(
         result.push(await read<SiteData>(url, parseSite));
       } catch (error) {
         if (missing(error)) continue;
+        if (error instanceof StorageError && error.code === "unauthenticated")
+          throw new PublicationError("Your pod session has expired. Reconnect to open Publish.", {
+            cause: error,
+          });
         if (
           error instanceof InvalidDocumentError ||
-          (error instanceof StorageError &&
-            ["not-rdf", "forbidden", "unauthenticated"].includes(error.code))
+          (error instanceof StorageError && ["not-rdf", "forbidden"].includes(error.code))
         )
           invalid.push({ url });
         else throw error;
@@ -331,10 +331,13 @@ export function publishRepository(
         result.push(await read<PageData>(entry.url, parsePage));
       } catch (error) {
         if (missing(error)) continue;
+        if (error instanceof StorageError && error.code === "unauthenticated")
+          throw new PublicationError("Your pod session has expired. Reconnect to open Publish.", {
+            cause: error,
+          });
         if (
           error instanceof InvalidDocumentError ||
-          (error instanceof StorageError &&
-            ["not-rdf", "forbidden", "unauthenticated"].includes(error.code))
+          (error instanceof StorageError && ["not-rdf", "forbidden"].includes(error.code))
         )
           invalid.push({ url: entry.url });
         else throw error;
@@ -359,7 +362,13 @@ export function publishRepository(
       await serializeSite(url, { ...data, publicUrl: undefined }),
     );
     const site = { ...made, data: validateSite({ ...data, publicUrl: undefined }) };
-    await index.register(SITE_CLASS, { instance: made.url });
+    try {
+      await index.register(SITE_CLASS, { instance: made.url });
+    } catch {
+      onWarning(
+        `Your site was saved at ${made.url}, but its private Type Index registration failed. Publish can still open it; other apps may not discover it.`,
+      );
+    }
     return site;
   }
   async function writeSite(site: StoredSite, data: SiteData): Promise<StoredSite> {
@@ -425,7 +434,16 @@ export function publishRepository(
     assertSlug(slug);
     const directory = new URL(`${slug}/`, publicUrl(site)).href;
     await remove(new URL("index.html", directory).href);
-    await remove(directory);
+    try {
+      await remove(directory);
+    } catch (error) {
+      if (!(error instanceof StorageError && error.code === "conflict")) throw error;
+      // Keep unrelated files. An own ACL prevents the site's public defaults applying here.
+      await permissions(directory, false);
+      onWarning(
+        `Publish removed its page from ${directory}. Extra files were left in this folder, which is now owner-only.`,
+      );
+    }
   }
   async function cleanStaleOutput(site: StoredSite, pages: readonly PageData[]) {
     const root = publicUrl(site);
@@ -471,6 +489,8 @@ export function publishRepository(
     const renderSite: RenderSite = { ...site.data, publicUrl: root };
     for (const page of pages) {
       const directory = await container(root, page.slug);
+      const access = await readGrants(directory, { ...roleOptions, kind: "folder" });
+      if (access.grants.some((grant) => !grant.inherited)) await permissions(directory, true);
       await output(
         new URL("index.html", directory).href,
         renderPage(renderSite, page, pages),
@@ -496,7 +516,8 @@ export function publishRepository(
     await assertOwnerOnly(site.url);
     const listing = await listPages(site);
     await assertOwnerOnly(new URL("pages/", site.url).href);
-    for (const page of listing.items) await assertOwnerOnly(page.url);
+    for (const page of listing.items)
+      if (page.data.status === "published") await assertOwnerOnly(page.url);
   }
   async function refreshPublic(site: StoredSite): Promise<StoredSite> {
     if (!site.data.publicUrl)
@@ -511,6 +532,7 @@ export function publishRepository(
       throw new PublicationError("Confirm that anyone may read this site before publishing.");
     await requireCurrent(site);
     await verifySources(site);
+    await assertOwnerOnly(page.url);
     const saved = await savePage(site, page, {
       ...data,
       status: "published",
@@ -555,10 +577,30 @@ export async function openPublishRepository(
   fetch: typeof globalThis.fetch,
   root: string,
   owner: string,
-  options?: { protocol: "solid" },
+  options?: { protocol?: "solid"; onWarning?: (message: string) => void },
 ): Promise<PublishRepository> {
-  if (options?.protocol === "solid")
-    return publishRepository(createSolidBackend({ fetch, root }), fetch, owner);
+  if (options?.protocol === "solid") {
+    const storage = createSolidBackend({ fetch, root });
+    try {
+      await readGrants(root, { fetch, root, model: "wac", kind: "folder" });
+    } catch (cause) {
+      if (isRoleError(cause) && cause.code === "unsupported")
+        throw new UnsupportedPublishAccessError();
+      throw new PublicationError(
+        `Couldn't read permissions for ${root}. Check your connection and pod access rules.`,
+        { cause },
+      );
+    }
+    const features = {
+      ...storage.features,
+      accessControl: {
+        state: "available" as const,
+        evidence: "pod-access:readGrants(wac)",
+        detail: { model: "wac" as const },
+      },
+    };
+    return publishRepository({ ...storage, features }, fetch, owner, options.onWarning);
+  }
   const { storage } = await createPodClient({ fetch, storage: root });
-  return publishRepository(storage, fetch, owner);
+  return publishRepository(storage, fetch, owner, options?.onWarning);
 }

@@ -44,23 +44,34 @@ the SDK. A caller that already knows the account protocol may supply `{protocol:
 this uses the SDK's public Solid backend without guessing from HTTP errors or hostnames.
 The suite uses this explicit path because its PodSession contract is Solid, including
 the demo pod, which has no discovery-description link. `publishRepository(storage, fetch,
-owner)` accepts an existing SDK storage client for integration and tests.
+owner, onWarning?)` accepts an existing SDK storage client for integration and tests.
+`onWarning(message)` reports non-fatal Type Index and retained-output warnings (defaults
+to `console.warn`); `openPublishRepository` accepts it in `options`. The suite routes
+these notices through its global warning toast.
 
 Sources live at `publish/<site>/site.ttl` and `publish/<site>/pages/<id>.ttl`. The
 repository uses pod-access roles to install owner-only own permissions on every source
 folder and document before writing source bytes. New files start as empty placeholders.
 Permissions are sealed only on creation;
 listing and ordinary saves preserve any sharing the owner later adds. Publication and
-repair verify raw WAC policies on the source folders and documents and refuse shared,
-unreadable or unverifiable sources without rewriting their ACLs.
+repair use pod-access's `checkOwnerOnly` on source containers, the site and rendered
+pages (including a draft selected for publication). Unrelated drafts do not block a
+rebuild. Inherited WAC ACLs are accepted; untyped rules, stale ACL reads and all other
+uncertainty fail closed, naming the resource and refusal reasons. This privacy check
+does not require owner Control; actual permission edits retain the roles API's lockout
+protection. The client must be rooted at the pod's real pim:Storage root.
 It registers WebSite instances in the private Type Index through pod-type-index; private
 index/preferences creation is sealed before RDF is written. It preserves the public
-profile's audience. Only generated entities read/write the website and page RDF.
+profile's audience. A registration failure returns the saved site with a warning;
+failed index discovery falls back to the source folder, while expired authentication
+asks the user to reconnect. Only generated entities read/write the website and page RDF.
 
 `listSites()` and `listPages(site)` return `{ items, invalid }`, where each invalid entry
 contains its source `url`. Malformed, invalid (including abandoned empty creations) or
 unreadable members are omitted from `items` and reported without hiding valid documents.
-Missing members are skipped; container and transient transport failures still surface.
+Missing members are skipped; missing/weak document ETags go into `invalid`.
+Authentication failures ask the user to reconnect; container and transient transport
+failures still surface.
 
 Public output is `public/sites/<site>/index.html`, `<slug>/index.html` and `feed.xml`.
 Publishing requires first-time confirmation, saves the owner-only RDF source, rebuilds
@@ -72,6 +83,10 @@ refreshes all remaining public navigation and RSS; removing the last published p
 also removes the index/feed, empty slug folders and the site's public grant, and clears
 the public URL. Rebuild/repair removes stale validated slug folders strictly within the
 site's own public container, so interrupted renames and unpublishes can be repaired.
+It deletes only its `index.html` in a stale slug folder. If extra files prevent deleting
+the folder, it leaves them, installs owner-only folder permissions and warns with the
+folder URL. Rebuilds continue; reusing that slug restores its public folder grant.
+A failed permission change still surfaces rather than claiming the folder is private.
 It cannot recall reader copies.
 
 All writes/deletes use observed strong ETags; stale saves are refused. Saved source

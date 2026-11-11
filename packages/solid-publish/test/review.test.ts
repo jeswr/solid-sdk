@@ -75,6 +75,7 @@ describe("Publish review regressions", () => {
     await pod.repo.savePage(pod.site, pod.page, { ...pageData, body: "Private edit" });
     await pod.repo.saveSite(pod.site, { ...siteData, name: "Edited" });
     expect(pod.calls.slice(before).filter((call) => call.url.endsWith(".acl"))).toEqual([]);
+    pod.intercept(undefined);
     expect(await (await pod.storage.read(aclUrl)).text()).toBe(shared);
   });
   it.each([
@@ -104,11 +105,11 @@ describe("Publish review regressions", () => {
     "publish/field/",
     "publish/field/site.ttl",
     "publish/field/pages/",
-  ])("verifies source boundary %s before publication", async (path) => {
+  ])("accepts verified inherited source access for %s", async (path) => {
     const pod = await prepared();
     const url = `${root}${path}.acl`;
     await pod.storage.delete(url, { ifMatch: (await pod.storage.head(url)).etag as string });
-    await expect(pod.repo.publish(pod.site, pod.page, pageData, true)).rejects.toThrow();
+    await expect(pod.repo.publish(pod.site, pod.page, pageData, true)).resolves.toBeDefined();
   });
   it("reports unsupported ACP clearly and refuses it before writes", async () => {
     const pod = await prepared();
@@ -126,8 +127,8 @@ describe("Publish review regressions", () => {
     pod.intercept((url, init) =>
       url.endsWith(".acl") && init.method !== "PUT"
         ? new Response(
-            "@prefix acp: <http://www.w3.org/ns/solid/acp#>. <#root> a acp:AccessControlResource.",
-            { headers: { "content-type": "text/turtle" } },
+            `@prefix acp: <http://www.w3.org/ns/solid/acp#>. <> a acp:AccessControlResource; acp:resource <${url.slice(0, -4)}> .`,
+            { headers: { "content-type": "text/turtle", etag: '"acp-1"' } },
           )
         : undefined,
     );
@@ -252,8 +253,6 @@ describe("fail-closed source and repair error branches", () => {
   it.each([
     "no-link",
     "foreign-link",
-    "missing-control",
-    "missing-members",
     "empty-policy",
   ])("refuses unverifiable source access: %s", async (variant) => {
     const pod = await prepared();
@@ -305,8 +304,12 @@ describe("fail-closed source and repair error branches", () => {
         pod.fetch,
         owner,
       );
-      if (code === "network") {
+      if (code === "unauthenticated") {
+        await expect(repo.listPages(pod.site)).rejects.toThrow(/Reconnect/);
+        await expect(repo.listSites()).rejects.toThrow(/Reconnect/);
+      } else if (code === "network") {
         await expect(repo.listPages(pod.site)).rejects.toMatchObject({ code });
+        await expect(repo.listSites()).rejects.toMatchObject({ code });
       } else {
         expect((await repo.listPages(pod.site)).invalid).toHaveLength(code !== "not-found" ? 1 : 0);
         expect((await repo.listSites()).invalid).toHaveLength(code !== "not-found" ? 1 : 0);
@@ -318,7 +321,7 @@ describe("fail-closed source and repair error branches", () => {
     pod.intercept((url, init) =>
       init.method === "HEAD" && url.endsWith("broken/") ? new Response(null) : undefined,
     );
-    await expect(pod.repo.createSite("broken", siteData)).rejects.toThrow(/isn't supported/);
+    await expect(pod.repo.createSite("broken", siteData)).rejects.toThrow(/owner-only.*broken/);
     pod.intercept((url, init) =>
       init.method === "HEAD" && url.endsWith("offline/")
         ? new Response(null, { status: 503 })

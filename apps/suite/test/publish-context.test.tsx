@@ -159,6 +159,22 @@ describe("Publish React session context", () => {
     expect(confirm).toHaveBeenCalledWith(expect.stringContaining("still saving"));
     document.body.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     expect(confirm).toHaveBeenCalledTimes(1);
+    for (const init of [
+      { ctrlKey: true },
+      { metaKey: true },
+      { shiftKey: true },
+      { altKey: true },
+      { button: 1 },
+    ]) {
+      anchor.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, ...init }));
+    }
+    anchor.target = "_blank";
+    anchor.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    anchor.target = "_self";
+    anchor.href = `${window.location.href.split("#")[0]}#preview`;
+    anchor.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    expect(confirm).toHaveBeenCalledTimes(1);
+
     anchor.remove();
     confirm.mockRestore();
     await act(async () => root.render(<p>Another route</p>));
@@ -166,6 +182,49 @@ describe("Publish React session context", () => {
     finish();
     expect(await saved).toBe(true);
     expect(window.dispatchEvent(new Event("beforeunload", { cancelable: true }))).toBe(true);
+  });
+  it("sends a failed write to the global toast after navigating to another route", async () => {
+    const errorToast = vi.spyOn(toast, "error").mockReturnValue("late-error");
+    const repo = repository();
+    let fail!: (cause: Error) => void;
+    repo.createSite = vi.fn(
+      () =>
+        new Promise<StoredSite>((_resolve, reject) => {
+          fail = reject;
+        }),
+    );
+    vi.mocked(connectPublish).mockResolvedValue(repo);
+    let workspace!: ReturnType<typeof usePublish>["workspace"];
+    function Capture() {
+      workspace = usePublish().workspace;
+      return <p>ready</p>;
+    }
+    await act(async () =>
+      root.render(
+        <PublishProvider session={session} fallback={fallback}>
+          <Capture />
+        </PublishProvider>,
+      ),
+    );
+    const now = new Date();
+    let saving!: Promise<boolean>;
+    await act(async () => {
+      saving = workspace.createSite("late", {
+        name: "Late",
+        description: "",
+        author: "Writer",
+        theme: "paper",
+        inLanguage: "en",
+        created: now,
+        modified: now,
+      }).saved;
+    });
+    await act(async () => root.render(<p>Another route</p>));
+    fail(new PublicationError("Your site could not be saved."));
+    expect(await saving).toBe(false);
+    expect(host.textContent).toBe("Another route");
+    expect(errorToast).toHaveBeenCalledWith("Your site could not be saved.");
+    errorToast.mockRestore();
   });
   it("never shows a late connection from an earlier account", async () => {
     let finish!: (repo: PublishRepository) => void;

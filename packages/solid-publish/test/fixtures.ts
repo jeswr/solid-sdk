@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
 import { type StorageClient, StorageError } from "@jeswr/storage-client";
 import { createMemoryStorage } from "@jeswr/storage-client/memory";
+import { createSolidBackend } from "@jeswr/storage-client/solid";
 import type { PageData, SiteData } from "../src/index.js";
 export const root = "https://pod.example/";
 export const owner = `${root}profile/card#me`;
@@ -26,14 +27,14 @@ export const pageData: PageData = {
 };
 /** Actual storage-client ETags and RDF; only the access-document HEAD seam is synthetic. */
 export async function podFixture() {
-  const storage = createMemoryStorage({ root, protocol: "solid" });
-  await storage.create(root, null, { name: "profile", kind: "container" });
-  await storage.create(
+  const backing = createMemoryStorage({ root, protocol: "solid" });
+  await backing.create(root, null, { name: "profile", kind: "container" });
+  await backing.create(
     `${root}profile/`,
     `@prefix pim: <http://www.w3.org/ns/pim/space#>. <${owner}> pim:storage <${root}>.`,
     { name: "card", contentType: "text/turtle" },
   );
-  await storage.create(
+  await backing.create(
     root,
     `@prefix acl: <http://www.w3.org/ns/auth/acl#>. <#owner> a acl:Authorization; acl:agent <${owner}>; acl:accessTo <${root}>; acl:default <${root}>; acl:mode acl:Read, acl:Write, acl:Control.`,
     { name: ".acl", contentType: "text/turtle" },
@@ -49,20 +50,20 @@ export async function podFixture() {
     try {
       const headers = new Headers(init.headers);
       if (method === "PUT") {
-        const existing = await storage.head(url).catch((error: unknown) => {
+        const existing = await backing.head(url).catch((error: unknown) => {
           if (error instanceof StorageError && error.code === "not-found") return null;
           throw error;
         });
         if (existing) {
           if (headers.get("if-match") !== existing.etag) return new Response(null, { status: 412 });
-          await storage.write(url, String(init.body), {
+          await backing.write(url, String(init.body), {
             ifMatch: existing.etag as string,
             contentType: headers.get("content-type") ?? "text/turtle",
           });
         } else {
           if (headers.get("if-none-match") !== "*") return new Response(null, { status: 412 });
           const parent = new URL(url.endsWith("/") ? "../" : "./", url).href;
-          await storage.create(parent, String(init.body), {
+          await backing.create(parent, String(init.body), {
             name: url.slice(parent.length).replace(/\/$/, ""),
             kind: url.endsWith("/") ? "container" : "resource",
             contentType: headers.get("content-type") ?? "text/turtle",
@@ -70,7 +71,7 @@ export async function podFixture() {
         }
         return new Response(null, { status: 204 });
       }
-      const result = method === "HEAD" ? await storage.head(url) : await storage.read(url);
+      const result = method === "HEAD" ? await backing.head(url) : await backing.read(url);
       const responseHeaders = new Headers({
         "content-type": result.contentType ?? "text/turtle",
         etag: result.etag as string,
@@ -89,6 +90,21 @@ export async function podFixture() {
       if (error instanceof StorageError) return new Response(null, { status: error.status ?? 500 });
       throw error;
     }
+  };
+  const backend = createSolidBackend({ fetch, root });
+  const storage = {
+    ...backing,
+    head: backend.head,
+    read: backend.read,
+    readRdf: backend.readRdf,
+    features: {
+      ...backing.features,
+      accessControl: {
+        state: "available" as const,
+        evidence: "fixture",
+        detail: { model: "wac" as const },
+      },
+    },
   };
   return {
     storage,

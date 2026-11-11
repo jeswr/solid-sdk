@@ -220,7 +220,7 @@ describe("pod source, Type Index and public artifacts", () => {
     );
     const repo = publishRepository(pod.storage, pod.fetch, owner);
     const site = await repo.createSite("field", siteData);
-    await expect(noVersions.listSites()).rejects.toThrow(/safe version/);
+    expect(await noVersions.listSites()).toEqual({ items: [], invalid: [{ url: site.url }] });
     const weakVersions = publishRepository(
       pod.wrap({
         readRdf: async (url, options) => ({
@@ -231,7 +231,7 @@ describe("pod source, Type Index and public artifacts", () => {
       pod.fetch,
       owner,
     );
-    await expect(weakVersions.listSites()).rejects.toThrow(/safe version/);
+    expect(await weakVersions.listSites()).toEqual({ items: [], invalid: [{ url: site.url }] });
     await expect(repo.listPages(site)).resolves.toEqual({ items: [], invalid: [] });
     await pod.storage.create(`${root}publish/`, "ignored", {
       name: "not-a-site.txt",

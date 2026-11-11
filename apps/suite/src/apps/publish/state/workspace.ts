@@ -94,8 +94,32 @@ export function createPublishWorkspace(
     event.returnValue = "";
   }
   function beforeNavigate(event: MouseEvent) {
-    const anchor = event.target instanceof Element ? event.target.closest("a[href]") : null;
-    if (anchor && !navigation?.confirm("Changes are still saving to your pod. Leave this page?")) {
+    if (
+      event.defaultPrevented ||
+      event.button !== 0 ||
+      event.ctrlKey ||
+      event.metaKey ||
+      event.shiftKey ||
+      event.altKey
+    )
+      return;
+    const anchor =
+      event.target instanceof Element ? event.target.closest<HTMLAnchorElement>("a[href]") : null;
+    if (
+      !anchor ||
+      anchor.hasAttribute("download") ||
+      (anchor.target && anchor.target.toLowerCase() !== "_self")
+    )
+      return;
+    const target = new URL(anchor.href);
+    const current = new URL(navigation?.location.href ?? anchor.href);
+    if (
+      target.origin === current.origin &&
+      target.pathname === current.pathname &&
+      target.search === current.search
+    )
+      return;
+    if (!navigation?.confirm("Changes are still saving to your pod. Leave this page?")) {
       event.preventDefault();
       event.stopImmediatePropagation();
     }
@@ -124,10 +148,9 @@ export function createPublishWorkspace(
           error instanceof PublicationError || error instanceof TypeError
             ? error.message
             : "Couldn't save this change. Your editor draft is still on this device. Reload before trying again.";
-        if (active) {
-          failure(message);
-          snapshot = { ...snapshot, error: message };
-        }
+        // The provider supplies the shell's global toast, which survives route unmount.
+        failure(message);
+        if (active) snapshot = { ...snapshot, error: message };
         return false;
       } finally {
         pending = pending.filter((item) => item.id !== id);

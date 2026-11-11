@@ -192,7 +192,7 @@ describe("Publish optimistic workspace", () => {
       workspace.getSnapshot().pages[site.url]?.find((p) => p.url === first.url)?.data.status,
     ).toBe("draft");
   });
-  it("does not notify an account about a late failed write after disposal", async () => {
+  it("reports a late failed write after disposal through the global failure callback", async () => {
     const { workspace, repo, first, site, failure } = fixture();
     await workspace.load();
     const slow = deferred<StoredPage>();
@@ -202,7 +202,7 @@ describe("Publish optimistic workspace", () => {
     workspace.dispose();
     slow.reject(new Error("late failure"));
     expect(await saving).toBe(false);
-    expect(failure).not.toHaveBeenCalled();
+    expect(failure).toHaveBeenCalledWith(expect.stringContaining("Couldn't save"));
   });
   it("finishes queued dependent writes after disposal without notifying unmounted listeners", async () => {
     const { repo, workspace } = fixture();
