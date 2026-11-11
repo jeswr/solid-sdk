@@ -52,6 +52,13 @@ reads; `logout()` fences immediately then purges both bodies and metadata, prese
 outbox writes. On switches and all logout paths, call/await this purge; coordinate
 replacement adapters with pending cleanup. Surface blocked/error purge outcomes.
 
+Commit response bytes and metadata atomically after the live session/resource fence.
+Notification revisions affect only the resource, membership targets and evicted cursor
+pages; matching-ETag no-ops do not fence reads. Network-first/forced read completion uses
+`revalidated` for initial fills, unchanged representations and repeated uncacheable reads.
+Emit `updated` for a changed cached representation or eviction, and for real notifications,
+so an `updated` subscriber can reread without feeding back into another invalidation.
+
 Bound each persisted body to 25 MiB using declared size and a bounded reader; leave
 the caller stream available on overflow. Never await cancellation of its tee branch.
 Store bodies beside metadata in the same IndexedDB database for worker and page.

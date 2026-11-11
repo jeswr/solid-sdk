@@ -818,53 +818,6 @@ declare function cacheNameForWebId(webId: string | undefined): string;
 declare function isScopeChange(configured: boolean, current: string | undefined, next: string | undefined): boolean;
 
 /**
- * IndexedDB metadata store — the client analogue of QLever: it makes the cache
- * queryable + revalidatable offline. Holds {@link CacheMetadata} records keyed
- * by the composite (url, varyKey). Response bytes live in the companion `responses` store in this same database.
- *
- * The store is scoped per identity (`solid-offline:<webId-hash>`, §7) via the
- * shared {@link dbNameForWebId} (see `scope.ts`) so logout-purge (P5) can drop
- * exactly one identity's DB.
- */
-
-/** A thin, promise-based handle over the metadata object store. */
-declare class MetadataStore {
-    private readonly db;
-    private constructor();
-    /** Shared pod-body store. No Request or request headers are persisted. */
-    get bytes(): {
-        match: (request: Request) => Promise<Response | undefined>;
-        put: (request: Request, response: Response) => Promise<void>;
-        delete: (request: Request) => Promise<boolean>;
-    };
-    private readonly byteCache;
-    static open(webId: string | undefined, factory?: IDBFactory): Promise<MetadataStore>;
-    /** For tests / advanced callers: open against an explicit DB name. */
-    static openNamed(dbName: string, factory?: IDBFactory): Promise<MetadataStore>;
-    get(key: string): Promise<CacheMetadata | undefined>;
-    put(record: CacheMetadata): Promise<void>;
-    delete(key: string): Promise<void>;
-    /** All metadata entries for a given URL (across varyKeys). */
-    getByUrl(url: string): Promise<CacheMetadata[]>;
-    /**
-     * All metadata entries (every (url, varyKey)). Used by P3's reconnect
-     * ETag-resync sweep and disconnected `If-None-Match` polling to enumerate the
-     * warmed set. Cheap relative to the network it saves; the warm budget bounds it.
-     */
-    getAll(): Promise<CacheMetadata[]>;
-    /**
-     * Record the last notification `state` (ETag carried in a change frame) for a
-     * resource, across every cached variant of that URL. Lets the SW short-circuit
-     * a self-caused change (`frame.state === lastState`) without a network round-trip.
-     */
-    setLastState(url: string, state: string): Promise<void>;
-    /** Touch fetchedAt (used on a 304 — confirms provisional bytes are still fresh). */
-    touch(key: string, at?: number): Promise<void>;
-    clear(): Promise<void>;
-    close(): void;
-}
-
-/**
  * Stale-while-revalidate engine for §2.
  *
  * This is the heart of P1 and is written against small injected interfaces
@@ -895,6 +848,58 @@ interface Broadcaster {
 }
 
 /**
+ * IndexedDB metadata store — the client analogue of QLever: it makes the cache
+ * queryable + revalidatable offline. Holds {@link CacheMetadata} records keyed
+ * by the composite (url, varyKey). Response bytes live in the companion `responses` store in this same database.
+ *
+ * The store is scoped per identity (`solid-offline:<webId-hash>`, §7) via the
+ * shared {@link dbNameForWebId} (see `scope.ts`) so logout-purge (P5) can drop
+ * exactly one identity's DB.
+ */
+
+/** A thin, promise-based handle over the metadata object store. */
+declare class MetadataStore {
+    private readonly db;
+    private readonly check;
+    private constructor();
+    /** Share the connection with a live session/resource fence checked at each commit. */
+    withFence(check: () => void): MetadataStore;
+    private transaction;
+    /** Buffer within the body budget, then atomically replace bytes and their metadata. */
+    replace(request: Request, response: Response, record: CacheMetadata): Promise<void>;
+    private byteRecord;
+    /** Shared pod-body store. No Request or request headers are persisted. */
+    get bytes(): ByteCache & {
+        replace?: MetadataStore['replace'];
+    };
+    private readonly byteCache;
+    static open(webId: string | undefined, factory?: IDBFactory): Promise<MetadataStore>;
+    /** For tests / advanced callers: open against an explicit DB name. */
+    static openNamed(dbName: string, factory?: IDBFactory): Promise<MetadataStore>;
+    get(key: string): Promise<CacheMetadata | undefined>;
+    put(record: CacheMetadata): Promise<void>;
+    delete(key: string): Promise<void>;
+    /** All metadata entries for a given URL (across varyKeys). */
+    getByUrl(url: string): Promise<CacheMetadata[]>;
+    /**
+     * All metadata entries (every (url, varyKey)). Used by P3's reconnect
+     * ETag-resync sweep and disconnected `If-None-Match` polling to enumerate the
+     * warmed set. Cheap relative to the network it saves; the warm budget bounds it.
+     */
+    getAll(): Promise<CacheMetadata[]>;
+    /**
+     * Record the last notification `state` (ETag carried in a change frame) for a
+     * resource, across every cached variant of that URL. Lets the SW short-circuit
+     * a self-caused change (`frame.state === lastState`) without a network round-trip.
+     */
+    setLastState(url: string, state: string): Promise<void>;
+    /** Touch fetchedAt (used on a 304 — confirms provisional bytes are still fresh). */
+    touch(key: string, at?: number): Promise<void>;
+    clear(): Promise<void>;
+    close(): void;
+}
+
+/**
  * StorageClient-driven invalidation in the credential-free worker. The page
  * forwards normalized pod-notifications changes; this pipeline revalidates or
  * purges cached data and broadcasts correlated, metadata-free lifecycle events.
@@ -909,6 +914,8 @@ interface InvalidateDeps {
     storage: StorageClient;
     broadcast: Broadcaster;
     now(): number;
+    /** Fence pending reads of an actionable resource or membership target before I/O. */
+    beforeChange?(url: string): void;
 }
 /** Outcome of handling a single notification frame — returned for tests + observability. */
 type InvalidateOutcome = {

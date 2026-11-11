@@ -147,6 +147,70 @@ it("relays adapter updates to the session subscribers, and keeps Strict Mode cle
 });
 
 it.each([
+  "no-store",
+  "private",
+  "no-etag",
+  "unchanged-etag",
+])("does not feed %s read completions back into subscribers that reread", async (policy) => {
+  const value = accounts();
+  vi.mocked(value.fetch).mockImplementation(
+    async () =>
+      new Response("same bytes", {
+        headers:
+          policy === "no-etag"
+            ? {}
+            : policy === "unchanged-etag"
+              ? { etag: "v1" }
+              : { "cache-control": policy },
+      }),
+  );
+  await mount(tree(value));
+  const pod = session();
+  const reads: Promise<string>[] = [];
+  const listener = vi.fn((changed: string) => {
+    // The bound makes a broken relay terminate deterministically, while still
+    // performing real subscriber reads through the provider and IndexedDB.
+    if (reads.length < 5) reads.push(pod.fetch(changed).then((response) => response.text()));
+  });
+  const stop = pod.subscribe(listener);
+  try {
+    expect(await (await pod.fetch(url)).text()).toBe("same bytes");
+    const options = vi.mocked(createPageCache).mock.calls.at(-1)?.[0];
+    // A real resource-change event must still prompt a read.
+    options?.onEvent?.({ event: "updated", url });
+    for (let index = 0; index < reads.length; index++) await reads[index];
+    expect(listener).toHaveBeenCalledOnce();
+    expect(value.fetch).toHaveBeenCalledTimes(2);
+  } finally {
+    stop();
+  }
+});
+
+it("relays a changed body once even if the ETag is unchanged and the subscriber rereads", async () => {
+  const value = accounts();
+  await mount(tree(value));
+  const pod = session();
+  await pod.fetch(url);
+  vi.mocked(value.fetch).mockImplementation(
+    async () => new Response("changed body", { headers: { etag: "v1" } }),
+  );
+  const reads: Promise<string>[] = [];
+  const listener = vi.fn((changed: string) => {
+    if (reads.length < 5) reads.push(pod.fetch(changed).then((response) => response.text()));
+  });
+  const stop = pod.subscribe(listener);
+  try {
+    expect(await (await pod.fetch(url)).text()).toBe("changed body");
+    for (let index = 0; index < reads.length; index++)
+      expect(await reads[index]).toBe("changed body");
+    expect(listener).toHaveBeenCalledOnce();
+    expect(value.fetch).toHaveBeenCalledTimes(3);
+  } finally {
+    stop();
+  }
+});
+
+it.each([
   "switch",
   "switch-back",
   "sign-out",

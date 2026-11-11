@@ -43,7 +43,11 @@ export interface PageCache {
 export function createPageCache(options: PageCacheOptions): PageCache {
   if (!options.webId) throw new Error('Offline cache requires an account');
   let closed = false;
-  let revision = 0;
+  const revisions = new Map<string, { value: number; readers: number }>();
+  const beforeChange = (url: string) => {
+    const revision = revisions.get(url);
+    if (revision) revision.value++;
+  };
   let opening: Promise<MetadataStore> | undefined;
   let subscription: Subscription | undefined;
   let starting: Promise<void> | undefined;
@@ -125,10 +129,10 @@ export function createPageCache(options: PageCacheOptions): PageCache {
       transport,
     );
   const invalidationDeps = async () => {
-    const store = await meta();
+    const store = (await meta()).withFence(check);
     const client = await storage();
     check();
-    return { cache: store.bytes, meta: store, storage: client, broadcast, now };
+    return { cache: store.bytes, meta: store, storage: client, broadcast, now, beforeChange };
   };
   const adapter: PageCache = {
     fetch: async (input, init) => {
@@ -136,75 +140,82 @@ export function createPageCache(options: PageCacheOptions): PageCache {
       const request = new Request(input, init);
       request.signal.throwIfAborted();
       if (!isPodCacheRequest(request, boundary.isWithinStorage)) return transport(request);
-      const captured = revision;
+      const revision = revisions.get(request.url) ?? { value: 0, readers: 0 };
+      revisions.set(request.url, revision);
+      revision.readers++;
+      const captured = revision.value;
       const current = () => {
         check();
         request.signal.throwIfAborted();
-        if (captured !== revision) throw new Error('Offline cache changed during read');
+        if (captured !== revision.value) throw new Error('Offline cache changed during read');
       };
-      let store: MetadataStore;
       try {
-        store = await meta();
-      } catch {
-        current();
-        const response = await transport(request);
-        return request.method === 'GET' ? withCacheProvenance(response, 'miss') : response;
-      }
-      // Every operation checks after awaiting: disk and network replies are as
-      // untrusted as a late authenticated response after a live account switch.
-      const guardedMeta = new Proxy(store, {
-        get(target, key) {
-          const value = Reflect.get(target, key);
-          if (typeof value !== 'function') return value;
-          return async (...args: unknown[]) => {
-            current();
-            const result = await value.apply(target, args);
-            current();
-            return result;
-          };
-        },
-      });
-      let network: Response | undefined;
-      let response: Response;
-      try {
-        const result = await handleFetch(request, {
-          cache: store.bytes,
-          meta: guardedMeta,
-          fetch: async (input, init) => {
-            current();
-            const response = await transport(input, init);
-            current();
-            network = response;
-            return response;
+        let store: MetadataStore;
+        try {
+          store = await meta();
+        } catch {
+          current();
+          const response = await transport(request);
+          return request.method === 'GET' ? withCacheProvenance(response, 'miss') : response;
+        }
+        // Every operation checks after awaiting: disk and network replies are as
+        // untrusted as a late authenticated response after a live account switch.
+        const guardedMeta = new Proxy(store.withFence(current), {
+          get(target, key) {
+            const value = Reflect.get(target, key);
+            if (typeof value !== 'function') return value;
+            return async (...args: unknown[]) => {
+              current();
+              const result = await value.apply(target, args);
+              current();
+              return result;
+            };
           },
-          broadcast,
-          now,
-          isOnline,
-          strategy: 'network-first',
         });
-        response = result.response;
-      } catch (error) {
+        let network: Response | undefined;
+        let response: Response;
+        try {
+          const result = await handleFetch(request, {
+            cache: guardedMeta.bytes,
+            meta: guardedMeta,
+            fetch: async (input, init) => {
+              current();
+              const response = await transport(input, init);
+              current();
+              network = response;
+              return response;
+            },
+            broadcast,
+            now,
+            isOnline,
+            strategy: 'network-first',
+          });
+          response = result.response;
+        } catch (error) {
+          current();
+          // Cache failures cannot discard a complete authoritative network answer.
+          // A 304 requires intact bytes and cannot use this escape path.
+          if (!network || network.status === 304) throw error;
+          response = withCacheProvenance(network, 'miss');
+        }
         current();
-        // Cache failures cannot discard a complete authoritative network answer.
-        // A 304 requires intact bytes and cannot use this escape path.
-        if (!network || network.status === 304) throw error;
-        response = withCacheProvenance(network, 'miss');
+        void watch(request.url);
+        return response;
+      } finally {
+        if (--revision.readers === 0) revisions.delete(request.url);
       }
-      current();
-      void watch(request.url);
-      return response;
     },
     notify: async (frame) => {
       check();
-      ++revision;
       // Local Delete eviction must work without discovery or a network.
-      const store = await meta();
+      const store = (await meta()).withFence(check);
       let discovered: ReturnType<typeof storage> | undefined;
       const deps = {
         cache: store.bytes,
         meta: store,
         broadcast,
         now,
+        beforeChange,
         storage: {
           ...boundary,
           read: async (...args: Parameters<typeof boundary.read>) => {

@@ -109,6 +109,10 @@ This driver needs IndexedDB and no service worker or Cache API. It uses the work
 ETag sweep and `purgeForWebId`; it does not implement a second cache policy.
 Native reads are network-first with conditional ETag validation. The existing worker
 keeps its default stale-while-revalidate delivery mode over the same engine and store.
+Both drivers commit response bytes and their metadata in one IndexedDB transaction.
+The page adapter checks the live session and resource revision after buffering and before
+that transaction. Notifications fence their resource and membership targets, including cached
+cursor pages; unrelated resources and matching-ETag no-ops leave pending reads valid.
 Offline or a transport TypeError may return provisional bytes marked
 `X-Solid-Offline-Cache: stale` and `X-Offline: stale`. HTTP failures, cancellation,
 session errors and explicit freshness requests never become stale successes.
@@ -240,7 +244,7 @@ by exactly one terminal message:
 | Event | Meaning | Status for a tracked URL |
 | --- | --- | --- |
 | `revalidating` | Revalidation started | `pending` |
-| `revalidated` | A conditional 304 or matching sweep HEAD confirmed the existing bytes | `fresh`, preserving an unread `updated` |
+| `revalidated` | A conditional 304, matching sweep HEAD, or completed authoritative read without a cached representation change | `fresh`, preserving an unread `updated` |
 | `updated` | Replacement, deletion, revocation, or a purge completed | `updated`; re-read |
 | `revalidate-failed` | Network/offline, storage, or non-authoritative HTTP failure | Retain settled freshness, including manual marks |
 
@@ -252,6 +256,12 @@ Direct delete purges also emit balanced `revalidating` / `updated` events (or
 `revalidate-failed` if the purge fails), without fetching. Offline cache hits,
 ETag notification short-circuits, and skipped SWR validations emit no lifecycle events.
 An unsolicited 304 on an unconditional listing refresh fails confirmation.
+Network-first and forced reads emit `updated` only when a previously cached representation
+changes (ETag, status, content type or bounded body comparison) or is evicted. Initial cache
+fills and repeated uncacheable reads complete with `revalidated`, so subscribers can reread
+on `updated` without creating a refresh loop. Real notifications retain their change events.
+Custom invalidation drivers can supply `InvalidateDeps.beforeChange(url)` to fence pending
+reads before resource, membership or cursor-page invalidation; ETag no-ops skip that callback.
 
 The status surface updates only URLs already tracked by `markFresh`, `markStale`, or
 `markPending`. Parallel observed attempts keep a URL pending until all settle. Attempt IDs

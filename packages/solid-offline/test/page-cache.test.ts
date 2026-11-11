@@ -15,6 +15,7 @@ import {
 import { MetadataStore } from '../src/metadata-store.js';
 import { createPageCache, type PageCache } from '../src/page-cache.js';
 import { dbNameForWebId, scopeHash } from '../src/scope.js';
+import type { OfflineEvent } from '../src/types.js';
 
 vi.mock('@jeswr/storage-client', async (original) => ({
   ...(await original<typeof import('@jeswr/storage-client')>()),
@@ -36,6 +37,7 @@ function fixture(idb = new IDBFactory(), identity = webId) {
   let online = true;
   let live = true;
   let at = 100;
+  const events: OfflineEvent[] = [];
   const fetch = vi.fn<typeof globalThis.fetch>(
     async () => new Response('body', { headers: { etag: 'v1', 'content-type': 'text/turtle' } }),
   );
@@ -48,6 +50,7 @@ function fixture(idb = new IDBFactory(), identity = webId) {
       indexedDB: idb,
       isOnline: () => online,
       now: () => at,
+      onEvent: (event) => events.push(event),
     });
     cleanups.push(cache);
     return cache;
@@ -55,6 +58,7 @@ function fixture(idb = new IDBFactory(), identity = webId) {
   return {
     idb,
     fetch,
+    events,
     make,
     cache: make(),
     offline: () => {
@@ -428,10 +432,132 @@ it('fences an old online read after a notification while it waits for the networ
   await expect(h.cache.fetch(url)).rejects.toThrow('Offline');
 });
 
+it('cannot overwrite newer validated bytes when an obsolete body finishes buffering', async () => {
+  const h = fixture();
+  await h.cache.fetch(url);
+  const buffering = deferred<void>();
+  let stream!: ReadableStreamDefaultController<Uint8Array>;
+  h.fetch.mockResolvedValueOnce(
+    new Response(
+      new ReadableStream<Uint8Array>(
+        {
+          start(controller) {
+            stream = controller;
+          },
+          pull() {
+            buffering.resolve();
+          },
+        },
+        { highWaterMark: 0 },
+      ),
+      { headers: { etag: 'obsolete' } },
+    ),
+  );
+  const pending = h.cache.fetch(url);
+  const rejected = expect(pending).rejects.toThrow('cache changed');
+  await buffering.promise;
+  await h.cache.notify({ type: 'Delete', object: url });
+  h.fetch.mockResolvedValueOnce(new Response('new bytes', { headers: { etag: 'v2' } }));
+  expect(await (await h.cache.fetch(url)).text()).toBe('new bytes');
+  stream.enqueue(new TextEncoder().encode('obsolete bytes'));
+  stream.close();
+  await rejected;
+  h.fetch.mockImplementationOnce(async (input, init) => {
+    expect(new Request(input, init).headers.get('if-none-match')).toBe('v2');
+    return new Response(null, { status: 304 });
+  });
+  const confirmed = await h.cache.fetch(url);
+  expect(cacheProvenance(confirmed)).toBe('hit');
+  expect(await confirmed.text()).toBe('new bytes');
+});
+
+it.each([
+  undefined,
+  'v1',
+])('emits changes only for a changed cached representation (ETag %s)', async (etag) => {
+  const h = fixture();
+  const respond = (body: string, validator = etag) =>
+    new Response(body, { headers: validator ? { etag: validator } : {} });
+  h.fetch.mockImplementation(async () => respond('same'));
+  await h.cache.fetch(url);
+  await h.cache.fetch(url);
+  expect(h.events.filter((event) => event.event === 'updated')).toEqual([]);
+  h.fetch.mockImplementation(async () => respond('changed'));
+  await h.cache.fetch(url);
+  expect(h.events.filter((event) => event.event === 'updated')).toHaveLength(1);
+  await h.cache.fetch(url);
+  expect(h.events.filter((event) => event.event === 'updated')).toHaveLength(1);
+  h.fetch.mockImplementation(async () => respond('changed', 'v2'));
+  await h.cache.fetch(url);
+  expect(h.events.filter((event) => event.event === 'updated')).toHaveLength(2);
+});
+
+it('evicts prior bytes even when comparing a fresh body exceeds the cache budget', async () => {
+  const h = fixture();
+  await h.cache.fetch(url);
+  h.fetch.mockResolvedValueOnce(
+    new Response('fresh', {
+      headers: {
+        etag: 'v1',
+        'content-type': 'text/turtle',
+        'content-length': String(26 * 1024 * 1024),
+      },
+    }),
+  );
+  expect(await (await h.cache.fetch(url)).text()).toBe('fresh');
+  h.offline();
+  h.fetch.mockRejectedValue(new TypeError('Offline'));
+  await expect(h.cache.fetch(url)).rejects.toThrow('Offline');
+});
+
+it.each([
+  { type: 'Update', object: `${root}unrelated`, state: 'v2' },
+  { type: 'Delete', object: `${root}unrelated` },
+  { type: 'Update', object: url, state: 'v1' },
+  { type: 'Delete', object: 'https://foreign.example/doc' },
+] as const)('keeps a pending read valid during an unrelated or no-op notification: %j', async (frame) => {
+  const h = fixture();
+  await h.cache.fetch(url);
+  await h.cache.fetch(`${root}unrelated`);
+  const late = deferred<Response>();
+  h.fetch.mockImplementationOnce(() => late.promise);
+  const pending = h.cache.fetch(url);
+  const settled = pending.then((response) => response.text());
+  await vi.waitFor(() => expect(h.fetch).toHaveBeenCalledTimes(3));
+  await h.cache.notify(frame);
+  late.resolve(new Response('current bytes', { headers: { etag: 'v2' } }));
+  await expect(settled).resolves.toBe('current bytes');
+});
+
+it.each([
+  'Add',
+  'Remove',
+  'Create',
+  'Delete',
+  'Move',
+] as const)('fences a pending membership read on %s even when the member is uncached', async (type) => {
+  const h = fixture();
+  await h.cache.fetch(root);
+  const late = deferred<Response>();
+  h.fetch.mockImplementationOnce(() => late.promise);
+  const pending = h.cache.fetch(root);
+  const rejected = expect(pending).rejects.toThrow('cache changed');
+  await vi.waitFor(() => expect(h.fetch).toHaveBeenCalledTimes(2));
+  await h.cache.notify({ type, object: url, target: root, origin: root });
+  late.resolve(new Response('obsolete listing'));
+  await rejected;
+});
+
 it('preserves the network answer when body persistence fails and rejects a missing account', async () => {
   const h = fixture();
-  vi.spyOn(MetadataStore.prototype, 'put').mockRejectedValueOnce(new Error('Quota'));
+  const replace = vi
+    .spyOn(MetadataStore.prototype, 'replace')
+    .mockRejectedValueOnce(new Error('Quota'));
   expect(await (await h.cache.fetch(url)).text()).toBe('body');
+  expect(replace).toHaveBeenCalledOnce();
+  const store = await MetadataStore.open(webId, h.idb);
+  expect(await store.getAll()).toEqual([]);
+  store.close();
   expect(() =>
     createPageCache({ webId: '', storageRoot: root, fetch: h.fetch, usable: () => true }),
   ).toThrow('account');

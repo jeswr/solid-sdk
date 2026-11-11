@@ -379,7 +379,10 @@ function keepAlive(event: ExtendableMessageEvent, task: () => Promise<void>): vo
  * SWR path adds `isOnline` on top (see `respond`).
  */
 async function baseDeps(): Promise<Omit<SwrDeps, 'isOnline'>> {
-  const meta = await getMeta();
+  const generation = invalidationGeneration;
+  const meta = (await getMeta()).withFence(() => {
+    if (generation !== invalidationGeneration) throw new Error('Offline account changed');
+  });
   return {
     cache: meta.bytes,
     meta,
