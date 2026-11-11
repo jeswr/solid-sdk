@@ -483,6 +483,7 @@ describe("listing and pagination (ADR-003 §4)", () => {
     expect(page.items).toEqual([
       {
         url: `${ROOT}a/`,
+        displayName: null,
         kind: "container",
         contentType: null,
         size: null,
@@ -491,6 +492,7 @@ describe("listing and pagination (ADR-003 §4)", () => {
       },
       {
         url: `${ROOT}b`,
+        displayName: null,
         kind: "resource",
         contentType: "text/plain",
         size: 1,

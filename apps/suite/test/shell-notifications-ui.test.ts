@@ -14,6 +14,7 @@ const axe = requireUi(
 ) as typeof import("../../../packages/suite-ui/node_modules/axe-core");
 
 import { CapabilityProvider } from "@jeswr/suite-ui/sync";
+import { UNDATED } from "../src/shell/lib/notifications-model";
 import { createDemoNotificationSource } from "../src/shell/notifications/demo-source";
 import { NotificationsBell } from "../src/shell/notifications/notifications-bell";
 import { NotificationsTray } from "../src/shell/notifications/notifications-tray";
@@ -113,4 +114,41 @@ it("explains unsupported expiry, disables duration choices and confirms denial i
   fireEvent.click(screen.getByRole("button", { name: /^Deny/ }));
   await screen.findByText("Denied", { exact: true });
   expect(screen.queryByRole("button", { name: /^Approve/ })).toBeNull();
+});
+// AUTHORED-BY Claude Opus 5.5
+it("shows no time for an undated inbox notification", async () => {
+  const at = new Date("2026-11-10T09:30:00Z");
+  const source = {
+    id: "fixture",
+    list: async () => [
+      {
+        id: "https://pod.example/inbox/a",
+        kind: "system" as const,
+        title: "Undated",
+        createdAt: new Date(UNDATED),
+        read: false,
+      },
+      {
+        id: "https://pod.example/inbox/b",
+        kind: "system" as const,
+        title: "Dated",
+        createdAt: at,
+        read: false,
+      },
+    ],
+  };
+  render(
+    h(CapabilityProvider, {
+      capabilities: {},
+      children: h(NotificationSessionProvider, {
+        accountId: "ui-undated",
+        sources: [source],
+        children: h(NotificationsTray, {}),
+      }),
+    }),
+  );
+  const undated = (await screen.findByText("Undated")).closest("li");
+  const dated = screen.getByText("Dated").closest("li");
+  expect(undated?.querySelector("time")).toBeNull();
+  expect(dated?.querySelector("time")?.getAttribute("dateTime")).toBe(at.toISOString());
 });

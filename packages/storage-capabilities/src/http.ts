@@ -92,3 +92,13 @@ export async function readBody(response: Response, url: string): Promise<string>
     reader.releaseLock();
   }
 }
+
+/** Advisory identity data: never resolve a relative or non-HTTP(S) owner identifier. */
+export function ownerIri(value: unknown): string | null {
+  return typeof value === "string" &&
+    /^https?:\/\/[^\s<>"{}|^`\\]+$/i.test(value) &&
+    !/%(?![0-9a-f]{2})|\p{Cc}|\p{Cs}/iu.test(value) &&
+    URL.canParse(value)
+    ? value
+    : null;
+}

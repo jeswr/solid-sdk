@@ -122,6 +122,7 @@ test("uses the real provider fetch and current actor, stays stable on rerender a
     "@context": "https://www.w3.org/ns/activitystreams",
     ...draft,
     actor: alice.webId,
+    published: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/),
   });
   expect(shareNotification("https://pod.example/doc", "reader").type).toBe("Announce");
   expect(mentionNotification("https://pod.example/comment", "https://pod.example/doc").type).toBe(

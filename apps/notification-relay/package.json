@@ -21,5 +21,8 @@
     "@jeswr/guarded-fetch": "workspace:*",
     "jose": "^6.2.3"
   },
+  "devDependencies": {
+    "@jeswr/storage-client": "workspace:*"
+  },
   "license": "MIT"
 }

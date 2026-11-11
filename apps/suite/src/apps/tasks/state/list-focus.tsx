@@ -1,9 +1,11 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 "use client";
 import {
   createContext,
   type ReactNode,
   useContext,
+  useEffect,
   useLayoutEffect,
   useReducer,
   useRef,
@@ -28,6 +30,7 @@ interface ListFocus {
   extendSelection: (url: string, direction: -1 | 1) => void;
   announce: (message: string) => void;
 }
+const POPUP = '[role="menu"], [role="alertdialog"], [role="dialog"]';
 const ListFocusContext = createContext<ListFocus | undefined>(undefined);
 export const useTaskListFocus = () => useContext(ListFocusContext);
 
@@ -47,6 +50,7 @@ export function TaskListFocus({
   const focused = useRef<{ element: HTMLElement; url: string; order: string[] } | undefined>(
     undefined,
   );
+  const popupFrame = useRef(0);
   // DOM order includes nesting and omits collapsed groups, matching what the user can reach.
   const visibleRows = () =>
     [...(root.current?.querySelectorAll<HTMLElement>("[data-tsk-row]") ?? [])].filter(
@@ -65,7 +69,22 @@ export function TaskListFocus({
     }
     focused.current = undefined;
     const current = document.activeElement;
-    if (current instanceof HTMLElement && current !== document.body && current.isConnected) return;
+    if (current instanceof HTMLElement && current !== document.body && current.isConnected) {
+      // A menu or dialog opened from the removed row still holds focus: hand focus off once it
+      // has closed and the page is no longer inert, unless focus has landed elsewhere by then.
+      if (!root.current?.contains(current) && current.closest(POPUP)) awaitPopup(previous);
+      return;
+    }
+    // A closing popup may still hold the page inert, where focus() silently fails.
+    if (inert()) awaitPopup(previous);
+    else handOff(previous);
+  };
+  // Radix marks nodes inside the list inert too, not only its ancestors.
+  const inert = () =>
+    Boolean(root.current?.closest("[inert]") ?? root.current?.querySelector("[inert]"));
+  const handOff = (previous: { url: string; order: string[] }) => {
+    const rows = visibleRows();
+    const urls = rows.map((row) => row.dataset.tskRow as string);
     const index = previous.order.indexOf(previous.url);
     const next =
       [
@@ -89,6 +108,20 @@ export function TaskListFocus({
       fallback?.focus();
     }
   };
+  const awaitPopup = (previous: { url: string; order: string[] }) => {
+    cancelAnimationFrame(popupFrame.current);
+    const tick = () => {
+      const active = document.activeElement;
+      if (active instanceof HTMLElement && active !== document.body && active.isConnected) {
+        if (active.closest(POPUP)) popupFrame.current = requestAnimationFrame(tick);
+        return;
+      }
+      if (inert()) popupFrame.current = requestAnimationFrame(tick);
+      else handOff(previous);
+    };
+    popupFrame.current = requestAnimationFrame(tick);
+  };
+  useEffect(() => () => cancelAnimationFrame(popupFrame.current), []);
   useLayoutEffect(refresh);
   const selectRange = (from: string, to: string) => {
     const rows = visibleRows();
@@ -173,7 +206,7 @@ export function TaskListFocus({
             next instanceof HTMLElement &&
             next !== document.body &&
             !event.currentTarget.contains(next) &&
-            !next.closest('[role="menu"], [role="alertdialog"], [role="dialog"]')
+            !next.closest(POPUP)
           )
             focused.current = undefined;
         }}
