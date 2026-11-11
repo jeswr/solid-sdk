@@ -1,3 +1,4 @@
+// AUTHORED-BY GPT-6.1 Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 //
 // JSX typing for @jeswr/reactive-authentication/elements's <authorization-code-flow>
@@ -7,6 +8,7 @@ import type { AuthorizationCodeFlow } from "@jeswr/reactive-authentication/eleme
 import type { DetailedHTMLProps, HTMLAttributes, Ref } from "react";
 
 declare module "react" {
+  // biome-ignore lint/style/useNamingConvention: React's augmentation namespace is named JSX.
   namespace JSX {
     interface IntrinsicElements {
       "authorization-code-flow": DetailedHTMLProps<

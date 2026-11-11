@@ -1,5 +1,6 @@
+// AUTHORED-BY GPT-6.1 Sol
 // AUTHORED-BY Codex GPT-6.1-Sol
-import type { Profile } from "./profile";
+import type { Profile } from "./profile.js";
 
 export interface DerivedSession {
   podRoot: string;
@@ -9,7 +10,7 @@ export interface DerivedSession {
   avatarUrl?: string;
 }
 
-/** Drive opens the first advertised storage, retaining its existing origin fallback. */
+/** Open the first advertised storage, retaining its existing origin fallback. */
 export function deriveSession(profile: Profile): DerivedSession {
   const storage = profile.storages[0];
   const root = storage ?? new URL("/", profile.webId).href;

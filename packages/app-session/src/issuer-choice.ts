@@ -1,3 +1,4 @@
+// AUTHORED-BY GPT-6.1 Sol
 // AUTHORED-BY Claude Opus 5.5
 import { AmbiguousIssuerError } from "@jeswr/pod-auth";
 

@@ -1,3 +1,4 @@
+// AUTHORED-BY GPT-6.1 Sol
 // AUTHORED-BY Codex GPT-6.1-Sol
 import type { Identity, LoginHint, PodAuth } from "@jeswr/pod-auth";
 import { createRecentProvidersStore, resolveLoginTarget } from "@jeswr/pod-auth/directory";
@@ -14,12 +15,13 @@ import {
   useRef,
   useState,
 } from "react";
-import { authFlowHolder, lazyElementGetCode } from "./auth-flow-holder";
-import { IssuerChoiceRequiredError } from "./issuer-choice";
-import { allowInsecureLoopback, getPodAuth, publicFetch } from "./pod-auth";
-import { readProfile } from "./profile";
-import { type DerivedSession, deriveSession } from "./session-derivation";
-import { consumeAutologinAccount, signInError } from "./sign-in";
+import { authFlowHolder, lazyElementGetCode } from "./auth-flow-holder.js";
+import { IssuerChoiceRequiredError } from "./issuer-choice.js";
+import { clearLegacyCredentials, type LegacyKeys } from "./legacy-credentials.js";
+import { allowInsecureLoopback, publicFetch } from "./pod-auth.js";
+import { readProfile } from "./profile.js";
+import { type DerivedSession, deriveSession } from "./session-derivation.js";
+import { consumeAutologinAccount, signInError } from "./sign-in.js";
 
 type Pending = SignInCardProps["pending"];
 export interface SessionContextValue {
@@ -45,32 +47,12 @@ export interface SessionContextValue {
 
 const SessionContext = createContext<SessionContextValue | null>(null);
 
+function accountHint(webId: string, issuer?: string): LoginHint {
+  return issuer ? { webId, issuer } : { webId };
+}
+
 /** Address lookups give up after this long, so a silent host cannot freeze the card. */
 export const LOOKUP_TIMEOUT_MS = 15_000;
-
-/**
- * Builds before pod-auth kept refresh tokens and DPoP keys in their own stores. pod-auth's
- * logout cannot reach them, so remove them once (they are never read again).
- */
-export function clearLegacyCredentials(): void {
-  try {
-    globalThis.indexedDB?.deleteDatabase("pod-drive:sessions");
-  } catch {
-    // Storage may be unavailable (private mode); there is then nothing to clear.
-  }
-  for (const [storage, key] of [
-    ["localStorage", "pod-drive:remembered-account"],
-    ["sessionStorage", "pod-drive:autologin-attempted"],
-    // The old full-page redirect record held a DPoP private key and a PKCE verifier.
-    ["sessionStorage", "pod-drive:pss.autologin.flow"],
-  ] as const) {
-    try {
-      globalThis[storage]?.removeItem(key);
-    } catch {
-      // As above.
-    }
-  }
-}
 
 export function useSession(): SessionContextValue {
   const value = useContext(SessionContext);
@@ -86,20 +68,35 @@ function recentProvidersStore() {
   }
 }
 
-/** Mirror the shared core; this host never handles credentials or patches global fetch. */
+export interface SessionProviderProps {
+  children: ReactNode;
+  getPodAuth: () => Promise<PodAuth>;
+  appName: string;
+  legacyCredentials?: LegacyKeys;
+  dev?: boolean;
+  auth?: PodAuth;
+  lookupTimeoutMs?: number;
+  readProfile?: typeof readProfile;
+}
+
+/** Mirror the shared core; never handle credentials or patch global fetch. */
 export function SessionProvider({
   children,
+  getPodAuth,
+  appName,
+  legacyCredentials = {},
+  dev = false,
   auth: suppliedAuth,
-}: {
-  children: ReactNode;
-  auth?: PodAuth;
-}) {
+  lookupTimeoutMs = LOOKUP_TIMEOUT_MS,
+  readProfile: profileReader = readProfile,
+}: SessionProviderProps) {
   const flowRef = useRef<AuthorizationCodeFlow>(null);
   const restoreRef = useRef<Promise<Identity | null> | null>(null);
   const authRef = useRef<PodAuth | null>(null);
   const mounted = useRef(false);
   const generation = useRef(0);
   const activeLogin = useRef<symbol | null>(null);
+  const loginController = useRef<AbortController | null>(null);
   const deepLink = useRef<string | null | undefined>(undefined);
   // Remembered issuers, so an account row never needs to choose among several issuers again.
   const accountIssuers = useRef(new Map<string, string>());
@@ -117,18 +114,18 @@ export function SessionProvider({
   const store = useMemo(recentProvidersStore, []);
   const [recentProviders, setRecentProviders] = useState(() => store.list());
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: `attempt` re-runs start-up on retry.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: startup settings and legacy keys are captured on mount; attempt retries initialization.
   useEffect(() => {
     mounted.current = true;
     let disposed = false;
     let changed = false;
     const stops: (() => void)[] = [];
-    const element = flowRef.current;
-    const getCode = element ? lazyElementGetCode(element) : null;
+    // The provider always renders this element before its effect runs.
+    const getCode = lazyElementGetCode(flowRef.current as AuthorizationCodeFlow);
     authFlowHolder.current = getCode;
     if (deepLink.current === undefined) {
-      deepLink.current = consumeAutologinAccount();
-      clearLegacyCredentials();
+      deepLink.current = consumeAutologinAccount(dev);
+      clearLegacyCredentials(legacyCredentials);
     }
     const suggestedAccounts = (): SignInRecentAccount[] =>
       deepLink.current ? [{ webId: deepLink.current }] : [];
@@ -193,11 +190,13 @@ export function SessionProvider({
     return () => {
       disposed = true;
       mounted.current = false;
+      loginController.current?.abort();
+      activeLogin.current = null;
       ++generation.current;
       for (const stop of stops) stop();
       if (authFlowHolder.current === getCode) authFlowHolder.current = null;
     };
-  }, [suppliedAuth, attempt]);
+  }, [suppliedAuth, getPodAuth, attempt]);
 
   useEffect(() => {
     let disposed = false;
@@ -207,7 +206,7 @@ export function SessionProvider({
     }
     const webId = identity.webId;
     setSession(null);
-    void readProfile(webId, publicFetch)
+    void profileReader(webId, publicFetch)
       .then(deriveSession)
       .catch(() =>
         deriveSession({
@@ -224,12 +223,12 @@ export function SessionProvider({
     return () => {
       disposed = true;
     };
-  }, [identity]);
+  }, [identity, profileReader]);
 
   const runLogin = useCallback(
     async (
       action: NonNullable<Pending>,
-      target: () => Promise<LoginHint>,
+      target: (signal: AbortSignal) => Promise<LoginHint>,
       choice?: SessionContextValue["issuerChoice"],
     ) => {
       const core = authRef.current;
@@ -237,6 +236,8 @@ export function SessionProvider({
       const attempt = Symbol();
       const started = generation.current;
       activeLogin.current = attempt;
+      const controller = new AbortController();
+      loginController.current = controller;
       setPending(action);
       setError(null);
       // A pick from the listed providers keeps that list on screen while it runs.
@@ -245,9 +246,9 @@ export function SessionProvider({
       const current = () =>
         mounted.current && generation.current === started && activeLogin.current === attempt;
       try {
-        hint = await target();
+        hint = await target(controller.signal);
         if (!current()) return;
-        const loggedIn = await core.login(hint);
+        const loggedIn = await core.login(hint, { signal: controller.signal });
         if (!current()) return;
         setIssuerChoice(undefined);
         store.remember(loggedIn.issuer);
@@ -264,7 +265,7 @@ export function SessionProvider({
       } finally {
         if (activeLogin.current === attempt) {
           activeLogin.current = null;
-          if (mounted.current) setPending(null);
+          setPending(null);
         }
       }
     },
@@ -273,15 +274,15 @@ export function SessionProvider({
 
   const loginWithAddress = useCallback(
     (input: string, kind: "webid" | "custom" = "webid") =>
-      runLogin({ kind, key: input }, async () => {
+      runLogin({ kind, key: input }, async (signal) => {
         const target = await resolveLoginTarget(input, {
           fetch: publicFetch,
-          signal: AbortSignal.timeout(LOOKUP_TIMEOUT_MS),
-          allowInsecureLoopback: allowInsecureLoopback(),
+          signal: AbortSignal.any([signal, AbortSignal.timeout(lookupTimeoutMs)]),
+          allowInsecureLoopback: allowInsecureLoopback(dev),
         });
         return target.kind === "webid" ? { webId: target.webId } : { issuer: target.issuer };
       }),
-    [runLogin],
+    [runLogin, dev, lookupTimeoutMs],
   );
   const loginWithIssuer = useCallback(
     (issuer: string) => {
@@ -290,7 +291,7 @@ export function SessionProvider({
         : undefined;
       return runLogin(
         { kind: "provider", key: issuer },
-        async () => (choice ? { webId: choice.webId, issuer } : { issuer }),
+        async () => (choice ? accountHint(choice.webId, issuer) : { issuer }),
         choice,
       );
     },
@@ -298,13 +299,13 @@ export function SessionProvider({
   );
   const loginWithAccount = useCallback(
     (webId: string) =>
-      runLogin({ kind: "account", key: webId }, async () => {
-        const issuer = accountIssuers.current.get(webId);
-        return issuer ? { webId, issuer } : { webId };
-      }),
+      runLogin({ kind: "account", key: webId }, async () =>
+        accountHint(webId, accountIssuers.current.get(webId)),
+      ),
     [runLogin],
   );
   const logout = useCallback(async () => {
+    loginController.current?.abort();
     ++generation.current;
     activeLogin.current = null;
     setPending(null);
@@ -345,7 +346,7 @@ export function SessionProvider({
   };
   return (
     <SessionContext.Provider value={value}>
-      <authorization-code-flow ref={flowRef} data-testid="solid-auth-flow">
+      <authorization-code-flow data-app-name={appName} ref={flowRef} data-testid="solid-auth-flow">
         <span slot="new-text">Open your provider's sign-in window to continue.</span>
         <span slot="switch-text">Finish signing in in the other window.</span>
       </authorization-code-flow>

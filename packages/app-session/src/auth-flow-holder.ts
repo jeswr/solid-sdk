@@ -1,3 +1,4 @@
+// AUTHORED-BY GPT-6.1 Sol
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { CodeRequestCancelledError } from "@jeswr/reactive-authentication";
 import type { AuthorizationCodeFlow } from "@jeswr/reactive-authentication/elements";
@@ -12,7 +13,7 @@ export function lazyElementGetCode(ui: AuthorizationCodeFlow): GetCode {
   return async (authorizationUri, signal) => {
     signal.throwIfAborted();
     if (typeof ui.getCode !== "function") {
-      let onAbort = () => {};
+      let onAbort!: () => void;
       try {
         await Promise.race([
           customElements.whenDefined(AUTH_FLOW_ELEMENT),

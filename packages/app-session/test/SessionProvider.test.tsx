@@ -1,5 +1,5 @@
+// AUTHORED-BY GPT-6.1 Sol
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { ThemeProvider } from "@jeswr/app-shell";
 import { AmbiguousIssuerError, type Identity, IssuerNotAuthorizedError } from "@jeswr/pod-auth";
 import {
   createRecentProvidersStore,
@@ -11,22 +11,15 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testi
 import { DataFactory, Writer } from "n3";
 import { StrictMode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import {
-  deferred,
-  fakePodAuth,
-  ISSUER,
-  identity,
-  POD_ROOT,
-  WEB_ID,
-} from "../../test/fake-pod-auth";
+import { deferred, fakePodAuth, ISSUER, identity, POD_ROOT, WEB_ID } from "../src/testing";
 
 const seams = vi.hoisted(() => ({
   publicFetch: vi.fn<typeof fetch>(),
   getPodAuth: vi.fn(),
   browser: vi.fn(),
 }));
-vi.mock("./pod-auth", async (original) => ({
-  ...(await original<typeof import("./pod-auth")>()),
+vi.mock("../src/pod-auth", async (original) => ({
+  ...(await original<typeof import("../src/pod-auth")>()),
   publicFetch: seams.publicFetch,
   getPodAuth: seams.getPodAuth,
 }));
@@ -41,20 +34,42 @@ vi.mock("@jeswr/pod-auth/directory", async (original) => {
     },
   };
 });
-vi.mock("@jeswr/pod-docs/ui", () => ({
-  DocumentBrowser: (props: unknown) => {
-    seams.browser(props);
-    return <div data-testid="file-browser" />;
-  },
-}));
-vi.mock("@jeswr/solid-elements/react", () => ({
-  Loading: ({ label }: { label: string }) => <span role="status">{label}</span>,
-}));
 
-import { App } from "../App";
-import { signInProviders } from "../LoginScreen";
-import { IssuerChoiceRequiredError } from "./issuer-choice";
-import { type SessionContextValue, SessionProvider, useSession } from "./SessionProvider";
+import { authFlowHolder } from "../src/auth-flow-holder";
+import { IssuerChoiceRequiredError } from "../src/issuer-choice";
+import {
+  signInProviders as configuredProviders,
+  issuerChoiceProviders,
+  LoginScreen,
+} from "../src/LoginScreen";
+import type { Profile } from "../src/profile";
+import { type SessionContextValue, SessionProvider, useSession } from "../src/SessionProvider";
+
+const providerOptions = {
+  homeIdp: ISSUER,
+  homeIdpName: "Home provider",
+  knownProviders: `${ISSUER},https://other.example/`,
+};
+const legacyCredentials = {
+  sessionStorage: ["test:pss.autologin.flow", "test:autologin-attempted"],
+};
+const signInProviders = () => configuredProviders(providerOptions);
+function App() {
+  const value = useSession();
+  if (value.restoringSession || (!value.ready && !value.error) || (value.webId && !value.session))
+    return <span role="status">Restoring your session…</span>;
+  if (!value.webId || !value.session)
+    return <LoginScreen appName="Test App" {...providerOptions} />;
+  seams.browser({ ...value.session, fetch: value.fetch });
+  return (
+    <>
+      <div data-testid="file-browser" />
+      {value.session.podRootIsFallback && (
+        <p role="note">Public files at {value.session.podRoot}</p>
+      )}
+    </>
+  );
+}
 
 let session: SessionContextValue;
 function Observer() {
@@ -65,12 +80,15 @@ function mount(fake = fakePodAuth(), supplied = true) {
   seams.getPodAuth.mockResolvedValue(fake.auth);
   const view = render(
     <StrictMode>
-      <ThemeProvider>
-        <SessionProvider auth={supplied ? fake.auth : undefined}>
-          <Observer />
-          <App />
-        </SessionProvider>
-      </ThemeProvider>
+      <SessionProvider
+        getPodAuth={seams.getPodAuth}
+        appName="Test App"
+        legacyCredentials={legacyCredentials}
+        auth={supplied ? fake.auth : undefined}
+      >
+        <Observer />
+        <App />
+      </SessionProvider>
     </StrictMode>,
   );
   return { ...view, ...fake };
@@ -105,7 +123,7 @@ function publicProfile(includeStorage = true) {
       ),
       n(POD_ROOT),
     ),
-    quad(n(WEB_ID), n("http://xmlns.com/foaf/0.1/name"), literal("Alice Docs")),
+    quad(n(WEB_ID), n("http://xmlns.com/foaf/0.1/name"), literal("Alice Example")),
     quad(
       n(WEB_ID),
       n("http://www.w3.org/2006/vcard/ns#hasPhoto"),
@@ -122,9 +140,11 @@ beforeEach(async () => {
   localStorage.clear();
   sessionStorage.clear();
   history.replaceState(null, "", "/");
-  vi.stubEnv("VITE_HOME_IDP", ISSUER);
-  vi.stubEnv("VITE_HOME_IDP_NAME", "Home provider");
-  vi.stubEnv("VITE_KNOWN_PROVIDERS", `${ISSUER},https://other.example/`);
+  Object.assign(providerOptions, {
+    homeIdp: ISSUER,
+    homeIdpName: "Home provider",
+    knownProviders: `${ISSUER},https://other.example/`,
+  });
   const turtle = await publicProfile();
   seams.publicFetch.mockImplementation(async (input) => {
     const url = input instanceof Request ? input.url : String(input);
@@ -142,7 +162,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe("Pod Docs shared authentication", () => {
+describe("App session shared authentication", () => {
   it("restores once under StrictMode, shows the wait, then the app with auth.fetch and public profile details", async () => {
     const before = globalThis.fetch;
     const fake = fakePodAuth();
@@ -159,14 +179,13 @@ describe("Pod Docs shared authentication", () => {
     expect(session.restoringSession).toBe(false);
     expect(session.session).toMatchObject({
       podRoot: POD_ROOT,
-      displayName: "Alice Docs",
+      displayName: "Alice Example",
       avatarUrl: "https://images.example/alice.png",
     });
     expect(seams.browser).toHaveBeenLastCalledWith(
       expect.objectContaining({
         podRoot: POD_ROOT,
         webId: WEB_ID,
-        title: "Your documents",
         fetch: fake.auth.fetch,
       }),
     );
@@ -202,7 +221,9 @@ describe("Pod Docs shared authentication", () => {
     if (path.includes("row")) {
       expect(screen.getByRole("heading", { name: "Choose an account" })).toBeVisible();
       fireEvent.click(
-        within(screen.getByRole("list", { name: "Recent accounts" })).getAllByRole("button")[0],
+        within(screen.getByRole("list", { name: "Recent accounts" })).getAllByRole(
+          "button",
+        )[0] as HTMLElement,
       );
       kind = "account";
       key = WEB_ID;
@@ -220,7 +241,9 @@ describe("Pod Docs shared authentication", () => {
       hint = path === "WebID" ? { webId: WEB_ID } : { issuer: ISSUER };
       submitAddress(key, custom);
     }
-    await waitFor(() => expect(fake.auth.login).toHaveBeenCalledWith(hint));
+    await waitFor(() =>
+      expect(fake.auth.login).toHaveBeenCalledWith(hint, { signal: expect.any(AbortSignal) }),
+    );
     expect(session.pending).toEqual({ kind, key });
     expect(screen.getByRole("button", { busy: true })).toBeDisabled();
     expect(createRecentProvidersStore(localStorage).list()).toEqual([]);
@@ -295,7 +318,10 @@ describe("Pod Docs shared authentication", () => {
     expect(screen.getByRole("button", { name: "Home provider" })).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "other.example" }));
     await waitFor(() =>
-      expect(fake.auth.login).toHaveBeenLastCalledWith({ webId: WEB_ID, issuer: other }),
+      expect(fake.auth.login).toHaveBeenLastCalledWith(
+        { webId: WEB_ID, issuer: other },
+        { signal: expect.any(AbortSignal) },
+      ),
     );
     // A failed choice keeps the list, so the person can pick again.
     expect(await screen.findByRole("alert")).toHaveTextContent("Sign-in was cancelled.");
@@ -304,7 +330,10 @@ describe("Pod Docs shared authentication", () => {
     fake.auth.login.mockReturnValueOnce(pick.promise);
     fireEvent.click(screen.getByRole("button", { name: "Home provider" }));
     await waitFor(() =>
-      expect(fake.auth.login).toHaveBeenLastCalledWith({ webId: WEB_ID, issuer: ISSUER }),
+      expect(fake.auth.login).toHaveBeenLastCalledWith(
+        { webId: WEB_ID, issuer: ISSUER },
+        { signal: expect.any(AbortSignal) },
+      ),
     );
     // While the pick runs, the card keeps the listed providers instead of remounting.
     expect(session.issuerChoice?.issuers).toEqual([ISSUER, other]);
@@ -320,7 +349,10 @@ describe("Pod Docs shared authentication", () => {
     submitAddress(WEB_ID);
     await waitFor(() => expect(session.issuerChoice).toBeDefined());
     await act(async () => session.loginWithIssuer("https://elsewhere.example/"));
-    expect(fake.auth.login).toHaveBeenLastCalledWith({ issuer: "https://elsewhere.example/" });
+    expect(fake.auth.login).toHaveBeenLastCalledWith(
+      { issuer: "https://elsewhere.example/" },
+      { signal: expect.any(AbortSignal) },
+    );
   });
 
   it("uses recent-provider storage for the custom address suggestions", async () => {
@@ -454,7 +486,7 @@ describe("Pod Docs shared authentication", () => {
     });
     expect(screen.getByRole("note")).toHaveTextContent(
       // pod-auth grants credentials only inside the profile's pim:storage, never this fallback.
-      "Your profile doesn't list a storage address, so Docs can only show public documents",
+      "Public files at",
     );
   });
 
@@ -532,7 +564,7 @@ describe("Pod Docs shared authentication", () => {
     const fake = fakePodAuth();
     seams.getPodAuth.mockRejectedValueOnce(new Error("SECRET")).mockResolvedValueOnce(fake.auth);
     render(
-      <SessionProvider>
+      <SessionProvider getPodAuth={seams.getPodAuth} appName="Test App">
         <Observer />
         <App />
       </SessionProvider>,
@@ -552,13 +584,13 @@ describe("Pod Docs shared authentication", () => {
   });
 
   it("removes the pre-pod-auth full-page sign-in record and loop guard once on mount", async () => {
-    sessionStorage.setItem("pod-docs:autologin-attempted", "1");
-    sessionStorage.setItem("pod-docs:pss.autologin.flow", "{}");
+    sessionStorage.setItem("test:autologin-attempted", "1");
+    sessionStorage.setItem("test:pss.autologin.flow", "{}");
     sessionStorage.setItem("unrelated", "kept");
     mount();
     await ready();
-    expect(sessionStorage.getItem("pod-docs:autologin-attempted")).toBeNull();
-    expect(sessionStorage.getItem("pod-docs:pss.autologin.flow")).toBeNull();
+    expect(sessionStorage.getItem("test:autologin-attempted")).toBeNull();
+    expect(sessionStorage.getItem("test:pss.autologin.flow")).toBeNull();
     expect(sessionStorage.getItem("unrelated")).toBe("kept");
   });
 
@@ -609,7 +641,176 @@ describe("Pod Docs shared authentication", () => {
   });
 });
 
-describe("Pod Docs provider configuration", () => {
+describe("startup and cancellation fences", () => {
+  it("requires the provider around the session hook", () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    expect(() => render(<Observer />)).toThrow("inside <SessionProvider>");
+  });
+
+  it("starts without browser storage and tolerates a remembered-account read failure", async () => {
+    vi.spyOn(globalThis, "localStorage", "get").mockImplementation(() => {
+      throw new Error("denied");
+    });
+    const fake = fakePodAuth();
+    fake.auth.remembered.mockRejectedValue(new Error("denied"));
+    mount(fake);
+    await ready();
+    expect(session.recentAccounts).toEqual([]);
+    await act(async () => session.loginWithIssuer(ISSUER));
+    expect(session.webId).toBe(WEB_ID);
+  });
+
+  it.each([
+    "resolve",
+    "reject",
+  ])("ignores a getter that finishes after unmount: %s", async (outcome) => {
+    const core = deferred<ReturnType<typeof fakePodAuth>["auth"]>();
+    const get = vi.fn(() => core.promise);
+    const fake = fakePodAuth();
+    const view = render(
+      <SessionProvider getPodAuth={get} appName="Test">
+        <Observer />
+      </SessionProvider>,
+    );
+    view.unmount();
+    await act(async () => {
+      if (outcome === "resolve") core.resolve(fake.auth);
+      else core.reject(new Error("late failure"));
+    });
+    expect(fake.auth.restore).not.toHaveBeenCalled();
+    expect(fake.auth.on).not.toHaveBeenCalled();
+  });
+
+  it("ignores queued events after unsubscribe and preserves a newer holder", async () => {
+    const view = mount();
+    await ready();
+    const handler = view.auth.on.mock.calls[0]?.[1];
+    const later = vi.fn(async () => "https://app.example/callback.html");
+    authFlowHolder.current = later;
+    view.unmount();
+    act(() => handler?.({ type: "login", identity, timestamp: Date.now() }));
+    expect(session.webId).toBeNull();
+    expect(authFlowHolder.current).toBe(later);
+    authFlowHolder.current = null;
+  });
+
+  it("ignores actions until ready and while another attempt is active", async () => {
+    const fake = fakePodAuth();
+    const restore = deferred<Identity | null>();
+    fake.auth.restore.mockReturnValue(restore.promise);
+    mount(fake);
+    await act(async () => session.loginWithIssuer(ISSUER));
+    expect(fake.auth.login).not.toHaveBeenCalled();
+    await act(async () => restore.resolve(null));
+    await ready();
+    const login = deferred<Identity>();
+    fake.auth.login.mockReturnValue(login.promise);
+    let first!: Promise<void>;
+    act(() => {
+      first = session.loginWithIssuer(ISSUER);
+    });
+    await act(async () => session.loginWithAccount(WEB_ID));
+    expect(fake.auth.login).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      login.resolve(identity);
+      await first;
+    });
+  });
+
+  it("fences a resolved hint when logout happens before login starts", async () => {
+    const { auth } = mount();
+    await ready();
+    await act(async () => {
+      const pending = session.loginWithIssuer(ISSUER);
+      await session.logout();
+      await pending;
+    });
+    expect(auth.login).not.toHaveBeenCalled();
+    expect(session.webId).toBeNull();
+  });
+
+  it("aborts login on unmount without logging out or surfacing late failures", async () => {
+    const fake = fakePodAuth();
+    const login = deferred<Identity>();
+    fake.auth.login.mockReturnValue(login.promise);
+    const view = mount(fake);
+    await ready();
+    let pending!: Promise<void>;
+    act(() => {
+      pending = session.loginWithIssuer(ISSUER);
+    });
+    await waitFor(() => expect(fake.auth.login).toHaveBeenCalledTimes(1));
+    const signal = fake.auth.login.mock.calls[0]?.[1]?.signal;
+    expect(signal?.aborted).toBe(false);
+    view.unmount();
+    expect(signal?.aborted).toBe(true);
+    await act(async () => {
+      login.reject(new Error("late failure"));
+      await pending;
+    });
+    expect(fake.auth.logout).not.toHaveBeenCalled();
+  });
+
+  it("does not surface a logout failure after unmount", async () => {
+    const fake = fakePodAuth();
+    const cleanup = deferred<void>();
+    fake.auth.logout.mockReturnValue(cleanup.promise);
+    const view = mount(fake);
+    await ready();
+    let pending!: Promise<void>;
+    act(() => {
+      pending = session.logout();
+    });
+    view.unmount();
+    await act(async () => {
+      cleanup.reject(new Error("late failure"));
+      await pending;
+    });
+    expect(session.error).toBeNull();
+  });
+
+  it("accepts an injected profile reader, timeout and development setting", async () => {
+    vi.stubGlobal("location", new URL("http://localhost/"));
+    const fake = fakePodAuth();
+    fake.auth.restore.mockResolvedValue(identity);
+    const profileReader = vi.fn(
+      async (): Promise<Profile> => ({
+        webId: WEB_ID,
+        name: "Injected",
+        storages: [POD_ROOT],
+        oidcIssuers: [],
+      }),
+    );
+    render(
+      <SessionProvider
+        getPodAuth={seams.getPodAuth}
+        appName="Injected"
+        auth={fake.auth}
+        readProfile={profileReader}
+        lookupTimeoutMs={100}
+        dev
+      >
+        <Observer />
+      </SessionProvider>,
+    );
+    await ready();
+    await waitFor(() => expect(session.session?.displayName).toBe("Injected"));
+    expect(profileReader).toHaveBeenCalledWith(WEB_ID, seams.publicFetch);
+    await act(async () => session.loginWithAddress("http://localhost/profile#me"));
+    expect(resolveSpy).toHaveBeenCalledWith(
+      "http://localhost/profile#me",
+      expect.objectContaining({ allowInsecureLoopback: true }),
+    );
+  });
+});
+
+describe("App session provider configuration", () => {
+  it("supports default providers and unknown issuers without application settings", () => {
+    expect(configuredProviders().length).toBeGreaterThan(0);
+    expect(issuerChoiceProviders(["https://unknown.example/"])).toEqual([
+      { id: "listed-0", issuer: "https://unknown.example/", name: "unknown.example" },
+    ]);
+  });
   it("puts the home issuer first, uses the configured label, and removes its duplicate", () => {
     expect(signInProviders().map(({ issuer, name }) => [issuer, name])).toEqual([
       [ISSUER, "Home provider"],
@@ -617,14 +818,14 @@ describe("Pod Docs provider configuration", () => {
     ]);
   });
   it("uses the host as the home name and the shared directory as fallback", () => {
-    vi.stubEnv("VITE_HOME_IDP_NAME", "");
-    vi.stubEnv("VITE_KNOWN_PROVIDERS", "");
+    providerOptions.homeIdpName = "";
+    providerOptions.knownProviders = "";
     const providers = signInProviders();
-    expect(providers[0].name).toBe("provider.example");
+    expect(providers[0]?.name).toBe("provider.example");
     expect(providers.some(({ issuer }) => issuer === "https://solidcommunity.net/")).toBe(true);
   });
   it("ignores an invalid home provider instead of crashing the login screen", () => {
-    vi.stubEnv("VITE_HOME_IDP", "javascript:alert(1)");
+    providerOptions.homeIdp = "javascript:alert(1)";
     expect(signInProviders().map(({ issuer }) => issuer)).toEqual([
       ISSUER,
       "https://other.example/",

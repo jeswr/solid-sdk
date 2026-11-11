@@ -1,8 +1,9 @@
+// AUTHORED-BY GPT-6.1 Sol
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { AmbiguousIssuerError, IssuerNotAuthorizedError } from "@jeswr/pod-auth";
 import { InvalidLoginAddressError, NotALoginAddressError } from "@jeswr/pod-auth/directory";
 import { CodeRequestCancelledError } from "@jeswr/reactive-authentication";
-import { allowInsecureLoopback, isLoopbackHost } from "./pod-auth";
+import { allowInsecureLoopback, isLoopbackHost } from "./pod-auth.js";
 
 /** Deliberately exclude raw protocol errors, URLs, codes and token material from the UI. */
 export function signInError(error: unknown): string {
@@ -23,7 +24,7 @@ export function signInError(error: unknown): string {
 }
 
 /** Consume a deep link as a public account suggestion; it never starts login. */
-export function consumeAutologinAccount(): string | null {
+export function consumeAutologinAccount(dev = false): string | null {
   const url = new URL(location.href);
   if (!url.hash.startsWith("#autologin/")) return null;
   const encoded = url.hash.slice("#autologin/".length);
@@ -35,7 +36,9 @@ export function consumeAutologinAccount(): string | null {
     if (/[\s\\]/u.test(input)) return null;
     const webId = new URL(input);
     return (webId.protocol === "https:" ||
-      (webId.protocol === "http:" && allowInsecureLoopback() && isLoopbackHost(webId.hostname))) &&
+      (webId.protocol === "http:" &&
+        allowInsecureLoopback(dev) &&
+        isLoopbackHost(webId.hostname))) &&
       !webId.username &&
       !webId.password
       ? webId.href
