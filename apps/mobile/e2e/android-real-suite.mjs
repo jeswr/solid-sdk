@@ -59,6 +59,14 @@ class Devtools {
         client.fail();
         return;
       }
+      // Opt-in failure capture: Chromium error codes and CORS enums only, never URLs or bodies.
+      if (message.method === "Network.loadingFailed" && client.failures) {
+        const { errorText, blockedReason, corsErrorStatus } = message.params ?? {};
+        client.failures.push(
+          [errorText, blockedReason, corsErrorStatus?.corsError].filter(Boolean).join(" "),
+        );
+        return;
+      }
       const pending = client.pending.get(message.id);
       if (!pending) return;
       client.pending.delete(message.id);
@@ -234,11 +242,16 @@ async function trustedRun(tlsDir) {
             .then(r => r.status + ' ' + (r.headers.get('content-type') ?? ''))
             .catch(e => 'error ' + e.name + ': ' + String(e.message).slice(0, 80))`)
           .catch(() => "unavailable");
+      app.failures = [];
+      await app.command("Network.enable").catch(() => {});
       pages.probes = {
         webId: await probe(seed.account.webId),
         openid: await probe(`${ORIGIN}/.well-known/openid-configuration`),
         clientId: await probe(CLIENT_ID),
       };
+      await delay(500);
+      pages.probes.networkFailures = app.failures.slice(0, 6);
+      app.failures = undefined;
     }
     return pages;
   }
@@ -436,6 +449,13 @@ async function trustedRun(tlsDir) {
       "-c",
       `printf '%s' ${quoteAndroidShell(flags)} > /data/local/tmp/chrome-command-line`,
     );
+    // The app WebView reads its own flag file for debuggable apps; pin the same certificate there,
+    // in addition to the debug APK's network security config trust anchor.
+    await shell(
+      "sh",
+      "-c",
+      `printf '%s' ${quoteAndroidShell(`webview --ignore-certificate-errors-spki-list=${spki}`)} > /data/local/tmp/webview-command-line`,
+    );
     await shell("am", "set-debug-app", "--persistent", CHROME);
     await shell("cmd", "role", "add-role-holder", "android.app.role.BROWSER", CHROME);
     assert(!(await adb(["reverse", "--list"])).includes("tcp:8443"));
@@ -620,6 +640,7 @@ async function trustedRun(tlsDir) {
         () => shell("am", "force-stop", CHROME),
         () => shell("am", "clear-debug-app"),
         () => shell("rm", "-f", "/data/local/tmp/chrome-command-line"),
+        () => shell("rm", "-f", "/data/local/tmp/webview-command-line"),
         ...forwards.map((port) => () => adb(["forward", "--remove", `tcp:${port}`])),
         ...(reversed ? [() => adb(["reverse", "--remove", "tcp:8443"])] : []),
         ...(mediaUri ? [() => shell("content", "delete", "--uri", mediaUri)] : []),
