@@ -19,6 +19,7 @@
     "@jeswr/app-shell": "workspace:*",
     "@jeswr/fetch-rdf": "workspace:*",
     "@jeswr/guarded-fetch": "workspace:*",
+    "@jeswr/health-insights": "workspace:*",
     "@jeswr/solid-elements": "workspace:*",
     "@jeswr/solid-health-diary": "workspace:*",
     "@jeswr/solid-offline": "workspace:*",

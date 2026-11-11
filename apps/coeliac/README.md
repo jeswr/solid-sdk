@@ -1,3 +1,9 @@
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+The Coeliac app now lives in **suite Health**, at
+<https://solid-suite.vercel.app/health/diary?mode=coeliac>.
+The home route redirects there; set `NEXT_PUBLIC_SUITE_URL` to target another suite deployment.
+Existing deep links remain available. Suite Health reads meals and symptoms logged here as read-only entries.
+
 # coeliac-app
 
 A privacy-first food-and-symptom diary for coeliac disease and other food intolerances. Log meals, exposures, and symptoms; the app helps surface likely trigger patterns, run structured elimination protocols, and shape a personalised diet plan — while keeping all of your health data in your own [Solid](https://solidproject.org/) pod rather than on someone else's server. The diary is written with the reusable [`@jeswr/solid-health-diary`](https://github.com/jeswr/solid-health-diary) model (the shared `diet:` sector of the @jeswr federation vocabulary), so it stays portable and readable by other pod-native apps.

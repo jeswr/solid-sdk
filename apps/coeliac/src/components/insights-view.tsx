@@ -1,5 +1,14 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
 "use client";
+import type {
+  AnalysisResult,
+  ContextClusterSurfacing,
+  EliminationProposal,
+  ReviewSurfacing,
+  SafetyRail,
+  SuspicionScore,
+} from "@jeswr/health-insights";
+import { nextAction, PATTERN_NOT_DIAGNOSIS } from "@jeswr/health-insights";
 /**
  * The Insights / Correlations view (DESIGN §4). Reads the account's cached diary and
  * runs the PURE inference engine, then renders — in the engine's own safety
@@ -21,21 +30,9 @@
  */
 import Link from "next/link";
 import { useCallback, useState } from "react";
-import { PATTERN_NOT_DIAGNOSIS } from "@/lib/inference/types";
-import type {
-  AnalysisResult,
-} from "@/lib/inference/analyze";
-import type {
-  EliminationProposal,
-  ReviewSurfacing,
-  SafetyRail,
-  SuspicionScore,
-} from "@/lib/inference/types";
-import type { ContextClusterSurfacing } from "@/lib/inference/context-cluster";
 import type { StoredProtocol } from "@/lib/cache/diary-store";
-import { nextAction } from "@/lib/protocol/fsm";
-import { storedProtocolToData } from "@/lib/protocol/persist";
 import { triggerLabel } from "@/lib/off/exposure-display";
+import { storedProtocolToData } from "@/lib/protocol/persist";
 import { useGenetics } from "@/lib/session/use-genetics";
 import { useInsights } from "@/lib/session/use-insights";
 import { useProtocolActions } from "@/lib/session/use-protocol-actions";
@@ -109,9 +106,9 @@ function SuspicionCard({ suspicion }: { suspicion: SuspicionScore }) {
         </span>
       </div>
       <p className="suspicion__stat">
-        Symptoms followed <strong>{followedCount}</strong> of your{" "}
-        <strong>{exposureCount}</strong> {triggerLabel(trigger).toLowerCase()} exposures (
-        {pct(followedRate)}), within a {lagWindowMin}–{lagWindowMax}h window.
+        Symptoms followed <strong>{followedCount}</strong> of your <strong>{exposureCount}</strong>{" "}
+        {triggerLabel(trigger).toLowerCase()} exposures ({pct(followedRate)}), within a{" "}
+        {lagWindowMin}–{lagWindowMax}h window.
       </p>
       {confounded && confounders.length > 0 ? (
         <p className="suspicion__confounded">
@@ -388,7 +385,11 @@ export function InsightsView() {
           <InsightsBody result={result} />
           {proposal && proposal.kind === "eliminate" && proposal.trigger && canStart ? (
             <div className="insights__start">
-              <button type="button" disabled={busy} onClick={() => onStart(proposal.trigger as string)}>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => onStart(proposal.trigger as string)}
+              >
                 Start a {triggerLabel(proposal.trigger)} challenge
               </button>
               <p className="insights__start-note">

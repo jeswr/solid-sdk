@@ -17,13 +17,22 @@ import { encodeRef } from "@/lib/refs";
 import { type DiaryDraft, type DiaryEntry, diaryLabel } from "../lib/data/diary";
 import { diaryDay, diaryWeek } from "../lib/diary-time";
 import { useDiary } from "../state/diary-context";
+import { useDiaryMode } from "../state/diary-mode-context";
 import { useHealth } from "../state/health-context";
+import { DiaryModeSettings } from "./diary-mode-settings";
 import { DiaryReadNote } from "./diary-read-note";
 import { DiarySheet } from "./diary-sheet";
 
 export function DiaryView() {
   const { clock } = useHealth();
-  const queryDate = useSearchParams().get("date");
+  const query = useSearchParams();
+  const queryDate = query.get("date");
+  const queryMode = query.get("mode");
+  const mode = useDiaryMode();
+  const { forVisit } = mode;
+  useEffect(() => {
+    if (queryMode === "coeliac") forVisit();
+  }, [queryMode, forVisit]);
   const [navigation, setNavigation] = useState({ date: queryDate, offset: 0 });
   const offset = navigation.date === queryDate ? navigation.offset : 0;
   const setOffset = (change: number) => setNavigation({ date: queryDate, offset: offset + change });
@@ -82,9 +91,14 @@ export function DiaryView() {
           <Button variant="outline" onClick={() => setForm({ kind: "symptom" })}>
             Log symptom
           </Button>
-          <Link href="/health/diary/patterns">Patterns</Link>
+          <Link
+            href={mode.enabled ? "/health/diary/patterns?mode=coeliac" : "/health/diary/patterns"}
+          >
+            Patterns
+          </Link>
         </div>
       </header>
+      <DiaryModeSettings />
       <section className="hlt-diary-actions" aria-label="Diary date range">
         <Button variant="outline" onClick={() => setOffset(1)}>
           Previous week
@@ -182,33 +196,37 @@ export function DiaryView() {
                               </p>
                             )}
                             {entry.note && <p className="hlt-diary-note">{entry.note}</p>}
-                            <div className="hlt-diary-actions">
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                disabled={busy.includes(entry.url)}
-                                onClick={() => setForm({ kind: entry.kind, entry })}
-                                aria-label={`Edit ${diaryLabel(entry)}`}
-                              >
-                                Edit
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                disabled={busy.includes(entry.url)}
-                                onClick={() => {
-                                  setFailure("");
-                                  void remove(entry).catch(() =>
-                                    setFailure(
-                                      "Couldn't delete this entry. It may have changed elsewhere; review the refreshed diary and try again.",
-                                    ),
-                                  );
-                                }}
-                                aria-label={`Delete ${diaryLabel(entry)}`}
-                              >
-                                Delete
-                              </Button>
-                            </div>
+                            {entry.readOnly ? (
+                              <p className="hlt-muted">Logged in the Coeliac app</p>
+                            ) : (
+                              <div className="hlt-diary-actions">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  disabled={busy.includes(entry.url)}
+                                  onClick={() => setForm({ kind: entry.kind, entry })}
+                                  aria-label={`Edit ${diaryLabel(entry)}`}
+                                >
+                                  Edit
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  disabled={busy.includes(entry.url)}
+                                  onClick={() => {
+                                    setFailure("");
+                                    void remove(entry).catch(() =>
+                                      setFailure(
+                                        "Couldn't delete this entry. It may have changed elsewhere; review the refreshed diary and try again.",
+                                      ),
+                                    );
+                                  }}
+                                  aria-label={`Delete ${diaryLabel(entry)}`}
+                                >
+                                  Delete
+                                </Button>
+                              </div>
+                            )}
                           </article>
                         </li>
                       );

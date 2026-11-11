@@ -2,16 +2,20 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { RdfFetchError } from "@jeswr/fetch-rdf";
 import { assertWithinPodScope } from "@jeswr/guarded-fetch";
+import { correlate, rankSuspicions } from "@jeswr/health-insights";
 import {
   buildMeal,
   buildSymptom,
   deriveExposures,
+  type ExposureData,
   type FoodItemData,
   isSymptomType,
   Meal,
+  type MealData,
   parseMeal,
   parseSymptom,
   Symptom,
+  type SymptomData,
   type SymptomType,
 } from "@jeswr/solid-health-diary";
 import { NS } from "@jeswr/suite-vocab";
@@ -48,6 +52,7 @@ export type DiaryDraft = CommonDraft &
         ingredients: string;
         tags: string[];
         items?: FoodItemData[];
+        exposures?: ExposureData[];
         itemIngredients?: string[];
       }
     | {
@@ -57,7 +62,7 @@ export type DiaryDraft = CommonDraft &
         durationMinutes: number | null;
       }
   );
-export type DiaryEntry = DiaryDraft & { url: string; etag: string | null };
+export type DiaryEntry = DiaryDraft & { url: string; etag: string | null; readOnly?: boolean };
 export interface DiaryReadFailure {
   url: string;
   error: unknown;
@@ -187,7 +192,11 @@ export function createDiaryStore(fetch: typeof globalThis.fetch, storage: string
     return safe;
   };
   async function readEntry(url: string): Promise<DiaryEntry | null> {
-    scoped(url);
+    const safe = assertWithinPodScope(base, url);
+    const legacy = /^(meals|symptoms)\/(?:\d{4}\/(?:0[1-9]|1[0-2])\/)?[A-Za-z0-9_-]+\.ttl$/.test(
+      safe.slice(base.length),
+    );
+    if (!legacy) scoped(url);
     const { document, etag } = await store.read(url);
     const fields = new DiaryFields(`${url}#it`, document, DataFactory);
     const compatible = packageDataset(document);
@@ -195,6 +204,8 @@ export function createDiaryStore(fetch: typeof globalThis.fetch, storage: string
     if (meal)
       return {
         kind: "meal",
+        readOnly: legacy,
+        exposures: meal.exposures ?? [],
         url,
         etag,
         at: meal.startTime,
@@ -221,6 +232,7 @@ export function createDiaryStore(fetch: typeof globalThis.fetch, storage: string
       throw new TypeError("Invalid symptom duration");
     return {
       kind: "symptom",
+      readOnly: legacy,
       url,
       etag,
       at: symptom.onset,
@@ -255,14 +267,28 @@ export function createDiaryStore(fetch: typeof globalThis.fetch, storage: string
       throw error;
     }
   }
-  async function readMonth(month: string): Promise<MonthResult> {
-    const { document } = await store.read(month);
+  async function readMonth(month: string, legacy = false): Promise<MonthResult> {
+    let document: DatasetCore;
+    try {
+      document = (await store.read(month)).document;
+    } catch (error) {
+      if (legacy && missing(error) && /\/(meals|symptoms)\/$/.test(month))
+        return { entries: [], failures: [] };
+      throw error;
+    }
     const urls = [
       ...new Set(
         [...new Container(month, document, DataFactory).contains].map((item) => item.value),
       ),
     ].filter(
-      (url) => url.startsWith(month) && /^[A-Za-z0-9_-]+\.ttl$/.test(url.slice(month.length)),
+      (url) =>
+        url.startsWith(month) &&
+        (/^[A-Za-z0-9_-]+\.ttl$/.test(url.slice(month.length)) ||
+          (legacy &&
+            /^(meals|symptoms)\/(?:\d{4}\/)?$/.test(month.slice(base.length)) &&
+            (/\/(meals|symptoms)\/$/.test(month) ? /^\d{4}\/$/ : /^(0[1-9]|1[0-2])\/$/).test(
+              url.slice(month.length),
+            ))),
     );
     const entries: DiaryEntry[] = [],
       failures: DiaryReadFailure[] = [];
@@ -272,8 +298,14 @@ export function createDiaryStore(fetch: typeof globalThis.fetch, storage: string
         while (cursor < urls.length) {
           const url = urls[cursor++] as string;
           try {
-            const entry = await readEntry(url);
-            if (entry) entries.push(entry);
+            if (url.endsWith("/")) {
+              const nested = await readMonth(url, true);
+              entries.push(...nested.entries);
+              failures.push(...nested.failures);
+            } else {
+              const entry = await readEntry(url);
+              if (entry) entries.push(entry);
+            }
           } catch (error) {
             failures.push({ url, error });
           }
@@ -301,12 +333,13 @@ export function createDiaryStore(fetch: typeof globalThis.fetch, storage: string
     // filtered exactly below.
     const first = range && diaryDay(new Date(range.start.getTime() - ZONE_SLACK)).slice(0, 7);
     const last = range && diaryDay(new Date(range.end.getTime() - 1 + ZONE_SLACK)).slice(0, 7);
-    for (const month of months) {
+    for (const month of [...months, `${base}meals/`, `${base}symptoms/`]) {
+      const legacy = !months.includes(month);
       const key = month.slice(base.length, -1);
-      if (first && last && (key < first || key > last)) continue;
+      if (!legacy && first && last && (key < first || key > last)) continue;
       let task = options.cached ? monthsCache.get(month) : undefined;
       if (!task) {
-        task = readMonth(month);
+        task = readMonth(month, legacy);
         if (options.cached) monthsCache.set(month, task);
       }
       let loaded: MonthResult;
@@ -338,6 +371,7 @@ export function createDiaryStore(fetch: typeof globalThis.fetch, storage: string
     existing?: DiaryEntry,
     restoreUrl?: string,
   ): Promise<DiaryEntry> {
+    if (existing?.readOnly) throw new TypeError("Coeliac entries are read-only");
     validate(draft);
     if (!/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(id)) throw new TypeError("Invalid diary ID");
     const source = existing ? scoped(existing.url) : undefined;
@@ -378,7 +412,7 @@ export function createDiaryStore(fetch: typeof globalThis.fetch, storage: string
             note: draft.note,
             patient: owner,
             items,
-            exposures: deriveExposures(items),
+            exposures: diaryExposures(items, draft.exposures ?? previousMeal?.exposures),
           })
         : buildSymptom(url, {
             ...previousSymptom,
@@ -435,6 +469,7 @@ export function createDiaryStore(fetch: typeof globalThis.fetch, storage: string
     return saved;
   }
   async function remove(entry: DiaryEntry): Promise<void> {
+    if (entry.readOnly) throw new TypeError("Coeliac entries are read-only");
     const url = scoped(entry.url);
     const etag = version(entry.etag);
     const response = await fetch(url, {
@@ -538,4 +573,48 @@ export function diaryPatterns(
       a.food.localeCompare(b.food) ||
       a.kind.localeCompare(b.kind),
   );
+}
+
+/** Preserve explicit meal-level observations while recalculating product-derived exposures. */
+export const MANUAL_EXPOSURE_NOTE = "Manually logged exposure";
+export function diaryExposures(
+  items: FoodItemData[],
+  exposures: readonly ExposureData[] = [],
+): ExposureData[] {
+  const result = new Map(deriveExposures(items).map((value) => [value.trigger, value]));
+  const strength = { absent: 0, "possible-undeclared": 1, trace: 2, present: 3 };
+  for (const exposure of exposures) {
+    if (exposure.note !== MANUAL_EXPOSURE_NOTE) continue;
+    const derived = result.get(exposure.trigger);
+    if (!derived || strength[exposure.exposureLevel] >= strength[derived.exposureLevel])
+      result.set(exposure.trigger, {
+        trigger: exposure.trigger,
+        exposureLevel: exposure.exposureLevel,
+        note: MANUAL_EXPOSURE_NOTE,
+      });
+  }
+  return [...result.values()];
+}
+/** Use the shared engine over both storage layouts; future events are excluded. */
+export function likelyDiaryTriggers(entries: readonly DiaryEntry[], now = new Date()) {
+  const meals: MealData[] = [],
+    symptoms: SymptomData[] = [];
+  for (const entry of entries) {
+    if (entry.at > now) continue;
+    if (entry.kind === "meal")
+      meals.push({
+        id: entry.url,
+        startTime: entry.at,
+        items: entry.items ?? entry.foods.map((name) => ({ name })),
+        exposures: entry.exposures ?? deriveExposures(entry.items ?? []),
+      });
+    else
+      symptoms.push({
+        id: entry.url,
+        onset: entry.at,
+        symptomType: entry.symptomType,
+        ...(entry.severity === null ? {} : { severity: entry.severity }),
+      });
+  }
+  return rankSuspicions(correlate(meals, symptoms)).filter((score) => score.exposureCount > 0);
 }

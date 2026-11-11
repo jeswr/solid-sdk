@@ -1,6 +1,8 @@
-// AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
-import { HomeScreen } from "@/components/home-screen";
+// AUTHORED-BY Codex GPT-6.1-Sol
+import { redirect } from "next/navigation";
 
 export default function Home() {
-  return <HomeScreen />;
+  redirect(
+    `${process.env.NEXT_PUBLIC_SUITE_URL ?? "https://solid-suite.vercel.app"}/health/diary?mode=coeliac`,
+  );
 }

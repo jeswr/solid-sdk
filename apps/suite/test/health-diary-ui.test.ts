@@ -1,7 +1,9 @@
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex GPT-6.1-Sol
+import { buildMeal, SYMPTOM_TYPES, storeToTurtle } from "@jeswr/solid-health-diary";
 import { beforeEach, expect, it, vi } from "vitest";
 import { createDiaryStore } from "../src/apps/health/lib/data/diary";
+import { createDiaryPreferencesStore } from "../src/apps/health/lib/data/diary-preferences";
 import { createHealthDataStore } from "../src/apps/health/lib/data/store";
 import { diaryDay, diaryMonday, diaryWeek } from "../src/apps/health/lib/diary-time";
 import { createDemoPod } from "../src/lib/demo-pod/pod";
@@ -372,4 +374,81 @@ it("shows pattern counts and the dashboard summary, and finds notes in Health se
       "bloating",
     ),
   );
+});
+
+it("enables Coeliac for a visit, logs suspected exposure and keeps tracking only on request", async () => {
+  const { session, diary, pod } = await setup();
+  route.query = "mode=coeliac";
+  const view = await mount(h(HealthProvider, { session, children: h(DiaryView) }));
+  await eventually(() => expect(button("Keep it on", view.host).disabled).toBe(false));
+  const preferences = createDiaryPreferencesStore(pod.fetch, ROOT, OWNER);
+  expect((await preferences.read()).enabled).toBe(false);
+  await click(button("Log meal", view.host));
+  await fill("#hlt-diary-foods", "Possible gluten");
+  const exposure = [...document.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')].find(
+    (input) => input.closest("label")?.textContent?.includes("Contains gluten"),
+  );
+  if (!exposure) throw new Error("Missing gluten toggle");
+  await click(exposure);
+  const suspected = [...document.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')].find(
+    (input) => input.closest("label")?.textContent?.includes("Suspected exposure"),
+  );
+  if (!suspected) throw new Error("Missing suspected toggle");
+  await click(suspected);
+  await submit();
+  await eventually(() => expect(document.querySelector('[role="dialog"]')).toBeNull());
+  const saved = (await diary.list()).find(
+    (entry) => entry.kind === "meal" && entry.foods.includes("Possible gluten"),
+  );
+  expect(saved?.kind === "meal" && saved.exposures).toMatchObject([
+    { trigger: "gluten", exposureLevel: "possible-undeclared" },
+  ]);
+  await click(button("Log symptom", view.host));
+  expect(
+    [...document.querySelectorAll<HTMLOptionElement>("#hlt-diary-type option")].map(
+      (option) => option.value,
+    ),
+  ).toEqual(SYMPTOM_TYPES);
+  await click(button("Cancel"));
+  await act(async () => {
+    const trigger = view.host.querySelector<HTMLSelectElement>("#hlt-diary-trigger");
+    if (!trigger) throw new Error("Missing trigger selector");
+    trigger.value = "lactose";
+    trigger.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  expect((await preferences.read()).enabled).toBe(false);
+  await click(button("Keep it on", view.host));
+  await eventually(() =>
+    expect(view.host.textContent).not.toContain("Food intolerance tracking is on for this visit."),
+  );
+  expect(await preferences.read()).toEqual({ enabled: true, trigger: "lactose" });
+  await view.render(h(HealthProvider, { session, children: h(DiaryPatterns) }));
+  await eventually(() =>
+    expect(view.host.querySelector('[aria-label="Likely triggers"]')?.textContent).toContain(
+      "of 1 exposures",
+    ),
+  );
+  expect(view.host.textContent).toContain(
+    "This is information, not medical advice — decision support, not diagnosis. Always discuss anything here with your clinician.",
+  );
+});
+it("shows legacy Coeliac entries with their source note and no edit or delete action", async () => {
+  const { session, pod } = await setup();
+  const folder = `${ROOT}health/diary/meals/`,
+    url = `${folder}legacy.ttl`;
+  await pod.fetch(folder, { method: "PUT", headers: { "content-type": "text/turtle" }, body: "" });
+  await pod.fetch(url, {
+    method: "PUT",
+    headers: { "content-type": "text/turtle" },
+    body: await storeToTurtle(
+      buildMeal(url, { startTime: new Date(), items: [{ name: "Legacy toast" }] }),
+    ),
+  });
+  const view = await mount(h(HealthProvider, { session, children: h(DiaryView) }));
+  await eventually(() => expect(view.host.textContent).toContain("Legacy toast"));
+  const legacy = [...view.host.querySelectorAll("article")].find((article) =>
+    article.textContent?.includes("Legacy toast"),
+  );
+  expect(legacy?.textContent).toContain("Logged in the Coeliac app");
+  expect(legacy?.querySelectorAll("button")).toHaveLength(0);
 });

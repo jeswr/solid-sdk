@@ -7,7 +7,7 @@
  * `AnalysisResult.reintroductionSchedule` is only ever present for the ONE active
  * challenge (one-active-challenge invariant), so this renders a single schedule.
  */
-import type { ReintroductionSchedule } from "@/lib/inference/types";
+import type { ReintroductionSchedule } from "@jeswr/health-insights";
 import { triggerLabel } from "@/lib/off/exposure-display";
 
 const DOSE_LABEL: Record<string, string> = {
@@ -26,8 +26,8 @@ export function ReintroductionTimeline({ schedule }: { schedule: ReintroductionS
     <section className="reintro-timeline" aria-label="Reintroduction schedule">
       <h2>Reintroduction schedule — {triggerLabel(schedule.trigger)}</h2>
       <p className="reintro-timeline__washout">
-        {schedule.washoutDays} day{schedule.washoutDays === 1 ? "" : "s"} of washout before the first
-        dose, then each dose is observed for a reaction before the next.
+        {schedule.washoutDays} day{schedule.washoutDays === 1 ? "" : "s"} of washout before the
+        first dose, then each dose is observed for a reaction before the next.
       </p>
       <ol className="reintro-timeline__steps">
         {schedule.steps.map((step) => (

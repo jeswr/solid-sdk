@@ -20,6 +20,7 @@ import {
 } from "../lib/data/diary";
 import { diaryDay } from "../lib/diary-time";
 import type { Range } from "../lib/model";
+import { DiaryModeProvider } from "./diary-mode-context";
 import { type AsyncState, useHealth } from "./health-context";
 
 interface Edit {
@@ -181,7 +182,9 @@ export function DiaryProvider({ children }: { children: ReactNode }) {
   }
   return (
     <Context value={{ activate, load, revision, edits, busy, retry, save: persist, remove }}>
-      {children}
+      <DiaryModeProvider key={`${session.webId}:${session.storageUrl}`}>
+        {children}
+      </DiaryModeProvider>
     </Context>
   );
 }

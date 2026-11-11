@@ -12,8 +12,14 @@ import {
   Textarea,
 } from "@jeswr/suite-ui";
 import { useRef, useState } from "react";
-import { type DiaryDraft, type DiaryEntry, matchDiaryItems } from "../lib/data/diary";
+import {
+  type DiaryDraft,
+  type DiaryEntry,
+  MANUAL_EXPOSURE_NOTE,
+  matchDiaryItems,
+} from "../lib/data/diary";
 import { useDiaryActions } from "../state/diary-context";
+import { useDiaryMode } from "../state/diary-mode-context";
 import { useSheetSide } from "./measurement-sheet";
 
 export function DiarySheet({
@@ -26,6 +32,17 @@ export function DiarySheet({
   onClose(): void;
 }) {
   const { save } = useDiaryActions();
+  const mode = useDiaryMode();
+  const selectedExposure =
+    entry?.kind === "meal"
+      ? entry.exposures?.find((value) => value.trigger === mode.trigger)
+      : undefined;
+  const [exposed, setExposed] = useState(
+    !!selectedExposure && selectedExposure.exposureLevel !== "absent",
+  );
+  const [suspected, setSuspected] = useState(
+    selectedExposure?.exposureLevel === "possible-undeclared",
+  );
   const side = useSheetSide();
   const [id] = useState(() => crypto.randomUUID());
   const trigger = useRef<HTMLElement | null>(null);
@@ -136,6 +153,28 @@ export function DiarySheet({
                     kind,
                     foods: names,
                     items,
+                    exposures: mode.enabled
+                      ? [
+                          ...(entry?.kind === "meal"
+                            ? (entry.exposures ?? []).filter(
+                                (value) => value.trigger !== mode.trigger,
+                              )
+                            : []),
+                          ...(exposed
+                            ? [
+                                {
+                                  trigger: mode.trigger,
+                                  exposureLevel: suspected
+                                    ? ("possible-undeclared" as const)
+                                    : ("present" as const),
+                                  note: MANUAL_EXPOSURE_NOTE,
+                                },
+                              ]
+                            : []),
+                        ]
+                      : entry?.kind === "meal"
+                        ? (entry.exposures ?? [])
+                        : [],
                     ingredients: ingredients.filter(Boolean).join("\n"),
                     itemIngredients: ingredients,
                     tags: [
@@ -227,6 +266,33 @@ export function DiarySheet({
               <p id="hlt-diary-ingredients-error" role="alert">
                 {errors.ingredients}
               </p>
+              {mode.enabled && (
+                <fieldset>
+                  <legend>Food intolerance exposure</legend>
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={exposed}
+                      onChange={(event) => setExposed(event.target.checked)}
+                    />{" "}
+                    Contains {mode.trigger}
+                  </label>
+                  {exposed && (
+                    <label>
+                      <input
+                        type="checkbox"
+                        checked={suspected}
+                        onChange={(event) => setSuspected(event.target.checked)}
+                      />{" "}
+                      Suspected exposure
+                    </label>
+                  )}
+                  <p className="hlt-muted">
+                    Leave unchecked when no exposure was logged. Check ingredients and the packet
+                    for allergens.
+                  </p>
+                </fieldset>
+              )}
               <label htmlFor="hlt-diary-tags">Tags (comma separated, optional)</label>
               <Input
                 id="hlt-diary-tags"

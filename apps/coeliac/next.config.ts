@@ -11,6 +11,7 @@ const suitePackages = [
   "@jeswr/app-shell",
   "@jeswr/solid-elements",
   "@jeswr/solid-health-diary",
+  "@jeswr/health-insights",
   "@jeswr/guarded-fetch",
   "@jeswr/solid-session-restore",
   "@jeswr/fetch-rdf",

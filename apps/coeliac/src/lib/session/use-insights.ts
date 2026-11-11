@@ -1,5 +1,7 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
 "use client";
+import type { SafetyContext } from "@jeswr/health-insights";
+import { type AnalysisResult, analyze, learnTriggerClasses } from "@jeswr/health-insights";
 /**
  * Run the pure inference engine ({@link analyze}) over the account's cached diary
  * (all meals + symptoms) and expose the result to the Insights view. Reads are
@@ -55,10 +57,7 @@
  * brief window between a context change and this hook's next completed refresh.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
-import { analyze, type AnalysisResult } from "../inference/analyze";
 import { diaryDataFromCache, triggerClassDataToStored } from "../inference/from-cache";
-import { learnTriggerClasses } from "../inference/learn-lag-profile";
-import type { SafetyContext } from "../inference/types";
 import { useSession } from "./context";
 
 /** Stable default context identity so the effect does not re-fire every render. */
@@ -83,10 +82,12 @@ export function useInsights(context: SafetyContext = EMPTY_CONTEXT): InsightsSta
   // `contextUsed` is the exact `context` reference the CURRENT `state` was
   // computed against (see the CONTEXT-APPLIED GATE docs above) — `null` before
   // the first refresh completes.
-  const [state, setState] = useState<Omit<InsightsState, "refresh" | "loaded"> & {
-    loaded: boolean;
-    contextUsed: SafetyContext | null;
-  }>({
+  const [state, setState] = useState<
+    Omit<InsightsState, "refresh" | "loaded"> & {
+      loaded: boolean;
+      contextUsed: SafetyContext | null;
+    }
+  >({
     result: null,
     mealCount: 0,
     symptomCount: 0,
@@ -107,7 +108,13 @@ export function useInsights(context: SafetyContext = EMPTY_CONTEXT): InsightsSta
     const refreshStore = store; // the store THIS invocation reads from + persists to.
     const refreshContext = context; // the context THIS invocation's result reflects.
     if (!refreshStore) {
-      setState({ result: null, mealCount: 0, symptomCount: 0, loaded: true, contextUsed: refreshContext });
+      setState({
+        result: null,
+        mealCount: 0,
+        symptomCount: 0,
+        loaded: true,
+        contextUsed: refreshContext,
+      });
       return;
     }
     const [meals, symptoms, protocols, conclusions, triggerClasses] = await Promise.all([
