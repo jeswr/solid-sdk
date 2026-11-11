@@ -281,9 +281,16 @@ describe("chart references through real Univer structural command history", () =
           unitId: engine.snapshot().id,
           sources: [{ id: chart.id, sheetId: chart.sheetId, range: null, revision: 0 }],
         });
+      const record = { unitId: initial.id, subUnitId: "data", sources: [] };
+      const capture = () =>
+        commands?.executeCommand("sheets.mutation.capture-chart-sources", record);
+      expect(await capture()).toBe(false);
+      expect(record.sources).toEqual([]);
       expect(await restore()).toBe(false);
       expect(readCharts(engine.snapshot()).charts).toEqual(readCharts(initial).charts);
       engine.setReadOnly(false);
+      expect(await capture()).toBe(true);
+      expect(record.sources).toHaveLength(2);
       expect(await restore()).toBe(true);
       expect(readCharts(engine.snapshot()).charts[0]?.range).toBeNull();
       engine.load(initial);
@@ -552,7 +559,7 @@ describe("chart references through real Univer structural command history", () =
   });
 
   it.each([
-    "title",
+    "source",
     "recreated",
   ] as const)("invalidates lost-source restoration after a chart is %s edited", async (edit) => {
     const initial = chartSnapshot();
@@ -575,7 +582,7 @@ describe("chart references through real Univer structural command history", () =
           }),
       ).toBe(true);
       const edited = readCharts(engine.snapshot()).charts;
-      if (edit === "title") edited[0] = { ...(edited[0] as ChartSpec), title: "Edited later" };
+      if (edit === "source") edited[0] = { ...(edited[0] as ChartSpec), range: "A1:B4" };
       else
         engine.setCharts?.(
           withCharts(
@@ -588,12 +595,108 @@ describe("chart references through real Univer structural command history", () =
         const saved = engine.snapshot();
         const spec = readCharts(saved).charts[0] as ChartSpec;
         expect(spec).toEqual({ ...edited[0], range });
-        expect(chartValues(saved, spec.sheetId, spec.range)).toEqual(chartCells.slice(1));
+        expect(chartValues(saved, spec.sheetId, spec.range)).toEqual(
+          edit === "source" ? [...chartCells.slice(1), [null, null]] : chartCells.slice(1),
+        );
       };
       expect(await current.univerAPI.undo()).toBe(true);
-      expectSource("A2:B4");
+      expectSource(edit === "source" ? "A2:B5" : "A2:B4");
       expect(await current.univerAPI.redo()).toBe(true);
-      expectSource("A1:B3");
+      expectSource(edit === "source" ? "A1:B4" : "A1:B3");
+    } finally {
+      engine.dispose();
+    }
+  });
+
+  it.each([
+    ["row", "title", "A1:B4"],
+    ["row", "source", "A2:B4"],
+    ["column", "source", "B1:B4"],
+  ] as const)("refreshes restoration records when redoing a %s deletion after a %s edit", async (axis, edit, editedRange) => {
+    const initial = chartSnapshot();
+    const engine = await mountUniver({} as HTMLElement, {
+      snapshot: initial,
+      dark: false,
+      compact: true,
+    });
+    try {
+      const current = headless.current as ReturnType<typeof headless.create>;
+      const injector = current.univer.__getInjector();
+      injector.get(headless.core.IUniverInstanceService).focusUnit(initial.id as string);
+      expect(
+        await injector
+          .get(headless.core.ICommandService)
+          .executeCommand(
+            axis === "row"
+              ? headless.sheets.RemoveRowCommand.id
+              : headless.sheets.RemoveColCommand.id,
+            {
+              unitId: initial.id,
+              subUnitId: "data",
+              range:
+                axis === "row"
+                  ? { startRow: 0, endRow: 3, startColumn: 0, endColumn: 5 }
+                  : { startRow: 0, endRow: 9, startColumn: 0, endColumn: 1 },
+            },
+          ),
+      ).toBe(true);
+      expect(readCharts(engine.snapshot()).charts[0]?.range).toBeNull();
+      expect(await current.univerAPI.undo()).toBe(true);
+      const edited = readCharts(engine.snapshot()).charts.map((spec) =>
+        spec.id === chart.id ? { ...spec, title: "Edited later", range: editedRange } : spec,
+      );
+      engine.setCharts?.(withCharts({}, edited).charts);
+      const expectedValues =
+        edit === "title"
+          ? chartCells
+          : axis === "row"
+            ? chartCells.slice(1)
+            : chartCells.map((row) => row.slice(1));
+      for (let replay = 0; replay < 2; replay++) {
+        expect(await current.univerAPI.redo()).toBe(true);
+        expect(readCharts(engine.snapshot()).charts[0]?.range).toBeNull();
+        expect(await current.univerAPI.undo()).toBe(true);
+        const restored = engine.snapshot();
+        expect(readCharts(restored).charts).toEqual(edited);
+        expect(chartValues(restored, "data", editedRange)).toEqual(expectedValues);
+      }
+    } finally {
+      engine.dispose();
+    }
+  });
+
+  it("restores clipped sources after presentation edits without losing those edits", async () => {
+    const initial = chartSnapshot();
+    const engine = await mountUniver({} as HTMLElement, {
+      snapshot: initial,
+      dark: false,
+      compact: true,
+    });
+    try {
+      const current = headless.current as ReturnType<typeof headless.create>;
+      const injector = current.univer.__getInjector();
+      injector.get(headless.core.IUniverInstanceService).focusUnit(initial.id as string);
+      expect(
+        await injector
+          .get(headless.core.ICommandService)
+          .executeCommand(headless.sheets.RemoveRowCommand.id, {
+            unitId: initial.id,
+            subUnitId: "data",
+            range: { startRow: 0, endRow: 0, startColumn: 0, endColumn: 5 },
+          }),
+      ).toBe(true);
+      const presentation = { title: "Edited later", legend: false, type: "line" as const };
+      engine.setCharts?.(
+        withCharts(
+          {},
+          readCharts(engine.snapshot()).charts.map((spec) => ({ ...spec, ...presentation })),
+        ).charts,
+      );
+      expect(await current.univerAPI.undo()).toBe(true);
+      expect(readCharts(engine.snapshot()).charts).toEqual(
+        readCharts(initial).charts.map((spec) => ({ ...spec, ...presentation })),
+      );
+      expect(chartValues(engine.snapshot(), "data", chart.range)).toEqual(chartCells);
     } finally {
       engine.dispose();
     }

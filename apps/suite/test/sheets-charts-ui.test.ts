@@ -1,7 +1,9 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+import { Button } from "@jeswr/suite-ui";
 import { expect, it, vi } from "vitest";
 import { ChartSvg, ChartWorkspace } from "../src/apps/sheets/components/chart-workspace";
+import { chartValues } from "../src/apps/sheets/lib/charts/range";
 import {
   type ChartSpec,
   chartTypes,
@@ -10,6 +12,12 @@ import {
 } from "../src/apps/sheets/lib/charts/spec";
 import type { SheetEngine, Snapshot } from "../src/apps/sheets/lib/contract";
 import { act, click, h, mount } from "./drive-ui-dom";
+
+// Keep the real controls and expose their callbacks for defensive permission checks.
+vi.mock("@jeswr/suite-ui", async (importOriginal) => {
+  const original = await importOriginal<typeof import("@jeswr/suite-ui")>();
+  return { ...original, Button: vi.fn(original.Button) };
+});
 
 const spec: ChartSpec = {
   id: "chart",
@@ -179,6 +187,85 @@ it("rerenders source values and formula results without closing the editor draft
   await ui.unmount();
 });
 
+it.each([
+  false,
+  true,
+])("rebases an open chart editor after a row insertion unless its range was edited (%s)", async (editRange) => {
+  const initial = withCharts(source(), [{ ...spec, range: "A1:B4" }]);
+  const sheet = (initial.sheets as Record<string, Snapshot>).data as Snapshot;
+  sheet.cellData = {
+    ...(sheet.cellData as object),
+    3: { 0: { v: "Mar" }, 1: { v: 30 } },
+  };
+  const expectedValues = chartValues(initial, "data", "A1:B4");
+  const f = fixture(initial);
+  const ui = await mount(h(ChartWorkspace, { engine: f.engine, snapshot: initial }));
+  await click(button("Edit chart"));
+  const shifted = withCharts(source(), [{ ...spec, range: "A2:B5" }]);
+  const shiftedSheet = (shifted.sheets as Record<string, Snapshot>).data as Snapshot;
+  shiftedSheet.cellData = Object.fromEntries(
+    Object.entries(sheet.cellData as object).map(([row, cells]) => [Number(row) + 1, cells]),
+  );
+  await f.changed(shifted);
+  expect(field("Data range (A1)").value).toBe("A1:B4");
+  await fill("Chart title", "After insertion");
+  if (editRange) await fill("Data range (A1)", "A3:B5");
+  await submit();
+  const saved = f.engine.snapshot();
+  const chart = readCharts(saved).charts[0] as ChartSpec;
+  expect(chart).toMatchObject({
+    title: "After insertion",
+    range: editRange ? "A3:B5" : "A2:B5",
+  });
+  expect(chartValues(saved, chart.sheetId, chart.range)).toEqual(
+    editRange ? expectedValues.slice(1) : expectedValues,
+  );
+  expect(document.querySelector("svg title")?.textContent).toBe("After insertion");
+  expect(document.querySelector("svg desc")?.textContent).toContain("10 to 30");
+  await ui.unmount();
+});
+
+it.each([
+  "deleted",
+  "moved",
+  "removed",
+] as const)("uses the live source when it is %s before the editor receives a refresh", async (change) => {
+  const initial = withCharts(source(), [spec]);
+  const f = fixture(initial);
+  const ui = await mount(h(ChartWorkspace, { engine: f.engine, snapshot: initial }));
+  await click(button("Edit chart"));
+  const live = {
+    ...spec,
+    sheetId: change === "moved" ? "other" : "data",
+    range: change === "deleted" ? null : spec.range,
+  };
+  const next = withCharts(source(), change === "removed" ? [] : [live]);
+  const sheets = next.sheets as Record<string, Snapshot>;
+  sheets.other = sheets.data as Snapshot;
+  f.engine.load(next);
+  await fill("Chart title", "Latest source");
+  await submit();
+  const saved = f.engine.snapshot();
+  if (change === "removed") {
+    expect(readCharts(saved).charts).toEqual([]);
+    expect(document.querySelector("article")).toBeNull();
+  } else {
+    expect(readCharts(saved).charts).toEqual([{ ...live, title: "Latest source" }]);
+    if (change === "deleted") {
+      expect(() => chartValues(saved, live.sheetId, live.range)).toThrow("Data range deleted");
+      expect(document.querySelector('[role="status"]')?.textContent).toContain(
+        "Data range deleted",
+      );
+    } else {
+      expect(chartValues(saved, live.sheetId, live.range)).toEqual(
+        chartValues(initial, spec.sheetId, spec.range),
+      );
+      expect(document.querySelector("svg desc")?.textContent).toContain("10 to 20");
+    }
+  }
+  await ui.unmount();
+});
+
 it("renders view-only charts and blocks insert, edit and delete after write access is lost", async () => {
   const initial = withCharts(source(), [spec]);
   const f = fixture(initial);
@@ -192,6 +279,10 @@ it("renders view-only charts and blocks insert, edit and delete after write acce
     expect(button("Edit chart").disabled).toBe(true);
     await click(button("Insert chart"));
     await click(button("Edit chart"));
+    const insertHandler = vi
+      .mocked(Button)
+      .mock.calls.findLast(([props]) => props.children === "Insert chart")?.[0].onClick;
+    await act(() => insertHandler?.(new MouseEvent("click") as never));
     expect(document.querySelector('aside[aria-label="Chart editor"]')).toBeNull();
     expect(f.engine.setCharts).not.toHaveBeenCalled();
     expect(f.engine.snapshot()).toEqual(initial);
@@ -304,6 +395,7 @@ it("keeps the chart when an engine closes while the editor is open", async () =>
   const ui = await mount(h(ChartWorkspace, { engine: f.engine, snapshot: initial }));
   await click(button("Edit chart"));
   await ui.render(h(ChartWorkspace, { engine: null, snapshot: initial }));
+  await submit();
   await click(button("Delete chart"));
   expect(readCharts(f.engine.snapshot()).charts).toEqual([spec]);
   const missingSetter = { ...f.engine };

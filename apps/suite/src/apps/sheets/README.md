@@ -73,9 +73,10 @@ entries: [...] }`. Zod validates the collection and each entry on save/load; inv
 (including unknown versions, duplicate IDs, and missing/out-of-bounds sources) are ignored
 and reported as content-free console warnings. Legacy snapshots need no migration.
 Row/column mutations shift chart sources during forward edits, undo and redo, including charts
-created after a command. Commands that clip or delete a source record its original range and
-the chart's revision. Undo restores that range only while the revision is unchanged; every
-manual chart edit (including title or legend changes) increments its revision. Fully deleted
+created after a command. Deletions record the current source and its revision before each replay,
+including redo. Undo restores that range only while the revision is unchanged; manual sheet or
+range edits increment the revision, while presentation edits preserve it. An open chart editor
+uses the live source on Apply unless its range field was changed. Fully deleted
 sources stay saved with `range: null` and show “Data range deleted”. Source validity is
 independent of the rendering budget: ranges above 10,000 cells remain saved and show
 “Range too large to chart” until reduced.

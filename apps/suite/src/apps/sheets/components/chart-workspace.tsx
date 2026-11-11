@@ -4,7 +4,7 @@
 import { Button } from "@jeswr/suite-ui";
 import { useEffect, useId, useRef, useState } from "react";
 import { chartModel } from "../lib/charts/model";
-import { chartSource, chartValues } from "../lib/charts/range";
+import { chartSheet, chartSource, chartValues } from "../lib/charts/range";
 import {
   type ChartSpec,
   chartSpecSchema,
@@ -125,6 +125,7 @@ export function ChartWorkspace({
 }) {
   const [current, setCurrent] = useState(snapshot);
   const [draft, setDraft] = useState<ChartSpec>();
+  const openedSource = useRef<ChartSpec | undefined>(undefined);
   const [inserting, setInserting] = useState(false);
   const [error, setError] = useState("");
   const insert = useRef<HTMLButtonElement>(null);
@@ -203,6 +204,7 @@ export function ChartWorkspace({
                 snapshot={current}
                 readOnly={readOnly}
                 onEdit={() => {
+                  openedSource.current = spec;
                   setDraft(spec);
                   setInserting(false);
                   setError("");
@@ -216,22 +218,38 @@ export function ChartWorkspace({
             <form
               onSubmit={(event) => {
                 event.preventDefault();
-                const parsed = chartSpecSchema.safeParse(draft);
+                const latest = engine?.snapshot() ?? current;
+                const latestCharts = readCharts(latest).charts;
+                const live = latestCharts.find((chart) => chart.id === draft.id);
+                // Untouched sources follow structural edits made while this editor is open.
+                const source =
+                  !inserting && draft.range === openedSource.current?.range && live ? live : draft;
+                const parsed = chartSpecSchema.safeParse({
+                  ...draft,
+                  sheetId: source.sheetId,
+                  range: source.range,
+                });
                 if (!parsed.success) {
                   setError("Enter a valid chart title and rectangular A1 range.");
                   return;
                 }
                 try {
                   // The qualifier is an editor check; stable sheet identity owns saved sources.
-                  parsed.data.range = chartSource(current, draft.sheetId, draft.range).range.a1;
+                  if (parsed.data.range === null) chartSheet(latest, parsed.data.sheetId);
+                  else
+                    parsed.data.range = chartSource(
+                      latest,
+                      parsed.data.sheetId,
+                      parsed.data.range,
+                    ).range.a1;
                 } catch (failure) {
                   setError((failure as Error).message);
                   return;
                 }
                 persist(
                   inserting
-                    ? [...charts, parsed.data]
-                    : charts.map((chart) => (chart.id === draft.id ? parsed.data : chart)),
+                    ? [...latestCharts, parsed.data]
+                    : latestCharts.map((chart) => (chart.id === draft.id ? parsed.data : chart)),
                 );
               }}
             >
