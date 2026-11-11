@@ -21,6 +21,7 @@ function fake() {
     pending: () => items.map((item) => ({ ...item })),
     conflicts: () => [...conflicts],
     enqueue: vi.fn(),
+    registerDelegate: vi.fn(),
     localBody: vi.fn(),
     purge: vi.fn(),
     close: vi.fn(),

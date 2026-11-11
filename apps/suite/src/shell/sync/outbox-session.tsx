@@ -6,6 +6,7 @@ import {
   createOutbox,
   type Outbox,
   type QueueingStorageClient,
+  type ReplayDelegate,
   withOutbox,
 } from "@jeswr/suite-sdk/offline";
 import { createContext, type ReactNode, useContext, useEffect, useRef, useState } from "react";
@@ -19,6 +20,20 @@ interface OutboxSession {
   adapter: ReturnType<typeof createRealOutbox>;
   storage: QueueingStorageClient | null;
   signal: AbortSignal;
+  /**
+   * Register after storage opens, in a useEffect keyed on this session. Replacement
+   * unregisters automatically; callers must register again for the next session.
+   */
+  registerReplayDelegate(
+    tag: string,
+    factory: (session: {
+      fetch: typeof globalThis.fetch;
+      storageUrl: string;
+      webId: string;
+      storage: StorageClient;
+      signal: AbortSignal;
+    }) => ReplayDelegate,
+  ): () => void;
 }
 const Context = createContext<OutboxSession | null>(null);
 
@@ -53,6 +68,27 @@ export function OutboxSessionProvider({ children }: { children: ReactNode }) {
       adapter,
       storage: null,
       signal: controller.signal,
+      registerReplayDelegate(tag, factory) {
+        const check = () => {
+          controller.signal.throwIfAborted();
+          if (!active()) throw new Error("The outbox account is no longer active");
+        };
+        check();
+        if (!storage) throw new Error("Your storage is still opening. Please try again.");
+        const delegate = factory({
+          fetch,
+          storageUrl: account.storageUrl,
+          webId: account.webId,
+          storage,
+          signal: controller.signal,
+        });
+        return outbox.registerDelegate(tag, async (delivery, ctx) => {
+          check();
+          const result = await delegate(delivery, ctx);
+          check();
+          return result;
+        });
+      },
     };
     setSession(opened);
     let opening = false;

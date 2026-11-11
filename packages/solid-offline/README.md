@@ -138,7 +138,7 @@ const unsubscribe = outbox.on('change', () => renderQueue(outbox.pending()));
 `write`, `writeRdf`, `create`, and `delete` queue only with `offline: 'queue'`, when the
 browser reports offline or the operation fails with a network error. Other failures still
 throw. A queued write/create returns `{ url, etag: null, created: false, queued: true }`;
-`delete` continues to return void. Calls without the option pass through to storage.
+`delete` continues to return void. Calls without `offline` or `guard` pass through to storage.
 `patch` and `move` remain unqueueable in v1. Bodies, including streams, are captured before
 an opted-in attempt, so a failed upload cannot consume the only local copy. This buffers
 the complete body in memory. Queued `writeRdf` bodies retain Turtle or expanded, context-free JSON-LD as requested.
@@ -156,6 +156,46 @@ the client supplied by `withOutbox` or the most recent `replay`. Progress is rep
 in bytes at start `(0, size)` and successful completion `(size, size)`; streaming upload
 progress is a later improvement. Deletes have size zero.
 
+For application policy checks, pass `guard: { tag, assertions? }` to `enqueue` or to the
+decorated `write`, `writeRdf`, `create`, and `delete` options alongside `offline: 'queue'`:
+
+```ts
+const unregister = outbox.registerDelegate('app.policy-v1', async (delivery, { storage, signal }) => {
+  await verifyPolicy(delivery.assertions, delivery.url, signal);
+  // Dispatch delivery.op using delivery's actual URL, bytes, validators and create/delete options.
+  return deliverVerifiedOperation(storage, delivery, signal);
+});
+await queuedStorage.write(documentUrl, bytes, {
+  contentType: 'text/plain', ifMatch: documentEtag, offline: 'queue',
+  guard: { tag: 'app.policy-v1', assertions: { policyEtag: capturedPolicyEtag } },
+});
+// Later: unregister();
+```
+
+`OutboxGuard` tags match `/^[a-z][a-z0-9.-]{0,63}$/`. Assertions must be plain JSON
+(`JsonValue`), at most 16 KiB serialized as UTF-8; undefined, non-finite numbers, sparse
+arrays, accessors, class instances and cycles are rejected. Guards are snapshotted at enqueue
+and validated again on hydration. Invalid stored guards become failed items and cannot be sent,
+including through retry. `pending()` exposes only the read-only `guard.tag`, never assertions.
+
+Every guarded delivery uses the registered `ReplayDelegate`, including online attempts and
+conflict resolutions. Its `GuardedDelivery` snapshot contains `op`, `url`, optional `container`,
+`name`, `contentType`, `ifMatch`, `createOptions`, `deleteOptions`, private `assertions`, and a
+`Uint8Array | null` body. `purpose` is `replay`, `resolve-mine`, or `resolve-both`. Resolution
+supplies the actual overwrite or copy request, with the fresh validator or create-only name.
+Delegates receive the underlying StorageClient and an AbortSignal; use that client rather than
+the queue decorator to avoid recursive delivery. Body, options and assertions are defensive copies.
+Delegate network, precondition and other replay errors follow the usual queue classification.
+Failed resolution retains the conflict, as it does for unguarded requests.
+
+Registrations belong to one outbox instance and session. Duplicate tags throw; unregister is
+idempotent. Missing delegates leave replay items waiting with `blocked: 'no-delegate'`, hold
+later work for the same URL, and allow other URLs to proceed without reporting delivery progress.
+Register later and replay explicitly to deliver them. Online guarded attempts refuse a missing
+delegate; guarded `mine`/`both` resolutions refuse and retain the conflict. `theirs` needs no
+delegate. Guard enforcement also applies when queue opt-in is omitted, without queuing failures.
+`close()` clears registrations and aborts guarded requests. Delegates and credentials are never persisted.
+
 `conflicts()` returns metadata; `await localBody(conflictId)` retrieves the local bytes without
 putting bodies in snapshots or broadcasts. `resolve(id, 'mine')` HEADs for a current ETag and
 conditionally overwrites (or deletes); an absent ETag or a failed request retains the conflict.
@@ -169,7 +209,7 @@ WebID's outbox to recover unsent changes; `await outbox.purge()` explicitly disc
 **Logout purges read caches but retains the outbox.** `offline.close()`/`logout()` removes online
 listeners and aborts replay; instantiate/register the next client only for its active session.
 The configured queue's WebID must match `createOfflineClient`'s WebID. `outbox.close()` releases
-its listeners without purging persisted items. Browser Web Locks serialize replay across tabs;
+its listeners and delegates without purging persisted items. Browser Web Locks serialize replay across tabs;
 without Web Locks, only same-realm instances are serialized. Cross-tab changes refresh snapshots
 and emit `change`/`conflict` events without broadcasting bodies, credentials, URLs or ETags.
 Network failures after a server commits a mutation remain ambiguous; the queue does not promise

@@ -7,13 +7,20 @@ import { useMemo, useSyncExternalStore } from "react";
 export { mergeRdf } from "@jeswr/solid-offline/merge";
 export type {
   ConflictRecord,
+  GuardedDelivery,
+  JsonValue,
   Outbox,
+  OutboxGuard,
   OutboxItem,
   OutboxOperation,
   QueueingStorageClient,
   QueueingWriteResult,
+  QueueOption,
+  ReplayDelegate,
   ReplayOptions,
 } from "@jeswr/solid-offline/outbox";
+// Guarded writes and resolutions require a session-local registerDelegate registration.
+// Snapshots expose guard tags and no-delegate blocking; assertions stay private to delegates.
 export { createOutbox, withOutbox } from "@jeswr/solid-offline/outbox";
 export type { UseOfflineStatusResult } from "@jeswr/solid-offline/react";
 export { useOfflineStatus } from "@jeswr/solid-offline/react";

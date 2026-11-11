@@ -38,6 +38,9 @@ const bob: SuiteAccount = {
   storageUrl: "https://pod.example/bob/",
 };
 let session: ReturnType<typeof useOutboxSession>;
+type DelegateFactory = Parameters<
+  NonNullable<ReturnType<typeof useOutboxSession>>["registerReplayDelegate"]
+>[1];
 function present<T>(value: T | null | undefined): T {
   if (value == null) throw new Error("Expected a session fixture value");
   return value;
@@ -172,4 +175,89 @@ test("the session storage writes through, queues network failures and surfaces o
       offline: "queue",
     }),
   ).rejects.toThrow("Denied");
+});
+
+test("replay factories receive the session transport and registration expires on account replacement", async () => {
+  const view = render(contents());
+  await waitFor(() => expect(session?.storage).toBeTruthy());
+  const first = present(session);
+  const delegate = vi.fn().mockResolvedValue(undefined);
+  const factory = vi.fn<DelegateFactory>(() => delegate);
+  const unregister = first.registerReplayDelegate("test.policy", factory);
+  const bound = present(factory.mock.calls[0])[0];
+  expect(bound.webId).toBe(alice.webId);
+  expect(bound.storageUrl).toBe(alice.storageUrl);
+  expect(bound.storage).toBe(
+    (await present(vi.mocked(createPodClient).mock.results[0]).value).storage,
+  );
+  expect(bound.signal).toBe(first.signal);
+  expect(bound.fetch).toBe(present(vi.mocked(createPodClient).mock.calls[0])[0].fetch);
+  await bound.fetch(alice.storageUrl);
+  expect(fixture.accounts.fetch).toHaveBeenCalledOnce();
+  await first.outbox.enqueue({
+    op: "write",
+    url: `${alice.storageUrl}guarded`,
+    body: "local",
+    guard: { tag: "test.policy", assertions: { policy: "captured" } },
+  });
+  await first.outbox.replay(present(first.storage));
+  expect(delegate).toHaveBeenCalledOnce();
+  fixture.accounts = { ...fixture.accounts, active: bob };
+  view.rerender(contents());
+  await waitFor(() => expect(session?.storage?.root).toBe(bob.storageUrl));
+  const second = present(session);
+  expect(bound.signal.aborted).toBe(true);
+  await expect(bound.fetch(bob.storageUrl)).rejects.toThrow();
+  expect(() => first.registerReplayDelegate("test.policy", factory)).toThrow();
+  await second.outbox.enqueue({
+    op: "write",
+    url: `${bob.storageUrl}guarded`,
+    guard: { tag: "test.policy" },
+  });
+  await second.outbox.replay(present(second.storage));
+  expect(second.outbox.pending()).toMatchObject([{ status: "waiting", blocked: "no-delegate" }]);
+  expect(delegate).toHaveBeenCalledOnce();
+  expect(factory).toHaveBeenCalledOnce();
+  const nextDelegate = vi.fn().mockResolvedValue(undefined);
+  const nextFactory = vi.fn(() => nextDelegate);
+  const stop = second.registerReplayDelegate("test.policy", nextFactory);
+  unregister(); // Old cleanup cannot unregister the new account's delegate.
+  await second.outbox.replay(present(second.storage));
+  expect(nextDelegate).toHaveBeenCalledOnce();
+  expect(second.outbox.pending()).toEqual([]);
+  stop();
+});
+
+test("a retained registration refuses inactive sessions even before cleanup and does not invoke its factory", async () => {
+  render(contents());
+  await waitFor(() => expect(session?.storage).toBeTruthy());
+  const first = present(session);
+  const factory = vi.fn(() => vi.fn().mockResolvedValue(undefined));
+  fixture.accounts.isActiveAccount = () => false;
+  expect(() => first.registerReplayDelegate("test.policy", factory)).toThrow("no longer active");
+  expect(factory).not.toHaveBeenCalled();
+});
+
+test("registered delivery and fetch are fenced when account authority changes without a new render", async () => {
+  render(contents());
+  await waitFor(() => expect(session?.storage).toBeTruthy());
+  const first = present(session);
+  const delegate = vi.fn().mockResolvedValue(undefined);
+  let transport!: typeof fetch;
+  first.registerReplayDelegate("test.policy", (bound) => {
+    transport = bound.fetch;
+    return delegate;
+  });
+  await first.outbox.enqueue({
+    op: "write",
+    url: `${alice.storageUrl}guarded`,
+    guard: { tag: "test.policy" },
+  });
+  fixture.accounts.isActiveAccount = () => false;
+  await first.outbox.replay(present(first.storage));
+  expect(delegate).not.toHaveBeenCalled();
+  expect(first.outbox.pending()).toMatchObject([
+    { status: "failed", error: expect.stringContaining("no longer active") },
+  ]);
+  await expect(transport(alice.storageUrl)).rejects.toThrow("no longer active");
 });

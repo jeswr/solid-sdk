@@ -9,6 +9,20 @@ import {
 } from '@jeswr/storage-client';
 import { DataFactory, Writer } from 'n3';
 
+export type JsonValue =
+  | null
+  | boolean
+  | number
+  | string
+  | JsonValue[]
+  | { [key: string]: JsonValue };
+
+/** Persisted application policy; assertions are visible only to delivery delegates. */
+export interface OutboxGuard {
+  tag: string;
+  assertions?: JsonValue;
+}
+
 export interface OutboxItem {
   id: string;
   op: 'write' | 'create' | 'delete';
@@ -21,6 +35,8 @@ export interface OutboxItem {
   createdAt: number;
   status: 'waiting' | 'replaying' | 'failed' | 'conflict';
   error?: string;
+  readonly guard?: { readonly tag: string };
+  readonly blocked?: 'no-delegate';
 }
 
 export interface ConflictRecord {
@@ -45,7 +61,29 @@ export interface OutboxOperation {
   label?: string;
   createOptions?: Omit<CreateOptions, 'signal'>;
   deleteOptions?: { recursive?: boolean };
+  guard?: OutboxGuard;
 }
+
+/** A defensive snapshot of the actual request, including conflict-resolution changes. */
+export interface GuardedDelivery {
+  op: OutboxOperation['op'];
+  url: string;
+  container?: string;
+  name?: string;
+  contentType?: string;
+  body: Uint8Array | null;
+  ifMatch?: string;
+  createOptions?: OutboxOperation['createOptions'];
+  deleteOptions?: OutboxOperation['deleteOptions'];
+  assertions?: JsonValue;
+  purpose: 'replay' | 'resolve-mine' | 'resolve-both';
+}
+
+export type ReplayDelegate = (
+  delivery: GuardedDelivery,
+  ctx: { storage: StorageClient; signal: AbortSignal },
+  // biome-ignore lint/suspicious/noConfusingVoidType: Delegates may intentionally return no result.
+) => Promise<WriteResult | void>;
 
 export interface ReplayOptions {
   /** Per-item byte progress, at start (0) and successful completion (size). */
@@ -62,6 +100,8 @@ export interface Outbox {
   conflicts(): ConflictRecord[];
   /** Durable enqueue; normally called by withOutbox. */
   enqueue(operation: OutboxOperation): Promise<OutboxItem>;
+  /** Session-local registration. Duplicate tags throw; close unregisters everything. */
+  registerDelegate(tag: string, delegate: ReplayDelegate): () => void;
   /** Accepts a conflict ID or an item ID; returns a defensive copy. */
   localBody(id: string): Promise<Uint8Array | null>;
   replay(client: StorageClient, options?: ReplayOptions): Promise<void>;
@@ -71,11 +111,11 @@ export interface Outbox {
   on(event: 'change' | 'conflict', listener: () => void): () => void;
   /** Deletes only this WebID's queue. Logout deliberately does not call this. */
   purge(): Promise<void>;
-  /** Releases listeners; persisted changes survive. */
+  /** Releases listeners/delegates and aborts guarded deliveries; persisted changes survive. */
   close(): void;
 }
 
-type QueueOption = { offline?: 'queue' };
+export type QueueOption = { offline?: 'queue'; guard?: OutboxGuard };
 type RdfOptions = Parameters<StorageClient['writeRdf']>[2];
 type DeleteOptions = NonNullable<Parameters<StorageClient['delete']>[1]>;
 export type QueueingWriteResult = WriteResult & { queued?: true };
@@ -102,9 +142,14 @@ interface StoredItem {
   createOptions?: OutboxOperation['createOptions'];
   deleteOptions?: OutboxOperation['deleteOptions'];
   conflict?: ConflictRecord;
+  guard?: OutboxGuard;
 }
 
 const clients = new WeakMap<Outbox, StorageClient>();
+const sessions = new WeakMap<
+  Outbox,
+  { delegates: Map<string, ReplayDelegate>; signal: AbortSignal }
+>();
 const underlying = new WeakMap<StorageClient, StorageClient>();
 // Also serialize instances in the same realm, including tests without Web Locks.
 const queues = new WeakMap<IDBFactory, Map<string, Promise<unknown>>>();
@@ -116,6 +161,106 @@ const isRdf = (type: string) =>
 const networkFailure = (error: unknown) =>
   (error instanceof StorageError && error.code === 'network') ||
   (error instanceof TypeError && /fetch|network/i.test(error.message));
+
+class MissingDelegateError extends Error {}
+
+function errorMessage(error: unknown): string {
+  try {
+    return error instanceof Error ? error.message : String(error);
+  } catch {
+    return 'Unknown delivery error';
+  }
+}
+
+function validateTag(tag: unknown): asserts tag is string {
+  if (typeof tag !== 'string' || !/^[a-z][a-z0-9.-]{0,63}$/.test(tag)) {
+    throw new TypeError('[solid-offline] invalid guard tag');
+  }
+}
+
+/** Validate before JSON serialization so lossy values and executable accessors cannot pass. */
+function snapshotGuard(value: unknown): OutboxGuard | undefined {
+  if (value === undefined) return undefined;
+  const invalid = () =>
+    new TypeError('[solid-offline] invalid guard: assertions must be plain JSON');
+  const ancestors = new Set<object>();
+  const copy = (input: unknown): JsonValue => {
+    if (input === null || typeof input === 'string' || typeof input === 'boolean') return input;
+    if (typeof input === 'number' && Number.isFinite(input)) return input;
+    if (typeof input !== 'object' || input === null || ancestors.has(input)) throw invalid();
+    const array = Array.isArray(input);
+    if (array && Object.getPrototypeOf(input) !== Array.prototype) throw invalid();
+    if (!array && ![Object.prototype, null].includes(Object.getPrototypeOf(input))) throw invalid();
+    ancestors.add(input);
+    const entries: [string, JsonValue][] = [];
+    for (const key of Reflect.ownKeys(input)) {
+      if (array && key === 'length') continue;
+      const property = Object.getOwnPropertyDescriptor(input, key);
+      if (
+        typeof key !== 'string' ||
+        !property?.enumerable ||
+        !Object.hasOwn(property, 'value') ||
+        (array && (!/^(0|[1-9][0-9]*)$/.test(key) || Number(key) >= input.length))
+      )
+        throw invalid();
+      entries.push([key, copy(property.value)]);
+    }
+    ancestors.delete(input);
+    if (array) {
+      if (entries.length !== input.length) throw invalid();
+      return entries.map(([, entry]) => entry);
+    }
+    return Object.fromEntries(entries);
+  };
+  const guard = copy(value);
+  if (!guard || Array.isArray(guard) || typeof guard !== 'object') throw invalid();
+  validateTag(guard.tag);
+  if (Object.keys(guard).some((key) => key !== 'tag' && key !== 'assertions')) throw invalid();
+  if (Object.hasOwn(guard, 'assertions')) {
+    if (encoder.encode(JSON.stringify(guard.assertions)).byteLength > 16 * 1024) {
+      throw new TypeError('[solid-offline] guard assertions exceed 16 KiB');
+    }
+    return { tag: guard.tag, assertions: guard.assertions };
+  }
+  return { tag: guard.tag };
+}
+
+function storedGuard(record: StoredItem): OutboxGuard | undefined {
+  const guard = snapshotGuard(record.guard);
+  const metadata = snapshotGuard(record.item.guard);
+  if (metadata?.tag !== guard?.tag || (metadata && Object.hasOwn(metadata, 'assertions'))) {
+    throw new TypeError('[solid-offline] invalid stored guard metadata');
+  }
+  return guard;
+}
+
+function delegateFor(outbox: Outbox, tag: string): ReplayDelegate {
+  const session = sessions.get(outbox);
+  if (!session) throw new Error('[solid-offline] outbox is closed');
+  const delegate = session.delegates.get(tag);
+  if (!delegate)
+    throw new MissingDelegateError(
+      `[solid-offline] no replay delegate registered for guard "${tag}"`,
+    );
+  return delegate;
+}
+
+async function deliverGuarded(
+  outbox: Outbox,
+  guard: OutboxGuard,
+  delivery: Omit<GuardedDelivery, 'assertions'>,
+  storage: StorageClient,
+  signal?: AbortSignal,
+): ReturnType<ReplayDelegate> {
+  const delegate = delegateFor(outbox, guard.tag);
+  const session = sessions.get(outbox) as NonNullable<ReturnType<typeof sessions.get>>;
+  const activeSignal = signal ? AbortSignal.any([session.signal, signal]) : session.signal;
+  activeSignal.throwIfAborted();
+  return delegate(structuredClone({ ...delivery, assertions: guard.assertions }), {
+    storage,
+    signal: activeSignal,
+  });
+}
 
 /** Rebuild from public RDF/JS fields; never trust private N3 ids or term methods. */
 async function serializeRdf(
@@ -265,6 +410,8 @@ export function createOutbox(options: {
   const listeners = { change: new Set<() => void>(), conflict: new Set<() => void>() };
   let records: StoredItem[] = [];
   let closed = false;
+  const controller = new AbortController();
+  const delegates = new Map<string, ReplayDelegate>();
   const channel =
     typeof BroadcastChannel === 'undefined' ? undefined : new BroadcastChannel(dbName);
   // Node's BroadcastChannel should not keep tooling/SSR processes alive.
@@ -295,8 +442,26 @@ export function createOutbox(options: {
   }
 
   async function refresh(): Promise<void> {
-    records = await transaction<StoredItem[]>('readonly', (store) => store.getAll());
-    records.sort((a, b) => a.item.createdAt - b.item.createdAt || (a.order ?? 0) - (b.order ?? 0));
+    const loaded = await transaction<StoredItem[]>('readwrite', (store) => {
+      const request = store.getAll();
+      request.onsuccess = () => {
+        for (const record of request.result as StoredItem[]) {
+          try {
+            storedGuard(record);
+          } catch (error) {
+            const message = `[solid-offline] invalid stored guard: ${errorMessage(error)}`;
+            if (record.item.status !== 'failed' || record.item.error !== message) {
+              record.item.status = 'failed';
+              record.item.error = message;
+              store.put(record);
+            }
+          }
+        }
+      };
+      return request;
+    });
+    loaded.sort((a, b) => a.item.createdAt - b.item.createdAt || (a.order ?? 0) - (b.order ?? 0));
+    records = loaded;
   }
 
   function emit(event: 'change' | 'conflict'): void {
@@ -382,6 +547,28 @@ export function createOutbox(options: {
     signal?: AbortSignal,
   ): Promise<void> {
     const { item } = record;
+    const guard = storedGuard(record);
+    if (guard) {
+      await deliverGuarded(
+        outbox,
+        guard,
+        {
+          op: item.op,
+          url: item.url,
+          container: item.container,
+          name: item.name,
+          contentType: item.contentType,
+          body: record.body,
+          ifMatch: record.ifMatch,
+          createOptions: record.createOptions,
+          deleteOptions: record.deleteOptions,
+          purpose: 'replay',
+        },
+        storage,
+        signal,
+      );
+      return;
+    }
     if (item.op === 'delete') {
       await storage.delete(item.url, { ...record.deleteOptions, ifMatch: record.ifMatch, signal });
     } else if (item.op === 'create') {
@@ -411,13 +598,38 @@ export function createOutbox(options: {
       if (closed || opts.signal?.aborted) break;
       if (!['waiting', 'replaying'].includes(record.item.status) || blocked.has(record.item.url))
         continue;
+      if (record.guard && !delegates.has(record.guard.tag)) {
+        if (record.item.status !== 'waiting') {
+          record.item.status = 'waiting';
+          await save(record);
+        }
+        blocked.add(record.item.url);
+        continue;
+      }
       record.item.status = 'replaying';
       await save(record);
+      // Registration can disappear while persistence yields to a component cleanup.
+      if (record.guard && !delegates.has(record.guard.tag)) {
+        record.item.status = 'waiting';
+        await save(record);
+        blocked.add(record.item.url);
+        continue;
+      }
       progress(0, record.item.size);
       try {
         await send(record, storage, opts.signal);
       } catch (error) {
-        if (networkFailure(error) || opts.signal?.aborted) {
+        if (error instanceof MissingDelegateError) {
+          record.item.status = 'waiting';
+          blocked.add(record.item.url);
+          await save(record);
+          continue;
+        }
+        if (
+          networkFailure(error) ||
+          opts.signal?.aborted ||
+          (record.guard && controller.signal.aborted)
+        ) {
           record.item.status = 'waiting';
           await save(record);
           break;
@@ -439,7 +651,7 @@ export function createOutbox(options: {
           blocked.add(record.item.url);
         } else {
           record.item.status = 'failed';
-          record.item.error = error instanceof Error ? error.message : String(error);
+          record.item.error = errorMessage(error);
         }
         await save(record);
         continue;
@@ -452,9 +664,20 @@ export function createOutbox(options: {
   const outbox: Outbox = {
     webId: options.webId,
     ready,
-    pending: () => records.map((r) => ({ ...r.item })),
+    pending: () =>
+      records.map((r) => {
+        const { guard: _guard, blocked: _blocked, ...item } = r.item;
+        return {
+          ...item,
+          ...(r.guard && typeof r.guard.tag === 'string' ? { guard: { tag: r.guard.tag } } : {}),
+          ...(r.item.status === 'waiting' && r.guard && !delegates.has(r.guard.tag)
+            ? { blocked: 'no-delegate' as const }
+            : {}),
+        };
+      }),
     conflicts: () => records.flatMap((r) => (r.conflict ? [{ ...r.conflict }] : [])),
     async enqueue(operation) {
+      const guard = snapshotGuard(operation.guard);
       // Snapshot mutable/stream bodies before waiting for the database lock.
       const body = await bytes(operation.body);
       return exclusive(async () => {
@@ -469,6 +692,7 @@ export function createOutbox(options: {
           size: body?.byteLength ?? 0,
           createdAt: now(),
           status: 'waiting',
+          ...(guard ? { guard: { tag: guard.tag } } : {}),
         };
         await save({
           item,
@@ -476,9 +700,25 @@ export function createOutbox(options: {
           ifMatch: operation.ifMatch,
           createOptions: operation.createOptions,
           deleteOptions: operation.deleteOptions,
+          guard,
         });
-        return { ...item };
+        return outbox.pending().find((entry) => entry.id === item.id) as OutboxItem;
       });
+    },
+    registerDelegate(tag, delegate) {
+      if (closed) throw new Error('[solid-offline] outbox is closed');
+      validateTag(tag);
+      if (delegates.has(tag))
+        throw new Error(`[solid-offline] duplicate replay delegate for "${tag}"`);
+      delegates.set(tag, delegate);
+      emit('change');
+      let registered = true;
+      return () => {
+        if (!registered) return;
+        registered = false;
+        delegates.delete(tag);
+        emit('change');
+      };
     },
     async localBody(id) {
       await ready;
@@ -512,12 +752,31 @@ export function createOutbox(options: {
           await drop(record);
           return;
         }
+        const guard = storedGuard(record);
+        if (guard) delegateFor(outbox, guard.tag);
         const storage = client();
         if (strategy === 'mine') {
           const head = await storage.head(item.url, { revalidate: true });
           if (!head.etag)
             throw new Error('[solid-offline] cannot overwrite without a current ETag');
-          if (item.op === 'delete') {
+          if (guard) {
+            await deliverGuarded(
+              outbox,
+              guard,
+              {
+                op: item.op === 'delete' ? 'delete' : 'write',
+                url: item.url,
+                container: item.container,
+                name: item.name,
+                contentType: item.contentType ?? 'application/octet-stream',
+                body: record.body,
+                ifMatch: head.etag,
+                deleteOptions: record.deleteOptions,
+                purpose: 'resolve-mine',
+              },
+              storage,
+            );
+          } else if (item.op === 'delete') {
             await storage.delete(item.url, { ...record.deleteOptions, ifMatch: head.etag });
           } else {
             await storage.write(item.url, record.body ?? new Uint8Array(), {
@@ -538,11 +797,28 @@ export function createOutbox(options: {
           const ext = dot > 0 ? original.slice(dot) : '';
           const name = `${stem}${record.conflict?.kind === 'rdf' ? ' (copy)' : `-conflict-${now()}`}${ext}`;
           // StorageClient.create's named Solid PUT uses If-None-Match: *.
-          await storage.create(container, record.body, {
+          const createOptions = {
             ...record.createOptions,
             name,
             contentType: item.contentType,
-          });
+          };
+          if (guard) {
+            await deliverGuarded(
+              outbox,
+              guard,
+              {
+                op: 'create',
+                url: `${childUrl(container, name)}${createOptions.kind === 'container' ? '/' : ''}`,
+                container,
+                name,
+                contentType: item.contentType,
+                body: record.body,
+                createOptions,
+                purpose: 'resolve-both',
+              },
+              storage,
+            );
+          } else await storage.create(container, record.body, createOptions);
         } else {
           throw new Error('[solid-offline] invalid conflict strategy');
         }
@@ -564,11 +840,16 @@ export function createOutbox(options: {
     },
     close() {
       closed = true;
+      controller.abort();
+      delegates.clear();
+      sessions.delete(outbox);
+      clients.delete(outbox);
       channel?.close();
       listeners.change.clear();
       listeners.conflict.clear();
     },
   };
+  sessions.set(outbox, { delegates, signal: controller.signal });
   return outbox;
 }
 
@@ -581,51 +862,78 @@ export function withOutbox(client: StorageClient, outbox: Outbox): QueueingStora
     operation: OutboxOperation,
     send: (body: Uint8Array | null) => Promise<WriteResult> | Promise<void>,
     signal?: AbortSignal,
+    queue = true,
   ): Promise<QueueingWriteResult> {
     signal?.throwIfAborted();
+    const guard = snapshotGuard(operation.guard);
     if (!raw.isWithinStorage(operation.container ?? operation.url)) {
       throw new StorageError('scope', { url: operation.url, method: operation.op.toUpperCase() });
     }
     const body = await bytes(operation.body);
     const offline = typeof navigator !== 'undefined' && navigator.onLine === false;
-    if (!offline) {
+    if (!offline || !queue) {
       try {
-        const result = await send(body);
+        const result = guard
+          ? await deliverGuarded(
+              outbox,
+              guard,
+              {
+                op: operation.op,
+                url: operation.url,
+                container: operation.container,
+                name: operation.name,
+                contentType: operation.contentType,
+                body,
+                ifMatch: operation.ifMatch,
+                createOptions: operation.createOptions,
+                deleteOptions: operation.deleteOptions,
+                purpose: 'replay',
+              },
+              raw,
+              signal,
+            )
+          : await send(body);
         return result ?? { url: operation.url, etag: null, created: false };
       } catch (error) {
-        if (signal?.aborted || !networkFailure(error)) throw error;
+        if (!queue || signal?.aborted || !networkFailure(error)) throw error;
       }
     }
     signal?.throwIfAborted();
-    await outbox.enqueue({ ...operation, body });
+    await outbox.enqueue({ ...operation, body, guard });
     return { url: operation.url, etag: null, created: false, queued: true };
   }
 
   const overrides: Pick<QueueingStorageClient, 'write' | 'writeRdf' | 'create' | 'delete'> = {
     write(url, body, opts) {
-      if (opts.offline !== 'queue') return client.write(url, body, opts);
-      const { offline: _offline, ...writeOpts } = opts;
+      if (opts.offline !== 'queue' && opts.guard === undefined)
+        return client.write(url, body, opts);
+      const { offline: _offline, guard, ...writeOpts } = opts;
       return attempt(
-        { op: 'write', url, body, contentType: opts.contentType, ifMatch: opts.ifMatch },
+        { op: 'write', url, body, contentType: opts.contentType, ifMatch: opts.ifMatch, guard },
         (copy) => raw.write(url, copy ?? new Uint8Array(), writeOpts),
         opts.signal,
+        opts.offline === 'queue',
       );
     },
     async writeRdf(url, dataset, opts) {
-      if (opts.offline !== 'queue') return client.writeRdf(url, dataset, opts);
+      if (opts.offline !== 'queue' && opts.guard === undefined)
+        return client.writeRdf(url, dataset, opts);
+      const guard = snapshotGuard(opts.guard);
       const quads = [...dataset];
       const contentType = opts.contentType ?? 'text/turtle';
       const body = await serializeRdf(quads, contentType);
-      const { offline: _offline, ...rdfOpts } = opts;
+      const { offline: _offline, guard: _guard, ...rdfOpts } = opts;
       return attempt(
-        { op: 'write', url, body, contentType, ifMatch: opts.ifMatch },
+        { op: 'write', url, body, contentType, ifMatch: opts.ifMatch, guard },
         () => raw.writeRdf(url, quads, rdfOpts),
         opts.signal,
+        opts.offline === 'queue',
       );
     },
     async create(container, body, opts) {
-      if (opts?.offline !== 'queue') return client.create(container, body, opts);
-      const { offline: _offline, signal, ...createOpts } = opts;
+      if (opts?.offline !== 'queue' && opts?.guard === undefined)
+        return client.create(container, body, opts);
+      const { offline: _offline, signal, guard, ...createOpts } = opts;
       const name = opts.name ?? `offline-${crypto.randomUUID()}`;
       const url = `${childUrl(container, name)}${opts.kind === 'container' ? '/' : ''}`;
       return attempt(
@@ -637,18 +945,27 @@ export function withOutbox(client: StorageClient, outbox: Outbox): QueueingStora
           body,
           contentType: opts.contentType,
           createOptions: { ...createOpts, name },
+          guard,
         },
         (copy) => raw.create(container, copy, { ...createOpts, name, signal }),
         signal,
+        opts.offline === 'queue',
       );
     },
     async delete(url, opts) {
-      if (opts?.offline !== 'queue') return client.delete(url, opts);
-      const { offline: _offline, ...deleteOpts } = opts;
+      if (opts?.offline !== 'queue' && opts?.guard === undefined) return client.delete(url, opts);
+      const { offline: _offline, guard, ...deleteOpts } = opts;
       await attempt(
-        { op: 'delete', url, ifMatch: opts.ifMatch, deleteOptions: { recursive: opts.recursive } },
+        {
+          op: 'delete',
+          url,
+          ifMatch: opts.ifMatch,
+          deleteOptions: { recursive: opts.recursive },
+          guard,
+        },
         () => raw.delete(url, deleteOpts),
         opts.signal,
+        opts.offline === 'queue',
       );
     },
   };
