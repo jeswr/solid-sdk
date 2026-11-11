@@ -316,7 +316,7 @@ test("prohibitions stay disabled, and bulk approval requires matching kinds and 
 }, info) => {
   await setup(page);
   await open(page, "approvals/prohibited-send");
-  await expect(page.getByText("Your permissions never allow this")).toBeVisible();
+  await expect(page.getByText("Your permissions never allow this", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Approve", exact: true })).toBeDisabled();
   await accessible(page, info, "prohibited-detail");
   await open(page);
