@@ -34,6 +34,7 @@
     "@jeswr/guarded-fetch": "workspace:*",
     "@jeswr/ldp-container": "workspace:*",
     "@jeswr/pod-access": "workspace:*",
+    "@jeswr/pod-ask": "workspace:*",
     "@jeswr/pod-auth": "workspace:*",
     "@jeswr/pod-connectors": "workspace:*",
     "@jeswr/rdf-engine": "workspace:*",
