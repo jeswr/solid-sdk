@@ -17,6 +17,8 @@ export interface Installation {
   challengeAttempts: number[];
   /** Admission time; an installation no registration ever attaches to expires from here. */
   createdAt: number;
+  /** WebID whose token admitted it; bounds per-principal admission (sst-1qsu). */
+  admittedBy: string;
 }
 export interface PushTopic {
   index: number;

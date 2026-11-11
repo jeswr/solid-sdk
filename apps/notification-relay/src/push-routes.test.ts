@@ -522,6 +522,53 @@ test("admits installations atomically up to capacity and expires ones never atta
     ).toThrow(/Invalid/u);
 });
 
+test("caps installations per admitting WebID and frees the slot on deletion", async () => {
+  const f = await setup({ maxPushInstallationsPerWebId: 2 });
+  const devices = [await phone(), await phone(), await phone()];
+  const ids: string[] = [];
+  for (const device of devices.slice(0, 2)) ids.push(await f.create(device));
+  // Another account's installation does not count against this WebID.
+  await f.store.transaction((state) => {
+    const mine = state.installations.get(ids[1] as string) as Installation;
+    state.installations.set("other", {
+      ...mine,
+      installationId: "other",
+      admittedBy: "https://other.example/profile#me",
+    });
+  });
+  expect((await f.state()).installations.size).toBe(3);
+  const third = devices[2] as (typeof devices)[number];
+  expect((await f.call("POST", "/push/installations", third.body, { phone: third })).status).toBe(
+    429,
+  );
+  expect(
+    (
+      await f.call("DELETE", `/push/installations/${ids[0]}`, undefined, {
+        phone: devices[0],
+        token: false,
+      })
+    ).status,
+  ).toBe(204);
+  expect(await f.create(third)).toMatch(/^[a-f0-9]{32}$/u);
+  expect(() =>
+    createPushApi({
+      publicOrigin: publicUrl,
+      store: f.store,
+      now: f.now,
+      authorize: async () => {
+        throw new Error("unused");
+      },
+      verifyResourceToken: async () => {
+        throw new Error("unused");
+      },
+      verifyWebhook: async () => {
+        throw new Error("unused");
+      },
+      maxInstallationsPerWebId: 0,
+    }),
+  ).toThrow(/Invalid/u);
+});
+
 test("routes only the specified methods and paths and exposes proof CORS headers", async () => {
   const f = await setup();
   for (const [method, path] of [
@@ -660,7 +707,8 @@ test("rechecks device identity/version at commit after asynchronous verification
 });
 
 test("rejects stale registration refresh/rotation/deletion commits after concurrent ownership changes", async () => {
-  const f = await setup();
+  // Many installations under one test WebID; the per-WebID quota has its own test.
+  const f = await setup({ maxPushInstallationsPerWebId: 100 });
   for (const operation of ["put", "rotate", "delete"] as const) {
     for (const mutation of ["delete", "webid", "installation"] as const) {
       const id = await f.create();

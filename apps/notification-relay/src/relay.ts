@@ -62,6 +62,7 @@ export function createRelay(options: {
   /** Push admission limits; see createPushApi. */
   maxPushInstallations?: number;
   unattachedPushLifetimeMs?: number;
+  maxPushInstallationsPerWebId?: number;
   allowedOrigins?: readonly string[];
   now?: () => number;
   allowInsecureLoopback?: boolean;
@@ -94,6 +95,7 @@ export function createRelay(options: {
     allowLoopback: options.allowInsecureLoopback,
     maxInstallations: options.maxPushInstallations,
     unattachedLifetimeMs: options.unattachedPushLifetimeMs,
+    maxInstallationsPerWebId: options.maxPushInstallationsPerWebId,
     verifyResourceToken,
     verifyWebhook: verify,
     authorize: async (request) => {

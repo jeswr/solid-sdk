@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 import { createDecipheriv, createECDH, createHmac } from "node:crypto";
 import type { ActivityPayload, ChallengePayload } from "../src/push-payload.js";
 import type { Installation } from "../src/push-state.js";
@@ -35,6 +36,7 @@ export const installation: Installation = {
   challengeHash: "",
   challengeAttempts: [],
   createdAt: activity.sentAt,
+  admittedBy: "https://alice.example/profile/card#me",
 };
 
 /** Independent receiver, following the mobile HMAC implementation rather than the sender's HKDF API. */

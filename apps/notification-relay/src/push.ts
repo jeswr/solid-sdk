@@ -48,10 +48,15 @@ export function createPushApi(options: {
   maxInstallations?: number;
   /** How long an installation may wait for its first registration (default 24 hours). */
   unattachedLifetimeMs?: number;
+  /** Installations one WebID may hold admitted at once (default 10). */
+  maxInstallationsPerWebId?: number;
 }) {
   const { store, now, publicOrigin } = options;
   const maxInstallations = options.maxInstallations ?? 10_000;
   const unattachedLifetime = options.unattachedLifetimeMs ?? 86_400_000;
+  const perWebId = options.maxInstallationsPerWebId ?? 10;
+  if (!Number.isSafeInteger(perWebId) || perWebId <= 0)
+    throw new Error("Invalid per-WebID installation capacity");
   if (!Number.isSafeInteger(maxInstallations) || maxInstallations <= 0)
     throw new Error("Invalid installation capacity");
   if (!Number.isSafeInteger(unattachedLifetime) || unattachedLifetime <= 0)
@@ -188,11 +193,17 @@ export function createPushApi(options: {
             challengeHash: sha256(nonce),
             challengeAttempts: [now()],
             createdAt: now(),
+            admittedBy: (identity as ResourceIdentity).webid,
           };
           await proof(request, body, installation);
           await transaction((state) => {
             // Admission and insertion share one commit, so concurrent creates cannot overshoot.
             requirePush(state.installations.size < maxInstallations, 503);
+            let held = 0;
+            for (const other of state.installations.values())
+              if (other.admittedBy === installation.admittedBy) held++;
+            // One account cannot take the global capacity; expiry and deletion free its slots.
+            requirePush(held < perWebId, 429);
             state.installations.set(installation.installationId, installation);
           });
           return respond(201, {
