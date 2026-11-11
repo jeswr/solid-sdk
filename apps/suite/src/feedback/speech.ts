@@ -23,6 +23,11 @@ export interface VoiceSession {
   stop(): void;
   cancel(): void;
 }
+/**
+ * The native apps declare no microphone permission (RECORD_AUDIO / NSMicrophoneUsageDescription),
+ * so voice answers are offered on the web suite only and the native interview is typed.
+ */
+export const voiceInThisBuild = process.env.NEXT_PUBLIC_SUITE_TARGET !== "native";
 /** Recording is mandatory even when browser dictation is available. */
 export async function startVoice(
   onText: (text: string) => void,
@@ -144,7 +149,8 @@ export function useVoice(onText: (text: string) => void, onClip: (clip: VoiceCli
   useEffect(() => {
     mounted.current = true;
     setSupported(
-      typeof MediaRecorder !== "undefined" &&
+      voiceInThisBuild &&
+        typeof MediaRecorder !== "undefined" &&
         typeof navigator.mediaDevices?.getUserMedia === "function",
     );
     return () => {

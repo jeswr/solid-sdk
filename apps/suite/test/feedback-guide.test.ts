@@ -42,6 +42,13 @@ it("has eight ordered stages, unique ids, and registry app options with SEQ and 
 });
 it("reads only the agreed walkthrough shape, filters slugs and tolerates unavailable or corrupt storage", () => {
   expect(readWalkthrough('{"done":["drive","drive","missing"]}')).toEqual(["drive"]);
+  // A finished multi-app step used to be dropped because only app slugs passed the filter.
+  expect(readWalkthrough('{"done":["photos-music-money","drive","photos"]}')).toEqual([
+    "photos",
+    "music",
+    "money",
+    "drive",
+  ]);
   for (const raw of [
     null,
     "no",

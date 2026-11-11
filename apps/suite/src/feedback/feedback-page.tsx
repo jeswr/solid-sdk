@@ -18,7 +18,7 @@ import {
   stages,
 } from "./guide";
 import type { AudioReceipt } from "./receipts";
-import { useVoice, type VoiceClip } from "./speech";
+import { useVoice, type VoiceClip, voiceInThisBuild } from "./speech";
 import { type Message, type Submission, validateAnswers } from "./validation";
 
 type TranscriptMessage = Message & { audio?: number[] };
@@ -561,27 +561,29 @@ export function FeedbackPage() {
                 >
                   Send answer
                 </Button>
-                <Button
-                  variant="outline"
-                  disabled={
-                    busy ||
-                    savingRecordings > 0 ||
-                    voice.starting ||
-                    (!voice.listening && (!voice.supported || clips.length >= 10))
-                  }
-                  aria-label={voice.listening ? "Stop recording" : "Speak your answer"}
-                  aria-pressed={voice.listening}
-                  onClick={() => {
-                    if (voice.listening) voice.stop();
-                    else {
-                      voiceBase.current = input;
-                      void voice.start();
+                {voiceInThisBuild && (
+                  <Button
+                    variant="outline"
+                    disabled={
+                      busy ||
+                      savingRecordings > 0 ||
+                      voice.starting ||
+                      (!voice.listening && (!voice.supported || clips.length >= 10))
                     }
-                  }}
-                >
-                  {voice.listening ? <Square aria-hidden="true" /> : <Mic aria-hidden="true" />}
-                  {voice.listening ? "Stop recording" : "Speak"}
-                </Button>
+                    aria-label={voice.listening ? "Stop recording" : "Speak your answer"}
+                    aria-pressed={voice.listening}
+                    onClick={() => {
+                      if (voice.listening) voice.stop();
+                      else {
+                        voiceBase.current = input;
+                        void voice.start();
+                      }
+                    }}
+                  >
+                    {voice.listening ? <Square aria-hidden="true" /> : <Mic aria-hidden="true" />}
+                    {voice.listening ? "Stop recording" : "Speak"}
+                  </Button>
+                )}
                 <Button
                   variant="ghost"
                   disabled={locked}
@@ -590,14 +592,20 @@ export function FeedbackPage() {
                   Skip
                 </Button>
               </div>
-              <p className="text-sm text-muted-foreground">
-                {voice.listening
-                  ? "Recording. Stops after two minutes."
-                  : `${clips.length} of 10 recordings attached. Up to two minutes each.`}{" "}
-                {pending.length > 0 && "Your recording will be attached to your next answer."}{" "}
-                {!voice.supported &&
-                  "Voice recording is unavailable in this browser. You can type instead."}
-              </p>
+              {!voiceInThisBuild ? (
+                <p className="text-sm text-muted-foreground">
+                  Voice answers are available in the web version of the suite.
+                </p>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  {voice.listening
+                    ? "Recording. Stops after two minutes."
+                    : `${clips.length} of 10 recordings attached. Up to two minutes each.`}{" "}
+                  {pending.length > 0 && "Your recording will be attached to your next answer."}{" "}
+                  {!voice.supported &&
+                    "Voice recording is unavailable in this browser. You can type instead."}
+                </p>
+              )}
               {voice.error && <p role="status">{voice.error}</p>}
             </div>
           )}

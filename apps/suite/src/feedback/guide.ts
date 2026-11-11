@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+import { walkthroughSteps } from "../welcome/steps";
 import { feedbackApps } from "./apps";
 
 export type Pathway = "guided" | "quick";
@@ -168,7 +169,12 @@ export function readWalkthrough(raw: string | null): string[] {
       !value.done.every((v) => typeof v === "string")
     )
       return [];
-    return [...new Set(value.done.filter((id) => feedbackApps.some((a) => a.slug === id)))];
+    // A walkthrough step can cover several apps (photos-music-money): expand steps to app slugs.
+    const slugs = value.done.flatMap((id) => {
+      const step = walkthroughSteps.find((s) => s.id === id);
+      return step ? step.destinations.map((d) => d.app as string) : [id];
+    });
+    return [...new Set(slugs.filter((id) => feedbackApps.some((a) => a.slug === id)))];
   } catch {
     return [];
   }
