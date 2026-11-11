@@ -15,11 +15,9 @@ tasks with the original RRULE appended to the description. Preview reports how m
 tasks will be imported without repeating. A DTSTART-only series uses DTSTART as the due anchor.
 No raw RRULE is persisted as scheduling RDF.
 
-Recurring exports use the due anchor as DTSTART and omit DUE, since VTODO requires DUE to be
-later than DTSTART. Only open all-day series with a matching anchor emit RRULE. Instant-valued
-UNTIL is converted to its inclusive local calendar date; finite COUNT subtracts closed occurrence
-copies in the project's complete task snapshot. Other series export as individual tasks with the
-existing humanised rule appended to DESCRIPTION, preserving the due date.
+Exports always preserve DUE when a deadline exists. Recurrence would require DTSTART equal to
+DUE with the same value type, which the exchange library rejects. Recurring tasks therefore
+export without DTSTART or RRULE, with the existing humanised rule appended to DESCRIPTION.
 
 `importLevels` checks parent dependencies and orders parents before descendants. Missing parents
 and cycles reject the preview. The state operation writes through `TasksCache`, using its

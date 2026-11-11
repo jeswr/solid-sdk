@@ -1,6 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { createHash } from "node:crypto";
-import { rrulestr } from "rrule";
 import { describe, expect, it, vi } from "vitest";
 import { duplicateTaskData } from "../../src/apps/tasks/lib/detail/task-data";
 import { taskDetails } from "../../src/apps/tasks/lib/model/task";
@@ -247,7 +246,7 @@ describe("calendar exchange through conditional cache writes", () => {
     ).toBe("2026-06-08");
   });
 
-  it("exports only the remaining finite occurrences after two completions", async () => {
+  it("preserves pending and completed deadlines after two recurring completions", async () => {
     const { cache, inbox } = await frameCache();
     const original = await cache.createTask(inbox, {
       title: "Three times",
@@ -263,13 +262,19 @@ describe("calendar exchange through conditional cache writes", () => {
     await cache.completeTask(advanced, stamp);
     const exported = parseVTodo(await exportCalendar(cache, inbox));
     const pending = exported.tasks.find((task) => task.state === "open");
-    if (!pending?.start || !pending.rrule || pending.start.kind !== "date")
-      throw new Error("Missing exported series");
+    expect(pending?.due).toEqual({ kind: "date", value: "2026-06-03" });
+    expect(pending?.start).toBeUndefined();
+    expect(pending?.rrule).toBeUndefined();
+    expect(pending?.description).toBe("Every day (3 times)");
     expect(
-      rrulestr(pending.rrule, { dtstart: new Date(`${pending.start.value}T00:00:00Z`) })
-        .all()
-        .map((date) => date.toISOString().slice(0, 10)),
-    ).toEqual(["2026-06-03"]);
+      exported.tasks
+        .filter((task) => task.state === "closed")
+        .map((task) => task.due)
+        .sort((a, b) => String(a?.value).localeCompare(String(b?.value))),
+    ).toEqual([
+      { kind: "date", value: "2026-06-01" },
+      { kind: "date", value: "2026-06-02" },
+    ]);
     const other = await cache.createProject("Imported");
     if (!other) throw new Error("Missing project");
     await calendarImport(cache, other, exported)();
@@ -277,6 +282,8 @@ describe("calendar exchange through conditional cache writes", () => {
       .getSnapshot()
       .tasks[other.url]?.items.find((row) => row.task.state === "open");
     if (!imported) throw new Error("Missing imported series");
+    expect(imported.task.dueDate).toEqual(new Date("2026-06-03T00:00:00"));
+    expect(imported.task.recurrence).toBeUndefined();
     await cache.completeTask(imported, stamp);
     expect(
       cache.getSnapshot().tasks[other.url]?.items.filter((row) => row.task.state === "open"),

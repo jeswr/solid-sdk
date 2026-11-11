@@ -1,7 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { rrulestr } from "rrule";
 import { describe, expect, it } from "vitest";
-import { humanise, type RecurrenceRule } from "../../src/apps/tasks/lib/model/recurrence";
+import { humanise, type RecurrenceRule, toRRule } from "../../src/apps/tasks/lib/model/recurrence";
 import type { TaskView } from "../../src/apps/tasks/lib/views/types";
 import {
   parseVTodo,
@@ -137,6 +137,31 @@ describe("project calendar adapter", () => {
     );
   });
 
+  it("preserves a recurring monthly deadline for consumers of DUE", () => {
+    const midnight = new Date("2026-06-15T00:00:00");
+    const text = serializeVTodo(
+      toCalendar(
+        [
+          {
+            view: view({ allDay: "2026-06-15", due: midnight }),
+            recurrence: { frequency: "MONTHLY", byMonthDay: 15 },
+          },
+        ],
+        new Map(),
+        stamp,
+      ),
+    );
+    expect(text).toContain("DUE;VALUE=DATE:20260615\r\n");
+    const task = parseVTodo(text).tasks[0] as VTodoTask;
+    expect(toTaskData(task, { allDayDueInstant: midnight })).toMatchObject({
+      task: { dueDate: midnight },
+      dueDay: "2026-06-15",
+    });
+    expect(task.rrule).toBeUndefined();
+    expect(task.start).toBeUndefined();
+    expect(task.description).toBe("Every month on the 15th");
+  });
+
   it.each([
     [{ frequency: "MONTHLY" }, "2026-06-01", ["2026-06-01", "2026-07-01", "2026-08-01"]],
     [
@@ -155,14 +180,10 @@ describe("project calendar adapter", () => {
     RecurrenceRule,
     string,
     string[],
-  ][])("exports independently expanded %j occurrences", (rule: RecurrenceRule, allDay, expected) => {
+  ][])("imports DTSTART-only %j occurrences", (rule: RecurrenceRule, allDay, expected) => {
     const [task] = parseVTodo(
       serializeVTodo(
-        toCalendar(
-          [{ view: view({ allDay, due: new Date(`${allDay}T00:00:00`) }), recurrence: rule }],
-          new Map(),
-          stamp,
-        ),
+        calendar([todo({ start: { kind: "date", value: allDay }, rrule: toRRule(rule) })]),
       ),
     ).tasks;
     expect(task?.start).toEqual({ kind: "date", value: allDay });
@@ -176,7 +197,7 @@ describe("project calendar adapter", () => {
       recurrence: { ...rule, interval: rule.interval ?? 1 },
     });
   });
-  it("normalizes an instant UNTIL to the inclusive all-day cutoff", () => {
+  it("keeps an instant UNTIL in the recurrence description alongside DUE", () => {
     const [task] = toCalendar(
       [
         {
@@ -190,10 +211,12 @@ describe("project calendar adapter", () => {
       new Map(),
       stamp,
     ).tasks;
-    expect(task?.rrule).toContain("UNTIL=20260603");
-    expect(expanded(task as VTodoTask, 10)).toEqual(["2026-06-01", "2026-06-02", "2026-06-03"]);
+    expect(task?.rrule).toBeUndefined();
+    expect(task?.start).toBeUndefined();
+    expect(task?.due).toEqual({ kind: "date", value: "2026-06-01" });
+    expect(task?.description).toBe("Every day until 3 Jun 2026");
   });
-  it("retains a date UNTIL with an inclusive last occurrence", () => {
+  it("keeps a date UNTIL in the recurrence description alongside DUE", () => {
     const [task] = toCalendar(
       [
         {
@@ -207,7 +230,10 @@ describe("project calendar adapter", () => {
       new Map(),
       stamp,
     ).tasks;
-    expect(expanded(task as VTodoTask, 10)).toEqual(["2026-06-01", "2026-06-02"]);
+    expect(task?.rrule).toBeUndefined();
+    expect(task?.start).toBeUndefined();
+    expect(task?.due).toEqual({ kind: "date", value: "2026-06-01" });
+    expect(task?.description).toBe("Every day until 2 Jun 2026");
   });
   it.each([
     [view({ due }), { frequency: "DAILY", until: "2027-01-01" }],
@@ -216,6 +242,11 @@ describe("project calendar adapter", () => {
     [view({ allDay: "2026-06-01", due }), { frequency: "WEEKLY", byDay: ["Wednesday"] }],
     [view({ allDay: "2026-06-01", due }), { frequency: "DAILY", until: "2026-05-01" }],
     [view({ allDay: "2026-06-01", due, state: "closed" }), { frequency: "DAILY" }],
+    [view({ allDay: "2026-06-01", due }), { frequency: "DAILY", interval: 2 }],
+    [view({ allDay: "2026-06-01", due }), { frequency: "MONTHLY" }],
+    [view({ allDay: "2026-06-01", due }), { frequency: "WEEKLY", byDay: ["Monday"] }],
+    [view({ allDay: "2026-06-01", due }), { frequency: "YEARLY" }],
+    [view({ allDay: "2026-06-01", due }), { frequency: "DAILY", count: 3 }],
   ] satisfies [
     TaskView,
     RecurrenceRule,
@@ -231,6 +262,13 @@ describe("project calendar adapter", () => {
     ).tasks;
     expect(task?.rrule).toBeUndefined();
     expect(task?.start).toBeUndefined();
+    expect(task?.due).toEqual(
+      source.allDay
+        ? { kind: "date", value: source.allDay }
+        : source.due
+          ? { kind: "utc", value: source.due }
+          : undefined,
+    );
     expect(task?.description).toBe(
       `Original\n\n${humanise(rule, source.allDay ? new Date(`${source.allDay}T00:00:00`) : (source.due ?? stamp))}`,
     );
