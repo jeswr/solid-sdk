@@ -11,6 +11,7 @@ import { entities } from "../src/generated/model.js";
 import {
   As2MessageDoc,
   buildAs2Message,
+  CHAT_ROLES,
   ChatWriter,
   parseAs2Message,
   safeHttpIri,
@@ -415,3 +416,16 @@ it("preserves strict consumer constructor, chaining and clearing-setter types", 
     fileURLToPath(new URL("./consumer.ts", import.meta.url)),
   ]);
 }, 30_000);
+
+describe("generated profile parity", () => {
+  it("keeps CHAT_ROLES identical to the generated role sh:in list", () => {
+    const manifest = JSON.parse(
+      readFileSync(new URL("../src/generated/model.json", import.meta.url), "utf8"),
+    ) as { entities: { fields: { name: string; predicate: string; in?: string[] }[] }[] };
+    const roles = manifest.entities
+      .flatMap((entity) => entity.fields)
+      .filter((field) => field.name === "role");
+    expect(roles).toHaveLength(1);
+    expect(roles[0]?.in).toEqual([...CHAT_ROLES]);
+  });
+});
