@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
 /**
  * Private type-index registration (DESIGN §2.3, solid-type-index skill). Registers
@@ -16,6 +17,7 @@
  * skill's compile-verified `@rdfjs/wrapper` recipe; never hand-built triples.
  */
 import { fetchRdf } from "@jeswr/fetch-rdf";
+import { createPodScopedFetch } from "@jeswr/guarded-fetch";
 import { DIET_MEAL, DIET_SYMPTOM, LEGACY_DIET_NS, docOf } from "@jeswr/solid-health-diary";
 import type { DatasetCore } from "@rdfjs/types";
 import {
@@ -28,10 +30,10 @@ import {
   TermWrapper,
 } from "@rdfjs/wrapper";
 import { DataFactory, Store } from "n3";
+import { type PodStorage, resolvePodStorage } from "./client";
 import { mealsContainer, symptomsContainer } from "./layout";
-import { ensureContainer, putResource } from "./pod-fs";
+import { ensureContainer, PodWriteError, putResource, writeOwnerOnlyAcl } from "./pod-fs";
 import { conditionalPut, datasetToTurtle } from "./rdf-io";
-import { writeOwnerOnlyAcl } from "@jeswr/solid-health-diary";
 
 const SOLID = "http://www.w3.org/ns/solid/terms#";
 const RDF = "http://www.w3.org/1999/02/22-rdf-syntax-ns#";
@@ -105,21 +107,52 @@ function diaryRegistrations(storageRoot: string): { classIri: string; container:
  * foreign index), if present.
  */
 function privateIndexOf(dataset: DatasetCore, webId: string): string | undefined {
-  const subject = DataFactory.namedNode(webId);
-  const predicate = DataFactory.namedNode(`${SOLID}privateTypeIndex`);
-  for (const q of dataset.match(subject, predicate, null)) {
-    if (q.object.termType === "NamedNode") return q.object.value;
+  return OptionalFrom.subjectPredicate(
+    new TermWrapper(webId, dataset, DataFactory), `${SOLID}privateTypeIndex`, NamedNodeAs.string,
+  );
+}
+
+/**
+ * Profiles and existing indexes may live outside storage (e.g. ESS). Only these
+ * documents use a separate authenticated transport, scoped to their own origin;
+ * redirects are returned as failures, never followed. Diary data stays on the client.
+ */
+async function readRegistrationDocument(
+  storage: PodStorage,
+  url: string,
+  fetch?: typeof globalThis.fetch,
+): Promise<{ dataset: DatasetCore; put: (body: string) => Promise<void> }> {
+  const client = await resolvePodStorage(storage);
+  if (client.isWithinStorage(url)) {
+    const { dataset, etag } = await client.readRdf(url);
+    return { dataset, put: (body) => conditionalPut(client, url, body, etag) };
   }
-  return undefined;
+  if (!fetch) throw new Error("Authenticated profile and Type Index access is unavailable");
+  const scoped = createPodScopedFetch(new URL(url).origin, { fetch });
+  const documentFetch: typeof globalThis.fetch = (input, init) =>
+    scoped(input, { ...init, redirect: "manual" });
+  const { dataset, etag } = await fetchRdf(url, { fetch: documentFetch });
+  return {
+    dataset,
+    put: async (body) => {
+      const headers = new Headers({ "content-type": "text/turtle" });
+      if (etag) headers.set("if-match", etag);
+      const response = await documentFetch(url, { method: "PUT", headers, body });
+      if (!response.ok) {
+        throw new PodWriteError(url, response.status, undefined, undefined, response.statusText);
+      }
+    },
+  };
 }
 
 /** Add + persist the diary registrations into an existing index document. */
 async function registerIntoIndex(
-  authedFetch: typeof globalThis.fetch,
+  storage: PodStorage,
   indexUrl: string,
   storageRoot: string,
+  fetch?: typeof globalThis.fetch,
 ): Promise<void> {
-  const { dataset, etag } = await fetchRdf(indexUrl, { fetch: authedFetch });
+  const { dataset, put } = await readRegistrationDocument(storage, indexUrl, fetch);
   const index = new TypeIndexDataset(dataset, DataFactory);
   let changed = false;
   for (const { classIri, container } of diaryRegistrations(storageRoot)) {
@@ -129,13 +162,13 @@ async function registerIntoIndex(
     }
   }
   if (changed) {
-    await conditionalPut(authedFetch, indexUrl, await datasetToTurtle(dataset), etag);
+    await put(await datasetToTurtle(dataset));
   }
 }
 
 /** Create a fresh private index doc (typed) with the diary registrations, ACL-first. */
 async function createIndex(
-  authedFetch: typeof globalThis.fetch,
+  storage: PodStorage,
   indexUrl: string,
   storageRoot: string,
   ownerWebId: string,
@@ -156,52 +189,45 @@ async function createIndex(
     index.register(indexUrl, regFragment(classIri), classIri, container);
   }
   // ACL FIRST (owner-only) before the index doc is written — it is sensitive.
-  await ensureContainer(authedFetch, new URL("./", indexUrl).toString());
-  await writeOwnerOnlyAcl(indexUrl, ownerWebId, authedFetch);
-  await putResource(authedFetch, indexUrl, await datasetToTurtle(store));
+  await ensureContainer(storage, new URL("./", indexUrl).toString());
+  await writeOwnerOnlyAcl(storage, indexUrl, ownerWebId);
+  await putResource(storage, indexUrl, await datasetToTurtle(store));
 }
 
 /** Link a freshly-created private index from the profile (conditional PUT). */
 async function linkIndexFromProfile(
-  authedFetch: typeof globalThis.fetch,
+  storage: PodStorage,
   webId: string,
   indexUrl: string,
+  fetch?: typeof globalThis.fetch,
 ): Promise<void> {
   const profileDoc = docOf(webId);
-  const { dataset, etag } = await fetchRdf(profileDoc, { fetch: authedFetch });
-  dataset.add(
-    DataFactory.quad(
-      DataFactory.namedNode(webId),
-      DataFactory.namedNode(`${SOLID}privateTypeIndex`),
-      DataFactory.namedNode(indexUrl),
-    ),
-  );
-  await conditionalPut(authedFetch, profileDoc, await datasetToTurtle(dataset), etag);
+  const { dataset, put } = await readRegistrationDocument(storage, profileDoc, fetch);
+  const profile = new TermWrapper(webId, dataset, DataFactory);
+  SetFrom.subjectPredicate(profile, `${SOLID}privateTypeIndex`, NamedNodeAs.string, NamedNodeFrom.string)
+    .add(indexUrl);
+  await put(await datasetToTurtle(dataset));
 }
 
 /**
  * Register the diary's `diet:Meal` / `diet:Symptom` types in the pod owner's
- * private type index (create-and-link when absent). Best-effort: resolves
- * `{ registered, indexUrl? }`; NEVER throws (a registration failure must not break
- * logging). Idempotent across sessions.
+ * private type index (create-and-link when absent). Rejects on failure so the
+ * caller can show a warning while continuing logging. Idempotent across sessions.
+ * Supply the authenticated fetch for profile/index documents outside storage.
  */
 export async function registerDiaryTypes(
-  authedFetch: typeof globalThis.fetch,
-  params: { webId: string; storageRoot: string },
+  storage: PodStorage,
+  params: { webId: string; storageRoot: string; fetch?: typeof globalThis.fetch },
 ): Promise<{ registered: boolean; indexUrl?: string }> {
-  const { webId, storageRoot } = params;
-  try {
-    const { dataset } = await fetchRdf(docOf(webId), { fetch: authedFetch });
-    const existing = privateIndexOf(dataset, webId);
-    if (existing) {
-      await registerIntoIndex(authedFetch, existing, storageRoot);
-      return { registered: true, indexUrl: existing };
-    }
-    const indexUrl = `${new URL("settings/privateTypeIndex.ttl", storageRoot).toString()}`;
-    await createIndex(authedFetch, indexUrl, storageRoot, webId);
-    await linkIndexFromProfile(authedFetch, webId, indexUrl);
-    return { registered: true, indexUrl };
-  } catch {
-    return { registered: false };
+  const { webId, storageRoot, fetch } = params;
+  const { dataset } = await readRegistrationDocument(storage, docOf(webId), fetch);
+  const existing = privateIndexOf(dataset, webId);
+  if (existing) {
+    await registerIntoIndex(storage, existing, storageRoot, fetch);
+    return { registered: true, indexUrl: existing };
   }
+  const indexUrl = new URL("settings/privateTypeIndex.ttl", storageRoot).toString();
+  await createIndex(storage, indexUrl, storageRoot, webId);
+  await linkIndexFromProfile(storage, webId, indexUrl, fetch);
+  return { registered: true, indexUrl };
 }
