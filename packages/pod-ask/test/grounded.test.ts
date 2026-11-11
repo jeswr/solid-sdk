@@ -122,6 +122,24 @@ describe("citation-aware parsing", () => {
     const result = parseGroundedAnswer("Invented claim. A supported claim [1].", sources);
     expect(result.sentences.map((s) => s.unsupported)).toEqual([true, false]);
   });
+  it("flags a model's exact refusal as not found instead of an unsupported claim", () => {
+    for (const text of [NOT_FOUND, `${NOT_FOUND}.`, ` "I couldn’t find that in your pod!" `]) {
+      expect(parseGroundedAnswer(text, sources)).toEqual({
+        sentences: [],
+        citations: [],
+        invalidCitations: [],
+        notFound: true,
+      });
+    }
+    for (const text of [
+      `${NOT_FOUND} [1].`,
+      `${NOT_FOUND}. But it expires in 2028 [1].`,
+      "I couldn't find that in your car.",
+    ]) {
+      expect(parseGroundedAnswer(text, sources).notFound).toBe(false);
+    }
+    expect(parseGroundedAnswer("Expires in 2028 [1].", sources).notFound).toBe(false);
+  });
   it("handles empty, citation-only, malformed and oversized answers without rendering links", () => {
     expect(parseGroundedAnswer("", sources).sentences).toEqual([]);
     expect(parseGroundedAnswer("[1].", sources).sentences).toEqual([]);
@@ -162,9 +180,15 @@ describe("extractive fallback", () => {
       extractiveAnswer("passport", []),
       extractiveAnswer("What is it?", sources),
     ]) {
-      expect(answer.sentences[0]?.text).toBe(NOT_FOUND);
-      expect(answer.citations).toEqual([]);
+      // A distinct flag, never an unsupported sentence that would show a citation warning.
+      expect(answer).toEqual({
+        sentences: [],
+        citations: [],
+        invalidCitations: [],
+        notFound: true,
+      });
     }
+    expect(extractiveAnswer("passport", sources).notFound).toBe(false);
   });
   it("ignores source-authored citations, unsafe links and duplicates; ranks and caps extracts", () => {
     const passages = [

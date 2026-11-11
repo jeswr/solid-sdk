@@ -13,8 +13,13 @@ export interface GroundedPrompt {
   /** Exactly the retained/truncated sources, in citation-number order. */
   passages: Passage[];
 }
+/**
+ * A grounded completion. It receives the built prompt and must answer from `prompt.passages`
+ * only; callers parse its reply with `parseGroundedAnswer(text, prompt.passages)`, because
+ * the prompt may drop sources (unsafe URLs, budget) and so renumber them.
+ */
 export interface AnswerModel {
-  answer(question: string, passages: readonly Passage[], signal: AbortSignal): Promise<string>;
+  answer(prompt: GroundedPrompt, signal: AbortSignal): Promise<string>;
 }
 export interface Citation {
   number: number;
@@ -32,6 +37,8 @@ export interface GroundedAnswer {
   sentences: AnswerSentence[];
   citations: Citation[];
   invalidCitations: number[];
+  /** The sources do not answer the question: render a neutral empty state, never a warning. */
+  notFound: boolean;
 }
 export const NOT_FOUND = "I couldn't find that in your pod";
 export const MAX_PASSAGES = 8;
@@ -112,7 +119,25 @@ function sentenceParts(text: string): string[] {
     .filter(Boolean);
 }
 
+const notFoundAnswer = (): GroundedAnswer => ({
+  sentences: [],
+  citations: [],
+  invalidCitations: [],
+  notFound: true,
+});
+/** Compare a whole reply with the refusal, ignoring quotes, apostrophe style and end punctuation. */
+function isRefusal(text: string): boolean {
+  const plain = (value: string) =>
+    value
+      .trim()
+      .replaceAll("\u2019", "'")
+      .replace(/^["\u201c]+|["\u201d]*[.!]*["\u201d]*$/gu, "")
+      .trim();
+  return plain(text) === NOT_FOUND;
+}
+
 export function parseGroundedAnswer(text: string, passages: readonly Passage[]): GroundedAnswer {
+  if (isRefusal(text.slice(0, MAX_ANSWER_CHARS))) return notFoundAnswer();
   const all = new Map<number, Citation>();
   const invalid = new Set<number>();
   const sentences = sentenceParts(text.slice(0, MAX_ANSWER_CHARS)).flatMap((part) => {
@@ -146,7 +171,12 @@ export function parseGroundedAnswer(text: string, passages: readonly Passage[]):
       },
     ];
   });
-  return { sentences, citations: [...all.values()], invalidCitations: [...invalid] };
+  return {
+    sentences,
+    citations: [...all.values()],
+    invalidCitations: [...invalid],
+    notFound: false,
+  };
 }
 
 const stopWords = new Set(
@@ -202,7 +232,7 @@ export function extractiveAnswer(question: string, passages: readonly Passage[])
       return true;
     })
     .slice(0, 3);
-  if (!selected.length) return parseGroundedAnswer(NOT_FOUND, []);
+  if (!selected.length) return notFoundAnswer();
   // Attach provenance structurally, preserving excerpt punctuation and source ordering.
   const citations = new Map<number, Citation>();
   const sentences = selected.map((part): AnswerSentence => {
@@ -211,5 +241,5 @@ export function extractiveAnswer(question: string, passages: readonly Passage[])
     citations.set(part.number, citation);
     return { text: part.text, citations: [citation], unsupported: false, invalidCitations: [] };
   });
-  return { sentences, citations: [...citations.values()], invalidCitations: [] };
+  return { sentences, citations: [...citations.values()], invalidCitations: [], notFound: false };
 }

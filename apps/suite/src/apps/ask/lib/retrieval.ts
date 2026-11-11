@@ -1,5 +1,7 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Claude Opus 5.5
 import { assertWithinPodScope } from "@jeswr/guarded-fetch";
+import { createInboxReader } from "@jeswr/pod-access/notify";
 import { MAX_PASSAGES, type Passage, questionTerms } from "@jeswr/pod-ask";
 import { createRdfEngine } from "@jeswr/rdf-engine";
 import { createPodClient } from "@jeswr/storage-client";
@@ -23,8 +25,30 @@ export interface AskRetrieval {
   dispose(): void;
 }
 
+/**
+ * Inboxes accept writes from anyone, so their contents are not "from your pod" in the sense
+ * Ask cites. Excludes any resource under a container named `inbox`, and under the profile's
+ * `ldp:inbox` wherever it lives. Other append-only containers need ACL reads (not done here).
+ */
+export function inInbox(url: string, inboxes: readonly string[] = []): boolean {
+  const resource = new URL(url);
+  resource.hash = "";
+  const containers = resource.pathname.split("/").slice(0, -1);
+  if (containers.some((segment) => segment.toLowerCase() === "inbox")) return true;
+  return inboxes.some((inbox) => {
+    const container = new URL(inbox);
+    container.hash = "";
+    const prefix = container.href.endsWith("/") ? container.href : `${container.href}/`;
+    return resource.href === container.href || resource.href.startsWith(prefix);
+  });
+}
+
 /** Ask-specific ranking adapter; discovery, bounded reads and RDF projections stay shared. */
-export function rankAskSources(rows: readonly SearchResult[], root: string): AskRetrieval {
+export function rankAskSources(
+  rows: readonly SearchResult[],
+  root: string,
+  inboxes: readonly string[] = [],
+): AskRetrieval {
   const index = new SearchIndex();
   const sources = new Map<string, AskPassage>();
   for (const row of rows) {
@@ -34,6 +58,7 @@ export function rankAskSources(rows: readonly SearchResult[], root: string): Ask
     } catch {
       continue;
     }
+    if (inInbox(row.url, inboxes)) continue;
     const mapped = podSearchResult(row);
     if (sources.has(row.url) || new URL(row.url).pathname.endsWith("/")) continue;
     const text = (row.snippet || row.title).slice(0, 4000).toWellFormed();
@@ -84,11 +109,23 @@ export function rankAskSources(rows: readonly SearchResult[], root: string): Ask
   };
 }
 
+/** The profile's single advertised inbox, or none when it is missing, ambiguous or unreadable. */
+async function profileInbox(session: PodSession): Promise<string[]> {
+  try {
+    const inbox = await createInboxReader({ fetch: session.fetch }).inbox(session.webId);
+    return inbox ? [inbox] : [];
+  } catch {
+    // Containers named inbox are still excluded.
+    return [];
+  }
+}
+
 export async function openAskRetrieval(
   session: PodSession,
   signal: AbortSignal,
 ): Promise<AskRetrieval> {
   const engine = createRdfEngine();
+  const inboxes = profileInbox(session);
   try {
     const { storage } = await createPodClient({
       storage: session.storageUrl,
@@ -106,7 +143,9 @@ export async function openAskRetrieval(
       { within: [storage.root], limit: 1000 },
       { signal },
     );
-    return rankAskSources(page.results, storage.root);
+    const excluded = await inboxes;
+    signal.throwIfAborted();
+    return rankAskSources(page.results, storage.root, excluded);
   } finally {
     engine.dispose();
   }

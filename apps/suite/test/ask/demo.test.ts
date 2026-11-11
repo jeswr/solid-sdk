@@ -1,6 +1,8 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Claude Opus 5.5
 import { fetchRdf } from "@jeswr/fetch-rdf";
 import { resolveStorageDescription } from "@jeswr/storage-capabilities";
+import { NS } from "@jeswr/suite-vocab";
 import { Writer } from "n3";
 import { expect, it, vi } from "vitest";
 import { askSearchCapabilities, ensureAskSample } from "../../src/apps/ask/demo/sample";
@@ -34,6 +36,20 @@ it("seeds fictional RDF resources in the demo pod once without overwriting edits
   const original = await saved.text();
   await ensureAskSample(session);
   expect(await (await pod.fetch(url)).text()).toBe(original);
+});
+it("writes Notes-compatible HTML bodies with Dublin Core metadata and plain-text snippets", async () => {
+  const { session } = fixture();
+  await ensureAskSample(session);
+  const url = `${root}notes/ask-sample-garden.ttl`;
+  const { dataset } = await fetchRdf(url, { fetch: session.fetch });
+  const value = (predicate: string) =>
+    [...dataset].find((q) => q.subject.value === `${url}#it` && q.predicate.value === predicate)
+      ?.object.value;
+  expect(value(`${NS.POD_DOCS}format`)).toBe("text/html");
+  expect(value(`${NS.POD_DOCS}body`)).toMatch(/^<p>Rowan and I .* plants &amp; I will .*<\/p>$/);
+  expect(value(`${NS.DCT}title`)).toBe("Garden agreement with Rowan");
+  expect(value(`${NS.DCT}description`)).toContain("plants & I will");
+  expect(value(`${NS.DCT}modified`)).toBe("2026-11-10T10:00:00.000Z");
 });
 it("never writes to a real pod", async () => {
   const { session } = fixture();

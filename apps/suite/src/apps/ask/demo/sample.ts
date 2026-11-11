@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Claude Opus 5.5
 
 import { resolveStorageDescription } from "@jeswr/storage-capabilities";
 import { createMemoryCache } from "@jeswr/storage-capabilities/cache";
@@ -32,6 +33,15 @@ export async function askSearchCapabilities(session: PodSession, signal: AbortSi
   return cache;
 }
 
+/** Plain sample text as a single HTML paragraph, the body format Notes writes. */
+function paragraph(text: string): string {
+  const escaped = text.replace(
+    /[&<>]/gu,
+    (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[character] as string,
+  );
+  return `<p>${escaped}</p>`;
+}
+
 /** Standard-vocabulary demo notes, compatible with Notes and written only into the demo pod. */
 export async function ensureAskSample(session: PodSession): Promise<void> {
   if (session.mode !== "demo") return;
@@ -44,14 +54,14 @@ export async function ensureAskSample(session: PodSession): Promise<void> {
     [
       "garden",
       "Garden agreement with Rowan",
-      "Rowan and I agreed to plant the garden's north border with lavender on Saturday 14 November. Rowan will bring the plants and I will prepare the soil.",
+      "Rowan and I agreed to plant the garden's north border with lavender on Saturday 14 November. Rowan will bring the plants & I will prepare the soil.",
     ],
     [
       "trip",
       "Autumn travel checklist",
       "For the autumn trip, check the passport expiry date before booking. The train booking reference is FICTION-42.",
     ],
-  ]) {
+  ] as const) {
     const url = new URL(`notes/ask-sample-${slug}.ttl`, session.storageUrl).href;
     const dataset = new Store();
     const subject = new TermWrapper(`${url}#it`, dataset, DataFactory);
@@ -67,23 +77,14 @@ export async function ensureAskSample(session: PodSession): Promise<void> {
       NamedNodeAs.string,
       NamedNodeFrom.string,
     ).add(`${NS.POD_DOCS}Document`);
-    RequiredAs.object(subject, `${NS.POD_DOCS}body`, text as string, LiteralFrom.string);
-    RequiredAs.object(subject, `${NS.POD_DOCS}format`, "text/plain", LiteralFrom.string);
+    RequiredAs.object(subject, `${NS.POD_DOCS}body`, paragraph(text), LiteralFrom.string);
+    RequiredAs.object(subject, `${NS.POD_DOCS}format`, "text/html", LiteralFrom.string);
+    RequiredAs.object(subject, `${NS.DCT}title`, title, LiteralFrom.string);
+    // Search snippets come from the plain-text description, never the HTML body.
+    RequiredAs.object(subject, `${NS.DCT}description`, text, LiteralFrom.string);
     RequiredAs.object(
       subject,
-      "http://purl.org/dc/terms/title",
-      title as string,
-      LiteralFrom.string,
-    );
-    RequiredAs.object(
-      subject,
-      "http://purl.org/dc/terms/description",
-      text as string,
-      LiteralFrom.string,
-    );
-    RequiredAs.object(
-      subject,
-      "http://purl.org/dc/terms/modified",
+      `${NS.DCT}modified`,
       new Date("2026-11-10T10:00:00Z"),
       LiteralFrom.dateTime,
     );

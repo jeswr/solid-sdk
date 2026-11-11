@@ -26,7 +26,6 @@ export default defineConfig({
       include: [
         "src/apps/ask/lib/**/*.ts",
         "src/apps/ask/state/**/*.{ts,tsx}",
-        "src/apps/ask/server.ts",
         "src/apps/ask/demo/sample.ts",
         "src/apps/agent/lib/**/*.ts",
         "src/shell/lib/**/*.ts",

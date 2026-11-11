@@ -1,8 +1,9 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Claude Opus 5.5
 
 import type { ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 const connection = vi.hoisted(() => ({ state: "online" }));
 vi.mock("@/shell/app-frame", () => ({
@@ -38,7 +39,9 @@ const passage: AskPassage = {
 };
 function fixture(
   passages = [passage],
-  answer = async () => "In 2028 [1]. Invented claim [99]. <script>alert(1)</script>.",
+  // null means no model; undefined would select this default.
+  answer: (() => Promise<string>) | null = async () =>
+    "In 2028 [1]. Invented claim [99]. <script>alert(1)</script>.",
   demo = false,
 ) {
   return new AskController(
@@ -49,7 +52,7 @@ function fixture(
       retrieve: () => passages,
       dispose: () => {},
     },
-    { answer },
+    answer ? { answer } : undefined,
     demo,
   );
 }
@@ -106,4 +109,60 @@ it("renders offline extracts, demo, empty retrieval and model failure recovery",
   } finally {
     connection.state = "online";
   }
+});
+
+describe("without a model (the shipped configuration)", () => {
+  it("shows one neutral extract-only line and no AI controls or wording", async () => {
+    connection.state = "offline";
+    try {
+      const controller = fixture([passage], null, true);
+      const idle = render(controller);
+      expect(idle).toContain("Answers are extracts from your pod. Nothing leaves your browser.");
+      await controller.ask("passport", undefined, false, false);
+      const html = render(controller);
+      for (const absent of [
+        'role="switch"',
+        "no AI",
+        "without AI",
+        "Anthropic",
+        "AI provider",
+        "Written by AI",
+        "Writing an answer",
+        "AI call",
+      ])
+        expect(html).not.toContain(absent);
+      expect(html).toContain("Fictional sample pod.");
+      expect(html).toContain("in this session.");
+      expect(html).toContain("Matching extracts");
+      expect(html).toContain("Nothing left your browser.");
+    } finally {
+      connection.state = "online";
+    }
+  });
+  it("renders a neutral not-found state instead of a citation warning", async () => {
+    const controller = fixture([{ ...passage, text: "Nothing relevant here." }], null);
+    await controller.ask("passport", undefined, false, true);
+    const html = render(controller);
+    expect(html).toContain("I couldn&#x27;t find that in your pod");
+    expect(html).not.toContain("No valid source citation");
+    expect(html).not.toContain('aria-label="Answer"');
+    expect(html).toContain('id="ask-sources-title"');
+  });
+  it("names apps from the suite registry rather than raw slugs", async () => {
+    const controller = fixture([passage], null);
+    await controller.ask("passport", undefined, false, true);
+    const html = render(controller);
+    expect(html).toContain("<span>Notes</span>");
+    expect(html).toContain("<span>Docs</span>");
+    expect(html).not.toMatch(/>notes</);
+    expect(html).not.toMatch(/>docs</);
+  });
+});
+it("keeps a model's refusal neutral too", async () => {
+  const controller = fixture([passage], async () => "I couldn't find that in your pod.");
+  await controller.ask("passport", undefined, false, true);
+  await controller.consent();
+  const html = render(controller);
+  expect(html).toContain("I couldn&#x27;t find that in your pod");
+  expect(html).not.toContain("No valid source citation");
 });

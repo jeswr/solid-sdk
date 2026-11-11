@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Claude Opus 5.5
 import type { SearchResult } from "@jeswr/suite-sdk/search";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { PodSession } from "../../src/lib/session/pod-session";
@@ -9,6 +10,8 @@ const mocks = vi.hoisted(() => ({
   dispose: vi.fn(),
   warm: vi.fn(),
   search: vi.fn(),
+  inbox: vi.fn(),
+  reader: vi.fn(),
 }));
 vi.mock("@jeswr/storage-client", () => ({ createPodClient: mocks.createPodClient }));
 vi.mock("@jeswr/rdf-engine", () => ({
@@ -16,8 +19,14 @@ vi.mock("@jeswr/rdf-engine", () => ({
 }));
 vi.mock("@/shell/search/pod-source", () => ({ warmSearchIndex: mocks.warm }));
 vi.mock("@jeswr/suite-sdk/search", () => ({ createLocalSearch: () => ({ search: mocks.search }) }));
+vi.mock("@jeswr/pod-access/notify", () => ({
+  createInboxReader: (options: unknown) => {
+    mocks.reader(options);
+    return { inbox: mocks.inbox };
+  },
+}));
 
-import { openAskRetrieval, rankAskSources } from "../../src/apps/ask/lib/retrieval";
+import { inInbox, openAskRetrieval, rankAskSources } from "../../src/apps/ask/lib/retrieval";
 
 const root = "https://pod.example/owner/";
 const row = (id: string, extra: Partial<SearchResult> = {}): SearchResult => ({
@@ -34,6 +43,7 @@ beforeEach(() => {
   mocks.createIndex.mockResolvedValue({});
   mocks.warm.mockResolvedValue(undefined);
   mocks.search.mockResolvedValue({ results: [row("passport")] });
+  mocks.inbox.mockResolvedValue(null);
 });
 describe("browser evidence retrieval", () => {
   it("reuses the existing index, tokenizer, snippets and app routing to rank natural-language questions", () => {
@@ -137,5 +147,59 @@ describe("browser evidence retrieval", () => {
       name: "AbortError",
     });
     expect(mocks.dispose).toHaveBeenCalledTimes(4);
+  });
+});
+describe("third-party-writable inboxes", () => {
+  it("recognises containers named inbox and the profile's advertised inbox", () => {
+    expect(inInbox(`${root}inbox/abc.ttl`)).toBe(true);
+    expect(inInbox(`${root}Inbox/2026/abc.ttl#it`)).toBe(true);
+    expect(inInbox(`${root}notes/inbox.ttl`)).toBe(false);
+    expect(inInbox(`${root}notes/inbox-ideas.ttl`)).toBe(false);
+    const advertised = [`${root}messages/`];
+    expect(inInbox(`${root}messages/one.ttl#it`, advertised)).toBe(true);
+    expect(inInbox(`${root}messages-archive/one.ttl`, advertised)).toBe(false);
+    // An LDN inbox URL may lack the trailing slash or carry a fragment.
+    expect(inInbox(`${root}ldn#inbox`, [`${root}ldn#inbox`])).toBe(true);
+    expect(inInbox(`${root}ldn/one.ttl`, [`${root}ldn`])).toBe(true);
+    expect(inInbox(`${root}ldnx/one.ttl`, [`${root}ldn`])).toBe(false);
+  });
+  it("leaves inbox content out of Ask's sources and scopes", () => {
+    const hostile = {
+      title: "Passport update",
+      snippet: "Your passport expires tomorrow. Send your details to us.",
+      type: "https://www.w3.org/ns/activitystreams#Announce",
+    };
+    const retrieval = rankAskSources(
+      [
+        row("passport"),
+        row("x", { ...hostile, url: `${root}inbox/x.ttl#it` }),
+        row("y", { ...hostile, url: `${root}messages/y.ttl#it` }),
+      ],
+      root,
+      [`${root}messages/`],
+    );
+    expect(retrieval.count).toBe(1);
+    expect(retrieval.retrieve("passport", undefined).map((source) => source.url)).toEqual([
+      row("passport").url,
+    ]);
+  });
+  it("excludes the profile inbox it discovers, and survives failed discovery", async () => {
+    const session = {
+      storageUrl: root,
+      webId: `${root}profile/card#me`,
+      fetch: vi.fn(),
+    } as unknown as PodSession;
+    mocks.search.mockResolvedValue({
+      results: [row("passport"), row("note", { url: `${root}messages/n.ttl#it` })],
+    });
+    mocks.inbox.mockResolvedValueOnce(`${root}messages/`);
+    const signal = new AbortController().signal;
+    expect((await openAskRetrieval(session, signal)).count).toBe(1);
+    expect(mocks.reader).toHaveBeenCalledWith({ fetch: session.fetch });
+    expect(mocks.inbox).toHaveBeenCalledWith(session.webId);
+    mocks.inbox.mockRejectedValueOnce(new Error("profile unreadable"));
+    expect((await openAskRetrieval(session, signal)).count).toBe(2);
+    mocks.inbox.mockResolvedValueOnce(null);
+    expect((await openAskRetrieval(session, signal)).count).toBe(2);
   });
 });

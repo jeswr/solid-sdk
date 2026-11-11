@@ -78,9 +78,6 @@
   gap: var(--space-1);
   margin-block: var(--space-4);
 }
-.ask-app-name {
-  text-transform: capitalize;
-}
 .ask-coverage {
   margin-bottom: var(--space-5);
 }

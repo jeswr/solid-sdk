@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Claude Opus 5.5
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 
@@ -12,7 +13,13 @@ test("asks the demo pod, follows citations and handles scoped empty retrieval ac
   await page.goto("/ask");
   const question = page.getByRole("textbox", { name: "Your question", exact: true });
   await expect(question).toBeVisible({ timeout: 45000 });
-  await expect(page.getByRole("switch", { name: "Answer from my pod only (no AI)" })).toBeChecked();
+  // No model is configured: there is no AI switch, only the extract-only notice.
+  await expect(
+    page.getByText("Answers are extracts from your pod. Nothing leaves your browser.", {
+      exact: true,
+    }),
+  ).toBeVisible();
+  await expect(page.getByRole("switch")).toHaveCount(0);
   await question.fill("When does my passport expire?");
   await question.press("Enter");
   const answer = page.getByRole("region", { name: "Answer", exact: true });
@@ -20,9 +27,7 @@ test("asks the demo pod, follows citations and handles scoped empty retrieval ac
   const citation = answer.getByRole("link", { name: /Source \d+: Passport renewal/ });
   await expect(citation).toHaveAttribute("href", /^\/notes\/n\//);
   await page.getByText("Which data was used", { exact: true }).click();
-  await expect(
-    page.getByText("Nothing was sent to an AI provider.", { exact: false }),
-  ).toBeVisible();
+  await expect(page.getByText("Nothing left your browser.", { exact: false })).toBeVisible();
   await expect(
     page.getByRole("link", { name: /Open raw resource: Passport renewal/ }),
   ).toHaveAttribute("href", /ask-sample-passport\.ttl#it$/);
@@ -35,6 +40,14 @@ test("asks the demo pod, follows citations and handles scoped empty retrieval ac
     .getByRole("group", { name: "Search scope" })
     .getByRole("button", { name: "Notes", exact: true })
     .click();
+  // Changing the scope re-asks the question that is on screen.
+  await expect(answer).toContainText("18 September 2028");
+  await expect(
+    page
+      .getByRole("region", { name: /^Sources/ })
+      .getByText("Notes", { exact: true })
+      .first(),
+  ).toBeVisible();
   await question.fill("What did I agree with Rowan about the garden?");
   await question.press("Enter");
   await expect(answer).toContainText("lavender");

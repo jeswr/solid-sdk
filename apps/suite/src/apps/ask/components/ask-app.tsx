@@ -1,5 +1,7 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Claude Opus 5.5
 "use client";
+import { NOT_FOUND } from "@jeswr/pod-ask";
 import type { AppSlug } from "@jeswr/suite-ui";
 import {
   AppGlyph,
@@ -15,6 +17,7 @@ import {
   Label,
   LoadingSkeleton,
   Switch,
+  suiteApps,
   Textarea,
   Toaster,
   toast,
@@ -25,7 +28,6 @@ import { type PodSession, PodSessionProvider, usePodSessionState } from "@/lib/s
 import { AppFrame, AppHeading, AppSessionGuard } from "@/shell/app-frame";
 import { useConnectionState } from "@/shell/sync/connection-state";
 import { ensureAskSample } from "../demo/sample";
-import { hostedAnswerModel } from "../lib/model";
 import { type AskPassage, openAskRetrieval } from "../lib/retrieval";
 import { AskContext, useAsk } from "../state/ask-context";
 import { AskController } from "../state/controller";
@@ -34,6 +36,7 @@ const suggestions = [
   "When does my passport expire?",
   "What did I agree with Rowan about the garden?",
 ];
+// Model errors and copy below apply only when an AnswerModel is configured (none is today).
 const errors = {
   "not-configured":
     "AI answers aren't configured on this server. You can still answer from your pod without AI.",
@@ -41,6 +44,10 @@ const errors = {
   network: "We couldn't reach the answer service. Your question is still here.",
   invalid: "The answer service returned an incomplete reply. Try an answer without AI.",
 };
+/** Display names come from the suite registry; CSS capitalisation is invisible to assistive tech. */
+function appName(slug: AppSlug): string {
+  return suiteApps.find((app) => app.slug === slug)?.name ?? slug;
+}
 
 function SourceLink({ source, number }: { source: AskPassage; number: number }) {
   return (
@@ -58,6 +65,7 @@ export function AskWorkspace() {
   const input = useRef<HTMLTextAreaElement>(null);
   const online = connection === "online";
   const busy = state.status === "answering";
+  const hasModel = controller.model !== undefined;
   useEffect(() => {
     if (state.error) toast.error(errors[state.error]);
   }, [state.error]);
@@ -67,6 +75,14 @@ export function AskWorkspace() {
   const choose = (value: string) => {
     setQuestion(value);
     input.current?.focus();
+  };
+  const reask = (value: string) => {
+    setQuestion(value);
+    ask(value);
+  };
+  const rescope = (value: AppSlug | undefined) => {
+    setScope(value);
+    void controller.reask(value, noAi, online);
   };
   const scopes = controller.retrieval.scopes;
   const sidebar = (
@@ -80,7 +96,7 @@ export function AskWorkspace() {
         <ul>
           {state.recent.map((recent) => (
             <li key={recent}>
-              <Button variant="ghost" onClick={() => choose(recent)}>
+              <Button variant="ghost" onClick={() => reask(recent)}>
                 {recent}
               </Button>
             </li>
@@ -102,13 +118,16 @@ export function AskWorkspace() {
           <p>Ask a question about your own pod. Follow each citation back to the original.</p>
           {controller.demo && (
             <p className="ask-demo">
-              Fictional sample pod · answers use extracts, with no AI call.
+              {hasModel
+                ? "Fictional sample pod · answers use extracts, with no AI call."
+                : "Fictional sample pod."}
             </p>
           )}
         </header>
         {!online && (
           <p className="ask-notice" role="status">
-            You're offline. Answers use the snippets already loaded in this session, without AI.
+            You're offline. Answers use the snippets already loaded in this session
+            {hasModel ? ", without AI." : "."}
           </p>
         )}
         <form
@@ -142,30 +161,38 @@ export function AskWorkspace() {
               <ArrowUp size={16} aria-hidden="true" /> Ask my pod
             </Button>
           </div>
-          <div className="ask-mode">
-            <Switch
-              id="ask-no-ai"
-              checked={noAi || controller.demo}
-              disabled={controller.demo}
-              onCheckedChange={(checked) => {
-                setNoAi(checked);
-                if (checked) controller.showExtracts();
-              }}
-            />
-            <Label htmlFor="ask-no-ai">Answer from my pod only (no AI)</Label>
-          </div>
-          <p className="ask-muted">
-            {noAi || controller.demo
-              ? "Shows matching extracts. Your question stays in your browser."
-              : "Anthropic writes an answer from selected snippets after you give consent."}
-          </p>
+          {hasModel ? (
+            <>
+              <div className="ask-mode">
+                <Switch
+                  id="ask-no-ai"
+                  checked={noAi || controller.demo}
+                  disabled={controller.demo}
+                  onCheckedChange={(checked) => {
+                    setNoAi(checked);
+                    if (checked) controller.showExtracts();
+                  }}
+                />
+                <Label htmlFor="ask-no-ai">Answer from my pod only (no AI)</Label>
+              </div>
+              <p className="ask-muted">
+                {noAi || controller.demo
+                  ? "Shows matching extracts. Your question stays in your browser."
+                  : "An AI model writes an answer from selected snippets after you give consent."}
+              </p>
+            </>
+          ) : (
+            <p className="ask-muted ask-mode">
+              Answers are extracts from your pod. Nothing leaves your browser.
+            </p>
+          )}
         </form>
         <fieldset className="ask-scopes" aria-label="Search scope">
           <Button
             size="sm"
             variant={!scope ? "secondary" : "ghost"}
             aria-pressed={!scope}
-            onClick={() => setScope(undefined)}
+            onClick={() => rescope(undefined)}
           >
             All apps
           </Button>
@@ -175,10 +202,10 @@ export function AskWorkspace() {
               size="sm"
               variant={scope === app ? "secondary" : "ghost"}
               aria-pressed={scope === app}
-              onClick={() => setScope(app)}
+              onClick={() => rescope(app)}
             >
               <AppGlyph app={app} />
-              <span className="ask-app-name">{app}</span>
+              <span>{appName(app)}</span>
             </Button>
           ))}
         </fieldset>
@@ -226,21 +253,31 @@ export function AskWorkspace() {
               </Button>
             </ErrorState>
           )}
-          {state.answer && (
+          {state.answer?.notFound && (
+            <EmptyState
+              variant="no-results"
+              title={NOT_FOUND}
+              body="Some sources below share words with your question, but none of them answers it. Try other words or another app."
+            />
+          )}
+          {state.answer && !state.answer.notFound && (
             <section className="ask-answer" aria-label="Answer">
               <div className="ask-answer-header">
                 <h2>{state.method === "extractive" ? "From your pod" : "Answer"}</h2>
                 <span className="ask-method">
-                  {state.method === "extractive"
-                    ? "Matching extracts · no AI"
-                    : "Written by AI · check the sources"}
+                  {state.method === "model"
+                    ? "Written by AI · check the sources"
+                    : hasModel
+                      ? "Matching extracts · no AI"
+                      : "Matching extracts"}
                 </span>
               </div>
               <p className="ask-asked">{state.question}</p>
               <div className="ask-answer-text">
-                {state.answer.sentences.map((sentence) => (
+                {state.answer.sentences.map((sentence, index) => (
                   <p
-                    key={sentence.text}
+                    // biome-ignore lint/suspicious/noArrayIndexKey: an answer never reorders, and its sentences can repeat
+                    key={`${index}:${sentence.text}`}
                     className={sentence.unsupported ? "ask-unsupported" : undefined}
                   >
                     {sentence.text}
@@ -284,7 +321,7 @@ export function AskWorkspace() {
                   </div>
                   <p>{source.text}</p>
                   <div className="ask-source-meta">
-                    <span className="ask-app-name">{source.app}</span>
+                    <span>{appName(source.app)}</span>
                     {source.modified && (
                       <time dateTime={source.modified}>
                         {new Date(source.modified).toLocaleDateString("en-GB", {
@@ -306,61 +343,64 @@ export function AskWorkspace() {
               <summary>Which data was used</summary>
               <p>
                 {state.method === "model"
-                  ? "Only your question and the snippets, titles, source URLs and metadata listed above are sent to Anthropic. Your pod credentials and recent questions are never sent."
-                  : "Only the snippets listed above were used in your browser. Nothing was sent to an AI provider."}
+                  ? "Only your question and the snippets, titles, source URLs and metadata listed above are sent to the AI provider. Your pod credentials and recent questions are never sent."
+                  : "Only the snippets listed above were used, in your browser. Nothing left your browser."}
               </p>
               <p>
                 Search uses a bounded, session-only index. Refresh this page to load recent pod
                 changes. This first cut searches labels and descriptions; binary files and full
-                collaborative document bodies may not be included.
+                collaborative document bodies may not be included. Inbox items are left out, because
+                anyone can send them.
               </p>
             </details>
           </section>
         )}
-        <Dialog
-          open={state.status === "consent"}
-          onOpenChange={(open) => {
-            if (!open) controller.showExtracts();
-          }}
-        >
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Let Anthropic write this answer?</DialogTitle>
-              <DialogDescription>
-                Your question and the matching snippets from your pod will be sent to Anthropic to
-                write the answer.
-              </DialogDescription>
-            </DialogHeader>
-            <p>
-              Only the {state.passages.length} sources listed on this page will be sent. This choice
-              lasts for this Ask session.
-            </p>
-            <details className="ask-disclosure">
-              <summary>Review the selected snippets</summary>
-              <ol>
-                {state.passages.map((source) => (
-                  <li key={source.url}>
-                    <strong>{source.title}</strong>
-                    <p>{source.text}</p>
-                  </li>
-                ))}
-              </ol>
-            </details>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => controller.showExtracts()}>
-                Use without AI
-              </Button>
-              <Button
-                onClick={() => {
-                  if (online) void controller.consent();
-                  else controller.showExtracts();
-                }}
-              >
-                Allow for this session
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+        {hasModel && (
+          <Dialog
+            open={state.status === "consent"}
+            onOpenChange={(open) => {
+              if (!open) controller.showExtracts();
+            }}
+          >
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Let an AI model write this answer?</DialogTitle>
+                <DialogDescription>
+                  Your question and the matching snippets from your pod will be sent to the AI
+                  provider to write the answer.
+                </DialogDescription>
+              </DialogHeader>
+              <p>
+                Only the {state.passages.length} sources listed on this page will be sent. This
+                choice lasts for this Ask session.
+              </p>
+              <details className="ask-disclosure">
+                <summary>Review the selected snippets</summary>
+                <ol>
+                  {state.passages.map((source) => (
+                    <li key={source.url}>
+                      <strong>{source.title}</strong>
+                      <p>{source.text}</p>
+                    </li>
+                  ))}
+                </ol>
+              </details>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => controller.showExtracts()}>
+                  Use without AI
+                </Button>
+                <Button
+                  onClick={() => {
+                    if (online) void controller.consent();
+                    else controller.showExtracts();
+                  }}
+                >
+                  Allow for this session
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        )}
       </div>
     </AppFrame>
   );
@@ -384,7 +424,8 @@ function Connected({ session }: { session: PodSession }) {
           retrieval.dispose();
           return;
         }
-        controller = new AskController(retrieval, hostedAnswerModel(), session.mode === "demo");
+        // No model until the agent gateway offers a grounded completion: answers are extracts.
+        controller = new AskController(retrieval, undefined, session.mode === "demo");
         setBoot({ controller });
       })
       .catch(() => {

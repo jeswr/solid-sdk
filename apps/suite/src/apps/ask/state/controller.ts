@@ -1,8 +1,11 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Claude Opus 5.5
 import {
   type AnswerModel,
+  buildGroundedPrompt,
   extractiveAnswer,
   type GroundedAnswer,
+  type GroundedPrompt,
   MAX_QUESTION_CHARS,
   parseGroundedAnswer,
 } from "@jeswr/pod-ask";
@@ -10,6 +13,10 @@ import type { AppSlug } from "@jeswr/suite-ui";
 import { type AskErrorCode, AskModelError } from "../lib/model";
 import type { AskPassage, AskRetrieval } from "../lib/retrieval";
 
+interface ModelPlan {
+  model: AnswerModel;
+  prompt: GroundedPrompt;
+}
 export interface AskState {
   status: "idle" | "consent" | "answering" | "answered" | "empty" | "error";
   question: string;
@@ -20,7 +27,11 @@ export interface AskState {
   method: "extractive" | "model";
 }
 
-/** One single-question controller per pod session; no conversation or durable history. */
+/**
+ * One single-question controller per pod session; no conversation or durable history.
+ * Without a model (the only configuration today) every answer is extractive and the
+ * consent and answering states are never entered. A model is an injected `AnswerModel`.
+ */
 export class AskController {
   #state: AskState = {
     status: "idle",
@@ -33,11 +44,13 @@ export class AskController {
   };
   #listeners = new Set<() => void>();
   #consented = false;
+  /** The model call planned for the current question, if a model will answer it. */
+  #plan: ModelPlan | undefined;
   #disposed = false;
   #request = new AbortController();
   constructor(
     readonly retrieval: AskRetrieval,
-    readonly model: AnswerModel,
+    readonly model: AnswerModel | undefined,
     readonly demo: boolean,
   ) {}
   getSnapshot = () => this.#state;
@@ -63,20 +76,33 @@ export class AskController {
     this.#request.abort();
     this.#request = new AbortController();
     const recent = [q, ...this.#state.recent.filter((entry) => entry !== q)].slice(0, 8);
-    const passages = this.retrieval.retrieve(q, scope);
+    let passages = this.retrieval.retrieve(q, scope);
+    const model = noAi || this.demo || !online ? undefined : this.model;
+    let plan: ModelPlan | undefined;
+    if (model && passages.length) {
+      // List exactly the sources the prompt keeps, so numbers and the disclosure match it.
+      const prompt = buildGroundedPrompt(q, passages);
+      const kept = new Set(prompt.passages.map((passage) => passage.url));
+      const sent = passages.filter((passage) => kept.has(passage.url));
+      if (sent.length) {
+        passages = sent;
+        plan = { model, prompt };
+      }
+    }
+    this.#plan = plan;
     this.#set({
       question: q,
       passages,
       recent,
       answer: null,
       error: null,
-      method: noAi || this.demo || !online ? "extractive" : "model",
+      method: plan ? "model" : "extractive",
     });
     if (!passages.length) {
       this.#set({ status: "empty" });
       return;
     }
-    if (noAi || this.demo || !online) {
+    if (!plan) {
       this.showExtracts();
       return;
     }
@@ -84,12 +110,19 @@ export class AskController {
       this.#set({ status: "consent" });
       return;
     }
-    await this.#complete();
+    await this.#complete(plan);
+  }
+  /** Re-run the current question, for example after the app filter changes. */
+  async reask(scope: AppSlug | undefined, noAi: boolean, online: boolean): Promise<void> {
+    const { status, question } = this.#state;
+    if (status === "idle" || status === "consent" || !question) return;
+    await this.ask(question, scope, noAi, online);
   }
   async consent(): Promise<void> {
-    if (this.#state.status !== "consent" || this.#disposed) return;
+    const plan = this.#plan;
+    if (!plan || this.#state.status !== "consent" || this.#disposed) return;
     this.#consented = true;
-    await this.#complete();
+    await this.#complete(plan);
   }
   showExtracts(): void {
     if (this.#disposed || !this.#state.passages.length) return;
@@ -101,14 +134,13 @@ export class AskController {
       answer: extractiveAnswer(this.#state.question, this.#state.passages),
     });
   }
-  async #complete(): Promise<void> {
+  async #complete({ model, prompt }: ModelPlan): Promise<void> {
     const request = this.#request;
-    const { question, passages } = this.#state;
     this.#set({ status: "answering", method: "model" });
     try {
-      const text = await this.model.answer(question, passages, request.signal);
+      const text = await model.answer(prompt, request.signal);
       if (request.signal.aborted || this.#disposed) return;
-      this.#set({ status: "answered", answer: parseGroundedAnswer(text, passages) });
+      this.#set({ status: "answered", answer: parseGroundedAnswer(text, prompt.passages) });
     } catch (error) {
       if (request.signal.aborted || this.#disposed) return;
       this.#set({
