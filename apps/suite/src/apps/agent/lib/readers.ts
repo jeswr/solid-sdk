@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 
 import { type Approval, readApprovalClaims } from "@jeswr/agent-mandate/approval";
 import { type ControlStatementClaims, readControlClaims } from "@jeswr/agent-mandate/control";
@@ -12,6 +13,7 @@ import {
   selectMembers,
   selectTrustMembers,
 } from "./collections";
+import { type StructuredCard, structuredCards } from "./inbox";
 import { AGENT, guardSlug, metadataNode, PROV, RDF, resourceSlug } from "./paths";
 import type { AgentVerifier, Verification } from "./verify";
 
@@ -89,7 +91,11 @@ export const readDescriptors = (client: AgentClient) =>
   ]);
 export const readProposals = (client: AgentClient) =>
   records(client, client.paths.proposals, "action-proposal");
-export type DisplayApproval = Approval & { createdAt: string; verification: Verification };
+export type DisplayApproval = Approval & {
+  createdAt: string;
+  verification: Verification;
+  signingKeyFragment?: string | undefined;
+};
 export type DisplayControl = ControlStatementClaims & { verification: Verification };
 export async function readApprovals(
   client: AgentClient,
@@ -130,7 +136,20 @@ export async function readApprovals(
             url: m.url,
             etag: doc.etag,
             verified: verification,
-            record: { ...claims, createdAt, verification },
+            record: {
+              ...claims,
+              createdAt,
+              verification,
+              signingKeyFragment: [...doc.dataset]
+                .find(
+                  (q) =>
+                    proofGraph !== undefined &&
+                    q.graph.equals(proofGraph) &&
+                    q.predicate.value === "https://w3id.org/security#verificationMethod" &&
+                    q.object.termType === "NamedNode",
+                )
+                ?.object.value.split("#")[1],
+            },
           };
         }),
       ),
@@ -210,7 +229,11 @@ export interface Triage {
   urgency: string | undefined;
   confidence: number | undefined;
 }
-export type InboxMessage = InboundMessage & { triage?: Triage | undefined; triageError?: unknown };
+export type InboxMessage = InboundMessage & {
+  cards: StructuredCard[];
+  triage?: Triage | undefined;
+  triageError?: unknown;
+};
 export async function readInbox(
   client: AgentClient,
   binding: string,
@@ -264,7 +287,15 @@ export async function readInbox(
       } catch (error) {
         triageError = error;
       }
-      return { ...loaded, record: { ...loaded.record, triage, triageError } };
+      return {
+        ...loaded,
+        record: {
+          ...loaded.record,
+          cards: await structuredCards(loaded.record.structuredPart),
+          triage,
+          triageError,
+        },
+      };
     }),
   );
   return collection(newest([...errors, ...rows]), {
@@ -323,34 +354,7 @@ export async function readConversations(client: AgentClient): Promise<Collection
   }
   return collection(newest(rows), containers);
 }
-export async function readAudit(
-  client: AgentClient,
-  options: { limit?: number; before?: number } = {},
-) {
-  if (options.limit !== undefined && (!Number.isSafeInteger(options.limit) || options.limit < 0))
-    throw new Error("Invalid audit limit");
-  const selected = selectMembers(
-    (await client.list(client.paths.audit))
-      .filter((m) => !m.container && m.url !== client.paths.auditChain)
-      .map((member) => {
-        const slug = resourceSlug(member.url);
-        const seq = slug && /^\d+$/.test(slug) ? Number(slug) : NaN;
-        return { ...member, seq: Number.isSafeInteger(seq) ? seq : -1 };
-      })
-      .filter((m) => options.before === undefined || m.seq < options.before),
-    options.limit,
-    (a, b) => b.seq - a.seq || a.url.localeCompare(b.url),
-  );
-  const rows = await mapBounded(selected.members, (member) =>
-    attempt(member.url, async () => {
-      if (member.seq < 0) throw new Error("Invalid audit sequence");
-      const loaded = await client.read(member.url, "audit-entry");
-      if (loaded.record.seq !== member.seq) throw new Error("Audit sequence mismatch");
-      return loaded;
-    }),
-  );
-  return collection(rows, selected);
-}
+export { readAudit } from "./audit";
 export const loadedRecords = <T>(rows: Row<T>[]) =>
   rows.filter(isLoaded<T>).map((row) => row.record);
 export type { PodRecord };

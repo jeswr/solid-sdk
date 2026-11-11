@@ -9,6 +9,7 @@ export const sparqLwsCid = {
   "@context": ["https://www.w3.org/ns/cid/v1", "https://www.w3.org/ns/lws/v1"],
   id: "https://lws.example/.well-known/storage",
   type: ["Storage"],
+  controller: "https://id.example/alice#me",
   service: [
     {
       id: "https://lws.example/.well-known/storage#root",

@@ -4,8 +4,15 @@ import { digestOf } from "@jeswr/agent-model";
 import type { Page } from "@playwright/test";
 import { afterEach, expect, it, vi } from "vitest";
 import { daemonDouble } from "../e2e/agent/daemon-double";
+import { appendOwnerTurn, newConversation } from "../src/apps/agent/lib/conversation";
 import { setupApprovalKey } from "../src/apps/agent/lib/keys";
-import { loadedRecords, readApprovals, readAudit, readOutbox } from "../src/apps/agent/lib/readers";
+import {
+  loadedRecords,
+  readApprovals,
+  readAudit,
+  readOutbox,
+  readTurns,
+} from "../src/apps/agent/lib/readers";
 import { createAgentSigner } from "../src/apps/agent/lib/sign";
 import { createAgentVerifier } from "../src/apps/agent/lib/verify";
 import { createDemoPod } from "../src/lib/demo-pod/pod";
@@ -94,4 +101,15 @@ it("the browser-pod double verifies real approvals, changed terms, denials and H
     transmission: expect.any(String),
     mandate: expect.any(String),
   });
+  const conversation = await newConversation(daemon.client, "reply-test");
+  expect(await daemon.answerOwnerTurn(conversation)).toBe(false);
+  await appendOwnerTurn(daemon.client, conversation, DEMO_WEBID, "Hello from the owner");
+  const started = performance.now();
+  expect(await daemon.answerOwnerTurn(conversation)).toBe(true);
+  expect(performance.now() - started).toBeLessThan(2000);
+  expect(loadedRecords(await readTurns(daemon.client, conversation)).map((t) => t.role)).toEqual([
+    "agent",
+    "owner",
+  ]);
+  expect(await daemon.answerOwnerTurn(conversation)).toBe(false);
 });
