@@ -178,6 +178,9 @@ export function FeedbackPage() {
   const voiceBase = useRef("");
   const transcriptEnd = useRef<HTMLDivElement>(null);
   const sending = useRef(false);
+  // Set once an attempt may have reached storage (a failed save or a restored draft).
+  // After that, a rejection must not unfreeze a record GitHub may already hold.
+  const uncertain = useRef(false);
   const voice = useVoice(
     (text) => setInput([voiceBase.current, text].filter(Boolean).join(" ").slice(0, 4000)),
     (clip) => {
@@ -214,6 +217,7 @@ export function FeedbackPage() {
         const saved = validateSubmission(JSON.parse(draft.record));
         submissionId.current = draft.submissionId;
         receipts.current = draft.receipts;
+        uncertain.current = true;
         setFrozenRecord(draft.record);
         setPathway(saved.pathway);
         setAnswers(saved.answers);
@@ -291,6 +295,7 @@ export function FeedbackPage() {
   }
   function start(p: Pathway) {
     submissionId.current = crypto.randomUUID();
+    uncertain.current = false;
     setFrozenRecord(undefined);
     clearDraft();
     setInput("");
@@ -493,7 +498,7 @@ export function FeedbackPage() {
       setReference(result.reference);
       clearDraft();
     } catch (error) {
-      if (error instanceof FeedbackRejected) {
+      if (error instanceof FeedbackRejected && !uncertain.current) {
         setFrozenRecord(undefined);
         clearDraft();
         setError(
@@ -501,6 +506,7 @@ export function FeedbackPage() {
         );
         return;
       }
+      uncertain.current = true;
       setError(
         error instanceof FeedbackRetryLater
           ? retryLaterMessage
