@@ -1,12 +1,7 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 //
-// Playwright config for the Pod Money static host's e2e layer. The first (and
-// currently only) suite is the task #123 401-BUDGET test: it proves the @jeswr/
-// solid-elements proactive auth-fetch (which REPLACED the raw ReactiveFetchManager)
-// attaches the DPoP token UP FRONT — so pod-money's LEDGER-DISCOVERY CHAIN (the
-// authenticated profile re-read + the public-type-index read + the ledger GET) pays
-// ZERO wasted 401s, never the per-resource 401-dance. (Each of those is a DISTINCT
-// pod URL that paid its own wasted 401 under the reactive manager.)
+// Playwright checks shared popup sign-in, private finance browsing and the public
+// global-fetch boundary against one local Community Solid Server.
 //
 // TWO webServers (the solid-test-infrastructure harness pattern):
 //   • CSS@7 on :3000 — it MUST own :3000 (the Solid issuer is keyed to that origin),
@@ -24,8 +19,7 @@
 //   cd web
 //   npx playwright install chromium   # one-time: fetch the browser
 //   npx playwright test               # boots CSS + vite, seeds the pod, runs the spec
-// The webServers boot on demand; `reuseExistingServer` (non-CI) reuses an already-running
-// CSS/vite so local iteration skips the ~13s CSS boot.
+// CSS starts fresh for each run; only Vite may be reused outside CI.
 import { defineConfig, devices } from "@playwright/test";
 
 const CSS_PORT = 3000;
@@ -38,7 +32,7 @@ export default defineConfig({
   testMatch: /.*\.spec\.ts/,
   fullyParallel: false,
   workers: 1,
-  // The 401-budget spec drives a real OIDC popup login + a ledger load, so it
+  // The sign-in spec drives a real OIDC popup login + a ledger load, so it
   // needs a generous ceiling (CSS round-trips + the popup dance).
   timeout: 120_000,
   expect: { timeout: 20_000 },

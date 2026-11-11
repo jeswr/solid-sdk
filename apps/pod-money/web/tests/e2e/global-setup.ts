@@ -1,20 +1,9 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 //
-// Playwright globalSetup for the task #123 401-budget e2e. Runs once after the
-// webServers (CSS@3000 + vite@5173) are up. It:
-//   1. creates a fresh CSS account + pod (the verified solid-test-infrastructure recipe);
-//   2. seeds the WebID profile (foaf:name + pim:storage — a fresh CSS pod has neither,
-//      so without this the app sees no display name / no storage and looks broken);
-//   3. seeds the PUBLIC TYPE INDEX (`settings/publicTypeIndex.ttl`) with a
-//      fin:Transaction registration pointing at the ledger — pod-money's `MoneyStore.
-//      discover(primaryClass)` reads THIS exact path to find the ledger;
-//   4. seeds the finance LEDGER (`finance/ledger.ttl`) — ONE fin:FinancialAccount + MANY
-//      fin:Transaction nodes. UNLIKE pod-music (which reads N PER-TRACK resources),
-//      pod-money reads its accounts+transactions from a SINGLE ledger file, so the
-//      per-resource 401-dance surface here is the DISCOVERY CHAIN: the authenticated
-//      profile re-read + the type-index read + the ledger GET — each a DISTINCT pod URL
-//      that paid its own wasted 401 under the old reactive manager. The transaction COUNT
-//      is the regression knob: the 401 count must NOT scale with it (it never adds reads).
+// Playwright setup for shared popup sign-in against the local CSS. Seed the public
+// WebID profile, the finance Type Index registration and a private ledger with one
+// account and several transactions. The spec lists those private rows using auth.fetch
+// and verifies that ambient fetch still receives 401/403.
 // It writes the seeded credentials to a JSON sidecar the spec reads (the spec drives
 // the real OIDC popup login with this account; the seeded data is its pod contents).
 //
@@ -46,7 +35,7 @@ const LEDGER = `${POD_ROOT}finance/ledger.ttl`;
 // The data layer's RDF namespaces (src/vocab.ts), restated here (inlined-setup rule).
 const FIN = "https://jeswr.org/ns/sectors/finance#";
 const PM = "https://jeswr.org/ns/pod-money#";
-// The transaction COUNT is the regression knob: the 401 count must not scale with it.
+// Several rows prove that the signed-in view reads and parses the seeded ledger.
 const TXN_COUNT = 12;
 
 // Where the spec reads the seeded account + container facts.
@@ -205,12 +194,10 @@ export default async function globalSetup() {
     "text/turtle",
   );
 
-  // 5. seed the finance LEDGER (one account + MANY transactions). This is the single
-  //    file `readLedger` GETs — the transaction COUNT is the regression knob (more
-  //    transactions = more TRIPLES in ONE file, never more reads).
+  // 5. Seed the private ledger that the signed-in view will list.
   await authedPut(LEDGER, ledgerTurtle(TXN_COUNT), "text/turtle");
 
-  // 6. hand the spec the seeded facts (login credentials + the regression knob).
+  // 6. hand the spec the seeded facts (login credentials + the expected row count).
   writeFileSync(
     CREDS_PATH,
     JSON.stringify(

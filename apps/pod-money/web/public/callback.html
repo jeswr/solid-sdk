@@ -15,7 +15,7 @@
     <p>Signing you in…</p>
     <script>
       // Hand the authorization code back to the app window that opened this popup
-      // (@solid/reactive-authentication's getCode() is awaiting it). Target OUR
+      // (@jeswr/reactive-authentication's getCode() is awaiting it). Target OUR
       // origin only — the URL carries the OAuth code; never broadcast to "*".
       if (window.opener) {
         window.opener.postMessage(location.href, "http://localhost:5173");
