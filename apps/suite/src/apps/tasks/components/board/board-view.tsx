@@ -35,6 +35,7 @@ import { MoveMenuItems } from "../move-menu";
 import { ProjectDot } from "../project-dot";
 import { TaskCheck, useCompleting } from "../task-check";
 import { SectionEnd, SectionHeader } from "../task-list";
+import { TaskProgress } from "../tree-controls";
 import { ProjectError } from "../views/project-error";
 import "./board.css";
 
@@ -61,8 +62,6 @@ function BoardCard({
   const query = new URLSearchParams(params.toString());
   query.set("task", encodeRef(task.url));
   const href = `${pathname}?${query}`;
-  const children = tasks.views.filter((child) => child.parentId === task.id);
-  const closed = children.filter((child) => child.state === "closed").length;
   const labels = project.tracker.labels.filter((label) => task.labelIds.includes(label.id));
   return (
     <li
@@ -121,7 +120,7 @@ function BoardCard({
             >
               Delete
             </DropdownMenuItem>
-            <MoveMenuItems task={task} disabled={pending || completing} nesting={false} />
+            <MoveMenuItems task={task} disabled={pending || completing} nesting={false} flat />
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
@@ -136,11 +135,7 @@ function BoardCard({
             <Repeat2 size={14} aria-label="Recurring task" />
           </span>
         )}
-        {children.length > 0 && (
-          <span role="img" aria-label={`${closed} of ${children.length} sub-tasks complete`}>
-            {closed}/{children.length}
-          </span>
-        )}
+        <TaskProgress tasks={tasks.views} id={task.id} />
         {labels.slice(0, 3).map((label) => (
           <span className="tsk-chip" key={label.id}>
             @{label.name}
@@ -194,16 +189,14 @@ function BoardColumn({
       )}
       <SectionEnd project={project} sectionId={section?.id} className="tsk-board-body">
         <ol className="tsk-board-cards" aria-label={`${section?.name ?? "No section"} tasks`}>
-          {rows
-            .filter((row) => row.depth === 0)
-            .map((row) => (
-              <BoardCard
-                key={row.task.url}
-                task={row.task}
-                project={project}
-                sectionId={section?.id}
-              />
-            ))}
+          {rows.map((row) => (
+            <BoardCard
+              key={row.task.url}
+              task={row.task}
+              project={project}
+              sectionId={section?.id}
+            />
+          ))}
         </ol>
       </SectionEnd>
       <AddTaskRow project={project} sectionId={section?.id} />
@@ -284,8 +277,9 @@ export function BoardView({ projectUrl }: { projectUrl: string }) {
     project?.tracker.sections ?? [],
     "manual",
     preferences.showCompletedInProject,
+    true,
   );
-  const unsectioned = groups.unsectioned.filter((row) => row.depth === 0);
+  const unsectioned = groups.unsectioned;
   const showNoSection = unsectioned.length > 0 || groups.sections.length === 0;
   return (
     <TaskListFocus className="tsk-content tsk-board-view">

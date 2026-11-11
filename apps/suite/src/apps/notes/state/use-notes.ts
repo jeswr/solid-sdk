@@ -2,6 +2,7 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { usePodSessionState } from "../../../lib/session/pod-session";
+import type { NoteLocation } from "../lib/model/note";
 import { type NotesPreferences, notesPreferencesSchema } from "../lib/model/prefs";
 import { type NotesFilter, selectNotes } from "../lib/model/query";
 import type { NotesStore } from "../lib/model/store";
@@ -66,7 +67,7 @@ export function useNotesResource<T>(store: NotesStore, load: () => Promise<T>) {
 const defaults = notesPreferencesSchema.parse({});
 export function useNotes(
   store: NotesStore,
-  filter: NotesFilter,
+  filter: NotesFilter & { location: NoteLocation },
   prefs: NotesPreferences = defaults,
 ) {
   const load = useCallback(() => store.list(filter.location), [store, filter.location]);

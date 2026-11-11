@@ -22,6 +22,8 @@ import {
 import { DOCUMENT_CLASS, NS, PREFIXES } from "../../../docs/lib/model/vocab";
 import { notesMediaContainer } from "../images";
 import { deleteLabel, mergeLabels } from "../organise/labels";
+import { createBrowserFiredStore, type FiredReminderStore } from "../reminders/fired-store";
+import { reminderKey } from "../reminders/scheduler";
 import { type NoteAction, reduceNoteState } from "../state";
 import { NoteConflictError, NoteMoveUncertainError } from "./errors";
 import {
@@ -35,11 +37,14 @@ import {
 
 export interface StoredNote extends Note {
   etag: string | null;
+  /** Local request/write order; independent of RDF dates and discarded on draft recovery. */
+  localGeneration?: number;
 }
 export interface NoteChanges {
   title?: string;
   body?: string;
   labels?: readonly string[];
+  reminder?: string | null;
 }
 export interface NoteFailure {
   url: string;
@@ -50,6 +55,7 @@ export interface NotesStoreOptions {
   podRoot: string;
   webId: string;
   now?: () => Date;
+  fired?: FiredReminderStore;
 }
 
 /** Account-scoped I/O; every caller and listing URL is checked before it is used. */
@@ -60,10 +66,13 @@ export class NotesStore {
   private readonly podRoot: string;
   private readonly webId: string;
   private initialization?: Promise<void>;
+  private generation = 0;
+  private readonly fired: FiredReminderStore | undefined;
 
   constructor(options: NotesStoreOptions) {
     this.podRoot = normalizePodBase(options.podRoot);
     this.webId = options.webId;
+    this.fired = options.fired;
     this.fetchImpl = refuseRedirects(options.fetch);
     this.now = options.now ?? (() => new Date());
     const active = new URL("notes/", this.podRoot).href;
@@ -89,9 +98,10 @@ export class NotesStore {
 
   async read(url: string): Promise<StoredNote | undefined> {
     const location = this.scope(url);
+    const localGeneration = ++this.generation;
     const { dataset, etag } = await readRdf(url, this.fetchImpl);
     const note = parseNote(url, dataset, location);
-    return note && { ...note, etag };
+    return note && { ...note, etag, localGeneration };
   }
 
   async list(location: NoteLocation): Promise<StoredNote[]> {
@@ -194,7 +204,11 @@ export class NotesStore {
           fetchImpl: this.fetchImpl,
           prefixes: PREFIXES,
         });
-        return { ...(parseNote(url, dataset, location) as Note), etag };
+        return {
+          ...(parseNote(url, dataset, location) as Note),
+          etag,
+          localGeneration: ++this.generation,
+        };
       } catch (error) {
         if (error instanceof ResourceWriteError && error.status === 412) continue;
         throw error;
@@ -220,7 +234,37 @@ export class NotesStore {
     };
   }
 
+  private recordOverdueIdentity(previous: Note, saved: Note): void {
+    if (!previous.reminder || previous.reminderId || !saved.reminderId || !saved.reminder) return;
+    const now = this.now().getTime();
+    if (Date.parse(saved.reminder) > now) return;
+    // The pod write has already succeeded. Local storage must never delay it.
+    void (async () => {
+      await (this.fired ?? createBrowserFiredStore(this.webId)).markDelivered(
+        reminderKey(saved),
+        now,
+      );
+    })().catch(() => {});
+  }
+
   async save(note: Note, input: NoteChanges, etag: string | null): Promise<StoredNote> {
+    const saved = await this.write(note, input, etag);
+    this.recordOverdueIdentity(note, saved);
+    return saved;
+  }
+
+  /** The scheduler identifies through the same guarded write, then claims delivery. */
+  async identifyReminder(note: StoredNote): Promise<StoredNote | undefined> {
+    if (note.reminderId) return note;
+    try {
+      return await this.write(note, {}, note.etag);
+    } catch (error) {
+      if (error instanceof NoteConflictError) return this.read(note.url);
+      throw error;
+    }
+  }
+
+  private async write(note: Note, input: NoteChanges, etag: string | null): Promise<StoredNote> {
     this.scope(note.url, note.location);
     const dataset = buildNote(note.url, { ...this.input(note), ...input });
     try {
@@ -229,7 +273,11 @@ export class NotesStore {
         fetchImpl: this.fetchImpl,
         prefixes: PREFIXES,
       });
-      return { ...(parseNote(note.url, dataset, note.location) as Note), etag: written.etag };
+      return {
+        ...(parseNote(note.url, dataset, note.location) as Note),
+        etag: written.etag,
+        localGeneration: ++this.generation,
+      };
     } catch (error) {
       if (error instanceof ResourceWriteError && error.status === 412)
         throw new NoteConflictError(note.url, { cause: error });
@@ -285,12 +333,14 @@ export class NotesStore {
         ...this.input(note),
         priorRevisions: revisions,
         now: new Date(revisions[0]?.generatedAt ?? note.modified ?? this.now()),
+        reminder: state.status === "trashed" ? null : note.reminder,
         trashedAt: state.status === "trashed" ? this.now() : undefined,
         previousContainer: state.status === "trashed" ? this.containers[state.previous] : undefined,
       });
       new NoteDoc(documentSubject(url), dataset, DataFactory).modified = this.now();
       return dataset;
     });
+    this.recordOverdueIdentity(note, moved);
     try {
       await this.remove(note.url, sourceEtag);
     } catch (error) {

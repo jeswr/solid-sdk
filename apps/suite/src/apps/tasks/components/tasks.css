@@ -258,9 +258,6 @@
   border-bottom: 1px solid var(--border);
   border-radius: var(--radius-sm);
 }
-.tsk-row[data-depth="1"] {
-  margin-inline-start: 28px;
-}
 .tsk-row:hover,
 .tsk-row:focus-within {
   background: var(--surface-2);
