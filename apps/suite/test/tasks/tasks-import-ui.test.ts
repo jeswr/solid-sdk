@@ -10,7 +10,7 @@ import { parseTodoistCsv } from "../../src/apps/tasks/lib/todoist";
 import { importProject } from "../../src/apps/tasks/state/import-project";
 import type { TasksCache } from "../../src/apps/tasks/state/tasks-cache";
 import { encodeRef } from "../../src/lib/refs";
-import type { Pod, RequestRecord } from "./pod";
+import { type Pod, type RequestRecord, webId } from "./pod";
 import { frameCache } from "./tasks-frame-fixtures";
 
 let cache: TasksCache;
@@ -79,10 +79,50 @@ afterEach(async () => {
 });
 
 describe("Todoist import dialog with the real conditional cache/store", () => {
+  it("warns safely about metadata and round-trips it through the project and task models", async () => {
+    await pick(
+      [
+        "TYPE,CONTENT,DESCRIPTION,AUTHOR,RESPONSIBLE,DURATION,DURATION_UNIT,DATE_LANG",
+        "section,Doing,SECRET section details,,,,,",
+        "task,Names,Body,SECRET Alice,SECRET Bob,45,minute,en",
+        "note,Comment,More,SECRET Carol,,,,",
+        "task,WebIDs,,https://alice.test/#me,https://bob.test/#me,1,day,",
+        "section,Empty,SECRET empty section,,,,,",
+      ].join("\n"),
+    );
+    const warnings = query('section[aria-label="Import warnings"]').textContent;
+    expect(warnings).toContain("author could not be matched to an account");
+    expect(warnings).toContain("responsible person could not be matched to an account");
+    expect(warnings).toContain("Durations will be kept as labelled text");
+    expect(warnings).toContain("Note authors will be kept as labelled text");
+    expect(warnings).toContain("Section descriptions will be kept as labelled text");
+    expect(warnings).toContain("Date language will be kept as labelled text");
+    expect(document.body.textContent).not.toContain("SECRET");
+    await click("Import 2 tasks");
+    await finished();
+    const created = cache.getSnapshot().projects.find((item) => item.tracker.title === "Work");
+    if (!created) throw new Error("Missing project");
+    const project = await cache.store.readProject(created.url);
+    expect(project.tracker.description).toBe(
+      'Section "Doing" description: SECRET section details\n\nSection "Empty" description: SECRET empty section',
+    );
+    const tasks = await cache.store.listTasks(project.tracker.stateStore as string);
+    const names = tasks.find((item) => item.task.title === "Names")?.task;
+    expect(names?.description).toBe(
+      "Body\n\nAuthor: SECRET Alice\n\nResponsible: SECRET Bob\n\nDuration: 45 minutes\n\nDate language: en\n\nComment\n\nMore\n\nNote author: SECRET Carol",
+    );
+    expect(names?.creator).toBe(webId);
+    expect(names?.assignee).toBeUndefined();
+    const identities = tasks.find((item) => item.task.title === "WebIDs")?.task;
+    expect(identities?.creator).toBe("https://alice.test/#me");
+    expect(identities?.assignee).toBe("https://bob.test/#me");
+    expect(identities?.description).toBe("Duration: 1 day");
+  });
+
   it("previews counts and safe warnings, edits the project name, then imports the whole forest", async () => {
     await cache.ensureLabels(inbox, ["Bills"]);
     await cache.updateProject(inbox, (tracker) =>
-      tracker.defineCategory("Label", "Bills", undefined, "#D97706"),
+      tracker.defineCategory("Label", "Bills", undefined, "var(--warning)"),
     );
     const csv = [
       "TYPE,CONTENT,DESCRIPTION,PRIORITY,INDENT,DATE,TIMEZONE",
@@ -137,12 +177,12 @@ describe("Todoist import dialog with the real conditional cache/store", () => {
     expect(tasks[1]?.task.allDay).toBeUndefined();
     expect(tasks[1]?.task.dueDate).toEqual(new Date("2026-07-01T16:00:00Z"));
     expect(tasks[1]?.task.parent).toBe(tasks[0]?.task.id);
-    expect(tasks[2]?.task.description).toBe("every third Friday");
+    expect(tasks[2]?.task.description).toBe("Original date: every third Friday");
     expect(tasks[2]?.task.recurrence).toBeUndefined();
     expect(tasks[0]?.task.types.has(sections[0]?.id as string)).toBe(true);
     expect(tasks[2]?.task.types.has(sections[1]?.id as string)).toBe(true);
     expect(project.tracker.labels).toHaveLength(1);
-    expect(project.tracker.labels[0]).toMatchObject({ name: "Bills", color: "#D97706" });
+    expect(project.tracker.labels[0]).toMatchObject({ name: "Bills", color: "var(--warning)" });
     for (const task of tasks.slice(0, 2))
       expect(task.task.types.has(project.tracker.labels[0]?.id as string)).toBe(true);
     expect(
@@ -323,5 +363,92 @@ describe("Todoist import dialog with the real conditional cache/store", () => {
       ),
     ).toEqual({ imported: 0, failed: 0 });
     expect(pod.mutations()).toHaveLength(count);
+  });
+
+  it("does not create a project when cancelled behind a blocked cache mutation", async () => {
+    await pick("TYPE,CONTENT\nsection,Doing\ntask,Title @work");
+    const blocked = Promise.withResolvers<void>();
+    const started = Promise.withResolvers<void>();
+    pod.intercept = async (request) => {
+      if (request.method === "PUT" && request.url === inbox.url) {
+        started.resolve();
+        await blocked.promise;
+      }
+    };
+    let mutation: ReturnType<TasksCache["updateProject"]>;
+    await act(async () => {
+      mutation = cache.updateProject(inbox, (tracker) => {
+        tracker.description = "Existing edit";
+      });
+      await started.promise;
+    });
+    const count = pod.mutations().length;
+    await click("Import 1 tasks");
+    await click("Cancel");
+    await act(async () => {
+      blocked.resolve();
+      await mutation;
+    });
+    await finished();
+    expect(pod.mutations()).toHaveLength(count);
+    expect(cache.getSnapshot().projects.map((project) => project.tracker.title)).toEqual(["Inbox"]);
+    expect(toast.info).toHaveBeenCalledWith(
+      "Import cancelled. Imported 0 tasks into Work. Already-created tasks stay.",
+      expect.anything(),
+    );
+    expect(push).not.toHaveBeenCalled();
+    expect(cache.getSnapshot().saving).toEqual([]);
+  });
+
+  it.each(["sections", "labels"])("cancels queued %s setup before it writes", async (stage) => {
+    await pick("TYPE,CONTENT\nsection,Doing\ntask,Title @work");
+    const blocked = Promise.withResolvers<void>();
+    const started = Promise.withResolvers<void>();
+    pod.intercept = async (request) => {
+      if (request.method === "PUT" && request.url === inbox.url) {
+        started.resolve();
+        await blocked.promise;
+      }
+    };
+    let queued = false;
+    let mutation: ReturnType<TasksCache["updateProject"]> | undefined;
+    const unsubscribe = cache.subscribe(() => {
+      if (queued) return;
+      const snapshot = cache.getSnapshot();
+      const project = snapshot.projects.find((item) => item.url.endsWith("/work.ttl"));
+      if (
+        !project ||
+        snapshot.saving.includes(project.url) ||
+        (stage === "labels" && !project.tracker.sections.length)
+      )
+        return;
+      queued = true;
+      // Reserve a competing mutation between setup stages, before the next stage is queued.
+      mutation = cache.updateProject(inbox, (tracker) => {
+        tracker.description = "Existing edit";
+      });
+    });
+    await click("Import 1 tasks");
+    await act(async () => started.promise);
+    const count = pod.mutations().length;
+    await click("Cancel");
+    await act(async () => {
+      blocked.resolve();
+      await mutation;
+    });
+    await finished();
+    unsubscribe();
+    expect(pod.mutations()).toHaveLength(count);
+    const project = cache.getSnapshot().projects.find((item) => item.tracker.title === "Work");
+    if (!project) throw new Error("Missing project");
+    const saved = await cache.store.readProject(project.url);
+    expect(saved.tracker.sections).toHaveLength(stage === "sections" ? 0 : 1);
+    expect(saved.tracker.labels).toEqual([]);
+    expect(cache.getSnapshot().views).toEqual([]);
+    expect(toast.error).not.toHaveBeenCalled();
+    expect(toast.info).toHaveBeenCalledWith(
+      "Import cancelled. Imported 0 tasks into Work. Already-created tasks stay.",
+      expect.anything(),
+    );
   });
 });

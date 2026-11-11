@@ -14,15 +14,15 @@ import {
 } from "@jeswr/suite-ui";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { encodeRef } from "@/lib/refs";
+import { type ImportWarning, importWarnings } from "../../lib/import/mapping";
 import {
   MAX_TODOIST_CSV_BYTES,
   parseTodoistCsv,
   TodoistImportError,
   type TodoistImportErrorCode,
   type TodoistProjectDraft,
-  type TodoistWarning,
 } from "../../lib/todoist";
 import { importProject } from "../../state/import-project";
 import { useTasks } from "../../state/tasks-context";
@@ -38,11 +38,21 @@ const errors: Record<TodoistImportErrorCode, string> = {
   INVALID_TIMEZONE:
     "A time zone is invalid or there are too many time zones. Check the file and try again.",
 };
-const warnings: Record<TodoistWarning["code"], string> = {
+const warnings: Record<ImportWarning["code"], string> = {
   UNKNOWN_TYPE: "An unrecognised row was skipped.",
   ORPHAN_NOTE: "A note without a task was skipped.",
   UNPARSED_DATE:
     "A date could not be interpreted. Its text will be kept in the task description; no due date or repeat will be set.",
+  UNRESOLVED_AUTHOR:
+    "A task author could not be matched to an account. The name will be kept as labelled text in the task description.",
+  UNRESOLVED_RESPONSIBLE:
+    "A responsible person could not be matched to an account. The name will be kept as labelled text in the task description; no assignee will be set.",
+  DURATION_TEXT: "Durations will be kept as labelled text in the task description.",
+  DATE_LANGUAGE_TEXT: "Date language will be kept as labelled text in the task description.",
+  NOTE_AUTHOR_TEXT:
+    "Note authors will be kept as labelled text beside their notes in the task description.",
+  SECTION_DESCRIPTION:
+    "Section descriptions will be kept as labelled text in the project description.",
 };
 
 export function TasksImportDialog() {
@@ -67,6 +77,7 @@ export function TasksImportDialog() {
     [],
   );
   const busy = progress !== undefined;
+  const previewWarnings = useMemo(() => (draft ? importWarnings(draft) : []), [draft]);
   function close(next: boolean) {
     if (!next && controller.current) {
       controller.current.abort();
@@ -199,11 +210,11 @@ export function TasksImportDialog() {
               {draft.sections.length} sections · {draft.tasks.length} tasks ·{" "}
               {draft.tasks.filter((task) => task.parentId !== null).length} sub-tasks
             </p>
-            {draft.warnings.length > 0 && (
+            {previewWarnings.length > 0 && (
               <section className="tsk-import-warnings" aria-label="Import warnings">
                 <p>Import warnings</p>
                 <ul>
-                  {draft.warnings.map((warning) => (
+                  {previewWarnings.map((warning) => (
                     <li key={`${warning.line}-${warning.code}`}>
                       Line {warning.line}: {warnings[warning.code]}
                     </li>

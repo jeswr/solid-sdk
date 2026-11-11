@@ -1,5 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { importTaskInput } from "../lib/import/mapping";
+import { importProjectDescription, importTaskInput } from "../lib/import/mapping";
 import type { StoredProject } from "../lib/model/store";
 import { unionLabels } from "../lib/model/tracker";
 import type { TodoistProjectDraft } from "../lib/todoist";
@@ -16,8 +16,8 @@ export async function importProject(
   if (signal.aborted) return { imported: 0, failed: 0 };
   // Import owns feedback and never offers a background Retry that could resume a cancelled job.
   const stop = () => {};
-  let project = await cache.prepareProjectCreate(title, stop, stop)();
-  if (!project) return { imported: 0, failed: draft.tasks.length };
+  let project = await cache.prepareProjectCreate(title, stop, stop, signal)();
+  if (!project) return { imported: 0, failed: signal.aborted ? 0 : draft.tasks.length };
   const result = { project, imported: 0, failed: 0 };
   if (signal.aborted) return result;
   const sections = new Map<string, string>();
@@ -26,6 +26,8 @@ export async function importProject(
     const saved = await cache.updateProject(
       project,
       (tracker) => {
+        const description = importProjectDescription(draft);
+        if (description) tracker.description = description;
         for (const { section, name } of reservations) {
           // defineCategory reuses identical names; reserve a distinct class even for repeated headings.
           const category = tracker.defineCategory("Section", name, section.orderKey);
@@ -34,8 +36,9 @@ export async function importProject(
       },
       stop,
       stop,
+      signal,
     );
-    if (!saved) return { ...result, failed: draft.tasks.length };
+    if (!saved) return { ...result, failed: signal.aborted ? 0 : draft.tasks.length };
     project = saved;
     for (const section of draft.sections) {
       const category = saved.tracker.sections.find((item) => item.position === section.orderKey);
@@ -48,8 +51,8 @@ export async function importProject(
     task.labels.map((name) => union.get(name.toLowerCase())?.[0]?.name ?? name),
   );
   if (names.length) {
-    const saved = await cache.ensureLabels(project, names, stop, stop);
-    if (!saved) return { ...result, failed: draft.tasks.length };
+    const saved = await cache.ensureLabels(project, names, stop, stop, signal);
+    if (!saved) return { ...result, failed: signal.aborted ? 0 : draft.tasks.length };
     project = saved;
   }
   if (signal.aborted) return result;

@@ -487,6 +487,7 @@ export class TasksCache {
     retry: () => void,
     urls: string[] = [],
     onFailure: MutationFailure = this.onFailure,
+    signal?: AbortSignal,
   ): Promise<T | undefined> {
     const entry = { apply, urls };
     this.pending.push(entry);
@@ -494,6 +495,8 @@ export class TasksCache {
     this.emit();
     const run = this.tail.then(async () => {
       try {
+        // Cancellation can happen while this operation waits behind another mutation.
+        if (signal?.aborted) return undefined;
         const { result, commit } = await write();
         this.baseline = commit(this.baseline);
         return result;
@@ -564,7 +567,7 @@ export class TasksCache {
                   {
                     ...data,
                     state: "open",
-                    creator: this.webId,
+                    creator: data.creator ?? this.webId,
                     ...(data.allDay
                       ? { dueDate: new Date(`${data.allDay}T00:00:00`) }
                       : data.due
@@ -777,6 +780,7 @@ export class TasksCache {
     names: readonly string[],
     onRetry?: () => void,
     onFailure?: MutationFailure,
+    signal?: AbortSignal,
   ): Promise<StoredProject | undefined> {
     const current = this.baseline.projects.find((item) => item.url === project.url);
     if (!this.pending.length && current && !missingLabels(current, names).length)
@@ -789,7 +793,7 @@ export class TasksCache {
         tracker.defineCategory("Label", name, undefined, source?.color);
       }
     };
-    return this.updateProject(project, define, onRetry, onFailure);
+    return this.updateProject(project, define, onRetry, onFailure, signal);
   }
   updateTask(
     item: StoredTask,
@@ -1536,6 +1540,7 @@ export class TasksCache {
     title: string,
     onRetry?: () => void,
     onFailure?: MutationFailure,
+    signal?: AbortSignal,
   ): () => Promise<StoredProject | undefined> {
     const url = `${this.store.projects}pending-${crypto.randomUUID()}.ttl`;
     const { tracker, dataset } = createTracker(url, title, `${url}/`, [this.webId], new Date());
@@ -1560,6 +1565,7 @@ export class TasksCache {
         onRetry ?? (() => void run()),
         [url],
         onFailure,
+        signal,
       );
     let attempted = false;
     let saved: StoredProject | undefined;
@@ -1587,6 +1593,7 @@ export class TasksCache {
     /** Composite operations retry their complete intent rather than this write alone. */
     onRetry?: () => void,
     onFailure?: MutationFailure,
+    signal?: AbortSignal,
   ): Promise<StoredProject | undefined> {
     const attempt = (retry = false): Promise<StoredProject | undefined> =>
       this.mutate(
@@ -1610,6 +1617,7 @@ export class TasksCache {
           }),
         [project.url],
         onFailure,
+        signal,
       );
     return attempt();
   }

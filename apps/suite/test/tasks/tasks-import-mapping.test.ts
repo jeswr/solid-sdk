@@ -1,6 +1,10 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { describe, expect, it } from "vitest";
-import { importTaskInput } from "../../src/apps/tasks/lib/import/mapping";
+import {
+  importProjectDescription,
+  importTaskInput,
+  importWarnings,
+} from "../../src/apps/tasks/lib/import/mapping";
 import { createTracker } from "../../src/apps/tasks/lib/model/tracker";
 import { parseTodoistCsv } from "../../src/apps/tasks/lib/todoist";
 
@@ -46,10 +50,53 @@ describe("Todoist task create inputs", () => {
       expect(importTaskInput(task, project, new Map())).toMatchObject({
         due: undefined,
         allDay: undefined,
-        description: date,
+        description: date ? `Original date: ${date}` : "",
       });
       expect(importTaskInput(task, project, new Map())).not.toHaveProperty("recurrence");
     }
+  });
+  it("keeps unresolved identities, note authors, duration and date language as labelled text", () => {
+    const draft = parse(
+      "TYPE,CONTENT,DESCRIPTION,AUTHOR,RESPONSIBLE,DURATION,DURATION_UNIT,DATE_LANG\nsection,Doing,Section details,,,,,\ntask,Title,Body,Alice,Bob,45,minute,en\nnote,Comment,More,Carol,,,,",
+    );
+    const task = draft.tasks[0];
+    if (!task) throw new Error("Missing draft");
+    expect(importTaskInput(task, project, new Map()).description).toBe(
+      "Body\n\nAuthor: Alice\n\nResponsible: Bob\n\nDuration: 45 minutes\n\nDate language: en\n\nComment\n\nMore\n\nNote author: Carol",
+    );
+    expect(importProjectDescription(draft)).toBe('Section "Doing" description: Section details');
+    expect(importWarnings(draft)).toEqual([
+      { code: "SECTION_DESCRIPTION", line: 2 },
+      { code: "UNRESOLVED_AUTHOR", line: 3 },
+      { code: "UNRESOLVED_RESPONSIBLE", line: 3 },
+      { code: "DURATION_TEXT", line: 3 },
+      { code: "DATE_LANGUAGE_TEXT", line: 3 },
+      { code: "NOTE_AUTHOR_TEXT", line: 4 },
+    ]);
+  });
+  it.each([
+    ["1", "day", "1 day"],
+    ["1.5", "day", "1.5 days"],
+  ])("maps WebID identities and retains a %s %s duration", (amount, unit, text) => {
+    const draft = parse(
+      `TYPE,CONTENT,AUTHOR,RESPONSIBLE,DURATION,DURATION_UNIT\ntask,Title,https://alice.test/#me,https://bob.test/#me,${amount},${unit}`,
+    );
+    const task = draft.tasks[0];
+    if (!task) throw new Error("Missing draft");
+    expect(importTaskInput(task, project, new Map())).toMatchObject({
+      creator: "https://alice.test/#me",
+      assignee: "https://bob.test/#me",
+      description: `Duration: ${text}`,
+    });
+    expect(importWarnings(draft)).toEqual([{ code: "DURATION_TEXT", line: 2 }]);
+    expect(importProjectDescription(draft)).toBe("");
+  });
+  it("combines parser warnings with metadata warnings without adding warnings for empty fields", () => {
+    const draft = parse(
+      "TYPE,CONTENT,DATE\nsection,Empty,\ntask,Title,every third Friday\nnote,Note,",
+    );
+    expect(importWarnings(draft)).toEqual(draft.warnings);
+    expect(importProjectDescription(draft)).toBe("");
   });
   it("requires a tracker-local label before task creation", () => {
     const task = parse("TYPE,CONTENT\ntask,Title @missing").tasks[0];
