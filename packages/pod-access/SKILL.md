@@ -322,3 +322,29 @@ whole verified destination and any remaining source items. Never recreate data o
 Native moves still delegate unchanged. Keep ordering, validator races, cleanup/deletion failures,
 lockout, aborts and both WAC/ACP transports covered at 100%. README documents non-atomic ancestor
 and final-check races; never promise transactional visibility.
+
+## Owner-only setup
+
+Use `makeOwnerOnly(resourceUrl, ownerWebId, { fetch, root?, implementation?, inherit?, replace? })`
+from `@jeswr/pod-access/roles`. This is the shared online owner-only writer; reuse it instead
+of constructing ACLs in consuming packages. It uses `ownerPolicy` and the existing system
+writers and readers. `inherit` defaults false; true requires a container and writes direct
+and member access. `replace` defaults false; true explicitly permits removing understood
+foreign own-document grants. It never permits foreign resource bindings or bypasses unsupported
+RDF. Always refuse foreign additive ACP ancestor member access, including with replace.
+
+Require one server-advertised Link endpoint, never derive it or the model from a suffix.
+An ACP relation/type permits creation; `rel="acl"` alone needs an own/ancestor RDF model.
+Unknown/mixed systems refuse. Reserved ACP agent IRIs can never be owner WebIDs:
+reject them before I/O, including PublicAgent/AuthenticatedAgent/OwnerAgent/CreatorAgent.
+Normalize HTTP(S) inputs; refuse credentials, resource query/
+fragment and query-addressed access documents. Preserve annotations, and serialize the final merged dataset with `@jeswr/rdf-serialize`
+to validate foreign literal metadata and blank-node labels. Re-read discovery and governing
+validators immediately before persistence. Use If-None-Match: *
+for create and a strong If-Match for replace; never retry 401/403/412 or swallow errors.
+CSS is the default trusted implementation; callers must assert ESS explicitly. Keep this
+helper separate from access-record sealing and keys. Test WAC, CSS/ESS ACP, both scopes,
+foreign selectors, unknown models, malformed links/RDF, validators, URL normalization and
+all transport failures, with 100% coverage. Ancestor/discovery races are not transactional;
+independent descendant policies are not rewritten. The README records the five original
+call sites and exact behavior changes.

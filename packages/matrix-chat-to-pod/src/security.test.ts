@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Fable 5
 /**
  * Adversarial security regression tests for the import path:
@@ -33,7 +34,16 @@ function fakeWriteFetch(responder: () => Response = () => new Response(null, { s
   writes: CapturedWrite[];
 } {
   const writes: CapturedWrite[] = [];
+  let target = CONTAINER;
   const fetch = (async (input: Parameters<typeof globalThis.fetch>[0], init?: RequestInit) => {
+    if (init?.method === "HEAD") {
+      target = String(input);
+      return new Response(null, { headers: { link: '<.acl>; rel="acl"' } });
+    }
+    if (init?.method !== "PUT")
+      return new Response(await buildOwnerOnlyAclTurtle(target, OWNER), {
+        headers: { "content-type": "text/turtle", etag: '"acl-v1"' },
+      });
     writes.push({
       url: typeof input === "string" ? input : input.toString(),
       body: typeof init?.body === "string" ? init.body : "",
@@ -117,7 +127,7 @@ describe("buildOwnerOnlyAclTurtle is injection-safe + fails closed on a non-IRI 
       if (q.predicate.value === `${ACL}agentClass`) agentClassPredicate = true;
     }
     expect(subjects.size).toBe(1); // only <...>.acl#owner
-    expect([...subjects][0]).toBe(`${CONTAINER}.acl#owner`);
+    expect([...subjects][0]).toBe(`${CONTAINER}.acl#authorization-0`);
     expect(agentClassPredicate).toBe(false);
   });
 
@@ -185,7 +195,7 @@ describe("pod writes refuse a redirect (fail-closed)", () => {
           ownerWebId: OWNER,
           guardedFetch: fakeGuardedFetch([{ chunk: [] }]),
         }),
-      ).rejects.toThrow(/refusing to follow a redirect/);
+      ).rejects.toThrow(/Access request failed/);
     });
   }
 
@@ -203,7 +213,7 @@ describe("pod writes refuse a redirect (fail-closed)", () => {
         ownerWebId: OWNER,
         guardedFetch: fakeGuardedFetch([{ chunk: [] }]),
       }),
-    ).rejects.toThrow(/refusing to follow a redirect/);
+    ).rejects.toThrow(/Access request failed/);
   });
 });
 

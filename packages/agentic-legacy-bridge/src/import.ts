@@ -25,8 +25,7 @@
  * write failure THROWS (never silently loses data).
  */
 
-import { buildOwnerOnlyAclTurtle } from "./acl.js";
-import { discoverWacAcl } from "./acl-discovery.js";
+import { makeOwnerOnly } from "@jeswr/pod-access/roles";
 import { serializeCanonical } from "./canonical.js";
 import type { ChannelAdapter, InboundRawMessage } from "./channel.js";
 import { ChannelParseError } from "./errors.js";
@@ -198,9 +197,10 @@ export async function importInbound(options: ImportInboundOptions): Promise<Impo
 
   // Lock the container BEFORE any content lands in it.
   if (writeAcl) {
-    const aclUrl = await discoverWacAcl(options.writeFetch, container);
-    const aclTurtle = await buildOwnerOnlyAclTurtle(container, options.ownerWebId);
-    await put(options.writeFetch, aclUrl, "text/turtle", aclTurtle);
+    await makeOwnerOnly(container, options.ownerWebId, {
+      fetch: options.writeFetch,
+      inherit: true,
+    });
   }
 
   const inbound = await options.adapter.pullInbound();

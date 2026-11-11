@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-5
 /**
  * `importRoom` — the (thin) orchestration that pages a Matrix room's history and
@@ -21,13 +22,14 @@
  *    NOT routed through the SSRF guard — the caller owns that fetch and its auth.
  *
  * Imported chat is THIRD-PARTY data landing in the user's pod, so the default ACL
- * is OWNER-ONLY (never auto-shared) — see {@link writeOwnerOnlyAcl}. Edits and
+ * is OWNER-ONLY (never auto-shared) — see `makeOwnerOnly` from pod-access. Edits and
  * redactions from the source are honoured on re-sync (an edit rewrites the target
  * resource + sets `dct:isReplacedBy`; a redaction stamps `schema:dateDeleted`).
  */
 
 import { createNodeGuardedFetch, type NodePinningOptions } from "@jeswr/guarded-fetch/node";
-import { serialize } from "@jeswr/rdf-serialize";
+import { ownerPolicy, writeWac } from "@jeswr/pod-access";
+import { makeOwnerOnly } from "@jeswr/pod-access/roles";
 import {
   type CanonicalMessage,
   longChatMessageSubject,
@@ -189,36 +191,6 @@ async function putLongChat(
 }
 
 /**
- * Write a default OWNER-ONLY WAC ACL for `container` (and its descendants, via
- * `acl:default`). Only the owner gets read/write/control; nothing is public.
- *
- * The ACL document is built with `@jeswr/solid-chat-interop`'s n3 `Writer` path
- * indirectly via a small typed builder here is overkill; instead we delegate to a
- * dedicated ACL writer that uses `n3.Writer` (never hand-concatenated triples) —
- * see {@link buildOwnerOnlyAclTurtle}. The ACL is PUT to `${container}.acl`.
- */
-async function writeOwnerOnlyAcl(
-  writeFetch: typeof globalThis.fetch,
-  container: string,
-  ownerWebId: string,
-): Promise<void> {
-  const aclUrl = `${container}.acl`;
-  const turtle = await buildOwnerOnlyAclTurtle(container, ownerWebId);
-  const res = await writeFetch(aclUrl, {
-    method: "PUT",
-    headers: { "content-type": "text/turtle" },
-    body: turtle,
-    redirect: "manual",
-  });
-  assertNoRedirect(res, "PUT", aclUrl);
-  if (!res.ok) {
-    throw new Error(
-      `owner-only ACL write failed: PUT ${aclUrl} -> ${res.status} ${res.statusText}`,
-    );
-  }
-}
-
-/**
  * Build an owner-only WAC ACL Turtle document for `container`, granting the owner
  * `acl:Read`/`acl:Write`/`acl:Control` over the container AND its descendants
  * (`acl:accessTo` + `acl:default`). Built with `n3.Writer` + typed quads — never
@@ -248,24 +220,9 @@ export async function buildOwnerOnlyAclTurtle(
   if (safeOwner === undefined) {
     throw new Error("owner-only ACL: ownerWebId must be a safe absolute http(s) IRI.");
   }
-  const { DataFactory, Store } = await import("n3");
-  const { namedNode } = DataFactory;
-  const Acl = "http://www.w3.org/ns/auth/acl#";
-  const RdfType = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
-  const store = new Store();
-  const auth = namedNode(`${safeContainer}.acl#owner`);
-  store.addQuad(auth, namedNode(RdfType), namedNode(`${Acl}Authorization`));
-  store.addQuad(auth, namedNode(`${Acl}agent`), namedNode(safeOwner));
-  store.addQuad(auth, namedNode(`${Acl}accessTo`), namedNode(safeContainer));
-  store.addQuad(auth, namedNode(`${Acl}default`), namedNode(safeContainer));
-  store.addQuad(auth, namedNode(`${Acl}mode`), namedNode(`${Acl}Read`));
-  store.addQuad(auth, namedNode(`${Acl}mode`), namedNode(`${Acl}Write`));
-  store.addQuad(auth, namedNode(`${Acl}mode`), namedNode(`${Acl}Control`));
-  return serialize([...store], {
-    format: "text/turtle",
-    prefixes: { acl: Acl },
-    emptyAsEmptyString: false,
-  });
+  const policy = ownerPolicy(safeOwner, true);
+  policy.grants[0]?.modes.delete("append");
+  return writeWac(policy, safeContainer, `${safeContainer}.acl`);
 }
 
 /**
@@ -350,7 +307,7 @@ export async function importRoom(options: ImportRoomOptions): Promise<ImportRoom
   // Optionally write the owner-only ACL first so the container is locked down
   // BEFORE any message lands in it.
   if (writeAcl && ownerWebId) {
-    await writeOwnerOnlyAcl(writeFetch, container, ownerWebId);
+    await makeOwnerOnly(container, ownerWebId, { fetch: writeFetch, inherit: true });
   }
 
   let skipped = 0;

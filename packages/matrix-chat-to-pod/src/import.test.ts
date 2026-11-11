@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
 /**
  * Tests for the thin `importRoom` orchestration — driven entirely by injected
@@ -18,7 +19,7 @@ import {
   redactionEvent,
   replyMessage,
 } from "../test/fixtures/events.js";
-import { importRoom } from "./import.js";
+import { buildOwnerOnlyAclTurtle, importRoom } from "./import.js";
 import type { MatrixEvent, MatrixMessagesResponse } from "./matrix.js";
 
 const HOMESERVER = "https://matrix.example.org";
@@ -37,7 +38,16 @@ interface CapturedWrite {
 /** Build a fake pod writeFetch that records every request and 201s. */
 function fakeWriteFetch(): { fetch: typeof globalThis.fetch; writes: CapturedWrite[] } {
   const writes: CapturedWrite[] = [];
+  let target = CONTAINER;
   const fetch = (async (input: Parameters<typeof globalThis.fetch>[0], init?: RequestInit) => {
+    if (init?.method === "HEAD") {
+      target = String(input);
+      return new Response(null, { headers: { link: '<.acl>; rel="acl"' } });
+    }
+    if (init?.method !== "PUT")
+      return new Response(await buildOwnerOnlyAclTurtle(target, OWNER), {
+        headers: { "content-type": "text/turtle", etag: '"acl-v1"' },
+      });
     const url = typeof input === "string" ? input : input.toString();
     const headers: Record<string, string> = {};
     const h = init?.headers;
@@ -478,5 +488,37 @@ describe("importRoom — input validation", () => {
         guardedFetch: fakeGuardedFetch([{ chunk: [plainMessage] as MatrixEvent[] }]).fetch,
       }),
     ).rejects.toThrow(/pod write failed/);
+  });
+});
+
+describe("importRoom private access migration", () => {
+  it("refuses absent discovery and foreign grants before any Matrix read or write", async () => {
+    for (const link of ["", '<custom-policy>; rel="acl"']) {
+      const writes: string[] = [];
+      const writeFetch = (async (_input, init) => {
+        if (init?.method === "HEAD") return new Response(null, { headers: { link } });
+        if (init?.method === "PUT") {
+          writes.push(String(_input));
+          return new Response(null, { status: 204 });
+        }
+        return new Response(await buildOwnerOnlyAclTurtle(CONTAINER, "https://other.example/#me"), {
+          headers: { "content-type": "text/turtle", etag: '"foreign"' },
+        });
+      }) as typeof fetch;
+      const guarded = fakeGuardedFetch([{ chunk: [] }]);
+      await expect(
+        importRoom({
+          homeserverUrl: HOMESERVER,
+          accessToken: TOKEN,
+          roomId: ROOM,
+          container: CONTAINER,
+          ownerWebId: OWNER,
+          writeFetch,
+          guardedFetch: guarded.fetch,
+        }),
+      ).rejects.toThrow();
+      expect(writes).toEqual([]);
+      expect(guarded.reads).toEqual([]);
+    }
   });
 });

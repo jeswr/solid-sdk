@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
 // AUTHORED-BY Codex GPT-6
 import { Parser, type Quad } from "n3";
@@ -31,12 +32,12 @@ function modesFor(ttl: string, agent: string): Set<string> {
 describe("buildOwnerOnlyAclTurtle", () => {
   it("grants the owner Read/Write/Control over the container + descendants, nothing public", async () => {
     const ttl = await buildOwnerOnlyAclTurtle(CONTAINER, OWNER);
-    expect(ttl).toContain(`acl:agent <${OWNER}>`);
-    expect(ttl).toContain(`acl:accessTo <${CONTAINER}>`);
-    expect(ttl).toContain(`acl:default <${CONTAINER}>`);
-    expect(ttl).toContain("acl:Read");
-    expect(ttl).toContain("acl:Write");
-    expect(ttl).toContain("acl:Control");
+    expect(ttl).toContain(`<${ACL}agent> <${OWNER}>`);
+    expect(ttl).toContain(`<${ACL}accessTo> <${CONTAINER}>`);
+    expect(ttl).toContain(`<${ACL}default> <${CONTAINER}>`);
+    expect(ttl).toContain(`${ACL}Read`);
+    expect(ttl).toContain(`${ACL}Write`);
+    expect(ttl).toContain(`${ACL}Control`);
     // Never public.
     expect(ttl).not.toContain("foaf:Agent");
     expect(ttl).not.toContain("agentClass");

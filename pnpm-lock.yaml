@@ -3015,6 +3015,9 @@ importers:
       '@jeswr/guarded-fetch':
         specifier: workspace:*
         version: link:../guarded-fetch
+      '@jeswr/pod-access':
+        specifier: workspace:*
+        version: link:../pod-access
       '@jeswr/rdf-serialize':
         specifier: workspace:*
         version: link:../rdf-serialize
@@ -3590,6 +3593,9 @@ importers:
       '@jeswr/guarded-fetch':
         specifier: workspace:*
         version: link:../guarded-fetch
+      '@jeswr/pod-access':
+        specifier: workspace:*
+        version: link:../pod-access
       '@jeswr/rdf-serialize':
         specifier: workspace:*
         version: link:../rdf-serialize
@@ -4973,6 +4979,9 @@ importers:
       '@jeswr/fetch-rdf':
         specifier: workspace:*
         version: link:../fetch-rdf
+      '@jeswr/pod-access':
+        specifier: workspace:*
+        version: link:../pod-access
       '@jeswr/rdf-serialize':
         specifier: workspace:*
         version: link:../rdf-serialize
@@ -5062,6 +5071,9 @@ importers:
       '@jeswr/model-runtime':
         specifier: workspace:*
         version: link:../model-runtime
+      '@jeswr/pod-access':
+        specifier: workspace:*
+        version: link:../pod-access
       '@rdfjs/wrapper':
         specifier: ^0.34.0
         version: 0.34.0
@@ -5405,6 +5417,9 @@ importers:
       '@jeswr/model-runtime':
         specifier: workspace:*
         version: link:../model-runtime
+      '@jeswr/pod-access':
+        specifier: workspace:*
+        version: link:../pod-access
       '@jeswr/solid-task-model':
         specifier: workspace:*
         version: link:../solid-task-model

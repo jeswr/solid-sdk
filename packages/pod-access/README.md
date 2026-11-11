@@ -342,9 +342,10 @@ no live service is needed. Run `pnpm run gate` after the package checks.
 <!-- AUTHORED-BY Codex GPT-6 -->
 
 `@jeswr/pod-access/roles` exports `rolesToModes`, `modesToRole`, `grantsWithRoles`,
-`readGrants`, `setGrants`, `addGrant`, `removeGrant`, `movePreservingAccess`, `isRoleError`, and their documented types
+`readGrants`, `setGrants`, `addGrant`, `removeGrant`, `movePreservingAccess`, `makeOwnerOnly`, `isRoleError`, and their documented types
 (`Role`, `ResourceKind`, `AgentRef`, `RoleGrant`, `GrantSnapshot`, `RoleModes`, `RoleContext`,
-`RoleError`, `RolesOptions`, `GrantMutationOptions`, `SetGrantsOptions`, `SetGrantsResult`).
+`RoleError`, `RolesOptions`, `GrantMutationOptions`, `SetGrantsOptions`, `SetGrantsResult`,
+`OwnerOnlyOptions`).
 It does not change the offline root API.
 
 ```ts
@@ -512,6 +513,82 @@ root when a host serves several pods. Access RDF is limited to 1 MiB, 10,000 qua
 64-step ancestor walk; remote JSON-LD contexts and named graphs are refused. No group or
 app identifier is fetched. RDF edits use typed wrappers and n3.Writer. The roles tests use
 in-memory HTTP fixtures only.
+
+### Owner-only setup
+
+```ts
+import { makeOwnerOnly } from "@jeswr/pod-access/roles";
+
+await makeOwnerOnly(containerUrl, ownerWebId, {
+  fetch: authenticatedFetch,
+  root: storageRoot,
+  inherit: true,
+  implementation: "css", // trusted deployment knowledge; default CSS
+});
+// Explicitly approve removing other principals from an existing own document:
+await makeOwnerOnly(resourceUrl, ownerWebId, {
+  fetch: authenticatedFetch, replace: true,
+});
+```
+
+`makeOwnerOnly(resourceUrl, ownerWebId, options: OwnerOnlyOptions): Promise<void>`
+installs `ownerPolicy` through the existing WAC/ACP writers. The owner receives
+Read, Write, Append and management (WAC/CSS Control; ESS ACR Read+Write).
+`inherit` defaults to false (resource only); true requires a trailing-slash container
+and includes WAC defaults or ACP member controls and ESS member management.
+Descendants with their own access documents are not changed.
+
+The authenticated injected fetch, `root` scope and `implementation` assertion follow
+`roles`. HTTP(S) resource and owner URLs are normalized before use; credentials,
+resource queries/fragments, reserved ACP agent IRIs as owner WebIDs, and ambiguous
+encoded access paths are refused. The resource
+must exist and advertise exactly one access document through Link `rel="acl"` or
+`rel="http://www.w3.org/ns/solid/acp#accessControl"`. Relative links resolve against
+the resource. No write endpoint or model is inferred from a filename suffix.
+An explicit ACP relation/type establishes ACP for creation; an `acl` relation alone
+requires a nonempty own or ancestor document establishing WAC or ACP. Missing links,
+unknown/mixed systems, unsupported policy shapes and unreadable RDF fail closed.
+CSS is the default dialect; ESS requires `implementation: "ess"`; NSS supports WAC.
+As with other role writers, query-addressed access documents are refused.
+
+Creation uses `If-None-Match: *`. Replacement requires the existing document's **strong**
+ETag and uses it verbatim in `If-Match`. Missing, weak, wildcard and malformed validators
+refuse. Existing own-document selectors for another WebID, public/authenticated agents,
+groups or clients require **`replace: true`**; the default is false. This explicit option
+allows removing understood foreign grants, never bypasses malformed/unsupported RDF or
+foreign resource bindings. Valid annotations are preserved and validated with
+`@jeswr/rdf-serialize`, including language tags and foreign blank-node labels.
+Discovery and governing validators are re-read before the PUT. Foreign additive ACP
+ancestor member grants always refuse (`inherited-grant`), even with replace, because editing the
+child cannot revoke them. WAC creation deliberately replaces inherited permissions for
+the selected target. No ancestor or descendant document is written.
+
+Errors use `isRoleError`/`RoleError.code`: unsupported/unknown models and unapproved foreign
+grants are `unsupported`, scoped URL refusals are `scope`, missing strong validators are
+`precondition-required`, changed discovery and HTTP 412 are `conflict`; other HTTP errors
+(including 401/403) are `invalid-response` with the status in the message. Malformed input IRIs and parser errors
+propagate. There are no retries or swallowed failures. A conditional own-document write
+cannot atomically protect against concurrent ancestor or discovery changes; success is
+not a transaction or a proof about descendants' independent policies.
+
+The helper reuses the role discovery/typed readers, `ownerPolicy`, `writeWac`/`writeAcp`
+and the shared serializer. The access-record folder's specialized sealing/key protocol
+remains separate; ordinary private setup must not impersonate that recovery protocol.
+
+The sst-9ku5 call-site audit (behavior before centralization):
+
+| Site | Target and scope | Agent and modes | Model and persistence | Existing access document |
+| --- | --- | --- | --- | --- |
+| `solid-health-diary/src/acl.ts` | Resource or container; always accessTo + default, even for files | Supplied owner WebID; Read/Write/Control | WAC only; PUT to suffix `.acl`; unconditional create/replace | Overwritten without reading |
+| `solid-listening/src/acl.ts` | Resource or container; always accessTo + default, even for files | Supplied owner WebID; Read/Write/Control | WAC only; PUT to suffix `.acl`; unconditional create/replace | Overwritten without reading |
+| `solid-scheduling/src/acl.ts` | Resource or container; always accessTo + default, even for files | Supplied owner WebID; Read/Write/Control | WAC only; PUT to suffix `.acl`; unconditional create/replace | Overwritten without reading |
+| `agentic-legacy-bridge/src/acl.ts` + `import.ts` | Container + member defaults, before importing | Supplied pod owner, not inbound/interpreter; Read/Write/Control | WAC only; builder used suffix-based subject names, importer already discovered Link; unconditional PUT | Read and validated WAC, then overwritten; no ETag or foreign-principal consent |
+| `matrix-chat-to-pod/src/import.ts` | Container + member defaults, before importing | Supplied owner WebID; Read/Write/Control | WAC only; PUT to suffix `.acl`; unconditional create/replace | Overwritten without reading |
+
+The bridge's separate `buildBridgeAclTurtle` intentionally grants inbound/interpreter
+identities under its documented privilege split; it is not an owner-only operation.
+All five migrated writers use the new helper with no implicit replacement consent.
+Their existing offline builders remain compatibility facades over `ownerPolicy`/`writeWac`.
 
 ### Moves that preserve sharing
 
