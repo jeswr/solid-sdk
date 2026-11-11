@@ -1,5 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
-import type { Category, Transaction } from "../model";
+import type { Category, Transaction } from "@jeswr/solid-money";
 import {
   comparePeriods,
   type ExactRatio,

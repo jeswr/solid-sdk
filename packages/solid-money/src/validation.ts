@@ -1,7 +1,8 @@
+// AUTHORED-BY Codex (GPT-6.1 Sol)
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { safeHttpIri } from "@jeswr/rdf-serialize";
-import { parseDate } from "../import/values";
-import type { Money, Range, Transaction } from "./types";
+import type { Money, Range, Transaction } from "./types.js";
+import { parseDate } from "./values.js";
 
 export function iri(value: string): string {
   if (safeHttpIri(value) !== value) throw new TypeError("Invalid money resource IRI");

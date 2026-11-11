@@ -1,8 +1,10 @@
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 
-# Money model (MON-00)
+# Money model integration (MON-00)
 
-Hook-free finance model for MON-01. No React, shell or suite-sdk imports, and no ambient fetch. Ported from Pod Money's typed finance wrappers, vocabulary migration and latest-balance helper; reuses the suite's MON-L1 CSV mapping / OFX parsers rather than PM's older schema:Invoice projection. All new RDF is built with @rdfjs/wrapper and serialised with @jeswr/rdf-serialize. The tests include the existing synthetic CSV, SGML OFX and XML OFX fixtures.
+The shared RDF model is generated in [`@jeswr/solid-money`](../../../../../../../packages/solid-money/README.md). This directory keeps only app storage and statement-import orchestration, plus a compatibility re-export for the original tests. The package README lists exact divergences and generator gaps.
+
+Hook-free finance integration for MON-01. No React, shell or suite-sdk imports, and no ambient fetch. Ported from Pod Money's typed finance wrappers, vocabulary migration and latest-balance helper; reuses the suite's MON-L1 CSV mapping / OFX parsers rather than PM's older schema:Invoice projection. All new RDF is built by the shared generated model and its documented compatibility views and serialised with @jeswr/rdf-serialize. The tests include the existing synthetic CSV, SGML OFX and XML OFX fixtures.
 
 Import from `./index`. `MoneyDocument` wraps an RDF dataset; `parseMoney` reads Turtle with relative IRIs resolved against its document URL; `serialiseMoney` writes it. Store reads also accept TriG and JSON-LD, retaining their graph names in memory. Serialization and store writes reject datasets containing named graphs before sending any PUT, because the write format is Turtle. `putAccount`, `putBalance`, `putTransaction` and `putCategories` validate records before mutation. The document exposes typed `accounts()`, `balances()`, `transactions()` and `categories()` snapshots. `MoneyNode` is the lower-level typed accessor for partial document edits. Unknown RDF is preserved. Malformed/incomplete required data throws, rather than inventing a zero amount. Monetary amount references accept named and blank nodes.
 

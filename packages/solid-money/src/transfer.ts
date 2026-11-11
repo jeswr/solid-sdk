@@ -1,8 +1,10 @@
+// AUTHORED-BY Codex (GPT-6.1 Sol)
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { compareAmounts } from "../import/values";
-import { type MoneyDocument, putTransaction, V } from "./rdf";
-import type { Money } from "./types";
-import { instant, iri, validateMoney } from "./validation";
+
+import { type MoneyDocument, putTransaction, V } from "./rdf.js";
+import type { Money } from "./types.js";
+import { instant, iri, validateMoney } from "./validation.js";
+import { compareAmounts } from "./values.js";
 
 /** One shard contains both signed legs; no cross-document transfer transaction is needed. */
 export function createTransfer(

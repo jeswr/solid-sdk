@@ -52,6 +52,7 @@
     "@jeswr/solid-health-diary",
     "@jeswr/solid-mcp",
     "@jeswr/solid-memory",
+    "@jeswr/solid-money",
     "@jeswr/solid-odrl",
     "solid-offline",
     "@jeswr/solid-openid-client",
