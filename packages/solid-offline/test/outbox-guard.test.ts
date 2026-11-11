@@ -99,6 +99,7 @@ describe('guarded delivery', () => {
     });
     await stored((record) => {
       Reflect.deleteProperty(record, 'keepalive');
+      Reflect.deleteProperty(record, 'createMode');
     });
     original.close();
     const outbox = box();
@@ -641,7 +642,16 @@ describe('guard validation', () => {
       'guard tag',
     );
   });
-  it.each([null, [], 'tag', {}, { tag, extra: 1 }])('rejects malformed guard %s', async (bad) => {
+  it.each([
+    null,
+    [],
+    'tag',
+    {},
+    { tag, extra: 1 },
+    { tag, assertions: null, extra: 1 },
+    Object.defineProperty({ tag }, 'assertions', { value: null }),
+    { tag, [Symbol('guard')]: 1 },
+  ])('rejects malformed guard %s', async (bad) => {
     await expect(enqueue(box(), { guard: bad as OutboxGuard })).rejects.toThrow('guard');
   });
   it('bounds UTF-8 serialized assertions at 16 KiB and accepts plain JSON without losing values', async () => {
@@ -659,6 +669,7 @@ describe('guard validation', () => {
       false,
       3.5,
       '',
+      '€',
       [],
       { values: [1, 's', null], first: repeated, second: repeated },
       Object.create(null),
@@ -689,6 +700,66 @@ describe('guard validation', () => {
       guard: { tag, assertions: Array.from({ length: 1999 }, () => 0) },
     });
     expect(outbox.pending()).toHaveLength(2);
+  });
+
+  it('rejects a huge array before enumerating its keys or visiting any element', async () => {
+    const ownKeys = vi.fn(() => {
+      throw new Error('array keys were enumerated');
+    });
+    const assertions = new Proxy(new Array(1_000_000), { ownKeys });
+    await expect(enqueue(box(), { guard: { tag, assertions } })).rejects.toThrow('2,000 nodes');
+    expect(ownKeys).not.toHaveBeenCalled();
+  });
+
+  it('rejects the next object key as soon as nested values consume the remaining budget', async () => {
+    const assertions = { first: Array.from({ length: 1998 }, () => 0), next: 0 };
+    await expect(enqueue(box(), { guard: { tag, assertions } })).rejects.toThrow('2,000 nodes');
+  });
+
+  it('stops a wide object before materializing all its own keys or reading later descriptors', async () => {
+    const assertions = Object.fromEntries(
+      Array.from({ length: 100_000 }, (_, i) => [String(i), 0]),
+    );
+    const ownKeys = vi.spyOn(Reflect, 'ownKeys');
+    const descriptors = vi.spyOn(Object, 'getOwnPropertyDescriptor');
+    await expect(enqueue(box(), { guard: { tag, assertions } })).rejects.toThrow(
+      /2,000 nodes|16 KiB/,
+    );
+    expect(ownKeys.mock.calls.some(([value]) => value === assertions)).toBe(false);
+    const visited = descriptors.mock.calls.filter(([value]) => value === assertions);
+    expect(visited.length).toBeLessThanOrEqual(2000);
+    expect(visited.some(([, key]) => key === '99999')).toBe(false);
+  });
+
+  it('bounds top-level guard fields before materializing a wide key list', async () => {
+    const malformed = {
+      tag,
+      assertions: null,
+      ...Object.fromEntries(Array.from({ length: 10_000 }, (_, i) => [String(i), 0])),
+    };
+    const ownKeys = vi.spyOn(Reflect, 'ownKeys');
+    await expect(enqueue(box(), { guard: malformed })).rejects.toThrow('guard');
+    expect(ownKeys.mock.calls.some(([value]) => value === malformed)).toBe(false);
+  });
+
+  it('ignores inherited enumerable properties without copying them into guards or assertions', async () => {
+    const outbox = box();
+    Object.defineProperty(Object.prototype, 'inheritedAssertion', {
+      enumerable: true,
+      configurable: true,
+      value: 42,
+    });
+    let queued: ReturnType<typeof enqueue>;
+    try {
+      queued = enqueue(outbox, { guard: { tag, assertions: {} } });
+    } finally {
+      Reflect.deleteProperty(Object.prototype, 'inheritedAssertion');
+    }
+    await queued;
+    const delegate = vi.fn<ReplayDelegate>().mockResolvedValue(undefined);
+    outbox.registerDelegate(tag, delegate);
+    await outbox.replay(storage().client);
+    expect(delegate.mock.calls[0]?.[0].assertions).toEqual({});
   });
 
   it.each([

@@ -152,6 +152,17 @@ interface StoredItem {
   deleteOptions?: OutboxOperation['deleteOptions'];
   conflict?: ConflictRecord;
   guard?: OutboxGuard;
+  request?: RequestDescription;
+  createMode?: 'solid' | 'container';
+}
+
+/** Derived only from the arguments sent to storage, never from policy metadata. */
+interface RequestDescription {
+  op: OutboxOperation['op'];
+  url: string;
+  container?: string;
+  name?: string;
+  kind?: CreateOptions['kind'];
 }
 
 const clients = new WeakMap<Outbox, StorageClient>();
@@ -177,6 +188,95 @@ const networkFailure = (error: unknown) =>
 
 class MissingDelegateError extends Error {}
 class GuardRequiredError extends Error {}
+class InvalidRequestError extends TypeError {}
+
+function canonicalTarget(url: string, storage?: StorageClient): string {
+  // Match storage-client's http.scoped / mutation target normalization. isWithinStorage
+  // supplies its scope checks; WHATWG parsing retains encoded segments verbatim.
+  if (typeof url !== 'string' || !URL.canParse(url))
+    throw new TypeError('[solid-offline] invalid destination URL');
+  const parsed = new URL(url);
+  if (
+    !['http:', 'https:'].includes(parsed.protocol) ||
+    parsed.username ||
+    parsed.password ||
+    /%2f|%5c/i.test(parsed.pathname) ||
+    (storage && (!storage.isWithinStorage(url) || parsed.href !== new URL(url, storage.root).href))
+  )
+    throw new StorageError('scope', { url: '[invalid destination]', method: 'OUTBOX' });
+  if (/[?#]/.test(parsed.href))
+    throw new StorageError('bad-request', {
+      url: parsed.href,
+      method: 'OUTBOX',
+      message: '[solid-offline] mutation URLs cannot have a query or fragment',
+    });
+  return storage && `${parsed.href}/` === storage.root ? storage.root : parsed.href;
+}
+
+function describeRequest(
+  operation: OutboxOperation,
+  storage?: StorageClient,
+  mode: StoredItem['createMode'] = 'solid',
+): RequestDescription {
+  if (operation.op !== 'create') {
+    if (operation.op !== 'write' && operation.op !== 'delete')
+      throw new TypeError('[solid-offline] invalid operation');
+    return { op: operation.op, url: canonicalTarget(operation.url, storage) };
+  }
+  const container = canonicalTarget(operation.container as string, storage);
+  const { name, kind = 'resource' } = operation.createOptions ?? {};
+  if (kind !== 'resource' && kind !== 'container')
+    throw new TypeError('[solid-offline] invalid create kind');
+  let exactName = storage ? storage.protocol === 'solid' : mode === 'solid';
+  // The optional TrashService also dispatches create as a command POST, on either backend.
+  const trash = storage?.features.trash;
+  if (storage && trash?.state === 'available' && trash.detail.endpoint) {
+    try {
+      if (canonicalTarget(trash.detail.endpoint, storage) === container) exactName = false;
+    } catch {
+      // storage-client ignores an unusable advertised endpoint when identifying commands.
+    }
+  }
+  // LWS always POSTs to the container. Its name is a hint, not a child path;
+  // leave hint validation to the backend, including names containing '/'.
+  if (exactName && !container.endsWith('/'))
+    throw new TypeError('[solid-offline] expected a container URL');
+  const url =
+    exactName && name !== undefined
+      ? canonicalTarget(`${childUrl(container, name)}${kind === 'container' ? '/' : ''}`, storage)
+      : container;
+  return { op: 'create', url, container, name, kind };
+}
+
+function recordOperation(record: StoredItem): OutboxOperation {
+  return {
+    ...record.item,
+    createOptions: record.createOptions,
+  };
+}
+
+function storedRequest(record: StoredItem, storage?: StorageClient): RequestDescription {
+  try {
+    const request = describeRequest(
+      recordOperation(record),
+      storage,
+      record.createMode ?? (record.request ? 'solid' : 'container'),
+    );
+    if (record.request !== undefined) {
+      const keys = ['op', 'url', 'container', 'name', 'kind'] as const;
+      if (
+        !record.request ||
+        keys.some((key) => request[key] !== record.request?.[key]) ||
+        record.item.url !== request.url ||
+        (request.op === 'create' && record.item.name !== request.name)
+      )
+        throw new TypeError('destination mismatch');
+    }
+    return request;
+  } catch {
+    throw new InvalidRequestError('[solid-offline] invalid stored request destination');
+  }
+}
 
 function guardRequired(
   policies: Map<string, GuardPolicy> | undefined,
@@ -233,7 +333,9 @@ function snapshotGuard(value: unknown): OutboxGuard | undefined {
   )
     throw invalid();
   const fields = new Map<string, unknown>();
-  for (const key of Reflect.ownKeys(value)) {
+  for (const key in value) {
+    if (!Object.hasOwn(value, key)) continue;
+    if (fields.size >= 2) throw invalid();
     const property = Object.getOwnPropertyDescriptor(value, key);
     if (
       (key !== 'tag' && key !== 'assertions') ||
@@ -243,6 +345,7 @@ function snapshotGuard(value: unknown): OutboxGuard | undefined {
       throw invalid();
     fields.set(key, property.value);
   }
+  if (Reflect.ownKeys(value).length !== fields.size) throw invalid();
   const tag = fields.get('tag');
   validateTag(tag);
   let nodes = 0;
@@ -272,7 +375,7 @@ function snapshotGuard(value: unknown): OutboxGuard | undefined {
   const ancestors = new Set<object>();
   const copy = (input: unknown, depth = 0): JsonValue => {
     if (depth > 32) throw new TypeError('[solid-offline] guard assertions exceed depth 32');
-    if (++nodes > 2000) throw new TypeError('[solid-offline] guard assertions exceed 2,000 nodes');
+    nodes++;
     if (typeof input === 'string') {
       stringSize(input);
       return input;
@@ -289,14 +392,17 @@ function snapshotGuard(value: unknown): OutboxGuard | undefined {
     const array = Array.isArray(input);
     if (array && Object.getPrototypeOf(input) !== Array.prototype) throw invalid();
     if (!array && ![Object.prototype, null].includes(Object.getPrototypeOf(input))) throw invalid();
+    // Reject oversized (including sparse) arrays before enumerating a single index.
+    if (array && input.length > 2000 - nodes)
+      throw new TypeError('[solid-offline] guard assertions exceed 2,000 nodes');
     ancestors.add(input);
     count(2); // Brackets/braces.
     const entries: [string, JsonValue][] = [];
-    for (const key of Reflect.ownKeys(input)) {
-      if (array && key === 'length') continue;
+    for (const key in input) {
+      if (!Object.hasOwn(input, key)) continue;
+      if (nodes >= 2000) throw new TypeError('[solid-offline] guard assertions exceed 2,000 nodes');
       const property = Object.getOwnPropertyDescriptor(input, key);
       if (
-        typeof key !== 'string' ||
         !property?.enumerable ||
         !Object.hasOwn(property, 'value') ||
         (array && (!/^(0|[1-9][0-9]*)$/.test(key) || Number(key) >= input.length))
@@ -309,6 +415,9 @@ function snapshotGuard(value: unknown): OutboxGuard | undefined {
       }
       entries.push([key, copy(property.value, depth + 1)]);
     }
+    // Only enumerate all own keys after the bounded traversal succeeds, to catch
+    // symbols and hidden properties that for-in deliberately does not visit.
+    if (Reflect.ownKeys(input).length !== entries.length + (array ? 1 : 0)) throw invalid();
     ancestors.delete(input);
     if (array) {
       if (entries.length !== input.length) throw invalid();
@@ -346,15 +455,16 @@ async function deliverGuarded(
   storage: StorageClient,
   signal?: AbortSignal,
 ): ReturnType<ReplayDelegate> {
-  assertGuardPolicy(outbox, delivery, guard);
+  const request = describeRequest(delivery, storage);
+  assertGuardPolicy(outbox, request, guard);
   const delegate = delegateFor(outbox, guard.tag);
   const session = sessions.get(outbox) as NonNullable<ReturnType<typeof sessions.get>>;
   const activeSignal = signal ? AbortSignal.any([session.signal, signal]) : session.signal;
   activeSignal.throwIfAborted();
-  return delegate(structuredClone({ ...delivery, assertions: guard.assertions }), {
-    storage,
-    signal: activeSignal,
-  });
+  return delegate(
+    structuredClone({ ...delivery, url: request.url, assertions: guard.assertions }),
+    { storage, signal: activeSignal },
+  );
 }
 
 /** Rebuild from public RDF/JS fields; never trust private N3 ids or term methods. */
@@ -476,6 +586,7 @@ async function bytes(body: Body | null | undefined): Promise<Uint8Array | null> 
 
 function childUrl(container: string, name: string): string {
   if (
+    typeof name !== 'string' ||
     !name ||
     name === '.' ||
     name === '..' ||
@@ -486,8 +597,7 @@ function childUrl(container: string, name: string): string {
   ) {
     throw new Error('[solid-offline] invalid create name');
   }
-  return new URL(encodeURIComponent(name), container.endsWith('/') ? container : `${container}/`)
-    .href;
+  return new URL(encodeURIComponent(name), container).href;
 }
 
 /** A separate DB from read metadata: logout may purge the cache, never unsent writes. */
@@ -543,14 +653,27 @@ export function createOutbox(options: {
       request.onsuccess = () => {
         for (const record of request.result as StoredItem[]) {
           try {
+            const storage = clients.get(outbox);
+            const description = storedRequest(record, storage);
             const guard = storedGuard(record);
-            const required = guardRequired(policies, record.item, guard);
+            // Legacy records acquire a destination binding once a client is available.
+            if (record.request === undefined && storage) {
+              record.request = description;
+              record.createMode = description.url === description.container ? 'container' : 'solid';
+              record.item.url = description.url;
+              if (description.op === 'create') record.item.name = description.name;
+              store.put(record);
+            }
+            const required = guardRequired(policies, description, guard);
             if (record.item.status === 'replaying' && required) {
               record.item.status = 'waiting';
               store.put(record);
             }
           } catch (error) {
-            const message = `[solid-offline] invalid stored guard: ${errorMessage(error)}`;
+            const message =
+              error instanceof InvalidRequestError
+                ? error.message
+                : `[solid-offline] invalid stored guard: ${errorMessage(error)}`;
             if (record.item.status !== 'failed' || record.item.error !== message) {
               record.item.status = 'failed';
               record.item.error = message;
@@ -648,18 +771,18 @@ export function createOutbox(options: {
     signal?: AbortSignal,
   ): Promise<void> {
     const { item } = record;
+    const request = storedRequest(record, storage);
     const guard = storedGuard(record);
     const keepalive = record.keepalive ?? record.createOptions?.keepalive;
-    assertGuardPolicy(outbox, item, guard);
+    assertGuardPolicy(outbox, request, guard);
     if (guard) {
       await deliverGuarded(
         outbox,
         guard,
         {
-          op: item.op,
-          url: item.url,
-          container: item.container,
-          name: item.name,
+          ...request,
+          container: request.container ?? item.container,
+          name: request.op === 'create' ? request.name : item.name,
           contentType: item.contentType,
           body: record.body,
           ifMatch: record.ifMatch,
@@ -674,15 +797,19 @@ export function createOutbox(options: {
       return;
     }
     if (item.op === 'delete') {
-      await storage.delete(item.url, { ...record.deleteOptions, ifMatch: record.ifMatch, signal });
+      await storage.delete(request.url, {
+        ...record.deleteOptions,
+        ifMatch: record.ifMatch,
+        signal,
+      });
     } else if (item.op === 'create') {
-      await storage.create(item.container as string, record.body, {
+      await storage.create(request.container as string, record.body, {
         ...record.createOptions,
         keepalive,
         signal,
       });
     } else {
-      await storage.write(item.url, record.body ?? new Uint8Array(), {
+      await storage.write(request.url, record.body ?? new Uint8Array(), {
         contentType: item.contentType as string,
         ifMatch: record.ifMatch as string,
         keepalive,
@@ -705,7 +832,7 @@ export function createOutbox(options: {
       if (!['waiting', 'replaying'].includes(record.item.status) || blocked.has(record.item.url))
         continue;
       if (
-        guardRequired(policies, record.item, record.guard) ||
+        guardRequired(policies, storedRequest(record, storage), record.guard) ||
         (record.guard && !delegates.has(record.guard.tag))
       ) {
         if (record.item.status !== 'waiting') {
@@ -719,7 +846,7 @@ export function createOutbox(options: {
       await save(record);
       // Registration can disappear while persistence yields to a component cleanup.
       if (
-        guardRequired(policies, record.item, record.guard) ||
+        guardRequired(policies, storedRequest(record, storage), record.guard) ||
         (record.guard && !delegates.has(record.guard.tag))
       ) {
         record.item.status = 'waiting';
@@ -783,7 +910,7 @@ export function createOutbox(options: {
           ...item,
           ...(r.guard && typeof r.guard.tag === 'string' ? { guard: { tag: r.guard.tag } } : {}),
           ...(r.item.status === 'waiting'
-            ? guardRequired(policies, r.item, r.guard)
+            ? guardRequired(policies, storedRequest(r), r.guard)
               ? { blocked: 'guard-required' as const }
               : r.guard && !delegates.has(r.guard.tag)
                 ? { blocked: 'no-delegate' as const }
@@ -794,15 +921,28 @@ export function createOutbox(options: {
     conflicts: () => records.flatMap((r) => (r.conflict ? [{ ...r.conflict }] : [])),
     async enqueue(operation) {
       const guard = snapshotGuard(operation.guard);
+      operation = {
+        ...operation,
+        createOptions:
+          operation.op === 'create'
+            ? structuredClone({
+                ...(operation.createOptions ?? { contentType: operation.contentType }),
+                name: operation.createOptions?.name ?? operation.name,
+              })
+            : structuredClone(operation.createOptions),
+        deleteOptions: structuredClone(operation.deleteOptions),
+      };
+      const storage = clients.get(outbox);
+      const request = describeRequest(operation, storage);
       // Snapshot mutable/stream bodies before waiting for the database lock.
       const body = await bytes(operation.body);
       return exclusive(async () => {
         const item: OutboxItem = {
           id: crypto.randomUUID(),
           op: operation.op,
-          url: operation.url,
-          container: operation.container,
-          name: operation.name,
+          url: request.url,
+          container: request.container ?? operation.container,
+          name: request.name ?? operation.name,
           contentType: operation.contentType,
           label: operation.label,
           size: body?.byteLength ?? 0,
@@ -818,6 +958,8 @@ export function createOutbox(options: {
           createOptions: operation.createOptions,
           deleteOptions: operation.deleteOptions,
           guard,
+          request,
+          createMode: request.url === request.container ? 'container' : 'solid',
         });
         return outbox.pending().find((entry) => entry.id === item.id) as OutboxItem;
       });
@@ -883,21 +1025,24 @@ export function createOutbox(options: {
           await drop(record);
           return;
         }
+        const storage = client();
+        const request = storedRequest(record, storage);
         const guard = storedGuard(record);
         const keepalive = record.keepalive ?? record.createOptions?.keepalive;
-        assertGuardPolicy(outbox, item, guard);
+        assertGuardPolicy(outbox, request, guard);
         if (guard) delegateFor(outbox, guard.tag);
-        const storage = client();
         if (strategy === 'mine') {
-          const head = await storage.head(item.url, { revalidate: true });
+          const head = await storage.head(request.url, { revalidate: true });
           if (!head.etag)
             throw new Error('[solid-offline] cannot overwrite without a current ETag');
-          const delivery = {
-            op: item.op === 'delete' ? ('delete' as const) : ('write' as const),
-            url: item.url,
-            container: item.container,
-          };
-          assertGuardPolicy(outbox, item, guard);
+          const delivery = describeRequest(
+            {
+              op: item.op === 'delete' ? ('delete' as const) : ('write' as const),
+              url: request.url,
+            },
+            storage,
+          );
+          assertGuardPolicy(outbox, storedRequest(record, storage), guard);
           assertGuardPolicy(outbox, delivery, guard);
           if (guard) {
             await deliverGuarded(
@@ -905,7 +1050,7 @@ export function createOutbox(options: {
               guard,
               {
                 op: item.op === 'delete' ? 'delete' : 'write',
-                url: item.url,
+                url: delivery.url,
                 container: item.container,
                 name: item.name,
                 contentType: item.contentType ?? 'application/octet-stream',
@@ -918,9 +1063,9 @@ export function createOutbox(options: {
               storage,
             );
           } else if (item.op === 'delete') {
-            await storage.delete(item.url, { ...record.deleteOptions, ifMatch: head.etag });
+            await storage.delete(delivery.url, { ...record.deleteOptions, ifMatch: head.etag });
           } else {
-            await storage.write(item.url, record.body ?? new Uint8Array(), {
+            await storage.write(delivery.url, record.body ?? new Uint8Array(), {
               contentType: item.contentType ?? 'application/octet-stream',
               ifMatch: head.etag,
               keepalive,
@@ -929,7 +1074,7 @@ export function createOutbox(options: {
         } else if (strategy === 'both') {
           if (item.op === 'delete')
             throw new Error('[solid-offline] keep both is unavailable for deletes');
-          const container = item.container ?? (await storage.parentOf(item.url));
+          const container = request.container ?? (await storage.parentOf(request.url));
           if (!container) throw new Error('[solid-offline] conflict has no parent container');
           const original =
             item.name ??
@@ -945,22 +1090,23 @@ export function createOutbox(options: {
             name,
             contentType: item.contentType,
           };
-          const delivery = {
-            op: 'create' as const,
-            url: `${childUrl(container, name)}${createOptions.kind === 'container' ? '/' : ''}`,
-            container,
-          };
-          assertGuardPolicy(outbox, item, guard);
+          const delivery = describeRequest(
+            {
+              op: 'create' as const,
+              url: container,
+              container,
+              createOptions,
+            },
+            storage,
+          );
+          assertGuardPolicy(outbox, storedRequest(record, storage), guard);
           assertGuardPolicy(outbox, delivery, guard);
           if (guard) {
             await deliverGuarded(
               outbox,
               guard,
               {
-                op: 'create',
-                url: `${childUrl(container, name)}${createOptions.kind === 'container' ? '/' : ''}`,
-                container,
-                name,
+                ...delivery,
                 contentType: item.contentType,
                 body: record.body,
                 createOptions,
@@ -969,7 +1115,7 @@ export function createOutbox(options: {
               },
               storage,
             );
-          } else await storage.create(container, record.body, createOptions);
+          } else await storage.create(delivery.container as string, record.body, createOptions);
         } else {
           throw new Error('[solid-offline] invalid conflict strategy');
         }
@@ -1010,20 +1156,36 @@ export function withOutbox(client: StorageClient, outbox: Outbox): QueueingStora
   const raw = underlying.get(client) ?? client;
   clients.set(outbox, raw);
 
+  function checkPolicy(operation: OutboxOperation): RequestDescription | undefined {
+    if (!sessions.get(outbox)?.policies.size) return undefined;
+    const request = describeRequest(operation, raw);
+    assertGuardPolicy(outbox, request);
+    return request;
+  }
+
   async function attempt(
     operation: OutboxOperation,
-    send: (body: Uint8Array | null) => Promise<WriteResult> | Promise<void>,
+    send: (
+      body: Uint8Array | null,
+      request: OutboxOperation,
+    ) => Promise<WriteResult> | Promise<void>,
     signal?: AbortSignal,
     queue = true,
   ): Promise<QueueingWriteResult> {
     signal?.throwIfAborted();
     const guard = snapshotGuard(operation.guard);
-    assertGuardPolicy(outbox, operation, guard);
-    if (!raw.isWithinStorage(operation.container ?? operation.url)) {
-      throw new StorageError('scope', { url: operation.url, method: operation.op.toUpperCase() });
-    }
+    operation = {
+      ...operation,
+      createOptions: structuredClone(operation.createOptions),
+      deleteOptions: structuredClone(operation.deleteOptions),
+    };
+    const request = describeRequest(operation, raw);
+    operation.url = request.url;
+    operation.container = request.container;
+    operation.name = request.name;
+    assertGuardPolicy(outbox, request, guard);
     const body = await bytes(operation.body);
-    assertGuardPolicy(outbox, operation, guard);
+    assertGuardPolicy(outbox, describeRequest(operation, raw), guard);
     const offline = typeof navigator !== 'undefined' && navigator.onLine === false;
     if (!offline || !queue) {
       try {
@@ -1047,7 +1209,7 @@ export function withOutbox(client: StorageClient, outbox: Outbox): QueueingStora
               raw,
               signal,
             )
-          : await send(body);
+          : await send(body, operation);
         return result ?? { url: operation.url, etag: null, created: false };
       } catch (error) {
         if (!queue || signal?.aborted || !networkFailure(error)) throw error;
@@ -1061,8 +1223,8 @@ export function withOutbox(client: StorageClient, outbox: Outbox): QueueingStora
   const overrides: Pick<QueueingStorageClient, 'write' | 'writeRdf' | 'create' | 'delete'> = {
     async write(url, body, opts) {
       if (opts.offline !== 'queue' && opts.guard === undefined) {
-        assertGuardPolicy(outbox, { op: 'write', url });
-        return client.write(url, body, opts);
+        const request = checkPolicy({ op: 'write', url });
+        return client.write(request?.url ?? url, body, opts);
       }
       const { offline: _offline, guard, ...writeOpts } = opts;
       return attempt(
@@ -1075,15 +1237,15 @@ export function withOutbox(client: StorageClient, outbox: Outbox): QueueingStora
           keepalive: opts.keepalive,
           guard,
         },
-        (copy) => raw.write(url, copy ?? new Uint8Array(), writeOpts),
+        (copy, request) => raw.write(request.url, copy ?? new Uint8Array(), writeOpts),
         opts.signal,
         opts.offline === 'queue',
       );
     },
     async writeRdf(url, dataset, opts) {
       if (opts.offline !== 'queue' && opts.guard === undefined) {
-        assertGuardPolicy(outbox, { op: 'write', url });
-        return client.writeRdf(url, dataset, opts);
+        const request = checkPolicy({ op: 'write', url });
+        return client.writeRdf(request?.url ?? url, dataset, opts);
       }
       const guard = snapshotGuard(opts.guard);
       const quads = [...dataset];
@@ -1100,31 +1262,37 @@ export function withOutbox(client: StorageClient, outbox: Outbox): QueueingStora
           keepalive: opts.keepalive,
           guard,
         },
-        () => raw.writeRdf(url, quads, rdfOpts),
+        (_copy, request) => raw.writeRdf(request.url, quads, rdfOpts),
         opts.signal,
         opts.offline === 'queue',
       );
     },
     async create(container, body, opts) {
       if (opts?.offline !== 'queue' && opts?.guard === undefined) {
-        if (sessions.get(outbox)?.policies.size)
-          assertGuardPolicy(outbox, {
-            op: 'create',
-            url: opts?.name
-              ? `${childUrl(container, opts.name)}${opts.kind === 'container' ? '/' : ''}`
-              : container,
-            container,
-          });
+        if (sessions.get(outbox)?.policies.size) {
+          const { signal, ...input } = opts ?? {};
+          const createOptions = structuredClone(input);
+          const request = checkPolicy({ op: 'create', url: container, container, createOptions });
+          return client.create(request?.container as string, body, { ...createOptions, signal });
+        }
         return client.create(container, body, opts);
       }
       const { offline: _offline, signal, guard, ...createOpts } = opts;
       const name = opts.name ?? `offline-${crypto.randomUUID()}`;
-      const url = `${childUrl(container, name)}${opts.kind === 'container' ? '/' : ''}`;
+      const request = describeRequest(
+        {
+          op: 'create',
+          url: container,
+          container,
+          createOptions: { ...createOpts, name },
+        },
+        raw,
+      );
       return attempt(
         {
           op: 'create',
-          url,
-          container,
+          url: request.url,
+          container: request.container,
           name,
           body,
           contentType: opts.contentType,
@@ -1132,15 +1300,16 @@ export function withOutbox(client: StorageClient, outbox: Outbox): QueueingStora
           keepalive: opts.keepalive,
           guard,
         },
-        (copy) => raw.create(container, copy, { ...createOpts, name, signal }),
+        (copy, request) =>
+          raw.create(request.container as string, copy, { ...request.createOptions, signal }),
         signal,
         opts.offline === 'queue',
       );
     },
     async delete(url, opts) {
       if (opts?.offline !== 'queue' && opts?.guard === undefined) {
-        assertGuardPolicy(outbox, { op: 'delete', url });
-        return client.delete(url, opts);
+        const request = checkPolicy({ op: 'delete', url });
+        return client.delete(request?.url ?? url, opts);
       }
       const { offline: _offline, guard, ...deleteOpts } = opts;
       await attempt(
@@ -1152,7 +1321,7 @@ export function withOutbox(client: StorageClient, outbox: Outbox): QueueingStora
           keepalive: opts.keepalive,
           guard,
         },
-        () => raw.delete(url, deleteOpts),
+        (_copy, request) => raw.delete(request.url, deleteOpts),
         opts.signal,
         opts.offline === 'queue',
       );

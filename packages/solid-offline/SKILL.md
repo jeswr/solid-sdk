@@ -120,6 +120,8 @@ separate IndexedDB queue; `localBody(conflictId)` (or item ID) asynchronously re
   depth 32 (assertion root at zero), and 2,000 visited values. Enforce the running byte
   budget while copying keys/strings (including JSON escaping and punctuation), before full
   serialization; stop traversal as soon as any budget is exceeded.
+  Check array length against the remaining node budget before enumeration; traverse object
+  properties with a bounded loop before collecting own keys for hidden/symbol rejection.
   Reject lossy values, accessors, sparse arrays, class instances and cycles before enqueue/online
   delivery, and revalidate stored guards on every hydration. Invalid records become failed and
   cannot be delivered by retry or resolution. Snapshot assertions before asynchronous work.
@@ -131,8 +133,19 @@ separate IndexedDB queue; `localBody(conflictId)` (or item ID) asynchronously re
   transformed resolution requests and policies registered during async preparation. A missing
   or different tag leaves replay waiting with `blocked: 'guard-required'`, holds same-URL
   followers and permits other URLs; online and mine/both reject before delivery. `withOutbox`
-  also checks ordinary calls without guard/queue opt-in. Unnamed ordinary creates describe
-  the container URL, since storage has not assigned the child URL. Preserve legacy delivery
+  also checks ordinary calls without guard/queue opt-in. Derive the canonical description
+  from the actual dispatch arguments, including StorageClient's root alias normalization;
+  named Solid creates use the encoded child URL and kind. LWS creates, unnamed ordinary creates
+  and advertised trash-command creates describe the container. Never apply Solid child-name
+  validation to LWS hints (which can contain `/`); StorageClient validates those hints.
+  Snapshot create options before async work. Persist the description and compare it to a
+  recomputation on hydration and before replay/retry and mine/both; mismatches fail before
+  any storage call. Build conflict copies through that same description function. Delegates
+  receive canonical URLs and effective names/options. Bind `withOutbox(storage, outbox)` before
+  direct LWS enqueue; detached enqueues use Solid naming. Legacy records acquire their binding
+  when a client is attached and still undergo recomputed policy checks. The description checks
+  consistency, not authenticity against coordinated IndexedDB edits; trusted policies and
+  delegate assertion checks provide authorization. Preserve legacy delivery
   under no matching policy. Policies are never stored alongside records or assertions.
   The shell exposes `registerGuardPolicy(tag, matches)` alongside `registerReplayDelegate`,
   bound to the active session and available while storage is opening. Export `GuardPolicy`

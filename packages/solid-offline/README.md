@@ -184,6 +184,8 @@ during copying and stops before full serialization; undefined, non-finite number
 arrays, accessors, class instances and cycles are rejected. Guards are snapshotted at enqueue
 and validated again on hydration. Invalid stored guards become failed items and cannot be sent,
 including through retry. `pending()` exposes only the read-only `guard.tag`, never assertions.
+Array lengths are checked against the remaining value budget before enumeration. Object
+traversal stops at the budget before collecting own keys to reject hidden or symbol properties.
 
 `registerGuardPolicy(tag, matches: GuardPolicy)` binds a trusted requirement to operations
 described only by `{ op, url, container? }`. On hydration and immediately before delivery,
@@ -191,12 +193,25 @@ each matching policy requires its own tag; a throwing matcher counts as a match.
 guards and guards with another tag leave replay waiting with `blocked: 'guard-required'`,
 hold later same-URL work and allow other URLs to proceed. Online calls through `withOutbox`
 reject before network I/O, even without queue opt-in; `mine`/`both` reject and retain conflicts.
-Checks also cover the transformed conflict-copy request. For unnamed online creates, the
-description uses the container URL until storage assigns a resource URL. Policies are
+Checks also cover the transformed conflict-copy request. URLs use StorageClient's canonical
+destination (including dot segments and the slashless storage-root alias). Named Solid creates
+describe the exact encoded child and its kind; LWS creates describe the container because the
+server chooses the identifier. LWS names such as `Report 2026/2027` remain hints, validated by
+StorageClient. Unnamed ordinary creates and advertised trash-command creates also describe the
+container. Bind the backend with `withOutbox(storage, outbox)` before direct LWS enqueues;
+enqueues without a client use Solid naming. Policies are
 session-local, never persisted, and must be reinstalled for each active session before replay.
 The shell session exposes the same `registerGuardPolicy(tag, matches)` lifecycle alongside
 `registerReplayDelegate`. No registered matching policy preserves legacy unguarded delivery.
 Delegates still verify assertions against trusted application state.
+
+Enqueue snapshots the dispatch options and persists a canonical request description, using the
+effective `createOptions.name` and `kind` rather than a preview URL or display name. Hydration
+and every replay, retry and mine/both delivery recompute it from the dispatch arguments. A
+mismatch fails the item before storage calls, including resolution HEADs. Legacy records acquire
+the description when a StorageClient is attached; policies still check their recomputed scope.
+This consistency check does not authenticate IndexedDB against coordinated edits of all fields;
+trusted session policies and delegate assertion checks remain the authorization boundary.
 
 Every guarded delivery uses the registered `ReplayDelegate`, including online attempts and
 conflict resolutions. Its `GuardedDelivery` snapshot contains `op`, `url`, optional `container`,
