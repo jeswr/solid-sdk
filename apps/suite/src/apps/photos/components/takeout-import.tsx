@@ -72,11 +72,9 @@ export function TakeoutImport() {
       if (!plan.items.length) {
         go({ name: "idle" });
         fail(
-          plan.videos
-            ? "That folder only has videos, which Photos can't import yet."
-            : plan.trashed
-              ? "That folder only has deleted photos from Google Photos' bin, which aren't imported."
-              : "No photos were found in that folder. Choose the Google Photos folder from your Takeout download.",
+          plan.trashed
+            ? "That folder only has deleted items from Google Photos' bin, which aren't imported."
+            : "No photos or videos were found in that folder. Choose the Google Photos folder from your Takeout download.",
         );
         return;
       }
@@ -152,7 +150,7 @@ export function TakeoutImport() {
           </li>
           <li>
             Choose the <strong>Google Photos</strong> folder inside it. Dates, places and captions
-            come from the files next to each photo, and album folders become albums.
+            come from the files next to each photo or video, and album folders become albums.
           </li>
         </ol>
         <div className="pho-takeout-option">
@@ -163,7 +161,7 @@ export function TakeoutImport() {
             disabled={phase.name === "saving" || (phase.name === "done" && !!phase.retry)}
             onChange={(event) => changeStrip(event.target.checked)}
           />
-          <label htmlFor={stripId}>Remove location from imported photos</label>
+          <label htmlFor={stripId}>Remove location from imported photos and videos</label>
         </div>
         {phase.name === "idle" && (
           <div className="pho-takeout-pick">
@@ -196,7 +194,7 @@ export function TakeoutImport() {
             </h3>
             <dl>
               <div>
-                <dt>Photos</dt>
+                <dt>Photos and videos</dt>
                 <dd>{phase.plan.items.length.toLocaleString("en")}</dd>
               </div>
               <div>
@@ -215,15 +213,12 @@ export function TakeoutImport() {
               <ul className="pho-takeout-notes">
                 {phase.plan.duplicates > 0 && (
                   <li>
-                    {count(phase.plan.duplicates, "copy", "copies")} of photos that are also in an
+                    {count(phase.plan.duplicates, "copy", "copies")} of items that are also in an
                     album will be imported once.
                   </li>
                 )}
                 {phase.plan.videos > 0 && (
-                  <li>
-                    {count(phase.plan.videos, "video")} will be left out. Photos can't store videos
-                    yet.
-                  </li>
+                  <li>{count(phase.plan.videos, "video")} included in this import.</li>
                 )}
                 {phase.plan.trashed > 0 && (
                   <li>
@@ -241,10 +236,10 @@ export function TakeoutImport() {
         {phase.name === "saving" && (
           <div className="pho-takeout-panel">
             <p ref={target} tabIndex={-1}>
-              Importing {count(phase.plan.items.length, "photo")}. Keep this page open until it
+              Importing {count(phase.plan.items.length, "item")}. Keep this page open until it
               finishes.
             </p>
-            {phase.albums && <p>Adding photos to albums…</p>}
+            {phase.albums && <p>Adding items to albums…</p>}
             <progress aria-label="Import progress" max={phase.total || 1} value={phase.done} />
             <p className="pho-takeout-count">
               {phase.done.toLocaleString("en")} of {phase.total.toLocaleString("en")}
@@ -257,20 +252,20 @@ export function TakeoutImport() {
               Import finished
             </h3>
             <p>
-              Imported {count(phase.saved, "photo")}
+              Imported {count(phase.saved, "item")}
               {phase.albums ? ` into ${count(phase.albums, "album")}` : ""}.
-              {phase.stopped ? " The import stopped because your pod isn't saving photos." : ""}
+              {phase.stopped ? " The import stopped because your pod isn't saving items." : ""}
               {phase.retry
-                ? ` ${count(phase.retry.items.length, "photo")} didn't import. Retrying adds them to their albums too.`
+                ? ` ${count(phase.retry.items.length, "item")} didn't import. Retrying adds them to their albums too.`
                 : ""}
               {phase.failedAlbums
-                ? ` ${count(phase.failedAlbums, "album")} couldn't be saved; the photos are in your library.`
+                ? ` ${count(phase.failedAlbums, "album")} couldn't be saved; the items are in your library.`
                 : ""}
             </p>
             {phase.unreadable.length > 0 && (
               <details className="pho-takeout-unreadable">
                 <summary>
-                  {`${count(phase.unreadable.length, "photo")} couldn't be imported`}
+                  {`${count(phase.unreadable.length, "item")} couldn't be imported`}
                 </summary>
                 <ul>
                   {phase.unreadable.slice(0, 50).map((photo) => (
@@ -280,7 +275,7 @@ export function TakeoutImport() {
                   ))}
                 </ul>
                 {phase.unreadable.length > 50 && (
-                  <p>And {count(phase.unreadable.length - 50, "more photo")}.</p>
+                  <p>And {count(phase.unreadable.length - 50, "more item")}.</p>
                 )}
               </details>
             )}
@@ -296,7 +291,7 @@ export function TakeoutImport() {
             {phase.name === "preview" ? (
               <>
                 <Button onClick={() => void save(phase.plan)}>
-                  Import {count(phase.plan.items.length, "photo")}
+                  Import {count(phase.plan.items.length, "item")}
                 </Button>
                 <Button variant="outline" onClick={() => go({ name: "idle" })}>
                   Choose a different folder
@@ -306,13 +301,13 @@ export function TakeoutImport() {
               <>
                 {phase.retry && (
                   <Button onClick={() => phase.retry && void save(phase.retry, phase.strip)}>
-                    Retry {count(phase.retry.items.length, "photo")}
+                    Retry {count(phase.retry.items.length, "item")}
                   </Button>
                 )}
                 <Button asChild variant={phase.retry ? "outline" : "default"}>
                   <Link href="/photos">
                     <Images size={16} aria-hidden="true" />
-                    View photos
+                    View photos and videos
                   </Link>
                 </Button>
                 <Button variant="outline" onClick={startOver}>

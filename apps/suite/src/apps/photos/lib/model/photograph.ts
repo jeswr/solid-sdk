@@ -37,13 +37,16 @@ import {
   TermWrapper,
 } from "@rdfjs/wrapper";
 import { DataFactory, Store } from "n3";
+import { formatDuration, parseDuration } from "./duration.js";
 import type { ExifMetadata, GeoPoint } from "./exif.js";
 import { isExifEmpty, normaliseExif } from "./exif.js";
 import { documentUrl, httpIri, isoDate } from "./validation.js";
-import { DCT, EXIF, GEO, PHOTOGRAPH_CLASS, RDF_TYPE, SCHEMA } from "./vocab.js";
+import { DCT, EXIF, GEO, PHOTOGRAPH_CLASS, RDF_TYPE, SCHEMA, VIDEO_CLASS, XSD } from "./vocab.js";
 
 /** A photo as the UI works with it (plain, serialisable). */
 export interface Photo {
+  kind?: "video";
+  durationSeconds?: number;
   /** Display title — `schema:name`. */
   name: string;
   /** Optional caption — `schema:description`. */
@@ -87,9 +90,22 @@ export class PhotographDoc extends TermWrapper {
   get types(): Set<string> {
     return SetFrom.subjectPredicate(this, RDF_TYPE, NamedNodeAs.string, NamedNodeFrom.string);
   }
-  mark(): this {
-    this.types.add(PHOTOGRAPH_CLASS);
+  mark(kind?: "video"): this {
+    this.types.add(kind === "video" ? VIDEO_CLASS : PHOTOGRAPH_CLASS);
     return this;
+  }
+
+  get durationSeconds(): number | undefined {
+    return OptionalFrom.subjectPredicate(this, `${SCHEMA}duration`, (term) =>
+      term.termType === "Literal" && term.datatype.value === `${XSD}duration`
+        ? parseDuration(term.value)
+        : undefined,
+    );
+  }
+  set durationSeconds(value: number | undefined) {
+    OptionalAs.object(this, `${SCHEMA}duration`, value, (seconds, factory) =>
+      LiteralFrom.datatypeTuple([`${XSD}duration`, formatDuration(seconds)], factory),
+    );
   }
 
   // --- schema:* descriptive ---
@@ -309,11 +325,18 @@ export function parsePhoto(
   subject = `${documentUrl(itemUrl)}#it`,
 ): Photo | undefined {
   const doc = new PhotographDoc(httpIri(subject), dataset, DataFactory);
-  if (!doc.types.has(PHOTOGRAPH_CLASS) && !doc.types.has(`${SCHEMA}ImageObject`)) return undefined;
+  const video = doc.types.has(VIDEO_CLASS);
+  if (!video && !doc.types.has(PHOTOGRAPH_CLASS) && !doc.types.has(`${SCHEMA}ImageObject`))
+    return undefined;
+  // A bare connector type marker without a binary is not a playable library item.
+  if (video && !doc.contentUrl) return undefined;
+  const durationSeconds = optionalValue(() => doc.durationSeconds);
   const thumbnailUrl = optionalValue(() => doc.thumbnailUrl);
   const created = optionalIso(() => doc.created);
   const modified = optionalIso(() => doc.modified);
   return {
+    ...(video ? { kind: "video" as const } : {}),
+    ...(durationSeconds !== undefined ? { durationSeconds } : {}),
     name: doc.name ?? "",
     ...(doc.description !== undefined ? { description: doc.description } : {}),
     contentUrl: doc.contentUrl ?? "",
@@ -338,7 +361,8 @@ function writeGeo(itemUrl: string, photoDoc: PhotographDoc, store: Store, point:
 export function buildPhoto(itemUrl: string, photo: Photo): Store {
   itemUrl = documentUrl(itemUrl);
   const store = new Store();
-  const doc = new PhotographDoc(`${itemUrl}#it`, store, DataFactory).mark();
+  const doc = new PhotographDoc(`${itemUrl}#it`, store, DataFactory).mark(photo.kind);
+  doc.durationSeconds = photo.durationSeconds;
   doc.name = photo.name || undefined;
   doc.description = photo.description || undefined;
   doc.contentUrl = httpIri(photo.contentUrl);
@@ -379,10 +403,13 @@ export function parsePhotos(
   const photos: { subject: string; photo: Photo }[] = [];
   for (const subject of [...subjects].sort()) {
     const types = new PhotographDoc(subject, dataset, DataFactory).types;
-    if (types.has(PHOTOGRAPH_CLASS) || types.has(`${SCHEMA}ImageObject`)) {
-      // The type check above guarantees a photograph.
-      const photo = parsePhoto(itemUrl, dataset, subject) as Photo;
-      photos.push({ subject, photo });
+    if (
+      types.has(PHOTOGRAPH_CLASS) ||
+      types.has(`${SCHEMA}ImageObject`) ||
+      types.has(VIDEO_CLASS)
+    ) {
+      const photo = parsePhoto(itemUrl, dataset, subject);
+      if (photo) photos.push({ subject, photo });
     }
   }
   return photos;

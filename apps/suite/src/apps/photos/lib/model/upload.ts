@@ -1,6 +1,9 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { parse } from "exifr";
+import { formatDuration } from "./duration.js";
 import { type ExifMetadata, normaliseExif } from "./exif.js";
+import { readVideoMetadata, stripVideoLocation } from "./mp4.js";
 import type { Photo } from "./photograph.js";
 import { httpIri, identifier, isoDate } from "./validation.js";
 
@@ -56,6 +59,7 @@ export async function readExif(bytes: ArrayBuffer): Promise<ExifMetadata> {
 export interface Dimensions {
   width: number;
   height: number;
+  durationSeconds?: number | undefined;
 }
 export interface ThumbnailPlan extends Dimensions {
   /** Apply this raw EXIF orientation once, including reflection for 2/4/5/7. */
@@ -131,11 +135,20 @@ export async function preparePhoto(
     "image/tiff": "tif",
     "image/heic": "heic",
     "image/avif": "avif",
+    "video/mp4": "mp4",
+    "video/quicktime": "mov",
+    "video/webm": "webm",
   };
   const extension = extensions[input.original.type];
-  if (!extension) throw new TypeError("Unsupported image media type");
+  if (!extension) throw new TypeError("Unsupported photo or video media type");
   const created = isoDate(now);
-  const read = await readExif(await input.original.arrayBuffer());
+  const video = input.original.type.startsWith("video/");
+  const movieBytes =
+    video && input.original.type !== "video/webm" ? await input.original.arrayBuffer() : undefined;
+  const movie = movieBytes ? readVideoMetadata(movieBytes) : {};
+  const read: ExifMetadata = video ? {} : await readExif(await input.original.arrayBuffer());
+  if (movie.created) read.dateTimeOriginal = movie.created;
+  if (movie.location) read.location = movie.location;
   const extra = input.metadata;
   // The file's own EXIF wins; outside details only fill gaps, and are validated alike.
   const dateTimeOriginal = read.dateTimeOriginal ?? extra?.dateTimeOriginal;
@@ -146,11 +159,15 @@ export async function preparePhoto(
     ...(location ? { location } : {}),
   });
   const dimensions = await encoder.dimensions(input.original);
+  const durationSeconds = video ? (movie.durationSeconds ?? dimensions.durationSeconds) : undefined;
+  if (durationSeconds !== undefined) formatDuration(durationSeconds);
   const plan = thumbnailPlan(dimensions.width, dimensions.height, exif.orientation);
   exif.pixelWidth = dimensions.width;
   exif.pixelHeight = dimensions.height;
   const original = input.stripLocation
-    ? await encoder.stripLocation(input.original)
+    ? movieBytes
+      ? new Blob([stripVideoLocation(movieBytes)], { type: input.original.type })
+      : await encoder.stripLocation(input.original)
     : input.original;
   if (input.stripLocation) delete exif.location;
   const thumbnail = await encoder.thumbnail(original, plan);
@@ -159,6 +176,8 @@ export async function preparePhoto(
   return {
     itemUrl: `${root}photos/items/${id}.ttl`,
     photo: {
+      ...(video ? { kind: "video" as const } : {}),
+      ...(durationSeconds !== undefined ? { durationSeconds } : {}),
       name: input.name,
       ...(extra?.description?.trim() ? { description: extra.description.trim() } : {}),
       contentUrl: `${root}photos/originals/${id}.${extension}`,

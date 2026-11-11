@@ -5,7 +5,7 @@ import { ImageOff } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { usePhotos } from "../state/photos-context";
 
-export function usePhotoUrl(url: string | undefined) {
+export function usePhotoUrl(url: string | undefined, media: "image" | "video" = "image") {
   const { session } = usePhotos();
   const [state, setState] = useState<{
     key: string;
@@ -14,7 +14,7 @@ export function usePhotoUrl(url: string | undefined) {
     error?: boolean;
   }>();
   const [attempt, setAttempt] = useState(0);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: attempt explicitly retries the same URL
+  const key = `${media}:${attempt}:${url}`;
   useEffect(() => {
     if (!url) return;
     let live = true;
@@ -23,23 +23,23 @@ export function usePhotoUrl(url: string | undefined) {
     const fetch = createPodScopedFetch(session.storageUrl, { fetch: session.fetch });
     void fetch(url, { signal: controller.signal })
       .then(async (response) => {
-        if (!response.ok) throw new Error("Image unavailable");
+        if (!response.ok) throw new Error("Media unavailable");
         const blob = await response.blob();
-        if (!blob.type.startsWith("image/")) throw new Error("Not an image");
+        if (!blob.type.startsWith(`${media}/`)) throw new Error("Unexpected media type");
         if (!live) return;
         objectUrl = URL.createObjectURL(blob);
-        setState({ key: url, url: objectUrl, size: blob.size });
+        setState({ key, url: objectUrl, size: blob.size });
       })
       .catch(() => {
-        if (live) setState({ key: url, error: true });
+        if (live) setState({ key, error: true });
       });
     return () => {
       live = false;
       controller.abort();
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [url, session, attempt]);
-  return { ...(state?.key === url ? state : {}), retry: () => setAttempt((value) => value + 1) };
+  }, [url, session, key, media]);
+  return { ...(state?.key === key ? state : {}), retry: () => setAttempt((value) => value + 1) };
 }
 export function PhotoImage({ url, name }: { url: string | undefined; name: string }) {
   const frame = useRef<HTMLSpanElement>(null);
@@ -80,7 +80,9 @@ export function PhotoImage({ url, name }: { url: string | undefined; name: strin
         <span
           role="img"
           className="pho-image-placeholder"
-          aria-label={image.error || broken ? `${name}: preview unavailable` : `Loading ${name}`}
+          aria-label={
+            !url || image.error || broken ? `${name}: preview unavailable` : `Loading ${name}`
+          }
         >
           <ImageOff size={24} aria-hidden="true" />
         </span>

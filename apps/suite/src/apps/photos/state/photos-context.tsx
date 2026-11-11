@@ -43,6 +43,7 @@ import {
 } from "../lib/data/trash";
 import { type UploadResult, uploadFiles } from "../lib/data/upload";
 import type { CaptureMetadata } from "../lib/model";
+import { VideoLocationError } from "../lib/model/mp4";
 
 interface Snapshot {
   photos: LibraryPhoto[];
@@ -453,7 +454,10 @@ function usePhotosState(session: PodSession) {
             toast.error(
               result && !result.ok && statusOf(result.error) === 412
                 ? "This upload already exists or changed elsewhere. Your library has been refreshed. Check Photos before retrying."
-                : result && !result.ok && result.error instanceof LocationStripError
+                : result &&
+                    !result.ok &&
+                    (result.error instanceof LocationStripError ||
+                      result.error instanceof VideoLocationError)
                   ? result.error.message
                   : `Couldn't upload ${input.name}. Retry in the upload panel.`,
             );

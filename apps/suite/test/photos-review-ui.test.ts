@@ -196,7 +196,7 @@ it("selects trash records independently when two records describe the same origi
   expect(purge).toHaveBeenCalledWith([urls[0]]);
   expect(errors.mock.calls.flat().join(" ")).not.toMatch(/same key|unique.*key/);
   expect(view.host.textContent).toContain(
-    "Photos in Trash stay in your pod until you delete them forever.",
+    "Photos and videos in Trash stay in your pod until you delete them forever.",
   );
   expect(view.host.querySelector(".pho-eyebrow")).toBeNull();
 });
