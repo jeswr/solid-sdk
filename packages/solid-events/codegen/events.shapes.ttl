@@ -16,6 +16,7 @@
 # Omit recurrence, inCalendar, tasks, reminders and availability: invitations are not schedules.
 # Attendance becomes an independent schema:RsvpAction; guest-list entries use InviteAction.
 # Add invitation policy, timestamps, location text, capacity and schema.org IRI enums.
+# Additional guests are narrowed to 0–20 for invitations.
 # Cross-field time ordering and agent-or-name rules are facade policy, not SHACL sh:or.
 
 ev:EventShape a sh:NodeShape ; sh:targetClass schema:Event ;
@@ -41,7 +42,7 @@ ev:RsvpShape a sh:NodeShape ; sh:targetClass schema:RsvpAction ;
   sh:property [ sh:path schema:agent ; sh:name "agent" ; sh:maxCount 1 ; sh:nodeKind sh:IRI ; sh:pattern "^https?://" ; ] ;
   sh:property [ sh:path schema:object ; sh:name "event" ; sh:maxCount 1 ; sh:nodeKind sh:IRI ; sh:pattern "^https?://" ; sh:minCount 1 ; ] ;
   sh:property [ sh:path schema:rsvpResponse ; sh:name "response" ; sh:maxCount 1 ; sh:nodeKind sh:IRI ; sh:pattern "^https?://" ; sh:minCount 1 ; sh:in ( schema:RsvpResponseYes schema:RsvpResponseNo schema:RsvpResponseMaybe ) ; ] ;
-  sh:property [ sh:path schema:additionalNumberOfGuests ; sh:name "additionalGuests" ; sh:maxCount 1 ; sh:datatype xsd:integer ; sh:minCount 1 ; sh:minInclusive 0 ; sh:maxInclusive 1000000 ; ] ;
+  sh:property [ sh:path schema:additionalNumberOfGuests ; sh:name "additionalGuests" ; sh:maxCount 1 ; sh:datatype xsd:integer ; sh:minCount 1 ; sh:minInclusive 0 ; sh:maxInclusive 20 ; ] ;
   sh:property [ sh:path schema:comment ; sh:name "comment" ; sh:maxCount 1 ; sh:datatype xsd:string ; ] ;
   sh:property [ sh:path schema:startTime ; sh:name "repliedAt" ; sh:maxCount 1 ; sh:datatype xsd:dateTime ; sh:minCount 1 ; ] ;
   sh:property [ sh:path schema:name ; sh:name "displayName" ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:pattern "\\S" ; ] ;

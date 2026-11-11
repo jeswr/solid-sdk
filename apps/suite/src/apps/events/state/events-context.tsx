@@ -31,6 +31,10 @@ export function EventsProvider({
           storageRoot: session.storageUrl,
           owner: session.webId,
           demo: session.mode === "demo",
+          onInvalidInvitation: () =>
+            toast.error(
+              "Some invitations could not be loaded. The available invitations are shown.",
+            ),
         }),
         () =>
           toast.error("Couldn't save your invitation. Please reconnect or refresh and try again."),

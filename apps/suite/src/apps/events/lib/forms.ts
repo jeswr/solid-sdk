@@ -34,7 +34,13 @@ export function invitationForm(
     rsvpDeadline: text("rsvpDeadline") ? new Date(text("rsvpDeadline")) : undefined,
     visibility: existing?.visibility ?? (text("visibility") === "link" ? "link" : "invitees"),
     guestListVisible: existing?.guestListVisible ?? form.get("guestListVisible") === "on",
-    publication: existing?.publication ?? (text("publication") === "draft" ? "draft" : "published"),
+    publication: existing
+      ? existing.publication === "draft" && text("publication") === "published"
+        ? "published"
+        : existing.publication
+      : text("publication") === "draft"
+        ? "draft"
+        : "published",
     created: existing?.created ?? now,
     modified: now,
   };

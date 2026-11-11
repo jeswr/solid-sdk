@@ -295,7 +295,7 @@ const manifest = {
           "guards": {
             "requiredFailClosed": true,
             "minInclusive": 0,
-            "maxInclusive": 1000000
+            "maxInclusive": 20
           }
         },
         {

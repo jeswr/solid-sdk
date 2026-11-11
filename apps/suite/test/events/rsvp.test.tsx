@@ -66,3 +66,10 @@ it("hydrates its scoped guest receipt, submits optimistically and rolls back on 
   await vi.waitFor(() => expect(notices.error).toHaveBeenCalled());
   expect(onReply).not.toHaveBeenCalled();
 });
+
+it("limits additional guests to twenty in the RSVP form", async () => {
+  const view = await mount(h(RsvpPanel, { event, fetch: vi.fn(), onReply: vi.fn() }));
+  expect(view.host.querySelector<HTMLInputElement>('input[name="additionalGuests"]')?.max).toBe(
+    "20",
+  );
+});

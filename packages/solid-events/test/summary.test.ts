@@ -7,6 +7,7 @@ const reply = (patch: Partial<Reply> = {}): Reply => ({
   url: "https://host.example/r/a",
   event: event.url,
   agent: "https://guest.example/me",
+  verifiedAgent: patch.agent ?? "https://guest.example/me",
   response: RSVP_RESPONSE.yes,
   additionalGuests: 2,
   repliedAt: new Date("2026-11-11T12:00:00Z"),
@@ -34,7 +35,7 @@ it("uses the latest agent response, deterministic ties, and only yes plus-guests
       url: "https://host.example/r/c",
       agent: "https://other.example/me",
       response: RSVP_RESPONSE.maybe,
-      additionalGuests: 50,
+      additionalGuests: 20,
     }),
     reply({ url: "https://host.example/r/d", agent: "https://third.example/me" }),
     reply({
@@ -64,7 +65,7 @@ it("uses the latest agent response, deterministic ties, and only yes plus-guests
     latest: summary.latest,
   });
 });
-it("keeps anonymous people with the same name distinct and applies changes by guest key", () => {
+it("keeps anonymous claims separate even with the same name or a copied guest hash", () => {
   const anonymous = reply({ agent: undefined, guestKey: "one", displayName: "Alex" });
   const other = reply({
     agent: undefined,
@@ -79,10 +80,11 @@ it("keeps anonymous people with the same name distinct and applies changes by gu
     repliedAt: new Date(+anonymous.repliedAt + 1000),
   };
   expect(summariseRsvps([anonymous, other, changed], { ...event, capacity: 8 })).toMatchObject({
-    yes: 1,
-    maybe: 1,
-    attending: 3,
-    remaining: 5,
+    yes: 0,
+    maybe: 0,
+    attending: 0,
+    remaining: 8,
+    unverified: [changed, anonymous, other],
   });
 });
 it("ignores older replies even when received later, invalid data and other event claims", () => {
@@ -106,4 +108,51 @@ it("ignores older replies even when received later, invalid data and other event
 
 it("accepts the invitation document URL as well as its generated subject", () => {
   expect(summariseRsvps([reply()], { url: "https://host.example/events/1/index.ttl" }).yes).toBe(1);
+});
+
+it("never lets a claimed WebID or a copied guest hash override verified authorship", () => {
+  const verified = { ...reply(), verifiedAgent: "https://guest.example/me" };
+  const forged = reply({
+    verifiedAgent: undefined,
+    url: "https://host.example/r/forged",
+    response: RSVP_RESPONSE.no,
+    repliedAt: new Date("2026-11-11T12:01:00Z"),
+  });
+  const result = summariseRsvps([verified, forged], event);
+  expect(result).toMatchObject({ yes: 1, no: 0, latest: [verified], unverified: [forged] });
+  const copied = { ...forged, agent: undefined, displayName: "Alex", guestKey: "sha256:copied" };
+  expect(
+    summariseRsvps([copied, { ...copied, url: `${copied.url}2` }], event).unverified,
+  ).toHaveLength(2);
+});
+it("rejects future claims and orders verified replies by server time ahead of claimed time", () => {
+  const agent = "https://guest.example/me";
+  const first = { ...reply(), verifiedAgent: agent, receivedAt: new Date("2026-11-11T12:01:00Z") };
+  const later = {
+    ...reply({
+      url: "https://host.example/r/b",
+      response: RSVP_RESPONSE.no,
+      repliedAt: new Date("2026-11-11T11:59:00Z"),
+    }),
+    verifiedAgent: agent,
+    receivedAt: new Date("2026-11-11T12:02:00Z"),
+  };
+  const future = {
+    ...reply({ url: "https://host.example/r/future", repliedAt: new Date("2099-01-01") }),
+    verifiedAgent: agent,
+  };
+  expect(summariseRsvps([first, later, future], event)).toMatchObject({
+    yes: 0,
+    no: 1,
+    invalid: 1,
+  });
+});
+
+it("still flags unverified late claims without adding them to verified counts", () => {
+  const claim = reply({ verifiedAgent: undefined });
+  const summary = summariseRsvps([claim], {
+    ...event,
+    rsvpDeadline: new Date(+claim.repliedAt - 1000),
+  });
+  expect(summary).toMatchObject({ yes: 0, latest: [], unverified: [claim], late: [claim] });
 });

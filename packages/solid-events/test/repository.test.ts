@@ -57,6 +57,14 @@ function harness() {
     const url = String(input);
     const method = init?.method ?? "GET";
     try {
+      if (method === "POST") {
+        const name = new Headers(init?.headers).get("slug") ?? "assigned.ttl";
+        const created = await storage.create(url, String(init?.body ?? ""), {
+          name,
+          contentType: "text/turtle",
+        });
+        return new Response(null, { status: 201, headers: { location: created.url } });
+      }
       if (method === "PUT") {
         const headers = new Headers(init?.headers);
         if (headers.get("if-none-match") === "*") {
@@ -132,7 +140,7 @@ it("persists and discovers invitations, independent invitees, replies, notificat
     additionalGuests: 1,
     repliedAt: new Date(),
   });
-  expect(await readReplies(fetch, event.url)).toEqual([first]);
+  expect(await readReplies(fetch, event.url)).toEqual({ replies: [first], invalid: 0 });
   const changed = await repository.update(event, { ...event, name: "Updated" });
   expect(changed.name).toBe("Updated");
   await expect(repository.update(event, { ...event, name: "Stale" })).rejects.toMatchObject({
@@ -182,20 +190,29 @@ it("bounds lists, filters unrelated reply entities, and keeps read errors distin
   expect(
     await repository.invitees({ ...eventData(), url: `${ROOT}events/e/index.ttl`, etag: null }),
   ).toEqual([]);
-  expect(await readReplies(fetch, `${ROOT}events/e/index.ttl`)).toEqual([]);
+  expect(await readReplies(fetch, `${ROOT}events/e/index.ttl`)).toEqual({
+    replies: [],
+    invalid: 0,
+  });
   vi.mocked(readContainerMembers).mockResolvedValue(
     Array.from({ length: 501 }, (_, i) => ({ url: `${ROOT}events/${i}/`, container: true })),
   );
-  await expect(repository.list()).rejects.toThrow("100");
-  await expect(
-    repository.invitees({ ...eventData(), url: `${ROOT}events/e/index.ttl`, etag: null }),
-  ).rejects.toThrow("Too many");
-  await expect(readReplies(fetch, `${ROOT}events/e/index.ttl`)).rejects.toThrow("too large");
+  expect(await repository.list()).toEqual([]);
+  expect(
+    await repository.invitees({ ...eventData(), url: `${ROOT}events/e/index.ttl`, etag: null }),
+  ).toEqual([]);
+  expect(await readReplies(fetch, `${ROOT}events/e/index.ttl`)).toEqual({
+    replies: [],
+    invalid: 0,
+  });
   vi.mocked(readContainerMembers).mockResolvedValue([
     { url: `${ROOT}events/note.txt`, container: false },
   ]);
   expect(await repository.list()).toEqual([]);
-  expect(await readReplies(fetch, `${ROOT}events/e/index.ttl`)).toEqual([]);
+  expect(await readReplies(fetch, `${ROOT}events/e/index.ttl`)).toEqual({
+    replies: [],
+    invalid: 1,
+  });
   await expect(
     readInvitation(
       async () => new Response("", { status: 200, headers: { "content-type": "text/turtle" } }),
@@ -270,4 +287,264 @@ it("requires advertised WAC, Control and a single safe access link; refuses exis
       OWNER,
     ),
   ).rejects.toThrow("protect");
+});
+
+it("uses CSS container Append for POST, never inherited child Write for a creating PUT", async () => {
+  const { repository, storage, fetch } = harness();
+  const event = await repository.create(eventData(), [], "wac");
+  const container = new URL("rsvps/", event.url).href;
+  const { readWac } = await import("@jeswr/pod-access");
+  const { parseRdf } = await import("@jeswr/fetch-rdf");
+  const guest: typeof globalThis.fetch = async (input, init) => {
+    const target = String(input);
+    const policy = readWac(
+      await parseRdf(await (await storage.read(`${container}.acl`)).text(), "text/turtle"),
+      container,
+      `${container}.acl`,
+    );
+    const mode = "append"; // CSS: POST needs container Append; PUT-create needs inherited resource Append/Write.
+    const scope = target === container ? "resource" : "members";
+    const allowed = policy.grants.some(
+      (g) =>
+        (g.appliesTo === scope || g.appliesTo === "both") &&
+        g.modes.has(mode) &&
+        g.who.some((c) => c.some((s) => s.kind === "public")),
+    );
+    if (!allowed) return new Response(null, { status: 403 });
+    return fetch(input, init);
+  };
+  expect((await guest(`${container}direct.ttl`, { method: "PUT" })).status).toBe(403);
+  const sent = await appendRsvp(
+    guest,
+    event,
+    {
+      event: entities.Event.subject(event.url),
+      displayName: "Tavi",
+      guestKey: "private-receipt",
+      response: RSVP_RESPONSE.yes,
+      additionalGuests: 0,
+      repliedAt: new Date(),
+    },
+    "receipt",
+  );
+  const body = await (await storage.read(sent.url)).text();
+  expect(body).not.toContain("private-receipt");
+  expect(sent.guestKey).toMatch(/^sha256:[a-f0-9]{64}$/);
+});
+it("publishes saved drafts with their persisted invitees and closes Append access on cancellation", async () => {
+  const { repository, storage } = harness();
+  const webId = "https://cleo.example/me";
+  const event = await repository.create(
+    { ...eventData(), publication: "draft", visibility: "invitees" },
+    [{ webId, event: "https://pending.example/e#it", invitedAt: new Date() }],
+    "publish",
+  );
+  const published = await repository.update(event, { ...event, publication: "published" });
+  expect(published.publication).toBe("published");
+  const { readWac } = await import("@jeswr/pod-access");
+  const container = new URL("rsvps/", event.url).href;
+  const policy = () =>
+    storage
+      .readRdf(`${container}.acl`)
+      .then((r) => readWac(r.dataset, container, `${container}.acl`));
+  expect((await policy()).grants.some((g) => g.modes.has("append") && !g.modes.has("write"))).toBe(
+    true,
+  );
+  await repository.update(published, { ...published, eventStatus: EVENT_STATUS.cancelled });
+  expect((await policy()).grants.some((g) => g.modes.has("append") && !g.modes.has("write"))).toBe(
+    false,
+  );
+});
+it("keeps good replies when individual files are malformed, inaccessible, oversized or unrelated", async () => {
+  harness();
+  const event = { ...eventData(), url: `${ROOT}events/e/index.ttl`, etag: null };
+  const container = new URL("rsvps/", event.url).href;
+  const urls = ["good", "malformed", "denied", "oversized", "unrelated"].map(
+    (n) => `${container}${n}.ttl`,
+  );
+  vi.mocked(readContainerMembers).mockResolvedValue(urls.map((url) => ({ url, container: false })));
+  const data = {
+    event: entities.Event.subject(event.url),
+    agent: OWNER,
+    response: RSVP_RESPONSE.yes,
+    additionalGuests: 0,
+    repliedAt: new Date(),
+  };
+  const fetch: typeof globalThis.fetch = async (input) => {
+    const url = String(input);
+    if (url === urls[2]) return new Response(null, { status: 403 });
+    const body =
+      url === urls[1]
+        ? "broken {{{"
+        : url === urls[3]
+          ? " ".repeat(65537)
+          : await entities.Rsvp.serialize(url, {
+              ...data,
+              event: url === urls[4] ? `${ROOT}other#it` : data.event,
+            });
+    return new Response(body, {
+      headers: { "content-type": "text/turtle", "last-modified": "Wed, 11 Nov 2026 12:00:00 GMT" },
+    });
+  };
+  const result = await readReplies(fetch, event.url);
+  expect(result).toMatchObject({
+    invalid: 4,
+    replies: [{ url: urls[0], receivedAt: new Date("2026-11-11T12:00:00Z") }],
+  });
+});
+it("reads beyond 500 replies and skips a bad invitation folder", async () => {
+  const { repository } = harness();
+  const event = await repository.create(eventData(), [], "good");
+  vi.mocked(readContainerMembers).mockResolvedValueOnce([
+    { url: `${repository.base}bad/`, container: true },
+    { url: new URL(".", event.url).href, container: true },
+  ]);
+  expect(await repository.list()).toHaveLength(1);
+  const urls = Array.from({ length: 501 }, (_, i) => `${ROOT}events/good/rsvps/${i}.ttl`);
+  vi.mocked(readContainerMembers).mockResolvedValue(urls.map((url) => ({ url, container: false })));
+  const fetch: typeof globalThis.fetch = async (input) =>
+    new Response(
+      await entities.Rsvp.serialize(String(input), {
+        event: entities.Event.subject(event.url),
+        agent: OWNER,
+        response: RSVP_RESPONSE.yes,
+        additionalGuests: 0,
+        repliedAt: new Date(),
+      }),
+      { headers: { "content-type": "text/turtle" } },
+    );
+  expect((await readReplies(fetch, event.url)).replies).toHaveLength(501);
+}, 30000);
+it("rejects unknown acl predicates in existing owner ACLs", async () => {
+  const { repository, storage, fetch } = harness();
+  await repository.create({ ...eventData(), publication: "draft" }, [], "unknown");
+  const target = `${repository.base}unknown/`;
+  const acl = `${target}.acl`;
+  const read = await storage.read(acl);
+  await storage.write(
+    acl,
+    `${await read.text()}\n<#hostile> <http://www.w3.org/ns/auth/acl#futurePredicate> <https://stranger.example/me> .`,
+    { ifMatch: read.etag ?? "missing", contentType: "text/turtle" },
+  );
+  await expect(sealNewResource(storage, fetch, target, OWNER)).rejects.toThrow("unknown");
+});
+
+it("uses a server-assigned POST location even when the Slug is renamed", async () => {
+  harness();
+  const event = { ...eventData(), url: `${ROOT}events/e/index.ttl`, etag: null };
+  const container = new URL("rsvps/", event.url).href;
+  const assigned = `${container}server-assigned`;
+  let body = "";
+  const fetch: typeof globalThis.fetch = async (_input, init) => {
+    if (init?.method === "POST") {
+      expect(String(_input)).toBe(container);
+      expect(new Headers(init.headers).get("slug")).toBe("hint.ttl");
+      body = String(init.body);
+      return new Response(null, { status: 201, headers: { location: "server-assigned" } });
+    }
+    return new Response(body, {
+      headers: {
+        "content-type": "text/turtle",
+        "authenticated-creator": OWNER,
+        "last-modified": "invalid",
+      },
+    });
+  };
+  const sent = await appendRsvp(
+    fetch,
+    event,
+    {
+      event: entities.Event.subject(event.url),
+      agent: OWNER,
+      response: RSVP_RESPONSE.yes,
+      additionalGuests: 0,
+      repliedAt: new Date(),
+      verifiedAgent: OWNER,
+    } as import("../src/index.js").Reply,
+    "hint",
+  );
+  expect(sent.url).toBe(assigned);
+  expect(sent.verifiedAgent).toBeUndefined();
+  vi.mocked(readContainerMembers).mockResolvedValue([{ url: assigned, container: false }]);
+  const read = await readReplies(fetch, event.url);
+  expect(read).toEqual({ replies: [sent], invalid: 0 });
+  expect(read.replies[0]?.verifiedAgent).toBeUndefined();
+  const proven = await readReplies(fetch, event.url, {
+    authenticatedCreator: (_url, response) =>
+      response.headers.get("authenticated-creator") ?? undefined,
+  });
+  expect(proven.replies[0]?.verifiedAgent).toBe(OWNER);
+  const other = await readReplies(fetch, event.url, {
+    authenticatedCreator: () => "https://stranger.example/me",
+  });
+  expect(other.replies[0]?.verifiedAgent).toBeUndefined();
+});
+it.each([
+  null,
+  "https://stranger.example/reply",
+  "../outside.ttl",
+  "#fragment",
+  "reply?query=1",
+  "nested/",
+])("rejects an unsafe or absent POST Location %s", async (location) => {
+  const event = { ...eventData(), url: `${ROOT}events/e/index.ttl`, etag: null };
+  const fetch = vi
+    .fn()
+    .mockResolvedValue(
+      new Response(null, { status: 201, headers: location === null ? {} : { location } }),
+    );
+  await expect(
+    appendRsvp(fetch, event, {
+      event: entities.Event.subject(event.url),
+      agent: OWNER,
+      response: RSVP_RESPONSE.yes,
+      additionalGuests: 0,
+      repliedAt: new Date(),
+    }),
+  ).rejects.toThrow();
+});
+it("keeps container denial distinct from an empty list", async () => {
+  harness();
+  vi.mocked(readContainerMembers).mockRejectedValueOnce(new Error("403 Forbidden"));
+  await expect(readReplies(vi.fn(), `${ROOT}events/e/index.ttl`)).rejects.toThrow("403");
+});
+it("lists healthy invitations after a corrupt folder and reports the failure", async () => {
+  const { repository, storage, fetch } = harness();
+  const event = await repository.create(eventData(), [], "healthy");
+  await storage.create(repository.base, null, { name: "broken", kind: "container" });
+  await storage.create(`${repository.base}broken/`, "broken {{{", {
+    name: "index.ttl",
+    contentType: "text/turtle",
+  });
+  const notice = vi.fn();
+  const reader = createEventsRepository({
+    fetch,
+    storageRoot: ROOT,
+    owner: OWNER,
+    onInvalidInvitation: notice,
+  });
+  expect(await reader.list()).toEqual([event]);
+  expect(notice).toHaveBeenCalledOnce();
+});
+it("cancels public guest appending and retains visible guest Read access", async () => {
+  const { repository, storage } = harness();
+  const event = await repository.create(
+    { ...eventData(), guestListVisible: true },
+    [],
+    "cancel-visible",
+  );
+  const container = new URL("rsvps/", event.url).href;
+  await repository.update(event, { ...event, eventStatus: EVENT_STATUS.cancelled });
+  const { readWac } = await import("@jeswr/pod-access");
+  const policy = readWac(
+    (await storage.readRdf(`${container}.acl`)).dataset,
+    container,
+    `${container}.acl`,
+  );
+  const guest = policy.grants.filter((g) => g.who.some((c) => c.some((s) => s.kind === "public")));
+  expect(guest).toHaveLength(1);
+  expect([...(guest[0]?.modes ?? [])]).toEqual(["read"]);
+  expect(guest[0]?.appliesTo).toBe("both");
+  const response = await storage.readRdf(`${container}.acl`);
+  expect(response.dataset.size).toBeGreaterThan(0);
 });

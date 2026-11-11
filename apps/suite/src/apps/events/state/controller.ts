@@ -59,20 +59,17 @@ export class EventsController {
     this.edits.set(token, { ...data, url, etag: existing?.etag ?? null });
     this.emit();
     const task = this.queue.then(async () => {
-      if (!this.active) return;
       let result: Invitation;
       if (existing) {
         result = await this.repository.update(this.confirmed.get(url) ?? existing, data);
       } else {
         result = await this.repository.create(data, invitees, id);
       }
-      if (this.active) {
-        this.confirmed.set(result.url, result);
-      }
+      this.confirmed.set(result.url, result);
     });
     this.queue = task
       .catch(() => {
-        if (this.active) this.onFailure();
+        this.onFailure();
       })
       .finally(() => {
         this.edits.delete(token);

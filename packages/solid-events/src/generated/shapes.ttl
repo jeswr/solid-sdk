@@ -15,7 +15,7 @@ ev:RsvpShape a sh:NodeShape;
     sh:targetClass schema:RsvpAction.
 shapes:04020710c90fc3aad9f56c610757e455b46d6413e66391747d2c93a542bebbd8-RsvpAction-additionalNumberOfGuests sh:datatype <http://www.w3.org/2001/XMLSchema#integer>;
     sh:maxCount 1;
-    sh:maxInclusive 1000000;
+    sh:maxInclusive 20;
     sh:minCount 1;
     sh:minInclusive 0;
     sh:name "additionalGuests";

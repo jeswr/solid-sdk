@@ -144,3 +144,37 @@ describe("domain validation", () => {
     ).toThrow();
   });
 });
+
+it("caps additional guests at twenty", () => {
+  expect(() => validateRsvp({ ...rsvp, additionalGuests: 20 })).not.toThrow();
+  expect(() => validateRsvp({ ...rsvp, additionalGuests: 21 })).toThrow();
+});
+it("marks the WAC-writing package security critical", async () => {
+  const { readFile } = await import("node:fs/promises");
+  expect(
+    JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"))
+      .securityCritical,
+  ).toBe(true);
+});
+
+it("shares the same URL validator across document and image policy", async () => {
+  const { validateHttpUrl } = await import("../src/index.js");
+  expect(validateHttpUrl("https://images.example/a?q=1#cover").href).toBe(
+    "https://images.example/a?q=1#cover",
+  );
+  for (const value of [
+    "file:///tmp/a",
+    "https://user:secret@host.example/a",
+    "https://host.example/evil>iri",
+    "https://host.example/a\n",
+    "relative",
+  ])
+    expect(() => validateHttpUrl(value)).toThrow();
+});
+
+it("enforces the guest cap in the generated model too", () => {
+  const url = "https://host.example/r";
+  expect(
+    entities.Rsvp.parse(url, entities.Rsvp.build(url, { ...rsvp, additionalGuests: 21 })),
+  ).toBeUndefined();
+});

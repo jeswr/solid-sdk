@@ -3,7 +3,7 @@ import { fetchRdf, RdfFetchError } from "@jeswr/fetch-rdf";
 import { assertWithinPodScope } from "@jeswr/guarded-fetch";
 import { createAccessClient, type EffectivePolicy, readWac, writeWac } from "@jeswr/pod-access";
 import type { StorageClient } from "@jeswr/storage-client";
-import type { EventData, InviteeData } from "./model.js";
+import { EVENT_STATUS, type EventData, type InviteeData } from "./model.js";
 
 /** Bootstrap only a missing own WAC document, at the server's advertised URL.
  * Existing policy is inspected and never replaced. ACP/unknown access fails closed. */
@@ -26,7 +26,7 @@ export async function sealNewResource(
   const acl = assertWithinPodScope(storage.root, links[0]?.target ?? "");
   try {
     const existing = await fetchRdf(acl, { fetch });
-    const policy = readWac(existing.dataset, target, acl, "css");
+    const policy = readWac(existing.dataset, target, acl, "css", true);
     // Never silently replace access configured by another application.
     if (
       !policy.grants.length ||
@@ -79,9 +79,20 @@ export async function publishAccess(
   const replies = new URL("rsvps/", eventUrl).href;
   for (const agent of audience) {
     // Configure reply access before exposing the invitation.
-    await access.share(replies, { agent, modes: ["append"] }, {});
+    if (event.eventStatus === EVENT_STATUS.scheduled)
+      await access.share(replies, { agent, modes: ["append"] }, {});
     if (event.guestListVisible)
       await access.share(replies, { agent, modes: ["read"] }, { inherit: true });
     await access.share(eventUrl, { agent, modes: ["read"] }, {});
   }
+}
+
+/** Revoke each Append rule by id, retaining separate owner and guest Read rules. */
+export async function closeReplies(storage: StorageClient, eventUrl: string): Promise<void> {
+  const access = createAccessClient({ storage });
+  if (access.model() !== "wac") throw new Error("WAC sharing is required");
+  const replies = new URL("rsvps/", eventUrl).href;
+  const grants = (await access.grants(replies)).filter((grant) => grant.modes.includes("append"));
+  if (grants.some((grant) => !grant.id)) throw new Error("Cannot safely identify reply grants");
+  for (const grant of grants) await access.revoke(replies, grant.id as string);
 }

@@ -439,3 +439,14 @@
     flex-direction: column;
   }
 }
+
+.ev-cover-image {
+  width: 100%;
+  max-height: 22rem;
+  object-fit: cover;
+  border-radius: var(--radius-lg);
+}
+
+.ev-form[hidden] {
+  display: none;
+}

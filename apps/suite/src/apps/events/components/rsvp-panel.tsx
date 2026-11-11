@@ -157,7 +157,7 @@ export function RsvpPanel({
             name="additionalGuests"
             type="number"
             min={0}
-            max={100}
+            max={20}
             step={1}
             defaultValue={0}
           />
@@ -185,7 +185,7 @@ export function RsvpPanel({
             {sending
               ? "Sending your reply…"
               : saved
-                ? "Your latest reply replaces your earlier response in the tally."
+                ? "Your reply is recorded. Unverified replies are shown separately from the verified tally."
                 : "Your reply goes directly to the organiser's pod."}
           </p>
         </form>

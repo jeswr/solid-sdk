@@ -29,6 +29,7 @@ export function EventForm({
   onSave(data: EventData, invitees: InviteeData[]): void;
 }) {
   const [error, setError] = useState("");
+  const [pending, setPending] = useState<{ data: EventData; invitees: InviteeData[] }>();
   return (
     <Dialog
       open={open}
@@ -45,7 +46,32 @@ export function EventForm({
               : "A good time starts with an invitation. Save it in your pod."}
           </DialogDescription>
         </DialogHeader>
+        {pending && (
+          <section aria-labelledby="ev-publish-title">
+            <h3 id="ev-publish-title">Publish this invitation?</h3>
+            <p>
+              The invitation will become readable by{" "}
+              {pending.data.visibility === "link" ? "anyone with the link" : "your invited WebIDs"}{" "}
+              and guests can reply.
+            </p>
+            <div className="ev-actions">
+              <Button type="button" variant="outline" onClick={() => setPending(undefined)}>
+                Keep editing
+              </Button>
+              <Button
+                type="button"
+                onClick={() => {
+                  onSave(pending.data, pending.invitees);
+                  onClose();
+                }}
+              >
+                Confirm publication
+              </Button>
+            </div>
+          </section>
+        )}
         <form
+          hidden={!!pending}
           className="ev-form"
           onSubmit={(event) => {
             event.preventDefault();
@@ -60,6 +86,10 @@ export function EventForm({
                 !invitees.length
               )
                 throw new Error("Add at least one invitee WebID, or choose anyone with the link");
+              if (existing?.publication === "draft" && data.publication === "published") {
+                setPending({ data, invitees });
+                return;
+              }
               onSave(data, invitees);
               onClose();
             } catch (failure) {
@@ -137,9 +167,7 @@ export function EventForm({
           <div>
             <Label htmlFor="ev-image">Cover image URL (optional)</Label>
             <Input id="ev-image" name="image" type="url" defaultValue={existing?.image} />
-            <p className="ev-muted">
-              Saved with the invitation. Remote images aren't loaded in this first cut.
-            </p>
+            <p className="ev-muted">Shown on your invitation and its guest page.</p>
           </div>
           <div className="ev-form-grid">
             <div>
@@ -165,9 +193,7 @@ export function EventForm({
             </div>
           </div>
           {existing ? (
-            <p className="ev-muted">
-              Sharing and publication settings are fixed after creation in this first cut.
-            </p>
+            <p className="ev-muted">Sharing settings are fixed after creation.</p>
           ) : (
             <>
               <fieldset className="ev-fieldset">
@@ -207,6 +233,18 @@ export function EventForm({
                 </Label>
               </fieldset>
             </>
+          )}
+          {existing?.publication === "draft" && (
+            <fieldset className="ev-fieldset">
+              <legend>Ready to share?</legend>
+              <Label className="ev-choice">
+                <Input type="radio" name="publication" value="draft" defaultChecked /> Keep as a
+                private draft
+              </Label>
+              <Label className="ev-choice">
+                <Input type="radio" name="publication" value="published" /> Publish invitation
+              </Label>
+            </fieldset>
           )}
           {error && (
             <p role="alert" className="ev-error">

@@ -16,7 +16,7 @@ import {
   StorageError,
 } from "@jeswr/storage-client";
 import { createSolidBackend } from "@jeswr/storage-client/solid";
-import { publishAccess, sealNewResource } from "./access.js";
+import { closeReplies, publishAccess, sealNewResource } from "./access.js";
 import {
   EVENT_STATUS,
   type EventData,
@@ -40,6 +40,7 @@ export interface EventsRepositoryOptions {
   owner: string;
   /** Explicit non-enforcing in-browser fixture; never enable for real storage. */
   demo?: boolean;
+  onInvalidInvitation?: () => void;
 }
 
 /** Read a foreign invitation through the caller's transport and the shared SSRF guard.
@@ -61,27 +62,67 @@ export function publicEventFetch(fetch: typeof globalThis.fetch): typeof globalT
   );
 }
 
-/** Bounded listing, shared by organiser and visible guest-list views. Denial stays an error. */
+export interface ReplyReadOptions {
+  /** Trusted deployment adapter for server-authenticated creator metadata.
+   * Must verify the server's contract; arbitrary headers/RDF are not identity evidence. */
+  authenticatedCreator?: (url: string, response: Response) => string | undefined;
+}
+export interface ReplyList {
+  replies: Reply[];
+  invalid: number;
+}
+
+/** Keep per-file failures separate from container access denial.
+ * Solid listings contain all members; process every member, including batches beyond 500.
+ * fetch-rdf's exported streaming reader supplies the byte cap (storage boundedText is internal). */
 export async function readReplies(
   fetch: typeof globalThis.fetch,
   eventUrl: string,
-): Promise<Reply[]> {
+  options: ReplyReadOptions = {},
+): Promise<ReplyList> {
   const document = eventDocumentUrl(eventUrl);
   const container = new URL("rsvps/", document).href;
-  const members = await readContainerMembers(fetch, container, {
+  const transport = refuseRedirects(fetch);
+  const members = await readContainerMembers(transport, container, {
     scope: container,
-    maxBytes: 1024 * 1024,
+    maxBytes: 16 * 1024 * 1024,
   });
-  if (!members) return [];
-  if (members.length > 500) throw new Error("This guest list is too large for this first cut");
   const replies: Reply[] = [];
-  for (const { url } of members) {
-    if (url.endsWith("/") || !url.endsWith(".ttl")) continue;
-    const result = await fetchRdf(url, { fetch });
-    const reply = entities.Rsvp.parse(url, result.dataset);
-    if (reply && reply.event === entities.Event.subject(document)) replies.push({ ...reply, url });
+  let invalid = 0;
+  for (const { url } of members ?? []) {
+    if (url.endsWith("/") || url.endsWith(".acl") || url.endsWith(".acr")) continue;
+    try {
+      assertWithinPodScope(container, url, { allowRoot: false });
+      const result = await fetchRdf(url, { fetch: transport, maxBytes: 64 * 1024 });
+      // A POST Slug is a hint: the document URL and RDF subject may differ.
+      // Discover subjects only; every field and type is read by the generated parser.
+      const subjects = new Set(
+        [...result.dataset]
+          .filter((q) => q.subject.termType === "NamedNode")
+          .map((q) => q.subject.value)
+          .filter((subject) => subject.endsWith("#it")),
+      );
+      const parsed = [...subjects]
+        .map((subject) => entities.Rsvp.parse(subject.slice(0, -3), result.dataset))
+        .filter((r) => r !== undefined);
+      if (parsed.length !== 1) throw new TypeError("Expected one reply");
+      const reply = parsed[0] as RsvpData;
+      validateRsvp(reply);
+      if (reply.event !== entities.Event.subject(document)) throw new TypeError("Unrelated reply");
+      const modified = result.headers.get("last-modified");
+      const receivedAt = modified ? new Date(modified) : undefined;
+      const creator = options.authenticatedCreator?.(url, result.response);
+      replies.push({
+        ...reply,
+        url,
+        ...(receivedAt && Number.isFinite(+receivedAt) ? { receivedAt } : {}),
+        ...(creator === reply.agent && creator ? { verifiedAgent: creator } : {}),
+      });
+    } catch {
+      invalid++;
+    }
   }
-  return replies;
+  return { replies, invalid };
 }
 
 /** Append one immutable reply; changing a reply appends a newer one. No Read/Write grant needed.
@@ -101,14 +142,33 @@ export async function appendRsvp(
     throw new Error("Sign in to reply to this invitation");
   const container = new URL("rsvps/", event.url).href;
   const url = new URL(`${encodeURIComponent(id)}.ttl`, container).href;
-  const response = await fetch(url, {
-    method: "PUT",
+  // Re-project generated fields so transport-only identity evidence cannot survive a new POST.
+  const safeReply = entities.Rsvp.parse(url, entities.Rsvp.build(url, reply)) as RsvpData;
+  if (reply.guestKey) {
+    const hash = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(reply.guestKey));
+    safeReply.guestKey = `sha256:${Array.from(new Uint8Array(hash), (b) => b.toString(16).padStart(2, "0")).join("")}`;
+  }
+  const response = await fetch(container, {
+    method: "POST",
     redirect: "error",
-    headers: { "content-type": "text/turtle", "if-none-match": "*" },
-    body: await entities.Rsvp.serialize(url, reply),
+    headers: { "content-type": "text/turtle", slug: `${encodeURIComponent(id)}.ttl` },
+    body: await entities.Rsvp.serialize(url, safeReply),
   });
   if (!response.ok) throw new Error("Couldn't send your reply");
-  return { ...reply, url };
+  const location = response.headers.get("location");
+  if (!location) throw new Error("The pod did not return a reply location");
+  const saved = assertWithinPodScope(container, new URL(location, container).href, {
+    allowRoot: false,
+  });
+  if (new URL(saved).hash || new URL(saved).search || saved.endsWith("/"))
+    throw new Error("The pod returned an invalid reply location");
+  const modified = response.headers.get("last-modified");
+  const receivedAt = modified ? new Date(modified) : undefined;
+  return {
+    ...safeReply,
+    url: saved,
+    ...(receivedAt && Number.isFinite(+receivedAt) ? { receivedAt } : {}),
+  };
 }
 
 export function createEventsRepository(options: EventsRepositoryOptions) {
@@ -161,14 +221,13 @@ export function createEventsRepository(options: EventsRepositoryOptions) {
     async list(): Promise<Invitation[]> {
       const members = await readContainerMembers(fetch, base, { scope: base });
       if (!members) return [];
-      if (members.length > 100) throw new Error("This first cut shows up to 100 event folders");
       const events: Invitation[] = [];
       for (const { url: folder } of members)
         if (folder.endsWith("/")) {
           try {
             events.push(await readInvitation(fetch, new URL("index.ttl", folder).href));
           } catch (e) {
-            if (!(e instanceof RdfFetchError) || e.status !== 404) throw e;
+            if (!(e instanceof RdfFetchError) || e.status !== 404) options.onInvalidInvitation?.();
           }
         }
       return events;
@@ -235,11 +294,25 @@ export function createEventsRepository(options: EventsRepositoryOptions) {
       if (
         data.visibility !== existing.visibility ||
         data.guestListVisible !== existing.guestListVisible ||
-        data.publication !== existing.publication
+        (existing.publication === "published" && data.publication !== "published")
       )
         throw new Error("Sharing settings are fixed after creation in this first cut");
       if (!existing.etag) throw new Error("A version is required to edit");
       const { storage } = await getClient();
+      // Reject a stale edit before applying any access side effects.
+      const current = await storage.head(existing.url);
+      if (current.etag !== existing.etag)
+        throw new StorageError("precondition-failed", {
+          url: existing.url,
+          method: "PUT",
+          status: 412,
+        });
+      if (existing.publication === "draft" && data.publication === "published") {
+        const invitees = await this.invitees(existing);
+        await publishAccess(storage, existing.url, data, invitees);
+      }
+      if (data.eventStatus !== EVENT_STATUS.scheduled && existing.publication === "published")
+        await closeReplies(storage, existing.url);
       await storage.write(existing.url, await entities.Event.serialize(existing.url, data), {
         contentType: "text/turtle",
         ifMatch: existing.etag,
@@ -250,7 +323,6 @@ export function createEventsRepository(options: EventsRepositoryOptions) {
       const container = new URL("invitees/", event.url).href;
       const members = await readContainerMembers(fetch, container, { scope: base });
       if (!members) return [];
-      if (members.length > 500) throw new Error("Too many invitees");
       const result: InviteeData[] = [];
       for (const { url } of members)
         if (url.endsWith(".ttl")) {

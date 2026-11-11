@@ -110,23 +110,27 @@ it("round-trips replies, changes and visible guest-list access", async () => {
       guestKey: "tavi",
       response: RSVP_RESPONSE.yes,
       additionalGuests: 2,
-      repliedAt: new Date("2026-12-01T12:00:00Z"),
+      repliedAt: new Date(Date.now() - 1000),
     },
     "one",
   );
   await appendRsvp(
     pod.fetch,
     event,
-    { ...first, response: RSVP_RESPONSE.maybe, repliedAt: new Date("2026-12-02T12:00:00Z") },
+    { ...first, response: RSVP_RESPONSE.maybe, repliedAt: new Date() },
     "two",
   );
   const replies = await readReplies(pod.fetch, event.url);
-  expect(replies).toHaveLength(2);
-  expect(summariseRsvps(replies, { url: entities.Event.subject(event.url) })).toMatchObject({
-    yes: 0,
-    maybe: 1,
-    attending: 0,
-  });
+  expect(replies.replies).toHaveLength(2);
+  expect(summariseRsvps(replies.replies, { url: entities.Event.subject(event.url) })).toMatchObject(
+    {
+      yes: 0,
+      maybe: 0,
+      attending: 0,
+      invalid: 0,
+      unverified: expect.arrayContaining([expect.objectContaining({ displayName: "Tavi Moss" })]),
+    },
+  );
   const container = new URL("rsvps/", event.url).href;
   const acl = `${container}.acl`;
   const policy = readWac(
@@ -176,10 +180,12 @@ it("seeds demo once, leaves other sessions untouched and covers every collection
   expect(events.filter((e) => e.publication === "draft")).toHaveLength(1);
   expect(events.filter((e) => e.eventStatus === EVENT_STATUS.cancelled)).toHaveLength(1);
   expect(
-    await readReplies(
-      session.fetch,
-      events.find((e) => e.name === "A little supper club")?.url ?? "missing",
-    ),
+    (
+      await readReplies(
+        session.fetch,
+        events.find((e) => e.name === "A little supper club")?.url ?? "missing",
+      )
+    ).replies,
   ).toHaveLength(4);
   const fetch = vi.fn();
   await ensureEventsSample({ ...session, mode: "solid", publicFetch: fetch, fetch });

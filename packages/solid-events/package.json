@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "description": "Generated Solid event invitations, independent RSVPs and guest lists.",
   "type": "module",
+  "securityCritical": true,
   "license": "MIT",
   "author": "Jesse Wright",
   "main": "./dist/index.js",
@@ -36,7 +37,14 @@
     "@jeswr/storage-client": "workspace:*"
   },
   "devDependencies": {
-    "@jeswr/federation-codegen": "workspace:*"
+    "@jeswr/federation-codegen": "workspace:*",
+    "@biomejs/biome": "2.5.3",
+    "@rdfjs/types": "2.0.1",
+    "@types/n3": "1.26.1",
+    "@types/node": "25.9.5",
+    "@vitest/coverage-v8": "^4.1.10",
+    "typescript": "6.0.3",
+    "vitest": "4.1.10"
   },
   "engines": {
     "node": ">=24"

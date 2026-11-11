@@ -5,10 +5,12 @@ import {
   entities,
   type Invitation,
   type InviteeData,
+  publicEventFetch,
   type Reply,
   RSVP_RESPONSE,
   readReplies,
   summariseRsvps,
+  validateHttpUrl,
 } from "@jeswr/solid-events";
 import {
   Badge,
@@ -24,7 +26,7 @@ import {
   toast,
 } from "@jeswr/suite-ui";
 import { ArrowLeft, CalendarDays, Clock3, Copy, Globe2, MapPin, Users } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { PodSession } from "@/lib/session/pod-session";
 import { AppHeading } from "@/shell/app-frame";
 import { useEvents } from "../state/events-context";
@@ -61,6 +63,7 @@ export function InvitationDetail({
   onNotify?: (() => void) | undefined;
 }) {
   const [replies, setReplies] = useState<Reply[]>([]);
+  const [invalid, setInvalid] = useState(0);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [attempt, setAttempt] = useState(0);
   const canRead = organiser || event.guestListVisible;
@@ -73,9 +76,10 @@ export function InvitationDetail({
     }
     setStatus("loading");
     void readReplies(fetch, event.url).then(
-      (rows) => {
+      (result) => {
         if (live) {
-          setReplies(rows);
+          setReplies(result.replies);
+          setInvalid(result.invalid);
           setStatus("ready");
         }
       },
@@ -88,6 +92,12 @@ export function InvitationDetail({
     };
   }, [fetch, event.url, canRead, attempt]);
   const summary = summariseRsvps(replies, { ...event, url: entities.Event.subject(event.url) });
+  let image: string | undefined;
+  try {
+    image = event.image ? validateHttpUrl(event.image).href : undefined;
+  } catch {
+    /* Invalid images are never requested. */
+  }
   return (
     <div className="ev-page ev-detail">
       {onBack && (
@@ -97,6 +107,16 @@ export function InvitationDetail({
         </Button>
       )}
       <header className="ev-invitation-cover">
+        {image && (
+          // biome-ignore lint/performance/noImgElement: foreign pod images must load in the browser without a server image proxy
+          <img
+            className="ev-cover-image"
+            src={image}
+            alt=""
+            referrerPolicy="no-referrer"
+            loading="lazy"
+          />
+        )}
         <div className="ev-cover-mark" aria-hidden="true">
           <CalendarDays size={56} strokeWidth={1} />
         </div>
@@ -231,6 +251,13 @@ export function InvitationDetail({
                 />
               ) : (
                 <>
+                  {invalid + summary.invalid > 0 && (
+                    <p role="status" className="ev-muted">
+                      {invalid + summary.invalid} replies could not be loaded or were invalid. The
+                      available replies are shown.
+                    </p>
+                  )}
+                  <p className="ev-muted">Only verified replies contribute to these counts.</p>
                   <div className="ev-tally">
                     <div>
                       <strong>{summary.attending}</strong>
@@ -252,41 +279,27 @@ export function InvitationDetail({
                       Capacity is a guide; places are not reserved.
                     </p>
                   )}
-                  {!summary.latest.length ? (
+                  {!summary.latest.length && !summary.unverified.length ? (
                     <EmptyState
                       title="The first yes is on its way"
                       body="Replies will appear here as your guests respond."
                     />
                   ) : (
-                    <ul className="ev-guest-list">
-                      {summary.latest.map((reply) => (
-                        <li key={reply.url}>
-                          <span className="ev-avatar" aria-hidden="true">
-                            {(reply.displayName ?? "G").slice(0, 1)}
-                          </span>
-                          <div>
-                            <strong>{reply.displayName ?? "Guest"}</strong>
-                            <small>
-                              {reply.agent ? "WebID supplied · identity unverified" : "Named guest"}
-                              {reply.additionalGuests > 0 ? ` · +${reply.additionalGuests}` : ""}
-                            </small>
-                            {reply.comment && <p>{reply.comment}</p>}
-                          </div>
-                          <div className="ev-reply-chips">
-                            <Badge variant="secondary">
-                              {reply.response === RSVP_RESPONSE.yes
-                                ? "Going"
-                                : reply.response === RSVP_RESPONSE.no
-                                  ? "Can't go"
-                                  : "Maybe"}
-                            </Badge>
-                            {summary.late.includes(reply) && (
-                              <Badge variant="outline">Late reply</Badge>
-                            )}
-                          </div>
-                        </li>
-                      ))}
-                    </ul>
+                    <>
+                      {summary.latest.length > 0 && (
+                        <GuestReplies replies={summary.latest} late={summary.late} verified />
+                      )}
+                      {summary.unverified.length > 0 && (
+                        <section aria-labelledby="ev-unverified-title">
+                          <h4 id="ev-unverified-title">Unverified replies</h4>
+                          <p className="ev-muted">
+                            These replies claim a name or WebID. They cannot replace a verified
+                            reply and are excluded from the counts above.
+                          </p>
+                          <GuestReplies replies={summary.unverified} late={summary.late} />
+                        </section>
+                      )}
+                    </>
                   )}
                 </>
               )}
@@ -313,6 +326,10 @@ export function InvitationDetail({
 }
 export function OrganiserDetail({ event, onBack }: { event: Invitation; onBack(): void }) {
   const { session, controller } = useEvents();
+  const fetch = useMemo(
+    () => (session.mode === "demo" ? session.fetch : publicEventFetch(session.fetch)),
+    [session],
+  );
   const [editing, setEditing] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [invitees, setInvitees] = useState<InviteeData[]>([]);
@@ -334,7 +351,7 @@ export function OrganiserDetail({ event, onBack }: { event: Invitation; onBack()
     <>
       <InvitationDetail
         event={event}
-        fetch={session.fetch}
+        fetch={fetch}
         session={session}
         organiser
         onBack={onBack}
@@ -402,5 +419,49 @@ export function OrganiserDetail({ event, onBack }: { event: Invitation; onBack()
         </DialogContent>
       </Dialog>
     </>
+  );
+}
+
+function GuestReplies({
+  replies,
+  late,
+  verified,
+}: {
+  replies: Reply[];
+  late: Reply[];
+  verified?: boolean;
+}) {
+  return (
+    <ul className="ev-guest-list">
+      {replies.map((reply) => (
+        <li key={reply.url}>
+          <span className="ev-avatar" aria-hidden="true">
+            {(reply.displayName ?? "G").slice(0, 1)}
+          </span>
+          <div>
+            <strong>{reply.displayName ?? "Guest"}</strong>
+            <small>
+              {verified
+                ? "Verified WebID"
+                : reply.agent
+                  ? "WebID supplied · identity unverified"
+                  : "Named guest · identity unverified"}
+              {reply.additionalGuests > 0 ? ` · +${reply.additionalGuests}` : ""}
+            </small>
+            {reply.comment && <p>{reply.comment}</p>}
+          </div>
+          <div className="ev-reply-chips">
+            <Badge variant="secondary">
+              {reply.response === RSVP_RESPONSE.yes
+                ? "Going"
+                : reply.response === RSVP_RESPONSE.no
+                  ? "Can't go"
+                  : "Maybe"}
+            </Badge>
+            {late.includes(reply) && <Badge variant="outline">Late reply</Badge>}
+          </div>
+        </li>
+      ))}
+    </ul>
   );
 }

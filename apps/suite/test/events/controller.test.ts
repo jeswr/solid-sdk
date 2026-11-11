@@ -106,7 +106,7 @@ it("serialises edits using the confirmed version and ignores stale refreshes", a
   expect(repository.update.mock.calls[1]?.[0].etag).toBe('"two"');
   expect(controller.snapshot().events[0]?.name).toBe("Newest");
 });
-it("fences disposed account reads, queued writes and failure notifications", async () => {
+it("fences disposed account reads while completing queued writes", async () => {
   const { repository, controller, failure } = fixture();
   const loading = deferred<Invitation[]>();
   repository.list.mockReturnValue(loading.promise);
@@ -118,7 +118,7 @@ it("fences disposed account reads, queued writes and failure notifications", asy
   loading.resolve([event]);
   await pending;
   await controller.settled();
-  expect(repository.create).not.toHaveBeenCalled();
+  expect(repository.create).toHaveBeenCalledOnce();
   expect(failure).not.toHaveBeenCalled();
   expect(listener).toHaveBeenCalledTimes(1);
   controller.activate();
@@ -149,10 +149,10 @@ it.each([
   if (outcome === "resolve") pending.resolve(event);
   else pending.reject(new Error("offline"));
   await controller.settled();
-  expect(failure).not.toHaveBeenCalled();
+  expect(failure).toHaveBeenCalledTimes(outcome === "reject" ? 1 : 0);
   expect(repository.list).not.toHaveBeenCalled();
 });
-it("ignores stale or disposed read errors and refuses network writes after disposal", async () => {
+it("ignores stale or disposed read errors while completing saves after disposal", async () => {
   const { repository, controller } = fixture();
   const old = deferred<Invitation[]>();
   repository.list.mockReturnValueOnce(old.promise);
@@ -169,5 +169,23 @@ it("ignores stale or disposed read errors and refuses network writes after dispo
   await second;
   controller.save(event);
   await controller.settled();
-  expect(repository.create).not.toHaveBeenCalled();
+  expect(repository.create).toHaveBeenCalledOnce();
+});
+
+it("finishes both queued saves after unmount, uses the confirmed ETag and reports late failures", async () => {
+  const { repository, controller, failure } = fixture();
+  await controller.refresh();
+  const first = deferred<Invitation>();
+  repository.update.mockReturnValueOnce(first.promise).mockRejectedValueOnce(new Error("offline"));
+  controller.save({ ...event, name: "One" }, [], event);
+  controller.save({ ...event, name: "Two" }, [], event);
+  const listener = vi.fn();
+  controller.subscribe(listener);
+  controller.dispose();
+  first.resolve({ ...event, name: "One", etag: '"two"' });
+  await controller.settled();
+  expect(repository.update).toHaveBeenCalledTimes(2);
+  expect(repository.update.mock.calls[1]?.[0].etag).toBe('"two"');
+  expect(failure).toHaveBeenCalledOnce();
+  expect(listener).not.toHaveBeenCalled();
 });

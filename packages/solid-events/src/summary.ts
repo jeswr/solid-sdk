@@ -10,6 +10,10 @@ import {
 
 export interface Reply extends RsvpData {
   url: string;
+  /** Trusted transport metadata; never populate this from reply RDF or a generic header. */
+  verifiedAgent?: string;
+  /** Last-Modified (or a trusted server creation timestamp), never the submitted time. */
+  receivedAt?: Date;
 }
 export interface RsvpSummary {
   yes: number;
@@ -22,18 +26,22 @@ export interface RsvpSummary {
   late: Reply[];
   latest: Reply[];
   invalid: number;
+  unverified: Reply[];
 }
 
-/** Replies are self-reported claims, including their agent and timestamp, not identity proofs.
- * Anonymous identity uses a random per-event guest key, never a display name.
- * Equal timestamps break ties by resource URL so listing order cannot change a tally. */
+/** Only transport-proven authorship can replace and count for a WebID.
+ * Unverified claims remain separate, including anonymous receipts: a public hash is not proof.
+ * Server times take precedence; claims more than five minutes ahead are invalid. */
 export function summariseRsvps(
   replies: readonly Reply[],
   event: Pick<EventData, "capacity" | "rsvpDeadline"> & { url: string },
+  now = new Date(),
 ): RsvpSummary {
   const newest = new Map<string, Reply>();
   const eventSubject = entities.Event.subject(eventDocumentUrl(event.url));
   let invalid = 0;
+  const unverified: Reply[] = [];
+  const time = (reply: Reply) => +(reply.receivedAt ?? reply.repliedAt);
   for (const reply of replies) {
     try {
       validateRsvp(reply);
@@ -41,21 +49,26 @@ export function summariseRsvps(
       invalid++;
       continue;
     }
-    if (reply.event !== eventSubject) {
+    if (
+      reply.event !== eventSubject ||
+      +reply.repliedAt > +now + 5 * 60 * 1000 ||
+      !Number.isFinite(time(reply)) ||
+      time(reply) > +now + 5 * 60 * 1000
+    ) {
       invalid++;
       continue;
     }
-    const key = reply.agent ? `webid:${reply.agent}` : `guest:${reply.guestKey}`;
+    if (!reply.agent || reply.verifiedAgent !== reply.agent) {
+      unverified.push(reply);
+      continue;
+    }
+    const key = reply.agent;
     const old = newest.get(key);
-    if (
-      !old ||
-      reply.repliedAt > old.repliedAt ||
-      (+reply.repliedAt === +old.repliedAt && reply.url > old.url)
-    )
+    if (!old || time(reply) > time(old) || (time(reply) === time(old) && reply.url > old.url))
       newest.set(key, reply);
   }
   const latest = [...newest.values()].sort(
-    (a, b) => +b.repliedAt - +a.repliedAt || a.url.localeCompare(b.url),
+    (a, b) => time(b) - time(a) || a.url.localeCompare(b.url),
   );
   const yes = latest.filter((r) => r.response === RSVP_RESPONSE.yes);
   const additionalGuests = yes.reduce((sum, r) => sum + r.additionalGuests, 0);
@@ -69,9 +82,10 @@ export function summariseRsvps(
     remaining: event.capacity === undefined ? null : Math.max(0, event.capacity - attending),
     overCapacity: event.capacity === undefined ? 0 : Math.max(0, attending - event.capacity),
     late: event.rsvpDeadline
-      ? latest.filter((r) => r.repliedAt > (event.rsvpDeadline as Date))
+      ? [...latest, ...unverified].filter((r) => time(r) > +(event.rsvpDeadline as Date))
       : [],
     latest,
     invalid,
+    unverified: unverified.sort((a, b) => time(b) - time(a) || a.url.localeCompare(b.url)),
   };
 }

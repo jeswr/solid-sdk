@@ -16,17 +16,23 @@ export const RSVP_RESPONSE = {
   maybe: "https://schema.org/RsvpResponseMaybe",
 } as const;
 
-/** Validate HTTP identifiers before transport, retaining their RDF lexical identity. */
-export function eventDocumentUrl(value: string): string {
+/** Shared lexical HTTP(S) validation for event, WebID and image URLs. */
+export function validateHttpUrl(value: string): URL {
   const url = new URL(value);
   if (
     !/^https?:$/.test(url.protocol) ||
     url.username ||
     url.password ||
-    url.search ||
     /[\s\p{Cc}<>"{}|^`\\]/u.test(value)
   )
-    throw new TypeError("Use an http(s) event URL without credentials or a query");
+    throw new TypeError("Use an http(s) URL without credentials");
+  return url;
+}
+
+/** Retain document identity while removing the generated entity fragment. */
+export function eventDocumentUrl(value: string): string {
+  const url = validateHttpUrl(value);
+  if (url.search) throw new TypeError("Use an event URL without a query");
   url.hash = "";
   return url.href;
 }
@@ -52,16 +58,7 @@ export function validateEvent(data: EventData): void {
   )
     throw new TypeError("Capacity must be a whole number between 0 and 1000000");
   for (const value of [data.organizer, data.onlineUrl, data.image])
-    if (value !== undefined) {
-      const url = new URL(value);
-      if (
-        !/^https?:$/.test(url.protocol) ||
-        url.username ||
-        url.password ||
-        /[\s\p{Cc}<>"{}|^`\\]/u.test(value)
-      )
-        throw new TypeError("Use an http(s) URL");
-    }
+    if (value !== undefined) validateHttpUrl(value);
 }
 
 export function validateRsvp(reply: RsvpData): void {

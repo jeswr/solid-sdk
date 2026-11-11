@@ -98,3 +98,15 @@ it("orders past invitations newest first, using an explicit end where present", 
   ];
   expect(filterInvitations(rows, "Past", now).map((row) => row.url)).toEqual(["newer", "older"]);
 });
+
+it("allows a saved draft to be published from the form", () => {
+  const existing = {
+    ...invitationForm(form(), owner),
+    publication: "draft" as const,
+    url: "https://host.example/event",
+    etag: '"a"',
+  };
+  const value = form();
+  value.set("publication", "published");
+  expect(invitationForm(value, owner, existing).publication).toBe("published");
+});
