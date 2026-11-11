@@ -9,15 +9,23 @@ import {
   type ObservationInput,
   readObservation,
 } from "./model.js";
-import { httpIri, isoTime, slug, utcDay } from "./policy.js";
-import { RDF_TYPE, SOSA_OBSERVATION } from "./vocab.js";
+import { httpIri, inDocument, isoTime, observationDocPath, slug, utcDay } from "./policy.js";
+import { RDF_TYPE, SOSA, SOSA_OBSERVATION } from "./vocab.js";
 
 export const DEFAULT_MAX_OBSERVATIONS = 2000;
 export interface ParseOptions {
+  /** Exact sensor IRI expected when reading a sensor's day document. */
+  expectedSensor?: string;
+  /** Expected UTC calendar day, strictly YYYY-MM-DD. */
+  expectedDay?: string;
   /** Counts typed roots before validation, including malformed or off-document roots. */
   maxObservations?: number;
   maxQuads?: number;
   maxBytes?: number;
+}
+/** An ordinary array with a non-enumerable count of all omitted typed roots. */
+export interface ObservationParseResult extends Array<Observation> {
+  readonly skipped: number;
 }
 function limit(value: number | undefined, fallback: number): number {
   const result = value ?? fallback;
@@ -50,30 +58,69 @@ export function parseObservations(
   documentUrl: string,
   dataset: DatasetCore,
   options: ParseOptions = {},
-): Observation[] {
+): ObservationParseResult {
   documentIri(documentUrl);
+  const expectedSensor =
+    options.expectedSensor === undefined ? undefined : httpIri(options.expectedSensor);
+  const expectedDay = options.expectedDay;
+  if (expectedDay !== undefined) {
+    if (typeof expectedDay !== "string" || !/^\d{4}-\d\d-\d\d$/.test(expectedDay)) {
+      throw new TypeError("Expected UTC day in YYYY-MM-DD form");
+    }
+    try {
+      utcDay(expectedDay);
+    } catch {
+      throw new TypeError("Invalid expected UTC day");
+    }
+  }
   const maxObservations = limit(options.maxObservations, DEFAULT_MAX_OBSERVATIONS);
   const store = boundedStore(dataset, options);
   const roots = store.getSubjects(RDF_TYPE, SOSA_OBSERVATION, null);
   if (roots.length > maxObservations) throw new RangeError("Observation cap exceeded");
+  // Include malformed/off-document observations when detecting shared result nodes.
+  const owners = new Map<string, string>();
+  const sharedRoots = new Set<string>();
+  for (const { subject, object } of store.getQuads(null, `${SOSA}hasResult`, null, null)) {
+    if (
+      object.termType !== "NamedNode" ||
+      !store.countQuads(subject, RDF_TYPE, SOSA_OBSERVATION, null)
+    )
+      continue;
+    const subjectKey = `${subject.termType}:${subject.value}`;
+    const owner = owners.get(object.value);
+    if (owner !== undefined) {
+      sharedRoots.add(owner);
+      sharedRoots.add(subjectKey);
+    } else {
+      owners.set(object.value, subjectKey);
+    }
+  }
   const observations: Observation[] = [];
   for (const root of roots) {
     if (
       root.termType !== "NamedNode" ||
-      (root.value !== documentUrl && !root.value.startsWith(`${documentUrl}#`))
+      !inDocument(root.value, documentUrl) ||
+      sharedRoots.has(`${root.termType}:${root.value}`)
     )
       continue;
     const parsed = readObservation(root.value, store);
-    if (parsed) observations.push(parsed);
+    if (
+      parsed &&
+      (expectedSensor === undefined || parsed.sensor === expectedSensor) &&
+      (expectedDay === undefined || parsed.resultTime.slice(0, 10) === expectedDay)
+    )
+      observations.push(parsed);
   }
-  return observations;
+  return Object.defineProperty(observations, "skipped", {
+    value: roots.length - observations.length,
+  }) as ObservationParseResult;
 }
 
 export async function parseObservationsTurtle(
   documentUrl: string,
   body: string,
   options: ParseOptions = {},
-): Promise<Observation[]> {
+): Promise<ObservationParseResult> {
   documentIri(documentUrl);
   const maxBytes = limit(options.maxBytes, 8 * 1024 * 1024);
   const maxQuads = limit(options.maxQuads, 50000);
@@ -100,6 +147,15 @@ export function buildObservationDay(
   documentIri(documentUrl);
   httpIri(sensor);
   const day = utcDay(date);
+  const sensorUrl = new URL(sensor);
+  const sensorPath = /\/environment\/([^/]+)\/sensor\.ttl$/.exec(sensorUrl.pathname);
+  if (
+    !sensorPath?.[1] ||
+    documentUrl.includes("?") ||
+    !new URL(documentUrl).pathname.endsWith(`/${observationDocPath(sensorPath[1], day)}`)
+  ) {
+    throw new TypeError("Document URL must match the sensor's observation day path");
+  }
   if (observations.length > limit(options.maxObservations, DEFAULT_MAX_OBSERVATIONS)) {
     throw new RangeError("Observation cap exceeded");
   }

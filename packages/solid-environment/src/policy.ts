@@ -2,7 +2,13 @@
 // AUTHORED-BY Codex GPT-6
 import { isSafeAbsoluteIri, readLiteral } from "@jeswr/model-runtime";
 import { DataFactory } from "n3";
-import { type ObservableProperty, type ObservationUnit, PROPERTY_UNITS, XSD } from "./vocab.js";
+import {
+  type ObservableProperty,
+  type ObservationUnit,
+  PROPERTY,
+  PROPERTY_UNITS,
+  XSD,
+} from "./vocab.js";
 
 /** Preserve RDF identities; refuse URL spellings that a scheme guard would rewrite. */
 export function httpIri(value: string): string {
@@ -14,6 +20,10 @@ export function httpIri(value: string): string {
     throw new TypeError("Expected a canonical http(s) IRI without credentials");
   }
   return value;
+}
+
+export function inDocument(iri: string, documentUrl: string): boolean {
+  return iri === documentUrl || iri.startsWith(`${documentUrl}#`);
 }
 
 /** ISO timestamp with an explicit timezone, validated by the shared XSD reader. */
@@ -44,6 +54,16 @@ export function validateReading(property: string, unit: string, value: number): 
   }
   if (typeof value !== "number" || !Number.isFinite(value)) {
     throw new TypeError("Observation value must be finite");
+  }
+  const minimum = property === PROPERTY.AirTemperature ? -60 : 0;
+  const maximum =
+    property === PROPERTY.AirTemperature ||
+    property === PROPERTY.RelativeHumidity ||
+    property === PROPERTY.FilterLifeRemaining
+      ? 100
+      : Infinity;
+  if (value < minimum || value > maximum) {
+    throw new RangeError("Observation value is outside the plausible range for its property");
   }
 }
 
