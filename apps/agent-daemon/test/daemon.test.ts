@@ -52,6 +52,7 @@ function harness() {
   const pod = createMemoryPod();
   const workspace = new PodWorkspace({
     io: pod.io,
+    storage: pod.storage,
     root: ROOT,
     ownerWebId: OWNER,
     privateTypeIndex: `${ROOT}settings/privateTypeIndex.ttl`,
@@ -1064,9 +1065,27 @@ it("serializes accounts sharing a binding and respects email/chat/social interva
       category: category as "email" | "chat" | "social",
     })),
   };
+  let completed!: () => void;
+  let nextPass = new Promise<void>((resolve) => {
+    completed = resolve;
+  });
+  h.executor.runOutboxOnce.mockImplementation(async () => {
+    completed();
+    return {};
+  });
   const controller = new AbortController();
   const run = createDaemon(options).run(controller.signal);
-  await vi.advanceTimersByTimeAsync(300_000);
+  // Finish storage work before moving the simulated scheduler clock.
+  await nextPass;
+  await vi.advanceTimersByTimeAsync(0);
+  for (let tick = 0; tick < 10; tick++) {
+    nextPass = new Promise<void>((resolve) => {
+      completed = resolve;
+    });
+    await vi.advanceTimersByTimeAsync(30_000);
+    await nextPass;
+    await vi.advanceTimersByTimeAsync(0);
+  }
   controller.abort();
   await run;
   expect(pollInterval("email")).toBe(120_000);

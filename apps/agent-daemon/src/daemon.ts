@@ -56,6 +56,7 @@ export async function composeDaemon(options: {
     const { storage } = await createPodClient({ fetch: auth.fetch, storage: options.storageRoot });
     const workspace = new PodWorkspace({
       io: auth.fetch,
+      storage,
       root: storage.root,
       ownerWebId: options.ownerWebId,
       privateTypeIndex: options.privateTypeIndex,

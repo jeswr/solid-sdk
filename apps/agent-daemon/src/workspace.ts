@@ -10,6 +10,7 @@ import { buildOwnerOnlyAclTurtle, messageSlug } from "@jeswr/agentic-legacy-brid
 import { parseRdf } from "@jeswr/fetch-rdf";
 import type { PodAuth } from "@jeswr/pod-auth";
 import { serialize } from "@jeswr/rdf-serialize";
+import { type ReadResult, type StorageClient, StorageError } from "@jeswr/storage-client";
 import {
   LiteralFrom,
   NamedNodeAs,
@@ -52,11 +53,13 @@ const safe = (value: string) => {
 /** All URLs are derived locally or scope checked before releasing the DPoP transport. */
 export class PodWorkspace {
   readonly io: PodAuth["fetch"];
+  readonly storage: StorageClient;
   readonly root: string;
   readonly ownerWebId: string;
   private readonly index: string;
   constructor(options: {
     io: PodAuth["fetch"];
+    storage: StorageClient;
     root: string;
     ownerWebId: string;
     privateTypeIndex: string;
@@ -64,6 +67,8 @@ export class PodWorkspace {
     const root = safe(options.root);
     if (!root.pathname.endsWith("/") || root.hash) throw new Error("Invalid storage root");
     const owner = safe(options.ownerWebId);
+    if (options.storage.root !== root.href) throw new Error("Invalid storage root");
+    this.storage = options.storage;
     this.root = root.href;
     this.ownerWebId = owner.href;
     this.index = options.privateTypeIndex;
@@ -97,20 +102,69 @@ export class PodWorkspace {
       return false;
     }
   }
-  private async put(url: string, body: string, condition?: { etag: string | null }) {
-    const headers: Record<string, string> = { "content-type": "text/turtle" };
-    if (condition)
-      headers[condition.etag === null ? "if-none-match" : "if-match"] = condition.etag ?? "*";
-    const response = await this.io(url, { method: "PUT", headers, body });
-    if (!response.ok)
-      throw new Error(response.status === 412 ? "Pod write conflict" : "Pod write failed");
+  private async put(url: string, body: string) {
+    this.assertScope(url);
+    try {
+      // These snapshots (ACL, triage, descriptor, heartbeat) were unconditional PUTs.
+      await this.storage.write(url, body, { contentType: "text/turtle", ifMatch: "*" });
+    } catch (error) {
+      throw this.failure(
+        error instanceof StorageError && error.status === 412
+          ? "Pod write conflict"
+          : "Pod write failed",
+        error,
+      );
+    }
   }
+  private failure(message: string, error: unknown): Error {
+    if (
+      error instanceof StorageError &&
+      error.status !== null &&
+      error.status >= 300 &&
+      error.status < 400
+    )
+      return new Error("Pod redirect refused");
+    return new Error(message);
+  }
+  private conflict(error: unknown): boolean {
+    return (
+      error instanceof StorageError &&
+      (error.code === "precondition-failed" || error.code === "conflict")
+    );
+  }
+  private async create(
+    url: string,
+    body: string | null,
+    kind: "resource" | "container" = "resource",
+  ) {
+    this.assertScope(url);
+    const target = new URL(url);
+    const path = target.pathname.replace(/\/$/, "");
+    const slash = path.lastIndexOf("/");
+    const parent = new URL(target.href);
+    parent.pathname = path.slice(0, slash + 1);
+    const result = await this.storage.create(parent.href, body, {
+      name: decodeURIComponent(path.slice(slash + 1)),
+      kind,
+      contentType: "text/turtle",
+    });
+    // Workspace RDF and type registrations require stable destinations.
+    if (result.url !== url) throw new Error("Pod assigned a different workspace URL");
+  }
+
   private async document(
     url: string,
   ): Promise<{ store: Store; etag: string | null; missing: boolean }> {
-    const response = await this.io(url, { headers: { accept: "text/turtle" } });
-    if (response.status === 404) return { store: new Store(), etag: null, missing: true };
-    if (!response.ok || !response.body) throw new Error("Pod read failed");
+    this.assertScope(url);
+    let response: ReadResult;
+    try {
+      response = await this.storage.read(url, { accept: "text/turtle" });
+    } catch (error) {
+      if (error instanceof StorageError && error.status === 404)
+        return { store: new Store(), etag: null, missing: true };
+      throw this.failure("Pod read failed", error);
+    }
+    if (!response.body) throw new Error("Pod read failed");
     const reader = response.body.getReader();
     const buffers: Uint8Array[] = [];
     let size = 0;
@@ -125,29 +179,30 @@ export class PodWorkspace {
     } finally {
       await reader.cancel();
     }
-    const type = response.headers.get("content-type")?.split(";")[0];
+    const type = response.contentType?.split(";")[0];
     if (!type || !["text/turtle", "application/trig", "application/n-triples"].includes(type))
       throw new Error("Unsupported pod document");
     const store = new Store(
       await parseRdf(Buffer.concat(buffers).toString("utf8"), type, { baseIRI: url }),
     );
-    return { store, etag: response.headers.get("etag"), missing: false };
+    return { store, etag: response.etag, missing: false };
   }
   private async container(url: string) {
-    const response = await this.io(url, { method: "HEAD" });
-    if (response.status === 404) {
-      const created = await this.io(url, {
-        method: "PUT",
-        headers: {
-          "content-type": "text/turtle",
-          "if-none-match": "*",
-          link: '<http://www.w3.org/ns/ldp#BasicContainer>; rel="type"',
-        },
-        body: "",
-      });
-      if (!created.ok && created.status !== 412) throw new Error("Container creation failed");
-    } else if (!response.ok) throw new Error("Container unavailable");
+    this.assertScope(url);
+    try {
+      await this.storage.head(url);
+      return;
+    } catch (error) {
+      if (!(error instanceof StorageError) || error.status !== 404)
+        throw this.failure("Container unavailable", error);
+    }
+    try {
+      await this.create(url, null, "container");
+    } catch (error) {
+      if (!this.conflict(error)) throw this.failure("Container creation failed", error);
+    }
   }
+
   async initialize(): Promise<void> {
     await this.container(this.url(""));
     // The first nonempty write locks the workspace, before any inbox or audit content.
@@ -184,15 +239,10 @@ export class PodWorkspace {
   async proposal(proposal: ActionProposal): Promise<void> {
     if (this.proposalLocation(proposal.id) !== proposal.id)
       throw new Error("Proposal outside proposals container");
-    const response = await this.io(proposal.id, {
-      method: "PUT",
-      headers: {
-        "content-type": "text/turtle",
-        "if-none-match": "*",
-      },
-      body: await recordToTurtle(proposal),
-    });
-    if (response.status === 412) {
+    try {
+      await this.create(proposal.id, await recordToTurtle(proposal));
+    } catch (error) {
+      if (!this.conflict(error)) throw this.failure("Proposal write failed", error);
       const current = await this.document(proposal.id);
       if (
         !current.missing &&
@@ -201,8 +251,8 @@ export class PodWorkspace {
         return;
       throw new Error("Proposal conflict");
     }
-    if (!response.ok) throw new Error("Proposal write failed");
   }
+
   async triage(source: string, triage: { primary: string; urgency: string; confidence: number }) {
     const store = new Store();
     const url = `${source.slice(0, -4)}.triage.ttl`;
@@ -257,16 +307,22 @@ export class PodWorkspace {
         node(current.store, this.index).iris(`${RDF}type`).add(`${SOLID}UnlistedDocument`);
         await this.put(`${this.index}.acl`, await this.resourceAcl(this.index));
       }
-      const response = await this.io(this.index, {
-        method: "PUT",
-        headers: {
-          "content-type": "text/turtle",
-          [current.missing ? "if-none-match" : "if-match"]: current.etag ?? "*",
-        },
-        body: await turtle(current.store),
-      });
-      if (response.status === 412) continue;
-      if (!response.ok) throw new Error("Type index registration failed");
+      try {
+        const body = await turtle(current.store);
+        if (current.missing) await this.create(this.index, body);
+        else
+          await this.storage.write(this.index, body, {
+            contentType: "text/turtle",
+            ifMatch: current.etag as string,
+          });
+      } catch (error) {
+        if (
+          error instanceof StorageError &&
+          (error.code === "precondition-failed" || (current.missing && error.code === "conflict"))
+        )
+          continue;
+        throw this.failure("Type index registration failed", error);
+      }
       return;
     }
     throw new Error("Type index conflict limit");

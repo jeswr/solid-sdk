@@ -9,7 +9,13 @@ description: Use when working on the host-neutral daemon composition, scheduler,
 A-012 implements the host-neutral daemon and CLI. Read agent DESIGN §2 / §6 / §9.1 and
 README.md before changing behavior. Root exports the runtime, pod workspace,
 local state, process lease, CLI composition and installer. `./testing` contains
-only ephemeral synthetic state and a conditional pod transport.
+only ephemeral synthetic state and an SDK memory StorageClient with a fetch adapter.
+
+Inject `storage: StorageClient` into `PodWorkspace`; `composeDaemon` shares the
+single root-entry `createPodClient({ fetch: auth.fetch, storage })` result with
+notifications. Workspace operations use that client. Retain the scoped `io` seam
+for the legacy importer. Use `createMemoryPod(root?).storage` for offline workspace
+tests; its fetch adapter, request records and resource snapshots share the SDK state.
 
 Use pod-auth/node client-credentials DPoP fetch for pod access. Keep the trusted
 host composition explicit. No credentials, provider implementations or account

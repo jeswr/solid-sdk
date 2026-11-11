@@ -14,6 +14,16 @@ an executor, verified authority stores, an audit writer and durable local state.
 `createDaemon` accepts the same already-composed capabilities for embedded hosts
 and offline tests. No provider, account or permission is inferred from pod content.
 
+`PodWorkspace` requires an injected `storage: StorageClient` alongside `io` and
+`root`. Composition shares the one `createPodClient` result with notifications.
+Workspace reads, writes and container creation use that client; `io` remains the
+scope-checked transport seam for the legacy inbound importer. Snapshot writes keep
+their unconditional semantics (`ifMatch: '*'`), while index edits use the observed
+ETag and proposals use conditional creation. Fixed workspace names must match the
+client's returned URLs. Read bounds and existing CLI error messages are retained.
+`createMemoryPod(root?)` now exposes SDK memory `storage` and a fetch adapter sharing
+that state, with request records and resource snapshots for offline assertions.
+
 The deployment supplies the owner-discovered private Type Index URL (already linked
 from the owner's preferences document). Registration preserves existing RDF and
 uses ETags, retries at most three conflicts, and refuses unreadable indexes or
