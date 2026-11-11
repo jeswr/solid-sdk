@@ -7,7 +7,6 @@ import { createSolidBackend } from '@jeswr/storage-client/solid';
 import { afterEach, expect, it, vi } from 'vitest';
 import { keyRequest } from '../src/cache-policy.js';
 import { MetadataStore } from '../src/metadata-store.js';
-import { cacheNameForWebId } from '../src/scope.js';
 import type { PageToWorkerMessage } from '../src/types.js';
 import { MockByteCache, turtleResponse } from './mocks.js';
 
@@ -104,9 +103,8 @@ it('routes notification/resync messages through credential-free storage and the 
       status: 200,
       aclStatus: 'ok',
     });
-    const cache = new MockByteCache();
-    cache.seed(keyRequest(url, 'accept=text/turtle'), turtleResponse(body, { etag: 'v1' }));
-    buckets.set(cacheNameForWebId(webId), cache);
+    const cache = meta.bytes;
+    await cache.put(keyRequest(url, 'accept=text/turtle'), turtleResponse(body, { etag: 'v1' }));
     return { meta, cache };
   }
   const a = await seed(alice, 'alice');
@@ -157,16 +155,16 @@ it('routes notification/resync messages through credential-free storage and the 
   self.fetch.mockRejectedValue(new Error('Offline'));
   const requestCount = self.fetch.mock.calls.length;
   await send({ type: 'notification', frame: { type: 'Delete', object: url } });
-  expect(a.cache.size).toBe(0);
+  expect((await a.meta.getAll()).length).toBe(0);
   expect(await a.meta.getByUrl(url)).toEqual([]);
-  expect(b.cache.size).toBe(1);
+  expect((await b.meta.getAll()).length).toBe(1);
   expect(self.fetch).toHaveBeenCalledTimes(requestCount);
   expect(createPodClient).not.toHaveBeenCalled();
 
   // A forged notification cannot evict another storage's cached entry.
   await send({ type: 'config', config: { webId: bob, storageRoot: 'https://other.example/' } });
   await send({ type: 'notification', frame: { type: 'Delete', object: url } });
-  expect(b.cache.size).toBe(1);
+  expect((await b.meta.getAll()).length).toBe(1);
 
   // Network reads retain discovery's LWS identity, which need not equal the root.
   const storageId = `${root}description`;

@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 /**
  * §7 WebID-scoped cache isolation + MANDATORY logout-purge.
  *
@@ -148,6 +149,10 @@ describe('logout-purge — drops BOTH stores for one WebID', () => {
     // Keep Alice's DB OPEN so the deletion is blocked by a live connection.
     const alice = await openFor(ALICE);
     await alice.put(record('https://alice.example/doc'));
+    const blocked = await new Promise<IDBDatabase>((resolve) => {
+      const request = indexedDB.open(dbNameForWebId(ALICE));
+      request.onsuccess = () => resolve(request.result);
+    });
     // Do NOT close it — this is exactly the "another tab/SW still holds the DB" case.
 
     const caches = new MockCacheStorage();
@@ -162,6 +167,7 @@ describe('logout-purge — drops BOTH stores for one WebID', () => {
     expect(result.errors).toHaveLength(0);
     // The DB is NOT yet gone (the blocker still holds it open).
     expect(await dbExists(dbNameForWebId(ALICE))).toBe(true);
+    blocked.close();
   });
 
   it('purges the anonymous scope when no WebID is given', async () => {

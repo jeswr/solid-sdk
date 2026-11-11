@@ -28,7 +28,7 @@ const sectorFiles = walk(join(ROOT, "sectors"));
 const mainFiles = ["fedapp.ttl", "fedreg.ttl", "task.ttl"]
   .map((file) => join(ROOT, file))
   .concat(sectorFiles.filter((file) => basename(file) === `${basename(dirname(file))}.ttl`));
-assert.equal(mainFiles.length, 17);
+assert.equal(mainFiles.length, 18);
 const currentTerms = new Map();
 for (const file of mainFiles) {
   const store = parse(file);
@@ -42,9 +42,9 @@ for (const file of mainFiles) {
     currentTerms.set(q.subject.value, types);
   }
 }
-assert.equal(currentTerms.size, 774, "pre-rebase term inventory must be preserved");
+assert.equal(currentTerms.size, 784, "774 rebased terms plus 10 new environment terms");
 const legacy = parse(join(ROOT, legacyFile));
-assert.equal(legacy.size, currentTerms.size, "exactly one mapping per pre-rebase term");
+assert.equal(legacy.size, 774, "new sectors must not add invented pre-rebase mappings");
 const seen = new Set();
 const counts = { equivalentClass: 0, equivalentProperty: 0, sameAs: 0 };
 for (const q of legacy) {
@@ -101,16 +101,20 @@ for (const file of [...rootFiles, ...sectorFiles.filter((file) => file.endsWith(
   for (const ontology of store.getSubjects(`${RDF}type`, `${OWL}Ontology`, null)) {
     if (!ontology.value.startsWith(newRoot)) continue; // preserve third-party ontologies
     ontologyCount += 1;
+    // Environment was authored after the rebase and has no legacy predecessor.
+    const environment = ontology.value === `${newRoot}sectors/environment`;
+    const version = environment ? "0.1.0" : "2.0.0";
     assert.deepEqual(
       store.getObjects(ontology, `${OWL}versionInfo`, null).map((term) => term.value),
-      ["2.0.0"],
+      [version],
       file,
     );
     assert.deepEqual(
       store.getObjects(ontology, `${OWL}versionIRI`, null).map((term) => term.value),
-      [`${ontology.value}/2.0.0`],
+      [`${ontology.value}/${version}`],
       file,
     );
+    if (environment) continue;
     assert.ok(
       store
         .getObjects(ontology, `${DCT}description`, null)
@@ -119,7 +123,7 @@ for (const file of [...rootFiles, ...sectorFiles.filter((file) => file.endsWith(
     );
   }
 }
-assert.equal(ontologyCount, 34, "main ontologies, owned sidecars and curated modules versioned");
+assert.equal(ontologyCount, 35, "rebased ontologies and the new environment sector versioned");
 for (const file of walk(join(ROOT, "docs")).filter((path) => basename(path) !== legacyFile)) {
   assert.ok(
     !readFileSync(file, "utf8").includes(oldRoot),
@@ -139,7 +143,7 @@ assert.equal(
   "fedcon version unchanged",
 );
 console.log(
-  "✓ All 34 rebased ontologies are 2.0.0; fedcon identity is preserved; docs and build exclude legacy IRIs.",
+  "✓ All 34 rebased ontologies are 2.0.0; environment starts at 0.1.0; fedcon identity is preserved; docs and build exclude legacy IRIs.",
 );
 
 // Verify every catalog target exists and each new namespace alias identifies the
@@ -179,5 +183,5 @@ for (const file of sectorFiles.filter((path) => basename(path) === "catalog-v001
   visit(main);
   catalogCount += 1;
 }
-assert.equal(catalogCount, 14);
-console.log("✓ All 14 catalog import closures resolve offline and exclude the legacy sidecar.");
+assert.equal(catalogCount, 15);
+console.log("✓ All 15 catalog import closures resolve offline and exclude the legacy sidecar.");
