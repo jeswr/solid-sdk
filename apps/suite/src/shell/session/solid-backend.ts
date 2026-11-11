@@ -6,6 +6,7 @@ import {
   AmbiguousIssuerError,
   createPodAuth,
   type GrantOwner,
+  type GrantRetirementResult,
   type Identity,
   IssuerNotAuthorizedError,
   type PodAuth,
@@ -27,6 +28,7 @@ import {
   SignInError,
   type SignInHint,
   type SignInOptions,
+  type SignOutResult,
   type SuiteAccount,
 } from "./types";
 
@@ -82,6 +84,7 @@ export class SolidBackend implements SessionBackend {
   #account: SuiteAccount | null = null;
   #identity: Identity | null = null;
   #expired = false;
+  #signedOut = false;
   #version = 0;
   #sessionVersion = 0;
   #attempt: AbortController | undefined;
@@ -155,7 +158,7 @@ export class SolidBackend implements SessionBackend {
   }
 
   #expire(): void {
-    if (this.#expired) return;
+    if (this.#expired || this.#signedOut) return;
     this.#expired = true;
     this.#restoring = undefined;
     ++this.#sessionVersion;
@@ -171,7 +174,7 @@ export class SolidBackend implements SessionBackend {
   async #retire(
     identity: GrantOwner,
     operation: "sign-out" | "reauthenticate" | "reject-identity",
-  ): Promise<boolean> {
+  ): Promise<GrantRetirementResult> {
     const result = await this.#core().retireIfOwnedBy(identity);
     if (!result.retired) {
       const diagnose =
@@ -180,7 +183,7 @@ export class SolidBackend implements SessionBackend {
           : console.info;
       diagnose("Solid session retirement skipped", { operation, reason: result.reason });
     }
-    return result.retired;
+    return result;
   }
 
   async #rejectIdentity(identity: Identity, started: number, session: number): Promise<never> {
@@ -190,8 +193,8 @@ export class SolidBackend implements SessionBackend {
       try {
         // pod-auth compares the exact grant and cleans up under its namespace lock, including
         // across tabs. The rejected snapshot cannot retire a newer sign-in for the same WebID.
-        const retired = await this.#retire(identity, "reject-identity");
-        if (retired && currentAttempt()) {
+        const result = await this.#retire(identity, "reject-identity");
+        if (result.retired && currentAttempt()) {
           this.#account = null;
           this.#identity = null;
           this.#expired = false;
@@ -251,7 +254,7 @@ export class SolidBackend implements SessionBackend {
 
   restore(): Promise<SuiteAccount | null> {
     if (!this.#options.createAuth && typeof window === "undefined") return Promise.resolve(null);
-    if (this.#expired) return Promise.resolve(null);
+    if (this.#expired || this.#signedOut) return Promise.resolve(null);
     if (this.#restoring) return this.#restoring;
     const restoring = (async () => {
       const started = this.#version;
@@ -330,8 +333,24 @@ export class SolidBackend implements SessionBackend {
         // Retain the accepted grant snapshot even after expiry. Reading current account metadata
         // cannot distinguish a fresh authorization for that same account in another tab.
         const identity = this.#identity ?? { webId: null, issuer: "" };
-        if (!(await this.#retire(identity, "reauthenticate")))
-          throw new SignInError("account-active");
+        const result = await this.#retire(identity, "reauthenticate");
+        attempt.signal.throwIfAborted();
+        if (started !== this.#version) throw new SignInError("cancelled");
+        if (!result.retired) {
+          if (result.reason === "owner-changed" || result.reason === "grant-changed")
+            throw new SignInError("account-active");
+          // No owned grant can be retired. A legacy pointer for another account still blocks
+          // switching, but an empty pointer or the expired account itself permits login.
+          const remembered = await core.remembered();
+          attempt.signal.throwIfAborted();
+          if (started !== this.#version) throw new SignInError("cancelled");
+          if (
+            remembered.some(
+              (account) => account.webId !== identity.webId || account.issuer !== identity.issuer,
+            )
+          )
+            throw new SignInError("account-active");
+        }
         this.#account = null;
         this.#identity = null;
         this.#expired = false;
@@ -354,6 +373,7 @@ export class SolidBackend implements SessionBackend {
       this.#account = account;
       this.#identity = identity;
       this.#expired = false;
+      this.#signedOut = false;
       ++this.#sessionVersion;
       this.#restoring = Promise.resolve(account);
       return account;
@@ -368,7 +388,7 @@ export class SolidBackend implements SessionBackend {
     }
   }
 
-  async signOut(account: SuiteAccount): Promise<void> {
+  async signOut(account: SuiteAccount): Promise<SignOutResult> {
     if (account.kind !== "solid" || account.id !== accountId(account.webId)) return;
     const identity = this.#identity;
     if (
@@ -376,20 +396,25 @@ export class SolidBackend implements SessionBackend {
       (identity.webId !== account.webId || (account.issuer && identity.issuer !== account.issuer))
     )
       return;
-    const retired = await this.#retire(
-      identity ?? { webId: account.webId, issuer: account.issuer ?? "" },
-      "sign-out",
-    );
-    // A remembered shell row alone has no grant ownership. A skipped retirement preserves
-    // local state too, and a late success cannot clear an identity installed in the meantime.
-    if (!retired || this.#identity !== identity) return;
-    ++this.#version;
-    ++this.#sessionVersion;
-    this.#attempt?.abort();
-    this.#account = null;
-    this.#identity = null;
-    this.#expired = false;
-    this.#restoring = undefined;
+    try {
+      const result = await this.#retire(
+        identity ?? { webId: account.webId, issuer: account.issuer ?? "" },
+        "sign-out",
+      );
+      if (!result.retired)
+        return { notice: "Signed out here. A session in another tab may still be active." };
+    } finally {
+      // The shell row is already removed. Detach this tab even when another tab owns the
+      // credentials, and fence all pending work before it can restore the removed account.
+      ++this.#version;
+      ++this.#sessionVersion;
+      this.#attempt?.abort();
+      this.#account = null;
+      this.#identity = null;
+      this.#expired = false;
+      this.#signedOut = true;
+      this.#restoring = undefined;
+    }
   }
 
   fetchFor(account: SuiteAccount): typeof fetch {
@@ -405,11 +430,11 @@ export class SolidBackend implements SessionBackend {
       if (!usable()) throw new Error("Sign in to continue");
       const core = this.#core();
       const identity = await core.identity();
+      if (!usable()) throw new Error("Sign in to continue");
       if (!identity || identity.webId !== account.webId || identity.issuer !== account.issuer) {
         this.#expire();
         throw new Error("Sign in to continue");
       }
-      if (!usable()) throw new Error("Sign in to continue");
       const response = await core.fetch(input, init);
       if (!usable()) throw new Error("Sign in to continue");
       return response;

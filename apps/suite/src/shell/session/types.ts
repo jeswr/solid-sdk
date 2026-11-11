@@ -14,11 +14,17 @@ export type SignInHint = { issuer: string } | { webId: string };
 export interface SignInOptions {
   signal?: AbortSignal;
 }
+/** Local sign-out completed, but a shared session may remain in another tab. */
+export interface SignOutNotice {
+  notice: string;
+}
+// biome-ignore lint/suspicious/noConfusingVoidType: Existing backends return Promise<void> when no notice is needed.
+export type SignOutResult = void | SignOutNotice;
 export interface SessionBackend {
   kind: SuiteAccount["kind"];
   restore(): Promise<SuiteAccount | null>;
   signIn(hint: SignInHint, options?: SignInOptions): Promise<SuiteAccount>;
-  signOut(account: SuiteAccount): Promise<void>;
+  signOut(account: SuiteAccount): Promise<SignOutResult>;
   fetchFor(account: SuiteAccount): typeof fetch;
   onExpired(cb: () => void): () => void;
 }

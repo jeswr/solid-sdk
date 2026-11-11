@@ -5,7 +5,18 @@ import type { SessionBackend, SuiteAccount } from "../src/shell/session/types";
 import { OfflineProvider } from "../src/shell/sync/offline-provider";
 import { act, h, mount } from "./drive-ui-dom";
 
+const notices = vi.hoisted(() => ({ toast: vi.fn() }));
+vi.mock("@jeswr/suite-ui", async (original) => ({
+  ...(await original<typeof import("@jeswr/suite-ui")>()),
+  toast: notices.toast,
+}));
+
 vi.mock("next/navigation", () => ({ usePathname: () => "/search" }));
+// Supplied backends own these session tests; demo seeding loads unrelated application services.
+vi.mock("../src/shell/session/demo-backend", () => ({
+  DemoBackend: vi.fn(),
+  demoAccount: { id: "demo" },
+}));
 vi.mock("../src/shell/settings/preferences", () => ({
   useAllPreferences: () => ({
     preferences: { offline: true, offlineHintSeen: true },
@@ -48,6 +59,7 @@ function backend(account: SuiteAccount): SessionBackend {
   };
 }
 beforeEach(() => {
+  notices.toast.mockClear();
   localStorage.clear();
   localStorage.setItem(
     "suite.accounts.v1",
@@ -98,6 +110,21 @@ it("clears every recent-items key on sign-out-all while preserving unsent change
   expect(accounts.accounts).toEqual([]);
   expect(Object.keys(localStorage).filter((key) => key.startsWith("suite.recent.v1."))).toEqual([]);
   expect(localStorage.getItem("suite.outbox.v1.one")).toBe(outbox);
+});
+
+it.each([
+  "signOut",
+  "signOutAll",
+] as const)("shows a skipped-retirement notice after %s removes the account", async (operation) => {
+  const first = backend(one);
+  const notice = "Signed out here. A session in another tab may still be active.";
+  vi.spyOn(first, "signOut").mockResolvedValue({ notice });
+  await mount(h(AccountsProvider, { backends: [first, backend(two)], children: h(Probe) }));
+  await act(async () => {
+    await accounts[operation]();
+  });
+  expect(accounts.accounts.some((account) => account.id === one.id)).toBe(false);
+  expect(notices.toast).toHaveBeenCalledExactlyOnceWith(notice);
 });
 
 it.each(
