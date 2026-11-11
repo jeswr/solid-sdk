@@ -10,7 +10,8 @@ const fixtures = vi.hoisted(() => ({
   loopback: false,
   fetch: (async () => new Response()) as typeof fetch,
 }));
-vi.mock("./auth/SessionProvider", () => ({
+vi.mock("@jeswr/app-session/react", async (original) => ({
+  ...(await original<typeof import("@jeswr/app-session/react")>()),
   useSession: () => ({
     webId: fixtures.session.webId,
     session: fixtures.session,
@@ -18,7 +19,7 @@ vi.mock("./auth/SessionProvider", () => ({
     ready: true,
   }),
 }));
-vi.mock("./auth/pod-auth", () => ({ allowInsecureLoopback: () => fixtures.loopback }));
+vi.mock("@jeswr/app-session", () => ({ allowInsecureLoopback: () => fixtures.loopback }));
 vi.mock("@jeswr/app-shell", () => ({
   AccountMenu: () => null,
   FeedbackButton: () => null,
