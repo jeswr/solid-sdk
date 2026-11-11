@@ -210,8 +210,8 @@ it("DOCX round trips generated documents covering every editor node and mark typ
         visitedNodes.add("doc");
         for (const embedded of [true, false]) {
           const imported = await roundTrip(original.toJSON(), embedded);
-          // DOCX carries pending text as ordinary text; only the legacy embedded
-          // document payload preserves suggestion metadata.
+          // DOCX carries pending text as ordinary text. The embedded payload drops
+          // suggestion marks too: an imported file can't vouch for their authors.
           const exported = (node: JSONContent): JSONContent => ({
             ...node,
             ...(node.marks
@@ -223,10 +223,12 @@ it("DOCX round trips generated documents covering every editor node and mark typ
               : {}),
             ...(node.content ? { content: node.content.map(exported) } : {}),
           });
-          const expected = embedded ? original : schema.nodeFromJSON(exported(original.toJSON()));
+          const expected = schema.nodeFromJSON(exported(original.toJSON()));
           expect(imported.json).toEqual(expected.toJSON());
+          // Dropping pending suggestions from an embedded payload is reported too.
+          const suggested = JSON.stringify(original.toJSON()).includes('"suggestion');
           expect(imported.skipped).toEqual(
-            embedded ? [] : [{ label: DOCX_FORMATTING_WARNING, count: 1 }],
+            embedded && !suggested ? [] : [{ label: DOCX_FORMATTING_WARNING, count: 1 }],
           );
         }
       },

@@ -269,6 +269,20 @@ it("announces the current suggestion and supports keyboard review with Escape re
   await waitFor(() => expect(document.activeElement).toBe(button("Accept")));
   fireEvent.keyDown(button("Accept"), { key: "Escape" });
   await waitFor(() => expect(document.activeElement).toBe(editor.view.dom));
+  // Windows reports AltGr as Ctrl+Alt: AltGr+Shift+A types a character, never a review.
+  const altGr = new KeyboardEvent("keydown", {
+    key: "Ą",
+    code: "KeyA",
+    ctrlKey: true,
+    altKey: true,
+    shiftKey: true,
+    bubbles: true,
+    cancelable: true,
+  });
+  Object.defineProperty(altGr, "getModifierState", { value: (key: string) => key === "AltGraph" });
+  editor.view.dom.dispatchEvent(altGr);
+  expect(altGr.defaultPrevented).toBe(false);
+  expect(document.activeElement).toBe(editor.view.dom);
   fireEvent.keyDown(editor.view.dom, {
     key: "A",
     code: "KeyA",

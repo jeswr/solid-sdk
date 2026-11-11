@@ -49,7 +49,7 @@ import {
   validateImage,
   wordCount,
 } from "../lib/editor/logic";
-import { suggestionKey } from "../lib/editor/suggestions";
+import { suggestionAction, suggestionKey } from "../lib/editor/suggestions";
 import { versionDisabledReason } from "../lib/editor/versions";
 import { DocsError, DocsSidebar, DocumentSkeleton } from "./common";
 import { DeleteDialog } from "./delete-dialog";
@@ -603,7 +603,8 @@ function HydratedEditor({ runtime }: { runtime: DocumentPersistence }) {
                 progress,
               );
               // setContent is one Yjs transaction and remains undoable through Collaboration.
-              editor.commands.setContent(imported.json);
+              // Tagged so suggesting mode neither blocks nor rewrites a whole-document import.
+              editor.chain().setMeta(suggestionAction, true).setContent(imported.json).run();
               return { skipped: imported.skipped, done: () => focusDocument(editor) };
             }}
           />

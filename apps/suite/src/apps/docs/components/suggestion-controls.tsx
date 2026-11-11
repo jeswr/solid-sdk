@@ -85,6 +85,8 @@ export function SuggestionPopover({ editor }: { editor: Editor }) {
         event.altKey &&
         event.shiftKey &&
         event.code === "KeyA" &&
+        // Windows reports AltGr as Ctrl+Alt; AltGr+Shift+A types a character (e.g. Ą).
+        !event.getModifierState("AltGraph") &&
         suggestionAt(editor.state) &&
         editor.isEditable
       ) {

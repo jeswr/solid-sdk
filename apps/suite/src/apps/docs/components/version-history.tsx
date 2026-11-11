@@ -15,6 +15,7 @@ import { baseExtensions } from "../editor/extensions";
 import type { DocumentPersistence } from "../editor/persistence";
 import { podScopedFetch } from "../editor/private-image";
 import { useDialogFocus } from "../hooks/use-dialog-focus";
+import { suggestionAction } from "../lib/editor/suggestions";
 import { versionDisabledReason } from "../lib/editor/versions";
 import { docContainerUrls } from "../lib/model/layout";
 import { type DocumentVersion, DocumentVersionStore, versionError } from "../lib/model/versions";
@@ -242,7 +243,11 @@ export function VersionHistory({
       // (an untagged outer transaction would retag the edit and leave it out of
       // the undo stack). stopCapturing keeps the restore its own undo step.
       yUndoPluginKey.getState(editor.state)?.undoManager.stopCapturing();
-      runtime.doc.transact(() => editor.commands.setContent(content), ySyncPluginKey);
+      // Tagged so suggesting mode neither blocks nor rewrites a restore.
+      runtime.doc.transact(
+        () => editor.chain().setMeta(suggestionAction, true).setContent(content).run(),
+        ySyncPluginKey,
+      );
       await runtime.flush();
       setConfirm(false);
       close();
