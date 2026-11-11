@@ -321,3 +321,39 @@ it("opens a note with the newest orphan draft and saves the other orphan through
   (store.save as ReturnType<typeof vi.fn>).mockResolvedValue({ ...original, ...draft.draft });
   await ui.unmount();
 });
+
+it("stops autosave, reconnect, cleanup and reopen saves after 403 while keeping recovery", async () => {
+  const { ResourceWriteError } = await import("../src/apps/docs/lib/model/errors");
+  const pending = createPendingDrafts({ initial: [], persist: vi.fn() });
+  const save = vi.fn().mockRejectedValue(new ResourceWriteError(original.url, 403));
+  const ui = await setup(save, undefined, pending);
+  await act(() => ui.draft.change({ title: "Recover me" }));
+  await act(() => ui.draft.flush().catch(() => {}));
+  expect(ui.draft.viewOnly).toBe(true);
+  expect(pending.get(original.url)?.status).toBe("read-only");
+  await act(() => ui.draft.change({ title: "Ignored" }));
+  await act(() => pending.retry());
+  await act(() => ui.draft.flush().catch(() => {}));
+  await ui.unmount();
+  expect(save).toHaveBeenCalledTimes(1);
+  expect(pending.get(original.url)?.draft.title).toBe("Recover me");
+  const reopened = await setup(save, undefined, pending);
+  expect(reopened.draft.viewOnly).toBe(true);
+  expect(reopened.draft.draft.title).toBe("Recover me");
+  await reopened.unmount();
+  expect(save).toHaveBeenCalledTimes(1);
+});
+
+it("locks pending drafts on WAC write denial, then resumes only on an explicit restored Write hint", async () => {
+  const pending = createPendingDrafts({ initial: [], persist: vi.fn() });
+  const ui = await setup(undefined, undefined, pending);
+  await act(() => ui.draft.change({ title: "Keep" }));
+  await ui.refreshNote({ ...original, readOnly: true });
+  expect(ui.draft.viewOnly).toBe(true);
+  await act(() => pending.retry());
+  expect(ui.save).not.toHaveBeenCalled();
+  await ui.refreshNote({ ...original, readOnly: false });
+  expect(ui.draft.viewOnly).toBe(false);
+  await act(() => pending.retry());
+  expect(ui.save).toHaveBeenCalledOnce();
+});

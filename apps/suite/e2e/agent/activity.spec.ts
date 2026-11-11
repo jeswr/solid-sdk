@@ -1,7 +1,12 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 import { expect, test } from "@playwright/test";
-import { auditFromTurtle, auditToTurtle } from "../../src/apps/agent/lib/audit";
+import {
+  auditFromTurtle,
+  auditHeadToTurtle,
+  auditToTurtle,
+  sealAudit,
+} from "../../src/apps/agent/lib/audit";
 import { daemonDouble } from "./daemon-double";
 import { agentScreenshot, openAgent } from "./helpers";
 
@@ -131,4 +136,34 @@ test("5000 records scroll for two seconds without long tasks", async ({ page }, 
   await expect(timeline.locator("li")).toHaveCount(15);
   await expect(timeline.locator('.agent-timeline-row[data-seq="1"]')).toBeVisible();
   await agentScreenshot(page, info, "activity-5000");
+});
+
+test("shared verifier displays and checks current tool-call records", async ({ page }) => {
+  await openAgent(page, "activity");
+  await expect(page.locator('.agent-timeline-row[data-seq="12"]')).toBeVisible();
+  const daemon = daemonDouble(page);
+  const latestUrl = `${daemon.client.paths.audit}12.ttl`;
+  const latestDoc = await daemon.client.graph(latestUrl);
+  const latest = await auditFromTurtle(latestDoc.text, latestUrl);
+  const entry = sealAudit(13, new Date().toISOString(), latest.hash, {
+    type: "tool-call",
+    id: "urn:fixture:tool-call",
+    agent: "urn:fixture:agent",
+    owner: "urn:fixture:owner",
+    taskId: "browser-check",
+    conversation: "urn:fixture:conversation",
+    modelCall: "urn:fixture:model-call",
+    tool: "pod_read",
+  });
+  const url = `${daemon.client.paths.audit}13.ttl`;
+  await daemon.client.create(url, await auditToTurtle(url, entry));
+  const head = await daemon.client.graph(daemon.client.paths.auditChain);
+  await daemon.client.replace(
+    daemon.client.paths.auditChain,
+    await auditHeadToTurtle(daemon.client.paths.auditChain, entry),
+    head.etag as string,
+  );
+  await expect(page.locator('.agent-timeline-row[data-seq="13"]')).toContainText("Tool used");
+  await page.getByRole("button", { name: "Check records", exact: true }).click();
+  await expect(page.getByRole("status").filter({ hasText: "Records check out" })).toBeVisible();
 });
