@@ -150,6 +150,8 @@ describe("stdio executable", () => {
             conversationId: conversation.conversationId,
             title: conversation.title,
             updatedAt: conversation.messages[0]?.createdAt,
+            channel: "mcp",
+            generatedAtTime: expect.any(String),
           },
         ],
       });

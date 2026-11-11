@@ -16,8 +16,16 @@ Use `runExportImport` for explicit `chatgpt-export <zip|json>` and
 `claude-export <json>` commands. It returns 0/1 with no secret-bearing errors,
 outside the hook watchdog. Reuse MCP config/auth, ChatWriter and private sequence
 assignments; retries are create-only and no raw export snapshots are queued.
-Redact titles and text. Bound input bytes, conversation/message/part counts and
-ZIP decompression independently; never extract archive paths to disk. Refuse
+Redact titles and text.
+Scope source IDs with the normalized account before redacting the label; keep
+absent-account derivation byte-identical. Hooks pass channel `hook`, export parsers
+pass `export`. Accept `account` via library options or the shared MCP config /
+`SOLID_MCP_ACCOUNT`; validate with normalizeChatAccount and use redactChatAccount
+before queueing. Bind queued entries, scans and checkpoints to an opaque account
+scope as well as pod root/WebID. Never relabel old snapshots on account changes;
+legacy unlabelled snapshots remain unlabelled hook captures.
+Bound input bytes, conversation/message/part counts and ZIP decompression
+independently; never extract archive paths to disk. Refuse
 unsafe paths, links, encryption, ZIP64 and duplicate root conversations.json.
 
 Use `runCapture` for the hook boundary; it is silent, always resolves to zero,

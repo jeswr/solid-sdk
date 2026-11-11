@@ -5,6 +5,8 @@ import {
   CHAT_ROLES,
   type ChatPodPort,
   ChatWriter,
+  chatConversationId,
+  normalizeChatAccount,
   renderTranscript,
 } from "@jeswr/solid-chat-interop";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -136,6 +138,17 @@ export function registerChatTools(
   });
   const provider = z.enum(CHAT_PROVIDERS);
   const id = z.string().regex(/^[a-zA-Z0-9_-]{1,200}$/);
+  const account = z
+    .string()
+    .refine((value) => {
+      try {
+        normalizeChatAccount(value);
+        return true;
+      } catch {
+        return false;
+      }
+    }, "Invalid chat account label")
+    .optional();
   server.registerTool(
     "chat_save",
     {
@@ -145,6 +158,7 @@ export function registerChatTools(
         provider,
         conversationId: id,
         title: z.string(),
+        account,
         messages: z.array(
           z.object({
             id: id.optional(),
@@ -167,7 +181,14 @@ export function registerChatTools(
           throw new Error(
             "write disabled: server is read-only (set readOnly:false to enable writes)",
           );
-        const saved = await writer().save(conversation);
+        const saved = await writer().save({
+          ...conversation,
+          conversationId: await chatConversationId(
+            conversation.conversationId,
+            conversation.account,
+          ),
+          channel: "mcp",
+        });
         return await result((await new PodOutput(pod).resource(saved)) ?? {});
       } catch (e) {
         return error(e);
@@ -181,6 +202,7 @@ export function registerChatTools(
         "List saved conversations in URL order. since is exclusive (latest message time); cursor is the previous nextCursor.",
       inputSchema: {
         provider: provider.optional(),
+        account,
         since: z.iso.datetime({ offset: true }).optional(),
         cursor: z.string().optional(),
         limit: z.number().int().min(1).max(100).optional(),
@@ -236,7 +258,14 @@ export function registerChatTools(
         const conversation = await writer().get(provider, conversationId);
         const permitted = await new PodOutput(pod).resource(conversation);
         return await result(
-          permitted ? { url: permitted.url, markdown: renderTranscript(permitted) } : {},
+          permitted
+            ? {
+                url: permitted.url,
+                ...(permitted.account === undefined ? {} : { account: permitted.account }),
+                ...(permitted.channel === undefined ? {} : { channel: permitted.channel }),
+                markdown: renderTranscript(permitted),
+              }
+            : {},
         );
       } catch (e) {
         return error(e);
