@@ -24,17 +24,25 @@ export function trustsExchangeOrigin(trust: LwsTrust, endpoint: URL): boolean {
 /**
  * The pod-auth exchange rule (#226) for a broker session. The resource must be inside a stored
  * root and the authorization server on a trusted origin. A container realm (or the resource
- * itself) must be inside a stored root; a storage-description realm must share the resource's
- * origin, where the engine then confirms the description lists a root containing the resource.
+ * itself) must be inside a stored root. Any other realm is a storage description: it must share
+ * the resource's origin and advertise a container root that lies inside a stored root and
+ * contains the resource. A description can only name an audience inside the existing grant.
  */
-export function trustsLwsBinding(
+export async function trustsLwsBinding(
   trust: LwsTrust,
   binding: { authorizationServer: URL; realm: URL; resource: URL },
-): boolean {
+  describedRoots: (storage: string) => Promise<readonly string[]>,
+): Promise<boolean> {
   const { authorizationServer, realm, resource } = binding;
   if (!inRoots(trust.roots, resource) || !trustsExchangeOrigin(trust, authorizationServer))
     return false;
-  return realm.href.endsWith("/") || realm.href === resource.href
-    ? inRoots(trust.roots, realm)
-    : realm.origin === resource.origin;
+  if (realm.href.endsWith("/") || realm.href === resource.href) return inRoots(trust.roots, realm);
+  if (realm.origin !== resource.origin) return false;
+  return (await describedRoots(realm.href)).some(
+    (root) =>
+      root.endsWith("/") &&
+      URL.canParse(root) &&
+      inRoots(trust.roots, new URL(root)) &&
+      isWithinPodScope(root, resource.href),
+  );
 }

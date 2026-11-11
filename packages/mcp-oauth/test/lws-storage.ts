@@ -21,6 +21,10 @@ export function lwsStorage(op = podIssuer()) {
     wrongResource: false,
     authorizationServers: [issuer],
     tokenEndpoint: `${issuer}exchange`,
+    /** The root the storage description advertises. */
+    storageRoot: POD_ROOT,
+    /** Answer with a pre-RFC 9728 `as_uri`/`realm` challenge for this realm instead. */
+    legacyRealm: undefined as string | undefined,
     onDiscovery: undefined as (() => Promise<void>) | undefined,
     onExchange: undefined as (() => Promise<void>) | undefined,
   };
@@ -49,7 +53,7 @@ export function lwsStorage(op = podIssuer()) {
         "@context": ["https://www.w3.org/ns/cid/v1", "https://www.w3.org/ns/lws/v1"],
         id: LWS_STORAGE,
         type: "Storage",
-        service: [{ type: "StorageRoot", serviceEndpoint: POD_ROOT }],
+        service: [{ type: "StorageRoot", serviceEndpoint: controls.storageRoot }],
       });
     if (request.url === `${issuer}.well-known/lws-configuration`) {
       await controls.onDiscovery?.();
@@ -103,7 +107,9 @@ export function lwsStorage(op = podIssuer()) {
     if (!authorization.startsWith("Bearer fixture-lws-") || rejected.has(authorization)) {
       headers.set(
         "www-authenticate",
-        `Bearer resource_metadata="${metadataPrefix}${url.pathname}${url.search}"`,
+        controls.legacyRealm === undefined
+          ? `Bearer resource_metadata="${metadataPrefix}${url.pathname}${url.search}"`
+          : `Bearer as_uri="${issuer}", realm="${controls.legacyRealm}"`,
       );
       return new Response(null, { status: 401, headers });
     }

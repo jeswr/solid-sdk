@@ -6,6 +6,7 @@ import { fixture, RESOURCE } from "../test/fixtures.js";
 import {
   FOREIGN_AUTHORIZATION_SERVER,
   LWS_AUTHORIZATION_SERVER,
+  LWS_STORAGE,
   lwsStorage,
 } from "../test/lws-storage.js";
 import {
@@ -162,6 +163,52 @@ describe("Solid-OIDC pod broker", () => {
     expect(
       lws.requests.some((request) => request.url.startsWith(FOREIGN_AUTHORIZATION_SERVER)),
     ).toBe(false);
+  });
+
+  it.each([
+    ["a storage description listing a stored root", () => LWS_STORAGE, true],
+    // #405 gate: a same-origin non-container realm the WebID's roots don't contain.
+    [
+      "a same-origin non-container realm outside the stored roots",
+      () => POD_ROOT.slice(0, -1),
+      false,
+    ],
+  ])("answers a legacy challenge for %s only inside the grant", async (_, realm, trusted) => {
+    let lws!: ReturnType<typeof lwsStorage>;
+    const f = brokerFixture(
+      (op) => {
+        lws = lwsStorage(op);
+        return lws.fetch;
+      },
+      { lwsAuthorizationServers: [LWS_AUTHORIZATION_SERVER] },
+    );
+    lws.controls.legacyRealm = realm();
+    const { session } = await f.login();
+    const fetcher = await f.provider.fetchFor(session.id);
+    if (trusted)
+      expect(await (await fetcher(`${POD_ROOT}note.txt`)).text()).toBe("private LWS content");
+    else await expect(fetcher(`${POD_ROOT}note.txt`)).rejects.toThrow("are not trusted");
+    expect(lws.exchanges).toHaveLength(trusted ? 1 : 0);
+  });
+
+  it("refuses a legacy storage-description realm whose root is broader than the stored roots", async () => {
+    let lws!: ReturnType<typeof lwsStorage>;
+    const f = brokerFixture(
+      (op) => {
+        lws = lwsStorage(op);
+        return lws.fetch;
+      },
+      { lwsAuthorizationServers: [LWS_AUTHORIZATION_SERVER] },
+    );
+    lws.controls.legacyRealm = LWS_STORAGE;
+    lws.controls.storageRoot = new URL("/", POD_ROOT).href;
+    const { session } = await f.login();
+    const fetcher = await f.provider.fetchFor(session.id);
+    await expect(fetcher(`${POD_ROOT}note.txt`)).rejects.toThrow("are not trusted");
+    expect(lws.exchanges).toHaveLength(0);
+    expect(lws.requests.some((request) => request.url.startsWith(LWS_AUTHORIZATION_SERVER))).toBe(
+      false,
+    );
   });
 
   it("validates configured LWS authorization servers", () => {

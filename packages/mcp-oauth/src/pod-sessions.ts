@@ -9,6 +9,7 @@ import {
   importServerDpopKey,
   type ServerAuthorizationState,
   type ServerOidcClient,
+  storageDescriptionRoots,
 } from "@jeswr/pod-auth/node";
 import { NamedNodeAs, NamedNodeFrom, SetFrom, TermWrapper } from "@rdfjs/wrapper";
 import { DataFactory } from "n3";
@@ -31,6 +32,8 @@ const OIDC_ISSUER = "http://www.w3.org/ns/solid/terms#oidcIssuer";
 const STORAGE = "http://www.w3.org/ns/pim/space#storage";
 const MAX_CACHED_CLIENTS = 256;
 const CLIENT_CACHE_TTL = 300;
+/** Reading an LWS storage description to confirm a realm inside the session's grant. */
+const DESCRIPTION_TIMEOUT_MS = 8_000;
 const encode = (value: unknown) => Buffer.from(JSON.stringify(value));
 // Only call after pod-auth has successfully validated the ID token.
 const verifiedIdTokenClaims = (token: string) =>
@@ -167,7 +170,13 @@ export function createPodSessionProvider(options: PodSessionProviderOptions): Po
         : {
             lws: true,
             trustAuthorizationServer: async (binding) =>
-              trustsLwsBinding(await lwsTrust(sessionId), binding),
+              trustsLwsBinding(await lwsTrust(sessionId), binding, (storage) =>
+                storageDescriptionRoots(
+                  storage,
+                  { fetch: fetcher },
+                  { signal: AbortSignal.timeout(DESCRIPTION_TIMEOUT_MS) },
+                ),
+              ),
           }),
       ...(key === undefined ? {} : { dpopKeyPair: await importServerDpopKey(key) }),
       fetch: async (input, init) => {
