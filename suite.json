@@ -49,6 +49,7 @@
     "@jeswr/solid-elements",
     "@jeswr/solid-federation-vocab",
     "@jeswr/solid-granary",
+    "@jeswr/solid-health",
     "@jeswr/solid-health-diary",
     "@jeswr/solid-mcp",
     "@jeswr/solid-memory",

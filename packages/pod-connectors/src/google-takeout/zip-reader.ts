@@ -121,6 +121,36 @@ async function bytesAt(file: ImportFile, start: number, length: number): Promise
   return bytes;
 }
 
+/** Validate original and once-decoded ZIP paths before any adapter dispatch.
+ * Names stay lexically unchanged; decoding is validation only.
+ */
+function safeEntryName(name: string): boolean {
+  if (name.length > 4096 || /%2f|%5c/i.test(name)) return false;
+  try {
+    // ZIP names may contain literal percent signs. Decode valid escapes while
+    // preserving those signs, then validate the resulting path as well.
+    const decoded = decodeURIComponent(name.replace(/%(?![0-9a-f]{2})/gi, "%25"));
+    for (const value of [name, decoded]) {
+      if (
+        value.startsWith("/") ||
+        value.includes("\\") ||
+        /^[a-z]:/i.test(value) ||
+        Array.from(value).some(
+          (char) =>
+            char.charCodeAt(0) < 32 || (char.charCodeAt(0) >= 127 && char.charCodeAt(0) <= 159),
+        )
+      )
+        return false;
+      const parts = value.replace(/\/$/, "").split("/");
+      if (parts.length > 16 || parts.some((part) => !part.trim() || part === "." || part === ".."))
+        return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /** Parse central records incrementally; only bounded metadata survives validation. */
 export async function zipDirectory(
   file: ImportFile,
@@ -203,6 +233,7 @@ export async function zipDirectory(
       };
       let disk = u16(fixed, 34);
       try {
+        if (!safeEntryName(entry.name)) throw new Error("Unsafe ZIP path.");
         const extra = variable.subarray(nameLength, nameLength + extraLength);
         let zip64 = false;
         for (let pos = 0; pos < extra.length; ) {

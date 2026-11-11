@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 /** Bounded, entry-detected Garmin account archives. Nested archives are never opened. */
+import { buildObservation, HEALTH, monthlyDocumentPath } from "@jeswr/solid-health";
 import { DataFactory, Store } from "n3";
 import { isoDurationFromSeconds } from "../core/duration.js";
 import type { FileImportContext, FileImportOutcome, ImportFile } from "../core/file-import.js";
@@ -19,7 +20,7 @@ import {
   zipDirectory,
 } from "../google-takeout/zip-reader.js";
 import { isTravelActivity } from "./activity-kind.js";
-import { HEALTH, HealthObservation, METRICS, type Metric } from "./health-vocab.js";
+import { METRICS, type Metric } from "./health-vocab.js";
 
 export interface GarminArchiveLimits {
   readonly maxEntries: number;
@@ -262,7 +263,6 @@ class Mapper {
   private readonly activities = new Map<string, NormalisedDoc>();
   private readonly metrics = new Map<string, NormalisedDoc>();
   private observations = 0;
-  private pending = 0;
   constructor(
     private readonly ctx: FileImportContext,
     private readonly limit: number,
@@ -337,8 +337,8 @@ class Mapper {
     const numeric = number(value);
     if (numeric === undefined || this.full || (kind === "steps" && !Number.isSafeInteger(numeric)))
       return false;
-    const slug = `health/observations/${kind}/${at.toISOString().slice(0, 7)}.ttl`;
-    const [type, , unitCode, unit] = METRICS[kind];
+    const slug = monthlyDocumentPath(kind, at);
+    const [type, codeValue, unitCode, unit] = METRICS[kind];
     const doc = this.document(slug, HEALTH.Observation, "health");
     const url = this.ctx.resolve(slug);
     const iri = `${url}#garmin-${kind}-${at.toISOString().slice(0, 10)}`;
@@ -347,39 +347,33 @@ class Mapper {
     const record = new SectorThing(url, doc.dataset, DataFactory);
     record.types.add(HEALTH.Record);
     record.dataSubject = patient;
-    const observation = new HealthObservation(iri, doc.dataset, DataFactory);
-    observation.types.add(HEALTH.Observation);
-    observation.types.add(HEALTH.ClinicalEntry);
-    observation.types.add(type);
-    if (type === HEALTH.HeartRate) observation.types.add(HEALTH.VitalSign);
-    observation.name = kind;
-    observation.measuredValue = numeric;
-    observation.unit = unit;
-    observation.unitCode = unitCode;
-    observation.patient = patient;
-    observation.code = `${iri}-code`;
-    observation.time = `${iri}-time`;
-    observation.source = "Garmin Connect";
-    observation.description = note;
-    // The vocab map completes the deterministic helper fragments; the session
-    // counts only source observations, excluding resources added by that map.
+    // Stage only the source observation here. The generated model validates the
+    // whole graph; the vocab map adds helper subjects after session item counting.
+    const built = buildObservation(iri, {
+      type,
+      codeValue,
+      measuredValue: numeric,
+      unit,
+      unitCode,
+      dateTime: at,
+      name: kind,
+      source: "Garmin Connect",
+      description: note,
+      scheme: /^(?:55423-8|8867-4|93832-4)$/.test(codeValue) ? "http://loinc.org" : undefined,
+    });
+    const dataset = doc.dataset as Store;
+    dataset.removeQuads(dataset.getQuads(DataFactory.namedNode(iri), null, null, null));
+    for (const quad of built.match(DataFactory.namedNode(iri))) dataset.add(quad);
     this.observations++;
-    this.pending++;
     return true;
   }
-  async flush(final = false): Promise<void> {
-    if (!final && this.pending < 250) return;
-    for (const doc of this.metrics.values()) {
+  async flush(): Promise<void> {
+    // No Pod writes until all recognised entries have been parsed. Decoder or
+    // cancellation failures during staging leave the Pod untouched.
+    for (const doc of [...this.metrics.values(), ...this.activities.values()]) {
       this.ctx.signal?.throwIfAborted();
       await this.ctx.write(doc);
     }
-    this.metrics.clear();
-    this.pending = 0;
-    if (final)
-      for (const doc of this.activities.values()) {
-        this.ctx.signal?.throwIfAborted();
-        await this.ctx.write(doc);
-      }
   }
 }
 
@@ -524,6 +518,8 @@ export async function importGarminArchive(
     }
     let count = 0;
     let parseFailed = false;
+    let malformed = false;
+    const parsedRows: Row[] = [];
     const recordLimit = Math.min(ctx.maxRows, limits.maxRecordsPerFile);
     const accountRecord = () => {
       if (recordAttempts++ >= limits.maxRecordsPerRun)
@@ -562,6 +558,7 @@ export async function importGarminArchive(
         } catch (error) {
           ctx.signal?.throwIfAborted();
           parseFailed = true;
+          malformed = !(error instanceof RecordLimit);
           note(error instanceof RecordLimit ? error.message : "invalid-or-too-deep-JSON");
           break;
         }
@@ -577,20 +574,29 @@ export async function importGarminArchive(
           note("total-observation-cap-exceeded");
           break;
         }
-        if (!mapRow(product, next.value, mapper, recordNote))
-          note("unrecognized-or-invalid-record");
-        await mapper.flush();
+        parsedRows.push(next.value);
       }
     } finally {
       await rows.return(undefined);
     }
+    // A malformed entry contributes no documents, including rows yielded before
+    // its bad token. Budget truncation remains explicitly reported as before.
+    if (!malformed)
+      for (const row of parsedRows) {
+        ctx.signal?.throwIfAborted();
+        if (mapper.full) {
+          note("total-observation-cap-exceeded");
+          break;
+        }
+        if (!mapRow(product, row, mapper, recordNote)) note("unrecognized-or-invalid-record");
+      }
     for (const [reason, days] of gapDays) {
       const previous = gaps.get(reason) ?? { files: 0, days: 0 };
       gaps.set(reason, { files: previous.files + 1, days: previous.days + days.size });
     }
     if (count === 0 && !parseFailed) note("empty-or-unrecognized-JSON");
   }
-  await mapper.flush(true);
+  await mapper.flush();
   return {
     skipped,
     unsupported: [

@@ -469,3 +469,63 @@ it("marks nested overlaps and duplicate names independently of entry data", asyn
 it("rejects ZIP64 entries on another disk", async () => {
   await expect(zipDirectory(fixture({ zip64: true, disk: 1 }).file)).rejects.toThrow(/Multi-disk/);
 });
+
+it.each([
+  `Takeout/${"x".repeat(4096)}.txt`,
+  `Takeout/${"deep/".repeat(17)}a.txt`,
+  "Takeout//a.txt",
+  "Takeout/ /a.txt",
+  "Takeout/a\u009f.txt",
+  "",
+  "Takeout/Drive/a%2fb.txt",
+  "Takeout/Drive/a%2Fb.txt",
+  "Takeout/Drive/a%5cb.txt",
+  "Takeout/Drive/a%5Cb.txt",
+  "C:Takeout/a.txt",
+  "c:/Takeout/a.txt",
+  "/Takeout/a.txt",
+  "//server/a.txt",
+  "Takeout/../a.txt",
+  "Takeout/%ff.txt",
+  "Takeout/%2e%2e/a.txt",
+  "Takeout/.%2E/a.txt",
+  "Takeout/./a.txt",
+  "Takeout/a\\b.txt",
+  "Takeout/a\u0000.txt",
+  "Takeout/a\u001f.txt",
+  "Takeout/a\u007f.txt",
+  "Takeout/a%00.txt",
+  "Takeout/a%0a.txt",
+  "Takeout/a%7f.txt",
+  "%43%3aTakeout/a.txt",
+])("rejects unsafe ZIP name before dispatch: %j", async (name) => {
+  const file = memory(zipSync({ [name]: strToU8("untrusted") }));
+  const entries = await zipDirectory(file);
+  expect(entries[0]?.invalid).toBe("invalid-entry");
+  const entry = vi.fn(discard),
+    skip = vi.fn();
+  await readZip(file, { entry, skip }, entries);
+  expect(entry).not.toHaveBeenCalled();
+  expect(skip).toHaveBeenCalledWith(name, "invalid-entry");
+});
+
+it("retains safe Unicode and percent-encoded filenames and directory entries", async () => {
+  const entries = await zipDirectory(
+    memory(
+      zipSync({
+        "Takeout/": new Uint8Array(),
+        "Takeout/Drive/caf%C3%A9.txt": strToU8("ok"),
+        "Takeout/Drive/é.txt": strToU8("ok"),
+        "Takeout/Drive/100% complete.txt": strToU8("ok"),
+        "Takeout/Drive/percent%zz.txt": strToU8("ok"),
+      }),
+    ),
+  );
+  expect(entries.map((entry) => entry.invalid)).toEqual([
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+  ]);
+});

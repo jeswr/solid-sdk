@@ -815,3 +815,13 @@ types where the current sectors have no equivalent (root `QUESTIONS.md` Q2); fol
 not playback events, accounts are not people, and workouts are not clinical observations.
 Recorded fixture tests cover sorted Turtle mappings, re-imports, pagination, provenance,
 checkpoint retention on source errors, and Dropbox deletions without production API calls.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+Garmin archive observations now use the generated `@jeswr/solid-health` write model.
+Measured values change from `xsd:double` to `xsd:decimal`; existing monthly paths,
+fragment IDs, codes, units and timezone-bearing `xsd:dateTime` timestamps are retained.
+Recognised entries are parsed before final Pod writes; malformed JSON entries contribute
+no observations, including rows preceding the bad token. A later fatal decoder error
+leaves no earlier data writes. Writer failures during the final flush still propagate.
+The shared ZIP validator also rejects encoded separators, absolute/drive paths, decoded
+traversal segments and control characters before adapter dispatch.

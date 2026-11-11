@@ -3946,6 +3946,9 @@ importers:
       '@jeswr/solid-dpop':
         specifier: workspace:*
         version: link:../solid-dpop
+      '@jeswr/solid-health':
+        specifier: workspace:*
+        version: link:../solid-health
       '@jeswr/suite-vocab':
         specifier: workspace:*
         version: link:../suite-vocab
@@ -4918,6 +4921,28 @@ importers:
       vitest:
         specifier: ^4.1.8
         version: 4.1.10(@opentelemetry/api@1.10.0)(@types/node@20.19.43)(@vitest/coverage-v8@4.1.10)(jsdom@29.1.1(@noble/hashes@2.4.0))(vite@8.1.4(@types/node@20.19.43)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1))
+
+  packages/solid-health:
+    dependencies:
+      '@jeswr/model-runtime':
+        specifier: workspace:*
+        version: link:../model-runtime
+      '@jeswr/suite-vocab':
+        specifier: workspace:*
+        version: link:../suite-vocab
+      n3:
+        specifier: ^2.0.3
+        version: 2.1.1
+    devDependencies:
+      '@jeswr/federation-codegen':
+        specifier: workspace:*
+        version: link:../federation-codegen
+      '@rdfjs/types':
+        specifier: ^2.0.1
+        version: 2.0.1
+      '@types/n3':
+        specifier: ^1.26.1
+        version: 1.26.1
 
   packages/solid-health-diary:
     dependencies:

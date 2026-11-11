@@ -1,18 +1,17 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
-import { NS } from "@jeswr/suite-vocab";
-import { DataFactory } from "n3";
-import { copyDataset } from "../core/incremental.js";
-import type { VocabMap } from "../core/types.js";
-import { PodThing } from "../core/vocab.js";
 import {
   CODE_SCHEMES,
   HEALTH,
   HealthCode,
   HealthInstant,
-  METRICS,
-  type Metric,
-} from "./health-vocab.js";
+  HealthPatient,
+} from "@jeswr/solid-health";
+import { NS } from "@jeswr/suite-vocab";
+import { DataFactory, Store } from "n3";
+import { copyDataset } from "../core/incremental.js";
+import type { VocabMap } from "../core/types.js";
+import { METRICS, type Metric } from "./health-vocab.js";
 
 /** Complete metric helper fragments here so the session does not count them as
  * imported items. Named, deterministic nodes also keep merge/reimport idempotent.
@@ -31,15 +30,17 @@ export const vocabMap: VocabMap = (doc) => {
     if (!match || !Object.hasOwn(METRICS, match[1] as string)) continue;
     const iri = quad.subject.value;
     const [, codeValue] = METRICS[match[1] as Metric];
-    const code = new HealthCode(`${iri}-code`, dataset, DataFactory);
-    code.types.add(HEALTH.Code);
-    code.code = codeValue;
+    // Keep generated mutations local to this observation's helpers; merging
+    // unchanged helper quads avoids repeatedly validating the monthly dataset.
+    const helpers = new Store();
+    const code = new HealthCode(`${iri}-code`, helpers, DataFactory).mark();
+    code.codeValue = codeValue;
     if (/^(?:55423-8|8867-4|93832-4)$/.test(codeValue)) code.scheme = CODE_SCHEMES.loinc;
-    const instant = new HealthInstant(`${iri}-time`, dataset, DataFactory);
-    instant.types.add(HEALTH.Instant);
+    const instant = new HealthInstant(`${iri}-time`, helpers, DataFactory).mark();
     instant.types.add(HEALTH.TemporalEntity);
     instant.dateTime = new Date(`${match[2]}T00:00:00Z`);
-    new PodThing(`${iri.split("#")[0]}#subject`, dataset, DataFactory).types.add(HEALTH.Person);
+    new HealthPatient(`${iri.split("#")[0]}#subject`, helpers, DataFactory).mark();
+    for (const helper of helpers) dataset.add(helper);
   }
   return { ...doc, dataset };
 };

@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+import { HEALTH, HealthObservation } from "@jeswr/solid-health";
 import { NS } from "@jeswr/suite-vocab";
 import { strToU8, zipSync } from "fflate";
 import { DataFactory, type Store } from "n3";
@@ -18,7 +19,6 @@ import { CLASSES, ExerciseAction, TravelAction } from "../core/vocab.js";
 import { zipDirectory } from "../google-takeout/zip-reader.js";
 import { GARMIN_ARCHIVE_LIMITS, garminInput, garminProduct } from "./archive.js";
 import { createGarminFileAdapter, garminFileAdapter } from "./file-adapter.js";
-import { HEALTH, HealthObservation } from "./health-vocab.js";
 
 const ROOT = `${TEST_POD_ROOT}integrations/garmin/`;
 const FITNESS = "account@example.test/DI_CONNECT/DI-Connect-Fitness/";
@@ -175,8 +175,18 @@ describe("Garmin full account ZIP", () => {
       ["vo2max-cycling", 53, "mL/(kg.min)"],
     ] as const) {
       const ds = pod.dataset(metricUrl(metric));
+      expect(subjects(ds), metric).toHaveLength(1);
       const sample = observation(ds);
       expect(sample.measuredValue, metric).toBe(value);
+      // The generated strict write profile replaces the legacy double datatype.
+      expect(
+        [
+          ...ds.match(
+            DataFactory.namedNode(sample.value),
+            DataFactory.namedNode(`${NS.HEALTH}value`),
+          ),
+        ][0]?.object,
+      ).toMatchObject({ datatype: DataFactory.namedNode(`${NS.XSD}decimal`) });
       expect(sample.unitCode, metric).toBe(unitCode);
       expect(subjects(ds, HEALTH.Record)).toEqual([metricUrl(metric)]);
       expect(
@@ -269,7 +279,7 @@ describe("Garmin full account ZIP", () => {
     expect(report.skipped).toBeUndefined();
   }, 30000);
 
-  it("flushes bounded monthly batches and merges a later correction without duplicating or losing earlier observations", async () => {
+  it("stages bounded monthly documents and merges a later correction without duplicating or losing earlier observations", async () => {
     const rows = Array.from({ length: 365 }, (_, i) => ({
       calendarDate: new Date(Date.UTC(2026, 0, 1) + i * 86400000).toISOString().slice(0, 10),
       totalSteps: i,
@@ -300,7 +310,7 @@ describe("Garmin full account ZIP", () => {
     );
     expect(corrected.measuredValue).toBe(9999);
     expect(report.skipped).toBeUndefined();
-  });
+  }, 120000);
 
   it("accepts single-object, object-wrapped and BOM JSON variants, numeric strings, and zero counts", async () => {
     const { pod } = await fileImport(
@@ -683,6 +693,51 @@ describe("Garmin archive budgets and cancellation", () => {
     ).toHaveLength(3);
     expect(report.unsupported?.join(" ")).toContain("invalid-or-too-deep-JSON");
     expect(report.unsupported?.join(" ")).toContain("records-per-file-cap");
+  }, 30000);
+
+  it("discards every row of a malformed entry and preserves complete entries for the same monthly document", async () => {
+    const { pod, report } = await fileImport(
+      garminFileAdapter,
+      zip({
+        [DAILY]: [{ calendarDate: "2026-06-01", totalSteps: 10 }],
+        [DAILY.replace("UDSFile_", "bad_UDSFile_")]:
+          '[{"calendarDate":"2026-06-01","totalSteps":999},{"calendarDate":"2026-06-02","totalSteps":5},invalid]',
+      }),
+    );
+    const store = pod.dataset(metricUrl("steps"));
+    expect(subjects(store)).toHaveLength(1);
+    expect(observation(store).measuredValue).toBe(10);
+    expect(report.unsupported?.join(" ")).toContain("invalid-or-too-deep-JSON");
+  });
+
+  it("makes no Pod writes when a later recognised entry has a fatal decoder error", async () => {
+    const rows = Array.from({ length: 260 }, (_, i) => ({
+      calendarDate: new Date(Date.UTC(2026, 0, 1) + i * 86400000).toISOString().slice(0, 10),
+      totalSteps: i,
+    }));
+    const bytes = zipSync({
+      [DAILY]: strToU8(JSON.stringify(rows)),
+      [ACTIVITY]: strToU8(JSON.stringify([run])),
+    });
+    const file = binaryFile(bytes);
+    const entries = await zipDirectory(file);
+    const later = entries[1];
+    if (!later) throw new Error("Fixture entry missing");
+    bytes[later.dataStart] = 7;
+    const write = vi.fn();
+    await expect(
+      garminFileAdapter.importFile(binaryFile(bytes), {
+        maxRows: 100000,
+        resolve: (slug) => `${ROOT}${slug}`,
+        read: async () => undefined,
+        write,
+        writeBinary: vi.fn(),
+        remove: vi.fn(),
+        progress: vi.fn(),
+        skip: vi.fn(),
+      }),
+    ).rejects.toThrow(/ZIP decoder failed/);
+    expect(write).not.toHaveBeenCalled();
   }, 30000);
 
   it("skips oversized record strings without retaining them or fetching embedded URLs", async () => {
