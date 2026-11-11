@@ -4,7 +4,7 @@ import { Button, LoadingSkeleton } from "@jeswr/suite-ui";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { type ReactNode, useCallback, useEffect } from "react";
-import { encodeRef } from "@/lib/refs";
+import { encodeIdentifierRef, encodeRef } from "@/lib/refs";
 import type { ChatSearchRoom } from "../lib/client";
 import { SearchError, type SearchSnippet } from "../lib/search";
 import { useAsync, useChat } from "../state/chat-context";
@@ -39,7 +39,7 @@ function resultHref(room: string, message: string) {
   let href = "/chat";
   try {
     href = `/chat/r/${encodeRef(room)}`;
-    return `${href}?message=${encodeRef(message)}`;
+    return `${href}?message=${encodeIdentifierRef(message)}`;
   } catch {
     return href;
   }
