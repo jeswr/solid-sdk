@@ -1023,21 +1023,15 @@ importers:
 
   apps/pod-docs/web:
     dependencies:
+      '@jeswr/app-session':
+        specifier: workspace:*
+        version: link:../../../packages/app-session
       '@jeswr/app-shell':
         specifier: workspace:*
         version: link:../../../packages/app-shell
-      '@jeswr/fetch-rdf':
-        specifier: workspace:*
-        version: link:../../../packages/fetch-rdf
       '@jeswr/pod-access':
         specifier: workspace:*
         version: link:../../../packages/pod-access
-      '@jeswr/pod-auth':
-        specifier: workspace:*
-        version: link:../../../packages/pod-auth
-      '@jeswr/reactive-authentication':
-        specifier: workspace:*
-        version: link:../../../packages/reactive-authentication
       '@jeswr/solid-elements':
         specifier: workspace:*
         version: link:../../../packages/solid-elements
@@ -1062,18 +1056,12 @@ importers:
       '@rdfjs/wrapper':
         specifier: ^0.34.0
         version: 0.34.0
-      '@solid/object':
-        specifier: ^0.6.0
-        version: 0.6.0
       lit:
         specifier: ^3.3.1
         version: 3.3.3
       lucide-react:
         specifier: ^0.544.0
         version: 0.544.0(react@19.2.7)
-      n3:
-        specifier: ^2.0.3
-        version: 2.1.1
       react:
         specifier: ^19.2.0
         version: 19.2.7
@@ -1102,9 +1090,6 @@ importers:
       '@testing-library/react':
         specifier: ^16.3.0
         version: 16.3.2(@testing-library/dom@10.4.1)(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
-      '@types/n3':
-        specifier: ^1.26.1
-        version: 1.26.1
       '@types/node':
         specifier: ^22.0.0
         version: 22.19.21
@@ -1205,21 +1190,15 @@ importers:
 
   apps/pod-drive/web:
     dependencies:
+      '@jeswr/app-session':
+        specifier: workspace:*
+        version: link:../../../packages/app-session
       '@jeswr/app-shell':
         specifier: workspace:*
         version: link:../../../packages/app-shell
-      '@jeswr/fetch-rdf':
-        specifier: workspace:*
-        version: link:../../../packages/fetch-rdf
       '@jeswr/pod-access':
         specifier: workspace:*
         version: link:../../../packages/pod-access
-      '@jeswr/pod-auth':
-        specifier: workspace:*
-        version: link:../../../packages/pod-auth
-      '@jeswr/reactive-authentication':
-        specifier: workspace:*
-        version: link:../../../packages/reactive-authentication
       '@jeswr/solid-elements':
         specifier: workspace:*
         version: link:../../../packages/solid-elements
@@ -1244,18 +1223,12 @@ importers:
       '@rdfjs/wrapper':
         specifier: ^0.34.0
         version: 0.34.0
-      '@solid/object':
-        specifier: ^0.6.0
-        version: 0.6.0
       lit:
         specifier: ^3.3.1
         version: 3.3.3
       lucide-react:
         specifier: ^0.544.0
         version: 0.544.0(react@19.2.7)
-      n3:
-        specifier: ^2.0.3
-        version: 2.1.1
       react:
         specifier: ^19.2.0
         version: 19.2.7
@@ -1284,9 +1257,6 @@ importers:
       '@testing-library/react':
         specifier: ^16.3.0
         version: 16.3.2(@testing-library/dom@10.4.1)(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
-      '@types/n3':
-        specifier: ^1.26.1
-        version: 1.26.1
       '@types/node':
         specifier: ^22.0.0
         version: 22.19.21
@@ -2418,6 +2388,9 @@ importers:
       '@hookform/resolvers':
         specifier: 5.4.0
         version: 5.4.0(react-hook-form@7.81.0(react@19.2.7))
+      '@jeswr/agent-audit':
+        specifier: workspace:*
+        version: link:../../packages/agent-audit
       '@jeswr/agent-mandate':
         specifier: workspace:*
         version: link:../../packages/agent-mandate
@@ -3070,6 +3043,67 @@ importers:
       '@vitest/coverage-v8':
         specifier: ^4.1.9
         version: 4.1.10(vitest@4.1.10)
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: ^4.1.9
+        version: 4.1.10(@opentelemetry/api@1.10.0)(@types/node@25.9.5)(@vitest/coverage-v8@4.1.10)(jsdom@29.1.1(@noble/hashes@2.4.0))(vite@8.1.4(@types/node@25.9.5)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1))
+
+  packages/app-session:
+    dependencies:
+      '@jeswr/fetch-rdf':
+        specifier: workspace:*
+        version: link:../fetch-rdf
+      '@jeswr/pod-auth':
+        specifier: workspace:*
+        version: link:../pod-auth
+      '@jeswr/reactive-authentication':
+        specifier: workspace:*
+        version: link:../reactive-authentication
+      '@jeswr/suite-ui':
+        specifier: workspace:*
+        version: link:../suite-ui
+      '@solid/object':
+        specifier: ^0.6.0
+        version: 0.6.0
+      n3:
+        specifier: ^2.0.3
+        version: 2.1.1
+    devDependencies:
+      '@biomejs/biome':
+        specifier: ^2.5.1
+        version: 2.5.3
+      '@testing-library/dom':
+        specifier: ^10.4.0
+        version: 10.4.1
+      '@testing-library/jest-dom':
+        specifier: ^6.6.3
+        version: 6.9.1
+      '@testing-library/react':
+        specifier: ^16.3.0
+        version: 16.3.2(@testing-library/dom@10.4.1)(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+      '@types/n3':
+        specifier: ^1.26.1
+        version: 1.26.1
+      '@types/node':
+        specifier: ^25.9.2
+        version: 25.9.5
+      '@types/react':
+        specifier: ^19.0.0
+        version: 19.2.17
+      '@types/react-dom':
+        specifier: ^19.0.0
+        version: 19.2.3(@types/react@19.2.17)
+      jsdom:
+        specifier: ^26.0.0
+        version: 26.1.0
+      react:
+        specifier: ^19.2.0
+        version: 19.2.7
+      react-dom:
+        specifier: ^19.2.0
+        version: 19.2.7(react@19.2.7)
       typescript:
         specifier: ^6.0.3
         version: 6.0.3
@@ -5759,6 +5793,42 @@ importers:
       fast-check:
         specifier: ^4.3.0
         version: 4.10.2
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: ^4.1.9
+        version: 4.1.10(@opentelemetry/api@1.10.0)(@types/node@26.6.6)(@vitest/coverage-v8@4.1.10)(jsdom@29.1.1(@noble/hashes@2.4.0))(vite@8.1.4(@types/node@26.6.6)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1))
+
+  packages/suite-charts:
+    devDependencies:
+      '@biomejs/biome':
+        specifier: ^2.5.1
+        version: 2.5.3
+      '@testing-library/dom':
+        specifier: 10.4.1
+        version: 10.4.1
+      '@testing-library/react':
+        specifier: 16.3.2
+        version: 16.3.2(@testing-library/dom@10.4.1)(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+      '@types/node':
+        specifier: 26.6.6
+        version: 26.6.6
+      '@types/react':
+        specifier: 19.2.17
+        version: 19.2.17
+      '@types/react-dom':
+        specifier: 19.2.3
+        version: 19.2.3(@types/react@19.2.17)
+      jsdom:
+        specifier: 29.1.1
+        version: 29.1.1(@noble/hashes@2.4.0)
+      react:
+        specifier: 19.2.7
+        version: 19.2.7
+      react-dom:
+        specifier: 19.2.7
+        version: 19.2.7(react@19.2.7)
       typescript:
         specifier: ^6.0.3
         version: 6.0.3

@@ -13,6 +13,11 @@ import { FOREIGN, POD, spoofedRequests } from "./request-fixtures.js";
 
 const TOKEN = "synthetic-access-token";
 
+vi.mock("dpop", async (importOriginal) => {
+  const real = await importOriginal<typeof import("dpop")>();
+  return { ...real, generateProof: vi.fn(real.generateProof) };
+});
+
 async function fixture() {
   const dpopKey = await DPoP.generateKeyPair("ES256");
   const client: oauth.Client = { client_id: "https://app.example/client" };
@@ -191,6 +196,37 @@ describe("WebIdDPoPTokenProvider — owned request target (sst-m040)", () => {
     expect(upgraded.headers.has("Authorization")).toBe(false);
     expect(upgraded.headers.has("DPoP")).toBe(false);
   });
+
+  for (const force of [false, true]) {
+    it(`rechecks the origin policy after proof signing, forceRefresh=${force}`, async () => {
+      const { generateProof } = await vi.importActual<typeof import("dpop")>("dpop");
+      let releaseProof!: () => void;
+      const proofGate = new Promise<void>((resolve) => {
+        releaseProof = resolve;
+      });
+      let signingStarted!: () => void;
+      const signing = new Promise<void>((resolve) => {
+        signingStarted = resolve;
+      });
+      vi.mocked(DPoP.generateProof).mockImplementationOnce(async (...args) => {
+        signingStarted();
+        await proofGate;
+        return generateProof(...args);
+      });
+      const request = new Request(POD, { redirect: "error", headers: { "X-Caller": "kept" } });
+      const pending = setup.provider.upgrade(request, force);
+      await signing;
+      setup.session.allowedOrigins = new Set();
+      releaseProof();
+      const upgraded = await pending;
+      expect(upgraded.headers.get("Authorization")).toBeNull();
+      expect(upgraded.headers.get("DPoP")).toBeNull();
+      expect(upgraded).toBe(request);
+      expect(upgraded.redirect).toBe("error");
+      expect(upgraded.headers.get("X-Caller")).toBe("kept");
+      expect(setup.refresh).toHaveBeenCalledTimes(force ? 1 : 0);
+    });
+  }
 
   for (const status of [307, 308]) {
     it(`makes a direct upgraded POST manual on a same-origin ${status} redirect`, async () => {
