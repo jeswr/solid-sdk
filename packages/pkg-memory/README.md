@@ -274,3 +274,15 @@ assertion would invalidate its content-derived identifier. The reference builder
 implicit `health:` and `core:` prefixes in `parseAssertion` stay legacy for the
 same reason. Use typed templates or explicitly declare canonical prefixes when
 authoring new Turtle assertions. Existing Python fixture identifiers remain valid.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+`readNanopubProvenance(value, np)` is a read-only, graph-scoped projection of
+publication time, agent/label, batch, attribution, referenced source metadata and
+evidence. It resolves message evidence through the batch sources graph to its parent
+conversation, retaining the message IRI, quote, locator, dateSent and sender. Source
+records expose kind, title, threadId, model, created and URL where available. Unused
+batch sources are excluded; absent metadata stays optional, and ambiguous/wrongly
+typed scalar fields throw a fixed error without values. Direct non-message evidence
+has no persisted per-evidence timestamp/speaker; these stay absent. This does not
+change builder output, parser behavior or hashing. `NanopubStore.ownerWebId` exposes
+the explicit construction-time owner identity without I/O for owner-checked consumers.

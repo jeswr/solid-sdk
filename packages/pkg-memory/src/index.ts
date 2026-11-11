@@ -33,6 +33,8 @@ export {
   VALIDITY_STATUSES,
 } from "./model.js";
 export type { PodConditions, PodPort } from "./pod-port.js";
+export type { FactProvenance, SourceInfo } from "./provenance.js";
+export { readNanopubProvenance } from "./provenance.js";
 export type { MemoryPurpose } from "./purpose.js";
 export {
   createDefaultPolicy,

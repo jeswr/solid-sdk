@@ -76,6 +76,7 @@
     "@jeswr/rdf-engine",
     "@jeswr/storage-conformance",
     "@jeswr/pkg-memory",
+    "@jeswr/pkg-health",
     "@jeswr/mcp-oauth",
     "@jeswr/agent-session-capture",
     "@jeswr/suite-vocab",
