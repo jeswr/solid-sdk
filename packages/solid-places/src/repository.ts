@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Claude Opus 5.5
 import { parseRdf } from "@jeswr/fetch-rdf";
 import { checkOwnerOnly, ownerPolicy, writeWac } from "@jeswr/pod-access";
 import { createTypeIndex } from "@jeswr/pod-type-index";
@@ -20,6 +21,23 @@ export async function importId(key: string): Promise<string> {
   if (key.length > 4096) throw new RangeError("Import identifier is too long");
   const hash = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(key));
   return [...new Uint8Array(hash)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+type Head = Awaited<ReturnType<StorageClient["head"]>>;
+type Read = Awaited<ReturnType<StorageClient["read"]>>;
+interface ReadProof {
+  value: Read;
+  chunks: Uint8Array<ArrayBuffer>[];
+}
+/** A recorded access-document read with a fresh, single-use body. */
+function replay({ value, chunks }: ReadProof): Read {
+  const response = new Response(new Blob(chunks));
+  return {
+    ...value,
+    body: response.body,
+    bytes: response.bytes.bind(response),
+    text: response.text.bind(response),
+    blob: response.blob.bind(response),
+  };
 }
 function missing(error: unknown) {
   return error instanceof StorageError && error.code === "not-found";
@@ -53,14 +71,16 @@ export function createPlacesRepository(
   }
   // Session-scoped proofs: retain only container observations from successful shared
   // checks. File ACL overrides are always checked afresh. Reopening clears all proofs.
+  // checkOwnerOnly drains each access document's body once, so a read is recorded as it is
+  // drained (within the helper's own byte cap) and replayed as a fresh body.
   const verified = new Set<string>();
-  const proofHeads = new Map<string, Awaited<ReturnType<StorageClient["head"]>>>();
-  const proofRdf = new Map<string, Awaited<ReturnType<StorageClient["readRdf"]>>>();
+  const proofHeads = new Map<string, Head>();
+  const proofReads = new Map<string, ReadProof>();
   async function verifyPrivacy(url: string) {
     scope(url);
     if (verified.has(url)) return;
-    const heads = new Map<string, Awaited<ReturnType<StorageClient["head"]>>>();
-    const rdf = new Map<string, Awaited<ReturnType<StorageClient["readRdf"]>>>();
+    const heads = new Map<string, Head>();
+    const reads = new Map<string, ReadProof>();
     const proofStorage = new Proxy(storage, {
       get(target, key) {
         if (key === "head")
@@ -71,13 +91,26 @@ export function createPlacesRepository(
             heads.set(args[0], value);
             return value;
           };
-        if (key === "readRdf")
-          return async (...args: Parameters<StorageClient["readRdf"]>) => {
-            const cached = proofRdf.get(args[0]);
-            if (cached) return cached;
-            const value = await target.readRdf(...args);
-            rdf.set(args[0], value);
-            return value;
+        if (key === "read")
+          return async (...args: Parameters<StorageClient["read"]>) => {
+            const cached = proofReads.get(args[0]);
+            if (cached) return replay(cached);
+            const value = await target.read(...args);
+            if (!value.body) return value;
+            const chunks: Uint8Array<ArrayBuffer>[] = [];
+            const body = value.body.pipeThrough(
+              new TransformStream<Uint8Array, Uint8Array>({
+                transform(chunk, controller) {
+                  chunks.push(new Uint8Array(chunk));
+                  controller.enqueue(chunk);
+                },
+                // Only a fully drained body is a reusable observation.
+                flush() {
+                  reads.set(args[0], { value, chunks });
+                },
+              }),
+            );
+            return { ...value, body };
           };
         const value = Reflect.get(target, key);
         return typeof value === "function" ? value.bind(target) : value;
@@ -88,7 +121,7 @@ export function createPlacesRepository(
     if (url.endsWith("/")) {
       verified.add(url);
       for (const [key, value] of heads) proofHeads.set(key, value);
-      for (const [key, value] of rdf) proofRdf.set(key, value);
+      for (const [key, value] of reads) proofReads.set(key, value);
     }
   }
   async function folder(parent: string, name: string) {
@@ -131,7 +164,7 @@ export function createPlacesRepository(
     initialized = false;
     verified.clear();
     proofHeads.clear();
-    proofRdf.clear();
+    proofReads.clear();
     if (
       storage.protocol !== "solid" ||
       storage.features.accessControl.state !== "available" ||

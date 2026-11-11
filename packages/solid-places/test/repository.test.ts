@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Claude Opus 5.5
 import { ownerPolicy, writeWac } from "@jeswr/pod-access";
 import { type StorageClient, StorageError } from "@jeswr/storage-client";
 import { createMemoryStorage } from "@jeswr/storage-client/memory";
@@ -265,11 +266,14 @@ it("requires a single version and re-reads follow-up validators with their match
   for (const etag of [null, "*", "unquoted", '"a","b"']) {
     const invalid = new Proxy(storage, {
       get(target, key) {
+        // Only record bodies carry the broken validator. Access documents keep the
+        // validator their HEAD advertised, as on a real server; a GET/HEAD mismatch there
+        // would (correctly) make the privacy check refuse before any save is attempted.
         if (key === "read")
-          return async (...args: Parameters<StorageClient["read"]>) => ({
-            ...(await target.read(...args)),
-            etag,
-          });
+          return async (...args: Parameters<StorageClient["read"]>) => {
+            const value = await target.read(...args);
+            return args[0].endsWith(".ttl") ? { ...value, etag } : value;
+          };
         const value = Reflect.get(target, key);
         return typeof value === "function" ? value.bind(target) : value;
       },
@@ -311,6 +315,7 @@ it.each([
   "foreign-acl",
   "acl-head-denied",
   "acl-read-denied",
+  "acl-body-missing",
 ])("fails closed on %s discovery", async (variant) => {
   const f = await fixture();
   const original = vi.mocked(f.storage.head).getMockImplementation()!;
@@ -350,11 +355,21 @@ it.each([
     };
   });
   if (variant === "outside") f.storage.isWithinStorage = () => false;
-  if (variant === "acl-read-denied")
-    vi.mocked(f.storage.readRdf).mockRejectedValue(
-      new StorageError("forbidden", { message: "Denied", status: 403, url: root, method: "HEAD" }),
-    );
-  await expect(f.repo.initialize()).rejects.toThrow();
+  // checkOwnerOnly reads access documents with storage.read.
+  if (variant === "acl-read-denied" || variant === "acl-body-missing")
+    vi.mocked(f.storage.read).mockImplementation(async (...args) => {
+      if (!args[0].endsWith(".acl")) return f.memory.read(...args);
+      if (variant === "acl-body-missing") return { ...(await f.memory.read(...args)), body: null };
+      throw new StorageError("forbidden", {
+        message: "Denied",
+        status: 403,
+        url: args[0],
+        method: "GET",
+      });
+    });
+  if (variant === "acl-read-denied" || variant === "acl-body-missing")
+    await expect(f.repo.initialize()).rejects.toThrow("owner-only");
+  else await expect(f.repo.initialize()).rejects.toThrow();
   expect(
     vi.mocked(f.storage.create).mock.calls.every(([, , options]) => options?.kind === "container"),
   ).toBe(true);
@@ -500,15 +515,16 @@ it("verifies containers once per session, reuses sealed month folders and still 
   expect(
     heads.mock.calls.slice(requests).filter(([url]) => url.endsWith("/") || url === `${month}.acl`),
   ).toHaveLength(0);
+  // The month ACL body is read once, by the shared proof, and replayed for file checks.
   expect(
-    vi.mocked(f.storage.readRdf).mock.calls.filter(([url]) => url === `${month}.acl`),
+    vi.mocked(f.storage.read).mock.calls.filter(([url]) => url === `${month}.acl`),
   ).toHaveLength(1);
   expect(heads.mock.calls.slice(requests).filter(([url]) => url.endsWith(".ttl.acl")).length).toBe(
     54,
   );
   await f.repo.initialize();
   expect(
-    vi.mocked(f.storage.readRdf).mock.calls.filter(([url]) => url === `${root}places/.acl`),
+    vi.mocked(f.storage.read).mock.calls.filter(([url]) => url === `${root}places/.acl`),
   ).toHaveLength(2);
 });
 it("bounds the resource count and unexpected shard depth", async () => {
