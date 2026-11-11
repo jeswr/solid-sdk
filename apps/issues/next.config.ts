@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 import { readFileSync } from "node:fs";
 import type { NextConfig } from "next";
 import { normaliseOrigin } from "./src/lib/app-origin";
@@ -15,6 +16,7 @@ import { normaliseOrigin } from "./src/lib/app-origin";
 // `next build && next start` (the Playwright e2e webServer) keeps working —
 // `output: "export"` is INCOMPATIBLE with `next start`, so it must stay opt-in.
 const staticExport = process.env.APP_STATIC_EXPORT === "1";
+const suiteOrigin = process.env.SUITE_ORIGIN?.trim();
 
 /**
  * The build version attached to feedback diagnostics (the FeedbackButton's
@@ -40,15 +42,12 @@ function buildVersion(): string {
 }
 
 const baseConfig: NextConfig = {
-  async redirects() {
-    const suite = process.env.SUITE_ORIGIN?.trim();
-    // Next forwards the original query (including tracker) to the destination.
-    // Only pages redirect; the client identifier and authentication assets stay served.
-    return suite ? [{ source: "/", destination: `${normaliseOrigin(suite)}/tasks/issues`, permanent: false }] : [];
-  },
   // Bake the build version into the client bundle so the FeedbackButton can
   // attach it to issue diagnostics without a runtime lookup.
-  env: { NEXT_PUBLIC_APP_VERSION: buildVersion() },
+  env: {
+    NEXT_PUBLIC_APP_VERSION: buildVersion(),
+    NEXT_PUBLIC_SUITE_ORIGIN: suiteOrigin ? normaliseOrigin(suiteOrigin) : "",
+  },
 };
 
 const nextConfig: NextConfig = staticExport
@@ -61,6 +60,21 @@ const nextConfig: NextConfig = staticExport
       // No Next.js image optimisation server in a static export.
       images: { unoptimized: true },
     }
-  : baseConfig;
+  : {
+      ...baseConfig,
+      async redirects() {
+        const suite = process.env.SUITE_ORIGIN?.trim();
+        // Next forwards the query; auth and client identifier assets stay served.
+        return suite
+          ? [
+              {
+                source: "/",
+                destination: `${normaliseOrigin(suite)}/tasks/issues`,
+                permanent: false,
+              },
+            ]
+          : [];
+      },
+    };
 
 export default nextConfig;

@@ -2,10 +2,10 @@
 import { useSyncExternalStore } from "react";
 import { beforeEach, expect, it, vi } from "vitest";
 import type { IssuesTaskStore } from "../../src/apps/tasks/lib/issues/store";
-import { NS } from "../../src/apps/tasks/lib/model/rdf";
+import { NS, serialize } from "../../src/apps/tasks/lib/model/rdf";
 import { TasksCache } from "../../src/apps/tasks/state/tasks-cache";
 import { encodeRef } from "../../src/lib/refs";
-import { act, click, h, mount } from "../drive-ui-dom";
+import { act, click, h, key, mount } from "../drive-ui-dom";
 import { webId } from "./pod";
 import { containerUrl, issuesFixture, trackerUrl } from "./tasks-issues-fixtures";
 
@@ -34,28 +34,42 @@ import { TaskDetail } from "../../src/apps/tasks/components/detail/task-detail";
 import { IssuesDetail } from "../../src/apps/tasks/components/issues/issues-detail";
 import { IssuesView } from "../../src/apps/tasks/components/issues/issues-view";
 import { TasksSidebar } from "../../src/apps/tasks/components/sidebar";
+import { TaskRow } from "../../src/apps/tasks/components/task-row";
 import { issueComments } from "../../src/apps/tasks/lib/issues/model";
 
 beforeEach(() => {
   localStorage.clear();
   vi.clearAllMocks();
+  for (const name of [
+    "HTMLFormElement",
+    "HTMLTextAreaElement",
+    "HTMLSelectElement",
+    "HTMLButtonElement",
+    "DocumentFragment",
+    "ShadowRoot",
+    "Document",
+  ] as const)
+    vi.stubGlobal(name, window[name]);
 });
 async function ready() {
   const fixture = await issuesFixture();
   store = fixture.store;
-  cache = new TasksCache(store, vi.fn(), webId);
+  const failure = vi.fn();
+  cache = new TasksCache(store, failure, webId);
   await cache.start();
   await cache.loadTasks(fixture.project);
-  return fixture;
+  return { ...fixture, failure };
 }
 it("disables creating and shows a readable detail for view-only access", async () => {
   const { pod, project } = await ready();
   const item = await cache.createTask(project, { title: "View only" });
   if (!item) throw new Error("Missing fixture");
   pod.intercept = (request) =>
-    request.url === containerUrl
+    request.url === containerUrl || request.url === item.url
       ? new Response(
-          `<${containerUrl}> a <${NS.LDP}BasicContainer>; <${NS.LDP}contains> <${item.url}>.`,
+          request.url === item.url
+            ? pod.files.get(item.url)?.body
+            : `<${containerUrl}> a <${NS.LDP}BasicContainer>; <${NS.LDP}contains> <${item.url}>.`,
           { headers: { "Content-Type": "text/turtle", "WAC-Allow": 'user="read"' } },
         )
       : undefined;
@@ -70,6 +84,106 @@ it("disables creating and shows a readable detail for view-only access", async (
   expect(host.querySelector('textarea[aria-label="Task title"]')).toBeNull();
   expect(host.querySelector('textarea[aria-label="Comment"]')).toBeNull();
   expect(host.textContent).toContain("View only");
+});
+it("keeps issue editing available when only the tracker and container are read-only", async () => {
+  const { pod, project } = await ready();
+  const item = await cache.createTask(project, { title: "Editable issue" });
+  if (!item) throw new Error("Missing issue");
+  pod.intercept = (request) =>
+    request.method === "GET" && [trackerUrl, containerUrl].includes(request.url)
+      ? new Response(
+          request.url === containerUrl
+            ? `<${containerUrl}> a <${NS.LDP}BasicContainer>; <${NS.LDP}contains> <${item.url}>.`
+            : pod.files.get(trackerUrl)?.body,
+          { headers: { "Content-Type": "text/turtle", "WAC-Allow": 'user="read"', ETag: '"1"' } },
+        )
+      : undefined;
+  await cache.refreshProjects();
+  await cache.loadTasks(project, true);
+  const { host } = await mount(h(TaskDetail, { stored: item, project, onClose: vi.fn() }));
+  expect(host.querySelector('textarea[aria-label="Task title"]')).not.toBeNull();
+  expect(host.querySelector('textarea[aria-label="Comment"]')).not.toBeNull();
+});
+it("hides issue project moves and disables Duplicate, including in shared task rows", async () => {
+  const { project, pod } = await ready();
+  const item = await cache.createTask(project, { title: "Stationary" });
+  if (!item) throw new Error("Missing issue");
+  await cache.createTask(project, { title: "Second issue" });
+  const ui = await mount(h(TaskDetail, { stored: item, project, onClose: vi.fn() }));
+  expect(ui.host.querySelector('[aria-label$=", move task"]')).toBeNull();
+  expect(ui.host.querySelector('[aria-label="Project"]')?.getAttribute("disabled")).not.toBeNull();
+  const actions = ui.host.querySelector<HTMLElement>('[aria-label="Task actions"]');
+  if (!actions) throw new Error("Missing menu");
+  await key(actions, "ArrowDown");
+  const duplicate = [...document.querySelectorAll('[role="menuitem"]')].find(
+    (item) => item.textContent === "Duplicate",
+  );
+  expect(duplicate?.getAttribute("data-disabled")).not.toBeNull();
+  await key(document.querySelector('[role="menu"]') as HTMLElement, "Escape");
+  const task = cache.getSnapshot().views.find((view) => view.url === item.url);
+  if (!task) throw new Error("Missing view");
+  await ui.render(
+    h(
+      "table",
+      null,
+      h(
+        "tbody",
+        null,
+        h(TaskRow, {
+          row: { task, depth: 0 },
+          tabIndex: 0,
+          onFocus: vi.fn(),
+          onMove: vi.fn(),
+          container: { kind: "section", projectUrl: project.url, sectionId: undefined },
+        }),
+      ),
+    ),
+  );
+  expect(ui.host.querySelector(".tsk-drag-handle")).toBeNull();
+  const row = ui.host.querySelector<HTMLElement>("[data-tsk-row]");
+  if (!row) throw new Error("Missing row");
+  const before = pod.mutations().length;
+  await act(() =>
+    row.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "ArrowDown", altKey: true, bubbles: true }),
+    ),
+  );
+  await key(row, "v");
+  expect(pod.mutations()).toHaveLength(before);
+  await key(row, "F10", true);
+  expect(
+    [...document.querySelectorAll('[role="menuitem"]')].some((item) =>
+      item.textContent?.startsWith("Move"),
+    ),
+  ).toBe(false);
+});
+it.each([
+  "open",
+  "closed",
+] as const)("retries the requested issue state when the refreshed state is %s", async (freshState) => {
+  const { project, pod, failure } = await ready();
+  const item = await cache.createTask(project, { title: "Conflict" });
+  if (!item) throw new Error("Missing issue");
+  const remote = await store.readTask(item.url);
+  remote.task.state = freshState;
+  remote.task.title = "Remote edit";
+  pod.seed(item.url, await serialize(remote.dataset));
+  const { host } = await mount(h(IssuesDetail, { stored: item }));
+  const close = [...host.querySelectorAll("button")].find(
+    (button) => button.textContent === "Close issue",
+  );
+  if (!close) throw new Error("Missing close button");
+  await click(close);
+  await act(async () => {
+    await vi.waitFor(() => expect(failure).toHaveBeenCalled());
+  });
+  const before = pod.mutations().length;
+  await act(async () => {
+    failure.mock.calls[0]?.[1]();
+    await vi.waitFor(() => expect(cache.getSnapshot().saving).toHaveLength(0));
+  });
+  expect((await store.readTask(item.url)).task.state).toBe("closed");
+  expect(pod.mutations().length - before).toBe(freshState === "closed" ? 0 : 1);
 });
 it("lists a tracker once in the labelled Issues sidebar section", async () => {
   await ready();

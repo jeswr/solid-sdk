@@ -103,7 +103,7 @@ describe("Issues discovery", () => {
           })
         : undefined;
     await store.listTasks(containerUrl);
-    expect(store.canEdit(project)).toBe(false);
+    expect(store.canEdit(project)).toBe(true);
     expect(store.canCreate(project)).toBe(false);
     await expect(store.createTask(project, { title: "No", state: "open" })).rejects.toMatchObject({
       status: 403,

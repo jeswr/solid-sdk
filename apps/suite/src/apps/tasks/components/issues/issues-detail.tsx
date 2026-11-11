@@ -47,8 +47,9 @@ export function IssuesDetail({
         <Button
           variant="outline"
           onClick={() => {
+            const target = stored.task.state === "closed" ? "open" : "closed";
             void tasks.updateTask(stored, (task) => {
-              task.state = task.state === "closed" ? "open" : "closed";
+              if (task.state !== target) task.state = target;
             });
           }}
         >

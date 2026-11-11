@@ -24,6 +24,7 @@ import {
   visibleTasks,
 } from "../lib/dnd/plan";
 import type { DropPlan, PlanOptions } from "../lib/dnd/types";
+import { isIssuesProject } from "../lib/issues/model";
 import type { TaskView } from "../lib/views/types";
 import { announceRetries, applyDropPlan, replanner } from "../state/drop-actions";
 import { useTaskListFocus } from "../state/list-focus";
@@ -67,9 +68,13 @@ export function useTaskMoves(task: TaskView, flat = false) {
   const all = tasks.views.filter((view) => view.projectUrl === task.projectUrl);
   const options: PlanOptions = { all, manual, flat };
   const views = visibleTasks(all, preferences.showCompletedInProject);
-  const plan = (make: Planner) => make(task, views, options);
+  const issue = tasks.projects.some(
+    (project) => project.url === task.projectUrl && isIssuesProject(project),
+  );
+  const plan = (make: Planner): DropPlan => (issue ? { kind: "none" } : make(task, views, options));
   /** Announces the outcome once the write settles; Retry plans again from fresh state. */
   const run = (relativeMake: Planner) => {
+    if (issue) return Promise.resolve(false);
     const make = relativeMake.anchor?.(task, views, options) ?? relativeMake;
     const first = make(task, views, options);
     if (first.kind === "none") return Promise.resolve(false);
@@ -123,6 +128,7 @@ export function MoveMenuItems({
   const parents = nesting ? nestCandidates(task, moves.views, moves.options.all) : [];
   const parent = nesting ? effectiveParent(task, moves.views) : undefined;
   const section = (parent ?? task).sectionId;
+  if (project && isIssuesProject(project)) return null;
   return (
     <>
       <DropdownMenuSeparator />

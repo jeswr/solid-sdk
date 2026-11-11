@@ -209,30 +209,34 @@ export function TaskDetail({
           <ArrowLeft size={16} aria-hidden="true" />
           Back
         </Button>
-        <Popover open={moveOpen} onOpenChange={setMoveOpen}>
-          <PopoverTrigger asChild>
-            <Button
-              className="tsk-detail-breadcrumb"
-              variant="ghost"
-              size="sm"
-              aria-label={`${view.projectTitle} › ${section?.name ?? "No section"}, move task`}
-            >
-              {view.projectTitle} › {section?.name ?? "No section"}
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent className="tsk-detail-popover" align="start">
-            <div className="tsk-detail-stack">
-              <ProjectFields
-                stored={stored}
-                project={project}
-                view={view}
-                onMove={(target) => {
-                  void move(target);
-                }}
-              />
-            </div>
-          </PopoverContent>
-        </Popover>
+        {issue ? (
+          <span className="tsk-detail-breadcrumb">{view.projectTitle}</span>
+        ) : (
+          <Popover open={moveOpen} onOpenChange={setMoveOpen}>
+            <PopoverTrigger asChild>
+              <Button
+                className="tsk-detail-breadcrumb"
+                variant="ghost"
+                size="sm"
+                aria-label={`${view.projectTitle} › ${section?.name ?? "No section"}, move task`}
+              >
+                {view.projectTitle} › {section?.name ?? "No section"}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="tsk-detail-popover" align="start">
+              <div className="tsk-detail-stack">
+                <ProjectFields
+                  stored={stored}
+                  project={project}
+                  view={view}
+                  onMove={(target) => {
+                    void move(target);
+                  }}
+                />
+              </div>
+            </PopoverContent>
+          </Popover>
+        )}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <IconButton label="Task actions" variant="ghost">
@@ -241,7 +245,7 @@ export function TaskDetail({
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
             <DropdownMenuItem
-              disabled={!stored.etag}
+              disabled={issue || !stored.etag}
               onSelect={() => {
                 void tasks.createTask(project, duplicateTaskData(stored, tasks.webId));
               }}

@@ -1,6 +1,8 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+import { isomorphic } from "rdf-isomorphic";
 import { ModelError } from "../model/errors";
 import { RdfIO, type Resource } from "../model/io";
+import type { TaskMove } from "../model/move";
 import { DataFactory, documentUrl, NS, requireTitle, Store } from "../model/rdf";
 import { type StoredProject, type StoredTask, type StoreOptions, TaskStore } from "../model/store";
 import { createTask, type TaskDetails, type TaskItem, validateTask } from "../model/task";
@@ -31,14 +33,20 @@ export class IssuesTaskStore extends TaskStore {
     return allowsWrite(this.permissions.get(url) ?? null, append);
   }
   canEdit(project: StoredProject, task?: StoredTask): boolean {
-    return (
-      this.canWrite(project.url) &&
-      this.canWrite(project.tracker.stateStore as string) &&
-      (!task || this.canWrite(task.url))
-    );
+    return this.canWrite(task?.url ?? project.url);
   }
   canCreate(project: StoredProject): boolean {
-    return this.canWrite(project.url) && this.canWrite(project.tracker.stateStore as string, true);
+    return this.canWrite(project.tracker.stateStore as string, true);
+  }
+  override prepareTaskMove(
+    item: StoredTask,
+    source: StoredProject,
+    target: StoredProject,
+    id?: string,
+  ): TaskMove {
+    if (item.task instanceof IssueItem || isIssuesProject(source))
+      throw new Error("Issues cannot be moved between projects.");
+    return super.prepareTaskMove(item, source, target, id);
   }
   override async readProject(url: string): Promise<StoredProject> {
     const project = await super.readProject(url);
@@ -167,11 +175,11 @@ export class IssuesTaskStore extends TaskStore {
     onReserved?: (resource: Resource) => void,
   ): Promise<StoredTask> {
     if (!isIssuesProject(project)) return super.createTask(project, data, id, onReserved);
-    if (!this.canCreate(project)) throw new ModelError(403, project.url);
+    if (!this.canCreate(project)) throw new ModelError(403, project.tracker.stateStore as string);
     if (!/^[a-zA-Z0-9-]+$/.test(id)) throw new TypeError("Invalid task identifier.");
     // An existing tracker may not have any issue documents or container yet.
     await this.issuesIO.container(project.tracker.stateStore as string);
-    if (!this.canCreate(project)) throw new ModelError(403, project.url);
+    if (!this.canCreate(project)) throw new ModelError(403, project.tracker.stateStore as string);
     const url = `${project.tracker.stateStore}${id}.ttl`;
     const now = this.config.now?.() ?? new Date();
     const dataset = createTask(url, {
@@ -200,6 +208,7 @@ export class IssuesTaskStore extends TaskStore {
     const task = new IssueItem(item.task.id, dataset, DataFactory);
     const state = task.state;
     change(task);
+    if (isomorphic([...item.dataset], [...dataset])) return item;
     requireTitle(task.title);
     const details: TaskDetails = {
       title: task.title as string,

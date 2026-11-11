@@ -9,6 +9,15 @@ import { companionApps } from "../../src/welcome/apps";
 
 afterEach(() => vi.unstubAllEnvs());
 describe("standalone Issues entry point", () => {
+  it("bakes the suite origin into static exports without server redirects", async () => {
+    vi.stubEnv("APP_STATIC_EXPORT", "1");
+    vi.stubEnv("SUITE_ORIGIN", "https://suite.example/");
+    vi.resetModules();
+    const { default: exported } = await import("../../../issues/next.config");
+    expect(exported.output).toBe("export");
+    expect(exported.env?.NEXT_PUBLIC_SUITE_ORIGIN).toBe("https://suite.example");
+    expect(exported.redirects).toBeUndefined();
+  });
   it("remains local when SUITE_ORIGIN is unset", async () => {
     vi.stubEnv("SUITE_ORIGIN", "");
     expect(await config.redirects?.()).toEqual([]);

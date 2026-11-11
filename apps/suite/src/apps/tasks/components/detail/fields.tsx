@@ -26,6 +26,7 @@ import {
 import { Flag, Repeat2, X } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { fromEditorRule, recurrenceAnchor, toEditorRule } from "../../lib/detail/recurrence-map";
+import { isIssuesProject } from "../../lib/issues/model";
 import { humanise } from "../../lib/model/recurrence";
 import type { Reminder } from "../../lib/model/reminders";
 import type { StoredProject, StoredTask } from "../../lib/model/store";
@@ -149,7 +150,7 @@ export function ProjectFields({
       <DetailSelect
         label="Project"
         value={project.url}
-        disabled={!stored.etag}
+        disabled={isIssuesProject(project) || !stored.etag}
         options={tasks.projects.map((item) => ({
           id: item.url,
           name: item.tracker.title ?? "Project",
@@ -161,6 +162,7 @@ export function ProjectFields({
       />
       <DetailSelect
         label="Section"
+        disabled={isIssuesProject(project)}
         value={view.sectionId ?? "none"}
         options={[{ id: "none", name: "No section" }, ...project.tracker.sections]}
         onChange={(id) => {

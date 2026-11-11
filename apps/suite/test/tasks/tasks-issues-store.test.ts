@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { describe, expect, it, vi } from "vitest";
+import { addIssueComment, issueComments } from "../../src/apps/tasks/lib/issues/model";
 import { IssuesTaskStore } from "../../src/apps/tasks/lib/issues/store";
 import { NS, node, serialize } from "../../src/apps/tasks/lib/model/rdf";
 import { TypeIndex } from "../../src/apps/tasks/lib/model/type-index";
@@ -7,6 +8,73 @@ import { storage, webId } from "./pod";
 import { containerUrl, issuesFixture, trackerUrl } from "./tasks-issues-fixtures";
 
 describe("Issues store boundaries", () => {
+  it("rejects issue moves before writing or deleting any data", async () => {
+    const { store, pod, project } = await issuesFixture();
+    const inbox = await store.bootstrapInbox();
+    const created = await store.createTask(project, { title: "Keep here", state: "open" });
+    const item = await store.updateTask(created, (task) => {
+      addIssueComment(task, "Keep this reply", webId, "reply", new Date());
+      node(task.id, task.dataset).setText("https://example.org/extra", "Keep");
+    });
+    const before = pod.mutations().length;
+    expect(() => store.prepareTaskMove(item, project, inbox)).toThrow("Issues cannot be moved");
+    await expect(store.moveTaskToProject(item, project, inbox)).rejects.toThrow(
+      "Issues cannot be moved",
+    );
+    expect(pod.mutations()).toHaveLength(before);
+    const reread = await store.readTask(item.url);
+    expect(issueComments(reread.task)[0]?.content).toBe("Keep this reply");
+    expect(node(reread.task.id, reread.dataset).text("https://example.org/extra")).toBe("Keep");
+  });
+  it.each([
+    "write",
+    "append",
+  ])("creates with container %s and edits with document write despite read-only tracker", async (mode) => {
+    const { store, pod, project } = await issuesFixture();
+    const created = await store.createTask(project, { title: "Editable", state: "open" });
+    const permissions = new Map([
+      [trackerUrl, "read"],
+      [containerUrl, `read ${mode}`],
+      [created.url, "read write"],
+    ]);
+    pod.intercept = (request) =>
+      request.method === "GET" && permissions.has(request.url)
+        ? new Response(pod.files.get(request.url)?.body, {
+            headers: {
+              "Content-Type": "text/turtle",
+              ETag: `"${pod.files.get(request.url)?.version}"`,
+              "WAC-Allow": `user="${permissions.get(request.url)}"`,
+            },
+          })
+        : undefined;
+    await store.readProject(trackerUrl);
+    await store.issuesIO.read(containerUrl);
+    const item = await store.readTask(created.url);
+    expect(store.canCreate(project)).toBe(true);
+    expect(store.canEdit(project, item)).toBe(true);
+    expect(store.canEdit(project)).toBe(false);
+    const commented = await store.updateTask(item, (task) => {
+      task.title = "Edited";
+      addIssueComment(task, "Reply", webId, "reply", new Date());
+    });
+    expect(commented.task.title).toBe("Edited");
+    expect(issueComments(commented.task)[0]?.content).toBe("Reply");
+    expect((await store.createTask(project, { title: "New", state: "open" })).task.title).toBe(
+      "New",
+    );
+    permissions.set(containerUrl, "read");
+    await store.issuesIO.read(containerUrl);
+    expect(store.canCreate(project)).toBe(false);
+    expect(store.canEdit(project, commented)).toBe(true);
+    await store.updateTask(commented, (task) => {
+      task.description = "Still editable";
+    });
+    await expect(
+      store.updateProject(project, (tracker) => {
+        tracker.title = "No";
+      }),
+    ).rejects.toMatchObject({ status: 403 });
+  });
   it("initialises a missing issues container conditionally before the first issue", async () => {
     const { store, pod, project } = await issuesFixture();
     pod.files.delete(containerUrl);
@@ -46,6 +114,10 @@ describe("Issues store boundaries", () => {
     });
     expect(updated.task.description).toBe("Ordinary body");
     expect(await store.listTasks(project.tracker.stateStore as string)).toHaveLength(1);
+    const target = await store.createProject("Destination");
+    const moved = await store.moveTaskToProject(updated, project, target, "moved");
+    expect(moved.task.description).toBe("Ordinary body");
+    expect(await store.listTasks(project.tracker.stateStore as string)).toHaveLength(0);
   });
   it("rejects a tracker that points outside its own folder or to a non-container", async () => {
     const { pod, store, project } = await issuesFixture();

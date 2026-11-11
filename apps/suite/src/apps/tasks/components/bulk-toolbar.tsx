@@ -18,6 +18,7 @@ import {
 } from "@jeswr/suite-ui";
 import { CalendarDays, Check, Flag, FolderInput, Tag, Trash2, X } from "lucide-react";
 import { type ReactNode, useRef, useState } from "react";
+import { isIssuesProject } from "../lib/issues/model";
 import { unionLabels } from "../lib/model/tracker";
 import type { PriorityLevel } from "../lib/views/types";
 import {
@@ -105,6 +106,11 @@ export function BulkToolbar() {
     {
       id: "project",
       label: "Move to project",
+      disabled: selected.some((view) =>
+        tasks.projects.some(
+          (project) => project.url === view.projectUrl && isIssuesProject(project),
+        ),
+      ),
       icon: <FolderInput size={16} />,
       onSelect: () => setPanel("project"),
     },
