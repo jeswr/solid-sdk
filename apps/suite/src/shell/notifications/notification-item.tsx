@@ -22,10 +22,11 @@ import {
   X,
 } from "lucide-react";
 import { useId, useRef, useState } from "react";
-import type {
-  AccessDecision,
-  NotificationKind,
-  SuiteNotification,
+import {
+  type AccessDecision,
+  type NotificationKind,
+  type SuiteNotification,
+  UNDATED,
 } from "../lib/notifications-model";
 import styles from "./notifications.module.css";
 
@@ -105,14 +106,16 @@ export function NotificationItem({
           {!item.read && <span className="suite-sr-only">, unread</span>}
         </p>
         {item.body && <p className={styles.muted}>{item.body}</p>}
-        <time className={styles.muted} dateTime={item.createdAt.toISOString()}>
-          {new Intl.DateTimeFormat(undefined, {
-            month: "short",
-            day: "numeric",
-            hour: "numeric",
-            minute: "2-digit",
-          }).format(item.createdAt)}
-        </time>
+        {item.createdAt.getTime() !== UNDATED && (
+          <time className={styles.muted} dateTime={item.createdAt.toISOString()}>
+            {new Intl.DateTimeFormat(undefined, {
+              month: "short",
+              day: "numeric",
+              hour: "numeric",
+              minute: "2-digit",
+            }).format(item.createdAt)}
+          </time>
+        )}
         {item.request?.purpose && <p className={styles.muted}>{item.request.purpose}</p>}
         {item.outcome ? (
           <p role="status">{item.outcome}</p>

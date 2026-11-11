@@ -28,6 +28,7 @@ export default defineConfig({
         "src/shell/lib/**/*.ts",
         "src/shell/sync/connection-state.ts",
         "src/shell/search/local-source.ts",
+        "src/shell/notifications/pod-source.ts",
         "src/shell/registration/{demo-backend,types}.ts",
         "src/apps/tasks/lib/model/**/*.ts",
         "src/apps/tasks/lib/share/**/*.ts",
