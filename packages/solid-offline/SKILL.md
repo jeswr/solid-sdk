@@ -110,9 +110,67 @@ separate IndexedDB queue; `localBody(conflictId)` (or item ID) asynchronously re
 
 - Decorate the authenticated StorageClient with `withOutbox(storage, outbox)`. Only `write`,
   `writeRdf`, `create`, and `delete` accept `offline: 'queue'`; patch/move remain unqueueable.
-  Without opt-in preserve the original arguments, errors and body identity. Buffer opted-in
+  Without opt-in preserve the original arguments, errors and body identity after checking trusted
+  guard requirements. Buffer opted-in
   streams before attempting a request. Queue only offline/network failures, never HTTP errors
   or cancelled requests. Queued writes/creates return `queued: true`; delete returns void.
+- Application policy uses `guard: OutboxGuard` (`{ tag, assertions?: JsonValue }`) on enqueue
+  or the decorated write/writeRdf/create/delete options (`QueueOption`). Tags match
+  `/^[a-z][a-z0-9.-]{0,63}$/`; assertions are plain JSON, at most 16 KiB serialized UTF-8,
+  depth 32 (assertion root at zero), and 2,000 visited values. Enforce depth, value-count and
+  running byte budgets during copying, including keys, strings, JSON escaping and punctuation,
+  before full serialization; stop copying as soon as any budget is exceeded. Key enumeration
+  of a same-origin caller's own object is not bounded by these budgets. Check array length
+  against the remaining node budget before enumeration; reject hidden/symbol properties.
+  Reject lossy values, accessors, sparse arrays, class instances and cycles before enqueue/online
+  delivery. Snapshot assertions before asynchronous work and serialize the validated copy once
+  at enqueue into a canonical JSON string for IndexedDB. On every hydration, check the stored
+  string's UTF-8 byte length (at most 16 KiB) before `JSON.parse`, then revalidate the parsed value
+  with the same depth, value-count and byte budgets. Fail closed on legacy object-valued
+  assertions, since no guarded records have shipped. Invalid records become failed and cannot
+  be delivered by retry or resolution.
+- Register trusted scope separately: `registerGuardPolicy(tag, matches: GuardPolicy)` receives
+  only `{ op, url, container? }`, returns idempotent cleanup, rejects duplicate/invalid tags,
+  and expires on close. Reinstall policies before replay in every session. Matching policies
+  require their own guard tag; a throwing matcher counts as a match. Check on hydration and
+  immediately before every replay/retry, online attempt and mine/both delivery, including
+  transformed resolution requests and policies registered during async preparation. A missing
+  or different tag leaves replay waiting with `blocked: 'guard-required'`, holds same-URL
+  followers and permits other URLs; online and mine/both reject before delivery. `withOutbox`
+  also checks ordinary calls without guard/queue opt-in. Derive the canonical description
+  from the actual dispatch arguments, including StorageClient's root alias normalization;
+  named Solid creates use the encoded child URL and kind. LWS creates, unnamed ordinary creates
+  and advertised trash-command creates describe the container. Never apply Solid child-name
+  validation to LWS hints (which can contain `/`); StorageClient validates those hints.
+  Snapshot create options before async work. Persist the description and compare it to a
+  recomputation on hydration and before replay/retry and mine/both; mismatches fail before
+  any storage call. Build conflict copies through that same description function. Delegates
+  receive canonical URLs and effective names/options. Bind `withOutbox(storage, outbox)` before
+  direct LWS enqueue; detached enqueues use Solid naming. Legacy records acquire their binding
+  when a client is attached and still undergo recomputed policy checks. The description checks
+  consistency, not authenticity against coordinated IndexedDB edits; trusted policies and
+  delegate assertion checks provide authorization. Preserve legacy delivery
+  under no matching policy. Policies are never stored alongside records or assertions.
+  The shell exposes `registerGuardPolicy(tag, matches)` alongside `registerReplayDelegate`,
+  bound to the active session and available while storage is opening. Export `GuardPolicy`
+  through suite-sdk/offline. Delegate checks still establish assertion validity.
+- `registerDelegate(tag, ReplayDelegate)` returns an idempotent unregister function; duplicate
+  tags throw. Registrations are instance/session-local, cleared by close, and never persisted.
+  All guarded deliveries, including online attempts and retry/mine/both, go through the delegate;
+  never fall back to raw storage. A missing delegate leaves replay waiting with
+  `blocked: 'no-delegate'`, holds later same-URL operations and lets other URLs proceed without
+  delivery progress. Register later and replay explicitly. Online delivery and mine/both reject
+  missing delegates; theirs can drop without one. Guard-only calls enforce policy without queuing.
+- `GuardedDelivery` is a defensive snapshot with actual operation/URL, optional container/name,
+  content type/validator/create/delete options, `keepalive`, bytes (`Uint8Array | null`) and private assertions.
+  Persist keepalive for guarded write/writeRdf/create/delete and preserve it through online,
+  replay and resolution snapshots. QueueOption adds keepalive for guarded delete transports;
+  the underlying StorageClient delete has no keepalive option.
+  Its purpose is `replay`, `resolve-mine`, or `resolve-both`; conflict resolution passes the fresh
+  ETag or generated create-only copy name. Delegate context is `{ storage, signal }`, using the
+  underlying client and a signal cancelled on close. Use that raw client to avoid recursive
+  delivery. Delegate replay failures follow storage classification; failed resolution retains
+  its conflict. `pending()` exposes only a defensive read-only `guard.tag`, never assertions.
 - Queued RDF keeps the requested Turtle or expanded, context-free JSON-LD format; named
   graphs require JSON-LD. Rebuild validated RDF/JS fields before N3 Writer; never trust private
   IDs, unsafe IRIs, language tags or prefix mappings. Omit queued Turtle prefixes. Generated create names stay stable for replay. Use named StorageClient
@@ -129,7 +187,8 @@ separate IndexedDB queue; `localBody(conflictId)` (or item ID) asynchronously re
 - Pass `{ storage, webId, outbox }` to `createOfflineClient` for replay after register and on
   window online. Strip the page-only outbox before posting worker configuration. Enforce an
   exact WebID match, abort replay on close/logout and remove online listeners. Logout keeps
-  unsent writes; `outbox.purge()` is explicit. `outbox.close()` releases listeners only.
+  unsent writes; `outbox.purge()` is explicit. `outbox.close()` releases listeners/delegates and
+  aborts guarded requests while retaining persisted changes.
 - Broadcast only change/conflict indicators on the WebID-specific channel, then refresh from
   IndexedDB. Browser Web Locks serialize tabs; same-realm locking is the fallback. Do not claim
   exactly-once delivery or cross-tab serialization on browsers lacking Web Locks.
