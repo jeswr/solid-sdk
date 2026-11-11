@@ -180,6 +180,7 @@ function parseList(
       depth: undefined,
       draft: {
         id: `task-${listIndex}-${index}`,
+        sourceId,
         title: nonblank(own(task, "title")).trim(),
         description: description.filter(Boolean).join("\n"),
         indent: 1,

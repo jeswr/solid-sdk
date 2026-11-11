@@ -158,6 +158,8 @@ export function createTask(url: string, data: TaskDetails): Store {
   const { rank, priority, ...base } = data;
   const dataset = buildTask(url, base);
   const task = new TaskItem(`${url}#it`, dataset, DataFactory);
+  // Historical imports may be closed without a known completion time.
+  if (data.state === "closed") task.endedAt = data.endedAt;
   task.rank = rank;
   task.priority = priority;
   task.calendarUid = data.calendarUid;

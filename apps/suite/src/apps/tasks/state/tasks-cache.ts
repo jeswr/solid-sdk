@@ -547,10 +547,11 @@ export class TasksCache {
   createTask(project: StoredProject, data: NewTask): Promise<StoredTask | undefined> {
     return this.prepareTaskCreate(project, data)();
   }
-  /** One queue reservation protects an import while independent task documents write four at a time. */
+  /** One queue reservation protects an import while independent task documents write four at a time.
+   * Project-scoped source identities make task creation idempotent across retries. */
   importTasks(
     project: StoredProject,
-    entries: readonly { id: string; parentId: string | null; data: NewTask }[],
+    entries: readonly { id: string; sourceId: string; parentId: string | null; data: NewTask }[],
     signal: AbortSignal,
     onProgress: (completed: number) => void,
   ) {
@@ -571,7 +572,12 @@ export class TasksCache {
               // Keep the forest intact when a parent failed; unrelated rows still import.
               if (entry.parentId && !parent) throw new Error("The parent could not be imported");
               const data = entry.data;
-              const id = crypto.randomUUID();
+              const hash = await crypto.subtle.digest(
+                "SHA-256",
+                new TextEncoder().encode(JSON.stringify([current.url, entry.sourceId])),
+              );
+              if (signal.aborted) return;
+              const id = `import-${Array.from(new Uint8Array(hash), (byte) => byte.toString(16).padStart(2, "0")).join("")}`;
               const url = `${current.tracker.stateStore}${id}.ttl`;
               let reserved: StoredTask | undefined;
               let task: StoredTask;
@@ -580,7 +586,7 @@ export class TasksCache {
                   current,
                   {
                     ...data,
-                    state: "open",
+                    state: data.state ?? "open",
                     creator: data.creator ?? this.webId,
                     ...(data.allDay
                       ? { dueDate: new Date(`${data.allDay}T00:00:00`) }
@@ -603,12 +609,13 @@ export class TasksCache {
                   },
                 );
               } catch (error) {
-                // A lost response may have committed. Count only our exact reserved payload.
+                // A 412 means this stable URL was already imported. Never overwrite it.
+                // Reconcile an ambiguous response only against this attempt's exact payload.
                 const existing = await this.optionalTask(url);
                 if (
-                  !reserved ||
                   !existing ||
-                  !isomorphic([...reserved.dataset], [...existing.dataset])
+                  (!(error instanceof ModelError && error.status === 412) &&
+                    (!reserved || !isomorphic([...reserved.dataset], [...existing.dataset])))
                 )
                   throw error;
                 task = existing;
@@ -1671,41 +1678,51 @@ export class TasksCache {
     onRetry?: () => void,
     onFailure?: MutationFailure,
     signal?: AbortSignal,
-  ): () => Promise<StoredProject | undefined> {
+    /** When provided, keep the created project usable even if saving sidebar order fails. */
+    onPositionFailure?: () => void,
+  ): (signal?: AbortSignal) => Promise<StoredProject | undefined> {
     const url = `${this.store.projects}pending-${crypto.randomUUID()}.ttl`;
     const { tracker, dataset } = createTracker(url, title, `${url}/`, [this.webId], new Date());
     const optimistic = { url, tracker, dataset, etag: null };
     let created: StoredProject | undefined;
     const operation: ProjectCreation = { owner: crypto.randomUUID() };
     const position = this.snapshot.projects.length;
-    const attempt = (retry = false): Promise<StoredProject | undefined> =>
+    const attempt = (
+      retry: boolean,
+      attemptSignal?: AbortSignal,
+    ): Promise<StoredProject | undefined> =>
       this.mutate(
         (state) => replaceProject(state, created ?? optimistic),
         async () => {
           created ??= await this.store.createProject(title, false, operation);
           const current = retry ? await this.store.readProject(created.url) : created;
-          const project =
-            current.tracker.position === position
-              ? current
-              : await this.store.updateProject(current, (tracker) => {
-                  tracker.position = position;
-                });
+          let project = current;
+          try {
+            if (current.tracker.position !== position)
+              project = await this.store.updateProject(current, (tracker) => {
+                tracker.position = position;
+              });
+          } catch (error) {
+            // Import can continue in this project even when sidebar ordering could not be saved.
+            if (!onPositionFailure) throw error;
+            onPositionFailure();
+          }
           return { result: project, commit: (state) => replaceProject(state, project) };
         },
         onRetry ?? (() => void run()),
         [url],
         onFailure,
-        signal,
+        attemptSignal,
       );
     let attempted = false;
     let saved: StoredProject | undefined;
     let running: Promise<StoredProject | undefined> | undefined;
-    const run = (): Promise<StoredProject | undefined> => {
+    const run = (attemptSignal = signal): Promise<StoredProject | undefined> => {
       if (saved) return Promise.resolve(saved);
       if (running) return running;
       const retry = attempted;
       attempted = true;
-      running = attempt(retry)
+      running = attempt(retry, attemptSignal)
         .then((project) => {
           saved = project;
           return project;
