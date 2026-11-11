@@ -218,7 +218,13 @@ export async function revokeApprovalKey(
       throw new Error("Couldn't re-sign your agent's controls, so the key was kept. Try again.");
     await client.create(copy.id, document, "application/trig");
   }
-  await migrateStatusList(client, session, id, at);
-  await removeApprovalKey(session, id, survivor);
+  const repair = await migrateStatusList(client, session, id, at);
+  try {
+    await removeApprovalKey(session, id, survivor);
+  } catch (error) {
+    // Puts the previous status list back only if this device's key was removed meanwhile.
+    await repair?.().catch(() => undefined);
+    throw error;
+  }
   return { resigned: pending.length };
 }

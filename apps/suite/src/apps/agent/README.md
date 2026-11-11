@@ -39,7 +39,10 @@ the key that signed an in-force Halt would let the agent resume. So `revokeAppro
    failure.
 6. Re-signs the permission status list (`mandates/status.ttl`) when the revoked key signed it,
    keeping every revocation bit and its validity window, and checks the copy verifies. Without
-   this, the list would stop verifying and no device could grant permissions again.
+   this, the list would stop verifying and no device could grant permissions again. If the
+   check or the profile edit then fails because another device removed this device's key
+   meanwhile (two devices revoking each other), the previous list is put back, conditionally
+   and only while it is still this device's copy, so the list stays signed by a listed key.
 7. Edits the profile only after all of that. Every conditional write, including a retry after
    a conflict, refuses unless this device's key is still listed in the version being edited, so
    two devices revoking each other can't leave the profile without a key.
