@@ -106,10 +106,12 @@ test("imports, reads with the keyboard, stars, archives and searches a mailbox",
   if ((page.viewportSize()?.width ?? 1280) < 1024)
     await page.getByRole("button", { name: "Open navigation", exact: true }).click();
   const compose = page
-    .getByRole("button", { name: "Compose", exact: true })
+    .getByRole("link", { name: "Compose", exact: true })
     .filter({ visible: true });
-  await expect(compose).toBeDisabled();
-  await expect(compose).toHaveAccessibleDescription("Sending needs a connected mail account");
+  await expect(compose).toHaveAttribute("href", "/mail/compose");
+  await expect(compose).toHaveAccessibleDescription(
+    "Drafts save to your pod. Sending needs a connected mail account.",
+  );
   if ((page.viewportSize()?.width ?? 1280) < 1024) {
     // The drawer autofocuses its Close button, whose tooltip takes the first Escape.
     const drawer = page.getByRole("dialog", { name: "Navigation", exact: true });
@@ -202,4 +204,35 @@ test("shows import ZIP guidance and query errors without losing navigation", asy
   await expect(page.locator(".mail-query-error")).toBeVisible();
   await page.goto("/mail/not-a-folder");
   await expect(page.getByRole("heading", { name: "This folder doesn't exist" })).toBeVisible();
+});
+test("composes, saves, edits and discards a draft in the pod", async ({ page }, info) => {
+  await page.goto("/mail/compose");
+  await expect(page.getByRole("heading", { name: "New message", level: 1 })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Send", exact: true })).toBeDisabled();
+  await page.getByLabel("To", { exact: true }).fill("Bob Example <bob@example.org>");
+  await page.getByLabel("Subject", { exact: true }).fill("Allotment rota");
+  await page.getByLabel("Message", { exact: true }).fill("Can you water on Thursday?");
+  await page.getByRole("button", { name: "Save draft", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Edit draft", level: 1 })).toBeVisible();
+  await expect(page).toHaveURL(/\/mail\/compose\?draft=/);
+  await accessible(page);
+  await capture(page, info, "compose");
+  await page.goto("/mail/drafts");
+  await expect(page.getByRole("heading", { name: "Drafts", level: 1 })).toBeVisible();
+  await page
+    .getByRole("link", { name: /Allotment rota/ })
+    .first()
+    .click();
+  await expect(page.getByText("Draft, not sent.")).toBeVisible();
+  await page.getByRole("link", { name: "Edit draft", exact: true }).click();
+  await expect(page.getByLabel("To", { exact: true })).toHaveValue("bob@example.org");
+  await expect(page.getByLabel("Message", { exact: true })).toHaveValue(
+    "Can you water on Thursday?",
+  );
+  page.once("dialog", (dialog) => void dialog.accept());
+  await page.getByRole("button", { name: "Discard", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Drafts", level: 1 })).toBeVisible();
+  await expect(page.getByRole("link", { name: /Allotment rota/ })).toHaveCount(0);
+  await page.goto("/mail/compose?draft=not-a-ref");
+  await expect(page.getByRole("heading", { name: "This draft isn't here any more" })).toBeVisible();
 });

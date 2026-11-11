@@ -22,6 +22,7 @@ import { createDemoNotificationSource } from "./demo-source";
 import { accountPreferences, showDesktopNotification } from "./desktop";
 import { localNotificationSource } from "./local-store";
 import { createPodNotificationSource } from "./pod-source";
+import { createNotificationReadState } from "./read-state";
 
 const NotificationsContext = createContext<NotificationsController | null>(null);
 const emptySources: readonly NotificationSource[] = [];
@@ -85,12 +86,17 @@ export function NotificationSessionProvider({
 }) {
   const controller = useMemo(
     () =>
-      createNotificationsController(sources, decider, (item) => {
-        if (shouldNotifyDesktop(item.kind, accountPreferences(accountId), new Date()))
-          void showDesktopNotification(item).catch(() => {
-            /* Delivery failure never interrupts the tray. */
-          });
-      }),
+      createNotificationsController(
+        sources,
+        decider,
+        (item) => {
+          if (shouldNotifyDesktop(item.kind, accountPreferences(accountId), new Date()))
+            void showDesktopNotification(item).catch(() => {
+              /* Delivery failure never interrupts the tray. */
+            });
+        },
+        createNotificationReadState(accountId),
+      ),
     [sources, decider, accountId],
   );
   useEffect(() => {
