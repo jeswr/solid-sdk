@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 /** Existing health sector / Health app measurement terms; no Garmin-specific IRIs. */
 import { NS } from "@jeswr/suite-vocab";
 import {
@@ -39,7 +40,7 @@ const PROP = {
 } as const;
 
 /** Codes and units agree with Health's Apple importer for steps, pulse and sleep.
- * Other measurements use source field codes in Garmin's existing website scheme;
+ * Other measurements use source field codes without asserting a concept scheme;
  * UCUM strings suffice where no verified QUDT unit is available locally.
  */
 export const METRICS = {
@@ -53,11 +54,11 @@ export const METRICS = {
   floors: [HEALTH.Observation, "floorsAscended", "1", `${NS.UNIT}NUM`],
   sleep: [HEALTH.Sleep, "93832-4", "s", `${NS.UNIT}SEC`],
   hrv: [HEALTH.Observation, "lastNightAvg", "ms", undefined],
-  "vo2max-running": [HEALTH.Observation, "vo2MaxValue", "mL/(kg.min)", undefined],
-  "vo2max-cycling": [HEALTH.Observation, "vo2MaxValue", "mL/(kg.min)", undefined],
+  "vo2max-running": [HEALTH.Observation, "running.vo2MaxValue", "mL/(kg.min)", undefined],
+  "vo2max-cycling": [HEALTH.Observation, "cycling.vo2MaxValue", "mL/(kg.min)", undefined],
 } as const;
 export type Metric = keyof typeof METRICS;
-export const CODE_SCHEMES = { loinc: "http://loinc.org", garmin: "https://connect.garmin.com" };
+export const CODE_SCHEMES = { loinc: "http://loinc.org" };
 
 export class HealthObservation extends PodThing {
   get measuredValue(): number | undefined {

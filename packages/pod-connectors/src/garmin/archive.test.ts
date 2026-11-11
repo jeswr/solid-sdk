@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { NS } from "@jeswr/suite-vocab";
 import { strToU8, zipSync } from "fflate";
 import { DataFactory, type Store } from "n3";
@@ -33,7 +34,7 @@ const run = {
   beginTimestamp: start,
   duration: 1_985_000,
   distance: 543_000,
-  calories: 345,
+  calories: 1444.148,
   avgHr: 150,
   maxHr: 176,
   elevationGain: 1800,
@@ -119,7 +120,7 @@ function fixture(): ImportFile {
           lightSleepSeconds: 14400,
           remSleepSeconds: 3600,
           awakeSleepSeconds: 900,
-          sleepScores: { overall: { value: 82 } },
+          sleepScores: { overallScore: 82 },
         },
       },
     ],
@@ -153,7 +154,7 @@ describe("Garmin full account ZIP", () => {
     expect(action.startTime?.getTime()).toBe(start);
     expect(action.duration).toBe("PT33M5S");
     expect(action.distance).toBe("5430 m");
-    expect(action.calories).toBe("345 kcal");
+    expect(action.calories).toBe("345.2 kcal");
     expect(action.description).toBe("avgHr: 150 bpm; maxHr: 176 bpm; elevationGain: 18 m");
     expect(subjects(pod.dataset(exUrl), CLASSES.ExerciseAction)).toHaveLength(2);
     const ride = new TravelAction(`${travelUrl}#journey-456`, pod.dataset(travelUrl), DataFactory);
@@ -185,7 +186,13 @@ describe("Garmin full account ZIP", () => {
             DataFactory.namedNode(`${NS.HEALTH}patient`),
           ),
         ][0]?.object.value,
-      ).toBe(TEST_WEBID);
+      ).toBe(`${metricUrl(metric)}#subject`);
+      expect(
+        [...ds].some((q) => q.subject.value === TEST_WEBID || q.object.value === TEST_WEBID),
+      ).toBe(false);
+      expect(
+        [...ds.match(null, DataFactory.namedNode(`${NS.CORE}inScheme`))].map((q) => q.object.value),
+      ).toEqual(["steps", "heart-rate", "sleep"].includes(metric) ? ["http://loinc.org"] : []);
       expect(
         [...ds].some(
           (q) =>
@@ -203,7 +210,8 @@ describe("Garmin full account ZIP", () => {
       `${NS.UNIT}BEAT-PER-MIN`,
     );
     expect(report.categories.sort()).toEqual(["health", "mobility"]);
-    expect(report.skipped).toBe(5);
+    expect(report.skipped).toBe(1);
+    expect(report.state?.counts.items).toBe(15);
     expect(report.unsupported?.join(" ")).toMatch(/nested-FIT-zip.*activity-files/);
     expect(report.unsupported?.join(" ")).toContain("vocabulary-gap-Body-Battery");
     expect(report.unsupported?.join(" ")).toContain("vocabulary-gap-intensity-minutes");
@@ -389,7 +397,7 @@ describe("Garmin full account ZIP", () => {
       garminFileAdapter,
       zip({ "DI_CONNECT/DI-Connect-Unknown/data.json": {} }),
     );
-    expect(unknown.report.skipped).toBe(1);
+    expect(unknown.report.skipped).toBeUndefined();
     expect(unknown.report.unsupported?.join(" ")).toContain("unrecognized-file");
   });
 
@@ -405,6 +413,192 @@ describe("Garmin full account ZIP", () => {
     );
     expect(observation(pod.dataset(metricUrl("vo2max-running"))).measuredValue).toBe(52);
     expect(observation(pod.dataset(metricUrl("vo2max-cycling"))).measuredValue).toBe(53);
+  });
+
+  it("keeps flat uppercase running and cycling VO2max rows distinct on the same day with distinct source codes", async () => {
+    const { pod, report } = await fileImport(
+      garminFileAdapter,
+      zip({
+        "DI_CONNECT/DI-Connect-Metrics/MetricsMaxMetData.json": [
+          { calendarDate: "2026-06-01", sport: "RUNNING", vo2MaxValue: 51 },
+          { calendarDate: "2026-06-01", sport: "CYCLING", vo2MaxValue: 53 },
+        ],
+      }),
+    );
+    const codes = [];
+    for (const [metric, value] of [
+      ["vo2max-running", 51],
+      ["vo2max-cycling", 53],
+    ] as const) {
+      const ds = pod.dataset(metricUrl(metric));
+      expect(observation(ds).measuredValue).toBe(value);
+      codes.push([...ds.match(null, DataFactory.namedNode(`${NS.CORE}value`))][0]?.object.value);
+      expect([...ds.match(null, DataFactory.namedNode(`${NS.CORE}inScheme`))]).toEqual([]);
+    }
+    expect(codes).toEqual(["running.vo2MaxValue", "cycling.vo2MaxValue"]);
+    expect(report.state?.counts.items).toBe(2);
+  });
+
+  it.each([
+    { overallScore: 82, overall: { value: 11 } },
+    { overall: { value: 82 } },
+    { overall: 82 },
+  ])("reads export and API sleep score shapes, preferring overallScore: %j", async (sleepScores) => {
+    const { pod } = await fileImport(
+      garminFileAdapter,
+      zip({
+        [`${WELLNESS}sleepData.json`]: [
+          { calendarDate: "2026-06-01", deepSleepSeconds: 100, sleepScores },
+        ],
+      }),
+    );
+    expect(observation(pod.dataset(metricUrl("sleep"))).description).toContain("Sleep score: 82");
+  });
+
+  it("counts each vocabulary gap once per file and reports distinct affected days without skipped records", async () => {
+    const row = {
+      calendarDate: "2026-06-01",
+      totalSteps: 1,
+      averageStressLevel: 0,
+      bodyBatteryHighestValue: 90,
+      moderateIntensityMinutes: 0,
+    };
+    const { report } = await fileImport(
+      garminFileAdapter,
+      zip({
+        [DAILY]: [row, row, { ...row, calendarDate: "2026-06-02" }],
+        [DAILY.replace("UDSFile_", "second_UDSFile_")]: [row],
+        [DAILY.replace("UDSFile_", "gap_only_UDSFile_")]: [
+          {
+            calendarDate: "2026-06-01",
+            averageStressLevel: 0,
+            bodyBatteryHighestValue: 90,
+            moderateIntensityMinutes: 0,
+          },
+        ],
+      }),
+    );
+    expect(report.skipped).toBeUndefined();
+    for (const gap of ["stress", "Body-Battery", "intensity-minutes"])
+      expect(report.unsupported).toContain(
+        `Garmin vocabulary-gap-${gap}: 3 files; 4 affected days.`,
+      );
+  });
+
+  it("does not count concept/time/subject fragments as imported items, including on reimport", async () => {
+    const file = zip({ [DAILY]: [{ calendarDate: "2026-06-01", totalSteps: 1 }] });
+    const { pod, report } = await fileImport(garminFileAdapter, file);
+    expect(report.state?.counts.items).toBe(1);
+    expect(subjects(pod.dataset(metricUrl("steps")), HEALTH.Code)).toHaveLength(1);
+    expect(subjects(pod.dataset(metricUrl("steps")), HEALTH.Instant)).toHaveLength(1);
+    const repeated = await fileImport(garminFileAdapter, file, { pod });
+    expect(repeated.report.state?.counts.items).toBe(1);
+    expect(subjects(pod.dataset(metricUrl("steps")), HEALTH.Code)).toHaveLength(1);
+    expect(subjects(pod.dataset(metricUrl("steps")), HEALTH.Instant)).toHaveLength(1);
+  });
+
+  it("rejects sentinel, date-like, seconds-only and out-of-range epochs, accepting milliseconds at both bounds", async () => {
+    const now = Date.parse("2026-06-15T12:00:00Z");
+    const clock = vi.spyOn(Date, "now").mockReturnValue(now);
+    try {
+      const minimum = Date.parse("2000-01-01T00:00:00Z");
+      const invalid = [
+        0,
+        "0",
+        20260601,
+        "20260601",
+        start / 1000,
+        String(start / 1000),
+        minimum - 1,
+        now + 86400001,
+      ];
+      const { pod, report } = await fileImport(
+        garminFileAdapter,
+        zip({
+          [ACTIVITY]: [...invalid, minimum, now + 86400000].map((beginTimestamp, activityId) => ({
+            ...run,
+            beginTimestamp,
+            activityId,
+          })),
+          [DAILY]: [...invalid, minimum, String(start)].map((timestamp) => ({
+            timestamp,
+            totalSteps: 1,
+          })),
+        }),
+      );
+      expect(report.skipped).toBe(invalid.length * 2);
+      expect(
+        subjects(pod.dataset(`${ROOT}health/activities.ttl`), CLASSES.ExerciseAction),
+      ).toHaveLength(2);
+      expect(observation(pod.dataset(metricUrl("steps", "2000-01"))).measuredValue).toBe(1);
+      expect(observation(pod.dataset(metricUrl("steps"))).measuredValue).toBe(1);
+    } finally {
+      clock.mockRestore();
+    }
+  });
+
+  it("buckets timestamp-only daily metrics by their own offset date across month boundaries", async () => {
+    const { pod } = await fileImport(
+      garminFileAdapter,
+      zip({
+        [DAILY]: [
+          { timestamp: "2026-06-01T00:30:00+14:00", totalSteps: 1 },
+          { timestamp: "2026-05-31T23:30:00-12:00", totalSteps: 2 },
+          { calendarDate: "2026-06-02", timestamp: "2026-06-01T23:30:00-12:00", totalSteps: 3 },
+        ],
+      }),
+    );
+    const may = observation(pod.dataset(metricUrl("steps", "2026-05")));
+    expect(may.value).toContain("2026-05-31");
+    expect(may.measuredValue).toBe(2);
+    const june = pod.dataset(metricUrl("steps"));
+    expect(
+      new HealthObservation(`${metricUrl("steps")}#garmin-steps-2026-06-01`, june, DataFactory)
+        .measuredValue,
+    ).toBe(1);
+    expect(
+      new HealthObservation(`${metricUrl("steps")}#garmin-steps-2026-06-02`, june, DataFactory)
+        .measuredValue,
+    ).toBe(3);
+  });
+
+  it.each([
+    "sleep",
+    "hrv",
+  ] as const)("reports unmatched flat %s rows around first-pass wrappers", async (kind) => {
+    const wrapped =
+      kind === "sleep"
+        ? { dailySleepDTO: { calendarDate: "2026-06-01", deepSleepSeconds: 100 } }
+        : { hrvSummaries: [{ calendarDate: "2026-06-01", lastNightAvg: 54 }] };
+    const { pod, report } = await fileImport(
+      garminFileAdapter,
+      zip({
+        [`${WELLNESS}${kind === "sleep" ? "sleepData" : "hrv"}.json`]: [
+          { unknown: 1 },
+          wrapped,
+          { unknown: 2 },
+        ],
+      }),
+    );
+    expect(observation(pod.dataset(metricUrl(kind))).measuredValue).toBe(
+      kind === "sleep" ? 100 : 54,
+    );
+    expect(report.skipped).toBe(2);
+    expect(report.unsupported).toContain("Garmin unrecognized-or-invalid-record: 2 skipped.");
+  });
+
+  it("continues to stream array-valued dailySleepDTO wrappers", async () => {
+    const { pod, report } = await fileImport(
+      garminFileAdapter,
+      zip({
+        [`${WELLNESS}sleepData.json`]: [
+          { dailySleepDTO: [{ calendarDate: "2026-06-01", deepSleepSeconds: 100 }] },
+          { unexpected: true },
+        ],
+      }),
+    );
+    expect(observation(pod.dataset(metricUrl("sleep"))).measuredValue).toBe(100);
+    expect(report.skipped).toBe(1);
   });
 
   it("bypasses the whole-upload cap using bounded sparse archive ranges", async () => {
@@ -535,6 +729,25 @@ describe("Garmin archive budgets and cancellation", () => {
     expect(report.unsupported?.join(" ")).toContain("total-decompressed-byte-cap");
   });
 
+  it("counts directories and unknown files as unrecognized after exhausting actual inflation", async () => {
+    const bytes = zipSync({
+      [ACTIVITY]: strToU8(JSON.stringify([{ ...run, ignored: "x".repeat(100000) }])),
+      "DI_CONNECT/": new Uint8Array(),
+      "DI_CONNECT/DI-Connect-Unknown/data.json": strToU8("{}"),
+      [DAILY]: strToU8('[{"calendarDate":"2026-06-01","totalSteps":1}]'),
+    });
+    const view = new DataView(bytes.buffer);
+    const directory = view.getUint32(bytes.length - 6, true);
+    view.setUint32(directory + 24, 1, true);
+    const { report } = await fileImport(
+      createGarminFileAdapter({ maxTotalBytes: 1000 }),
+      binaryFile(bytes),
+    );
+    expect(report.skipped).toBe(2);
+    expect(report.unsupported).toContain("Garmin total-decompressed-byte-cap-exceeded: 2 skipped.");
+    expect(report.unsupported).toContain("Garmin unrecognized-file: 2 unrecognized.");
+  });
+
   it("aborts decoder exceptions instead of continuing with unaccounted inflater work", async () => {
     const bytes = zipSync({ [ACTIVITY]: strToU8(JSON.stringify([run])) });
     const [entry] = await zipDirectory(binaryFile(bytes));
@@ -570,6 +783,23 @@ describe("Garmin archive budgets and cancellation", () => {
     expect(report.written).toEqual([]);
     expect(report.skipped).toBe(4);
     expect(report.unsupported?.join(" ")).toContain("total-record-cap-exceeded: 2 skipped");
+  });
+
+  it("charges unmatched first-pass rows to the shared attempted-record budget", async () => {
+    const { report } = await fileImport(
+      createGarminFileAdapter({ maxRecordsPerRun: 1 }),
+      zip({
+        [`${WELLNESS}hrv.json`]: [
+          { unexpected: 1 },
+          { hrvSummaries: [{ calendarDate: "2026-06-01", lastNightAvg: 54 }] },
+          { unexpected: 2 },
+        ],
+      }),
+    );
+    expect(report.written).toEqual([]);
+    expect(report.skipped).toBe(2);
+    expect(report.unsupported).toContain("Garmin unrecognized-or-invalid-record: 1 skipped.");
+    expect(report.unsupported).toContain("Garmin total-record-cap-exceeded: 1 skipped.");
   });
 
   it("returns a counted note for empty or unsupported JSON envelopes", async () => {
@@ -634,6 +864,38 @@ describe("Garmin archive budgets and cancellation", () => {
         },
       }),
     ).rejects.toThrow("Pod write failed");
+  });
+
+  it.each([
+    "metrics",
+    "activities",
+  ] as const)("checks cancellation between %s writes in final flush", async (kind) => {
+    const controller = new AbortController();
+    const reason = new Error("cancelled during flush");
+    const write = vi.fn(async (doc) => {
+      controller.abort(reason);
+      return { url: `${ROOT}${doc.slug}`, category: doc.category, forClass: doc.forClass };
+    });
+    const file =
+      kind === "metrics"
+        ? zip({ [DAILY]: [{ calendarDate: "2026-06-01", totalSteps: 1, restingHeartRate: 50 }] })
+        : zip({ [ACTIVITY]: [run, { ...run, activityId: 124, activityType: "cycling" }] });
+    // Bypass the runner's own abort wrapper to exercise the adapter's flush boundary.
+    await expect(
+      garminFileAdapter.importFile(file, {
+        signal: controller.signal,
+        maxRows: 100000,
+        webId: TEST_WEBID,
+        resolve: (slug) => `${ROOT}${slug}`,
+        read: async () => undefined,
+        write,
+        writeBinary: vi.fn(),
+        remove: vi.fn(),
+        progress: vi.fn(),
+        skip: vi.fn(),
+      }),
+    ).rejects.toBe(reason);
+    expect(write).toHaveBeenCalledTimes(1);
   });
 
   it("validates lowering-only limits and bounds legacy text after opting into streaming", async () => {

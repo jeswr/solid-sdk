@@ -244,7 +244,9 @@ Supported paths tolerate account/email/UserID prefixes and filename date suffixe
   `health/activities.ttl#activity-<id>` or `mobility/journeys.ttl#journey-<id>`.
   Runs/indoor cycling are exercise actions; outdoor rides/commutes are travel actions.
   Archive distance/elevation are converted from cm to m, duration from ms to s and
-  ISO duration text; calories remain kcal. Pulse/elevation summaries are labelled notes.
+  ISO duration text. Summary `calories` appear to use kJ-like units: divide by 4.184
+  and round to one decimal place for kcal. **This conversion is pending verification
+  against a real export.** Pulse/elevation summaries are labelled notes.
 - `DI_CONNECT/DI-Connect-Aggregator/UDSFile_*.json`: steps, distance, resting/minimum/
   maximum/average pulse, active kcal and floors. Numeric strings and zero counts work;
   invalid dates and non-finite/negative values are omitted.
@@ -257,9 +259,14 @@ Supported paths tolerate account/email/UserID prefixes and filename date suffixe
 Daily measurements use `health/observations/<metric>/<YYYY-MM>.ttl`, deterministic
 metric/day subjects, and existing HealthRecord/Observation/CodeableConcept/OWL-Time terms.
 Steps, pulse and sleep use the Health model's QUDT/UCUM units; other quantities use generic
-observations and source field codes without new IRIs. Effective instants use the calendar
-date (UTC midnight), following Health's current measurement reader. Reimports merge matching
-subjects under ETags; overlapping exports preserve older dates. File imports have no cursor
+observations and source field codes without asserting a concept scheme; running and cycling
+VO₂max have distinct codes. The patient is an unnamed document-local `#subject`, following
+Apple Health; an export does not establish the Pod owner's identity. Effective instants use
+the calendar date (UTC midnight), following Health's current measurement reader. If only a
+timestamp is available, its own offset determines the day. Numeric epochs must be Garmin
+milliseconds between 2000-01-01 and now + one day; seconds, zero and date-like numbers are
+rejected. Reimports merge matching subjects under ETags; overlapping exports preserve older
+dates. File imports have no cursor
 or deletion reconciliation. Raw JSON files are not retained.
 
 The connector Apple Health adapter currently imports workouts only. The suite Health
@@ -269,10 +276,13 @@ separate HRV/VO₂max charts. Observations are stored and registered using exist
 terms; automatic chart discovery needs follow-up app work. This change includes no app edits.
 
 Stress, Body Battery and intensity minutes have no terms in the current health sector.
-They produce counted vocabulary-gap notes in `report.unsupported`. Unknown files and
-malformed/oversized records also increment `report.skipped`; grouped notes retain no account
-paths. Uploaded-Files nested ZIPs are counted without opening them; their note directs users
-to the `activity-files` adapter for FIT import. Unknown record shapes are reported, not guessed.
+They produce vocabulary-gap notes in `report.unsupported`, counted once per file per gap,
+with the number of distinct affected days per file. These notes do not increment
+`report.skipped`. Unknown files and directories are counted as unrecognised in notes;
+malformed/oversized records and omitted supported entries increment `report.skipped`.
+Grouped notes retain no account paths. Uploaded-Files nested ZIPs are counted without opening
+them; their note directs users to the `activity-files` adapter for FIT import. Unknown record
+shapes are reported, not guessed.
 
 Garmin reuses Takeout's ZIP/ZIP64 directory, local-header, overlap, size and CRC validation.
 Defaults: 10,000 dispatched entries, 64 MiB decompressed per entry, 32 MiB JSON per entry,

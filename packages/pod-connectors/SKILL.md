@@ -272,8 +272,10 @@ run row budget too, so invalid input cannot reset its work allowance at each ent
 Keep metadata directory validation before dispatch,
 entry CRC validation before JSON parsing, small inflater input pieces and monthly metric
 batches. Catch entry parse failures separately from Pod writes; propagate writer failures
-and decoder exceptions. Count cap/unknown/FIT skips and return static grouped run-report
-notes without source account paths. Keep legacy text capped despite `streaming: true`.
+and decoder exceptions. Count cap/FIT skips separately from unrecognised files; group
+vocabulary gaps once per file with distinct affected-day counts, without treating them as
+skipped records. Return static grouped run-report notes without source account paths.
+Keep legacy text capped despite `streaming: true`.
 The connector's Apple adapter is workouts-only: use the separate suite Health model's
 Observation/CodeableConcept/Instant mapping for metrics, and keep the README candid that
 current Health charts read native shards rather than connector metric directories. Do not

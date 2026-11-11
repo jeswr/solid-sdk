@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 /** Bounded, entry-detected Garmin account archives. Nested archives are never opened. */
 import { DataFactory, Store } from "n3";
 import { isoDurationFromSeconds } from "../core/duration.js";
@@ -8,7 +9,7 @@ import { jsonEntries } from "../core/file-json.js";
 import { fileText } from "../core/file-stream.js";
 import { SectorThing } from "../core/file-vocab-map.js";
 import type { NormalisedDoc } from "../core/types.js";
-import { CLASSES, ExerciseAction, PodThing, TravelAction } from "../core/vocab.js";
+import { CLASSES, ExerciseAction, TravelAction } from "../core/vocab.js";
 import {
   cappedSink,
   InflationBudget,
@@ -18,15 +19,7 @@ import {
   zipDirectory,
 } from "../google-takeout/zip-reader.js";
 import { isTravelActivity } from "./activity-kind.js";
-import {
-  CODE_SCHEMES,
-  HEALTH,
-  HealthCode,
-  HealthInstant,
-  HealthObservation,
-  METRICS,
-  type Metric,
-} from "./health-vocab.js";
+import { HEALTH, HealthObservation, METRICS, type Metric } from "./health-vocab.js";
 
 export interface GarminArchiveLimits {
   readonly maxEntries: number;
@@ -140,27 +133,30 @@ function number(value: unknown): number | undefined {
 }
 function date(value: unknown): Date | undefined {
   const numeric = number(value);
+  if (numeric !== undefined) {
+    // Garmin epochs are milliseconds. Never guess seconds or accept sentinel/date-like
+    // numbers (e.g. 0 or 20260601) as dates near 1970.
+    if (numeric < Date.UTC(2000, 0, 1) || numeric > Date.now() + 86400000) return undefined;
+    return new Date(numeric);
+  }
   const raw = text(value);
   if (
-    numeric === undefined &&
-    (!raw ||
-      !/^\d{4}-\d{2}-\d{2}(?:[ T]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})?)?$/.test(raw))
+    !raw ||
+    !/^\d{4}-\d{2}-\d{2}(?:[ T]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})?)?$/.test(raw)
   )
     return undefined;
-  if (numeric === undefined && raw) {
-    const calendar = raw.slice(0, 10);
-    const midnight = new Date(`${calendar}T00:00:00Z`);
-    if (!Number.isFinite(midnight.getTime()) || midnight.toISOString().slice(0, 10) !== calendar)
-      return undefined;
-  }
-  const iso = raw?.replace(" ", "T");
-  const normalized = iso?.includes("T")
+  const calendar = raw.slice(0, 10);
+  const midnight = new Date(`${calendar}T00:00:00Z`);
+  if (!Number.isFinite(midnight.getTime()) || midnight.toISOString().slice(0, 10) !== calendar)
+    return undefined;
+  const iso = raw.replace(" ", "T");
+  const normalized = iso.includes("T")
     ? /(?:Z|[+-]\d{2}:?\d{2})$/.test(iso)
       ? iso
       : `${iso}Z`
     : `${iso}T00:00:00Z`;
-  const result = new Date(numeric ?? normalized);
-  // Daily observations need a finite, bounded shard space; reject sentinel epochs.
+  const result = new Date(normalized);
+  // Calendar strings also need a finite, bounded shard space.
   return Number.isFinite(result.getTime()) &&
     result.getUTCFullYear() >= 1900 &&
     result.getUTCFullYear() <= 2199
@@ -174,11 +170,25 @@ function day(value: unknown): Date | undefined {
   return result?.toISOString().slice(0, 10) === raw ? result : undefined;
 }
 
+function timestampDay(value: unknown): Date | undefined {
+  const parsed = date(value);
+  if (!parsed) return undefined;
+  // Daily metrics belong to the timestamp's local calendar day, even when its
+  // offset crosses a UTC day/month boundary. Store that day at UTC midnight.
+  const raw = text(value);
+  return day(raw?.includes("-") ? raw.slice(0, 10) : parsed.toISOString().slice(0, 10));
+}
+
 /** Normalize an object root to an array without copying its text. Two selector passes
  * support both flat arrays and large wrapper arrays without retaining a wrapper record.
  * Each pass is linear and the shared reader caps tokens, records and nesting (64).
  */
-async function* records(bytes: Uint8Array, kind: Product, skip: () => void): AsyncGenerator<Row> {
+async function* records(
+  bytes: Uint8Array,
+  kind: Product,
+  skip: () => void,
+  unrecognized: () => void,
+): AsyncGenerator<Row> {
   const bom = bytes[0] === 239 && bytes[1] === 187 && bytes[2] === 191 ? 3 : 0;
   let first = bom;
   while (first < bytes.length && [9, 10, 13, 32].includes(bytes[first] as number)) first++;
@@ -210,17 +220,30 @@ async function* records(bytes: Uint8Array, kind: Product, skip: () => void): Asy
     fit: [],
   };
   let found = false;
+  let unmatched = 0;
+  const selected = () => {
+    found = true;
+    while (unmatched > 0) {
+      unmatched--;
+      unrecognized();
+    }
+  };
   try {
     for await (const entry of jsonEntries(
       input,
       keys[kind].map((key) => `[].${key}`),
-      [],
+      kind === "sleep" ? ["[].dailySleepDTO"] : [],
       () => {
-        found = true;
+        selected();
         skip();
       },
+      (path) => {
+        if (path !== "") return;
+        if (found) unrecognized();
+        else unmatched++;
+      },
     )) {
-      found = true;
+      selected();
       const row = object(entry.value);
       yield kind === "vo2max" && entry.path === "[].cycling"
         ? { ...row, garminCycling: true }
@@ -294,7 +317,10 @@ class Mapper {
       calories = number(row.calories);
     action.duration = duration === undefined ? undefined : isoDurationFromSeconds(duration / 1000);
     action.distance = distance === undefined ? undefined : `${distance / 100} m`;
-    action.calories = calories === undefined ? undefined : `${calories} kcal`;
+    // summarizedActivities calories appear to be kJ-like; conversion to kcal
+    // (divide by 4.184, round to 1 dp) is pending verification against a real export.
+    action.calories =
+      calories === undefined ? undefined : `${Math.round((calories / 4.184) * 10) / 10} kcal`;
     if (action instanceof ExerciseAction) action.exerciseType = type;
     // Preserve extra summary fields without minting Garmin predicates.
     const details: string[] = [];
@@ -312,15 +338,15 @@ class Mapper {
     if (numeric === undefined || this.full || (kind === "steps" && !Number.isSafeInteger(numeric)))
       return false;
     const slug = `health/observations/${kind}/${at.toISOString().slice(0, 7)}.ttl`;
-    const [type, codeValue, unitCode, unit] = METRICS[kind];
+    const [type, , unitCode, unit] = METRICS[kind];
     const doc = this.document(slug, HEALTH.Observation, "health");
     const url = this.ctx.resolve(slug);
     const iri = `${url}#garmin-${kind}-${at.toISOString().slice(0, 10)}`;
-    const patient = this.ctx.webId ?? `${url}#subject`;
+    // An account export does not establish that its patient is the Pod owner.
+    const patient = `${url}#subject`;
     const record = new SectorThing(url, doc.dataset, DataFactory);
     record.types.add(HEALTH.Record);
     record.dataSubject = patient;
-    new PodThing(patient, doc.dataset, DataFactory).types.add(HEALTH.Person);
     const observation = new HealthObservation(iri, doc.dataset, DataFactory);
     observation.types.add(HEALTH.Observation);
     observation.types.add(HEALTH.ClinicalEntry);
@@ -335,26 +361,25 @@ class Mapper {
     observation.time = `${iri}-time`;
     observation.source = "Garmin Connect";
     observation.description = note;
-    const code = new HealthCode(`${iri}-code`, doc.dataset, DataFactory);
-    code.types.add(HEALTH.Code);
-    code.code = codeValue;
-    code.scheme = /^(?:55423-8|8867-4|93832-4)$/.test(codeValue)
-      ? CODE_SCHEMES.loinc
-      : CODE_SCHEMES.garmin;
-    const instant = new HealthInstant(`${iri}-time`, doc.dataset, DataFactory);
-    instant.types.add(HEALTH.Instant);
-    instant.types.add(HEALTH.TemporalEntity);
-    instant.dateTime = at;
+    // The vocab map completes the deterministic helper fragments; the session
+    // counts only source observations, excluding resources added by that map.
     this.observations++;
     this.pending++;
     return true;
   }
   async flush(final = false): Promise<void> {
     if (!final && this.pending < 250) return;
-    for (const doc of this.metrics.values()) await this.ctx.write(doc);
+    for (const doc of this.metrics.values()) {
+      this.ctx.signal?.throwIfAborted();
+      await this.ctx.write(doc);
+    }
     this.metrics.clear();
     this.pending = 0;
-    if (final) for (const doc of this.activities.values()) await this.ctx.write(doc);
+    if (final)
+      for (const doc of this.activities.values()) {
+        this.ctx.signal?.throwIfAborted();
+        await this.ctx.write(doc);
+      }
   }
 }
 
@@ -391,16 +416,27 @@ export async function importGarminArchive(
   )
     throw new Error("This ZIP is not a recognized Garmin account export.");
   const notes = new Map<string, number>();
+  const gaps = new Map<string, { files: number; days: number }>();
   let skipped = 0;
   let recordAttempts = 0;
   const note = (reason: string, count = 1) => {
-    skipped += count;
+    if (reason !== "unrecognized-file") skipped += count;
     notes.set(reason, (notes.get(reason) ?? 0) + count);
+  };
+  const omitEntries = (remaining: typeof entries, reason: string) => {
+    for (const entry of remaining)
+      note(
+        entry.invalid
+          ? "invalid-zip-entry"
+          : entry.name.endsWith("/") || !garminProduct(entry.name)
+            ? "unrecognized-file"
+            : reason,
+      );
   };
   const mapper = new Mapper(ctx, limits.maxObservations);
   const inflationBudget = new InflationBudget(limits.maxTotalBytes);
   if (entries.length > limits.maxEntries)
-    note("entry-count-cap-exceeded", entries.length - limits.maxEntries);
+    omitEntries(entries.slice(limits.maxEntries), "entry-count-cap-exceeded");
   for (const [index, entry] of entries.slice(0, limits.maxEntries).entries()) {
     ctx.signal?.throwIfAborted();
     ctx.progress({
@@ -409,7 +445,10 @@ export async function importGarminArchive(
       total: Math.min(entries.length, limits.maxEntries),
     });
     ctx.signal?.throwIfAborted();
-    if (entry.name.endsWith("/") && !entry.invalid) continue;
+    if (entry.name.endsWith("/") && !entry.invalid) {
+      note("unrecognized-file");
+      continue;
+    }
     const product = garminProduct(entry.name);
     if (entry.invalid) {
       note("invalid-zip-entry");
@@ -470,9 +509,9 @@ export async function importGarminArchive(
       if (error instanceof ZipDecoderError)
         throw new Error("Garmin ZIP decoder failed; archive import aborted.", { cause: error });
       if (error instanceof TotalInflatedLimit) {
-        note(
+        omitEntries(
+          entries.slice(index, limits.maxEntries),
           "total-decompressed-byte-cap-exceeded",
-          Math.min(entries.length, limits.maxEntries) - index,
         );
         break;
       }
@@ -491,10 +530,28 @@ export async function importGarminArchive(
         throw new RecordLimit("total-record-cap-exceeded");
       if (count++ >= recordLimit) throw new RecordLimit("records-per-file-cap-exceeded");
     };
-    const rows = records(bytes, product, () => {
-      note("JSON-record-byte-cap-exceeded");
-      accountRecord();
-    });
+    const rows = records(
+      bytes,
+      product,
+      () => {
+        accountRecord();
+        note("JSON-record-byte-cap-exceeded");
+      },
+      () => {
+        accountRecord();
+        note("unrecognized-or-invalid-record");
+      },
+    );
+    const gapDays = new Map<string, Set<string>>();
+    const recordNote = (reason: string, affectedDay?: string) => {
+      if (!affectedDay) return note(reason);
+      let days = gapDays.get(reason);
+      if (!days) {
+        days = new Set();
+        gapDays.set(reason, days);
+      }
+      days.add(affectedDay);
+    };
     try {
       while (true) {
         ctx.signal?.throwIfAborted();
@@ -520,32 +577,55 @@ export async function importGarminArchive(
           note("total-observation-cap-exceeded");
           break;
         }
-        if (!mapRow(product, next.value, mapper, note)) note("unrecognized-or-invalid-record");
+        if (!mapRow(product, next.value, mapper, recordNote))
+          note("unrecognized-or-invalid-record");
         await mapper.flush();
       }
     } finally {
       await rows.return(undefined);
+    }
+    for (const [reason, days] of gapDays) {
+      const previous = gaps.get(reason) ?? { files: 0, days: 0 };
+      gaps.set(reason, { files: previous.files + 1, days: previous.days + days.size });
     }
     if (count === 0 && !parseFailed) note("empty-or-unrecognized-JSON");
   }
   await mapper.flush(true);
   return {
     skipped,
-    unsupported: [...notes].map(([reason, count]) => `Garmin ${reason}: ${count} skipped.`),
+    unsupported: [
+      ...[...notes].map(
+        ([reason, count]) =>
+          `Garmin ${reason}: ${count} ${reason === "unrecognized-file" ? "unrecognized" : "skipped"}.`,
+      ),
+      ...[...gaps].map(
+        ([reason, count]) => `Garmin ${reason}: ${count.files} files; ${count.days} affected days.`,
+      ),
+    ],
   };
 }
 
-function mapRow(kind: Product, raw: Row, mapper: Mapper, note: (reason: string) => void): boolean {
+function mapRow(
+  kind: Product,
+  raw: Row,
+  mapper: Mapper,
+  note: (reason: string, affectedDay?: string) => void,
+): boolean {
   if (kind === "activities") return mapper.activity(raw);
   const row = Object.keys(object(raw.dailySleepDTO)).length ? object(raw.dailySleepDTO) : raw;
   const hrv = object(row.hrvSummary);
   const at =
-    day(row.calendarDate ?? hrv.calendarDate) ?? date(row.metricsDate ?? row.date ?? row.timestamp);
+    day(row.calendarDate ?? hrv.calendarDate) ??
+    timestampDay(row.metricsDate ?? row.date ?? row.timestamp);
   if (!at) return false;
   let mapped = false;
   const add = (metric: Metric, value: unknown, details?: string) => {
     if (mapper.full && number(value) !== undefined) note("total-observation-cap-exceeded");
     mapped = mapper.metric(metric, at, value, details) || mapped;
+  };
+  const gap = (reason: string) => {
+    note(reason, at.toISOString().slice(0, 10));
+    mapped = true;
   };
   if (kind === "daily") {
     for (const [field, metric] of [
@@ -560,11 +640,11 @@ function mapRow(kind: Product, raw: Row, mapper: Mapper, note: (reason: string) 
     ] as const)
       add(metric, row[field]);
     if (["averageStressLevel", "allDayStress"].some((key) => row[key] != null))
-      note("vocabulary-gap-stress");
+      gap("vocabulary-gap-stress");
     if (Object.keys(row).some((key) => /bodyBattery/i.test(key) && row[key] != null))
-      note("vocabulary-gap-Body-Battery");
+      gap("vocabulary-gap-Body-Battery");
     if (["moderateIntensityMinutes", "vigorousIntensityMinutes"].some((key) => row[key] != null))
-      note("vocabulary-gap-intensity-minutes");
+      gap("vocabulary-gap-intensity-minutes");
   } else if (kind === "sleep") {
     const stages = [row.deepSleepSeconds, row.lightSleepSeconds, row.remSleepSeconds].map(number);
     const start = date(row.sleepStartTimestampGMT),
@@ -581,7 +661,9 @@ function mapRow(kind: Product, raw: Row, mapper: Mapper, note: (reason: string) 
       if (number(row[field]) !== undefined) details.push(`${field}: ${number(row[field])} s`);
     }
     const score = number(
-      object(object(row.sleepScores).overall).value ?? object(row.sleepScores).overall,
+      object(row.sleepScores).overallScore ??
+        object(object(row.sleepScores).overall).value ??
+        object(row.sleepScores).overall,
     );
     if (score !== undefined) details.push(`Sleep score: ${score}`);
     // Awake/in-bed are not asleep. Never infer asleep duration from the whole window.
@@ -605,7 +687,9 @@ function mapRow(kind: Product, raw: Row, mapper: Mapper, note: (reason: string) 
     const generic = object(row.generic),
       cycling = object(row.cycling);
     add(
-      row.garminCycling === true || row.sport === "cycling" ? "vo2max-cycling" : "vo2max-running",
+      row.garminCycling === true || text(row.sport)?.toLowerCase() === "cycling"
+        ? "vo2max-cycling"
+        : "vo2max-running",
       generic.vo2MaxPreciseValue ??
         generic.vo2MaxValue ??
         row.vo2MaxPreciseValue ??
