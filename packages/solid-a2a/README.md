@@ -89,8 +89,13 @@ const protocol = await buildProtocolDocument({
   **min(2, availableParallelism()) workers** and at most **64 waiting calls**. A full
   queue fails closed with `Validation worker queue is full`. Workers have V8 limits of
   512 MiB old generation, 16 MiB young generation and a 4 MiB stack (these are heap/stack
-  limits, not a total process RSS limit). The old-generation limit leaves at least eight
-  times the largest escaped transfer's space for parsing, datasets and temporary copies.
+  limits, not a total process RSS limit). Transfer strings, parsed RDF terms, named-graph
+  indexes, validation views and temporary copies coexist. Review probes measured about
+  178 MB of worker heap at the graph caps, roughly a 3x margin under 512 MiB; this is an
+  observation, not a worst-case memory guarantee. The default pool permits 1 GiB of old
+  generation across two workers; the maximum eight-worker pool permits 4 GiB, plus up to
+  128 MiB young generation and 32 MiB stacks. Caller graphs, queues, cached encodings and
+  Node overhead add to the combined process footprint.
   Idle workers are unref'd.
   Each call has a **2000 ms wall-clock deadline**, including input preflight, queue wait,
   worker startup, validation and report projection. Set `{ timeoutMs: 5000 }` to change
@@ -103,14 +108,24 @@ const protocol = await buildProtocolDocument({
   and message deserialization failures also fail closed. Successful workers are reused.
   The calling thread checks raw graph counts (1000 intent / 10000 shape quads), the
   shared term caps, and aggregate budgets of **1,048,576 data / 4,194,304 shape characters**
-  before conversion or serialization. Characters are UTF-16 code units, counted for every
-  term occurrence, including datatype IRIs, language, direction and graph names. Duplicate
-  quads count in full. These budgets bound even sixfold N-Quads escaping to less than
-  64 MiB of two-byte text across both graphs. Dataset iteration and structured intent
-  lowering are bounded too. Transfer uses N3 Writer/Parser N-Quads and preserves blank
-  node identifiers, named graphs, datatypes, languages and RDF 1.2 direction.
+  before conversion or serialization. These count UTF-16 code units with N-Quads escaping
+  weighted before encoding: quotes/backslashes and short escapes cost two, other C0 controls
+  six, and a surrogate pair ten. Metadata counts too, including datatype IRIs, language,
+  direction and graph names; duplicate quads count in full. Escaped source term text across both
+  graphs is bounded to 5 Mi code units; transfer punctuation and safe blank-node labels add
+  a bounded amount. Dataset iteration
+  and structured intent lowering are bounded too. Both execution paths refuse IRIs with
+  whitespace, controls or IRIREF delimiters (`<>"{}|^` plus backtick and backslash), relative
+  IRIs and malformed BCP 47 language tags. RDF 1.2 direction is a separate `ltr`/`rtl` field.
+  Transfer uses N3 Writer/Parser N-Quads and relabels **all** blank nodes to safe `b<n>`
+  labels, sharing one map across data and shapes so identity is preserved. Original graphs
+  and protocol hashes stay unchanged. Named graphs, datatypes, languages and direction
+  are preserved. Encoded shapes are weakly cached by their input document/array/dataset.
+  Each call still checks the limits and compares all term fields to invalidate changed shapes.
+  Queued term fields are rechecked at dispatch in case the caller changed them during startup.
+  Deadlines are checked before each graph encoding and before posting to a worker.
 - Use `new ValidationWorkerPool({ size: 2, maxQueueSize: 32 })` and pass it as
-  `{ workerPool }` to configure concurrency and queue capacity. `size` accepts 1–32;
+  `{ workerPool }` to configure concurrency and queue capacity. `size` accepts 1–8;
   `maxQueueSize` accepts 0–65536. Worker warm-up has its own **10000 ms** ready-handshake
   timeout, configurable with `startupTimeoutMs` (integer 1–2147483647). It continues across
   short call deadlines; a failed handshake refuses waiting calls. Call

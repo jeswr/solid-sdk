@@ -8,6 +8,7 @@
 // handshake decoders that accept what the encoder refuses.
 
 import { parseRdf } from "@jeswr/fetch-rdf";
+import { DataFactory, Writer } from "n3";
 import { describe, expect, it } from "vitest";
 import {
   buildShapeForIntent,
@@ -441,12 +442,18 @@ ${body}`,
     });
 
     it("keeps literals with the same text but another datatype or language apart", async () => {
-      let data = "";
-      for (let i = 0; i < 80; i++)
-        data += `<urn:f> <urn:ex:p> "a"^^<urn:dt:${i}> .\n<urn:f> <urn:ex:r> "z"@en-v${i} .\n`;
+      const { namedNode, quad, literal } = DataFactory;
+      // Distinct, well-formed private-use tags reach the operation budget check.
+      const data = Array.from({ length: 80 }, (_, i) => [
+        quad(namedNode("urn:f"), namedNode("urn:ex:p"), literal("a", namedNode(`urn:dt:${i}`))),
+        quad(namedNode("urn:f"), namedNode("urn:ex:r"), literal("z", `en-x-v${i}`)),
+      ]).flat();
       const report = await quick(
         "<urn:S> sh:targetNode <urn:f> ; sh:path [ sh:zeroOrOnePath <urn:ex:p> ] ; sh:lessThan <urn:ex:r> .",
-        await parseRdf(data, "text/turtle"),
+        await parseRdf(
+          new Writer({ format: "N-Quads" }).quadsToString(data),
+          "application/n-quads",
+        ),
       );
       expect(report.conforms).toBe(false);
       expect(report.results[0]?.message).toMatch(/evaluations over this intent/);

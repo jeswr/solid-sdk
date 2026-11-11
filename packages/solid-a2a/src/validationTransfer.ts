@@ -1,5 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import type { Literal, Quad } from "@rdfjs/types";
+import type { BlankNode, Literal, Quad, Term } from "@rdfjs/types";
 import { DataFactory, Parser, Writer } from "n3";
 
 type DirectionalLiteral = Literal & { readonly direction?: string };
@@ -16,9 +16,41 @@ export function validationLiteral(term: Literal, datatype = term.datatype.value)
   });
 }
 
-/** Only called after the shared input caps; N3 Writer preserves RDF 1.2 direction. */
-export function encodeValidationQuads(quads: readonly Quad[]): string {
-  return new Writer({ format: "N-Quads" }).quadsToString(Array.from(quads));
+/** Only called after shared syntax/cost checks. Share the map across both graphs. */
+export function encodeValidationQuads(
+  quads: readonly Quad[],
+  blankNodes = new Map<string, BlankNode>(),
+): string {
+  const copy = (term: Term): Term => {
+    switch (term.termType) {
+      case "BlankNode": {
+        let safe = blankNodes.get(term.value);
+        if (!safe) {
+          safe = DataFactory.blankNode(`b${blankNodes.size}`);
+          blankNodes.set(term.value, safe);
+        }
+        return safe;
+      }
+      case "NamedNode":
+        return DataFactory.namedNode(term.value);
+      case "Literal":
+        return validationLiteral(term);
+      case "DefaultGraph":
+        return DataFactory.defaultGraph();
+      default:
+        throw new Error("Unsupported validation term");
+    }
+  };
+  // Copy rather than fromQuad/fromTerm, which discard RDF 1.2 direction.
+  const safe = quads.map((q) =>
+    DataFactory.quad(
+      copy(q.subject) as Quad["subject"],
+      copy(q.predicate) as Quad["predicate"],
+      copy(q.object) as Quad["object"],
+      copy(q.graph) as Quad["graph"],
+    ),
+  );
+  return new Writer({ format: "N-Quads" }).quadsToString(safe);
 }
 
 export function decodeValidationQuads(nquads: string): Quad[] {

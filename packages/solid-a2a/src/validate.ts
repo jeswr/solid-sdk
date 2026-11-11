@@ -71,6 +71,7 @@ export async function validateIntent(
         deadline,
         timeoutMs,
         options.workerPool,
+        shape,
       );
     }
     return await validateGraphs(intentQuads(intent), shapeQuads(shape));

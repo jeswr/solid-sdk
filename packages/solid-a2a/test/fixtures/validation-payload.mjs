@@ -17,8 +17,8 @@ let shapes = Array.from({ length: Number(process.argv[2]) }, (_, index) =>
 );
 let data;
 if (process.argv[2] === "escaped") {
-  // N3 escapes each NUL into six wire characters. Exercise worker headroom, not
-  // just the refusal path, with both budgets nearly full at the same time.
+  // N3 escapes each NUL into six wire characters. Fill the weighted budgets
+  // nearly to their caps, rather than submitting six times the allowed text.
   const fill = (budget, prefix) => {
     const quads = [];
     let characters = 0;
@@ -30,14 +30,14 @@ if (process.argv[2] === "escaped") {
       const length =
         subject.value.length +
         predicate.value.length +
-        object.value.length +
+        object.value.length * 6 +
         object.datatype.value.length +
         graph.value.length;
       if (characters + length > budget) break;
       quads.push(quad(subject, predicate, object, graph));
       characters += length;
     }
-    assert.ok(characters > budget - 4096);
+    assert.ok(characters > budget - 25_000);
     return quads;
   };
   data = fill(1_048_576, "data");

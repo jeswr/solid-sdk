@@ -13,10 +13,12 @@ This package is security-critical. Read [README.md](README.md) for the public co
   with a diagnostic in `results`; there is no validation exception type or error code.
 - `src/validationCore.ts` owns the step-model pre-check and shared 20,000-operation
   budget across validator datasets; `validationLimits.ts` owns quad-count, term and
-  aggregate character caps (1 Mi data / 4 Mi shapes, UTF-16 code units).
+  aggregate character caps (1 Mi data / 4 Mi shapes, escape-weighted UTF-16 code units).
+  Count N-Quads expansion before encoding; never allocate escaped strings just to meter them.
+  Refuse unsafe/relative IRIs and malformed BCP 47 tags on both execution paths.
   Keep these protections in the worker and in the browser fallback.
 - Node validation uses a lazy bounded pool, defaulting to min(2, availableParallelism())
-  workers and 64 queued calls. Preserve configurable `ValidationWorkerPool` size/queue
+  workers and 64 queued calls. Preserve configurable `ValidationWorkerPool` size (1–8)/queue
   bounds, per-worker resource limits (512 MiB old / 16 MiB young / 4 MiB stack),
   ready-before-dispatch warming and idle `unref()`. Worker warm-up has an independent
   configurable `startupTimeoutMs` (default 10000), surviving short caller deadlines.
@@ -29,8 +31,15 @@ This package is security-critical. Read [README.md](README.md) for the public co
   `closeValidationPool()` closes the shared pool, and `pool.close()` refuses pending calls
   and awaits termination with bounded grace. Successful workers are reused; closed
   instances stay closed. Submission is module-internal, never a public uncapped `run()`.
+  Weakly cache encoded shapes by the original input object, comparing all term fields
+  and rechecking limits on reuse so mutable inputs cannot retain a stale policy. Seed
+  each request's blank-node map from the shape encoding; data must not mutate the cache.
+  Check the deadline before each graph encoding. The combined footprint includes parsed
+  terms, graph indexes and validation views, not just text; do not infer an 8x heap margin
+  from transfer size. At size 8, old-generation limits alone total 4 GiB.
 - Shared quad-count, aggregate character and term caps in `validationLimits.ts` run
   before copying/converting or serializing on the caller as well as in the worker.
+  Repeat the checks at dispatch to catch term mutations during queue wait/startup.
   Bound dataset iteration and structured intent lowering too. Raw duplicate quads count toward the input cap.
   Keep input adapters in `validationInputs.ts`; workers receive N-Quads and must not
   import intent translation or the general fetch/serialization dependency graph during
@@ -46,8 +55,9 @@ This package is security-critical. Read [README.md](README.md) for the public co
   an explicit execution choice and otherwise fail closed. Preserve all input/operation
   protections there. There is no shipped browser Web Worker entry.
 - `validationTransfer.ts` uses N3 Writer/Parser N-Quads, including literal language AND
-  RDF 1.2 direction. Parse with `blankNodePrefix: ""` to preserve identifiers across
-  data and shapes. N3 `fromTerm`/`fromQuad` drop direction and must not be used on the
+  RDF 1.2 direction. Relabel ALL blank nodes to safe `b<n>` identifiers with a single
+  map shared by data and shapes. Parse with `blankNodePrefix: ""` to preserve that
+  cross-graph identity. N3 `fromTerm`/`fromQuad` drop direction and must not be used on the
   transfer path. Preserve named graphs, datatype IRIs and literal values.
   Namespace normalization must preserve direction too and remain confined to disposable
   validation views; hashing and serialization retain the original graph.
@@ -60,8 +70,9 @@ This package is security-critical. Read [README.md](README.md) for the public co
 
 Validate changes with the existing conformance, alias and hardening tests plus
 `test/validation-timeout.test.ts`, `test/validation-pool.test.ts` and
-`test/validation-round2.test.ts`. These suites simulate
+`test/validation-round2.test.ts` and `test/validation-round3.test.ts`. These suites simulate
 an infinitely busy synchronous validator, check actual termination and parent responsiveness, and cover timeout options,
 concurrency, queue admission/expiry, shutdown, resource limits, worker configuration,
-direction preservation, messageerror and crash replacement. Follow the root gate requirements
+direction preservation, messageerror, crash replacement, syntax injection, cache invalidation,
+escape-heavy caller loop gaps and sampled heap at the quad caps. Follow the root gate requirements
 and keep changes inside the authorized package scope.

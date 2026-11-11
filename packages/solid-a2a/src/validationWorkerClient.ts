@@ -1,7 +1,8 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import type { Worker, WorkerOptions } from "node:worker_threads";
-import type { Quad } from "@rdfjs/types";
+import type { BlankNode, Quad } from "@rdfjs/types";
 import type { ValidationReport } from "./types.js";
+import { checkedQuads } from "./validationLimits.js";
 import { encodeValidationQuads } from "./validationTransfer.js";
 
 export interface ValidationWorkerRequest {
@@ -14,7 +15,7 @@ export interface ValidationWorkerRequest {
 export type ValidationWorkerFactory = (url: URL, options: WorkerOptions) => Worker;
 
 export interface ValidationWorkerPoolOptions {
-  /** Concurrent workers, 1–32. Defaults to min(2, availableParallelism()). */
+  /** Concurrent workers, 1–8. Defaults to min(2, availableParallelism()). */
   readonly size?: number;
   /** Waiting calls beyond occupied workers, 0–65536 (default 64). */
   readonly maxQueueSize?: number;
@@ -29,6 +30,7 @@ type Job = {
   id: number;
   data: readonly Quad[];
   shapes: readonly Quad[];
+  shapeKey: object;
   deadline: number;
   timeoutMs: number;
   posted: boolean;
@@ -51,10 +53,31 @@ type Runner = (
   shapes: readonly Quad[],
   deadline: number,
   timeoutMs: number,
+  shapeKey: object,
 ) => Promise<ValidationReport>;
 // Only the capped validateIntent adapter can submit work. No public pool.run bypass.
 const runners = new WeakMap<ValidationWorkerPool, Runner>();
 const timeoutError = (ms: number) => new Error(`Validation exceeded ${ms} ms wall-clock limit`);
+
+type ShapeTransfer = { terms: string[]; encoded: string; blankNodes: Map<string, BlankNode> };
+// Key by the original ProtocolDocument/array/dataset, not the preflight's copy.
+const shapeTransfers = new WeakMap<object, ShapeTransfer>();
+function shapeTerms(quads: readonly Quad[]): string[] {
+  const terms: string[] = [];
+  for (const q of quads) {
+    for (const term of [q.subject, q.predicate, q.object, q.graph]) {
+      terms.push(term.termType, term.value);
+      if (term.termType === "Literal") {
+        terms.push(
+          term.datatype.value,
+          term.language,
+          (term as typeof term & { direction?: string }).direction ?? "",
+        );
+      }
+    }
+  }
+  return terms;
+}
 
 /** Lazily warmed, bounded workers. Retired slots count until termination or exit. */
 export class ValidationWorkerPool {
@@ -70,7 +93,7 @@ export class ValidationWorkerPool {
 
   constructor(options: ValidationWorkerPoolOptions = {}) {
     for (const [name, value, min, max] of [
-      ["size", options.size, 1, 32],
+      ["size", options.size, 1, 8],
       ["maxQueueSize", options.maxQueueSize, 0, 65_536],
       ["startupTimeoutMs", options.startupTimeoutMs, 1, 2_147_483_647],
     ] as const) {
@@ -80,8 +103,8 @@ export class ValidationWorkerPool {
     }
     this.options = { ...options };
     this.size = options.size ?? 2;
-    runners.set(this, (data, shapes, deadline, timeoutMs) =>
-      this.#run(data, shapes, deadline, timeoutMs),
+    runners.set(this, (data, shapes, deadline, timeoutMs, shapeKey) =>
+      this.#run(data, shapes, deadline, timeoutMs, shapeKey),
     );
   }
 
@@ -117,6 +140,7 @@ export class ValidationWorkerPool {
     shapes: readonly Quad[],
     deadline: number,
     timeoutMs: number,
+    shapeKey: object,
   ): Promise<ValidationReport> {
     if (this.closed) throw new Error("Validation worker pool is closed");
     const reserved = [...this.slots].filter((slot) => slot.dead || slot.job !== undefined).length;
@@ -144,6 +168,7 @@ export class ValidationWorkerPool {
         id: ++this.nextId,
         data,
         shapes,
+        shapeKey,
         deadline,
         timeoutMs,
         posted: false,
@@ -190,9 +215,10 @@ export class ValidationWorkerPool {
       this.options.workerUrl ?? new URL("./validationWorker.js", import.meta.url),
       {
         resourceLimits: {
-          // At most 5 Mi source characters across both graphs: even sixfold
-          // N-Quads escaping as two-byte strings is < 64 MiB. Leave >= 8x
-          // headroom for parsing, validator datasets and temporary term copies.
+          // Text is only part of the footprint: parsed terms, named graph
+          // indexes, validation views and temporary copies coexist. Review
+          // probes saw ~178 MB used heap at both quad/character caps; 512 MiB
+          // gives roughly 3x that observation, not a guaranteed 8x margin.
           maxOldGenerationSizeMb: 512,
           maxYoungGenerationSizeMb: 16,
           stackSizeMb: 4,
@@ -268,10 +294,41 @@ export class ValidationWorkerPool {
       return;
     }
     try {
+      // RDF/JS types are readonly, but caller objects may change while queued
+      // or during startup. Recheck before any Writer or cache access.
+      checkedQuads(job.data, false);
+      checkedQuads(job.shapes, true);
+      const terms = shapeTerms(job.shapes);
+      const cached = shapeTransfers.get(job.shapeKey);
+      let shapes =
+        cached &&
+        cached.terms.length === terms.length &&
+        cached.terms.every((term, i) => term === terms[i])
+          ? cached
+          : undefined;
+      // Shapes seed one map so their encoding can be reused with any data.
+      // Clone it per request: data-only blank nodes must not pollute the cache.
+      const blankNodes = new Map(shapes?.blankNodes);
+      if (performance.now() >= job.deadline) {
+        this.expire(job);
+        return;
+      }
+      if (!shapes) {
+        shapes = {
+          terms,
+          encoded: encodeValidationQuads(job.shapes, blankNodes),
+          blankNodes: new Map(blankNodes),
+        };
+        shapeTransfers.set(job.shapeKey, shapes);
+      }
+      if (performance.now() >= job.deadline) {
+        this.expire(job);
+        return;
+      }
       const request: ValidationWorkerRequest = {
         id: job.id,
-        data: encodeValidationQuads(job.data),
-        shapes: encodeValidationQuads(job.shapes),
+        data: encodeValidationQuads(job.data, blankNodes),
+        shapes: shapes.encoded,
       };
       // Serialization and a delayed parent timer must never admit a late success.
       if (performance.now() >= job.deadline) {
@@ -376,10 +433,11 @@ export function runValidationWorker(
   deadline: number,
   timeoutMs: number,
   pool?: ValidationWorkerPool,
+  shapeKey: object = shapes,
 ): Promise<ValidationReport> {
   if (!pool) defaultPool ??= new ValidationWorkerPool();
   const selected = pool ?? (defaultPool as ValidationWorkerPool);
-  return (runners.get(selected) as Runner)(data, shapes, deadline, timeoutMs);
+  return (runners.get(selected) as Runner)(data, shapes, deadline, timeoutMs, shapeKey);
 }
 
 /** Shut down the shared pool; a later validateIntent call lazily creates a new one. */
