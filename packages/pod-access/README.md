@@ -342,7 +342,7 @@ no live service is needed. Run `pnpm run gate` after the package checks.
 <!-- AUTHORED-BY Codex GPT-6 -->
 
 `@jeswr/pod-access/roles` exports `rolesToModes`, `modesToRole`, `grantsWithRoles`,
-`readGrants`, `setGrants`, `addGrant`, `removeGrant`, `isRoleError`, and their documented types
+`readGrants`, `setGrants`, `addGrant`, `removeGrant`, `movePreservingAccess`, `isRoleError`, and their documented types
 (`Role`, `ResourceKind`, `AgentRef`, `RoleGrant`, `GrantSnapshot`, `RoleModes`, `RoleContext`,
 `RoleError`, `RolesOptions`, `GrantMutationOptions`, `SetGrantsOptions`, `SetGrantsResult`).
 It does not change the offline root API.
@@ -512,6 +512,50 @@ root when a host serves several pods. Access RDF is limited to 1 MiB, 10,000 qua
 64-step ancestor walk; remote JSON-LD contexts and named graphs are refused. No group or
 app identifier is fetched. RDF edits use typed wrappers and n3.Writer. The roles tests use
 in-memory HTTP fixtures only.
+
+### Moves that preserve sharing
+
+```ts
+import { movePreservingAccess } from "@jeswr/pod-access/roles";
+
+const moved = await movePreservingAccess(storage, resourceUrl, destinationContainer, {
+  fetch: authenticatedFetch, root: storage.root, webId, name: "renamed.txt", signal,
+});
+// Persist moved.url. Drive shows its sharing-reset warning only if !moved.preserved.
+```
+
+`MovePreservingAccessOptions` extends `GrantMutationOptions`: the guarded authenticated fetch,
+caller WebID, root and trusted implementation are the usual role options. As with `storage.move`,
+`to` is a destination container; optional `name` is a decoded name hint. Always use the returned
+`url`. An advertised native move bypasses access entirely and returns `preserved: true`, with
+empty `reapplied` and `dropped` arrays. This supports native LWS moves without treating ODRL as WAC.
+
+Emulated Solid moves snapshot only own WAC/ACP roles, including container and descendant roles,
+then preflight the destination model and caller management before moving. The traversal uses
+`listAll` and refuses above 2,000 resources including the root, matching storage-client's cap.
+Advertised access/metadata documents and `.acl`/`.acr` descendants are auxiliary, not separate
+sharing targets. Folder grants must represent identical folder and member modes; partial or
+lossy role projections and separate comments-container moves are refused before moving.
+Inherited grants are neither copied nor reported as dropped: inherited access follows the
+new ancestors and can therefore change.
+
+Unsupported own grants stop the operation with `StorageError('unsupported')`, feature
+`accessControl`, before any move or write. With `acceptReset: true`, expressible grants are
+reapplied and unexpressible ones appear in `dropped: [{ url, grant, reason }]`, using original
+resource URLs. `preserved` is false exactly when `dropped` is nonempty. Caller lockout and
+unreadable/unrepresentable source policies always refuse, even with `acceptReset`.
+`reapplied` lists destination resource URLs whose full own selection succeeded. Moves use
+`setGrants` with `ownOnly: true`, which replaces own grants without materialising WAC ancestor
+defaults; ordinary `setGrants` retains its existing inherited-default behavior.
+
+Any thrown reapplication error, failed `setGrants` entry or cancellation after moving triggers
+an attempt to move the data back and restore the original own selections. Recovery ignores the
+spent abort signal. A `MovePreservingAccessError` is a non-retryable `StorageError('conflict')`
+with `step: 'reapply'` after successful recovery, or `step: 'rollback-failed'` when recovery
+fails. `from` and `to` retain the original and moved root URLs; `url` reports the last known
+location. Rollback failure carries both causes in an `AggregateError`. No retries are automatic.
+These multi-request operations cannot promise atomic visibility or protection against concurrent
+ancestor changes; storage-client's underlying partial-move errors also propagate unchanged.
 
 ### Solid access requests
 

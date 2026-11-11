@@ -217,3 +217,14 @@ test("role and preference exchanges keep their scenario recording boundaries", a
   expect(events.length).toBeGreaterThan(0);
   expect(new Set(events)).toEqual(new Set(["SC-ROLES-commenter"]));
 });
+
+test("memory LWS move roles skip only after proving move absence", async () => {
+  const target = await memoryTarget("lws").start();
+  const features = await target.resolveFeatures?.();
+  if (!features) throw new Error("Missing features");
+  const item = scenario("SC-ROLES-movePreservingAccess");
+  expect(await evaluateCase(item, target, features)).toEqual([
+    { test: `${item.id}:absence:move`, status: "pass", feature: "move", reason: null },
+    { test: item.id, status: "skip", feature: "move", reason: "target-lacks:move" },
+  ]);
+});

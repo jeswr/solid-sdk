@@ -264,7 +264,7 @@ Rules the memory backend enforces, and the real backends must match:
   rather than labelling graph blocks as Turtle.
   `where` is `unsupported` in memory. JSON Patch applies to JSON resources only.
 - Solid moves are copy+delete emulation (new URL, capped at 2 000 resources) and drop ACLs.
-  ACL-preserving moves belong to pod-access (SDK-APP-04). LWS moves need
+  ACL-preserving moves use `movePreservingAccess` from `@jeswr/pod-access/roles` (SDK-APP-04). LWS moves need
   MoveResource (`unsupported` with `feature: 'move'` otherwise), and the server picks the name.
 - LWS `setMetadata` refuses the server-managed rels `linkset`, `type` and `up`. Solid rels that are
   not IRIs map to `http://www.iana.org/assignments/relation/<rel>`.

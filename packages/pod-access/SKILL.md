@@ -229,8 +229,8 @@ preflight/results and conditional conflict contract, with no automatic 412 retry
 expiry/purpose before any I/O. Test snapshots after JSON round trips, stale own/source validators,
 absence races, preservation of unrelated RDF, creation/replacement preconditions and replay no-ops.
 
-`notify`/`message` only record a no-op delivery hook (SDK-APP-07). `decide()` and
-`movePreservingAccess` are outside this layer. The root remains the migrator's offline API;
+`notify`/`message` only record a no-op delivery hook (SDK-APP-07). `decide()` lives in `./requests-solid`.
+`movePreservingAccess` is exported from `./roles` (see README.md). The root remains the migrator's offline API;
 its security and proof semantics must remain unchanged. `@jeswr/fetch-rdf` is an existing
 workspace runtime dependency for role HTTP parsing. Keep exactOptionalPropertyTypes enabled.
 
@@ -282,3 +282,16 @@ and own-ACR `accessControl` management. Member `memberAccess` and own-ACR
 shared with own-ACR management. Never rewrite descendant access
 documents. Test shared principals, foreign targets, metadata, both scopes, owner lockout
 and ETag races; preserve 100% coverage.
+
+`movePreservingAccess(storage, from, destinationContainer, options)` extends the role mutation
+options with `name?`, `acceptReset?`, and `signal?`. Native moves bypass access. Emulated Solid
+moves snapshot own roles across at most 2,000 resources including the root, refuse lossy source
+policies, preflight destination expressibility and lockout, then use `setGrants` with
+`ownOnly: true` (no WAC ancestor materialisation). Inherited access follows destination ancestors
+and is not reported as dropped. Folder roles require equal direct/member scopes; separate
+comments-container moves refuse. No auxiliary access or describedby documents are role targets.
+Unsupported destination grants require `acceptReset` and return `preserved: false` with original
+URL/grant/reason entries in `dropped`; warn only on that result. `reapplied` contains destination
+resource URLs. Reapplication failure/abort moves back and restores the snapshot without the
+caller signal. Typed StorageError conflicts expose `step: reapply | rollback-failed`, `from`,
+`to` and last known `url`; rollback failures retain both causes. Never retry or widen a grant.

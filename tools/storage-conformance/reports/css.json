@@ -103,9 +103,9 @@
   },
   {
     "test": "SC-RDF-not-rdf",
-    "status": "fail",
+    "status": "pass",
     "feature": null,
-    "reason": "assertion-failed"
+    "reason": null
   },
   {
     "test": "SC-DEL-conditional",
@@ -201,6 +201,12 @@
     "test": "SC-ROLES-inherited",
     "status": "pass",
     "feature": null,
+    "reason": null
+  },
+  {
+    "test": "SC-ROLES-movePreservingAccess",
+    "status": "pass",
+    "feature": "move",
     "reason": null
   },
   {
