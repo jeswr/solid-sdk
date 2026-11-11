@@ -1,6 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { normalizePodBase } from "@jeswr/guarded-fetch";
-import { isDirectChild } from "../../docs/lib/model/layout";
+import { isDirectChild } from "@jeswr/solid-docs/layout";
 
 export const notesMediaContainer = (podRoot: string) =>
   new URL("notes/media/", normalizePodBase(podRoot)).href;

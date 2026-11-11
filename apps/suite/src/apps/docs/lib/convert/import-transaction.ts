@@ -1,5 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1
-import { DOCS_SLUG } from "../model/layout";
+import { DOCS_SLUG } from "@jeswr/solid-docs/layout";
 
 /** Track only this import's create-only writes, never the original or shared setup. */
 export function importTransaction(session: { storageUrl: string; fetch: typeof fetch }) {

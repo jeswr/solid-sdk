@@ -1,0 +1,81 @@
+{
+  "name": "@jeswr/solid-docs",
+  "version": "0.1.0",
+  "description": "Generated RDF document, revision, comment and version models for Solid Docs",
+  "type": "module",
+  "license": "MIT",
+  "author": "Jesse Wright",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jeswr/solid-sdk.git",
+    "directory": "packages/solid-docs"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./document": {
+      "types": "./dist/document.d.ts",
+      "import": "./dist/document.js"
+    },
+    "./vocab": {
+      "types": "./dist/vocab.d.ts",
+      "import": "./dist/vocab.js"
+    },
+    "./layout": {
+      "types": "./dist/layout.d.ts",
+      "import": "./dist/layout.js"
+    },
+    "./type-index": {
+      "types": "./dist/type-index.d.ts",
+      "import": "./dist/type-index.js"
+    },
+    "./comments": {
+      "types": "./dist/comments.d.ts",
+      "import": "./dist/comments.js"
+    },
+    "./versions": {
+      "types": "./dist/versions.d.ts",
+      "import": "./dist/versions.js"
+    }
+  },
+  "files": [
+    "dist",
+    "codegen",
+    "README.md",
+    "SKILL.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json && node scripts/copy-generated.mjs",
+    "codegen": "node node_modules/@jeswr/federation-codegen/dist/cli.js gen --ontology codegen/docs.ontology.ttl --shapes codegen/docs.shapes.ttl --config codegen/codegen.config.json --out src/generated",
+    "lint": "biome check src scripts test codegen/codegen.config.json package.json",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@jeswr/model-runtime": "workspace:*",
+    "@jeswr/suite-vocab": "workspace:*",
+    "@rdfjs/wrapper": "0.34.0",
+    "n3": "2.0.3"
+  },
+  "peerDependencies": {
+    "@rdfjs/types": "2.0.1"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.1",
+    "@jeswr/federation-codegen": "workspace:*",
+    "@jeswr/fetch-rdf": "workspace:*",
+    "@rdfjs/types": "2.0.1",
+    "@types/n3": "1.26.1",
+    "@types/node": "^25.9.2",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.9"
+  },
+  "engines": {
+    "node": ">=24"
+  }
+}

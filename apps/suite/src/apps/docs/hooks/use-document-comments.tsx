@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 "use client";
+import { docContainerUrls } from "@jeswr/solid-docs/layout";
 import type { Editor } from "@tiptap/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CommentsControls, CommentsSidebar } from "../components/comments-sidebar";
@@ -15,7 +16,6 @@ import {
   type DocumentComment,
   DocumentCommentStore,
 } from "../lib/model/comments";
-import { docContainerUrls } from "../lib/model/layout";
 
 export function useDocumentComments(runtime: DocumentPersistence, editor: Editor | null) {
   const resource = runtime.stored?.url;

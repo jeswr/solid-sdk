@@ -1,148 +1,24 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { RdfFetchError } from "@jeswr/fetch-rdf";
-import {
-  LiteralAs,
-  LiteralFrom,
-  NamedNodeAs,
-  NamedNodeFrom,
-  OptionalAs,
-  OptionalFrom,
-  TermWrapper,
-} from "@rdfjs/wrapper";
+import { isDirectChild } from "@jeswr/solid-docs/layout";
 import { Container } from "@solid/object";
-import { DataFactory, Store } from "n3";
+import { DataFactory } from "n3";
 import { ResourceWriteError } from "./errors";
-import { isDirectChild } from "./layout";
 import { deleteRdf, readRdf, writeRdf } from "./rdf-io";
-import { DCT, OA, PD, RDF_TYPE } from "./vocab";
 
-export interface CommentAnchor {
-  exact: string;
-  prefix: string;
-  suffix: string;
-  start: string;
-  end: string;
-}
-export interface DocumentComment {
-  url: string;
-  etag: string | null;
-  text: string;
-  creator: string;
-  created: string;
-  target: string;
-  kind: "root" | "reply";
-  anchor?: CommentAnchor | undefined;
-  resolved: boolean;
-}
-export interface CommentThread {
-  root: DocumentComment;
-  replies: DocumentComment[];
-}
+export type { CommentAnchor, CommentThread, DocumentComment } from "@jeswr/solid-docs/comments";
+
+import {
+  buildComment,
+  type CommentAnchor,
+  type CommentThread,
+  type DocumentComment,
+  readComment,
+  setCommentResolution,
+  setCommentText,
+} from "@jeswr/solid-docs/comments";
+
 const changed = () => new Error("This comment changed; try again.");
-/** Quote context kept per side (capture stores 32 code points). */
-const CONTEXT = 32;
-const MAX_QUOTE = 10_000;
-const MAX_POSITION = 1_024;
-
-class Annotation extends TermWrapper {
-  string(predicate: string) {
-    return OptionalFrom.subjectPredicate(this, predicate, LiteralAs.string);
-  }
-  iri(predicate: string) {
-    return OptionalFrom.subjectPredicate(this, predicate, NamedNodeAs.string);
-  }
-  literal(predicate: string, value: string | undefined) {
-    OptionalAs.object(this, predicate, value, LiteralFrom.string);
-  }
-  link(predicate: string, value: string) {
-    OptionalAs.object(this, predicate, value, NamedNodeFrom.string);
-  }
-  read(url: string, etag: string | null): DocumentComment {
-    const motivation = this.iri(OA.motivatedBy);
-    const text = this.string(OA.bodyValue);
-    const creator = this.iri(DCT.creator);
-    const created = OptionalFrom.subjectPredicate(this, DCT.created, LiteralAs.date);
-    const target = this.iri(OA.hasTarget);
-    if (
-      this.iri(RDF_TYPE) !== OA.Annotation ||
-      !text?.trim() ||
-      !creator ||
-      !created ||
-      !Number.isFinite(created.getTime()) ||
-      !target ||
-      (motivation !== OA.commenting && motivation !== OA.replying)
-    )
-      throw new Error("Malformed comment");
-    const root = motivation === OA.commenting;
-    let anchor: CommentAnchor | undefined;
-    let source = target;
-    if (root) {
-      const node = new Annotation(target, this.dataset, DataFactory);
-      const selector = node.iri(OA.hasSelector);
-      source = node.iri(OA.hasSource) as string;
-      const quote = new Annotation(selector as string, this.dataset, DataFactory);
-      const exact = quote.string(OA.exact);
-      const prefix = quote.string(OA.prefix);
-      const suffix = quote.string(OA.suffix);
-      const start = this.string(PD.anchorStart);
-      const end = this.string(PD.anchorEnd);
-      if (
-        !source ||
-        !selector ||
-        quote.iri(RDF_TYPE) !== OA.TextQuoteSelector ||
-        !exact ||
-        prefix === undefined ||
-        suffix === undefined ||
-        !start ||
-        !end
-      )
-        throw new Error("Malformed comment anchor");
-      // Other users write these: bound them so anchor resolution stays cheap.
-      if (exact.length > MAX_QUOTE || start.length > MAX_POSITION || end.length > MAX_POSITION)
-        throw new Error("Malformed comment anchor");
-      anchor = {
-        exact,
-        prefix: Array.from(prefix).slice(-CONTEXT).join(""),
-        suffix: Array.from(suffix).slice(0, CONTEXT).join(""),
-        start,
-        end,
-      };
-    }
-    return {
-      url,
-      etag,
-      text,
-      creator,
-      created: created.toISOString(),
-      target: source,
-      kind: root ? "root" : "reply",
-      anchor,
-      resolved: OptionalFrom.subjectPredicate(this, PD.resolved, LiteralAs.boolean) ?? false,
-    };
-  }
-  write(comment: DocumentComment) {
-    this.link(RDF_TYPE, OA.Annotation);
-    this.link(OA.motivatedBy, comment.kind === "root" ? OA.commenting : OA.replying);
-    this.literal(OA.bodyValue, comment.text);
-    this.link(DCT.creator, comment.creator);
-    OptionalAs.object(this, DCT.created, new Date(comment.created), LiteralFrom.dateTime);
-    const anchor = comment.anchor;
-    if (anchor) {
-      this.link(OA.hasTarget, `${comment.url}#target`);
-      this.literal(PD.anchorStart, anchor.start);
-      this.literal(PD.anchorEnd, anchor.end);
-      const target = new Annotation(`${comment.url}#target`, this.dataset, DataFactory);
-      target.link(OA.hasSource, comment.target);
-      target.link(OA.hasSelector, `${comment.url}#quote`);
-      const quote = new Annotation(`${comment.url}#quote`, this.dataset, DataFactory);
-      quote.link(RDF_TYPE, OA.TextQuoteSelector);
-      quote.literal(OA.exact, anchor.exact);
-      quote.literal(OA.prefix, anchor.prefix);
-      quote.literal(OA.suffix, anchor.suffix);
-    } else this.link(OA.hasTarget, comment.target);
-  }
-}
-
 /** One Web Annotation per direct Turtle child; all mutations retain validators. */
 export class DocumentCommentStore {
   constructor(
@@ -159,7 +35,7 @@ export class DocumentCommentStore {
     const result = await readRdf(url, this.http);
     return {
       ...result,
-      comment: new Annotation(url, result.dataset, DataFactory).read(url, result.etag),
+      comment: readComment(url, result.dataset, result.etag),
     };
   }
   async list(
@@ -232,8 +108,7 @@ export class DocumentCommentStore {
       anchor,
       resolved: false,
     };
-    const dataset = new Store();
-    new Annotation(comment.url, dataset, DataFactory).write(comment);
+    const dataset = buildComment(comment);
     const { etag } = await writeRdf(comment.url, dataset, {
       fetchImpl: this.http,
       createOnly: true,
@@ -250,10 +125,7 @@ export class DocumentCommentStore {
       const { dataset, etag, comment } = await this.read(root.url);
       if (comment.kind !== "root" || comment.target !== this.document)
         throw new Error("Invalid comment target");
-      const node = new Annotation(root.url, dataset, DataFactory);
-      OptionalAs.object(node, PD.resolved, resolved ? true : undefined, LiteralFrom.boolean);
-      OptionalAs.object(node, PD.resolvedBy, resolved ? actor : undefined, NamedNodeFrom.string);
-      OptionalAs.object(node, PD.resolvedAt, resolved ? now : undefined, LiteralFrom.dateTime);
+      setCommentResolution(root.url, dataset, resolved, actor, now);
       await writeRdf(root.url, dataset, { fetchImpl: this.http, etag });
     };
     try {
@@ -276,7 +148,7 @@ export class DocumentCommentStore {
     const { dataset, comment } = await this.read(entry.url);
     this.own(comment, actor);
     if (!text.trim()) throw new Error("Enter a comment.");
-    new Annotation(entry.url, dataset, DataFactory).literal(OA.bodyValue, text.trim());
+    setCommentText(entry.url, dataset, text.trim());
     await writeRdf(entry.url, dataset, { fetchImpl: this.http, etag: entry.etag });
   }
   private async remove(entry: DocumentComment) {

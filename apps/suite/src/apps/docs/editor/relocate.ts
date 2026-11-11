@@ -1,6 +1,8 @@
 // AUTHORED-BY Codex
 // AUTHORED-BY Codex GPT-6
 import { RdfFetchError } from "@jeswr/fetch-rdf";
+import { buildDocument, type PodDocument } from "@jeswr/solid-docs/document";
+import { docContainerUrls } from "@jeswr/solid-docs/layout";
 import { SolidUpdateStore } from "@jeswr/y-solid";
 import { SetFrom, TermAs, TermFrom, TermWrapper } from "@rdfjs/wrapper";
 import { DataFactory, Store } from "n3";
@@ -8,8 +10,6 @@ import sanitizeHtml from "sanitize-html";
 import { applyUpdate, Doc, encodeStateAsUpdate, XmlElement, XmlFragment, XmlText } from "yjs";
 import { DriveAccessError } from "../../drive/lib/client/access";
 import { type DriveClient, DriveError, type WriteOptions } from "../../drive/lib/client/client";
-import { buildDocument, type PodDocument } from "../lib/model/document";
-import { docContainerUrls } from "../lib/model/layout";
 import { serializeTurtle } from "../lib/model/rdf-io";
 import { assertUpdateIdentities } from "../lib/model/update-store";
 import { isUrlAttribute, relocateAttributes } from "./url-attributes";

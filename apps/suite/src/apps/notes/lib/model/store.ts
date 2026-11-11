@@ -2,24 +2,24 @@
 // AUTHORED-BY Codex GPT-6
 import { RdfFetchError } from "@jeswr/fetch-rdf";
 import { normalizePodBase, refuseRedirects } from "@jeswr/guarded-fetch";
+import { documentSubject, type Revision } from "@jeswr/solid-docs/document";
+import { isDirectChild, toSlug } from "@jeswr/solid-docs/layout";
+import { DOCUMENT_CLASS, NS, PREFIXES } from "@jeswr/solid-docs/vocab";
 import { Container, ContainerDataset } from "@solid/object";
 import { DataFactory, Store } from "n3";
 import { uploadPodImage } from "../../../docs/lib/editor/image-upload";
-import { documentSubject, type Revision } from "../../../docs/lib/model/document";
 import {
   ConcurrencyValidatorError,
   OutOfScopeError,
   ResourceDeleteError,
   ResourceWriteError,
 } from "../../../docs/lib/model/errors";
-import { isDirectChild, toSlug } from "../../../docs/lib/model/layout";
 import { deleteRdf, readRdf, writeRdf } from "../../../docs/lib/model/rdf-io";
 import {
   discoverProfileLinks,
   discoverRegistrations,
   ensureTypeRegistrations,
 } from "../../../docs/lib/model/type-index";
-import { DOCUMENT_CLASS, NS, PREFIXES } from "../../../docs/lib/model/vocab";
 import { notesMediaContainer } from "../images";
 import { deleteLabel, mergeLabels } from "../organise/labels";
 import { createBrowserFiredStore, type FiredReminderStore } from "../reminders/fired-store";

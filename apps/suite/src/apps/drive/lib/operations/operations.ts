@@ -9,11 +9,11 @@
  */
 
 import { fetchRdf } from "@jeswr/fetch-rdf";
+import { type PodDocument, parseDocument } from "@jeswr/solid-docs/document";
+import { docContainerUrls } from "@jeswr/solid-docs/layout";
 import { Store } from "n3";
 import { mapConcurrent } from "../../../../lib/parallel";
 import { relocateDocument, writeRestoreSnapshot } from "../../../docs/editor/relocate";
-import { type PodDocument, parseDocument } from "../../../docs/lib/model/document";
-import { docContainerUrls } from "../../../docs/lib/model/layout";
 import { discardVersion, ownsEmptyContainer } from "../client/cleanup";
 import {
   type DriveClient,

@@ -44,6 +44,7 @@
     "@jeswr/solid-community-feeds",
     "@jeswr/solid-components",
     "@jeswr/solid-dav-bridge",
+    "@jeswr/solid-docs",
     "@jeswr/solid-dpop",
     "@jeswr/solid-drawing",
     "@jeswr/solid-elements",

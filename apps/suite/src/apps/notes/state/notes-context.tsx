@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 "use client";
+import { isDirectChild } from "@jeswr/solid-docs/layout";
 import { toast } from "@jeswr/suite-ui";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
@@ -15,7 +16,6 @@ import {
 } from "react";
 import { encodeRef } from "@/lib/refs";
 import type { PodSession } from "@/lib/session/pod-session";
-import { isDirectChild } from "../../docs/lib/model/layout";
 import { type NoteColour, rekeyPreferences, togglePinned } from "../lib/model/prefs";
 import { createNotesStore, type NoteChanges, type StoredNote } from "../lib/model/store";
 import { getPendingDrafts } from "./draft-registry";
