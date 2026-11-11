@@ -5010,6 +5010,9 @@ importers:
       '@jeswr/pkg-memory':
         specifier: workspace:*
         version: link:../pkg-memory
+      '@jeswr/pod-type-index':
+        specifier: workspace:*
+        version: link:../pod-type-index
       '@jeswr/rdf-serialize':
         specifier: workspace:*
         version: link:../rdf-serialize

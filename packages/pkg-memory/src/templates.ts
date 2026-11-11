@@ -1,6 +1,8 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+
 import { safeHttpIri } from "@jeswr/rdf-serialize";
 import { DataFactory as df, Store } from "n3";
+import { containsCardNumber } from "./cards.js";
 import { dateTime, iri, NS, RdfNode, validCalendarDate } from "./rdf.js";
 
 /** Temporal bound whose datatype records its precision (KG §2.3). */
@@ -152,6 +154,8 @@ function safeBillingAddress(value: unknown): boolean {
     text = decoded;
   }
   if (/[%?#]/.test(text)) return false;
+  // Share complete-PAN refusal with context redaction; retain the stricter partial-number budget.
+  if (containsCardNumber(text)) return false;
   return (text.normalize("NFKC").match(/\p{N}/gu)?.length ?? 0) <= 4;
 }
 

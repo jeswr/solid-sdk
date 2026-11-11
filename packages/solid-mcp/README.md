@@ -160,16 +160,48 @@ env_vars = ["SOLID_MCP_POD_ROOT", "SOLID_MCP_WEBID", "SOLID_MCP_READONLY", "SOLI
 - MCP tools: `pod_list`, `pod_read`, `search`, `fetch`, `context_read`, and opt-in `pod_write`;
   `memory_remember`, `memory_recall`, `memory_forget`, `profile_get`, `address_get`,
   and `health_query` with trusted client identity.
-- Shared context: `context_read` returns the owner's Markdown context document at
-  `agent/context/shared-context.md` under the pod root (`SHARED_CONTEXT_PATH`), or a
-  `not_found` result with setup guidance. It takes no arguments, so a model cannot steer it to
-  another URL. It refuses redirects (at the transport, via `PodReadOptions.redirect: "error"`)
-  and aliases, and replaces anything that looks like a payment card number with
-  `[card number removed]`, reporting the count in `redactedCardNumbers`. See `decisions/0004-mcp-personal-context-and-knowledge-graph.md`.
-  Helpers: `readSharedContext`, `sharedContextUrl`, `createContextToolRegistry`.
+- Shared context: `context_read` takes no arguments and discovers the configured owner's
+  private Type Index registration for `https://jeswr.org/ns/agent#SharedContext`.
+  It accepts exactly one pod-scoped HTTP(S) document instance, without a fragment.
+  Only no private pointer or no registration falls back to `SHARED_CONTEXT_PATH`
+  (`agent/context/shared-context.md` below the configured root). Unsafe, duplicate,
+  container, malformed or unreadable registrations return `{status:"error",reason}`;
+  registration URLs are withheld. Public indexes are ignored. A missing context returns
+  `{status:"not_found",url,setup}`. Redirects and aliases are refused at every read.
+  Text has Unicode-aware card redaction (`CARD_REDACTION`, `redactedCardNumbers`) using
+  pkg-memory's single detector. All decimal scripts, astral digits and Unicode separators
+  are covered; the existing broader NFKC forms and punctuation remain covered too.
+  As in pkg-memory, all nonzero issuer prefixes count, so chance-valid account/phone
+  windows can also be removed. Overlapping/adjacent matches merge and cover up to 19 digits.
+  The effective WAC ACL must grant Write/Append/Control only to the owner. Public mutation
+  headers, other agents, public/authenticated classes, groups, origins and unprovable ACL
+  evidence return `{status:"untrusted",url,reason}` with no text. An owner-only ACL yields
+  `aclVerified:true`; a portable/LWS port without exposed ACL support returns text with
+  `aclVerified:false`. WAC-Allow public mutation evidence still denies on those ports.
+  Helpers: `readSharedContext`, `sharedContextUrl`, `createContextToolRegistry`,
+  `setupSharedContext`. See decision 0004.
 - One-release aliases in v0.2: `solid_list`, `solid_read`, `solid_search`, `solid_write`.
   List/read/write aliases retain the same schemas, output and read-only enforcement.
   `solid_search` retains its optional scope and ranked array response.
+
+## Owner setup for shared context
+
+Run `solid-mcp context-init [--initial-text TEXT]` with the same private CLI configuration
+and an owner WebID, or call:
+
+```ts
+const result = await setupSharedContext(pod, { webId: pod.webId, initialText: "# How I work\n" });
+```
+
+This owner-facing helper is never an MCP tool. It creates the conventional document with
+`If-None-Match: *` after writing its advertised owner-only WAC ACL. It registers through
+`@jeswr/pod-type-index`, provisioning private settings/preferences/index ACLs before writes.
+Index bootstrap needs root WAC-Allow `user` Write+Control evidence. Results are `created`
+or `already_exists` with `{url,registered:true}`, or `error` with a fixed reason. Existing
+document bytes are preserved; a different registration stops setup without mutation.
+A successful rerun performs no writes. Strong ETags protect existing ACL/index updates;
+unsafe or shared ACLs refuse replacement. The CLI subcommand explicitly enables setup
+writes and reports to stderr; regular stdio remains read-only by default.
 
 ## Portable pod access
 
@@ -203,7 +235,8 @@ the fetch capability while pod operations use the supplied port.
 `PodPort` exposes raw-byte `read`, `list`, conditional `write` and `delete`, `root` and
 `webId`. Its optional `head` returns `PodHeadResult.acl`, an absolute WAC ACL URL
 discovered from a unique, unanchored `rel="acl"` Link on the exact target, including
-HTTP 404 for resources not yet created. HEAD refuses redirects. Optional
+HTTP 404 for resources not yet created. Both HEAD and read results may retain raw
+`wacAllow` evidence, including public permissions, for shared-context trust checks. HEAD refuses redirects. Optional
 `PodReadOptions.accept` selects a representation; generic reads keep
 the backend default, while RDF/profile reads request RDF explicitly. The fetch adapter retains listing metadata, ETags, guarded read redirects,
 and refusal of all mutation redirects. Mutations reject the root and its slashless
@@ -536,3 +569,14 @@ The public exports `loadCliConfig(env?, home?)`, `createCliFetch(config, fetch?)
 and `createChatPodPort(config)` let `@jeswr/agent-session-capture` reuse the stdio
 configuration, DPoP login, pod scope and WAC discovery behavior. The chat adapter
 keeps write permission checks; callers must supply `readOnly: false` explicitly.
+
+
+Generic mutations re-read private context discovery on each operation. They refuse the
+registered context, its ancestors and advertised ACL, and private index/preferences
+pointers and their advertised ACLs. Unprovable discovery with a configured owner blocks
+generic mutations with the fixed personal-data diagnostic. Setup uses its separate
+owner-facing capability; it is never registered as an MCP tool.
+
+`PodHeadResult.aclError` distinguishes malformed, ambiguous or unsupported ACL-link
+evidence from absent ACL capability. Trust checks deny this evidence rather than
+returning unverified text.

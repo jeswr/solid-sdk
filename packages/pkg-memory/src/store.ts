@@ -19,12 +19,16 @@ import { type PodConditions, type PodPort, podStatus } from "./pod-port.js";
 import { readMemoryPolicy } from "./policy.js";
 import { createDefaultPolicy } from "./purpose.js";
 import { dateTime, graph, NS, putGraph, RdfNode, ReferenceStore as Store } from "./rdf.js";
-import { discoverWacAcl, validateDedicatedWacAcl, type WacDiscoveryOptions } from "./wac.js";
+import {
+  discoverWacAcl,
+  ownerOnlyWacAcl,
+  validateDedicatedWacAcl,
+  type WacDiscoveryOptions,
+} from "./wac.js";
 
 const encode = (body: string) => new TextEncoder().encode(body);
 const decode = (body: Uint8Array) => new TextDecoder("utf-8", { fatal: true }).decode(body);
 const uuid = /^urn:uuid:([\da-f]{8}(?:-[\da-f]{4}){3}-[\da-f]{12})(?![\s\S])/;
-const acl = "http://www.w3.org/ns/auth/acl#";
 
 /** Identity and clock for an append-only withdrawal. */
 export interface RetractionOptions {
@@ -335,13 +339,7 @@ export class NanopubStore {
         throw new Error("Memory protection unavailable");
       }
     }
-    const dataset = new Store();
-    const authorization = new RdfNode(`${aclUrl}#owner`, dataset)
-      .link(`${NS.rdf}type`, `${acl}Authorization`)
-      .link(`${acl}agent`, this.owner)
-      .link(`${acl}accessTo`, url);
-    if (inherit) authorization.link(`${acl}default`, url);
-    for (const mode of ["Read", "Write", "Control"]) authorization.link(`${acl}mode`, acl + mode);
+    const dataset = ownerOnlyWacAcl(url, this.owner, aclUrl, inherit);
     await this.pod.write(aclUrl, encode(await serialize([...dataset])), "text/turtle", condition);
   }
   private async writeNanopub(url: string, bytes: Uint8Array): Promise<void> {

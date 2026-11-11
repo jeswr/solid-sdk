@@ -61,6 +61,7 @@
   "dependencies": {
     "@jeswr/guarded-fetch": "workspace:*",
     "@jeswr/pkg-memory": "workspace:*",
+    "@jeswr/pod-type-index": "workspace:*",
     "@jeswr/rdf-serialize": "workspace:*",
     "@jeswr/solid-chat-interop": "workspace:*",
     "@jeswr/solid-dpop": "workspace:*",
@@ -98,6 +99,7 @@
     "inlined": [
       "@jeswr/mcp-oauth",
       "@jeswr/pkg-memory",
+      "@jeswr/pod-type-index",
       "@jeswr/storage-client"
     ]
   },

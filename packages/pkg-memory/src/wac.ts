@@ -1,7 +1,8 @@
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Codex GPT-6.1-Sol
 import { safeHttpIri } from "@jeswr/rdf-serialize";
 import type { DatasetCore } from "@rdfjs/types";
-import { Store } from "n3";
+import { DataFactory, Store } from "n3";
 import type { PodPort } from "./pod-port.js";
 import { NS, RdfNode } from "./rdf.js";
 
@@ -95,4 +96,60 @@ export function validateDedicatedWacAcl(existing: DatasetCore, target: string): 
     )
       throw unavailable();
   }
+}
+
+/** Build the owner-only authorization used by memory and shared-context setup. */
+export function ownerOnlyWacAcl(
+  target: string,
+  owner: string,
+  aclUrl: string,
+  inherit = false,
+): Store {
+  const dataset = new Store();
+  const rule = new RdfNode(`${aclUrl}#owner`, dataset)
+    .link(`${NS.rdf}type`, `${ACL}Authorization`)
+    .link(`${ACL}agent`, owner)
+    .link(`${ACL}accessTo`, target);
+  if (inherit) rule.link(`${ACL}default`, target);
+  for (const mode of ["Read", "Write", "Control"]) rule.link(`${ACL}mode`, ACL + mode);
+  return dataset;
+}
+
+/** Prove a dedicated effective ACL gives mutation authority only to the owner.
+ * Read-only grants to others are allowed. Unknown/conditional audiences fail closed.
+ * For inherited ACLs only default/defaultForNew rules apply to descendants.
+ */
+export function validateOwnerOnlyWacAcl(
+  existing: DatasetCore,
+  target: string,
+  owner: string,
+  inherited = false,
+): void {
+  if (!owner) throw unavailable();
+  for (const quad of existing) if (quad.graph.termType !== "DefaultGraph") throw unavailable();
+  validateDedicatedWacAcl(existing, target);
+  const dataset = new Store([...existing]);
+  let effective = false;
+  for (const subject of dataset.getSubjects(null, null, null)) {
+    const rule = new RdfNode(subject, dataset);
+    const applies = inherited
+      ? rule.terms(`${ACL}default`).size + rule.terms(`${ACL}defaultForNew`).size > 0
+      : rule.terms(`${ACL}accessTo`).size > 0;
+    if (!applies) continue;
+    effective = true;
+    if (
+      ![...rule.terms(`${ACL}mode`)].some((term) =>
+        ["Write", "Append", "Control"].includes(term.value.slice(ACL.length)),
+      )
+    )
+      continue;
+    const agents = [...rule.terms(`${ACL}agent`)];
+    if (
+      !agents.length ||
+      agents.some((term) => !term.equals(DataFactory.namedNode(owner))) ||
+      ["agentClass", "agentGroup", "origin"].some((name) => rule.terms(ACL + name).size)
+    )
+      throw unavailable();
+  }
+  if (!effective) throw unavailable();
 }

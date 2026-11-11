@@ -34,9 +34,11 @@ describe("fetch PodPort", () => {
     '<a>; rel="alternate"; title="rel=acl"',
     '<a>; rel="acl"; rel="alternate"',
     '<a>; rel="acl", malformed',
-  ])("omits unusable WAC metadata: %s", async (link) => {
+  ])("distinguishes absent from invalid WAC metadata: %s", async (link) => {
     const pod = createFetchPodPort({ fetch: responding(200, { link }), podRoot: ROOT });
-    expect(await pod.head?.(FILE)).toEqual({});
+    expect(await pod.head?.(FILE)).toEqual(
+      link === "" || link.includes('title="rel=acl"') ? {} : { aclError: true },
+    );
   });
 
   it.each([

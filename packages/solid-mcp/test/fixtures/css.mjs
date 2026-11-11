@@ -121,6 +121,15 @@ export function mockCss() {
       assert.equal(await request.text(), "hello fixture");
       return new Response(null, { status: 201 });
     }
+    if (request.url === `${POD}profile/card` || request.url === `${POD}profile/card#me`) {
+      const store = new Store();
+      new Resource(`${POD}profile/card#me`, store, DataFactory).type.add(
+        "http://xmlns.com/foaf/0.1/Person",
+      );
+      return new Response(await serialize([...store], { format: "text/turtle" }), {
+        headers: { "content-type": "text/turtle" },
+      });
+    }
     if (request.url === `${POD}stats`) return Response.json(stats);
     if (request.url === `${POD}redirect`)
       return new Response(null, {

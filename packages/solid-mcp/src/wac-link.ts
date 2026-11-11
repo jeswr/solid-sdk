@@ -1,7 +1,9 @@
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex GPT-6.1-Sol
 /** Parse a conservative Link-header subset; ambiguous/unsupported discovery fails closed. */
-export function wacAclLink(header: string): string {
+export function wacAclLink(header: string): string;
+export function wacAclLink(header: string, allowAbsent: true): string | undefined;
+export function wacAclLink(header: string, allowAbsent = false): string | undefined {
   const acls: string[] = [];
   let remaining = header;
   while (remaining.trim()) {
@@ -28,6 +30,7 @@ export function wacAclLink(header: string): string {
       acls.push(link[1] ?? "");
     }
   }
+  if (allowAbsent && acls.length === 0) return undefined;
   if (acls.length !== 1 || !acls[0]) throw new Error("A unique WAC ACL link is required for chats");
   return acls[0];
 }

@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 5.5
 
 import type { Quad_Object, Store } from "n3";
@@ -11,6 +12,7 @@ import {
   findCardNumbers,
   PAYMENT_CARD_BRANDS,
   parseNanopublications,
+  redactCardNumbers,
   serializeNanopublications,
 } from "../src/index.js";
 import { NS } from "../src/rdf.js";
@@ -392,4 +394,95 @@ describe("card number detection", () => {
     const used = process.cpuUsage(started);
     expect((used.user + used.system) / 1000).toBeLessThan(8000);
   }, 60_000);
+});
+
+describe("shared Unicode card redaction", () => {
+  const pan = "4111111111111111";
+  const scripts = [0xff10, 0x0660, 0x0966, 0x1d7ce];
+  const digits = (zero: number) =>
+    [...pan].map((digit) => String.fromCodePoint(zero + Number(digit))).join("");
+  it("maps every decimal script and mixed scripts back to original UTF-16 offsets", () => {
+    for (const value of [
+      ...scripts.map(digits),
+      [...pan]
+        .map((digit, i) =>
+          String.fromCodePoint((scripts[i % scripts.length] as number) + Number(digit)),
+        )
+        .join(""),
+    ]) {
+      const prefix = "😀 owner 🧠 ";
+      const text = `${prefix}${value} end 🎉`;
+      expect(findCardNumbers(text)).toEqual([[prefix.length, prefix.length + value.length]]);
+      expect(redactCardNumbers(text, "[hidden]")).toEqual({
+        text: `${prefix}[hidden] end 🎉`,
+        count: 1,
+      });
+    }
+  });
+  it.each([
+    "\u2009",
+    "\u202f",
+    "\u3000",
+    "\u2011",
+    "\u2013",
+    "\u00b7",
+    "\u2027",
+    "\t\n",
+    ".",
+    ",",
+    "_",
+    "/",
+  ])("redacts Unicode grouping %j", (separator) => {
+    const grouped = ["４１１１", "١١١١", "११११", "𝟏𝟏𝟏𝟏"].join(separator);
+    expect(redactCardNumbers(`😀 ${grouped} done`)).toEqual({
+      text: "😀 [card number removed] done",
+      count: 1,
+    });
+  });
+  it("merges overlapping and adjacent matches and preserves non-card numbers", () => {
+    expect(redactCardNumbers(pan + pan)).toEqual({ text: "[card number removed]", count: 1 });
+    expect(redactCardNumbers(`${pan} ${pan}`)).toEqual({ text: "[card number removed]", count: 1 });
+    expect(redactCardNumbers(`${pan}x${pan}`)).toEqual({
+      text: "[card number removed]x[card number removed]",
+      count: 2,
+    });
+    expect(redactCardNumbers("000000000000000000000000000000")).toEqual({
+      text: "000000000000000000000000000000",
+      count: 0,
+    });
+    expect(redactCardNumbers("999999999999999999999999")).toEqual({
+      text: "999999999999999999999999",
+      count: 0,
+    });
+    expect(redactCardNumbers("6011000990139424123").text).toBe("[card number removed]");
+  });
+  it("finishes a 1 MiB digit run well below one second", () => {
+    const text = "4".repeat(1024 * 1024);
+    // Count CPU work so concurrent suite workers do not turn scheduler delays into failures.
+    const started = process.cpuUsage();
+    findCardNumbers(text);
+    const used = process.cpuUsage(started);
+    expect((used.user + used.system) / 1000).toBeLessThan(900);
+  });
+});
+
+it("refuses decimal-script PANs in card template inputs without echoing digits", () => {
+  for (const zero of [0xff10, 0x0660, 0x0966, 0x1d7ce]) {
+    const pan = [..."4111111111111111"]
+      .map((digit) => String.fromCodePoint(zero + Number(digit)))
+      .join("");
+    expect(containsCardNumber(pan)).toBe(true);
+    for (const field of ["last4", "brand", "billingAddress"]) {
+      try {
+        createFactAssertion(
+          owner,
+          card({ ...valid, [field]: field === "billingAddress" ? `urn:x:${pan}` : pan }),
+        );
+        throw new Error("accepted PAN");
+      } catch (error) {
+        expect((error as Error).message).toBe("Invalid payment card");
+        expect((error as Error).message).not.toContain(pan);
+      }
+    }
+  }
 });

@@ -26,10 +26,13 @@ export { createChatPodPort } from "./chat-tools.js";
 export { type CliConfig, loadCliConfig } from "./cli-config.js";
 export { createCliFetch } from "./client-credentials.js";
 export {
+  CARD_REDACTION,
   createContextToolRegistry,
   readSharedContext,
   SHARED_CONTEXT_PATH,
   type SharedContextResult,
+  type SharedContextSetupResult,
+  setupSharedContext,
   sharedContextUrl,
 } from "./context-tools.js";
 export { type FetchResult, fetchDocument } from "./fetch.js";

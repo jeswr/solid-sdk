@@ -59,6 +59,13 @@ by whitespace, any punctuation, invisible format characters, combining marks or
 `+ = ~ |`. Percent-decode IRIs before scanning them. Ideographic numerals are not
 covered.
 
+`findCardNumbers(text)` returns merged spans into the original UTF-16 string, including
+astral digits. It checks every start with incremental Luhn prefix sums and covers up to
+19 digits after a match, including overlapping and adjacent matches.
+`redactCardNumbers(text, marker = CARD_REDACTION)` returns `{text, count}`, preserving
+everything outside those spans; `CARD_REDACTION` is `[card number removed]`.
+solid-mcp uses this same implementation for context redaction.
+
 The batch contract follows `np_builder.py` (snake-case source fields). Claims can
 supply a default-graph RDF/JS dataset or a Turtle assertion body using the reference
 prefixes (`me:` resolves to the required owner WebID). Turtle bodies are RDF syntax;
@@ -274,3 +281,13 @@ assertion would invalidate its content-derived identifier. The reference builder
 implicit `health:` and `core:` prefixes in `parseAssertion` stay legacy for the
 same reason. Use typed templates or explicitly declare canonical prefixes when
 authoring new Turtle assertions. Existing Python fixture identifiers remain valid.
+
+
+`ownerOnlyWacAcl(target, owner, aclUrl, inherit?)` builds the same typed authorization
+used by NanopubStore: owner Read/Write/Control, plus container defaults when requested.
+Serialize it with the existing Writer and persist with conditional headers after ACL
+discovery and dedicated-target validation. `validateOwnerOnlyWacAcl(dataset, target,
+owner, inherited?)` additionally proves no effective Write/Append/Control rule names
+another agent, a public/authenticated class, a group or an origin. Public Read-only
+rules are permitted. Inherited checks consider default/defaultForNew rules. Unknown,
+shared, malformed and named-graph ACLs fail closed; no external group is fetched.

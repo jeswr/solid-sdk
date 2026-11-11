@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6.1-Sol
 /**
  * Payment-card number detection (decisions/0004). Personal data may record a card's brand,
  * last four digits, expiry and billing address, never its full number (PAN) or security code.
@@ -10,7 +11,7 @@
  * covered, including UATP (1), Maestro (50, 56-69), RuPay (60, 65, 81, 82) and
  * petroleum cards (7).
  */
-const CARD_PREFIX = /^[1-9]/;
+// After decimal normalization, every nonzero digit is a possible issuer prefix.
 
 /**
  * Characters that may sit between digit groups without ending a run: whitespace, any
@@ -18,6 +19,8 @@ const CARD_PREFIX = /^[1-9]/;
  * characters (zero-width space, soft hyphen), any combining mark, and `+ = ~ |`. Callers
  * should percent-decode IRIs before scanning them. Ideographic numerals are not covered.
  */
+// U+00B7 and U+2027 are punctuation used as visual digit-group delimiters.
+// Retain the broader existing separator set to avoid weakening template refusal.
 const SEPARATOR = /^[\s\p{Z}\p{P}\p{Cf}\p{M}+=~|]$/u;
 const DECIMAL = /^\p{Nd}$/u;
 const NUMBER = /^\p{N}$/u;
@@ -60,18 +63,18 @@ export function findCardNumbers(text: string): Array<[number, number]> {
   const spans: Array<[number, number]> = [];
   let positions: number[] = [];
   let ends: number[] = [];
-  let digits = "";
+  let digits: number[] = [];
   const flush = () => {
     scanRun(digits, positions, ends, spans);
     positions = [];
     ends = [];
-    digits = "";
+    digits = [];
   };
   let index = 0;
   for (const char of text) {
     const value = digitValue(char);
     if (value !== undefined) {
-      digits += String(value);
+      digits.push(value);
       positions.push(index);
       ends.push(index + char.length);
     } else if (digits.length > 0 && !SEPARATOR.test(char)) flush();
@@ -82,42 +85,63 @@ export function findCardNumbers(text: string): Array<[number, number]> {
 }
 
 function scanRun(
-  digits: string,
+  digits: number[],
   positions: number[],
   ends: number[],
   spans: Array<[number, number]>,
 ): void {
-  const ranges: Array<[number, number]> = [];
+  // Two incremental prefix sums make each Luhn window O(1). Absolute end parity
+  // determines which sum doubles the penultimate digit. Uint8 residues avoid growth
+  // and keep the 1 MiB adversarial case cheap even under coverage instrumentation.
+  const even = new Uint8Array(digits.length + 1);
+  const odd = new Uint8Array(digits.length + 1);
+  let evenSum = 0;
+  let oddSum = 0;
+  for (let i = 0; i < digits.length; i += 1) {
+    const digit = digits[i] as number;
+    const doubled = digit > 4 ? digit * 2 - 9 : digit * 2;
+    evenSum = (evenSum + (i % 2 === 0 ? doubled : digit)) % 10;
+    oddSum = (oddSum + (i % 2 === 0 ? digit : doubled)) % 10;
+    even[i + 1] = evenSum;
+    odd[i + 1] = oddSum;
+  }
+  let coveredEnd = -2;
   for (let start = 0; start + 12 <= digits.length; start += 1) {
-    if (!CARD_PREFIX.test(digits[start] as string)) continue;
-    // evenSum doubles digits at even offsets from start; oddSum doubles odd offsets.
-    let evenSum = 0;
-    let oddSum = 0;
-    for (let i = start; i < start + 19 && i < digits.length; i += 1) {
-      const digit = Number(digits[i]);
-      const doubled = digit * 2 > 9 ? digit * 2 - 9 : digit * 2;
-      if ((i - start) % 2 === 0) {
-        evenSum += doubled;
-        oddSum += digit;
-      } else {
-        evenSum += digit;
-        oddSum += doubled;
-      }
-      const length = i - start + 1;
-      // Luhn doubles every second digit counting from the right-most (check) digit.
-      if (length >= 12 && (length % 2 === 0 ? evenSum : oddSum) % 10 === 0) {
-        const end = Math.min(start + 19, digits.length) - 1;
-        const last = ranges[ranges.length - 1];
-        if (last && start <= last[1] + 1) last[1] = Math.max(last[1], end);
-        else ranges.push([start, end]);
-        break;
-      }
+    if (digits[start] === 0) continue;
+    const limit = Math.min(start + 19, digits.length);
+    for (let end = start + 12; end <= limit; end += 1) {
+      const sums = end % 2 === 0 ? even : odd;
+      if (sums[end] !== sums[start]) continue;
+      // Keep checking every later start, even inside an already covered range.
+      const to = ends[limit - 1] as number;
+      if (start <= coveredEnd + 1) (spans[spans.length - 1] as [number, number])[1] = to;
+      else spans.push([positions[start] as number, to]);
+      coveredEnd = limit - 1;
+      break;
     }
   }
-  for (const [from, to] of ranges) spans.push([positions[from] as number, ends[to] as number]);
 }
 
 /** Whether `text` holds what looks like a payment card number. */
 export function containsCardNumber(text: string): boolean {
   return findCardNumbers(text).length > 0;
+}
+
+/** Default marker shared by context readers and other redaction callers. */
+export const CARD_REDACTION = "[card number removed]";
+
+/** Replace merged card spans, preserving the original text outside those spans. */
+export function redactCardNumbers(
+  text: string,
+  marker = CARD_REDACTION,
+): { text: string; count: number } {
+  const spans = findCardNumbers(text);
+  const output: string[] = [];
+  let cursor = 0;
+  for (const [from, to] of spans) {
+    output.push(text.slice(cursor, from), marker);
+    cursor = to;
+  }
+  output.push(text.slice(cursor));
+  return { text: output.join(""), count: spans.length };
 }
