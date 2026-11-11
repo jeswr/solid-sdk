@@ -1,10 +1,17 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { DataFactory, Parser, type Quad_Object, termToId } from 'n3';
+// AUTHORED-BY Codex GPT-6
+import { parseRdfSync, type Quad, type Term } from '@jeswr/fetch-rdf';
+import { DataFactory, termToId } from 'n3';
 import {
   type CommunicationKind,
   communicationValue,
   MAX_FORM_FILL_VALUE_LENGTH,
 } from '../../shared/formfill-values';
+import { BUFFERED_RDF_LIMITS } from './rdf-limits';
+
+type Quad_Object = Quad['object'];
+// n3 supports RDF/JS terms here; its type declaration restricts this to n3's own classes.
+const termKey = termToId as (term: Term) => string;
 
 const VCARD = 'http://www.w3.org/2006/vcard/ns#';
 const RDF_TYPE = 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type';
@@ -40,14 +47,20 @@ export interface FormFillData {
  * vCard precedes schema.org; lowest positive vcard:pref wins, ties use document order.
  */
 export function readFormFillData(webId: string, turtle: string, baseUrl: string): FormFillData {
-  const quads = new Parser({ baseIRI: baseUrl, format: 'text/turtle' }).parse(turtle);
+  const quads: Quad[] = [];
+  parseRdfSync(turtle, {
+    ...BUFFERED_RDF_LIMITS,
+    baseIRI: baseUrl,
+    format: 'text/turtle',
+    onQuad: (quad) => quads.push(quad),
+  });
   const person = DataFactory.namedNode(webId);
   const index = new Map<string, Map<string, Quad_Object[]>>();
   const preferenceRanks = new Map<string, number>();
 
   // Index once, keeping each property's parser order for deterministic preference ties.
   for (const { subject, predicate, object } of quads) {
-    const key = termToId(subject);
+    const key = termKey(subject);
     let predicates = index.get(key);
     if (!predicates) {
       predicates = new Map();
@@ -63,11 +76,11 @@ export function readFormFillData(webId: string, turtle: string, baseUrl: string)
 
   function objects(subject: Quad_Object | undefined, predicate: string): Quad_Object[] {
     if (!subject || subject.termType === 'Literal') return [];
-    return index.get(termToId(subject))?.get(predicate) ?? [];
+    return index.get(termKey(subject))?.get(predicate) ?? [];
   }
 
   function preference(node: Quad_Object): number {
-    const key = termToId(node);
+    const key = termKey(node);
     const cached = preferenceRanks.get(key);
     if (cached !== undefined) return cached;
     let rank = Number.POSITIVE_INFINITY;

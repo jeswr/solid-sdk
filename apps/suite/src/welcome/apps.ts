@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import type { AppSlug } from "@jeswr/suite-ui";
+import { plannedApps } from "../apps/planned/planned";
 import { appRegistry } from "../shell/registry";
 
 export const descriptions: Record<AppSlug, string> = {
@@ -34,10 +35,19 @@ export const descriptions: Record<AppSlug, string> = {
   ask: "Ask questions about your pod and get answers with sources.",
 };
 
+/** Placeholder apps are listed so people see what is coming, but never as something to try yet. */
+export function welcomeStatus(
+  slug: AppSlug,
+  status: "first-cut" | "parity" | "backlog",
+): "Coming soon" | "Early" | "Ready to try" {
+  if (plannedApps.has(slug)) return "Coming soon";
+  return status === "backlog" ? "Early" : "Ready to try";
+}
+
 export const welcomeApps = appRegistry.map((app) => ({
   ...app,
   description: descriptions[app.slug],
-  statusLabel: app.status === "backlog" ? "Early" : "Ready to try",
+  statusLabel: welcomeStatus(app.slug, app.status),
 }));
 
 export interface CompanionApp {
