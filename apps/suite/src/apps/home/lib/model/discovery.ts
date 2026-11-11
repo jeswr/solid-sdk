@@ -192,13 +192,20 @@ export async function discoverDomainItems(
           if (truncated) break;
         }
       }
-      if (!imported.size) {
-        const node =
-          webId && url === resourceUrl(webId)
-            ? subjectOf(dataset, webId)
-            : primarySubject(dataset, url);
-        if (node && dataset.match(TermAs.term(node)).size > 0)
-          add(node, classifySubject(node, webId));
+      // The document's own primary record (a note holding an imported reference, say)
+      // still gets its card unless it is one of the imported records already shown.
+      const node =
+        webId && url === resourceUrl(webId)
+          ? subjectOf(dataset, webId)
+          : primarySubject(dataset, url);
+      if (
+        !truncated &&
+        node &&
+        dataset.match(TermAs.term(node)).size > 0 &&
+        !imported.has(TermAs.term(node).value)
+      ) {
+        const classified = classifySubject(node, webId);
+        if (!imported.size || classified.dataType) add(node, classified);
       }
       document = { dataset, etag, items, truncated };
       documents.set(url, document);

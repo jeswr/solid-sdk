@@ -319,6 +319,20 @@ describe("domain discovery", () => {
     expect(fetch.mock.calls.some(([input]) => String(input).includes("unrelated"))).toBe(false);
   });
 
+  // An imported reference inside a note used to hide the note's own card.
+  it("keeps a document's primary record when it also holds imported records", async () => {
+    const url = `${STORAGE}notes/reading.ttl`;
+    const result = await discoverDomainItems("all", {
+      storage: STORAGE,
+      fetch: fixtureFetch({
+        [url]: `<#it> a schema:NoteDigitalDocument; schema:name "Reading notes".
+          <#book> a schema:Book; schema:name "A book"; prov:wasGeneratedBy <runs.ttl#run>.`,
+      }),
+      typeIndex: [{ forClass: `${NS.SCHEMA}NoteDigitalDocument`, instance: url }],
+    });
+    expect(result.items.map((item) => item.title).sort()).toEqual(["A book", "Reading notes"]);
+  });
+
   it("uses only the primary subject for connector collections independently of the WebID", async () => {
     const fetch = fixtureFetch({
       [`${STORAGE}collection.ttl`]:
