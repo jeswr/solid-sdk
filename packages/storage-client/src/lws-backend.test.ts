@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { deriveFeatures } from "@jeswr/storage-capabilities";
 import { describe, expect, test, vi } from "vitest";
@@ -81,6 +82,98 @@ async function collect(entries: AsyncIterable<Entry>) {
 }
 
 describe("sparq fixtures and pagination", () => {
+  test("list and listAll preserve slashless container identifiers and opaque pagination", async () => {
+    const container = `${ROOT}grants`;
+    const next = `${container}?token=a%2fb&x=1&x=2`;
+    const { storage, calls } = backend({
+      [`GET ${container}`]: {
+        status: 200,
+        headers: { "content-type": "application/lws+json", link: `<${next}>; rel="next"` },
+        body: JSON.stringify(pageBody([{ id: "grant-one" }], { totalItems: 2 })),
+      },
+      [`GET ${next}`]: {
+        status: 200,
+        headers: { "content-type": "application/lws+json" },
+        body: JSON.stringify(pageBody([{ id: `${ROOT}records/grant-two` }], { totalItems: 2 })),
+      },
+    });
+    const page = await storage.list(container);
+    expect(page.next).toEqual({ url: next });
+    expect(page.items.map(({ url }) => url)).toEqual([`${ROOT}grant-one`]);
+    expect((await collect(storage.listAll(container))).map(({ url }) => url)).toEqual([
+      `${ROOT}grant-one`,
+      `${ROOT}records/grant-two`,
+    ]);
+    expect(calls.map(({ method, url }) => [method, url])).toEqual([
+      ["GET", container],
+      ["GET", container],
+      ["GET", next],
+    ]);
+  });
+
+  test.each([
+    [200, "invalid-response"],
+    [405, "method-not-allowed"],
+  ])("slashless noncontainers still fail on a %i response", async (status, code) => {
+    const container = `${ROOT}file`;
+    const { storage, calls } = backend({
+      [`GET ${container}`]: {
+        status,
+        headers: { "content-type": "application/lws+json" },
+        body: JSON.stringify({ type: "DataResource", items: [] }),
+      },
+    });
+    await rejects(storage.list(container), code);
+    await rejects(collect(storage.listAll(container)), code);
+    expect(calls.map(({ url }) => url)).toEqual([container, container]);
+  });
+
+  test("lists a created opaque container at its exact identifier across pages", async () => {
+    const container = `${ROOT}opaque-container`;
+    const next = `${container}?cursor=a%2fb&x=1&x=2`;
+    const { storage, calls } = backend({
+      [`POST ${ROOT}`]: {
+        status: 201,
+        headers: { location: container, etag: '"created"' },
+      },
+      [`GET ${container}`]: {
+        status: 200,
+        headers: {
+          "content-type": "application/lws+json",
+          link: `${storageLink()}, <?cursor=a%2fb&x=1&x=2>; rel=next`,
+          etag: '"page-1"',
+        },
+        body: JSON.stringify(
+          pageBody([{ id: "sibling-member" }, { id: FOREIGN }], { totalItems: 2 }),
+        ),
+      },
+      [`GET ${next}`]: {
+        status: 200,
+        headers: { "content-type": "application/lws+json" },
+        body: JSON.stringify(
+          pageBody([{ id: "another-container", type: "Container" }], { type: "ContainerPage" }),
+        ),
+      },
+    });
+    const created = await storage.create(ROOT, null, { kind: "container" });
+    expect(created.url).toBe(container);
+    const first = await storage.list(created.url);
+    expect(first).toMatchObject({ next: { url: next }, total: 2, etag: '"page-1"' });
+    expect(first.items.map(({ url }) => url)).toEqual([`${ROOT}sibling-member`]);
+    expect(
+      (await collect(storage.listAll(created.url))).map(({ url, kind }) => [url, kind]),
+    ).toEqual([
+      [`${ROOT}sibling-member`, "resource"],
+      [`${ROOT}another-container`, "container"],
+    ]);
+    expect(calls.map(({ method, url }) => [method, url])).toEqual([
+      ["POST", ROOT],
+      ["GET", container],
+      ["GET", container],
+      ["GET", next],
+    ]);
+  });
+
   test("listAll consumes 1500 members in exactly three 500-member pages", async () => {
     const { storage, calls } = backend();
     const all = await collect(storage.listAll(CONTAINER));
@@ -88,6 +181,7 @@ describe("sparq fixtures and pagination", () => {
     expect(new Set(all.map(({ url }) => url)).size).toBe(1500);
     expect(all[0]).toEqual({
       url: NOTE,
+      displayName: null,
       kind: "resource",
       contentType: "text/turtle",
       size: 17,
@@ -374,6 +468,7 @@ describe("listing validation and advisory fields", () => {
       {
         url: `${CONTAINER}z`,
         kind: "resource",
+        displayName: null,
         contentType: "text/turtle",
         size: 0,
         modified: new Date("2026-10-02T10:30:00Z"),
@@ -382,6 +477,7 @@ describe("listing validation and advisory fields", () => {
       {
         url: `${ROOT}elsewhere`,
         kind: "container",
+        displayName: null,
         contentType: null,
         size: 2,
         modified: null,
@@ -390,6 +486,7 @@ describe("listing validation and advisory fields", () => {
       {
         url: `${CONTAINER}a/`,
         kind: "resource",
+        displayName: null,
         contentType: "image/png",
         size: null,
         modified: null,
@@ -527,17 +624,47 @@ describe("listing validation and advisory fields", () => {
     }
   });
 
-  test("container syntax is checked before sending, including empty delimiters", async () => {
+  test.each([
+    CONTAINER,
+    `${ROOT}opaque-container`,
+  ])("container syntax is checked before sending, including empty delimiters: %s", async (container) => {
     const { storage, fetch } = backend();
-    for (const url of [
-      `${ROOT}file`,
-      `${CONTAINER}?`,
-      `${CONTAINER}#`,
-      `${CONTAINER}?page=1`,
-      `${CONTAINER}#top`,
-    ])
+    for (const suffix of ["?", "#", "?page=1", "#top"]) {
+      const url = `${container}${suffix}`;
       await rejects(storage.list(url), "bad-request");
+      await rejects(collect(storage.listAll(url)), "bad-request");
+    }
     expect(fetch).not.toHaveBeenCalled();
+  });
+
+  test("opaque container listings and cursors stay scoped before fetching", async () => {
+    const root = `${ROOT}alice/`;
+    const container = `${root}opaque-container`;
+    const fetch = vi.fn<AuthFetch>();
+    const storage = createLwsBackend({ root, fetch });
+    for (const url of [FOREIGN, `${ROOT}outside`, `${root}..%2foutside`, "opaque-container"]) {
+      await rejects(storage.list(url), "scope");
+      await rejects(collect(storage.listAll(url)), "scope");
+      await rejects(storage.list(container, { cursor: { url } }), "scope");
+    }
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    { raw: pageBody(), link: storageLink(FOREIGN), code: "scope" },
+    { raw: { type: "DataResource", items: [] }, link: "", code: "invalid-response" },
+    { raw: pageBody(), link: `<${FOREIGN}>; rel=next`, code: "invalid-response" },
+  ])("opaque listings retain response validation: $code ($link)", async ({ raw, link, code }) => {
+    const container = `${ROOT}opaque-container`;
+    const { storage, calls } = backend({
+      [`GET ${container}`]: {
+        status: 200,
+        headers: { "content-type": "application/lws+json", link },
+        body: JSON.stringify(raw),
+      },
+    });
+    await rejects(collect(storage.listAll(container)), code);
+    expect(calls.map(({ url }) => url)).toEqual([container]);
   });
 });
 
@@ -1192,7 +1319,7 @@ describe("bounded JSON and aborts", () => {
   });
 });
 
-describe("construction, parentOf and pending mutations", () => {
+describe("construction and parentOf", () => {
   test("defaults and provided features, invalid roots", () => {
     const fetch = vi.fn<AuthFetch>();
     const storage = createLwsBackend({ root: ROOT, fetch });
@@ -1210,6 +1337,7 @@ describe("construction, parentOf and pending mutations", () => {
       fetchedAt: 0,
       etag: null,
       maxAgeMs: 0,
+      owner: null,
       verificationMethods: [],
     });
     expect(createLwsBackend({ root: ROOT, fetch, features }).features).toBe(features);
@@ -1260,21 +1388,5 @@ describe("construction, parentOf and pending mutations", () => {
     expect(
       await backend({ [`HEAD ${NOTE}`]: { status: 200, headers: {} } }).storage.parentOf(NOTE),
     ).toBeNull();
-  });
-
-  test("all mutation stubs reject unsupported without fetching until T-024", async () => {
-    const { storage, fetch } = backend();
-    const pending = [
-      storage.write(NOTE, "x", { contentType: "text/plain", ifMatch: "*" }),
-      storage.writeRdf(NOTE, [], { ifMatch: "*" }),
-      storage.create(CONTAINER, null),
-      storage.patch(NOTE, { kind: "json", ops: [] }, { ifMatch: '"1"' }),
-      storage.move(NOTE, ROOT),
-      storage.delete(NOTE),
-      storage.setMetadata(NOTE, [], { ifMatch: '"1"' }),
-    ];
-    for (const promise of pending)
-      expect((await rejects(promise, "unsupported")).message).toContain("T-024");
-    expect(fetch).not.toHaveBeenCalled();
   });
 });

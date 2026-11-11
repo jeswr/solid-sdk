@@ -21,6 +21,7 @@ import { formatDue, isOverdue } from "../../lib/format/due";
 import { classifyError } from "../../lib/model/errors";
 import type { StoredProject } from "../../lib/model/store";
 import type { Category } from "../../lib/model/tracker";
+import { labelColour } from "../../lib/views/label-colours";
 import { projectGroups, type Row } from "../../lib/views/project-groups";
 import type { TaskView } from "../../lib/views/types";
 import { completeTask, deleteTask } from "../../state/actions";
@@ -29,10 +30,15 @@ import { TaskListFocus } from "../../state/list-focus";
 import { useTasksPreferences } from "../../state/preferences";
 import { useTasks } from "../../state/tasks-context";
 import { AddTaskRow } from "../add-task-row";
+import { AssigneeAvatar } from "../assignee-avatar";
 import { useTaskDrag } from "../dnd/use-task-drag";
+import { LabelChip } from "../label-chip";
+import { LabelFilterBar } from "../label-filter-bar";
 import { MoveMenuItems } from "../move-menu";
+import { ProjectDot } from "../project-dot";
 import { TaskCheck, useCompleting } from "../task-check";
 import { SectionEnd, SectionHeader } from "../task-list";
+import { TaskProgress } from "../tree-controls";
 import { ProjectError } from "../views/project-error";
 import "./board.css";
 
@@ -59,8 +65,6 @@ function BoardCard({
   const query = new URLSearchParams(params.toString());
   query.set("task", encodeRef(task.url));
   const href = `${pathname}?${query}`;
-  const children = tasks.views.filter((child) => child.parentId === task.id);
-  const closed = children.filter((child) => child.state === "closed").length;
   const labels = project.tracker.labels.filter((label) => task.labelIds.includes(label.id));
   return (
     <li
@@ -75,6 +79,7 @@ function BoardCard({
       {...drag.pointer}
       {...drag.touch}
     >
+      <AssigneeAvatar task={task} />
       <div className="tsk-card-top">
         {drag.handle && (
           <button
@@ -118,7 +123,7 @@ function BoardCard({
             >
               Delete
             </DropdownMenuItem>
-            <MoveMenuItems task={task} disabled={pending || completing} nesting={false} />
+            <MoveMenuItems task={task} disabled={pending || completing} nesting={false} flat />
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
@@ -133,15 +138,13 @@ function BoardCard({
             <Repeat2 size={14} aria-label="Recurring task" />
           </span>
         )}
-        {children.length > 0 && (
-          <span role="img" aria-label={`${closed} of ${children.length} sub-tasks complete`}>
-            {closed}/{children.length}
-          </span>
-        )}
+        <TaskProgress tasks={tasks.views} id={task.id} />
         {labels.slice(0, 3).map((label) => (
-          <span className="tsk-chip" key={label.id}>
-            @{label.name}
-          </span>
+          <LabelChip
+            key={label.id}
+            name={label.name}
+            colour={labelColour(label.name, tasks.projects)}
+          />
         ))}
         {labels.length > 3 && <span>+{labels.length - 3}</span>}
         {task.priority < 4 && <span className="tsk-sr-only">Priority P{task.priority}</span>}
@@ -191,16 +194,14 @@ function BoardColumn({
       )}
       <SectionEnd project={project} sectionId={section?.id} className="tsk-board-body">
         <ol className="tsk-board-cards" aria-label={`${section?.name ?? "No section"} tasks`}>
-          {rows
-            .filter((row) => row.depth === 0)
-            .map((row) => (
-              <BoardCard
-                key={row.task.url}
-                task={row.task}
-                project={project}
-                sectionId={section?.id}
-              />
-            ))}
+          {rows.map((row) => (
+            <BoardCard
+              key={row.task.url}
+              task={row.task}
+              project={project}
+              sectionId={section?.id}
+            />
+          ))}
         </ol>
       </SectionEnd>
       <AddTaskRow project={project} sectionId={section?.id} />
@@ -266,7 +267,10 @@ export function BoardView({ projectUrl }: { projectUrl: string }) {
   const { preferences } = useTasksPreferences();
   const project = tasks.projects.find((item) => item.url === projectUrl);
   const load = tasks.tasks[projectUrl];
-  const title = project?.tracker.title ?? "Project";
+  const title =
+    project?.tracker.title ??
+    preferences.sharedProjects.find((shared) => shared.url === projectUrl)?.title ??
+    "Project";
   useEffect(() => {
     if (project) void tasks.cache.loadTasks(project);
   }, [project, tasks.cache]);
@@ -278,13 +282,15 @@ export function BoardView({ projectUrl }: { projectUrl: string }) {
     project?.tracker.sections ?? [],
     "manual",
     preferences.showCompletedInProject,
+    true,
   );
-  const unsectioned = groups.unsectioned.filter((row) => row.depth === 0);
+  const unsectioned = groups.unsectioned;
   const showNoSection = unsectioned.length > 0 || groups.sections.length === 0;
   return (
     <TaskListFocus className="tsk-content tsk-board-view">
       <header className="tsk-view-header">
         <h1>
+          {project && <ProjectDot colour={project.tracker.color} />}
           {project ? (
             <EditableText
               label="Project name"
@@ -299,6 +305,7 @@ export function BoardView({ projectUrl }: { projectUrl: string }) {
           )}
         </h1>
       </header>
+      <LabelFilterBar projectUrl={projectUrl} />
       {renderAsync({
         loading:
           tasks.status === "loading" ||
@@ -314,7 +321,10 @@ export function BoardView({ projectUrl }: { projectUrl: string }) {
               }}
             >
               {classifyError(load.error) === "forbidden" && (
-                <p>You no longer have access to {title}</p>
+                <>
+                  <p>You no longer have access to {title}</p>
+                  <p>Ask the owner to share this project</p>
+                </>
               )}
             </ProjectError>
           ) : !project && tasks.status === "ready" ? (

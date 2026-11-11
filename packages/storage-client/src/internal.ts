@@ -1,10 +1,56 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6
 // Shared, backend-neutral internals (not exported from the package).
 import { StorageError } from "./errors.js";
 import type { Body, Entry, Page, PageCursor } from "./types.js";
 
+/** Fetch keepalive bodies must fit the browser's 64 KiB budget without consuming streams. */
+export function validateKeepalive(
+  method: string,
+  url: string,
+  body: Body | null | undefined,
+  keepalive: boolean | undefined,
+): void {
+  if (keepalive !== undefined && typeof keepalive !== "boolean")
+    throw new TypeError("keepalive must be a boolean");
+  if (!keepalive) return;
+  const size =
+    body == null
+      ? 0
+      : typeof body === "string"
+        ? new TextEncoder().encode(body).byteLength
+        : body instanceof Uint8Array
+          ? body.byteLength
+          : body instanceof Blob
+            ? body.size
+            : NaN;
+  if (!Number.isSafeInteger(size) || size < 0 || size > 64 * 1024) {
+    throw new StorageError("bad-request", {
+      method,
+      url,
+      message:
+        "keepalive requires a known body size of at most 64 KiB; use the outbox for larger or streaming bodies",
+    });
+  }
+}
+
 /** ADR-003 §4: listAll stops here. */
 export const MAX_PAGES = 10_000;
+
+/** Reject invalid listing caps rather than silently disabling a security limit. */
+export function validateListingMaxBytes(maxBytes: number | undefined): void {
+  if (maxBytes !== undefined && (!Number.isSafeInteger(maxBytes) || maxBytes < 0)) {
+    throw new TypeError("maxBytes must be a non-negative safe integer");
+  }
+}
+
+export function listingTooLarge(url: string, maxBytes: number): StorageError {
+  return new StorageError("payload-too-large", {
+    method: "GET",
+    url,
+    message: `GET ${url}: listing exceeds max size (${maxBytes} response bytes per page)`,
+  });
+}
 
 /** Throw `network` (retryable: false) when the caller's signal has fired. */
 export function throwIfAborted(method: string, url: string, signal: AbortSignal | undefined): void {

@@ -1,8 +1,9 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // Shared security regressions exercised through both public network backends.
 import { LinkHeaderOverflowError } from "@jeswr/storage-capabilities";
+import { DataFactory } from "n3";
 import { describe, expect, test, vi } from "vitest";
-import { StorageError } from "./errors.js";
+import { MAX_PROBLEM_BYTES, StorageError } from "./errors.js";
 import { CSS_ROOT, cssReadExchanges } from "./fixtures/css.js";
 import { scoped } from "./http.js";
 import { createLwsBackend } from "./lws.js";
@@ -16,6 +17,296 @@ const factories = [
   { protocol: "solid", create: createSolidBackend },
   { protocol: "lws", create: createLwsBackend },
 ] as const;
+
+describe.each(factories)("$protocol RDF negotiation errors", ({ create, protocol }) => {
+  test.each([406, 501])("readRdf maps %i to not-rdf with the original details", async (status) => {
+    const problem = {
+      type: "https://example.org/problems/no-converter",
+      title: "Cannot serve RDF",
+      detail: "PRIVATE response detail",
+      instance: "/request/1",
+      formats: ["text/plain"],
+    };
+    const fetch = vi.fn<AuthFetch>(async () =>
+      Response.json(problem, { status, headers: { "content-type": "application/problem+json" } }),
+    );
+    const storage = create({ root: ROOT, fetch });
+    const signal = new AbortController().signal;
+    const error = await storage
+      .readRdf("HTTPS://LWS.EXAMPLE:443/notes/a", { ifNoneMatch: '"v1"', signal })
+      .catch((error: unknown) => error);
+    expect(error).toBeInstanceOf(StorageError);
+    expect(error).toMatchObject({
+      code: "not-rdf",
+      status,
+      url: NOTE,
+      method: "GET",
+      problem,
+      retryable: false,
+      retryAfterMs: null,
+    });
+    expect((error as StorageError).message).toBe(`GET ${NOTE} failed: not-rdf (${status})`);
+    expect(fetch).toHaveBeenCalledExactlyOnceWith(NOTE, {
+      method: "GET",
+      headers: { Accept: "text/turtle, application/ld+json;q=0.9", "If-None-Match": '"v1"' },
+      redirect: "manual",
+      signal,
+    });
+  });
+
+  test.each<[number, string]>([
+    [406, "bad-request"],
+    [501, "server"],
+  ])("other operations retain %i -> %s", async (status, code) => {
+    const storage = create({ root: ROOT, fetch: async () => new Response(null, { status }) });
+    const inserts = [
+      DataFactory.quad(
+        DataFactory.namedNode(NOTE),
+        DataFactory.namedNode("urn:p"),
+        DataFactory.literal("value"),
+      ),
+    ];
+    for (const operation of [
+      () => storage.read(NOTE),
+      () => storage.read(NOTE, { accept: "text/turtle, application/ld+json;q=0.9" }),
+      () => storage.head(NOTE),
+      () => storage.list(ROOT),
+      () => storage.write(NOTE, "body", { contentType: "text/plain", ifMatch: '"v1"' }),
+      () => storage.patch(NOTE, { kind: "rdf", inserts, deletes: [] }, { ifMatch: '"v1"' }),
+    ]) {
+      await expect(operation()).rejects.toMatchObject({ code, status });
+    }
+
+    const metadataUrl = `${NOTE}.meta`;
+    const fetch = vi.fn<AuthFetch>(async (_input, init) =>
+      init?.method === "HEAD"
+        ? new Response(null, {
+            headers: {
+              link: `<${metadataUrl}>; rel="${protocol === "solid" ? "describedby" : "linkset"}"`,
+            },
+          })
+        : new Response(null, { status }),
+    );
+    const metadataStorage = create({ root: ROOT, fetch });
+    await expect(metadataStorage.metadata(NOTE)).rejects.toMatchObject({
+      code,
+      status,
+      method: "GET",
+      url: metadataUrl,
+    });
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(new Headers(fetch.mock.calls[1]?.[1]?.headers).get("accept")).toBe(
+      protocol === "solid" ? "text/turtle, application/ld+json;q=0.9" : "application/linkset+json",
+    );
+  });
+
+  test.each([406, 501])("readRdf does not read non-JSON error bodies on %i", async (status) => {
+    const pull = vi.fn();
+    const cancel = vi.fn();
+    const storage = create({
+      root: ROOT,
+      fetch: async () =>
+        new Response(new ReadableStream<Uint8Array>({ pull, cancel }, { highWaterMark: 0 }), {
+          status,
+          headers: { "content-type": "text/plain" },
+        }),
+    });
+    await expect(storage.readRdf(NOTE)).rejects.toMatchObject({
+      code: "not-rdf",
+      status,
+      problem: null,
+    });
+    expect(pull).not.toHaveBeenCalled();
+    expect(cancel).toHaveBeenCalledOnce();
+  });
+
+  test.each([406, 501])("readRdf retains the problem body limit on %i", async (status) => {
+    const pull = vi.fn((controller: ReadableStreamDefaultController<Uint8Array>) => {
+      controller.enqueue(new Uint8Array(MAX_PROBLEM_BYTES + 1));
+    });
+    const cancel = vi.fn();
+    const storage = create({
+      root: ROOT,
+      fetch: async () =>
+        new Response(new ReadableStream({ pull, cancel }, { highWaterMark: 0 }), {
+          status,
+          headers: { "content-type": "application/problem+json" },
+        }),
+    });
+    await expect(storage.readRdf(NOTE)).rejects.toMatchObject({
+      code: "not-rdf",
+      status,
+      problem: null,
+    });
+    expect(pull).toHaveBeenCalledOnce();
+    expect(cancel).toHaveBeenCalledOnce();
+  });
+
+  test.each([406, 501])("an abort while reading a %i problem stays network", async (status) => {
+    const controller = new AbortController();
+    const storage = create({
+      root: ROOT,
+      fetch: async () =>
+        new Response(
+          new ReadableStream<Uint8Array>({
+            pull(body) {
+              controller.abort("stop");
+              body.close();
+            },
+          }),
+          { status, headers: { "content-type": "application/problem+json" } },
+        ),
+    });
+    await expect(storage.readRdf(NOTE, { signal: controller.signal })).rejects.toMatchObject({
+      code: "network",
+      status: null,
+      retryable: false,
+    });
+  });
+
+  test("readRdf preserves unexpected errors unchanged", async () => {
+    const error = new Error("header access failed");
+    const response = new Response(null);
+    const get = response.headers.get.bind(response.headers);
+    vi.spyOn(response.headers, "get").mockImplementation((name) => {
+      if (name === "content-type") throw error;
+      return get(name);
+    });
+    const storage = create({ root: ROOT, fetch: async () => response });
+    await expect(storage.readRdf(NOTE)).rejects.toBe(error);
+  });
+
+  test.each<[number, string, boolean]>([
+    [302, "invalid-response", false],
+    [403, "forbidden", false],
+    [500, "server", false],
+    [503, "server", true],
+  ])("readRdf retains %i -> %s", async (status, code, retryable) => {
+    const fetch = vi.fn<AuthFetch>(async () => new Response(null, { status }));
+    const storage = create({ root: ROOT, fetch });
+    await expect(storage.readRdf(NOTE)).rejects.toMatchObject({ code, status, retryable });
+    expect(fetch).toHaveBeenCalledOnce();
+    expect(fetch.mock.calls[0]?.[1]?.redirect).toBe("manual");
+  });
+
+  if (protocol === "lws") {
+    test.each([
+      406, 501,
+    ])("readRdf keeps a foreign storage binding as scope on %i", async (status) => {
+      const storage = create({
+        root: ROOT,
+        fetch: async () =>
+          new Response(null, {
+            status,
+            headers: { link: `<https://foreign.example/>; rel="${LWS}storage"` },
+          }),
+      });
+      await expect(storage.readRdf(NOTE)).rejects.toMatchObject({
+        code: "scope",
+        status: null,
+        url: NOTE,
+        method: "GET",
+      });
+    });
+  }
+});
+
+describe.each(factories)("$protocol observation revalidation", ({ create, protocol }) => {
+  test("keeps request headers local and forwards them on every listing page", async () => {
+    const requests: Request[] = [];
+    const storage = create({
+      root: ROOT,
+      fetch: async (input, init) => {
+        const request = new Request(input, init);
+        requests.push(request);
+        if (request.method === "HEAD") return new Response(null);
+        if (protocol === "solid")
+          return new Response("", { headers: { "content-type": "text/turtle" } });
+        return Response.json(
+          { type: "Container", items: [] },
+          {
+            headers: {
+              "content-type": "application/lws+json",
+              ...(request.url === ROOT ? { link: '<?page=2>; rel="next"' } : {}),
+            },
+          },
+        );
+      },
+    });
+    const headers = new Headers({
+      "x-warm-request": "crawl",
+      Accept: "invalid",
+      Range: "bytes=0-1",
+      "If-None-Match": "invalid",
+    });
+    await storage.head(NOTE, { headers });
+    await storage.read(NOTE, {
+      headers,
+      accept: "text/plain",
+      ifNoneMatch: '"v1"',
+      range: { start: 2, end: 3 },
+    });
+    await Array.fromAsync(storage.listAll(ROOT, { headers }));
+    for (const request of requests) expect(request.headers.get("x-warm-request")).toBe("crawl");
+    expect(requests[0]?.headers.get("accept")).toBe("*/*");
+    expect(requests[0]?.headers.has("range")).toBe(false);
+    expect(requests[0]?.headers.has("if-none-match")).toBe(false);
+    expect(requests[1]?.headers.get("accept")).toBe("text/plain");
+    expect(requests[1]?.headers.get("range")).toBe("bytes=2-3");
+    expect(requests[1]?.headers.get("if-none-match")).toBe('"v1"');
+    expect(requests.slice(2)).toHaveLength(protocol === "solid" ? 1 : 2);
+    for (const request of requests.slice(2)) {
+      expect(request.headers.get("accept")).toBe(
+        protocol === "solid" ? "text/turtle" : "application/lws+json, application/ld+json;q=0.5",
+      );
+      expect(request.headers.has("range")).toBe(false);
+      expect(request.headers.has("if-none-match")).toBe(false);
+    }
+    await storage.read(NOTE);
+    expect(requests.at(-1)?.headers.has("x-warm-request")).toBe(false);
+    expect(headers.get("accept")).toBe("invalid");
+  });
+
+  test.each([
+    undefined,
+    false,
+    true,
+  ])("forwards revalidate=%s to HEAD and every listing page", async (revalidate) => {
+    const signal = new AbortController().signal;
+    const fetch = vi.fn<AuthFetch>(async (input, init) => {
+      if (init?.method === "HEAD") return new Response(null);
+      if (protocol === "solid") {
+        return new Response("", { headers: { "content-type": "text/turtle" } });
+      }
+      const next = String(input) === ROOT;
+      return Response.json(
+        { type: "Container", items: [{ id: next ? "a" : "b", type: "DataResource" }] },
+        {
+          headers: {
+            "content-type": "application/lws+json",
+            ...(next ? { link: '<?page=2&opaque=a%2Fb>; rel="next"' } : {}),
+          },
+        },
+      );
+    });
+    const storage = create({ root: ROOT, fetch });
+    await storage.head(NOTE, { signal, revalidate });
+    await storage.list(ROOT, { signal, revalidate });
+    const entries = await Array.fromAsync(storage.listAll(ROOT, { signal, revalidate }));
+    expect(entries.map((entry) => entry.url)).toEqual(
+      protocol === "lws" ? [`${ROOT}a`, `${ROOT}b`] : [],
+    );
+    expect(fetch).toHaveBeenCalledTimes(protocol === "lws" ? 4 : 3);
+    for (const [, init] of fetch.mock.calls) {
+      expect(init?.cache).toBe(revalidate ? "no-cache" : undefined);
+      expect(init?.signal).toBe(signal);
+      expect(init?.redirect).toBe("manual");
+    }
+    if (protocol === "lws") {
+      expect(fetch.mock.calls.at(-1)?.[0]).toBe(`${ROOT}?page=2&opaque=a%2Fb`);
+    }
+  });
+});
 
 describe.each(factories)("$protocol request scope", ({ create, protocol }) => {
   test.each([

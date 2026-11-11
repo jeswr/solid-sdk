@@ -3,6 +3,7 @@
 // AUTHORED-BY Codex GPT-6
 package org.jeswr.suite;
 
+import android.content.pm.ApplicationInfo;
 import android.os.Bundle;
 import android.view.Gravity;
 import android.webkit.WebView;
@@ -28,6 +29,7 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(SuitePushPlugin.class);
         registerPlugin(SuiteShareIntakePlugin.class);
         registerPlugin(SuiteShareStagingPlugin.class);
+        registerPlugin(SuiteFilesPlugin.class);
         registerPlugin(SuiteSecureStorePlugin.class);
         super.onCreate(savedInstanceState);
     }
@@ -40,6 +42,12 @@ public class MainActivity extends BridgeActivity {
             return;
         }
         super.load();
+        // MOBILE_DEBUG=1 writes webContentsDebuggingEnabled into capacitor.config.json and Capacitor
+        // has just applied it process-wide. A release build must never honour it, whatever config
+        // was bundled, so the installed app's debuggable flag decides (sst-8wx.17).
+        if ((getApplicationInfo().flags & ApplicationInfo.FLAG_DEBUGGABLE) == 0) {
+            WebView.setWebContentsDebuggingEnabled(false);
+        }
         WebView webView = bridge.getWebView();
         if (usesProxyInjection()) {
             // addDocumentStartJavaScript threw and Capacitor fell back to the proxy: fail closed.
@@ -47,16 +55,26 @@ public class MainActivity extends BridgeActivity {
             refuse();
             return;
         }
-        bridge.setWebViewClient(new SuiteWebViewClient(bridge));
+        SuiteWebViewClient client;
+        try {
+            // Bundled mode refuses to start without a valid route manifest (MOB-P3 E4).
+            client = new SuiteWebViewClient(bridge);
+        } catch (RuntimeException e) {
+            webView.stopLoading();
+            refuse();
+            return;
+        }
+        bridge.setWebViewClient(client);
         webView.stopLoading();
         // Reinstall Capacitor's listener with synchronous secure-store admission. Its inherited
         // listener checks the main frame and WebView enforces these exact-origin rules before
         // SuiteMessageHandler.postMessage can take a ticket or dispatch any plugin invocation.
         try {
-            if (NavigationPolicy.origin(bridge.getServerUrl()) == null) throw new IllegalStateException("Missing suite origin");
+            String appUrl = NavigationPolicy.appUrl(bridge.getServerUrl(), bridge.getLocalUrl());
+            if (appUrl == null) throw new IllegalStateException("Missing suite origin");
             WebViewCompat.removeWebMessageListener(webView, "androidBridge");
             bridge.getAllowedOriginRules().clear();
-            bridge.getAllowedOriginRules().add(bridge.getServerUrl());
+            bridge.getAllowedOriginRules().add(appUrl);
             new SuiteMessageHandler(bridge, webView);
         } catch (RuntimeException e) {
             refuse();

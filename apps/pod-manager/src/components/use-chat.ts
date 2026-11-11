@@ -3,8 +3,8 @@
 
 /**
  * Chat hook — opens a chat at a container URL (scope-guarded to the user's own
- * pods via `openChat`/`ChatScopeError`), lists messages, and sends. Production
- * paths pass NO `fetch`. Re-lists on reload (wired to live notifications by the
+ * pods via `openChat`/`ChatScopeError`), lists messages, and sends through the
+ * session transport. Re-lists on reload (wired to live notifications by the
  * page).
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -21,7 +21,7 @@ export interface UseChat extends AsyncState<ChatMessage[]> {
 }
 
 export function useChat(containerUrl: string | undefined): UseChat {
-  const { webId, activeStorage, profile, status } = useSession();
+  const { webId, activeStorage, profile, status, podFetch } = useSession();
   const [state, setState] = useState<AsyncState<ChatMessage[]>>({ loading: true });
   const [nonce, setNonce] = useState(0);
   const reload = useCallback(() => setNonce((n) => n + 1), []);
@@ -43,14 +43,14 @@ export function useChat(containerUrl: string | undefined): UseChat {
     }
     try {
       return {
-        chat: openChat({ containerUrl, storages, webId }),
+        chat: openChat({ containerUrl, storages, webId, fetchImpl: podFetch }),
         outOfScope: false,
       };
     } catch (e) {
       if (e instanceof ChatScopeError) return { chat: undefined, outOfScope: true };
       throw e;
     }
-  }, [status, webId, storages, containerUrl]);
+  }, [status, webId, storages, containerUrl, podFetch]);
 
   useEffect(() => {
     if (!containerUrl) {

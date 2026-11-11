@@ -211,6 +211,18 @@ describe("deleteRdf", () => {
     expect(err).toBeInstanceOf(ResourceDeleteError);
     expect(err.status).toBe(500);
   });
+
+  // AUTHORED-BY Claude Opus 5.5
+  it("deletes conditionally on one strong validator, rejecting malformed ones before I/O", async () => {
+    const { fetch, calls } = mockFetch({ [`DELETE ${URL_X}`]: { status: 412 } });
+    const err = await deleteRdf(URL_X, fetch, '"v1"').catch((e) => e);
+    expect(err).toBeInstanceOf(ResourceDeleteError);
+    expect(err.status).toBe(412);
+    expect(calls[0]?.headers["if-match"]).toBe('"v1"');
+    for (const etag of [null, 'W/"v1"', '"v1"\n'])
+      await expect(deleteRdf(URL_X, fetch, etag)).rejects.toBeInstanceOf(ConcurrencyValidatorError);
+    expect(calls).toHaveLength(1);
+  });
 });
 
 describe("nameFromUrl", () => {

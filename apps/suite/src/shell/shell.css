@@ -103,3 +103,26 @@
 .shell-public-note {
   margin: 0;
 }
+
+/* AUTHORED-BY Claude Opus 5.5 */
+/* /offline: the recent items saved on this device. */
+.shell-offline-recent {
+  display: grid;
+  gap: var(--space-3);
+  margin: var(--space-3) 0 0;
+  padding: 0;
+  list-style: none;
+}
+.shell-offline-recent li {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+}
+.shell-offline-recent a {
+  min-height: 24px;
+  overflow-wrap: anywhere;
+}
+.shell-offline-recent time {
+  color: var(--foreground-muted);
+  font-size: var(--text-sm);
+}

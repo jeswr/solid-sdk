@@ -3,14 +3,17 @@
 import { fetchRdf } from "@jeswr/fetch-rdf";
 import { isWithinPodScope } from "@jeswr/guarded-fetch";
 import { createNodeGuardedFetch, refuseRedirects } from "@jeswr/guarded-fetch/node";
-import { exportDpopKeyPairJwk, importDpopKeyPairJwk } from "@jeswr/solid-dpop";
 import {
-  type AuthorizationRequestState,
-  createSolidOidcClient,
-  type SolidOidcClient,
-} from "@jeswr/solid-openid-client";
+  createNodeOidcClient,
+  exportServerDpopKey,
+  importServerDpopKey,
+  type ServerAuthorizationState,
+  type ServerOidcClient,
+  storageDescriptionRoots,
+} from "@jeswr/pod-auth/node";
 import { NamedNodeAs, NamedNodeFrom, SetFrom, TermWrapper } from "@rdfjs/wrapper";
 import { DataFactory } from "n3";
+import { trustsExchangeOrigin, trustsLwsBinding } from "./lws-trust.js";
 import {
   digest,
   GRANT_TTL,
@@ -29,15 +32,17 @@ const OIDC_ISSUER = "http://www.w3.org/ns/solid/terms#oidcIssuer";
 const STORAGE = "http://www.w3.org/ns/pim/space#storage";
 const MAX_CACHED_CLIENTS = 256;
 const CLIENT_CACHE_TTL = 300;
+/** Reading an LWS storage description to confirm a realm inside the session's grant. */
+const DESCRIPTION_TIMEOUT_MS = 8_000;
 const encode = (value: unknown) => Buffer.from(JSON.stringify(value));
-// Only call after solid-openid-client has successfully validated the ID token.
+// Only call after pod-auth has successfully validated the ID token.
 const verifiedIdTokenClaims = (token: string) =>
   JSON.parse(Buffer.from(token.split(".")[1] as string, "base64url").toString("utf8")) as {
     sub: string;
     nonce?: string;
   };
-type PrivateJwk = Awaited<ReturnType<typeof exportDpopKeyPairJwk>>;
-type CachedClient = { bytes: Uint8Array; client: SolidOidcClient };
+type PrivateJwk = Awaited<ReturnType<typeof exportServerDpopKey>>;
+type CachedClient = { bytes: Uint8Array; client: ServerOidcClient };
 
 class Profile extends TermWrapper {
   get issuers(): Set<string> {
@@ -52,7 +57,7 @@ interface Pending {
   kind: "pending";
   issuer: string;
   expectedWebId?: string;
-  state: AuthorizationRequestState;
+  state: ServerAuthorizationState;
   key: PrivateJwk;
   expiresAt: number;
 }
@@ -81,6 +86,12 @@ export interface PodSessionProviderOptions {
   /** Trusted DNS-pinned, bounded transport; fixtures may inject an offline issuer. */
   fetch?: typeof fetch;
   now?: () => number;
+  /**
+   * LWS authorization servers on origins other than the issuer and the storage roots. The
+   * session's ID token is exchanged only with those origins, never with a server a resource
+   * names in its metadata.
+   */
+  lwsAuthorizationServers?: readonly string[];
 }
 
 /** Upstream login broker. Only the two identity fields cross the MCP protocol boundary. */
@@ -90,6 +101,9 @@ export function createPodSessionProvider(options: PodSessionProviderOptions): Po
   secureUrl(options.clientId);
   const redirectUri = secureUrl(options.redirectUri);
   if (redirectUri.search) throw new Error("Pod callback must not contain a query");
+  const authorizationServers = (options.lwsAuthorizationServers ?? []).map(
+    (server) => secureUrl(server).href,
+  );
   const now = options.now ?? (() => Math.floor(Date.now() / 1000));
   const fetcher = refuseRedirects(
     options.fetch ??
@@ -115,7 +129,7 @@ export function createPodSessionProvider(options: PodSessionProviderOptions): Po
   const cacheClient = (
     value: Pick<StoredPodSession, "identity" | "expiresAt" | "accessExpiresAt">,
     bytes: Uint8Array,
-    client: SolidOidcClient,
+    client: ServerOidcClient,
   ) => {
     pruneClients();
     const id = value.identity.id;
@@ -146,23 +160,41 @@ export function createPodSessionProvider(options: PodSessionProviderOptions): Po
   const clientFor = async (issuer: string, key?: PrivateJwk, sessionId?: string) => {
     // Construction performs discovery; the same transport later fetches pod resources.
     let discovering = true;
-    const client = await createSolidOidcClient({
+    const client = await createNodeOidcClient({
       issuer,
       clientId: options.clientId,
       redirectUri: options.redirectUri,
-      scope: "openid webid offline_access",
-      ...(key === undefined ? {} : { dpopKeyPair: await importDpopKeyPairJwk(key) }),
+      // Only a session's client answers LWS challenges, under that session's exchange rule.
+      ...(sessionId === undefined
+        ? {}
+        : {
+            lws: true,
+            trustAuthorizationServer: async (binding) =>
+              trustsLwsBinding(await lwsTrust(sessionId), binding, (storage) =>
+                storageDescriptionRoots(
+                  storage,
+                  { fetch: fetcher },
+                  { signal: AbortSignal.timeout(DESCRIPTION_TIMEOUT_MS) },
+                ),
+              ),
+          }),
+      ...(key === undefined ? {} : { dpopKeyPair: await importServerDpopKey(key) }),
       fetch: async (input, init) => {
         const request = new Request(input, init);
-        // Public-client discovery/token calls carry no Authorization header. Check each
-        // credentialed resource attempt after body buffering and DPoP proof generation,
-        // including nonce retries that bypass fetchFor's earlier liveness check.
-        if (
-          sessionId !== undefined &&
-          request.headers.has("authorization") &&
-          !(await provider.isActive(sessionId))
-        )
-          throw new Error("Pod session is inactive");
+        // LWS exchanges carry the subject credential in their form body. Check them as
+        // well as resource attempts after buffering/proof generation, immediately before send.
+        const exchangesSubject =
+          request.method === "POST" &&
+          !request.headers.has("authorization") &&
+          request.headers.get("content-type")?.startsWith("application/x-www-form-urlencoded") &&
+          new URLSearchParams(await request.clone().text()).get("grant_type") ===
+            "urn:ietf:params:oauth:grant-type:token-exchange";
+        if (sessionId !== undefined && (request.headers.has("authorization") || exchangesSubject)) {
+          const trust = await lwsTrust(sessionId);
+          // Defence in depth: the subject credential never leaves for an untrusted origin.
+          if (exchangesSubject && !trustsExchangeOrigin(trust, new URL(request.url)))
+            throw new Error("LWS exchange endpoint is not trusted");
+        }
         const response = await fetcher(request, { credentials: "omit" });
         if (discovering && response.status === 200) {
           // Read the original: cancelling a clone can wait for its unread sibling.
@@ -207,6 +239,11 @@ export function createPodSessionProvider(options: PodSessionProviderOptions): Po
       throw error;
     }
   };
+  const lwsTrust = async (id: string) => {
+    const stored = await readSession(id);
+    if (!stored) throw new Error("Pod session is inactive");
+    return { issuer: stored.value.issuer, roots: stored.value.roots, authorizationServers };
+  };
   const provider = {
     async begin(webIdOrIssuer: string, redirect: string) {
       if (redirect !== options.redirectUri) throw new Error("Pod callback mismatch");
@@ -230,13 +267,13 @@ export function createPodSessionProvider(options: PodSessionProviderOptions): Po
       }
       secureUrl(issuer);
       const client = await clientFor(issuer);
-      const authorization = await client.authorizationUrl({ prompt: "consent" });
+      const authorization = await client.authorizationUrl();
       const pending: Pending = {
         kind: "pending",
         issuer,
         expectedWebId,
         state: authorization.state,
-        key: await exportDpopKeyPairJwk(client.dpopKeyPair),
+        key: await exportServerDpopKey(client.dpopKeyPair),
         expiresAt: now() + LOGIN_TTL,
       };
       if (

@@ -1,8 +1,10 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 "use client";
-import { ErrorState } from "@jeswr/suite-ui";
+import { ErrorState, LoadingSkeleton } from "@jeswr/suite-ui";
 import { useSearchParams } from "next/navigation";
 import { decodeRef } from "@/lib/refs";
+import { usePageRouteParams } from "@/lib/route-params";
 import { folderIriFromKey } from "../lib/client";
 import { useFolders, useMail, useMailSearch, useThreads } from "../state/mail-context";
 import { MailAsync, MailEmptyState, MissingFolder } from "./async";
@@ -68,6 +70,18 @@ function FolderContent({ folderKey }: { folderKey: string }) {
       }}
     </MailAsync>
   );
+}
+/** Reads the folder on the client so the native export's placeholder page works too. */
+export function FolderRoute() {
+  const params = usePageRouteParams<{ folder: string }>("/mail/[folder]");
+  if (!params) return <LoadingSkeleton preset="list" />;
+  return <FolderPage folderKey={params.folder} />;
+}
+/** Reads the thread ref on the client so the native export's placeholder page works too. */
+export function ThreadRoute() {
+  const params = usePageRouteParams<{ ref: string }>("/mail/t/[ref]");
+  if (!params) return <LoadingSkeleton preset="list" />;
+  return <ThreadPage reference={params.ref} />;
 }
 export function FolderPage({ folderKey }: { folderKey: string }) {
   const { client, account } = useMail();

@@ -55,6 +55,84 @@ function scan(path, source) {
 }
 
 describe("agent layer boundaries (DESIGN §2.2)", () => {
+  it("permits the pilot interview SDK only in the suite feedback server and manifest", () => {
+    const manifest = JSON.stringify({
+      name: "@jeswr/app-suite",
+      dependencies: { "@anthropic-ai/sdk": "1.4.0" },
+    });
+    const check = (path, source, extra = {}) =>
+      checkAgentLayers(
+        workspace({
+          "apps/suite/package.json": manifest,
+          [path]: source,
+          ...extra,
+        }),
+      );
+    expect(
+      check("apps/suite/src/feedback/server.ts", 'import Anthropic from "@anthropic-ai/sdk";'),
+    ).toEqual([]);
+    for (const path of [
+      "apps/suite/src/feedback/feedback-page.tsx",
+      "apps/suite/src/feedback/other.ts",
+      "apps/suite/src/app/api/feedback/turn/route.ts",
+      "apps/suite/src/apps/agent/sdk.ts",
+      "apps/other/src/feedback/server.ts",
+    ])
+      expect(check(path, 'import "@anthropic-ai/sdk";').join("\n")).toContain("gateway-only");
+    for (const target of [
+      "openai",
+      "@anthropic-ai/claude-agent-sdk",
+      "@anthropic-ai/sdk/resources",
+    ]) {
+      expect(
+        check("apps/suite/src/feedback/server.ts", `import "${target}";`).join("\n"),
+      ).toContain("gateway-only");
+    }
+    expect(
+      check("apps/suite/src/feedback/server.ts", 'import "@anthropic-ai/sdk";', {
+        "apps/suite/package.json": JSON.stringify({
+          name: "@jeswr/other",
+          dependencies: { "@anthropic-ai/sdk": "1.4.0" },
+        }),
+      }).join("\n"),
+    ).toContain("gateway-only");
+  });
+  it("permits the gh child-process edge only in the GitHub binding", () => {
+    const source = 'import { execFile } from "child_process";';
+    expect(scan("packages/agent-channels/src/github.ts", source)).toEqual([]);
+    for (const path of [
+      "packages/agent-channels/src/reader.ts",
+      "packages/agent-channels/src/github/other.ts",
+      "packages/agent-model-gateway/src/github.ts",
+      "packages/agent-executor/src/github.ts",
+    ])
+      expect(scan(path, source).join("\n")).toContain("outside DESIGN");
+    for (const target of ["child_process/other", "node:child_process", "fs", "openai"])
+      expect(
+        scan("packages/agent-channels/src/github.ts", `import "${target}";`).length,
+      ).toBeGreaterThan(0);
+  });
+
+  it("permits the two A-027 Matrix dependencies while retaining the channel allowlist", () => {
+    expect(
+      scan(
+        "packages/agent-channels/src/matrix.ts",
+        'import "@jeswr/matrix-chat-to-pod/transform"; import "@matrix-org/matrix-sdk-crypto-nodejs";',
+      ),
+    ).toEqual([]);
+    expect(
+      scan("packages/agent-channels/src/matrix.ts", 'import "@matrix-org/unreviewed-client";').join(
+        "\n",
+      ),
+    ).toContain("outside DESIGN");
+    expect(
+      scan(
+        "packages/agent-channels/src/matrix.ts",
+        'export * from "@jeswr/agent-channels/matrix/send";',
+      ).join("\n"),
+    ).toContain("executor-only");
+  });
+
   it("rejects type-only ./gmail/send imports outside the executor", () => {
     expect(
       scan(
@@ -118,6 +196,24 @@ describe("agent layer boundaries (DESIGN §2.2)", () => {
     }
   });
 
+  it("allows A-011 gateway integrations while preserving audit and send exclusions", () => {
+    expect(
+      scan(
+        "packages/agent-model-gateway/src/index.ts",
+        'import type { TokenProvider } from "@jeswr/agent-credentials"; import "@jeswr/agentic-legacy-bridge/metadata"; import "@jeswr/solid-mcp"; import "zod"; import "@anthropic-ai/claude-agent-sdk";',
+      ),
+    ).toEqual([]);
+    expect(
+      scan("packages/agent-model-gateway/src/index.ts", 'import "@jeswr/agent-audit";').join("\n"),
+    ).toContain("gateway must not import agent-audit");
+    expect(
+      scan(
+        "packages/agent-model-gateway/src/index.ts",
+        'import "@jeswr/agent-channels/gmail/send";',
+      ).join("\n"),
+    ).toContain("executor-only");
+  });
+
   it("parses JSX text before a restricted re-export", () => {
     expect(
       scan(
@@ -171,7 +267,11 @@ describe("agent layer boundaries (DESIGN §2.2)", () => {
     ["packages/agent-channels/src/gmail/send.test.ts", 'import "./send.js";'],
     [
       "packages/agent-model-gateway/src/index.ts",
-      'import "openai/resources"; import "@anthropic-ai/sdk";',
+      'import "openai/resources"; import "@anthropic-ai/sdk"; import "@anthropic-ai/claude-agent-sdk";',
+    ],
+    [
+      "packages/personal-agent/src/actor/claude-actor.ts",
+      'import "@anthropic-ai/claude-agent-sdk";',
     ],
     [
       "packages/agent-model-gateway/src/index.ts",
@@ -204,6 +304,18 @@ describe("agent layer boundaries (DESIGN §2.2)", () => {
   it.each([
     ["packages/agent-channels/src/index.ts", 'import "@anthropic-ai/sdk";', "gateway-only"],
     ["packages/agent-executor/src/index.ts", 'import "openai";', "gateway-only"],
+    [
+      "packages/agent-credentials/src/index.ts",
+      'import "@anthropic-ai/claude-agent-sdk";',
+      "gateway-only",
+    ],
+    [
+      "packages/agent-memory/src/index.ts",
+      'import "@anthropic-ai/claude-agent-sdk";',
+      "gateway-only",
+    ],
+    ["apps/agent-daemon/src/index.ts", 'import "@anthropic-ai/claude-agent-sdk";', "gateway-only"],
+    ["packages/personal-agent/src/index.ts", 'import "openai";', "gateway-only"],
     [
       "packages/agent-executor/src/index.ts",
       'import "@jeswr/agent-model-gateway";',
@@ -1091,4 +1203,46 @@ describe("agent capability references", () => {
       scan("packages/guarded-fetch/src/index.ts", "const request = globalThis.fetch;"),
     ).toEqual([]);
   });
+});
+
+// AUTHORED-BY Codex GPT-6.1-Sol
+it("allows the A-015 pod adapters only inside the agent data layer", () => {
+  for (const dependency of [
+    "@jeswr/guarded-fetch",
+    "@jeswr/fetch-rdf",
+    "@jeswr/rdf-serialize",
+    "@jeswr/ldp-container",
+    "@jeswr/solid-vc",
+  ]) {
+    expect(scan("apps/suite/src/apps/agent/lib/client.ts", `import "${dependency}";`)).toEqual([]);
+    for (const path of [
+      "apps/suite/src/apps/agent/components/list.tsx",
+      "apps/suite/src/apps/agent/lib-other/client.ts",
+      "apps/suite/src/apps/agent/lib.ts",
+    ])
+      expect(scan(path, `import "${dependency}";`).join("\n")).toContain("agent UI dependency");
+  }
+  expect(
+    scan("apps/suite/src/apps/agent/components/list.tsx", 'import "@jeswr/suite-ui";'),
+  ).toEqual([]);
+  expect(
+    scan("apps/suite/src/apps/agent/lib/client.ts", "const io = globalThis.fetch;").join("\n"),
+  ).toContain("forbidden agent identifier");
+});
+
+it("allows P0's browser-safe approval/control entry points and rejects the general mandate barrel", () => {
+  for (const entry of ["approval", "control"]) {
+    expect(
+      scan("apps/suite/src/apps/agent/lib/sign.ts", `import "@jeswr/agent-mandate/${entry}";`),
+    ).toEqual([]);
+    expect(
+      scan(
+        "apps/suite/src/apps/agent/components/list.tsx",
+        `import "@jeswr/agent-mandate/${entry}";`,
+      ).join("\n"),
+    ).toContain("issue/verify");
+  }
+  expect(
+    scan("apps/suite/src/apps/agent/lib/sign.ts", 'import "@jeswr/agent-mandate";').join("\n"),
+  ).toContain("issue/verify");
 });

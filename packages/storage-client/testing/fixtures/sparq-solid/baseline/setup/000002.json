@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "request": {
+    "method": "HEAD",
+    "url": "http://sparq-solid.example/",
+    "headers": [],
+    "body": null
+  },
+  "response": {
+    "url": "http://sparq-solid.example/",
+    "status": 200,
+    "statusText": "",
+    "headers": [
+      ["accept-patch", "text/n3, application/sparql-update"],
+      ["accept-post", "text/turtle, application/ld+json"],
+      ["accept-ranges", "bytes"],
+      ["allow", "OPTIONS, HEAD, GET, PUT, POST, DELETE, PATCH"],
+      ["content-length", "153"],
+      ["content-type", "text/turtle"],
+      ["etag", "\"153-ccec287eaea82b5f\""],
+      [
+        "link",
+        "<http://www.w3.org/ns/ldp#Resource>; rel=\"type\", <http://www.w3.org/ns/ldp#Container>; rel=\"type\", <http://www.w3.org/ns/ldp#BasicContainer>; rel=\"type\", <http://sparq-solid.example/.acl>; rel=\"acl\""
+      ],
+      ["vary", "Accept, Origin"],
+      ["wac-allow", "user=\"read write control\",public=\"\""]
+    ],
+    "body": null,
+    "redirected": false
+  }
+}

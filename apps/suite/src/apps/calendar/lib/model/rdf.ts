@@ -146,6 +146,12 @@ export class CalendarDoc extends ModelNode {
   }
 }
 export class EventDoc extends ModelNode {
+  get timeZone() {
+    return this.text(`${c}timeZone`);
+  }
+  set timeZone(v: string | undefined) {
+    this.setText(`${c}timeZone`, v);
+  }
   get name() {
     return this.text(`${s}name`) ?? this.text(`${c}summary`);
   }
@@ -292,6 +298,7 @@ export function buildEvent(url: string, data: CalendarEvent): Store {
   doc.name = data.name;
   doc.start = data.start;
   doc.end = data.end;
+  doc.timeZone = data.timeZone;
   doc.location = data.location;
   doc.description = data.description;
   doc.inCalendar = data.inCalendar;
@@ -310,6 +317,7 @@ export function parseEvent(url: string, dataset: DatasetCore): CalendarEvent | u
     name: doc.name ?? "",
     start,
     end: doc.end,
+    timeZone: doc.timeZone,
     location: doc.location,
     description: doc.description,
     inCalendar: doc.inCalendar,

@@ -1,5 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { z } from "zod";
+import { START_PAGE } from "./next";
 
 export const preferencesSchema = z.object({
   theme: z.enum(["system", "light", "dark"]).catch("system"),
@@ -7,7 +9,7 @@ export const preferencesSchema = z.object({
   fontScale: z.enum(["90", "100", "110"]).catch("100"),
   motion: z.enum(["system", "reduce"]).catch("system"),
   appColours: z.boolean().catch(true),
-  startPage: z.enum(["/home", "/drive", "/docs", "/tasks", "/permissions"]).catch("/drive"),
+  startPage: z.enum(["/home", "/drive", "/docs", "/tasks", "/permissions"]).catch(START_PAGE),
   notifications: z
     .object({
       shared: z.boolean().catch(true),
@@ -43,8 +45,11 @@ export const preferencesSchema = z.object({
     })
     .catch({ enabled: false, start: "22:00", end: "08:00" }),
   offline: z.boolean().catch(true),
+  /** Set once the first-use offline hint toast has been shown for this account. */
+  offlineHintSeen: z.boolean().catch(false),
   technicalDetails: z.boolean().catch(false),
   accountIds: z.boolean().catch(false),
+  onboarding: z.enum(["not-started", "complete", "skipped"]).catch("not-started"),
 });
 export type Preferences = z.output<typeof preferencesSchema>;
 export const defaultPreferences: Preferences = preferencesSchema.parse({});

@@ -164,6 +164,10 @@ export async function createCalendar(
   await io.registerCalendar(indexUrl, url, container);
   attempts.delete(attempt);
 }
+/** Range order: by start, then by URL so ties are stable. */
+export function compareOccurrences(a: Occurrence, b: Occurrence): number {
+  return +new Date(a.data.start) - +new Date(b.data.start) || a.url.localeCompare(b.url);
+}
 export async function loadRange(
   account: CalendarAccount,
   calendars: CalendarInfo[],
@@ -189,9 +193,7 @@ export async function loadRange(
       }
     }),
   );
-  events.sort(
-    (a, b) => +new Date(a.data.start) - +new Date(b.data.start) || a.url.localeCompare(b.url),
-  );
+  events.sort(compareOccurrences);
   return { events, warnings };
 }
 export type EventWrite = (

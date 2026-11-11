@@ -1,7 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
 
 // Ports: the OIDC issuer is resolved from the seeded profile's solid:oidcIssuer (our
-// WebIdDPoPTokenProvider callbacks), so the test CSS can run on ANY port — :3099 keeps
+// shared pod-auth discovery), so the test CSS can run on ANY port — :3099 keeps
 // it clear of the prod-solid-server dev stack (RS :3000, broker :3001, import app :3301)
 // and of next dev's default :3000. The app runs on :3200 (AGENTS.md §Servers). Keep the
 // CSS port in sync with e2e/global-setup.ts and e2e/golden-path.spec.ts — cross-file
@@ -44,15 +44,10 @@ export default defineConfig({
       stderr: "pipe",
     },
     {
-      // e2e runs against the PRODUCTION build: `next dev` compiles routes on demand and a
-      // mid-login rebuild (CSS dereferencing /clientid.jsonld) Fast-Refresh-reloads the page,
-      // destroying the in-flight OIDC state — observed and diagnosed, not hypothetical. The
-      // build is a static export (`output: "export"` → `out/`), which `next start` cannot
-      // serve — scripts/serve-static.mjs serves it with the production Caddyfile's exact
-      // try_files rule, so e2e exercises the deployed routing behaviour AND the real bundle.
-      // Never reused: a stale server on this port poisons the run. `rm -rf .next out` so a
-      // stale/half-written cache or export can't poison the build.
-      command: `rm -rf .next out && npm run build && node scripts/serve-static.mjs out ${APP_PORT}`,
+      // pod-auth permits loopback HTTP only in development. Dynamic registration avoids
+      // the former client-ID dereference/recompile during an in-flight login.
+      command: `pnpm exec next dev --hostname localhost --port ${APP_PORT}`,
+      env: { NEXT_PUBLIC_HOME_IDP: `http://localhost:${CSS_PORT}`, NEXT_PUBLIC_HOME_IDP_NAME: "Local provider" },
       url: `http://localhost:${APP_PORT}`,
       timeout: 240_000,
       reuseExistingServer: false,

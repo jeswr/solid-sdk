@@ -240,6 +240,41 @@ describe("Tasks row deletion and focus", () => {
     expect(document.activeElement?.textContent).toContain("Add task");
   });
 
+  it.each([
+    true,
+    false,
+  ])("hands focus to the next row only once a row menu has closed and the list is no longer inert (focus elsewhere: %s)", async (elsewhere) => {
+    const { host, inbox } = await populated(["First", "Second"]);
+    const [first, second] = [...host.querySelectorAll<HTMLElement>("[data-tsk-row]")];
+    if (!first || !second) throw new Error("Missing rows");
+    await act(() => first.focus());
+    // A row menu (outside the list) takes focus and, like Radix, makes the list inert.
+    const menu = document.createElement("div");
+    menu.setAttribute("role", "menu");
+    const item = document.createElement("button");
+    menu.append(item);
+    document.body.append(menu);
+    await act(() => item.focus());
+    second.setAttribute("inert", "");
+    const task = cache.getSnapshot().tasks[inbox.url]?.items[0];
+    if (!task) throw new Error("Missing task");
+    await act(() => cache.deleteTask(task));
+    expect(document.activeElement).toBe(item);
+    await act(() => menu.remove());
+    const frame = () => new Promise((resolve) => requestAnimationFrame(() => resolve(undefined)));
+    await act(frame);
+    // focus() on an inert row fails silently in a browser: nothing may move while it is inert.
+    expect(document.activeElement).not.toBe(second);
+    const outside = document.createElement("button");
+    document.body.append(outside);
+    await act(() => {
+      second.removeAttribute("inert");
+      if (elsewhere) outside.focus();
+    });
+    await act(frame);
+    expect(document.activeElement).toBe(elsewhere ? outside : second);
+    outside.remove();
+  });
   it("keeps focus on another control during a remote row removal", async () => {
     const { host, inbox } = await populated(["First", "Second"]);
     const row = host.querySelector<HTMLElement>("[data-tsk-row]");
@@ -332,5 +367,10 @@ it("refreshes Today, Upcoming, due chips and sidebar counts as clock boundaries 
   expect([...host.querySelectorAll("#today .tsk-due")].map((chip) => chip.textContent)).toContain(
     "Today",
   );
+  // WCAG 2.5.3: each chip's accessible name begins with its visible due text.
+  for (const chip of host.querySelectorAll("#today .tsk-due"))
+    expect(chip.getAttribute("aria-label")).toMatch(
+      new RegExp(`^${chip.textContent}, reschedule '(Timed|Tomorrow) task'$`),
+    );
   await unmount();
 });

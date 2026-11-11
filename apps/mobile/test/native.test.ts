@@ -1,6 +1,7 @@
 // AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY GPT-5.6 Codex
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -8,6 +9,7 @@ import { pathToFileURL } from "node:url";
 import { describe, expect, test } from "vitest";
 import { DEFAULT_SUITE_URL } from "../src/config.ts";
 import {
+  checkBundle,
   prepareNative,
   renderOfflinePage,
   withAppBoundDomain,
@@ -131,6 +133,93 @@ describe("iOS project", () => {
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
+  });
+
+  test("bundled mode removes the app-bound domains reversibly", () => {
+    const bundled = withAppBoundDomain(plist, { SUITE_MODE: "bundled" });
+    expect(bundled).not.toContain("WKAppBoundDomains</key>");
+    expect(bundled).toContain("WKAppBoundDomains: none in bundled mode");
+    expect(withAppBoundDomain(bundled, { SUITE_MODE: "bundled" })).toBe(bundled);
+    expect(withAppBoundDomain(bundled, {})).toBe(plist);
+    expect(() => withAppBoundDomain("<plist/>", { SUITE_MODE: "bundled" })).toThrow(
+      "WKAppBoundDomains",
+    );
+    const debug = withLocalNetworking(plist, {
+      SUITE_URL: "http://localhost:4173",
+      MOBILE_DEBUG: "1",
+    });
+    expect(
+      withLocalNetworking(debug, {
+        SUITE_MODE: "bundled",
+        SUITE_URL: "http://localhost:4173",
+        MOBILE_DEBUG: "1",
+      }),
+    ).toBe(plist);
+  });
+
+  describe("bundled sync preparation", () => {
+    const exportTree = (root: string, info: Record<string, unknown>, skip = "") => {
+      const dir = join(root, "export");
+      mkdirSync(join(dir, "_next/static"), { recursive: true });
+      writeFileSync(join(dir, "build-info.json"), JSON.stringify(info));
+      for (const name of ["route-manifest.json", "404.html", "index.html", "_next/static/a.js"])
+        if (name !== skip) writeFileSync(join(dir, name), name);
+      return dir;
+    };
+    const good = {
+      target: "native",
+      clientIdUrl: "https://suite.example/.well-known/solid-client-id-mobile.jsonld",
+    };
+    const withRoot = (run: (root: string) => void) => {
+      const root = mkdtempSync(join(tmpdir(), "mobile-bundled-"));
+      try {
+        mkdirSync(join(root, "ios/App/App"), { recursive: true });
+        writeFileSync(join(root, "ios/App/App/Info.plist"), plist);
+        run(root);
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
+    };
+
+    test("copies a checked native export into www-bundled and drops app-bound domains", () =>
+      withRoot((root) => {
+        const dir = exportTree(root, good);
+        mkdirSync(join(root, "www-bundled"));
+        writeFileSync(join(root, "www-bundled/stale.html"), "stale");
+        prepareNative(pathToFileURL(`${root}/`), { SUITE_MODE: "bundled", SUITE_EXPORT_DIR: dir });
+        expect(readFileSync(join(root, "www-bundled/_next/static/a.js"), "utf8")).toBe(
+          "_next/static/a.js",
+        );
+        expect(() => readFileSync(join(root, "www-bundled/stale.html"))).toThrow();
+        expect(readFileSync(join(root, "ios/App/App/Info.plist"), "utf8")).not.toContain(
+          "WKAppBoundDomains</key>",
+        );
+      }));
+
+    test.each([
+      ["a web export", { ...good, target: "web" }, "", "native target"],
+      ["an http Client ID", { ...good, clientIdUrl: "http://suite.example/id" }, "", "https"],
+      ["no Client ID", { target: "native" }, "", "https"],
+      ["credentials", { ...good, clientIdUrl: "https://a:b@suite.example/id" }, "", "https"],
+      ["no route manifest", good, "route-manifest.json", "route-manifest.json"],
+      ["no 404 page", good, "404.html", "404.html"],
+    ])("refuses %s", (_, info, skip, message) =>
+      withRoot((root) => {
+        const dir = exportTree(root, info, skip);
+        expect(() => checkBundle(pathToFileURL(`${dir}/`))).toThrow(message);
+        expect(() =>
+          prepareNative(pathToFileURL(`${root}/`), {
+            SUITE_MODE: "bundled",
+            SUITE_EXPORT_DIR: dir,
+          }),
+        ).toThrow(message);
+      }));
+
+    test("refuses an export without build-info.json", () =>
+      withRoot((root) => {
+        mkdirSync(join(root, "empty"));
+        expect(() => checkBundle(pathToFileURL(`${join(root, "empty")}/`))).toThrow("build:native");
+      }));
   });
 
   test("the shared scheme includes the UI-test target and its App dependency", () => {
@@ -261,6 +350,39 @@ describe("iOS project", () => {
     expect(read("ios/App/Shared/ShareOutStore.swift")).not.toMatch(/import (Capacitor|UIKit)/);
   });
 
+  // AUTHORED-BY Claude Opus 5.5
+  test("registers the iOS PDF handoff, which previews read-only and deletes the file on close", () => {
+    expect(read("ios/App/App/MainViewController.swift")).toContain(
+      "bridge.registerPluginInstance(SuiteFilesPlugin())",
+    );
+    const source = read("ios/App/App/SuiteFilesPlugin.swift");
+    expect(source).toContain('jsName = "SuiteFiles"');
+    for (const method of ["pdfBegin", "pdfChunk", "pdfOpen", "pdfClear"]) {
+      expect(source).toContain(`CAPPluginMethod(name: "${method}"`);
+    }
+    expect(source).toContain("QLPreviewController.canPreview(file as NSURL)");
+    // Sign-out closes the viewer this plugin presented and empties the store (sst-8wx.18).
+    expect(source).toMatch(
+      /func pdfClear\(_ call: CAPPluginCall\) \{\s*queue\.async \{[\s\S]*?store\(\)\.clear\(\)[\s\S]*?DispatchQueue\.main\.async \{[\s\S]*?self\.close\(viewer\)/,
+    );
+    expect(source).toMatch(
+      /isBeingPresented, let coordinator = viewer\.transitionCoordinator[\s\S]*?presentingViewController\?\.dismiss\(animated: false\)/,
+    );
+    expect(source).toMatch(/editingModeFor previewItem[^}]*\.disabled/);
+    expect(source).toMatch(/previewControllerDidDismiss[\s\S]*release\(file\)/);
+    // A stale caller's refusal must not clear the live preview; expiry uses the monotonic clock.
+    expect(source).not.toMatch(/func reject[^}]*clear\(\)/);
+    expect(source).toContain("UIApplication.willEnterForegroundNotification");
+    expect(read("ios/App/App/PdfPreviewStore.swift")).not.toContain("Date()");
+    const pbxproj = read("ios/App/App.xcodeproj/project.pbxproj");
+    for (const file of [
+      "PdfPreviewStore.swift",
+      "SuiteFilesPlugin.swift",
+      "PdfPreviewStoreTests.swift",
+    ])
+      expect(pbxproj).toContain(`/* ${file} in Sources */`);
+  });
+
   test("replaces @capacitor/share on iOS so only committed staged files can be shared", () => {
     const main = read("ios/App/App/MainViewController.swift");
     // Registered after the staging plugin, and after Capacitor's own plugins have loaded.
@@ -349,6 +471,44 @@ describe("iOS project", () => {
   });
 });
 
+describe("release builds ignore the debug opt-in", () => {
+  // MOBILE_DEBUG=1 turns on webContentsDebuggingEnabled in the generated config; native code
+  // switches inspection back off unless the build itself is a debug build (sst-8wx.17).
+  test("Android disables WebView debugging unless the app is debuggable", () => {
+    const activity = read("android/app/src/main/java/org/jeswr/suite/MainActivity.java");
+    const load = activity.slice(activity.indexOf("protected void load()"));
+    const guard =
+      "if ((getApplicationInfo().flags & ApplicationInfo.FLAG_DEBUGGABLE) == 0) {\n" +
+      "            WebView.setWebContentsDebuggingEnabled(false);\n        }";
+    expect(load).toContain(guard);
+    // After Capacitor applies the config, and before any early return.
+    expect(load.indexOf("super.load();")).toBeLessThan(load.indexOf(guard));
+    expect(load.indexOf(guard)).toBeLessThan(load.indexOf("usesProxyInjection()"));
+  });
+
+  test("iOS Release builds are never inspectable", () => {
+    const controller = read("ios/App/App/MainViewController.swift");
+    const didLoad = controller.slice(controller.indexOf("func capacitorDidLoad()"));
+    expect(didLoad).toMatch(
+      /#if !DEBUG\n(?:\s*\/\/.*\n)*\s*if #available\(iOS 16\.4, \*\) \{\n\s*webView\?\.isInspectable = false\n\s*\}\n\s*#endif/,
+    );
+    expect(didLoad.indexOf("#if !DEBUG")).toBeLessThan(didLoad.indexOf("registerPluginInstance"));
+    // DEBUG is defined for the Debug configurations only, in either flag spelling, and no Release
+    // configuration inherits settings from an xcconfig this test cannot see.
+    const project = read("ios/App/App.xcodeproj/project.pbxproj");
+    const release = [
+      ...project.matchAll(/\{\n\t\t\tisa = XCBuildConfiguration;[\s\S]*?name = (\w+);/g),
+    ]
+      .filter((m) => m[1] === "Release")
+      .map((m) => m[0]);
+    expect(release.length).toBeGreaterThan(0);
+    for (const config of release)
+      expect(config).not.toMatch(
+        /SWIFT_ACTIVE_COMPILATION_CONDITIONS[^;]*DEBUG|-D\W*DEBUG\b|\bDEBUG=1|baseConfigurationReference/,
+      );
+  });
+});
+
 describe("Android project", () => {
   const manifest = read("android/app/src/main/AndroidManifest.xml");
   const debugManifest = read("android/app/src/debug/AndroidManifest.xml");
@@ -361,7 +521,10 @@ describe("Android project", () => {
     const entries = [...paths.matchAll(/<([a-z-]+)\s+name="([^"]+)"\s+path="([^"]+)"\s*\/>/g)].map(
       (match) => match.slice(1),
     );
-    expect(entries).toEqual([["cache-path", "share_out", "share-out/"]]);
+    expect(entries).toEqual([
+      ["cache-path", "share_out", "share-out/"],
+      ["cache-path", "pdf_preview", "pdf-preview/"],
+    ]);
     expect(paths).not.toMatch(/<(?:external|root|files)-path/);
     expect(manifest).toContain('android:resource="@xml/file_paths"');
     // biome-ignore lint/suspicious/noTemplateCurlyInString: Android manifest placeholder is literal.
@@ -372,6 +535,41 @@ describe("Android project", () => {
       expect(source).toContain(`public void ${method}(PluginCall call)`);
     }
     expect(source).toContain('result.put("uri", Uri.fromFile(file).toString())');
+  });
+
+  // AUTHORED-BY Claude Opus 5.5
+  test("registers the PDF handoff, which opens a read-only FileProvider URI after a viewer check", () => {
+    expect(read("android/app/src/main/java/org/jeswr/suite/MainActivity.java")).toContain(
+      "registerPlugin(SuiteFilesPlugin.class)",
+    );
+    const source = read("android/app/src/main/java/org/jeswr/suite/SuiteFilesPlugin.java");
+    expect(source).toContain('@CapacitorPlugin(name = "SuiteFiles")');
+    for (const method of ["pdfBegin", "pdfChunk", "pdfOpen", "pdfClear"]) {
+      expect(source).toContain(`public void ${method}(PluginCall call)`);
+    }
+    expect(source).toContain('setDataAndType(uri, "application/pdf")');
+    expect(source).toContain("addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)");
+    expect(source).not.toContain("FLAG_GRANT_WRITE_URI_PERMISSION");
+    expect(source.indexOf("resolveActivity")).toBeLessThan(source.indexOf("startActivity"));
+    expect(source).toContain('"pdf-preview"');
+    // One store per process, swept on resume, a stale caller's refusal never clears the live
+    // preview, and expiry uses the monotonic clock.
+    expect(source).toContain("private static PdfPreviewStore store;");
+    expect(source).toMatch(/handleOnResume\(\)[\s\S]*sweep\(SystemClock\.elapsedRealtime\(\)\)/);
+    expect(source).not.toContain("currentTimeMillis");
+    // Only sign-out's pdfClear empties the whole store (sst-8wx.18). It first revokes every
+    // viewer grant under pdf-preview/, independently of the delete.
+    const clearCall =
+      /public void pdfClear\(PluginCall call\) \{\s*boolean revoked = false;\s*try \{[\s\S]*?\.path\(PREVIEW_PATH_NAME\)[\s\S]*?revokeUriPermission\(previews, Intent\.FLAG_GRANT_READ_URI_PERMISSION\);\s*revoked = true;\s*\} catch \(RuntimeException ignored\) \{[\s\S]*?\}\s*try \{\s*store\(\)\.clear\(\);[\s\S]*?if \(revoked\) call\.resolve\(\);\s*else call\.reject\([\s\S]*?\n {4}\}\n/;
+    expect(source).toContain('PREVIEW_PATH_NAME = "pdf_preview";');
+    expect(read("android/app/src/main/res/xml/file_paths.xml")).toContain(
+      '<cache-path name="pdf_preview" path="pdf-preview/" />',
+    );
+    expect(source).toMatch(clearCall);
+    expect(source.replace(clearCall, "")).not.toContain("store().clear()");
+    expect(manifest).toMatch(
+      /<queries>\s*<intent>\s*<action android:name="android.intent.action.VIEW" \/>\s*<data android:mimeType="application\/pdf" \/>\s*<\/intent>\s*<\/queries>/,
+    );
   });
 
   test("disables backup and cleartext in the main manifest", () => {
@@ -597,5 +795,52 @@ describe("mobile CI iOS fixture guardrails", () => {
     expect(driver).toContain('join(artifacts, "AppUITests.xcresult")');
     expect(driver).toContain('"-only-testing:AppUITests"');
     expect(driver).toMatch(/"-configuration",\s*"Debug"/);
+  });
+});
+
+describe("bundled-mode wiring (MOB-P3 E4, E5)", () => {
+  test("Android serves the local origin before Capacitor and fails closed without a manifest", () => {
+    const client = read("android/app/src/main/java/org/jeswr/suite/SuiteWebViewClient.java");
+    const intercept = client.slice(
+      client.indexOf("public WebResourceResponse shouldInterceptRequest("),
+    );
+    const serve = intercept.indexOf("bundled.serve(");
+    expect(serve).toBeGreaterThan(-1);
+    expect(intercept.indexOf("BundledServer.isNativeFilePath(")).toBeLessThan(serve);
+    expect(
+      intercept.indexOf("return super.shouldInterceptRequest(view, request);"),
+    ).toBeGreaterThan(serve);
+    expect(client).toContain('getAssets().open("public/route-manifest.json")');
+    expect(client).toContain("if (isDocumentRequest(request)) return forbidden();");
+    // Capacitor's local server answers http://localhost too; only the exact app origin is served.
+    expect(
+      intercept.indexOf("isOtherLocalOrigin(request.getUrl())) return forbidden();"),
+    ).toBeLessThan(intercept.indexOf("BundledServer.isNativeFilePath("));
+    expect(
+      intercept.indexOf("isOtherLocalOrigin(request.getUrl())) return forbidden();"),
+    ).toBeGreaterThan(-1);
+    const activity = read("android/app/src/main/java/org/jeswr/suite/MainActivity.java");
+    expect(activity).toMatch(
+      /client = new SuiteWebViewClient\(bridge\);\s*\} catch \(RuntimeException e\) \{/,
+    );
+  });
+
+  test("iOS wraps Capacitor's local scheme handler and blocks device-file navigations first", () => {
+    const controller = read("ios/App/App/MainViewController.swift");
+    expect(controller).toContain("SuiteBundledWebViewConfiguration.adopting(base)");
+    expect(controller).toContain('fatalError("Bundled mode needs public/route-manifest.json")');
+    const navigation = read("ios/App/App/SuiteNavigationPlugin.swift");
+    expect(navigation.indexOf("isLocalDeviceFile(url")).toBeLessThan(
+      navigation.indexOf("navigationAction.targetFrame?.isMainFrame"),
+    );
+    const pbxproj = read("ios/App/App.xcodeproj/project.pbxproj");
+    for (const file of [
+      "RouteResolver.swift",
+      "SuiteSchemeHandler.swift",
+      "RouteResolverTests.swift",
+      "SuiteSchemeHandlerTests.swift",
+    ]) {
+      expect(pbxproj).toContain(`/* ${file} in Sources */,`);
+    }
   });
 });

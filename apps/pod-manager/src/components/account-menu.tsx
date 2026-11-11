@@ -1,5 +1,6 @@
 "use client";
 
+import { usePodMedia } from "@/components/use-pod-media";
 import { LogOut, UserRound } from "lucide-react";
 import { useSession } from "@/components/session-provider";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -12,7 +13,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { toast } from "sonner";
 
 /** Initials from a display name, for the avatar fallback. */
 export function initials(name: string): string {
@@ -25,6 +25,7 @@ export function initials(name: string): string {
 /** Header account control: avatar + name, with sign-out. */
 export function AccountMenu() {
   const { profile, webId, logout } = useSession();
+  const avatar = usePodMedia(profile?.avatarUrl);
   const name = profile?.displayName ?? webId ?? "Account";
 
   return (
@@ -37,7 +38,7 @@ export function AccountMenu() {
         >
           <Avatar className="size-7">
             {profile?.avatarUrl ? (
-              <AvatarImage src={profile.avatarUrl} alt="" />
+              <AvatarImage src={avatar} alt="" />
             ) : null}
             <AvatarFallback className="bg-accent text-accent-foreground text-xs">
               {profile ? initials(name) : <UserRound className="size-4" aria-hidden="true" />}
@@ -60,10 +61,7 @@ export function AccountMenu() {
         <DropdownMenuSeparator />
         <DropdownMenuItem
           onClick={() => {
-            logout();
-            toast.success("Signed out", {
-              description: "Your session ended. Your data stays in your pod.",
-            });
+            void logout();
           }}
         >
           <LogOut className="size-4" aria-hidden="true" />

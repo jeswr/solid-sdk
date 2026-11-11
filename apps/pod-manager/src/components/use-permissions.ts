@@ -3,10 +3,9 @@
 /**
  * React bridge for the permissions read model (DESIGN.md §3 "Connected apps").
  * The UI never touches RDF: it renders {@link ConnectedApp} shapes and calls
- * the typed backend for mutations. Production paths pass NO `fetch` — the
- * auth-patched global runs (AGENTS.md §Reading data).
+ * the typed backend for mutations. Pod requests use the session transport explicitly.
  */
-import { useCallback } from "react";
+import { useCallback, useMemo } from "react";
 import { freshRdf } from "@/lib/rdf-read";
 import { useSession } from "@/components/session-provider";
 import { useSwrRead } from "@/components/use-swr-read";
@@ -27,7 +26,10 @@ import {
  * The single backend instance the UI mutates through (WAC today; the
  * {@link PermissionsBackend} seam admits an ACP implementation later).
  */
-export const permissionsBackend = new WacPermissionsBackend();
+export function usePermissionsBackend() {
+  const { podFetch } = useSession();
+  return useMemo(() => new WacPermissionsBackend(podFetch), [podFetch]);
+}
 
 /** An app with access, enriched with its human-readable identity. */
 export interface ConnectedApp extends AppAccess {
@@ -63,17 +65,18 @@ export interface ConnectedAppsState extends AsyncState<ConnectedApp[]> {
 async function loadConnectedApps(
   webId: string,
   activeStorage: string,
+  podFetch: typeof fetch,
 ): Promise<ConnectedAppsModel> {
-  const { dataset } = await freshRdf(webId);
-  const { locations } = await discoverRegistrations(webId, dataset);
+  const { dataset } = await freshRdf(webId, podFetch);
+  const { locations } = await discoverRegistrations(webId, dataset, podFetch);
   const ctx: PermissionsContext = {
     ownerWebId: webId,
     podRoot: activeStorage,
     summaries: summariseCategories(locations),
   };
-  const access = await permissionsBackend.listApps(ctx);
+  const access = await new WacPermissionsBackend(podFetch).listApps(ctx);
   const identities = await Promise.all(
-    access.map((app) => fetchAppIdentity(app.agentId)),
+    access.map((app) => fetchAppIdentity(app.agentId, podFetch)),
   );
   const apps: ConnectedApp[] = access
     .map((app, i) => ({
@@ -96,7 +99,7 @@ async function loadConnectedApps(
  * {@link ConnectedAppsState.getFreshModel} for the mutation path.
  */
 export function useConnectedApps(): ConnectedAppsState {
-  const { webId, activeStorage } = useSession();
+  const { webId, activeStorage, podFetch } = useSession();
 
   const { data, error, loading, revalidating, reload } = useSwrRead<ConnectedAppsModel>(
     "connected-apps",
@@ -104,7 +107,7 @@ export function useConnectedApps(): ConnectedAppsState {
     // is required to build ctx — guard so a missing storage can't crash.
     async (id) => {
       if (!activeStorage) throw new Error("No active storage selected yet.");
-      return loadConnectedApps(id, activeStorage);
+      return loadConnectedApps(id, activeStorage, podFetch);
     },
     // Watch the pod root so a grant/revoke made elsewhere invalidates + refreshes.
     { topicUrl: activeStorage },
@@ -114,8 +117,8 @@ export function useConnectedApps(): ConnectedAppsState {
     if (!webId || !activeStorage) {
       throw new Error("Not signed in, or no active storage selected.");
     }
-    return loadConnectedApps(webId, activeStorage);
-  }, [webId, activeStorage]);
+    return loadConnectedApps(webId, activeStorage, podFetch);
+  }, [webId, activeStorage, podFetch]);
 
   return {
     data: data?.apps,

@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6
 /**
@@ -10,10 +11,14 @@
 import { NS } from "@jeswr/suite-vocab";
 import type { Quad } from "@rdfjs/types";
 import { DataFactory, Writer } from "n3";
+import { withDemoAgentKey } from "../../apps/agent/lib/demo-mandate";
+import { buildAgentSeed, demoApprovalVerificationMethod } from "../../apps/agent/lib/seed";
 import { HILLS_PNG, REPORT_PDF, SUNSET_PNG } from "./binaries";
 import type { DemoSeedFile } from "./pod";
 import { seedContacts } from "./seed-contacts";
+import { buildHomeSeed } from "./seed-home";
 import { seedPermissions } from "./seed-permissions";
+import { DEMO_INBOX, seedRequests } from "./seed-requests";
 
 const { namedNode, literal, quad } = DataFactory;
 const RDF_TYPE = namedNode("http://www.w3.org/1999/02/22-rdf-syntax-ns#type");
@@ -22,9 +27,11 @@ const PIM = "http://www.w3.org/ns/pim/space#";
 const SOLID = "http://www.w3.org/ns/solid/terms#";
 const ACL = "http://www.w3.org/ns/auth/acl#";
 const VCARD = "http://www.w3.org/2006/vcard/ns#";
+const LDP = "http://www.w3.org/ns/ldp#";
 
-export const DEMO_ROOT = "https://alice.demo.pod/";
-export const DEMO_WEBID = `${DEMO_ROOT}profile/card#me`;
+import { DEMO_ROOT, DEMO_WEBID } from "./constants";
+
+export { DEMO_ROOT, DEMO_WEBID };
 export const DEMO_NAME = "Alice Wilder";
 export const DRIVE_ROOT_CLASS = `${NS.POD_DRIVE}DriveRoot`;
 
@@ -56,22 +63,39 @@ export async function buildDemoSeed(
   const root = namedNode(DEMO_ROOT);
   const profile = await turtle(
     [
+      ...(await demoApprovalVerificationMethod()).quads,
       quad(me, RDF_TYPE, namedNode(`${FOAF}Person`)),
       quad(me, namedNode(`${FOAF}name`), literal(DEMO_NAME)),
       quad(me, namedNode(`${PIM}storage`), root),
+      quad(me, namedNode(`${LDP}inbox`), namedNode(`${DEMO_ROOT}${DEMO_INBOX}`)),
       quad(
         me,
         namedNode(`${SOLID}privateTypeIndex`),
         namedNode(`${DEMO_ROOT}settings/privateTypeIndex.ttl`),
       ),
     ],
-    { foaf: FOAF, pim: PIM, solid: SOLID },
+    { foaf: FOAF, pim: PIM, solid: SOLID, ldp: LDP },
   );
   const index = namedNode(`${DEMO_ROOT}settings/privateTypeIndex.ttl`);
   const typeIndex = await turtle(
     [
       quad(index, RDF_TYPE, namedNode(`${SOLID}TypeIndex`)),
       quad(index, RDF_TYPE, namedNode(`${SOLID}UnlistedDocument`)),
+      quad(
+        namedNode(`${index.value}#agent-workspace`),
+        RDF_TYPE,
+        namedNode(`${SOLID}TypeRegistration`),
+      ),
+      quad(
+        namedNode(`${index.value}#agent-workspace`),
+        namedNode(`${SOLID}forClass`),
+        namedNode("https://jeswr.org/ns/agent#AgentWorkspace"),
+      ),
+      quad(
+        namedNode(`${index.value}#agent-workspace`),
+        namedNode(`${SOLID}instance`),
+        namedNode(`${DEMO_ROOT}agent/`),
+      ),
     ],
     { solid: SOLID },
   );
@@ -107,8 +131,15 @@ export async function buildDemoSeed(
     "",
   ].join("\n");
   const files: DemoSeedFile[] = [
+    ...(await buildHomeSeed(now)),
     ...(await seedPermissions(DEMO_ROOT, DEMO_WEBID, now)),
-    { path: "profile/card", body: profile, contentType: "text/turtle", modified: now - 40 * DAY },
+    ...(await buildAgentSeed(now)),
+    {
+      path: "profile/card",
+      body: await withDemoAgentKey(profile),
+      contentType: "text/turtle",
+      modified: now - 40 * DAY,
+    },
     {
       path: "settings/privateTypeIndex.ttl",
       body: typeIndex,
@@ -144,7 +175,10 @@ export async function buildDemoSeed(
     { path: "drive/data.ttl", body: contact, contentType: "text/turtle", modified: now - 12 * DAY },
     { path: "drive/Archive/", body: "", contentType: "text/turtle", modified: now - 30 * DAY },
   ];
-  if (options.calendar === false) return seedContacts(files, now);
-  const { seedCalendar } = await import("./seed-calendar");
-  return seedContacts(await seedCalendar(files, now), now);
+  const seeded = async () => {
+    if (options.calendar === false) return seedContacts(files, now);
+    const { seedCalendar } = await import("./seed-calendar");
+    return seedContacts(await seedCalendar(files, now), now);
+  };
+  return seedRequests(await seeded(), DEMO_ROOT, DEMO_WEBID, now);
 }

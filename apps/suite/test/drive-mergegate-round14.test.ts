@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex
+// AUTHORED-BY Claude Opus 5.5
 
 import { parseRdf } from "@jeswr/fetch-rdf";
 import { afterEach, expect, it, vi } from "vitest";
@@ -32,6 +33,7 @@ it("every exported container-creating client method requires a policy at type an
     "list",
     "stat",
     "read",
+    "readLimited",
     "readVersion",
     "readRdf",
     "remove",

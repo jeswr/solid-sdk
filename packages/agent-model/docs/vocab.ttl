@@ -13,6 +13,8 @@ agent:ActionProposal rdfs:comment "An executable proposal with exact action inte
     rdfs:label "ActionProposal".
 agent:AgentWorkspace rdfs:comment "Private agent workspace registered in the owner private type index.";
     rdfs:label "AgentWorkspace".
+agent:Archive rdfs:comment "Control kind hiding the referenced inbound message from triage queues; the message itself is kept.";
+    rdfs:label "Archive".
 agent:AgreementRecord rdfs:comment "Documentary record relating an identified offer, the accepting message and the exact terms digest (A8).";
     rdfs:label "AgreementRecord".
 agent:Approval rdfs:comment "Owner decision bound to one proposal and its exact terms digest, with expiry and an opaque proof attachment.";
@@ -25,7 +27,7 @@ agent:Configuration rdfs:comment "One coherent mechanism combination (integrity,
     rdfs:label "Configuration".
 agent:Confirmation rdfs:comment "The confirmation-record type (owner-only; the Actor cannot write these).";
     rdfs:label "Confirmation".
-agent:ControlStatement rdfs:comment "Owner control statement to halt, resume, change a binding, dispatch, revoke or forget; requires external proof verification.";
+agent:ControlStatement rdfs:comment "Owner control statement to halt, resume, change a binding, dispatch, revoke, forget or archive; requires external proof verification.";
     rdfs:label "ControlStatement".
 agent:DispatchNow rdfs:comment "Control kind requesting dispatch of a specific proposal through the executor.";
     rdfs:label "DispatchNow".
@@ -77,6 +79,8 @@ agent:ProposalPending rdfs:comment "Status individuals — a proposal is NEVER s
     rdfs:label "ProposalPending".
 agent:ProposalRejected rdfs:comment "Migrated M1 lifecycle or intent term ProposalRejected.";
     rdfs:label "ProposalRejected".
+agent:Remember rdfs:comment "Permission action for saving information to the agent memory; subject to owner mandate and approval checks.";
+    rdfs:label "Remember".
 agent:RepresentationAssessment rdfs:comment "An evaluator's conclusion whether a software actor speaks for a party for an operation. Not an authorisation.";
     rdfs:label "RepresentationAssessment".
 agent:RepresentationStatement rdfs:comment "Party-signed statement that an actor key speaks for the party for listed operations. Authorises nothing at the receiver.";
@@ -233,6 +237,8 @@ agent:effectKey rdfs:comment "Idempotency key of the effect.";
     rdfs:label "effectKey".
 agent:endToEndEncrypted rdfs:comment "Whether channel content has end-to-end encryption.";
     rdfs:label "endToEndEncrypted".
+agent:federated rdfs:comment "Whether channel messages can be relayed between independently operated servers.";
+    rdfs:label "federated".
 agent:entryHash rdfs:comment "SHA-256 digest sealing the entry (over seq, time, previous hash and record).";
     rdfs:label "entryHash".
 agent:evaluatedActor rdfs:comment "The software actor whose representation was assessed.";

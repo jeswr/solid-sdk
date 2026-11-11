@@ -99,7 +99,7 @@ authenticated data). The file store uses hashed filenames, 0600 files, 0700 new 
 fsynced writes and atomic rename. Use a dedicated private directory on a local filesystem.
 The key and store must be shared across restarts/workers. Losing the key requires new logins.
 
-The broker uses the server's public Solid Client ID Document, served by MCP-11. It must declare
+The broker uses `createNodeOidcClient` from `@jeswr/pod-auth/node` and the server's public Solid Client ID Document, served by MCP-11. It must declare
 the exact callback URI, `token_endpoint_auth_method: "none"`, and
 `scope: "openid webid offline_access"`. The broker requests consent, PKCE S256, state, nonce and
 a new ES256 DPoP key for each login. It resolves an issuer directly, or falls back to the input
@@ -108,6 +108,15 @@ malformed discovery, transport failures and issuer mismatches never trigger fall
 OIDC completion, the verified WebID must match a supplied WebID and advertise the selected issuer
 in its own profile. Remote JSON-LD contexts are refused by the RDF parser.
 
+LWS storages are answered by exchanging the session's verified ID token, under pod-auth's
+exchange rule. The resource must be inside a stored root, and the authorization server must
+be on the issuer's origin, a storage root's origin, or listed in `lwsAuthorizationServers`.
+A container realm must be inside a stored root. Any other realm is read as a storage
+description (pod-auth's `storageDescriptionRoots`, without credentials or redirects): it must
+share the resource's origin and advertise a container root that is inside a stored root and
+contains the resource, so a description can never widen the token audience. The broker's transport also refuses any token-exchange POST to another
+origin, so a trusted server's metadata cannot redirect the ID token either.
+
 `complete()` consumes pending login state atomically and returns only `{ id, webId }`. The
 refresh token and private DPoP JWK stay in the vault; access/ID tokens stay in process memory.
 `fetchFor(id)` returns a fetch that checks durable session liveness on every call, permits only
@@ -115,7 +124,7 @@ the WebID profile's `pim:storage` roots, refuses caller Authorization/DPoP/Cooki
 browser credentials, and refuses redirects. It snapshots the effective request before asynchronous
 checks and sends that same request after validation. It restores with the original DPoP key and
 refreshes on access expiry, persisting token rotation before sending a resource request. The existing
-Solid client handles bounded nonce retries at both the token and resource endpoints.
+pod-auth Node client handles bounded nonce retries at both the token and resource endpoints.
 Private clients are capped at 256 cached entries and evicted after at most five minutes or
 at access/session expiry, whichever comes first. Failed liveness checks remove cached credentials.
 Default network transport pins DNS, refuses SSRF targets, caps responses at 1 MiB and sets an

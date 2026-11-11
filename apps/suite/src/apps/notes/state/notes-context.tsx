@@ -116,7 +116,7 @@ function useNotesValue(session: PodSession) {
     const from: unknown = history.state?.from;
     router.push(
       typeof from === "string" &&
-        /^\/notes(?:\/(?:archive|trash|search|label\/[^/?#]+))?(?:\?[^#]*)?$/.test(from)
+        /^\/notes(?:\/(?:archive|trash|search|reminders|label\/[^/?#]+))?(?:\?[^#]*)?$/.test(from)
         ? from
         : "/notes",
       { scroll: false },

@@ -1,10 +1,13 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 import { PodScopeError } from "@jeswr/guarded-fetch";
 import { describe, expect, it } from "vitest";
 import { PrivateIndexAccessError } from "../../src/apps/docs/lib/model/errors.js";
+import { serializeTurtle } from "../../src/apps/docs/lib/model/rdf-io.js";
 import { ensureTypeRegistrations } from "../../src/apps/docs/lib/model/type-index.js";
 import { verifyPrivateIndexAccess } from "../../src/apps/docs/lib/model/type-index-access.js";
 import { DOCUMENT_CLASS, NS } from "../../src/apps/docs/lib/model/vocab.js";
+import { authorization, document, properties } from "../sharing-fixtures";
 import { type MockResponse, mockFetch, privateIndexPolicy } from "./helpers.js";
 
 const POD = "https://pod.example/alice/";
@@ -127,6 +130,38 @@ describe("private Type Index effective access", () => {
         },
       }),
     ).rejects.toBeInstanceOf(PrivateIndexAccessError);
+  });
+
+  it.each([
+    "legacy-owner",
+    "split-owner",
+    "legacy-bob",
+  ])("checks both inherited predicates for %s", async (shape) => {
+    const parent = `${POD}settings/`;
+    const policy = document("wac", true, parent);
+    const owner = authorization(policy, WEBID, ["Read", "Write", "Control"], parent);
+    if (shape === "legacy-owner") {
+      properties(owner).values(`${ACL}default`).clear();
+      properties(owner).values(`${ACL}defaultForNew`).add(parent);
+    } else {
+      if (shape === "split-owner") owner.mode.delete(`${ACL}Read`);
+      const legacy = authorization(
+        policy,
+        shape === "legacy-bob" ? "https://bob.example/#me" : WEBID,
+        ["Read"],
+      );
+      properties(legacy).values(`${ACL}default`).clear();
+      properties(legacy).values(`${ACL}defaultForNew`).add(`${POD}elsewhere/`);
+      properties(legacy).values(`${ACL}defaultForNew`).add(parent);
+    }
+    const verifying = verify({
+      ...head(INDEX),
+      ...head(parent),
+      [`GET ${parent}.acl`]: { body: await serializeTurtle(policy.dataset) },
+    });
+    if (shape === "legacy-bob")
+      await expect(verifying).rejects.toBeInstanceOf(PrivateIndexAccessError);
+    else await expect(verifying).resolves.toBeUndefined();
   });
 
   it.each([401, 403, 500])("propagates unreadable effective ACLs (%s)", async (status) => {

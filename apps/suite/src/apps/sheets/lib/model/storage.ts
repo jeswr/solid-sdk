@@ -6,6 +6,7 @@ import { serialize } from "@jeswr/rdf-serialize";
 import { DatasetWrapper } from "@rdfjs/wrapper";
 import { ContainerDataset } from "@solid/object";
 import { DataFactory } from "n3";
+import { validateCommentSnapshot } from "../comments/anchors";
 import { type Column, csvToGrid, type Grid, gridToCsv } from "./grid";
 import {
   httpIri,
@@ -21,7 +22,7 @@ import {
   type WorkbookMetadata,
   workbookLayout,
 } from "./rdf";
-import { deserializeSnapshot, type Snapshot, serializeSnapshot } from "./snapshot";
+import { type Snapshot, serializeSnapshot } from "./snapshot";
 
 class TypeIndexDataset extends DatasetWrapper {
   get registrations() {
@@ -35,6 +36,7 @@ export type Precondition =
 export interface Stored<T> {
   value: T;
   etag: string | null;
+  readOnly?: boolean;
 }
 
 export class SheetStorageError extends Error {
@@ -69,7 +71,12 @@ export function createSheetStorage(fetch: typeof globalThis.fetch, podRoot: stri
   async function read(url: string, accept: string): Promise<Stored<string>> {
     const response = await scopedFetch(url, { headers: { Accept: accept }, cache: "no-store" });
     if (!response.ok) throw new SheetStorageError(response.status, response.headers.get("etag"));
-    return { value: await response.text(), etag: response.headers.get("etag") };
+    const user = /(?:^|,)\s*user\s*=\s*"([^"]*)"/i.exec(response.headers.get("wac-allow") ?? "");
+    return {
+      value: await response.text(),
+      etag: response.headers.get("etag"),
+      ...(user && !/\bwrite\b/i.test(user[1] as string) ? { readOnly: true } : {}),
+    };
   }
   async function write(
     url: string,
@@ -158,9 +165,25 @@ export function createSheetStorage(fetch: typeof globalThis.fetch, podRoot: stri
     },
     async loadSnapshot(container: string): Promise<Stored<Snapshot>> {
       const result = await read(workbookLayout(container).snapshot, "application/json");
-      return { ...result, value: deserializeSnapshot(result.value) };
+      let snapshot: Snapshot = JSON.parse(result.value);
+      if (snapshot !== null && typeof snapshot === "object" && !Array.isArray(snapshot))
+        snapshot = validateCommentSnapshot(snapshot);
+      // Optional chart metadata is untrusted independently of the workbook's cells.
+      // Sanitize it before strict JSON validation, which rejects overflowing numbers.
+      const value =
+        snapshot !== null &&
+        typeof snapshot === "object" &&
+        !Array.isArray(snapshot) &&
+        snapshot.charts !== undefined
+          ? (await import("../charts/spec")).validateChartSnapshot(snapshot)
+          : snapshot;
+      serializeSnapshot(value);
+      return { ...result, value };
     },
     async saveSnapshot(container: string, snapshot: Snapshot, condition: Precondition) {
+      snapshot = validateCommentSnapshot(snapshot);
+      if (snapshot.charts !== undefined)
+        snapshot = (await import("../charts/spec")).validateChartSnapshot(snapshot);
       return write(
         workbookLayout(container).snapshot,
         serializeSnapshot(snapshot),

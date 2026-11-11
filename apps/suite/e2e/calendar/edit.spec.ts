@@ -285,9 +285,10 @@ test("keeps offline saves across reload and syncs after reconnecting", async ({
   expect(queued).toBe(0);
 });
 
-test("warns and skips a New York recurring import instead of shifting its London occurrence", async ({
+test("imports a New York recurring series at the same New York wall time across both DST changes", async ({
   page,
 }) => {
+  // AUTHORED-BY Claude Opus 5.5
   await open(page, "2026-10-01");
   await menu(page);
   await page.getByRole("menuitem", { name: "Import…", exact: true }).click();
@@ -295,13 +296,22 @@ test("warns and skips a New York recurring import instead of shifting its London
     name: "new-york.ics",
     mimeType: "text/calendar",
     buffer: Buffer.from(
-      "BEGIN:VCALENDAR\nBEGIN:VEVENT\nUID:ny\nSUMMARY:New York weekly\nDTSTART;TZID=America/New_York:20261018T090000\nRRULE:FREQ=WEEKLY;COUNT=4\nEND:VEVENT\nEND:VCALENDAR",
+      "BEGIN:VCALENDAR\nBEGIN:VEVENT\nUID:ny\nSUMMARY:New York weekly\nDTSTART;TZID=America/New_York:20261018T090000\nDTEND;TZID=America/New_York:20261018T100000\nRRULE:FREQ=WEEKLY;COUNT=4\nEND:VEVENT\nEND:VCALENDAR",
     ),
   });
   const dialog = page.getByRole("dialog", { name: "Import calendar events", exact: true });
-  await expect(dialog.getByText("0 events · 1 skipped", { exact: true })).toBeVisible();
-  await expect(dialog.getByRole("list", { name: "Import warnings" })).toContainText(
-    '"New York weekly": recurring events in America/New_York cannot yet retain their timezone.',
-  );
-  await expect(dialog.getByRole("button", { name: "Import", exact: true })).toBeDisabled();
+  await expect(dialog.getByText("1 events · 0 skipped", { exact: true })).toBeVisible();
+  await dialog.getByRole("button", { name: "Import", exact: true }).click();
+  await expect(dialog.getByRole("status")).toHaveText("1 imported, 0 failed");
+  await dialog.getByRole("button", { name: "Done", exact: true }).click();
+  // London leaves BST on 25 Oct but New York keeps EDT until 1 Nov, so 09:00 New York is
+  // 13:00 London that week and 14:00 London once both are on standard time.
+  await page.goto("/calendar/week?d=2026-10-19");
+  await expect(
+    page.getByRole("button", { name: /^New York weekly, 13:00–14:00, Work$/ }),
+  ).toHaveCount(1);
+  await page.goto("/calendar/week?d=2026-11-02");
+  await expect(
+    page.getByRole("button", { name: /^New York weekly, 14:00–15:00, Work$/ }),
+  ).toHaveCount(1);
 });

@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import type { KeyValueStore } from "@key-value-kit/core";
 import { createMemoryStore } from "@key-value-kit/storage/memory";
 import type * as oauth from "oauth4webapi";
@@ -150,7 +151,9 @@ export class LwsTokenProvider implements TokenProvider {
       const cached = await this.#tokens.read(key, ticket);
       if (cached !== undefined && usable(cached, renewalWindow)) return cached;
       await this.#tokens.remove(key);
-      return await this.#tokens.write(key, await this.#exchange(as, realm, ticket), ticket);
+      const fresh = await this.#exchange(as, realm, ticket);
+      // Without a declared lifetime, use the token only for this request.
+      return fresh.expiresAt === undefined ? fresh : await this.#tokens.write(key, fresh, ticket);
     });
 
     await this.#tokens.assertCurrent(ticket);
@@ -342,5 +345,5 @@ function resourceMetadataChallenge(request: Request, challenge: ChallengeContext
 }
 
 function usable(token: LwsAccessToken, renewalWindow: number): boolean {
-  return token.expiresAt === undefined || Date.now() < token.expiresAt - renewalWindow;
+  return token.expiresAt !== undefined && Date.now() < token.expiresAt - renewalWindow;
 }

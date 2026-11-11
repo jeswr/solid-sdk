@@ -1,12 +1,12 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { useSyncExternalStore } from "react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { NS, node, serialize } from "../../src/apps/tasks/lib/model/rdf";
 import type { StoredProject } from "../../src/apps/tasks/lib/model/store";
 import type { TasksCache } from "../../src/apps/tasks/state/tasks-cache";
 import type { TasksContextValue } from "../../src/apps/tasks/state/tasks-context";
 import { act, click, h, key, mount } from "../drive-ui-dom";
-import type { Pod } from "./pod";
+import { type Pod, storage } from "./pod";
 import { frameCache } from "./tasks-frame-fixtures";
 
 const now = new Date("2026-11-02T10:00:00Z");
@@ -29,7 +29,12 @@ function api(snapshot = cache.getSnapshot()): TasksContextValue {
     ...snapshot,
     cache,
     inboxUrl: cache.inboxUrl,
+    sharingAvailable: false,
     webId: "https://alice.example/#me",
+    storageUrl: storage,
+    shareAdapter: () => {
+      throw new Error("Sharing is not used in this fixture");
+    },
     loadTasks: cache.loadTasks.bind(cache),
     retry: cache.retry,
     createTask: cache.createTask.bind(cache),
@@ -302,6 +307,11 @@ describe("Upcoming", () => {
   });
 
   it("honours weekStart, shifts seven days, shows overdue only from Today, and opens a day composer", async () => {
+    // The composer's due chip words dates against the real clock ("Tomorrow"); pin it to `now`.
+    vi.useFakeTimers({ toFake: ["Date"], now });
+    onTestFinished(() => {
+      vi.useRealTimers();
+    });
     localStorage.setItem("suite.tasks.prefs", JSON.stringify({ weekStart: "sunday" }));
     const inbox = cache.getSnapshot().projects[0] as StoredProject;
     await cache.createTask(inbox, { title: "Late", allDay: "2026-10-31" });
@@ -803,8 +813,8 @@ describe("Label view", () => {
     const { host } = await mount(
       h("main", null, h(TasksSidebar), h(LabelView, { label: "bills" })),
     );
-    expect(host.querySelectorAll('a[href="/tasks/l/bills"]')).toHaveLength(1);
-    expect(host.querySelector('a[href="/tasks/l/bills"]')?.textContent).toContain("2");
+    expect(host.querySelectorAll('.tsk-sidebar a[href="/tasks/l/bills"]')).toHaveLength(1);
+    expect(host.querySelector('.tsk-sidebar a[href="/tasks/l/bills"]')?.textContent).toContain("2");
     expect(titles(region(host, "Inbox"))).toEqual(["Inbox rent"]);
     expect(titles(region(host, "Home"))).toEqual(["Home rent"]);
     await click(button("Home", region(host, "Home")));

@@ -1,55 +1,25 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+// AUTHORED-BY Codex GPT-6.1-Sol
 /**
- * build-dist — produce the committed, self-contained `dist/` for GitHub-branch
- * installs under `ignore-scripts=true`.
+ * Build self-contained runtime, renderer, and declarations for mirror installs
+ * under ignore-scripts=true. Workspace dependencies (including the private
+ * agent-model) are bundled; only the npm dependencies below stay external.
  *
- * WHY a bundler (esbuild) instead of plain `tsc`:
- *
- * `@jeswr/federation-client` depends on `@jeswr/fetch-rdf`, which is NOT on npm
- * and ships no usable `dist/` (a git dep that needs its own build). A consumer
- * running `npm install github:jeswr/federation-client#main` under the suite's
- * `ignore-scripts=true` invariant will NOT run our `build:deps`/`prepare`, so
- * `@jeswr/fetch-rdf` would never get built and the import would fail. The fix is
- * to make the committed artifact self-contained re: that off-npm dep by INLINING
- * `@jeswr/fetch-rdf`'s compiled code into our `dist/index.js`.
- *
- * Externalisation contract (the load-bearing part):
- *   - INLINED  (bundled into dist): the off-npm `@jeswr` suite deps —
- *       `@jeswr/fetch-rdf` (ships no usable dist) AND `@jeswr/rdf-serialize`
- *       (the shared serialiser; a git dep not on npm). Both are absent from the
- *       EXTERNAL list below, so esbuild bundles them into the self-contained dist.
- *   - EXTERNAL (resolved from npm by the consumer): everything else —
- *       `n3`, `@solid/object`, `@rdfjs/wrapper`, `@rdfjs/types`, AND
- *       fetch-rdf's OWN runtime deps `jsonld-streaming-parser` + `content-type`
- *       (all npm-published; we add them to our `dependencies` so the consumer
- *       resolves them). `@jeswr/rdf-serialize`'s only runtime dep, `n3`, is
- *       already in this list, so inlining it pulls in nothing new. We deliberately
- *       do NOT bundle these — keeping them external means a single shared copy +
- *       normal npm dedupe/audit.
- *
- * `tsc` still emits the `.d.ts` declarations (declarations carry no fetch-rdf
- * type import — verified — so they are already self-contained). esbuild owns the
- * JS; tsc owns the types (declaration-only).
- *
- * The committed `dist/` is kept in sync with `src/` by `scripts/check-dist-fresh.mjs`.
+ * TypeScript expands ChannelCapability from the model's inferred schema when
+ * emitting declarations, preserving its exact shape without shipping a model
+ * or Zod type import. dist/ is built here and committed only in the mirrors.
  */
 import { execFileSync } from "node:child_process";
-import { readFileSync, rmSync, writeFileSync } from "node:fs";
+import { readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
+import ts from "typescript";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const outdir = join(root, "dist");
 
-/**
- * Rewrite an esbuild sourcemap `sources[]` entry to a stable, package-root-relative
- * path — dropping any absolute prefix or `../` traversal so the committed map is
- * deterministic and never leaks the builder's filesystem. A bundled-dep source
- * becomes `node_modules/…`; an own source becomes `src/…`. (`node_modules` is
- * matched first so a dep whose own path contains `src/` still normalises to its
- * `node_modules/` root.)
- */
+/** Keep source paths stable across checkouts and symlinked node_modules. */
 function toPkgRelativeSource(source) {
   const nm = source.indexOf("node_modules/");
   if (nm !== -1) return source.slice(nm);
@@ -58,97 +28,136 @@ function toPkgRelativeSource(source) {
   return source;
 }
 
-/**
- * Everything that must stay EXTERNAL (resolved from npm, not inlined). The
- * packages bundled in are the off-npm `@jeswr` suite deps `@jeswr/fetch-rdf` and
- * `@jeswr/rdf-serialize` — by virtue of being absent from this list. Their own
- * npm-published runtime deps (fetch-rdf's `jsonld-streaming-parser`/`content-type`,
- * rdf-serialize's `n3`) stay external.
- */
+/** Npm dependencies declared by this package; all other runtime code is bundled. */
 const EXTERNAL = [
   "n3",
-  "@solid/object",
   "@rdfjs/wrapper",
   "@rdfjs/types",
-  // @jeswr/fetch-rdf's own runtime deps — npm-published, kept external:
   "jsonld-streaming-parser",
   "content-type",
+  "undici",
 ];
 
+function emitDeclarations(buildDir) {
+  const configPath = join(root, "tsconfig.build.json");
+  const config = ts.readConfigFile(configPath, ts.sys.readFile);
+  if (config.error)
+    throw new Error(ts.flattenDiagnosticMessageText(config.error.messageText, "\n"));
+  const parsed = ts.parseJsonConfigFileContent(config.config, ts.sys, root, {
+    outDir: buildDir,
+  });
+  const program = ts.createProgram(parsed.fileNames, parsed.options);
+  const diagnostics = [...parsed.errors, ...ts.getPreEmitDiagnostics(program)];
+  if (diagnostics.length) {
+    throw new Error(
+      ts.formatDiagnosticsWithColorAndContext(diagnostics, {
+        getCurrentDirectory: () => root,
+        getCanonicalFileName: (file) => file,
+        getNewLine: () => "\n",
+      }),
+    );
+  }
+  const checker = program.getTypeChecker();
+  const source = program.getSourceFile(join(root, "src/types.ts"));
+  const modelImport = source.statements.find(
+    (node) => ts.isImportDeclaration(node) && node.moduleSpecifier.text === "@jeswr/agent-model",
+  );
+  const imported = modelImport.importClause.namedBindings.elements.find(
+    (node) => node.name.text === "ChannelCapability",
+  );
+  const capability = checker.typeToTypeNode(
+    checker.getTypeAtLocation(imported),
+    undefined,
+    ts.NodeBuilderFlags.NoTruncation | ts.NodeBuilderFlags.InTypeAlias,
+  );
+  if (!capability || !ts.isTypeLiteralNode(capability)) {
+    throw new Error("build-dist: expected a self-contained ChannelCapability object type.");
+  }
+  const result = program.emit(undefined, undefined, undefined, true, {
+    afterDeclarations: [
+      (context) => (file) => {
+        const visit = (node) => {
+          if (ts.isImportDeclaration(node) && node.moduleSpecifier.text === "@jeswr/agent-model") {
+            const names = node.importClause?.namedBindings;
+            if (
+              !names ||
+              !ts.isNamedImports(names) ||
+              names.elements.some((name) => name.name.text !== "ChannelCapability")
+            )
+              throw new Error("build-dist: unexpected private model type import.");
+            return undefined;
+          }
+          if (
+            ts.isTypeReferenceNode(node) &&
+            ts.isIdentifier(node.typeName) &&
+            node.typeName.text === "ChannelCapability"
+          )
+            return capability;
+          return ts.visitEachChild(node, visit, context);
+        };
+        return ts.visitNode(file, visit);
+      },
+    ],
+  });
+  if (result.emitSkipped || result.diagnostics.length)
+    throw new Error("build-dist: declaration emission failed.");
+}
+
 async function main(buildDir = outdir) {
-  // 1. Ensure @jeswr/fetch-rdf's dist exists in node_modules so esbuild can
-  //    resolve + inline it (ignore-scripts skipped its prepare on install).
-  execFileSync("node", [join(root, "scripts", "build-deps.mjs")], {
+  execFileSync("node", [join(root, "scripts/build-deps.mjs")], {
     cwd: root,
     stdio: ["ignore", "ignore", "inherit"],
   });
 
-  // 2. Clean target then bundle the runtime JS (esbuild owns dist/index.js).
   rmSync(buildDir, { recursive: true, force: true });
   await build({
-    entryPoints: [join(root, "src", "index.ts")],
-    outfile: join(buildDir, "index.js"),
+    entryPoints: {
+      index: join(root, "src/index.ts"),
+      "render-card": join(root, "scripts/render-card-entry.mjs"),
+    },
+    outdir: buildDir,
     bundle: true,
     format: "esm",
+    // The lazily imported Node guard (undici, node:dns) stays in its own chunk, so
+    // importing the entry never loads it.
+    splitting: true,
+    chunkNames: "chunks/[name]-[hash]",
     platform: "node",
     target: "node24",
-    // Inline the off-npm @jeswr suite deps (@jeswr/fetch-rdf + @jeswr/rdf-serialize)
-    // by their absence from EXTERNAL; keep the npm-published deps external.
     external: EXTERNAL,
     sourcemap: true,
     legalComments: "none",
     logLevel: "warning",
   });
 
-  // 2b. Normalise esbuild's path labels so the COMMITTED bundle + sourcemap never
-  //     embed an absolute local build path (`/Users/…`, `/home/…`) or an
-  //     environment-specific `../…` traversal — both leak the builder's filesystem
-  //     and vary across checkouts / a symlinked `node_modules`. Rewrite to stable,
-  //     package-root-relative paths (`node_modules/…`, `src/…`). Idempotent; keeps
-  //     the committed dist deterministic.
-  const indexFile = join(buildDir, "index.js");
-  const mapFile = join(buildDir, "index.js.map");
+  const outputs = [
+    "index",
+    "render-card",
+    ...readdirSync(join(buildDir, "chunks"))
+      .filter((file) => file.endsWith(".js"))
+      .map((file) => `chunks/${file.slice(0, -3)}`),
+  ];
+  for (const entry of outputs) {
+    const indexFile = join(buildDir, `${entry}.js`);
+    const mapFile = join(buildDir, `${entry}.js.map`);
+    // Normalize esbuild's module comments and sourcemap sources before shipping.
+    const normalisedJs = readFileSync(indexFile, "utf8").replace(
+      /^\/\/ \S*\/(node_modules\/\S*)$/gm,
+      "// $1",
+    );
+    writeFileSync(indexFile, normalisedJs, "utf8");
+    const map = JSON.parse(readFileSync(mapFile, "utf8"));
+    if (Array.isArray(map.sources)) map.sources = map.sources.map(toPkgRelativeSource);
+    writeFileSync(mapFile, JSON.stringify(map), "utf8");
 
-  // (i) The bundle's module-boundary `// <path>` comments.
-  const normalisedJs = readFileSync(indexFile, "utf8").replace(
-    /^\/\/ \S*\/(node_modules\/\S*)$/gm,
-    "// $1",
-  );
-  writeFileSync(indexFile, normalisedJs, "utf8");
-
-  // (ii) The sourcemap `sources[]` entries (esbuild records them absolute /
-  //      traversal-relative; rewrite each to package-root-relative).
-  const map = JSON.parse(readFileSync(mapFile, "utf8"));
-  if (Array.isArray(map.sources)) {
-    map.sources = map.sources.map(toPkgRelativeSource);
-  }
-  writeFileSync(mapFile, JSON.stringify(map), "utf8");
-
-  // 2c. Leak guard: FAIL the build if any absolute local path survives in the
-  //     committed JS bundle OR its sourcemap. Cheap, and it stops a regression in
-  //     the normalisation above from silently shipping a filesystem path.
-  for (const f of [indexFile, mapFile]) {
-    const content = readFileSync(f, "utf8");
-    const leak = content.match(/\/(?:Users|home)\/[^\s"']+/);
-    if (leak) {
-      throw new Error(
-        `build-dist: committed artifact ${f} leaks an absolute local path: ${leak[0]}`,
-      );
+    for (const file of [indexFile, mapFile]) {
+      const leak = readFileSync(file, "utf8").match(/\/(?:Users|home)\/[^\s"']+/);
+      if (leak)
+        throw new Error(`build-dist: artifact ${file} leaks an absolute local path: ${leak[0]}`);
     }
   }
 
-  // 3. Emit the .d.ts declarations (declaration-only — esbuild already wrote JS).
-  execFileSync(
-    "node",
-    [
-      join(root, "node_modules", "typescript", "bin", "tsc"),
-      "-p",
-      join(root, "tsconfig.build.json"),
-      "--outDir",
-      buildDir,
-    ],
-    { cwd: root, stdio: ["ignore", "ignore", "inherit"] },
-  );
+  emitDeclarations(buildDir);
 }
 
 const argDir = process.argv[2];

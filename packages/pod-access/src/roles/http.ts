@@ -1,11 +1,11 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex
 import { parseRdf } from "@jeswr/fetch-rdf";
 import type { Store } from "n3";
 import { DataFactory } from "n3";
 import { ACL, ACP, RDF, safeIri } from "../rdf.js";
-import type { EffectivePolicy } from "../types.js";
 import { roleError } from "./errors.js";
-import { readPolicy } from "./rdf.js";
+import { type RolePolicy, readPolicy } from "./rdf.js";
 import type { RolesOptions } from "./types.js";
 
 export interface Document {
@@ -13,17 +13,23 @@ export interface Document {
   resource: string;
   model: "wac" | "acp";
   dataset: Store;
-  policy: EffectivePolicy;
+  policy: RolePolicy;
   etag: string | null;
 }
 export interface Snapshot {
   resource: string;
+  resourceEtag: string | null;
   ownUrl: string;
   own: Document | undefined;
   model: "wac" | "acp";
   documents: Document[];
 }
-export function scoped(url: string, root: string): string {
+/**
+ * Refuses (`scope`) a URL outside `root` or not in canonical form. `query` admits a query string,
+ * which only read-only model detection allows on an access document (ESS addresses its ACRs as
+ * `?ext=acr`); every path that writes keeps refusing it.
+ */
+export function scoped(url: string, root: string, query = false): string {
   safeIri(url);
   const parsed = new URL(url);
   const base = new URL(root);
@@ -31,7 +37,7 @@ export function scoped(url: string, root: string): string {
     !/^https?:$/.test(parsed.protocol) ||
     parsed.username ||
     parsed.password ||
-    parsed.search ||
+    (parsed.search && !query) ||
     parsed.hash ||
     /%(?:2f|5c|2e|25|00)/i.test(parsed.pathname) ||
     parsed.href !== url ||
@@ -59,7 +65,7 @@ function links(headers: Headers, base: string, rel: string): string[] {
 }
 export async function request(
   url: string,
-  options: RolesOptions,
+  options: Pick<RolesOptions, "fetch">,
   init: RequestInit,
 ): Promise<Response> {
   const response = await options.fetch(url, { ...init, redirect: "error", cache: "no-store" });
@@ -94,13 +100,71 @@ async function boundedBody(response: Response, url: string): Promise<string> {
     reader.releaseLock();
   }
 }
-/** Own ACL or nearest WAC ancestor; ACP collects member controls through the root. */
+const mismatches = new WeakMap<object, "wac" | "acp">();
+const mixed = new WeakSet<object>();
+/**
+ * Whether `error` is a refusal for access documents that mix models (both vocabularies in one
+ * document, or ancestors of different models), so the resource's model cannot be decided.
+ */
+export function isMixedModel(error: unknown): boolean {
+  // WeakSet lookups of non-objects are simply misses.
+  return mixed.has(error as object);
+}
+function mixedModels(url: string, message: string) {
+  const error = roleError("invalid-response", url, message);
+  mixed.add(error);
+  return error;
+}
+/** The model a resource really uses when `load` refused it for differing from a pinned model. */
+export function mismatchedModel(error: unknown): "wac" | "acp" | undefined {
+  // WeakMap lookups of non-objects are simply misses.
+  return mismatches.get(error as object);
+}
+/**
+ * Own ACL or nearest WAC ancestor; ACP collects member controls through the root. With a pinned
+ * `options.model`, a resource that uses the other model is refused (`unsupported`), so nothing
+ * planned from this snapshot can write that model's documents.
+ */
 export async function load(resource: string, options: RolesOptions): Promise<Snapshot> {
+  // Outside detection the resource's own advertised document always sets the model.
+  const snapshot = (await discover(resource, options, false)) as Snapshot;
+  if (options.model !== undefined && snapshot.model !== options.model) {
+    const error = roleError(
+      "unsupported",
+      resource,
+      `Resource uses the ${snapshot.model} access model, not the required ${options.model} model`,
+    );
+    mismatches.set(error, snapshot.model);
+    throw error;
+  }
+  return snapshot;
+}
+/**
+ * Read-only model detection through the same discovery walk as `load`. It builds no policies (so
+ * a policy this layer cannot map still reports its model) and admits a query on an access
+ * document's URL, as ESS uses for its ACRs. It fails closed: only an existing, non-empty access
+ * document decides the model, so a missing or empty one never counts as WAC, and a walk that
+ * finds no deciding document reports "unknown". Refuses `unsupported` when the resource advertises
+ * no access document; every other failure (including mixed models, see `isMixedModel`) is thrown.
+ */
+export async function detectModel(
+  resource: string,
+  options: Pick<RolesOptions, "fetch" | "root">,
+): Promise<{ model: "wac" | "acp" | "unknown"; ownUrl: string }> {
+  const { model, ownUrl } = await discover(resource, options, true);
+  return { model: model ?? "unknown", ownUrl };
+}
+async function discover(
+  resource: string,
+  options: Pick<RolesOptions, "fetch" | "root" | "implementation">,
+  detecting: boolean,
+): Promise<Omit<Snapshot, "model"> & { model: Snapshot["model"] | undefined }> {
   const root = options.root ?? `${new URL(resource).origin}/`;
   scoped(root, root);
   scoped(resource, root);
   const documents: Document[] = [];
   let ownUrl = "";
+  let resourceEtag: string | null = null;
   let own: Document | undefined;
   let model: "wac" | "acp" | undefined;
   let current = resource;
@@ -109,6 +173,7 @@ export async function load(resource: string, options: RolesOptions): Promise<Sna
       throw roleError("invalid-response", resource, "Ancestor walk exceeds 64 documents");
     const head = await request(current, options, { method: "HEAD" });
     requireOk(head, current);
+    if (current === resource) resourceEtag = head.headers.get("etag");
     const endpoints = [
       ...new Set([
         ...links(head.headers, current, "acl"),
@@ -121,7 +186,7 @@ export async function load(resource: string, options: RolesOptions): Promise<Sna
     if (current === resource && endpoint === undefined)
       throw roleError("unsupported", resource, "Resource advertises no access document");
     if (endpoint !== undefined) {
-      scoped(endpoint, root);
+      scoped(endpoint, root, detecting);
       const response = await request(endpoint, options, {
         headers: { accept: "text/turtle, application/ld+json;q=0.9" },
       });
@@ -161,24 +226,34 @@ export async function load(resource: string, options: RolesOptions): Promise<Sna
           DataFactory.namedNode(`${RDF}type`),
           DataFactory.namedNode(`${ACL}Authorization`),
         ).size > 0;
-      if (acp && wac)
-        throw roleError("invalid-response", endpoint, "Mixed access-control vocabularies");
+      if (acp && wac) throw mixedModels(endpoint, "Mixed access-control vocabularies");
       const detected = acp ? "acp" : "wac";
-      if (model && exists && detected !== model)
-        throw roleError("invalid-response", endpoint, "Mixed ancestor access models");
-      model ??= detected;
       if (current === resource) ownUrl = endpoint;
-      if (exists) {
+      // Detection decides only from an existing, non-empty document; a missing or empty one says
+      // nothing about the model, so the walk goes on to the nearest ancestor that does. A
+      // non-empty document with neither ACP terms nor a WAC authorization is not evidence of
+      // either model: detection stops there and reports unknown (fail closed).
+      if (detecting && exists && dataset.size > 0 && !acp && !wac)
+        return { resource, resourceEtag, ownUrl, own, model: undefined, documents };
+      const decides = !detecting || (exists && dataset.size > 0);
+      if (decides) {
+        if (model && exists && detected !== model)
+          throw mixedModels(endpoint, "Mixed ancestor access models");
+        model ??= detected;
+      }
+      if (exists && !detecting) {
+        // Outside detection every document decides, so the model is set.
+        const settled = model as "wac" | "acp";
         const document: Document = {
           url: endpoint,
           resource: current,
-          model,
+          model: settled,
           dataset,
           policy: readPolicy(
             dataset,
             current,
             endpoint,
-            model,
+            settled,
             options.implementation ?? "css",
             resource,
           ),
@@ -186,11 +261,11 @@ export async function load(resource: string, options: RolesOptions): Promise<Sna
         };
         documents.push(document);
         if (current === resource) own = document;
-        if (model === "wac") break;
       }
+      if (exists && decides && model === "wac") break;
     }
     if (current === root) break;
     current = scoped(new URL(current.endsWith("/") ? ".." : ".", current).href, root);
   }
-  return { resource, ownUrl, own, model: model as "wac" | "acp", documents };
+  return { resource, resourceEtag, ownUrl, own, model, documents };
 }

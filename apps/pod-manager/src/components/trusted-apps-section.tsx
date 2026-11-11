@@ -16,7 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import {
-  permissionsBackend,
+  usePermissionsBackend,
   type ConnectedApp,
   type ConnectedAppsModel,
 } from "@/components/use-permissions";
@@ -40,6 +40,7 @@ export function TrustedAppsSection({
    */
   getFreshModel: () => Promise<ConnectedAppsModel>;
 }) {
+  const permissionsBackend = usePermissionsBackend();
   const origins = reconcileTrustedApps(apps);
   const [removed, setRemoved] = useState<ReadonlySet<string>>(new Set());
   const [busy, setBusy] = useState<ReadonlySet<string>>(new Set());

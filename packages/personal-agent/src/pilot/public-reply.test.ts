@@ -7,11 +7,10 @@
  * response validation and domain completion are recorded separately.
  */
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { createServer } from "node:http";
-import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { freePort } from "../test-support/free-port.js";
 import {
   PUBLIC_REPLIES_FILE,
   PublicDispatcher,
@@ -38,14 +37,6 @@ async function cli(args: string[]) {
   let out = "";
   await main([...args], { stdout: (s) => (out += s) });
   return out.trim().startsWith("{") ? JSON.parse(out) : {};
-}
-
-async function freePort(): Promise<number> {
-  const s = createServer();
-  await new Promise<void>((r) => s.listen(0, "127.0.0.1", r));
-  const port = (s.address() as AddressInfo).port;
-  await new Promise<void>((r) => s.close(() => r()));
-  return port;
 }
 
 async function provision() {

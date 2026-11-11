@@ -33,7 +33,28 @@ public-key fixtures in `test/fixtures/origin-main-credentials.json` cover both s
 npm install github:jeswr/solid-vc#main
 ```
 
-Requires Node.js 24 or newer.
+Requires Node.js 24 or newer, or a browser with WebCrypto in a secure context. Hashing
+and random identifiers use `globalThis.crypto`; status-list compression requires the web-standard
+`CompressionStream("gzip")` and `DecompressionStream("gzip")` APIs. Decoding keeps strict
+base64url validation and the 16KB minimum, validates GZIP integrity, and cancels the stream
+as soon as its expansion exceeds `maxDecodedBytes` (16 MiB by default).
+The public entry bundles with esbuild's `platform: "browser"` without Node builtins.
+Browser WebID/status resolution requires an injected fetch; the DNS-pinned Node default
+is disabled by the package's browser mapping. Non-extractable P-256 private keys can be
+passed directly in a `KeyPair` to `DataIntegritySuite("ecdsa-rdfc-2019")` without export.
+
+Status-list compression is asynchronous. Await `encodeStatusList`, `decodeStatusList`,
+`buildBitstringStatusListCredential`, `statusListBitsOf`, `withStatusBit`, and `readStatusBit`.
+For example, `const bits = await decodeStatusList(await encodeStatusList(createStatusBitstring()))`.
+Concatenated GZIP members and trailing bytes are rejected by the platform decoder.
+
+`statusListCredentialToTurtle(vc)` serializes a single-proof status-list credential as
+`application/trig`, preserving its named Data Integrity proof graph. Its structural inverse,
+`parseStatusListCredential(document)`, rejects ambiguous or lossy graphs and returns the
+credential or `undefined`; always verify the result before trusting its bits.
+`createBitstringStatusResolver` accepts this RDF transport alongside existing JSON/JSON-LD,
+including lists signed by a non-extractable P-256 owner key with `ecdsa-rdfc-2019`.
+Status signature, issuer-control, URL, validity and decoded-size checks apply to both formats.
 
 ## Minimal usage
 
@@ -71,7 +92,10 @@ Check `result.verified` and `result.errors`; verification failures are structure
 generic boolean with no explanation.
 
 A policy IRI alone does not bind mutable policy content. For authorization that depends on policy
-contents, pass `policyContent` when issuing and `presentedResources` when verifying.
+contents, pass `policyContent` when issuing and `presentedResources` when verifying. The digest is
+over the base-free graph, which merges relative forms (`.#x` reads as `#x`) and, in JSON-LD, drops
+relative-IRI triples, so issuing refuses policy content whose relative IRIs (datatypes included) are
+anything but fragment references (`<#x>`), and JSON-LD content with any relative IRI.
 
 ## Key API
 

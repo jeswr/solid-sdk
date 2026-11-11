@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 "use client";
 import {
   AlertDialog,
@@ -27,6 +28,7 @@ import { Copy, Info, MessageSquare } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useId, useRef, useState } from "react";
 import { decodeRef } from "@/lib/refs";
+import { usePageRouteParams } from "@/lib/route-params";
 import type { Message } from "../lib/client";
 import { roomContainer } from "../lib/model";
 import {
@@ -382,6 +384,17 @@ export function RoomView({ url, messageId }: { url: string; messageId?: string |
       {task && <TaskDialog message={task} url={url} onClose={() => setTask(undefined)} />}
     </div>
   );
+}
+/** Reads the room ref on the client so the native export's placeholder page works too. */
+export function RoomPageRoute() {
+  const params = usePageRouteParams<{ ref: string }>("/chat/r/[ref]");
+  if (!params)
+    return (
+      <div className="chat-state" role="status">
+        Opening this conversation…
+      </div>
+    );
+  return <RoomRoute reference={params.ref} />;
 }
 export function RoomRoute({ reference }: { reference: string }) {
   return (

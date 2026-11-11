@@ -1,0 +1,28 @@
+{
+  "profile": {
+    "emailAddress": "receiver@example.test",
+    "messagesTotal": 2,
+    "threadsTotal": 1,
+    "historyId": "100"
+  },
+  "messages": {
+    "messages": [{ "id": "a1", "threadId": "ab" }, { "id": "b2", "threadId": "ab" }],
+    "resultSizeEstimate": 2
+  },
+  "history": {
+    "history": [
+      {
+        "id": "105",
+        "messages": [{ "id": "a1" }],
+        "messagesAdded": [
+          { "message": { "id": "a1", "threadId": "ab" } },
+          { "message": { "id": "a1" } }
+        ]
+      },
+      { "id": "110", "messagesAdded": [{ "message": { "id": "c3" } }] }
+    ],
+    "historyId": "120"
+  },
+  "emptyHistory": { "historyId": "130" },
+  "accepted": { "id": "d4", "threadId": "ab" }
+}

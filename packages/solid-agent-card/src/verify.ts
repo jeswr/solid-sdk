@@ -9,8 +9,11 @@
 // well-known serving pattern where the URL ≠ the agent IRI it describes —
 // otherwise to the URL it was served from.
 
+// AUTHORED-BY Codex GPT-6.1-Sol
+import { type ChannelCapability, fromRdf } from "@jeswr/agent-model";
 import { fetchRdf, parseRdf } from "@jeswr/fetch-rdf";
 import type { DatasetCore } from "@rdfjs/types";
+import { fetchOrGuarded } from "./internal/default-fetch.js";
 import { classifyFetchError, describeError } from "./internal/errors.js";
 import type {
   AgentDescriptor,
@@ -33,10 +36,12 @@ export interface VerifyOptions {
   /**
    * A `fetch` implementation (e.g. an authenticated Solid fetch).
    *
-   * SECURITY — this fetch is the SSRF boundary when verifying by URL. In a
-   * **server / Node** context the default `globalThis.fetch` is NOT SSRF-guarded;
-   * when `input` is an UNTRUSTED URL, inject an SSRF-guarded fetch (e.g.
-   * `@jeswr/guarded-fetch`'s node fetch, DNS-pinned). Prefer the `body` /
+   * SECURITY — this fetch is the SSRF boundary when verifying by URL. When
+   * omitted under Node, `@jeswr/guarded-fetch`'s DNS-pinned fetch is used (loaded
+   * lazily): private, loopback and link-local targets are refused, including via
+   * redirects. In a browser the default is `globalThis.fetch`, which is only
+   * partially guarded. An injected fetch replaces either default, so it must
+   * enforce its own SSRF policy for UNTRUSTED URLs. Prefer the `body` /
    * {@link verifyDataset} paths when the RDF is already in hand — they never
    * touch the network.
    */
@@ -90,7 +95,7 @@ export async function verifyDescriptor(
         baseIRI: options.baseIRI ?? input,
       });
     } else {
-      const fetched = await fetchRdf(input, options.fetch ? { fetch: options.fetch } : {});
+      const fetched = await fetchRdf(input, { fetch: await fetchOrGuarded(options.fetch) });
       dataset = fetched.dataset;
     }
   } catch (err) {
@@ -203,6 +208,7 @@ function projectDescriptor(
 
   const skills = projectSkills(node, issues);
   const securitySchemes = projectSchemes(node, issues);
+  const bindings = projectBindings(node, issues);
 
   return {
     id,
@@ -216,7 +222,31 @@ function projectDescriptor(
     ...(skills.length > 0 && { skills }),
     ...(securitySchemes.length > 0 && { securitySchemes }),
     ...(protocolSources.length > 0 && { protocolSources }),
+    ...(bindings.length > 0 && { bindings }),
   };
+}
+
+/** Validate linked capability records locally; never dereference advertised bindings. */
+function projectBindings(
+  node: AgentDescriptionNode,
+  issues: VerificationIssue[],
+): ChannelCapability[] {
+  const bindings: ChannelCapability[] = [];
+  for (const term of node.bindings) {
+    try {
+      if (term.termType !== "NamedNode") throw new TypeError("Expected a capability IRI.");
+      const record = fromRdf(node.dataset, term.value);
+      if (record.type !== "channel-capability") throw new TypeError("Expected a capability.");
+      bindings.push(record);
+    } catch {
+      issues.push({
+        code: "invalid-binding",
+        message: "agent:supportsBinding must link to a valid channel capability in this document.",
+        subject: node.value,
+      });
+    }
+  }
+  return bindings;
 }
 
 /** Project + validate the linked skills, recording issues (incl. duplicate ids). */

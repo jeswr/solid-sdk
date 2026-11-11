@@ -1,5 +1,6 @@
 // AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 /**
  * `createMemoryStorage()`: a faithful in-memory StorageClient (ADR-003 §8) for unit tests and as
  * the conformance reference. It reproduces ETags (monotonic), 412/428 semantics, container
@@ -16,9 +17,21 @@ import {
   type StorageDescription,
 } from "@jeswr/storage-capabilities";
 import { LWS, SSD } from "@jeswr/storage-capabilities/vocab";
+import { LiteralFrom, NamedNodeFrom, RequiredAs } from "@rdfjs/wrapper";
+import { Resource } from "@solid/object/solid";
 import { DataFactory, Store } from "n3";
 import { StorageError, type StorageErrorCode } from "./errors.js";
-import { isWithin, paginate, pathParent, throwIfAborted, toBytes } from "./internal.js";
+import { scoped } from "./http.js";
+import {
+  isWithin,
+  listingTooLarge,
+  paginate,
+  pathParent,
+  throwIfAborted,
+  toBytes,
+  validateKeepalive,
+  validateListingMaxBytes,
+} from "./internal.js";
 import { applyJsonPatch, type JsonPatchError } from "./json-patch.js";
 import {
   applyQuadPatch,
@@ -28,6 +41,7 @@ import {
   TRIPLE_FORMATS,
   WRITABLE_RDF,
 } from "./rdf.js";
+import { encodeResource, isTrashEndpoint, serviceUrl, trashCommand } from "./services.js";
 import type {
   CreateOptions,
   Entry,
@@ -53,6 +67,10 @@ export interface MemoryStorageOptions {
   pageSize?: number;
   /** LWS: advertise and honour MoveResource. Default false. */
   moveResource?: boolean;
+  /** Advertise and implement TrashService. Default false. */
+  trash?: boolean;
+  /** Record immutable content versions. Default false. */
+  versioning?: boolean;
   /**
    * Default true: a mutation without `ifMatch` throws a TypeError, so apps cannot be written
    * against the memory backend incorrectly. Set false to reach the emulated server instead
@@ -76,6 +94,7 @@ const MAX_EMULATED_MOVE = 2_000;
 const BASE32 = "abcdefghijklmnopqrstuvwxyz234567";
 
 interface UserLink {
+  title?: string;
   anchor: string;
   rel: string;
   href: string;
@@ -91,6 +110,10 @@ interface Node {
   modified: number;
   types: string[];
   links: UserLink[];
+  titles: Map<string, string>;
+  original?: string;
+  trashedAt?: number;
+  versionAt?: number;
 }
 
 function slug(): string {
@@ -133,8 +156,23 @@ export function createMemoryStorage(options: MemoryStorageOptions = {}): MemoryS
     protocol,
     id: lws ? `${root}.well-known/storage` : root,
     root,
+    owner: null,
     descriptionUrl: lws ? `${root}.well-known/storage` : `${root}.well-known/solid`,
-    services: lws ? [{ type: [LWS.StorageRoot], endpoint: root, extra: {} }] : [],
+    services: [
+      ...(lws ? [{ type: [LWS.StorageRoot], endpoint: root, extra: {} }] : []),
+      ...(options.trash
+        ? [{ type: [SSD.TrashService], endpoint: `${root}.trash/`, extra: {} }]
+        : []),
+      ...(options.versioning
+        ? [
+            {
+              type: [SSD.VersioningService],
+              endpoint: `${root}.versions/?resource={resource}`,
+              extra: {},
+            },
+          ]
+        : []),
+    ],
     capabilities: [
       ...(moveResource
         ? [
@@ -174,7 +212,58 @@ export function createMemoryStorage(options: MemoryStorageOptions = {}): MemoryS
     modified: now,
     types: [],
     links: [],
+    titles: new Map(),
   });
+
+  const histories = new Map<string, string>();
+  const historyAliases = new Map<string, string>();
+  function serviceContainer(url: string, parent = root): void {
+    nodes.set(url, {
+      ...(nodes.get(root) as Node),
+      url,
+      parent,
+      etag: nextEtag(),
+      metaEtag: nextEtag(),
+      links: [],
+      titles: new Map(),
+      types: [],
+    });
+    touch(parent);
+  }
+  if (options.trash) serviceContainer(`${root}.trash/`);
+  if (options.versioning) {
+    serviceContainer(`${root}.versions/`);
+  }
+  function recordVersion(node: Node): void {
+    if (!options.versioning || node.kind !== "resource" || node.original !== undefined) return;
+    let history = histories.get(node.url);
+    if (history === undefined) {
+      history = freeUrl(`${root}.versions/`, slug(), "container");
+      serviceContainer(history, `${root}.versions/`);
+      histories.set(node.url, history);
+      const alias = `${root}.versions/?resource=${encodeResource(node.url)}`;
+      historyAliases.set(alias, history);
+    }
+    const url = freeUrl(history, slug(), "resource");
+    nodes.set(url, {
+      ...node,
+      url,
+      parent: history,
+      body: node.body.slice(),
+      links: [],
+      titles: new Map(),
+      types: [...node.types],
+      versionAt: clock(),
+    });
+    touch(history);
+  }
+  function mutable(method: string, url: string): void {
+    if (
+      (options.versioning && url.startsWith(`${root}.versions/`)) ||
+      (options.trash && url === `${root}.trash/`)
+    )
+      throw fail("method-not-allowed", method, url, 405);
+  }
 
   const fail = (
     code: StorageErrorCode,
@@ -191,6 +280,7 @@ export function createMemoryStorage(options: MemoryStorageOptions = {}): MemoryS
 
   function begin(method: string, url: string, signal?: AbortSignal): void {
     throwIfAborted(method, url, signal);
+    if (options.trash || options.versioning) scoped(root, method, url);
     // Only canonical, IRI-safe URLs are stored, so listings can never carry Turtle delimiters.
     if (!canonical(url)) {
       throw fail("bad-request", method, url, 400, {
@@ -275,6 +365,10 @@ export function createMemoryStorage(options: MemoryStorageOptions = {}): MemoryS
   function entry(node: Node): Entry {
     return {
       url: node.url,
+      displayName: lws
+        ? (node.links.find((link) => link.anchor === node.url && link.title !== undefined)?.title ??
+          null)
+        : (node.titles.get(node.url) ?? null),
       kind: node.kind,
       contentType: node.kind === "container" ? null : node.contentType,
       size: node.kind === "container" ? null : node.body.byteLength,
@@ -303,6 +397,8 @@ export function createMemoryStorage(options: MemoryStorageOptions = {}): MemoryS
       if (node.url === root) push("type", "http://www.w3.org/ns/pim/space#Storage");
       push("describedby", metadataUrl(node.url));
     }
+    const history = histories.get(node.url);
+    if (history !== undefined) push("version-history", history);
     return links;
   }
 
@@ -335,6 +431,7 @@ export function createMemoryStorage(options: MemoryStorageOptions = {}): MemoryS
               ...(child.kind === "container"
                 ? {}
                 : { format: child.contentType, size: child.body.byteLength }),
+              ...(entry(child).displayName === null ? {} : { title: entry(child).displayName }),
               modified: new Date(child.modified).toISOString(),
             })),
           }),
@@ -351,8 +448,19 @@ export function createMemoryStorage(options: MemoryStorageOptions = {}): MemoryS
         quad(self, namedNode(`${LDP}contains`), namedNode(child.url)),
       ),
     ];
+    const dataset = new Store(quads);
+    for (const child of children(node.url)) {
+      const title = child.titles.get(child.url);
+      if (title !== undefined)
+        RequiredAs.object(
+          new Resource(child.url, dataset, DataFactory),
+          "http://purl.org/dc/terms/title",
+          title,
+          LiteralFrom.string,
+        );
+    }
     return {
-      bytes: new TextEncoder().encode(await serializeQuads(quads, "text/turtle")),
+      bytes: new TextEncoder().encode(await serializeQuads(dataset, "text/turtle")),
       contentType: "text/turtle",
       next: null,
     };
@@ -362,10 +470,15 @@ export function createMemoryStorage(options: MemoryStorageOptions = {}): MemoryS
   function target(method: string, url: string): { node: Node; page: number } {
     const match = lws ? /^(.*\/)\?page=([1-9]\d{0,8})$/.exec(url) : null;
     // Only containers end in '/', so a matched base is always a container.
-    const node = need(method, match ? (match[1] as string) : url);
+    const node = need(method, match ? (match[1] as string) : (historyAliases.get(url) ?? url));
     // Snapshot: later mutations replace fields, they never alter this copy.
     return {
-      node: { ...node, links: [...node.links], types: [...node.types] },
+      node: {
+        ...node,
+        links: [...node.links],
+        types: [...node.types],
+        titles: new Map(node.titles),
+      },
       page: match ? Number(match[2]) : 1,
     };
   }
@@ -387,6 +500,7 @@ export function createMemoryStorage(options: MemoryStorageOptions = {}): MemoryS
       etag: node.etag,
       contentType,
       lastModified: new Date(node.modified),
+      mementoDatetime: node.versionAt === undefined ? null : new Date(node.versionAt),
       body: bytes === null ? null : new Blob([data.slice()]).stream(),
       bytes: async () => data.slice(),
       text: async () => new TextDecoder().decode(data),
@@ -414,12 +528,15 @@ export function createMemoryStorage(options: MemoryStorageOptions = {}): MemoryS
     return encodeURIComponent(name);
   }
 
-  function freeUrl(parent: string, base: string, kind: ResourceKind): string {
+  function freeUrl(parent: string, base: string, kind: ResourceKind, excluded?: string): string {
     const suffix = kind === "container" ? "/" : "";
     let candidate = `${parent}${base}${suffix}`;
     for (
       let n = 1;
-      nodes.has(candidate) || nodes.has(candidate.replace(/\/$/, "")) || nodes.has(`${candidate}/`);
+      candidate === excluded ||
+      nodes.has(candidate) ||
+      nodes.has(candidate.replace(/\/$/, "")) ||
+      nodes.has(`${candidate}/`);
       n++
     ) {
       candidate = `${parent}${base}-${n}${suffix}`;
@@ -450,19 +567,24 @@ export function createMemoryStorage(options: MemoryStorageOptions = {}): MemoryS
       modified: time,
       types: [],
       links: [],
+      titles: new Map(),
     });
     touch(pathParent(parent, root));
   }
 
-  function listPage(url: string, cursor: PageCursor | undefined): Page<Entry> {
+  async function listPage(
+    url: string,
+    cursor: PageCursor | undefined,
+    maxBytes: number | undefined,
+    signal: AbortSignal | undefined,
+  ): Promise<Page<Entry>> {
+    url = historyAliases.get(url) ?? url;
     const node = container("GET", url);
     const items = children(url);
-    if (!lws) {
-      if (cursor !== undefined)
-        throw fail("bad-request", "GET", cursor.url, 400, {
-          message: "Solid listings have one page",
-        });
-      return { items: items.map(entry), next: null, total: items.length, etag: node.etag };
+    if (!lws && cursor !== undefined) {
+      throw fail("bad-request", "GET", cursor.url, 400, {
+        message: "Solid listings have one page",
+      });
     }
     let page = 1;
     if (cursor !== undefined) {
@@ -473,12 +595,21 @@ export function createMemoryStorage(options: MemoryStorageOptions = {}): MemoryS
       page = Number(match[2]);
     }
     const start = (page - 1) * pageSize;
-    const slice = items.slice(start, start + pageSize);
+    const slice = lws ? items.slice(start, start + pageSize) : items;
+    // Match the raw representation returned by read(), including empty-container overhead.
+    // Capture the result before serialisation yields, preserving the listing's snapshot.
+    const entries = slice.map(entry);
+    const etag = node.etag;
+    if (maxBytes !== undefined) {
+      const { bytes } = await representation(node, page);
+      throwIfAborted("GET", cursor?.url ?? url, signal);
+      if (bytes.byteLength > maxBytes) throw listingTooLarge(cursor?.url ?? url, maxBytes);
+    }
     return {
-      items: slice.map(entry),
-      next: start + pageSize < items.length ? { url: `${url}?page=${page + 1}` } : null,
+      items: entries,
+      next: lws && start + pageSize < items.length ? { url: `${url}?page=${page + 1}` } : null,
       total: items.length,
-      etag: node.etag,
+      etag,
     };
   }
 
@@ -494,6 +625,12 @@ export function createMemoryStorage(options: MemoryStorageOptions = {}): MemoryS
       for (const link of moved.links) {
         if (within(link.anchor, from)) link.anchor = to + link.anchor.slice(from.length);
       }
+      moved.titles = new Map(
+        [...moved.titles].map(([anchor, title]) => [
+          within(anchor, from) ? to + anchor.slice(from.length) : anchor,
+          title,
+        ]),
+      );
       moved.url = url;
       moved.etag = nextEtag();
       moved.metaEtag = nextEtag();
@@ -534,15 +671,12 @@ export function createMemoryStorage(options: MemoryStorageOptions = {}): MemoryS
 
     async list(url, opts = {}) {
       begin("GET", url, opts.signal);
-      return listPage(url, opts.cursor);
+      validateListingMaxBytes(opts.maxBytes);
+      return listPage(url, opts.cursor, opts.maxBytes, opts.signal);
     },
 
     listAll(url, opts = {}) {
-      return paginate(
-        url,
-        async (cursor) => client.list(url, { cursor, signal: opts.signal }),
-        opts.signal,
-      );
+      return paginate(url, async (cursor) => client.list(url, { ...opts, cursor }), opts.signal);
     },
 
     async head(url, opts = {}) {
@@ -615,6 +749,7 @@ export function createMemoryStorage(options: MemoryStorageOptions = {}): MemoryS
       if (typeof opts?.contentType !== "string" || opts.contentType === "") {
         throw new TypeError(`PUT ${url}: contentType is required`);
       }
+      mutable("PUT", url);
       const ifMatch = conditional("PUT", url, opts.ifMatch, true);
       if (url.endsWith("/")) {
         throw fail("method-not-allowed", "PUT", url, 405, {
@@ -631,6 +766,7 @@ export function createMemoryStorage(options: MemoryStorageOptions = {}): MemoryS
         );
       }
       checkEtag("PUT", url, node, ifMatch);
+      validateKeepalive("PUT", url, body, opts.keepalive);
       const bytes = await toBytes(body, opts.signal, "PUT", url);
       throwIfAborted("PUT", url, opts.signal);
       if (node) {
@@ -638,7 +774,8 @@ export function createMemoryStorage(options: MemoryStorageOptions = {}): MemoryS
         node.contentType = opts.contentType;
         node.etag = nextEtag();
         node.modified = clock();
-        return { url, etag: node.etag, created: false };
+        recordVersion(node);
+        return { url, etag: node.etag, created: false, etagSource: "response" };
       }
       if (nodes.has(`${url}/`))
         throw fail("conflict", "PUT", url, 409, { message: `${url}/ is a container` });
@@ -654,10 +791,12 @@ export function createMemoryStorage(options: MemoryStorageOptions = {}): MemoryS
         modified: clock(),
         types: [],
         links: [],
+        titles: new Map(),
       };
       nodes.set(url, created);
       touch(created.parent);
-      return { url, etag: created.etag, created: true };
+      recordVersion(created);
+      return { url, etag: created.etag, created: true, etagSource: "response" };
     }),
 
     async writeRdf(url, dataset, opts) {
@@ -674,6 +813,44 @@ export function createMemoryStorage(options: MemoryStorageOptions = {}): MemoryS
 
     create: serial("POST", async (url, body, opts: CreateOptions = {}) => {
       begin("POST", url, opts.signal);
+      validateKeepalive("POST", url, body, opts.keepalive);
+      if (isTrashEndpoint(client, url)) {
+        const command = trashCommand(body);
+        const source = serviceUrl(
+          client,
+          "POST",
+          "resource" in command ? command.resource : command.restore,
+        );
+        mutable("POST", source);
+        const node = need("POST", source);
+        if (source === root) throw fail("method-not-allowed", "POST", source, 405);
+        if ("resource" in command) {
+          if (node.original !== undefined) throw fail("conflict", "POST", source, 409);
+          const oldParent = node.parent;
+          const dest = freeUrl(url, slug(), node.kind);
+          relocate(node, source, dest, url);
+          node.original = source;
+          node.trashedAt = clock();
+          touch(oldParent);
+          touch(url);
+          return { url: dest, etag: node.etag, created: true };
+        }
+        if (node.original === undefined || node.parent !== url)
+          throw fail("not-found", "POST", source, 404);
+        const original = node.original;
+        const parent = pathParent(original, root) as string;
+        container("POST", parent);
+        const dest = lws ? freeUrl(parent, slug(), node.kind, original) : original;
+        if (nodes.has(dest) || nodes.has(`${dest}/`) || nodes.has(dest.replace(/\/$/, "")))
+          throw fail("conflict", "POST", source, 409);
+        relocate(node, source, dest, parent);
+        delete node.original;
+        delete node.trashedAt;
+        touch(url);
+        touch(parent);
+        return { url: dest, etag: node.etag, created: true };
+      }
+      mutable("POST", url);
       const parent = container("POST", url);
       const kind = opts.kind ?? "resource";
       if (
@@ -708,17 +885,20 @@ export function createMemoryStorage(options: MemoryStorageOptions = {}): MemoryS
         metaEtag: nextEtag(),
         modified: clock(),
         types: links.filter((link) => link.rel === "type").map((link) => link.target),
+        titles: new Map(),
         links: links
           .filter((link) => !LWS_SERVER_RELS.has(link.rel))
           .map((link) => ({ anchor: target, rel: link.rel, href: link.target })),
       };
       nodes.set(target, created);
       touch(parent.url);
-      return { url: target, etag: created.etag, created: true };
+      recordVersion(created);
+      return { url: target, etag: created.etag, created: true, etagSource: "response" };
     }),
 
     patch: serial("PATCH", async (url, patch: Patch, opts) => {
       begin("PATCH", url, opts?.signal);
+      mutable("PATCH", url);
       const ifMatch = conditional("PATCH", url, opts?.ifMatch);
       const node = need("PATCH", url);
       checkEtag("PATCH", url, node, ifMatch);
@@ -817,12 +997,15 @@ export function createMemoryStorage(options: MemoryStorageOptions = {}): MemoryS
       node.body = bytes;
       node.etag = nextEtag();
       node.modified = clock();
+      recordVersion(node);
       return { url, etag: node.etag, created: false };
     }),
 
     move: serial("MOVE", async (url, destination, opts = {}) => {
       begin("MOVE", url, opts.signal);
       begin("MOVE", destination, opts.signal);
+      mutable("MOVE", url);
+      mutable("MOVE", destination);
       if (lws && !moveResource) {
         throw fail("unsupported", "MOVE", url, null, {
           feature: "move",
@@ -866,6 +1049,7 @@ export function createMemoryStorage(options: MemoryStorageOptions = {}): MemoryS
 
     delete: serial("DELETE", async (url, opts = {}) => {
       begin("DELETE", url, opts.signal);
+      mutable("DELETE", url);
       const ifMatch = conditional("DELETE", url, opts.ifMatch);
       const node = need("DELETE", url);
       if (url === root) throw fail("method-not-allowed", "DELETE", url, 405);
@@ -883,31 +1067,68 @@ export function createMemoryStorage(options: MemoryStorageOptions = {}): MemoryS
       const links = new Map<string, Map<string, MetadataLink[]>>();
       const add = (anchor: string, rel: string, href: string) => {
         const rels = links.get(anchor) ?? new Map<string, MetadataLink[]>();
-        rels.set(rel, [...(rels.get(rel) ?? []), { href, params: {} }]);
+        const target: MetadataLink = { href, params: {} };
+        rels.set(rel, [...(rels.get(rel) ?? []), target]);
         links.set(anchor, rels);
+        return target;
       };
       if (lws) {
         for (const [rel, targets] of headerLinks(node)) {
           if (rel !== "linkset") for (const { target } of targets) add(url, rel, target);
         }
       }
-      for (const link of node.links) add(link.anchor, link.rel, link.href);
+      const originalRel = lws ? "original" : `${IANA_REL}original`;
+      // Hide colliding user links while trashed, retaining them for restoration.
+      const userLinks =
+        node.original === undefined
+          ? node.links
+          : node.links.filter((link) => link.anchor !== url || link.rel !== originalRel);
+      for (const link of userLinks) {
+        const target = add(link.anchor, link.rel, link.href);
+        if (lws && link.title !== undefined) target.params.title = link.title;
+      }
+      if (node.original !== undefined) {
+        const original = add(url, originalRel, node.original);
+        if (lws) original.params.modified = new Date(node.trashedAt as number).toISOString();
+      }
       let raw: unknown;
       if (lws) {
         raw = {
           linkset: [...links].map(([anchor, rels]) => ({
             anchor,
             ...Object.fromEntries(
-              [...rels].map(([rel, targets]) => [rel, targets.map(({ href }) => ({ href }))]),
+              [...rels].map(([rel, targets]) => [
+                rel,
+                targets.map(({ href, params }) => ({ href, ...params })),
+              ]),
             ),
           })),
         };
       } else {
         const { namedNode, quad } = DataFactory;
         raw = new Store(
-          node.links.map((link) =>
+          userLinks.map((link) =>
             quad(namedNode(link.anchor), namedNode(link.rel), namedNode(link.href)),
           ),
+        );
+      }
+      if (!lws) {
+        for (const [anchor, title] of node.titles)
+          RequiredAs.object(
+            new Resource(anchor, raw as Store, DataFactory),
+            "http://purl.org/dc/terms/title",
+            title,
+            LiteralFrom.string,
+          );
+      }
+      if (!lws && node.original !== undefined) {
+        const resource = new Resource(url, raw as Store, DataFactory);
+        RequiredAs.object(resource, `${IANA_REL}original`, node.original, NamedNodeFrom.string);
+        RequiredAs.object(
+          resource,
+          "http://purl.org/dc/terms/modified",
+          new Date(node.trashedAt as number),
+          LiteralFrom.dateTime,
         );
       }
       return { url: metadataUrl(url), etag: node.metaEtag, links, raw };
@@ -915,13 +1136,17 @@ export function createMemoryStorage(options: MemoryStorageOptions = {}): MemoryS
 
     setMetadata: serial("PATCH", async (url, ops: readonly MetadataOp[], opts) => {
       begin("PATCH", metadataUrl(url));
+      mutable("PATCH", url);
       const ifMatch = conditional("PATCH", metadataUrl(url), opts?.ifMatch);
       const node = need("PATCH", url);
       if (ifMatch !== undefined && ifMatch !== "*" && ifMatch !== node.metaEtag) {
         throw fail("precondition-failed", "PATCH", metadataUrl(url), 412, { etag: node.metaEtag });
       }
       const next = [...node.links];
+      const titles = new Map(node.titles);
       for (const op of ops) {
+        if (op.title !== undefined && typeof op.title !== "string")
+          throw new TypeError("title must be a string");
         const anchor = op.anchor ?? url;
         if (!isWithin(anchor, root)) throw fail("scope", "PATCH", anchor, null);
         if (lws && LWS_SERVER_RELS.has(op.rel)) {
@@ -934,10 +1159,25 @@ export function createMemoryStorage(options: MemoryStorageOptions = {}): MemoryS
         const index = next.findIndex(
           (link) => link.anchor === anchor && link.rel === rel && link.href === op.href,
         );
-        if (op.op === "add" && index === -1) next.push({ anchor, rel, href: op.href });
+        if (op.op === "add") {
+          if (index === -1)
+            next.push({
+              anchor,
+              rel,
+              href: op.href,
+              ...(!lws || op.title === undefined ? {} : { title: op.title }),
+            });
+          else if (lws && op.title !== undefined)
+            next[index] = { ...(next[index] as UserLink), title: op.title };
+        }
         if (op.op === "remove" && index !== -1) next.splice(index, 1);
+        if (!lws && op.title !== undefined) {
+          if (op.op === "add") titles.set(anchor, op.title);
+          else if (titles.get(anchor) === op.title) titles.delete(anchor);
+        }
       }
       node.links = next;
+      node.titles = titles;
       node.metaEtag = nextEtag();
       return { etag: node.metaEtag };
     }),

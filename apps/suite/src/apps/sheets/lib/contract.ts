@@ -1,4 +1,6 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 /**
  * The Sheets app's two seams (SHT-01), shared by the data layer and the editor UI:
@@ -18,10 +20,16 @@
  * Both are interfaces so the UI can be exercised against fakes in unit tests.
  */
 
+import type { DraftAnchor } from "./comments/anchors";
+import type { CellAnchor } from "./comments/selector";
 import type { WorkbookMetadata } from "./model/rdf";
 import type { Snapshot } from "./model/snapshot";
+import type { StructuralEdit } from "./refs/model";
 
 export type { Snapshot, WorkbookMetadata };
+
+/** The exact snapshot accepted by the authoritative workbook write and its ETag. */
+export type SnapshotSaved = (snapshot: Snapshot, revision: string) => void;
 
 /** One row in the Sheets list. */
 export interface WorkbookSummary {
@@ -51,6 +59,8 @@ export interface WorkbookVersion {
 }
 
 export interface OpenedWorkbook {
+  /** Confirmed lack of write access; missing permission hints remain unknown. */
+  readonly readOnly?: boolean;
   readonly container: string;
   readonly metadata: WorkbookMetadata;
   readonly snapshot: Snapshot;
@@ -96,6 +106,16 @@ export class WorkbookNotFoundError extends Error {
   }
 }
 
+/** Unsafe shared link or a shared resource that cannot be opened anonymously. */
+export class WorkbookLinkError extends Error {
+  constructor(
+    message = "Shared spreadsheets must use a container URL on the same origin as your pod.",
+  ) {
+    super(message);
+    this.name = "WorkbookLinkError";
+  }
+}
+
 export interface CreateWorkbookInput {
   readonly title: string;
   /** Engine snapshot; omitted means one empty sheet named "Sheet1". */
@@ -117,7 +137,11 @@ export interface WorkbookService {
   create(input: CreateWorkbookInput): Promise<OpenedWorkbook>;
   /** Imports every CSV field as text into a one-sheet workbook (formulas are not executed). */
   createFromCsv(input: CreateFromCsvInput): Promise<OpenedWorkbook>;
+  /** Imports a browser-read Excel workbook, preserving supported formats and formulas. */
+  createFromXlsx(input: { title: string; data: Uint8Array }): Promise<OpenedWorkbook>;
   open(container: string): Promise<OpenedWorkbook>;
+  /** Public same-origin shared links only; anonymous and view-only, with no redirects. */
+  openShared(container: string): Promise<OpenedWorkbook>;
   /**
    * Writes `workbook.json` with If-Match `base.snapshotEtag` (a freshly read ETag
    * when `force`); that guarded snapshot write owns the revision. Derived CSVs and
@@ -147,6 +171,8 @@ export interface WorkbookService {
 
 export interface WorkbookServiceOptions {
   readonly fetch: typeof globalThis.fetch;
+  /** Pristine, credential-free transport for public shared workbooks. Defaults to global fetch. */
+  readonly publicFetch?: typeof globalThis.fetch;
   /** Storage root (ends in `/`). */
   readonly podRoot: string;
   readonly webId: string;
@@ -160,9 +186,37 @@ export interface ActiveSheet {
   readonly name: string;
 }
 
+export type CsvImportResult =
+  | { status: "imported" }
+  | { status: "blocked"; reason: "comments-loading" | "read-only" };
+
 export interface SheetEngine {
+  /** Hold editing independently of access permissions while missing anchors load. */
+  setCommentsLoading?(loading: boolean): void;
+  /** Listed selectors replay only history after their recorded workbook ETag. */
+  registerCommentAnchors?(
+    anchors: Record<string, CellAnchor>,
+    position?: "snapshot" | "current",
+    revisions?: Record<string, string | undefined>,
+  ): void;
+  /** Last saved workbook ETag, recorded on new comment annotations. */
+  commentRevision?(): string | undefined;
+  /** Acknowledge the exact saved snapshot, even if editing continued during its write. */
+  setWorkbookRevision?(revision: string, snapshot: Snapshot): void;
+  trackCommentDraft?(anchor: CellAnchor): DraftAnchor;
+  selectedCell?(): CellAnchor | undefined;
+  selectCell?(anchor: CellAnchor): void;
+  onSelection?(listener: (anchor: CellAnchor | undefined) => void): () => void;
+  onStructure?(listener: (edit: StructuralEdit) => void): () => void;
+
+  /** App-owned chart metadata is retained beside the engine snapshot. */
+  setCharts?(charts: import("./model/snapshot").JsonValue): void;
+  /** Current rectangular selection, local to the active sheet. */
+  selection?(): { sheetId: string; range: string };
+  /** Includes background formula results, without scheduling another save. */
+  onValuesChange?(listener: () => void): () => void;
   /** Replace the whole workbook (e.g. "reload theirs" after a conflict). Does not fire `onChange`. */
-  load(snapshot: Snapshot): void;
+  load(snapshot: Snapshot, workbookRevision?: string): void;
   /** The current workbook as a JSON-safe snapshot (passes `serializeSnapshot`). */
   snapshot(): Snapshot;
   /** Fires after every user mutation (cell edit, format, sheet add/rename/move/delete…). */
@@ -170,13 +224,20 @@ export interface SheetEngine {
   /** CSV of one sheet (default: the active sheet), cached formula results as values. */
   exportCsv(sheetId?: string): string;
   activeSheet(): ActiveSheet;
-  /** Adds a sheet with the CSV as text cells, or replaces the active sheet's cells. */
-  importCsv(csv: string, options: { mode: "new-sheet" | "replace-active"; name?: string }): void;
+  /** Adds text cells or explicitly reports a loading/access lock so the caller can retry. */
+  importCsv(
+    csv: string,
+    options: { mode: "new-sheet" | "replace-active"; name?: string },
+  ): CsvImportResult;
   setDark(dark: boolean): void;
+  setReadOnly(readOnly: boolean): void;
   dispose(): void;
 }
 
 export interface MountEngineOptions {
+  readonly workbookRevision?: string;
+  readonly commentsLoading?: boolean;
+  readonly readOnly?: boolean;
   readonly snapshot: Snapshot;
   readonly dark: boolean;
   /** Narrow viewport (< 640 px): no ribbon toolbar; formula bar, grid and sheet tabs only. */

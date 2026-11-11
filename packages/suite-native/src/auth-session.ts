@@ -22,32 +22,52 @@ export const USER_CANCELLED = "USER_CANCELLED";
 /** ADR-004 D2 `ui.getCode`: hand over an authorization URL, receive the authorization code. */
 export type GetCode = (authorizationUrl: URL, signal: AbortSignal) => Promise<string>;
 
-export interface NativeCodeDriverOptions {
+interface DriverBase {
   plugin: AuthSessionPlugin;
   /** Private-use scheme redirect (RFC 8252 §7.1), e.g. `org.jeswr.suite:/oauth/callback`. */
   redirectUri: string;
-  /**
-   * The issuer identifier of the authorization server behind an authorization URL, from the
-   * metadata pod-auth discovered. Mix-up defence (RFC 9207, Solid-OIDC §8): the callback must
-   * carry exactly one `iss` equal to it.
-   */
-  resolveIssuer(authorizationUrl: URL): string | Promise<string>;
   /** Accept `http://localhost` / loopback authorization endpoints (local CSS in development only). */
   allowInsecureLoopback?: boolean;
 }
+export type NativeCodeDriverOptions = DriverBase &
+  (
+    | {
+        /** Resolve with the authorization code only (the original ADR-004 D2 contract). */
+        returns?: "code";
+        /**
+         * The issuer identifier of the authorization server behind an authorization URL, from the
+         * metadata pod-auth discovered. Mix-up defence (RFC 9207, Solid-OIDC §8): the callback must
+         * carry exactly one `iss` equal to it.
+         */
+        resolveIssuer(authorizationUrl: URL): string | Promise<string>;
+      }
+    | {
+        /**
+         * Resolve with the whole validated callback URL, for pod-auth's current `ui.getCode`, which
+         * runs RFC 9207 validation itself against the issuer metadata of the pending request. The
+         * driver still requires exactly one `iss`, so a missing one can never pass as legacy mode;
+         * with `resolveIssuer` it also checks the value before handing the URL over. An error
+         * callback is handed over too, so pod-auth rejects it after its own issuer check.
+         */
+        returns: "callback";
+        resolveIssuer?(authorizationUrl: URL): string | Promise<string>;
+      }
+  );
 
 const SCHEME = /^[a-z][a-z0-9+.-]*\.[a-z0-9+.-]*[a-z0-9]$/;
 const RESERVED_SCHEMES = new Set(["http", "https", "file", "data", "javascript", "blob", "about"]);
 const LOOPBACK = new Set(["localhost", "127.0.0.1", "[::1]"]);
+const ERROR_CODE = /^[\x20\x21\x23-\x5b\x5d-\x7e]{1,128}$/;
+const ERROR_DESCRIPTION = /^[\x20\x21\x23-\x5b\x5d-\x7e]{1,500}$/;
 
-interface Redirect {
+export interface Redirect {
   href: string;
   scheme: string;
   protocol: string;
   pathname: string;
 }
 
-function parseRedirect(redirectUri: string): Redirect {
+export function parseRedirect(redirectUri: string): Redirect {
   let url: URL;
   try {
     url = new URL(redirectUri);
@@ -90,6 +110,11 @@ function checkAuthorizationUrl(url: URL, redirect: Redirect, allowLoopback: bool
   if (single(params, "code_challenge_method", bad("needs code_challenge_method")) !== "S256") {
     throw bad("must use PKCE S256")();
   }
+  // A request object (JAR) or pushed request (PAR) would carry its own
+  // redirect_uri, PKCE method and state, making the checks above vacuous.
+  if (params.has("request") || params.has("request_uri")) {
+    throw bad("must not use a request object or request_uri")();
+  }
   const modes = params.getAll("response_mode");
   if (modes.length > 1 || (modes.length === 1 && modes[0] !== "query")) {
     throw bad("must use the query response mode")();
@@ -97,7 +122,13 @@ function checkAuthorizationUrl(url: URL, redirect: Redirect, allowLoopback: bool
   return single(params, "state", bad("needs one state"));
 }
 
-function checkCallback(raw: string, redirect: Redirect, state: string, issuer: string) {
+function checkCallback(
+  raw: string,
+  redirect: Redirect,
+  state: string,
+  issuer: string | undefined,
+  deferError: boolean,
+): { url: URL; code: string | undefined } {
   const bad = (why: string) => () => new AuthorizationRequestError(`Callback ${why}`);
   let url: URL;
   try {
@@ -113,14 +144,28 @@ function checkCallback(raw: string, redirect: Redirect, state: string, issuer: s
   const returned = params.getAll("state");
   if (returned.length !== 1 || returned[0] !== state)
     throw new StateMismatchError("State mismatch");
-  if (single(params, "iss", bad("needs exactly one iss")) !== issuer) {
+  const iss = single(params, "iss", bad("needs exactly one iss"));
+  if (issuer !== undefined && iss !== issuer) {
     throw bad("iss does not match the authorization server")();
   }
+  // In callback mode pod-auth validates the whole response, so an error callback reaches it
+  // and is rejected only after its RFC 9207 issuer check (sst-o1zg).
+  if (params.has("error") && deferError) return { url, code: undefined };
   if (params.has("error")) {
+    // RFC 6749 §4.1.2.1 limits both fields to %x20-21 / %x23-5B / %x5D-7E; the
+    // identity provider is the user's choice, so its text is bounded before it
+    // reaches an Error message a UI may show.
     const code = single(params, "error", bad("carries a malformed error"));
-    throw new AuthorizationError(code, params.get("error_description") ?? undefined);
+    if (!ERROR_CODE.test(code)) throw bad("carries a malformed error")();
+    const description = params.getAll("error_description");
+    throw new AuthorizationError(
+      code,
+      description.length === 1 && ERROR_DESCRIPTION.test(description[0] as string)
+        ? description[0]
+        : undefined,
+    );
   }
-  return single(params, "code", bad("needs exactly one code"));
+  return { url, code: single(params, "code", bad("needs exactly one code")) };
 }
 
 function abortError(): DOMException {
@@ -132,17 +177,21 @@ function abortError(): DOMException {
  * `SuiteAuthSession` plugin and returns the authorization code. Fails closed on any request or
  * callback that does not match the configured redirect, PKCE S256, the request's `state` and the
  * resolved issuer.
- * Only the code leaves this function; PKCE verifier, DPoP and tokens stay in pod-auth.
+ * Only the code (or, with `returns: "callback"`, the validated callback URL holding it) leaves
+ * this function; PKCE verifier, DPoP and tokens stay in pod-auth.
  */
 export function createNativeCodeDriver(options: NativeCodeDriverOptions): GetCode {
   const redirect = parseRedirect(options.redirectUri);
   const { plugin } = options;
   const allowLoopback = options.allowInsecureLoopback === true;
   let busy = false;
-  const resolve = async (authorizationUrl: URL): Promise<string> => {
+  const callback = options.returns === "callback";
+  const resolveIssuer = options.resolveIssuer;
+  const resolve = async (authorizationUrl: URL): Promise<string | undefined> => {
+    if (!resolveIssuer) return undefined;
     let issuer: unknown;
     try {
-      issuer = await options.resolveIssuer(authorizationUrl);
+      issuer = await resolveIssuer(authorizationUrl);
     } catch {
       throw new AuthorizationRequestError("Unknown authorization server");
     }
@@ -182,7 +231,8 @@ export function createNativeCodeDriver(options: NativeCodeDriverOptions): GetCod
         }
         throw new NativeAuthError("The system browser sign-in failed");
       }
-      return checkCallback(String(result?.url), redirect, state, issuer);
+      const checked = checkCallback(String(result?.url), redirect, state, issuer, callback);
+      return callback ? checked.url.href : (checked.code as string);
     })();
     // A result that arrives after an abort is dropped.
     work.catch(() => undefined);

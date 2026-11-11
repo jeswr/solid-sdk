@@ -13,6 +13,7 @@
  * stays the default. When no edit map exists for the matched view (or no viewer
  * matches), it falls back to a resolved auto-form over the document's subjects.
  */
+import { useSession } from "@/components/session-provider";
 import { useMemo } from "react";
 import type { LoadedResource } from "@/components/use-resource";
 import { editableSubjects } from "@/lib/forms/editable-subjects";
@@ -28,6 +29,7 @@ export interface EditableTypedViewProps {
 }
 
 export function EditableTypedView({ resource, onReload }: EditableTypedViewProps) {
+  const { podFetch } = useSession();
   const editable = useMemo(() => {
     if (!resource.dataset) return undefined;
     return editableSubjects(resource.url, resource.dataset, resource.categoryId);
@@ -53,6 +55,7 @@ export function EditableTypedView({ resource, onReload }: EditableTypedViewProps
               <p className="text-sm font-medium leading-tight">{subject.label}</p>
             )}
             <FormRenderer
+              fetchImpl={podFetch}
               url={resource.url}
               dataset={resource.dataset!}
               subject={subject.id}

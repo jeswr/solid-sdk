@@ -8,6 +8,7 @@ import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { atomNames, type FixtureName, primitiveNames } from "./fixture-names";
 import { ShellSearchFixture } from "./global-search/fixture";
+import { PrimitiveStates } from "./primitive-states";
 import { SyncFixtures } from "./sync-fixtures";
 
 function Field({ label, children }: { label: string; children: (id: string) => ReactNode }) {
@@ -284,6 +285,7 @@ function Primitives({ name }: { name: string }) {
             <Ui.ContextMenuItem>Open file</Ui.ContextMenuItem>
             <Ui.ContextMenuItem>Rename</Ui.ContextMenuItem>
             <Ui.ContextMenuItem disabled>Move to trash</Ui.ContextMenuItem>
+            <PrimitiveStates name="context-menu-items" />
           </Ui.ContextMenuContent>
         </Ui.ContextMenu>
       );
@@ -298,6 +300,7 @@ function Primitives({ name }: { name: string }) {
               <Ui.CommandItem>Upload a file</Ui.CommandItem>
               <Ui.CommandItem disabled>Share offline</Ui.CommandItem>
             </Ui.CommandGroup>
+            <PrimitiveStates name="command-items" />
           </Ui.CommandList>
         </Ui.Command>
       );
@@ -721,7 +724,10 @@ export function FixtureCatalog({ name }: { name: FixtureName }) {
                     {atomNames.includes(component as (typeof atomNames)[number]) ? (
                       <Atoms name={component} />
                     ) : (
-                      <Primitives name={component} />
+                      <>
+                        <Primitives name={component} />
+                        <PrimitiveStates name={component} />
+                      </>
                     )}
                   </div>
                 </section>

@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { describe, expect, it } from "vitest";
 import {
   capabilityRows,
@@ -47,6 +48,11 @@ describe("storage capabilities", () => {
 });
 
 describe("per-account preferences", () => {
+  it("defaults to Home while preserving an explicitly chosen start page", () => {
+    expect(defaultPreferences.startPage).toBe("/home");
+    expect(parsePreferences('{"startPage":"invalid"}').startPage).toBe("/home");
+    expect(parsePreferences('{"startPage":"/drive"}').startPage).toBe("/drive");
+  });
   it.each([null, "{", "null", "[]", "42", '"text"'])("tolerates %s", (raw) => {
     expect(parsePreferences(raw)).toEqual(defaultPreferences);
   });

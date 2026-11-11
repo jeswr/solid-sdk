@@ -1,6 +1,9 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex
+// AUTHORED-BY Claude Opus 5.5
 // @vitest-environment jsdom
 
+import type { GrantSnapshot } from "@jeswr/pod-access/roles";
 import { serialize } from "@jeswr/rdf-serialize";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 // Reuse the workspace's installed UI test tooling; this app adds no dependencies.
@@ -16,12 +19,14 @@ import userEvent from "../../../packages/suite-ui/node_modules/@testing-library/
 import { ShareDialog } from "../src/apps/drive/components/share-dialog";
 import {
   applySharing,
+  CONTENTS_DIFFER,
   loadSharing,
   SharingConflictError,
+  SharingIncompleteError,
   SharingRefreshError,
   type SharingSession,
   type SharingSnapshot,
-} from "../src/apps/drive/lib/sharing/apply";
+} from "../src/apps/drive/lib/sharing/adapter";
 import type { SharingState } from "../src/apps/drive/lib/sharing/types";
 import { createDemoPod } from "../src/lib/demo-pod/pod";
 import {
@@ -35,8 +40,8 @@ import {
   policy,
 } from "./sharing-fixtures";
 
-vi.mock("../src/apps/drive/lib/sharing/apply", async (original) => ({
-  ...(await original<typeof import("../src/apps/drive/lib/sharing/apply")>()),
+vi.mock("../src/apps/drive/lib/sharing/adapter", async (original) => ({
+  ...(await original<typeof import("../src/apps/drive/lib/sharing/adapter")>()),
   loadSharing: vi.fn(),
   applySharing: vi.fn(),
 }));
@@ -52,15 +57,9 @@ const state: SharingState = {
   general: { inherited: false, explicit: false, sources: [] },
 };
 function snapshot(next = state, canManage = true): SharingSnapshot {
-  const own = accessDocument();
-  return {
-    input: { access: { resource: FILE, documents: [own] } },
-    own,
-    ownExists: true,
-    state: next,
-    canManage,
-    etags: new Map(),
-  };
+  // The SDK token is opaque; the mocked adapter never inspects it.
+  const grants = { url: FILE, grants: [], version: "test" } as unknown as GrantSnapshot;
+  return { resource: FILE, grants, state: next, canManage, contentsDiffer: false };
 }
 const session: SharingSession = { fetch, webId: ALICE, storageUrl: "https://example.org/" };
 const onClose = vi.fn();
@@ -222,6 +221,60 @@ it("shows load failures, retries, and reports clipboard errors", async () => {
   await screen.findByText("Couldn't copy the link. Try again.");
 });
 
+it("enables folder editing and warns about independent item sharing before saving", async () => {
+  load.mockResolvedValue({ ...snapshot(), resource: "https://example.org/drive/Work/" });
+  show({ item: { name: "Work", url: "https://example.org/drive/Work/" } });
+  await ready();
+  expect(screen.getByText(CONTENTS_DIFFER).getAttribute("role")).toBe("note");
+  expect(CONTENTS_DIFFER).toContain("have their own sharing won't change");
+  expect((screen.getByLabelText(`Role for ${BOB}`) as HTMLSelectElement).disabled).toBe(false);
+  expect((screen.getByLabelText("Who can access") as HTMLSelectElement).disabled).toBe(false);
+  fireEvent.change(screen.getByLabelText(`Role for ${BOB}`), { target: { value: "editor" } });
+  await screen.findByText("Sharing saved");
+  expect(apply).toHaveBeenCalledWith(
+    session,
+    expect.objectContaining({ canManage: true }),
+    expect.objectContaining({ people: expect.arrayContaining([{ webId: BOB, role: "editor" }]) }),
+  );
+});
+
+it("shows a supplied read-only reason with editing disabled", async () => {
+  const readOnly = "Sharing is unavailable for this item";
+  load.mockResolvedValue({ ...snapshot(state, false), readOnly });
+  show();
+  await ready();
+  expect(screen.getByText(readOnly).getAttribute("role")).toBe("status");
+  expect((screen.getByLabelText("Who can access") as HTMLSelectElement).disabled).toBe(true);
+});
+
+it("notes when a folder's contents are shared differently from the folder", async () => {
+  load.mockResolvedValue({
+    ...snapshot(state, false),
+    contentsDiffer: true,
+  });
+  show();
+  await ready();
+  expect(screen.getByText(CONTENTS_DIFFER).getAttribute("role")).toBe("note");
+  expect(CONTENTS_DIFFER).toMatch(/own sharing won't change/);
+});
+
+it("shows the reloaded access, not a save, when the selection was only partly applied", async () => {
+  const fresh = snapshot(state);
+  apply.mockRejectedValueOnce(new SharingIncompleteError(fresh, [BOB]));
+  show();
+  await ready();
+  fireEvent.click(screen.getByRole("button", { name: `Remove access for ${BOB}` }));
+  await screen.findByText(
+    `Sharing wasn't saved as chosen for ${BOB}. The current access is shown; review it and try again.`,
+  );
+  // Bob still has access in the reloaded state, so his row stays.
+  expect(screen.getByLabelText(`Role for ${BOB}`)).toBeTruthy();
+  expect(screen.queryByText("Sharing saved")).toBeNull();
+  expect(screen.getByText("Sharing not saved as chosen")).toBeTruthy();
+  expect(onSaved).toHaveBeenCalledOnce();
+  expect(screen.queryByRole("button", { name: "Retry" })).toBeNull();
+});
+
 it("reloads and displays the exact conflict message without retrying a save", async () => {
   apply.mockRejectedValueOnce(
     new SharingConflictError(
@@ -231,7 +284,27 @@ it("reloads and displays the exact conflict message without retrying a save", as
   show();
   await ready();
   fireEvent.click(screen.getByRole("button", { name: `Remove access for ${BOB}` }));
-  await screen.findByText("Sharing changed elsewhere, review and try again");
+  await screen.findByText(
+    "Sharing changed since you opened it. The current access is shown; review it and try again.",
+  );
+  expect(screen.queryByLabelText(`Role for ${BOB}`)).toBeNull();
+  expect(screen.queryByRole("button", { name: "Retry" })).toBeNull();
+  expect(apply).toHaveBeenCalledOnce();
+});
+
+it("clears stale controls on an unreadable conflict and reloads only on request", async () => {
+  apply.mockRejectedValueOnce(new SharingConflictError());
+  show();
+  await ready();
+  fireEvent.change(screen.getByLabelText(`Role for ${BOB}`), { target: { value: "editor" } });
+  await screen.findByText(/Sharing changed since you opened it. Reload to see the current access/);
+  expect(screen.queryByRole("region", { name: "People with access" })).toBeNull();
+  expect(onSaved).not.toHaveBeenCalled();
+  load.mockResolvedValueOnce(
+    snapshot({ ...state, people: state.people.filter((p) => p.webId !== BOB) }),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+  await ready();
   expect(screen.queryByLabelText(`Role for ${BOB}`)).toBeNull();
   expect(apply).toHaveBeenCalledOnce();
 });
@@ -314,16 +387,18 @@ it("invalidates stale permissions after a committed save and retries only the re
   show();
   await ready();
   fireEvent.change(screen.getByLabelText("Who can access"), { target: { value: "anyone" } });
-  await screen.findByText(/Sharing was saved, but current access couldn't be reloaded/);
+  await screen.findByText(/sharing change was sent, but current access couldn't be reloaded/);
   expect(screen.queryByRole("region", { name: "General access" })).toBeNull();
   expect(screen.queryByRole("region", { name: "People with access" })).toBeNull();
-  expect(screen.getByText("Sharing saved")).toBeTruthy();
+  // Unverified access is never announced as saved.
+  expect(screen.queryByText("Sharing saved")).toBeNull();
+  expect(screen.getByText("Sharing not confirmed")).toBeTruthy();
   expect(onSaved).toHaveBeenCalledOnce();
   load.mockRejectedValueOnce(new Error("Still unavailable"));
   fireEvent.click(screen.getByRole("button", { name: "Retry" }));
   await screen.findByText("Still unavailable");
   expect(screen.queryByLabelText("Who can access")).toBeNull();
-  expect(screen.getByText("Sharing saved")).toBeTruthy();
+  expect(screen.getByText("Sharing not confirmed")).toBeTruthy();
   load.mockResolvedValueOnce(snapshot({ ...state, link: "viewer", public: "viewer" }));
   fireEvent.click(screen.getByRole("button", { name: "Retry" }));
   await ready();
@@ -358,8 +433,8 @@ it.each(
   model,
   wasPublic,
 }) => {
-  const actual = await vi.importActual<typeof import("../src/apps/drive/lib/sharing/apply")>(
-    "../src/apps/drive/lib/sharing/apply",
+  const actual = await vi.importActual<typeof import("../src/apps/drive/lib/sharing/adapter")>(
+    "../src/apps/drive/lib/sharing/adapter",
   );
   const pod = createDemoPod({ root: session.storageUrl });
   await pod.fetch(FILE, { method: "PUT", body: "report" });
@@ -368,8 +443,8 @@ it.each(
     authorization(doc, ALICE, ["Read", "Write", "Control"]);
     if (wasPublic) authorization(doc, PUBLIC, ["Read"]);
   } else {
-    policy(doc, ALICE, ["Read", "Write"]);
-    policy(doc, ALICE, ["Read", "Write"], doc.source);
+    // CSS ACP managers hold resource Control (the SDK's default dialect).
+    policy(doc, ALICE, ["Read", "Write", "Control"]);
     if (wasPublic) policy(doc, PUBLIC, ["Read"]);
   }
   await pod.fetch(doc.source, {
@@ -459,4 +534,51 @@ it("keeps an Editor removal open on Escape until a rejected PUT is reported", as
   await act(async () => reject(new Error("Couldn't save sharing (403)")));
   await screen.findByText("Couldn't save sharing (403)");
   expect((screen.getByLabelText(`Role for ${BOB}`) as HTMLSelectElement).value).toBe("editor");
+});
+
+it("returns focus stranded by a save to the control, or to Done when the control is gone", async () => {
+  show();
+  await ready();
+  const done = screen.getByRole("button", { name: "Done" });
+  // A removal deletes its own trigger, so focus moves to Done.
+  const remove = screen.getByRole("button", { name: `Remove access for ${BOB}` });
+  remove.focus();
+  fireEvent.click(remove);
+  await waitFor(() => expect(document.activeElement).toBe(done));
+  // A control that survives the save gets its focus back.
+  const general = screen.getByLabelText("Who can access");
+  general.focus();
+  const focusGeneral = vi.spyOn(general, "focus");
+  fireEvent.change(general, { target: { value: "anyone" } });
+  // While saving, the disabled control loses focus to the body (see the Share case below).
+  const stranded = vi.spyOn(document, "activeElement", "get").mockReturnValue(document.body);
+  await screen.findByLabelText("Link role");
+  await waitFor(() => expect(focusGeneral).toHaveBeenCalled());
+  stranded.mockRestore();
+  expect(document.activeElement).toBe(general);
+  // Focus the user moved elsewhere during the save stays where they put it.
+  const linkRole = screen.getByLabelText("Link role");
+  linkRole.focus();
+  fireEvent.change(linkRole, { target: { value: "editor" } });
+  const copy = screen.getByRole("button", { name: "Copy link" });
+  copy.focus();
+  await waitFor(() => expect(apply).toHaveBeenCalledTimes(3));
+  await waitFor(() => expect((linkRole as HTMLSelectElement).disabled).toBe(false));
+  expect(document.activeElement).toBe(copy);
+  // A successful add leaves Share disabled, so focus moves to Done.
+  fireEvent.change(screen.getByRole("combobox", { name: "Add people" }), {
+    target: { value: "https://example.org/carol#me" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Add person" }));
+  const share = screen.getByRole("button", { name: "Share" });
+  share.focus();
+  // Chrome drops focus to the body when a focused control becomes disabled, without a
+  // focusout the modal's focus scope could react to; jsdom keeps it, so report the body.
+  const focusDone = vi.spyOn(done, "focus");
+  fireEvent.click(share);
+  const active = vi.spyOn(document, "activeElement", "get").mockReturnValue(document.body);
+  await screen.findByLabelText("Role for https://example.org/carol#me");
+  await waitFor(() => expect(focusDone).toHaveBeenCalled());
+  active.mockRestore();
+  expect(share).toHaveProperty("disabled", true);
 });

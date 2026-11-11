@@ -3,11 +3,22 @@
 // Solid mutations (ADR-003 §6, T-022); the read side stays in solid-backend.ts.
 import type { DatasetCore, Quad } from "@jeswr/fetch-rdf";
 import { escapeIri } from "@jeswr/rdf-serialize";
+import {
+  LiteralAs,
+  LiteralFrom,
+  NamedGraphDataset,
+  NamedNodeAs,
+  NamedNodeFrom,
+  RequiredAs,
+  SetFrom,
+  TermWrapper,
+} from "@rdfjs/wrapper";
 import { DataFactory, Store } from "n3";
 import { StorageError, type StorageErrorCode, storageErrorFrom } from "./errors.js";
 import { discard, scoped, send } from "./http.js";
 import { pathParent, throwIfAborted } from "./internal.js";
 import { serializeQuads, WRITABLE_RDF } from "./rdf.js";
+import { isTrashEndpoint, postTrash } from "./services.js";
 import type { SolidBackendOptions } from "./solid-backend.js";
 import { buildN3Patch, n3Envelope, patchFormulas } from "./solid-patch.js";
 import type {
@@ -224,8 +235,18 @@ export function solidWrites(
     headers: Record<string, string>,
     signal?: AbortSignal,
     body?: Body,
+    keepalive?: boolean,
   ): Promise<Response> {
-    const response = await send(fetch, method, target(method, url), headers, signal, body);
+    const response = await send(
+      fetch,
+      method,
+      target(method, url),
+      headers,
+      signal,
+      body,
+      false,
+      keepalive,
+    );
     if (![200, 201, 204, 205].includes(response.status)) {
       if (response.status < 200 || response.status >= 400) {
         const cause = await storageErrorFrom(method, url, response);
@@ -246,10 +267,14 @@ export function solidWrites(
     response: Response,
     signal?: AbortSignal,
   ): Promise<WriteResult> {
+    const own = response.headers.get("etag");
+    const observed = await etag(url, own, signal);
     return {
       url,
-      etag: await etag(url, response.headers.get("etag"), signal),
+      etag: observed,
       created: response.status === 201,
+      ...(own !== null ? { etagSource: "response" as const } : {}),
+      ...(own === null && observed !== null ? { etagSource: "follow-up" as const } : {}),
     };
   }
   // The segment is already encoded. Never decode it, even when moving a non-UTF-8 name.
@@ -260,6 +285,7 @@ export function solidWrites(
     body: Body,
     type: string,
     signal?: AbortSignal,
+    keepalive?: boolean,
   ): Promise<{ result: WriteResult; creationEtag: string | null }> {
     const url = target(
       "PUT",
@@ -270,7 +296,14 @@ export function solidWrites(
     if (kind === "container") headers.Link = LDP_CONTAINER;
     let response: Response;
     try {
-      response = await request("PUT", url, headers, signal, kind === "container" ? "" : body);
+      response = await request(
+        "PUT",
+        url,
+        headers,
+        signal,
+        kind === "container" ? "" : body,
+        keepalive,
+      );
     } catch (cause) {
       if (cause instanceof StorageError && cause.status === 412)
         throw new StorageError("conflict", {
@@ -361,7 +394,11 @@ export function solidWrites(
         throw error("method-not-allowed", "PUT", dest, "Containers have no writable body");
       const headers: Record<string, string> = { "Content-Type": opts.contentType };
       if (opts.ifMatch !== "*") headers["If-Match"] = opts.ifMatch;
-      return result(dest, await request("PUT", dest, headers, opts.signal, body), opts.signal);
+      return result(
+        dest,
+        await request("PUT", dest, headers, opts.signal, body, opts.keepalive),
+        opts.signal,
+      );
     },
     async writeRdf(url, dataset, opts) {
       const dest = target("PUT", url);
@@ -376,6 +413,9 @@ export function solidWrites(
       });
     },
     async create(url, body, opts = {}) {
+      if (isTrashEndpoint(client(), url)) {
+        return postTrash(client(), fetch, url, body, opts.signal, undefined, opts.keepalive);
+      }
       const parent = container("POST", url);
       const kind = opts.kind ?? "resource";
       if (kind !== "resource" && kind !== "container") throw new TypeError("Invalid kind");
@@ -383,7 +423,9 @@ export function solidWrites(
       const type = kind === "container" ? "text/turtle" : (opts.contentType as string);
       const segment = nameFor("POST", parent, opts.name);
       if (segment !== undefined)
-        return (await createExact(parent, segment, kind, body ?? "", type, opts.signal)).result;
+        return (
+          await createExact(parent, segment, kind, body ?? "", type, opts.signal, opts.keepalive)
+        ).result;
       const slug = [...crypto.getRandomValues(new Uint8Array(16))]
         .map((byte) => BASE32[byte % 32])
         .join("");
@@ -398,6 +440,7 @@ export function solidWrites(
         },
         opts.signal,
         kind === "container" ? "" : (body ?? ""),
+        opts.keepalive,
       );
       const location = response.headers.get("location");
       if (location === null) throw error("invalid-response", "POST", parent, "Missing Location");
@@ -690,23 +733,40 @@ export function solidWrites(
         else absoluteIri(rel);
         if (op.op !== "add" && op.op !== "remove")
           throw new TypeError("Invalid metadata operation");
-        return {
-          op: op.op,
-          quad: DataFactory.quad(
-            DataFactory.namedNode(anchor),
-            DataFactory.namedNode(rel),
-            DataFactory.namedNode(op.href),
-          ),
-        };
+        if (op.title !== undefined && typeof op.title !== "string")
+          throw new TypeError("title must be a string");
+        return { ...op, anchor, rel };
       });
       const document = await client().metadata(dest);
       const metadataUrl = target("PATCH", document.url);
       checkEtag("PATCH", metadataUrl, document.etag, opts.ifMatch);
       const original = document.raw as DatasetCore;
       const effective = new Store([...(original as Iterable<Quad>)]);
+      // Metadata operations address default-graph statements, as before; wrapper deletes
+      // must not also remove matching statements from an unrelated named graph.
+      const defaults = new NamedGraphDataset(DataFactory.defaultGraph(), effective, DataFactory);
       for (const change of changes) {
-        if (change.op === "add") effective.add(change.quad);
-        else effective.delete(change.quad);
+        const anchor = new TermWrapper(change.anchor, defaults, DataFactory);
+        const targets = SetFrom.subjectPredicate(
+          anchor,
+          change.rel,
+          NamedNodeAs.string,
+          NamedNodeFrom.string,
+        );
+        if (change.op === "add") targets.add(change.href);
+        else targets.delete(change.href);
+        if (change.title !== undefined) {
+          const predicate = "http://purl.org/dc/terms/title";
+          if (change.op === "add")
+            RequiredAs.object(anchor, predicate, change.title, LiteralFrom.string);
+          else
+            SetFrom.subjectPredicate(
+              anchor,
+              predicate,
+              LiteralAs.string,
+              LiteralFrom.string,
+            ).delete(change.title);
+        }
       }
       const inserts = [...effective].filter((q) => !original.has(q));
       const deletes = [...(original as Iterable<Quad>)].filter((q) => !effective.has(q));

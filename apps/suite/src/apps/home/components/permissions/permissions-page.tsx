@@ -15,12 +15,8 @@ import {
 } from "@jeswr/suite-ui";
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import {
-  accessRequestsEnabled,
-  failureNotice,
-  type PermissionsView,
-  visibleRows,
-} from "../../lib/permissions/view";
+import { AppHeading } from "@/shell/app-frame";
+import { failureNotice, type PermissionsView, visibleRows } from "../../lib/permissions/view";
 import {
   type PermissionsBinding,
   readPermissionsView,
@@ -28,6 +24,7 @@ import {
   usePermissions,
   writePermissionsView,
 } from "../../state/permissions";
+import { useRequestCaps, useRequests } from "../../state/requests";
 import { useHomeSession } from "../home-app";
 import { PermissionAccessRow } from "./permission-access";
 
@@ -116,8 +113,16 @@ export function RequestsLink({ pending = 0 }: { pending?: number }) {
   );
 }
 
+/** The Requests link with the live pending count; mounted only when requests are available. */
+function PendingRequestsLink() {
+  // Unreadable inbox items can't be answered, so they are never counted as pending.
+  const { pending } = useRequests();
+  return <RequestsLink pending={pending.length} />;
+}
+
 export function PermissionsPage() {
   const binding = usePermissions();
+  const caps = useRequestCaps();
   const session = useHomeSession();
   const preferences = usePermissionPreferences();
   const [tab, setTab] = useState("people");
@@ -125,7 +130,7 @@ export function PermissionsPage() {
   return (
     <div className="hm-page hm-permissions-page">
       <header>
-        <h1>Permissions</h1>
+        <AppHeading>Permissions</AppHeading>
         <p className="hm-permission-muted">Who can see or change the data in your pod.</p>
       </header>
       <Tabs value={tab} onValueChange={setTab}>
@@ -134,7 +139,7 @@ export function PermissionsPage() {
             <TabsTrigger value="people">People</TabsTrigger>
             <TabsTrigger value="apps">Apps</TabsTrigger>
           </TabsList>
-          {accessRequestsEnabled(process.env.NEXT_PUBLIC_SUITE_CAPS) && <RequestsLink />}
+          {caps.accessRequests && <PendingRequestsLink />}
           <Input
             className="hm-permission-search"
             aria-label="Search permissions"

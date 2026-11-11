@@ -313,6 +313,58 @@ describe("applyDropPlan", () => {
     expect((await store.readTask(urls[1] as string)).task.rank).toBe(2);
   });
 
+  it("announces a landed board reorder on Retry after another client changes only its parent", async () => {
+    const { cache, pod, store, failures, inbox } = await cramped();
+    const task = viewOf(cache, "c");
+    const target = {
+      kind: "task",
+      url: viewOf(cache, "a").url,
+      container: { kind: "section", projectUrl: inbox.url },
+      placement: "after",
+    } as const;
+    const replan = replanner(cache, task.url, (fresh, project) =>
+      planDrop(fresh, target, project, { flat: true }),
+    );
+    const plan = replan();
+    const message = "Moved 'c' to No section, position 2.";
+    const announce = vi.fn();
+    const retried = announceRetries(cache, {
+      task,
+      plan,
+      message,
+      showCompleted: false,
+      flat: true,
+      describe: () => "Retried",
+      announce,
+    });
+    let offline = false;
+    pod.intercept = (request) => {
+      if (offline) throw new TypeError("Offline");
+      if (request.method === "PUT" && request.url === task.url) {
+        pod.seed(request.url, request.body);
+        offline = true;
+        throw new TypeError("Response lost");
+      }
+    };
+    expect(await applyDropPlan(plan, writer(cache), replan, retried)).toBe(false);
+    expect(failures).toHaveBeenCalledOnce();
+    pod.intercept = undefined;
+    const parentId = viewOf(cache, "b").id;
+    await store.updateTask(await store.readTask(task.url), (item) => {
+      item.parent = parentId;
+    });
+    await cache.loadTasks(inbox, true);
+    expect(order(cache)).toEqual(["a", "c", "b"]);
+    expect(viewOf(cache, "c").parentId).toBe(parentId);
+    expect(replan()).toEqual({ kind: "none" });
+    pod.requests.length = 0;
+    const [, retry] = failures.mock.calls[0] as [unknown, () => void];
+    retry();
+    await vi.waitFor(() => expect(announce).toHaveBeenCalledWith(message));
+    expect(pod.mutations()).toEqual([]);
+    expect((await store.readTask(task.url)).task.parent).toBe(parentId);
+  });
+
   it("announces a retry's own outcome, repeating success only where the task now sits", async () => {
     const { cache, replan } = await cramped();
     const task = viewOf(cache, "c");

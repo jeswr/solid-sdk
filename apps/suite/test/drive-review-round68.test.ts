@@ -233,7 +233,8 @@ it.each([
   const f = await rdfPod();
   const target = `${PRIVATE}report.txt`;
   f.after(async (url, method, response) => {
-    if (url === target && method === "PUT" && response.ok) {
+    // The read-back placeholder (sst-2vvz) offers no strong validator either.
+    if (url === target && (method === "PUT" || method === "GET") && response.ok) {
       if (receipt === null) response.headers.delete("etag");
       else response.headers.set("etag", receipt);
     }

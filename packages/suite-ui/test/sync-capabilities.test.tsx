@@ -6,6 +6,8 @@ import { describe, expect, it, vi } from "vitest";
 import {
   CapabilityGate,
   CapabilityProvider,
+  OFFLINE_REASON,
+  OnlineGate,
   useCapabilities,
   useRequiresOnline,
 } from "../src/sync/index.js";
@@ -117,5 +119,61 @@ describe("capability gates", () => {
     expect(screen.getByRole("status").textContent).toBe(
       '{"capabilities":{},"disabled":false,"reason":"Reconnect to change sharing"}',
     );
+  });
+});
+
+// AUTHORED-BY Claude Opus 5.5
+describe("online gate", () => {
+  it.each([
+    false,
+    true,
+  ])("keeps the focused child and its identity across connection changes (fragment: %s)", (fragment) => {
+    const control = <button type="button">Share</button>;
+    const view = (online: boolean) => (
+      <OnlineGate online={online}>
+        {fragment ? (
+          <>
+            {control}
+            <span>Sharing</span>
+          </>
+        ) : (
+          control
+        )}
+      </OnlineGate>
+    );
+    const { rerender } = render(view(true));
+    const child = screen.getByRole("button");
+    child.focus();
+    for (const online of [false, true]) {
+      rerender(view(online));
+      expect(screen.getByRole("button")).toBe(child);
+      expect(document.activeElement).toBe(child);
+      expect(child.hasAttribute("disabled")).toBe(!online);
+    }
+  });
+  it("is transparent online and disables controls with a reachable explanation offline", async () => {
+    const user = userEvent.setup();
+    const click = vi.fn();
+    const view = (online: boolean, reason?: string) => (
+      <OnlineGate online={online} {...(reason ? { reason } : {})}>
+        <button type="button" onClick={click}>
+          Change sharing
+        </button>
+      </OnlineGate>
+    );
+    const { rerender } = render(view(true));
+    expect(screen.queryByRole("group", { name: OFFLINE_REASON })).toBeNull();
+    fireEvent.click(screen.getByRole("button"));
+    expect(click).toHaveBeenCalledOnce();
+    rerender(view(false));
+    const button = screen.getByRole<HTMLButtonElement>("button");
+    expect(button.disabled).toBe(true);
+    expect(button.getAttribute("aria-disabled")).toBe("true");
+    expect(OFFLINE_REASON).toBe("You're offline. This needs a connection.");
+    await user.tab();
+    expect(document.activeElement).toBe(screen.getByRole("group", { name: OFFLINE_REASON }));
+    expect((await screen.findByRole("tooltip")).textContent).toBe(OFFLINE_REASON);
+    rerender(view(false, "Reconnect to empty the trash"));
+    expect(screen.getByRole("group", { name: "Reconnect to empty the trash" })).toBeTruthy();
   });
 });

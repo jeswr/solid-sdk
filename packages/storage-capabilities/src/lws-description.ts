@@ -1,5 +1,7 @@
 // AUTHORED-BY GPT-6.1-Sol
+
 import { CapabilitiesError } from "./errors.js";
+import { ownerIri } from "./http.js";
 import type { CapabilityEntry, ServiceEntry, StorageDescription } from "./types.js";
 import { LWS, NOTIFY, SSD } from "./vocab.js";
 
@@ -299,6 +301,7 @@ export function parseLwsDescription(
     protocol: "lws",
     id: location.href,
     root: root.endpoint,
+    owner: ownerIri(body.controller),
     descriptionUrl: location.href,
     services,
     capabilities,

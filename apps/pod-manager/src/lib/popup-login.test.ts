@@ -1,417 +1,160 @@
-/**
- * popup-login.test.ts — the app-owned OAuth popup lifecycle.
- *
- * The security-critical behaviour is the postMessage gate: ONLY a string
- * message from the expected origin AND from our own popup window may end the
- * flow. Everything else (spoofed origins, other windows, structured data)
- * must be ignored. Lifecycle behaviour — silent→interactive same-window
- * reuse, cancel, user-closed popup, timeout, blocked-popup recovery — is
- * driven through a fake window so the tests run in plain Node.
- */
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+// AUTHORED-BY Codex GPT-6.1-Sol
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { CodeRequestCancelledError } from "@jeswr/reactive-authentication";
 import {
-  openPopupUnlessRenewable,
   PopupBlockedError,
   PopupLoginController,
   type MessageEventLike,
   type OpenerWindowLike,
-  type PopupWindowLike,
-  type RenewProbe,
 } from "./popup-login";
 
-const ORIGIN = "https://app.test";
-const AUTH_URI = new URL("https://as.test/authorize?client_id=x");
-
-class FakePopup implements PopupWindowLike {
-  closed = false;
-  focused = 0;
-  urls: string[] = [];
-  close(): void {
-    this.closed = true;
-  }
-  focus(): void {
-    this.focused++;
-  }
-}
-
-class FakeWindow implements OpenerWindowLike {
-  listeners = new Set<(event: MessageEventLike) => void>();
-  popup: FakePopup | null = new FakePopup();
-  /** When true, open() is "blocked" (returns null) unless the popup is already open. */
-  blockFreshOpens = false;
-  opens: string[] = [];
-
-  open(url?: string): PopupWindowLike | null {
-    this.opens.push(url ?? "");
-    if (this.popup !== null && !this.popup.closed) {
-      // Named-window reuse: navigation of the existing popup.
-      this.popup.urls.push(url ?? "");
-      return this.popup;
-    }
-    if (this.blockFreshOpens) return null;
-    this.popup = new FakePopup();
-    this.popup.urls.push(url ?? "");
-    return this.popup;
-  }
-
-  addEventListener(_: "message", listener: (event: MessageEventLike) => void): void {
-    this.listeners.add(listener);
-  }
-  removeEventListener(_: "message", listener: (event: MessageEventLike) => void): void {
-    this.listeners.delete(listener);
-  }
-  emit(event: MessageEventLike): void {
-    for (const l of [...this.listeners]) l(event);
-  }
-}
-
-let win: FakeWindow;
-
-function makeController(
-  options: Partial<ConstructorParameters<typeof PopupLoginController>[0]> = {},
-): PopupLoginController {
-  win = new FakeWindow();
-  win.popup = null; // no popup until open()/getCode
-  return new PopupLoginController({
+const ORIGIN = "https://manager.example";
+const URL_AUTH = new URL("https://provider.example/authorize?state=check");
+const CALLBACK = `${ORIGIN}/callback.html?code=complete&state=check&iss=https%3A%2F%2Fprovider.example%2F`;
+function setup() {
+  const listeners = new Set<(event: MessageEventLike) => void>();
+  const popup = {
+    location: { href: "about:blank" },
+    closed: false,
+    close: vi.fn(() => {
+      popup.closed = true;
+    }),
+    focus: vi.fn(),
+  };
+  const windowRef = {
+    open: vi.fn(() => popup),
+    addEventListener: (_: "message", callback: (event: MessageEventLike) => void) => {
+      listeners.add(callback);
+    },
+    removeEventListener: (_: "message", callback: (event: MessageEventLike) => void) => {
+      listeners.delete(callback);
+    },
+  } satisfies OpenerWindowLike;
+  const controller = new PopupLoginController({
     expectedOrigin: ORIGIN,
-    windowRef: win,
-    ...options,
+    windowRef,
+    pollMs: 20,
+    timeoutMs: 500,
   });
+  const message = (overrides: Partial<MessageEventLike> = {}) => {
+    for (const listener of listeners)
+      listener({ origin: ORIGIN, source: popup, data: CALLBACK, ...overrides });
+  };
+  return { controller, windowRef, popup, listeners, message };
 }
-
-const signal = () => new AbortController().signal;
-
-/**
- * Drain the microtask queue (several ticks: getCode's await chain takes more
- * than one) so the controller's message listener is registered / settled
- * state is observable before the test proceeds. Fake-timer safe.
- */
-const flush = () => vi.advanceTimersByTimeAsync(0);
-
-beforeEach(() => {
-  vi.useFakeTimers();
-});
-afterEach(() => {
-  vi.useRealTimers();
-});
-
-describe("message gate", () => {
-  it("resolves with the callback URL for a message from the right origin and source", async () => {
-    const controller = makeController();
+afterEach(() => vi.useRealTimers());
+describe("gesture-owned popup", () => {
+  it("pre-opens synchronously, navigates without another open, and returns the entire callback", async () => {
+    const { controller, windowRef, popup, listeners, message } = setup();
     controller.open();
-    const code = controller.getCode(AUTH_URI, signal());
-    await flush();
-    win.emit({
-      origin: ORIGIN,
-      source: win.popup,
-      data: `${ORIGIN}/callback.html?code=abc&state=s`,
-    });
-    await expect(code).resolves.toBe(`${ORIGIN}/callback.html?code=abc&state=s`);
-    // Terminal response: the popup is closed and the listener removed.
-    expect(win.popup?.closed).toBe(true);
-    expect(win.listeners.size).toBe(0);
+    expect(windowRef.open).toHaveBeenCalledExactlyOnceWith(
+      "about:blank",
+      "podManagerLogin",
+      expect.any(String),
+    );
+    const result = controller.getCode(URL_AUTH, new AbortController().signal);
+    expect(popup.location.href).toBe(URL_AUTH.href);
+    expect(windowRef.open).toHaveBeenCalledOnce();
+    for (const bad of [
+      { origin: "https://foreign.example" },
+      { source: {} },
+      { data: 12 },
+      { data: "not a URL" },
+      { data: `${ORIGIN}/other?code=bad` },
+      { data: "https://foreign.example/callback.html?code=bad" },
+    ])
+      message(bad);
+    expect(listeners.size).toBe(1);
+    expect(popup.closed).toBe(false);
+    message();
+    expect(await result).toBe(CALLBACK);
+    expect(popup.close).toHaveBeenCalledOnce();
+    expect(listeners.size).toBe(0);
   });
-
-  it("ignores messages from a different origin — even with the right source", async () => {
-    const controller = makeController();
+  it("declines a code request without a pre-opened window", async () => {
+    const { controller, windowRef } = setup();
+    await expect(controller.getCode(URL_AUTH, new AbortController().signal)).rejects.toBeInstanceOf(
+      CodeRequestCancelledError,
+    );
+    expect(windowRef.open).not.toHaveBeenCalled();
+  });
+  it.each([
+    "none",
+    "none consent",
+  ])("always declines prompt=%s, even with a gesture window", async (prompt) => {
+    const { controller, windowRef, popup } = setup();
     controller.open();
-    const code = controller.getCode(AUTH_URI, signal());
-    await flush();
-    win.emit({
-      origin: "https://evil.test",
-      source: win.popup,
-      data: `${ORIGIN}/callback.html?code=spoofed&state=s`,
-    });
-    // Still pending: the spoof did not settle the flow.
-    win.emit({
-      origin: ORIGIN,
-      source: win.popup,
-      data: `${ORIGIN}/callback.html?code=real&state=s`,
-    });
-    await expect(code).resolves.toContain("code=real");
+    const url = new URL(URL_AUTH);
+    url.searchParams.set("prompt", prompt);
+    await expect(controller.getCode(url, new AbortController().signal)).rejects.toBeInstanceOf(
+      CodeRequestCancelledError,
+    );
+    expect(windowRef.open).toHaveBeenCalledOnce();
+    expect(popup.closed).toBe(true);
   });
-
-  it("ignores messages whose source is not our popup window", async () => {
-    const controller = makeController();
-    controller.open();
-    const code = controller.getCode(AUTH_URI, signal());
-    await flush();
-    win.emit({
-      origin: ORIGIN,
-      source: { some: "other window" },
-      data: `${ORIGIN}/callback.html?code=spoofed&state=s`,
-    });
-    win.emit({ origin: ORIGIN, source: null, data: `${ORIGIN}/callback.html?code=null&state=s` });
-    win.emit({
-      origin: ORIGIN,
-      source: win.popup,
-      data: `${ORIGIN}/callback.html?code=real&state=s`,
-    });
-    await expect(code).resolves.toContain("code=real");
-  });
-
-  it("ignores non-string message data", async () => {
-    const controller = makeController();
-    controller.open();
-    const code = controller.getCode(AUTH_URI, signal());
-    await flush();
-    win.emit({ origin: ORIGIN, source: win.popup, data: { url: "x" } });
-    win.emit({
-      origin: ORIGIN,
-      source: win.popup,
-      data: `${ORIGIN}/callback.html?code=real&state=s`,
-    });
-    await expect(code).resolves.toContain("code=real");
-  });
-});
-
-describe("silent → interactive, same window", () => {
-  it("keeps the popup open on an interaction-needed response and reuses it for the retry", async () => {
-    const controller = makeController();
-    controller.open();
-    const popup = win.popup;
-    expect(popup).not.toBeNull();
-
-    const silent = controller.getCode(AUTH_URI, signal());
-    await flush();
-    win.emit({
-      origin: ORIGIN,
-      source: popup,
-      data: `${ORIGIN}/callback.html?error=login_required&state=s`,
-    });
-    await expect(silent).resolves.toContain("error=login_required");
-    // The popup survives: the interactive retry must navigate it, not reopen.
-    expect(popup?.closed).toBe(false);
-
-    const interactive = controller.getCode(AUTH_URI, signal());
-    await flush();
-    expect(win.popup).toBe(popup); // same named window, navigated
-    expect(popup?.urls.at(-1)).toBe(AUTH_URI.href);
-    win.emit({
-      origin: ORIGIN,
-      source: popup,
-      data: `${ORIGIN}/callback.html?code=abc&state=s`,
-    });
-    await expect(interactive).resolves.toContain("code=abc");
-    expect(popup?.closed).toBe(true);
-  });
-
-  it("closes the popup on terminal errors (e.g. access_denied)", async () => {
-    const controller = makeController();
-    controller.open();
-    const code = controller.getCode(AUTH_URI, signal());
-    await flush();
-    win.emit({
-      origin: ORIGIN,
-      source: win.popup,
-      data: `${ORIGIN}/callback.html?error=access_denied&state=s`,
-    });
-    await expect(code).resolves.toContain("access_denied");
-    expect(win.popup?.closed).toBe(true);
-  });
-});
-
-describe("cancellation and cleanup", () => {
-  it("cancel() rejects the pending flow with AbortError, closes the popup, removes listeners", async () => {
-    const controller = makeController();
-    controller.open();
-    const code = controller.getCode(AUTH_URI, signal());
-    await flush();
-    controller.cancel();
-    await expect(code).rejects.toMatchObject({ name: "AbortError" });
-    expect(win.popup?.closed).toBe(true);
-    expect(win.listeners.size).toBe(0);
-  });
-
-  it("rejects as cancelled when the user closes the popup", async () => {
-    const controller = makeController();
-    controller.open();
-    const code = controller.getCode(AUTH_URI, signal());
-    await flush();
-    win.popup?.close(); // the user closes the window
-    // Attach the handler BEFORE advancing timers, or the rejection counts as unhandled.
-    const expectation = expect(code).rejects.toMatchObject({ name: "AbortError" });
-    await vi.advanceTimersByTimeAsync(2_000); // poll + close grace
-    await expectation;
-    expect(win.listeners.size).toBe(0);
-  });
-
-  it("still resolves when the message lands just before the close is noticed", async () => {
-    const controller = makeController();
-    controller.open();
-    const code = controller.getCode(AUTH_URI, signal());
-    await flush();
-    win.emit({
-      origin: ORIGIN,
-      source: win.popup,
-      data: `${ORIGIN}/callback.html?code=abc&state=s`,
-    });
-    await vi.advanceTimersByTimeAsync(5_000); // close-poll keeps quiet after settle
-    await expect(code).resolves.toContain("code=abc");
-  });
-
-  it("rejects with TimeoutError after the configured timeout", async () => {
-    const controller = makeController({ timeoutMs: 10_000 });
-    controller.open();
-    const code = controller.getCode(AUTH_URI, signal());
-    await flush();
-    // Attach the handler BEFORE advancing timers, or the rejection counts as unhandled.
-    const expectation = expect(code).rejects.toMatchObject({ name: "TimeoutError" });
-    await vi.advanceTimersByTimeAsync(10_001);
-    await expectation;
-    expect(win.popup?.closed).toBe(true);
-    expect(win.listeners.size).toBe(0);
-  });
-
-  it("rejects when the abort signal fires and closes the popup", async () => {
-    const controller = makeController();
+  it.each([true, false])("closes and rejects on abort (already aborted: %s)", async (early) => {
+    const { controller, popup, listeners } = setup();
     controller.open();
     const abort = new AbortController();
-    const code = controller.getCode(AUTH_URI, abort.signal);
-    await flush();
-    abort.abort(new Error("flow torn down"));
-    await expect(code).rejects.toThrow("flow torn down");
-    expect(win.popup?.closed).toBe(true);
-    expect(win.listeners.size).toBe(0);
+    if (early) abort.abort();
+    const result = controller.getCode(URL_AUTH, abort.signal);
+    if (!early) abort.abort();
+    await expect(result).rejects.toMatchObject({ name: "AbortError" });
+    expect(popup.closed).toBe(true);
+    expect(listeners.size).toBe(0);
   });
-});
-
-describe("blocked-popup recovery", () => {
-  it("throws PopupBlockedError when open is blocked and no handler exists", async () => {
-    const controller = makeController();
-    win.blockFreshOpens = true; // no open() call happened in a click handler
-    await expect(controller.getCode(AUTH_URI, signal())).rejects.toBeInstanceOf(
-      PopupBlockedError,
-    );
-  });
-
-  it("defers to onBlocked; resume() under a fresh gesture re-opens and the flow completes", async () => {
-    let handlers: { resume: () => void; cancel: () => void } | null = null;
-    const controller = makeController({
-      onBlocked: (resume, cancel) => {
-        handlers = { resume, cancel };
-      },
-    });
-    win.blockFreshOpens = true;
-    const code = controller.getCode(AUTH_URI, signal());
-    await flush();
-    expect(handlers).not.toBeNull();
-
-    // The user clicks "Open sign-in window": fresh activation, open allowed.
-    win.blockFreshOpens = false;
-    handlers!.resume();
-    await flush();
-    win.emit({
-      origin: ORIGIN,
-      source: win.popup,
-      data: `${ORIGIN}/callback.html?code=abc&state=s`,
-    });
-    await expect(code).resolves.toContain("code=abc");
-  });
-
-  it("onBlocked cancel() rejects the flow as cancelled", async () => {
-    let handlers: { resume: () => void; cancel: () => void } | null = null;
-    const controller = makeController({
-      onBlocked: (resume, cancel) => {
-        handlers = { resume, cancel };
-      },
-    });
-    win.blockFreshOpens = true;
-    const code = controller.getCode(AUTH_URI, signal());
-    await flush();
-    handlers!.cancel();
-    await expect(code).rejects.toMatchObject({ name: "AbortError" });
-  });
-});
-
-describe("openPopupUnlessRenewable (the click-handler front door)", () => {
-  const probe = (answer: boolean): RenewProbe => ({
-    canRenewWithoutInteraction: () => answer,
-  });
-
-  it("does NOT open any window when the probe says the session suffices", () => {
-    const controller = makeController();
-    openPopupUnlessRenewable(controller, probe(true), "https://as.test");
-    expect(win.opens).toEqual([]); // window.open never called — no flash
-    expect(controller.isOpen).toBe(false);
-  });
-
-  it("opens the popup synchronously when the probe says interaction may be needed", () => {
-    const controller = makeController();
-    openPopupUnlessRenewable(controller, probe(false), "https://as.test");
-    expect(win.opens).toEqual(["about:blank"]);
-    expect(controller.isOpen).toBe(true);
-  });
-
-  it("opens the popup when no provider is ready yet (loading ≠ yes)", () => {
-    const controller = makeController();
-    openPopupUnlessRenewable(controller, null, "https://as.test");
-    expect(win.opens).toEqual(["about:blank"]);
-  });
-
-  it("opens the popup when the issuer is not known synchronously (typed WebID)", () => {
-    const controller = makeController();
-    const spy = vi.fn(() => true);
-    openPopupUnlessRenewable(controller, { canRenewWithoutInteraction: spy }, undefined);
-    expect(spy).not.toHaveBeenCalled();
-    expect(win.opens).toEqual(["about:blank"]);
-  });
-
-  it("opens the popup for an unparsable issuer instead of throwing", () => {
-    const controller = makeController();
-    const spy = vi.fn(() => true);
-    openPopupUnlessRenewable(controller, { canRenewWithoutInteraction: spy }, "not a url");
-    expect(spy).not.toHaveBeenCalled(); // new URL threw before the probe ran
-    expect(win.opens).toEqual(["about:blank"]);
-  });
-
-  it("hands the probe the parsed issuer URL", () => {
-    const controller = makeController();
-    const spy = vi.fn((issuer: URL) => issuer instanceof URL);
-    openPopupUnlessRenewable(controller, { canRenewWithoutInteraction: spy }, "https://as.test");
-    expect(spy).toHaveBeenCalledWith(new URL("https://as.test"), undefined);
-  });
-
-  it("passes the expected WebID through to the probe", () => {
-    const controller = makeController();
-    const spy = vi.fn<(issuer: URL, webId?: string) => boolean>(() => false);
-    openPopupUnlessRenewable(
-      controller,
-      { canRenewWithoutInteraction: spy },
-      "https://as.test",
-      "https://pod.test/bob#me",
-    );
-    expect(spy).toHaveBeenCalledWith(new URL("https://as.test"), "https://pod.test/bob#me");
-    expect(controller.isOpen).toBe(true);
-  });
-});
-
-describe("open()", () => {
-  it("open() then getCode navigates the SAME named window (activation preserved)", async () => {
-    const controller = makeController();
-    controller.open(); // synchronous, in the click handler
-    const popup = win.popup;
-    expect(popup?.urls).toEqual(["about:blank"]);
-    expect(controller.isOpen).toBe(true);
-
-    const code = controller.getCode(AUTH_URI, signal());
-    await flush();
-    expect(win.popup).toBe(popup);
-    expect(popup?.urls).toEqual(["about:blank", AUTH_URI.href]);
-    win.emit({
-      origin: ORIGIN,
-      source: popup,
-      data: `${ORIGIN}/callback.html?code=abc&state=s`,
-    });
-    await expect(code).resolves.toContain("code=abc");
-  });
-
-  it("closeIfOpen() closes a dangling popup when login fails before getCode", () => {
-    const controller = makeController();
+  it("cancel and unused-session cleanup close the window", async () => {
+    const { controller, popup, listeners } = setup();
     controller.open();
-    expect(controller.isOpen).toBe(true);
-    controller.closeIfOpen(); // e.g. WebID resolution failed
-    expect(controller.isOpen).toBe(false);
-    expect(win.popup?.closed).toBe(true);
+    const result = controller.getCode(URL_AUTH, new AbortController().signal);
+    controller.cancel();
+    controller.cancel();
+    await expect(result).rejects.toBeInstanceOf(CodeRequestCancelledError);
+    expect(popup.close).toHaveBeenCalledOnce();
+    expect(listeners.size).toBe(0);
+    const unused = setup();
+    unused.controller.open();
+    unused.controller.closeIfOpen();
+    expect(unused.popup.closed).toBe(true);
+  });
+  it("detects user close and timeouts without leaving listeners or timers", async () => {
+    vi.useFakeTimers();
+    for (const close of [true, false]) {
+      const { controller, popup, listeners } = setup();
+      controller.open();
+      const result = controller.getCode(URL_AUTH, new AbortController().signal);
+      const failure = expect(result).rejects.toMatchObject({
+        name: close ? "CodeRequestCancelledError" : "PopupTimeoutError",
+      });
+      if (close) popup.closed = true;
+      await vi.advanceTimersByTimeAsync(500);
+      await failure;
+      expect(listeners.size).toBe(0);
+      expect(vi.getTimerCount()).toBe(0);
+    }
+  });
+  it("reports blocked windows from the click without navigating", () => {
+    const windowRef: OpenerWindowLike = {
+      open: vi.fn(() => null),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    };
+    const controller = new PopupLoginController({ expectedOrigin: ORIGIN, windowRef });
+    expect(() => controller.open()).toThrow(PopupBlockedError);
+    expect(windowRef.addEventListener).not.toHaveBeenCalled();
+  });
+  it("cleans up when navigation throws", async () => {
+    const { controller, popup, listeners } = setup();
+    controller.open();
+    Object.defineProperty(popup.location, "href", {
+      set() {
+        throw new Error("closed");
+      },
+    });
+    await expect(controller.getCode(URL_AUTH, new AbortController().signal)).rejects.toThrow(
+      "closed",
+    );
+    expect(listeners.size).toBe(0);
+    expect(popup.closed).toBe(true);
   });
 });

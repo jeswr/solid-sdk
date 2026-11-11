@@ -3,19 +3,21 @@
 // AUTHORED-BY Codex GPT-6
 // Solid backend read side (ADR-003 §6, T-021); mutations are isolated in solid-write.ts.
 import { deriveFeatures, type Features } from "@jeswr/storage-capabilities";
-import { LiteralAs, OptionalFrom } from "@rdfjs/wrapper";
+import { LiteralAs, OptionalFrom, TermAs } from "@rdfjs/wrapper";
 import { Container, Resource } from "@solid/object/solid";
 import { DataFactory } from "n3";
 import { StorageError } from "./errors.js";
 import { allowOf, discard, linksOf, listingContainer, type ReadShape, scoped } from "./http.js";
-import { paginate, pathParent } from "./internal.js";
+import { paginate, pathParent, validateListingMaxBytes } from "./internal.js";
 import {
   acceptReadStatus,
   createReadOperations,
   MEDIA_TYPE,
+  RDF_ACCEPT,
   type ReadExpectation,
   rdfBody,
 } from "./read.js";
+import { versionHistoryQuery } from "./services.js";
 import { type InspectContainer, solidWrites } from "./solid-write.js";
 import type { AuthFetch, Entry, Metadata, MetadataLink, Page, StorageClient } from "./types.js";
 
@@ -40,6 +42,15 @@ export interface SolidBackendOptions {
 
 /** A listed member with the optional `dct:format` literal some servers emit. */
 class Member extends Resource {
+  get displayTitle(): string | undefined {
+    const title = OptionalFrom.subjectPredicate(
+      this,
+      "http://purl.org/dc/terms/title",
+      TermAs.term,
+    );
+    return title?.termType === "Literal" ? title.value : undefined;
+  }
+
   get format(): string | undefined {
     return OptionalFrom.subjectPredicate(this, DCT_FORMAT, LiteralAs.string);
   }
@@ -90,6 +101,7 @@ export function createSolidBackend(options: SolidBackendOptions): StorageClient 
       protocol: "solid",
       id: root,
       root,
+      owner: null,
       descriptionUrl: null,
       services: [],
       capabilities: [],
@@ -146,6 +158,7 @@ export function createSolidBackend(options: SolidBackendOptions): StorageClient 
     const modified = member.modifiedAt;
     return {
       url: member.id,
+      displayName: tolerant(() => member.displayTitle) ?? null,
       kind,
       contentType: kind === "container" ? null : (format ?? iana ?? null),
       size: typeof size === "number" && Number.isSafeInteger(size) && size >= 0 ? size : null,
@@ -159,7 +172,8 @@ export function createSolidBackend(options: SolidBackendOptions): StorageClient 
     opts: Parameters<StorageClient["list"]>[1] = {},
     inspect?: InspectContainer,
   ) {
-    const container = listingContainer(root, url, "solid");
+    const container = listingContainer(root, url, versionHistoryQuery(features, root, url));
+    validateListingMaxBytes(opts.maxBytes);
     if (opts.cursor !== undefined) {
       throw new StorageError("bad-request", {
         method: "GET",
@@ -167,7 +181,14 @@ export function createSolidBackend(options: SolidBackendOptions): StorageClient 
         message: "Solid listings have one page",
       });
     }
-    const result = await get(container, { Accept: "text/turtle" }, opts.signal);
+    const result = await get(
+      container,
+      { Accept: "text/turtle" },
+      opts.signal,
+      false,
+      opts.revalidate,
+      opts.headers,
+    );
     if (result.kind !== "container") {
       discard(result.body);
       throw new StorageError("method-not-allowed", {
@@ -176,12 +197,15 @@ export function createSolidBackend(options: SolidBackendOptions): StorageClient 
         message: `${container} is not a container`,
       });
     }
-    const { dataset } = await rdfBody(result, "invalid-response");
+    const { dataset } = await rdfBody(result, "invalid-response", opts.maxBytes, opts.signal);
     const listed = new Container(container, dataset, DataFactory);
     const items: Entry[] = [];
     // `contains` is a set of distinct members, so URLs are unique.
     for (const resource of listed.contains) {
-      const entry = entryOf(new Member(resource.id, dataset, DataFactory), container);
+      const entry = entryOf(
+        new Member(resource.id, dataset, DataFactory),
+        container.split("?")[0] as string,
+      );
       if (entry) items.push(entry);
     }
     items.sort((a, b) => (a.url < b.url ? -1 : 1));
@@ -191,16 +215,16 @@ export function createSolidBackend(options: SolidBackendOptions): StorageClient 
 
   async function* listAll(
     url: string,
-    opts: { signal?: AbortSignal } = {},
+    opts: Parameters<StorageClient["listAll"]>[1] = {},
     inspect?: InspectContainer,
   ) {
-    const container = listingContainer(root, url, "solid");
+    const container = listingContainer(root, url, versionHistoryQuery(features, root, url));
     yield* paginate(
       container,
       (cursor) =>
         inspect
-          ? list(container, { cursor, signal: opts.signal }, inspect)
-          : client.list(container, { cursor, signal: opts.signal }),
+          ? list(container, { ...opts, cursor }, inspect)
+          : client.list(container, { ...opts, cursor }),
       opts.signal,
     );
   }
@@ -227,9 +251,11 @@ export function createSolidBackend(options: SolidBackendOptions): StorageClient 
           message: `${described.url} advertises no describedby metadata`,
         });
       }
-      const document = await client.readRdf(described.metadataUrl);
+      // Keep metadata's HTTP errors on the shared mapping, separate from readRdf negotiation.
+      const document = await get(described.metadataUrl, { Accept: RDF_ACCEPT }, undefined);
+      const { dataset } = await rdfBody(document, "not-rdf");
       const links = new Map<string, Map<string, MetadataLink[]>>();
-      for (const quad of document.dataset.match()) {
+      for (const quad of dataset.match()) {
         if (quad.subject.termType !== "NamedNode" || quad.object.termType !== "NamedNode") continue;
         const rels = links.get(quad.subject.value) ?? new Map<string, MetadataLink[]>();
         rels.set(quad.predicate.value, [
@@ -238,7 +264,7 @@ export function createSolidBackend(options: SolidBackendOptions): StorageClient 
         ]);
         links.set(quad.subject.value, rels);
       }
-      return { url: document.url, etag: document.etag, links, raw: document.dataset };
+      return { url: document.url, etag: document.etag, links, raw: dataset };
     },
 
     async parentOf(url) {

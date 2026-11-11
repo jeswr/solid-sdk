@@ -29,8 +29,11 @@ import { fromEditorRule, recurrenceAnchor, toEditorRule } from "../../lib/detail
 import { humanise } from "../../lib/model/recurrence";
 import type { Reminder } from "../../lib/model/reminders";
 import type { StoredProject, StoredTask } from "../../lib/model/store";
+import { labelColour } from "../../lib/views/label-colours";
 import { type PriorityLevel, priorityValue, type TaskView } from "../../lib/views/types";
+import { offerNotificationPermission } from "../../state/reminders";
 import { useTasks } from "../../state/tasks-context";
+import { LabelDot } from "../label-chip";
 
 export function localDate(date: Date): string {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
@@ -245,7 +248,11 @@ function LabelsField({
     <div className="tsk-detail-stack">
       <TagInput
         label="Labels"
-        options={[...names].map(([id, label]) => ({ id, label }))}
+        options={[...names].map(([id, label]) => ({
+          id,
+          label,
+          icon: <LabelDot colour={labelColour(id, tasks.projects)} />,
+        }))}
         value={selected}
         onChange={(keys) => {
           void setLabels(keys);
@@ -275,8 +282,17 @@ function LabelsField({
     </div>
   );
 }
+function memberName(webId: string) {
+  let displayName = webId;
+  try {
+    displayName = new URL(webId).hostname;
+  } catch {
+    /* Keep foreign IRIs renderable. */
+  }
+  return displayName;
+}
 function useMemberProfile(webId: string) {
-  return { displayName: new URL(webId).hostname, loading: false };
+  return { displayName: memberName(webId), loading: false };
 }
 
 function AssigneeField({
@@ -315,6 +331,11 @@ function AssigneeField({
             });
           }}
         />
+        {view.assignee && view.assignee !== tasks.webId && (
+          <p className="su-muted">
+            {memberName(view.assignee)} will see this when they open the project
+          </p>
+        )}
         {error && <p role="alert">{error}</p>}
         {members.includes(tasks.webId) && (
           <Button
@@ -376,7 +397,7 @@ export function TaskProperties({
           reminder.offset
         ] ?? reminder.offset);
   const addReminder = (reminder: Reminder) => {
-    void tasks.updateTask(stored, (task) => {
+    const saving = tasks.updateTask(stored, (task) => {
       if (!task.dueDate) return;
       if (
         task.reminders.some((entry) =>
@@ -387,6 +408,9 @@ export function TaskProperties({
       )
         return;
       task.reminders = [...task.reminders, reminder];
+    });
+    void saving.then((saved) => {
+      if (saved?.task.reminders.length) offerNotificationPermission();
     });
   };
   return (

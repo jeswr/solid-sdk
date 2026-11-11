@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 "use client";
 import {
   Button,
@@ -11,10 +12,10 @@ import {
   Input,
   toast,
 } from "@jeswr/suite-ui";
-import { Archive, Import, Pencil, StickyNote, Tag, Trash2 } from "lucide-react";
+import { Archive, Bell, Import, Pencil, StickyNote, Tag, Trash2 } from "lucide-react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
 import { useState } from "react";
+import { useRoutePathname } from "@/lib/route-params";
 import { useNotesContext } from "../state/notes-context";
 import { ConfirmDialog } from "./controls";
 import { KeepImportDialog } from "./keep-import";
@@ -91,12 +92,13 @@ function LabelRow({ label }: { label: string }) {
 }
 export function NotesSidebar() {
   const { labels, persistLabels } = useNotesContext();
-  const pathname = usePathname();
+  const pathname = useRoutePathname();
   const [editing, setEditing] = useState(false);
   const [importing, setImporting] = useState(false);
   const [name, setName] = useState("");
   const destinations = [
     { href: "/notes", label: "Notes", icon: StickyNote },
+    { href: "/notes/reminders", label: "Reminders", icon: Bell },
     ...labels.map((label) => ({
       href: `/notes/label/${encodeURIComponent(label)}`,
       label,

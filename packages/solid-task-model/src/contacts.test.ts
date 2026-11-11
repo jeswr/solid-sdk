@@ -2,6 +2,7 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
 import { parseRdf } from "@jeswr/fetch-rdf";
 import { createRdfEngine } from "@jeswr/rdf-engine/node";
+import type { Term } from "@rdfjs/types";
 import { DataFactory, Parser, Store } from "n3";
 import { afterAll, describe, expect, it } from "vitest";
 import {
@@ -713,5 +714,171 @@ describe("subject conventions", () => {
     expect(addressBookSubject(BOOK)).toBe(`${BOOK}#this`);
     expect(personSubject(PERSON)).toBe(`${PERSON}#this`);
     expect(groupSubject(GROUP)).toBe(`${GROUP}#this`);
+  });
+});
+
+// AUTHORED-BY Claude Opus 5.5
+describe("addresses (vcard:hasAddress) — structured postal addresses", () => {
+  it("round-trips several addresses with kinds, multi-line streets and partial fields", () => {
+    const addresses = [
+      {
+        kind: "home" as const,
+        street: "12 Example Lane\nFlat 3",
+        locality: "Exampletown",
+        region: "CA",
+        postalCode: "12345",
+        country: "US",
+      },
+      { kind: "work" as const, locality: "London", country: "United Kingdom" },
+      { postalCode: "SW1A 1AA" },
+    ];
+    const parsed = parsePerson(PERSON, buildPerson(PERSON, { name: "Addr", addresses }));
+    expect(parsed?.addresses).toHaveLength(3);
+    expect(parsed?.addresses).toEqual(expect.arrayContaining(addresses));
+  });
+
+  it("writes the SolidOS address node shape, trimming values and skipping empty addresses", () => {
+    const store = buildPerson(PERSON, {
+      name: "Shape",
+      addresses: [{ kind: "work", locality: "  Paris  " }, { street: "   " }, {}],
+    });
+    const edges = store.getQuads(
+      DataFactory.namedNode(personSubject(PERSON)),
+      DataFactory.namedNode(vcard("hasAddress")),
+      null,
+      null,
+    );
+    expect(edges).toHaveLength(1);
+    const node = edges[0]?.object;
+    expect(node?.termType).toBe("BlankNode");
+    const locality = store.getQuads(
+      node ?? null,
+      DataFactory.namedNode(vcard("locality")),
+      null,
+      null,
+    );
+    expect(locality.map((q) => q.object.value)).toEqual(["Paris"]);
+    expect(
+      store.getQuads(
+        node ?? null,
+        DataFactory.namedNode("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"),
+        DataFactory.namedNode(vcard("Work")),
+        null,
+      ),
+    ).toHaveLength(1);
+  });
+
+  it("reads named address nodes and untyped nodes, skipping nodes without address literals", () => {
+    const store = parseStore(
+      `@prefix vcard: <http://www.w3.org/2006/vcard/ns#>.
+       <#this> a vcard:Individual; vcard:fn "Imported";
+         vcard:hasAddress <#addr>, [ vcard:locality "Lyon" ], [ vcard:locality <http://example.org/not-a-literal> ], "literal".
+       <#addr> a vcard:Home; vcard:street-address "1 Rue"; vcard:country-name "France".`,
+      PERSON,
+    );
+    const parsed = parsePerson(PERSON, store);
+    expect(parsed?.addresses).toEqual(
+      expect.arrayContaining([
+        { kind: "home", street: "1 Rue", country: "France" },
+        { locality: "Lyon" },
+      ]),
+    );
+    expect(parsed?.addresses).toHaveLength(2);
+  });
+
+  it("replaces previous addresses (and their nodes) on setAddresses", () => {
+    const store = buildPerson(PERSON, { name: "R", addresses: [{ locality: "Old" }] });
+    const person = new Contact(personSubject(PERSON), store, DataFactory);
+    person.setAddresses([{ locality: "New" }]);
+    expect(person.addresses).toEqual([{ locality: "New" }]);
+    expect(store.getQuads(null, DataFactory.namedNode(vcard("locality")), null, null)).toHaveLength(
+      1,
+    );
+    person.setAddresses([]);
+    expect(parsePerson(PERSON, store)?.addresses).toBeUndefined();
+  });
+
+  it("drops replaced named address nodes unless another statement still references them", () => {
+    const store = parseStore(
+      `@prefix vcard: <http://www.w3.org/2006/vcard/ns#>.
+       <#this> a vcard:Individual; vcard:fn "N"; vcard:hasAddress <#home>, <#shared>, <#this>.
+       <#home> a vcard:Home; vcard:locality "Gone".
+       <#shared> vcard:locality "Kept".
+       <#other> vcard:hasAddress <#shared>.`,
+      PERSON,
+    );
+    const person = new Contact(personSubject(PERSON), store, DataFactory);
+    person.setAddresses([{ locality: "New" }]);
+    expect(person.addresses).toEqual([{ locality: "New" }]);
+    const localities = store
+      .getQuads(null, DataFactory.namedNode(vcard("locality")), null, null)
+      .map((q) => q.object.value);
+    expect(localities.sort()).toEqual(["Kept", "New"]);
+    expect(store.getQuads(DataFactory.namedNode(`${PERSON}#home`), null, null, null)).toHaveLength(
+      0,
+    );
+    // A self-reference never deletes the contact's own statements.
+    expect(person.name).toBe("N");
+  });
+
+  it("round-trips addresses through Turtle serialization", async () => {
+    const turtle = await serializePerson(PERSON, {
+      name: "T",
+      addresses: [{ kind: "home", street: "1 Way\nUnit 2", country: "Wales" }],
+    });
+    expect((await parsePersonTtl(PERSON, turtle, "text/turtle"))?.addresses).toEqual([
+      { kind: "home", street: "1 Way\nUnit 2", country: "Wales" },
+    ]);
+  });
+});
+
+// AUTHORED-BY Claude Opus 5.5
+describe("address entries, addAddress and removeAddress", () => {
+  it("exposes each readable address with its node and edits one node at a time", () => {
+    const store = parseStore(
+      `@prefix vcard: <http://www.w3.org/2006/vcard/ns#>.
+       <#this> a vcard:Individual; vcard:fn "E"; vcard:hasAddress _:a, _:b, _:empty, "text".
+       _:a a vcard:Home; vcard:locality "Keep"; <https://example.org/geo> "1,2".
+       _:b vcard:locality "Drop".
+       _:empty <https://example.org/note> "no fields".`,
+      PERSON,
+    );
+    const person = new Contact(personSubject(PERSON), store, DataFactory);
+    const entries = person.addressEntries;
+    expect(entries.map((e) => e.address)).toEqual([
+      { kind: "home", locality: "Keep" },
+      { locality: "Drop" },
+    ]);
+    person.removeAddress(entries[1]?.node as Term);
+    person.addAddress({ kind: "work", region: " R " });
+    person.addAddress({ street: "  " });
+    expect(person.addresses).toEqual([
+      { kind: "home", locality: "Keep" },
+      { kind: "work", region: "R" },
+    ]);
+    // The untouched node keeps its extra RDF; the unreadable node and literal are left alone.
+    expect(
+      store.getQuads(null, DataFactory.namedNode("https://example.org/geo"), null, null),
+    ).toHaveLength(1);
+    expect(
+      store.getQuads(null, DataFactory.namedNode("https://example.org/note"), null, null),
+    ).toHaveLength(1);
+    expect(
+      store.getQuads(
+        null,
+        DataFactory.namedNode(vcard("locality")),
+        DataFactory.literal("Drop"),
+        null,
+      ),
+    ).toHaveLength(0);
+    person.removeAddress(DataFactory.literal("text"));
+    expect(
+      store.getQuads(
+        null,
+        DataFactory.namedNode(vcard("hasAddress")),
+        DataFactory.literal("text"),
+        null,
+      ),
+    ).toHaveLength(0);
   });
 });

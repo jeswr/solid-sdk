@@ -74,7 +74,11 @@ function validate(content: ShareContent): void {
 
 function dismissed(error: unknown): boolean {
   const { name, message } = (error ?? {}) as { name?: unknown; message?: unknown };
-  return name === "AbortError" || (typeof message === "string" && /cancel/i.test(message));
+  // Exactly the dismissal the share plugins report; any other failure is a failure.
+  return (
+    name === "AbortError" ||
+    (typeof message === "string" && /^share cancell?ed\.?$/i.test(message.trim()))
+  );
 }
 
 /**

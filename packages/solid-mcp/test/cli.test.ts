@@ -158,7 +158,38 @@ describe("stdio executable", () => {
         arguments: { provider: conversation.provider, conversationId: conversation.conversationId },
       });
       expect(JSON.parse(text(chat))).toEqual({ ...conversation, url });
-      // New registrations require a successful stdio exercise, not just a listing update.
+      const exported = await callTool({
+        name: "chat_export",
+        arguments: { provider: conversation.provider, conversationId: conversation.conversationId },
+      });
+      expect(JSON.parse(text(exported))).toMatchObject({ url });
+      expect(JSON.parse(text(exported)).markdown).toContain(conversation.messages[0]?.text);
+      const context = await callTool({ name: "context_read", arguments: {} });
+      expect(JSON.parse(text(context))).toEqual({
+        status: "ok",
+        url: `${POD}agent/context/shared-context.md`,
+        contentType: "text/plain",
+        text: "hello fixture",
+        redactedCardNumbers: 0,
+      });
+      // The CLI has no trusted MCP client identity, so personal tools must refuse access.
+      for (const request of [
+        { name: "memory_remember", arguments: { text: "private fixture" } },
+        { name: "memory_recall", arguments: { purpose: "ServiceProvision" } },
+        {
+          name: "memory_forget",
+          arguments: { id: "urn:uuid:00000000-0000-4000-8000-000000000000", mode: "delete" },
+        },
+        { name: "profile_get", arguments: { purpose: "ServiceProvision" } },
+        { name: "address_get", arguments: { purpose: "ServiceProvision" } },
+        { name: "health_query", arguments: { kind: "conditions", purpose: "ServiceProvision" } },
+      ]) {
+        const result = await client.callTool(request);
+        expect(result.isError, request.name).toBe(true);
+        expect(text(result)).toBe("Pod operation failed");
+        calledTools.add(request.name);
+      }
+      // Exercise every registration over stdio, including identity-bound denials.
       expect([...calledTools].sort()).toEqual(expectedNames);
       expect(stderr).not.toContain("fixture-secret");
       expect(stderr).not.toContain("fixture-token");

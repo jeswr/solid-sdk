@@ -1,0 +1,28 @@
+{
+  "$comment": "AUTHORED-BY Codex GPT-6.1-Sol; AUTHORED-BY Codex GPT-6",
+  "name": "@jeswr/app-notification-relay",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Authenticated LWS webhook to SSE relay. Experimental, AI-agent-generated.",
+  "type": "module",
+  "securityCritical": true,
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "build": "pnpm -w exec tsc -p apps/notification-relay/tsconfig.json",
+    "typecheck": "pnpm -w exec tsc -p apps/notification-relay/tsconfig.json --noEmit",
+    "lint": "pnpm -w exec biome check apps/notification-relay",
+    "test": "pnpm -w exec vitest run --root apps/notification-relay",
+    "start": "node dist/src/server.js"
+  },
+  "dependencies": {
+    "@jeswr/fetch-rdf": "workspace:*",
+    "@jeswr/guarded-fetch": "workspace:*",
+    "jose": "^6.2.3"
+  },
+  "devDependencies": {
+    "@jeswr/storage-client": "workspace:*"
+  },
+  "license": "MIT"
+}

@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 "use client";
 import { Button, Toaster } from "@jeswr/suite-ui";
 import { type ReactNode, Suspense } from "react";
@@ -31,6 +32,13 @@ function SessionGate({ children }: { children: ReactNode }) {
     return (
       <div className="mail-boot" role="status">
         Opening your Mail…
+      </div>
+    );
+  // Native builds start signed out until native sign-in lands.
+  if (state.status === "signed-out")
+    return (
+      <div className="mail-boot" role="status">
+        Sign in to open your Mail
       </div>
     );
   if (state.status === "error")

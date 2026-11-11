@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 "use client";
 import {
   Button,
@@ -13,10 +14,11 @@ import {
 } from "@jeswr/suite-ui";
 import { MessageSquare, Plus, X } from "lucide-react";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { type ReactNode, useCallback, useEffect, useState } from "react";
 import { SuiteFrame } from "@/components/interim-shell/suite-frame";
 import { encodeRef } from "@/lib/refs";
+import { useRoutePathname } from "@/lib/route-params";
 import { PodSessionProvider, usePodSessionState } from "@/lib/session/pod-session";
 import { characterShortcutsEnabled } from "@/shell/lib/shortcut-settings";
 import { classifyChatError, type Room } from "../lib/client";
@@ -73,7 +75,7 @@ export function RoomName({ room }: { room: Room }) {
 }
 function SidebarRow({ room, count }: { room: Room; count: number }) {
   const path = `/chat/r/${encodeRef(room.url)}`;
-  const pathname = usePathname();
+  const pathname = useRoutePathname();
   return (
     <li>
       <Link
@@ -292,6 +294,13 @@ function SessionGate({ children }: { children: ReactNode }) {
     return (
       <div className="chat-state" role="status">
         Opening your Chat…
+      </div>
+    );
+  // Native builds start signed out until native sign-in lands.
+  if (state.status === "signed-out")
+    return (
+      <div className="chat-state" role="status">
+        Sign in to open your Chat
       </div>
     );
   if (state.status === "error")

@@ -1,0 +1,16 @@
+{
+  "content": {
+    "body": "Automated message from https://sender.example/agent\n\nKind: describe\nConversation: urn:example:conversation:1\nMessage: urn:example:message:1\nRequest: implementation description\n\n— Sent by Jesse Wright's software agent · how to talk to it: https://jeswr.org/agent · spec: https://jeswr.org/agentic-web",
+    "msgtype": "m.text",
+    "org.jeswr.agent.envelope": {
+      "@context": {
+        "agent": "https://jeswr.org/ns/agent#"
+      },
+      "@type": "agent:SignedMessage",
+      "agent:compactJws": "<signed-fixture>",
+      "agent:wireFormat": "jws-compact"
+    }
+  },
+  "roomId": "!dm:example.org",
+  "txnId": "urn:example:message:1"
+}

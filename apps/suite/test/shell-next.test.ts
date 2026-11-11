@@ -1,8 +1,14 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { describe, expect, it } from "vitest";
-import { START_PAGE, safeNext } from "../src/shell/lib/next";
+import { START_PAGE, START_PAGE_NAME, safeNext } from "../src/shell/lib/next";
 
 describe("safeNext", () => {
+  it("opens Home by default now that the Home app is available", () => {
+    expect(START_PAGE).toBe("/home");
+    expect(START_PAGE_NAME).toBe("Home");
+    expect(safeNext(null)).toBe("/home");
+  });
   it.each([
     null,
     undefined,

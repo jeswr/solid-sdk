@@ -5,6 +5,8 @@ import { defineConfig } from "@playwright/test";
 const port = Number(process.env.SUITE_E2E_PORT ?? 3210);
 export default defineConfig({
   testDir: "./e2e",
+  // Visual baselines and live-CSS scenarios have separate, opt-in configs and stay out of CI.
+  testIgnore: ["**/visual/**", "**/shell-css/**"],
   outputDir: "../../artifacts/playwright/DS-01",
   fullyParallel: true,
   workers: 2,
@@ -26,7 +28,8 @@ export default defineConfig({
   webServer: {
     // A production build is deterministic (no on-demand dev compiles timing out tests).
     command: `next build --webpack && next start --hostname 127.0.0.1 -p ${port}`,
-    env: { NEXT_PUBLIC_DEV_FIXTURES: "1" },
+    // SUITE_E2E=1 lets the server honour a SUITE_TEST_CAPS passed to this run (shell/lib/env.ts).
+    env: { NEXT_PUBLIC_DEV_FIXTURES: "1", SUITE_E2E: "1" },
     url: `http://127.0.0.1:${port}/dev/components`,
     reuseExistingServer: false,
     timeout: 300000,
