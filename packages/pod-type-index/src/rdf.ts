@@ -1,8 +1,15 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
+import {
+  assertSerializedQuads,
+  assertWritableQuads,
+  isSafeAbsoluteIri,
+} from "@jeswr/model-runtime";
 import type { RdfReadResult } from "@jeswr/storage-client";
 import { NS } from "@jeswr/suite-vocab";
 import { DatasetWrapper, NamedNodeAs, NamedNodeFrom, SetFrom, TermWrapper } from "@rdfjs/wrapper";
-import { DataFactory, Store } from "n3";
+import { DataFactory, Store, Writer } from "n3";
+import { error } from "./common.js";
 import { entities, type TypeRegistrationData } from "./generated/model.js";
 
 export const PUBLIC = `${NS.SOLID}publicTypeIndex`;
@@ -50,15 +57,21 @@ export class IndexDataset extends DatasetWrapper {
 
 /** Generated pointers work on untyped WebID subjects without adding a foaf:Agent type. */
 export function pointer(subject: Resource, predicate: string, read = false): Set<string> {
+  if (!isSafeAbsoluteIri(subject.value)) throw error("scope", subject.value);
   const dataset = read
     ? new Store([...subject.dataset.match(subject.node, null, null, DataFactory.defaultGraph())])
     : subject.dataset;
   const profile = new entities.Profile.Wrapper(subject.value, dataset, DataFactory);
-  return {
-    [PUBLIC]: profile.publicTypeIndex,
-    [PRIVATE]: profile.privateTypeIndex,
-    [PREFS]: profile.preferencesFile,
-  }[predicate] as Set<string>;
+  switch (predicate) {
+    case PUBLIC:
+      return profile.publicTypeIndex;
+    case PRIVATE:
+      return profile.privateTypeIndex;
+    case PREFS:
+      return profile.preferencesFile;
+    default:
+      return new Set<string>();
+  }
 }
 
 export function registrationData(subject: Resource): TypeRegistrationData {
@@ -86,27 +99,44 @@ export function addRegistration(
   target: string,
   container: boolean,
 ): void {
+  if (![subject, iri, target].every(isSafeAbsoluteIri)) throw error("scope", document.url);
   const data = {
     forClass: [iri],
     ...(container ? { instanceContainer: [target] } : { instance: [target] }),
   };
-  for (const quad of entities.TypeRegistration.build(subject, data)) document.dataset.add(quad);
+  const built = entities.TypeRegistration.build(subject, data);
+  // Optional generated fields can silently drop invalid values. Never publish a shell.
+  if (
+    built.match(
+      DataFactory.namedNode(subject),
+      DataFactory.namedNode(container ? CONTAINER : INSTANCE),
+      DataFactory.namedNode(target),
+      DataFactory.defaultGraph(),
+    ).size !== 1
+  ) {
+    throw error("scope", document.url);
+  }
+  for (const quad of built) document.dataset.add(quad);
 }
 
 export function removeRegistration(subject: Resource, container: boolean): void {
   const predicate = container ? CONTAINER : INSTANCE;
   const iri = subject.iris(CLASS)[0] as string;
   const location = subject.iris(predicate)[0] as string;
-  if (subject.termType === "BlankNode") {
-    subject.values(CLASS).delete(iri);
-    subject.values(predicate).delete(location);
-  } else {
-    const reg = new entities.TypeRegistration.Wrapper(subject.value, subject.dataset, DataFactory);
-    reg.forClass.delete(iri);
-    (container ? reg.instanceContainer : reg.instance).delete(location);
-  }
+  const reg =
+    subject.termType === "BlankNode"
+      ? undefined
+      : new entities.TypeRegistration.Wrapper(subject.value, subject.dataset, DataFactory);
+  const classes = reg ? reg.forClass : subject.values(CLASS);
+  const locations = reg
+    ? container
+      ? reg.instanceContainer
+      : reg.instance
+    : subject.values(predicate);
+  // A failed delete must abort the mutation before the type marker or any storage write.
+  if (!classes.delete(iri) || !locations.delete(location)) throw error("conflict", subject.value);
   // Remove only the exact explicit type, preserving every unrelated annotation/type.
-  subject.values(TYPE).delete(REGISTRATION);
+  if (!subject.values(TYPE).delete(REGISTRATION)) throw error("conflict", subject.value);
 }
 
 export function markIndex(document: RdfReadResult, visibility: "public" | "private"): void {
@@ -128,13 +158,13 @@ export function indexDataset(document: RdfReadResult): IndexDataset {
 }
 
 export async function serialize(document: RdfReadResult): Promise<string> {
-  try {
-    return await entities.TypeIndex.storeToTurtle(new Store([...document.dataset]));
-  } catch (cause) {
-    // Preserve the public N3 error contract; runtime integrity failures stay fail-closed.
-    if (cause instanceof TypeError && cause.message === "RDF serialization failed") {
-      throw cause.cause;
-    }
-    throw cause;
-  }
+  const quads = [...document.dataset];
+  assertWritableQuads(quads);
+  const writer = new Writer({ format: "text/turtle" });
+  writer.addQuads(quads);
+  const result = await new Promise<string>((resolve, reject) => {
+    writer.end((cause, text) => (cause ? reject(cause) : resolve(text)));
+  });
+  assertSerializedQuads(quads, result);
+  return result;
 }

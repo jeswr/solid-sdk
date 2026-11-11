@@ -75,8 +75,9 @@ live in [`codegen/`](./codegen/). There is no federation sector for Type Indexes
 Solid/PIM IRIs are retained exactly. `src/generated/` contains the manifest, typed shim,
 normalized shapes, and input/output hashes; never edit these files by hand.
 
-`src/rdf.ts` delegates named-subject registration build/parse, TypeIndex typing, profile pointer
-access, and full-dataset serialization to the generated entities. `Resource` remains a minimal
+`src/rdf.ts` delegates named-subject registration build/parse, TypeIndex typing, and profile pointer
+access to the generated entities. It serializes the whole document with `n3.Writer`, using the
+runtime's exported quad validation and round-trip integrity checks. `Resource` remains a minimal
 internal typed view for raw validation evidence and blank-node registrations. `IndexDataset`
 enumerates independent subjects and applies the generated registration entity to each named
 subject. `src/solid.ts` retains network discovery, URL scope and alias policy, bounded results,
@@ -132,6 +133,27 @@ The generated runtime tightens these edges outside the original oracle. Each is 
   (`rejects a serializer result that silently loses triples`). Valid RDF serializes to the
   original N3 bytes without changing the dataset. Original N3 callback errors still propagate
   unchanged, as required by `src/validation.test.ts`.
+- Solid registration and unregistration reject targets that fail the runtime's safe absolute
+  IRI guard with `StorageError` code `scope` before I/O. This includes raw `|` in a path,
+  and `{`, `}`, `|`, or `^` surviving URL normalization in a fragment. Absolute-looking class
+  IRIs that the runtime cannot parse also fail with `scope`. Invalid inputs already rejected
+  by the original class/visibility/container contract retain their original errors. These
+  input divergences are pinned by `rejects runtime-unsafe mutation targets before I/O` and
+  `rejects an absolute-looking class that the runtime cannot parse before I/O`. Defensive
+  build assertions are covered separately in `test/review-regressions.test.ts`.
+- Runtime-unsafe WebIDs and storage roots reject at client construction with `StorageError`
+  code `scope`, preventing raw runtime `TypeError`s and any I/O (`rejects a runtime-unsafe
+  WebID with StorageError/scope`, `rejects a runtime-unsafe storage root with StorageError/scope`).
+- Stored profile/preferences pointers with runtime-unsafe IRIs are hidden during discovery;
+  strict registration and unregistration reject them with `scope`, without writes. This
+  applies to `publicTypeIndex`, `privateTypeIndex`, and `preferencesFile`, including values
+  preserved by JSON-LD parsing (`hides runtime-unsafe stored pointers on discovery and rejects
+  strict mutations`). Valid sibling pointers remain discoverable.
+- Stored locations on named registrations with runtime-unsafe IRIs are hidden from `find`,
+  while valid sibling locations remain visible. Raw values still count for removal ambiguity,
+  so unregister cannot silently delete only the visible member (`hides runtime-unsafe stored
+  locations while retaining valid siblings`). The JSON-LD tests cover both `instance` and
+  `instanceContainer`; blank registrations retain the original typed view.
 
 ## App migration candidates
 

@@ -1,4 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
+import { isSafeAbsoluteIri } from "@jeswr/model-runtime";
 import type { RdfReadResult, StorageClient } from "@jeswr/storage-client";
 import { StorageError } from "@jeswr/storage-client";
 import { canonicalize } from "@jeswr/suite-vocab";
@@ -61,6 +63,9 @@ function rawCount(subject: Resource, predicate: string): number {
 
 export function solidIndex(storage: StorageClient, webId: string) {
   const profile = requireScoped(storage, webId);
+  if (!isSafeAbsoluteIri(storage.root) || !isSafeAbsoluteIri(profile)) {
+    throw error("scope", storage.root);
+  }
   const profileUrl = documentUrl(profile);
 
   function links(subject: Resource, predicate: string, strict = false): string[] {

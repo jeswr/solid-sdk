@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+import { StorageError } from "@jeswr/storage-client";
 import { SetFrom, TermAs, TermFrom, TermWrapper } from "@rdfjs/wrapper";
 import { DataFactory, Parser, Store, Writer } from "n3";
 import { afterEach, expect, it, vi } from "vitest";
@@ -205,4 +206,178 @@ it("keeps the N3 serialization of valid RDF byte-compatible and leaves the datas
   expect(await serialize(document)).toBe(expected);
   expect([...document.dataset]).toEqual(original);
   expect(document.dataset.match(DataFactory.namedNode(INDEX)).size).toBe(2);
+});
+
+// AUTHORED-BY Codex GPT-6
+// Exact divergences: runtime IRI safety at the facade and on stored JSON-LD data.
+it.each([
+  "|",
+  "{",
+  "}",
+  "^",
+])("rejects a runtime-unsafe WebID with StorageError/scope (%s)", (character) => {
+  const storage = createMemoryStorage({ root: ROOT });
+  const read = vi.spyOn(storage, "readRdf");
+  const write = vi.spyOn(storage, "writeRdf");
+  const create = vi.spyOn(storage, "create");
+  expect(() =>
+    createTypeIndex({ storage, features: storage.features, profile: `${WEBID}${character}x` }),
+  ).toThrow(expect.objectContaining({ name: "StorageError", code: "scope", url: ROOT }));
+  expect(read).not.toHaveBeenCalled();
+  expect(write).not.toHaveBeenCalled();
+  expect(create).not.toHaveBeenCalled();
+});
+
+it("rejects a runtime-unsafe storage root with StorageError/scope", () => {
+  const root = `${ROOT}a|b/`;
+  const storage = createMemoryStorage({ root });
+  const read = vi.spyOn(storage, "readRdf");
+  const create = vi.spyOn(storage, "create");
+  expect(() =>
+    createTypeIndex({ storage, features: storage.features, profile: `${root}profile/card#me` }),
+  ).toThrow(expect.objectContaining({ name: "StorageError", code: "scope", url: root }));
+  expect(read).not.toHaveBeenCalled();
+  expect(create).not.toHaveBeenCalled();
+});
+
+const unsafePaths = ["a^b", "doc#a{b", "doc#a}b", "doc#a|b", "doc#a^b"];
+const pointerPredicates = [
+  `${SOLID}publicTypeIndex`,
+  `${SOLID}privateTypeIndex`,
+  "http://www.w3.org/ns/pim/space#preferencesFile",
+];
+
+it.each(
+  pointerPredicates.flatMap((predicate) => unsafePaths.map((path) => ({ predicate, path }))),
+)("hides runtime-unsafe stored pointers on discovery and rejects strict mutations (%j)", async ({
+  predicate,
+  path,
+}) => {
+  const { storage, index } = await setup(`
+    <#r> a solid:TypeRegistration ; solid:forClass <${CLASS}> ; solid:instance <${ROOT}keep> .
+  `);
+  const unsafe = ROOT + path;
+  const visibility = predicate === pointerPredicates[0] ? "public" : "private";
+  const safePredicate = visibility === "public" ? pointerPredicates[1] : pointerPredicates[0];
+  await storage.write(
+    CARD,
+    JSON.stringify({
+      "@id": WEBID,
+      [predicate]: [{ "@id": unsafe }],
+      [safePredicate as string]: [{ "@id": INDEX }],
+    }),
+    { ifMatch: "*", contentType: "application/ld+json" },
+  );
+  const card = await storage.readRdf(CARD);
+  expect(
+    card.dataset.match(null, DataFactory.namedNode(predicate), DataFactory.namedNode(unsafe)).size,
+  ).toBe(1);
+  const before = await (await storage.read(CARD)).text();
+  const read = vi.spyOn(storage, "readRdf");
+  const write = vi.spyOn(storage, "writeRdf");
+  const create = vi.spyOn(storage, "create");
+  expect(await index.find(CLASS)).toEqual([`${ROOT}keep`]);
+  expect(read.mock.calls.map(([url]) => url)).toEqual([CARD, INDEX]);
+  for (const operation of [index.register, index.unregister]) {
+    await expect(
+      operation(CLASS, { instance: `${ROOT}one` }, { index: visibility }),
+    ).rejects.toMatchObject({
+      name: "StorageError",
+      code: "scope",
+      url: ROOT,
+    });
+  }
+  expect(read.mock.calls.every(([url]) => url !== unsafe)).toBe(true);
+  expect(write).not.toHaveBeenCalled();
+  expect(create).not.toHaveBeenCalled();
+  expect(await (await storage.read(CARD)).text()).toBe(before);
+});
+
+it.each(
+  ["instance", "instanceContainer"].flatMap((predicate) =>
+    unsafePaths.map((path) => ({ predicate, path })),
+  ),
+)("hides runtime-unsafe stored locations while retaining valid siblings (%j)", async ({
+  predicate,
+  path,
+}) => {
+  const { storage, index } = await setup("");
+  const unsafe = ROOT + path;
+  const keep = `${ROOT}keep/`;
+  await storage.write(
+    INDEX,
+    JSON.stringify({
+      "@id": `${INDEX}#r`,
+      "@type": [`${SOLID}TypeRegistration`],
+      [`${SOLID}forClass`]: [{ "@id": CLASS }],
+      [`${SOLID}${predicate}`]: [{ "@id": unsafe }, { "@id": keep }],
+    }),
+    { ifMatch: "*", contentType: "application/ld+json" },
+  );
+  const document = await storage.readRdf(INDEX);
+  expect(
+    document.dataset.match(
+      null,
+      DataFactory.namedNode(SOLID + predicate),
+      DataFactory.namedNode(unsafe),
+    ).size,
+  ).toBe(1);
+  const before = await (await storage.read(INDEX)).text();
+  expect(await index.find(CLASS)).toEqual([keep]);
+  const write = vi.spyOn(storage, "writeRdf");
+  const create = vi.spyOn(storage, "create");
+  // Raw evidence still counts the hidden value, preventing a destructive partial removal.
+  await expect(
+    index.unregister(CLASS, predicate === "instance" ? { instance: keep } : { container: keep }),
+  ).rejects.toMatchObject({ code: "conflict" });
+  expect(write).not.toHaveBeenCalled();
+  expect(create).not.toHaveBeenCalled();
+  expect(await (await storage.read(INDEX)).text()).toBe(before);
+});
+
+it.each([
+  { instance: `${ROOT}a|b` },
+  { instance: `${ROOT}doc#a{b` },
+  { instance: `${ROOT}doc#a}b` },
+  { instance: `${ROOT}doc#a|b` },
+  { instance: `${ROOT}doc#a^b` },
+  { container: `${ROOT}a|b/` },
+  { container: `${ROOT}doc#a{b/` },
+  { container: `${ROOT}doc#a}b/` },
+  { container: `${ROOT}doc#a|b/` },
+  { container: `${ROOT}doc#a^b/` },
+])("rejects runtime-unsafe mutation targets before I/O (%j)", async (location) => {
+  const { storage, index } = await setup("");
+  const read = vi.spyOn(storage, "readRdf");
+  const write = vi.spyOn(storage, "writeRdf");
+  const create = vi.spyOn(storage, "create");
+  for (let attempt = 0; attempt < 2; attempt++) {
+    await expect(index.register(CLASS, location)).rejects.toBeInstanceOf(StorageError);
+    await expect(index.register(CLASS, location)).rejects.toMatchObject({
+      code: "scope",
+      url: ROOT,
+    });
+    await expect(index.unregister(CLASS, location)).rejects.toMatchObject({ code: "scope" });
+  }
+  expect(read).not.toHaveBeenCalled();
+  expect(write).not.toHaveBeenCalled();
+  expect(create).not.toHaveBeenCalled();
+});
+
+it("rejects an absolute-looking class that the runtime cannot parse before I/O", async () => {
+  const { storage, index } = await setup("");
+  const read = vi.spyOn(storage, "readRdf");
+  const write = vi.spyOn(storage, "writeRdf");
+  const create = vi.spyOn(storage, "create");
+  for (const operation of [index.register, index.unregister]) {
+    await expect(
+      operation("https://[invalid]/Class", { instance: `${ROOT}one` }),
+    ).rejects.toMatchObject({
+      code: "scope",
+      url: ROOT,
+    });
+  }
+  expect(read).not.toHaveBeenCalled();
+  expect(write).not.toHaveBeenCalled();
+  expect(create).not.toHaveBeenCalled();
 });
