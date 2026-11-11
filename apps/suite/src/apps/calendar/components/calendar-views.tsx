@@ -14,9 +14,10 @@ import {
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { type CSSProperties, type KeyboardEvent, useEffect, useRef, useState } from "react";
-import { layoutAllDayEvents, layoutTimeGrid, monthGrid } from "../lib/layout";
+import { layoutAllDayEvents, layoutTimeGrid } from "../lib/layout";
 import { useCalendarState, useCalendars, useEventsInRange } from "../state/calendar-context";
 import { columnAt, dayDistance, PX_PER_MINUTE, pointerMinutes } from "../state/drag";
+import { layoutMonth, monthBarLabel } from "../state/month-layout";
 import {
   addDays,
   addMonths,
@@ -48,6 +49,7 @@ export function EventButton({
   className = "",
   tabIndex,
   compact = false,
+  accessibleName,
   day,
   drag,
   resizable = false,
@@ -57,6 +59,7 @@ export function EventButton({
   className?: string;
   tabIndex?: number;
   compact?: boolean;
+  accessibleName?: string;
   day?: () => HTMLElement | undefined;
   /** Pointer drag handlers; the keyboard alternative is the Edit dialog. */
   drag?: DragSourceProps | undefined;
@@ -73,7 +76,9 @@ export function EventButton({
       style={{ ...style, borderInlineStartColor: event.calendar.colour }}
       tabIndex={tabIndex}
       title={`${event.data.name} · ${eventTime(event.data)} · ${event.calendar.title}`}
-      aria-label={`${event.data.name}, ${eventTime(event.data)}, ${event.calendar.title}`}
+      aria-label={
+        accessibleName ?? `${event.data.name}, ${eventTime(event.data)}, ${event.calendar.title}`
+      }
       onClick={(e) => openEvent(event, e.currentTarget, day?.())}
     >
       <span className="cal-event-title">
@@ -118,31 +123,47 @@ function MonthView({ events }: { events: Occurrence[] }) {
   const { date, navigate, weekStart } = useCalendarNavigation();
   const editing = useCalendarEditing();
   const value = localDate(date);
-  const grid = monthGrid(value.getFullYear(), value.getMonth() + 1, weekStart);
   const [focused, setFocused] = useState(date);
+  const [agendaDay, setAgendaDay] = useState(date);
+  const [phone, setPhone] = useState(false);
   const root = useRef<HTMLTableElement>(null);
   const [limit, setLimit] = useState(2);
+  const weeks = layoutMonth(events, value.getFullYear(), value.getMonth() + 1, weekStart, limit);
   const { focusRequest, selected, closeEvent } = useCalendarState();
   const drag = useEventDrag();
   const ghost = drag?.active?.surface === "month" ? drag.active : undefined;
   // The month cell under the pointer; dragging keeps the time of day and the event's span.
+  const dayAt = (x: number, y: number) =>
+    [...(root.current?.querySelectorAll<HTMLElement>("[data-day]") ?? [])].find((cell) => {
+      const rect = cell.getBoundingClientRect();
+      return x >= rect.left && x < rect.right && y >= rect.top && y < rect.bottom;
+    })?.dataset.day;
   const monthOrigin =
-    (from: string): DragOrigin =>
-    () =>
-    (x, y) => {
-      const cell = document.elementFromPoint(x, y)?.closest<HTMLElement>("[data-day]");
-      const day = cell && root.current?.contains(cell) ? cell.dataset.day : undefined;
-      return day ? { days: dayDistance(from, day), minutes: 0 } : undefined;
+    (fallback: string): DragOrigin =>
+    (x0, y0) => {
+      const from = dayAt(x0, y0) ?? fallback;
+      return (x, y) => {
+        const day = dayAt(x, y);
+        return day ? { days: dayDistance(from, day), minutes: 0 } : undefined;
+      };
     };
   useEffect(() => {
     const element = root.current;
     if (!element) return;
-    const observer = new ResizeObserver(() => {
+    const resize = () => {
+      const compact = window.innerWidth < 640;
       const height = element.querySelector(".cal-month-day")?.getBoundingClientRect().height ?? 100;
-      setLimit(window.innerWidth < 640 ? 2 : Math.max(2, Math.floor((height - 68) / 28)));
-    });
+      setPhone(compact);
+      setLimit(compact ? 2 : Math.max(2, Math.floor((height - 68) / 28)));
+    };
+    resize();
+    const observer = new ResizeObserver(resize);
     observer.observe(element);
-    return () => observer.disconnect();
+    window.addEventListener("resize", resize);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", resize);
+    };
   }, []);
   useEffect(() => {
     const request = focusRequest.current;
@@ -154,8 +175,34 @@ function MonthView({ events }: { events: Occurrence[] }) {
         focusRequest.current = undefined;
       }
     } else setFocused(date);
+    setAgendaDay(date);
   }, [date, focusRequest]);
   function onKey(event: KeyboardEvent, key: string) {
+    if (event.key === "Tab" && !phone && event.target instanceof HTMLButtonElement) {
+      const cell = root.current?.querySelector<HTMLElement>(`[data-day="${focused}"]`);
+      const bars = [
+        ...(cell?.closest("tr")?.querySelectorAll<HTMLButtonElement>("button.cal-month-bar") ?? []),
+      ].filter((button) => button.tabIndex === 0);
+      const buttons = [
+        ...bars,
+        ...(cell?.querySelectorAll<HTMLButtonElement>(".cal-month-chip, .cal-more") ?? []),
+      ];
+      const index = buttons.indexOf(event.target);
+      // Portal content keeps its own focus scope.
+      if (index < 0) return;
+      const next = buttons[index + (event.shiftKey ? -1 : 1)];
+      if (next) {
+        event.preventDefault();
+        next.focus();
+      } else if (event.shiftKey) {
+        event.preventDefault();
+        cell?.focus();
+      } else if (key !== focused) {
+        // Start native forward traversal after the focused day, skipping its earlier bar.
+        cell?.focus();
+      }
+      return;
+    }
     if (event.target instanceof HTMLButtonElement || event.target instanceof HTMLAnchorElement)
       return;
     let next: string;
@@ -169,7 +216,22 @@ function MonthView({ events }: { events: Occurrence[] }) {
       next = addDays(key, 6 - ((localDate(key).getDay() - weekStart + 7) % 7));
     else if (event.key === "PageUp" || event.key === "PageDown")
       next = stepDate("month", key, event.key === "PageUp" ? -1 : 1);
-    else if (event.key === "Enter") {
+    else if (event.key === "Tab" && !event.shiftKey && !phone) {
+      // A continued bar lives in its first cell; Tab must also reach it from later days.
+      const week = weeks.find((week) => key >= week.startDate && key < addDays(week.startDate, 7));
+      const bar = week?.bars.find((bar) => occursOn(bar.event.data, key));
+      const first =
+        bar &&
+        root.current
+          ?.querySelector(`[data-day="${key}"]`)
+          ?.closest("tr")
+          ?.querySelector<HTMLButtonElement>(`button[data-occurrence="${CSS.escape(bar.id)}"]`);
+      if (first) {
+        event.preventDefault();
+        first.focus();
+      }
+      return;
+    } else if (event.key === "Enter") {
       event.preventDefault();
       editing?.openQuick(key, addDays(key, 1), event.currentTarget as HTMLElement);
       return;
@@ -188,108 +250,229 @@ function MonthView({ events }: { events: Occurrence[] }) {
       navigate(next, "month");
     }
   }
+  const agendaLabel = new Intl.DateTimeFormat("en-GB", { dateStyle: "full" }).format(
+    localDate(agendaDay),
+  );
   return (
-    // biome-ignore lint/a11y/noNoninteractiveElementToInteractiveRole: this table implements the ARIA grid keyboard pattern
-    <table ref={root} role="grid" className="cal-month" aria-label="Month calendar">
-      <tbody>
-        <tr className="cal-weekdays">
-          {(grid[0] ?? []).map((cell) => (
-            <th scope="col" key={cell.date}>
-              {new Intl.DateTimeFormat("en-GB", { weekday: "short" }).format(localDate(cell.date))}
-            </th>
-          ))}
-        </tr>
-        {grid.map((week) => (
-          <tr className="cal-month-week" key={week.map((cell) => cell.date).join()}>
-            {week.map((cell) => {
-              const dayEvents = events.filter((e) => occursOn(e.data, cell.date));
-              const target = ghost && occursOn(ghost.preview, cell.date);
-              const label = new Intl.DateTimeFormat("en-GB", { dateStyle: "full" }).format(
-                localDate(cell.date),
-              );
-              return (
-                <td
-                  // biome-ignore lint/a11y/noNoninteractiveElementToInteractiveRole: focusable cell in an interactive ARIA grid
-                  role="gridcell"
-                  key={cell.date}
-                  className="cal-month-day"
-                  data-outside={!cell.inMonth || undefined}
-                  data-today={cell.date === dateKey(new Date()) || undefined}
-                  data-day={cell.date}
-                  data-drop-target={target || undefined}
-                  tabIndex={cell.date === focused ? 0 : -1}
-                  aria-label={label}
-                  onFocus={() => setFocused(cell.date)}
-                  onKeyDown={(event) => onKey(event, cell.date)}
-                  onClick={(event) => {
-                    if (event.target === event.currentTarget)
-                      editing?.openQuick(cell.date, addDays(cell.date, 1), event.currentTarget);
-                  }}
-                >
-                  <Link
-                    tabIndex={-1}
-                    href={calendarHref("day", cell.date)}
-                    className="cal-day-number"
-                    aria-label={`Open ${label}`}
+    <>
+      {/* biome-ignore lint/a11y/noNoninteractiveElementToInteractiveRole: this table implements the ARIA grid keyboard pattern */}
+      <table ref={root} role="grid" className="cal-month" aria-label="Month calendar">
+        <tbody>
+          <tr className="cal-weekdays">
+            {(weeks[0]?.days ?? []).map((cell) => (
+              <th scope="col" key={cell.date}>
+                {new Intl.DateTimeFormat("en-GB", { weekday: "short" }).format(
+                  localDate(cell.date),
+                )}
+              </th>
+            ))}
+          </tr>
+          {weeks.map((week) => (
+            <tr className="cal-month-week" key={week.startDate}>
+              {week.days.map((cell) => {
+                const dayEvents = cell.events;
+                const target = ghost && occursOn(ghost.preview, cell.date);
+                const label = new Intl.DateTimeFormat("en-GB", { dateStyle: "full" }).format(
+                  localDate(cell.date),
+                );
+                return (
+                  <td
+                    // biome-ignore lint/a11y/noNoninteractiveElementToInteractiveRole: focusable cell in an interactive ARIA grid
+                    role="gridcell"
+                    key={cell.date}
+                    className="cal-month-day"
+                    style={{ "--cal-bar-lanes": cell.barLanes } as CSSProperties}
+                    data-outside={!cell.inMonth || undefined}
+                    data-today={cell.date === dateKey(new Date()) || undefined}
+                    data-day={cell.date}
+                    aria-selected={phone ? cell.date === agendaDay : undefined}
+                    data-drop-target={target || undefined}
+                    tabIndex={cell.date === focused ? 0 : -1}
+                    aria-label={label}
+                    onFocus={(event) => {
+                      const bar = week.bars.find(
+                        (bar) => bar.id === (event.target as HTMLElement).dataset.occurrence,
+                      );
+                      if (
+                        !bar ||
+                        !occursOn(bar.event.data, focused) ||
+                        focused < week.startDate ||
+                        focused >= addDays(week.startDate, 7)
+                      ) {
+                        setFocused(cell.date);
+                        if (phone && event.target === event.currentTarget) setAgendaDay(cell.date);
+                      }
+                    }}
+                    onKeyDown={(event) => onKey(event, cell.date)}
+                    onClick={(event) => {
+                      if (event.target === event.currentTarget) {
+                        if (phone) setAgendaDay(cell.date);
+                        else
+                          editing?.openQuick(cell.date, addDays(cell.date, 1), event.currentTarget);
+                      }
+                    }}
                   >
-                    {cell.dayOfMonth}
-                  </Link>
-                  {dayEvents.slice(0, limit).map((event) => (
-                    <EventButton
-                      key={event.id}
-                      event={event}
-                      className="cal-month-chip"
-                      tabIndex={focused === cell.date ? 0 : -1}
-                      drag={drag?.source(event, "month", monthOrigin(cell.date))}
-                    />
-                  ))}
-                  {target && <DragGhost drag={ghost} />}
-                  {dayEvents.length > limit && (
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <button
-                          type="button"
-                          className="cal-more"
-                          tabIndex={focused === cell.date ? 0 : -1}
-                          aria-label={`${dayEvents.length - limit} more events on ${label}`}
-                        >{`+${dayEvents.length - limit} more`}</button>
-                      </PopoverTrigger>
-                      <PopoverContent
-                        className="cal-overflow"
-                        aria-label={`Events on ${label}`}
-                        onInteractOutside={(event) => {
-                          if (selected) event.preventDefault();
-                        }}
-                        onEscapeKeyDown={(event) => {
-                          if (selected) {
-                            event.preventDefault();
-                            closeEvent();
-                          }
+                    {phone ? (
+                      <button
+                        type="button"
+                        className="cal-month-open"
+                        tabIndex={-1}
+                        aria-label={`Show events on ${label}${cell.hidden ? `, ${cell.hidden} more events` : ""}`}
+                        aria-controls="cal-month-agenda"
+                        onClick={() => {
+                          setAgendaDay(cell.date);
+                          setFocused(cell.date);
                         }}
                       >
-                        <h2>{label}</h2>
-                        <Link href={calendarHref("day", cell.date)}>Open day</Link>
-                        {dayEvents.map((event) => (
+                        <span className="cal-day-number">{cell.dayOfMonth}</span>
+                        {cell.hidden > 0 && <span className="cal-phone-more">+{cell.hidden}</span>}
+                      </button>
+                    ) : (
+                      <Link
+                        tabIndex={-1}
+                        href={calendarHref("day", cell.date)}
+                        className="cal-day-number"
+                        aria-label={`Open ${label}`}
+                      >
+                        {cell.dayOfMonth}
+                      </Link>
+                    )}
+                    {week.bars
+                      .filter((bar) => bar.column === cell.column)
+                      .map((bar) => {
+                        const className = `cal-month-bar${bar.continuesBefore ? " cal-continues-before" : ""}${bar.continuesAfter ? " cal-continues-after" : ""}`;
+                        const style = {
+                          "--cal-bar-span": bar.span,
+                          "--cal-event-lane": bar.lane,
+                        } as CSSProperties;
+                        const name = `${monthBarLabel(bar.event.data)}, ${bar.event.calendar.title}`;
+                        return phone ? (
+                          <span
+                            key={bar.id}
+                            role="img"
+                            aria-label={name}
+                            className={`${className} cal-month-mark`}
+                            style={{ ...style, borderInlineStartColor: bar.event.calendar.colour }}
+                          />
+                        ) : (
+                          <EventButton
+                            key={bar.id}
+                            event={bar.event}
+                            accessibleName={name}
+                            className={className}
+                            style={style}
+                            tabIndex={
+                              occursOn(bar.event.data, focused) &&
+                              focused >= week.startDate &&
+                              focused < addDays(week.startDate, 7)
+                                ? 0
+                                : -1
+                            }
+                            day={() =>
+                              root.current?.querySelector<HTMLElement>(`[data-day="${focused}"]`) ??
+                              undefined
+                            }
+                            drag={drag?.source(bar.event, "month", monthOrigin(cell.date))}
+                          />
+                        );
+                      })}
+                    <div className="cal-month-timed">
+                      {cell.timed.map((event, index) =>
+                        phone ? (
+                          <span
+                            key={event.id}
+                            className="cal-month-dot"
+                            role="img"
+                            aria-label={`${event.data.name}, ${eventTime(event.data)}`}
+                            style={
+                              {
+                                "--cal-event-lane": cell.barLanes + index,
+                                "--cal-dot-colour": event.calendar.colour,
+                              } as CSSProperties
+                            }
+                          />
+                        ) : (
                           <EventButton
                             key={event.id}
                             event={event}
-                            day={() =>
-                              root.current?.querySelector<HTMLElement>(
-                                `[data-day="${cell.date}"]`,
-                              ) ?? undefined
-                            }
+                            className="cal-month-chip"
+                            tabIndex={focused === cell.date ? 0 : -1}
+                            drag={drag?.source(event, "month", monthOrigin(cell.date))}
                           />
-                        ))}
-                      </PopoverContent>
-                    </Popover>
-                  )}
-                </td>
-              );
-            })}
-          </tr>
-        ))}
-      </tbody>
-    </table>
+                        ),
+                      )}
+                    </div>
+                    {target && <DragGhost drag={ghost} />}
+                    {cell.hidden > 0 && !phone && (
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <button
+                            type="button"
+                            className="cal-more"
+                            tabIndex={focused === cell.date ? 0 : -1}
+                            aria-label={`${cell.hidden} more events on ${label}`}
+                          >{`+${cell.hidden} more`}</button>
+                        </PopoverTrigger>
+                        <PopoverContent
+                          className="cal-overflow"
+                          aria-label={`Events on ${label}`}
+                          onInteractOutside={(event) => {
+                            if (selected) event.preventDefault();
+                          }}
+                          onEscapeKeyDown={(event) => {
+                            if (selected) {
+                              event.preventDefault();
+                              closeEvent();
+                            }
+                          }}
+                        >
+                          <h2>{label}</h2>
+                          <Link href={calendarHref("day", cell.date)}>Open day</Link>
+                          {dayEvents.map((event) => (
+                            <EventButton
+                              key={event.id}
+                              event={event}
+                              day={() =>
+                                root.current?.querySelector<HTMLElement>(
+                                  `[data-day="${cell.date}"]`,
+                                ) ?? undefined
+                              }
+                            />
+                          ))}
+                        </PopoverContent>
+                      </Popover>
+                    )}
+                  </td>
+                );
+              })}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {phone && (
+        <section
+          id="cal-month-agenda"
+          className="cal-month-agenda"
+          aria-label={`Events on ${agendaLabel}`}
+        >
+          <h2 aria-live="polite">{agendaLabel}</h2>
+          <Link href={calendarHref("day", agendaDay)}>Open day</Link>
+          {events
+            .filter((event) => occursOn(event.data, agendaDay))
+            .map((event) => (
+              <EventButton
+                key={event.id}
+                event={event}
+                accessibleName={`${monthBarLabel(event.data)}, ${eventTime(event.data)}, ${event.calendar.title}`}
+                day={() =>
+                  root.current?.querySelector<HTMLElement>(`[data-day="${agendaDay}"]`) ?? undefined
+                }
+              />
+            ))}
+          {!events.some((event) => occursOn(event.data, agendaDay)) && <p>No events</p>}
+        </section>
+      )}
+    </>
   );
 }
 function TimeView({ events, view }: { events: Occurrence[]; view: "week" | "day" }) {

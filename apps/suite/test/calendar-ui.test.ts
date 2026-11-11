@@ -158,6 +158,99 @@ it("moves month focus, handles date navigation and opens quick-create", async ()
   await settle();
   expect(document.activeElement?.getAttribute("data-day")).toBe("2026-12-02");
 });
+it("renders one continuous bar per week with named continuation ends above timed events", async () => {
+  mocks.path = "/calendar/month";
+  const mounted = await mount(screen("month"));
+  await settle();
+  const bars = [...mounted.host.querySelectorAll<HTMLButtonElement>(".cal-month-bar")].filter(
+    (bar) => bar.getAttribute("aria-label")?.startsWith("Three-day trip,"),
+  );
+  expect(bars).toHaveLength(2);
+  expect(bars[0]?.style.getPropertyValue("--cal-bar-span")).toBe("1");
+  expect(bars[0]?.classList.contains("cal-continues-after")).toBe(true);
+  expect(bars[1]?.style.getPropertyValue("--cal-bar-span")).toBe("2");
+  expect(bars[1]?.classList.contains("cal-continues-before")).toBe(true);
+  expect(bars[1]?.getAttribute("aria-label")).toBe(
+    "Three-day trip, Sun 1 Nov 2026 – Tue 3 Nov 2026, Personal",
+  );
+  const monday = mounted.host.querySelector<HTMLElement>(
+    '.cal-month [data-day="2026-11-02"]',
+  ) as HTMLElement;
+  await act(() => monday.focus());
+  expect(bars[1]?.tabIndex).toBe(0);
+  expect(bars[0]?.tabIndex).toBe(-1);
+  expect(monday.querySelector(".cal-month-timed .cal-month-chip")).not.toBeNull();
+  await key(monday, "Tab");
+  expect(document.activeElement).toBe(bars[1]);
+  await key(bars[1] as HTMLElement, "Tab");
+  const timed = monday.querySelector(".cal-month-chip") as HTMLElement;
+  expect(document.activeElement).toBe(timed);
+  await key(timed, "Tab", true);
+  expect(document.activeElement).toBe(bars[1]);
+  await key(bars[1] as HTMLElement, "Tab", true);
+  expect(document.activeElement).toBe(monday);
+  const tuesday = mounted.host.querySelector<HTMLElement>(
+    '.cal-month [data-day="2026-11-03"]',
+  ) as HTMLElement;
+  await act(() => tuesday.focus());
+  await key(tuesday, "Tab");
+  expect(document.activeElement).toBe(bars[1]);
+  await click(bars[1] as HTMLElement);
+  expect(mounted.host.querySelector(".cal-details h2")?.textContent).toBe("Three-day trip");
+});
+it("shows two phone indicators, opens the tapped day's agenda and preserves grid keys", async () => {
+  const width = window.innerWidth;
+  Object.defineProperty(window, "innerWidth", { value: 375, configurable: true });
+  onTestFinished(() => {
+    Object.defineProperty(window, "innerWidth", { value: width, configurable: true });
+  });
+  mocks.path = "/calendar/month";
+  const mounted = await mount(screen("month"));
+  await settle();
+  expect(mounted.host.querySelectorAll(".cal-month button.cal-event")).toHaveLength(0);
+  const sunday = mounted.host.querySelector<HTMLElement>(
+    '.cal-month [data-day="2026-11-01"]',
+  ) as HTMLElement;
+  expect(sunday.querySelectorAll(".cal-month-mark")).toHaveLength(2);
+  const open = sunday.querySelector<HTMLElement>(".cal-month-open") as HTMLElement;
+  expect(open.textContent).toContain("+9");
+  expect(open.getAttribute("aria-label")).toContain("9 more events");
+  await click(open);
+  const agenda = mounted.host.querySelector<HTMLElement>("#cal-month-agenda") as HTMLElement;
+  expect(agenda.getAttribute("aria-label")).toBe("Events on Sunday, 1 November 2026");
+  expect(buttons(agenda, "Read in the park,")).toHaveLength(1);
+  expect(buttons(agenda, "Three-day trip,")).toHaveLength(1);
+  await click(buttons(agenda, "Read in the park,")[0] as HTMLElement);
+  await click(mounted.host.querySelector('[aria-label="Close event details"]') as HTMLElement);
+  await settle();
+  expect(document.activeElement).toBe(buttons(agenda, "Read in the park,")[0]);
+  const monday = mounted.host.querySelector<HTMLElement>(
+    '.cal-month [data-day="2026-11-02"]',
+  ) as HTMLElement;
+  await click(monday.querySelector(".cal-month-open") as HTMLElement);
+  expect(agenda.getAttribute("aria-label")).toBe("Events on Monday, 2 November 2026");
+  expect(buttons(agenda, "Three-day trip,")).toHaveLength(1);
+  expect(buttons(agenda, "Team stand-up,")).toHaveLength(1);
+  expect(monday.querySelectorAll(".cal-month-dot")).toHaveLength(1);
+  await act(() => monday.focus());
+  await key(monday, "ArrowRight");
+  expect(document.activeElement?.getAttribute("data-day")).toBe("2026-11-03");
+  expect(agenda.getAttribute("aria-label")).toBe("Events on Tuesday, 3 November 2026");
+  await key(document.activeElement as HTMLElement, "Enter");
+  expect(document.querySelector(".cal-quick")).not.toBeNull();
+  await key(document.activeElement as HTMLElement, "Escape");
+  const empty = mounted.host.querySelector<HTMLElement>(
+    '.cal-month [data-day="2026-11-05"] .cal-month-open',
+  ) as HTMLElement;
+  await click(empty);
+  expect(agenda.textContent).toContain("No events");
+  await act(() => {
+    Object.defineProperty(window, "innerWidth", { value: 1280, configurable: true });
+    window.dispatchEvent(new Event("resize"));
+  });
+  expect(mounted.host.querySelector("#cal-month-agenda")).toBeNull();
+  expect(mounted.host.querySelector("button.cal-month-bar")).not.toBeNull();
+});
 it("moves between week slots, tabs to an event, shows read-only details and restores focus", async () => {
   const mounted = await mount(screen());
   await settle();

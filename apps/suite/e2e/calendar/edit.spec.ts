@@ -25,8 +25,10 @@ async function editor(page: Page) {
     : page.getByRole("region", { name: /^(New|Edit) event$/ });
 }
 async function editOccurrence(page: Page, day: string, name: string) {
-  await page
-    .locator(`.cal-month [data-day="${day}"]`)
+  const cell = page.locator(`.cal-month [data-day="${day}"]`);
+  const phone = (page.viewportSize()?.width ?? 0) < 640;
+  if (phone) await cell.locator(".cal-month-open").click();
+  await (phone ? page.locator(".cal-month-agenda") : cell)
     .getByRole("button", { name: new RegExp(`^${name},`) })
     .click();
   await page.getByRole("button", { name: "Edit", exact: true }).click();
@@ -50,6 +52,8 @@ async function closeNavigation(page: Page) {
 }
 // The demo seed has a Mon/Wed/Fri stand-up, so match the planning series by title.
 function planning(page: Page, day: string) {
+  if ((page.viewportSize()?.width ?? 0) < 640)
+    return page.locator(`.cal-month [data-day="${day}"]`).getByRole("img", { name: /planning/ });
   return page
     .locator(`.cal-month [data-day="${day}"] button.cal-event`)
     .filter({ hasText: /planning/ });
@@ -165,8 +169,10 @@ test("imports five fixture events and exports all calendar masters as parseable 
   await expect(page).toHaveURL(/\/calendar\/month\?d=2026-11-01$/);
   await expect(
     page
-      .locator('.cal-month [data-day="2026-11-09"] button.cal-event')
-      .filter({ hasText: "Imported breakfast edited" }),
+      .locator('.cal-month [data-day="2026-11-09"]')
+      .getByRole((page.viewportSize()?.width ?? 0) < 640 ? "img" : "button", {
+        name: /^Imported breakfast edited,/,
+      }),
   ).toHaveCount(1);
   const count = await page.evaluate(async () => {
     const request = indexedDB.open("solid-suite-demo", 1);
