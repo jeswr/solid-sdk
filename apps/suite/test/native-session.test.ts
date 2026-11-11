@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 import { beforeEach, expect, it, vi } from "vitest";
 import { getDemoPod, resetDemoPod } from "../src/lib/demo-pod/browser";
 import { PodSessionProvider, usePodSessionState } from "../src/lib/session/native-session";
@@ -126,6 +127,47 @@ it("maps the native shell account and preserves its session through expiry and r
   await expect(pod.fetch(account.storageUrl)).rejects.toThrow("Sign in to continue");
   expect(getDemoPod).not.toHaveBeenCalled();
   expect(resetDemoPod).not.toHaveBeenCalled();
+});
+
+it("refuses a session fetch once the live account changes, before React re-renders", async () => {
+  const account = {
+    id: "solid:alice",
+    kind: "solid" as const,
+    name: "Alice",
+    webId: "https://pod.example/profile#me",
+    storageUrl: "https://pod.example/",
+  };
+  let live = true;
+  const fetch = vi.fn(async () => new Response("private data"));
+  optionalAccounts.mockReturnValue({
+    active: account,
+    accounts: [account],
+    status: "ready",
+    fetch,
+    isActiveAccount: (id: string) => live && id === account.id,
+  } as unknown as AccountsContextValue);
+  let state!: ReturnType<typeof usePodSessionState>;
+  function Probe() {
+    state = usePodSessionState();
+    return null;
+  }
+  await mount(h(PodSessionProvider, { children: h(Probe) }));
+  if (state.status !== "ready") throw new Error("Expected the native shell account");
+  const pod = state.session;
+
+  // A switch or sign-out has happened in live state, but nothing has re-rendered yet.
+  live = false;
+  await expect(pod.fetch(account.storageUrl)).rejects.toThrow("Sign in to continue");
+  expect(fetch).not.toHaveBeenCalled();
+
+  // The account changes while a request is in flight: its response is not handed back.
+  live = true;
+  fetch.mockImplementationOnce(async () => {
+    live = false;
+    return new Response("other account's data");
+  });
+  await expect(pod.fetch(account.storageUrl)).rejects.toThrow("Sign in to continue");
+  expect(fetch).toHaveBeenCalledTimes(1);
 });
 
 it("keeps native account restoration loading without opening a fallback pod", async () => {
