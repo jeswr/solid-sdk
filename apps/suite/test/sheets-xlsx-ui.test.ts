@@ -130,12 +130,7 @@ it.each([
   await ui.unmount();
 });
 
-it("preserves a chosen CSV and retries when comments start loading during the file read", async () => {
-  const service = mocks.service as WorkbookService;
-  const book = await service.create({ title: "Refresh", snapshot: snapshot() });
-  const ui = await mount(h(SheetEditor, { container: book.container }));
-  await vi.waitFor(() => expect(mocks.mount).toHaveBeenCalled());
-  const engine = await mocks.mount.mock.results[0]?.value;
+async function chooseCsv(read: Promise<string>) {
   await key(button("File"), "ArrowDown");
   const item = [...document.querySelectorAll('[role="menuitem"]')].find(
     (element) => element.textContent === "Import CSV",
@@ -145,8 +140,7 @@ it("preserves a chosen CSV and retries when comments start loading during the fi
   const input = document.querySelector<HTMLInputElement>('input[aria-label="CSV file to import"]');
   if (!input) throw new Error("Missing CSV input");
   const file = new File(["Label\nChosen"], "chosen.csv", { type: "text/csv" });
-  const read = deferred<string>();
-  vi.spyOn(file, "text").mockReturnValueOnce(read.promise);
+  vi.spyOn(file, "text").mockReturnValueOnce(read);
   Object.defineProperty(input, "files", { value: [file], configurable: true });
   Object.defineProperty(input, "value", {
     value: "chosen.csv",
@@ -154,30 +148,55 @@ it("preserves a chosen CSV and retries when comments start loading during the fi
     configurable: true,
   });
   await act(() => input.dispatchEvent(new Event("change", { bubbles: true })));
+  return { file, input };
+}
+
+it("imports a chosen CSV while a focus refresh reloads comments", async () => {
+  // Only the first comments load locks editing; a later refresh rebases late
+  // anchors from the workbook revision, so an import may proceed meanwhile.
+  const service = mocks.service as WorkbookService;
+  const book = await service.create({ title: "Refresh", snapshot: snapshot() });
+  const ui = await mount(h(SheetEditor, { container: book.container }));
+  await vi.waitFor(() => expect(mocks.mount).toHaveBeenCalled());
+  const engine = await mocks.mount.mock.results[0]?.value;
+  const read = deferred<string>();
+  await chooseCsv(read.promise);
   const comments = deferred<CellThread[]>();
   vi.spyOn(CellCommentStore.prototype, "list").mockReturnValueOnce(comments.promise);
   await act(() => window.dispatchEvent(new Event("focus")));
   await act(async () => read.resolve("Label\nChosen"));
-  expect(engine?.importCsv).toHaveReturnedWith({ status: "blocked", reason: "comments-loading" });
-  expect(document.querySelector('[role="dialog"]')?.textContent).toContain(
-    "Comments are loading. Try importing again when they finish.",
-  );
-  expect(input.files?.[0]).toBe(file);
-  expect(input.value).toBe("chosen.csv");
-  expect(input.disabled).toBe(true);
-  expect(document.querySelector("fieldset")?.disabled).toBe(true);
-  expect(button("Choose CSV file").disabled).toBe(true);
-  expect(button("Retry import").disabled).toBe(true);
-  await act(async () => comments.resolve([]));
-  expect(document.querySelector('[role="alert"]')?.textContent).toContain("Try importing again");
-  expect(button("Retry import").disabled).toBe(false);
-  expect(input.disabled).toBe(false);
-  await click(button("Retry import"));
   expect(engine?.importCsv).toHaveBeenLastCalledWith("Label\nChosen", {
     mode: "new-sheet",
     name: "chosen",
   });
   expect(engine?.importCsv).toHaveReturnedWith({ status: "imported" });
+  expect(document.querySelector('[role="dialog"]')).toBeNull();
+  await act(async () => comments.resolve([]));
+  await ui.unmount();
+});
+
+it("preserves a chosen CSV and retries when the engine reports comments loading", async () => {
+  const service = mocks.service as WorkbookService;
+  const book = await service.create({ title: "Blocked", snapshot: snapshot() });
+  const ui = await mount(h(SheetEditor, { container: book.container }));
+  await vi.waitFor(() => expect(mocks.mount).toHaveBeenCalled());
+  const engine = await mocks.mount.mock.results[0]?.value;
+  engine?.importCsv.mockReturnValueOnce({ status: "blocked", reason: "comments-loading" });
+  const read = deferred<string>();
+  const { file, input } = await chooseCsv(read.promise);
+  await act(async () => read.resolve("Label\nChosen"));
+  expect(document.querySelector('[role="alert"]')?.textContent).toContain(
+    "Comments are loading. Try importing again when they finish.",
+  );
+  expect(input.files?.[0]).toBe(file);
+  expect(input.value).toBe("chosen.csv");
+  expect(button("Retry import").disabled).toBe(false);
+  await click(button("Retry import"));
+  expect(engine?.importCsv).toHaveBeenLastCalledWith("Label\nChosen", {
+    mode: "new-sheet",
+    name: "chosen",
+  });
+  expect(engine?.importCsv).toHaveLastReturnedWith({ status: "imported" });
   expect(input.value).toBe("");
   expect(document.querySelector('[role="dialog"]')).toBeNull();
   await ui.unmount();
