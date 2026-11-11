@@ -36,7 +36,14 @@
     "@jeswr/guarded-fetch": "workspace:*"
   },
   "devDependencies": {
-    "@jeswr/federation-codegen": "workspace:*"
+    "@jeswr/federation-codegen": "workspace:*",
+    "@biomejs/biome": "2.5.3",
+    "@rdfjs/types": "2.0.1",
+    "@types/n3": "1.26.1",
+    "@types/node": "25.9.5",
+    "typescript": "6.0.3",
+    "vitest": "4.1.10",
+    "@vitest/coverage-v8": "^4.1.10"
   },
   "engines": {
     "node": ">=24"
