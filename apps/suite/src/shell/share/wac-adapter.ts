@@ -16,6 +16,7 @@ import {
   type ShareCapabilities,
   ShareError,
   type ShareRole,
+  type ShareWriteOptions,
   type SharingAdapter,
   type SharingState,
 } from "./types";
@@ -162,7 +163,11 @@ export class WacSharingAdapter implements SharingAdapter {
       throw error;
     }
   }
-  private change(url: string, select: (selection: SharingSelection) => SharingSelection) {
+  private change(
+    url: string,
+    select: (selection: SharingSelection) => SharingSelection,
+    opts?: ShareWriteOptions,
+  ) {
     const pending = this.queue.then(async () => {
       const snapshot = this.snapshots.get(url);
       if (!snapshot) throw new ShareError("unsupported");
@@ -171,6 +176,10 @@ export class WacSharingAdapter implements SharingAdapter {
       const input = this.input(snapshot.documents);
       const current = readSharing(input);
       const changes = diffSharing(input, select(current));
+      // This plan and its conditional PUTs use the same snapshot. Any added mode
+      // widens at least one principal/scope, even if an earlier read called it a revocation.
+      if (opts?.narrowOnly && changes.some((change) => change.add.length > 0))
+        throw new ShareError("would-grant");
       if (!changes.length) return;
       const next = snapshot.documents.map((doc) => ({
         ...doc,
@@ -217,7 +226,7 @@ export class WacSharingAdapter implements SharingAdapter {
     url: string,
     webId: string,
     role: ShareRole | null,
-    opts?: { expires?: Date; purpose?: string },
+    opts?: ShareWriteOptions & { expires?: Date; purpose?: string },
   ) {
     this.url(webId);
     if (
@@ -227,26 +236,34 @@ export class WacSharingAdapter implements SharingAdapter {
       opts?.purpose
     )
       throw new ShareError("unsupported");
-    return this.change(url, (current) => ({
-      ...current,
-      people: [
-        ...current.people.filter((person) => person.webId !== webId),
-        ...(role ? [{ webId, role }] : []),
-      ],
-    }));
+    return this.change(
+      url,
+      (current) => ({
+        ...current,
+        people: [
+          ...current.people.filter((person) => person.webId !== webId),
+          ...(role ? [{ webId, role }] : []),
+        ],
+      }),
+      opts,
+    );
   }
-  async setGeneral(url: string, general: SharingState["general"]) {
+  async setGeneral(url: string, general: SharingState["general"], opts?: ShareWriteOptions) {
     if (
       !["restricted", "link"].includes(general.mode) ||
       (general.role !== undefined && !["viewer", "editor"].includes(general.role))
     )
       throw new ShareError("unsupported");
-    return this.change(url, (current) => ({
-      ...current,
-      link:
-        general.mode === "restricted" ? "none" : general.role === "editor" ? "editor" : "viewer",
-      public: general.mode === "restricted" ? "none" : "viewer",
-    }));
+    return this.change(
+      url,
+      (current) => ({
+        ...current,
+        link:
+          general.mode === "restricted" ? "none" : general.role === "editor" ? "editor" : "viewer",
+        public: general.mode === "restricted" ? "none" : "viewer",
+      }),
+      opts,
+    );
   }
   private apply(
     dataset: DatasetCore,
