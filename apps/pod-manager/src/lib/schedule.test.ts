@@ -198,6 +198,7 @@ describe("respondToPoll — same-pod write + notify organiser", () => {
         pollUrl: POLL_URL,
         organizerWebId: CAROL,
         attendeeWebId: BOB,
+        sessionWebId: BOB,
         podRoot: ATTENDEE_POD,
         option: OPT_A,
         response: "yes",
@@ -242,6 +243,7 @@ describe("respondToPoll — same-pod write + notify organiser", () => {
       pollUrl: POLL_URL,
       organizerWebId: CAROL,
       attendeeWebId: BOB,
+      sessionWebId: BOB,
       podRoot: ATTENDEE_POD,
       option: OPT_A,
       pollName: "x",
@@ -496,4 +498,78 @@ describe("aggregatePollRsvps — organiser-side loop closure", () => {
     ).rejects.toMatchObject({ name: "RdfFetchError" });
     expect(fetchImpl).not.toHaveBeenCalled();
   });
+});
+
+it("tallies RSVPs from the actual client-sent Offer body after inbox parsing", async () => {
+  const { createInboxReader } = await import("@jeswr/pod-access/notify");
+  const { NamedNodeAs, NamedNodeFrom, SetFrom, TermWrapper } = await import("@rdfjs/wrapper");
+  const { DataFactory, Store } = await import("n3");
+  const organizerInbox = "https://1.1.1.1/inbox/";
+  const notificationUrl = `${organizerInbox}offer`;
+  async function link(subject: string, predicate: string, object: string) {
+    const store = new Store();
+    const doc = new TermWrapper(subject, store, DataFactory);
+    SetFrom.subjectPredicate(doc, predicate, NamedNodeAs.string, NamedNodeFrom.string).add(object);
+    return serializeTurtle(store);
+  }
+  const profile = await link(CAROL, "http://www.w3.org/ns/ldp#inbox", organizerInbox);
+  const listing = await link(organizerInbox, "http://www.w3.org/ns/ldp#contains", notificationUrl);
+  let responseBody = "";
+  let responseUrl = "";
+  let offerBody = "";
+  const rdf = (body: string) => new Response(body, { headers: { "content-type": "text/turtle" } });
+  const fetch = vi.fn<typeof globalThis.fetch>().mockImplementation(async (input, init) => {
+    const url = String(input);
+    if (init?.method === "PUT") {
+      responseUrl = url;
+      responseBody = String(init.body);
+      return new Response(null, { status: 201 });
+    }
+    if (init?.method === "POST") {
+      offerBody = String(init.body);
+      return new Response(null, { status: 201 });
+    }
+    if (url === "https://1.1.1.1/profile/card") return rdf(profile);
+    if (url === organizerInbox) return rdf(listing);
+    if (url === notificationUrl) return rdf(offerBody);
+    if (url === responseUrl) return rdf(responseBody);
+    return new Response(null, { status: 404 });
+  });
+  await respondToPoll(
+    {
+      pollUrl: URL,
+      organizerWebId: CAROL,
+      attendeeWebId: BOB,
+      sessionWebId: BOB,
+      podRoot: "https://8.8.4.4/",
+      option: OPT_A,
+      response: "yes",
+    },
+    fetch,
+  );
+  const offers = await createInboxReader({ fetch }).list(organizerInbox);
+  expect(offers[0]).toMatchObject({ type: "Offer", actor: BOB, object: URL, content: responseUrl });
+  const poll: Poll = { name: "Dinner", options: [OPT_A], invitees: [BOB], rsvps: [] };
+  const rsvps = await aggregatePollRsvps(poll, URL, offers, fetch);
+  expect(rsvps).toEqual([{ attendee: BOB, option: OPT_A, response: "yes" }]);
+  expect(tallyRsvps([OPT_A], rsvps)).toEqual([{ option: OPT_A, yes: 1, no: 0, maybe: 0 }]);
+});
+
+it("refuses an RSVP actor different from the authenticated session before writing", async () => {
+  const fetch = vi.fn<typeof globalThis.fetch>();
+  await expect(
+    respondToPoll(
+      {
+        pollUrl: URL,
+        organizerWebId: CAROL,
+        attendeeWebId: ALICE,
+        sessionWebId: BOB,
+        podRoot: "https://8.8.4.4/",
+        option: OPT_A,
+        response: "yes",
+      },
+      fetch,
+    ),
+  ).rejects.toThrow("session user");
+  expect(fetch).not.toHaveBeenCalled();
 });

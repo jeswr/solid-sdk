@@ -123,7 +123,7 @@ test("bounds active member GETs at six", async () => {
   expect(peak).toBe(6);
 });
 
-test.each([401, 403, 404])("returns an empty listing for container HTTP %s", async (status) => {
+test.each([404])("returns an empty listing for container HTTP %s", async (status) => {
   const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(new Response(null, { status }));
   expect(await createInboxReader({ fetch }).list(inbox)).toEqual([]);
   expect(fetch).toHaveBeenCalledOnce();
@@ -156,6 +156,7 @@ test("skips unreadable, malformed and non-activity members", async () => {
     .mockResolvedValueOnce(turtle('<> <http://purl.org/dc/terms/title> "No activity".'))
     .mockRejectedValueOnce(new Error("offline"));
   expect(await createInboxReader({ fetch }).list(inbox)).toEqual([
+    { url: `${inbox}not-activity`, type: "Notification" },
     { url: `${inbox}ok`, type: "Announce", summary: "hello" },
   ]);
 });
@@ -217,7 +218,7 @@ test("shares profile discovery with the notifier for ten minutes, including conc
         : turtle(`<${webId}> <http://www.w3.org/ns/ldp#inbox> <${inbox}>.`),
     );
   const reader = createInboxReader({ fetch, clock });
-  const notify = createNotifyClient({ fetch, clock });
+  const notify = createNotifyClient({ fetch, clock, webId });
   await Promise.all([
     reader.inbox(webId),
     notify(webId, { type: "Offer", actor: webId, object: inbox }),
@@ -302,7 +303,7 @@ test("rejects oversized containers and skips oversized members", async () => {
   const oversized = () => turtle("x".repeat(256 * 1024 + 1));
   const fetch = vi.fn<typeof globalThis.fetch>().mockImplementation(async () => oversized());
   const reader = createInboxReader({ fetch });
-  await expect(reader.list(inbox)).rejects.toThrow();
+  expect((await reader.listPage(inbox)).truncated).toBe(true);
   fetch.mockResolvedValueOnce(listing([`${inbox}n`]));
   expect(await reader.list(inbox)).toEqual([]);
 });
@@ -342,4 +343,101 @@ test("list remains safe to pass as a detached callback", async () => {
   const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(turtle(""));
   const { list } = createInboxReader({ fetch });
   expect(await list(inbox)).toEqual([]);
+});
+
+test.each([401, 403])("listing HTTP %s propagates as an error", async (status) => {
+  const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(new Response(null, { status }));
+  await expect(createInboxReader({ fetch }).listPage(inbox)).rejects.toMatchObject({ status });
+});
+
+test("retains completed listing statements at the byte cap and caps individual bodies strictly", async () => {
+  const { NamedNodeAs, NamedNodeFrom, SetFrom, TermWrapper } = await import("@rdfjs/wrapper");
+  const { DataFactory, Store, Writer } = await import("n3");
+  const dataset = new Store();
+  const root = new TermWrapper(inbox, dataset, DataFactory);
+  const members = SetFrom.subjectPredicate(
+    root,
+    "http://www.w3.org/ns/ldp#contains",
+    NamedNodeAs.string,
+    NamedNodeFrom.string,
+  );
+  for (let i = 0; i < 1000; i++) members.add(`${inbox}${i}-${"a".repeat(300)}`);
+  const writer = new Writer({ format: "text/turtle" });
+  writer.addQuads([...dataset]);
+  const body = await new Promise<string>((resolve, reject) =>
+    writer.end((e, value) => (e ? reject(e) : resolve(value))),
+  );
+  const fetch = vi.fn<typeof globalThis.fetch>().mockImplementation(async (url) =>
+    url === inbox
+      ? new Response(body, {
+          headers: { "content-type": "text/turtle", "content-length": String(body.length) },
+        })
+      : note(),
+  );
+  const page = await createInboxReader({ fetch, maxItems: 500 }).listPage(inbox);
+  expect(page.truncated).toBe(true);
+  expect(page.members.length).toBeGreaterThan(500);
+  expect(page.members.length).toBeLessThan(1000);
+  expect(page.notifications).toHaveLength(500);
+  expect(fetch).toHaveBeenCalledTimes(501);
+});
+
+test("a truncated JSON-LD listing returns explicit truncation without enabling remote contexts", async () => {
+  const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(
+    new Response(" ".repeat(256 * 1024 + 1), {
+      headers: { "content-type": "application/ld+json" },
+    }),
+  );
+  expect(await createInboxReader({ fetch }).listPage(inbox)).toEqual({
+    notifications: [],
+    members: [],
+    truncated: true,
+  });
+});
+
+test("a complete capped N-Triples prefix is retained", async () => {
+  const fetch = vi
+    .fn<typeof globalThis.fetch>()
+    .mockResolvedValueOnce(
+      new Response(
+        "<https://8.8.4.4/inbox/> <http://www.w3.org/ns/ldp#contains> <https://8.8.4.4/inbox/n>.\n" +
+          " ".repeat(256 * 1024),
+        { headers: { "content-type": "application/n-triples" } },
+      ),
+    )
+    .mockImplementation(async () => note());
+  const page = await createInboxReader({ fetch }).listPage(inbox);
+  expect(page.truncated).toBe(true);
+  expect(page.notifications).toEqual([{ url: `${inbox}n`, type: "Announce", summary: "hello" }]);
+});
+
+test.each([
+  "localhost",
+  "127.0.0.1",
+  "[::1]",
+])("reader permits loopback pods only when opted in (%s)", async (host) => {
+  const ownInbox = `http://${host}:3000/inbox/`;
+  const fetch = vi.fn<typeof globalThis.fetch>().mockImplementation(async () => turtle(""));
+  await expect(createInboxReader({ fetch }).listPage(ownInbox)).rejects.toThrow();
+  expect(fetch).not.toHaveBeenCalled();
+  expect(
+    await createInboxReader({ fetch, devLoopback: true, dnsLookup: null }).listPage(ownInbox),
+  ).toEqual({ notifications: [], members: [], truncated: false });
+});
+
+test("unknown-activity opt-in retains even empty readable RDF documents", async () => {
+  const fetch = vi
+    .fn<typeof globalThis.fetch>()
+    .mockResolvedValueOnce(listing([`${inbox}empty`, `${inbox}foreign-subject`]))
+    .mockImplementation(async (url) =>
+      turtle(
+        String(url).endsWith("empty")
+          ? ""
+          : '<https://other.example/doc> <http://purl.org/dc/terms/title> "Other".',
+      ),
+    );
+  expect(await createInboxReader({ fetch, includeUnknownActivities: true }).list(inbox)).toEqual([
+    { url: `${inbox}empty`, type: "Notification" },
+    { url: `${inbox}foreign-subject`, type: "Notification" },
+  ]);
 });

@@ -1,6 +1,8 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+
+import { parseRdf } from "@jeswr/fetch-rdf";
 import { expect, test, vi } from "vitest";
-import { NoInboxError, NotificationSendError } from "./errors.js";
+import { InvalidTargetError, NoInboxError, NotificationSendError } from "./errors.js";
 import { sendNotification } from "./notify-send.js";
 
 const recipient = "https://8.8.8.8/profile#me";
@@ -34,16 +36,21 @@ test("delivers invitations and RSVP content through the real SDK sender with cac
   expect(fetch).toHaveBeenCalledTimes(3);
   const init = fetch.mock.calls[1][1];
   expect.assert(init);
-  expect(new Headers(init.headers).get("content-type")).toBe("application/ld+json");
+  expect(new Headers(init.headers).get("content-type")).toBe("text/turtle");
   expect(init.redirect).toBe("manual");
-  expect(JSON.parse(init.body as string)).toMatchObject({
-    type: "Invite",
-    actor: args.actorWebId,
-    object: "https://alice.example/room/",
-    summary: "Join",
-    content: "Response URL",
-  });
-  expect(JSON.parse(fetch.mock.calls[2][1]?.body as string)).not.toHaveProperty("object");
+  const ds = await parseRdf(String(init.body), "text/turtle", { baseIRI: `${inbox}n` });
+  const values = [...ds].map((q) => [q.predicate.value.split("#").at(-1), q.object.value]);
+  expect(values).toEqual(
+    expect.arrayContaining([
+      ["type", "https://www.w3.org/ns/activitystreams#Invite"],
+      ["actor", args.actorWebId],
+      ["object", "https://alice.example/room/"],
+      ["summary", "Join"],
+      ["content", "Response URL"],
+    ]),
+  );
+  const empty = await parseRdf(String(fetch.mock.calls[2][1]?.body), "text/turtle");
+  expect([...empty].some((q) => q.predicate.value.endsWith("#object"))).toBe(false);
 });
 
 test("adapts missing inboxes and structured delivery failures to UI errors", async () => {
@@ -64,7 +71,7 @@ test.each([
   "https://user:pass@8.8.4.4/inbox/",
 ])("refuses unsafe inbox %s without POSTing", async (target) => {
   const fetch = transport(201, target);
-  await expect(sendNotification(args, fetch)).rejects.toBeInstanceOf(NotificationSendError);
+  await expect(sendNotification(args, fetch)).rejects.toBeInstanceOf(InvalidTargetError);
   expect(fetch.mock.calls.every(([, init]) => init?.method !== "POST")).toBe(true);
 });
 
@@ -82,4 +89,42 @@ test("refuses a transport that followed a redirect despite manual mode", async (
     return response;
   });
   await expect(sendNotification(args, fetch)).rejects.toBeInstanceOf(NotificationSendError);
+});
+
+test.each([
+  401, 403, 404, 429, 500, 503,
+])("retains the actual inbox HTTP %s for UI feedback", async (status) => {
+  await expect(sendNotification(args, transport(status))).rejects.toMatchObject({
+    name: "NotificationSendError",
+    status,
+  });
+});
+
+test.each([401, 403, 404, 500])("unreadable HTTP %s profiles adapt to no inbox", async (status) => {
+  const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(new Response(null, { status }));
+  await expect(sendNotification(args, fetch)).rejects.toBeInstanceOf(NoInboxError);
+});
+
+test("network failures remain distinct from an HTTP rejection", async () => {
+  const fetch = vi.fn<typeof globalThis.fetch>().mockRejectedValue(new TypeError("offline"));
+  await expect(sendNotification(args, fetch)).rejects.toMatchObject({
+    name: "NotificationSendError",
+    status: 0,
+  });
+});
+
+test("non-HTTPS object and target are omitted without rejecting the send", async () => {
+  const fetch = transport();
+  await expect(
+    sendNotification(
+      { ...args, object: "http://example.org/x", target: "javascript:alert(1)" },
+      fetch,
+    ),
+  ).resolves.toEqual({ inbox });
+  const ds = await parseRdf(String(fetch.mock.calls[1][1]?.body), "text/turtle");
+  expect(
+    [...ds].some(
+      (q) => q.predicate.value.endsWith("#object") || q.predicate.value.endsWith("#target"),
+    ),
+  ).toBe(false);
 });

@@ -202,7 +202,7 @@ Notification delivery lives at `@jeswr/pod-access/notify`:
 ```ts
 import { assignmentAnnounce, createInboxManager, createNotify } from '@jeswr/pod-access/notify';
 
-const notify = createNotify({ fetch: auth.fetch });
+const notify = createNotify({ fetch: auth.fetch, webId: auth.webId });
 const result = await notify(assigneeWebId, {
   ...assignmentAnnounce(task, tracker, assignerName, title),
   actor: senderWebId,
@@ -213,9 +213,12 @@ const result = await notify(assigneeWebId, {
 
 Activities support `Announce`, `Offer`, `Accept`, `Reject`, `Create`, `Invite` and `Update`;
 `actor` is required, with optional `object`, `target`, `summary` and `content`.
-The POST body is ActivityStreams JSON-LD
-(`application/ld+json`). Delivery failures resolve as values. An inbox's 401/403 is `forbidden`;
-other transport, parsing, policy or HTTP failures are `network`. No unambiguous inbox is `no-inbox`.
+The client binds `actor` to the authenticated `webId` supplied at construction and refuses
+mismatches as `invalid-actor`. It builds a typed RDF/JS dataset and serializes with n3.Writer
+as `text/turtle`, using the relative named subject `#it`. Non-HTTPS optional object/target
+links are omitted. Issue drafts include PROV-O attribution and generation time.
+Delivery failures resolve as values: `no-inbox`, `lws-no-ldn`, `invalid-target`,
+`profile-unreadable`, `forbidden` (inbox 401/403), or `network`. HTTP failures retain `status`.
 
 Builders return templates without actor: `shareNotification(resource, role)` announces a share
 with summary `Shared with you as {role}`; `assignmentAnnounce(task, tracker, assignerName, title)`
@@ -248,16 +251,18 @@ is a thin browser-safe reader wrapper. `inbox(webId)` discovers the owner's inbo
 null (including LWS profiles). `list(inboxUrl, { signal? })` returns `InboxNotification[]`,
 newest first with undated items last and URL ties deterministic. Items carry `url`, `type`
 and optional `actor`, `object`, `target`, `summary`, `content`, `name`, `published` (ISO string).
-Legacy names and valid untyped publication dates are retained. `listPage(inboxUrl, { signal? })`
-returns `{ notifications, members, truncated }`: `members` includes all eligible direct children,
-and `truncated` reports whether there were more members than the fetch ceiling, even when
+Legacy names and valid untyped publication dates are retained. `includeUnknownActivities: true`
+keeps even empty readable RDF as unknown notifications (Issues opts in); the fallback label
+does not assert an ActivityStreams type IRI. `listPage(inboxUrl, { signal? })`
+returns `{ notifications, members, truncated }`: `members` includes all eligible direct children read before the byte ceiling,
+and `truncated` reports whether the listing exceeded the byte or item ceiling, even when
 individual fetched members could not be read.
 
 Reads use the delivery transport's HTTPS, redirect, byte and deadline guards. At most
-`maxItems` direct children (default 50, non-negative safe integer) are fetched in listing
+`maxItems` direct children (default 50, non-negative safe integer up to the exported `MAX_INBOX_ITEMS` of 500) are fetched in listing
 order, with concurrency at most six. Foreign, outside-container, nested, query/fragment and
 encoded-slash members are never dereferenced; unreadable members are skipped. Container
-401/403/404 or RDF parse failures return `[]`; other container failures reject. Abort rejects
+404 or RDF parse failures return `[]`; 401/403 and other container failures reject. Abort rejects
 with `AbortError` and stops new work. `createNotifyFetch({ fetch, pinningFetch? })` exposes
 the same transport for notification-linked foreign resources. It also refuses a final response
 URL different from the requested document if a caller transport ignored manual redirects.
@@ -265,7 +270,7 @@ URL different from the requested document if a caller transport ignored manual r
 `createInboxManager({ webId, storageRoots, fetch, pinningFetch?, clock?, maxItems? })`
 discovers the owner's inbox, returning `null` if absent or outside the active storage roots
 (or query-addressed). Supply trusted roots from the authenticated session. The returned
-`{ inboxUrl, list, markRead, dismiss }` pins all writes to direct children of that inbox:
+`{ inboxUrl, list, listPage, markRead, dismiss }` pins all writes to direct children of that inbox:
 
 ```ts
 const inbox = await createInboxManager({
@@ -280,14 +285,29 @@ if (inbox) {
 }
 ```
 
-Read state uses the existing same-container `<notification>.read.ttl` sidecar convention;
-sidecars are hidden from the notification list and still count toward the bounded child-fetch
-budget. Marker creation sends `If-None-Match: *`; updates and deletes read a strong ETag by
-HEAD and send `If-Match`. Missing/weak/wildcard validators refuse writes, and conflicts reject
-without retry. Dismissal tolerates missing resources and cleans up its sidecar best effort.
-The shared scope guard refuses foreign/outside/nested/query/fragment/credentialed and
-encoded-delimiter targets before any I/O. Public HTTPS, pinning, redirect, size and deadline
-limits apply to reads and writes alike.
+Read state uses same-container `<notification>.read.ttl` sidecars. Sidecars remain in
+`members` for read state but are never fetched or counted against the notification budget.
+The manager fetches up to `MAX_INBOX_ITEMS`, sorts newest first, then applies its optional
+display `maxItems` (default the package maximum). `listPage()` returns notifications and
+`truncated`; apps must surface that flag, since a bounded listing may omit newer items.
+Listing overflow retains complete RDF statements already read and sets `truncated: true`;
+individual notification bodies still fail at 256 KiB.
+
+Mark-read PUT and notification DELETE are unconditional, idempotent operations: they do
+not merge existing data and require no HEAD or ETag. Dismissal tolerates 404 and cleans up
+its sidecar best effort. Strong ETag preconditions remain required for read-modify-write
+operations elsewhere in this package. Only direct notification children of the owner's
+inbox are valid mutation targets; read markers cannot be supplied as notification targets.
+Foreign/outside/nested/query/fragment/credentialed/encoded-delimiter targets fail before I/O.
+
+Production delivery permits public HTTPS on port 443 only. All branches reject single-label
+hosts, empty DNS labels, trailing dots, private/reserved IPs, userinfo and redirects.
+Own-storage GET/HEAD may use any HTTPS port when `ownStorageRoots` comes from the trusted
+session. This never relaxes foreign reads or POST/PUT/DELETE port checks. `devLoopback: true`
+is an explicit app opt-in for HTTP(S) on exactly localhost, 127.0.0.1 or [::1], on any port;
+it never permits general HTTP or another private host. Issues enables it only when the app
+itself runs on one of those loopback hosts. Node public hostnames still require DNS pinning;
+browsers retain the documented DNS limitation.
 
 `notificationKind(notification)` classifies builder round-trips as `share` (Announce with
 summary starting `Shared with you as `), `assignment` (Announce with target), `mention`

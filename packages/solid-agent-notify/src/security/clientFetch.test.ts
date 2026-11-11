@@ -109,3 +109,188 @@ test("accepts Request inputs while preserving method, headers and final URL chec
   expect(fetch.mock.calls[0]?.[1]?.method).toBe("POST");
   expect(new Headers(fetch.mock.calls[0]?.[1]?.headers).get("content-type")).toBe("text/plain");
 });
+
+// The browser policy must run without Node DNS or the pinning requirement masking host checks.
+test.each([
+  "https://wiki/inbox/",
+  "https://router/x",
+  "https://a..example/x",
+  "https://.example/x",
+  "https://example.org./x",
+  "https://printer.local/x",
+  "https://localhost/x",
+  "https://127.0.0.1/x",
+  "https://10.0.0.1/x",
+  "https://169.254.1.1/x",
+  "https://[::1]/x",
+  "https://[fe80::1]/x",
+  "https://[fd00::1]/x",
+  "https://user:pass@example.org/x",
+  "https://example.org:8443/x",
+])("refuses unsafe browser destination with dnsLookup:null: %s", async (url) => {
+  vi.stubGlobal("window", globalThis);
+  vi.stubGlobal("document", {});
+  const fetch = vi.fn<typeof globalThis.fetch>();
+  await expect(clientFetch({ fetch, dnsLookup: null })(url)).rejects.toThrow();
+  expect(fetch).not.toHaveBeenCalled();
+});
+
+test.each([
+  "https://pod.example/x",
+  "https://8.8.8.8/x",
+  "https://[2606:4700:4700::1111]/x",
+])("accepts public browser names and public IP literals: %s", async (url) => {
+  vi.stubGlobal("window", globalThis);
+  vi.stubGlobal("document", {});
+  const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(new Response(null));
+  await expect(clientFetch({ fetch, dnsLookup: null })(url)).resolves.toHaveProperty("status", 200);
+});
+
+test.each([
+  "localhost",
+  "127.0.0.1",
+  "[::1]",
+])("loopback development is explicit and exact: %s", async (host) => {
+  for (const scheme of ["http", "https"]) {
+    const url = `${scheme}://${host}:3000/inbox/`;
+    const fetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockImplementation(async () => new Response(null));
+    await expect(clientFetch({ fetch, dnsLookup: null })(url)).rejects.toThrow();
+    expect(fetch).not.toHaveBeenCalled();
+    await expect(
+      clientFetch({ fetch, dnsLookup: null, devLoopback: true })(url),
+    ).resolves.toHaveProperty("status", 200);
+  }
+});
+
+test.each([
+  "http://pod.example/x",
+  "http://10.0.0.1/x",
+  "http://127.0.0.2/x",
+  "https://foo.localhost/x",
+  "http://localhost./x",
+])("development does not admit non-loopback targets: %s", async (url) => {
+  const fetch = vi.fn<typeof globalThis.fetch>();
+  await expect(clientFetch({ fetch, dnsLookup: null, devLoopback: true })(url)).rejects.toThrow();
+  expect(fetch).not.toHaveBeenCalled();
+});
+
+test("only own storage GET/HEAD admits an alternate HTTPS port", async () => {
+  const fetch = vi.fn<typeof globalThis.fetch>().mockImplementation(async () => new Response(null));
+  const request = clientFetch({ fetch, ownStorageRoots: ["https://8.8.8.8:8443/alice/"] });
+  await expect(request("https://8.8.8.8:8443/alice/inbox/")).resolves.toHaveProperty("status", 200);
+  await expect(
+    request(new Request("https://8.8.8.8:8443/alice/inbox/", { method: "HEAD" })),
+  ).resolves.toHaveProperty("status", 200);
+  for (const [url, method] of [
+    ["https://8.8.8.8:8443/bob/inbox/", "GET"],
+    ["https://8.8.8.8:8443/alice/inbox/", "POST"],
+    ["https://8.8.8.8:8443/alice/inbox/", "DELETE"],
+  ])
+    await expect(request(url, { method })).rejects.toThrow();
+  expect(fetch).toHaveBeenCalledTimes(2);
+});
+
+test("empty response URLs do not misreport fragment inputs as redirects", async () => {
+  const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(new Response("ok"));
+  await expect(clientFetch({ fetch })("https://8.8.8.8/x#fragment")).resolves.toHaveProperty(
+    "status",
+    200,
+  );
+  await expect(clientFetch({ fetch })("bad URL")).rejects.toThrow();
+});
+
+test("aborting a listing cancels its source stream", async () => {
+  const controller = new AbortController();
+  const cancelled = vi.fn();
+  const fetch = vi.fn<typeof globalThis.fetch>().mockImplementation(async () => {
+    return new Response(
+      new ReadableStream({
+        start() {
+          queueMicrotask(() => controller.abort());
+        },
+        cancel: cancelled,
+      }),
+    );
+  });
+  await expect(
+    clientFetch({ fetch }, { truncated: false })("https://8.8.8.8/inbox/", {
+      signal: controller.signal,
+    }),
+  ).rejects.toThrow();
+  await vi.waitFor(() => expect(cancelled).toHaveBeenCalled());
+});
+
+test("checks label safety with a pinned Node resolver before any authenticated request", async () => {
+  const fetch = vi.fn<typeof globalThis.fetch>();
+  for (const url of ["https://wiki/x", "https://a..example/x", "https://example.org./x"]) {
+    await expect(
+      clientFetch({
+        fetch,
+        pinningFetch: fetch,
+        dnsLookup: async () => [{ address: "8.8.8.8", family: 4 }],
+      })(url),
+    ).rejects.toThrow();
+  }
+  expect(fetch).not.toHaveBeenCalled();
+});
+
+test("listing cancellation errors cannot hide a capped result", async () => {
+  const fetch = vi.fn<typeof globalThis.fetch>().mockImplementation(
+    async () =>
+      new Response(
+        new ReadableStream({
+          start(controller) {
+            controller.enqueue(new Uint8Array(256 * 1024 + 1));
+          },
+          cancel() {
+            return Promise.reject(new Error("cancel refused"));
+          },
+        }),
+      ),
+  );
+  const budget = { truncated: false };
+  await expect(clientFetch({ fetch }, budget)("https://8.8.8.8/inbox/")).resolves.toHaveProperty(
+    "status",
+    200,
+  );
+  expect(budget.truncated).toBe(true);
+});
+
+test("uses the fragment-free input when the runtime cannot attach a response URL", async () => {
+  const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(new Response(null));
+  const define = Object.defineProperty;
+  const mock = vi
+    .spyOn(Object, "defineProperty")
+    .mockImplementation((target, property, descriptor) => {
+      if (target instanceof Response && property === "url") throw new TypeError("read-only URL");
+      return define(target, property, descriptor);
+    });
+  try {
+    await expect(clientFetch({ fetch })("https://8.8.8.8/x#fragment")).resolves.toHaveProperty(
+      "status",
+      200,
+    );
+  } finally {
+    mock.mockRestore();
+  }
+});
+
+test("the shared deadline also bounds DNS validation before dispatch", async () => {
+  vi.useFakeTimers();
+  const fetch = vi.fn<typeof globalThis.fetch>();
+  try {
+    const pending = clientFetch({
+      fetch,
+      pinningFetch: fetch,
+      dnsLookup: async () => new Promise(() => {}),
+    })("https://pod.example/inbox/");
+    const refused = expect(pending).rejects.toThrow();
+    await vi.advanceTimersByTimeAsync(8_001);
+    await refused;
+    expect(fetch).not.toHaveBeenCalled();
+  } finally {
+    vi.useRealTimers();
+  }
+});

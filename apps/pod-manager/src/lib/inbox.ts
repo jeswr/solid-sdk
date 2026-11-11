@@ -1,6 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 /** Bind the shared reader/read-marker API to Pod Manager's active storage. */
-import { createInboxManager, type ManagedInbox } from "@jeswr/pod-access/notify";
+import { createInboxManager, MAX_INBOX_ITEMS, type ManagedInbox } from "@jeswr/pod-access/notify";
 
 export type { ReadableNotification as InboxNotification } from "@jeswr/pod-access/notify";
 export type Inbox = ManagedInbox;
@@ -13,6 +13,7 @@ export async function inboxFor(opts: {
   return (
     (await createInboxManager({
       webId: opts.webId,
+      maxItems: MAX_INBOX_ITEMS,
       storageRoots: [opts.activeStorage],
       fetch: opts.fetchImpl ?? globalThis.fetch,
     })) ?? undefined

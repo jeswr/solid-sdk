@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+import { createInboxReader } from "@jeswr/pod-access/notify";
 import type { AuthEvent, AuthEventType, Identity, PodAuth } from "@jeswr/pod-auth";
 import { PodAuthProvider } from "@jeswr/pod-auth/react";
 import {
@@ -22,6 +23,20 @@ import {
   useNotify,
 } from "./index.js";
 import { createNotify } from "./testing.js";
+
+async function sent(body: BodyInit | null | undefined) {
+  const reader = createInboxReader({
+    fetch: async (url) =>
+      new Response(
+        url === inbox
+          ? "<https://8.8.4.4/inbox/> <http://www.w3.org/ns/ldp#contains> <https://8.8.4.4/inbox/n>."
+          : String(body),
+        { headers: { "content-type": "text/turtle" } },
+      ),
+  });
+  const [{ url: _url, ...activity }] = await reader.list(inbox);
+  return activity;
+}
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 const recipient = "https://8.8.8.8/profile#me";
@@ -70,7 +85,7 @@ function fakeAuth(current: Identity | null = alice) {
 
 let action: NotifyAction;
 let root: Root | undefined;
-let options: Omit<NotifyOptions, "fetch"> | undefined;
+let options: Omit<NotifyOptions, "fetch" | "webId"> | undefined;
 let update = () => {};
 function Probe() {
   action = useNotify(options);
@@ -118,8 +133,7 @@ test("uses the real provider fetch and current actor, stays stable on rerender a
   expect(await action(recipient, draft)).toEqual({ delivered: true, inbox });
   expect(await action(recipient, draft)).toEqual({ delivered: true, inbox });
   expect(fetch).toHaveBeenCalledTimes(3);
-  expect(JSON.parse(fetch.mock.calls[1]?.[1]?.body as string)).toEqual({
-    "@context": "https://www.w3.org/ns/activitystreams",
+  expect(await sent(fetch.mock.calls[1]?.[1]?.body)).toEqual({
     ...draft,
     actor: alice.webId,
     published: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/),
@@ -129,7 +143,7 @@ test("uses the real provider fetch and current actor, stays stable on rerender a
     "Create",
   );
   expect(roomInvitation("https://pod.example/room/").type).toBe("Offer");
-  expect(typeof createNotify({ fetch })).toBe("function");
+  expect(typeof createNotify({ fetch, webId: "https://alice.example/#me" })).toBe("function");
 });
 
 test("resets the cache on account switch and same-account logout/login", async () => {
@@ -143,7 +157,7 @@ test("resets the cache on account switch and same-account logout/login", async (
   expect(action).not.toBe(first);
   await action(recipient, draft);
   expect(fetch).toHaveBeenCalledTimes(4);
-  expect(JSON.parse(fetch.mock.calls[3]?.[1]?.body as string).actor).toBe(bob.webId);
+  expect((await sent(fetch.mock.calls[3]?.[1]?.body)).actor).toBe(bob.webId);
   await emit("logout", null);
   expect(await action(recipient, draft)).toEqual({
     delivered: false,
@@ -156,7 +170,7 @@ test("resets the cache on account switch and same-account logout/login", async (
   expect(fetch).toHaveBeenCalledTimes(6);
 });
 
-test("can deliver a complete activity with an explicit actor when a CID identity has no WebID", async () => {
+test("refuses explicit actors when the authenticated CID identity has no WebID", async () => {
   const { auth, fetch } = fakeAuth({ ...alice, protocol: "lws", webId: null });
   await mount(auth);
   const draft = roomInvitation("https://pod.example/room/");
@@ -167,8 +181,9 @@ test("can deliver a complete activity with an explicit actor when a CID identity
   });
   expect(fetch).not.toHaveBeenCalled();
   expect(await action(recipient, { ...draft, actor: "https://alice.example/#me" })).toEqual({
-    delivered: true,
-    inbox,
+    delivered: false,
+    inbox: null,
+    reason: "network",
   });
 });
 
@@ -268,7 +283,7 @@ test.each([
   expect(fetch).toHaveBeenCalledTimes(1);
   expect(await action(recipient, draft)).toEqual({ delivered: true, inbox });
   expect(fetch).toHaveBeenCalledTimes(3);
-  expect(JSON.parse(fetch.mock.calls[2]?.[1]?.body as string).actor).toBe(bob.webId);
+  expect((await sent(fetch.mock.calls[2]?.[1]?.body)).actor).toBe(bob.webId);
 });
 
 test.each([

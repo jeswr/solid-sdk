@@ -1,6 +1,8 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate; see docs/MODEL-PROVENANCE.md
 "use client";
 
+import { Inbox as InboxIcon, Loader2, MailCheck, Send, Trash2, X } from "lucide-react";
 /**
  * Inbox — the user's LDN inbox. Lists incoming ActivityStreams 2.0
  * notifications (newest first), with mark-read / dismiss, plus a "Send
@@ -11,27 +13,26 @@
  * without polling. All content links render through `safeLinkHref`.
  */
 import { useState } from "react";
-import { Inbox as InboxIcon, Loader2, MailCheck, Send, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
-import { useSession } from "@/components/session-provider";
-import { useInbox } from "@/components/use-inbox";
-import { useResourceNotifications } from "@/components/use-resource-notifications";
-import { PeoplePicker } from "@/components/people-picker";
-import { EmptyState, ErrorState } from "@/components/states";
 import { ItemRowSkeleton } from "@/components/item-row";
-import { Button } from "@/components/ui/button";
+import { PeoplePicker } from "@/components/people-picker";
+import { useSession } from "@/components/session-provider";
+import { EmptyState, ErrorState } from "@/components/states";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { safeLinkHref } from "@/lib/pod-scope";
-import { sendNotification } from "@/lib/notify-send";
-import { NoInboxError, InvalidTargetError, NotificationSendError } from "@/lib/errors";
+import { useInbox } from "@/components/use-inbox";
+import { useResourceNotifications } from "@/components/use-resource-notifications";
+import { InvalidTargetError, NoInboxError, NotificationSendError } from "@/lib/errors";
 import type { InboxNotification } from "@/lib/inbox";
+import { sendNotification } from "@/lib/notify-send";
+import { safeLinkHref } from "@/lib/pod-scope";
 
 export default function InboxPage() {
   const { webId } = useSession();
-  const { data, loading, error, inboxUrl, reload, markRead, dismiss } = useInbox();
+  const { data, loading, error, inboxUrl, truncated, reload, markRead, dismiss } = useInbox();
   const [composing, setComposing] = useState(false);
 
   // Live-update: re-list when the inbox container changes.
@@ -54,7 +55,10 @@ export default function InboxPage() {
             </p>
           </div>
         </div>
-        <Button onClick={() => setComposing((c) => !c)} variant={composing ? "secondary" : "default"}>
+        <Button
+          onClick={() => setComposing((c) => !c)}
+          variant={composing ? "secondary" : "default"}
+        >
           <Send aria-hidden="true" />
           {composing ? "Close" : "Send notification"}
         </Button>
@@ -64,12 +68,18 @@ export default function InboxPage() {
         <ComposeNotification actorWebId={webId} onSent={() => setComposing(false)} />
       )}
 
+      {truncated && !loading && !error && (
+        <p role="status">
+          Showing the newest {data?.length ?? 0} notifications from a limited inbox listing.
+        </p>
+      )}
+
       {error ? (
         <ErrorState error={error} onRetry={reload} />
       ) : loading ? (
         <ul className="flex flex-col gap-2">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <ItemRowSkeleton key={i} />
+          {["first", "second", "third", "fourth"].map((slot) => (
+            <ItemRowSkeleton key={slot} />
           ))}
         </ul>
       ) : !inboxUrl ? (
@@ -148,7 +158,7 @@ function NotificationRow({
               {n.actor}
             </a>
           ) : (
-            n.actor ?? "Unknown sender"
+            (n.actor ?? "Unknown sender")
           )}
           {formatPublished(n.published)}
         </span>
@@ -164,7 +174,13 @@ function NotificationRow({
       </span>
       <span className="flex shrink-0 items-center gap-1">
         {!n.read && (
-          <Button type="button" variant="ghost" size="icon" onClick={onMarkRead} aria-label="Mark as read">
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            onClick={onMarkRead}
+            aria-label="Mark as read"
+          >
             <MailCheck className="size-4" aria-hidden="true" />
           </Button>
         )}
@@ -193,13 +209,16 @@ function ComposeNotification({ actorWebId, onSent }: { actorWebId: string; onSen
     try {
       // sendNotification discovers + STRICT-validates the recipient inbox before
       // any POST (SSRF guard) — the session supplies the Pod transport.
-      await sendNotification({
-        recipientWebId: recipient,
-        actorWebId,
-        type: "Announce",
-        summary: summary.trim() || undefined,
-        content: content.trim() || undefined,
-      }, podFetch);
+      await sendNotification(
+        {
+          recipientWebId: recipient,
+          actorWebId,
+          type: "Announce",
+          summary: summary.trim() || undefined,
+          content: content.trim() || undefined,
+        },
+        podFetch,
+      );
       toast.success("Notification sent");
       onSent();
     } catch (e) {
@@ -207,8 +226,10 @@ function ComposeNotification({ actorWebId, onSent }: { actorWebId: string; onSen
         toast.error("This person's pod doesn't advertise an inbox.");
       } else if (e instanceof InvalidTargetError) {
         toast.error("That inbox address isn't safe to send to.");
-      } else if (e instanceof NotificationSendError) {
-        toast.error("Their inbox rejected the notification. Please try again later.");
+      } else if (e instanceof NotificationSendError && e.status !== 0) {
+        toast.error(
+          `Their inbox rejected the notification (HTTP ${e.status}). Please try again later.`,
+        );
       } else {
         toast.error("Could not send the notification. Please try again.");
       }
@@ -242,8 +263,16 @@ function ComposeNotification({ actorWebId, onSent }: { actorWebId: string; onSen
         />
       </div>
       <div className="flex items-center gap-2">
-        <Button type="button" onClick={() => void onSend()} disabled={sending || recipients.length === 0}>
-          {sending ? <Loader2 className="animate-spin" aria-hidden="true" /> : <Send aria-hidden="true" />}
+        <Button
+          type="button"
+          onClick={() => void onSend()}
+          disabled={sending || recipients.length === 0}
+        >
+          {sending ? (
+            <Loader2 className="animate-spin" aria-hidden="true" />
+          ) : (
+            <Send aria-hidden="true" />
+          )}
           Send
         </Button>
         <Button type="button" variant="ghost" onClick={onSent}>

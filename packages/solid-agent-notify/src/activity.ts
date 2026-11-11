@@ -24,7 +24,16 @@ import { DataFactory, Store } from "n3";
 import { AS, RDF_TYPE } from "./vocabulary.js";
 
 /** AS2.0 activity verbs this package emits. (Reads accept any `as:*` type.) */
-export type ActivityType = "Announce" | "Invite" | "Offer" | "Create" | "Update" | "Add" | "Remove";
+export type ActivityType =
+  | "Announce"
+  | "Invite"
+  | "Offer"
+  | "Create"
+  | "Update"
+  | "Add"
+  | "Remove"
+  | "Accept"
+  | "Reject";
 
 /** The plain shape of a notification (no RDF terms) callers build / consume. */
 export interface ActivityNotification {
@@ -42,6 +51,8 @@ export interface ActivityNotification {
   content?: string;
   /** `as:published` — when it was sent (defaults to now on send). */
   published?: Date;
+  /** Include own-origin PROV-O attribution and generation time. */
+  provenance?: boolean;
 }
 
 /** True for an absolute http(s) URL usable as an AS2.0 IRI object/actor/target. */
@@ -130,6 +141,12 @@ export class ActivityDoc extends TermWrapper {
   set content(v: string | undefined) {
     OptionalAs.object(this, `${AS}content`, v, LiteralFrom.string);
   }
+  set attributedTo(v: string) {
+    OptionalAs.object(this, "http://www.w3.org/ns/prov#wasAttributedTo", v, NamedNodeFrom.string);
+  }
+  set generatedAt(v: Date) {
+    OptionalAs.object(this, "http://www.w3.org/ns/prov#generatedAtTime", v, LiteralFrom.dateTime);
+  }
   get published(): Date | undefined {
     return OptionalFrom.subjectPredicate(this, `${AS}published`, LiteralAs.date);
   }
@@ -169,6 +186,10 @@ export function buildActivity(notification: ActivityNotification, subject = "#it
   doc.summary = notification.summary?.trim() || undefined;
   doc.content = notification.content?.trim() || undefined;
   doc.published = notification.published ?? new Date();
+  if (notification.provenance) {
+    doc.attributedTo = notification.actor;
+    doc.generatedAt = doc.published as Date;
+  }
   return store;
 }
 

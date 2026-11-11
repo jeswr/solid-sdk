@@ -1,11 +1,12 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 
-import { fetchRdf } from "@jeswr/fetch-rdf";
+import { fetchRdf, parseRdf } from "@jeswr/fetch-rdf";
 import { NamedNodeFrom, OptionalAs, TermWrapper } from "@rdfjs/wrapper";
 import { DataFactory, Store } from "n3";
 import { describe, expect, it, vi } from "vitest";
 import {
+  InvalidTargetError,
   ItemReadError,
   NoInboxError,
   NotificationSendError,
@@ -102,7 +103,7 @@ describe("user issue assignment announcements", () => {
     const [input, init] = h.posts()[0];
     expect(String(input)).toBe(INBOX);
     expect(init?.redirect).toBe("manual");
-    expect(new Headers(init?.headers).get("content-type")).toBe("application/ld+json");
+    expect(new Headers(init?.headers).get("content-type")).toBe("text/turtle");
     expect(
       h.fetchImpl.mock.calls.map(([url, request]) => [String(url), request?.method ?? "GET"]),
     ).toEqual([
@@ -117,17 +118,19 @@ describe("user issue assignment announcements", () => {
       fetch: vi.fn<typeof fetch>(async () => turtle(String(put?.body))),
     });
     expect(new IssueDoc(`${ISSUE}#it`, saved, DataFactory).creator).toBe(REPORTER);
-    const activity = JSON.parse(String(init?.body));
-    expect(activity).toEqual({
-      "@context": "https://www.w3.org/ns/activitystreams",
-      type: "Announce",
-      actor: ACTOR,
-      object: `${ISSUE}#it`,
-      target: RECIPIENT,
-      summary: 'You were assigned to "Repair "a hinge""',
-      published: expect.any(String),
-    });
-    expect(Number.isNaN(Date.parse(activity.published))).toBe(false);
+    const ds = await parseRdf(String(init?.body), "text/turtle", { baseIRI: `${INBOX}n` });
+    const values = [...ds].map((q) => [q.predicate.value, q.object.value]);
+    expect(values).toEqual(
+      expect.arrayContaining([
+        ["https://www.w3.org/ns/activitystreams#actor", ACTOR],
+        ["https://www.w3.org/ns/activitystreams#object", `${ISSUE}#it`],
+        ["https://www.w3.org/ns/activitystreams#target", RECIPIENT],
+        [
+          "https://www.w3.org/ns/activitystreams#summary",
+          'You were assigned to "Repair "a hinge""',
+        ],
+      ]),
+    );
     expect(String(init?.body)).not.toContain(issue.description);
     expect(h.onError).not.toHaveBeenCalled();
   });
@@ -228,7 +231,7 @@ describe("user issue assignment announcements", () => {
   });
 
   it.each([
-    { name: "unsafe inbox", inbox: "https://169.254.169.254/inbox/", error: NotificationSendError },
+    { name: "unsafe inbox", inbox: "https://169.254.169.254/inbox/", error: InvalidTargetError },
     { name: "missing inbox", inbox: "", error: NoInboxError },
   ])("sends nothing after $name discovery refusal", async ({ inbox, error }) => {
     const h = await harness({ inbox });

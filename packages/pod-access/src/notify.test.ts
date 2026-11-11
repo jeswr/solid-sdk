@@ -4,6 +4,7 @@ import {
   assignmentAnnounce,
   createInboxReader,
   createNotify,
+  issueAnnounce,
   mentionNotification,
   notificationKind,
   roomInvitation,
@@ -51,7 +52,11 @@ test("wraps the real sender and delivers the byte-stable assignment with the cal
       }),
     )
     .mockResolvedValue(new Response(null, { status: 201 }));
-  const notify = createNotify({ fetch, clock: () => Date.parse("2026-11-11T12:00:00.000Z") });
+  const notify = createNotify({
+    fetch,
+    webId: "https://alice.example/profile#me",
+    clock: () => Date.parse("2026-11-11T12:00:00.000Z"),
+  });
   await expect(
     notify(webId, {
       ...assignmentAnnounce(
@@ -65,9 +70,11 @@ test("wraps the real sender and delivers the byte-stable assignment with the cal
   ).resolves.toEqual({ delivered: true, inbox });
   expect(fetch).toHaveBeenCalledTimes(2);
   expect(fetch.mock.calls[1]?.[0]).toBe(inbox);
-  expect(fetch.mock.calls[1]?.[1]?.body).toMatchInlineSnapshot(
-    `"{"@context":"https://www.w3.org/ns/activitystreams","type":"Announce","actor":"https://alice.example/profile#me","object":"https://pod.example/task#it","target":"https://pod.example/tracker#this","summary":"Alice assigned you 'Pay rent'","published":"2026-11-11T12:00:00.000Z"}"`,
-  );
+  const { parseRdf } = await import("@jeswr/fetch-rdf");
+  const ds = await parseRdf(String(fetch.mock.calls[1]?.[1]?.body), "text/turtle", {
+    baseIRI: `${inbox}n`,
+  });
+  expect([...ds].every((q) => q.subject.value === `${inbox}n#it`)).toBe(true);
 });
 
 test("wraps inbox discovery and reading, and classifies each real builder round-trip", async () => {
@@ -83,6 +90,19 @@ test("wraps inbox discovery and reading, and classifies each real builder round-
     ),
     mentionNotification("https://pod.example/comment", "https://pod.example/doc"),
     roomInvitation("https://pod.example/room/"),
+    issueAnnounce("https://pod.example/issue", webId, "Mentioned"),
+    {
+      type: "Invite" as const,
+      object: "https://pod.example/poll",
+      summary: "Invitation",
+      content: "details",
+    },
+    {
+      type: "Offer" as const,
+      object: "https://pod.example/poll",
+      summary: "RSVP yes",
+      content: "https://pod.example/rsvp",
+    },
   ];
   const bodies: string[] = [];
   const fetch = vi.fn<typeof globalThis.fetch>().mockImplementation(async (url, init) => {
@@ -101,41 +121,36 @@ test("wraps inbox discovery and reading, and classifies each real builder round-
         { headers: { "content-type": "text/turtle" } },
       );
     }
-    // Model the pod's RDF representation: a stored subject and a local AS context.
-    const activity = JSON.parse(bodies[Number(String(url).slice(inbox.length))] as string);
-    return new Response(
-      JSON.stringify({
-        ...activity,
-        "@id": `${url}#it`,
-        "@context": {
-          "@vocab": "https://www.w3.org/ns/activitystreams#",
-          type: "@type",
-          actor: { "@type": "@id" },
-          object: { "@type": "@id" },
-          target: { "@type": "@id" },
-          published: { "@type": "http://www.w3.org/2001/XMLSchema#dateTime" },
-        },
-      }),
-      {
-        headers: { "content-type": "application/ld+json" },
-      },
-    );
+    return new Response(bodies[Number(String(url).slice(inbox.length))], {
+      headers: { "content-type": "text/turtle" },
+    });
   });
   let tick = 0;
   // A strictly increasing clock makes the reader's newest-first order deterministic. The
   // reader shares it so inbox discovery is shared with the notifier.
   const clock = () => Date.UTC(2026, 10, 11) + 1_000 * tick++;
-  const notify = createNotify({ fetch, clock });
+  const notify = createNotify({ fetch, clock, webId });
   for (const draft of drafts) await notify(webId, { ...draft, actor: webId });
   const reader = createInboxReader({ fetch, clock });
   expect(await reader.inbox(webId)).toBe(inbox);
   const notifications = await reader.list(inbox);
   expect(notifications.map(notificationKind)).toEqual([
     "invitation",
+    "other",
+    "assignment",
+    "invitation",
     "mention",
     "assignment",
     "share",
   ]);
+  for (const [i, draft] of drafts.entries()) {
+    const item = notifications.find((item) => item.url === `${inbox}${i}`);
+    expect(item).toMatchObject({ type: draft.type, actor: webId, object: draft.object });
+    expect(item?.summary).toBe(draft.summary);
+    if ("target" in draft) expect(item?.target).toBe(draft.target);
+    if ("content" in draft) expect(item?.content).toBe(draft.content);
+    expect(item?.published).toMatch(/^2026-/);
+  }
   expect(fetch.mock.calls.filter(([url]) => url === "https://8.8.8.8/profile")).toHaveLength(1);
 });
 
@@ -165,6 +180,7 @@ test("issue announcements preserve Issues' recipient target and summary as plain
     object: "https://pod.example/issue",
     target: "https://bob.example/#me",
     summary: "Mentioned",
+    provenance: true,
   });
 });
 
@@ -234,6 +250,8 @@ test.each([
   `${ownInbox}a%5cb`,
   "https://user:pass@8.8.8.8/inbox/n",
   `${item}.read.ttl`,
+  `${item}.read%2Ettl`,
+  `${item}%252Eread.ttl`,
 ])("refuses mark-read and dismiss outside the notification scope: %s", async (url) => {
   const { box, fetch } = await manager(() => {
     throw new Error("No I/O permitted");
@@ -243,54 +261,27 @@ test.each([
   expect(fetch).toHaveBeenCalledTimes(1);
 });
 
-test("creates read markers conditionally, updates with If-Match, and serializes typed RDF", async () => {
+test("repeated mark-read overwrites the own sidecar without HEAD or validators", async () => {
   const { parseRdf } = await import("@jeswr/fetch-rdf");
-  let exists = false;
-  const { box, fetch } = await manager((_url, init) => {
-    if (init?.method === "HEAD")
-      return new Response(null, exists ? { headers: { etag: '"marker-v1"' } } : { status: 404 });
-    return new Response(null, { status: 201 });
-  });
-  expect.assert(box);
-  await box.markRead(item);
-  let init = fetch.mock.calls.at(-1)?.[1];
-  expect.assert(init);
-  expect(new Headers(init.headers).get("if-none-match")).toBe("*");
-  expect.assert(init);
-  expect(new Headers(init.headers).has("if-match")).toBe(false);
-  const dataset = await parseRdf(init.body as string, "text/turtle");
-  expect([...dataset].map((q) => [q.predicate.value, q.object.value])).toEqual([
-    ["https://www.w3.org/ns/activitystreams#read", "true"],
-    ["https://www.w3.org/ns/activitystreams#object", item],
-  ]);
-  exists = true;
-  expect.assert(box);
-  await box.markRead(item);
-  init = fetch.mock.calls.at(-1)?.[1];
-  expect.assert(init);
-  expect(new Headers(init.headers).get("if-match")).toBe('"marker-v1"');
-  expect.assert(init);
-  expect(new Headers(init.headers).has("if-none-match")).toBe(false);
-  expect(fetch.mock.calls.at(-1)?.[0]).toBe(`${item}.read.ttl`);
-});
-
-test.each([
-  null,
-  "",
-  "*",
-  'W/"weak"',
-  '"a", "b"',
-  "unquoted",
-])("refuses missing or unsafe validators: %s", async (etag) => {
   const { box, fetch } = await manager(
-    () => new Response(null, { headers: etag === null ? {} : { etag } }),
+    () => new Response(null, { status: 201, headers: { etag: 'W/"weak"' } }),
   );
   expect.assert(box);
-  await expect(box.markRead(item)).rejects.toThrow("strong ETag");
-  await expect(box.dismiss(item)).rejects.toThrow("strong ETag");
-  expect(
-    fetch.mock.calls.some(([, init]) => init?.method === "PUT" || init?.method === "DELETE"),
-  ).toBe(false);
+  await box.markRead(item);
+  await box.markRead(item);
+  const writes = fetch.mock.calls.slice(1);
+  expect(writes).toHaveLength(2);
+  for (const [url, init] of writes) {
+    expect(url).toBe(`${item}.read.ttl`);
+    expect(init?.method).toBe("PUT");
+    expect(new Headers(init?.headers).has("if-match")).toBe(false);
+    expect(new Headers(init?.headers).has("if-none-match")).toBe(false);
+    const dataset = await parseRdf(String(init?.body), "text/turtle");
+    expect([...dataset].map((q) => [q.predicate.value, q.object.value])).toEqual([
+      ["https://www.w3.org/ns/activitystreams#read", "true"],
+      ["https://www.w3.org/ns/activitystreams#object", item],
+    ]);
+  }
 });
 
 test.each([
@@ -306,7 +297,7 @@ test.each([
   expect(fetch.mock.calls.filter(([, init]) => init?.method === method)).toHaveLength(1);
 });
 
-test("dismiss conditionally deletes the notification and marker, tolerates absent resources and failed cleanup", async () => {
+test("dismiss unconditionally deletes the notification and marker, tolerates absent resources and failed cleanup", async () => {
   let absent = false;
   let failedCleanup = false;
   const { box, fetch } = await manager((url, init) => {
@@ -321,24 +312,22 @@ test("dismiss conditionally deletes the notification and marker, tolerates absen
   await box.dismiss(item);
   let deletes = fetch.mock.calls.filter(([, init]) => init?.method === "DELETE");
   expect(deletes.map(([url]) => url)).toEqual([item, `${item}.read.ttl`]);
-  expect(deletes.every(([, init]) => new Headers(init?.headers).get("if-match") === '"v1"')).toBe(
-    true,
-  );
+  expect(deletes.every(([, init]) => !new Headers(init?.headers).has("if-match"))).toBe(true);
   absent = true;
   await expect(box.dismiss(item)).resolves.toBeUndefined();
   absent = false;
   failedCleanup = true;
   await expect(box.dismiss(item)).resolves.toBeUndefined();
   deletes = fetch.mock.calls.filter(([, init]) => init?.method === "DELETE");
-  expect(deletes).toHaveLength(3);
+  expect(deletes).toHaveLength(6);
 });
 
-test("refuses unreadable marker/notification HEADs and never writes", async () => {
+test("surfaces forbidden marker writes and notification deletes", async () => {
   const { box, fetch } = await manager(() => new Response(null, { status: 403 }));
   expect.assert(box);
   await expect(box.markRead(item)).rejects.toThrow("403");
   await expect(box.dismiss(item)).rejects.toThrow("403");
-  expect(fetch.mock.calls.every(([, init]) => !init?.method || init.method === "HEAD")).toBe(true);
+  expect(fetch.mock.calls.slice(1).map(([, init]) => init?.method)).toEqual(["PUT", "DELETE"]);
 });
 
 test("pins the owner's storage roots and transport before async discovery", async () => {
@@ -359,4 +348,84 @@ test("pins the owner's storage roots and transport before async discovery", asyn
   release(rdf(`<${owner}> <http://www.w3.org/ns/ldp#inbox> <https://1.1.1.1/inbox/>.`));
   expect(await pending).toBeNull();
   expect(options.fetch).not.toHaveBeenCalled();
+});
+
+test("manager reads beyond 50 notifications, ignores sidecars in its budget and sorts before display limits", async () => {
+  const { NamedNodeAs, NamedNodeFrom, SetFrom, TermWrapper } = await import("@rdfjs/wrapper");
+  const { DataFactory, Store } = await import("n3");
+  const { serialize } = await import("@jeswr/rdf-serialize");
+  const { createInboxManager } = await import("./notify.js");
+  const dataset = new Store();
+  const doc = new TermWrapper(ownInbox, dataset, DataFactory);
+  const members = SetFrom.subjectPredicate(
+    doc,
+    "http://www.w3.org/ns/ldp#contains",
+    NamedNodeAs.string,
+    NamedNodeFrom.string,
+  );
+  for (let i = 0; i < 60; i++) {
+    members.add(`${ownInbox}${i}.read.ttl`);
+    members.add(`${ownInbox}${i}`);
+  }
+  const listing = await serialize([...dataset]);
+  const fetch = vi.fn<typeof globalThis.fetch>().mockImplementation(async (url) => {
+    if (String(url).endsWith("/profile"))
+      return rdf(
+        "<https://8.8.8.8/profile#me> <http://www.w3.org/ns/ldp#inbox> <https://8.8.8.8/inbox/>.",
+      );
+    if (url === ownInbox) return rdf(listing);
+    const child = new TermWrapper(`${url}#it`, new Store(), DataFactory);
+    const { OptionalAs, LiteralFrom } = await import("@rdfjs/wrapper");
+    OptionalAs.object(
+      child,
+      "https://www.w3.org/ns/activitystreams#summary",
+      String(url),
+      LiteralFrom.string,
+    );
+    OptionalAs.object(
+      child,
+      "https://www.w3.org/ns/activitystreams#published",
+      new Date(Date.UTC(2026, 0, 1) + Number(String(url).slice(ownInbox.length)) * 1000),
+      LiteralFrom.dateTime,
+    );
+    return rdf(await serialize([...child.dataset]));
+  });
+  const full = await createInboxManager({
+    fetch,
+    webId: owner,
+    storageRoots: ["https://8.8.8.8/"],
+  });
+  expect.assert(full);
+  const page = await full.listPage();
+  expect(page.notifications).toHaveLength(60);
+  expect(page.notifications[0].url).toBe(`${ownInbox}59`);
+  expect(page.notifications.every((item) => item.read)).toBe(true);
+  expect(page.truncated).toBe(false);
+  expect(fetch.mock.calls.some(([url]) => String(url).endsWith(".read.ttl"))).toBe(false);
+  const limited = await createInboxManager({
+    fetch,
+    webId: owner,
+    storageRoots: ["https://8.8.8.8/"],
+    maxItems: 2,
+  });
+  expect.assert(limited);
+  expect((await limited.listPage()).notifications.map((item) => item.url)).toEqual([
+    `${ownInbox}59`,
+    `${ownInbox}58`,
+  ]);
+  expect((await limited.listPage()).truncated).toBe(true);
+});
+
+test.each([
+  -1,
+  501,
+  1.5,
+  Number.NaN,
+])("manager rejects invalid display maxItems=%s before I/O", async (maxItems) => {
+  const { createInboxManager } = await import("./notify.js");
+  const fetch = vi.fn<typeof globalThis.fetch>();
+  await expect(
+    createInboxManager({ fetch, webId: owner, storageRoots: ["https://8.8.8.8/"], maxItems }),
+  ).rejects.toThrow(TypeError);
+  expect(fetch).not.toHaveBeenCalled();
 });

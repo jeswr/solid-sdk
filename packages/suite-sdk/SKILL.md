@@ -31,6 +31,7 @@ conflict-copy and merge behavior. Keep this hook's tests at 100% coverage.
 Read `packages/pod-access/SKILL.md` for notification API details. Use `PodAuthProvider` from
 `@jeswr/pod-auth/react`; never create another auth session or modify credentials in this facade.
 The notifier cache belongs to the current identity and must reset on lifecycle/account changes.
+Bind notifications to the session WebID; an explicit activity actor cannot replace it.
 Recipient protocol hints describe the recipient, independently of the current identity's protocol.
 Preserve the explicit DNS-pinning requirement for Node transports and all redirect refusals.
 

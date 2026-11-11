@@ -1,7 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 /** Pod Manager's UI error adapter; discovery, serialization and delivery live in the SDK. */
 import { createNotify, type NotificationDraft } from "@jeswr/pod-access/notify";
-import { NoInboxError, NotificationSendError } from "./errors.js";
+import { InvalidTargetError, NoInboxError, NotificationSendError } from "./errors.js";
 
 export type ActivityType = NotificationDraft["type"];
 export interface SendNotificationArgs {
@@ -25,16 +25,22 @@ export async function sendNotification(
     summary: args.summary?.trim() || undefined,
     content: args.content?.trim() || undefined,
   };
-  const result = await createNotify({ fetch: fetchImpl ?? globalThis.fetch })(args.recipientWebId, {
+  const result = await createNotify({
+    webId: args.actorWebId,
+    fetch: fetchImpl ?? globalThis.fetch,
+  })(args.recipientWebId, {
     ...draft,
     actor: args.actorWebId,
   });
   if (result.delivered && result.inbox) return { inbox: result.inbox };
-  if (result.reason === "no-inbox" || result.reason === "lws-no-ldn") {
+  if (
+    result.reason === "no-inbox" ||
+    result.reason === "lws-no-ldn" ||
+    result.reason === "profile-unreadable"
+  ) {
     throw new NoInboxError(args.recipientWebId);
   }
-  throw new NotificationSendError(
-    result.inbox ?? args.recipientWebId,
-    result.reason === "forbidden" ? 403 : 0,
-  );
+  if (result.reason === "invalid-target")
+    throw new InvalidTargetError(result.inbox ?? args.recipientWebId, "blocked-host");
+  throw new NotificationSendError(result.inbox ?? args.recipientWebId, result.status ?? 0);
 }

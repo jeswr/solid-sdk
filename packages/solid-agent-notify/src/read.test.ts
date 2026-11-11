@@ -93,7 +93,7 @@ test.each([
   ["<#it> a as:Announce, as:Offer.", "Announce, Offer"],
 ])("preserves actor and conventional #it discovery: %s", async (body, type) => {
   const dataset = await parseRdf(`${as} ${body}`, "text/turtle", { baseIRI: `${inbox}n` });
-  expect(findActivitySubject(`${inbox}n`, dataset)).toBe(`${inbox}n#it`);
+  expect(findActivitySubject(`${inbox}n`, dataset)?.value).toBe(`${inbox}n#it`);
   expect(parseInboxNotification(`${inbox}n`, dataset)?.type).toBe(type);
 });
 
@@ -159,4 +159,66 @@ test("non-date publication metadata never hides an otherwise readable activity",
     type: "Announce",
     name: "https://pod.example/name",
   });
+});
+
+test("retains RDF/JS blank-node subjects and repeated malformed publication values", async () => {
+  const ds = await parseRdf(
+    `@prefix as: <https://www.w3.org/ns/activitystreams#>.
+    [] a as:Offer; as:actor <https://alice.example/#me>; as:object <https://pod.example/poll>;
+      as:summary "yes"; as:content "response"; as:published "bad", <https://bad.example/>, "2026-11-11T12:00:00Z".`,
+    "text/turtle",
+  );
+  expect(findActivitySubject(`${inbox}n`, ds)?.termType).toBe("BlankNode");
+  expect(parseInboxNotification(`${inbox}n`, ds)).toMatchObject({
+    type: "Offer",
+    actor: "https://alice.example/#me",
+    object: "https://pod.example/poll",
+    summary: "yes",
+    content: "response",
+    published: "2026-11-11T12:00:00.000Z",
+  });
+});
+
+test("untyped activities survive with a display fallback and no fabricated activity IRI", async () => {
+  const ds = await parseRdf(
+    '[] <https://www.w3.org/ns/activitystreams#name> "Legacy".',
+    "text/turtle",
+  );
+  expect(parseInboxNotification(`${inbox}n`, ds)).toEqual({
+    url: `${inbox}n`,
+    type: "Notification",
+    name: "Legacy",
+  });
+});
+
+test("ignores unrelated foreign subjects before finding untyped display content", async () => {
+  const ds = await parseRdf(
+    '<https://other.example/doc> <http://purl.org/dc/terms/title> "Other". [] <https://www.w3.org/ns/activitystreams#name> "Legacy".',
+    "text/turtle",
+  );
+  expect(parseInboxNotification(`${inbox}n`, ds)?.name).toBe("Legacy");
+});
+
+test("reserved sidecar suffixes cannot be bypassed with percent encodings", async () => {
+  const { isReadMarker } = await import("./inbox.js");
+  for (const url of [
+    "bad URL",
+    `${inbox}n.read.ttl`,
+    `${inbox}n.read%2Ettl`,
+    `${inbox}n%252Eread.ttl`,
+    `${inbox}%zz`,
+  ])
+    expect(isReadMarker(url)).toBe(true);
+  expect(isReadMarker(`${inbox}n`)).toBe(false);
+  expect(isReadMarker("https://pod.example/a%25/inbox/n")).toBe(false);
+});
+
+test("a malformed foreign rdf:type does not hide an untyped or recognizable activity", async () => {
+  for (const body of [
+    '<#it> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> "garbage"; <https://www.w3.org/ns/activitystreams#summary> "Legacy".',
+    '<#it> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> "garbage", <https://www.w3.org/ns/activitystreams#Offer>; <https://www.w3.org/ns/activitystreams#summary> "Legacy".',
+  ]) {
+    const ds = await parseRdf(body, "text/turtle", { baseIRI: `${inbox}n` });
+    expect(parseInboxNotification(`${inbox}n`, ds)?.summary).toBe("Legacy");
+  }
 });

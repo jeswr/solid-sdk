@@ -1,6 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 /** Issues display adaptation over the SDK's bounded LDN reader. */
-import { createInboxReader } from "@jeswr/pod-access/notify";
+import { createInboxReader, type InboxReaderOptions } from "@jeswr/pod-access/notify";
 import { isOwnPodUrl } from "./own-pod";
 
 export interface InboxNotification {
@@ -23,8 +23,13 @@ export async function resolveOwnInbox(
   webId: string,
   ownStorageUrls: readonly string[],
   fetchImpl?: typeof fetch,
+  devLoopback = false,
 ): Promise<string | undefined> {
-  const inbox = await createInboxReader({ fetch: fetchImpl ?? globalThis.fetch }).inbox(webId);
+  const inbox = await createInboxReader({
+    fetch: fetchImpl ?? globalThis.fetch,
+    ownStorageRoots: ownStorageUrls,
+    devLoopback,
+  }).inbox(webId);
   return inbox && isOwnPodUrl(inbox, ownStorageUrls) ? inbox : undefined;
 }
 
@@ -34,16 +39,27 @@ export async function readInbox(
   ownStorageUrls: readonly string[],
   fetchImpl?: typeof fetch,
   maxFetch = 500,
+  devLoopback = false,
 ): Promise<InboxResult> {
-  const reader = createInboxReader({ fetch: fetchImpl ?? globalThis.fetch, maxItems: maxFetch });
-  const inboxUrl = await resolveOwnInbox(webId, ownStorageUrls, fetchImpl);
+  const options: InboxReaderOptions = {
+    fetch: fetchImpl ?? globalThis.fetch,
+    maxItems: maxFetch,
+    includeUnknownActivities: true,
+    ownStorageRoots: ownStorageUrls,
+    devLoopback,
+  };
+  const reader = createInboxReader(options);
+  const inboxUrl = await resolveOwnInbox(webId, ownStorageUrls, fetchImpl, devLoopback);
   if (!inboxUrl) return { inboxUrl, notifications: [], totalMembers: 0, truncated: false };
   const page = await reader.listPage(inboxUrl);
   return {
     inboxUrl,
     notifications: page.notifications.slice(0, 50).map(({ type, content, name, ...item }) => ({
       ...item,
-      types: type.split(", ").map((local) => `https://www.w3.org/ns/activitystreams#${local}`),
+      types:
+        type === "Notification"
+          ? []
+          : type.split(", ").map((local) => `https://www.w3.org/ns/activitystreams#${local}`),
       summary: item.summary ?? content ?? name,
     })),
     totalMembers: page.members.length,

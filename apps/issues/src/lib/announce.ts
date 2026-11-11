@@ -16,7 +16,9 @@ export interface AnnounceContent {
   targetWebId: string;
   summary: string;
 }
-export type AnnounceNetworkOptions = Partial<Pick<NotifyOptions, "fetch" | "pinningFetch">>;
+export type AnnounceNetworkOptions = Partial<
+  Pick<NotifyOptions, "fetch" | "pinningFetch" | "devLoopback">
+>;
 export type SendResult =
   | { status: "sent"; inbox: string }
   | { status: "no-inbox" }
@@ -32,10 +34,11 @@ export async function sendAnnounce(
     content.targetWebId,
     content.summary,
   );
-  const result = await createNotify({ ...options, fetch: options.fetch ?? globalThis.fetch })(
-    content.targetWebId,
-    { ...draft, actor: content.actorWebId },
-  );
+  const result = await createNotify({
+    ...options,
+    webId: content.actorWebId,
+    fetch: options.fetch ?? globalThis.fetch,
+  })(content.targetWebId, { ...draft, actor: content.actorWebId });
   if (result.delivered && result.inbox) return { status: "sent", inbox: result.inbox };
   if (result.reason === "no-inbox" || result.reason === "lws-no-ldn") return { status: "no-inbox" };
   return { status: "error", stage: result.inbox ? "post" : "resolve", error: result };
@@ -163,7 +166,11 @@ export class Announcer {
         targetWebId,
         summary: defaultSummary(kind, issueTitle),
       },
-      { fetch: this.opts.fetch, pinningFetch: this.opts.pinningFetch },
+      {
+        fetch: this.opts.fetch,
+        pinningFetch: this.opts.pinningFetch,
+        devLoopback: this.opts.devLoopback,
+      },
     );
 
     if (result.status === "sent") {

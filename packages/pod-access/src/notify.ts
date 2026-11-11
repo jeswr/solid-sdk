@@ -11,9 +11,12 @@ import {
   type InboxReader,
   type InboxReaderOptions,
   isInboxChild,
+  isReadMarker,
+  MAX_INBOX_ITEMS,
   type Notify,
   type NotifyActivity,
   type NotifyOptions,
+  READ_SUFFIX,
 } from "solid-agent-notify/client";
 
 export type {
@@ -28,7 +31,7 @@ export type {
   NotifyResult,
 } from "solid-agent-notify/client";
 
-export { createNotifyFetch } from "solid-agent-notify/client";
+export { createNotifyFetch, MAX_INBOX_ITEMS } from "solid-agent-notify/client";
 
 /** A reusable activity template. Supply the authenticated sender's WebID as actor at delivery. */
 export type NotificationDraft = Omit<NotifyActivity, "actor">;
@@ -69,7 +72,7 @@ export function issueAnnounce(
   recipient: string,
   summary: string,
 ): NotificationDraft {
-  return { type: "Announce", object: issue, target: recipient, summary };
+  return { type: "Announce", object: issue, target: recipient, summary, provenance: true };
 }
 
 /** Offer a room invitation using the suite's supported activity verbs. */
@@ -103,6 +106,7 @@ export interface ReadableNotification extends InboxNotification {
 export interface ManagedInbox {
   readonly inboxUrl: string;
   list(): Promise<ReadableNotification[]>;
+  listPage(): Promise<{ notifications: ReadableNotification[]; truncated: boolean }>;
   markRead(notificationUrl: string): Promise<void>;
   dismiss(notificationUrl: string): Promise<void>;
 }
@@ -113,7 +117,6 @@ export interface InboxManagerOptions extends InboxReaderOptions {
   storageRoots: readonly string[];
 }
 
-const READ_SUFFIX = ".read.ttl";
 const AS = "https://www.w3.org/ns/activitystreams#";
 
 class ReadMarker extends TermWrapper {
@@ -121,15 +124,6 @@ class ReadMarker extends TermWrapper {
     OptionalAs.object(this, `${AS}read`, true, LiteralFrom.boolean);
     OptionalAs.object(this, `${AS}object`, notificationUrl, NamedNodeFrom.string);
   }
-}
-
-/** Require an exact strong validator, never a wildcard, weak ETag or list. */
-function strongEtag(response: Response): string {
-  const etag = response.headers.get("etag");
-  if (etag === null || !/^"[\x21\x23-\x7e\x80-\xff]*"$/.test(etag)) {
-    throw new Error("Inbox mutation requires a strong ETag");
-  }
-  return etag;
 }
 
 function requireOk(response: Response): void {
@@ -145,8 +139,16 @@ export async function createInboxManager(
   options: InboxManagerOptions,
 ): Promise<ManagedInbox | null> {
   const { webId, storageRoots, ...transport } = options;
+  const maxItems = options.maxItems ?? MAX_INBOX_ITEMS;
+  if (!Number.isSafeInteger(maxItems) || maxItems < 0 || maxItems > MAX_INBOX_ITEMS) {
+    throw new TypeError("maxItems must be an integer from 0 to 500");
+  }
   const roots = [...storageRoots];
-  const reader = createInboxReader(transport);
+  const reader = createInboxReader({
+    ...transport,
+    ownStorageRoots: roots,
+    maxItems: MAX_INBOX_ITEMS,
+  });
   const discovered = await reader.inbox(webId);
   if (
     discovered === null ||
@@ -156,7 +158,7 @@ export async function createInboxManager(
     return null;
   }
   const inboxUrl = discovered;
-  const fetcher = createNotifyFetch(transport);
+  const fetcher = createNotifyFetch({ ...transport, ownStorageRoots: roots });
   function child(url: string): void {
     if (!isInboxChild(url, inboxUrl)) {
       throw new Error("Refusing a resource outside the owner's inbox");
@@ -164,37 +166,32 @@ export async function createInboxManager(
   }
   function notification(url: string): void {
     child(url);
-    if (url.endsWith(READ_SUFFIX)) throw new Error("A read marker is not a notification");
+    if (isReadMarker(url)) throw new Error("A read marker is not a notification");
   }
   async function remove(url: string): Promise<void> {
     child(url);
-    const response = await fetcher(url, { method: "HEAD" });
-    if (response.status === 404) return;
-    requireOk(response);
-    const etag = strongEtag(response);
-    requireOk(await fetcher(url, { method: "DELETE", headers: { "if-match": etag } }));
+    const response = await fetcher(url, { method: "DELETE" });
+    if (response.status !== 404) requireOk(response);
+  }
+  async function listPage() {
+    const page = await reader.listPage(inboxUrl);
+    const members = new Set(page.members);
+    return {
+      notifications: page.notifications
+        .slice(0, maxItems)
+        .map((item) => ({ ...item, read: members.has(`${item.url}${READ_SUFFIX}`) })),
+      truncated: page.truncated || page.notifications.length > maxItems,
+    };
   }
   return {
     inboxUrl,
-    async list() {
-      const page = await reader.listPage(inboxUrl);
-      const members = new Set(page.members);
-      return page.notifications
-        .filter((item) => !item.url.endsWith(READ_SUFFIX))
-        .map((item) => ({ ...item, read: members.has(`${item.url}${READ_SUFFIX}`) }));
-    },
+    list: async () => (await listPage()).notifications,
+    listPage,
     async markRead(url) {
       notification(url);
       const marker = `${url}${READ_SUFFIX}`;
       child(marker);
-      const response = await fetcher(marker, { method: "HEAD" });
       const headers = new Headers({ "content-type": "text/turtle" });
-      if (response.status === 404) {
-        headers.set("if-none-match", "*");
-      } else {
-        requireOk(response);
-        headers.set("if-match", strongEtag(response));
-      }
       const dataset = new Store();
       new ReadMarker(`${marker}#it`, dataset, DataFactory).mark(url);
       const body = await serialize([...dataset], { prefixes: { as: AS } });

@@ -1,14 +1,15 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8
 "use client";
 
+import { AlertCircle, ArrowUpRight, Bell, Inbox as InboxIcon, RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { readInbox, type InboxNotification } from "@/lib/inbox";
-import { activityLabel, notificationTitle, hostOf, formatPublished } from "@/lib/inbox-display";
-import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { AlertCircle, ArrowUpRight, Bell, Inbox as InboxIcon, RefreshCw } from "lucide-react";
+import { type InboxNotification, readInbox } from "@/lib/inbox";
+import { activityLabel, formatPublished, hostOf, notificationTitle } from "@/lib/inbox-display";
 
 /**
  * The LDN inbox view (Linked Data Notifications). Reads the signed-in user's
@@ -43,7 +44,13 @@ export function InboxView({
     setError(null);
     try {
       const ownStorage = ownStorageKey ? ownStorageKey.split("\n") : [];
-      const result = await readInbox(webId, ownStorage);
+      const result = await readInbox(
+        webId,
+        ownStorage,
+        undefined,
+        500,
+        ["localhost", "127.0.0.1", "[::1]"].includes(location.hostname),
+      );
       if (seq !== loadSeq.current) return;
       setNotifications(result.notifications);
       setInboxUrl(result.inboxUrl);
@@ -74,10 +81,26 @@ export function InboxView({
             Notifications delivered to your pod (assignments, mentions, announcements).
           </p>
         </div>
-        <Button variant="outline" size="sm" className="gap-1.5" onClick={() => void load()} disabled={loading}>
+        <Button
+          variant="outline"
+          size="sm"
+          className="gap-1.5"
+          onClick={() => void load()}
+          disabled={loading}
+        >
           <RefreshCw className={`size-4 ${loading ? "animate-spin" : ""}`} aria-hidden /> Refresh
         </Button>
       </div>
+
+      {truncated && !loading && !error && (
+        <p
+          role="status"
+          className="rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs text-muted-foreground"
+        >
+          Your inbox is large — showing a limited set of notifications. Some, possibly including
+          recent ones, may not be listed here.
+        </p>
+      )}
 
       {loading ? (
         <ul className="space-y-3" aria-busy="true" aria-label="Loading notifications">
@@ -105,7 +128,10 @@ export function InboxView({
         </div>
       ) : notifications.length === 0 ? (
         <div className="flex flex-col items-center gap-4 rounded-xl border border-dashed p-12 text-center">
-          <span aria-hidden className="flex size-12 items-center justify-center rounded-full bg-primary/10 text-primary">
+          <span
+            aria-hidden
+            className="flex size-12 items-center justify-center rounded-full bg-primary/10 text-primary"
+          >
             <InboxIcon className="size-6" />
           </span>
           <div>
@@ -118,24 +144,13 @@ export function InboxView({
           </div>
         </div>
       ) : (
-        <>
-          {truncated && (
-            <p
-              role="status"
-              className="rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs text-muted-foreground"
-            >
-              Your inbox is large — showing a limited set of notifications. Some,
-              possibly including recent ones, may not be listed here.
-            </p>
-          )}
-          <ul className="space-y-3">
-            {notifications.map((n) => (
-              <li key={n.url}>
-                <NotificationCard notification={n} />
-              </li>
-            ))}
-          </ul>
-        </>
+        <ul className="space-y-3">
+          {notifications.map((n) => (
+            <li key={n.url}>
+              <NotificationCard notification={n} />
+            </li>
+          ))}
+        </ul>
       )}
     </section>
   );

@@ -400,6 +400,8 @@ export async function respondToPoll(
     pollUrl: string;
     organizerWebId: string;
     attendeeWebId: string;
+    /** WebID from the authenticated session; must match the attendee. */
+    sessionWebId: string;
     podRoot: string;
     option: string; // ISO start-time of the chosen option
     response: RsvpResponse;
@@ -407,6 +409,8 @@ export async function respondToPoll(
   },
   fetchImpl?: typeof fetch,
 ): Promise<{ responseUrl: string }> {
+  if (args.attendeeWebId !== args.sessionWebId)
+    throw new Error("RSVP attendee must be the session user");
   // 1. Same-pod write: one RsvpAction resource per (poll, attendee) in the
   //    attendee's own pod. The name is DETERMINISTIC in the poll URL so a
   //    re-vote OVERWRITES in place (no orphan response files accumulate).
@@ -433,7 +437,7 @@ export async function respondToPoll(
   await sendNotification(
     {
       recipientWebId: args.organizerWebId,
-      actorWebId: args.attendeeWebId,
+      actorWebId: args.sessionWebId,
       type: "Offer",
       object: args.pollUrl,
       summary: `RSVP ${args.response} for ${optionIso}`,

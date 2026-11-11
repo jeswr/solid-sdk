@@ -112,8 +112,8 @@ not establish safe migration. Run its regression suite when changing the transla
 
 ## Notification delivery and reading
 
-`createNotify({ fetch, clock?, recipientProtocol?, pinningFetch? })` returns a callable
-`notify(agentWebId, activity)`. Supply the pod-auth fetch and an explicit actor WebID.
+`createNotify({ webId, fetch, clock?, recipientProtocol?, pinningFetch? })` returns a callable
+`notify(agentWebId, activity)`. Supply the pod-auth fetch and authenticated session `webId`; a different activity actor is refused.
 Builders return templates without actor: `shareNotification`, `assignmentAnnounce`,
 `mentionNotification`, `roomInvitation`, `issueAnnounce(issue, recipient, summary)`. The latter
 preserves Issues' issue-event recipient target and human summary as an Announce draft.
@@ -132,9 +132,9 @@ guard's documented DNS limitation. All parsing goes through fetch-rdf, with remo
 `inbox(webId)` returns the owner's inbox or null, including LWS profiles. `list(inboxUrl,
 { signal? })` returns `InboxNotification[]` newest first, undated last, deterministic URL ties.
 Reuse the shared pure scope/parser/ordering helpers and discovery cache; never import the
-Node transport into the client entry. Fetch at most maxItems children (default 50) with at
+Node transport into the client entry. Fetch at most maxItems children (default 50, maximum 500; sidecars excluded) with at
 most six requests active. Refuse foreign/outside/nested/query/fragment/encoded-slash members.
-Unreadable members are skipped; container 401/403/404 and parse failures return []; other
+Unreadable members are skipped; container 404 and parse failures return []; 401/403 and other
 container failures reject. Aborts reject with AbortError and start no further requests.
 `listPage(inboxUrl, { signal? })` also returns the complete eligible `members` list and
 `truncated` (whether the child-fetch ceiling was exceeded), retaining limit warnings even
@@ -150,10 +150,24 @@ root and has no query. Roots come from the authenticated session, never notifica
 The manager exposes `inboxUrl`, `list()`, `markRead(url)` and `dismiss(url)`. Listing adds
 `read` from the existence of `<notification>.read.ttl` in the same container and hides these
 reserved sidecars. Direct children only: reject foreign origins, nesting, credentials,
-queries/fragments and encoded slash/backslash before I/O. Marker updates and deletes
-require a strong ETag read by HEAD and send If-Match; absent marker creation sends
-If-None-Match: *. Missing resources dismiss idempotently; marker cleanup after dismissal
-is best effort. Conflicts propagate without retry; never write unconditionally.
+queries/fragments and encoded slash/backslash before I/O. Mark-read PUT and notification DELETE are unconditional and idempotent; no HEAD or ETag is
+required. Only read-modify-write operations require strong ETag preconditions. Missing
+resources dismiss idempotently and sidecar cleanup is best effort. The manager fetches up to
+`MAX_INBOX_ITEMS` (500), sorts before its display cut and exposes `listPage().truncated`.
+Sidecars never consume the notification fetch budget. Byte-limited listings preserve complete
+statements with `truncated: true`; individual notification bodies retain the hard 256 KiB cap.
+Listing 401/403 errors must propagate to app error states. `includeUnknownActivities: true`
+retains even empty readable RDF as unknown notifications; Issues opts in and exposes no
+invented ActivityStreams type IRI.
+
+Delivery uses a typed RDF/JS dataset and n3.Writer Turtle with a named relative `#it` subject.
+Read activity subjects as RDF/JS terms, including blank nodes. Issue drafts add PROV-O
+attribution and generation time. Optional non-HTTPS object/target links are omitted.
+Delivery results distinguish invalid targets, unreadable profiles, network failures and real
+HTTP status. All runtime branches refuse dotless hosts, empty labels and trailing dots.
+Public delivery is HTTPS/443; trusted `ownStorageRoots` only relaxes HTTPS ports for scoped
+GET/HEAD. Explicit `devLoopback` admits HTTP(S) on localhost/127.0.0.1/[::1] only, any port.
+Never propagate a development-discovered cache entry into a strict transport policy.
 
 `notificationKind(n)` maps Announce share summaries before
 Announce targets, then Create targets, then Offer to share/assignment/mention/invitation;

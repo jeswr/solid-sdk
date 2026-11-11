@@ -176,3 +176,95 @@ describe("readInbox (end to end, mocked fetch)", () => {
     expect(notifications).toEqual([]);
   });
 });
+
+it.each([
+  401, 403,
+])("propagates listing HTTP %s instead of rendering an empty inbox", async (status) => {
+  const fetch = vi
+    .fn<typeof globalThis.fetch>()
+    .mockResolvedValueOnce(
+      new Response(
+        "<https://8.8.8.8/alice/profile/card#me> <http://www.w3.org/ns/ldp#inbox> <https://8.8.8.8/alice/inbox/>.",
+        { headers: { "content-type": "text/turtle" } },
+      ),
+    )
+    .mockResolvedValue(new Response(null, { status }));
+  await expect(readInbox(WEBID, OWN, fetch)).rejects.toMatchObject({ status });
+});
+
+it("keeps untyped notifications without inventing an as:Notification IRI", async () => {
+  const fetch = vi
+    .fn<typeof globalThis.fetch>()
+    .mockResolvedValueOnce(
+      new Response(
+        "<https://8.8.8.8/alice/profile/card#me> <http://www.w3.org/ns/ldp#inbox> <https://8.8.8.8/alice/inbox/>.",
+        { headers: { "content-type": "text/turtle" } },
+      ),
+    )
+    .mockResolvedValueOnce(
+      new Response("<> <http://www.w3.org/ns/ldp#contains> <n>.", {
+        headers: { "content-type": "text/turtle" },
+      }),
+    )
+    .mockResolvedValueOnce(
+      new Response('[] <https://www.w3.org/ns/activitystreams#summary> "Legacy".', {
+        headers: { "content-type": "text/turtle" },
+      }),
+    );
+  const result = await readInbox(WEBID, OWN, fetch);
+  expect(result.notifications).toEqual([{ url: `${INBOX}n`, types: [], summary: "Legacy" }]);
+});
+
+it("own-pod HTTPS reads retain non-default ports", async () => {
+  const webId = "https://8.8.8.8:8443/alice/profile#me";
+  const root = "https://8.8.8.8:8443/alice/";
+  const fetch = vi
+    .fn<typeof globalThis.fetch>()
+    .mockResolvedValueOnce(
+      new Response(
+        "<https://8.8.8.8:8443/alice/profile#me> <http://www.w3.org/ns/ldp#inbox> <https://8.8.8.8:8443/alice/inbox/>.",
+        { headers: { "content-type": "text/turtle" } },
+      ),
+    )
+    .mockResolvedValue(new Response("", { headers: { "content-type": "text/turtle" } }));
+  expect((await readInbox(webId, [root], fetch)).inboxUrl).toBe(`${root}inbox/`);
+});
+
+it("loopback reader development support is explicit", async () => {
+  const webId = "http://localhost:3000/alice/profile#me";
+  const root = "http://localhost:3000/alice/";
+  const fetch = vi
+    .fn<typeof globalThis.fetch>()
+    .mockImplementation(
+      async (url) =>
+        new Response(
+          String(url).endsWith("/profile")
+            ? "<http://localhost:3000/alice/profile#me> <http://www.w3.org/ns/ldp#inbox> <http://localhost:3000/alice/inbox/>."
+            : "",
+          { headers: { "content-type": "text/turtle" } },
+        ),
+    );
+  expect((await readInbox(webId, [root], fetch)).inboxUrl).toBeUndefined();
+  expect(fetch).not.toHaveBeenCalled();
+  expect((await readInbox(webId, [root], fetch, 500, true)).inboxUrl).toBe(`${root}inbox/`);
+});
+
+it("retains a readable empty notification with no invented type", async () => {
+  const fetch = vi
+    .fn<typeof globalThis.fetch>()
+    .mockResolvedValueOnce(
+      new Response(
+        "<https://8.8.8.8/alice/profile/card#me> <http://www.w3.org/ns/ldp#inbox> <https://8.8.8.8/alice/inbox/>.",
+        { headers: { "content-type": "text/turtle" } },
+      ),
+    )
+    .mockResolvedValueOnce(
+      new Response("<> <http://www.w3.org/ns/ldp#contains> <n>.", {
+        headers: { "content-type": "text/turtle" },
+      }),
+    )
+    .mockResolvedValueOnce(new Response("", { headers: { "content-type": "text/turtle" } }));
+  expect((await readInbox(WEBID, OWN, fetch)).notifications).toEqual([
+    { url: `${INBOX}n`, types: [], summary: undefined },
+  ]);
+});

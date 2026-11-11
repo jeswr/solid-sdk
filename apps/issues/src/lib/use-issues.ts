@@ -242,16 +242,20 @@ export function useIssues(
   // keeps the SAME assignment idempotent (mentions are per-comment). Non-blocking:
   // the pod write always succeeds even if the notify fails; a failure surfaces as
   // a non-intrusive toast, never a thrown error into the mutation.
+  const devLoopback =
+    typeof location !== "undefined" &&
+    ["localhost", "127.0.0.1", "[::1]"].includes(location.hostname);
   const announcer = useMemo(
     () =>
       creator
         ? new Announcer({
             actorWebId: creator,
+            devLoopback,
             onError: (message) => toast.error(message),
             fetch: (input, init) => globalThis.fetch(input, init),
           })
         : null,
-    [creator],
+    [creator, devLoopback],
   );
 
   // Stable announce-assignment seam for mutation paths that write OUTSIDE the wired

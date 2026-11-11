@@ -35,3 +35,18 @@ test("uses SDK scope guards for mark-read and dismiss before authenticated I/O",
   await expect(box.dismiss(`${inbox}nested/n`)).rejects.toThrow();
   expect(fetchImpl).toHaveBeenCalledTimes(1);
 });
+
+test.each([401, 403])("propagates inbox listing HTTP %s to the UI", async (status) => {
+  const fetch = profile();
+  fetch
+    .mockResolvedValueOnce(
+      new Response(
+        "<https://8.8.8.8/profile#me> <http://www.w3.org/ns/ldp#inbox> <https://8.8.8.8/inbox/>.",
+        { headers: { "content-type": "text/turtle" } },
+      ),
+    )
+    .mockResolvedValue(new Response(null, { status }));
+  const box = await inboxFor({ webId, activeStorage: "https://8.8.8.8/", fetchImpl: fetch });
+  expect.assert(box);
+  await expect(box.listPage()).rejects.toMatchObject({ status });
+});

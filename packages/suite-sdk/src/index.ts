@@ -40,7 +40,7 @@ export type {
 } from "./use-registration.js";
 export { RegistrationError, useRegistration } from "./use-registration.js";
 
-/** Deliver a template using the current actor, or a complete activity with an explicit actor. */
+/** Deliver a template as the session user; an explicit actor must match that WebID. */
 export type NotifyAction = (
   agentWebId: string,
   activity: NotificationDraft & { actor?: string },
@@ -50,7 +50,7 @@ export type NotifyAction = (
  * Read the PodAuthProvider's fetch and actor. Reset the inbox cache whenever session identity
  * changes, including logout/login as the same account. Options describe recipients, not the sender.
  */
-export function useNotify(options: Omit<NotifyOptions, "fetch"> = {}): NotifyAction {
+export function useNotify(options: Omit<NotifyOptions, "fetch" | "webId"> = {}): NotifyAction {
   const { fetch, identity } = usePodAuth();
   const { clock, recipientProtocol, pinningFetch } = options;
   const active = useRef<object | null>(null);
@@ -62,15 +62,18 @@ export function useNotify(options: Omit<NotifyOptions, "fetch"> = {}): NotifyAct
         if (active.current !== session) throw new Error("Notification session changed");
         return transport(input, init);
       };
-    const notify = createNotify({
-      fetch: scoped(fetch),
-      clock,
-      recipientProtocol,
-      pinningFetch: pinningFetch === undefined ? undefined : scoped(pinningFetch),
-    });
+    const notify = identity?.webId
+      ? createNotify({
+          webId: identity.webId,
+          fetch: scoped(fetch),
+          clock,
+          recipientProtocol,
+          pinningFetch: pinningFetch === undefined ? undefined : scoped(pinningFetch),
+        })
+      : null;
     const action: NotifyAction = async (agentWebId, activity) => {
       const actor = activity.actor ?? identity?.webId;
-      if (!actor) return { delivered: false, inbox: null, reason: "network" };
+      if (!actor || !notify) return { delivered: false, inbox: null, reason: "network" };
       return notify(agentWebId, { ...activity, actor });
     };
     return { session, action };

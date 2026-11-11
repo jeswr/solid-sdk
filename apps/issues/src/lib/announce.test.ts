@@ -307,3 +307,36 @@ describe("defaultSummary", () => {
     expect(defaultSummary("mention")).toBe("You were mentioned in a comment");
   });
 });
+
+it("local development announcements require an explicit loopback opt-in and carry PROV-O", async () => {
+  const { parseRdf } = await import("@jeswr/fetch-rdf");
+  const target = "http://localhost:3000/bob/profile#me";
+  const actor = "http://localhost:3000/alice/profile#me";
+  let posted = "";
+  const fetch = fakePod({
+    profiles: { [target]: profile(target, "http://localhost:3000/bob/inbox/") },
+    onPost: (_url, body) => {
+      posted = body;
+    },
+  });
+  const content = {
+    kind: "assignment" as const,
+    actorWebId: actor,
+    targetWebId: target,
+    objectIri: "http://localhost:3000/alice/issue",
+    summary: "Assigned",
+  };
+  expect(await sendAnnounce(content, { fetch })).toMatchObject({ status: "error" });
+  expect(posted).toBe("");
+  expect(await sendAnnounce(content, { fetch, devLoopback: true })).toMatchObject({
+    status: "sent",
+  });
+  const ds = await parseRdf(posted, "text/turtle");
+  expect(
+    [...ds].find((q) => q.predicate.value === "http://www.w3.org/ns/prov#wasAttributedTo")?.object
+      .value,
+  ).toBe(actor);
+  expect(
+    [...ds].some((q) => q.predicate.value === "http://www.w3.org/ns/prov#generatedAtTime"),
+  ).toBe(true);
+});
