@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6.1-Sol
 // The demo pod's request fixture runs through the real SDK: list, approve, deny.
 
 import { parseRdf } from "@jeswr/fetch-rdf";
@@ -100,10 +101,15 @@ describe("demo access request fixture", () => {
 
   it("denies without granting anything", async () => {
     const { demo, options } = await pod();
+    const activityAcl = `${DEMO_ROOT}health/activity.ttl.acl`;
+    const before = await (await demo.fetch(activityAcl)).text();
     const [entry] = await listRequests(options);
     if (!entry || entry.status === "unreadable") throw new Error("unreadable");
     expect(await decide(entry, { approve: false }, options)).toMatchObject({ status: "denied" });
-    expect((await demo.fetch(`${DEMO_ROOT}health/activity.ttl.acl`)).status).toBe(404);
+    expect(await (await demo.fetch(activityAcl)).text()).toBe(before);
+    expect(objects(await graph(demo.fetch, activityAcl), `${ACL}agent`)).not.toContain(
+      DEMO_REQUESTER,
+    );
     expect((await listRequests(options))[0]).toMatchObject({ status: "denied" });
   });
 });
