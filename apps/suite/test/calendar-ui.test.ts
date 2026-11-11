@@ -9,7 +9,7 @@ import { act, click, deferred, h, key, mount } from "./drive-ui-dom";
 
 const mocks = vi.hoisted(() => ({
   session: undefined as PodSession | undefined,
-  status: "ready" as "ready" | "loading" | "error",
+  status: "ready" as "ready" | "loading" | "error" | "signed-out",
   path: "/calendar/week",
   date: "2026-11-01",
   query: "",
@@ -20,9 +20,11 @@ vi.mock("@/lib/session/pod-session", () => ({
   usePodSessionState: () =>
     mocks.status === "ready"
       ? { status: "ready", session: mocks.session }
-      : mocks.status === "loading"
-        ? { status: "loading" }
-        : { status: "error", error: new Error("storage") },
+      : mocks.status === "signed-out"
+        ? { status: "signed-out" }
+        : mocks.status === "loading"
+          ? { status: "loading" }
+          : { status: "error", error: new Error("storage") },
   PodSessionProvider: ({ children }: { children: unknown }) => children,
 }));
 vi.mock(
@@ -1093,6 +1095,46 @@ it("creates a weekly series from the full editor and announces invalid end dates
   expect(saved.filter((e) => e.data.name === "Changed local")).toHaveLength(1);
   expect(saved.filter((e) => e.data.name === "Weekly planning")).toHaveLength(3);
 });
+it("keeps a zoned series when editing its title from a London occurrence", async () => {
+  const account = mocks.session as PodSession;
+  const url = `${DEMO_ROOT}calendar/work/zoned.ttl`;
+  const io = calendarIO(account.fetch, account.storageUrl);
+  const event = {
+    name: "New York weekly",
+    uid: "new-york-weekly",
+    start: new Date("2026-10-18T13:00Z"),
+    end: new Date("2026-10-18T14:00Z"),
+    timeZone: "America/New_York",
+    inCalendar: `${DEMO_ROOT}calendar/work.ttl#it`,
+    recurrence: { frequency: "WEEKLY", count: 4 } as const,
+  };
+  await io.saveEvent(url, event, { create: true });
+  mocks.path = `/calendar/e/${encodeRef(url)}`;
+  mocks.extra = { occurrence: "2026-11-01T14:00:00.000Z" };
+  await mount(h(CalendarApp, { children: h(CalendarEditorRoute, { eventRef: encodeRef(url) }) }));
+  await settle();
+  const editor = document.querySelector(".cal-editor-page") as HTMLElement;
+  expect(editor.textContent).toContain("Time zone: America/New_York");
+  await changeField(
+    editor.querySelector('[aria-label="Title"]') as HTMLInputElement,
+    "Renamed New York weekly",
+  );
+  await act(() =>
+    editor
+      .querySelector("form")
+      ?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
+  );
+  await click(
+    [...document.querySelectorAll(".cal-series-dialog button")].find(
+      (button) => button.textContent === "All events",
+    ) as HTMLElement,
+  );
+  await settle();
+  expect((await io.loadEvent(url))?.data).toMatchObject({
+    ...event,
+    name: "Renamed New York weekly",
+  });
+});
 it("loads the series master for editing an occurrence and detaches just that occurrence", async () => {
   const url = `${DEMO_ROOT}calendar/work/stand-up.ttl`;
   mocks.path = `/calendar/e/${encodeRef(url)}`;
@@ -1734,11 +1776,13 @@ it("retries a failed compensation before creating another replacement and deleti
   expect(mocks.router.push).toHaveBeenCalled();
 });
 
-it("shows the import warning before an unsupported New York series can be saved", async () => {
+it.each([
+  ["America/New_York", false],
+  ["Unknown/Zone", true],
+] as const)("previews TZID %s and imports only supported zones", async (timeZone, skipped) => {
   await mount(screen());
   await settle();
-  const text =
-    "BEGIN:VCALENDAR\nBEGIN:VEVENT\nUID:ny\nSUMMARY:New York weekly\nDTSTART;TZID=America/New_York:20261018T090000\nRRULE:FREQ=WEEKLY;COUNT=4\nEND:VEVENT\nEND:VCALENDAR";
+  const text = `BEGIN:VCALENDAR\nBEGIN:VEVENT\nUID:ny\nSUMMARY:New York weekly\nDTSTART;TZID=${timeZone}:20261018T090000\nRRULE:FREQ=WEEKLY;COUNT=4\nEND:VEVENT\nEND:VCALENDAR`;
   const input = document.querySelector('[aria-label="Import ICS file"]') as HTMLInputElement;
   Object.defineProperty(input, "files", {
     value: [{ name: "new-york.ics", size: text.length, text: async () => text }],
@@ -1747,14 +1791,39 @@ it("shows the import warning before an unsupported New York series can be saved"
   await act(() => input.dispatchEvent(new Event("change", { bubbles: true })));
   await settle();
   const dialog = document.querySelector(".cal-import-dialog") as HTMLElement;
-  expect(dialog.textContent).toContain("0 events · 1 skipped");
-  expect(dialog.querySelector('[aria-label="Import warnings"]')?.textContent).toContain(
-    '"New York weekly": recurring events in America/New_York',
-  );
-  expect(
-    [...dialog.querySelectorAll("button")].find((button) => button.textContent === "Import")
-      ?.disabled,
-  ).toBe(true);
+  expect(dialog.textContent).toContain(skipped ? "0 events · 1 skipped" : "1 events · 0 skipped");
+  const button = [...dialog.querySelectorAll("button")].find(
+    (button) => button.textContent === "Import",
+  ) as HTMLButtonElement;
+  expect(button.disabled).toBe(skipped);
+  if (skipped) {
+    expect(dialog.querySelector('[aria-label="Import warnings"]')?.textContent).toContain(
+      "Invalid IANA time zone",
+    );
+  } else {
+    expect(dialog.querySelector('[aria-label="Import warnings"]')).toBeNull();
+    await changeField(
+      dialog.querySelector('[aria-label="Target calendar"]') as HTMLSelectElement,
+      `${DEMO_ROOT}calendar/work.ttl#it`,
+    );
+    await click(button);
+    await settle();
+    expect(dialog.textContent).toContain("1 imported, 0 failed");
+    const account = mocks.session as PodSession;
+    const events = await calendarIO(account.fetch, account.storageUrl).eventsInRange(
+      `${DEMO_ROOT}calendar/work/`,
+      new Date("2026-10-01Z"),
+      new Date("2026-12-01Z"),
+      "Europe/London",
+    );
+    const imported = events.filter((event) => event.data.name === "New York weekly");
+    expect(imported.map((event) => event.data.timeZone)).toEqual(Array(4).fill(timeZone));
+    expect(imported.map((event) => event.data.start)).toEqual(
+      ["2026-10-18T13:00Z", "2026-10-25T13:00Z", "2026-11-01T14:00Z", "2026-11-08T14:00Z"].map(
+        (instant) => new Date(instant),
+      ),
+    );
+  }
 });
 it.each([
   "create",
@@ -1821,4 +1890,52 @@ it.each([
     "Still my draft",
   );
   expect(form.querySelector('[role="alert"]')?.textContent).toContain("500");
+});
+
+it("recovers a journaled series edit when the account provider starts", async () => {
+  const { SeriesJournal } = await import("../src/apps/calendar/state/intents");
+  const account = mocks.session as PodSession;
+  const io = calendarIO(account.fetch, account.storageUrl);
+  const source = (await io.loadEvent(`${DEMO_ROOT}calendar/work/stand-up.ttl`))!;
+  const replacementUrl = `${DEMO_ROOT}calendar/work/recovered.ttl`;
+  const replacement = {
+    ...source.data,
+    uid: "recovery-copy",
+    recurrence: undefined,
+    name: "Recovered meeting",
+  };
+  const replacementEtag = await io.saveEvent(replacementUrl, replacement, { create: true });
+  const original = {
+    ...source.data,
+    recurrence: { ...source.data.recurrence!, exceptDate: [source.data.start] },
+  };
+  const journal = new SeriesJournal(account.webId, localStorage);
+  journal.put({
+    created: { kind: "create", url: replacementUrl, data: replacement },
+    original: { kind: "update", url: source.url, etag: source.etag as string, data: original },
+    replacementEtag,
+  });
+  const mounted = await mount(screen());
+  await vi.waitFor(async () => expect(journal.list()).toEqual([]));
+  expect((await io.loadEvent(source.url))?.data.recurrence?.exceptDate).toEqual([
+    source.data.start,
+  ]);
+  expect((await io.loadEvent(replacementUrl))?.data.name).toBe("Recovered meeting");
+  await mounted.unmount();
+  const writes: string[] = [];
+  mocks.session = {
+    ...account,
+    fetch: (input, init) => {
+      if (init?.method === "PUT" || init?.method === "DELETE") writes.push(String(input));
+      return account.fetch(input, init);
+    },
+  };
+  await mount(screen());
+  await settle();
+  expect(writes).toEqual([]);
+});
+it("asks a signed-out account to sign in before starting calendar recovery", async () => {
+  mocks.status = "signed-out";
+  const mounted = await mount(h(CalendarProvider, { children: null }));
+  expect(mounted.host.textContent).toContain("Sign in to open your Calendar");
 });

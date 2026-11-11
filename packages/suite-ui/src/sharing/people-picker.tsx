@@ -323,8 +323,9 @@ export function PeoplePicker({
         onRetry={contacts.onRetry}
         onClear={() => onQueryChange("")}
       />
-      {open && hasSharingContent(contacts.state) && results.length === 0 && (
-        <p role="status" className="su-muted">
+      {/* Hiding instead of removing on blur preserves a host dialog's native Tab focus. */}
+      {hasSharingContent(contacts.state) && results.length === 0 && (
+        <p role="status" className="su-muted" hidden={!open}>
           {query
             ? `No results for '${query}'`
             : "No more contacts. Enter an account ID to add someone."}

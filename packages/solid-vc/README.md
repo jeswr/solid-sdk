@@ -48,6 +48,14 @@ Status-list compression is asynchronous. Await `encodeStatusList`, `decodeStatus
 For example, `const bits = await decodeStatusList(await encodeStatusList(createStatusBitstring()))`.
 Concatenated GZIP members and trailing bytes are rejected by the platform decoder.
 
+`statusListCredentialToTurtle(vc)` serializes a single-proof status-list credential as
+`application/trig`, preserving its named Data Integrity proof graph. Its structural inverse,
+`parseStatusListCredential(document)`, rejects ambiguous or lossy graphs and returns the
+credential or `undefined`; always verify the result before trusting its bits.
+`createBitstringStatusResolver` accepts this RDF transport alongside existing JSON/JSON-LD,
+including lists signed by a non-extractable P-256 owner key with `ecdsa-rdfc-2019`.
+Status signature, issuer-control, URL, validity and decoded-size checks apply to both formats.
+
 ## Minimal usage
 
 ```ts
@@ -84,7 +92,10 @@ Check `result.verified` and `result.errors`; verification failures are structure
 generic boolean with no explanation.
 
 A policy IRI alone does not bind mutable policy content. For authorization that depends on policy
-contents, pass `policyContent` when issuing and `presentedResources` when verifying.
+contents, pass `policyContent` when issuing and `presentedResources` when verifying. The digest is
+over the base-free graph, which merges relative forms (`.#x` reads as `#x`) and, in JSON-LD, drops
+relative-IRI triples, so issuing refuses policy content whose relative IRIs (datatypes included) are
+anything but fragment references (`<#x>`), and JSON-LD content with any relative IRI.
 
 ## Key API
 

@@ -2,11 +2,13 @@
 import { SolidPersistence } from "@jeswr/y-solid";
 import { generateHTML, getSchema } from "@tiptap/react";
 import { prosemirrorJSONToYDoc } from "@tiptap/y-tiptap";
-import { IndexeddbPersistence, storeState } from "y-indexeddb";
+import { clearDocument, IndexeddbPersistence, storeState } from "y-indexeddb";
 import type { PodSession } from "@/lib/session/pod-session";
-import { type ImportProgress, importDocx, MAX_IMPORT_BYTES } from "../lib/convert/docx-import";
+import { type ImportProgress, importDocx } from "../lib/convert/docx-import";
+import { validateImportFile } from "../lib/convert/import-file";
+import { importTransaction } from "../lib/convert/import-transaction";
 import { importMarkdown } from "../lib/convert/markdown";
-import { importHtml } from "../lib/convert/schema";
+import { importHtml, importPlainText } from "../lib/convert/schema";
 import { wordCount } from "../lib/editor/logic";
 import { createDocsStore, docContainerUrls, type StoredDocument } from "../lib/model";
 import {
@@ -15,13 +17,9 @@ import {
   sameIncarnation,
 } from "../lib/model/incarnation";
 import { baseExtensions } from "./extensions";
-import { deleteDocument } from "./operations";
 import { DocumentUpdateStore } from "./update-store";
 
-export function validateImportFile(file: Pick<File, "name" | "size">) {
-  if (file.size > MAX_IMPORT_BYTES) throw new Error("Choose a file of 50 MB or less");
-  if (!/\.(docx|md|markdown)$/i.test(file.name)) throw new Error("Choose a DOCX or Markdown file");
-}
+export { validateImportFile };
 export async function uploadImportImage(
   session: PodSession,
   resource: string,
@@ -68,7 +66,12 @@ export async function convertImport(
       title: file.name.replace(/\.docx$/i, "").slice(0, 200),
     };
   }
-  const result = importMarkdown(await file.text(), file.name);
+  const source = await file.text();
+  const result = /\.html?$/i.test(file.name)
+    ? { ...importHtml(source), title: file.name.replace(/\.[^.]+$/, "").slice(0, 200) }
+    : /\.txt$/i.test(file.name)
+      ? { ...importPlainText(source), title: file.name.replace(/\.[^.]+$/, "").slice(0, 200) }
+      : importMarkdown(source, file.name);
   return { ...result, html: generateHTML(result.json, extensions) };
 }
 
@@ -79,6 +82,9 @@ export async function importDocument(
   progress: (value: ImportProgress) => void,
 ) {
   validateImportFile(file);
+  const transaction = importTransaction(session);
+  session = { ...session, fetch: transaction.fetch };
+  let mirror: string | undefined;
   const store = createDocsStore({
     podRoot: session.storageUrl,
     webId: session.webId,
@@ -117,10 +123,8 @@ export async function importDocument(
       "prosemirror",
     );
     doc.getMap("document").set("instanceId", stored.data.instanceId);
-    const local = new IndexeddbPersistence(
-      incarnationMirror(stored, stored.data.updateLog as string),
-      doc,
-    );
+    mirror = incarnationMirror(stored, stored.data.updateLog as string);
+    const local = new IndexeddbPersistence(mirror, doc);
     const expected = stored;
     const provider = new SolidPersistence({
       doc,
@@ -154,11 +158,13 @@ export async function importDocument(
     }
     return { url: stored.url, skipped: result.skipped };
   } catch (error) {
-    if (stored) {
-      // A failed import owns only its reservation, never a replacement at its URL.
-      const current = await store.read(stored.url).catch(() => undefined);
-      if (current && sameIncarnation(stored, current))
-        await deleteDocument(stored.url, session).catch(() => {});
+    try {
+      await Promise.all([mirror ? clearDocument(mirror) : undefined, transaction.rollback()]);
+    } catch (cleanupError) {
+      throw new Error(
+        "Import failed and the incomplete document couldn't be fully removed. Check your connection and remove it from Docs before trying again. Your original file wasn't changed.",
+        { cause: cleanupError },
+      );
     }
     throw error;
   }

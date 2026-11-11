@@ -2,12 +2,16 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, type Page, test } from "@playwright/test";
 import { encodeRef } from "../../src/lib/refs";
+import { seedDemoSession } from "../demo-session";
+
+test.beforeEach(({ page }) => seedDemoSession(page));
 
 async function ready(page: Page, path = "/home") {
   await page.goto(path);
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText(
-    /Good (morning|afternoon|evening), Alice/,
-  );
+  // The shell owns the page's h1 ("Home"); the app's own title is the next level.
+  await expect(
+    page.getByRole("heading", { level: 2, name: /^Good (morning|afternoon|evening), Alice$/ }),
+  ).toBeVisible();
   await expect(page.getByRole("status", { name: "Loading your data", exact: true })).toBeHidden();
 }
 async function accessible(page: Page) {
@@ -229,7 +233,7 @@ test("live changes from another app update cards without skeletons", async ({ pa
   const drive = await context.newPage();
   await drive.goto("/drive");
   await expect(
-    drive.getByRole("heading", { level: 1, name: "My Drive", exact: true }),
+    drive.getByRole("heading", { level: 2, name: "My Drive", exact: true }),
   ).toBeVisible();
   await drive.getByTestId("drive-upload-input").setInputFiles({
     name: "Live update.txt",

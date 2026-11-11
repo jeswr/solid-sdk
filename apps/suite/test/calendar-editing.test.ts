@@ -43,6 +43,12 @@ const allDay: CalendarEvent = {
   end: "2026-10-19",
   recurrence: { frequency: "WEEKLY", count: 5 },
 };
+const zoned: CalendarEvent = {
+  ...timed,
+  timeZone: "America/New_York",
+  start: new Date("2026-10-18T13:00Z"),
+  end: new Date("2026-10-18T14:00Z"),
+};
 function occurrences(e: CalendarEvent) {
   return expandEvent(e, new Date("2026-10-01"), new Date("2026-12-01"), zone);
 }
@@ -92,7 +98,7 @@ describe("Calendar references and quick drafts", () => {
     expect(() => quickDraft("", timed, now, zone)).toThrow();
   });
 });
-describe.each([timed, allDay])("recurrence edit planning $name", (master) => {
+describe.each([timed, allDay, zoned])("recurrence edit planning $name", (master) => {
   it("detaches only one occurrence and preserves all others", () => {
     const occurrence = occurrences(master)[2] as CalendarEvent;
     const edited = { ...occurrence, name: "Changed" };
@@ -159,6 +165,10 @@ describe.each([timed, allDay])("recurrence edit planning $name", (master) => {
     );
     expect(plan.original?.start).toEqual(master.start);
     expect(plan.original?.uid).toBe(master.uid);
+    expect(plan.original?.timeZone).toBe(master.timeZone);
+    expect(occurrences(plan.original as CalendarEvent)).toEqual(
+      occurrences(master).map((event) => ({ ...event, name: "Changed" })),
+    );
     expect(planSeriesEdit(master, occurrence.start, null, "all", zone)).toEqual({ original: null });
     expect(() => planSeriesEdit(master, "2028-01-01", null, "this", zone)).toThrow("outside");
   });

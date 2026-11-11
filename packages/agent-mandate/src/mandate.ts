@@ -1,10 +1,12 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6
 import { readBoundAuthorization, verifyAgentAuthority } from "@jeswr/agent-authz-verifier";
 import {
   buildAgentAuthorizationCredential,
   type Credential,
   credentialToRdf,
+  DataIntegritySuite,
   digestQuads,
   issue,
   type KeyPair,
@@ -16,9 +18,11 @@ import {
 import { Store } from "n3";
 import {
   bindingPolicy,
+  decodeCurrency,
   decodeLimit,
   decodePolicy,
   decodeProhibitions,
+  encodeCurrency,
   encodeLimit,
   encodePolicy,
   encodeProhibitions,
@@ -59,7 +63,7 @@ export function defaultMandate(options: {
 }): Mandate {
   if (
     options.recipientHashes.length === 0 ||
-    options.recipientHashes.some((h) => !/^sha256:[a-f0-9]{64}$/.test(h))
+    options.recipientHashes.some((h) => !/^(?:sha256:)?[a-f0-9]{64}$/.test(h))
   )
     throw new Error("Expected salted SHA-256 account hashes");
   return {
@@ -126,6 +130,7 @@ export function mandateCredential(
       [`${AGENT}withApproval`]: encodePolicy(m.withApproval),
       [`${ODRL}prohibition`]: encodeProhibitions(m.prohibitions),
       [`${ODRL}constraint`]: m.limits.map(encodeLimit),
+      ...encodeCurrency(m.currency),
     },
   };
   return { ...credential, credentialSubject: subject };
@@ -135,10 +140,12 @@ export async function issueMandate(
   m: Mandate,
   key: KeyPair,
   status: { statusListCredential: string; statusListIndex: string; id?: string },
+  options: { cryptosuite?: "eddsa-rdfc-2022" | "ecdsa-rdfc-2019" } = {},
 ): Promise<VerifiableCredential> {
   return issue({
     credential: mandateCredential(m, status),
     key,
+    suite: new DataIntegritySuite(options.cryptosuite ?? "eddsa-rdfc-2022"),
     options: { created: new Date(m.validFrom) },
   });
 }
@@ -179,7 +186,11 @@ export function createVcMandateVerifier(options: VcMandateOptions): MandateVerif
         )
           return undefined;
         const proofs = Array.isArray(vc.proof) ? vc.proof : [vc.proof];
-        if (proofs.length !== 1 || proofs[0]?.cryptosuite !== "eddsa-rdfc-2022") return undefined;
+        if (
+          proofs.length !== 1 ||
+          !["eddsa-rdfc-2022", "ecdsa-rdfc-2019"].includes(proofs[0]?.cryptosuite)
+        )
+          return undefined;
         const statuses = Array.isArray(vc.credentialStatus)
           ? vc.credentialStatus
           : [vc.credentialStatus];
@@ -233,6 +244,7 @@ export function createVcMandateVerifier(options: VcMandateOptions): MandateVerif
           withApproval: decodePolicy(root.one(`${AGENT}withApproval`)),
           prohibitions: decodeProhibitions(root),
           limits,
+          ...decodeCurrency(root),
         };
         // Every entry path must preserve the entire signed claim graph, including restrictions.
         // Decoding a known subset must never erase a signed field before evaluation.

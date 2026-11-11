@@ -1,10 +1,20 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 const MAX_BYTES = 1024 * 1024;
 
+const RDF_TYPES = ["text/turtle", "application/trig"];
+/** Status lists may also be stored as JSON-LD; their parser checks the structure strictly. */
+export const STATUS_LIST_TYPES = [
+  ...RDF_TYPES,
+  "application/vc+ld+json",
+  "application/ld+json",
+  "application/json",
+];
+
 /** One bound and format policy for records, listings, and discovery documents. */
-export async function readRdfDocument(response: Response) {
+export async function readRdfDocument(response: Response, allowed: readonly string[] = RDF_TYPES) {
   const contentType = response.headers.get("content-type")?.split(";")[0]?.trim().toLowerCase();
-  if (contentType !== "text/turtle" && contentType !== "application/trig") {
+  if (!contentType || !allowed.includes(contentType)) {
     await response.body?.cancel();
     throw new Error("Unsupported agent record format");
   }

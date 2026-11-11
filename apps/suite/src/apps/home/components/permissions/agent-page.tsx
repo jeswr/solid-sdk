@@ -5,6 +5,7 @@ import { Button, EmptyState, ErrorState, LoadingSkeleton, toast } from "@jeswr/s
 import { Globe, Users } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
+import { AppHeading } from "@/shell/app-frame";
 import type { ClientMetadata } from "../../lib/permissions";
 import { agentId, agentName, permissionDate, sameAgent } from "../../lib/permissions/view";
 import { usePermissions } from "../../state/permissions";
@@ -81,17 +82,17 @@ export function PermissionAgentPage({ agentRef }: { agentRef: string }) {
       </Link>
       {binding.status === "loading" ? (
         <>
-          <h1>Permissions</h1>
+          <AppHeading>Permissions</AppHeading>
           <LoadingSkeleton preset="detail" label="Loading permissions" />
         </>
       ) : binding.status === "error" ? (
         <>
-          <h1>Permissions</h1>
+          <AppHeading>Permissions</AppHeading>
           <ErrorState error="unreachable" actions={{ retry: () => void binding.refresh() }} />
         </>
       ) : !row ? (
         <>
-          <h1>Permissions</h1>
+          <AppHeading>Permissions</AppHeading>
           <EmptyState
             title="No access found for this account"
             body=""
@@ -111,7 +112,7 @@ export function PermissionAgentPage({ agentRef }: { agentRef: string }) {
               )}
             </span>
             <div className="hm-permission-profile-text">
-              <h1>{name}</h1>
+              <AppHeading>{name}</AppHeading>
               {!pseudo && (
                 <div className="hm-permission-id">
                   <span>{row.kind === "app" ? "Client ID" : "Account ID"}</span>

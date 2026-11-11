@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { readFileSync } from "node:fs";
 import { runInNewContext } from "node:vm";
 import { describe, expect, it, vi } from "vitest";
@@ -31,13 +32,13 @@ describe("static authentication callback bridge", () => {
     expect(html.match(/<script/gu)).toHaveLength(1);
     expect(html).not.toMatch(/<script[^>]+src=/u);
   });
-  it("messages only the exact same-origin opener and closes the popup", () => {
+  it("messages only the exact same-origin opener and leaves closure to that opener", () => {
     const result = bridge("same-origin");
     expect(result.postMessage).toHaveBeenCalledWith(
       { type: "solid-suite:auth-callback", url: callback },
       origin,
     );
-    expect(result.window.close).toHaveBeenCalledOnce();
+    expect(result.window.close).not.toHaveBeenCalled();
     expect(result.sessionStorage.setItem).not.toHaveBeenCalled();
     expect(result.location.replace).not.toHaveBeenCalled();
   });

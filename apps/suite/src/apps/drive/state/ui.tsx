@@ -24,6 +24,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { NATIVE_SAVE_LIMIT, saveNatively } from "@/lib/native/save-file";
 import { encodeRef } from "@/lib/refs";
 import { PUBLIC_SUITE_URL } from "../../../lib/urls";
 import { DriveAccessError } from "../lib/client/access";
@@ -39,6 +40,7 @@ import { unconfirmedIdentityMessage } from "../lib/client/commit";
 import { DriveDeletePendingError } from "../lib/client/deletion";
 import { isOwnStorage } from "../lib/client/ownership";
 import { DriveOperationInProgressError } from "../lib/client/source-operations";
+import { docsHref, isDocsDocument } from "../lib/open-with/docs";
 import {
   childUrl,
   copyItem,
@@ -54,8 +56,8 @@ import {
   trashItems,
 } from "../lib/operations/operations";
 import type { TrashEntry } from "../lib/operations/trash-index";
-import { loadSharing } from "../lib/sharing/apply";
-import { sharingSummary } from "./access";
+import { loadSharing } from "../lib/sharing/adapter";
+import { accessSummary } from "./access";
 import { useDrive } from "./drive-context";
 import { pruneDeleted } from "./prefs";
 import { moveWithValidator } from "./undo";
@@ -450,6 +452,9 @@ async function refreshAfter<T>(
   }
 }
 
+/** Shared by every useDriveActions caller: the native share-out cache serves one save at a time. */
+let nativeSaveInFlight = false;
+
 export function useDriveActions() {
   const { openDialog, setDetailsItems } = useDriveUi();
   const retargetDetails = useCallback(
@@ -484,6 +489,11 @@ export function useDriveActions() {
         router.push(hrefFor(item));
         return;
       }
+      // Docs documents open in the Docs editor, not the generic preview.
+      if (isDocsDocument(item, session.storageUrl)) {
+        router.push(docsHref(item.url));
+        return;
+      }
       if (setPreview && process.env.NEXT_PUBLIC_SUITE_TARGET !== "native") {
         const files = (siblings ?? [item]).filter((entry) => entry.kind === "file");
         setPreview({
@@ -496,12 +506,31 @@ export function useDriveActions() {
         });
       } else router.push(hrefFor(item));
     },
-    [router],
+    [router, session.storageUrl],
   );
 
   const download = useCallback(
     async (item: DriveItem) => {
       try {
+        if (process.env.NEXT_PUBLIC_SUITE_TARGET === "native") {
+          // No blob: download in the shells: stage the file and open the share sheet instead.
+          // One save at a time: a second staging could evict the file the open sheet points at.
+          if (nativeSaveInFlight) return;
+          nativeSaveInFlight = true;
+          const progress = toast.loading(`Preparing ${item.name}…`);
+          try {
+            const bounded = await client.readLimited(item.url, NATIVE_SAVE_LIMIT);
+            if (!bounded) {
+              toast.error("Too large to save on this device");
+              return;
+            }
+            await saveNatively(bounded, item.name, item.contentType);
+          } finally {
+            toast.dismiss(progress);
+            nativeSaveInFlight = false;
+          }
+          return;
+        }
         const blob = await client.read(item.url);
         const href = URL.createObjectURL(blob);
         const anchor = document.createElement("a");
@@ -522,7 +551,7 @@ export function useDriveActions() {
       try {
         await navigator.clipboard.writeText(link);
         const description = await loadSharing(session, item.url).then(
-          ({ state }) => sharingSummary(state, session.webId),
+          (snapshot) => accessSummary(snapshot, session.webId),
           () => "Access unknown",
         );
         toast("Link copied", { description });

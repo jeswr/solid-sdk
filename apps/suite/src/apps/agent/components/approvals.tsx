@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 "use client";
 import type { Account } from "@jeswr/agent-model";
 import {
@@ -11,19 +12,115 @@ import {
 } from "@jeswr/suite-ui";
 import { Ban, Brain, Calendar, CreditCard, Mail, Plug } from "lucide-react";
 import Link from "next/link";
-import { type KeyboardEvent as ReactKeyboardEvent, useEffect, useRef, useState } from "react";
-import { isComplete } from "../lib/collections";
+import {
+  type KeyboardEvent as ReactKeyboardEvent,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import type { Row } from "../lib/client";
+import { collection, isComplete, metadataOf } from "../lib/collections";
 import { formatRelativeTime } from "../lib/format";
-import { useAgentQuery, useAgentWorkspace } from "../lib/hooks";
+import { type Query, useAgentQuery, useAgentWorkspace } from "../lib/hooks";
+import { mandateBoundaries } from "../lib/mandate-rules";
+import {
+  activateMandate,
+  allowSimilar,
+  canAllowSimilar,
+  loadVerifiedMandate,
+  PendingRevocation,
+  proposalBadge,
+} from "../lib/mandates";
 import { resourceSlug } from "../lib/paths";
-import { canBulkApprove, type PendingApproval } from "../lib/queue";
+import { canBulkApprove, conservativeReason, type PendingApproval } from "../lib/queue";
 import { loadedRecords, readAccounts } from "../lib/readers";
 import { createAgentSigner } from "../lib/sign";
 import { useApprovalQueue } from "../lib/use-queue";
 import { AgentControl } from "./agent-control";
 import { useApprovalDevice } from "./approval-key-setup-sheet";
-import { DetailScreen, DisabledAction, QueryRows, Screen } from "./states";
+import { DetailScreen, QueryRows, Screen } from "./states";
 import { OfflineBanner, useDaemonStatus } from "./status-pill";
+import { useAgentClock } from "./use-agent-clock";
+
+/**
+ * The shared approval queue (verified records only, complete trust collections) with each
+ * row's badge and "allow similar" option evaluated against the verified current mandate.
+ * Re-evaluated on the clock and at every policy boundary, so "Allowed" never outlives it.
+ */
+function useQueue(): Query<Row<PendingApproval>[]> {
+  const { session } = useAgentWorkspace();
+  const base = useApprovalQueue();
+  const mandate = useAgentQuery(session.storageUrl, (c) => loadVerifiedMandate(c, session));
+  const policy = mandate.status === "ready" ? mandate.data : undefined;
+  const boundaries = useMemo(() => mandateBoundaries(policy), [policy]);
+  const now = useAgentClock(boundaries);
+  const rows = base.status === "ready" ? base.data : undefined;
+  const [evaluated, setEvaluated] = useState<{
+    rows: typeof rows;
+    policy: typeof policy;
+    now: number;
+    data: Row<PendingApproval>[];
+  }>();
+  useEffect(() => {
+    if (!rows || mandate.status === "loading") return;
+    let active = true;
+    void Promise.all(
+      rows.map(async (row) =>
+        "record" in row
+          ? {
+              ...row,
+              record: {
+                ...row.record,
+                // The mandate's badge never relaxes the queue's own (prohibited, renewal) reason.
+                reason: conservativeReason(
+                  row.record.reason,
+                  await proposalBadge(policy, row.record.proposal, new Date(now)),
+                ),
+                similarAllowed: await canAllowSimilar(policy, row.record.proposal, new Date(now)),
+              },
+            }
+          : row,
+      ),
+    ).then((data) => {
+      if (active) setEvaluated({ rows, policy, now, data });
+    });
+    return () => {
+      active = false;
+    };
+  }, [rows, policy, now, mandate.status]);
+  if (base.status !== "ready") return base;
+  if (mandate.status === "loading" || !evaluated)
+    return { status: "loading", reload: base.reload } as const;
+  if (evaluated.rows === rows && evaluated.policy === policy && evaluated.now === now)
+    return { ...base, data: collection(evaluated.data, metadataOf(base.data)) };
+  // While a re-evaluation is in flight, keep the list mounted (typed confirmations, focus and
+  // list position survive a clock tick) but never keep showing a stale "Allowed": carry over
+  // earlier badges only for the same proposal and terms, downgraded, and nothing permissive.
+  const previous = new Map(
+    evaluated.data.flatMap((row) =>
+      "record" in row
+        ? [[`${row.record.proposal.id} ${row.record.proposal.intent.termsDigest}`, row.record]]
+        : [],
+    ),
+  );
+  const data = (rows ?? []).map((row) => {
+    if (!("record" in row)) return row;
+    const earlier = previous.get(
+      `${row.record.proposal.id} ${row.record.proposal.intent.termsDigest}`,
+    )?.reason;
+    const reason = conservativeReason(row.record.reason, earlier ?? row.record.reason);
+    return {
+      ...row,
+      record: {
+        ...row.record,
+        reason: reason === "Allowed" ? "Ask first" : reason,
+        similarAllowed: false,
+      },
+    };
+  });
+  return { ...base, data: collection(data, metadataOf(base.data)) };
+}
 
 function Recipient({ hash, accounts }: { hash: string; accounts: Account[] }) {
   const own = accounts.find((account) => account.channelHandleHash === hash);
@@ -67,12 +164,18 @@ function ApprovalDetail({
   accounts,
   decide,
   busy,
+  similar,
 }: {
   row: PendingApproval;
   accounts: Account[];
   decide(row: PendingApproval, decision: "approve" | "deny"): void;
   busy: boolean;
+  similar(row: PendingApproval): void;
 }) {
+  const [confirmation, setConfirmation] = useState("");
+  const needsConfirmation =
+    row.proposal.intent.amount.value > 0 ||
+    ["pay", "Transfer", "https://jeswr.org/ns/agent#Transfer"].includes(row.proposal.intent.action);
   const action = useRef(decide);
   action.current = decide;
   useEffect(() => {
@@ -135,7 +238,7 @@ function ApprovalDetail({
             ? "Verified"
             : row.verification === "unchecked"
               ? "Unchecked"
-              : `Invalid (${row.verification.invalid})`}
+              : "Signature could not be verified"}
         </p>
       </details>
       <div className="agent-row">
@@ -145,9 +248,28 @@ function ApprovalDetail({
         >
           Approve
         </Button>
-        <DisabledAction tip="Available once you can edit permissions">
+        {needsConfirmation && (
+          <label>
+            Type CONFIRM to allow similar actions
+            <input
+              aria-label="Type CONFIRM to allow similar actions"
+              value={confirmation}
+              onChange={(e) => setConfirmation(e.target.value)}
+            />
+          </label>
+        )}
+        <Button
+          disabled={
+            busy ||
+            row.reason === "Never" ||
+            !row.similarAllowed ||
+            row.state !== "pending" ||
+            (needsConfirmation && confirmation !== "CONFIRM")
+          }
+          onClick={() => similar(row)}
+        >
           Approve and allow similar for 7 days
-        </DisabledAction>
+        </Button>
         <Button
           variant="outline"
           disabled={busy || row.state !== "pending"}
@@ -175,7 +297,7 @@ function DecisionState({ row }: { row: PendingApproval }) {
   );
 }
 export function ApprovalsScreen({ id }: { id?: string }) {
-  const query = useApprovalQueue();
+  const query = useQueue();
   const status = useDaemonStatus();
   const { client, session } = useAgentWorkspace();
   const device = useApprovalDevice();
@@ -187,7 +309,8 @@ export function ApprovalsScreen({ id }: { id?: string }) {
   const [busy, setBusy] = useState(false);
   const inFlight = useRef(false);
   const [error, setError] = useState(false);
-  const decide = (rows: PendingApproval[], decision: "approve" | "deny") => {
+  const [pendingRevocation, setPendingRevocation] = useState<PendingRevocation>();
+  const decide = (rows: PendingApproval[], decision: "approve" | "deny", similar = false) => {
     if (inFlight.current) return;
     void device.requireKey(() => {
       if (inFlight.current) return;
@@ -205,20 +328,43 @@ export function ApprovalsScreen({ id }: { id?: string }) {
             },
           }));
           try {
+            const mandate = await loadVerifiedMandate(client, session);
+            if (decision === "approve" && (await proposalBadge(mandate, proposal)) === "Never")
+              throw new Error("Your permissions never allow this");
+            if (similar) {
+              if (!mandate) throw new Error("Give your agent permissions first");
+              if (!(await canAllowSimilar(mandate, proposal)))
+                throw new Error("These permissions require confirmation");
+              await activateMandate(
+                client,
+                session,
+                allowSimilar(
+                  mandate,
+                  proposal,
+                  `${client.paths.mandates}${crypto.randomUUID()}.trig`,
+                ),
+                new Date(),
+                mandate,
+              );
+            }
             await createAgentSigner(session, client).signApproval(proposal, decision);
-          } catch {
+          } catch (error) {
             setOptimistic((current) => {
               const next = { ...current };
               delete next[proposal.id];
               return next;
             });
+            if (error instanceof PendingRevocation) throw error;
             throw new Error("Approval couldn't be saved");
           }
         }
         setSelected(new Set());
       };
       void run()
-        .catch(() => setError(true))
+        .catch((error) => {
+          if (error instanceof PendingRevocation) setPendingRevocation(error);
+          else setError(true);
+        })
         .finally(() => {
           inFlight.current = false;
           setBusy(false);
@@ -231,6 +377,29 @@ export function ApprovalsScreen({ id }: { id?: string }) {
     <>
       <OfflineBanner status={status} />
       {error && <p role="alert">Couldn't save your decision. Try again.</p>}
+      {pendingRevocation && (
+        <div role="alert">
+          <p>{pendingRevocation.message}</p>
+          <Button
+            disabled={busy}
+            onClick={() => {
+              setBusy(true);
+              void pendingRevocation
+                .retry()
+                .then(
+                  () => setPendingRevocation(undefined),
+                  (error) => setPendingRevocation(error as PendingRevocation),
+                )
+                .finally(() => {
+                  setBusy(false);
+                  query.reload();
+                });
+            }}
+          >
+            Try again
+          </Button>
+        </div>
+      )}
       <QueryRows query={query} empty="Nothing waiting for you">
         {(records) => {
           const rows = records.map((row) => {
@@ -249,10 +418,12 @@ export function ApprovalsScreen({ id }: { id?: string }) {
             const row = rows.find((row) => resourceSlug(row.proposal.id) === id);
             return row ? (
               <ApprovalDetail
+                key={`${row.proposal.id}:${row.proposal.intent.termsDigest}`}
                 row={row}
                 accounts={own}
                 busy={busy}
                 decide={(row, decision) => decide([row], decision)}
+                similar={(row) => decide([row], "approve", true)}
               />
             ) : (
               <p>This proposal is no longer waiting for approval.</p>

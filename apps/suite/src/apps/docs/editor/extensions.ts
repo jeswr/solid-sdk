@@ -1,3 +1,5 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex
 import Collaboration from "@tiptap/extension-collaboration";
 import Highlight from "@tiptap/extension-highlight";
@@ -12,14 +14,17 @@ import { type Attribute, Extension } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import type { Doc } from "yjs";
 import { codeWhitespaceTextblocks, compatibleCodeExtensions } from "../lib/editor/code-mark";
+import { CommentDecorations } from "../lib/editor/comment-decorations";
 import { normaliseDestination, normaliseImageDestination } from "../lib/editor/destination";
 import { normaliseHtmlLists } from "../lib/editor/html-lists";
 import { editorShortcut, validLink } from "../lib/editor/logic";
+import { Suggestions } from "../lib/editor/suggestions";
 import { normaliseTableSpan } from "../lib/editor/table-spans";
 import { FindDecorations } from "./find-plugin";
 import { clearFormatting } from "./formatting";
 import { protectiveLinkRel } from "./link-rel";
 import { privateImage } from "./private-image";
+import { SuggestionDelete, SuggestionInsert } from "./suggestion-marks";
 import { textStyleExtensions } from "./text-style";
 
 const SafeStarterKit = StarterKit.extend({
@@ -43,24 +48,26 @@ const SafeStarterKit = StarterKit.extend({
               };
             },
           })
-        : extension.name === "link"
-          ? extension.extend({
-              addAttributes(this: { parent: (() => Record<string, Attribute>) | undefined }) {
-                const attrs = this.parent?.() ?? {};
-                return {
-                  ...attrs,
-                  rel: {
-                    ...attrs.rel,
-                    parseHTML: (element: HTMLElement) =>
-                      protectiveLinkRel(element.getAttribute("rel")),
-                    renderHTML: (attrs: Record<string, unknown>) => ({
-                      rel: protectiveLinkRel(attrs.rel),
-                    }),
-                  },
-                };
-              },
-            })
-          : extension,
+        : extension.name === "codeBlock"
+          ? extension.extend({ marks: "suggestionInsert suggestionDelete" })
+          : extension.name === "link"
+            ? extension.extend({
+                addAttributes(this: { parent: (() => Record<string, Attribute>) | undefined }) {
+                  const attrs = this.parent?.() ?? {};
+                  return {
+                    ...attrs,
+                    rel: {
+                      ...attrs.rel,
+                      parseHTML: (element: HTMLElement) =>
+                        protectiveLinkRel(element.getAttribute("rel")),
+                      renderHTML: (attrs: Record<string, unknown>) => ({
+                        rel: protectiveLinkRel(attrs.rel),
+                      }),
+                    },
+                  };
+                },
+              })
+            : extension,
     );
   },
 });
@@ -77,6 +84,13 @@ const PasteDestinations = Extension.create({
             const fragment = document.createElement("template");
             fragment.innerHTML = html;
             normaliseHtmlLists(fragment.content);
+            for (const element of fragment.content.querySelectorAll("ins, del")) {
+              if (element.getAttributeNames().some((key) => key.startsWith("data-suggestion-")))
+                element.replaceWith(...element.childNodes);
+            }
+            for (const element of fragment.content.querySelectorAll("*"))
+              for (const key of element.getAttributeNames())
+                if (key.startsWith("data-suggestion-")) element.removeAttribute(key);
             for (const element of fragment.content.querySelectorAll("a[href], img[src]")) {
               const key = element.tagName === "A" ? "href" : "src";
               const url = element.getAttribute(key) as string;
@@ -264,6 +278,10 @@ export function baseExtensions(fetchImpl: typeof fetch) {
     PasteDestinations,
     EditorKeys,
     FindDecorations,
+    CommentDecorations,
+    SuggestionInsert,
+    SuggestionDelete,
+    Suggestions,
   ];
 }
 export function editorExtensions(doc: Doc, fetchImpl: typeof fetch) {

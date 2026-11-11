@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex
 import { MarkdownManager } from "@tiptap/markdown";
 import { DOMParser as SchemaDOMParser, type TagParseRule } from "@tiptap/pm/model";
@@ -138,6 +139,8 @@ export const MARKDOWN_MARK_RULES: Record<string, MarkdownRule & { delimiter?: st
   link: { tag: "a", attributes: ["href", "target", "rel", "class", "title"] },
   bold: { delimiter: "**", tag: "strong", attributes: [] },
   italic: { delimiter: "*", tag: "em", attributes: [] },
+  suggestionInsert: { tag: "ins", attributes: [], omitted: ["id", "author", "created"] },
+  suggestionDelete: { tag: "del", attributes: [], omitted: ["id", "author", "created"] },
   strike: { delimiter: "~~", tag: "del", attributes: [] },
   highlight: { tag: "mark", attributes: [] },
   underline: { tag: "u", attributes: [] },
@@ -1323,7 +1326,7 @@ const blockTypes = new Set(
     .map((type) => type.name),
 );
 export const MARKDOWN_NOTES =
-  "Formatting uses GFM where lossless and HTML for richer content. Images link to their absolute URL. Font family, size, text and highlight colours, line height and paragraph spacing are omitted.";
+  "Formatting uses GFM where lossless and HTML for richer content. Images link to their absolute URL. Font family, size, text and highlight colours, line height and paragraph spacing are omitted. Pending suggestions export as plain text, retaining both insertions and deletions.";
 
 /** Lift block HTML tokens out of inline containers before schema validation. */
 function splitInlineBlocks(node: JSONContent): JSONContent[] {

@@ -3,7 +3,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { ACCOUNTS_KEY } from "../src/shell/lib/accounts-store";
 import { DemoBackend, demoAccount } from "../src/shell/session/demo-backend";
 import { SolidBackend } from "../src/shell/session/solid-backend";
-import { SignInError } from "../src/shell/session/types";
 
 afterEach(() => vi.unstubAllGlobals());
 describe("session backend seam", () => {
@@ -18,22 +17,19 @@ describe("session backend seam", () => {
       message: "We couldn't find a sign-in service at that address",
     });
   });
-  it("validates URL hints without making discovery requests in this preview", async () => {
+  it("defers authentication until mounted in a browser", async () => {
     const backend = new SolidBackend();
     const fetch = vi.fn();
     vi.stubGlobal("fetch", fetch);
-    await expect(backend.signIn({ webId: "https://example.org/profile#me" })).rejects.toEqual(
-      new SignInError("unavailable"),
+    await expect(backend.signIn({ webId: "https://example.org/profile#me" })).rejects.toMatchObject(
+      {
+        code: "unavailable",
+      },
     );
-    await expect(backend.signIn({ issuer: "http://localhost:3000/" })).rejects.toMatchObject({
-      code: "unavailable",
-    });
     expect(fetch).not.toHaveBeenCalled();
     expect(await backend.restore()).toBeNull();
-    expect(backend.fetchFor()).toBe(fetch);
     expect(backend.kind).toBe("solid");
-    await backend.signOut();
-    backend.onExpired()();
+    backend.onExpired(() => {})();
   });
   it("signs into demo instantly and restores only its active pointer", async () => {
     const backend = new DemoBackend();

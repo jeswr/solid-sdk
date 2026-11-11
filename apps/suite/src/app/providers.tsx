@@ -1,7 +1,9 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 "use client";
 import { ThemeProvider, useTheme } from "next-themes";
 import { useEffect } from "react";
+import { NativePreviewCleanup } from "@/components/native-preview-cleanup";
 import { accountFixtureProps } from "@/shell/account/test-backends";
 import { SuiteEnvironmentContext } from "@/shell/environment";
 import type { SuiteEnv } from "@/shell/lib/env";
@@ -31,6 +33,7 @@ export function Providers({
       <ServiceWorkerRegistration />
       <SuiteEnvironmentContext.Provider value={environment}>
         <AccountsProvider {...accountFixtureProps()}>
+          {process.env.NEXT_PUBLIC_SUITE_TARGET === "native" ? <NativePreviewCleanup /> : null}
           <PreferencesProvider>
             <AppearanceEffect />
             <ShellSearchProvider>

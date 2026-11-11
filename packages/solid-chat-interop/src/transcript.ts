@@ -5,7 +5,9 @@ import { redactSecrets } from "./redact.js";
 
 /** A fence one backtick longer than any backtick run in `text`, so content cannot close it. */
 function fence(text: string): string {
-  const longest = Math.max(0, ...Array.from(text.matchAll(/`+/g), (m) => m[0].length));
+  // Iterate rather than spread: a long text can hold more runs than a call accepts arguments.
+  let longest = 0;
+  for (const run of text.matchAll(/`+/g)) longest = Math.max(longest, run[0].length);
   return "`".repeat(Math.max(3, longest + 1));
 }
 /** One line of plain text: no control characters, line breaks or Markdown heading/emphasis marks. */

@@ -56,17 +56,19 @@ it("bounds concurrency, reports partial failures and progress, including an empt
   expect(await importEvents([], async () => {}, progress)).toEqual({ imported: 0, failed: [] });
 });
 
-it("warns and skips TZID series the model cannot persist, including New York during London's rollback", () => {
+it("imports TZID series and single events, including New York during London's rollback", () => {
   const text = `BEGIN:VCALENDAR\nBEGIN:VEVENT\nUID:ny\nSUMMARY:New York weekly\nDTSTART;TZID=America/New_York:20261018T090000\nRRULE:FREQ=WEEKLY;COUNT=4\nEND:VEVENT\nBEGIN:VEVENT\nUID:single\nSUMMARY:New York one-off\nDTSTART;TZID=America/New_York:20261025T090000\nEND:VEVENT\nEND:VCALENDAR`;
   const parsed = importCalendar(text, "Europe/London");
-  expect(parsed.events).toHaveLength(1);
-  expect(parsed.events[0]?.name).toBe("New York one-off");
-  expect(parsed.events[0]?.start).toEqual(new Date("2026-10-25T13:00:00Z"));
-  expect(parsed.timeZones).toEqual(["America/New_York"]);
-  expect(parsed.skipped).toBe(1);
-  expect(parsed.warnings).toEqual([
-    expect.stringContaining('"New York weekly": recurring events in America/New_York'),
+  expect(parsed.events).toHaveLength(2);
+  expect(parsed.events.map((event) => event.timeZone)).toEqual([
+    "America/New_York",
+    "America/New_York",
   ]);
+  expect(parsed.events[1]?.name).toBe("New York one-off");
+  expect(parsed.events[1]?.start).toEqual(new Date("2026-10-25T13:00:00Z"));
+  expect(parsed.timeZones).toEqual(["America/New_York", "America/New_York"]);
+  expect(parsed.skipped).toBe(0);
+  expect(parsed.warnings).toEqual([]);
   expect(importCalendar("BEGIN:VCALENDAR\nEND:VCALENDAR", "Europe/London").events).toEqual([]);
   const utc = importCalendar(
     text
@@ -77,4 +79,18 @@ it("warns and skips TZID series the model cannot persist, including New York dur
   );
   expect(utc.skipped).toBe(0);
   expect(utc.timeZones).toEqual([undefined, undefined]);
+  expect(utc.events.every((event) => event.timeZone === undefined)).toBe(true);
+});
+it.each([
+  "Unknown/Zone",
+  "",
+  "+01:00",
+  "Europe/London\u0000",
+])("skips an unsupported recurring TZID %j with a visible warning", (timeZone) => {
+  const source = `BEGIN:VCALENDAR\nBEGIN:VEVENT\nUID:invalid\nSUMMARY:Unsupported zone\nDTSTART;TZID="${timeZone}":20260301T090000\nRRULE:FREQ=WEEKLY;COUNT=3\nEND:VEVENT\nEND:VCALENDAR`;
+  const parsed = importCalendar(source, "Europe/London");
+  expect(parsed.events).toEqual([]);
+  expect(parsed.timeZones).toEqual([]);
+  expect(parsed.skipped).toBe(1);
+  expect(parsed.warnings).toEqual(["Invalid IANA time zone"]);
 });

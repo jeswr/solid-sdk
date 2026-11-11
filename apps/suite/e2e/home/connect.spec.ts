@@ -1,6 +1,9 @@
 // AUTHORED-BY Codex GPT-6
 import AxeBuilder from "@axe-core/playwright";
 import { expect, type Page, test } from "@playwright/test";
+import { seedDemoSession } from "../demo-session";
+
+test.beforeEach(({ page }) => seedDemoSession(page));
 
 test.beforeEach(async ({ page }) => {
   await page.route("**/__connect-test-reset", (route) =>
@@ -52,7 +55,7 @@ test("catalogue filters use the URL, search matches descriptions, n focuses sear
   page,
 }, info) => {
   await page.goto("/connect?domain=media");
-  await expect(page.getByRole("heading", { level: 1, name: "Connect services" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 2, name: "Connect services" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Media", exact: true })).toHaveAttribute(
     "aria-pressed",
     "true",
@@ -191,7 +194,7 @@ test("offline catalogue disables every action and the flow is replaced until rec
   context,
 }) => {
   await page.goto("/connect");
-  await expect(page.getByRole("heading", { level: 1, name: "Connect services" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 2, name: "Connect services" })).toBeVisible();
   await context.setOffline(true);
   const actions = page.locator(".hm-connect-card-action button");
   await expect(actions).toHaveCount(18);

@@ -2,6 +2,9 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, type Page, test } from "@playwright/test";
 import type { DemoPodSnapshot } from "../../src/lib/demo-pod/pod";
+import { seedDemoSession } from "../demo-session";
+
+test.beforeEach(({ page }) => seedDemoSession(page));
 
 const root = "https://alice.demo.pod/";
 
@@ -53,19 +56,21 @@ test("scenario 3: contact detail, saved name, and a concurrent demo pod write", 
 }) => {
   await ready(page, "/home/socials");
   await page.getByRole("link", { name: "Pax Orchard", exact: true }).click();
-  await expect(page.getByRole("heading", { level: 1, name: "Pax Orchard" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 2, name: "Pax Orchard" })).toBeVisible();
   await expect(page.getByText("legacy0@example.org", { exact: true })).toBeVisible();
   await expect(page.getByRole("main")).not.toContainText(/http|WebID|ACL|RDF|container|Type Index/);
   await accessible(page);
   await page.getByRole("button", { name: "Edit", exact: true }).click();
   await page.getByLabel("Name (required)", { exact: true }).fill("Pax Meadow");
   await page.getByRole("button", { name: "Save", exact: true }).click();
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Pax Meadow");
+  await expect(
+    page.getByRole("heading", { level: 2, name: "Pax Meadow", exact: true }),
+  ).toBeVisible();
   await page.getByRole("link", { name: "Socials", exact: true }).click();
   await expect(page.getByRole("link", { name: "Pax Meadow", exact: true })).toBeVisible();
   await page.getByRole("link", { name: "Pax Meadow", exact: true }).click();
   await expect(page).toHaveURL(/\/home\/socials\/i\//);
-  await expect(page.getByRole("heading", { level: 1, name: "Pax Meadow" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 2, name: "Pax Meadow" })).toBeVisible();
   const route = page.url();
   await page.getByRole("button", { name: "Edit", exact: true }).click();
   await page.getByLabel("Name (required)", { exact: true }).fill("My Pax");
@@ -82,7 +87,7 @@ test("scenario 3: contact detail, saved name, and a concurrent demo pod write", 
   await accessible(page);
   await conflict.getByRole("button", { name: "Keep my changes", exact: true }).click();
   await expect(conflict).toBeHidden();
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("My Pax");
+  await expect(page.getByRole("heading", { level: 2, name: "My Pax", exact: true })).toBeVisible();
   // Keeping only changed fields also keeps the other editor's changed email.
   await expect(page.getByText("new@example.org", { exact: true })).toBeVisible();
   await other.close();
@@ -97,7 +102,7 @@ test("scenario 4: delete a bookmark, keyboard Undo, then commit after eight seco
   const original = await resource(page, bookmarkUrl);
   expect(original).not.toBeNull();
   await page.getByRole("link", { name: "Design inspiration", exact: true }).click();
-  await expect(page.getByRole("heading", { level: 1, name: "Design inspiration" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 2, name: "Design inspiration" })).toBeVisible();
   await page.getByRole("button", { name: "More item actions" }).click();
   await page.getByRole("menuitem", { name: "Delete", exact: true }).click();
   await expect(page).toHaveURL("/home/documents");

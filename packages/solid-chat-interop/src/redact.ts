@@ -19,11 +19,22 @@ export function redactSecrets(text: string): string {
         /-----BEGIN (?:[A-Z0-9]+ )*PRIVATE KEY-----[\s\S]*?(?:-----END (?:[A-Z0-9]+ )*PRIVATE KEY-----|$)/g,
         "[REDACTED PRIVATE KEY]",
       )
-      .replace(/\bsk-[A-Za-z0-9_-]+/g, "[REDACTED TOKEN]")
-      .replace(/\b(?:gh[pousr]_[A-Za-z0-9_]+|github_pat_[A-Za-z0-9_]+)/g, "[REDACTED TOKEN]")
-      .replace(/\b(?:AKIA|ASIA|AIDA|AROA)[A-Z0-9]{16}\b/g, "[REDACTED AWS KEY]")
-      .replace(/\beyJ[A-Za-z0-9_-]*\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g, "[REDACTED JWT]")
-      .replace(/\b(?:proxy-)?authorization\s*:[^\r\n]*/gi, "[REDACTED AUTHORIZATION]")
+      // Token boundaries are letters and digits only, so Markdown emphasis such as
+      // `__sk-...__` or `_ghp_..._` cannot hide a credential behind a word character.
+      .replace(/(?<![A-Za-z0-9])sk-[A-Za-z0-9_-]+/g, "[REDACTED TOKEN]")
+      .replace(
+        /(?<![A-Za-z0-9])(?:gh[pousr]_[A-Za-z0-9_]+|github_pat_[A-Za-z0-9_]+)/g,
+        "[REDACTED TOKEN]",
+      )
+      .replace(
+        /(?<![A-Za-z0-9])(?:AKIA|ASIA|AIDA|AROA)[A-Z0-9]{16}(?![A-Za-z0-9])/g,
+        "[REDACTED AWS KEY]",
+      )
+      .replace(
+        /(?<![A-Za-z0-9])eyJ[A-Za-z0-9_-]*\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g,
+        "[REDACTED JWT]",
+      )
+      .replace(/(?<![A-Za-z0-9])(?:proxy-)?authorization\s*:[^\r\n]*/gi, "[REDACTED AUTHORIZATION]")
       // Redact every shell/.env assignment, including non-secret-looking variable names,
       // multiline quoted values, unquoted backslash-newline continuations and an unfinished
       // final quote. Retain no variable value.

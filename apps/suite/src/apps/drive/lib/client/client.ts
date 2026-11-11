@@ -139,6 +139,11 @@ export interface DriveClient {
     options?: { ifMatch: string; readonly verifyHeaders?: ResourceAssertion["verifyHeaders"] },
   ): Promise<DriveItem>;
   read(url: string): Promise<Blob>;
+  /**
+   * The body when it is at most `limit` bytes, else `undefined`. Checks Content-Length first and
+   * stops reading at the cap, so an oversized or lying response never fills memory.
+   */
+  readLimited(url: string, limit: number): Promise<Blob | undefined>;
   /** Bytes and validator from the same GET, for subsequent conditional deletion. */
   readVersion(url: string): Promise<{
     body: Blob;
@@ -701,6 +706,62 @@ export function createSolidDriveClient(options: {
   };
 
   const read: DriveClient["read"] = async (url) => (await readVersion(url)).body;
+
+  // Native preview and save reads hand bytes to the OS, so they stay inside the
+  // signed-in pod: the request and the final response must both be in storage,
+  // and redirects are refused rather than followed.
+  const storageRoot = new URL(storageUrl);
+  const storagePath = storageRoot.pathname.endsWith("/")
+    ? storageRoot.pathname
+    : `${storageRoot.pathname}/`;
+  const inStorage = (target: string): boolean => {
+    try {
+      const candidate = new URL(target);
+      return (
+        candidate.origin === storageRoot.origin &&
+        !candidate.username &&
+        !candidate.password &&
+        (candidate.pathname.startsWith(storagePath) || `${candidate.pathname}/` === storagePath)
+      );
+    } catch {
+      return false;
+    }
+  };
+
+  const readLimited: DriveClient["readLimited"] = async (url, limit) => {
+    if (!inStorage(url)) throw new DriveError("forbidden", 403, url);
+    await provision.check(url);
+    const response = await ensureOk(await http(url, { redirect: "error" }), url);
+    if (response.redirected || (response.url !== "" && !inStorage(response.url))) {
+      await response.body?.cancel().catch(() => undefined);
+      throw new DriveError("forbidden", 403, url);
+    }
+    rememberType(url, response.headers);
+    const type = response.headers.get("content-type") ?? "";
+    const declared = response.headers.get("content-length");
+    if (declared !== null && Number(declared) > limit) {
+      await response.body?.cancel().catch(() => undefined);
+      return undefined;
+    }
+    if (!response.body) {
+      const blob = await response.blob();
+      return blob.size > limit ? undefined : blob;
+    }
+    const reader = response.body.getReader();
+    const parts: Uint8Array[] = [];
+    let total = 0;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > limit) {
+        await reader.cancel().catch(() => undefined);
+        return undefined;
+      }
+      parts.push(value);
+    }
+    return new Blob(parts as BlobPart[], { type });
+  };
 
   const readRdf: DriveClient["readRdf"] = async (url) => {
     await provision.check(url);
@@ -2879,6 +2940,7 @@ export function createSolidDriveClient(options: {
     list,
     stat,
     read,
+    readLimited,
     readVersion,
     readRdf,
     exclusive(urls, work) {
