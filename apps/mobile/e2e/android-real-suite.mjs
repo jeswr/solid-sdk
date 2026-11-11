@@ -226,6 +226,20 @@ async function trustedRun(tlsDir) {
         pages[name] = "unavailable";
       }
     }
+    if (app && seed) {
+      // Status codes or error names only: tells TLS/CORS/network failure apart from a bad profile.
+      const probe = (url) =>
+        app
+          .evaluate(`fetch(${JSON.stringify(url)}, { credentials: 'omit' })
+            .then(r => r.status + ' ' + (r.headers.get('content-type') ?? ''))
+            .catch(e => 'error ' + e.name + ': ' + String(e.message).slice(0, 80))`)
+          .catch(() => "unavailable");
+      pages.probes = {
+        webId: await probe(seed.account.webId),
+        openid: await probe(`${ORIGIN}/.well-known/openid-configuration`),
+        clientId: await probe(CLIENT_ID),
+      };
+    }
     return pages;
   }
   async function connect(port, socket, select) {
