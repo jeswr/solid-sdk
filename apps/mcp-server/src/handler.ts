@@ -27,6 +27,8 @@ export interface AppOptions {
   upstreamFetch?: typeof fetch;
   metadataFetch?: typeof fetch;
   now?: () => number;
+  /** LWS authorization servers trusted beyond the issuer's and storage roots' origins. */
+  lwsAuthorizationServers?: readonly string[];
 }
 
 interface BrowserFlow {
@@ -66,6 +68,9 @@ export async function createApp(
       vault,
       fetch: options.upstreamFetch,
       now,
+      ...(options.lwsAuthorizationServers === undefined
+        ? {}
+        : { lwsAuthorizationServers: options.lwsAuthorizationServers }),
     });
   const cookieName = origin.protocol === "https:" ? "__Host-mcp-flow" : "mcp-flow";
   const cookie = (id: string, age = 600) =>
