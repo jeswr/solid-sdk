@@ -383,6 +383,10 @@ Its caller must encrypt pending state and the private JWK envelope, consume call
 claim refresh ownership atomically, persist rotation before use, and scope every resource fetch.
 The envelope retains the original private JWK for JSON-only encrypted server vaults; signing
 keys are imported as non-extractable. Browser persistence continues to store CryptoKeys only.
+It also exports `storageDescriptionRoots(storage, { fetch }, { signal, allowInsecureLoopback? })`,
+the storage-description reader behind the LWS realm rule: it returns the roots an LWS or Solid
+description advertises (no credentials, no redirects, `[]` on any failure). The roots are claims;
+a broker must still require each one to lie inside the session's stored roots.
 
 Both factories establish an identity before returning. Client credentials use a DPoP grant and report
 the configured client identifier as the subject, with no inferred WebID. CID mode signs short-lived,

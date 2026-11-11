@@ -45,6 +45,10 @@ forwarding to the Node listener on `:3200`, or use the disposable TLS integratio
 below. Use the public HTTPS origin behind a proxy that preserves Host. URL generation uses only
 `MCP_PUBLIC_ORIGIN`, never forwarded headers. `MCP_ALLOWED_ORIGINS` is a comma-separated
 list of exact browser origins; the default permits no cross-origin browser MCP calls.
+A pod session exchanges its ID token for LWS access only with an authorization server on the
+issuer's origin or a storage root's origin. `MCP_LWS_AUTHORIZATION_SERVERS` is a
+comma-separated list of further HTTPS LWS authorization servers to trust; a server that a
+resource names in its metadata is never trusted on that basis alone.
 Writes default off; set `MCP_READ_ONLY=false` explicitly to enable them. Personal tools
 retain the pod's purpose policy and special-category audit requirements. A profile must
 advertise exactly one storage root; ambiguous profiles fail closed.
