@@ -8,8 +8,6 @@ import type { AppSlug } from "@jeswr/suite-ui";
 export const plannedApps: ReadonlySet<AppSlug> = new Set<AppSlug>([
   "bookmarks",
 
-  "insights",
-
   "forms",
 
   "recipes",
