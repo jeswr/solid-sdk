@@ -2,6 +2,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { SuiteNativeError } from "./errors.js";
 import {
+  clearPdfPreviews,
   openPdf,
   PDF_PREVIEW_CHUNK_BYTES,
   PDF_PREVIEW_MAX_BYTES,
@@ -21,6 +22,7 @@ function plugin(overrides: Partial<PdfPreviewPlugin> = {}) {
     pdfBegin: vi.fn(async () => ({ handle: "h1" })),
     pdfChunk: vi.fn(async () => undefined),
     pdfOpen: vi.fn(async () => undefined),
+    pdfClear: vi.fn(async () => undefined),
     ...overrides,
   } satisfies PdfPreviewPlugin;
 }
@@ -144,5 +146,23 @@ describe("openPdf", () => {
     });
     expect(await code(openPdf(native, "a.pdf", pdf(10)))).toBe("failed");
     expect(native.pdfOpen).not.toHaveBeenCalled();
+  });
+});
+
+describe("clearPdfPreviews", () => {
+  it("asks native code to clear every preview", async () => {
+    const native = plugin();
+    await clearPdfPreviews(native);
+    expect(native.pdfClear).toHaveBeenCalledOnce();
+    expect(native.pdfBegin).not.toHaveBeenCalled();
+  });
+
+  it("reports a native failure as failed", async () => {
+    const native = plugin({
+      pdfClear: vi.fn(async () => {
+        throw Object.assign(new Error("io"), { code: "too-large" });
+      }),
+    });
+    expect(await code(clearPdfPreviews(native))).toBe("failed");
   });
 });

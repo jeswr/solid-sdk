@@ -27,6 +27,7 @@ export {
   UserCancelledError,
 } from "./errors.js";
 export {
+  clearPdfPreviews,
   openPdf,
   PDF_PREVIEW_CHUNK_BYTES,
   PDF_PREVIEW_MAX_BYTES,

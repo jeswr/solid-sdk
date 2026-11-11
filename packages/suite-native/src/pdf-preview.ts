@@ -6,6 +6,8 @@ export interface PdfPreviewPlugin {
   pdfBegin(options: { name: string; size: number }): Promise<{ handle: string }>;
   pdfChunk(options: { handle: string; data: string }): Promise<void>;
   pdfOpen(options: { handle: string }): Promise<void>;
+  /** Drops any transfer, closes an in-app viewer and deletes every cached preview file. */
+  pdfClear(): Promise<void>;
 }
 
 /** Native code enforces the same cap on the declared size and on every append. */
@@ -82,5 +84,18 @@ export async function openPdf(
     await plugin.pdfOpen({ handle });
   } catch (error) {
     throw new PdfPreviewError(error instanceof Cancelled ? "cancelled" : nativeCode(error));
+  }
+}
+
+/**
+ * Sign-out or account switch: drops any transfer, closes QuickLook on iOS and deletes every
+ * cached preview so the next account never sees the last one's files (sst-8wx.18). An external
+ * Android viewer keeps only what it already read: the file behind its URI is gone.
+ */
+export async function clearPdfPreviews(plugin: PdfPreviewPlugin): Promise<void> {
+  try {
+    await plugin.pdfClear();
+  } catch {
+    throw new PdfPreviewError("failed");
   }
 }

@@ -357,10 +357,17 @@ describe("iOS project", () => {
     );
     const source = read("ios/App/App/SuiteFilesPlugin.swift");
     expect(source).toContain('jsName = "SuiteFiles"');
-    for (const method of ["pdfBegin", "pdfChunk", "pdfOpen"]) {
+    for (const method of ["pdfBegin", "pdfChunk", "pdfOpen", "pdfClear"]) {
       expect(source).toContain(`CAPPluginMethod(name: "${method}"`);
     }
     expect(source).toContain("QLPreviewController.canPreview(file as NSURL)");
+    // Sign-out closes the viewer this plugin presented and empties the store (sst-8wx.18).
+    expect(source).toMatch(
+      /func pdfClear\(_ call: CAPPluginCall\) \{\s*queue\.async \{[\s\S]*?store\(\)\.clear\(\)[\s\S]*?DispatchQueue\.main\.async \{[\s\S]*?self\.close\(viewer\)/,
+    );
+    expect(source).toMatch(
+      /isBeingPresented, let coordinator = viewer\.transitionCoordinator[\s\S]*?presentingViewController\?\.dismiss\(animated: false\)/,
+    );
     expect(source).toMatch(/editingModeFor previewItem[^}]*\.disabled/);
     expect(source).toMatch(/previewControllerDidDismiss[\s\S]*release\(file\)/);
     // A stale caller's refusal must not clear the live preview; expiry uses the monotonic clock.
@@ -537,7 +544,7 @@ describe("Android project", () => {
     );
     const source = read("android/app/src/main/java/org/jeswr/suite/SuiteFilesPlugin.java");
     expect(source).toContain('@CapacitorPlugin(name = "SuiteFiles")');
-    for (const method of ["pdfBegin", "pdfChunk", "pdfOpen"]) {
+    for (const method of ["pdfBegin", "pdfChunk", "pdfOpen", "pdfClear"]) {
       expect(source).toContain(`public void ${method}(PluginCall call)`);
     }
     expect(source).toContain('setDataAndType(uri, "application/pdf")');
@@ -550,7 +557,16 @@ describe("Android project", () => {
     expect(source).toContain("private static PdfPreviewStore store;");
     expect(source).toMatch(/handleOnResume\(\)[\s\S]*sweep\(SystemClock\.elapsedRealtime\(\)\)/);
     expect(source).not.toContain("currentTimeMillis");
-    expect(source).not.toContain("store().clear()");
+    // Only sign-out's pdfClear empties the whole store (sst-8wx.18). It first revokes every
+    // viewer grant under pdf-preview/, independently of the delete.
+    const clearCall =
+      /public void pdfClear\(PluginCall call\) \{\s*boolean revoked = false;\s*try \{[\s\S]*?\.path\(PREVIEW_PATH_NAME\)[\s\S]*?revokeUriPermission\(previews, Intent\.FLAG_GRANT_READ_URI_PERMISSION\);\s*revoked = true;\s*\} catch \(RuntimeException ignored\) \{[\s\S]*?\}\s*try \{\s*store\(\)\.clear\(\);[\s\S]*?if \(revoked\) call\.resolve\(\);\s*else call\.reject\([\s\S]*?\n {4}\}\n/;
+    expect(source).toContain('PREVIEW_PATH_NAME = "pdf_preview";');
+    expect(read("android/app/src/main/res/xml/file_paths.xml")).toContain(
+      '<cache-path name="pdf_preview" path="pdf-preview/" />',
+    );
+    expect(source).toMatch(clearCall);
+    expect(source.replace(clearCall, "")).not.toContain("store().clear()");
     expect(manifest).toMatch(
       /<queries>\s*<intent>\s*<action android:name="android.intent.action.VIEW" \/>\s*<data android:mimeType="application\/pdf" \/>\s*<\/intent>\s*<\/queries>/,
     );

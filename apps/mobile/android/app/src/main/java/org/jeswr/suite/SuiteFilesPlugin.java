@@ -24,6 +24,8 @@ public class SuiteFilesPlugin extends Plugin {
     // One store per process: a recreated activity must not delete a file an external viewer reads.
     // The store empties the directory when first created, which clears what a killed process left.
     private static PdfPreviewStore store;
+    /** The {@code cache-path} name for pdf-preview/ in res/xml/file_paths.xml. */
+    private static final String PREVIEW_PATH_NAME = "pdf_preview";
 
     @Override
     public void load() {
@@ -107,6 +109,37 @@ public class SuiteFilesPlugin extends Plugin {
             discard(call.getString("handle"), true);
             call.reject("Cannot preview this PDF", "failed");
         }
+    }
+
+    /**
+     * Sign-out or account switch (sst-8wx.18): revokes every viewer's read grant on the preview
+     * directory, then drops any transfer and deletes every preview file, so the next account never
+     * sees them. Revocation does not depend on deletion: a file that cannot be deleted is no longer
+     * readable through an existing grant. An external viewer keeps only what it already read.
+     */
+    @PluginMethod
+    public void pdfClear(PluginCall call) {
+        boolean revoked = false;
+        try {
+            // Revokes this URI and every sub-path: all FileProvider grants under pdf-preview/.
+            Uri previews = new Uri.Builder()
+                .scheme("content")
+                .authority(getContext().getPackageName() + ".fileprovider")
+                .path(PREVIEW_PATH_NAME)
+                .build();
+            getContext().revokeUriPermission(previews, Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            revoked = true;
+        } catch (RuntimeException ignored) {
+            // Still delete below, then report the failure.
+        }
+        try {
+            store().clear();
+        } catch (IOException | RuntimeException e) {
+            call.reject("Cannot clear PDF previews", "failed");
+            return;
+        }
+        if (revoked) call.resolve();
+        else call.reject("Cannot revoke PDF preview access", "failed");
     }
 
     /**
