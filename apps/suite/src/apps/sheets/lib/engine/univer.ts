@@ -135,7 +135,15 @@ export const mountUniver: MountEngine = async (container, options) => {
     string,
     { sheetId: string; rowIds: string[]; colIds: string[]; revision: number; lost: boolean }
   >();
+  let beforePositions: Map<string, Axes> | undefined;
   const metadata = (phase: "before" | "after", positions: Map<string, Axes>) => {
+    if (phase === "before")
+      beforePositions = new Map(
+        [...positions].map(([id, position]) => [
+          id,
+          { rowIds: [...position.rowIds], colIds: [...position.colIds] },
+        ]),
+      );
     const checkpoint = anchors.identitySnapshot();
     if (checkpoint.revision !== identityRevision) {
       identities.anchors.clear();
@@ -234,6 +242,7 @@ export const mountUniver: MountEngine = async (container, options) => {
     edit: StructuralEdit;
     deleted: AnchorDeletions;
     inverse: AnchorDeletions | undefined;
+    beforeAxes: Axes | undefined;
   }[] = [];
   let disposed = false;
   let loading = false;
@@ -436,6 +445,12 @@ export const mountUniver: MountEngine = async (container, options) => {
           shiftChartRanges(readCharts({ charts }).charts, edit.sheet, edit),
         ).charts;
       }
+      const state = options.collaboration && sheetStates(options.collaboration.doc).get(edit.sheet);
+      const beforeAxes = event.options?.fromCollab
+        ? beforePositions?.get(edit.sheet)
+        : state
+          ? axes(state)
+          : undefined;
       const deleted = anchors.shift(edit);
       captureAnchors(deleted, event.options?.fromCollab);
       let inverse: AnchorDeletions | undefined;
@@ -445,7 +460,7 @@ export const mountUniver: MountEngine = async (container, options) => {
         inverse = operation[direction === "undo" ? "redo" : "undo"].pop();
         if (inverse) anchors.revive(restoreAnchors(inverse));
       }
-      structuralLog.push({ revision: savedRevision, edit, deleted, inverse });
+      structuralLog.push({ revision: savedRevision, edit, deleted, inverse, beforeAxes });
       for (const listener of structures) listener(edit);
     }
     editedSinceLoad = true;
@@ -563,10 +578,21 @@ export const mountUniver: MountEngine = async (container, options) => {
           ? (savedCursors.get(revision) ?? (revision === mountRevision ? 0 : -1))
           : -1;
         if (position === "snapshot" && start >= 0) {
-          for (const { edit, deleted, inverse } of structuralLog.slice(start)) {
+          for (const { edit, deleted, inverse, beforeAxes } of structuralLog.slice(start)) {
             const next = shiftCellAnchor(anchor, edit);
-            if (!anchor.deleted && next.deleted)
+            if (!anchor.deleted && next.deleted) {
               deleted.anchors[id] = { sheetId: anchor.sheetId, cell: anchor.cell };
+              // Discovery may follow a failed initial list. Fill the native history
+              // record with the identities at deletion time, including removed IDs.
+              const ref = parseA1(anchor.cell);
+              const rowId = beforeAxes?.rowIds[(ref.rows as AxisRange).start.index - 1];
+              const colId = beforeAxes?.colIds[(ref.columns as AxisRange).start.index - 1];
+              if (rowId && colId)
+                anchorCheckpoints.get(deleted)?.set(`anchors:${id}`, {
+                  rowIds: [rowId],
+                  colIds: [colId],
+                });
+            }
             anchor = next;
             const revived = inverse?.anchors[id];
             if (anchor.deleted && revived) anchor = { ...revived, deleted: false };

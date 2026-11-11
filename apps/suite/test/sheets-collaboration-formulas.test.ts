@@ -21,7 +21,7 @@ it("preserves strings, escaped quotes, function names, scientific numbers and un
   const { workbook, positions } = fixture();
   const cell = encodeCell({ f }, "data", workbook, positions);
   expect(decodeCell(cell, workbook, positions)).toEqual({ f });
-  expect(formulaReferences(f).map((token) => token.text)).toEqual(["Unknown!A1"]);
+  expect(formulaReferences(f).map((token) => token.text)).toEqual(["B3:A1", "Unknown!A1"]);
   expect(
     decodeCell(encodeCell({ v: "plain" }, "data", workbook, positions), workbook, positions),
   ).toEqual({ v: "plain" });
@@ -61,11 +61,13 @@ it("resolves whole rows, whole columns and references with differently cased she
 it.each([
   "rowIds",
   "colIds",
-] as const)("renders deleted %s and missing endpoints as #REF!", (axis) => {
+] as const)("renders deleted %s as #REF! and retains unallocated endpoints", (axis) => {
   const { workbook, positions } = fixture();
   const cell = encodeCell({ f: "=A1+SUM(A1:B3)+Z99" }, "data", workbook, positions);
   positions.get("data")?.[axis].splice(0, 1);
-  expect(decodeCell(cell, workbook, positions).f).toBe("=#REF!+SUM(#REF!)+#REF!");
+  expect(decodeCell(cell, workbook, positions).f).toBe(
+    axis === "rowIds" ? "=#REF!+SUM(#REF!)+Z98" : "=#REF!+SUM(#REF!)+Y99",
+  );
 });
 
 it("invalidates references to absent sheets or structures", () => {
@@ -77,4 +79,29 @@ it("invalidates references to absent sheets or structures", () => {
   positions.delete("other");
   expect(decodeCell(cell, workbook, positions).f).toBe("=#REF!");
   expect(encodeCell({ f: "=Absent!A1" }, "data", workbook, positions).f).toBe("=Absent!A1");
+});
+
+it("round-trips unallocated references and shifts them by net axis insertions/deletions", () => {
+  const { workbook, positions } = fixture();
+  const f = "=SUM(A1:A2000)+$ZZ$9+SUM(999:2000)+SUM(Z:ZZ)";
+  const cell = encodeCell({ f }, "data", workbook, positions);
+  expect(decodeCell(cell, workbook, positions)).toEqual({ f });
+  positions.get("data")?.rowIds.splice(1, 0, "inserted");
+  positions.get("data")?.colIds.splice(1, 0, "inserted");
+  expect(decodeCell(cell, workbook, positions).f).toBe(
+    "=SUM(A1:A2001)+$AAA$10+SUM(1000:2001)+SUM(AA:AAA)",
+  );
+  positions.get("data")?.rowIds.splice(2, 2);
+  positions.get("data")?.colIds.splice(2, 2);
+  expect(decodeCell(cell, workbook, positions).f).toBe(
+    "=SUM(A1:A1999)+$ZY$8+SUM(998:1999)+SUM(Y:ZY)",
+  );
+});
+
+it("retains reversed endpoint order and absolute flags while encoding normalized bounds", () => {
+  const { workbook, positions } = fixture();
+  const cell = encodeCell({ f: "=SUM($B3:A$1)+SUM(3:$1)+SUM(B:$A)" }, "data", workbook, positions);
+  positions.get("data")?.rowIds.unshift("inserted");
+  positions.get("data")?.colIds.unshift("inserted");
+  expect(decodeCell(cell, workbook, positions).f).toBe("=SUM($C4:B$2)+SUM(4:$2)+SUM(C:$B)");
 });

@@ -1,13 +1,22 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { SolidPersistence, SolidUpdateStore } from "@jeswr/y-solid";
-import { IndexeddbPersistence } from "y-indexeddb";
+import {
+  clearLocalMirrors,
+  hasUnconfirmedLocalState,
+  IndexeddbPersistence,
+  prepareLocalMirror,
+} from "@jeswr/y-solid/local";
 import * as Y from "yjs";
-import { hasUnconfirmedLocalState } from "../../../docs/editor/local-state";
 import type { Snapshot } from "../contract";
 import { checkpoint, SEED_ORIGIN, seedSheets, sheetStates } from "./model";
 
-export function workbookMirrorName(webId: string, workbook: string) {
-  return `suite.sheets.workbook:${JSON.stringify([webId, workbook])}`;
+export function workbookMirrorName(webId: string, workbook: string, instanceId?: string) {
+  return `suite.sheets.workbook:${JSON.stringify(instanceId === undefined ? [webId, workbook] : [webId, workbook, instanceId])}`;
+}
+
+export async function clearWorkbookMirrors(webId: string, workbook: string) {
+  if (typeof indexedDB !== "undefined")
+    await clearLocalMirrors(workbookMirrorName(webId, workbook));
 }
 
 /** One append-only update log, with an atomic, create-only initial seed. */
@@ -50,7 +59,7 @@ export class WorkbookCollaboration {
       await this.provider.whenSynced;
       if (this.failure) throw this.failure;
       if (sheetStates(this.doc).size) {
-        await this.openMirror();
+        await this.openMirror(snapshot);
         return;
       }
       if (this.readOnly) {
@@ -81,22 +90,25 @@ export class WorkbookCollaboration {
       } finally {
         seed.destroy();
       }
-      await this.openMirror();
+      await this.openMirror(snapshot);
     } catch (error) {
       await this.destroy();
       throw error;
     }
   }
 
-  private async openMirror() {
+  private async openMirror(snapshot: Snapshot) {
     const confirmed = Y.encodeStateAsUpdate(this.doc);
     this.confirmedVector = checkpoint(this.doc).stateVector;
     // Public/shared viewers never consume the owner's pending local updates.
     if (!this.webId || this.readOnly || typeof indexedDB === "undefined") return;
-    this.mirror = new IndexeddbPersistence(
-      workbookMirrorName(this.webId, new URL("../", this.container).href),
-      this.doc,
-    );
+    const workbook = new URL("../", this.container).href;
+    const instanceId = snapshot.id;
+    if (typeof instanceId !== "string" || !instanceId)
+      throw new Error("Missing workbook instance identity");
+    const name = workbookMirrorName(this.webId, workbook, instanceId);
+    await prepareLocalMirror(workbookMirrorName(this.webId, workbook), name);
+    this.mirror = new IndexeddbPersistence(name, this.doc);
     await this.mirror.whenSynced;
     if (await hasUnconfirmedLocalState(this.mirror, async () => confirmed)) {
       // The mirror may include edits whose earlier append failed before teardown.

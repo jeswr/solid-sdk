@@ -5,12 +5,15 @@ import type { AxisRange, Reference } from "../refs/model";
 import { indexToColumn } from "../refs/notation";
 import type { Axes } from "./model";
 
+// Unallocated coordinates remain beyond the live grid by this same offset.
+type StableCoordinate = string | null | { unallocated: number; allocated: number };
+
 type StableReference = {
   text: string;
   sheetId: string;
   reference: Reference;
-  rows: (string | null)[] | null;
-  columns: (string | null)[] | null;
+  rows: StableCoordinate[] | null;
+  columns: StableCoordinate[] | null;
 };
 export type StoredCell = ICellData & { stableFormula?: (string | StableReference)[] };
 
@@ -35,7 +38,9 @@ export function encodeCell(
     const ids = (range: AxisRange | null, axis: string[]) =>
       range === null
         ? null
-        : [axis[range.start.index - 1] ?? null, axis[range.end.index - 1] ?? null];
+        : [range.start, range.end].map(
+            ({ index }) => axis[index - 1] ?? { unallocated: index - 1, allocated: axis.length },
+          );
     parts.push(cell.f.slice(end, token.start), {
       text: token.text,
       sheetId: target as string,
@@ -62,8 +67,14 @@ export function decodeCell(
       const axes = positions.get(part.sheetId);
       const sheet = workbook.sheets[part.sheetId];
       if (!axes || !sheet) return "#REF!";
-      const indices = (ids: (string | null)[] | null, axis: string[]) =>
-        ids?.map((id) => (id === null ? -1 : axis.indexOf(id)));
+      const indices = (ids: StableCoordinate[] | null, axis: string[]) =>
+        ids?.map((id) =>
+          id === null
+            ? -1
+            : typeof id === "string"
+              ? axis.indexOf(id)
+              : id.unallocated + axis.length - id.allocated,
+        );
       const rows = indices(part.rows, axes.rowIds);
       const cols = indices(part.columns, axes.colIds);
       if ([...(rows ?? []), ...(cols ?? [])].some((index) => index < 0)) return "#REF!";
@@ -76,13 +87,21 @@ export function decodeCell(
         (ref.sheet === undefined || ref.sheet === sheet.name)
       )
         return part.text;
-      const point = (end: "start" | "end", index: number) =>
-        (cols
-          ? `${ref.columns?.[end].absolute ? "$" : ""}${indexToColumn((cols[index] as number) + 1)}`
-          : "") +
-        (rows ? `${ref.rows?.[end].absolute ? "$" : ""}${(rows[index] as number) + 1}` : "");
-      const start = point("start", 0),
-        end = point("end", 1);
+      const point = (endpoint: number) => {
+        const coordinate = (
+          range: AxisRange | null,
+          indices: number[] | undefined,
+          format: (index: number) => string,
+        ) => {
+          if (!range || !indices) return "";
+          const index = range.reversed ? 1 - endpoint : endpoint;
+          const bound = index === 0 ? range.start : range.end;
+          return `${bound.absolute ? "$" : ""}${format((indices[index] as number) + 1)}`;
+        };
+        return coordinate(ref.columns, cols, indexToColumn) + coordinate(ref.rows, rows, String);
+      };
+      const start = point(0),
+        end = point(1);
       // Preserve the original sheet spelling/quoting; names are snapshot-managed.
       const prefix =
         ref.sheet === undefined ? "" : part.text.slice(0, part.text.lastIndexOf("!") + 1);

@@ -59,3 +59,23 @@ streaming reads and redirect refusal, skips sub-containers, and sorts update URL
 ## License
 
 [MIT](./LICENSE) © Jesse Wright
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+
+### Browser mirrors (`@jeswr/y-solid/local`)
+
+The optional `y-indexeddb` peer supplies `IndexeddbPersistence`, `storeState` and
+`clearDocument` through this subpath. The main provider entry point does not load it.
+`hasUnconfirmedLocalState(mirror, loadConfirmed?)` checks persisted updates, including
+pending dependent structs and deletions, against a confirmed full Yjs update.
+`loadPersistedLocalState(doc, mirror)` refreshes the whole shared update store after
+another tab compacts it. `coversUpdates(confirmed, updates)` exposes the same coverage
+comparison for atomic acknowledgement transactions.
+
+Use `prepareLocalMirror(namespace, instanceName)` before attaching the instance mirror
+to a live document. Scope both names to the authenticated WebID and resource URL, and
+include the immutable resource instance ID in `instanceName`. Obsolete and unversioned
+mirrors are read into isolated documents; only unconfirmed state is retained under
+`<old-name>:retired`. It is never merged into the replacement. Call
+`clearLocalMirrors(namespace)` after closing publishers when the user deletes the
+resource. These helpers require IndexedDB and propagate storage failures.

@@ -18,6 +18,8 @@ export interface Axis {
   readonly absolute: boolean;
 }
 export interface AxisRange {
+  /** Text direction; endpoints themselves are always the min/max bounds. */
+  readonly reversed?: true;
   readonly start: Axis;
   readonly end: Axis;
 }

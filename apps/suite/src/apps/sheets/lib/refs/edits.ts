@@ -52,7 +52,11 @@ function shiftAxis(range: AxisRange, edit: StructuralEdit): AxisRange | null {
     nextStart = start < edit.index ? start : Math.max(edit.index, start - edit.count);
     nextEnd = end <= last ? Math.min(end, edit.index - 1) : end - edit.count;
   }
-  return { start: { ...range.start, index: nextStart }, end: { ...range.end, index: nextEnd } };
+  return {
+    ...range,
+    start: { ...range.start, index: nextStart },
+    end: { ...range.end, index: nextEnd },
+  };
 }
 
 /** null denotes #REF!. Local references resolve against formulaSheet. Never mutates inputs. */

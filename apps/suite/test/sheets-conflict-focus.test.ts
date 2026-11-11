@@ -329,7 +329,7 @@ it.each([
   if (!remove) throw new Error("Missing delete menu item");
   await click(remove);
   await click(button(document, "Delete"));
-  expect(pendingSaves.get(book.container)).toBeUndefined();
+  await vi.waitFor(() => expect(pendingSaves.get(book.container)).toBeUndefined());
   await expect(service.open(book.container)).rejects.toMatchObject({
     name: "WorkbookNotFoundError",
   });

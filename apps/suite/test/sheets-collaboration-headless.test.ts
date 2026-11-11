@@ -756,3 +756,49 @@ it.each([
     doc.destroy();
   }
 });
+
+it("preserves an out-of-grid range through a remote insertion above it", async () => {
+  const base = initial() as unknown as IWorkbookData;
+  const sheet = base.sheets.data as IWorkbookData["sheets"][string];
+  sheet.rowCount = 1000;
+  sheet.cellData = { 0: { 0: { f: "=SUM(B1:B2000)" } }, 2: { 1: { v: 42, t: 2 } } };
+  const p = await pair(base as unknown as Snapshot);
+  try {
+    expect(p.left.data()?.cellData?.[0]?.[0]?.f).toBe("=SUM(B1:B2000)");
+    await p.right.structural("row", "insert", 2);
+    p.sync();
+    for (const replica of [p.left, p.right])
+      expect(replica.data()?.cellData?.[0]?.[0]?.f).toBe("=SUM(B1:B2001)");
+    await vi.waitFor(() => {
+      for (const replica of [p.left, p.right])
+        expect(replica.data()?.cellData?.[0]?.[0]?.v).toBe(42);
+    });
+  } finally {
+    p.dispose();
+  }
+});
+
+it("keeps a concurrently entered reversed range attached to its values", async () => {
+  const base = initial() as unknown as IWorkbookData;
+  (base.sheets.data as IWorkbookData["sheets"][string]).cellData = {
+    0: { 0: { v: 8, t: 2 } },
+    2: { 1: { v: 42, t: 2 } },
+  };
+  const p = await pair(base as unknown as Snapshot);
+  try {
+    await p.left.cell(0, 3, { f: "=SUM(B3:A1)" });
+    const original = p.left.data()?.cellData?.[0]?.[3]?.f;
+    await p.right.structural("row", "insert", 2);
+    p.sync();
+    for (const replica of [p.left, p.right])
+      expect(replica.data()?.cellData?.[0]?.[3]?.f).toBe(
+        original === "=SUM(B3:A1)" ? "=SUM(B4:A1)" : "=SUM(A1:B4)",
+      );
+    await vi.waitFor(() => {
+      for (const replica of [p.left, p.right])
+        expect(replica.data()?.cellData?.[0]?.[3]?.v).toBe(50);
+    });
+  } finally {
+    p.dispose();
+  }
+});

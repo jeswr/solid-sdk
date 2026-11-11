@@ -469,3 +469,115 @@ it("contains background sync and teardown failures while retaining explicit erro
   expect(a.runtime.provider.destroyed).toBe(true);
   flush.mockRestore();
 });
+
+it.each([
+  false,
+  true,
+])("isolates a recreated slug from its prior instance (unconfirmed=%s)", async (pending) => {
+  const { IDBFactory, IDBKeyRange } = createRequire(
+    `${process.cwd()}/../../packages/solid-offline/package.json`,
+  )("fake-indexeddb");
+  vi.stubGlobal("indexedDB", new IDBFactory());
+  vi.stubGlobal("IDBKeyRange", IDBKeyRange);
+  const h = await harness();
+  const runtimes: WorkbookCollaboration[] = [];
+  try {
+    const old = await h.service.create({ title: "Recreated", snapshot });
+    const first = (await h.service.collaborate?.(
+      old.container,
+      old.snapshot,
+      false,
+    )) as WorkbookCollaboration;
+    runtimes.push(first);
+    if (pending)
+      h.setHook((call) =>
+        call.method === "PUT" && call.url.includes("/collab/")
+          ? new Response(null, { status: 503 })
+          : undefined,
+      );
+    edit(first, "Deleted content");
+    await first.destroy().catch(() => {});
+    h.setHook(() => undefined);
+    // Deletion in another browser/account leaves this WebID's local mirror behind.
+    await createWorkbookService({ ...h.options, webId: "another-browser" }).remove(old.container);
+    const replacement = await h.service.create({
+      title: "Recreated",
+      snapshot: {
+        ...snapshot,
+        sheets: { data: { ...(snapshot.sheets as Record<string, object>).data, cellData: {} } },
+      },
+    });
+    expect(replacement.container).toBe(old.container);
+    expect(replacement.snapshot.id).not.toBe(old.snapshot.id);
+    expect(workbookMirrorName(WEBID, old.container, old.snapshot.id as string)).not.toBe(
+      workbookMirrorName(WEBID, old.container, replacement.snapshot.id as string),
+    );
+    const reopened = (await h.service.collaborate?.(
+      replacement.container,
+      replacement.snapshot,
+      false,
+    )) as WorkbookCollaboration;
+    runtimes.push(reopened);
+    expect(JSON.stringify(sheetStates(reopened.doc).toJSON())).not.toContain("Deleted content");
+    const log = new Y.Doc();
+    for (const entry of await reopened.provider.store.loadUpdates())
+      Y.applyUpdate(log, entry.update);
+    expect(JSON.stringify(sheetStates(log).toJSON())).not.toContain("Deleted content");
+    log.destroy();
+    const names = (await indexedDB.databases()).map((item) => item.name);
+    const retired = `${workbookMirrorName(WEBID, old.container, old.snapshot.id as string)}:retired`;
+    expect(names.includes(retired)).toBe(pending);
+    await h.service.remove(replacement.container);
+    const remaining = (await indexedDB.databases()).map((item) => item.name);
+    expect(remaining).not.toContain(retired);
+    expect(remaining).not.toContain(
+      workbookMirrorName(WEBID, replacement.container, replacement.snapshot.id as string),
+    );
+  } finally {
+    h.setHook(() => undefined);
+    await Promise.all(runtimes.map((runtime) => runtime.destroy().catch(() => {})));
+    vi.unstubAllGlobals();
+  }
+});
+
+it("conditionally upgrades legacy workbook IDs once and returns the saved validator", async () => {
+  const h = await harness();
+  const book = await h.service.create({ title: "Legacy", snapshot });
+  const legacy = { ...book.snapshot };
+  delete legacy.id;
+  await h.storage.saveSnapshot(book.container, legacy, { ifMatch: book.version.snapshotEtag });
+  const opened = await h.service.open(book.container);
+  expect(opened.snapshot.id).toMatch(/^[0-9a-f-]{36}$/);
+  expect(opened.snapshot.id).not.toBe(book.snapshot.id);
+  const persisted = await h.storage.loadSnapshot(book.container);
+  expect(persisted.value).toEqual(opened.snapshot);
+  expect(persisted.etag).toBe(opened.version.snapshotEtag);
+  expect((await h.service.open(book.container)).snapshot.id).toBe(opened.snapshot.id);
+  await expect(
+    h.service.save(book.container, opened.snapshot, opened.version),
+  ).resolves.toBeDefined();
+});
+
+it("re-reads a legacy ID migration that loses its If-Match race", async () => {
+  const h = await harness();
+  const book = await h.service.create({ title: "Racing migration", snapshot });
+  const legacy = { ...book.snapshot };
+  delete legacy.id;
+  await h.storage.saveSnapshot(book.container, legacy, { ifMatch: book.version.snapshotEtag });
+  const winner = crypto.randomUUID();
+  let raced = false;
+  h.setHook(async (call) => {
+    if (!raced && call.method === "PUT" && call.url.endsWith("workbook.json")) {
+      raced = true;
+      await h.pod.fetch(call.url, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...book.snapshot, id: winner }),
+      });
+    }
+    return undefined;
+  });
+  const opened = await h.service.open(book.container);
+  expect(raced).toBe(true);
+  expect(opened.snapshot.id).toBe(winner);
+});
