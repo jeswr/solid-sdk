@@ -1,0 +1,44 @@
+# AUTHORED-BY Codex (GPT-6.1 Sol)
+@prefix schema: <http://schema.org/> .
+@prefix places: <https://jeswr.org/ns/places#> .
+@prefix dct: <http://purl.org/dc/terms/> .
+@prefix core: <https://jeswr.org/ns/core#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+
+# Profile of sectors/core/core.shacl.ttl core:PlaceShape (unconstrained).
+# Uses schema:Place, aligned to core:Place; requires name, flat coordinates,
+# category and saved flag. No sector visit/journey shape exists. Text address
+# only; one value per field; no GeoCoordinates child. Visit links are IRIs,
+# not embedded Place children. No sh:class: linked records live in other files.
+places:PlaceShape a sh:NodeShape ; sh:targetClass schema:Place ;
+ sh:property [ sh:path schema:name ; sh:name "name" ; sh:datatype xsd:string ; sh:maxCount 1 ; sh:minCount 1 ; sh:minLength 1 ;  ] ;
+ sh:property [ sh:path schema:address ; sh:name "address" ; sh:datatype xsd:string ; sh:maxCount 1 ;  ] ;
+ sh:property [ sh:path schema:latitude ; sh:name "latitude" ; sh:datatype xsd:double ; sh:maxCount 1 ; sh:minCount 1 ; sh:minInclusive -90 ; sh:maxInclusive 90 ; ] ;
+ sh:property [ sh:path schema:longitude ; sh:name "longitude" ; sh:datatype xsd:double ; sh:maxCount 1 ; sh:minCount 1 ; sh:minInclusive -180 ; sh:maxInclusive 180 ; ] ;
+ sh:property [ sh:path schema:category ; sh:name "category" ; sh:datatype xsd:string ; sh:maxCount 1 ; sh:minCount 1 ; sh:in ("home" "work" "food" "shop" "travel" "outdoors" "culture" "health" "other") ; ] ;
+ sh:property [ sh:path schema:description ; sh:name "notes" ; sh:datatype xsd:string ; sh:maxCount 1 ;  ] ;
+ sh:property [ sh:path places:saved ; sh:name "saved" ; sh:datatype xsd:boolean ; sh:maxCount 1 ; sh:minCount 1 ;  ] ;
+ sh:property [ sh:path schema:identifier ; sh:name "externalId" ; sh:datatype xsd:string ; sh:maxCount 1 ;  ] ;
+ sh:property [ sh:path dct:created ; sh:name "created" ; sh:datatype xsd:dateTime ; sh:maxCount 1 ;  ] ;
+ sh:property [ sh:path dct:modified ; sh:name "modified" ; sh:datatype xsd:dateTime ; sh:maxCount 1 ;  ] .
+places:VisitShape a sh:NodeShape ; sh:targetClass places:Visit ;
+ sh:property [ sh:path schema:location ; sh:name "place" ; sh:nodeKind sh:IRI ; sh:maxCount 1 ; sh:minCount 1 ; sh:pattern "^https?://" ; ] ;
+ sh:property [ sh:path schema:startTime ; sh:name "startTime" ; sh:datatype xsd:dateTime ; sh:maxCount 1 ; sh:minCount 1 ;  ] ;
+ sh:property [ sh:path schema:endTime ; sh:name "endTime" ; sh:datatype xsd:dateTime ; sh:maxCount 1 ; sh:minCount 1 ;  ] ;
+ sh:property [ sh:path places:confidence ; sh:name "confidence" ; sh:datatype xsd:decimal ; sh:maxCount 1 ; sh:minInclusive 0 ; sh:maxInclusive 1 ; ] ;
+ sh:property [ sh:path dct:source ; sh:name "source" ; sh:datatype xsd:string ; sh:maxCount 1 ; sh:minCount 1 ; sh:in ("google-timeline" "manual" "photo" "check-in") ; ] ;
+ sh:property [ sh:path schema:description ; sh:name "notes" ; sh:datatype xsd:string ; sh:maxCount 1 ;  ] .
+places:JourneyShape a sh:NodeShape ; sh:targetClass places:Journey ;
+ sh:property [ sh:path schema:startTime ; sh:name "startTime" ; sh:datatype xsd:dateTime ; sh:maxCount 1 ; sh:minCount 1 ;  ] ;
+ sh:property [ sh:path schema:endTime ; sh:name "endTime" ; sh:datatype xsd:dateTime ; sh:maxCount 1 ; sh:minCount 1 ;  ] ;
+ sh:property [ sh:path places:startLatitude ; sh:name "startLatitude" ; sh:datatype xsd:double ; sh:maxCount 1 ; sh:minCount 1 ; sh:minInclusive -90 ; sh:maxInclusive 90 ; ] ;
+ sh:property [ sh:path places:startLongitude ; sh:name "startLongitude" ; sh:datatype xsd:double ; sh:maxCount 1 ; sh:minCount 1 ; sh:minInclusive -180 ; sh:maxInclusive 180 ; ] ;
+ sh:property [ sh:path places:endLatitude ; sh:name "endLatitude" ; sh:datatype xsd:double ; sh:maxCount 1 ; sh:minCount 1 ; sh:minInclusive -90 ; sh:maxInclusive 90 ; ] ;
+ sh:property [ sh:path places:endLongitude ; sh:name "endLongitude" ; sh:datatype xsd:double ; sh:maxCount 1 ; sh:minCount 1 ; sh:minInclusive -180 ; sh:maxInclusive 180 ; ] ;
+ sh:property [ sh:path places:activityType ; sh:name "activityType" ; sh:datatype xsd:string ; sh:maxCount 1 ; sh:minCount 1 ; sh:in ("walking" "cycling" "running" "driving" "train" "bus" "flight" "ferry" "other") ; ] ;
+ sh:property [ sh:path schema:distance ; sh:name "distance" ; sh:datatype xsd:double ; sh:maxCount 1 ; sh:minCount 1 ; sh:minInclusive 0 ; ] ;
+ sh:property [ sh:path dct:source ; sh:name "source" ; sh:datatype xsd:string ; sh:maxCount 1 ; sh:minCount 1 ; sh:in ("google-timeline" "manual" "photo" "check-in") ; ] .
