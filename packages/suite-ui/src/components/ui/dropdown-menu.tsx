@@ -208,11 +208,13 @@ function DropdownMenuSubTrigger({
 function DropdownMenuSubContent({
   className,
   collisionPadding = 8,
+  forceMount,
   ...props
 }: React.ComponentProps<typeof DropdownMenuPrimitive.SubContent>) {
   return (
-    <DropdownMenuPrimitive.Portal>
+    <DropdownMenuPrimitive.Portal {...(forceMount ? { forceMount } : {})}>
       <DropdownMenuPrimitive.SubContent
+        {...(forceMount ? { forceMount } : {})}
         data-slot="dropdown-menu-sub-content"
         data-density={useDensity()}
         collisionPadding={collisionPadding}
