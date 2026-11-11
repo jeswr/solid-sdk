@@ -35,6 +35,7 @@ const EXTERNAL = [
   "@rdfjs/types",
   "jsonld-streaming-parser",
   "content-type",
+  "undici",
 ];
 
 function emitDeclarations(buildDir) {
