@@ -1,5 +1,11 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-export { aggregateReactions, type Reaction, type ReactionSummary } from "./reactions";
+export {
+  aggregateReactions,
+  MAX_REACTION_CHIPS,
+  type Reaction,
+  type ReactionSummary,
+  visibleReactions,
+} from "./reactions";
 export { type ChatMessage, type RoomSnapshot, unreadCountsByRoom } from "./receipts";
 export {
   buildTimeline,
