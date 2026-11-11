@@ -229,16 +229,23 @@ receipts share this boundary. A write receipt requires read authorization after
 the write; the write can succeed even if that receipt is denied.
 
 Generic access reserves the personal-data subtree `private/pkg/`, derived from
-`NanopubStore`'s storage layout. It includes nanopublications, policy, locks, audit
-logs and their local ACLs. Only the internal personal-tool and audit path can
-access this area; personal reads still require the current purpose policy and,
-for sensitive data, a verified audit append. Generic reads and mutations return
-the fixed diagnostic `Personal data requires a purpose-limited tool`, without
+`NanopubStore`'s storage layout, and the owner-only agent containers
+`agent/context/`, `agent/memory/` (including `health/`) and `agent/accounts/`.
+The agent prefixes share one layout definition with the shared-context path.
+The personal-data area includes nanopublications, policy, locks, audit
+logs and their local ACLs. `context_read` is the only read path for the shared
+context and applies card-number redaction. The internal personal-tool and audit
+path retains access to personal data; personal reads still require the current
+purpose policy and, for sensitive data, a verified audit append. Generic reads
+and mutations return the fixed diagnostic `Personal data requires a purpose-limited tool`, without
 echoing a URL. Generic writes/deletes also refuse ancestors of the reserved area.
 Listings, search candidates/results, Type Index hints, container projections and
-MCP resource enumeration omit protected children before reading them. Redirect
-hops and returned aliases receive the same checks, including slashless containers,
-query/fragment aliases, case variants, percent decoding and normalized `..` paths.
+MCP resource enumeration omit protected children before reading them. Listings
+of ancestors such as the pod root, `agent/` and `private/` remain available,
+with protected members and their containment/metadata triples removed. Listings
+inside protected areas are refused. Redirect hops and returned aliases receive
+the same checks, including slashless containers, query/fragment aliases, case
+variants, percent decoding and normalized `..` paths.
 
 Container representations are rebuilt from authorized children through typed
 RDF accessors and the N3 Writer. This applies to container URLs, slashless roots,

@@ -1,10 +1,9 @@
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Codex GPT-6.1-Sol
 import { NanopubStore } from "@jeswr/pkg-memory";
+import { PROTECTED_AGENT_CONTAINERS } from "./agent-layout.js";
 import { podScopedUrlOrUndefined } from "./auth.js";
 import type { PodPort } from "./pod-port.js";
-
-/** Container of the owner-written shared-context document (see context-tools.ts). */
-const SHARED_CONTEXT_CONTAINER = "agent/context/";
 
 export const PERSONAL_DATA_DENIED = "Personal data requires a purpose-limited tool";
 
@@ -77,13 +76,13 @@ export function requireGenericPodAccess(
     const target = new URL(url, pod.root);
     const protectedRoot = new URL(personalDataRoot(pod));
     if (target.origin !== protectedRoot.origin) return; // The pod-scope guard owns this.
-    const prefixes = pathAliases(protectedRoot);
+    const prefixes = [
+      protectedRoot,
+      ...PROTECTED_AGENT_CONTAINERS.map((path) => new URL(path, pod.root)),
+    ].flatMap(pathAliases);
     // The whole profile document carries Contact data, independent of its WebID fragment.
     const profile = pod.webId && podScopedUrlOrUndefined({ podRoot: pod.root }, pod.webId);
     if (profile && (!profileDiscovery || mutation)) prefixes.push(...pathAliases(new URL(profile)));
-    // Only the owner writes the shared context that later conversations load (ADR 0004),
-    // so generic tools may read it but never create, replace or delete it or an ancestor.
-    if (mutation) prefixes.push(...pathAliases(new URL(SHARED_CONTEXT_CONTAINER, pod.root)));
     for (const path of pathAliases(target)) {
       if (
         prefixes.some(

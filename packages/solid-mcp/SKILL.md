@@ -20,9 +20,10 @@ name, Zod schema (the SDK emits JSON Schema), handler and readOnly flag. Keep th
 solid_* aliases for v0.2, with the same schema, result and write enforcement as their
 pod_list/pod_read/pod_write/search names. No new tools belong to MCP-01.
 Shared-context tools (decisions/0004) live in context-tools.ts and register beside the pod
-tools. context_read takes no arguments and reads only the fixed SHARED_CONTEXT_PATH; keep
-model input away from the URL, and keep writes to owner-approved proposals. It reads below
-the server's configured root (a sub-container server looks under that sub-container), refuses
+tools. context_read is the only shared-context read path; it takes no arguments and reads
+only the fixed SHARED_CONTEXT_PATH. Keep model input away from the URL, and keep writes
+to owner-approved proposals. It reads below the server's configured root (a sub-container
+server looks under that sub-container), refuses
 redirects/aliases (PodReadOptions.redirect "error"; no second request), and redacts
 Luhn-valid card numbers before returning text.
 
@@ -38,6 +39,10 @@ ACLs). Audit must derive its container from the same layout. Deny generic reads,
 writes and deletes with `Personal data requires a purpose-limited tool`; never
 echo rejected URLs. Refuse ancestor mutations too. Filter protected listing/search
 candidates, Type Index hints, container projections and MCP resource enumeration.
+Also reserve `agent/context/`, `agent/memory/` (including `health/`) and
+`agent/accounts/` for all generic access. Keep the protected agent prefixes in
+`agent-layout.ts`, sharing the context container with `SHARED_CONTEXT_PATH`.
+Ancestor listings remain available but omit protected members and their metadata.
 Check redirects and final aliases, slashless containers, case variants, repeated
 percent encoding and normalized dot segments at the shared output/operation
 boundary. Only memoryContext and audit may opt into internal personal access;
