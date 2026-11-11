@@ -37,8 +37,10 @@ test("welcome shows the directory, captioned tour, pending media and feedback st
     page.getByTestId("tour-video").locator("track[kind=captions][default]"),
   ).toHaveAttribute("src", "/media/suite-walkthrough.vtt");
   await expect(page.getByTestId("feedback-pending")).toContainText("This video isn't ready yet.");
-  await expect(page.getByTestId("clips-pending")).toContainText(
-    "The feature clips aren't ready yet.",
+  await expect(page.getByLabel("Choose a feature")).toHaveValue("notes");
+  await expect(page.getByTestId("clip-video")).toHaveAttribute(
+    "src",
+    "/media/suite-clip-notes.mp4",
   );
   await page.getByTestId("tour-video").evaluate((video) => {
     Object.defineProperty(video, "duration", { value: 201, configurable: true });

@@ -12,14 +12,15 @@ const clip = {
   duration: 32,
 };
 describe("welcome media manifest", () => {
-  it("loads the supplied tour and captions, leaving unrecorded videos and clips pending", () => {
+  it("loads the supplied tour, captions and narrated feature clips, leaving the feedback video pending", () => {
     const manifest = parseManifest(
       JSON.parse(readFileSync(new URL("../public/media/manifest.json", import.meta.url), "utf8")),
     );
     expect(manifest.videos.tour?.file).toBe("suite-walkthrough.mp4");
     expect(manifest.videos.tour?.captions).toBe("suite-walkthrough.vtt");
     expect(manifest.videos.feedback?.file).toBeUndefined();
-    expect(manifest.clips).toEqual([]);
+    expect(manifest.clips.map((c) => c.id)).toEqual(["notes", "chat", "search"]);
+    for (const c of manifest.clips) expect(c.captions).toBe(`suite-clip-${c.id}.vtt`);
   });
   it("admits only listed clips with local files, distinct safe ids and text", () => {
     const manifest = parseManifest({

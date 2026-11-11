@@ -9,5 +9,30 @@
       "duration": 201
     }
   },
-  "clips": []
+  "clips": [
+    {
+      "id": "notes",
+      "title": "Capture a quick note",
+      "summary": "Notes keeps quick ideas and reminders in your pod, ready to pick up later.",
+      "file": "suite-clip-notes.mp4",
+      "captions": "suite-clip-notes.vtt",
+      "duration": 21
+    },
+    {
+      "id": "chat",
+      "title": "Start a conversation",
+      "summary": "Chat keeps conversations in your pod, organised into rooms and direct messages.",
+      "file": "suite-clip-chat.mp4",
+      "captions": "suite-clip-chat.vtt",
+      "duration": 21
+    },
+    {
+      "id": "search",
+      "title": "Find a saved file",
+      "summary": "Search helps you find files you have opened or synced, wherever they are saved.",
+      "file": "suite-clip-search.mp4",
+      "captions": "suite-clip-search.vtt",
+      "duration": 20
+    }
+  ]
 }
