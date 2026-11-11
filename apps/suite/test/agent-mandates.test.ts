@@ -52,7 +52,7 @@ import {
   demoMandateFiles,
   withDemoAgentKey,
 } from "../src/apps/agent/lib/demo-mandate";
-import { revocationImpact } from "../src/apps/agent/lib/key-admin";
+import { revocationImpact, revokeApprovalKey } from "../src/apps/agent/lib/key-admin";
 import { ApprovalKeyStore, setupApprovalKey } from "../src/apps/agent/lib/keys";
 import {
   allowSimilar,
@@ -74,6 +74,7 @@ import {
   activateMandate,
   loadVerifiedMandate,
   mandateHistory,
+  migrateStatusList,
   nextStatusIndex,
   PendingRevocation,
   previewMandate,
@@ -627,6 +628,55 @@ describe("signed mandate activation and revocation", () => {
     expect(await revocationImpact(client, session, signing, NOW)).toMatchObject({
       permissions: false,
     });
+  });
+  // AUTHORED-BY Claude Opus 5.5
+  it("re-signs the status list when its key is revoked, so the other device can grant permissions", async () => {
+    const { client, session } = await fixture();
+    const signing = (await getKey()).verificationMethod;
+    const first = mandate(at("mandates/first.trig"));
+    const second = {
+      ...mandate(at("mandates/second.trig")),
+      validFrom: new Date(NOW.getTime() + 1000).toISOString(),
+    };
+    await activateMandate(client, session, first, NOW);
+    const next = new Date(NOW.getTime() + 1000);
+    await activateMandate(client, session, second, next);
+    expect(await migrateStatusList(client, session, `${OWNER}-other-key`, next)).toBe(false);
+    await setupApprovalKey(session);
+    const device = (await getKey()).verificationMethod;
+    expect(await revokeApprovalKey(client, session, signing, () => next)).toEqual({ resigned: 0 });
+    const status = await parseStatusListCredential(
+      (await client.graph(client.paths.mandatesStatus)).text,
+    );
+    if (!status) throw new Error("Missing signed status");
+    expect([status.proof].flat().map((proof) => proof?.verificationMethod)).toEqual([device]);
+    // The replaced mandate stays revoked; the current one doesn't verify any more (old key).
+    expect(await readStatusBit(status, 0)).toBe(true);
+    expect(await readStatusBit(status, 1)).toBe(false);
+    expect(await loadVerifiedMandate(client, session, next)).toBeUndefined();
+    const third = {
+      ...mandate(at("mandates/third.trig")),
+      validFrom: new Date(next.getTime() + 1000).toISOString(),
+    };
+    const later = new Date(next.getTime() + 1000);
+    expect(statusIndex(await activateMandate(client, session, third, later))).toBe(2);
+    await expectSameMandate(await loadVerifiedMandate(client, session, later), third);
+  });
+  it("keeps the key when the re-signed status list doesn't verify", async () => {
+    const { client, session } = await fixture();
+    const signing = (await getKey()).verificationMethod;
+    await activateMandate(client, session, mandate(at("mandates/first.trig")), NOW);
+    await setupApprovalKey(session);
+    const original = await client.graph(client.paths.mandatesStatus);
+    // The store keeps the old body, so the readback still shows the revoked key's proof.
+    vi.spyOn(client, "replace").mockResolvedValueOnce(undefined as never);
+    await expect(revokeApprovalKey(client, session, signing, () => NOW)).rejects.toThrow(
+      /re-sign your permission status/,
+    );
+    expect((await client.graph(client.paths.mandatesStatus)).text).toBe(original.text);
+    expect(
+      await createWebIdKeyResolver({ fetch: session.fetch }).isControlledBy(signing, OWNER),
+    ).toBe(true);
   });
   it("replaces without reusing status indices, preserves revocation bits and emits a verified revoke control", async () => {
     const { client, session } = await fixture();

@@ -2,7 +2,12 @@
 // AUTHORED-BY Claude Opus 5.5
 import { parseRdf } from "@jeswr/fetch-rdf";
 import { serialize } from "@jeswr/rdf-serialize";
-import { createWebIdKeyResolver, type KeyPair, publishVerificationMethod } from "@jeswr/solid-vc";
+import {
+  createWebIdKeyResolver,
+  type KeyPair,
+  publishVerificationMethod,
+  SEC_ASSERTION_METHOD,
+} from "@jeswr/solid-vc";
 import { DataFactory, Store } from "n3";
 import { type ProfileSession, profileReader } from "./profile";
 
@@ -125,17 +130,55 @@ export async function publishApprovalKey(session: ProfileSession, key: KeyPair) 
     throw new Error("Your account profile hasn't confirmed this key. Try again.");
 }
 
-/** Remove one key from the profile: its owner links and its own description. */
-export async function removeApprovalKey(session: ProfileSession, id: string) {
+/** Is `key` one of the owner's assertion methods in this profile graph? */
+const listsKey = (store: Store, owner: string, key: string) =>
+  store.has(
+    DataFactory.quad(
+      DataFactory.namedNode(owner),
+      DataFactory.namedNode(SEC_ASSERTION_METHOD),
+      DataFactory.namedNode(key),
+    ),
+  );
+
+/**
+ * Remove one key from the profile: its owner links and its own description. Every conditional
+ * attempt, including conflict retries, refuses unless `survivor` (the key that re-signed the
+ * owner's controls) is still listed in the version being edited, so concurrent removals can't
+ * leave the profile without a usable key.
+ */
+export async function removeApprovalKey(session: ProfileSession, id: string, survivor: string) {
+  if (survivor === id) throw new Error("This device can't revoke its own key.");
   await editProfile(session, (store) => {
+    if (!listsKey(store, session.webId, survivor))
+      throw new Error("This device's key is no longer in your profile, so the key was kept.");
     const key = DataFactory.namedNode(id);
     store.removeQuads([
       ...store.match(DataFactory.namedNode(session.webId), null, key),
       ...store.match(key, null, null),
     ]);
   });
-  const resolver = createWebIdKeyResolver({ fetch: profileReader(session) });
-  if (await resolver.isControlledBy(id, session.webId))
+  // A failed read is not a confirmed removal: confirm explicit absence in a fresh copy.
+  const profile = new URL(session.webId);
+  profile.hash = "";
+  const unconfirmed =
+    "The key was removed, but your profile couldn't be read back to confirm it. Check your keys again.";
+  let store: Store;
+  try {
+    const response = await profileReader(session)(profile.href, {
+      redirect: "error",
+      headers: { accept: "text/turtle" },
+      cache: "no-store",
+    });
+    if (!response.ok) throw new Error(unconfirmed);
+    store = new Store([
+      ...(await parseRdf(await response.text(), response.headers.get("content-type"), {
+        baseIRI: profile.href,
+      })),
+    ]);
+  } catch {
+    throw new Error(unconfirmed);
+  }
+  if (listsKey(store, session.webId, id))
     throw new Error("Your account profile still lists this key. Try again.");
 }
 

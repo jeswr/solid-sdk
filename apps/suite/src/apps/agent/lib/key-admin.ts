@@ -21,7 +21,7 @@ import { DataFactory, Store } from "n3";
 import type { AgentClient } from "./client";
 import { isLoaded } from "./client";
 import { approvalKeyStatus, deviceKeyId, removeApprovalKey, withApprovalKey } from "./keys";
-import { currentCredential } from "./mandates";
+import { currentCredential, migrateStatusList } from "./mandates";
 import { type ProfileSession, profileReader } from "./profile";
 import { type DisplayControl, readControl } from "./readers";
 import { createAgentVerifier } from "./verify";
@@ -32,15 +32,26 @@ const RESTRICTIVE_KINDS: readonly string[] = ["Halt", "RevokeMandate", "Archive"
 /** Kinds whose loss changes standing state. */
 const STATE_KINDS: readonly string[] = [...RESTRICTIVE_KINDS, "Resume", "SetBindingState"];
 
-/** A binding change is restrictive when it cannot connect the account or allow anything. */
-function restrictive(claims: ControlStatementClaims) {
-  if (RESTRICTIVE_KINDS.includes(claims.kind)) return true;
-  if (claims.kind !== "SetBindingState") return false;
-  const state = claims.bindingState;
-  return (
-    (state === undefined || state === "disabled" || state === "none") &&
-    Object.values(claims.restrictions ?? {}).every((allowed) => allowed !== true)
-  );
+type Effect = "restrictive" | "permissive" | "mixed";
+const LIMITING_STATES: readonly (string | undefined)[] = [undefined, "disabled", "none"];
+
+/**
+ * What a statement does to the agent. A binding change that disables an account or turns an
+ * action off restricts; one that connects an account or turns an action on permits. One that does
+ * both is mixed: re-signing it would carry its permissive part forward, and letting it lapse would
+ * drop its restrictive part, so revocation refuses until it expires.
+ */
+function effect(claims: ControlStatementClaims): Effect {
+  if (RESTRICTIVE_KINDS.includes(claims.kind)) return "restrictive";
+  if (claims.kind !== "SetBindingState") return "permissive";
+  const restrictions = Object.values(claims.restrictions ?? {});
+  const permits =
+    !LIMITING_STATES.includes(claims.bindingState) || restrictions.some((on) => on === true);
+  const limits =
+    (claims.bindingState !== undefined && LIMITING_STATES.includes(claims.bindingState)) ||
+    restrictions.some((on) => on !== true);
+  if (!permits) return "restrictive";
+  return limits ? "mixed" : "permissive";
 }
 
 export interface ApprovalKeyRow {
@@ -88,7 +99,11 @@ interface Signed {
   claims: ControlStatementClaims;
 }
 
-/** In-force, owner-verified state-bearing controls whose proof names `id`. Fails closed. */
+/**
+ * In-force, owner-attributed state-bearing controls whose proof names `id`. Fails closed: an
+ * incomplete listing, an unreadable document, a statement by this key whose key check couldn't be
+ * completed, or a mixed-effect statement all stop revocation before anything is written.
+ */
 async function signedBy(
   client: AgentClient,
   session: ProfileSession,
@@ -101,10 +116,13 @@ async function signedBy(
   for (const container of [client.paths.control, client.paths.archive]) {
     const rows = await readControl(client, verifier, container);
     if (!rows.complete) throw new Error("There are too many agent controls to check this key.");
+    if (rows.some((row) => !isLoaded(row)))
+      throw new Error(
+        "Some of your agent's controls couldn't be read, so the key was kept. Try again.",
+      );
     for (const row of rows.filter(isLoaded<DisplayControl>)) {
       const { verification, ...claims } = row.record;
       if (
-        verification !== "verified" ||
         !STATE_KINDS.includes(claims.kind) ||
         claims.attributedTo !== session.webId ||
         Date.parse(claims.createdAt) > now.getTime() ||
@@ -113,7 +131,20 @@ async function signedBy(
         continue;
       const document = await client.graph(row.url);
       if ((await readControlVerificationMethod(document.text, row.url)) !== id) continue;
-      if (restrictive(claims)) found.push({ url: row.url, claims });
+      if (verification !== "verified") {
+        // The key is listed (checked before the scan), so a key failure here means its check
+        // couldn't finish, not that the statement was never trusted. Other failures are final.
+        if (typeof verification === "object" && verification.invalid !== "key") continue;
+        throw new Error(
+          "Couldn't check one of your agent's controls signed with this key, so the key was kept. Try again.",
+        );
+      }
+      const kind = effect(claims);
+      if (kind === "mixed")
+        throw new Error(
+          "This key recently changed an account so that your agent can do some things and not others. Revoke it after that change expires, within a day.",
+        );
+      if (kind === "restrictive") found.push({ url: row.url, claims });
       else lapsing += 1;
     }
   }
@@ -170,7 +201,8 @@ export async function revokeApprovalKey(
   assertRevocable(session, id);
   if (!(await listApprovalKeys(session)).some((key) => key.id === id))
     throw new Error("That key isn't one of your agent approval keys.");
-  if ((await approvalKeyStatus(session)) !== "ready")
+  const survivor = deviceKeyId();
+  if (!survivor || (await approvalKeyStatus(session)) !== "ready")
     throw new Error("Set up this device's key before revoking another one.");
   const at = now();
   const { restrictive: pending } = await signedBy(client, session, id, at);
@@ -186,6 +218,7 @@ export async function revokeApprovalKey(
       throw new Error("Couldn't re-sign your agent's controls, so the key was kept. Try again.");
     await client.create(copy.id, document, "application/trig");
   }
-  await removeApprovalKey(session, id);
+  await migrateStatusList(client, session, id, at);
+  await removeApprovalKey(session, id, survivor);
   return { resigned: pending.length };
 }
