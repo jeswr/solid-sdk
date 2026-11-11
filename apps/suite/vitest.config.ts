@@ -25,6 +25,8 @@ export default defineConfig({
       provider: "v8",
       include: [
         "src/apps/agent/lib/**/*.ts",
+        "src/apps/whiteboard/lib/**/*.ts",
+        "src/apps/whiteboard/state/**/*.ts",
         "src/shell/lib/**/*.ts",
         "src/shell/sync/connection-state.ts",
         "src/shell/search/local-source.ts",
