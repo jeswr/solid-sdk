@@ -12,8 +12,9 @@ vi.mock("@/lib/refs", async () => import("../../src/lib/refs"));
 vi.mock("next/navigation", () => ({
   usePathname: () => "/tasks/p/board",
   useRouter: () => router,
-  useSearchParams: () => new URLSearchParams(),
+  useSearchParams: () => new URLSearchParams(search),
 }));
+let search = "";
 vi.mock("@jeswr/suite-ui", async (original) => ({
   ...(await original<Record<string, unknown>>()),
   toast: { success: vi.fn(), error: vi.fn(), dismiss: vi.fn() },
@@ -181,6 +182,33 @@ describe("List | Board toggle", () => {
     await mount(h("main", null, h(ProjectView, { inbox: true })));
     expect(router.replace).not.toHaveBeenCalled();
   });
+});
+
+it("focuses the add-task row for ?add=1 and drops only that param, in place", async () => {
+  for (const name of [
+    "matchMedia",
+    "HTMLFormElement",
+    "HTMLInputElement",
+    "HTMLElement",
+    "DocumentFragment",
+    "Document",
+    "ShadowRoot",
+  ] as const)
+    vi.stubGlobal(name, window[name]);
+  await project(["First"]);
+  search = "add=1&keep=value";
+  const replaceState = vi.spyOn(window.history, "replaceState").mockImplementation(() => undefined);
+  try {
+    await mount(h("main", null, h(ProjectView, { inbox: true })));
+    // The mocked URL never changes, so the effect may run again; each call drops only `add`.
+    await act(() => vi.waitFor(() => expect(replaceState).toHaveBeenCalled()));
+    for (const call of replaceState.mock.calls)
+      expect(call).toEqual([null, "", "/tasks/p/board?keep=value"]);
+    expect(router.replace).not.toHaveBeenCalled();
+  } finally {
+    search = "";
+    replaceState.mockRestore();
+  }
 });
 
 describe("keyboard reorder and multi-select", () => {

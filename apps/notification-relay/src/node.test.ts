@@ -70,7 +70,7 @@ test("rejects wrong authority, ambiguous targets and duplicate security headers"
     expect(f.res.writeHead).toHaveBeenCalledWith(400);
     expect(f.handle).not.toHaveBeenCalled();
   }
-  for (const header of ["content-digest", "dpop", "authorization"]) {
+  for (const header of ["content-digest", "dpop", "authorization", "installation-proof"]) {
     const f = fixture();
     f.req.rawHeaders.push(header, "one", header, "two");
     await f.handler(f.req, f.res);

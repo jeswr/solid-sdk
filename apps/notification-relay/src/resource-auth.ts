@@ -58,7 +58,7 @@ export function webhookSenderPolicy(sender: string) {
 export function createResourceTokenVerifier(options: {
   publicUrl: string;
   outboundFetch: typeof fetch;
-  store: RelayStore;
+  store: Pick<RelayStore, "insertIfAbsent">;
   now?: () => number;
   allowLoopbackForTests?: boolean;
 }) {

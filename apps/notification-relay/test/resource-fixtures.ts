@@ -20,7 +20,9 @@ export const publicUrl = "https://relay.example";
 export const target = `${publicUrl}/push/installations`;
 export const profile = `@prefix solid: <http://www.w3.org/ns/solid/terms#> . <${webid}> solid:oidcIssuer <${issuer}> .`;
 
-export async function resourceFixture(store?: RelayStore) {
+export async function resourceFixture(
+  store?: Pick<RelayStore, "insertIfAbsent"> & Partial<Pick<RelayStore, "transaction">>,
+) {
   const signer = await generateKeyPair("ES256", { extractable: true });
   const device = await generateKeyPair("ES256", { extractable: true });
   const jwk = await exportJWK(signer.publicKey);
@@ -37,7 +39,13 @@ export async function resourceFixture(store?: RelayStore) {
       return new Response(profile, { headers: { "content-type": "text/turtle" } });
     throw new Error("Unexpected outbound request");
   });
-  const shared = store ?? new InMemoryRelayStore(now);
+  const memory = new InMemoryRelayStore(now);
+  const shared: RelayStore = store
+    ? {
+        insertIfAbsent: store.insertIfAbsent.bind(store),
+        transaction: store.transaction?.bind(store) ?? memory.transaction.bind(memory),
+      }
+    : memory;
   const options = { publicUrl, outboundFetch, store: shared, now };
   const verify = createResourceTokenVerifier(options);
   const claims = {
