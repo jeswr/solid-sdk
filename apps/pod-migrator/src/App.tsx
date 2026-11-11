@@ -1,3 +1,4 @@
+// AUTHORED-BY GPT-6.1 Sol
 // AUTHORED-BY Codex GPT-6
 import { ErrorBoundary, ThemeProvider, ThemeToggle } from "@jeswr/app-shell";
 import { assertWithinPodScope } from "@jeswr/guarded-fetch";
@@ -282,9 +283,6 @@ function MigrationApp({ connections }: { connections: readonly [PodConnection, P
   const heading = useRef<HTMLHeadingElement>(null);
 
   useEffect(() => {
-    for (const connection of connections) void connection.initialize(location.href);
-  }, [connections]);
-  useEffect(() => {
     if (steps[step]) heading.current?.focus();
   }, [step]);
   useEffect(
@@ -304,11 +302,11 @@ function MigrationApp({ connections }: { connections: readonly [PodConnection, P
             implementation: sourceState.implementation,
             publicHttp: createPodHttp({
               root: sourceState.root,
-              fetch: sourceConnection.auth.publicFetch,
+              fetch: sourceConnection.publicFetch,
             }),
             http: createPodHttp({
               root: sourceState.root,
-              fetch: sourceConnection.auth.authenticatedFetch,
+              fetch: sourceConnection.fetch,
             }),
           }
         : null,
@@ -323,7 +321,7 @@ function MigrationApp({ connections }: { connections: readonly [PodConnection, P
             implementation: targetState.implementation,
             http: createPodHttp({
               root: targetState.root,
-              fetch: targetConnection.auth.authenticatedFetch,
+              fetch: targetConnection.fetch,
             }),
           }
         : null,
@@ -603,34 +601,34 @@ function MigrationApp({ connections }: { connections: readonly [PodConnection, P
               {error}
             </p>
           )}
-          {step < 3 && (
-            <>
-              <p className="section-description">
-                {step === 0
-                  ? "Start with the account that holds the files you want to copy."
-                  : step === 1
-                    ? "Sign in to the account that will receive your files. You can use a different provider."
-                    : "Choose where your files will go and how links should be handled."}
-              </p>
-              <div className="connections-grid">
-                <ConnectionCard
-                  connection={sourceConnection}
-                  state={sourceState}
-                  side="source"
-                  disabled={Boolean(busy)}
-                />
-                <div className="direction" aria-hidden="true">
-                  →
-                </div>
-                <ConnectionCard
-                  connection={targetConnection}
-                  state={targetState}
-                  side="target"
-                  disabled={Boolean(busy)}
-                />
+          <div hidden={step >= 3}>
+            <p className="section-description">
+              {step === 0
+                ? "Start with the account that holds the files you want to copy."
+                : step === 1
+                  ? "Sign in to the account that will receive your files. You can use a different provider."
+                  : "Choose where your files will go and how links should be handled."}
+            </p>
+            <div className="connections-grid">
+              <ConnectionCard
+                key={sourceConnection.id}
+                connection={sourceConnection}
+                state={sourceState}
+                side="source"
+                disabled={Boolean(busy) || !!targetState.signingIn}
+              />
+              <div key="direction" className="direction" aria-hidden="true">
+                →
               </div>
-            </>
-          )}
+              <ConnectionCard
+                key={targetConnection.id}
+                connection={targetConnection}
+                state={targetState}
+                side="target"
+                disabled={Boolean(busy) || !!sourceState.signingIn}
+              />
+            </div>
+          </div>
           {step === 0 && (
             <div className="actions">
               <button

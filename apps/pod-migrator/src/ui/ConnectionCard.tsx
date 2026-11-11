@@ -1,7 +1,11 @@
+// AUTHORED-BY GPT-6.1 Sol
 // AUTHORED-BY Codex GPT-6
+
+import { LoginScreen, SessionProvider, useSession } from "@jeswr/app-session/react";
 import { AccountMenu } from "@jeswr/app-shell";
-import { useState } from "react";
+import { useEffect } from "react";
 import type { ConnectionState, PodConnection } from "../auth/connections.js";
+import { legacyCredentials } from "../auth/pod-auth.js";
 
 export function ConnectionCard({
   connection,
@@ -14,8 +18,33 @@ export function ConnectionCard({
   side: "source" | "target";
   disabled: boolean;
 }) {
-  const [value, setValue] = useState("");
-  const [kind, setKind] = useState<"webid" | "issuer">("webid");
+  return (
+    <SessionProvider
+      getPodAuth={connection.getPodAuth}
+      appName="Pod Migrator"
+      dev={import.meta.env.DEV}
+      legacyCredentials={legacyCredentials[connection.id]}
+    >
+      <ConnectionContent connection={connection} state={state} side={side} disabled={disabled} />
+    </SessionProvider>
+  );
+}
+
+function ConnectionContent({
+  connection,
+  state,
+  side,
+  disabled,
+}: {
+  connection: PodConnection;
+  state: ConnectionState;
+  side: "source" | "target";
+  disabled: boolean;
+}) {
+  const session = useSession();
+  useEffect(() => {
+    void connection.updateSession(session);
+  }, [connection, session]);
   const title = side === "source" ? "Copy from" : "Copy to";
   const pending = state.status === "restoring" || state.status === "loading";
   return (
@@ -29,7 +58,7 @@ export function ConnectionCard({
           {state.root ? "Connected" : pending ? "Connecting…" : "Not connected"}
         </span>
       </div>
-      <h3>{side === "source" ? "Source pod" : "Target pod"}</h3>
+      <h3>{side === "source" ? "Source pod" : "Destination pod"}</h3>
       {state.webId && (
         <>
           <div className="account-line">
@@ -107,62 +136,21 @@ export function ConnectionCard({
           {state.status === "restoring" ? "Restoring your sign-in…" : "Connecting to your account…"}
         </p>
       )}
-      {!state.root && !pending && !state.webId && (
-        <form
-          className="login-form"
-          onSubmit={(event) => {
-            event.preventDefault();
-            void connection.login(value, kind);
-          }}
-        >
-          <label className="field">
-            Sign in with
-            <select
-              disabled={disabled}
-              value={kind}
-              onChange={(event) => setKind(event.target.value as "webid" | "issuer")}
-            >
-              <option value="webid">My WebID</option>
-              <option value="issuer">My identity provider</option>
-            </select>
-          </label>
-          <label className="field">
-            {kind === "webid" ? "WebID URL" : "Identity provider URL"}
-            <input
-              type="url"
-              required
-              disabled={disabled}
-              value={value}
-              autoComplete="url"
-              placeholder={
-                kind === "webid" ? "https://you.example/profile/card#me" : "https://login.example"
-              }
-              onChange={(event) => setValue(event.target.value)}
-            />
-          </label>
-          <button type="submit" className="primary" disabled={disabled || !value.trim()}>
-            Sign in to {side}
-          </button>
-          <p className="muted quick-pick-label">Or choose a provider</p>
-          <div className="quick-picks">
-            {[
-              ["Inrupt PodSpaces", "https://login.inrupt.com"],
-              ["solidcommunity.net", "https://solidcommunity.net"],
-            ].map(([label, issuer]) => (
-              <button
-                key={issuer}
-                type="button"
-                disabled={disabled}
-                onClick={() => {
-                  if (issuer) void connection.login(issuer, "issuer");
-                }}
-              >
-                {label}
-                <span aria-hidden="true">↗</span>
-              </button>
-            ))}
-          </div>
-        </form>
+      {!state.webId && (session.ready || session.startupFailed) && (
+        <fieldset className="connection-sign-in" disabled={disabled}>
+          <legend className="sr-only">
+            {side === "source" ? "Source pod" : "Destination pod"} sign-in
+          </legend>
+          <LoginScreen
+            appName={
+              side === "source" ? "Pod Migrator · Source pod" : "Pod Migrator · Destination pod"
+            }
+            knownProviders={import.meta.env.VITE_KNOWN_PROVIDERS}
+            homeIdp={import.meta.env.VITE_HOME_IDP}
+            homeIdpName={import.meta.env.VITE_HOME_IDP_NAME}
+            dev={import.meta.env.DEV}
+          />
+        </fieldset>
       )}
       {state.webId && !pending && !state.root && state.status === "error" && (
         <button

@@ -7,7 +7,7 @@
   "outputDirectory": "dist",
   "rewrites": [
     {
-      "source": "/((?!assets/|.*\\.[^/]+$).*)",
+      "source": "/((?!assets/|callback/|.*\\.[^/]+$).*)",
       "destination": "/index.html"
     }
   ],

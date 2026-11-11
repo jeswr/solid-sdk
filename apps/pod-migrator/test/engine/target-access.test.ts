@@ -1,7 +1,8 @@
+// AUTHORED-BY GPT-6.1 Sol
 // AUTHORED-BY Codex GPT-6
 import { DataFactory, Store } from "n3";
 import { expect, it } from "vitest";
-import { RdfNode, serialize } from "../../src/engine/rdf.js";
+import { serialize } from "../../src/engine/rdf.js";
 import { targetAccessLinks } from "../../src/engine/target-access.js";
 import { pods } from "./helpers.js";
 
@@ -42,3 +43,5 @@ it("bounds target enumeration before inspecting more than 10000 resources", asyn
   await expect(targetAccessLinks(target.side())).rejects.toThrow("10000");
   expect(target.requests.filter((request) => request.method === "HEAD")).toHaveLength(10000);
 }, 15000);
+
+import { RdfNode } from "./rdf-node.js";

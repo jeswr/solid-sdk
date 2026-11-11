@@ -1,8 +1,16 @@
-// AUTHORED-BY Codex GPT-6
-import type { SolidAuth } from "@jeswr/solid-auth-core";
-import { type Mock, vi } from "vitest";
+// AUTHORED-BY GPT-6.1 Sol
+
+import type { SessionContextValue } from "@jeswr/app-session/react";
+import { fakePodAuth } from "@jeswr/app-session/testing";
+import type { Identity } from "@jeswr/pod-auth";
+import { vi } from "vitest";
 import type { MigrationPlan } from "../../src/App.js";
-import { PodConnection } from "../../src/auth/connections.js";
+import { type ConnectionId, PodConnection } from "../../src/auth/connections.js";
+
+// Shared profile decoration is public. Keep every test offline, including the captured transport.
+vi.hoisted(() => {
+  globalThis.fetch = (async () => new Response(null, { status: 404 })) as typeof fetch;
+});
 
 export const sourceWebId = "https://source.example/profile/card#me";
 export const targetWebId = "https://target.example/profile/card#me";
@@ -12,54 +20,81 @@ export const profileTurtle = `@prefix pim: <http://www.w3.org/ns/pim/space#>.
 <https://source.example/profile/card#me> pim:storage <https://storage.example/alice/>.
 <https://target.example/profile/card#me> pim:storage <https://storage.example/bob/>.`;
 
-type FakeAuth = {
-  -readonly [K in keyof SolidAuth]: SolidAuth[K] extends (...args: infer Args) => infer Result
-    ? Mock<(...args: Args) => Result>
-    : SolidAuth[K];
-};
-
-export function fakeAuth(webId: string | null = sourceWebId): FakeAuth {
-  const auth = {
-    webId,
-    issuer: "https://issuer.example/",
-    publicFetch: vi
-      .fn<typeof fetch>()
-      .mockImplementation(
-        async () => new Response(profileTurtle, { headers: { "content-type": "text/turtle" } }),
-      ),
-    authenticatedFetch: vi.fn<typeof fetch>().mockImplementation(
-      async () =>
-        new Response(profileTurtle, {
-          headers: { "content-type": "text/turtle", "x-powered-by": "Community Solid Server" },
-        }),
+/** Add only migrator profile/server fixtures to the shared protocol fake. */
+export function fakeAuth(webId: string | null = sourceWebId, issuer = "https://issuer.example/") {
+  const { auth, emit } = fakePodAuth();
+  const currentIdentity = (): Identity | null =>
+    webId
+      ? {
+          webId,
+          subject: webId,
+          issuer,
+          clientId: "https://app.example/clientid.jsonld",
+          protocol: "solid-oidc",
+          storages: [webId === targetWebId ? targetRoot : sourceRoot],
+        }
+      : null;
+  auth.restore.mockImplementation(async () => {
+    const value = currentIdentity();
+    emit("restore", value);
+    return value;
+  });
+  auth.identity.mockImplementation(async () => currentIdentity());
+  auth.login.mockImplementation(async () => {
+    webId ??= sourceWebId;
+    const value = currentIdentity() as Identity;
+    emit("login", value);
+    return value;
+  });
+  auth.logout.mockImplementation(async () => {
+    webId = null;
+    emit("logout", null);
+  });
+  auth.fetch.mockImplementation(
+    async () =>
+      new Response(profileTurtle, {
+        headers: { "content-type": "text/turtle", "x-powered-by": "Community Solid Server" },
+      }),
+  );
+  return Object.assign(auth, {
+    publicFetch: vi.fn<typeof fetch>(
+      async () => new Response(profileTurtle, { headers: { "content-type": "text/turtle" } }),
     ),
-    restore: vi
-      .fn()
-      .mockResolvedValue(webId ? { outcome: "restored", webId } : { outcome: "login" }),
-    handleRedirect: vi.fn().mockResolvedValue({ outcome: "none" }),
-    beginRedirectLogin: vi
-      .fn()
-      .mockResolvedValue({ authorizationUrl: "https://issuer.example/authorize" }),
-    completeRedirectLogin: vi.fn(),
-    hasPendingRedirect: vi.fn().mockReturnValue(false),
-    reArmAllowedOrigins: vi.fn().mockReturnValue(true),
-    logout: vi.fn().mockImplementation(async () => {
-      auth.webId = null;
-    }),
-    dropLiveSession: vi.fn(),
-    dropSession: vi.fn(),
-    login: vi.fn(),
-    rememberAccount: vi.fn(),
-    recentAccounts: vi.fn().mockReturnValue([]),
-    onSessionChange: vi.fn().mockReturnValue(() => {}),
-  } satisfies SolidAuth;
-  return auth;
+    emit,
+  });
+}
+
+export function sessionFor(
+  auth: ReturnType<typeof fakeAuth>,
+  webId: string | null = sourceWebId,
+): SessionContextValue {
+  return {
+    webId,
+    session: null,
+    fetch: auth.fetch,
+    logout: auth.logout,
+    restoringSession: false,
+    ready: true,
+    error: null,
+    pending: null,
+    recentAccounts: [],
+    recentProviders: [],
+    startupFailed: false,
+    retry: vi.fn(),
+    loginWithAddress: vi.fn(),
+    loginWithIssuer: vi.fn(),
+    loginWithAccount: vi.fn(),
+  };
+}
+
+export function connectionFor(id: ConnectionId, auth: ReturnType<typeof fakeAuth>) {
+  return new PodConnection(id, async () => auth, auth.publicFetch);
 }
 
 export function fakeConnections() {
   return [
-    new PodConnection("source", fakeAuth()),
-    new PodConnection("target", fakeAuth(targetWebId)),
+    connectionFor("source", fakeAuth()),
+    connectionFor("target", fakeAuth(targetWebId)),
   ] as const;
 }
 

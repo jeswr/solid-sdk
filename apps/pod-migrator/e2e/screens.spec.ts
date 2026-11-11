@@ -1,3 +1,4 @@
+// AUTHORED-BY GPT-6.1 Sol
 // AUTHORED-BY Codex GPT-6
 import { mkdir } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
@@ -22,7 +23,9 @@ test("connection, options, review, run, and result screens", async ({ page }, in
     });
   };
   await page.goto("/?signed-out");
-  await expect(page.getByRole("button", { name: "Sign in to source" })).toBeVisible();
+  await expect(
+    page.getByRole("region", { name: "source connection" }).getByRole("textbox", { name: "WebID" }),
+  ).toBeVisible();
   await expect(page.getByRole("button", { name: "Continue to target" })).toBeDisabled();
   await capture("connect");
   await page.goto("/");

@@ -1,3 +1,4 @@
+// AUTHORED-BY GPT-6.1 Sol
 // AUTHORED-BY Codex GPT-6
 import {
   LiteralAs,
@@ -8,7 +9,7 @@ import {
   TermFrom,
 } from "@rdfjs/wrapper";
 import { DataFactory, type Store } from "n3";
-import { ACL, ACP, RDF, RdfNode } from "../../src/engine/rdf.js";
+import { ACL, ACP, RDF } from "../../src/engine/rdf.js";
 import type { FakePod } from "./fake-pod.js";
 import { acl } from "./helpers.js";
 
@@ -253,3 +254,5 @@ export async function targetFixture(pod: FakePod, shape: string): Promise<Store>
       dataset.delete(q);
   return dataset;
 }
+
+import { RdfNode } from "./rdf-node.js";

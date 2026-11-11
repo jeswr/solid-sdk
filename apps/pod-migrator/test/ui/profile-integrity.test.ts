@@ -1,10 +1,18 @@
+// AUTHORED-BY GPT-6.1 Sol
+// AUTHORED-BY GPT-6.1 Sol
 // AUTHORED-BY Codex GPT-6
 import { parseRdf } from "@jeswr/fetch-rdf";
 import { DataFactory, Store, Writer } from "n3";
 import { expect, it, vi } from "vitest";
-import { PodConnection } from "../../src/auth/connections.js";
-import { RdfNode, serialize } from "../../src/engine/rdf.js";
-import { fakeAuth, profileTurtle, sourceRoot, sourceWebId } from "./fixtures.js";
+import { serialize } from "../../src/engine/rdf.js";
+import {
+  connectionFor,
+  fakeAuth,
+  profileTurtle,
+  sessionFor,
+  sourceRoot,
+  sourceWebId,
+} from "./fixtures.js";
 
 it.each([
   false,
@@ -26,9 +34,9 @@ it.each([
   auth.publicFetch.mockImplementation(
     privateProfile ? async () => new Response(null, { status: 403 }) : delayed,
   );
-  auth.authenticatedFetch.mockImplementation(delayed);
-  const connection = new PodConnection("source", auth);
-  const reading = connection.readProfile();
+  auth.fetch.mockImplementation(delayed);
+  const connection = connectionFor("source", auth);
+  const reading = connection.updateSession(sessionFor(auth));
   await requested;
   await connection.logout();
   finish(
@@ -39,7 +47,6 @@ it.each([
   await reading;
   expect(delayed).toHaveBeenCalledTimes(1);
   expect(connection.snapshot()).toMatchObject({ status: "signed-out", root: null });
-  expect(auth.reArmAllowedOrigins).not.toHaveBeenCalled();
 });
 
 it.each(
@@ -63,7 +70,7 @@ it.each(
     writer.end((error, result) => (error ? reject(error) : resolve(result))),
   );
   const auth = fakeAuth();
-  const authenticatedFetch = auth.authenticatedFetch.getMockImplementation();
+  const authenticatedFetch = auth.fetch.getMockImplementation();
   const conversion = vi.fn(() =>
     evidence === "406" || evidence === "401"
       ? new Response(null, { status: Number(evidence) })
@@ -79,19 +86,20 @@ it.each(
   auth.publicFetch.mockImplementation(
     privateProfile ? async () => new Response(null, { status: 403 }) : profileFetch,
   );
-  auth.authenticatedFetch.mockImplementation((input, init) =>
+  auth.fetch.mockImplementation((input, init) =>
     input === url ? profileFetch(input, init) : (authenticatedFetch as typeof fetch)(input, init),
   );
-  const connection = new PodConnection("source", auth);
-  await connection.readProfile();
+  const connection = connectionFor("source", auth);
+  await connection.updateSession(sessionFor(auth));
   expect(conversion).toHaveBeenCalledTimes(1);
   expect(connection.snapshot()).toMatchObject({
     status: evidence === "agree" ? "connected" : "error",
     root: evidence === "agree" ? sourceRoot : null,
   });
-  expect(auth.reArmAllowedOrigins).toHaveBeenCalledTimes(evidence === "agree" ? 1 : 0);
   const publicReads = auth.publicFetch.mock.calls.filter(([input]) => input === url);
-  const privateReads = auth.authenticatedFetch.mock.calls.filter(([input]) => input === url);
+  const privateReads = auth.fetch.mock.calls.filter(([input]) => input === url);
   expect(publicReads).toHaveLength(privateProfile ? 1 : 3);
   expect(privateReads).toHaveLength(privateProfile ? 3 : 0);
 });
+
+import { RdfNode } from "../engine/rdf-node.js";

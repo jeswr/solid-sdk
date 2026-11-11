@@ -1,10 +1,11 @@
+// AUTHORED-BY GPT-6.1 Sol
+// AUTHORED-BY GPT-6.1 Sol
 // AUTHORED-BY Codex GPT-6
 import { LiteralFrom, SetFrom } from "@rdfjs/wrapper";
 import { DataFactory, Store } from "n3";
 import { expect, it, vi } from "vitest";
-import { PodConnection } from "../../src/auth/connections.js";
-import { FOAF, RdfNode, serialize } from "../../src/engine/rdf.js";
-import { fakeAuth, sourceRoot, sourceWebId } from "./fixtures.js";
+import { FOAF, serialize } from "../../src/engine/rdf.js";
+import { connectionFor, fakeAuth, sessionFor, sourceRoot, sourceWebId } from "./fixtures.js";
 
 it.each([
   false,
@@ -25,7 +26,7 @@ it.each([
     "foaf:name": "Zoë 漢字 🌱",
   });
   const auth = fakeAuth();
-  const authenticatedFetch = auth.authenticatedFetch.getMockImplementation() as typeof fetch;
+  const authenticatedFetch = auth.fetch.getMockImplementation() as typeof fetch;
   const conversion = vi.fn((accept: string | null) =>
     accept === "application/ld+json"
       ? new Response(jsonld, {
@@ -47,18 +48,19 @@ it.each([
   auth.publicFetch.mockImplementation(
     privateProfile ? async () => new Response(null, { status: 403 }) : profileFetch,
   );
-  auth.authenticatedFetch.mockImplementation((input, init) =>
+  auth.fetch.mockImplementation((input, init) =>
     input === url ? profileFetch(input, init) : authenticatedFetch(input, init),
   );
-  const connection = new PodConnection("source", auth);
-  await connection.readProfile();
+  const connection = connectionFor("source", auth);
+  await connection.updateSession(sessionFor(auth));
   expect(connection.snapshot()).toMatchObject({ status: "connected", root: sourceRoot });
-  expect(auth.reArmAllowedOrigins).toHaveBeenCalledOnce();
   expect(conversion).toHaveBeenCalledExactlyOnceWith("application/ld+json");
   expect(auth.publicFetch.mock.calls.filter(([input]) => input === url)).toHaveLength(
     privateProfile ? 1 : 2,
   );
-  expect(auth.authenticatedFetch.mock.calls.filter(([input]) => input === url)).toHaveLength(
+  expect(auth.fetch.mock.calls.filter(([input]) => input === url)).toHaveLength(
     privateProfile ? 2 : 0,
   );
 });
+
+import { RdfNode } from "../engine/rdf-node.js";
