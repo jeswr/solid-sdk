@@ -33,7 +33,9 @@ export function createPodAuth(options: PodAuthOptions): PodAuth {
   validateOptions(options);
   if (options.lws !== undefined && options.lws.subject !== "oidc-id-token")
     return createAgentAuth(options, { kind: "cid", cid: { ...options.lws.subject.cid } });
+  const lifetime = new AbortController();
   let current: Identity | null = null;
+  let durableSession = false;
   let restoring: Promise<Identity | null> | undefined;
   let loggingOut: Promise<void> | undefined;
   let epoch = 0;
@@ -62,6 +64,7 @@ export function createPodAuth(options: PodAuthOptions): PodAuth {
     protocol: Identity["protocol"],
     expected: LoginHint,
   ) => {
+    lifetime.signal.throwIfAborted();
     if (loggingOut !== undefined) throw new Error("Logout is in progress");
     const started = epoch;
     if (
@@ -81,19 +84,21 @@ export function createPodAuth(options: PodAuthOptions): PodAuth {
     await providers.boundary.learn(claims.webId, request.signal, providers.fence.signal);
     request.signal.throwIfAborted();
     const webId = claims.webId;
-    if (webId !== undefined)
+    if (webId !== undefined) {
+      const account = {
+        webId,
+        issuer: claims.issuer,
+        selected: expected,
+        requestUrl: request.url,
+        context,
+      };
       await providers.fence.commit(
         generation,
-        async () =>
-          await providers.persistence.remember({
-            webId,
-            issuer: claims.issuer,
-            selected: expected,
-            requestUrl: request.url,
-            context,
-          }),
+        async () => await providers.persistence.remember(account),
         request.signal,
       );
+      if (current === null) durableSession = await providers.persistence.present(account);
+    }
     if (started !== epoch) throw new Error("Session changed during authentication");
     const first = current === null;
     observedFence = providers.fence.signal;
@@ -130,14 +135,38 @@ export function createPodAuth(options: PodAuthOptions): PodAuth {
     }
     return started === epoch ? snapshot() : null;
   };
+  const checkExpiry = async () => {
+    if (current === null || !durableSession) return;
+    const account = await providers.persistence.active();
+    if (account !== null && !(await providers.persistence.present(account))) {
+      current = null;
+      providers.boundary.clear();
+      emit("expired");
+    }
+  };
   const api: PodAuth = {
-    fetch: providers.manager.fetch as typeof fetch,
+    fetch: async (input, init) => {
+      lifetime.signal.throwIfAborted();
+      const signal = init?.signal ?? (input instanceof Request ? input.signal : undefined);
+      try {
+        const response = await providers.manager.fetch(input, {
+          ...init,
+          signal: AbortSignal.any([lifetime.signal, ...(signal == null ? [] : [signal])]),
+        });
+        if (response.status === 401) await checkExpiry();
+        return response;
+      } catch (error) {
+        await checkExpiry();
+        throw error;
+      }
+    },
     identity: readIdentity,
     remembered: async () => {
       const account = await providers.persistence.active();
       return account === null ? [] : [{ webId: account.webId, issuer: account.issuer }];
     },
     restore: () => {
+      if (lifetime.signal.aborted) return Promise.reject(lifetime.signal.reason);
       if (loggingOut || pending) return Promise.reject(new Error("Authentication is in progress"));
       if (restoring) return restoring;
       const started = epoch;
@@ -153,7 +182,7 @@ export function createPodAuth(options: PodAuthOptions): PodAuth {
           remembered: account === null ? [] : [account],
           restoreIssuer: async () => {
             try {
-              const claims = await providers.restore(account!);
+              const claims = await providers.restore(account!, lifetime.signal);
               return claims?.webId === undefined ? undefined : { webId: claims.webId };
             } catch (error) {
               // Transport/protocol failures are fail-closed; storage errors still propagate below.
@@ -181,10 +210,13 @@ export function createPodAuth(options: PodAuthOptions): PodAuth {
       restoring = promise;
       return promise;
     },
-    logout: () => {
+    logout: (logoutOptions) => {
+      if (logoutOptions?.scope === "session" && options.sessionScope === undefined)
+        return Promise.reject(new Error("Session-only logout requires sessionScope"));
       if (loggingOut) return loggingOut;
       ++epoch;
       current = null;
+      durableSession = false;
       providers.boundary.clear();
       const promise = providers.logout().finally(() => {
         observedFence = providers.fence.signal;
@@ -196,6 +228,7 @@ export function createPodAuth(options: PodAuthOptions): PodAuth {
       return promise;
     },
     login: (hint, loginOptions) => {
+      if (lifetime.signal.aborted) return Promise.reject(lifetime.signal.reason);
       const abort = loginOptions?.signal;
       if (abort?.aborted) return Promise.reject(abort.reason);
       if (loggingOut || restoring)
@@ -230,10 +263,11 @@ export function createPodAuth(options: PodAuthOptions): PodAuth {
           return existing;
         }
         // Keep preflight cancellation even if provider startup observes a newer generation.
-        const signal =
-          abort === undefined
-            ? providers.fence.signal
-            : AbortSignal.any([providers.fence.signal, abort]);
+        const signal = AbortSignal.any([
+          providers.fence.signal,
+          lifetime.signal,
+          ...(abort === undefined ? [] : [abort]),
+        ]);
         let granted = false;
         try {
           await providers.login(selected, signal, () => {
@@ -265,6 +299,14 @@ export function createPodAuth(options: PodAuthOptions): PodAuth {
       return () => {
         handlers.delete(handler);
       };
+    },
+    dispose: () => {
+      ++epoch;
+      current = null;
+      lifetime.abort(new Error("PodAuth instance disposed"));
+      providers.boundary.clear();
+      providers.fence.close();
+      listeners.clear();
     },
   };
   return api;

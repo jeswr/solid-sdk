@@ -266,6 +266,51 @@ artifact in each Vercel deploy; keep its contents fixed for that deploy. The scr
 file only; the hosting application configures the route and headers. It does not change app builds
 or publish a deployment.
 
+## Multiple accounts (`./accounts`, SDK-APP-02)
+
+```ts
+import { createAccountManager, UnknownAccountError } from '@jeswr/pod-auth/accounts';
+
+const manager = createAccountManager(options); // the same PodAuthOptions as createPodAuth
+await manager.restoreAll();
+await manager.add({ webId: aliceWebId }, { signal });
+await manager.add({ webId: bobWebId });
+await manager.switchTo(aliceWebId); // local storage only; no navigation or network
+await manager.fetch(resource); // selects the active account when called
+await manager.fetchFor(bobWebId)(bobResource); // stays bound to Bob
+const stop = manager.on('expired', webId => showExpired(webId));
+await manager.remove(bobWebId);
+stop();
+manager.dispose(); // cancel work and release listeners; keep remembered sessions
+```
+
+`accounts()` and `active()` return synchronous, credential-free identity copies. `on('change',
+handler)` reports completed add, remove, switch and restore operations. Unknown WebIDs throw
+`UnknownAccountError` (`webId`); asynchronous actions reject with it. A failed or cancelled add
+preserves the account list and active pointer. Repeating a WebID replaces only that account,
+preserving its position. Additions can authorize concurrently, each with a fresh DPoP key and
+credential boundary. Removal selects the first remaining account when the active account is removed.
+
+The sessions store holds a public list of WebIDs and opaque session scopes beside the active
+WebID. These pointers never establish identity: `restoreAll()` asks each core to validate its own
+refresh record and non-extractable key under the existing refresh lock. Accounts restore independently;
+expired or temporarily unavailable accounts cannot prevent another from restoring. Transient failures
+retain their pointers for retry. The persisted active account wins if it restores, otherwise the first
+restored account wins. An expiry event carries that account's WebID. `authFor(webId)` exposes its
+actual core for adapters; `authFor(null)` supplies an anonymous adapter whose login calls `add()`.
+WebID-less agent sessions are outside this manager's contract.
+
+Each core uses a separate public `sessionScope` in its session/key/fence namespace. Calling
+`logout({ scope: 'session' })` requires that option and revokes/purges only the selected scope,
+including its stored key. Ordinary unscoped `logout()` retains its existing all-sessions behavior.
+Manager removal uses scoped logout; replacement retires only the old scope. Replacement and failed-add
+cleanup attempt revocation and local purge even if the OP fails. Cache stores can be shared; storage
+capability caches remain partitioned by storage ID. No credentials move when switching.
+
+For React, use `AccountsProvider` and `useAccounts` from `@jeswr/suite-sdk`; existing `usePodAuth`
+consumers follow the active core. A single account is a manager with one account, so a separate
+single-session fallback is unnecessary. Existing `PodAuthProvider` usage keeps working.
+
 ## Session lifecycle
 
 Optional `storage.sessions` and `storage.caches` accept structural async key-value stores, namespaced

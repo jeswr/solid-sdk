@@ -2,7 +2,7 @@
 
 # @jeswr/suite-sdk
 
-> **Experimental — AI-agent-generated.** Private registration, notification, search, preferences and offline facades.
+> **Experimental — AI-agent-generated.** Private account, registration, notification, search, preferences and offline facades.
 
 Mount `PodAuthProvider` from `@jeswr/pod-auth/react`, then use the provider's authenticated
 fetch and current actor through the hook:
@@ -37,6 +37,33 @@ limits match [pod-access](../pod-access/README.md). No read-state writes are per
 
 `./testing` re-exports `createNotify` for fixture-fetch tests. Run this package's `lint`, `build`,
 `typecheck` and `test` scripts; tests enforce 100% coverage.
+
+## Accounts (`SDK-APP-02`)
+
+```tsx
+import { createAccountManager } from '@jeswr/pod-auth/accounts';
+import { AccountsProvider, useAccounts } from '@jeswr/suite-sdk';
+
+const manager = createAccountManager(options);
+await manager.restoreAll();
+// Mount once around the application:
+<AccountsProvider manager={manager}><App /></AccountsProvider>
+
+// In a component:
+const { accounts, active, switchTo, add, remove } = useAccounts();
+await switchTo(accounts[0].webId); // local switch; no navigation or network
+```
+
+`useAccounts()` returns identity snapshots and the manager's stable actions. `AccountsProvider`
+adopts the manager's current core through `PodAuthProvider` from `@jeswr/pod-auth/react`.
+Existing `usePodAuth`, `useNotify`, `useInbox` and registration consumers then follow the active
+identity and its bounded fetch. Replacing an account as the same WebID also replaces the provider's
+core. With no active account the provider is unauthenticated; its login action adds an account.
+The caller owns manager startup (`restoreAll`) and disposal. See [pod-auth's account contract](../pod-auth/README.md#multiple-accounts-accounts-sdk-app-02)
+for cancellation, scoped removal, expiry and storage details.
+
+A single account is just a manager with one account; no single-session fallback is needed.
+Existing applications can continue using `PodAuthProvider` directly.
 
 ## Offline (`SDK-APP-08`)
 
