@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Codex GPT-6
 "use client";
 import { emptyScene, LIMITS, parseScene, type Scene, sceneToSvg } from "@jeswr/excalidraw-scene";
 import {
@@ -14,8 +15,18 @@ import {
   toast,
 } from "@jeswr/suite-ui";
 import { Copy, Pencil, Plus, Trash2, Upload } from "lucide-react";
-import { useRef, useState } from "react";
+import { memo, useMemo, useRef, useState } from "react";
 import type { Board } from "../lib/repository";
+
+const BoardThumbnail = memo(function BoardThumbnail({ scene }: { scene: Scene }) {
+  const src = useMemo(
+    () =>
+      `data:image/svg+xml;charset=utf-8,${encodeURIComponent(sceneToSvg(scene, { background: true }))}`,
+    [scene],
+  );
+  // biome-ignore lint/performance/noImgElement: a local generated SVG thumbnail needs no image optimiser or network request.
+  return <img alt="" src={src} draggable={false} />;
+});
 export function BoardList({
   boards,
   ready,
@@ -94,12 +105,7 @@ export function BoardList({
                 aria-label={`Open ${board.title}`}
                 onClick={() => onOpen(board)}
               >
-                {/* biome-ignore lint/performance/noImgElement: a local generated SVG thumbnail needs no image optimiser or network request. */}
-                <img
-                  alt=""
-                  src={`data:image/svg+xml;charset=utf-8,${encodeURIComponent(sceneToSvg(board.scene, { background: true }))}`}
-                  draggable={false}
-                />
+                <BoardThumbnail scene={board.scene} />
               </button>
               <div className="wb-card-foot">
                 <div>

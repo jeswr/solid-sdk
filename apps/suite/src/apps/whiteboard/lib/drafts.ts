@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Codex GPT-6
 import { parseScene, serializeScene } from "@jeswr/excalidraw-scene";
 import type { Board } from "./repository";
 /** Only unsaved whiteboard snapshots, scoped to the active account and pod. */
@@ -11,13 +12,21 @@ export interface DraftStorage {
 }
 const PREFIX = "whiteboard.drafts.v1:";
 const OWNER_KEY = "whiteboard.drafts.owner";
-/** Called on sign-out/account changes; stale asynchronous saves cannot restore another account's drafts. */
-export function activateDraftOwner(storage: DraftStorage, owner: string | null): void {
-  const keep = owner === null ? null : `${PREFIX}${encodeURIComponent(owner)}:`;
-  for (let i = (storage.length ?? 0) - 1; i >= 0; i--) {
+/** Purge only an account that has signed out, even when another account is active. */
+export function purgeDraftOwner(storage: DraftStorage, owner: string): void {
+  const prefix = `${PREFIX}${encodeURIComponent(owner)}:`;
+  const keys: string[] = [];
+  for (let i = 0; i < (storage.length ?? 0); i++) {
     const name = storage.key?.(i);
-    if (name?.startsWith(PREFIX) && (!keep || !name.startsWith(keep))) storage.removeItem(name);
+    if (name?.startsWith(prefix)) keys.push(name);
   }
+  for (const name of keys) storage.removeItem(name);
+  if (storage.getItem(OWNER_KEY) === owner) storage.setItem(OWNER_KEY, "");
+}
+/** Switching accounts changes the write fence without discarding either account's drafts. */
+export function activateDraftOwner(storage: DraftStorage, owner: string | null): void {
+  const previous = storage.getItem(OWNER_KEY);
+  if (owner === null && previous) purgeDraftOwner(storage, previous);
   storage.setItem(OWNER_KEY, owner ?? "");
 }
 const key = (owner: string, root: string) =>
@@ -44,7 +53,8 @@ export function readDrafts(storage: DraftStorage, owner: string, root: string): 
         !b.metadata ||
         typeof b.metadata.sceneDocument !== "string" ||
         (b.etag !== null && typeof b.etag !== "string") ||
-        (b.descriptorEtag !== null && typeof b.descriptorEtag !== "string")
+        (b.descriptorEtag !== null && typeof b.descriptorEtag !== "string") ||
+        (b.descriptorText !== undefined && typeof b.descriptorText !== "string")
       )
         throw new Error("Invalid draft");
       return {
@@ -54,6 +64,7 @@ export function readDrafts(storage: DraftStorage, owner: string, root: string): 
         blob: b.blob,
         etag: b.etag,
         descriptorEtag: b.descriptorEtag,
+        ...(b.descriptorText === undefined ? {} : { descriptorText: b.descriptorText }),
         metadata: b.metadata,
         scene: parseScene(b.json),
       };
@@ -62,16 +73,16 @@ export function readDrafts(storage: DraftStorage, owner: string, root: string): 
     return [];
   }
 }
-/** Return false so the UI can explain when local retention is unavailable. */
+/** False means storage failed; fenced callbacks are intentionally silent. */
 export function writeDrafts(
   storage: DraftStorage,
   owner: string,
   root: string,
   boards: Board[],
-): boolean {
+): boolean | "fenced" {
   try {
     const active = storage.getItem(OWNER_KEY);
-    if (!owner || (active !== null && active !== owner)) return false;
+    if (!owner || (active !== null && active !== owner)) return "fenced";
     if (!boards.length) storage.removeItem(key(owner, root));
     else
       storage.setItem(

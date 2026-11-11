@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Codex GPT-6
 import type { Scene } from "@jeswr/excalidraw-scene";
 import { type Board, type BoardAccess, isConflict } from "../lib/repository";
 export type SaveState = "saved" | "saving" | "pending" | "error" | "conflict";
@@ -9,6 +10,7 @@ export class BoardAutosave {
   private timer: ReturnType<typeof setTimeout> | undefined;
   private flight: Promise<void> | null = null;
   private blocked = false;
+  private finished = false;
   constructor(
     private repository: BoardAccess,
     board: Board,
@@ -18,6 +20,7 @@ export class BoardAutosave {
     this.board = board;
   }
   update(scene: Scene) {
+    if (this.finished) return;
     this.pending = scene;
     this.changed("pending", { ...this.board, scene });
     clearTimeout(this.timer);
@@ -55,18 +58,23 @@ export class BoardAutosave {
     this.flight = null;
     if (this.pending && !this.blocked) await this.flush(keepalive);
   }
-  /** Drain pending writes before the descriptor is deleted; never delete after a failed flush. */
+  /** Deletion needs only the in-flight result. Unsent edits no longer need saving. */
   async finish(): Promise<Board> {
-    await this.flush();
-    if (this.pending || this.blocked) throw new Error("Save this board before deleting it");
+    clearTimeout(this.timer);
+    this.finished = true;
+    this.blocked = true;
+    this.pending = null;
+    if (this.flight) await this.flight;
+    this.pending = null;
     return this.board;
   }
   retry() {
+    if (this.finished) return Promise.resolve();
     this.blocked = false;
     return this.flush();
   }
   dispose() {
     clearTimeout(this.timer);
-    void this.flush(true);
+    return this.flush(true);
   }
 }

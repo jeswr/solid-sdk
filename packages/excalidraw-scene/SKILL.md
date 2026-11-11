@@ -3,6 +3,7 @@ name: excalidraw-scene
 description: Use when importing or editing Excalidraw v2 scenes, computing drawing geometry, or embedding drawings through the safe SVG renderer in @jeswr/excalidraw-scene.
 ---
 <!-- AUTHORED-BY Codex (GPT-6.1 Sol) -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 
 Keep this package pure: no RDF, React, pod I/O or third-party runtime dependencies.
 Descriptor operations belong behind solid-drawing's public API in the consumer.
@@ -10,7 +11,9 @@ Descriptor operations belong behind solid-drawing's public API in the consumer.
 Parse untrusted text with `parseScene` or bounded `parseSceneStream`; persist with
 `serializeScene`. Unedited imports retain original bytes, unknown fields and opaque types.
 Missing legacy `updated` values default to zero. Unsupported colour strings stay in the
-scene but are excluded from rendering; never widen the paint allowlist to admit URLs or variables.
+scene but are excluded from rendering, including the canvas background. Use `isColour` for
+consumer styles too: the paint allowlist accepts hex, named colours and numeric rgb/rgba,
+hsl/hsla or oklch functions. Never admit URLs or CSS variables.
 
 Use `sceneToSvg` or `sceneToSvgContent` for HTML/SVG embeds. These sanitise their inputs;
 never bypass them with imported markup. The package is security-critical: preserve escaping,

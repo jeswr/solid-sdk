@@ -1,7 +1,9 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Codex GPT-6
 /** Descriptor + blob I/O seam. Keep RDF behind solid-drawing until its codegen migration lands. */
 import {
   emptyScene,
+  LIMITS,
   newId,
   parseSceneStream,
   type Scene,
@@ -22,6 +24,8 @@ export interface Board {
   blob: string;
   etag: string | null;
   descriptorEtag: string | null;
+  /** Exact descriptor text observed with descriptorEtag; absent in legacy drafts. */
+  descriptorText?: string | undefined;
   metadata: SceneData;
 }
 function validator(etag: string | null): string {
@@ -36,6 +40,31 @@ export interface DrawingAccess {
   rename(board: Board, title: string): Promise<Board>;
   remove(board: Board): Promise<void>;
 }
+/** The public storage API exposes a stream but no bounded text reader. */
+async function boundedText(body: ReadableStream<Uint8Array> | null, url: string): Promise<string> {
+  if (!body) return "";
+  const reader = body.getReader();
+  const decoder = new TextDecoder("utf-8", { ignoreBOM: true, fatal: true });
+  let size = 0;
+  let text = "";
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) return text + decoder.decode();
+      size += value.byteLength;
+      if (size > LIMITS.bytes) {
+        throw new StorageError("payload-too-large", { url, method: "GET" });
+      }
+      text += decoder.decode(value, { stream: true });
+    }
+  } catch (error) {
+    void reader.cancel().catch(() => {});
+    throw error;
+  } finally {
+    reader.releaseLock();
+  }
+}
+const freshRead = { headers: { "Cache-Control": "no-cache, no-store" } };
 export class DrawingIO implements DrawingAccess {
   constructor(
     readonly storage: StorageClient,
@@ -43,9 +72,14 @@ export class DrawingIO implements DrawingAccess {
     private hint?: TypeHint,
   ) {}
   /** A version is safe only when observed alongside the bytes it protects. */
-  private async matchingVersion(url: string, bytes: string): Promise<string> {
-    const resource = await this.storage.read(url);
-    if ((await resource.text()) !== bytes || !resource.etag || resource.etag.startsWith("W/"))
+  private async matchingVersion(url: string, bytes: string | undefined): Promise<string> {
+    if (bytes === undefined) throw new StorageError("precondition-failed", { url, method: "GET" });
+    const resource = await this.storage.read(url, freshRead);
+    if (
+      (await boundedText(resource.body, url)) !== bytes ||
+      !resource.etag ||
+      resource.etag.startsWith("W/")
+    )
       throw new StorageError("precondition-failed", { url, method: "GET" });
     return resource.etag;
   }
@@ -55,12 +89,16 @@ export class DrawingIO implements DrawingAccess {
     return this.matchingVersion(result.url, bytes);
   }
   async read(url: string): Promise<Board> {
-    const description = await this.storage.read(url, { accept: "text/turtle" });
-    const metadata = await parseSceneTtl(url, await description.text(), description.contentType);
+    const description = await this.storage.read(url, { ...freshRead, accept: "text/turtle" });
+    const descriptorText = await boundedText(description.body, url);
+    const metadata = await parseSceneTtl(url, descriptorText, description.contentType);
     if (!metadata) throw new TypeError("This board has an invalid drawing descriptor");
     if (!this.storage.isWithinStorage(metadata.sceneDocument))
       throw new Error("This canvas is outside your pod");
-    const canvas = await this.storage.read(metadata.sceneDocument, { accept: "application/json" });
+    const canvas = await this.storage.read(metadata.sceneDocument, {
+      ...freshRead,
+      accept: "application/json",
+    });
     return {
       id: url,
       title: metadata.title ?? "Untitled board",
@@ -69,6 +107,7 @@ export class DrawingIO implements DrawingAccess {
       blob: metadata.sceneDocument,
       etag: canvas.etag,
       descriptorEtag: description.etag,
+      descriptorText,
       metadata,
     };
   }
@@ -86,8 +125,8 @@ export class DrawingIO implements DrawingAccess {
       contentType: "text/turtle",
       ...this.hint,
     });
-    const fresh = await this.storage.read(descriptor.url);
-    if ((await fresh.text()) !== "")
+    const fresh = await this.storage.read(descriptor.url, freshRead);
+    if ((await boundedText(fresh.body, descriptor.url)) !== "")
       throw new Error("The new descriptor changed before it could be initialised");
     const metadata: SceneData = {
       sceneDocument: blob.url,
@@ -106,8 +145,9 @@ export class DrawingIO implements DrawingAccess {
       scene,
       descriptor: descriptor.url,
       blob: blob.url,
-      etag: await this.responseVersion(blob, json),
-      descriptorEtag: await this.responseVersion(written, ttl),
+      etag: await this.responseVersion(blob, json).catch(() => null),
+      descriptorEtag: await this.responseVersion(written, ttl).catch(() => null),
+      descriptorText: ttl,
       metadata,
     };
   }
@@ -131,16 +171,14 @@ export class DrawingIO implements DrawingAccess {
       contentType: "text/turtle",
       ifMatch: board.descriptorEtag
         ? validator(board.descriptorEtag)
-        : await this.matchingVersion(
-            board.descriptor,
-            await descriptorTtl(board.descriptor, board.metadata),
-          ),
+        : await this.matchingVersion(board.descriptor, board.descriptorText),
     });
     return {
       ...board,
       title: value,
       metadata,
       descriptorEtag: await this.responseVersion(result, ttl),
+      descriptorText: ttl,
     };
   }
   async remove(board: Board): Promise<void> {
@@ -148,10 +186,7 @@ export class DrawingIO implements DrawingAccess {
     await this.storage.delete(board.descriptor, {
       ifMatch: board.descriptorEtag
         ? validator(board.descriptorEtag)
-        : await this.matchingVersion(
-            board.descriptor,
-            await descriptorTtl(board.descriptor, board.metadata),
-          ),
+        : await this.matchingVersion(board.descriptor, board.descriptorText),
     });
     try {
       if ((await this.storage.parentOf(board.blob)) === this.container)

@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Codex GPT-6
 import { createTypeIndex, type TypeIndex } from "@jeswr/pod-type-index";
 import { DRAW_SCENE_IRI } from "@jeswr/solid-drawing";
 import { createPodClient, type StorageClient, StorageError } from "@jeswr/storage-client";
@@ -68,12 +69,15 @@ export async function openWhiteboards(session: PodSession) {
     session.mode === "demo"
       ? drawingDemoTransport(session.fetch, session.storageUrl)
       : session.fetch;
-  const client = await createPodClient({ fetch, storage: session.storageUrl });
+  // Read-back certification must bypass the browser HTTP cache.
+  const freshFetch: typeof globalThis.fetch = (input, init) =>
+    fetch(input, { ...init, cache: "no-store" });
+  const client = await createPodClient({ fetch: freshFetch, storage: session.storageUrl });
   const index = createTypeIndex({
     storage: client.storage,
     features: client.features,
     profile: session.webId,
-    fetch,
+    fetch: freshFetch,
   });
   return prepareWhiteboards(client.storage, index);
 }

@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Codex GPT-6
 import { describe, expect, it } from "vitest";
 import {
   addElement,
@@ -608,4 +609,24 @@ it("starts revisions when explicitly editing an opaque future element without ve
     '{"type":"excalidraw","version":2,"appState":{},"files":{},"elements":[{"id":"future","type":"future"}]}',
   );
   expect(updateElements(s, ["future"], { vendor: "edited" }).elements[0]?.version).toBe(1);
+});
+
+it("bounds and exports a rotated 20,000-point pen stroke within 100 ms each", () => {
+  const element = freedraw(
+    10,
+    20,
+    Array.from({ length: 20000 }, (_, i) => [i / 10, Math.sin(i) * 100] as const),
+    { angle: 0.4 },
+  );
+  const scene = { ...emptyScene(), elements: [element] };
+  const start = performance.now();
+  const bounds = elementBounds(element);
+  const boundsMs = performance.now() - start;
+  const exportStart = performance.now();
+  const svg = sceneToSvg(scene);
+  const exportMs = performance.now() - exportStart;
+  expect(bounds.width).toBeGreaterThan(1000);
+  expect(svg).toContain("polyline");
+  expect(boundsMs).toBeLessThan(100);
+  expect(exportMs).toBeLessThan(100);
 });

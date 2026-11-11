@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Codex GPT-6
 import { isColour } from "./parse.js";
 import { type Bounds, ELEMENT_TYPES, type Point, type Scene, type SceneElement } from "./types.js";
 export function isRenderable(e: SceneElement): boolean {
@@ -18,11 +19,17 @@ export function rotatePoint([x, y]: Point, [cx, cy]: Point, angle: number): Poin
 /** Unrotated bounds relative to the element origin, including negative path points. */
 export function localBounds(e: SceneElement): Bounds {
   if (!e.points?.length) return { x: 0, y: 0, width: e.width, height: e.height };
-  const xs = e.points.map((p) => p[0]),
-    ys = e.points.map((p) => p[1]);
-  const x = Math.min(...xs),
-    y = Math.min(...ys);
-  return { x, y, width: Math.max(...xs) - x, height: Math.max(...ys) - y };
+  let x = Infinity,
+    y = Infinity,
+    right = -Infinity,
+    bottom = -Infinity;
+  for (const [px, py] of e.points) {
+    x = Math.min(x, px);
+    y = Math.min(y, py);
+    right = Math.max(right, px);
+    bottom = Math.max(bottom, py);
+  }
+  return { x, y, width: right - x, height: bottom - y };
 }
 export function elementCentre(e: SceneElement): Point {
   const b = localBounds(e);
@@ -42,20 +49,27 @@ export function resizeHandle(e: SceneElement, handle: string): Point {
 export function elementBounds(e: SceneElement): Bounds {
   if (!(ELEMENT_TYPES as readonly string[]).includes(e.type))
     return { x: 0, y: 0, width: 0, height: 0 };
-  const points: Point[] = e.points?.length
-    ? e.points.map(([x, y]) => [e.x + x, e.y + y])
+  const centre = elementCentre(e);
+  const points: readonly Point[] = e.points?.length
+    ? e.points
     : [
-        [e.x, e.y],
-        [e.x + e.width, e.y],
-        [e.x, e.y + e.height],
-        [e.x + e.width, e.y + e.height],
+        [0, 0],
+        [e.width, 0],
+        [0, e.height],
+        [e.width, e.height],
       ];
-  const rotated = points.map((p) => rotatePoint(p, elementCentre(e), e.angle));
-  const xs = rotated.map((p) => p[0]),
-    ys = rotated.map((p) => p[1]);
-  const x = Math.min(...xs),
-    y = Math.min(...ys);
-  return { x, y, width: Math.max(...xs) - x, height: Math.max(...ys) - y };
+  let x = Infinity,
+    y = Infinity,
+    right = -Infinity,
+    bottom = -Infinity;
+  for (const [px, py] of points) {
+    const [rx, ry] = rotatePoint([e.x + px, e.y + py], centre, e.angle);
+    x = Math.min(x, rx);
+    y = Math.min(y, ry);
+    right = Math.max(right, rx);
+    bottom = Math.max(bottom, ry);
+  }
+  return { x, y, width: right - x, height: bottom - y };
 }
 export function sceneBounds(scene: Scene, ids?: readonly string[]): Bounds {
   const elements = scene.elements.filter((e) => isRenderable(e) && (!ids || ids.includes(e.id)));

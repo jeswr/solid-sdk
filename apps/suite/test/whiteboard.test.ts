@@ -549,7 +549,7 @@ describe("review regressions", () => {
     writer.update(emptyScene());
     await writer.flush();
     expect(changed.mock.calls.at(-1)?.[0]).toBe("conflict");
-    await expect(writer.finish()).rejects.toThrow("before deleting");
+    await expect(writer.finish()).resolves.toMatchObject({ id: b.id });
     writer.dispose();
   });
   it("commits descriptor deletion even when orphan cleanup fails", async () => {
@@ -619,7 +619,7 @@ describe("review regressions", () => {
     for (const c of PALETTE) expect(paletteColour(c.token)).toMatch(/^#[\da-f]{6}$/);
     expect(paletteColour("none")).toBe("transparent");
   });
-  it("purges signed-out and other WebID drafts and fences late writes", async () => {
+  it("preserves other signed-in drafts and fences late writes", async () => {
     const { activateDraftOwner } = await import("../src/apps/whiteboard/lib/drafts");
     const map = new Map<string, string>();
     const storage = {
@@ -641,11 +641,14 @@ describe("review regressions", () => {
     writeDrafts(storage, "alice", root, [b]);
     activateDraftOwner(storage, "bob");
     expect(readDrafts(storage, "bob", root)).toEqual([]);
-    expect(writeDrafts(storage, "alice", root, [b])).toBe(false);
-    expect([...map.values()].join()).not.toContain("Private");
+    expect(writeDrafts(storage, "alice", root, [b])).toBe("fenced");
+    expect(readDrafts(storage, "alice", root)).toEqual([b]);
+    activateDraftOwner(storage, "bob");
     writeDrafts(storage, "bob", root, [b]);
     activateDraftOwner(storage, null);
-    expect(writeDrafts(storage, "bob", root, [b])).toBe(false);
+    expect(writeDrafts(storage, "bob", root, [b])).toBe("fenced");
+    expect(readDrafts(storage, "alice", root)).toEqual([b]);
+    activateDraftOwner(storage, null);
     expect([...map.values()].join()).not.toContain("Private");
   });
 });
@@ -714,4 +717,205 @@ it("pastes into a separate destination without counting clipboard originals twic
   expect(pasted.scene.files).toEqual({ source: "kept", target: "kept" });
   expect(target.elements).toHaveLength(1);
   expect(() => commit(history(target), pasted.scene)).not.toThrow();
+});
+
+// AUTHORED-BY Codex GPT-6
+it.each([
+  "rename",
+  "remove",
+] as const)("certifies raw descriptor bytes for %s, including non-canonical Turtle", async (operation) => {
+  const { repository, storage } = await fixture();
+  const b = await repository.create("Raw descriptor");
+  const raw = `# Keep original lexical representation\n${await (await storage.read(b.descriptor)).text()}\n`;
+  await storage.write(b.descriptor, raw, {
+    contentType: "text/turtle",
+    ifMatch: b.descriptorEtag as string,
+  });
+  const observed = { ...(await repository.read(b.id)), descriptorEtag: null };
+  if (operation === "rename")
+    await expect(repository.rename(observed, "Renamed")).resolves.toMatchObject({
+      title: "Renamed",
+    });
+  else await expect(repository.remove(observed)).resolves.toBeUndefined();
+});
+
+it("cancels oversized read-back streams instead of buffering unbounded text", async () => {
+  const { LIMITS } = await import("@jeswr/excalidraw-scene");
+  const { repository, storage } = await fixture();
+  const b = await repository.create("Bounded");
+  const cancel = vi.fn();
+  const text = vi.fn(async () => serializeScene(b.scene));
+  const read = storage.read.bind(storage);
+  vi.spyOn(storage, "read").mockImplementation(async (url, options) => {
+    if (url !== b.blob) return read(url, options);
+    return {
+      ...(await read(url, options)),
+      text,
+      body: new ReadableStream<Uint8Array>({
+        pull(controller) {
+          controller.enqueue(new Uint8Array(LIMITS.bytes + 1));
+        },
+        cancel,
+      }),
+    };
+  });
+  await expect(repository.save({ ...b, etag: null }, emptyScene())).rejects.toMatchObject({
+    code: "payload-too-large",
+  });
+  expect(cancel).toHaveBeenCalled();
+  expect(text).not.toHaveBeenCalled();
+});
+
+it("keeps created URLs when ETag read-back observes another writer", async () => {
+  const { repository, storage } = await fixture();
+  const create = storage.create.bind(storage);
+  const write = storage.write.bind(storage);
+  vi.spyOn(storage, "create").mockImplementation(async (...args) => {
+    const result = await create(...args);
+    if (args[2]?.contentType === "application/json") {
+      await write(result.url, serializeScene(scene()), {
+        contentType: "application/json",
+        ifMatch: result.etag as string,
+      });
+      return { ...result, etag: null };
+    }
+    return result;
+  });
+  const created = await repository.create("Created once");
+  expect(created.etag).toBeNull();
+  expect(created.descriptor).not.toBe("");
+  expect((await repository.list()).map((b) => b.id)).toEqual([created.id]);
+  await expect(repository.save(created, emptyScene())).rejects.toMatchObject({
+    code: "precondition-failed",
+  });
+});
+
+it("deletion drops pending edits on blocked writers and only awaits an in-flight save", async () => {
+  const { repository } = await fixture();
+  const b = await repository.create("Blocked");
+  const save = vi.spyOn(repository, "save").mockRejectedValue(new Error("offline"));
+  const writer = new BoardAutosave(repository, b, vi.fn(), 60000);
+  writer.update(emptyScene());
+  await writer.flush();
+  writer.update(scene());
+  await expect(writer.finish()).resolves.toEqual(b);
+  await writer.retry();
+  expect(save).toHaveBeenCalledTimes(1);
+});
+
+it.each([
+  "var(--surface)",
+  "url(https://evil.example/paint)",
+])("keeps unsupported canvas backgrounds out of editor styles: %s", async (background) => {
+  const React = await import("react");
+  const { renderToStaticMarkup } = await import("react-dom/server");
+  const { BoardEditor } = await import("../src/apps/whiteboard/components/editor");
+  const { repository } = await fixture();
+  const board = await repository.create("Background");
+  board.scene = { ...board.scene, appState: { viewBackgroundColor: background } };
+  const html = renderToStaticMarkup(
+    React.createElement(BoardEditor, {
+      board,
+      repository,
+      onBack() {},
+      onChange() {},
+      retain() {},
+      onCopy() {},
+      hasDraft: false,
+    }),
+  );
+  expect(html).not.toContain(background);
+});
+
+it("collects all of a signed-out owner's draft keys before removing any", async () => {
+  const { activateDraftOwner, purgeDraftOwner } = await import("../src/apps/whiteboard/lib/drafts");
+  const map = new Map<string, string>();
+  let removing = false;
+  const storage = {
+    get length() {
+      return map.size;
+    },
+    key(i: number) {
+      expect(removing).toBe(false);
+      return [...map.keys()][i] ?? null;
+    },
+    getItem: (k: string) => map.get(k) ?? null,
+    setItem(k: string, v: string) {
+      map.set(k, v);
+    },
+    removeItem(k: string) {
+      removing = true;
+      map.delete(k);
+    },
+  };
+  const { repository } = await fixture();
+  const b = await repository.create("Retained");
+  activateDraftOwner(storage, "alice");
+  writeDrafts(storage, "alice", root, [b]);
+  writeDrafts(storage, "alice", `${root}other/`, [b]);
+  activateDraftOwner(storage, "bob");
+  writeDrafts(storage, "bob", root, [b]);
+  purgeDraftOwner(storage, "alice");
+  expect(readDrafts(storage, "alice", root)).toEqual([]);
+  expect(readDrafts(storage, "alice", `${root}other/`)).toEqual([]);
+  expect(readDrafts(storage, "bob", root)).toEqual([b]);
+});
+
+it("uses no-store at the authenticated fetch seam, including ETag certification reads", async () => {
+  const pod = createDemoPod({ root: DEMO_ROOT, seed: await buildDemoSeed(Date.now()) });
+  const fetch = vi.fn(pod.fetch);
+  const repo = await openWhiteboards({
+    mode: "demo",
+    storageUrl: DEMO_ROOT,
+    webId: DEMO_WEBID,
+    displayName: "Fictional",
+    fetch,
+    subscribe: pod.subscribe,
+    reset: async () => {},
+  });
+  const b = await repo.create("Fresh");
+  await repo.save({ ...b, etag: null }, emptyScene());
+  expect(fetch).toHaveBeenCalled();
+  expect(fetch.mock.calls.every(([, init]) => init?.cache === "no-store")).toBe(true);
+});
+
+it("retains created URLs when descriptor certification fails after initialisation", async () => {
+  const { repository, storage } = await fixture();
+  const write = storage.write.bind(storage);
+  vi.spyOn(storage, "write").mockImplementationOnce(async (...args) => {
+    const result = await write(...args);
+    await write(
+      result.url,
+      await descriptor(result.url, { sceneDocument: `${root}other`, title: "Concurrent" }),
+      {
+        contentType: "text/turtle",
+        ifMatch: result.etag as string,
+      },
+    );
+    return { ...result, etag: null };
+  });
+  const b = await repository.create("Local");
+  expect(b.descriptorEtag).toBeNull();
+  expect(b.descriptor).not.toBe("");
+  await expect(repository.rename(b, "Retry")).rejects.toMatchObject({
+    code: "precondition-failed",
+  });
+});
+
+it("discards unsent edits during deletion and does not restart a retired writer", async () => {
+  const { repository } = await fixture();
+  const b = await repository.create("Delete");
+  const gate = Promise.withResolvers<Board>();
+  const save = vi.spyOn(repository, "save").mockReturnValueOnce(gate.promise);
+  const writer = new BoardAutosave(repository, b, vi.fn(), 60000);
+  writer.update(emptyScene());
+  const flight = writer.flush();
+  writer.update(scene());
+  const finish = writer.finish();
+  gate.resolve({ ...b, etag: '"committed"' });
+  await flight;
+  expect((await finish).etag).toBe('"committed"');
+  writer.update(scene());
+  await writer.retry();
+  expect(save).toHaveBeenCalledOnce();
 });

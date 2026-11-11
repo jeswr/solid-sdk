@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Codex GPT-6
 import type { Board } from "../lib/repository";
 /** Canvas and descriptor writes settle independently; late saves must preserve a newer name. */
 export function mergeBoardFields(
@@ -14,5 +15,6 @@ export function mergeBoardFields(
         title: incoming.title,
         metadata: incoming.metadata,
         descriptorEtag: incoming.descriptorEtag,
+        descriptorText: incoming.descriptorText,
       };
 }

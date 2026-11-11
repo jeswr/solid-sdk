@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Codex GPT-6
 "use client";
 import {
   addElement,
@@ -10,6 +11,7 @@ import {
   emptyScene,
   groupElements,
   hitElement,
+  isColour,
   isRenderable,
   linear,
   moveElements,
@@ -122,7 +124,7 @@ export function BoardEditor({
   retain: (b: Board, pending: boolean) => void;
   onCopy: (scene: Scene) => void;
   hasDraft: boolean;
-  onWriter?: (writer: BoardAutosave) => void;
+  onWriter?: (id: string, writer: BoardAutosave) => () => void;
 }) {
   const [state, setState] = useState(() => history(board.scene)),
     [preview, setPreview] = useState<Scene | null>(null),
@@ -169,9 +171,17 @@ export function BoardEditor({
         }
       }),
   );
+  const releaseWriter = useRef<() => void>(() => {});
   useEffect(() => {
-    onWriter?.(writer);
-  }, [writer, onWriter]);
+    const release = onWriter?.(board.id, writer) ?? (() => {});
+    releaseWriter.current = release;
+    return () => {
+      void writer.dispose().finally(release);
+    };
+  }, [board.id, writer, onWriter]);
+  const retireWriter = () => {
+    void writer.finish().finally(() => releaseWriter.current());
+  };
   const initialBoard = useRef(board);
   const first = useRef(true);
   useEffect(() => {
@@ -204,7 +214,6 @@ export function BoardEditor({
       removeEventListener("pagehide", flush);
       document.removeEventListener("visibilitychange", hidden);
       removeEventListener("online", retry);
-      writer.dispose();
     };
   }, [writer]);
   useEffect(() => {
@@ -702,7 +711,11 @@ export function BoardEditor({
         // biome-ignore lint/a11y/noNoninteractiveTabindex: the application canvas receives drawing shortcuts and has an accessible shape list.
         tabIndex={0}
         className={`wb-canvas wb-tool-${tool}`}
-        style={{ backgroundColor: scene.appState.viewBackgroundColor }}
+        style={{
+          backgroundColor: isColour(scene.appState.viewBackgroundColor)
+            ? scene.appState.viewBackgroundColor
+            : undefined,
+        }}
         onPointerDown={(event) => {
           try {
             begin(event);
@@ -994,6 +1007,7 @@ export function BoardEditor({
               disabled={!remote}
               onClick={() => {
                 if (remote) {
+                  retireWriter();
                   callbacks.current.retain(board, false);
                   callbacks.current.onChange(remote, true);
                   setConflict(null);
@@ -1006,6 +1020,7 @@ export function BoardEditor({
             <Button
               onClick={() => {
                 if (conflict) {
+                  retireWriter();
                   callbacks.current.retain(board, false);
                   if (remote) callbacks.current.onChange(remote, true);
                   callbacks.current.onCopy(conflict);
