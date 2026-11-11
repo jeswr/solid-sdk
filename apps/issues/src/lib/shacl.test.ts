@@ -186,7 +186,14 @@ describe("SHACL shape (shapes/issue.ttl)", () => {
     issue.tracker = TRACKER;
     issue.title = "Assigned to a non-web IRI";
     issue.state = "open";
-    issue.assignee = "urn:agent:bob"; // a valid IRI (passes nodeKind) but not ^https?://
+    // The shared task model (@jeswr/solid-task-model) refuses to write a
+    // non-http(s) assignee, so the invalid link is loaded as pod data instead,
+    // exercising the shape against what another client could have written.
+    issue.assignee = "urn:agent:bob";
+    expect(issue.assignee).toBeUndefined();
+    ds.addQuads(
+      new Parser({ baseIRI: URL_ }).parse(`<#this> <${WF}assignee> <urn:agent:bob> .`),
+    ); // a valid IRI (passes nodeKind) but not ^https?://
 
     const report = await validate(ds);
     expect(report.conforms).toBe(false);
