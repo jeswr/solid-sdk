@@ -72,6 +72,7 @@
     "@jeswr/pod-notifications",
     "@jeswr/pod-access",
     "@jeswr/suite-sdk",
+    "@jeswr/suite-charts",
     "@jeswr/rdf-engine",
     "@jeswr/storage-conformance",
     "@jeswr/pkg-memory",
