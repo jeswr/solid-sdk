@@ -42,7 +42,7 @@ export function decodeRef(ref: string): string {
 
 /**
  * Lossless references for RDF identifiers (for example a message subject IRI). Unlike
- * `encodeRef`, the IRI is not normalized through `new URL().href`, so `#café` survives as written
+ * `encodeRef`, the IRI is not normalized through `new URL().href`, so `#naïve` survives as written
  * and still matches the literal subject in the data. The value must still be an http(s) IRI.
  */
 export function encodeIdentifierRef(iri: string): string {

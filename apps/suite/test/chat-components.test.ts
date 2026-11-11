@@ -271,7 +271,7 @@ it("focuses a linked message whose identifier is not in normalized URL form", as
   const client = new ChatClient(pod.fetch, ROOT, ME);
   const room = await client.createRoom({ name: "Accents", members: [] });
   const sent = await client.send(room.url, "Un café ?");
-  const id = `${sent.id.split("#")[0]}#café`;
+  const id = `${sent.id.split("#")[0]}#naïve`;
   const original = ChatClient.prototype.messages;
   vi.spyOn(ChatClient.prototype, "messages").mockImplementation(async function (
     this: ChatClient,
