@@ -1,12 +1,14 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
-import { NoteConflictError } from "../lib/model/errors";
+import { ResourceWriteError } from "../../docs/lib/model/errors";
+import { NoteConflictError, NotePermissionError } from "../lib/model/errors";
 import type { NotesStore, StoredNote } from "../lib/model/store";
 
 export type NoteDraft = Pick<StoredNote, "title" | "body" | "labels">;
 export interface PendingDraft {
   note: StoredNote;
   draft: NoteDraft;
-  status: "saving" | "failed" | "conflict";
+  status: "saving" | "failed" | "conflict" | "read-only";
 }
 type Save = NotesStore["save"];
 type Listener = (url: string, saved?: StoredNote) => void;
@@ -24,22 +26,39 @@ export function createPendingDrafts(seams: {
   const writers = new Map<string, Save>();
   const inFlight = new Map<string, Promise<StoredNote>>();
   const listeners = new Set<Listener>();
+  const blocked = new Set<string>();
   const changed = (url: string, saved?: StoredNote) => {
     seams.persist([...entries.values()]);
     for (const listener of listeners) listener(url, saved);
   };
-  const bind = (note: StoredNote, save: Save) => writers.set(note.url, save);
+  const bind = (note: StoredNote, save: Save) => {
+    writers.set(note.url, save);
+    const entry = entries.get(note.url);
+    if (note.readOnly === true) blocked.add(note.url);
+    if (note.readOnly === false) blocked.delete(note.url);
+    if (entry && note.readOnly !== undefined && (entry.status === "read-only") !== note.readOnly) {
+      entries.set(note.url, {
+        ...entry,
+        note: { ...entry.note, readOnly: note.readOnly },
+        status: note.readOnly ? "read-only" : "saving",
+      });
+      changed(note.url);
+    }
+  };
   const flush = (note: StoredNote, save: Save): Promise<StoredNote> => {
-    bind(note, save);
+    writers.set(note.url, save);
     const running = inFlight.get(note.url);
     if (running) return running;
     const pending = entries.get(note.url);
+    if (blocked.has(note.url) || pending?.status === "read-only")
+      return Promise.reject(new ResourceWriteError(note.url, 403));
     if (!pending) return Promise.resolve(note);
     if (pending.status === "conflict") return Promise.reject(new NoteConflictError(note.url));
     const drain = async () => {
       let saved = note;
       try {
         while (entries.has(note.url)) {
+          if (blocked.has(note.url)) throw new ResourceWriteError(note.url, 403);
           const snapshot = entries.get(note.url) as PendingDraft;
           entries.set(note.url, { ...snapshot, status: "saving" });
           changed(note.url);
@@ -54,9 +73,26 @@ export function createPendingDrafts(seams: {
         return saved;
       } catch (error) {
         const latest = entries.get(note.url) as PendingDraft;
+        const forbidden = error instanceof ResourceWriteError && error.status === 403;
+        if (forbidden) blocked.add(note.url);
         entries.set(note.url, {
           ...latest,
-          status: error instanceof NoteConflictError ? "conflict" : "failed",
+          ...(forbidden
+            ? {
+                note: {
+                  ...latest.note,
+                  readOnly: true,
+                  ...(error instanceof NotePermissionError
+                    ? { localGeneration: error.localGeneration }
+                    : {}),
+                },
+              }
+            : {}),
+          status: forbidden
+            ? "read-only"
+            : error instanceof NoteConflictError
+              ? "conflict"
+              : "failed",
         });
         changed(note.url);
         throw error;
@@ -82,7 +118,8 @@ export function createPendingDrafts(seams: {
       };
     },
     change(note: StoredNote, draft: NoteDraft, save: Save) {
-      bind(note, save);
+      writers.set(note.url, save);
+      if (blocked.has(note.url) || entries.get(note.url)?.status === "read-only") return;
       const existing = entries.get(note.url);
       entries.set(note.url, {
         note: existing?.note ?? note,
@@ -93,6 +130,7 @@ export function createPendingDrafts(seams: {
     },
     flush,
     resolve(latest: StoredNote, keepMine: boolean) {
+      if (blocked.has(latest.url) || entries.get(latest.url)?.status === "read-only") return;
       const pending = entries.get(latest.url);
       if (!pending) return;
       if (keepMine) entries.set(latest.url, { ...pending, note: latest, status: "saving" });
@@ -103,7 +141,9 @@ export function createPendingDrafts(seams: {
       return Promise.allSettled(
         [...entries.values()].flatMap(({ note, status }) => {
           const save = writers.get(note.url);
-          return save && status !== "conflict" ? [flush(note, save)] : [];
+          return save && status !== "conflict" && status !== "read-only" && !blocked.has(note.url)
+            ? [flush(note, save)]
+            : [];
         }),
       );
     },
