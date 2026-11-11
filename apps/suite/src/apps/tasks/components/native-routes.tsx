@@ -4,6 +4,7 @@ import { ErrorState, LoadingSkeleton } from "@jeswr/suite-ui";
 import { decodeRef } from "@/lib/refs";
 import { usePageRouteParams } from "@/lib/route-params";
 import { BoardView } from "./board/board-view";
+import { FilterView } from "./views/filter-view";
 import { LabelView } from "./views/label-view";
 import { ProjectView } from "./views/project-view";
 
@@ -31,6 +32,12 @@ export function LabelRoute() {
   const params = usePageRouteParams<{ label: string }>("/tasks/l/[label]");
   if (!params) return <LoadingSkeleton preset="list" />;
   return <LabelView label={params.label} />;
+}
+
+export function FilterRoute() {
+  const params = usePageRouteParams<{ slug: string }>("/tasks/filters/[slug]");
+  if (!params) return <LoadingSkeleton preset="list" />;
+  return <FilterView slug={params.slug} />;
 }
 
 /** Reads the project ref on the client, so the native export's placeholder page works too. */

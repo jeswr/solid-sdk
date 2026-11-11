@@ -14,8 +14,9 @@ import {
 } from "fs";
 // biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
 import { basename, dirname, join } from "path";
-import { type EvidenceLedger, verifyLedger } from "./ledger.js";
+import type { EvidenceLedger } from "./ledger.js";
 import { GENESIS, type LedgerEntry, type LedgerRecord, seal } from "./records.js";
+import { verifyLedger } from "./verify.js";
 
 export interface LedgerBounds {
   readonly segmentMaxEntries: number;
