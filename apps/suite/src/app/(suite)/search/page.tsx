@@ -6,7 +6,7 @@
  */
 import { type AppSlug, EmptyState, suiteApps } from "@jeswr/suite-ui";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import type { SearchResult } from "@/shell/lib/search-results";
 import { runSearch } from "@/shell/lib/search-run";
 import { SearchResultsView } from "@/shell/search/results-view";
@@ -31,6 +31,7 @@ function SearchPage() {
     error?: "unknown";
   }>({ results: [], loading: false });
   const [attempt, setAttempt] = useState(0);
+  const shownSource = useRef(source);
   // biome-ignore lint/correctness/useExhaustiveDependencies: attempt re-runs the search on Retry
   useEffect(() => {
     if (!query) {
@@ -38,7 +39,10 @@ function SearchPage() {
       return;
     }
     const controller = new AbortController();
-    setState((current) => ({ results: current.results, loading: true }));
+    // Keep results while refining a query, but never show one account's results under another.
+    const same = shownSource.current === source;
+    shownSource.current = source;
+    setState((current) => ({ results: same ? current.results : [], loading: true }));
     void runSearch(
       source,
       query,

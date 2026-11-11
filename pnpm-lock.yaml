@@ -2429,6 +2429,9 @@ importers:
       '@jeswr/pod-connectors':
         specifier: workspace:*
         version: link:../../packages/pod-connectors
+      '@jeswr/rdf-engine':
+        specifier: workspace:*
+        version: link:../../packages/rdf-engine
       '@jeswr/rdf-serialize':
         specifier: workspace:*
         version: link:../../packages/rdf-serialize
@@ -2444,6 +2447,15 @@ importers:
       '@jeswr/solid-vc':
         specifier: workspace:*
         version: link:../../packages/solid-vc
+      '@jeswr/storage-capabilities':
+        specifier: workspace:*
+        version: link:../../packages/storage-capabilities
+      '@jeswr/storage-client':
+        specifier: workspace:*
+        version: link:../../packages/storage-client
+      '@jeswr/suite-sdk':
+        specifier: workspace:*
+        version: link:../../packages/suite-sdk
       '@jeswr/suite-native':
         specifier: workspace:*
         version: link:../../packages/suite-native
