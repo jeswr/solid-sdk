@@ -22,9 +22,9 @@ Comments parse through generated Annotation/Quote MUSTs and enums; the facade ch
 motivation-dependent anchors, UTF-16 bounds (sh:maxLength is unsupported) and context truncation. Version metadata uses generated Revision fields without `mark()`.
 Do not add types to historically untyped target/version nodes. Versions retain a
 mapper preflight check: a mistyped optional creator rejects the whole entry,
-whereas generated root optional fields normally drop such a field. Generic Type Index
-blank-node and singleton/set views remain in `src/type-index.ts`, since generated
-wrappers cannot express those APIs. Network, ETag, access checks, React and Yjs logic
+whereas generated root optional fields normally drop such a field. Type Index views
+stay in the Suite app until it moves onto `@jeswr/pod-type-index` (bead sst-5wzk);
+do not copy them into this package. Network, ETag, access checks, React and Yjs logic
 belong in the app. Keep constants derived from `@jeswr/suite-vocab` and all stored IRIs.
 
 Preserve the copied oracle tests verbatim except imports. Every behavior change must

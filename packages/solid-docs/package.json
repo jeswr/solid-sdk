@@ -29,10 +29,6 @@
       "types": "./dist/layout.d.ts",
       "import": "./dist/layout.js"
     },
-    "./type-index": {
-      "types": "./dist/type-index.d.ts",
-      "import": "./dist/type-index.js"
-    },
     "./comments": {
       "types": "./dist/comments.d.ts",
       "import": "./dist/comments.js"

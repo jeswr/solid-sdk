@@ -49,14 +49,13 @@ Generator gaps retained inside this package:
   Root optional fields normally drop malformed terms; versions must retain their old
   whole-entry rejection for a mistyped optional creator. A vetted mapper
   preflight check preserves that contract before returning generated values.
-- Generic Type Index views need blank-node subjects and both singleton and live-set
-  views of each predicate. Generated wrappers require named subjects and one projection
-  per path. `src/type-index.ts` preserves these minimal typed compatibility views;
-  Type Index fetching, access checks and bootstrap remain in the Suite app.
+- Type Index views are not part of this package: they stay in the Suite app until the
+  app-wide move onto `@jeswr/pod-type-index` (bead sst-5wzk), so this package adds no
+  new copy of them.
 
 Text sanitization is explicitly disabled in the generation config to preserve rich-text
 content and existing user strings. No scheme normalization is added to field IRIs.
-The root and `/document`, `/comments`, `/versions`, `/vocab`, `/layout`, `/type-index`
+The root and `/document`, `/comments`, `/versions`, `/vocab` and `/layout`
 entries contain no Node built-ins. `codegen/` and `dist/` ship in the publishable package.
 There is no mirror repository configured for this new package.
 

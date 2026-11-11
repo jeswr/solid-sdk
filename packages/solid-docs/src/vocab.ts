@@ -32,7 +32,7 @@
  * on top of it). The history-compaction strategy is a follow-up ADR.
  *
  * House rule: nothing here builds RDF — these are IRI constants consumed by the
- * typed `@rdfjs/wrapper` accessors in `document.ts` and `type-index.ts`.
+ * typed `@rdfjs/wrapper` accessors in `document.ts` (and the Suite app's `type-index.ts`).
  */
 
 import { NS as SUITE_NS } from "@jeswr/suite-vocab";
