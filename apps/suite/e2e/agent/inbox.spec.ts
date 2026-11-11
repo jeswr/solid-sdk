@@ -1,7 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { expect, test } from "@playwright/test";
 import { daemonDouble } from "./daemon-double";
-import { agentScreenshot, openAgent } from "./helpers";
+import { agentScreenshot, openAgent, setupAgentKey } from "./helpers";
 
 test("9: calendar cards carry deterministic provenance and HTML stays inert", async ({
   page,
@@ -26,7 +26,10 @@ test("9: calendar cards carry deterministic provenance and HTML stays inert", as
   await expect(page).toHaveURL(/\/agent\/chat\?about=message-1$/);
   await expect(page.getByRole("textbox", { name: "Message your agent" })).toHaveValue(/message-1/);
 });
-test("archive stays on this device and never signs Forget", async ({ page }, info) => {
+test("archive signs one Archive control outside control/ and holds after reload", async ({
+  page,
+}, info) => {
+  await setupAgentKey(page);
   await openAgent(page, "inbox/gmail");
   const daemon = daemonDouble(page);
   const controlsBefore = await daemon.client.list(daemon.client.paths.control);
@@ -40,6 +43,10 @@ test("archive stays on this device and never signs Forget", async ({ page }, inf
   await expect(page.getByRole("button", { name: "Calendar invitation", exact: true })).toHaveCount(
     0,
   );
+  // Authority controls are untouched; the archive is one signed record in archive/.
   expect(await daemon.client.list(daemon.client.paths.control)).toEqual(controlsBefore);
+  const archives = await daemon.client.list(daemon.client.paths.archive);
+  expect(archives).toHaveLength(1);
+  expect(archives[0]?.url).toMatch(/-Archive-[0-9a-f-]+\.trig$/);
   await agentScreenshot(page, info, "inbox-archived");
 });

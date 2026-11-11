@@ -47,8 +47,10 @@ state or restrictions. Restriction-only changes omit the binding state so they c
 an account that another device disconnected.
 They may carry an optional `restrictions` object containing all four typed booleans
 (`read`, `triage`, `draft`, `send`) through the existing `agent:restrictions` predicate.
-Other control kinds cannot carry restrictions. Control parsing validates the complete
-object but grants no authority without external signature verification.
+Other control kinds cannot carry restrictions. An `Archive` control targets one inbound
+message IRI and asks consumers to hide that message from triage queues; the message is kept.
+Control parsing validates the complete object but grants no authority without external
+signature verification.
 Approval and mandate proofs are preserved without verification. A parsed approval is
 not authority to act; cryptographic verification and current expiry/revocation checks
 belong to agent-mandate and agent-executor. Mandate records reference credentials rather

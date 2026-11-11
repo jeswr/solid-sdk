@@ -169,11 +169,10 @@ export const readMandates = async (client: AgentClient) =>
 export async function readControl(
   client: AgentClient,
   verifier?: AgentVerifier,
+  container = client.paths.control,
 ): Promise<Collection<DisplayControl>> {
   const selected = selectTrustMembers(
-    (await client.list(client.paths.control)).filter(
-      (m) => !m.container && m.url !== client.paths.heartbeat,
-    ),
+    (await client.list(container)).filter((m) => !m.container && m.url !== client.paths.heartbeat),
   );
   return collection(
     newest(
