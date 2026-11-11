@@ -1,11 +1,11 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
 
 import { parseRdf } from "@jeswr/fetch-rdf";
-import { StorageError } from "@jeswr/storage-client";
+import { StorageError, type StorageErrorCode } from "@jeswr/storage-client";
 import { createMemoryStorage } from "@jeswr/storage-client/memory";
 import { describe, expect, it, vi } from "vitest";
 import { parseBookmark } from "../src/bookmark.js";
-import { createBookmarkRepository, createSolidBookmarkRepository } from "../src/pod.js";
+import { createBookmarkRepository } from "../src/pod.js";
 import { BOOKMARK_CLASS } from "../src/vocab.js";
 
 function setup(protocol: "solid" | "lws" = "solid") {
@@ -24,6 +24,179 @@ function setup(protocol: "solid" | "lws" = "solid") {
 const fault = (code: "forbidden" | "conflict" | "not-found") =>
   new StorageError(code, { url: "https://pod.example/owner/", method: "HEAD" });
 
+describe.each(["solid", "lws"] as const)("partial reads and registration (%s)", (protocol) => {
+  it.each([
+    "forbidden",
+    "server",
+    "network",
+    "invalid-response",
+    "rate-limited",
+    "unauthenticated",
+  ] as StorageErrorCode[])("keeps healthy siblings after a child %s failure", async (code) => {
+    const { storage, repo } = setup(protocol);
+    const good = await repo.create({ url: "https://example.org/good" });
+    const bad = await repo.create({ url: "https://example.org/bad" });
+    const read = storage.readRdf.bind(storage);
+    vi.spyOn(storage, "readRdf").mockImplementation((url) =>
+      url === bad.url
+        ? Promise.reject(
+            new StorageError(code, {
+              url,
+              method: "GET",
+              status: code === "forbidden" ? 403 : code === "server" ? 500 : null,
+            }),
+          )
+        : read(url),
+    );
+    expect(await repo.list()).toEqual({
+      items: [expect.objectContaining({ url: good.url })],
+      skipped: [{ url: bad.url, reason: code }],
+    });
+  });
+  it("keeps the container usable when registration fails and retries only once later", async () => {
+    const { repo, index } = setup(protocol);
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    index.register.mockRejectedValue(new Error("secret-profile-token"));
+    try {
+      await Promise.all([repo.initialize(), repo.initialize()]);
+      expect(index.register).toHaveBeenCalledTimes(1);
+      expect(repo.registration).toBe("failed");
+      const record = await repo.create({ url: "https://example.org/" });
+      expect(index.register).toHaveBeenCalledTimes(2);
+      expect((await repo.list()).items[0]?.url).toBe(record.url);
+      await repo.initialize();
+      expect(index.register).toHaveBeenCalledTimes(2);
+      expect(warn).toHaveBeenCalledWith("Bookmark Type Index registration failed", {
+        reason: "unknown",
+      });
+      expect(JSON.stringify(warn.mock.calls)).not.toContain("secret-profile-token");
+    } finally {
+      warn.mockRestore();
+    }
+  });
+  it("recovers registration on a later initialise, including concurrent callers", async () => {
+    const { repo, index } = setup(protocol);
+    index.register.mockRejectedValueOnce(fault("forbidden"));
+    await repo.initialize();
+    expect(repo.registration).toBe("failed");
+    await Promise.all([repo.initialize(), repo.initialize()]);
+    expect(index.register).toHaveBeenCalledTimes(2);
+    expect(repo.registration).toBe("registered");
+  });
+  it("reports an unexpected child parser failure without exposing its message", async () => {
+    const { repo, storage } = setup(protocol);
+    const record = await repo.create({ url: "https://example.org/" });
+    vi.spyOn(storage, "readRdf").mockRejectedValueOnce(new Error("Untrusted private response"));
+    expect(await repo.list()).toEqual({
+      items: [],
+      skipped: [{ url: record.url, reason: "unknown" }],
+    });
+  });
+  it("still fails a container listing without returning a partial collection", async () => {
+    const { repo, storage } = setup(protocol);
+    await repo.create({ url: "https://example.org/" });
+    const entry = (await storage.list(new URL("bookmarks/", storage.root).href)).items[0];
+    if (!entry) throw new Error("Missing fixture");
+    vi.spyOn(storage, "listAll").mockImplementation(async function* () {
+      yield entry;
+      throw fault("forbidden");
+    });
+    await expect(repo.list()).rejects.toMatchObject({ code: "forbidden" });
+  });
+});
+
+describe("failed create cleanup", () => {
+  it("removes an empty orphan after a failed PUT using its freshly read ETag", async () => {
+    const { repo, storage } = setup();
+    await repo.initialize();
+    const remove = vi.spyOn(storage, "delete");
+    vi.spyOn(storage, "write").mockRejectedValueOnce(new Error("Lost PUT"));
+    await expect(repo.create({ url: "https://example.org/" })).rejects.toThrow("Lost PUT");
+    expect(remove).toHaveBeenCalledWith(expect.any(String), { ifMatch: expect.any(String) });
+    expect((await repo.list()).items).toEqual([]);
+    const page = await storage.list(new URL("bookmarks/", storage.root).href);
+    expect(page.items).toEqual([]);
+  });
+  it("cleans up after an initial read lacks an ETag if a fresh validator can be obtained", async () => {
+    const { repo, storage } = setup();
+    await repo.initialize();
+    const read = storage.read.bind(storage);
+    vi.spyOn(storage, "read").mockImplementationOnce(async (...args) => ({
+      ...(await read(...args)),
+      etag: null,
+    }));
+    const remove = vi.spyOn(storage, "delete");
+    await expect(repo.create({ url: "https://example.org/" })).rejects.toThrow("version");
+    expect(remove).toHaveBeenCalledOnce();
+  });
+  it("keeps a committed bookmark when the PUT response was lost", async () => {
+    const { repo, storage } = setup();
+    const write = storage.write.bind(storage);
+    vi.spyOn(storage, "write").mockImplementationOnce(async (...args) => {
+      await write(...args);
+      throw new Error("Lost response");
+    });
+    const remove = vi.spyOn(storage, "delete");
+    await expect(repo.create({ url: "https://example.org/" })).rejects.toThrow("Lost response");
+    expect(remove).not.toHaveBeenCalled();
+    expect((await repo.list()).items).toHaveLength(1);
+  });
+  it("never deletes concurrently changed data or replaces the original error on cleanup failure", async () => {
+    const { repo, storage } = setup();
+    const remove = vi.spyOn(storage, "delete").mockRejectedValueOnce(fault("conflict"));
+    vi.spyOn(storage, "write").mockRejectedValueOnce(new Error("Original failure"));
+    await expect(repo.create({ url: "https://example.org/" })).rejects.toThrow("Original failure");
+    expect(remove).toHaveBeenCalledOnce();
+    expect((await storage.list(new URL("bookmarks/", storage.root).href)).items).toHaveLength(1);
+  });
+  it("leaves an unverifiable empty resource alone", async () => {
+    const { repo, storage } = setup();
+    const create = storage.create.bind(storage);
+    vi.spyOn(storage, "create").mockImplementation(async (...args) => ({
+      ...(await create(...args)),
+      etag: null,
+    }));
+    const read = storage.read.bind(storage);
+    vi.spyOn(storage, "read").mockImplementation(async (...args) => ({
+      ...(await read(...args)),
+      etag: null,
+    }));
+    const remove = vi.spyOn(storage, "delete");
+    await expect(repo.create({ url: "https://example.org/" })).rejects.toThrow("version");
+    expect(remove).not.toHaveBeenCalled();
+  });
+  it("can use the creation response validator when read responses omit ETags", async () => {
+    const { repo, storage } = setup();
+    const read = storage.read.bind(storage);
+    vi.spyOn(storage, "read").mockImplementation(async (...args) => ({
+      ...(await read(...args)),
+      etag: null,
+    }));
+    const remove = vi.spyOn(storage, "delete");
+    await expect(repo.create({ url: "https://example.org/" })).rejects.toThrow("version");
+    expect(remove).toHaveBeenCalledOnce();
+    expect((await storage.list(new URL("bookmarks/", storage.root).href)).items).toEqual([]);
+  });
+  it("uses the cleanup read's validator to preserve a concurrent write", async () => {
+    const { repo, storage } = setup();
+    const remove = storage.delete.bind(storage);
+    const write = storage.write.bind(storage);
+    vi.spyOn(storage, "write").mockRejectedValueOnce(new Error("Failed PUT"));
+    let orphan = "";
+    vi.spyOn(storage, "delete").mockImplementationOnce(async (url, options) => {
+      orphan = url;
+      const fresh = await storage.read(url);
+      await write(url, "Another writer's content", {
+        contentType: "text/plain",
+        ifMatch: fresh.etag as string,
+      });
+      return remove(url, options);
+    });
+    await expect(repo.create({ url: "https://example.org/" })).rejects.toThrow("Failed PUT");
+    expect(await (await storage.read(orphan)).text()).toBe("Another writer's content");
+  });
+});
+
 describe.each(["solid", "lws"] as const)("bookmark repository (%s)", (protocol) => {
   it("initialises once, registers a private container and performs conditional CRUD", async () => {
     const { repo, index, storage } = setup(protocol);
@@ -34,7 +207,7 @@ describe.each(["solid", "lws"] as const)("bookmark repository (%s)", (protocol) 
       { container: expect.any(String) },
       { index: "private" },
     );
-    expect(await repo.list()).toEqual([]);
+    expect((await repo.list()).items).toEqual([]);
     const record = await repo.create({
       url: "https://example.org/",
       title: "First",
@@ -42,7 +215,7 @@ describe.each(["solid", "lws"] as const)("bookmark repository (%s)", (protocol) 
     });
     expect(record.url.startsWith(storage.root)).toBe(true);
     expect(record.data.created).toBeInstanceOf(Date);
-    expect((await repo.list())[0]?.data.title).toBe("First");
+    expect((await repo.list()).items[0]?.data.title).toBe("First");
     const updated = await repo.update(record, {
       title: "Second",
       description: "Description",
@@ -63,14 +236,14 @@ describe.each(["solid", "lws"] as const)("bookmark repository (%s)", (protocol) 
     });
     await expect(repo.remove(record)).rejects.toMatchObject({ code: "precondition-failed" });
     await repo.remove(updated);
-    expect(await repo.list()).toEqual([]);
+    expect((await repo.list()).items).toEqual([]);
   });
   it("validates URLs before writing and carries explicit creation dates", async () => {
     const { repo } = setup(protocol);
     await expect(repo.create({ url: "javascript:x" })).rejects.toThrow(TypeError);
     const record = await repo.create({ url: "https://example.org/", created: new Date(0) });
     await expect(repo.update(record, { url: "file:///x" })).rejects.toThrow(TypeError);
-    expect((await repo.list())[0]?.data.created).toEqual(new Date(0));
+    expect((await repo.list()).items[0]?.data.created).toEqual(new Date(0));
   });
 });
 it("preserves unrelated RDF and unprofiled text on edits", async () => {
@@ -83,7 +256,7 @@ it("preserves unrelated RDF and unprofiled text on edits", async () => {
   const original = await storage.readRdf(record.url);
   for (const quad of original.dataset) dataset.add(quad);
   await storage.writeRdf(record.url, dataset, { ifMatch: original.etag as string });
-  const current = (await repo.list())[0];
+  const current = (await repo.list()).items[0];
   if (!current) throw new Error("Missing fixture");
   await repo.update(current, { title: "Edited", notes: "" });
   const result = await storage.readRdf(record.url);
@@ -123,9 +296,9 @@ it("reuses an existing container and recovers a concurrent exact-name create", a
     profile: "https://pod.example/owner/profile#me",
   });
   await second.initialize();
-  expect(await second.list()).toEqual([]);
+  expect((await second.list()).items).toEqual([]);
 });
-it("propagates unexpected create and registration failures", async () => {
+it("propagates container failures but tolerates registration failures", async () => {
   const { storage, index } = setup();
   vi.spyOn(storage, "create").mockRejectedValueOnce(fault("forbidden"));
   const repo = createBookmarkRepository({
@@ -135,8 +308,10 @@ it("propagates unexpected create and registration failures", async () => {
   });
   await expect(repo.initialize()).rejects.toMatchObject({ code: "forbidden" });
   index.register.mockRejectedValueOnce(new Error("No index permission"));
-  await expect(repo.initialize()).rejects.toThrow("No index permission");
+  await expect(repo.initialize()).resolves.toBeUndefined();
+  expect(repo.registration).toBe("failed");
   await repo.initialize();
+  expect(repo.registration).toBe("registered");
 });
 it("skips non-RDF files, empty resources, containers and resources deleted during a read", async () => {
   const { storage, repo } = setup();
@@ -150,9 +325,12 @@ it("skips non-RDF files, empty resources, containers and resources deleted durin
   vi.spyOn(storage, "readRdf").mockImplementation((url) =>
     url === removed.url ? Promise.reject(fault("not-found")) : read(url),
   );
-  expect(await repo.list()).toEqual([]);
+  expect((await repo.list()).items).toEqual([]);
   vi.spyOn(storage, "readRdf").mockRejectedValue(fault("forbidden"));
-  await expect(repo.list()).rejects.toMatchObject({ code: "forbidden" });
+  expect((await repo.list()).items).toEqual([]);
+  expect((await repo.list()).skipped).toEqual(
+    expect.arrayContaining([{ url: removed.url, reason: "forbidden" }]),
+  );
 });
 it("refuses editing resources without a validator or bookmark identity", async () => {
   const { storage, repo } = setup();
@@ -164,16 +342,6 @@ it("refuses editing resources without a validator or bookmark identity", async (
     dataset: await parseRdf("", "text/turtle"),
   });
   await expect(repo.update(record, {})).rejects.toThrow("no longer a bookmark");
-});
-it("provides an explicit Solid factory and propagates access failures", async () => {
-  const fetch = vi.fn(async () => new Response(null, { status: 403 }));
-  const repo = createSolidBookmarkRepository({
-    fetch,
-    storageRoot: "https://pod.example/",
-    profile: "https://pod.example/profile#me",
-  });
-  await expect(repo.initialize()).rejects.toMatchObject({ code: "forbidden" });
-  expect(fetch).toHaveBeenCalledTimes(1);
 });
 it("rejects unsafe or unverifiable creates and deletes", async () => {
   const { repo, storage } = setup();
@@ -202,7 +370,7 @@ it("requires a refresh if a write result has only a follow-up validator", async 
   const created = await repo.create({ url: "https://example.org/" });
   expect(created.etag).toBeNull();
   await expect(repo.update(created, { title: "unsafe" })).rejects.toThrow("version");
-  const current = (await repo.list())[0];
+  const current = (await repo.list()).items[0];
   if (!current) throw new Error("Missing fixture");
   const writeRdf = storage.writeRdf.bind(storage);
   vi.spyOn(storage, "writeRdf").mockImplementation(async (...args) => ({

@@ -1,7 +1,8 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
 // @vitest-environment jsdom
 import type { BookmarkRepository } from "@jeswr/solid-bookmark/pod";
-import { createSolidBookmarkRepository } from "@jeswr/solid-bookmark/pod";
+import { createBookmarkRepository } from "@jeswr/solid-bookmark/pod";
+import { createPodClient } from "@jeswr/storage-client";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { renderToString } from "react-dom/server";
@@ -14,7 +15,8 @@ import {
 } from "../src/apps/bookmarks/state/bookmarks-context";
 import type { PodSession } from "../src/lib/session/pod-session";
 
-vi.mock("@jeswr/solid-bookmark/pod", () => ({ createSolidBookmarkRepository: vi.fn() }));
+vi.mock("@jeswr/storage-client", () => ({ createPodClient: vi.fn(async () => ({ storage: {} })) }));
+vi.mock("@jeswr/solid-bookmark/pod", () => ({ createBookmarkRepository: vi.fn() }));
 vi.mock("../src/apps/bookmarks/demo/sample", () => ({ ensureSample: vi.fn(async () => {}) }));
 const notify = vi.hoisted(() => vi.fn());
 vi.mock("@jeswr/suite-ui", async () => {
@@ -65,17 +67,21 @@ function fixture() {
   document.body.append(host);
   const root = createRoot(host);
   const repo: BookmarkRepository = {
+    registration: "registered",
     initialize: vi.fn(async () => {}),
-    list: vi.fn(async () => [
-      { url: "https://pod.example/one.ttl", etag: '"1"', data: { url: "https://example.org/" } },
-    ]),
+    list: vi.fn(async () => ({
+      items: [
+        { url: "https://pod.example/one.ttl", etag: '"1"', data: { url: "https://example.org/" } },
+      ],
+      skipped: [],
+    })),
     create: vi.fn(),
     update: vi.fn(async () => {
       throw new Error("offline");
     }),
     remove: vi.fn(),
   };
-  vi.mocked(createSolidBookmarkRepository).mockReturnValue(repo);
+  vi.mocked(createBookmarkRepository).mockReturnValue(repo);
   let changed: (() => void) | undefined;
   const unsubscribe = vi.fn();
   const session: PodSession = {
@@ -114,7 +120,7 @@ it("has a safe loading snapshot outside its provider", async () => {
 });
 it("supplies a deterministic server snapshot without opening a pod", () => {
   expect(renderToString(<Probe />)).toContain("loading");
-  expect(createSolidBookmarkRepository).not.toHaveBeenCalled();
+  expect(createBookmarkRepository).not.toHaveBeenCalled();
 });
 it("defers notification refreshes while an optimistic write is outstanding", async () => {
   const f = fixture();
@@ -171,6 +177,16 @@ it("loads the session, reconciles change events, reports save failures and unsub
       ),
     );
     expect(f.host.textContent).toContain("ready:1");
+    expect(createPodClient).toHaveBeenCalledWith({
+      storage: f.session.storageUrl,
+      fetch: f.session.fetch,
+      capabilities: expect.any(Object),
+    });
+    expect(createBookmarkRepository).toHaveBeenCalledWith({
+      storage: expect.any(Object),
+      fetch: f.session.fetch,
+      profile: f.session.webId,
+    });
     await act(async () => f.changed());
     expect(f.repo.list).toHaveBeenCalledTimes(2);
     await act(async () => f.host.querySelector("button")?.click());
@@ -179,6 +195,23 @@ it("loads the session, reconciles change events, reports save failures and unsub
     await f.close();
   }
   expect(f.unsubscribe).toHaveBeenCalledOnce();
+});
+it("shows SDK discovery failures without falling back to a protocol-specific client", async () => {
+  const f = fixture();
+  vi.mocked(createPodClient).mockRejectedValueOnce(new Error("Missing discovery metadata"));
+  try {
+    await act(async () =>
+      f.root.render(
+        <BookmarksProvider session={f.session}>
+          <Probe />
+        </BookmarksProvider>,
+      ),
+    );
+    expect(f.host.textContent).toContain("Couldn't open");
+    expect(createBookmarkRepository).not.toHaveBeenCalled();
+  } finally {
+    await f.close();
+  }
 });
 it("shows initialisation errors and retries without a page reload", async () => {
   const f = fixture();

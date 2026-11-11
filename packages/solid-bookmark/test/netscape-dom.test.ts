@@ -23,3 +23,20 @@ it("uses the platform's complete entity decoder without creating elements from e
   expect(result.bookmarks[0]?.title).toBe("α é <img src=x onerror=alert(1)>");
   expect(() => parseNetscapeBookmarks("<DL>".repeat(129))).toThrow("nested too deeply");
 });
+it("preserves raw less-than text and canonicalises URLs with the DOM parser too", () => {
+  const urls = [
+    "https://example.com",
+    "HTTPS://EXAMPLE.org/",
+    "https://de.wikipedia.org/wiki/Äpfel",
+  ];
+  expect(
+    parseNetscapeBookmarks(
+      urls.map((url) => `<a href="${url}">a < b & c</a>`).join(""),
+    ).bookmarks.map(({ url, title }) => ({ url, title })),
+  ).toEqual(urls.map((url) => ({ url: new URL(url).href, title: "a < b & c" })));
+  expect(parseNetscapeBookmarks('<a href="java&#10;script:alert(1)">Bad</a>')).toEqual({
+    bookmarks: [],
+    skipped: 1,
+  });
+  expect(parseNetscapeBookmarks("<p>".repeat(100_002)).error).toBe("file-too-large");
+});

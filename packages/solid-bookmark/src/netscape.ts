@@ -1,7 +1,7 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
 /** Inert Netscape bookmark interchange. No imported markup is rendered or fetched. */
 import type { BookmarkData } from "./bookmark.js";
-import { isHttpIri } from "./iri.js";
+import { httpIriOrUndefined, isHttpIri } from "./iri.js";
 
 interface Token {
   name: string;
@@ -65,20 +65,19 @@ const allowed = new Set(["a", "h3", "dl", "dd", "dt", "p", "br"]);
 const attributes = new Set(["href", "add_date", "tags", "description", "notes", "archived"]);
 
 /** Tolerates missing closing tags, mixed case and quoted '>' characters. */
-function tokenize(html: string, decodeEntities: boolean): Token[] {
+function tokenize(html: string, decodeEntities: boolean): Token[] | undefined {
   const tokens: Token[] = [];
   let index = 0;
   let ignored: string | undefined;
   while (index < html.length) {
-    if (tokens.length > 100_000)
-      throw new RangeError("Bookmark export contains too many HTML tokens");
+    if (tokens.length >= 100_000) return undefined;
     if (html.startsWith("<!--", index)) {
       const end = html.indexOf("-->", index + 4);
       index = end < 0 ? html.length : end + 3;
       continue;
     }
-    if (html[index] !== "<") {
-      const next = html.indexOf("<", index);
+    if (html[index] !== "<" || !/[a-z/!]/i.test(html[index + 1] ?? "")) {
+      const next = html.indexOf("<", index + 1);
       const end = next < 0 ? html.length : next;
       if (!ignored)
         tokens.push({
@@ -127,9 +126,10 @@ function tokenize(html: string, decodeEntities: boolean): Token[] {
   return tokens;
 }
 
-function parseTokens(html: string): Token[] {
+function parseTokens(html: string): Token[] | undefined {
   const Parser = (globalThis as unknown as { DOMParser?: new () => HtmlParser }).DOMParser;
   const tokens = tokenize(html, !Parser);
+  if (!tokens) return undefined;
   if (!Parser) return tokens;
   // Only known inert tags/attributes reach DOMParser: no images, styles or executable HTML.
   // Preserve entity references for the platform's complete HTML entity decoder.
@@ -171,11 +171,14 @@ export interface NetscapeImport {
   bookmarks: BookmarkData[];
   /** Invalid or non-http(s) links; the caller can explain omissions. */
   skipped: number;
+  /** Size/token budget exceeded. No partial bookmarks are returned. */
+  error?: "file-too-large";
 }
 
 /** Folders become tags. Invalid dates are omitted; unsafe/missing URLs are skipped. */
 export function parseNetscapeBookmarks(html: string): NetscapeImport {
-  if (html.length > 10_000_000) throw new RangeError("Bookmark export exceeds 10 MB");
+  const tokens = html.length > 10_000_000 ? undefined : parseTokens(html);
+  if (!tokens) return { bookmarks: [], skipped: 0, error: "file-too-large" };
   const result: NetscapeImport = { bookmarks: [], skipped: 0 };
   const folders: (string | undefined)[] = [];
   let folder: string | undefined;
@@ -194,8 +197,8 @@ export function parseNetscapeBookmarks(html: string): NetscapeImport {
       return;
     }
     previous = undefined;
-    const url = attrs.href?.trim();
-    if (!isHttpIri(url)) {
+    const url = httpIriOrUndefined(attrs.href?.trim());
+    if (!url) {
       result.skipped++;
       return;
     }
@@ -222,7 +225,7 @@ export function parseNetscapeBookmarks(html: string): NetscapeImport {
     };
     result.bookmarks.push(previous);
   };
-  for (const token of parseTokens(html)) {
+  for (const token of tokens) {
     if (token.text !== undefined) {
       if (capture) capture.text += token.text;
       continue;

@@ -52,10 +52,23 @@ federation-codegen skills before changing generation or guard behavior.
 The `/netscape` subpath owns inert browser HTML import/export. Keep platform-DOM and
 tokenizer-only paths tested, including entities, malformed nesting, bounds and unsafe URLs.
 `/pod` owns one-resource-per-bookmark CRUD and private Type Index registration. Use
-`createBookmarkRepository` for an injected SDK storage client, or the explicitly Solid
-`createSolidBookmarkRepository` when the session already knows its LDP root. Conditional
+`createBookmarkRepository` with the storage client returned by SDK `createPodClient`;
+the Solid-only factory has been removed. Do not import storage-client's backend subpaths.
+`list()` returns `{ items, skipped: [{ url, reason }] }` (`BookmarkListing`); individual
+child failures must not hide healthy siblings. Container failures still propagate.
+`repository.registration` is a live `BookmarkRegistrationStatus` (`pending`, `registered`,
+`failed`). Registration failure is non-fatal, logs only a fixed message/error code, and
+retries at most once on a later initialise per repository lifetime. Initialisers share
+in-flight attempts. Failed creates re-read and conditionally delete only empty orphans
+with safe validators. `readRdf` currently has no per-resource size limit. Conditional
 edits mutate the original graph through generated accessors; missing validators require a
 refresh. The W3C `http://www.w3.org/2002/01/bookmark#` ontology is not a supported alias.
+
+The browser-safe root now exports `httpIriOrUndefined` for canonicalising typed/imported
+HTTP(S) URLs; `isHttpIri` remains the strict already-canonical guard. The importer uses
+canonical hrefs, preserves raw `<` in text, and returns `NetscapeImport.error` =
+`file-too-large` with no partial results on byte/token overflow. Excessive nesting still
+throws. Keep the app's 5,000-bookmark and byte/token limit messages consistent.
 
 The `tsc` build copies the generated JS and precise declarations into `dist/generated/`.
 The mirror must retain `@jeswr/model-runtime` and receive a `--dep-sha` pin for its

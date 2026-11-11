@@ -61,7 +61,11 @@ describe("Netscape bookmark interchange (without a DOM)", () => {
         '<a href="https://example.org/">&#0;&#xD800;&#1114112;&unknown;&copy;&nbsp;</a>',
       ).bookmarks[0]?.title,
     ).toBe("���&unknown;©");
-    expect(() => parseNetscapeBookmarks(" ".repeat(10_000_001))).toThrow(RangeError);
+    expect(parseNetscapeBookmarks(" ".repeat(10_000_001))).toEqual({
+      bookmarks: [],
+      skipped: 0,
+      error: "file-too-large",
+    });
   });
   it("omits invalid and out-of-range dates", () => {
     for (const date of ["-1", "NaN", "1.5", "99999999999999999", ""])
@@ -105,6 +109,46 @@ describe("Netscape bookmark interchange (without a DOM)", () => {
   });
   it("bounds malformed nesting and token floods", () => {
     expect(() => parseNetscapeBookmarks("<DL>".repeat(129))).toThrow("nested too deeply");
-    expect(() => parseNetscapeBookmarks("<p>".repeat(100_002))).toThrow("too many HTML tokens");
+    expect(parseNetscapeBookmarks("<p>".repeat(100_002))).toEqual({
+      bookmarks: [],
+      skipped: 0,
+      error: "file-too-large",
+    });
+  });
+  it.each([
+    ["https://example.com", "https://example.com/"],
+    ["HTTPS://EXAMPLE.org/", "https://example.org/"],
+    ["https://de.wikipedia.org/wiki/Äpfel", "https://de.wikipedia.org/wiki/%C3%84pfel"],
+  ])("canonicalises an imported URL: %s", (input, expected) => {
+    expect(parseNetscapeBookmarks(`<a href="${input}">Title</a>`).bookmarks[0]?.url).toBe(expected);
+  });
+  it.each([
+    "javascript:alert(1)",
+    "data:text/html,x",
+    "file:///x",
+    "java&#115;cript:alert(1)",
+    "java&#10;script:alert(1)",
+    "jav\tascript:alert(1)",
+    "&#100;ata:text/html,x",
+    "&#x66;ile:///x",
+    "java&amp;#115;cript:alert(1)",
+    "ht\ntps://example.org/",
+    "ht&#10;tps://example.org/",
+    "https:example.org",
+  ])("rejects unsafe schemes after entity decoding: %s", (url) => {
+    expect(parseNetscapeBookmarks(`<a href="${url}">Unsafe</a>`)).toEqual({
+      bookmarks: [],
+      skipped: 1,
+    });
+  });
+  it("keeps a raw less-than sign in link text", () => {
+    expect(
+      parseNetscapeBookmarks('<a href="https://example.com/">a < b & c</a>').bookmarks[0]?.title,
+    ).toBe("a < b & c");
+  });
+  it("discards partial results when a token flood exceeds the budget", () => {
+    expect(
+      parseNetscapeBookmarks(`<a href="https://example.com/">First</a>${"<p>".repeat(100_000)}`),
+    ).toEqual({ bookmarks: [], skipped: 0, error: "file-too-large" });
   });
 });

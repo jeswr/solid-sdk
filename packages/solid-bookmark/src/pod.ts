@@ -1,7 +1,6 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
 import { createTypeIndex, type TypeIndex } from "@jeswr/pod-type-index";
-import { type StorageClient, StorageError } from "@jeswr/storage-client";
-import { createSolidBackend } from "@jeswr/storage-client/solid";
+import { type StorageClient, StorageError, type StorageErrorCode } from "@jeswr/storage-client";
 import { DataFactory } from "n3";
 import {
   Bookmark,
@@ -21,24 +20,18 @@ export interface StoredBookmark {
 export type BookmarkPatch = Partial<
   Pick<BookmarkData, "url" | "title" | "description" | "notes" | "archived" | "tags">
 >;
+export interface BookmarkListing {
+  items: StoredBookmark[];
+  skipped: { url: string; reason: StorageErrorCode | "unknown" }[];
+}
+export type BookmarkRegistrationStatus = "pending" | "registered" | "failed";
 export interface BookmarkRepository {
+  readonly registration: BookmarkRegistrationStatus;
   initialize(): Promise<void>;
-  list(): Promise<StoredBookmark[]>;
+  list(): Promise<BookmarkListing>;
   create(data: BookmarkData): Promise<StoredBookmark>;
   update(record: StoredBookmark, patch: BookmarkPatch): Promise<StoredBookmark>;
   remove(record: StoredBookmark): Promise<void>;
-}
-/** Explicit Solid/LDP entry point for sessions which already discovered their pod root. */
-export function createSolidBookmarkRepository(options: {
-  fetch: typeof fetch;
-  storageRoot: string;
-  profile: string;
-}): BookmarkRepository {
-  return createBookmarkRepository({
-    storage: createSolidBackend({ fetch: options.fetch, root: options.storageRoot }),
-    profile: options.profile,
-    fetch: options.fetch,
-  });
 }
 function version(record: { etag: string | null }): string {
   if (!record.etag) throw new Error("This pod did not supply a version for a safe edit");
@@ -66,8 +59,11 @@ export function createBookmarkRepository(options: {
     });
   let container = new URL("bookmarks/", storage.root).href;
   let ready: Promise<void> | undefined;
+  let registration: BookmarkRegistrationStatus = "pending";
+  let attempts = 0;
+  let registering: Promise<void> | undefined;
   let links: { rel: string; target: string }[] = [];
-  const initialize = (): Promise<void> => {
+  const initialize = async (): Promise<void> => {
     ready ??= (async () => {
       try {
         await storage.head(container);
@@ -82,13 +78,29 @@ export function createBookmarkRepository(options: {
           await storage.head(container);
         }
       }
-      const hint = await index.register(BOOKMARK_CLASS, { container }, { index: "private" });
-      links = [...(hint?.links ?? [])];
     })().catch((error: unknown) => {
       ready = undefined;
       throw error;
     });
-    return ready;
+    await ready;
+    if (!registering && (registration === "registered" || attempts >= 2)) return;
+    registering ??= (async () => {
+      attempts++;
+      try {
+        const hint = await index.register(BOOKMARK_CLASS, { container }, { index: "private" });
+        links = [...(hint?.links ?? [])];
+        registration = "registered";
+      } catch (error) {
+        registration = "failed";
+        // Never log the URL, server response, credentials or original error message.
+        console.warn("Bookmark Type Index registration failed", {
+          reason: error instanceof StorageError ? error.code : "unknown",
+        });
+      }
+    })();
+    const task = registering;
+    await task;
+    if (registering === task) registering = undefined;
   };
   const read = async (url: string): Promise<StoredBookmark | undefined> => {
     const result = await storage.readRdf(url);
@@ -96,10 +108,14 @@ export function createBookmarkRepository(options: {
     return data ? { url, etag: result.etag, data } : undefined;
   };
   return {
+    get registration() {
+      return registration;
+    },
     initialize,
     async list() {
       await initialize();
       const records: StoredBookmark[] = [];
+      const skipped: BookmarkListing["skipped"] = [];
       let count = 0;
       for await (const entry of storage.listAll(container, { maxBytes: 4_000_000 })) {
         if (++count > 5000) throw new RangeError("This collection exceeds 5,000 resources");
@@ -108,30 +124,46 @@ export function createBookmarkRepository(options: {
           const record = await read(entry.url);
           if (record) records.push(record);
         } catch (error) {
-          if (!(error instanceof StorageError) || !["not-found", "not-rdf"].includes(error.code))
-            throw error;
+          skipped.push({
+            url: entry.url,
+            reason: error instanceof StorageError ? error.code : "unknown",
+          });
         }
       }
-      return records;
+      return { items: records, skipped };
     },
     async create(data) {
       validate(data);
       if (!isHttpIri(data.url)) throw new TypeError("Enter an http(s) URL");
       await initialize();
       const created = await storage.create(container, null, { contentType: "text/turtle", links });
-      const fresh = await storage.read(created.url);
-      if ((await fresh.bytes()).length) throw new Error("The new resource is no longer empty");
-      const normalized = { ...data, created: data.created ?? new Date() };
-      const body = await serializeBookmark(created.url, normalized);
-      const result = await storage.write(created.url, body, {
-        contentType: "text/turtle",
-        ifMatch: version(fresh),
-      });
-      return {
-        url: result.url,
-        etag: result.etagSource === "response" ? result.etag : null,
-        data: normalized,
-      };
+      try {
+        const fresh = await storage.read(created.url);
+        if ((await fresh.bytes()).length) throw new Error("The new resource is no longer empty");
+        const normalized = { ...data, created: data.created ?? new Date() };
+        const body = await serializeBookmark(created.url, normalized);
+        const result = await storage.write(created.url, body, {
+          contentType: "text/turtle",
+          ifMatch: version(fresh),
+        });
+        return {
+          url: result.url,
+          etag: result.etagSource === "response" ? result.etag : null,
+          data: normalized,
+        };
+      } catch (error) {
+        // A lost response can mean the PUT committed. Delete only a freshly observed empty
+        // resource, with an observed validator: never remove saved data or a concurrent edit.
+        try {
+          const orphan = await storage.read(created.url);
+          const etag = orphan.etag ?? (created.etagSource === "response" ? created.etag : null);
+          if (etag && !(await orphan.bytes()).length)
+            await storage.delete(created.url, { ifMatch: etag });
+        } catch {
+          // Cleanup is best effort and must not replace the original failure.
+        }
+        throw error;
+      }
     },
     async update(record, patch) {
       validate(patch);

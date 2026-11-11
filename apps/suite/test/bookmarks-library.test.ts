@@ -2,8 +2,10 @@
 import { describe, expect, it } from "vitest";
 import {
   bookmarkDraft,
+  bookmarkImport,
   bookmarkTags,
   bookmarkTitle,
+  importSizeMessage,
   visibleBookmarks,
 } from "../src/apps/bookmarks/lib/library";
 
@@ -33,6 +35,38 @@ const items = [
 ];
 const base = { view: "all" as const, tag: null, search: "", sort: "newest" as const };
 describe("bookmark presentation", () => {
+  it.each([
+    ["https://example.com", "https://example.com/"],
+    ["HTTPS://EXAMPLE.org/", "https://example.org/"],
+    ["https://de.wikipedia.org/wiki/Äpfel", "https://de.wikipedia.org/wiki/%C3%84pfel"],
+  ])("canonicalises typed bookmark URLs: %s", (input, url) => {
+    expect(bookmarkDraft({ url: input, title: "", description: "", notes: "", tags: "" }).url).toBe(
+      url,
+    );
+  });
+  it.each([
+    "java&#x73;cript:alert(1)",
+    "java\nscript:alert(1)",
+    "jav\tascript:alert(1)",
+    "&#x64;ata:text/html,x",
+    "&#x66;ile:///x",
+    "ht\ntps://example.org/",
+    "h\tttps://example.org/",
+    "https:example.org",
+  ])("rejects encoded or control-character schemes: %s", (url) => {
+    expect(() => bookmarkDraft({ url, title: "", description: "", notes: "", tags: "" })).toThrow(
+      "http",
+    );
+  });
+  it("uses one friendly message for byte, token and bookmark count limits", () => {
+    expect(bookmarkImport('<a href="https://example.org/">Good</a>').bookmarks).toHaveLength(1);
+    for (const html of [
+      " ".repeat(10_000_001),
+      "<p>".repeat(100_002),
+      '<a href="https://example.org/">One</a>'.repeat(5001),
+    ])
+      expect(() => bookmarkImport(html)).toThrow(importSizeMessage);
+  });
   it("validates drafts, defaults titles to the host, trims and deduplicates tags", () => {
     expect(
       bookmarkDraft({

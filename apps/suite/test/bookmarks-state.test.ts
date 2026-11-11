@@ -1,5 +1,9 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
-import type { BookmarkRepository, StoredBookmark } from "@jeswr/solid-bookmark/pod";
+import type {
+  BookmarkListing,
+  BookmarkRepository,
+  StoredBookmark,
+} from "@jeswr/solid-bookmark/pod";
 import { describe, expect, it, vi } from "vitest";
 import { createLibraryStore } from "../src/apps/bookmarks/state/library-store";
 
@@ -11,8 +15,9 @@ const record = (id = "one"): StoredBookmark => ({
 function setup() {
   const first = record();
   const repo: BookmarkRepository = {
+    registration: "registered",
     initialize: vi.fn(async () => {}),
-    list: vi.fn(async () => [first]),
+    list: vi.fn(async () => ({ items: [first], skipped: [] })),
     create: vi.fn(async (data) => ({
       url: "https://pod.example/bookmarks/new.ttl",
       etag: '"new"',
@@ -39,9 +44,24 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 describe("optimistic bookmark library", () => {
+  it("publishes child failures and registration status without blanking readable bookmarks", async () => {
+    const { repo, store, first } = setup();
+    const skipped = [{ url: "https://pod.example/blocked.ttl", reason: "forbidden" as const }];
+    vi.mocked(repo.list).mockResolvedValueOnce({ items: [first], skipped });
+    Object.defineProperty(repo, "registration", { value: "failed", configurable: true });
+    await store.load();
+    expect(store.getSnapshot()).toMatchObject({ status: "ready", skipped, registration: "failed" });
+    expect(store.getSnapshot().items[0]?.id).toBe(first.url);
+    Object.defineProperty(repo, "registration", { value: "registered" });
+    await store.load();
+    expect(store.getSnapshot()).toMatchObject({ skipped: [], registration: "registered" });
+  });
   it("tags an untagged record and drops edits to a create that failed", async () => {
     const { store, repo, first, failure } = setup();
-    vi.mocked(repo.list).mockResolvedValue([{ ...first, data: { url: first.data.url } }]);
+    vi.mocked(repo.list).mockResolvedValue({
+      items: [{ ...first, data: { url: first.data.url } }],
+      skipped: [],
+    });
     await store.load();
     await store.tag([first.url], "new");
     expect(store.getSnapshot().items[0]?.data.tags).toEqual(["new"]);
@@ -66,7 +86,7 @@ describe("optimistic bookmark library", () => {
   });
   it("stops a bulk write between records after account teardown", async () => {
     const { store, repo, first } = setup();
-    vi.mocked(repo.list).mockResolvedValue([first, record("two")]);
+    vi.mocked(repo.list).mockResolvedValue({ items: [first, record("two")], skipped: [] });
     await store.load();
     const pending = deferred<StoredBookmark>();
     vi.mocked(repo.update).mockReturnValueOnce(pending.promise);
@@ -101,7 +121,7 @@ describe("optimistic bookmark library", () => {
     await store.add([{ id: "local", data: { url: "https://example.net/", title: "New" } }]);
     const created = await vi.mocked(repo.create).mock.results[0]?.value;
     if (!created) throw new Error("Missing created fixture");
-    vi.mocked(repo.list).mockResolvedValue([first, created]);
+    vi.mocked(repo.list).mockResolvedValue({ items: [first, created], skipped: [] });
     await store.load();
     expect(store.getSnapshot().items.map((item) => item.id)).toEqual([first.url, "local"]);
     await store.edit(["local"], { title: "Still editable" });
@@ -181,7 +201,7 @@ describe("optimistic bookmark library", () => {
   });
   it("handles partial bulk failures and ignores missing records", async () => {
     const { store, repo, first } = setup();
-    vi.mocked(repo.list).mockResolvedValue([first, record("two")]);
+    vi.mocked(repo.list).mockResolvedValue({ items: [first, record("two")], skipped: [] });
     await store.load();
     vi.mocked(repo.update).mockRejectedValueOnce(new Error("conflict"));
     await store.edit([first.url, record("two").url, "missing"], { archived: true });
@@ -196,11 +216,11 @@ describe("optimistic bookmark library", () => {
   it("fences stale refreshes and reports read errors, clearing denied data", async () => {
     const { store, repo, first } = setup();
     await store.load();
-    const slow = deferred<StoredBookmark[]>();
+    const slow = deferred<BookmarkListing>();
     vi.mocked(repo.list).mockReturnValueOnce(slow.promise);
     const read = store.load();
     await store.edit([first.url], { title: "Keep" });
-    slow.resolve([first]);
+    slow.resolve({ items: [first], skipped: [] });
     await read;
     expect(store.getSnapshot().items[0]?.data.title).toBe("Keep");
     vi.mocked(repo.list).mockRejectedValueOnce(new Error("offline"));
@@ -213,18 +233,18 @@ describe("optimistic bookmark library", () => {
   });
   it("fences out-of-order successes, errors and disposed sessions", async () => {
     const { store, repo } = setup();
-    const slow = deferred<StoredBookmark[]>();
+    const slow = deferred<BookmarkListing>();
     vi.mocked(repo.list).mockReturnValueOnce(slow.promise);
     const old = store.load();
     await store.load();
     slow.reject(new Error("stale error"));
     await old;
     expect(store.getSnapshot().status).toBe("ready");
-    const late = deferred<StoredBookmark[]>();
+    const late = deferred<BookmarkListing>();
     vi.mocked(repo.list).mockReturnValueOnce(late.promise);
     const read = store.load();
     store.dispose();
-    late.resolve([]);
+    late.resolve({ items: [], skipped: [] });
     await read;
     await store.edit([record().url], { title: "Ignored" });
     expect(repo.update).not.toHaveBeenCalled();

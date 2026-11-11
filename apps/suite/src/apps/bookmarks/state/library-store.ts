@@ -1,6 +1,12 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
 import type { BookmarkData } from "@jeswr/solid-bookmark";
-import type { BookmarkPatch, BookmarkRepository, StoredBookmark } from "@jeswr/solid-bookmark/pod";
+import type {
+  BookmarkListing,
+  BookmarkPatch,
+  BookmarkRegistrationStatus,
+  BookmarkRepository,
+  StoredBookmark,
+} from "@jeswr/solid-bookmark/pod";
 import type { BookmarkItem } from "../lib/library";
 
 type Change =
@@ -13,6 +19,8 @@ export interface LibrarySnapshot {
   status: "loading" | "ready" | "error";
   error: unknown;
   saving: number;
+  skipped: BookmarkListing["skipped"];
+  registration: BookmarkRegistrationStatus;
 }
 export function createLibraryStore(
   repository: BookmarkRepository,
@@ -21,7 +29,14 @@ export function createLibraryStore(
   const confirmed = new Map<string, StoredBookmark>();
   const pending: Change[] = [];
   const listeners = new Set<() => void>();
-  let snapshot: LibrarySnapshot = { items: [], status: "loading", error: null, saving: 0 };
+  let snapshot: LibrarySnapshot = {
+    items: [],
+    skipped: [],
+    registration: repository.registration,
+    status: "loading",
+    error: null,
+    saving: 0,
+  };
   let queue = Promise.resolve();
   let generation = 0;
   let readGeneration = 0;
@@ -51,6 +66,7 @@ export function createLibraryStore(
       ...snapshot,
       items: [...items].map(([id, data]) => ({ id, data })),
       saving: pending.length,
+      registration: repository.registration,
     };
     for (const listener of listeners) listener();
   };
@@ -58,12 +74,12 @@ export function createLibraryStore(
     const read = ++readGeneration;
     const started = generation;
     try {
-      const records = await repository.list();
+      const { items: records, skipped } = await repository.list();
       if (disposed || read !== readGeneration || started !== generation || pending.length) return;
       const knownIds = new Map([...confirmed].map(([id, record]) => [record.url, id]));
       confirmed.clear();
       for (const record of records) confirmed.set(knownIds.get(record.url) ?? record.url, record);
-      snapshot = { ...snapshot, status: "ready", error: null };
+      snapshot = { ...snapshot, skipped, status: "ready", error: null };
       publish();
     } catch (error) {
       if (disposed || read !== readGeneration || started !== generation) return;

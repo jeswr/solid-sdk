@@ -36,7 +36,7 @@ async function seed(
   });
   if (response.ok) return;
   if (response.status !== 404) throw new Error("Couldn't check sample bookmarks");
-  const existing = new Set((await repository.list()).map((record) => record.data.url));
+  const existing = new Set((await repository.list()).items.map((record) => record.data.url));
   const samples = [
     {
       url: "https://example.org/journal/quiet-gardens",

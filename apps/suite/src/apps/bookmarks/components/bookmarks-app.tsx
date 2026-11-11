@@ -1,11 +1,7 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
 "use client";
 import type { BookmarkData } from "@jeswr/solid-bookmark";
-import {
-  type NetscapeImport,
-  parseNetscapeBookmarks,
-  serializeNetscapeBookmarks,
-} from "@jeswr/solid-bookmark/netscape";
+import { type NetscapeImport, serializeNetscapeBookmarks } from "@jeswr/solid-bookmark/netscape";
 import {
   Badge,
   Button,
@@ -47,7 +43,7 @@ import {
   Tag,
   Trash2,
 } from "lucide-react";
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useEffect, useRef, useState } from "react";
 import { saveNatively } from "@/lib/native/save-file";
 import { PodSessionProvider, usePodSessionState } from "@/lib/session/pod-session";
 import { AppFrame, AppHeading, AppSessionGuard } from "@/shell/app-frame";
@@ -57,8 +53,10 @@ import {
   type BookmarkSort,
   type BookmarkView,
   bookmarkDraft,
+  bookmarkImport,
   bookmarkTags,
   bookmarkTitle,
+  importSizeMessage,
   visibleBookmarks,
 } from "../lib/library";
 import { BookmarksProvider, useBookmarkSnapshot, useBookmarks } from "../state/bookmarks-context";
@@ -195,10 +193,8 @@ function ImportDialog({ open, onClose }: { open: boolean; onClose(): void }) {
     setError("");
     setParsed(null);
     try {
-      if (file.size > 10_000_000) throw new Error("Choose an HTML export smaller than 10 MB.");
-      const result = parseNetscapeBookmarks(await file.text());
-      if (result.bookmarks.length > 5000)
-        throw new Error("Import up to 5,000 bookmarks at a time.");
+      if (file.size > 10_000_000) throw new Error(importSizeMessage);
+      const result = bookmarkImport(await file.text());
       setParsed(result);
     } catch (error) {
       setError((error as Error).message);
@@ -278,7 +274,14 @@ function Library() {
   const [importing, setImporting] = useState(false);
   const [tagging, setTagging] = useState(false);
   const [bulkTag, setBulkTag] = useState("");
+  const [registrationHintDismissed, setRegistrationHintDismissed] = useState(false);
+  const [filterNotice, setFilterNotice] = useState("");
+  const announcementTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(() => () => clearTimeout(announcementTimer.current), []);
   const items = visibleBookmarks(snapshot.items, { view, tag, search, sort });
+  const unreadable = snapshot.skipped.filter(
+    ({ reason }) => reason !== "not-found" && reason !== "not-rdf",
+  ).length;
   const selection = selected.filter((id) => items.some((item) => item.id === id));
   const tags = bookmarkTags(snapshot.items);
   const editable = snapshot.status === "ready" && connection === "online";
@@ -295,10 +298,22 @@ function Library() {
       count: snapshot.items.filter((item) => item.data.archived).length,
     },
   ];
-  const filter = (nextView: BookmarkView, nextTag: string | null) => {
+  const filter = (nextView: BookmarkView, nextTag: string | null, nextSearch = search) => {
+    announceCount(
+      visibleBookmarks(snapshot.items, { view: nextView, tag: nextTag, search: nextSearch, sort })
+        .length,
+    );
     setView(nextView);
     setTag(nextTag);
+    setSearch(nextSearch);
     setSelected([]);
+  };
+  const announceCount = (count: number) => {
+    if (count === items.length) return;
+    clearTimeout(announcementTimer.current);
+    announcementTimer.current = setTimeout(() => {
+      setFilterNotice(`${count} ${count === 1 ? "bookmark" : "bookmarks"}`);
+    }, 300);
   };
   const remove = (ids: string[]) => {
     if (!store) return;
@@ -418,6 +433,19 @@ function Library() {
             You're offline. Browse loaded bookmarks or export a copy. Reconnect to save changes.
           </p>
         )}
+        {unreadable > 0 && (
+          <p className="bkm-notice">
+            {unreadable} {unreadable === 1 ? "item couldn't" : "items couldn't"} be read.
+          </p>
+        )}
+        {snapshot.registration === "failed" && !registrationHintDismissed && (
+          <div className="bkm-notice">
+            <span>Your bookmarks are available here. Other apps may not find them yet.</span>
+            <Button variant="ghost" size="sm" onClick={() => setRegistrationHintDismissed(true)}>
+              Dismiss hint
+            </Button>
+          </div>
+        )}
         <div className="bkm-mobile-filters">
           <Label htmlFor="bkm-view">View</Label>
           <Select
@@ -452,6 +480,10 @@ function Library() {
               placeholder="Search your bookmarks…"
               value={search}
               onChange={(event) => {
+                announceCount(
+                  visibleBookmarks(snapshot.items, { view, tag, search: event.target.value, sort })
+                    .length,
+                );
                 setSearch(event.target.value);
                 setSelected([]);
               }}
@@ -500,13 +532,20 @@ function Library() {
           <Checkbox
             aria-label="Select all visible bookmarks"
             disabled={!items.length}
-            checked={items.length > 0 && selection.length === items.length}
+            checked={
+              selection.length > 0 && selection.length < items.length
+                ? "indeterminate"
+                : items.length > 0 && selection.length === items.length
+            }
             onCheckedChange={(checked) => setSelected(checked ? items.map((item) => item.id) : [])}
           />
-          <span role="status">
+          <span>
             {selection.length
               ? `${selection.length} selected`
               : `${items.length} ${items.length === 1 ? "bookmark" : "bookmarks"}`}
+          </span>
+          <span className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+            {filterNotice}
           </span>
           {selection.length > 0 && (
             <div className="bkm-bulk">
@@ -568,8 +607,7 @@ function Library() {
                 <Button
                   variant="outline"
                   onClick={() => {
-                    filter("all", null);
-                    setSearch("");
+                    filter("all", null, "");
                   }}
                 >
                   Clear filters

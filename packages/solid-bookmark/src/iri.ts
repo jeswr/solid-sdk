@@ -2,6 +2,9 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
 import { httpIriOrUndefined as filterIri, isHttpIri as guardIri } from "@jeswr/model-runtime";
 
-/** Canonical http(s) IRI, or undefined; retain the package's public signatures. */
-export const httpIriOrUndefined: (value: string | undefined) => string | undefined = filterIri;
+/** Canonical http(s) IRI; never repair an obfuscated or non-absolute scheme. */
+export function httpIriOrUndefined(value: string | undefined): string | undefined {
+  if (!value || !/^https?:\/\//i.test(value.trim())) return undefined;
+  return filterIri(value);
+}
 export const isHttpIri: (value: string | undefined) => value is string = guardIri;

@@ -41,7 +41,7 @@ test("demo CRUD, search, tags, bulk actions, HTML interchange and persistence", 
   await expect(page.locator(".bkm-item")).toHaveCount(6);
   await page.getByRole("button", { name: "Add bookmark", exact: true }).click();
   const editor = page.getByRole("dialog", { name: "Add a bookmark" });
-  await editor.getByLabel("URL", { exact: true }).fill("https://example.org/saved-story");
+  await editor.getByLabel("URL", { exact: true }).fill("HTTPS://EXAMPLE.org");
   await editor.getByLabel("Title", { exact: true }).focus();
   await expect(editor.getByLabel("Title", { exact: true })).toHaveValue("example.org");
   await editor.getByLabel("Title", { exact: true }).fill("The orchard notebook");
@@ -55,6 +55,7 @@ test("demo CRUD, search, tags, bulk actions, HTML interchange and persistence", 
   await expect(link).toBeVisible();
   await saved(page);
   await expect(link).toHaveAttribute("rel", "noopener noreferrer");
+  await expect(link).toHaveAttribute("href", "https://example.org/");
   await page.getByRole("button", { name: "Edit The orchard notebook", exact: true }).click();
   await page
     .getByRole("dialog")
@@ -75,6 +76,9 @@ test("demo CRUD, search, tags, bulk actions, HTML interchange and persistence", 
   await saved(page);
   await view(page, "All bookmarks");
   await page.getByRole("checkbox", { name: "Select The orchard notebook", exact: true }).check();
+  await expect(
+    page.getByRole("checkbox", { name: "Select all visible bookmarks", exact: true }),
+  ).toHaveAttribute("aria-checked", "mixed");
   await page.locator(".bkm-bulk").getByRole("button", { name: "Add tag", exact: true }).click();
   await page.getByLabel("Tag name").fill("weekend");
   await page.getByRole("dialog").getByRole("button", { name: "Add tag", exact: true }).click();
@@ -91,7 +95,7 @@ test("demo CRUD, search, tags, bulk actions, HTML interchange and persistence", 
     name: "bookmarks.html",
     mimeType: "text/html",
     buffer: Buffer.from(
-      '<DL><DT><H3>Imported folder</H3><DL><DT><A HREF="https://example.net/imported" ADD_DATE="1700000000" TAGS="reading">An imported idea</A></DL></DL>',
+      '<DL><DT><H3>Imported folder</H3><DL><DT><A HREF="HTTPS://EXAMPLE.net/imported" ADD_DATE="1700000000" TAGS="reading">An imported idea</A></DL></DL>',
     ),
   });
   await expect(page.getByRole("dialog").getByRole("status")).toContainText("1 bookmark to import");
@@ -101,6 +105,10 @@ test("demo CRUD, search, tags, bulk actions, HTML interchange and persistence", 
     .click();
   await saved(page);
   await expect(page.getByRole("link", { name: "An imported idea" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "An imported idea" })).toHaveAttribute(
+    "href",
+    "https://example.net/imported",
+  );
   const download = page.waitForEvent("download");
   await page.getByRole("button", { name: "Export", exact: true }).click();
   expect((await download).suggestedFilename()).toBe("bookmarks.html");
@@ -111,6 +119,23 @@ test("demo CRUD, search, tags, bulk actions, HTML interchange and persistence", 
     (await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21aa"]).analyze())
       .violations,
   ).toEqual([]);
+});
+
+test("Undo remains available while its toast is hovered", async ({ page }) => {
+  await page.goto("/bookmarks");
+  await expect(page.locator(".bkm-item")).toHaveCount(6);
+  await page.clock.install();
+  await page
+    .getByRole("button", { name: "Delete A small guide to quieter gardens", exact: true })
+    .click();
+  const undo = page.getByRole("button", { name: "Undo", exact: true });
+  await undo.hover();
+  await page.clock.fastForward(9000);
+  await expect(undo).toBeVisible();
+  await undo.click();
+  await expect(
+    page.getByRole("link", { name: "A small guide to quieter gardens", exact: true }),
+  ).toBeVisible();
 });
 
 test("responsive light and dark views, empty search, keyboard controls and offline browsing", async ({

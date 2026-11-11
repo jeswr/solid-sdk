@@ -1,6 +1,8 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
 "use client";
-import { createSolidBookmarkRepository } from "@jeswr/solid-bookmark/pod";
+import { createBookmarkRepository } from "@jeswr/solid-bookmark/pod";
+import { createMemoryCache } from "@jeswr/storage-capabilities/cache";
+import { createPodClient } from "@jeswr/storage-client";
 import { ErrorState, toast } from "@jeswr/suite-ui";
 import {
   createContext,
@@ -33,9 +35,15 @@ export function BookmarksProvider({
     setError(false);
     void Promise.resolve()
       .then(async () => {
-        const repository = createSolidBookmarkRepository({
+        const { storage } = await createPodClient({
           fetch: session.fetch,
-          storageRoot: session.storageUrl,
+          storage: session.storageUrl,
+          capabilities: createMemoryCache(),
+        });
+        if (!live) return;
+        const repository = createBookmarkRepository({
+          storage,
+          fetch: session.fetch,
           profile: session.webId,
         });
         await ensureSample(session, repository);
@@ -73,7 +81,14 @@ export function BookmarksProvider({
 export function useBookmarks() {
   return useContext(Context);
 }
-const initial = { items: [], status: "loading" as const, error: null, saving: 0 };
+const initial = {
+  items: [],
+  skipped: [],
+  registration: "pending" as const,
+  status: "loading" as const,
+  error: null,
+  saving: 0,
+};
 const noSubscribe = () => () => {};
 export function useBookmarkSnapshot() {
   const store = useBookmarks();

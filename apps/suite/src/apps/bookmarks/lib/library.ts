@@ -1,5 +1,15 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
-import { type BookmarkData, isHttpIri } from "@jeswr/solid-bookmark";
+import { type BookmarkData, httpIriOrUndefined } from "@jeswr/solid-bookmark";
+import { parseNetscapeBookmarks } from "@jeswr/solid-bookmark/netscape";
+
+export const importSizeMessage =
+  "This file is too large. Import up to 5,000 bookmarks at a time from an HTML export smaller than 10 MB.";
+export function bookmarkImport(html: string) {
+  const result = parseNetscapeBookmarks(html);
+  if (result.error === "file-too-large" || result.bookmarks.length > 5000)
+    throw new Error(importSizeMessage);
+  return result;
+}
 
 export type BookmarkView = "all" | "unread" | "archived";
 export type BookmarkSort = "newest" | "oldest" | "title";
@@ -17,8 +27,8 @@ export function bookmarkDraft(draft: {
   notes: string;
   tags: string;
 }): BookmarkData {
-  const url = draft.url.trim();
-  if (!isHttpIri(url)) throw new TypeError("Enter a full http:// or https:// URL.");
+  const url = httpIriOrUndefined(draft.url.trim());
+  if (!url) throw new TypeError("Enter a full http:// or https:// URL.");
   return {
     url,
     title: draft.title.trim() || new URL(url).host,
