@@ -210,7 +210,7 @@ export class MailClient {
     const page = await loadThreads(this.store, folderIri, offset, limit);
     return {
       ...page,
-      items: page.items.map(({ thread, messages }) => row(thread.value, messages, this.webId)),
+      items: page.items.map(({ id, messages }) => row(id, messages, this.webId)),
     };
   }
   async thread(threadIri: string): Promise<ThreadView> {

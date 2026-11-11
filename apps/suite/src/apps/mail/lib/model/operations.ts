@@ -45,25 +45,15 @@ export async function loadFolders(store: MailStore, root: string) {
       .flatMap((thread) => [...thread.messageIris].map(documentOf))
       .filter((url) => !loaded.has(url)),
   );
-  const combined = combine([folders, messages, members]);
-  const all = [...combined.messages];
-  const unread = new Set(
-    all
-      .filter((message) => !message.isRead)
-      .map((message) => message.partOfThread ?? message.value),
-  );
+  const combined = combine([folders, messages, threads, members]);
   return folderCounts(combined).map((count) => ({
     ...count,
-    unreadThreads: new Set(
-      all
-        .filter(
-          (message) =>
-            count.folder.messageIris.has(message.value) ||
-            message.folderIris.has(count.folder.value),
-        )
-        .map((message) => message.partOfThread ?? message.value)
-        .filter((thread) => unread.has(thread)),
-    ).size,
+    unreadThreads: pageThreads(
+      combined,
+      count.folder.value,
+      0,
+      Number.MAX_SAFE_INTEGER,
+    ).items.filter((row) => row.messages.some((message) => !message.isRead)).length,
   }));
 }
 export async function loadThreads(store: MailStore, folderIri: string, offset = 0, limit = 50) {
@@ -89,6 +79,8 @@ export async function loadThreads(store: MailStore, folderIri: string, offset = 
 }
 export async function loadThread(store: MailStore, threadIri: string) {
   const thread = await store.load(documentOf(threadIri));
+  const message = thread.mailbox.findMessage(threadIri);
+  if (message) return [message];
   const messages = await snapshotPresent(
     store,
     [...thread.mailbox.thread(threadIri).messageIris].map(documentOf),
