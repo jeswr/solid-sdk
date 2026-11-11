@@ -64,7 +64,9 @@ export const mountUniver: MountEngine = async (container, options) => {
     ],
   });
   let workbook = univerAPI.createWorkbook(options.snapshot as Partial<IWorkbookData>);
+  let charts = options.snapshot.charts;
   const listeners = new Set<() => void>();
+  const valueListeners = new Set<() => void>();
   let disposed = false;
   let loading = false;
   let queued = false;
@@ -78,8 +80,12 @@ export const mountUniver: MountEngine = async (container, options) => {
       if (disposed || current !== generation) return;
       queued = false;
       for (const listener of listeners) listener();
+      for (const listener of valueListeners) listener();
     });
   };
+  const calculation = univerAPI.getFormula().calculationResultApplied(() => {
+    if (!disposed && !loading) for (const listener of valueListeners) listener();
+  });
   const subscription = univerAPI.addEvent(univerAPI.Event.CommandExecuted, (event) => {
     if (
       event.type !== CommandType.MUTATION ||
@@ -97,12 +103,15 @@ export const mountUniver: MountEngine = async (container, options) => {
   });
   const snapshot = (): Snapshot => {
     const data: Snapshot = JSON.parse(JSON.stringify(workbook.save()));
+    // Univer drops unknown top-level properties when saving its canvas model.
+    if (charts !== undefined) data.charts = JSON.parse(JSON.stringify(charts));
     serializeSnapshot(data);
     return data;
   };
   const load = (data: Snapshot) => {
     serializeSnapshot(data);
     loading = true;
+    charts = data.charts;
     editedSinceLoad = false;
     ++generation;
     queued = false;
@@ -114,6 +123,21 @@ export const mountUniver: MountEngine = async (container, options) => {
     }
   };
   return {
+    setCharts(value) {
+      charts = JSON.parse(JSON.stringify(value));
+      notify();
+    },
+    selection() {
+      const sheet = workbook.getActiveSheet();
+      return {
+        sheetId: sheet.getSheetId(),
+        range: sheet.getActiveRange()?.getA1Notation() ?? "A1",
+      };
+    },
+    onValuesChange(listener) {
+      valueListeners.add(listener);
+      return () => valueListeners.delete(listener);
+    },
     load,
     snapshot,
     onChange(listener) {
@@ -165,7 +189,9 @@ export const mountUniver: MountEngine = async (container, options) => {
       disposed = true;
       ++generation;
       subscription.dispose();
+      calculation.dispose();
       listeners.clear();
+      valueListeners.clear();
       univer.dispose();
     },
   };

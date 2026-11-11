@@ -261,3 +261,111 @@
     z-index: 30;
   }
 }
+
+/* Charts use a strip so their controls do not depend on Univer's canvas coordinates. */
+.sht-editor {
+  display: flex;
+  flex-direction: column;
+}
+.sht-grid-region {
+  flex: 1;
+}
+.sht-chart-workspace {
+  flex-shrink: 0;
+  max-height: 50%;
+  overflow: auto;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+}
+.sht-chart-toolbar {
+  padding: var(--space-2);
+}
+.sht-chart-layout {
+  display: flex;
+  align-items: flex-start;
+}
+.sht-chart-strip {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  gap: var(--space-3);
+  overflow-x: auto;
+  padding: var(--space-3);
+}
+.sht-chart-card {
+  flex: 0 0 min(480px, 80vw);
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+.sht-chart-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+.sht-chart-heading h2 {
+  font-size: var(--text-sm);
+  overflow-wrap: anywhere;
+}
+.sht-chart-svg {
+  width: 100%;
+  color: var(--foreground);
+}
+.sht-chart-svg text {
+  fill: currentColor;
+  font-size: 10px;
+}
+.sht-chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  font-size: var(--text-xs);
+  list-style: none;
+}
+.sht-chart-legend li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+.sht-chart-legend span {
+  width: 12px;
+  height: 12px;
+  border-radius: var(--radius-sm);
+}
+.sht-chart-editor {
+  flex: 0 0 280px;
+  padding: var(--space-3);
+  border-left: 1px solid var(--border);
+}
+.sht-chart-editor form {
+  display: grid;
+  gap: var(--space-2);
+}
+.sht-chart-editor input,
+.sht-chart-editor select {
+  min-height: 32px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--foreground);
+}
+.sht-chart-buttons,
+.sht-chart-checkbox {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+@media (max-width: 639px) {
+  .sht-chart-layout {
+    flex-direction: column-reverse;
+  }
+  .sht-chart-editor {
+    flex-basis: auto;
+    width: 100%;
+  }
+  .sht-chart-strip {
+    width: 100%;
+  }
+}

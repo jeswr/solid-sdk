@@ -158,9 +158,16 @@ export function createSheetStorage(fetch: typeof globalThis.fetch, podRoot: stri
     },
     async loadSnapshot(container: string): Promise<Stored<Snapshot>> {
       const result = await read(workbookLayout(container).snapshot, "application/json");
-      return { ...result, value: deserializeSnapshot(result.value) };
+      const snapshot = deserializeSnapshot(result.value);
+      const value =
+        snapshot.charts === undefined
+          ? snapshot
+          : (await import("../charts/spec")).validateChartSnapshot(snapshot);
+      return { ...result, value };
     },
     async saveSnapshot(container: string, snapshot: Snapshot, condition: Precondition) {
+      if (snapshot.charts !== undefined)
+        snapshot = (await import("../charts/spec")).validateChartSnapshot(snapshot);
       return write(
         workbookLayout(container).snapshot,
         serializeSnapshot(snapshot),

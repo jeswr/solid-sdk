@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Snapshot } from "../src/apps/sheets/lib/contract";
@@ -12,18 +13,28 @@ const mock = vi.hoisted(() => {
     options?: { fromChangeset?: boolean; fromFormula?: boolean };
   }) => void;
   const subscription = { dispose: vi.fn() };
+  let selection: string | null = "B2:C4";
+  let calculated: () => void;
+  const calculation = { dispose: vi.fn() };
   const workbook = {
     getId: () => "book",
     save: () => data,
     getActiveSheet: () => ({
       getSheetId: () => active,
       getSheetName: () => (data.sheets as Record<string, { name: string }>)[active]?.name,
+      getActiveRange: () => (selection === null ? null : { getA1Notation: () => selection }),
     }),
     setActiveSheet: vi.fn((id: string) => {
       active = id;
     }),
   };
   const api = {
+    getFormula: () => ({
+      calculationResultApplied: (callback: () => void) => {
+        calculated = callback;
+        return calculation;
+      },
+    }),
     Event: { CommandExecuted: "executed" },
     createWorkbook: vi.fn((next: Record<string, unknown>) => {
       data = next;
@@ -42,6 +53,11 @@ const mock = vi.hoisted(() => {
     api,
     univer,
     subscription,
+    calculation,
+    calculated: () => calculated(),
+    select: (range: string | null) => {
+      selection = range;
+    },
     emit: (event: Parameters<typeof handler>[0]) => handler(event),
     create: vi.fn(() => ({ univer, univerAPI: api })),
     preset: vi.fn((_options: unknown) => ({ plugins: ["core"] })),
@@ -331,4 +347,57 @@ describe("Univer engine adapter", () => {
     expect(change).toHaveBeenCalledOnce();
     engine.dispose();
   });
+});
+
+it("retains app chart specs on snapshots, CSV import and reload and exposes the current selection", async () => {
+  const engine = await mount();
+  expect(engine.selection?.()).toEqual({ sheetId: "data", range: "B2:C4" });
+  mock.select(null);
+  expect(engine.selection?.().range).toBe("A1");
+  mock.select("B2:C4");
+  const changed = vi.fn();
+  const values = vi.fn();
+  engine.onChange(changed);
+  const off = engine.onValuesChange?.(values);
+  const charts = { version: 1, entries: [{ id: "chart" }] };
+  engine.setCharts?.(charts);
+  charts.entries[0] = { id: "changed outside" };
+  await Promise.resolve();
+  expect(changed).toHaveBeenCalledOnce();
+  expect(values).toHaveBeenCalledOnce();
+  const saved = engine.snapshot();
+  expect(saved.charts).toEqual({ version: 1, entries: [{ id: "chart" }] });
+  engine.importCsv("Value\n1", { mode: "replace-active" });
+  expect(engine.snapshot().charts).toEqual(saved.charts);
+  engine.load(saved);
+  expect(engine.snapshot().charts).toEqual(saved.charts);
+  const fromMount = await (await loadEngine())({} as HTMLElement, {
+    snapshot: saved,
+    dark: false,
+    compact: false,
+  });
+  expect(fromMount.snapshot().charts).toEqual(saved.charts);
+  fromMount.dispose();
+  off?.();
+  mock.calculated();
+  expect(values).toHaveBeenCalledOnce();
+  engine.dispose();
+});
+
+it("refreshes chart values after applied formula results without another autosave", async () => {
+  const engine = await mount();
+  const changed = vi.fn();
+  const values = vi.fn();
+  engine.onChange(changed);
+  engine.onValuesChange?.(values);
+  mock.calculated();
+  expect(values).toHaveBeenCalledOnce();
+  expect(changed).not.toHaveBeenCalled();
+  mock.api.disposeUnit.mockImplementationOnce(() => mock.calculated());
+  engine.load(initial());
+  expect(values).toHaveBeenCalledOnce();
+  engine.dispose();
+  mock.calculated();
+  expect(values).toHaveBeenCalledOnce();
+  expect(mock.calculation.dispose).toHaveBeenCalledOnce();
 });
