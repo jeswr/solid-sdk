@@ -2,7 +2,7 @@
 import * as oauth from "oauth4webapi";
 import { withDPoPNonceRetry } from "./dpopNonce.js";
 import { TokenType } from "./lws/constants.js";
-import { LwsTokenProvider } from "./lws/LwsTokenProvider.js";
+import { type AuthorizationServerPolicy, LwsTokenProvider } from "./lws/LwsTokenProvider.js";
 import { ReactiveAuthenticationClient } from "./ReactiveAuthenticationClient.js";
 import { type HttpOptions, oauthOptions } from "./transport.js";
 
@@ -32,6 +32,11 @@ export interface ServerOidcOptions {
   dpopKeyPair?: ServerDpopKey;
   /** Answer LWS challenges with the verified OIDC ID token; credentials stay in memory. */
   lws?: boolean;
+  /**
+   * Decides which authorization servers may receive the ID token in an LWS exchange.
+   * Brokers should always set it: without it any server listed in RFC 9728 metadata is trusted.
+   */
+  trustAuthorizationServer?: AuthorizationServerPolicy;
 }
 export const SERVER_MAX_REPLAY_BODY_BYTES = 10 * 1024 * 1024;
 
@@ -118,7 +123,12 @@ export async function createServerOidcClient(options: ServerOidcOptions) {
             };
           },
         },
-        { http },
+        {
+          http,
+          ...(options.trustAuthorizationServer === undefined
+            ? {}
+            : { trustAuthorizationServer: options.trustAuthorizationServer }),
+        },
       )
     : undefined;
   const resourceHttp: HttpOptions =
