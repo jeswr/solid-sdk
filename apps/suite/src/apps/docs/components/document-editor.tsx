@@ -21,6 +21,8 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { SuiteFrame } from "@/components/interim-shell/suite-frame";
+import { SaveTemplateDialog } from "@/components/templates/save-template-dialog";
+import { TemplatePicker } from "@/components/templates/template-picker";
 import { encodeRef } from "@/lib/refs";
 import type { PodSession } from "@/lib/session/pod-session";
 import { editorActions } from "../editor/actions";
@@ -112,6 +114,8 @@ export function DocumentEditor({
   return <HydratedEditor key={runtime.doc.guid} runtime={runtime} />;
 }
 function HydratedEditor({ runtime }: { runtime: DocumentPersistence }) {
+  const [savingTemplate, setSavingTemplate] = useState(false);
+  const [fromTemplate, setFromTemplate] = useState(false);
   const conflictFocus = useDialogFocus();
   const saveErrorFocus = useDialogFocus();
   const router = useRouter();
@@ -444,6 +448,35 @@ function HydratedEditor({ runtime }: { runtime: DocumentPersistence }) {
     });
   return (
     <div className="docs-editor-shell" data-outline={outline ? "open" : "closed"}>
+      <TemplatePicker
+        session={runtime.session}
+        app="docs"
+        open={fromTemplate}
+        onOpenChange={setFromTemplate}
+      />
+      {savingTemplate && (
+        <SaveTemplateDialog
+          session={runtime.session}
+          app="docs"
+          title={title}
+          open
+          onOpenChange={setSavingTemplate}
+          content={async (resource) => {
+            const { buildDocument, serializeTurtle } = await import("../lib/model");
+            return {
+              body: await serializeTurtle(
+                buildDocument(resource, {
+                  title,
+                  body: editor?.getHTML() ?? "",
+                  creator: runtime.session.webId,
+                }),
+              ),
+              contentType: "text/turtle",
+            };
+          }}
+        />
+      )}
+
       <SuiteFrame
         app="docs"
         sidebar={<DocsSidebar />}
@@ -522,6 +555,8 @@ function HydratedEditor({ runtime }: { runtime: DocumentPersistence }) {
       >
         {editor && (
           <EditorMenubar
+            saveTemplate={() => setSavingTemplate(true)}
+            fromTemplate={() => setFromTemplate(true)}
             editor={editor}
             actions={actions}
             mac={mac}

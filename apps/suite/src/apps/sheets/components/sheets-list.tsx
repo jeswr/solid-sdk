@@ -30,6 +30,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { SuiteFrame } from "@/components/interim-shell/suite-frame";
+import { TemplateLauncher } from "@/components/templates/template-picker";
 import { useNeedsConnection } from "../../../shell/sync/requires-online";
 import type { WorkbookSummary } from "../lib/contract";
 import { pendingSaves } from "../lib/pending-saves";
@@ -96,6 +97,7 @@ export function SheetsList() {
     <SuiteFrame app="sheets" sidebar={<SheetsSidebar />} context={<span>Sheets</span>}>
       <section className="sht-list" aria-labelledby="sht-list-title">
         <h1 id="sht-list-title">All spreadsheets</h1>
+        <TemplateLauncher app="sheets" />
         {failed ? (
           <div className="sht-state" role="alert">
             <h2>Couldn't load your spreadsheets</h2>

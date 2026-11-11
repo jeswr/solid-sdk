@@ -1555,3 +1555,83 @@
     transition: none;
   }
 }
+
+/* AUTHORED-BY Codex GPT-6.1-Sol */
+.su-template-dialog {
+  width: min(56rem, calc(100vw - 2rem));
+  max-width: 56rem;
+  max-height: 85dvh;
+  overflow-y: auto;
+}
+.su-template-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+.su-template-filters label {
+  display: grid;
+  gap: var(--space-1);
+}
+.su-template-filters select {
+  padding: var(--space-2);
+  background: var(--surface);
+  color: var(--foreground);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+}
+.su-template-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 13rem), 1fr));
+  gap: var(--space-3);
+  padding: 0;
+  list-style: none;
+}
+.su-template-card {
+  min-width: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--foreground);
+}
+.su-template-card > button[data-template-choice] {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  width: 100%;
+  padding: var(--space-3);
+  border: 0;
+  border-radius: inherit;
+  background: inherit;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+/* biome-ignore lint/style/noDescendingSpecificity: gallery focus styles are scoped independently of toast controls */
+.su-template-card button:focus-visible,
+.su-template-filters select:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+.su-template-card button:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+.su-template-card small {
+  color: var(--foreground-muted);
+}
+.su-template-preview,
+.su-template-card img {
+  display: block;
+  width: 100%;
+  height: 7rem;
+  overflow: hidden;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: var(--text-sm);
+  background: var(--surface-2);
+  padding: var(--space-2);
+}
+.su-template-card img {
+  object-fit: cover;
+}

@@ -33,6 +33,9 @@ import { useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { SuiteFrame } from "@/components/interim-shell/suite-frame";
+import { SaveTemplateDialog } from "@/components/templates/save-template-dialog";
+import { TemplatePicker } from "@/components/templates/template-picker";
+import { usePodSessionState } from "@/lib/session/pod-session";
 import { useNeedsConnection } from "../../../shell/sync/requires-online";
 import { useWorkbook } from "../hooks/use-workbook";
 import type { SaveStatus } from "../lib/autosave";
@@ -197,6 +200,8 @@ function Grid({
 }
 
 export function SheetEditor({ container }: { container: string }) {
+  const templateState = usePodSessionState();
+  const templateSession = templateState.status === "ready" ? templateState.session : undefined;
   const state = useWorkbook(container);
   const sharingConnection = useNeedsConnection();
   const service = useWorkbookService();
@@ -208,7 +213,9 @@ export function SheetEditor({ container }: { container: string }) {
   const fileTrigger = useRef<HTMLButtonElement>(null);
   const loadTheirVersion = useRef<HTMLButtonElement>(null);
   const input = useRef<HTMLInputElement>(null);
-  const [dialog, setDialog] = useState<"import" | "delete" | "share">();
+  const [dialog, setDialog] = useState<
+    "import" | "delete" | "share" | "template" | "fromTemplate"
+  >();
   const [mode, setMode] = useState<"new-sheet" | "replace-active">("new-sheet");
   const [csvFile, setCsvFile] = useState<File>();
   const [importError, setImportError] = useState<string>();
@@ -343,6 +350,12 @@ export function SheetEditor({ container }: { container: string }) {
               >
                 Import CSV
               </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => setDialog("fromTemplate")}>
+                From template…
+              </DropdownMenuItem>
+              <DropdownMenuItem disabled={!engine.current} onSelect={() => setDialog("template")}>
+                Save as template
+              </DropdownMenuItem>
               <DropdownMenuItem onSelect={download}>Download current sheet as CSV</DropdownMenuItem>
               <DropdownMenuItem onSelect={() => void downloadExcel()}>
                 Download as Excel (.xlsx)
@@ -394,6 +407,36 @@ export function SheetEditor({ container }: { container: string }) {
       }
     >
       <div className="sht-editor">
+        {templateSession && (
+          <TemplatePicker
+            session={templateSession}
+            app="sheets"
+            open={dialog === "fromTemplate"}
+            onOpenChange={(open) => {
+              if (!open) setDialog(undefined);
+            }}
+          />
+        )}
+        {templateSession && dialog === "template" && (
+          <SaveTemplateDialog
+            session={templateSession}
+            app="sheets"
+            title={title}
+            open
+            onOpenChange={(open) => {
+              if (!open) setDialog(undefined);
+            }}
+            content={async () => {
+              if (!engine.current) throw new Error("The spreadsheet is still loading");
+              const { serializeSnapshot } = await import("../lib/model/snapshot");
+              return {
+                body: serializeSnapshot(engine.current.snapshot()),
+                contentType: "application/json",
+              };
+            }}
+          />
+        )}
+
         <h1 className="sr-only">{title}</h1>
         {state.workbook && (
           <WorkbookComments

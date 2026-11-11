@@ -338,7 +338,10 @@ export function createDemoPod(options: DemoPodOptions): DemoPod {
     if (isContainerUrl(url)) {
       links.push(`<${LDP}Container>; rel="type"`, `<${LDP}BasicContainer>; rel="type"`);
     }
-    if (url === root) links.push(`<${PIM_STORAGE}>; rel="type"`);
+    if (url === root) {
+      links.push(`<${PIM_STORAGE}>; rel="type"`);
+      links.push(`<${root}>; rel="http://www.w3.org/ns/solid/terms#storageDescription"`);
+    }
     if (!url.endsWith(".acl")) links.push(`<${url}.acl>; rel="acl"`);
     return links.join(", ");
   };

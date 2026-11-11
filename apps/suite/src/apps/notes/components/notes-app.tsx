@@ -6,6 +6,7 @@ import { Grid2X2, List } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { type ReactNode, useEffect, useRef } from "react";
 import { SuiteFrame } from "@/components/interim-shell/suite-frame";
+import { TemplateLauncher } from "@/components/templates/template-picker";
 import { decodeRef } from "@/lib/refs";
 import { useRoutePathname } from "@/lib/route-params";
 import { PodSessionProvider, usePodSessionState } from "@/lib/session/pod-session";
@@ -117,20 +118,23 @@ function NotesChrome({ children }: { children: ReactNode }) {
       sidebar={<NotesSidebar />}
       search={{ placeholder: "Search notes", action: "/notes/search", scopeLabel: "in Notes" }}
       actions={
-        <IconButton
-          label={prefs.view === "grid" ? "List view" : "Grid view"}
-          variant="ghost"
-          aria-pressed={prefs.view === "list"}
-          onClick={() =>
-            updatePrefs((value) => ({ ...value, view: value.view === "grid" ? "list" : "grid" }))
-          }
-        >
-          {prefs.view === "grid" ? (
-            <List size={20} aria-hidden="true" />
-          ) : (
-            <Grid2X2 size={20} aria-hidden="true" />
-          )}
-        </IconButton>
+        <>
+          <TemplateLauncher app="notes" session={session} beforeOpen={refresh} />
+          <IconButton
+            label={prefs.view === "grid" ? "List view" : "Grid view"}
+            variant="ghost"
+            aria-pressed={prefs.view === "list"}
+            onClick={() =>
+              updatePrefs((value) => ({ ...value, view: value.view === "grid" ? "list" : "grid" }))
+            }
+          >
+            {prefs.view === "grid" ? (
+              <List size={20} aria-hidden="true" />
+            ) : (
+              <Grid2X2 size={20} aria-hidden="true" />
+            )}
+          </IconButton>
+        </>
       }
     >
       <NotesRoutes />

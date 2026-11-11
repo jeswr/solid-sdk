@@ -1,0 +1,50 @@
+{
+  "$comment": "AUTHORED-BY Codex GPT-6.1-Sol",
+  "name": "@jeswr/suite-templates",
+  "version": "0.1.0",
+  "description": "Generated template metadata, pod storage and built-in suite templates",
+  "type": "module",
+  "license": "MIT",
+  "securityCritical": false,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "templates.ttl",
+    "templates.shacl.ttl",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json && node scripts/copy-generated.mjs",
+    "codegen": "node node_modules/@jeswr/federation-codegen/dist/cli.js gen --ontology templates.ttl --shapes templates.shacl.ttl --config codegen.config.json --out src/generated",
+    "lint": "biome check src test scripts package.json codegen.config.json vitest.config.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@jeswr/model-runtime": "workspace:*",
+    "@jeswr/storage-client": "workspace:*",
+    "@jeswr/pod-type-index": "workspace:*",
+    "@jeswr/guarded-fetch": "workspace:*",
+    "n3": "^2.0.3"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.1",
+    "@jeswr/federation-codegen": "workspace:*",
+    "@types/node": "^25.9.2",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.9",
+    "@rdfjs/types": "^2.0.1",
+    "@types/n3": "^1.26.1"
+  },
+  "peerDependencies": {
+    "@rdfjs/types": "^2.0.1"
+  }
+}

@@ -15,6 +15,7 @@ import {
   useState,
 } from "react";
 import { SuiteFrame } from "@/components/interim-shell/suite-frame";
+import { TemplateLauncher } from "@/components/templates/template-picker";
 import { decodeRef, encodeRef } from "@/lib/refs";
 import { useRouteParams, useRoutePathname } from "@/lib/route-params";
 import { PodSessionProvider, usePodSessionState } from "@/lib/session/pod-session";
@@ -255,22 +256,21 @@ function TasksChrome({ children }: { children: ReactNode }) {
         sidebar={<TasksSidebar />}
         context={<span className="tsk-context-title">{title}</span>}
         actions={
-          supportsSort || projectUrl ? (
-            <>
-              {activeProject && tasks.sharingAvailable && (
-                <Button variant="outline" onClick={() => setSharing(true)}>
-                  Share
-                </Button>
-              )}
-              {supportsSort && <SortMenu viewId={pathname} />}
-              {projectUrl && (
-                <ViewToggle
-                  projectUrl={projectUrl}
-                  mode={pathname.endsWith("/board") ? "board" : "list"}
-                />
-              )}
-            </>
-          ) : undefined
+          <>
+            <TemplateLauncher app="tasks" />
+            {activeProject && tasks.sharingAvailable && (
+              <Button variant="outline" onClick={() => setSharing(true)}>
+                Share
+              </Button>
+            )}
+            {supportsSort && <SortMenu viewId={pathname} />}
+            {projectUrl && (
+              <ViewToggle
+                projectUrl={projectUrl}
+                mode={pathname.endsWith("/board") ? "board" : "list"}
+              />
+            )}
+          </>
         }
         details={details}
         detailsReturnFocus={detailsReturnFocus}

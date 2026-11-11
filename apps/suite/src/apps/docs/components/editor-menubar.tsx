@@ -86,6 +86,8 @@ export interface EditorMenubarProps extends Partial<VersionMenuProps> {
   setZoom: (value: number) => void;
   rename: () => void;
   copy: () => void;
+  saveTemplate?: () => void;
+  fromTemplate?: () => void;
   remove: () => void;
   importFile: () => void;
   print: () => void;
@@ -172,7 +174,9 @@ export function EditorMenubar(props: EditorMenubarProps) {
         <DropdownMenuItem asChild>
           <Link href="/docs">Open</Link>
         </DropdownMenuItem>
+        {props.fromTemplate && item("From template…", props.fromTemplate, "", false)}
         {item("Make a copy", props.copy, "", props.draft)}
+        {props.saveTemplate && item("Save as template", props.saveTemplate, "", readOnly)}
         <DropdownMenuItem
           disabled={!!shareDisabledReason}
           title={shareDisabledReason}
