@@ -43,7 +43,7 @@ test.beforeEach(async ({ page }) => {
   });
 });
 async function accessible(page: Page) {
-  await expect(page).toHaveTitle("Chat · Chat · Solid Suite");
+  await expect(page).toHaveTitle("Chat · Solid Suite");
   // Radix animates the closing portal; wait for its content to leave the DOM
   // before scanning the full page (keep every axe rule enabled).
   await expect(page.locator("[data-radix-popper-content-wrapper]")).toHaveCount(0);
@@ -117,7 +117,6 @@ test("searches messages and follows a highlighted result to the focused room mes
   await search.press("Enter");
   await expect(page).toHaveURL(/\/chat\/search\?q=garden$/);
   if ((page.viewportSize()?.width ?? 1280) < 1024) {
-    await page.getByRole("button", { name: "Close chat navigation", exact: true }).click();
     await expect(page.getByRole("dialog", { name: "Chat navigation", exact: true })).toBeHidden();
   }
   await expect(page.getByRole("heading", { name: "Search", level: 2, exact: true })).toBeVisible();
@@ -296,4 +295,50 @@ test("keeps offline sends queued and supports multiline text and the edit shortc
   await composer.press("Shift+Enter");
   await composer.press("L");
   await expect(composer).toHaveValue("Line one\nL");
+});
+
+test("slash reaches search with a collapsed desktop sidebar or a closed narrow drawer", async ({
+  page,
+}) => {
+  const main = page.getByRole("main");
+  if ((page.viewportSize()?.width ?? 1280) >= 1024) {
+    await main.focus();
+    await page.keyboard.press("[");
+    await expect(page.locator(".suite-sidebar-slot")).toBeHidden();
+  }
+  await main.focus();
+  await page.keyboard.press("/");
+  await expect(page).toHaveURL(/\/chat\/search$/);
+  const search = page.getByRole("searchbox", {
+    name: "Search messages in joined rooms",
+    exact: true,
+  });
+  await expect(search).toBeVisible();
+  await main.focus();
+  await page.keyboard.press("/");
+  await expect(search).toBeFocused();
+});
+
+test("closes the narrow drawer after selecting a room and returns details focus to its only toggle", async ({
+  page,
+}) => {
+  await createRoom(page, "Drawer room");
+  if ((page.viewportSize()?.width ?? 1280) < 1024) {
+    // Visiting the search page leaves the existing room available in navigation.
+    await page.goto("/chat/search");
+    await page.getByRole("button", { name: "Toggle sidebar", exact: true }).click();
+    const drawer = page.getByRole("dialog", { name: "Chat navigation", exact: true });
+    await drawer.getByRole("link", { name: "Drawer room", exact: true }).click();
+    await expect(drawer).toBeHidden();
+    await expect(page.locator(".chat-room-heading")).toContainText("Drawer room");
+  }
+  await expect(page.getByRole("button", { name: "Show details", exact: true })).toHaveCount(0);
+  const toggle = page.getByRole("button", { name: "Toggle details pane", exact: true });
+  await expect(toggle).toHaveCount(1);
+  await toggle.click();
+  await expect(
+    page.getByRole("heading", { name: "Conversation details", exact: true }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Close details", exact: true }).click();
+  await expect(toggle).toBeFocused();
 });

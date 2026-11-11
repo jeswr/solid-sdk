@@ -442,3 +442,17 @@ it("uses envelope empty states with equal Button sizes and no skipped heading le
   ).toEqual(["default", "default"]);
   await view.unmount();
 });
+
+it("keeps split-view thread and empty headings below the shell page heading", async () => {
+  mocks.params.set("t", encodeRef(conversation.iri));
+  const view = await mount(
+    h(AccountsContext, { value: shellTestAccounts() }, h(FolderPage, { folderKey: "inbox" })),
+  );
+  expect(view.host.querySelector("h2")?.textContent).toBe("Inbox");
+  expect(view.host.querySelector(".mail-thread h3")?.textContent).toBe(conversation.subject);
+  mocks.params.delete("t");
+  await view.render(
+    h(AccountsContext, { value: shellTestAccounts() }, h(FolderPage, { folderKey: "inbox" })),
+  );
+  expect(view.host.querySelector(".mail-empty h3")?.textContent).toBe("Choose a conversation");
+});

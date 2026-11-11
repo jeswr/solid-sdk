@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect } from "react";
 import { useAppShell } from "@/shell/app-frame";
 import { characterShortcutsEnabled } from "@/shell/lib/shortcut-settings";
-import { isEditableTarget } from "@/shell/lib/shortcuts";
+import { isShortcutLayerTarget } from "@/shell/lib/shortcuts";
 import { useRegisteredShortcuts, useShortcut } from "@/shell/shortcuts/provider";
 import { useChat } from "../state/chat-context";
 
@@ -18,26 +18,19 @@ export function ChatShortcuts() {
   const inShell = useAppShell();
   const focusSearch = useCallback(
     (target: EventTarget | null) => {
-      if (isEditableTarget(target)) return false;
-      if (target instanceof Element) {
-        if (target.closest('[role="alertdialog"],[role="menu"],[role="listbox"]')) return false;
-        const dialog = target.closest('dialog,[role="dialog"]');
-        // The navigation drawer owns a search field; other dialogs keep their keys.
-        if (dialog && !dialog.querySelector(conversations)) return false;
-      }
-      const field =
-        document.querySelector<HTMLInputElement>(
-          `[role="dialog"] ${conversations} [data-chat-search]`,
-        ) ?? document.querySelector<HTMLInputElement>('[data-chat-search="page"]');
+      if (isShortcutLayerTarget(target, conversations)) return false;
+      const selectors = [
+        `[role="dialog"] ${conversations} [data-chat-search]`,
+        '[data-chat-search="page"]',
+        ...(!window.matchMedia("(max-width: 1023px)").matches
+          ? [`${conversations} [data-chat-search]`]
+          : []),
+      ];
+      const field = selectors
+        .map((selector) => document.querySelector<HTMLInputElement>(selector))
+        .find((input) => input && (input.checkVisibility?.() ?? input.getClientRects().length > 0));
       if (field) field.focus();
-      else if (window.matchMedia("(max-width: 1023px)").matches) router.push("/chat/search");
-      else {
-        const sidebar = document.querySelector<HTMLInputElement>(
-          `${conversations} [data-chat-search]`,
-        );
-        if (!sidebar) return false;
-        sidebar.focus();
-      }
+      else router.push("/chat/search");
       return true;
     },
     [router],
@@ -48,13 +41,13 @@ export function ChatShortcuts() {
     scope: "app",
     group: "Chat",
     label: "Focus chat search",
-    // Keep the binding ahead of global search even when a dialog owns the key.
+    when: () => !isShortcutLayerTarget(document.activeElement, conversations),
     run: () => focusSearch(document.activeElement),
   });
   // Our registered binding also detects standalone hosts with a ShortcutsProvider.
   const registered = useRegisteredShortcuts().some((shortcut) => shortcut.id === searchId);
   useEffect(() => {
-    if (inShell || registered) return;
+    if (inShell) return;
     const shortcut = (event: KeyboardEvent) => {
       if (
         event.defaultPrevented ||
@@ -62,11 +55,11 @@ export function ChatShortcuts() {
         event.metaKey ||
         event.ctrlKey ||
         event.altKey ||
-        isEditableTarget(event.target) ||
+        isShortcutLayerTarget(event.target, conversations) ||
         !characterShortcutsEnabled()
       )
         return;
-      if (event.key === "/" && focusSearch(event.target)) event.preventDefault();
+      if (event.key === "/" && !registered && focusSearch(event.target)) event.preventDefault();
       if (event.key === "]") {
         event.preventDefault();
         setDetails(!details);

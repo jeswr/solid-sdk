@@ -18,7 +18,7 @@ import {
 } from "@jeswr/suite-ui/shell";
 import { OfflinePill } from "@jeswr/suite-ui/sync";
 import { useRouter } from "next/navigation";
-import { type ReactNode, Suspense, useEffect, useState } from "react";
+import { type ReactNode, Suspense, useEffect, useRef, useState } from "react";
 import { useRoutePathname } from "@/lib/route-params";
 import { WalkthroughDock } from "@/welcome/walkthrough";
 import { AccountMenu } from "./account/account-menu";
@@ -72,12 +72,23 @@ function Frame({
   const { characterKeys } = useShortcutSettings();
   const env = useSuiteEnvironment();
   const app = appRegistry.find((item) => item.slug === slug);
-  const title = app ? `${pageTitle} · ${app.name} · Solid Suite` : undefined;
+  const title = app
+    ? `${pageTitle === app.name ? app.name : `${pageTitle} · ${app.name}`} · Solid Suite`
+    : undefined;
   useEffect(() => {
     if (title) document.title = title;
   }, [title]);
   useRecentTitle(title);
   const [preferences, setPreferences] = useState<ShellPreferences>(defaultShellPreferences);
+  const previousPathname = useRef(pathname);
+  useEffect(() => {
+    if (previousPathname.current === pathname) return;
+    previousPathname.current = pathname;
+    if (!window.matchMedia("(min-width: 1024px)").matches)
+      setPreferences((current) =>
+        current.sidebarOpen ? { ...current, sidebarOpen: false } : current,
+      );
+  }, [pathname]);
   const [rail, setRail] = useState<RailPreferences>(() => parseRailPreferences(null));
   useEffect(() => {
     try {

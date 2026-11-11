@@ -77,7 +77,7 @@ export function MailEmptyState({
       <span className="suite-async-tile" aria-hidden="true">
         <Mail size={24} strokeWidth={1.5} />
       </span>
-      <h2>{title}</h2>
+      <AppHeading level={2}>{title}</AppHeading>
       <p>{body}</p>
       {(primaryAction || secondaryAction) && (
         <div className="suite-async-actions">

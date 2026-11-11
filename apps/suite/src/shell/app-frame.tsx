@@ -26,8 +26,9 @@ export function useAppShell() {
 const appTitles = { home: "Home", drive: "Drive", mail: "Mail", chat: "Chat" } as const;
 type AppFrameProps = Omit<SuiteFrameProps, "app"> & {
   app: keyof typeof appTitles;
-  /** Keep details content available while closed so the shell can reopen it. */
+  /** Advertise a controlled pane even while its content is unmounted. */
   detailsOpen?: boolean;
+  detailsTitle?: string;
   onDetailsOpenChange?: (open: boolean) => void;
 };
 
@@ -49,7 +50,12 @@ export function AppSessionGuard({ children }: { children: React.ReactNode }) {
 }
 
 /** Apps retain their sidebar and details; the shell owns global navigation and account UI. */
-export function AppFrame({ detailsOpen, onDetailsOpenChange, ...props }: AppFrameProps) {
+export function AppFrame({
+  detailsOpen,
+  detailsTitle,
+  onDetailsOpenChange,
+  ...props
+}: AppFrameProps) {
   const accounts = useShellAccounts();
   if (!accounts) return <SuiteFrame {...props} />;
   const title = appTitles[props.app];
@@ -62,11 +68,11 @@ export function AppFrame({ detailsOpen, onDetailsOpenChange, ...props }: AppFram
         context={props.context}
         actions={props.actions}
         search={props.search ? <SearchBox search={props.search} /> : undefined}
-        {...(props.details
+        {...(props.details || detailsOpen !== undefined
           ? {
               details: {
-                title: "Details",
-                children: props.details,
+                title: detailsTitle ?? "Details",
+                children: detailsOpen === false ? null : props.details,
                 open: detailsOpen ?? true,
                 onOpenChange:
                   onDetailsOpenChange ?? ((open: boolean) => !open && props.onDetailsClose?.()),
@@ -81,7 +87,8 @@ export function AppFrame({ detailsOpen, onDetailsOpenChange, ...props }: AppFram
 }
 
 /** ShellFrame supplies the page h1; app content keeps its heading in standalone previews. */
-export function AppHeading(props: ComponentProps<"h1">) {
+export function AppHeading({ level = 1, ...props }: ComponentProps<"h1"> & { level?: 1 | 2 }) {
   const accounts = useShellAccounts();
-  return accounts ? <h2 {...props} /> : <h1 {...props} />;
+  const Heading = level === 2 ? (accounts ? "h3" : "h2") : accounts ? "h2" : "h1";
+  return <Heading {...props} />;
 }

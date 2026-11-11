@@ -2679,23 +2679,6 @@
         }
       ]
     },
-    "47636ce0e6ab87ad4f49cf03ae793768892a3fa7f213d5932ac59b6e7ff759b0": {
-      "tokens": 207,
-      "locations": [
-        {
-          "file": "apps/suite/src/apps/chat/components/chat-app.tsx",
-          "startLine": 249,
-          "endLine": 294,
-          "tokens": 207
-        },
-        {
-          "file": "apps/suite/src/apps/mail/components/mail-app.tsx",
-          "startLine": 23,
-          "endLine": 68,
-          "tokens": 207
-        }
-      ]
-    },
     "49a45a7600dec8b150008fd3ab0a508ae8e21bd15022c99f834a8ffc3a64068e": {
       "tokens": 242,
       "locations": [

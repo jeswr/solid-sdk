@@ -9,11 +9,14 @@ import { ChatApp, ChatLanding } from "../src/apps/chat/components/chat-app";
 import { RoomView } from "../src/apps/chat/components/room";
 import { ChatSearchPage } from "../src/apps/chat/components/search";
 import { ChatClient } from "../src/apps/chat/lib/client";
+import { useChat } from "../src/apps/chat/state/chat-context";
 import { MailApp } from "../src/apps/mail/components/mail-app";
 import { FolderPage } from "../src/apps/mail/components/views";
 import { createDemoPod } from "../src/lib/demo-pod/pod";
 import type { PodSession } from "../src/lib/session/pod-session";
 import { AppFrame, AppHeading } from "../src/shell/app-frame";
+import { AppSession } from "../src/shell/app-session";
+import { isShortcutLayerTarget } from "../src/shell/lib/shortcuts";
 import { AccountsContext } from "../src/shell/session/accounts-context";
 import type { AccountsContextValue } from "../src/shell/session/accounts-provider";
 import { GlobalShortcuts } from "../src/shell/shortcuts/global-shortcuts";
@@ -29,6 +32,8 @@ import { shellTestAccounts } from "./shell-test-accounts";
 const mocks = vi.hoisted(() => ({
   session: undefined as PodSession | undefined,
   podProvider: vi.fn(),
+  podStatus: "ready" as "ready" | "loading" | "signed-out" | "error",
+  mode: "demo" as "demo" | "extension",
   router: { push: vi.fn(), replace: vi.fn() },
 }));
 vi.mock("next/navigation", () => ({
@@ -44,7 +49,7 @@ vi.mock("../src/lib/session/pod-session", () => ({
     mocks.podProvider();
     return children;
   },
-  usePodSessionState: () => ({ status: "ready", session: mocks.session }),
+  usePodSessionState: () => ({ status: mocks.podStatus, session: mocks.session, mode: mocks.mode }),
 }));
 vi.mock("../src/shell/app-frame-loaders", () => ({
   loadShell: async () => ({ SuiteShell: TestShell }),
@@ -108,6 +113,8 @@ function setup() {
   return new ChatClient(pod.fetch, ROOT, ME);
 }
 beforeEach(() => {
+  mocks.podStatus = "ready";
+  mocks.mode = "demo";
   localStorage.clear();
   vi.clearAllMocks();
   vi.spyOn(window, "matchMedia").mockImplementation((media) => ({
@@ -120,6 +127,14 @@ beforeEach(() => {
     removeListener() {},
     dispatchEvent: () => true,
   }));
+});
+// jsdom has no layout; model visible search fields while retaining hidden ancestors.
+beforeEach(() => {
+  vi.spyOn(HTMLInputElement.prototype, "getClientRects").mockImplementation(function (
+    this: HTMLInputElement,
+  ) {
+    return (this.closest("[hidden]") ? [] : [new DOMRect(0, 0, 200, 32)]) as unknown as DOMRectList;
+  });
 });
 afterEach(() => vi.restoreAllMocks());
 
@@ -284,13 +299,15 @@ it("prefers Chat's page field and excludes dialogs, menus, listboxes and editabl
   await act(() => main.focus());
   await key(main, "/");
   expect(document.activeElement).toBe(main.querySelector('[data-chat-search="page"]'));
-  for (const role of ["dialog", "alertdialog", "menu", "listbox", "textbox"]) {
+  for (const role of ["dialog", "alertdialog", "menu", "listbox", "textbox", "combobox"]) {
     const layer = document.createElement("div");
     layer.setAttribute("role", role);
     layer.tabIndex = 0;
     main.append(layer);
     await act(() => layer.focus());
-    await key(layer, "/");
+    const event = new KeyboardEvent("keydown", { key: "/", bubbles: true, cancelable: true });
+    await act(() => layer.dispatchEvent(event));
+    expect(event.defaultPrevented).toBe(false);
     expect(document.activeElement).toBe(layer);
     layer.remove();
   }
@@ -321,6 +338,153 @@ it("uses Chat's drawer search ahead of the page field, and navigates to search o
   await act(() => close.focus());
   await key(close, "/");
   expect(document.activeElement).toBe(drawer.querySelector("[data-chat-search]"));
-  await click(drawer.querySelector('a[href="/chat/new"]') as Element);
+  await key(close, "Escape");
   expect(document.querySelector('[role="dialog"]')).toBeNull();
+});
+
+it("navigates slash to Chat search when the desktop sidebar is collapsed", async () => {
+  setup();
+  const view = await mount(shell(h(ChatApp, { children: h(ChatLanding) })));
+  const main = view.host.querySelector("main") as HTMLElement;
+  await key(main, "[");
+  expect(view.host.querySelector(".suite-sidebar-slot")?.hasAttribute("hidden")).toBe(true);
+  await act(() => main.focus());
+  await key(main, "/");
+  expect(mocks.router.push).toHaveBeenCalledExactlyOnceWith("/chat/search");
+  expect(document.activeElement).toBe(main);
+});
+
+it("does not read Chat details while closed, including after invalidation, and uses one toggle", async () => {
+  const client = setup();
+  const room = await client.createRoom({ name: "Lazy details", members: [] });
+  const files = vi.spyOn(ChatClient.prototype, "files");
+  const readRoom = vi.spyOn(ChatClient.prototype, "room");
+  function Invalidate() {
+    const { invalidate } = useChat();
+    return h("button", { onClick: invalidate }, "Invalidate");
+  }
+  const view = await mount(
+    shell(h(ChatApp, { children: h("div", null, h(RoomView, { url: room.url }), h(Invalidate)) })),
+  );
+  const reads = readRoom.mock.calls.length;
+  expect(files).not.toHaveBeenCalled();
+  expect(view.host.querySelector(".chat-details")).toBeNull();
+  expect(view.host.querySelector('[aria-label="Show details"]')).toBeNull();
+  const toggle = view.host.querySelector('[aria-label="Toggle details pane"]') as HTMLElement;
+  await click(toggle);
+  expect(files).toHaveBeenCalledExactlyOnceWith(room.url);
+  expect(readRoom.mock.calls.length).toBe(reads + 1);
+  expect(
+    [...view.host.querySelectorAll("h2")].filter((el) => el.textContent === "Conversation details"),
+  ).toHaveLength(1);
+  await click(view.host.querySelector('[aria-label="Close details"]') as Element);
+  expect(document.activeElement).toBe(toggle);
+  expect(view.host.querySelector(".chat-details")).toBeNull();
+  files.mockClear();
+  await click(
+    [...view.host.querySelectorAll("button")].find(
+      (el) => el.textContent === "Invalidate",
+    ) as Element,
+  );
+  expect(files).not.toHaveBeenCalled();
+});
+
+it("does not repeat Chat's app heading on the empty shell page", async () => {
+  setup();
+  const view = await mount(shell(h(ChatApp, { children: h(ChatLanding) })));
+  expect([...view.host.querySelectorAll("main h1, main h2")].map((el) => el.textContent)).toEqual([
+    "Chat",
+    "Conversations",
+  ]);
+});
+
+it.each([MailApp, ChatApp])("gives session states outside AppFrame an h1 (%s)", async (App) => {
+  for (const wrapped of [false, true]) {
+    for (const status of ["signed-out", "error"] as const) {
+      mocks.podStatus = status;
+      const content = h(App, { children: null });
+      const view = await mount(wrapped ? shell(content) : content);
+      expect(view.host.querySelectorAll("h1")).toHaveLength(1);
+      expect(view.host.querySelector("h2")).toBeNull();
+      expect(view.host.querySelector(".suite-shell")).toBeNull();
+      if (status === "error") {
+        expect(view.host.textContent).toContain("demo pod's storage");
+        expect(view.host.querySelector("button")?.textContent).toBe("Retry");
+      }
+      await view.unmount();
+    }
+  }
+});
+
+it("shares layer exclusions between app and global shortcuts, with navigation drawer opt-in", () => {
+  expect(isShortcutLayerTarget(null)).toBe(false);
+  expect(isShortcutLayerTarget(new EventTarget())).toBe(false);
+  const dialog = document.createElement("dialog");
+  const button = document.createElement("button");
+  const nav = document.createElement("nav");
+  dialog.append(button, nav);
+  expect(isShortcutLayerTarget(button)).toBe(true);
+  expect(isShortcutLayerTarget(button, "nav")).toBe(false);
+  expect(isShortcutLayerTarget(button, "form")).toBe(true);
+});
+
+it("preserves the shared boundary's loading and error copy, and resets providers only on session identity changes", async () => {
+  setup();
+  mocks.podStatus = "loading";
+  const sessionTree = () =>
+    h(AppSession, {
+      name: "Mail",
+      className: "mail-boot",
+      retry: true,
+      children: () => h(Stateful),
+    });
+  function Stateful() {
+    const [count, setCount] = useState(0);
+    return h("button", { onClick: () => setCount(count + 1) }, String(count));
+  }
+  const view = await mount(sessionTree());
+  expect(view.host.querySelector('[role="status"]')?.textContent).toBe("Opening your Mail…");
+  mocks.podStatus = "error";
+  mocks.mode = "extension";
+  await view.render(sessionTree());
+  expect(view.host.querySelector('[role="alert"]')?.textContent).toContain("Solid extension");
+  const reload = vi.fn();
+  const previousLocation = globalThis.location;
+  vi.stubGlobal("location", { reload });
+  await click(view.host.querySelector("button") as Element);
+  expect(reload).toHaveBeenCalledOnce();
+  vi.stubGlobal("location", previousLocation);
+  mocks.podStatus = "ready";
+  await view.render(sessionTree());
+  await click(view.host.querySelector("button") as Element);
+  await view.render(sessionTree());
+  expect(view.host.querySelector("button")?.textContent).toBe("1");
+  if (!mocks.session) throw new Error("Expected session fixture");
+  mocks.session = { ...mocks.session, webId: "https://bob.example/#me" };
+  await view.render(sessionTree());
+  expect(view.host.querySelector("button")?.textContent).toBe("0");
+});
+
+it("returns focus to Chat's sole details toggle after closing the narrow sheet", async () => {
+  const client = setup();
+  const room = await client.createRoom({ name: "Narrow details", members: [] });
+  vi.mocked(window.matchMedia).mockImplementation((media) => ({
+    matches: media === "(max-width: 1023px)",
+    media,
+    addEventListener() {},
+    removeEventListener() {},
+    onchange: null,
+    addListener() {},
+    removeListener() {},
+    dispatchEvent: () => true,
+  }));
+  const view = await mount(shell(h(ChatApp, { children: h(RoomView, { url: room.url }) })));
+  const toggle = view.host.querySelector('[aria-label="Toggle details pane"]') as HTMLElement;
+  expect(view.host.querySelector('[aria-label="Show details"]')).toBeNull();
+  await act(() => toggle.focus());
+  await click(toggle);
+  expect(document.querySelector('[role="dialog"] .chat-details')).not.toBeNull();
+  await click(document.querySelector('[aria-label="Close details"]') as Element);
+  expect(document.querySelector('[role="dialog"]')).toBeNull();
+  expect(document.activeElement).toBe(toggle);
 });

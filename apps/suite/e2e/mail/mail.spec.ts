@@ -41,7 +41,7 @@ async function capture(page: Page, info: TestInfo, view: string) {
   await page.screenshot({ path: `${directory}/${info.project.name}-${view}.png`, fullPage: true });
 }
 async function accessible(page: Page) {
-  await expect(page).toHaveTitle("Mail · Mail · Solid Suite");
+  await expect(page).toHaveTitle("Mail · Solid Suite");
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 }
@@ -52,7 +52,6 @@ async function nav(page: Page, folder: string) {
       .getByRole("dialog", { name: "Mail navigation", exact: true })
       .getByRole("link", { name: new RegExp(`^${folder}(?: \\d+ unread)?$`) })
       .click();
-    await page.getByRole("button", { name: "Close mail navigation", exact: true }).click();
     await expect(page.getByRole("dialog", { name: "Mail navigation", exact: true })).toBeHidden();
   } else
     await page
@@ -120,7 +119,7 @@ test("imports, reads with the keyboard, stars, archives and searches a mailbox",
   );
   if ((page.viewportSize()?.width ?? 1280) < 1024) {
     const drawer = page.getByRole("dialog", { name: "Mail navigation", exact: true });
-    await drawer.getByRole("button", { name: "Close mail navigation", exact: true }).click();
+    await page.keyboard.press("Escape");
     await expect(drawer).toBeHidden();
   }
   const iri = await rows.first().getAttribute("data-thread");
@@ -143,7 +142,7 @@ test("imports, reads with the keyboard, stars, archives and searches a mailbox",
   if (!iri) throw new Error("The imported thread has no resource identifier");
   await page.goto(`/mail/inbox?t=${encodeRef(iri)}`);
   await expect(
-    page.getByRole("heading", { name: "Saturday at the garden", exact: true, level: 2 }),
+    page.getByRole("heading", { name: "Saturday at the garden", exact: true, level: 3 }),
   ).toBeVisible();
   await accessible(page);
   // Also verify the full thread deep link on the wide layout.
@@ -193,7 +192,7 @@ test("shows import ZIP guidance and query errors without losing navigation", asy
   page,
 }, info) => {
   await page.goto("/mail/inbox");
-  await expect(page.getByRole("heading", { name: "No mail yet", level: 2 })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "No mail yet", level: 3 })).toBeVisible();
   await accessible(page);
   await capture(page, info, "empty");
   await page.goto("/mail/import");
@@ -238,4 +237,23 @@ test("composes, saves, edits and discards a draft in the pod", async ({ page }, 
   await expect(page.getByRole("link", { name: /Allotment rota/ })).toHaveCount(0);
   await page.goto("/mail/compose?draft=not-a-ref");
   await expect(page.getByRole("heading", { name: "This draft isn't here any more" })).toBeVisible();
+});
+
+test("closes narrow Mail navigation after a folder change and lets Escape close it after reopening", async ({
+  page,
+}) => {
+  test.skip((page.viewportSize()?.width ?? 1280) >= 1024, "Narrow navigation drawer");
+  await page.goto("/mail/inbox");
+  const toggle = page.getByRole("button", { name: "Toggle sidebar", exact: true });
+  const drawer = page.getByRole("dialog", { name: "Mail navigation", exact: true });
+  await toggle.click();
+  await drawer.getByRole("link", { name: "Archive", exact: true }).click();
+  await expect(page).toHaveURL(/\/mail\/archive$/);
+  await expect(drawer).toBeHidden();
+  await expect(page.getByRole("heading", { name: "Archive", level: 2, exact: true })).toBeVisible();
+  await toggle.click();
+  await expect(drawer).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(drawer).toBeHidden();
+  await expect(toggle).toBeFocused();
 });

@@ -184,7 +184,7 @@
   min-width: 0;
   padding: var(--space-3);
 }
-.mail-thread :is(h1, h2) {
+.mail-thread :is(h1, h2, h3) {
   font-size: var(--text-xl);
   line-height: 1.4;
   font-weight: 600;
@@ -458,7 +458,7 @@
   clip-path: inset(50%);
 }
 
-.mail-empty h2 {
+.mail-empty :is(h2, h3) {
   margin: 0 0 var(--space-1);
   font-size: var(--text-md);
   line-height: var(--lh-md);

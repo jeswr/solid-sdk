@@ -108,7 +108,7 @@ export function ChatSearchPage({ query }: { query: string }) {
       ) : search.status === "error" ? (
         queryError ? (
           <div role="alert">
-            <h2>Check your search</h2>
+            <AppHeading level={2}>Check your search</AppHeading>
             <p>Use the filter examples above and a valid date or time zone.</p>
           </div>
         ) : (

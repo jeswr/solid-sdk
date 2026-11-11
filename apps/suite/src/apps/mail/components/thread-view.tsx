@@ -196,7 +196,6 @@ export function ThreadView({
   back?: string;
   headingLevel?: 1 | 2;
 }) {
-  const Heading = headingLevel === 1 ? AppHeading : "h2";
   const state = useThread(iri);
   const folders = useFolders();
   const { client, invalidate } = useMail();
@@ -256,7 +255,7 @@ export function ThreadView({
                   <Star size={18} fill={starred ? "currentColor" : "none"} aria-hidden="true" />
                 </IconButton>
               </div>
-              <Heading>{thread.subject}</Heading>
+              <AppHeading level={headingLevel}>{thread.subject}</AppHeading>
               <div className="mail-chips">
                 {labels.map((iri) => {
                   const folder = folders.data?.find((f) => f.iri === iri);
