@@ -111,6 +111,8 @@ it.each(entries)("resolves the declared %s surface", (subpath, target) => {
       "./github",
       "./graph-mail",
       "./graph-mail/send",
+      "./graph-teams",
+      "./graph-teams/send",
       "./mastodon",
       "./mastodon/send",
       "./discord",
@@ -153,6 +155,13 @@ it("keeps Graph mail sending out of the root and reader surfaces", () => {
   expect(entry4).toHaveProperty("createGraphMailReader");
   expect(entry4).not.toHaveProperty("createGraphMailSend");
   expect(entry20).toHaveProperty("createGraphMailSend");
+});
+
+it("keeps Teams sending on its executor subpath", () => {
+  expect(entry0).not.toHaveProperty("createGraphTeamsSend");
+  expect(entry5).toHaveProperty("createGraphTeamsReader");
+  expect(entry5).not.toHaveProperty("createGraphTeamsSend");
+  expect(entry21).toHaveProperty("createGraphTeamsSend");
 });
 
 it("keeps Mastodon sending out of root and reader exports", () => {

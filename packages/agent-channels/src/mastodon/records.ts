@@ -2,8 +2,8 @@
 import { digestBytes, parseBoundedJson } from "@jeswr/agent-model";
 import type { InboundRawMessage } from "../channel.js";
 import { ChannelParseError } from "../errors.js";
+import { htmlToText } from "../html.js";
 import type { BridgeMessage } from "../message.js";
-import { decodeEntities } from "./entities.js";
 import { handle, id, JSON_LIMITS, MAX_RECORD_BYTES, record } from "./rest.js";
 
 export type Source = "notifications" | "conversations";
@@ -18,19 +18,6 @@ function clean(text: string): string {
 function plainText(value: unknown): string {
   if (typeof value !== "string") throw new ChannelParseError("invalid Mastodon text");
   return clean(value).trim();
-}
-/** A plain-text projection only. No provider markup, attributes or links are followed. */
-function htmlText(value: unknown): string {
-  if (typeof value !== "string") throw new ChannelParseError("invalid Mastodon text");
-  return clean(
-    decodeEntities(
-      value
-        .replace(/<(script|style)\b[^>]*>[\s\S]*?<\/\1\s*>/gi, "")
-        .replace(/<!--[\s\S]*?-->/g, "")
-        .replace(/<br\s*\/?\s*>|<\/p\s*>/gi, "\n")
-        .replace(/<[^>]*>/g, ""),
-    ).replaceAll("\u00a0", " "),
-  ).trim();
 }
 export function parseRecord(
   origin: string,
@@ -74,7 +61,7 @@ export function parseRecord(
       if (typeof status.visibility !== "string")
         throw new ChannelParseError("invalid Mastodon visibility");
       signals["mastodon-visibility"] = status.visibility;
-      textBody += `${textBody ? "\n" : ""}${plainText(status.spoiler_text ?? "")}${status.spoiler_text ? "\n" : ""}${htmlText(status.content)}`;
+      textBody += `${textBody ? "\n" : ""}${plainText(status.spoiler_text ?? "")}${status.spoiler_text ? "\n" : ""}${htmlToText(status.content)}`;
     }
     const date = source === "conversations" ? status?.created_at : row.created_at;
     if (typeof date !== "string" || !Number.isFinite(Date.parse(date)))

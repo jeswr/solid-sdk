@@ -12,6 +12,17 @@ implements the contracts, shared legacy message/adapter shapes, frozen carriage
 profiles, capability RDF, guarded origins and the in-memory direct test binding.
 Provider modules remain reserved for their individual tasks.
 
+A-025 implements `./graph-teams` (`createGraphTeamsReader`, `ORIGINS`) and the
+executor-only `./graph-teams/send` (`createGraphTeamsSend`). Ingest uses Graph-only
+bounded collection paging with resumable, account-scoped pending messages; channel
+403s degrade the RDF descriptor without disabling chats. Use a reader per tenant/account.
+Share HTML projection and envelope codecs. `teams-card/0.1` carries the envelope
+in Adaptive Card `data.envelope`, with matching visible text, a text body and the
+required footer. Bind sender account, pinned chat and exact request in the approved
+wire. Reads retry 429/503 with injected sleep/clock under attempt and wait bounds;
+POST never retries because Graph chat sends have no idempotency key. No lookup or
+final absence is advertised. See the README for poll, byte and consent limits.
+
 Follow ADR-001 D4: Node >=24, ESM exports, workspace dependencies, strict TypeScript,
 Biome, and Vitest. Maintain 100% branches/functions/lines/statements coverage.
 
