@@ -171,6 +171,16 @@ env_vars = ["SOLID_MCP_POD_ROOT", "SOLID_MCP_WEBID", "SOLID_MCP_READONLY", "SOLI
   List/read/write aliases retain the same schemas, output and read-only enforcement.
   `solid_search` retains its optional scope and ranked array response.
 
+`pod_write({url, content, contentType, ifMatch?})` and `writeResource(source, url,
+content, contentType, ifMatch?)` create resources with `If-None-Match: *` by default.
+An existing resource is refused: read it first and pass its exact strong ETag as
+`ifMatch` to replace it with `If-Match`. Wildcards, weak tags and validator lists
+are refused. Concurrent creates or edits return a conflict with the same read-first
+guidance; no unconditional overwrite is available through generic tools.
+`pod_read` and `solid_read` retain their content in the first text block and add
+`ETag: <value>` in a second block when available. `fetch` supplies `metadata.etag`.
+Projected container representations omit the source ETag.
+
 ## Portable pod access
 
 ```ts
@@ -192,7 +202,8 @@ are refused when it is omitted. Resource credentials stay within the pod.
 Discovery failures propagate without choosing a fallback backend.
 The adapter refuses redirects. Solid create-only writes keep their exact URL and
 `If-None-Match: *`; LWS create-only writes fail before mutation because LWS names are
-hints. Updates preserve `ifMatch`; deletion without a supplied validator first reads
+hints. Updates require a strong `ifMatch`; empty write conditions are refused.
+Deletion without a supplied validator first reads
 an ETag and refuses deletion when none is available. Container writes require create-only
 conditions and accept empty bodies or LDP container types; other container metadata
 is refused before mutation. Exact named creates reject URL spellings the backend would rewrite.
@@ -203,7 +214,11 @@ the fetch capability while pod operations use the supplied port.
 `PodPort` exposes raw-byte `read`, `list`, conditional `write` and `delete`, `root` and
 `webId`. Its optional `head` returns `PodHeadResult.acl`, an absolute WAC ACL URL
 discovered from a unique, unanchored `rel="acl"` Link on the exact target, including
-HTTP 404 for resources not yet created. HEAD refuses redirects. Optional
+HTTP 404 for resources not yet created. It also returns `exists` and
+`auxiliaryResources`: the complete absolute URLs advertised by `acl`, `describedby`
+and ACP `http://www.w3.org/ns/solid/acp#accessControl` relations. An empty array
+means successful discovery with no such links; an absent field means unknown.
+HEAD refuses redirects. Optional
 `PodReadOptions.accept` selects a representation; generic reads keep
 the backend default, while RDF/profile reads request RDF explicitly. The fetch adapter retains listing metadata, ETags, guarded read redirects,
 and refusal of all mutation redirects. Mutations reject the root and its slashless
@@ -235,6 +250,20 @@ access this area; personal reads still require the current purpose policy and,
 for sensitive data, a verified audit append. Generic reads and mutations return
 the fixed diagnostic `Personal data requires a purpose-limited tool`, without
 echoing a URL. Generic writes/deletes also refuse ancestors of the reserved area.
+
+Generic writes and deletes also refuse decoded filename suffixes `.acl`, `.acr`
+and `.meta`, regardless of case, including repeatedly encoded aliases. Before a
+mutation, `PodOutput` HEADs the target and its parent through the current PodPort.
+It refuses any target advertised by either as a WAC ACL, ACP access-control or
+description resource, including URLs without a reserved suffix. Redirects, failed
+HEAD requests (including 401/403/405), malformed/anchored Link metadata, absent
+HEAD support, or missing `auxiliaryResources` fail closed with
+`Access-control and description discovery unavailable; mutation refused`.
+A successful 404 still supplies discovery metadata for a not-yet-created target.
+Custom ports must return complete auxiliary metadata to enable generic mutations.
+Dedicated memory and audit ACL provisioning retains its existing protected-area
+and purpose checks.
+
 Listings, search candidates/results, Type Index hints, container projections and
 MCP resource enumeration omit protected children before reading them. Redirect
 hops and returned aliases receive the same checks, including slashless containers,
@@ -436,9 +465,12 @@ and address reads remain available on a read-only server when permitted.
 ## Chat tools
 
 All four tools use `@jeswr/solid-chat-interop`'s reusable `ChatWriter` and require
-`webId` to identify the owner. `chat_save` also requires `readOnly:false`.
+`webId` to identify the owner. Chat reads work with owner-provisioned storage.
+`chat_save` currently fails closed: `ChatWriter` requires ACL writes, which the
+generic MCP mutation boundary refuses, including nonstandard advertised ACL URLs.
 
-- `chat_save({provider, conversationId, title, messages})` returns `{url, saved, skipped}`.
+- `chat_save({provider, conversationId, title, messages})` requires `readOnly:false`
+  and currently returns an error before ACL or chat-content mutation.
   Messages are `{id?, role, text, createdAt}`. Providers: `claude`, `chatgpt`, `codex`.
   Roles: `system`, `user`, `assistant`, `tool`; dates require an explicit timezone.
 - `chat_list({provider?, since?, cursor?, limit?})` returns `{conversations, nextCursor?}`.
@@ -452,18 +484,12 @@ All four tools use `@jeswr/solid-chat-interop`'s reusable `ChatWriter` and requi
   conversation as a Markdown transcript to paste into another account. Titles and
   text are redacted again on export, and each message sits in its own code fence.
 
-Storage is `<podRoot>private/chats/<provider>/<conversationId>/`, with owner-only
-WAC ACLs written before chat content and create-only message PUTs using
-`If-None-Match: *`. First title and message contents win; retrying an existing ID
-skips it. IDs use 1–200 letters, digits, underscores or hyphens. Omitted message IDs
-are deterministic hashes; capture callers should supply source IDs to distinguish
-otherwise identical events. The fetch adapter retains pod-scope and redirect checks
-and accepts only Turtle/N3-family RDF for chats, preventing remote JSON-LD context
-loads. Servers must support the ACL-before-content sequence; errors fail closed.
-ACL discovery uses HEAD and a unique WAC `rel="acl"` Link, including on 404 for
-containers not yet created. Missing/ambiguous ACL links, ACP and unsafe ACL URLs
-abort saves; ACL associations are rechecked after container creation. Writes refuse
-all redirects. Listing skips containers whose conversation metadata returns 404,
+Storage is `<podRoot>private/chats/<provider>/<conversationId>/`. IDs use 1–200
+letters, digits, underscores or hyphens. The fetch adapter retains pod-scope and
+redirect checks and accepts only Turtle/N3-family RDF for chats, preventing remote
+JSON-LD context loads. The ACL-before-content sequence is refused at its first ACL
+write; there is no fallback to inherited permissions or unprotected chat content.
+Listing skips containers whose conversation metadata returns 404,
 while preserving permission, transport and message-read errors.
 
 Chat tools are registered alongside the canonical pod tools and compatibility
@@ -536,3 +562,5 @@ The public exports `loadCliConfig(env?, home?)`, `createCliFetch(config, fetch?)
 and `createChatPodPort(config)` let `@jeswr/agent-session-capture` reuse the stdio
 configuration, DPoP login, pod scope and WAC discovery behavior. The chat adapter
 keeps write permission checks; callers must supply `readOnly: false` explicitly.
+Its generic mutation guard also refuses ACL provisioning, so capture saves through
+this adapter currently fail closed.

@@ -104,6 +104,8 @@ export type PodEntry = Pick<PodChild, "url" | "isContainer"> & Partial<Omit<PodC
 // @public
 export interface PodHeadResult {
     acl?: string;
+    auxiliaryResources?: readonly string[];
+    exists?: boolean;
 }
 
 // @public
@@ -159,6 +161,7 @@ export function readRdf(source: PodSource, url: string): Promise<ReadRdfResult>;
 // @public
 export interface ReadRdfResult {
     dataset: Store;
+    etag?: string;
     turtle: string;
 }
 
@@ -251,7 +254,7 @@ export type SolidMcpServerConfig = ((SolidMcpConfig & {
 };
 
 // @public
-export function writeResource(source: PodSource, url: string, content: string, contentType: string): Promise<{
+export function writeResource(source: PodSource, url: string, content: string, contentType: string, ifMatch?: string): Promise<{
     url: string;
     etag?: string;
 }>;

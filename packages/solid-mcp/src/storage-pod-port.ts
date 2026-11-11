@@ -12,6 +12,7 @@ import {
 } from "./auth.js";
 import { parseBoundedRdf } from "./bounded-rdf.js";
 import { limitedBody, mediaType, RDF_MEDIA_TYPES } from "./content.js";
+import { requireWriteConditions } from "./generic-mutation.js";
 import { podOperationFetch, withPodReadMode } from "./pod-operation.js";
 import {
   configurePodSearchLimits,
@@ -147,6 +148,7 @@ export function createStoragePodPort(
       // storage-client's '*' means unconditional; PodPort's explicit wildcard
       // requires an existing representation. Refuse rather than drop that guard.
       if (cond.ifMatch === "*") throw new Error("Unsupported wildcard update precondition");
+      requireWriteConditions(cond);
       const backend = await storage();
       let result: Awaited<ReturnType<StorageClient["write"]>>;
       if (cond.ifNoneMatch === "*") {
@@ -192,7 +194,7 @@ export function createStoragePodPort(
       } else {
         result = await backend.write(target, body, {
           contentType,
-          ifMatch: cond.ifMatch ?? "*",
+          ifMatch: cond.ifMatch,
         });
       }
       return { etag: result.etag ?? undefined };

@@ -51,6 +51,26 @@ discovery may bypass only the profile restriction; it must still exclude memory.
 Preserve ETags and conditional mutation headers. Use PodReadOptions.accept for RDF/profile
 reads; generic byte reads must retain the backend default representation.
 
+Generic PodOutput.write/delete must refuse decoded, case-insensitive `.acl`, `.acr`
+and `.meta` suffixes and all ACL, ACP access-control and describedby URLs advertised
+by HEAD of the target or parent. Use the current guarded PodPort, never raw fetch.
+PodHeadResult.auxiliaryResources is the complete absolute link set (empty is known;
+absent is unknown), and exists distinguishes an existing target from a 404. Missing
+HEAD support, failed/redirected HEAD, or malformed/anchored metadata fails closed
+with `Access-control and description discovery unavailable; mutation refused`.
+404 retains links for safe create discovery. Personal memory/audit provisioning
+uses its dedicated path and keeps its existing protections.
+writeResource and pod_write/solid_write default to `If-None-Match: *`. Replacements
+require an optional ifMatch argument containing one strong ETag, never `*`, weak
+tags or lists; reject missing replacement validators with read-first guidance.
+PodOutput generic writes require explicit conditions and storage-pod-port refuses
+empty write conditions instead of translating them to storage-client's unconditional
+`*`. pod_read/solid_read return content first and an optional `ETag: <value>` second
+text block; fetch retains metadata.etag. Projected containers omit source ETags.
+chat_save is also behind this generic boundary: its ChatWriter ACL provisioning
+must fail closed before mutation, including nonstandard advertised ACLs. Keep chat
+reads over owner-provisioned data and do not add an ACL bypass to restore saves.
+
 Use fetch-rdf and typed wrappers for RDF reads, rdf-serialize for serialization.
 Tests use fake fetch and portable pods only. Run lint, build, typecheck and test;
 exercise canonical tools and aliases, read-only enforcement and SSRF regressions.

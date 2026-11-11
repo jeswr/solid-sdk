@@ -490,16 +490,23 @@ describe.each(["legacy config", "fetch PodPort"])("pod operations via %s", (mode
 
     it("fails closed on a 403 write", async () => {
       // A fetch that returns 403 on PUT (the pod denied write access).
-      const denying = (async () =>
-        new Response("no", { status: 403, statusText: "Forbidden" })) as typeof fetch;
+      const denying = (async (_input, init) =>
+        init?.method === "HEAD"
+          ? new Response(null, { status: 404 })
+          : new Response("no", { status: 403, statusText: "Forbidden" })) as typeof fetch;
       await expect(
         writeResource(cfg(denying, { readOnly: false }), `${POD}new.ttl`, "x", "text/turtle"),
       ).rejects.toThrow(/unauthenticated\/forbidden \(403\)/);
     });
 
     it("throws with status on a generic non-2xx write", async () => {
-      const failing = (async () =>
-        new Response("boom", { status: 500, statusText: "Internal Server Error" })) as typeof fetch;
+      const failing = (async (_input, init) =>
+        init?.method === "HEAD"
+          ? new Response(null, { status: 404 })
+          : new Response("boom", {
+              status: 500,
+              statusText: "Internal Server Error",
+            })) as typeof fetch;
       await expect(
         writeResource(cfg(failing, { readOnly: false }), `${POD}new.ttl`, "x", "text/turtle"),
       ).rejects.toThrow(/HTTP 500/);
@@ -511,6 +518,7 @@ describe.each(["legacy config", "fetch PodPort"])("pod operations via %s", (mode
       const requests: Array<{ url: string; redirect: RequestRedirect | undefined; body: unknown }> =
         [];
       const redirecting = (async (input: RequestInfo | URL, init?: RequestInit) => {
+        if (init?.method === "HEAD") return new Response(null, { status: 404 });
         const u =
           typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
         requests.push({ url: u, redirect: init?.redirect, body: init?.body });

@@ -140,7 +140,7 @@ export function registerChatTools(
     "chat_save",
     {
       description:
-        "Save an owner-only AS2 conversation. Requires readOnly:false. Message IDs are immutable; first title wins.",
+        "Chat saves currently fail closed: the writer requires ACL provisioning, which generic MCP mutation access refuses. Read owner-provisioned chats with chat_list, chat_get or chat_export.",
       inputSchema: {
         provider,
         conversationId: id,

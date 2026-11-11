@@ -39,7 +39,11 @@ describe("storage-client PodPort", () => {
     fetch.mockResolvedValueOnce(
       new Response(null, { status, headers: { link: '<policy>; rel="acl"' } }),
     );
-    expect(await pod.head?.(FILE)).toEqual({ acl: `${ROOT}policy` });
+    expect(await pod.head?.(FILE)).toEqual({
+      acl: `${ROOT}policy`,
+      auxiliaryResources: [`${ROOT}policy`],
+      exists: status !== 404,
+    });
     expect(createPodClient).toHaveBeenCalledOnce();
     expect(fetch).toHaveBeenCalledWith(
       FILE,
@@ -561,7 +565,7 @@ it("retains absent metadata and drops foreign listing entries", async () => {
   expect(await pod.list(ROOT)).toEqual([{ url: `${ROOT}folder/`, isContainer: true, type: [] }]);
 });
 
-it("preserves missing media type/validators and unconditional write semantics", async () => {
+it("preserves missing read metadata and refuses writes without a validator", async () => {
   const { createSolidBackend } = await import("@jeswr/storage-client/solid");
   const calls: Request[] = [];
   const fetch: typeof globalThis.fetch = async (input, init) => {
@@ -577,10 +581,10 @@ it("preserves missing media type/validators and unconditional write semantics", 
   );
   const pod = createStoragePodPort({ fetch, podRoot: ROOT, readOnly: false });
   expect(await pod.read(FILE)).toMatchObject({ contentType: "", etag: undefined });
-  expect(await pod.write(FILE, new Uint8Array([1]), "application/octet-stream", {})).toEqual({
-    etag: undefined,
-  });
-  expect(calls.at(-1)?.headers.has("if-match")).toBe(false);
+  await expect(
+    pod.write(FILE, new Uint8Array([1]), "application/octet-stream", {}),
+  ).rejects.toThrow(/ETag/);
+  expect(calls.some((request) => request.method === "PUT")).toBe(false);
 });
 
 it.each([

@@ -113,7 +113,11 @@ describe("stdio executable", () => {
         expect(text(search)).toContain(`${POD}note`);
         await callTool({
           name: writeName,
-          arguments: { url: `${POD}written`, content: "hello fixture", contentType: "text/plain" },
+          arguments: {
+            url: `${POD}written-${writeName}`,
+            content: "hello fixture",
+            contentType: "text/plain",
+          },
         });
       }
       const fetched = await callTool({ name: "fetch", arguments: { id: `${POD}note` } });
@@ -138,32 +142,26 @@ describe("stdio executable", () => {
           },
         ],
       };
-      const url = `${POD}private/chats/codex/stdio-fixture/`;
-      const saved = await callTool({ name: "chat_save", arguments: conversation });
-      expect(JSON.parse(text(saved))).toEqual({ url, saved: 1, skipped: 0 });
+      const saved = await client.callTool({ name: "chat_save", arguments: conversation });
+      expect(saved.isError).toBe(true);
+      expect(text(saved)).toMatch(/access-control/);
+      calledTools.add("chat_save");
       const chats = await callTool({ name: "chat_list", arguments: {} });
       expect(JSON.parse(text(chats))).toEqual({
-        conversations: [
-          {
-            url,
-            provider: conversation.provider,
-            conversationId: conversation.conversationId,
-            title: conversation.title,
-            updatedAt: conversation.messages[0]?.createdAt,
-          },
-        ],
+        conversations: [],
       });
-      const chat = await callTool({
+      const chat = await client.callTool({
         name: "chat_get",
         arguments: { provider: conversation.provider, conversationId: conversation.conversationId },
       });
-      expect(JSON.parse(text(chat))).toEqual({ ...conversation, url });
-      const exported = await callTool({
+      expect(chat.isError).toBe(true);
+      calledTools.add("chat_get");
+      const exported = await client.callTool({
         name: "chat_export",
         arguments: { provider: conversation.provider, conversationId: conversation.conversationId },
       });
-      expect(JSON.parse(text(exported))).toMatchObject({ url });
-      expect(JSON.parse(text(exported)).markdown).toContain(conversation.messages[0]?.text);
+      expect(exported.isError).toBe(true);
+      calledTools.add("chat_export");
       const context = await callTool({ name: "context_read", arguments: {} });
       expect(JSON.parse(text(context))).toEqual({
         status: "ok",
