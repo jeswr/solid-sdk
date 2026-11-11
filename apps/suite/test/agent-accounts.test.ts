@@ -7,6 +7,7 @@ import {
   AccountSettingsQueue,
   accountBinding,
   accountDescriptor,
+  accountDescriptorConflict,
   accountLoginCommand,
   overlayAccountControls,
   readAccountSettings,
@@ -52,6 +53,14 @@ describe("account capability selection", () => {
     expect(accountDescriptor(account, [other])).toBeUndefined();
     expect(accountDescriptor(account, [{ ...own, binding: "matrix" }])).toBeUndefined();
     expect(accountDescriptor(account, [])).toBeUndefined();
+  });
+  it("reports disagreeing records as a conflict instead of choosing one", () => {
+    expect(accountDescriptorConflict(account, [own, { ...own, id: `${own.id}-2` }])).toBe(true);
+    expect(accountDescriptorConflict(account, [shared, { ...shared, id: `${shared.id}-2` }])).toBe(
+      true,
+    );
+    expect(accountDescriptorConflict(account, [own, shared, other])).toBe(false);
+    expect(accountDescriptorConflict(account, [])).toBe(false);
   });
   it("does not silently choose between disagreeing descriptor records", () => {
     expect(

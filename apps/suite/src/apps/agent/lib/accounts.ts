@@ -27,15 +27,27 @@ export function accountBinding(account: Pick<Account, "channel" | "provider">): 
     : account.provider;
 }
 
-/** Prefer account-specific observations; never borrow another account's grants or ingest time. */
-export function accountDescriptor(account: Account, descriptors: readonly ChannelCapability[]) {
+/** Account-specific observations if any exist, otherwise shared ones for the binding. */
+function descriptorCandidates(account: Account, descriptors: readonly ChannelCapability[]) {
   const matching = descriptors.filter(
     (descriptor) => descriptor.binding === accountBinding(account),
   );
   const specific = matching.filter((descriptor) => descriptor.account === account.id);
-  if (specific.length) return specific.length === 1 ? specific[0] : undefined;
-  const shared = matching.filter((descriptor) => descriptor.account === undefined);
-  return shared.length === 1 ? shared[0] : undefined;
+  return specific.length ? specific : matching.filter((d) => d.account === undefined);
+}
+
+/** Prefer account-specific observations; never borrow another account's grants or ingest time. */
+export function accountDescriptor(account: Account, descriptors: readonly ChannelCapability[]) {
+  const candidates = descriptorCandidates(account, descriptors);
+  return candidates.length === 1 ? candidates[0] : undefined;
+}
+
+/** True when several records describe the account and none is chosen silently. */
+export function accountDescriptorConflict(
+  account: Account,
+  descriptors: readonly ChannelCapability[],
+) {
+  return descriptorCandidates(account, descriptors).length > 1;
 }
 
 /** Only a plain profile name is placed in a command; secret-store references never leave the model. */

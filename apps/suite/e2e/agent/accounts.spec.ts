@@ -110,8 +110,10 @@ test("8: registry accounts stay private, show conflicts and write verified owner
     (row) => row.inventory?.identityConflicts.length,
   );
   expect(conflicts.length).toBeGreaterThan(0);
+  // A static warning row, not a live alert, so several conflicts don't each interrupt.
+  await expect(page.getByRole("alert")).toHaveCount(0);
   const warning = page
-    .getByRole("alert")
+    .locator(".agent-banner")
     .filter({ hasText: "Two different handles recorded — pick one" })
     .first();
   await warning.getByText("How to resolve this", { exact: true }).click();
@@ -275,14 +277,20 @@ test("12: account details show account-specific scopes and copy the exact host c
 }, info) => {
   await setup(page);
   const daemon = daemonDouble(page);
+  // Replace the seeded descriptor: two records for one account would be shown as a conflict.
   const descriptor = {
     ...exampleRecords["channel-capability"],
-    id: `${daemon.client.paths.descriptors}gmail-scopes.ttl`,
+    id: `${daemon.client.paths.descriptors}gmail.ttl`,
     binding: "gmail",
     account: `${daemon.client.paths.accounts}gmail.ttl`,
     grantedScopes: ["https://www.googleapis.com/auth/gmail.readonly", "mail.".repeat(80)],
   };
-  await daemon.client.create(descriptor.id, await recordToTurtle(descriptor));
+  const seeded = await daemon.client.graph(descriptor.id);
+  await daemon.client.replace(
+    descriptor.id,
+    await recordToTurtle(descriptor),
+    seeded.etag as string,
+  );
   await page.goto("/agent/accounts/gmail");
   await expect(page.getByRole("heading", { name: "Scopes granted", exact: true })).toBeVisible();
   await page.getByText("Technical details", { exact: true }).click();

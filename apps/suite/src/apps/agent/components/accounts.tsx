@@ -29,6 +29,7 @@ import {
   AccountSettingsQueue,
   accountBinding,
   accountDescriptor,
+  accountDescriptorConflict,
   accountLoginCommand,
   persistAccountPatch,
   readAccountSettings,
@@ -151,11 +152,13 @@ export function AccountCapabilities({
 function AccountCard({
   account,
   descriptor,
+  descriptorConflict = false,
   detail,
   sendAllowed,
 }: {
   account: Account;
   descriptor?: ChannelCapability | undefined;
+  descriptorConflict?: boolean;
   detail: boolean;
   sendAllowed: boolean;
 }) {
@@ -228,7 +231,7 @@ function AccountCard({
         <Badge variant="outline">Account hash: {account.channelHandleHash.slice(0, 16)}</Badge>
       )}
       {account.inventory?.identityConflicts.length ? (
-        <div role="alert" className="agent-banner">
+        <div className="agent-banner">
           <p>Two different handles recorded — pick one</p>
           <details>
             <summary>How to resolve this</summary>
@@ -286,8 +289,13 @@ function AccountCard({
       </Button>
       {detail ? (
         <>
+          {descriptorConflict && (
+            <p className="agent-banner">
+              The agent recorded conflicting details for this account, so none are shown.
+            </p>
+          )}
           <AccountCapabilities descriptor={descriptor} />
-          <h3>Scopes granted</h3>
+          <h4>Scopes granted</h4>
           {descriptor?.grantedScopes === undefined ? (
             <p>No scopes recorded by the agent.</p>
           ) : descriptor.grantedScopes.length === 0 ? (
@@ -295,6 +303,10 @@ function AccountCard({
           ) : (
             <details>
               <summary>Technical details</summary>
+              <p>
+                {new Set(descriptor.grantedScopes).size} permission
+                {new Set(descriptor.grantedScopes).size === 1 ? "" : "s"} granted by the provider.
+              </p>
               <ul className="agent-scopes">
                 {[...new Set(descriptor.grantedScopes)].map((scope) => (
                   <li key={scope}>
@@ -440,15 +452,15 @@ export function AccountsScreen({ id }: { id?: string }) {
               {rows
                 .filter((row) => row.channel === channel)
                 .map((row) => {
-                  const descriptor =
-                    descriptors.status === "ready"
-                      ? accountDescriptor(row, loadedRecords(descriptors.data))
-                      : undefined;
+                  const recorded =
+                    descriptors.status === "ready" ? loadedRecords(descriptors.data) : [];
+                  const descriptor = accountDescriptor(row, recorded);
                   return (
                     <AccountCard
                       key={`${session.webId}:${row.id}`}
                       account={row}
                       descriptor={descriptor}
+                      descriptorConflict={accountDescriptorConflict(row, recorded)}
                       detail={!!id}
                       sendAllowed={
                         evaluated?.policy === policy &&
