@@ -530,3 +530,50 @@ it("keeps an Editor removal open on Escape until a rejected PUT is reported", as
   await screen.findByText("Couldn't save sharing (403)");
   expect((screen.getByLabelText(`Role for ${BOB}`) as HTMLSelectElement).value).toBe("editor");
 });
+
+it("returns focus stranded by a save to the control, or to Done when the control is gone", async () => {
+  show();
+  await ready();
+  const done = screen.getByRole("button", { name: "Done" });
+  // A removal deletes its own trigger, so focus moves to Done.
+  const remove = screen.getByRole("button", { name: `Remove access for ${BOB}` });
+  remove.focus();
+  fireEvent.click(remove);
+  await waitFor(() => expect(document.activeElement).toBe(done));
+  // A control that survives the save gets its focus back.
+  const general = screen.getByLabelText("Who can access");
+  general.focus();
+  const focusGeneral = vi.spyOn(general, "focus");
+  fireEvent.change(general, { target: { value: "anyone" } });
+  // While saving, the disabled control loses focus to the body (see the Share case below).
+  const stranded = vi.spyOn(document, "activeElement", "get").mockReturnValue(document.body);
+  await screen.findByLabelText("Link role");
+  await waitFor(() => expect(focusGeneral).toHaveBeenCalled());
+  stranded.mockRestore();
+  expect(document.activeElement).toBe(general);
+  // Focus the user moved elsewhere during the save stays where they put it.
+  const linkRole = screen.getByLabelText("Link role");
+  linkRole.focus();
+  fireEvent.change(linkRole, { target: { value: "editor" } });
+  const copy = screen.getByRole("button", { name: "Copy link" });
+  copy.focus();
+  await waitFor(() => expect(apply).toHaveBeenCalledTimes(3));
+  await waitFor(() => expect((linkRole as HTMLSelectElement).disabled).toBe(false));
+  expect(document.activeElement).toBe(copy);
+  // A successful add leaves Share disabled, so focus moves to Done.
+  fireEvent.change(screen.getByRole("combobox", { name: "Add people" }), {
+    target: { value: "https://example.org/carol#me" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Add person" }));
+  const share = screen.getByRole("button", { name: "Share" });
+  share.focus();
+  // Chrome drops focus to the body when a focused control becomes disabled, without a
+  // focusout the modal's focus scope could react to; jsdom keeps it, so report the body.
+  const focusDone = vi.spyOn(done, "focus");
+  fireEvent.click(share);
+  const active = vi.spyOn(document, "activeElement", "get").mockReturnValue(document.body);
+  await screen.findByLabelText("Role for https://example.org/carol#me");
+  await waitFor(() => expect(focusDone).toHaveBeenCalled());
+  active.mockRestore();
+  expect(share).toHaveProperty("disabled", true);
+});

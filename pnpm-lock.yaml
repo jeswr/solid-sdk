@@ -2436,6 +2436,9 @@ importers:
       '@jeswr/pod-connectors':
         specifier: workspace:*
         version: link:../../packages/pod-connectors
+      '@jeswr/rdf-engine':
+        specifier: workspace:*
+        version: link:../../packages/rdf-engine
       '@jeswr/rdf-serialize':
         specifier: workspace:*
         version: link:../../packages/rdf-serialize
@@ -2451,6 +2454,15 @@ importers:
       '@jeswr/solid-vc':
         specifier: workspace:*
         version: link:../../packages/solid-vc
+      '@jeswr/storage-capabilities':
+        specifier: workspace:*
+        version: link:../../packages/storage-capabilities
+      '@jeswr/storage-client':
+        specifier: workspace:*
+        version: link:../../packages/storage-client
+      '@jeswr/suite-sdk':
+        specifier: workspace:*
+        version: link:../../packages/suite-sdk
       '@jeswr/suite-native':
         specifier: workspace:*
         version: link:../../packages/suite-native
@@ -5699,12 +5711,24 @@ importers:
 
   packages/suite-sdk:
     dependencies:
+      '@jeswr/guarded-fetch':
+        specifier: workspace:*
+        version: link:../guarded-fetch
       '@jeswr/pod-access':
         specifier: workspace:*
         version: link:../pod-access
       '@jeswr/pod-auth':
         specifier: workspace:*
         version: link:../pod-auth
+      '@jeswr/rdf-engine':
+        specifier: workspace:*
+        version: link:../rdf-engine
+      '@jeswr/storage-capabilities':
+        specifier: workspace:*
+        version: link:../storage-capabilities
+      '@jeswr/storage-client':
+        specifier: workspace:*
+        version: link:../storage-client
     devDependencies:
       '@biomejs/biome':
         specifier: ^2.5.1

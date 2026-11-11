@@ -1,54 +1,11 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { randomUUID } from "node:crypto";
-import { forClientCredentials } from "@jeswr/pod-auth/node";
 import { Authorization } from "@solid/object";
 import { DataFactory, Store, Writer } from "n3";
 import { encodeRef } from "../../src/lib/refs";
-import { type AccountName, accessible, cssAccount, expect, test, warmLiveRoutes } from "./fixtures";
+import { accessible, accountAuth, cssAccount, expect, test, warmLiveRoutes } from "./fixtures";
 
 test.beforeAll(({ request }) => warmLiveRoutes(request));
-
-/** Arrange through CSS's account API; browser tests still use interactive OIDC. */
-async function accountAuth(name: AccountName) {
-  const account = cssAccount(name);
-  let cookie = "";
-  const json = async (path: string, body?: unknown) => {
-    const url = new URL(path, account.issuer);
-    expect(url.origin).toBe(new URL(account.issuer).origin);
-    const response = await fetch(url, {
-      method: body === undefined ? "GET" : "POST",
-      redirect: "error",
-      headers: {
-        Accept: "application/json",
-        Cookie: cookie,
-        ...(body === undefined ? {} : { "Content-Type": "application/json" }),
-      },
-      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-    });
-    cookie = response.headers.get("set-cookie")?.split(";")[0] ?? cookie;
-    // Account responses contain credentials: assert only status, never response bodies.
-    expect(response.ok).toBe(true);
-    return response.json();
-  };
-  const before = await json(".account/");
-  await json(before.controls.password.login, {
-    email: account.email,
-    password: account.password,
-  });
-  const after = await json(".account/");
-  const credentials = await json(after.controls.account.clientCredentials, {
-    name: `shell-errors-${randomUUID()}`,
-    webId: account.webId,
-  });
-  return forClientCredentials({
-    issuer: account.issuer,
-    clientId: credentials.id,
-    clientSecret: credentials.secret,
-    // Both fixture users explicitly receive this known root for arrangement only.
-    boundary: [new URL("alice/", account.issuer).href],
-    allowInsecureLoopback: true,
-  });
-}
 
 test("scenario 10: an unknown route shows 404 actions and returns Home", async ({ page }) => {
   const response = await page.goto("/missing-shell-page");

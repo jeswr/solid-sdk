@@ -1,8 +1,22 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { beforeEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { AccountsProvider, useAccounts } from "../src/shell/session/accounts-provider";
 import type { SessionBackend, SuiteAccount } from "../src/shell/session/types";
+import { OfflineProvider } from "../src/shell/sync/offline-provider";
 import { act, h, mount } from "./drive-ui-dom";
+
+vi.mock("next/navigation", () => ({ usePathname: () => "/search" }));
+vi.mock("../src/shell/settings/preferences", () => ({
+  useAllPreferences: () => ({
+    preferences: { offline: true, offlineHintSeen: true },
+    ready: true,
+  }),
+}));
+vi.mock("../src/shell/sync/service-worker", () => ({ rememberPage: vi.fn() }));
+vi.mock("../src/shell/sync/connection-state", async (original) => ({
+  ...(await original<typeof import("../src/shell/sync/connection-state")>()),
+  useConnectionState: () => "online",
+}));
 
 const one: SuiteAccount = {
   id: "one",
@@ -56,6 +70,7 @@ beforeEach(() => {
     }),
   );
 });
+afterEach(() => vi.useRealTimers());
 
 it("removes only the signed-out account's history and retains its pending outbox even if logout fails", async () => {
   const first = backend(one);
@@ -83,4 +98,54 @@ it("clears every recent-items key on sign-out-all while preserving unsent change
   expect(accounts.accounts).toEqual([]);
   expect(Object.keys(localStorage).filter((key) => key.startsWith("suite.recent.v1."))).toEqual([]);
   expect(localStorage.getItem("suite.outbox.v1.one")).toBe(outbox);
+});
+
+it.each(
+  (["signOut", "signOutAll", "switchTo"] as const).flatMap((transition) =>
+    (["timer", "observer"] as const).map((callback) => ({ transition, callback })),
+  ),
+)("blocks the $callback immediately on $transition, before React commits", async ({
+  transition,
+  callback,
+}) => {
+  vi.useFakeTimers();
+  document.title = "Search · Solid Suite";
+  const view = await mount(
+    h(AccountsProvider, {
+      backends: [backend(one), backend(two)],
+      children: h(OfflineProvider, { children: h(Probe) }),
+    }),
+  );
+  if (callback === "observer") {
+    await act(() => vi.advanceTimersByTime(0));
+    expect(JSON.parse(localStorage.getItem("suite.recent.v1.one") ?? "[]")).toMatchObject([
+      { title: document.title, href: "/search" },
+    ]);
+  }
+  const history = localStorage.getItem("suite.recent.v1.one");
+  const outbox = localStorage.getItem("suite.outbox.v1.one");
+  await act(async () => {
+    // React still exposes the old account to its consumers during these callbacks.
+    const pending = transition === "switchTo" ? accounts.switchTo("two") : accounts[transition]();
+    expect(accounts.active?.id).toBe("one");
+    const afterTransition = localStorage.getItem("suite.recent.v1.one");
+    if (callback === "observer") {
+      document.title = "A late private title";
+      await Promise.resolve();
+    } else vi.advanceTimersByTime(0);
+    expect(localStorage.getItem("suite.recent.v1.one")).toBe(afterTransition);
+    await pending;
+  });
+  await act(async () => {
+    document.title = "A title after React commits";
+    vi.advanceTimersByTime(0);
+  });
+  expect(localStorage.getItem("suite.recent.v1.one")).toBe(
+    transition === "switchTo" ? history : null,
+  );
+  expect(localStorage.getItem("suite.recent.v1.two")).toBe(
+    transition === "signOutAll" ? null : "[]",
+  );
+  expect(localStorage.getItem("suite.outbox.v1.one")).toBe(outbox);
+  await view.unmount();
 });

@@ -36,7 +36,7 @@ DNS-pinning path, which requires Node ≥ 22.19.0.)
 `solid-agent-notify/client` exposes `createNotifyClient({ fetch, clock?, recipientProtocol?,
 pinningFetch? })`. Its returned `notify(agentWebId, activity)` discovers exactly one `ldp:inbox`
 on the recipient's exact WebID subject using fetch-rdf, caches positive/negative discovery for
-ten minutes per instance, and POSTs ActivityStreams JSON-LD through the caller's fetch.
+ten minutes per transport/clock scope, and POSTs ActivityStreams JSON-LD through the caller's fetch.
 Activities carry `type: 'Announce'|'Offer'|'Accept'|'Reject'|'Create'`, `actor`, `object`, optional
 `target` and `summary`. Results are `{delivered, inbox, reason?}`; delivery failures never throw.
 Reasons are `no-inbox`, `forbidden` (401/403), `lws-no-ldn`, and `network` (other failures).
@@ -50,8 +50,33 @@ The fetch implementation must honor manual redirects. Activity IRIs require HTTP
 
 Known LWS recipients can be short-circuited with `recipientProtocol(webId) => 'lws'`; LWS profile
 media types also return `lws-no-ldn`. The sender's protocol never determines the recipient's.
-Recreate the notifier on account/session changes. The SDK wrapper and builders live in
+Use a fresh transport wrapper on account/session changes so caches cannot cross identities. The SDK wrapper and builders live in
 `@jeswr/pod-access/notify`; the React hook lives in `@jeswr/suite-sdk`.
+
+## Caller-fetch inbox reader
+
+```ts
+import { createInboxReader } from "solid-agent-notify/client";
+
+const reader = createInboxReader({ fetch: authenticatedFetch, maxItems: 50 });
+const inbox = await reader.inbox(ownerWebId); // string | null (including LWS profiles)
+const items = inbox ? await reader.list(inbox, { signal }) : [];
+```
+
+`createInboxReader({ fetch, pinningFetch?, clock?, maxItems? })` shares the notifier's exact
+WebID discovery implementation and ten-minute cache when **fetch, pinningFetch and clock**
+identities match (omitted clock uses Date.now). Recreate session transports on account changes.
+Discovery failures return null; transient failures are retried. The cache holds at most 256 WebIDs.
+
+`list` returns `InboxNotification[]` (`url`, `type`, optional `actor`, `object`, `target`,
+`summary`, `content`, `published`), newest first, undated last, with URL tie ordering. It reads
+at most `maxItems` direct children in listing order (default 50, a non-negative safe integer),
+with at most six member requests active. Cross-origin, outside-container, nested, query,
+fragment and encoded-slash members are skipped. Unreadable/non-activity members are skipped;
+401/403/404 containers and unparseable listings return `[]`. Other container transport/HTTP
+failures reject. Cancellation rejects with `AbortError`, even for a custom abort reason, and
+starts no further requests. Reads use the same bounded `clientFetch` as delivery: HTTPS only,
+no URL credentials or redirects, including on members. This API does not mark read or delete.
 
 ## Node API
 

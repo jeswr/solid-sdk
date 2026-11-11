@@ -23,7 +23,11 @@ const config: NextConfig = {
   transpilePackages: ["@jeswr/suite-ui"],
   devIndicators: false,
   // Yjs must be a singleton across the app, TipTap, IndexedDB and the workspace provider.
-  webpack(config) {
+  webpack(config, { isServer, webpack }) {
+    // rdf-engine's lazy WASM loader includes a Node-only disk fallback. Browser
+    // initialization uses its emitted WASM URL and never enters that branch.
+    if (!isServer)
+      config.plugins.push(new webpack.IgnorePlugin({ resourceRegExp: /^node:fs\/promises$/ }));
     // Imported model files use Node-style .js specifiers for their TypeScript sources.
     config.resolve.extensionAlias = {
       ...config.resolve.extensionAlias,

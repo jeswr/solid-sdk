@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex
+// AUTHORED-BY Codex GPT-6
 "use client";
 
 import {
@@ -12,7 +13,7 @@ import {
   PeoplePicker,
   type SharingPerson as PickerPerson,
 } from "@jeswr/suite-ui";
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import type { DriveItem } from "../lib/client/client";
 import {
   applySharing,
@@ -92,6 +93,8 @@ export function ShareDialog({
   const [role, setRole] = useState<SharingRole>("viewer");
   const [announcement, setAnnouncement] = useState("");
   const [retry, setRetry] = useState(0);
+  const focusAfterSave = useRef<HTMLElement | null>(null);
+  const done = useRef<HTMLButtonElement>(null);
   const generalId = useId();
   const generalRoleId = useId();
   const lockId = useId();
@@ -123,8 +126,30 @@ export function ShareDialog({
     };
   }, [session, item.url, retry]);
 
+  useEffect(() => {
+    if (saving) return;
+    const previous = focusAfterSave.current;
+    focusAfterSave.current = null;
+    if (
+      !previous ||
+      (document.activeElement !== document.body &&
+        document.activeElement?.getAttribute("role") !== "dialog")
+    )
+      return;
+    // Disabling the saving control can strand focus on the modal container.
+    // A successful add clears its selection and leaves Share disabled; a removal
+    // deletes its trigger. Done remains available in both cases.
+    // Done is always rendered while the dialog is open.
+    const target =
+      previous.isConnected && !previous.matches(":disabled")
+        ? previous
+        : (done.current as HTMLButtonElement);
+    target.focus();
+  }, [saving]);
+
   const save = async (selection: SharingSelection) => {
     if (!snapshot || saving || disabledReason) return;
+    focusAfterSave.current = document.activeElement as HTMLElement | null;
     setSaving(true);
     setError("");
     try {
@@ -356,6 +381,10 @@ export function ShareDialog({
                 </p>
               )}
             </section>
+            <p className="su-muted">
+              Access end dates aren't available in this sharing dialog. Access continues until you
+              remove it.
+            </p>
           </div>
         )}
         <p role="status" className="su-muted">
@@ -373,7 +402,7 @@ export function ShareDialog({
           >
             Copy link
           </Button>
-          <Button disabled={saving} onClick={close}>
+          <Button ref={done} disabled={saving} onClick={close}>
             Done
           </Button>
         </DialogFooter>

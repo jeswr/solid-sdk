@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6
 package org.jeswr.suite;
 
 import java.io.File;
@@ -36,6 +37,8 @@ public final class PdfPreviewStore {
     }
 
     private final File root;
+    private final PreviewFs fs;
+    private final PreviewFs.Stat rootIdentity;
     private String handle;
     private File file;
     private long size;
@@ -45,8 +48,15 @@ public final class PdfPreviewStore {
 
     /** Creates the store and empties its directory, which also clears files a killed process left. */
     public PdfPreviewStore(File root) throws IOException {
+        this(root, new AndroidPreviewFs());
+    }
+
+    PdfPreviewStore(File root, PreviewFs fs) throws IOException {
         this.root = root.getCanonicalFile();
+        this.fs = fs;
         if (!this.root.isDirectory() && !this.root.mkdirs()) throw new IOException("Cannot create pdf-preview cache");
+        this.rootIdentity = fs.lstat(this.root.getPath());
+        if (!rootIdentity.directory) throw new IOException("Pdf-preview cache is not a directory");
         clear();
     }
 
@@ -118,9 +128,10 @@ public final class PdfPreviewStore {
         handle = null;
         file = null;
         finished = false;
-        File[] entries = root.listFiles();
-        if (entries == null) throw new IOException("Cannot list pdf-preview cache");
-        for (File entry : entries) remove(entry);
+        try (PreviewFs.Directory directory = fs.openDirectory(root.getPath())) {
+            verifyDirectory(rootIdentity, fs.fstat(directory));
+            removeContents(directory);
+        }
     }
 
     private void current(String id, long now) throws Refused, IOException {
@@ -167,23 +178,27 @@ public final class PdfPreviewStore {
         return safe;
     }
 
-    /**
-     * Never follows a link: a symlink, or anything that does not resolve to itself inside the store,
-     * is unlinked rather than descended into, so cleanup cannot delete files outside the cache.
-     */
-    private void remove(File entry) throws IOException {
-        if (contained(entry) && entry.isDirectory()) {
-            File[] children = entry.listFiles();
-            if (children == null) throw new IOException("Cannot list " + entry.getName());
-            for (File child : children) remove(child);
+    /** Removes children through open directories, without following links or crossing devices. */
+    private void removeContents(PreviewFs.Directory parent) throws IOException {
+        for (String name : fs.list(parent)) {
+            PreviewFs.Stat entry = fs.lstat(parent, name);
+            if (entry.device != rootIdentity.device) throw new IOException("Preview entry is on another device");
+            if (entry.directory) {
+                try (PreviewFs.Directory child = fs.openDirectory(parent, name)) {
+                    verifyDirectory(entry, fs.fstat(child));
+                    removeContents(child);
+                    fs.rmdir(parent, name);
+                }
+            } else {
+                fs.unlink(parent, name);
+            }
         }
-        if (!entry.delete() && entry.exists()) throw new IOException("Cannot remove " + entry.getName());
     }
 
-    private boolean contained(File entry) throws IOException {
-        File canonical = entry.getCanonicalFile();
-        // String prefix, not Path: File#toPath needs API 26 and minSdk is 24.
-        return entry.getAbsoluteFile().equals(canonical)
-            && canonical.getPath().startsWith(root.getPath() + File.separator);
+    private void verifyDirectory(PreviewFs.Stat expected, PreviewFs.Stat actual) throws IOException {
+        if (!actual.directory || actual.device != rootIdentity.device
+            || actual.device != expected.device || actual.inode != expected.inode) {
+            throw new IOException("Pdf-preview directory changed during cleanup");
+        }
     }
 }
