@@ -1,12 +1,14 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 /** Bounded SAI discovery and class matching; exact shapes stay private to the check. */
-import { DataFactory, Parser, Store } from 'n3';
+import { parseRdfSync } from '@jeswr/fetch-rdf';
+import { DataFactory, type Store } from 'n3';
 import type { PinnedTarget } from './class-grant';
 import { safePathUrl, safeTargetUrl } from './class-path';
 import type { ResolutionBudget } from './class-resolution-budget';
 import type { ResolveFetch, ResolveOptions } from './class-resolve';
 import { CLASS_SHAPE_TREES } from './class-shape-trees';
+import { BUFFERED_RDF_LIMITS } from './rdf-limits';
 import type { ClassShape } from './shacl-lite';
 
 const INTEROP = 'http://www.w3.org/ns/solid/interop#';
@@ -85,7 +87,7 @@ function parse(body: Document, budget?: ResolutionBudget): ParsedDocument | null
       url: body.url,
       store: budget
         ? budget.parse(body.url, body.text)
-        : new Store(new Parser({ baseIRI: documentUrl(body.url) }).parse(body.text)),
+        : parseRdfSync(body.text, { ...BUFFERED_RDF_LIMITS, baseIRI: documentUrl(body.url) }),
     };
   } catch {
     return null;
