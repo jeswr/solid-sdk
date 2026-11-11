@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6
 "use client";
 /**
  * Registers the offline worker from `/service-worker` in production builds only: a development server's
@@ -7,7 +8,10 @@
 import { useEffect } from "react";
 import { REMEMBER_PAGE } from "../lib/service-worker";
 
-const enabled = () => process.env.NODE_ENV === "production" && "serviceWorker" in navigator;
+const enabled = () =>
+  process.env.NEXT_PUBLIC_SUITE_TARGET !== "native" &&
+  process.env.NODE_ENV === "production" &&
+  "serviceWorker" in navigator;
 
 export function registerServiceWorker(): void {
   if (!enabled()) return;

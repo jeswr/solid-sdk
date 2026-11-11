@@ -309,6 +309,10 @@ export function useChatActions() {
         await client.remove(url, subject);
         invalidate();
       },
+      async react(url: string, subject: string, emoji: string) {
+        await client.react(url, subject, emoji);
+        invalidate();
+      },
       async toTask(url: string, subject: string, task: { title: string; due?: Date }) {
         await client.toTask(url, subject, task);
         invalidate();
