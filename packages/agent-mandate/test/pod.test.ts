@@ -83,10 +83,10 @@ it("bypasses HTTP caches for credential, status and profile evidence", async () 
   const base = options();
   const seen: { url: string; cache: RequestCache | undefined }[] = [];
   const record =
-    (fetch: typeof base.fetch): typeof base.fetch =>
+    (inner: typeof base.fetch): typeof base.fetch =>
     async (input, init) => {
       seen.push({ url: String(input), cache: init?.cache });
-      return fetch(input, init);
+      return inner(input, init);
     };
   expect(
     await createPodMandateVerifier(

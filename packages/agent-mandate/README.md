@@ -112,6 +112,9 @@ without language tags. Both verification and unsigned readers enforce these term
 `readApprovalClaims(document, id)` and `readControlClaims(document, id)` return unsigned
 claims or `undefined` for malformed input. They are **display only, never authority**:
 they perform no verification and may return expired or tampered claims.
+`readControlVerificationMethod(document, id)` returns the key a control's proof names, for
+key management (for example, finding statements to re-sign before a key is removed). It is
+not authority either: pair it with `verifyControlStatement`.
 
 The optional Node adapter is isolated at `@jeswr/agent-mandate/sparq`:
 `sparqPolicyEngine({ binary, timeoutMs? })`. It uses the pilot `sparq-policy-decide/1`

@@ -30,14 +30,14 @@ export interface PodMandateOptions {
 type Fetch = PodMandateOptions["fetch"];
 
 /** Revocation and key-control evidence must never come from an HTTP cache. */
-function noStore(fetch: Fetch): Fetch {
+function noStore(inner: Fetch): Fetch {
   return ((input: Parameters<Fetch>[0], init?: Parameters<Fetch>[1]) =>
-    fetch(input, { ...init, cache: "no-store" })) as Fetch;
+    inner(input, { ...init, cache: "no-store" })) as Fetch;
 }
 
 /** Bounded browser-safe transport; parsing alone never establishes authority. */
 export function createPodMandateVerifier(options: PodMandateOptions): MandateVerifier {
-  const fetch = noStore(options.fetch);
+  const evidenceFetch = noStore(options.fetch);
   const profileFetch = noStore(options.profileFetch ?? options.fetch);
   let statusListCredential: string;
   try {
@@ -59,14 +59,14 @@ export function createPodMandateVerifier(options: PodMandateOptions): MandateVer
           webIdKeyResolver: keys,
           now: () => now,
           resolveStatus: createBitstringStatusResolver({
-            fetch,
+            fetch: evidenceFetch,
             resolveKey: keys.resolveKey,
             isControlledBy: keys.isControlledBy,
             now,
             trustedStatusIssuers: [options.ownerWebId],
           }),
           read: async () => {
-            const response = await fetch(options.credentialUrl, {
+            const response = await evidenceFetch(options.credentialUrl, {
               headers: { Accept: "application/trig" },
               redirect: "manual",
             });

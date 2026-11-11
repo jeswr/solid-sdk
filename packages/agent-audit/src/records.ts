@@ -1,6 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
-import { canonicalJson, digestOf, isIri } from "@jeswr/agent-model";
+import { canonicalJson, digestOf, isIri } from "@jeswr/agent-model/core/canonical";
 import { z } from "zod";
 
 /** No free-form payloads: audit records contain references, digests and counts only. */
@@ -119,7 +119,8 @@ export type LedgerEntry = z.infer<typeof entrySchema>;
 /** Reject getters, cycles and lossy JSON before validating the privacy allowlist. */
 export function checkedRecord(value: unknown): LedgerRecord {
   const json = canonicalJson(value);
-  if (Buffer.byteLength(json) > 65536) throw new Error("Audit record exceeds bound");
+  if (new TextEncoder().encode(json).byteLength > 65536)
+    throw new Error("Audit record exceeds bound");
   return ledgerRecordSchema.parse(JSON.parse(json));
 }
 export function seal(seq: number, at: string, prev: string, value: unknown): LedgerEntry {

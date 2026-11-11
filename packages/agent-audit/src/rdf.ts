@@ -1,6 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
-import { canonicalJson } from "@jeswr/agent-model";
+import { AGENT, PROV } from "@jeswr/agent-model/vocab";
 import { parseRdf } from "@jeswr/fetch-rdf";
 import type { DataFactory as Factory, Quad } from "@rdfjs/types";
 import {
@@ -12,12 +12,10 @@ import {
   TermWrapper,
 } from "@rdfjs/wrapper";
 import { DataFactory, Store, Writer } from "n3";
-import { writeDecisionRecord } from "./decision-record.js";
+import { writeEntryGraph, writeHeadGraph } from "./prov.js";
 import type { LedgerEntry } from "./records.js";
 
-export const AGENT = "https://jeswr.org/ns/agent#";
-export const PROV = "http://www.w3.org/ns/prov#";
-const RDF_TYPE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
+export { AGENT, PROV } from "@jeswr/agent-model/vocab";
 /** Strict wrapper accessors; an ambiguous/missing/wrong-kind value is unwalkable. */
 export class Node extends TermWrapper {
   values(p: string): Node[] {
@@ -62,55 +60,12 @@ export async function verifiedApprovalCreatedAt(document: string, id: string): P
 }
 export function entryGraph(url: string, e: LedgerEntry): Store {
   const store = new Store();
-  const n = node(store, url);
-  const entity = node(store, new URL("#entry", url).href);
-  n.setIri(RDF_TYPE, `${PROV}Activity`);
-  entity.setIri(RDF_TYPE, `${PROV}Entity`);
-  n.setIri(`${PROV}generated`, entity.value);
-  n.setText(`${AGENT}seq`, String(e.seq), "http://www.w3.org/2001/XMLSchema#integer");
-  n.setText(`${PROV}startedAtTime`, e.at, "http://www.w3.org/2001/XMLSchema#dateTime");
-  n.setText(`${AGENT}ledgerHash`, e.hash);
-  n.setText(`${AGENT}prevHash`, e.prev);
-  n.setText(
-    `${AGENT}record`,
-    canonicalJson(e.record),
-    "http://www.w3.org/1999/02/22-rdf-syntax-ns#JSON",
-  );
-  if (e.record.type !== "ledger-checkpoint") {
-    const r = e.record;
-    n.setIri(`${PROV}wasAssociatedWith`, r.agent);
-    entity.setIri(`${PROV}wasAttributedTo`, r.owner);
-    n.setIri(`${PROV}generated`, r.id);
-    if (r.taskId !== undefined) n.setText(`${AGENT}taskId`, r.taskId);
-    if (r.conversation !== undefined) n.setIri(`${AGENT}conversation`, r.conversation);
-    for (const id of [
-      r.proposal,
-      r.mandate,
-      r.approval,
-      r.decisionRecord,
-      r.transmission,
-      r.receipt,
-      r.modelCall,
-    ])
-      if (id !== undefined) n.setIri(`${PROV}used`, id);
-    if (r.type === "decision") writeDecisionRecord(n, r, e.at);
-    if (r.type === "personal-data-read") {
-      if (r.purpose !== undefined) n.setIri("https://w3id.org/dpv#hasPurpose", r.purpose);
-      for (const category of r.categories as string[])
-        n.setIri("https://w3id.org/dpv#hasPersonalData", category);
-      for (const resource of r.resources as string[]) n.setIri(`${PROV}used`, resource);
-    }
-  }
+  writeEntryGraph(node(store, url), node(store, new URL("#entry", url).href), e);
   return store;
 }
 export function headGraph(url: string, seq: number, hash: string): Store {
   const store = new Store();
-  const n = node(store, url);
-  n.setIri(RDF_TYPE, `${AGENT}AuditChain`);
-  n.setIri(RDF_TYPE, `${PROV}Collection`);
-  n.setText(`${AGENT}seq`, String(seq), "http://www.w3.org/2001/XMLSchema#integer");
-  n.setText(`${AGENT}ledgerHash`, hash);
-  n.setIri(`${PROV}hadMember`, new URL(`${seq}.ttl#entry`, url).href);
+  writeHeadGraph(node(store, url), seq, hash);
   return store;
 }
 export function turtle(store: Store): Promise<string> {
