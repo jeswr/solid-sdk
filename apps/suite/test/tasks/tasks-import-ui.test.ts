@@ -689,6 +689,97 @@ describe("Google Tasks through the shared import dialog", () => {
     expect(toast.success).toHaveBeenCalledWith("Imported 0 tasks into Empty", expect.anything());
   });
 
+  it.each([
+    0, 1,
+  ])("isolates a project setup failure with %i tasks and retries only that list", async (failedTasks) => {
+    await pick(
+      JSON.stringify({
+        kind: "tasks#taskLists",
+        items: [
+          {
+            id: "first",
+            title: "First",
+            items: [
+              { id: "first-task", title: "First task", status: "needsAction", position: "01" },
+            ],
+          },
+          {
+            id: "failed",
+            title: "Failed",
+            items: Array.from({ length: failedTasks }, () => ({
+              id: "failed-task",
+              title: "Retry task",
+              status: "needsAction",
+              position: "01",
+            })),
+          },
+          {
+            id: "last",
+            title: "Last",
+            items: [{ id: "last-task", title: "Last task", status: "needsAction", position: "01" }],
+          },
+        ],
+      }),
+      "Tasks.json",
+    );
+    pod.intercept = (request) => {
+      if (request.method === "PUT" && request.url.endsWith("/failed.ttl"))
+        return new Response("SECRET setup failure", { status: 503 });
+    };
+    await click(`Import ${2 + failedTasks} tasks`);
+    await act(async () => {
+      await vi.waitFor(() =>
+        expect(document.querySelector('input[type="file"]:disabled')).toBeNull(),
+      );
+    });
+    const projects = cache.getSnapshot().projects.filter((project) => project.url !== inbox.url);
+    expect(projects.map((project) => project.tracker.title)).toEqual(["First", "Last"]);
+    expect(cache.getSnapshot().views.map((task) => task.title)).toEqual([
+      "First task",
+      "Last task",
+    ]);
+    expect(toast.error).toHaveBeenCalledWith(
+      `Imported 2 tasks into 2 projects.${failedTasks ? " 1 tasks failed." : ""} 1 projects failed.`,
+      expect.anything(),
+    );
+    expect(vi.mocked(toast.error).mock.calls[0]?.[1]?.description).toMatchObject({
+      props: {
+        children: projects.map((project) => ({
+          props: {
+            href: `/tasks/p/${encodeRef(project.url)}`,
+            children: ["Open ", project.tracker.title],
+          },
+        })),
+      },
+    });
+    expect(query('[role="alert"]').textContent).toContain("Could not finish the import.");
+    expect(document.body.textContent).not.toContain("SECRET");
+    expect([...document.querySelectorAll("legend")].map((legend) => legend.textContent)).toEqual([
+      "Failed",
+    ]);
+    expect(query<HTMLInputElement>('input[type="checkbox"]').checked).toBe(true);
+    expect(push).not.toHaveBeenCalled();
+
+    pod.intercept = undefined;
+    await click(`Import ${failedTasks} tasks`);
+    await finished();
+    expect(cache.getSnapshot().projects.map((project) => project.tracker.title)).toEqual([
+      "Inbox",
+      "First",
+      "Last",
+      "Failed",
+    ]);
+    expect(cache.getSnapshot().views).toHaveLength(2 + failedTasks);
+    for (const project of projects) {
+      const tasks = await cache.store.listTasks(project.tracker.stateStore as string);
+      expect(tasks.map((task) => task.task.title)).toEqual([`${project.tracker.title} task`]);
+    }
+    expect(toast.success).toHaveBeenCalledWith(
+      `Imported ${failedTasks} tasks into Failed`,
+      expect.anything(),
+    );
+  });
+
   it("reports a project setup failure for an empty list instead of claiming success", async () => {
     await pick('{"kind":"tasks#taskLists","items":[{"id":"empty","title":"Empty"}]}', "Tasks.json");
     vi.spyOn(cache.store, "createProject").mockRejectedValue(new Error("Write failed"));

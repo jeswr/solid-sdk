@@ -173,24 +173,34 @@ export function TasksImportDialog() {
     controller.current = job;
     setProgress(0);
     setCancelling(false);
+    setError("");
     try {
       const created: { title: string; href: string }[] = [];
+      const completed = new Set<string>();
       let imported = 0;
       let failed = 0;
+      let setupFailed = 0;
       let offset = 0;
-      for (const { draft, name } of selected) {
+      for (const { id: projectId, draft, name } of selected) {
         if (job.signal.aborted) break;
-        const result = await importProject(cache, draft, name.trim(), job.signal, (done) => {
-          if (controller.current === job) setProgress(offset + done);
-        });
-        // An empty list still needs its project; zero task failures cannot signal setup failure.
-        if (!result.project && !job.signal.aborted && !draft.tasks.length)
-          throw new Error("Project creation failed");
-        imported += result.imported;
-        failed += result.failed;
-        offset += draft.tasks.length;
-        if (result.project)
-          created.push({ title: name.trim(), href: `/tasks/p/${encodeRef(result.project.url)}` });
+        try {
+          const result = await importProject(cache, draft, name.trim(), job.signal, (done) => {
+            if (controller.current === job) setProgress(offset + done);
+          });
+          imported += result.imported;
+          failed += result.failed;
+          if (result.project) {
+            created.push({ title: name.trim(), href: `/tasks/p/${encodeRef(result.project.url)}` });
+            completed.add(projectId);
+          } else if (!job.signal.aborted) setupFailed++;
+        } catch {
+          if (!job.signal.aborted) {
+            setupFailed++;
+            failed += draft.tasks.length;
+          }
+        } finally {
+          offset += draft.tasks.length;
+        }
       }
       const title = selected.length === 1 ? selected[0]?.name.trim() : `${created.length} projects`;
       const links = created.map(({ title, href }) => (
@@ -200,10 +210,11 @@ export function TasksImportDialog() {
       ));
       const description =
         links.length > 1 ? <div className="tsk-import-links">{links}</div> : links[0];
-      if (failed)
-        toast.error(`Imported ${imported} tasks into ${title}. ${failed} tasks failed.`, {
-          description,
-        });
+      if (failed || setupFailed)
+        toast.error(
+          `Imported ${imported} tasks into ${title}.${failed ? ` ${failed} tasks failed.` : ""}${setupFailed ? ` ${setupFailed} projects failed.` : ""}`,
+          { description },
+        );
       else if (job.signal.aborted)
         toast.info(
           `Import cancelled. Imported ${imported} tasks into ${title}. Already-created tasks stay.`,
@@ -211,6 +222,12 @@ export function TasksImportDialog() {
         );
       else toast.success(`Imported ${imported} tasks into ${title}`, { description });
       if (controller.current !== job) return;
+      if (setupFailed && !job.signal.aborted) {
+        // A retry must never create another project for a list already processed in this batch.
+        setProjects((current) => current.filter((project) => !completed.has(project.id)));
+        setError("Could not finish the import. Already-created tasks stay in the new projects.");
+        return;
+      }
       setOpen(false);
       setProjects([]);
       if (created[0]) router.push(created[0].href);
