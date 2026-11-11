@@ -1,4 +1,47 @@
 /* AUTHORED-BY Codex GPT-6 */
+.tsk-colour-popover {
+  width: 244px;
+}
+.tsk-colour-swatches {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+}
+.tsk-colour-swatches [role="radio"] {
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--border-strong);
+  cursor: pointer;
+}
+.tsk-colour-swatches [role="radio"][aria-checked="true"] {
+  box-shadow:
+    0 0 0 2px var(--surface),
+    0 0 0 4px var(--foreground);
+}
+.tsk-colour-swatches [role="radio"]:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 5px;
+}
+.tsk-no-colour {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+.tsk-project-chip {
+  gap: 4px;
+}
+@media (pointer: coarse) {
+  .tsk-colour-popover {
+    width: 260px;
+  }
+  .tsk-colour-swatches [role="radio"] {
+    width: 44px;
+    height: 44px;
+  }
+}
 .tsk-boot {
   display: grid;
   min-height: 100dvh;
@@ -21,6 +64,11 @@
   color: var(--foreground);
   font-size: var(--text-2xl);
   font-weight: 650;
+}
+.tsk-view-header h1:has(> .tsk-project-dot) {
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 .tsk-view-header :where(h1) .suite-editable {
   font: inherit;
@@ -128,12 +176,19 @@
   text-overflow: ellipsis;
 }
 .tsk-project-dot {
+  display: inline-block;
+  width: 18px;
+  height: 18px;
+  border-radius: var(--radius-full);
+  background: var(--foreground-muted);
+  flex-shrink: 0;
+}
+.tsk-project-row > .tsk-project-dot {
+  margin-inline-start: 10px;
+}
+.tsk-project-chip > .tsk-project-dot {
   width: 8px;
   height: 8px;
-  margin-inline-start: 10px;
-  border-radius: var(--radius-full);
-  background: var(--app-tasks);
-  flex-shrink: 0;
 }
 .tsk-sidebar-footer {
   margin-top: 16px;
@@ -376,7 +431,8 @@
 }
 @media (prefers-reduced-motion: reduce) {
   .tsk-row,
-  .tsk-check {
+  .tsk-check,
+  .tsk-colour-swatches [role="radio"] {
     animation: none;
     transition: none;
   }
