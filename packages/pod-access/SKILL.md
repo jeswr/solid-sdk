@@ -34,7 +34,11 @@ Containers include their own member defaults, without claiming to inspect existi
 Only the exact supplied owner WebID may have any modes; groups, public/authenticated agents,
 other agents and conditional non-owner grants must refuse. Unsupported models report that
 fact. ACP requires a trusted CSS/ESS dialect. Keep unsupported matcher forms, partial ACR
-management, parser complexity and missing/unreadable documents closed. Preserve 100% coverage
+management, parser complexity and missing/unreadable documents closed.
+Policies above `storage.root` are never examined: reaching the caller-supplied root requires
+its HEAD to advertise `rel="type"` pim:Storage, else `not-storage-root`. Read access documents
+through `storage.read` and the roles 1 MiB bounded reader; refuse targets equal to the resource
+only after URL normalisation. Preserve 100% coverage
 and document read-time races; this check neither locks policies nor proves caller write access.
 
 Use [storage-capabilities](../storage-capabilities/SKILL.md) to inspect access-control models

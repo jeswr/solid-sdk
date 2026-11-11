@@ -1,10 +1,12 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
-import { type RdfReadResult, StorageError } from "@jeswr/storage-client";
+// AUTHORED-BY Claude Opus 5.5
+import { parseRdf } from "@jeswr/fetch-rdf";
+import { StorageError } from "@jeswr/storage-client";
 import type { DatasetCore } from "@rdfjs/types";
 import { Policy } from "@solid/object";
 import { DataFactory } from "n3";
 import { ACL, ACP, modeIri, parent, RDF, RdfNode, safeIri } from "./rdf.js";
-import { scoped } from "./roles/http.js";
+import { boundedBody, scoped } from "./roles/http.js";
 import { readAcp } from "./systems/acp.js";
 import { readWac } from "./systems/wac.js";
 import type { AccessClientOptions, AccessMode, EffectivePolicy, Subject } from "./types.js";
@@ -19,10 +21,14 @@ export interface OwnerOnlyOptions extends Pick<AccessClientOptions, "storage" | 
 export interface OwnerOnlyReason {
   subject: "public" | "authenticated" | "agent" | "group" | "origin/client-scoped" | "unknown";
   modes: AccessMode[];
-  reason: "non-owner" | "unknown" | "unrepresentable" | "unsupported-model";
+  reason: "non-owner" | "unknown" | "unrepresentable" | "unsupported-model" | "not-storage-root";
 }
 
 export type OwnerOnlyResult = { private: true } | { private: false; reasons: OwnerOnlyReason[] };
+
+const PIM_STORAGE = "http://www.w3.org/ns/pim/space#Storage";
+const RDF_ACCEPT = "text/turtle, application/ld+json;q=0.9";
+const TARGETS = [`${ACL}accessTo`, `${ACL}default`, `${ACP}resource`];
 
 function refused(reason: OwnerOnlyReason["reason"]): OwnerOnlyResult {
   return { private: false, reasons: [{ subject: "unknown", modes: [], reason }] };
@@ -41,6 +47,7 @@ function policy(
   const allowed = (["read", "append", "write", "control"] as const).map((mode) =>
     modeIri(mode).replace(ACL, vocabulary),
   );
+  const canonical = new URL(resource).href;
   for (const q of dataset) {
     if (q.graph.termType !== "DefaultGraph") throw new TypeError("Named access graph");
     for (const term of [q.subject, q.predicate, q.object]) {
@@ -52,6 +59,14 @@ function policy(
       (q.predicate.value === `${RDF}type` && q.object.value.startsWith(other))
     )
       throw new TypeError("Mixed access models");
+    // The readers compare targets as exact strings, but a server may normalise them. A target
+    // that names this resource only after URL normalisation could hide an effective grant.
+    if (
+      TARGETS.includes(q.predicate.value) &&
+      q.object.value !== resource &&
+      new URL(q.object.value).href === canonical
+    )
+      throw new TypeError("Non-canonical access target");
     if ([`${ACL}mode`, `${ACP}allow`, `${ACP}deny`].includes(q.predicate.value)) {
       if (q.object.termType !== "NamedNode" || !allowed.includes(q.object.value))
         throw new TypeError("Unrepresentable access mode");
@@ -117,13 +132,19 @@ export async function checkOwnerOnly(options: OwnerOnlyOptions): Promise<OwnerOn
     for (let depth = 0; current !== undefined && depth < 64; depth++) {
       const head = await storage.head(current, { revalidate: true });
       if (head.url !== current || head.status !== 200) return refused("unknown");
+      // storage.root is caller-supplied and may be a sub-root. ACP member policies above it
+      // would never be examined, so reaching the root requires the server's pim:Storage type.
+      if (
+        current === root &&
+        !(head.links.get("type") ?? []).some((link) => link.target === PIM_STORAGE)
+      )
+        return refused("not-storage-root");
       if (current === url) container = head.kind === "container";
       const links = [
         ...(head.links.get("acl") ?? []),
         ...(head.links.get(`${ACP}accessControl`) ?? []),
       ];
       if (model === "wac" && head.links.has(`${ACP}accessControl`)) return refused("unknown");
-      if (links.some((link) => Object.hasOwn(link.params, "anchor"))) return refused("unknown");
       const endpoints = [...new Set(links.map((link) => link.target))];
       if (endpoints.length !== 1) return refused("unknown");
       const endpoint = scoped(endpoints[0] as string, root, true);
@@ -147,20 +168,26 @@ export async function checkOwnerOnly(options: OwnerOnlyOptions): Promise<OwnerOn
         !/^(?:W\/)?"[\x21\x23-\x7e\x80-\xff]*"$/.test(accessHead.etag)
       )
         return refused("unknown");
-      // readRdf has no cache-control option. Bind its possibly cached representation to
-      // a fresh HEAD validator. A GET failure after an existing HEAD is never absence.
-      const read: RdfReadResult = await storage.readRdf(endpoint);
+      // read has no cache-control option. Bind its possibly cached representation to a fresh
+      // HEAD validator. A GET failure after an existing HEAD is never absence. The body is
+      // always drained through the 1 MiB cap before any other check.
+      const read = await storage.read(endpoint, { accept: RDF_ACCEPT });
+      const text = await boundedBody(read, endpoint);
       if (
         read.url !== endpoint ||
+        read.status !== 200 ||
         read.etag !== accessHead.etag ||
-        read.notModified ||
-        !read.dataset.size ||
-        read.dataset.size > 10_000
+        read.contentType === null
       )
         return refused("unknown");
+      const dataset = await parseRdf(text, read.contentType, {
+        baseIRI: endpoint,
+        maxQuads: 10_000,
+      });
+      if (!dataset.size) return refused("unknown");
       let parsed: EffectivePolicy;
       try {
-        parsed = policy(read.dataset, current, endpoint, model, acpDialect ?? "css");
+        parsed = policy(dataset, current, endpoint, model, acpDialect ?? "css");
       } catch {
         return refused("unrepresentable");
       }
