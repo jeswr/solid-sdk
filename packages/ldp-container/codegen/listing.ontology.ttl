@@ -1,0 +1,19 @@
+# AUTHORED-BY Codex GPT-6.1-Sol
+# Local generation input for existing LDP classes; this does not redefine LDP.
+@prefix ldp: <http://www.w3.org/ns/ldp#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix vann: <http://purl.org/vocab/vann/> .
+
+<http://www.w3.org/ns/ldp> a owl:Ontology ;
+    vann:preferredNamespacePrefix "ldp" ;
+    vann:preferredNamespaceUri "http://www.w3.org/ns/ldp#" .
+
+ldp:Resource a owl:Class ;
+    rdfs:label "LDP resource"@en ;
+    skos:definition "A resource described by listing metadata."@en .
+
+ldp:Container a owl:Class ;
+    rdfs:label "LDP container"@en ;
+    skos:definition "A resource whose listing identifies member resources."@en .

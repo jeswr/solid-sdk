@@ -4,6 +4,8 @@ import { assertWithinPodScope, isContainerUrl } from "@jeswr/guarded-fetch";
 import { ContainerDataset } from "@solid/object";
 import { DataFactory } from "n3";
 
+export { buildListingDataset, type ListingMetadata } from "./listing.js";
+
 /** A checked, canonical member URL and its trailing-slash container classification. */
 export interface ContainerMember {
   readonly url: string;
