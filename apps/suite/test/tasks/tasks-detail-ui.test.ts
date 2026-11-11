@@ -642,14 +642,15 @@ describe("persistent detail route ownership", () => {
     await moveFromDetails();
     await act(() => vi.waitFor(() => expect(cache.getSnapshot().saving).toEqual([])));
     if (retrying) {
-      expect(router.replace).not.toHaveBeenCalled();
+      expect(replaceState).not.toHaveBeenCalled();
       pod.intercept = undefined;
       const retry = failures.mock.calls[0]?.[1] as () => void;
       await act(() => retry());
-      await act(() => vi.waitFor(() => expect(router.replace).toHaveBeenCalledOnce()));
+      await act(() => vi.waitFor(() => expect(replaceState).toHaveBeenCalledOnce()));
     }
-    expect(router.replace).toHaveBeenCalledOnce();
-    const href = router.replace.mock.calls[0]?.[0] as string;
+    expect(replaceState).toHaveBeenCalledOnce();
+    expect(router.replace).not.toHaveBeenCalled();
+    const href = replaceState.mock.calls[0]?.[2] as string;
     const next = new URL(href, "https://suite.example");
     const movedUrl = decodeRef(next.searchParams.get("task") as string);
     expect(next.pathname).toBe("/tasks/inbox");
