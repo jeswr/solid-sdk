@@ -1,4 +1,5 @@
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 
 # Notification relay
 
@@ -9,7 +10,9 @@ entry (`api/index.ts`, rewrite configuration included). No runtime pod-package d
 
 ```sh
 pnpm --filter @jeswr/app-notification-relay... build
+NODE_ENV=production \
 RELAY_PUBLIC_URL=https://relay.example \
+RELAY_MOBILE_CLIENT_ID=https://mobile.example/clientid.jsonld \
 RELAY_ID_TOKEN_AUDIENCE=https://app.example/clientid.jsonld \
 RELAY_TRUSTED_ISSUERS='[{"issuer":"https://issuer.example","jwksUri":"https://issuer.example/jwks"}]' \
 RELAY_ALLOWED_ORIGINS=https://app.example \
@@ -50,10 +53,36 @@ Ed25519, ECDSA or RSA-PSS. Conflicting algorithm metadata is rejected.
 Other key representations, multiple signatures, extra covered components and digest
 algorithms are rejected. JSON-LD contexts are never fetched.
 
-Outbound description/JWKS requests use DNS-pinned public HTTPS, no redirects, an 8-second
-limit and a 256 KiB limit. Bodies are limited to 1 MiB. Stream URLs are bearer credentials:
+Outbound requests use DNS-pinned public HTTPS, at most three revalidated redirects,
+a 5-second deadline including body reads and a 256 KiB limit. The legacy storage
+description verifier still refuses redirects. Bodies are limited to 1 MiB. Stream URLs are bearer credentials:
 keep them out of access logs and analytics (including reverse-proxy/Vercel logs).
 Browser origins require an explicit allowlist (`RELAY_ALLOWED_ORIGINS`, comma-separated).
+
+The push API now has authentication and route skeletons. Send a Solid-OIDC access token
+as `Authorization: DPoP <token>` and its request-bound proof as `DPoP: <proof>`.
+The relay discovers the issuer's metadata and JWKS, requires audience `solid`, and
+checks that the claimed WebID's RDF profile lists that issuer. It verifies the proof's
+signature, method, public URL (without query or fragment), timestamp within 60 seconds,
+access-token hash and key thumbprint. Discovery, JWKS and profile caches last ten minutes.
+Profile reads carry no credentials and remote JSON-LD contexts are refused.
+
+`RELAY_MOBILE_CLIENT_ID` must exactly match the token's `client_id`. Without it,
+push routes refuse access. The installation create/update/delete and activation routes,
+registration PUT/DELETE, and inbox rotation route in MOB-P2 §4 return 501 after successful
+authentication; auth failures return 401 with `WWW-Authenticate: DPoP`.
+Device proofs, device-only cleanup, registration state and push delivery come in later parts.
+The exported `webhookSenderPolicy` checks the verified WebID against a stored sender,
+without the mobile-client rule; P6 will connect it to webhook deliveries.
+
+`configuredRelay(env, { outboundFetch, store })` supports embedding and tests.
+The async `RelayStore` currently holds atomic five-minute DPoP replay reservations;
+`InMemoryRelayStore` can be shared by several relay objects. Separate processes will need
+a shared backend such as Redis with SET NX PX. Existing SSE state stays local.
+`createRelayOutboundFetch({ allowLoopbackForTests: true })` is only for test harnesses.
+Both deployment entries require `NODE_ENV=production` and reject transport overrides;
+they always build the production guard themselves. No environment setting enables loopback.
+Keep tokens, WebIDs, URLs and payloads out of logs.
 
 Replay buffers retain events for 15 minutes, up to 1000 events/4 MiB per registration;
 slow SSE clients are disconnected after 4 MiB of queued data. There are at most 1000
