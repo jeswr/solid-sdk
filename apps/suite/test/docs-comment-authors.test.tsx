@@ -234,3 +234,27 @@ it("resolves authors independently and ignores pending results from a replaced s
   unmount();
   await act(async () => last.resolve(await profile(webId, "Unmounted")));
 });
+
+// With 129 authors on screen, the LRU used to evict in traversal order and refetch every
+// profile on each 30-second refresh.
+it("refreshes 129 simultaneous authors without refetching their profiles", async () => {
+  const fetch = vi.fn(async (input: RequestInfo | URL) => {
+    const creator = new URL(input instanceof Request ? input.url : input);
+    creator.hash = "me";
+    return profile(creator.href, creator.pathname);
+  });
+  const pod = session(fetch);
+  const authors = Array.from({ length: 129 }, (_, index) => churnAuthor(index));
+  const all = () => authors.flatMap((creator) => threadsFor(creator));
+  const { result, rerender } = renderHook(({ threads }) => useCommentAuthors(pod, threads), {
+    initialProps: { threads: all() },
+  });
+  await waitFor(() =>
+    expect(authors.every((creator) => result.current(creator) === new URL(creator).pathname)).toBe(
+      true,
+    ),
+  );
+  expect(fetch).toHaveBeenCalledTimes(129);
+  for (let refresh = 0; refresh < 3; refresh++) await act(async () => rerender({ threads: all() }));
+  expect(fetch).toHaveBeenCalledTimes(129);
+});
