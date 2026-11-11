@@ -3,11 +3,12 @@
 import { canonicalJson } from "@jeswr/agent-model";
 // biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
 import { createHmac } from "crypto";
-import { type EvidenceLedger, verifyLedger } from "./ledger.js";
+import type { EvidenceLedger } from "./ledger.js";
 import { assertSameGraph, entryGraph, headGraph, parseTurtle, turtle } from "./rdf.js";
 import { readHead } from "./reader.js";
 import { checkedRecord, type LedgerEntry, type LedgerRecord, MAX_AUDIT_SEQ } from "./records.js";
 import { type AuditFetch, auditBase, readDocument, request } from "./transport.js";
+import { verifyLedger } from "./verify.js";
 
 /** Keep this random per-owner salt in the private runtime store, never in pod records. */
 export function hashRecipient(recipient: string, accountId: string, salt: Uint8Array): string {
