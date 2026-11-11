@@ -17,6 +17,7 @@ import {
 import { VersionAction, VersionHistory } from "../src/apps/docs/components/version-history";
 import { baseExtensions, editorExtensions } from "../src/apps/docs/editor/extensions";
 import type { DocumentPersistence } from "../src/apps/docs/editor/persistence";
+import { suggestionKey } from "../src/apps/docs/lib/editor/suggestions";
 import { ResourceReadError } from "../src/apps/docs/lib/model/errors";
 import { type DocumentVersion, DocumentVersionStore } from "../src/apps/docs/lib/model/versions";
 
@@ -472,4 +473,15 @@ it("rejects unsupported snapshot nodes and destroys the temporary document", asy
   expect(destroy).toHaveBeenCalledOnce();
   expect(editor.getText()).toBe("Live content");
   expect(create).not.toHaveBeenCalled();
+});
+
+// AUTHORED-BY Claude Opus 5.5
+it("restores a version as-is while suggesting mode is on (never blocked or turned into a suggestion)", async () => {
+  editor.view.dispatch(editor.state.tr.setMeta(suggestionKey, { enabled: true, author: webId }));
+  render(<Harness />);
+  await select();
+  fireEvent.click(button("Restore this version"));
+  fireEvent.click(button("Restore"));
+  await waitFor(() => expect(editor.getText()).toBe("Old content"));
+  expect(JSON.stringify(editor.getJSON())).not.toContain("suggestion");
 });

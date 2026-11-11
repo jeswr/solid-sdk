@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex
 "use client";
 import {
@@ -48,6 +49,7 @@ import {
   validateImage,
   wordCount,
 } from "../lib/editor/logic";
+import { suggestionAction, suggestionKey } from "../lib/editor/suggestions";
 import { versionDisabledReason } from "../lib/editor/versions";
 import { DocsError, DocsSidebar, DocumentSkeleton } from "./common";
 import { DeleteDialog } from "./delete-dialog";
@@ -61,6 +63,11 @@ import { InlineTitle } from "./inline-title";
 import { OutlinePane } from "./outline-pane";
 import { SaveIndicator } from "./save-indicator";
 import { SlashMenu, type SlashPosition } from "./slash-menu";
+import {
+  ResolveAllSuggestions,
+  SuggestionModeSwitch,
+  SuggestionPopover,
+} from "./suggestion-controls";
 import { TableActions } from "./table-actions";
 import { trashDocumentWithUndo } from "./trash-actions";
 import { VersionHistory } from "./version-history";
@@ -113,6 +120,9 @@ function HydratedEditor({ runtime }: { runtime: DocumentPersistence }) {
   const printAbort = useRef<AbortController | null>(null);
   const [importing, setImporting] = useState(false);
   const [history, setHistory] = useState(false);
+  // Local to this mounted document; never written to Yjs or shared preferences.
+  const [suggesting, setSuggesting] = useState(false);
+  const [resolveAll, setResolveAll] = useState<boolean | null>(null);
   const [namingVersion, setNamingVersion] = useState(false);
   const closeHistory = useCallback(() => setHistory(false), []);
   const closeNamingVersion = useCallback(() => setNamingVersion(false), []);
@@ -240,6 +250,14 @@ function HydratedEditor({ runtime }: { runtime: DocumentPersistence }) {
     [runtime],
   );
   const comments = useDocumentComments(runtime, editor);
+  const changeSuggesting = (enabled: boolean) => {
+    if (!editor?.isEditable || runtime.readOnly || history) return;
+    editor.view.dispatch(
+      editor.state.tr.setMeta(suggestionKey, { enabled, author: runtime.session.webId }),
+    );
+    setSuggesting(enabled);
+    focusDocument(editor);
+  };
   useEffect(() => {
     setMac(/Mac|iPhone|iPad/.test(navigator.platform));
     // On a phone the outline would take half the screen; it starts hidden there.
@@ -535,6 +553,9 @@ function HydratedEditor({ runtime }: { runtime: DocumentPersistence }) {
               runtime.readOnly,
               runtime.online,
             )}
+            suggesting={suggesting}
+            setSuggesting={changeSuggesting}
+            resolveSuggestions={setResolveAll}
             addComment={comments.add}
             commentReason={comments.reason}
             share={sharing.open}
@@ -582,7 +603,8 @@ function HydratedEditor({ runtime }: { runtime: DocumentPersistence }) {
                 progress,
               );
               // setContent is one Yjs transaction and remains undoable through Collaboration.
-              editor.commands.setContent(imported.json);
+              // Tagged so suggesting mode neither blocks nor rewrites a whole-document import.
+              editor.chain().setMeta(suggestionAction, true).setContent(imported.json).run();
               return { skipped: imported.skipped, done: () => focusDocument(editor) };
             }}
           />
@@ -602,6 +624,7 @@ function HydratedEditor({ runtime }: { runtime: DocumentPersistence }) {
             setZoom={setZoom}
             outline={outline}
             toggleOutline={() => setOutline((value) => !value)}
+            modeControl={<SuggestionModeSwitch suggesting={suggesting} change={changeSuggesting} />}
           />
         )}
         {editor && !history && comments.controls}
@@ -679,6 +702,14 @@ function HydratedEditor({ runtime }: { runtime: DocumentPersistence }) {
             position={slash}
             close={() => setSlash(null)}
             image={opens.image}
+          />
+        )}
+        {editor && !runtime.readOnly && !history && <SuggestionPopover editor={editor} />}
+        {editor && resolveAll !== null && !runtime.readOnly && !history && (
+          <ResolveAllSuggestions
+            editor={editor}
+            accept={resolveAll}
+            close={() => setResolveAll(null)}
           />
         )}
         {link && editor && <LinkPopover editor={editor} close={() => setLink(false)} />}
