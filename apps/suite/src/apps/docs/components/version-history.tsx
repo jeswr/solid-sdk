@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 "use client";
+import { podScopedFetch } from "@jeswr/suite-sdk/pod-scoped-fetch";
 import {
   Button,
   Dialog,
@@ -13,7 +14,6 @@ import { ySyncPluginKey, yUndoPluginKey, yXmlFragmentToProsemirrorJSON } from "@
 import { type ReactNode, useEffect, useId, useMemo, useRef, useState } from "react";
 import { baseExtensions } from "../editor/extensions";
 import type { DocumentPersistence } from "../editor/persistence";
-import { podScopedFetch } from "../editor/private-image";
 import { useDialogFocus } from "../hooks/use-dialog-focus";
 import { suggestionAction } from "../lib/editor/suggestions";
 import { versionDisabledReason } from "../lib/editor/versions";

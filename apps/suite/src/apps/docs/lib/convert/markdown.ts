@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+import { chipIri } from "@jeswr/suite-sdk/chips/core";
 // AUTHORED-BY Codex
 import { MarkdownManager } from "@tiptap/markdown";
 import { DOMParser as SchemaDOMParser, type TagParseRule } from "@tiptap/pm/model";
@@ -325,6 +326,8 @@ function exactAttributes(node: JSONContent | InlineMark, mark = false): string {
 }
 
 function htmlNode(node: JSONContent): string {
+  if (node.type === "chip" && !chipIri(String(node.attrs?.iri ?? "")))
+    return escapeHtmlText(String(node.attrs?.label ?? ""));
   if (node.type === "chip")
     return `<a${attributes({ href: node.attrs?.iri, "data-chip": "", "data-chip-kind": node.attrs?.kind, "data-chip-label": node.attrs?.label })}>${escapeHtmlText(String(node.attrs?.label ?? ""))}</a>`;
   if (node.type === "text") return serializeInline([node], false, true);

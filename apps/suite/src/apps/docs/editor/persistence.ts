@@ -2,12 +2,17 @@
 // AUTHORED-BY Codex GPT-6
 
 import { RdfFetchError } from "@jeswr/fetch-rdf";
+import {
+  addedChipRefs,
+  type ChipRef,
+  htmlChipRefs,
+  notifySavedChips,
+} from "@jeswr/suite-sdk/chips";
 import { type SolidPersistence, SolidUpdateStore } from "@jeswr/y-solid";
 import { generateHTML, getSchema, type JSONContent } from "@tiptap/react";
 import { prosemirrorJSONToYDoc, yDocToProsemirrorJSON } from "@tiptap/y-tiptap";
 import { IndexeddbPersistence, storeState } from "y-indexeddb";
 import { applyUpdate, Doc, encodeStateAsUpdate, mergeUpdates } from "yjs";
-import { notifySavedHtml } from "@/lib/chip-mentions";
 import type { PodSession } from "@/lib/session/pod-session";
 import { createSolidDriveClient } from "../../drive/lib/client/client";
 import { deriveTitle, type SaveState, wordCount } from "../lib/editor/logic";
@@ -75,6 +80,7 @@ export class DocumentPersistence {
   local: IndexeddbPersistence | undefined;
   provider: SolidPersistence | undefined;
   stored: StoredDocument | undefined;
+  private readonly addedMentions = new Map<string, ChipRef>();
   private titleState: TitleState | undefined;
   title = "";
   body = "<p></p>";
@@ -1049,8 +1055,15 @@ export class DocumentPersistence {
     this.body = body;
     this.json = json;
   }
-  change(body: string, json: JSONContent) {
+  change(body: string, json: JSONContent, localMentions = true) {
     if (this.readOnly) return;
+    const refs = htmlChipRefs(body);
+    if (localMentions) {
+      for (const ref of addedChipRefs(htmlChipRefs(this.body), refs))
+        this.addedMentions.set(ref.iri, ref);
+    }
+    for (const iri of this.addedMentions.keys())
+      if (!refs.some((ref) => ref.iri === iri)) this.addedMentions.delete(iri);
     this.capture(body, json);
     if (this.creation === "draft" && !this.title) {
       try {
@@ -1186,6 +1199,7 @@ export class DocumentPersistence {
             ? title
             : undefined;
         const snapshot = this.snapshot();
+        const mentions = new Map(this.addedMentions);
         this.state = "saving";
         this.notify();
         if (this.creation !== "created") {
@@ -1266,6 +1280,13 @@ export class DocumentPersistence {
         const confirmed = await this.persistUpdates();
         await this.withMirror((mirror) => storeState(mirror, true));
         await this.cacheStored();
+        const saved = this.stored as StoredDocument;
+        const savedRefs = htmlChipRefs(saved.data.body).filter((ref) => mentions.has(ref.iri));
+        void notifySavedChips(this.session, saved.url, [], savedRefs, saved.data.title).catch(
+          () => {},
+        );
+        for (const [iri, ref] of mentions)
+          if (this.addedMentions.get(iri) === ref) this.addedMentions.delete(iri);
         this.savedVersion = version;
         this.lastSaved = Date.now();
         if (this.version === version) {
@@ -1291,7 +1312,6 @@ export class DocumentPersistence {
       }
       this.state = this.conflict ? "failed" : "saved";
       if (this.state === "saved" && this.stored && !this.stopped) {
-        void notifySavedHtml(this.session, this.stored.url, this.body).catch(() => {});
         void this.automaticVersions.afterSave(
           new DocumentVersionStore(docContainerUrls(this.stored.url).versions, this.session.fetch),
           this.doc,

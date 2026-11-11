@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex
 "use client";
+import { podScopedFetch } from "@jeswr/suite-sdk/pod-scoped-fetch";
 import {
   AppIcon,
   Avatar,
@@ -16,6 +17,7 @@ import {
 } from "@jeswr/suite-ui";
 import { useEditor } from "@tiptap/react";
 import { BubbleMenu } from "@tiptap/react/menus";
+import { ySyncPluginKey } from "@tiptap/y-tiptap";
 import { ArrowLeft, ImagePlus, Star } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -33,7 +35,6 @@ import { imageTransfer, type RichImageTransfer } from "../editor/image-transfer"
 import { convertImport, uploadImportImage } from "../editor/import-document";
 import type { DocumentPersistence } from "../editor/persistence";
 import { printDocument } from "../editor/print-document";
-import { podScopedFetch } from "../editor/private-image";
 import { useDialogFocus } from "../hooks/use-dialog-focus";
 import { useDocument } from "../hooks/use-document";
 import { useDocumentComments } from "../hooks/use-document-comments";
@@ -221,7 +222,12 @@ function HydratedEditor({ runtime }: { runtime: DocumentPersistence }) {
       },
       onUpdate: ({ editor, transaction }) => {
         if (runtime.readOnly) return;
-        runtime.change(editor.getHTML(), editor.getJSON());
+        runtime.change(
+          editor.getHTML(),
+          editor.getJSON(),
+          !transaction.getMeta(ySyncPluginKey)?.isChangeOrigin &&
+            !transaction.getMeta("suiteChipImport"),
+        );
         setRevision((n) => n + 1);
         if (!transaction.getMeta("docsSlashClosed")) {
           const { $from } = editor.state.selection;
@@ -606,7 +612,12 @@ function HydratedEditor({ runtime }: { runtime: DocumentPersistence }) {
               );
               // setContent is one Yjs transaction and remains undoable through Collaboration.
               // Tagged so suggesting mode neither blocks nor rewrites a whole-document import.
-              editor.chain().setMeta(suggestionAction, true).setContent(imported.json).run();
+              editor
+                .chain()
+                .setMeta(suggestionAction, true)
+                .setMeta("suiteChipImport", true)
+                .setContent(imported.json)
+                .run();
               return { skipped: imported.skipped, done: () => focusDocument(editor) };
             }}
           />

@@ -1,8 +1,8 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 "use client";
+import { notifySavedHtml } from "@jeswr/suite-sdk/chips";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { notifySavedHtml } from "@/lib/chip-mentions";
 import { usePodSessionState } from "@/lib/session/pod-session";
 import { NoteConflictError } from "../lib/model/errors";
 import type { NotesStore, StoredNote } from "../lib/model/store";
@@ -57,7 +57,10 @@ export function useNoteDraft(
   const save = useCallback<NotesStore["save"]>(
     async (...args) => {
       const saved = await store.save(...args);
-      if (session) void notifySavedHtml(session, saved.url, saved.body).catch(() => {});
+      if (session)
+        void notifySavedHtml(session, saved.url, args[0].body, saved.body, saved.title).catch(
+          () => {},
+        );
       return saved;
     },
     [store, session],

@@ -248,3 +248,20 @@ once-on-save mention notification drafts/delivery. `@jeswr/suite-sdk/chips/tipta
 `createChipExtension`, an inline atom whose fallback HTML is a normal resource anchor.
 The suite-ui package supplies `Chip` hover cards and the keyboard-accessible `ChipPicker`.
 See [SKILL.md](./SKILL.md) for lifecycle and receipt guarantees.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+Smart chip consumers can import types, validation, text helpers and `chipHref(ref, encodeRef)`
+from the dependency-free `@jeswr/suite-sdk/chips/core` leaf. Tiptap's optional peers are used
+only by `./chips/tiptap`. `createChipPeople` accepts a contact-loader adapter; `createChipSearch`
+adapts shell search results without another index.
+
+After acknowledged local saves, call `notifySavedHtml/Text(session, resource, before, after, title)`.
+Only newly added person IRIs are notified. Supply loaded/last-saved content and the resource title
+(maximum 120 characters in the notification); never pass private body text as the title. Do not
+notify on import or remote merge. Collaborative editors can track local deltas with `addedChipRefs`
+and send acknowledged additions through `notifySavedChips`. `htmlChipRefs` validates raw absolute
+HTTP(S) hrefs. `createMentionNotifier` validates before receipts and isolates per-person failures.
+
+`podScopedFetch` and `isOwnPodIri` from `./pod-scoped-fetch` keep authenticated reads inside the
+user's storage path. Foreign reads bypass the session transport/cache and omit credentials,
+referrers and native caching; redirects are refused. Resolve foreign chips only on hover/focus.

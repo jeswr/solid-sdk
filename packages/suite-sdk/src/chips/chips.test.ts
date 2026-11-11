@@ -102,6 +102,8 @@ describe("chip candidates", () => {
     for (const iri of [
       "javascript:alert(1)",
       "relative",
+      "https:relative",
+      "//pod.example/relative",
       "https://user:secret@example.org/",
       "https://pod.example/a b",
     ])
@@ -131,14 +133,14 @@ describe("text chips and mention drafts", () => {
       expect(chipQuery(text, text.length)).toBeNull();
     expect(chipQuery("```x``` @Bob", 12)?.query).toBe("Bob");
   });
-  it("builds the existing Create mention shape, with bounded excerpt and stable receipt keys", () => {
+  it("builds the existing Create mention shape, with bounded title and stable receipt keys", () => {
     expect(mentionNotification(file.iri, person.iri, "hello")).toEqual({
       type: "Create",
       object: file.iri,
       target: file.iri,
       summary: "Mentioned you: hello",
     });
-    expect(mentionNotification(file.iri, person.iri, "x".repeat(500)).summary?.length).toBe(295);
+    expect(mentionNotification(file.iri, person.iri, "x".repeat(500)).summary?.length).toBe(135);
     expect(() => mentionNotification("bad", person.iri, "")).toThrow();
     expect(() => mentionNotification(file.iri, "bad", "")).toThrow();
     expect(mentionKey(file.iri, person.iri)).not.toBe(mentionKey(person.iri, file.iri));
@@ -161,7 +163,7 @@ describe("text chips and mention drafts", () => {
       throw new Error("network");
     });
     const send = createMentionNotifier({ actor: file.iri, notify, receipts: localStorage });
-    await expect(send(file.iri, [person], "Hi")).rejects.toThrow("network");
+    await send(file.iri, [person], "Hi");
     await send(file.iri, [person], "Retry");
     expect(notify).toHaveBeenCalledTimes(1);
     const unavailable = createMentionNotifier({
@@ -174,8 +176,26 @@ describe("text chips and mention drafts", () => {
         },
       },
     });
-    await expect(unavailable(file.iri, [person], "Hi")).rejects.toThrow("quota");
+    await unavailable(file.iri, [person], "Hi");
     expect(notify).toHaveBeenCalledTimes(1);
+  });
+  it("validates before receipts and continues after malformed refs or failed delivery", async () => {
+    const notify = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("offline"))
+      .mockResolvedValue({ delivered: true });
+    const receipts = { getItem: vi.fn(() => null), setItem: vi.fn() };
+    const send = createMentionNotifier({ actor: file.iri, notify, receipts });
+    await send("bad", [person], "Title");
+    await send(
+      file.iri,
+      [{ ...person, iri: "relative" }, person, { ...person, iri: "https://cat.example/#me" }],
+      "Title",
+    );
+    expect(receipts.setItem).toHaveBeenCalledTimes(2);
+    expect(notify).toHaveBeenCalledTimes(2);
+    await createMentionNotifier({ actor: "bad", notify, receipts })(file.iri, [person], "Title");
+    expect(notify).toHaveBeenCalledTimes(2);
   });
 });
 

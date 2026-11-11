@@ -5,17 +5,6 @@ import type { DOMOutputSpec } from "@tiptap/pm/model";
 import { normaliseImageDestination } from "../lib/editor/destination";
 import { readPodImage } from "../lib/editor/image-upload";
 import { imageLinkFromHtml, normaliseImageLink } from "./image-link";
-/**
- * Pod credentials go only to the pod's own origin: an image URL pasted from elsewhere is fetched
- * anonymously, so a document can't make the editor send authenticated requests to other hosts.
- */
-export function podScopedFetch(fetchImpl: typeof fetch, storageUrl: string): typeof fetch {
-  const podOrigin = new URL(storageUrl).origin;
-  return (input, init) =>
-    new URL(input instanceof Request ? input.url : String(input)).origin === podOrigin
-      ? fetchImpl(input, init)
-      : fetch(input, { ...init, credentials: "omit", referrerPolicy: "no-referrer" });
-}
 /** The stored src stays a pod URL; authenticated bytes are displayed only in the node view. */
 export function privateImage(fetchImpl: typeof fetch, acceptSource = normaliseImageDestination) {
   return Image.extend({

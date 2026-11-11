@@ -55,7 +55,11 @@
       "types": "./dist/sign-in/index.d.ts",
       "import": "./dist/sign-in/index.js"
     },
-    "./styles/sign-in.css": "./dist/styles/sign-in.css"
+    "./styles/sign-in.css": "./dist/styles/sign-in.css",
+    "./chips": {
+      "types": "./dist/chips.d.ts",
+      "import": "./dist/chips.js"
+    }
   },
   "files": [
     "dist",

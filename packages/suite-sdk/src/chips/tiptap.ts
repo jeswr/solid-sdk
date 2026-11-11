@@ -1,6 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { Node } from "@tiptap/core";
-import { type ChipRef, chipIri, chipKinds } from "./index.js";
+import { type ChipRef, chipIri, chipKinds } from "./core.js";
 
 /** An atom with a normal anchor fallback. The factory has no React or app dependencies. */
 export function createChipExtension() {

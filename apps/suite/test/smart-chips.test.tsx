@@ -11,6 +11,7 @@ const { cleanup, fireEvent, render, screen, waitFor } = requireUi(
   "@testing-library/react",
 ) as typeof import("../../../packages/suite-ui/node_modules/@testing-library/react");
 
+import { htmlChipRefs } from "@jeswr/suite-sdk/chips";
 import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { parseInline } from "../src/apps/chat/lib/text/inline";
@@ -20,7 +21,6 @@ import { parseDocumentHtml } from "../src/apps/docs/lib/editor/parse-html";
 import { documentStatistics } from "../src/apps/docs/lib/outline";
 import { notesExtensions } from "../src/apps/notes/editor/extensions";
 import { ChipText, ChipTextarea, chipHref } from "../src/components/chips";
-import { htmlChipRefs } from "../src/lib/chip-mentions";
 
 afterEach(cleanup);
 
@@ -121,6 +121,23 @@ describe("shared suite chip adapters", () => {
     const exported = exportMarkdown(imported);
     const parsed = importMarkdown(exported, "chips.md").json;
     expect(parsed).toEqual(imported);
+  });
+  it("exports unsafe or relative chip IRIs as escaped label text", () => {
+    for (const iri of ["javascript:alert(1)", "relative", "", "https://u:p@evil.example/"]) {
+      const output = exportMarkdown({
+        type: "doc",
+        content: [
+          {
+            type: "paragraph",
+            content: [{ type: "chip", attrs: { iri, label: "<Private> & label", kind: "person" } }],
+          },
+        ],
+      });
+      expect(output).not.toContain("href=");
+      const parsed = new window.DOMParser().parseFromString(output, "text/html");
+      expect(parsed.body.textContent).toBe("<Private> & label");
+      expect(parsed.querySelector("a")).toBeNull();
+    }
   });
   it("never imports an unsafe chip IRI and collects person references from stored HTML", () => {
     const imported = importHtml(

@@ -1,4 +1,6 @@
 // AUTHORED-BY Codex
+
+import { podScopedFetch } from "@jeswr/suite-sdk/pod-scoped-fetch";
 import { generateHTML, type JSONContent } from "@tiptap/react";
 import { Packer } from "docx";
 import type { PodSession } from "@/lib/session/pod-session";
@@ -9,7 +11,6 @@ import { normaliseImageDestination } from "../lib/editor/destination";
 import { baseExtensions } from "./extensions";
 import { imagePng } from "./image-blob";
 import { loadDocumentContent } from "./persistence";
-import { podScopedFetch } from "./private-image";
 
 export type DownloadFormat = "docx" | "md" | "html";
 export async function readExportImage(session: PodSession, src: string): Promise<ExportImage> {

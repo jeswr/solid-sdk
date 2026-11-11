@@ -64,6 +64,9 @@ describe("DOCX authenticated image loading", () => {
       redirect: "error",
       credentials: "omit",
       referrerPolicy: "no-referrer",
+      referrer: "",
+      cache: "no-store",
+      headers: new Headers(),
     });
     expect(close).toHaveBeenCalledTimes(2);
   });

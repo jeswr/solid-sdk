@@ -427,3 +427,12 @@ callback, and exposes a hover/focus card with owner and an Open link. Unreadable
 keep their stored label and link directly to the IRI with a lock icon. `ChipPicker` supplies
 a debounced combobox/listbox with arrows, Enter, Escape, composition handling and cancelled
 search fencing. Import the existing components stylesheet; both components use suite tokens.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+Import chip UI from `@jeswr/suite-ui/chips`: `Chip`, `ChipPicker`, `ChipTextarea`,
+`ChipPickerAnchor`, `ChipText` and `ChipEditorTools`. This subpath imports only the SDK's dependency-free
+`chips/core` leaf; the root UI barrel does not load chip code. Pass a `search(query, signal)`
+callback to composers. Rich editors provide a `ChipEditorAdapter` for query/subscription,
+focus and insertion. `Chip` defers metadata until hover/focus unless `resolveOnMount` is
+explicitly set for an own-pod resource. Textarea blur handlers always run; Escape restores
+composer focus, while Tab or outside focus closes the picker without refocusing.

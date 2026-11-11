@@ -2,13 +2,8 @@
 import { fetchRdf, RdfFetchError } from "@jeswr/fetch-rdf";
 import { LiteralAs, NamedNodeAs, OptionalFrom, TermWrapper } from "@rdfjs/wrapper";
 import { DataFactory } from "n3";
-import { type ChipRef, chipIri, chipKind } from "./index.js";
+import { type ChipRef, chipIri, chipKind, type ResolvedChip } from "./core.js";
 
-export interface ResolvedChip extends ChipRef {
-  icon: ChipRef["kind"] | "lock";
-  readable: boolean;
-  owner?: string;
-}
 type Metadata = Omit<ResolvedChip, "label" | "kind" | "icon"> &
   Partial<Pick<ResolvedChip, "label" | "kind" | "icon">>;
 // Weakly scoped to the caller's session transport; no identity's metadata crosses sessions.

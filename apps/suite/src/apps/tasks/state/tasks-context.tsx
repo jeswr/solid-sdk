@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 "use client";
+import { notifySavedText } from "@jeswr/suite-sdk/chips";
 import { toast } from "@jeswr/suite-ui";
 import {
   createContext,
@@ -11,7 +12,6 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
-import { notifySavedText } from "@/lib/chip-mentions";
 import type { PodSession } from "@/lib/session/pod-session";
 import { classifyError } from "../lib/model/errors";
 import { type StoredProject, TaskStore } from "../lib/model/store";
@@ -134,7 +134,13 @@ function useTasksValue(session: PodSession) {
       updateTask: async (...args: Parameters<typeof cache.updateTask>) => {
         const saved = await cache.updateTask(...args);
         if (saved)
-          void notifySavedText(session, saved.url, saved.task.description ?? "").catch(() => {});
+          void notifySavedText(
+            session,
+            saved.url,
+            args[0].task.description ?? "",
+            saved.task.description ?? "",
+            saved.task.title ?? "Task",
+          ).catch(() => {});
         return saved;
       },
       updateProject: cache.updateProject.bind(cache),

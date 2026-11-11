@@ -1,11 +1,11 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 "use client";
+import { notifySavedText } from "@jeswr/suite-sdk/chips";
 import { Button, IconButton, toast } from "@jeswr/suite-ui";
 import { Send, X } from "lucide-react";
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { ChipTextarea } from "@/components/chips";
-import { notifySavedText } from "@/lib/chip-mentions";
 import { usePodSessionState } from "@/lib/session/pod-session";
 import type { Message } from "../lib/client";
 import { useChatActions, useDraft } from "../state/chat-context";
@@ -52,7 +52,13 @@ export function Composer({
       try {
         await actions.edit(url, editing.id, draft);
         if (sessionState.status === "ready")
-          void notifySavedText(sessionState.session, editing.id, draft).catch(() => {});
+          void notifySavedText(
+            sessionState.session,
+            editing.id,
+            editing.content,
+            draft,
+            "Chat message",
+          ).catch(() => {});
         onEdit(undefined);
         setDraft("");
       } catch {

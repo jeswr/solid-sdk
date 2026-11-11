@@ -99,8 +99,6 @@ export function TaskDetail({
   const title = titleDraft.value;
   const description = descriptionDraft.value;
   const [editingDescription, setEditingDescription] = useState(false);
-  const [comment, setComment] = useState("");
-  const [commentSaving, setCommentSaving] = useState(false);
   const [childTitle, setChildTitle] = useState("");
   const [addingChild, setAddingChild] = useState(false);
   const childField = useRef<HTMLInputElement>(null);
@@ -460,35 +458,6 @@ export function TaskDetail({
           </button>
         )}
       </section>
-      <form
-        aria-label="Task comments"
-        onSubmit={(event) => {
-          event.preventDefault();
-          if (!comment.trim() || commentSaving) return;
-          const submitted = comment;
-          setCommentSaving(true);
-          void tasks
-            .updateTask(stored, (task) => {
-              task.description = `${task.description ?? ""}\n\n${tasks.webId}: ${submitted}`.trim();
-            })
-            .then((saved) => {
-              if (saved) setComment("");
-            })
-            .catch(() => toast.error("Couldn't post your comment. Your draft is still here."))
-            .finally(() => setCommentSaving(false));
-        }}
-      >
-        <label htmlFor={`${id}-comment`}>Add a comment</label>
-        <ChipTextarea
-          id={`${id}-comment`}
-          value={comment}
-          onChange={(event) => setComment(event.target.value)}
-          disabled={commentSaving}
-        />
-        <Button type="submit" disabled={!comment.trim() || commentSaving}>
-          Post comment
-        </Button>
-      </form>
       <TaskAttachments key={stored.url} stored={stored} />
       <TaskProperties
         stored={stored}

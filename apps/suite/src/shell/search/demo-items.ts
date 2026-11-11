@@ -3,13 +3,15 @@
  * Search items for the demo account, derived from the demo pod's seed so the
  * TopBar search and /search show real results before SDK-APP-09 lands.
  */
+import { type ChipRef, chipHref } from "@jeswr/suite-sdk/chips/core";
+import type { AppSlug } from "@jeswr/suite-ui";
 import { DEMO_ROOT, DEMO_WEBID } from "../../lib/demo-pod/seed";
 import { encodeRef } from "../../lib/refs";
 import type { LocalSearchItem } from "./local-source";
 
 interface SeedEntry {
   readonly path: string;
-  readonly search?: import("@jeswr/suite-sdk/chips").ChipRef;
+  readonly search?: ChipRef;
   readonly contentType?: string;
   readonly modified?: number;
 }
@@ -21,9 +23,30 @@ export function demoSearchItems(seed: readonly SeedEntry[]): LocalSearchItem[] {
           {
             id: entry.search.iri,
             title: entry.search.label,
-            type: "data",
-            app: "calendar",
-            href: `/calendar/e/${encodeRef(entry.search.iri.split("#")[0] as string)}`,
+            type:
+              entry.search.kind === "person"
+                ? "person"
+                : entry.search.kind === "task"
+                  ? "task"
+                  : entry.search.kind === "file"
+                    ? "file"
+                    : ["doc", "note", "sheet"].includes(entry.search.kind)
+                      ? "document"
+                      : "data",
+            app: (entry.search.app ??
+              (
+                {
+                  person: "contacts",
+                  file: "drive",
+                  doc: "docs",
+                  sheet: "sheets",
+                  note: "notes",
+                  event: "calendar",
+                  task: "tasks",
+                } as Record<string, AppSlug>
+              )[entry.search.kind] ??
+              "drive") as AppSlug,
+            href: chipHref(entry.search, encodeRef),
             owner: DEMO_WEBID,
           },
         ]

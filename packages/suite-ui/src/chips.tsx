@@ -1,6 +1,13 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 "use client";
-import { type ChipRef, chipIri, type ResolvedChip } from "@jeswr/suite-sdk/chips";
+import {
+  type ChipRef,
+  chipIri,
+  chipQuery,
+  chipText,
+  type ResolvedChip,
+  textChips,
+} from "@jeswr/suite-sdk/chips/core";
 import {
   Calendar,
   CheckSquare,
@@ -13,9 +20,19 @@ import {
   StickyNote,
   User,
 } from "lucide-react";
-import { useEffect, useId, useRef, useState } from "react";
+import {
+  type ComponentProps,
+  Fragment,
+  type ReactNode,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+} from "react";
+import { createPortal } from "react-dom";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "./components/ui/hover-card.js";
 import { Input } from "./components/ui/input.js";
+import { Textarea } from "./components/ui/textarea.js";
 
 const icons = {
   person: User,
@@ -34,10 +51,12 @@ export function Chip({
   reference,
   resolve,
   href = reference.iri,
+  resolveOnMount = false,
 }: {
   reference: ChipRef;
   resolve?: ((ref: ChipRef) => Promise<ResolvedChip>) | undefined;
   href?: string;
+  resolveOnMount?: boolean;
 }) {
   const [live, setLive] = useState<ResolvedChip>();
   const [open, setOpen] = useState(false);
@@ -47,7 +66,7 @@ export function Chip({
   }, [reference, resolve]);
   useEffect(() => {
     let active = true;
-    if (resolve)
+    if (resolve && chipIri(reference.iri) && (resolveOnMount || open))
       void resolve(reference)
         .then((value) => {
           if (active) setLive(value);
@@ -58,7 +77,7 @@ export function Chip({
     return () => {
       active = false;
     };
-  }, [reference, resolve]);
+  }, [reference, resolve, resolveOnMount, open]);
   const label = live?.label ?? reference.label;
   const Icon = icons[live?.icon ?? reference.kind] ?? icons.link;
   if (!chipIri(reference.iri)) return <span>{label}</span>;
@@ -114,7 +133,7 @@ export function ChipPicker({
   search: (query: string, signal: AbortSignal) => Promise<ChipRef[]>;
   initialQuery?: string;
   onChoose: (ref: ChipRef) => void;
-  onClose: () => void;
+  onClose: (restoreFocus?: boolean) => void;
 }) {
   const id = useId();
   const input = useRef<HTMLInputElement>(null);
@@ -171,7 +190,7 @@ export function ChipPicker({
           if (event.key === "Escape" || event.key === "Tab") {
             if (event.key === "Escape") event.preventDefault();
             event.stopPropagation();
-            onClose();
+            onClose(event.key === "Escape");
           } else if (event.key === "ArrowDown" || event.key === "ArrowUp") {
             event.preventDefault();
             setActive((value) =>
@@ -210,5 +229,156 @@ export function ChipPicker({
       </div>
       {status && <p role="status">{status}</p>}
     </div>
+  );
+}
+
+/** Shared portal positioning for text and rich-text composers. */
+export function ChipPickerAnchor({ children }: { children: ReactNode }) {
+  return createPortal(
+    <div
+      style={{ position: "fixed", bottom: "var(--space-4)", left: "var(--space-4)", zIndex: 100 }}
+    >
+      {children}
+    </div>,
+    document.body,
+  );
+}
+
+export type ChipSearch = (query: string, signal: AbortSignal) => Promise<ChipRef[]>;
+type ChipRange = NonNullable<ReturnType<typeof chipQuery>>;
+export interface ChipEditorAdapter {
+  query(): ChipRange | null;
+  subscribe(listener: () => void): () => void;
+  focus(): void;
+  insert(range: ChipRange, ref: ChipRef): void;
+}
+/** Editor-specific transaction access stays in the caller's small adapter. */
+export function ChipEditorTools({
+  editor,
+  search,
+}: {
+  editor: ChipEditorAdapter | null;
+  search: ChipSearch;
+}) {
+  const [range, setRange] = useState<ChipRange | null>(null);
+  const dismissed = useRef<number | null>(null);
+  useEffect(() => {
+    setRange(null);
+    if (!editor) return;
+    return editor.subscribe(() => {
+      const query = editor.query();
+      if (!query) {
+        dismissed.current = null;
+        return;
+      }
+      if (dismissed.current !== query.from) setRange(query);
+    });
+  }, [editor]);
+  if (!range || !editor) return null;
+  return (
+    <ChipPickerAnchor>
+      <ChipPicker
+        initialQuery={range.query}
+        search={search}
+        onClose={(restoreFocus) => {
+          dismissed.current = range.from;
+          setRange(null);
+          if (restoreFocus) editor.focus();
+        }}
+        onChoose={(ref) => {
+          setRange(null);
+          editor.insert(range, ref);
+        }}
+      />
+    </ChipPickerAnchor>
+  );
+}
+
+/** Adds mentions while preserving the caller's controlled field and blur/save contract. */
+export function ChipTextarea({
+  value = "",
+  onChange,
+  onBlur,
+  ref: forwardedRef,
+  search,
+  ...props
+}: ComponentProps<"textarea"> & { search: ChipSearch }) {
+  const field = useRef<HTMLTextAreaElement | null>(null);
+  const dismissed = useRef<number | null>(null);
+  const [range, setRange] = useState<ReturnType<typeof chipQuery>>(null);
+  const current = String(value);
+  return (
+    <>
+      <Textarea
+        {...props}
+        value={value}
+        ref={(node) => {
+          field.current = node;
+          if (typeof forwardedRef === "function") forwardedRef(node);
+          else if (forwardedRef) forwardedRef.current = node;
+        }}
+        onChange={(event) => {
+          onChange?.(event);
+          const query = chipQuery(event.target.value, event.target.selectionStart);
+          if (!query) dismissed.current = null;
+          setRange(query && dismissed.current !== query.from ? query : null);
+        }}
+        onBlur={onBlur}
+      />
+      {range && (
+        <ChipPickerAnchor>
+          <ChipPicker
+            initialQuery={range.query}
+            search={search}
+            onClose={(restoreFocus) => {
+              dismissed.current = range.from;
+              setRange(null);
+              if (restoreFocus) field.current?.focus();
+            }}
+            onChoose={(reference) => {
+              const node = field.current;
+              setRange(null);
+              if (!node || node.disabled || node.readOnly) return;
+              const next = `${current.slice(0, range.from)}${chipText(reference)} ${current.slice(range.to)}`;
+              Object.getOwnPropertyDescriptor(
+                window.HTMLTextAreaElement.prototype,
+                "value",
+              )?.set?.call(node, next);
+              node.dispatchEvent(new Event("input", { bubbles: true }));
+              node.dispatchEvent(new Event("change", { bubbles: true }));
+              node.focus();
+            }}
+          />
+        </ChipPickerAnchor>
+      )}
+    </>
+  );
+}
+
+/** Render plain composers' structured links without duplicating their parsing in applications. */
+export function ChipText({
+  text,
+  plain = (value: string) => value,
+  renderChip = (reference: ChipRef) => <Chip reference={reference} />,
+}: {
+  text: string;
+  plain?: ((value: string) => ReactNode) | undefined;
+  renderChip?: (reference: ChipRef) => ReactNode;
+}) {
+  let cursor = 0;
+  return (
+    <>
+      {textChips(text).map(({ ref, from, to }) => {
+        const before = text.slice(cursor, from);
+        cursor = to;
+        return (
+          <Fragment key={`${from}:${ref.iri}`}>
+            {plain(before)}
+            {renderChip(ref)}
+          </Fragment>
+        );
+      })}
+      {plain(text.slice(cursor))}
+    </>
   );
 }

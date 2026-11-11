@@ -5738,18 +5738,6 @@ importers:
       '@jeswr/fetch-rdf':
         specifier: workspace:*
         version: link:../fetch-rdf
-      '@rdfjs/wrapper':
-        specifier: 0.34.0
-        version: 0.34.0
-      '@tiptap/core':
-        specifier: 3.31.4
-        version: 3.31.4(@tiptap/pm@3.31.4)
-      '@tiptap/pm':
-        specifier: 3.31.4
-        version: 3.31.4
-      n3:
-        specifier: 2.0.3
-        version: 2.0.3
       '@jeswr/guarded-fetch':
         specifier: workspace:*
         version: link:../guarded-fetch
@@ -5771,13 +5759,25 @@ importers:
       '@jeswr/storage-client':
         specifier: workspace:*
         version: link:../storage-client
+      '@rdfjs/wrapper':
+        specifier: 0.34.0
+        version: 0.34.0
+      n3:
+        specifier: 2.0.3
+        version: 2.0.3
     devDependencies:
-      '@types/n3':
-        specifier: 1.26.1
-        version: 1.26.1
       '@biomejs/biome':
         specifier: ^2.5.1
         version: 2.5.3
+      '@tiptap/core':
+        specifier: 3.31.4
+        version: 3.31.4(@tiptap/pm@3.31.4)
+      '@tiptap/pm':
+        specifier: 3.31.4
+        version: 3.31.4
+      '@types/n3':
+        specifier: 1.26.1
+        version: 1.26.1
       '@types/node':
         specifier: ^25.9.2
         version: 25.9.5
@@ -5808,12 +5808,12 @@ importers:
 
   packages/suite-ui:
     dependencies:
-      '@jeswr/suite-sdk':
-        specifier: workspace:*
-        version: link:../suite-sdk
       '@hookform/resolvers':
         specifier: 5.4.0
         version: 5.4.0(react-hook-form@7.81.0(react@19.2.7))
+      '@jeswr/suite-sdk':
+        specifier: workspace:*
+        version: link:../suite-sdk
       '@radix-ui/react-popover':
         specifier: 1.1.19
         version: 1.1.19(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
