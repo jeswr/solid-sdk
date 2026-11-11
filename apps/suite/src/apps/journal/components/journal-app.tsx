@@ -1,6 +1,6 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
 "use client";
-import { Button, ErrorState, LoadingSkeleton, Toaster } from "@jeswr/suite-ui";
+import { Button, ErrorState, LoadingSkeleton } from "@jeswr/suite-ui";
 import { BookOpen, LockKeyhole } from "lucide-react";
 import type { ReactNode } from "react";
 import { PodSessionProvider, usePodSessionState } from "@/lib/session/pod-session";
@@ -86,7 +86,6 @@ export function JournalApp({ children }: { children: ReactNode }) {
     <AppSessionGuard>
       <PodSessionProvider>
         <SessionGate>{children}</SessionGate>
-        <Toaster position="bottom-center" />
       </PodSessionProvider>
     </AppSessionGuard>
   );

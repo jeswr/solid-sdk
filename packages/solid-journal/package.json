@@ -16,14 +16,16 @@
   "files": [
     "dist",
     "codegen",
-    "README.md"
+    "codegen.config.json",
+    "README.md",
+    "LICENSE"
   ],
   "scripts": {
-    "build": "../../node_modules/.bin/tsc -p tsconfig.build.json && node scripts/copy-generated.mjs",
+    "build": "tsc -p tsconfig.build.json && node scripts/copy-generated.mjs",
     "codegen": "node node_modules/@jeswr/federation-codegen/dist/cli.js gen --ontology codegen/journal.ontology.ttl --shapes codegen/journal.shapes.ttl --config codegen.config.json --out src/generated",
-    "lint": "../../node_modules/.bin/biome check src scripts test *.json",
-    "typecheck": "../../node_modules/.bin/tsc --noEmit",
-    "test": "../../node_modules/.bin/vitest run"
+    "lint": "biome check src scripts test *.json",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
   },
   "dependencies": {
     "@jeswr/model-runtime": "workspace:*",
@@ -35,7 +37,8 @@
     "n3": "^2.0.3"
   },
   "devDependencies": {
-    "@jeswr/federation-codegen": "workspace:*"
+    "@jeswr/federation-codegen": "workspace:*",
+    "@types/n3": "^1.26.1"
   },
   "engines": {
     "node": ">=24"

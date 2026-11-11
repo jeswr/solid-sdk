@@ -21,6 +21,14 @@ The generated `Entry` class is `https://jeswr.org/ns/journal#Entry`, a subclass 
 
 The health and social federation sectors do not define a personal-journal entry. `diet:mood` in the health-diary nutrition vocabulary denotes a clinical symptom concept, so it does not substitute for a journal mood rating. This package defines only Entry, mood and weather. Profile narrowings are documented in the SHACL header: the location is a literal, photos are HTTP(S) links and body text is required. All datatype, cardinality and enum accessors are generated; `src/model.ts` is a small facade that rejects invalid required data before publishing.
 
+## Exact divergences
+
+`validateEntry` retains a friendly error for invalid moods because the generated optional-enum writer otherwise drops them silently. Invalid image links also raise a validation error, using the generated image accessor's guarded membership check; valid links keep generated normalisation and deduplication. `serializeEntry` (including store saves) writes both `journal:Entry` and `http://schema.org/CreativeWork` explicitly, so readers need no ontology inference. The generator has no extra-write-type configuration, so the facade adds the standard type through the generated wrapper's `types` accessor. Reads still accept entries carrying only `journal:Entry`; the exported `entryEntity` remains the unmodified generated API. These behaviours are pinned in `test/compatibility.test.ts`.
+
+The `n3` dependency supplies the facade's `DataFactory` and the `Store` type imported by generated declarations. `@rdfjs/types` supplies their `DataFactory`, `DatasetCore` and `Term` types. Both remain declared for consumers of those declarations.
+
+## Pod persistence
+
 ```ts
 import { openJournal } from '@jeswr/solid-journal';
 const journal = await openJournal(authenticatedFetch, storageRoot, ownerWebId);

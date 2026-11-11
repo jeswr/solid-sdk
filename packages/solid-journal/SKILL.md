@@ -12,6 +12,10 @@ Its fields, requiredness and mood enum come from `codegen/journal.ontology.ttl`,
 validation facade over `src/generated/model.js`; never edit generated output.
 Change the inputs, run `pnpm run codegen --update-lock`, then run the byte drift test.
 The README documents the health/social vocabulary comparison and profile narrowings.
+`validateEntry` reports invalid moods and image links instead of silently dropping them.
+`serializeEntry` adds `http://schema.org/CreativeWork` through the generated typed `types`
+accessor because codegen has no extra-write-type configuration. Keep accepting legacy
+entries typed only `journal:Entry`; `entryEntity` remains the unmodified generated API.
 
 `openJournal` discovers Solid storage; `createJournalStore` accepts injected public SDK
 interfaces. Entries are individual Turtle documents with a `#it` subject. Preserve

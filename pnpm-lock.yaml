@@ -5081,6 +5081,9 @@ importers:
       '@jeswr/federation-codegen':
         specifier: workspace:*
         version: link:../federation-codegen
+      '@types/n3':
+        specifier: ^1.26.1
+        version: 1.26.1
 
   packages/solid-listening:
     dependencies:
