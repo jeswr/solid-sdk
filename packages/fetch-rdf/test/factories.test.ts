@@ -10,8 +10,8 @@ it.each([
   "sync",
   "jsonld",
 ])("uses the factory and one fresh output store (%s)", async (mode) => {
-    const factory = { ...df };
-    const namedNode = vi.spyOn(factory, "namedNode");
+  const factory = { ...df };
+  const namedNode = vi.spyOn(factory, "namedNode");
   const store = new Store([], { factory });
   const storeFactory = vi.fn(() => store);
   const options = { factory, storeFactory };
@@ -32,7 +32,7 @@ it.each([
         );
   expect(result).toBe(store);
   expect(result.size).toBeGreaterThan(0);
-    expect(namedNode).toHaveBeenCalled();
+  expect(namedNode).toHaveBeenCalled();
   expect(storeFactory).toHaveBeenCalledTimes(1);
 });
 

@@ -32,6 +32,7 @@ export {
   EPISTEMIC_STATUSES,
   parseAssertion,
   parseNanopublications,
+  parseNanopublicationsTolerant,
   serializeNanopublications,
   VALIDITY_STATUSES,
 } from "./model.js";

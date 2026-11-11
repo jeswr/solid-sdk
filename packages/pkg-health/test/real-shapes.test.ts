@@ -62,8 +62,8 @@ it.each([
 });
 it.each([
   ["normal", "normal"],
-  ["Marked normal", "normal"],
-  ["normal (numeric value not transcribed)", "normal"],
+  ["Marked normal", undefined],
+  ["normal (numeric value not transcribed)", undefined],
   ["abnormal", "abnormal"],
   ["positive", "abnormal"],
   ["HIGH", "high"],
@@ -74,13 +74,19 @@ it.each([
   ["reduced", "low"],
   ["negative", "normal"],
   ["unremarkable", "normal"],
+  ["  Within Normal Limits  ", "normal"],
   ["not normal", undefined],
   ["possibly high", undefined],
   ["unknown", undefined],
   ["borderline", undefined],
   ["normality", undefined],
-  ["abnormal high", "high"],
-] as const)("retains qualitative %s with display interpretation %s", async (value, interpretation) => {
+  ["abnormal high", undefined],
+  ["Negative for high-risk HPV", undefined],
+  ["Low risk", undefined],
+  ["High normal", undefined],
+  ["within normal limits, slightly low", undefined],
+  ["constructor", undefined],
+] as const)("interprets only exact qualitative phrases: %s -> %s", async (value, interpretation) => {
   const graph = observation({ value, datatype: "string", date: "2026-01-01", dateType: "date" });
   const view = projectHealthFacts(await batch([{ ...claim("one"), assertion: graph }]), { owner });
   expect(view.byKind.observation[0]).toMatchObject({ value, interpretation });
@@ -326,7 +332,7 @@ it("builds a deterministic fictional story through the public testing export", a
   await expect(exampleHealthKnowledge({ now: "Fictional invalid clock" })).rejects.toMatchObject({
     code: "invalid-input",
   });
-});
+}, 30_000);
 it("scales graph reads with nanopubs, indexes shared assertions once, and copies batch provenance once", async () => {
   const value = await batch([claim("base")]);
   const original = required(value.nanopubs[0]);

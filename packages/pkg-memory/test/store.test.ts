@@ -1910,6 +1910,10 @@ it.each([
   });
   const np = revision.nanopubs[0]!;
   expect(np.batch).toBe("context-withdrawal");
+  const { parseNanopublicationsTolerant } = await import("../src/index.js");
+  const tolerant = await parseNanopublicationsTolerant(await serializeNanopublications(revision));
+  expect(tolerant.skipped).toEqual([]);
+  expect(isomorphic([...tolerant.dataset], [...revision.dataset])).toBe(true);
   expect(np.assertionId).toBe(previous!.assertionId);
   expect(
     isomorphic(

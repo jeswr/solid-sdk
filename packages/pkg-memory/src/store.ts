@@ -7,6 +7,7 @@ import { type OdrlPolicy, policyToTurtle } from "@jeswr/solid-odrl";
 import type { DatasetCore, Term } from "@rdfjs/types";
 import { DataFactory as df } from "n3";
 import { compareDateTimes } from "./chronology.js";
+import { correspondenceBatches } from "./correspondence.js";
 import { canonicalizeGraphWithLabels, pkgId } from "./ids.js";
 import {
   buildNanopublications,
@@ -377,19 +378,6 @@ export class NanopubStore {
     )
       throw new Error("Pod did not preserve nanopublication bytes in octet-stream fallback");
   }
-}
-
-/** Batch-scoped context retains only source/entity graphs, never other envelopes. */
-function correspondenceBatches(np: Nanopublication, dataset: DatasetCore): Set<string> {
-  const batches = new Set([np.batch]);
-  for (const term of new RdfNode(np.id, graph(dataset, np.provenanceId)).terms(
-    `${NS.pkg}correspondenceBatch`,
-  )) {
-    if (term.termType !== "Literal" || term.datatype.value !== `${NS.xsd}string`)
-      throw new Error("Expected a correspondence batch string");
-    batches.add(term.value);
-  }
-  return batches;
 }
 
 function sharedGraphNames(np: Nanopublication, dataset: DatasetCore): string[] {

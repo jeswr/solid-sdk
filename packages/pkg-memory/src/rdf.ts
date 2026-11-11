@@ -135,6 +135,13 @@ class CompactReferenceStore extends ReferenceStore {
   }
 }
 
+/** A compact store holding only the given quads (and only their terms). */
+export function compactStore(quads: Iterable<Quad>): Store {
+  const out = new CompactReferenceStore();
+  for (const q of quads) out.add(q);
+  return out;
+}
+
 /** Parse through the suite boundary while preserving reference LANGTAG spelling. */
 export async function parseReferenceRdf(
   body: string,

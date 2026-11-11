@@ -14,7 +14,7 @@ import type { DatasetCore, Term } from "@rdfjs/types";
 import { DataFactory as df } from "n3";
 import { entities } from "./generated/model.js";
 import { health, LABEL, RDF_TYPE, ReadNode, S } from "./read.js";
-import { effectiveTime, readPeriod } from "./temporal.js";
+import { effectiveTime, readPeriod, temporalTime } from "./temporal.js";
 import {
   type HealthCode,
   type HealthFact,
@@ -105,6 +105,7 @@ function base(
     code: readCode(node),
     period: readPeriod(node),
     belief: np.belief,
+    affectedBySkipped: np.affectedBySkipped,
     validity: np.validity,
     epistemic: np.epistemic,
     hedge: np.hedge,
@@ -128,13 +129,15 @@ function project(
       if (property === undefined || value === undefined) return undefined;
       return { ...result, kind, property, value, label: humanise(property) };
     }
-    case "document":
+    case "document": {
+      const created = node.literal(`${S}dateCreated`);
       return {
         ...result,
         kind,
         name: result.label,
-        dateCreated: node.literal(`${S}dateCreated`)?.value,
+        dateCreated: created && temporalTime(created) !== undefined ? created.value : undefined,
       };
+    }
     case "condition":
       return { ...result, kind, onset: base.period.start, abatement: base.period.end };
     case "allergy":
@@ -227,15 +230,24 @@ export function humanise(value: string): string {
     .trim();
   return words.charAt(0).toUpperCase() + words.slice(1);
 }
-/** Ordered, whole-word display keywords. Never interpret negated/uncertain results. */
+const interpretations = new Map<string, "normal" | "abnormal" | "high" | "low" | undefined>([
+  ["high", "high"],
+  ["elevated", "high"],
+  ["raised", "high"],
+  ["low", "low"],
+  ["decreased", "low"],
+  ["reduced", "low"],
+  ["abnormal", "abnormal"],
+  ["positive", "abnormal"],
+  ["normal", "normal"],
+  ["negative", "normal"],
+  ["unremarkable", "normal"],
+  ["within normal limits", "normal"],
+  ["borderline", undefined],
+]);
+/** Exact display phrases only; compound and negated text remains uninterpreted. */
 function interpretation(value: string): "normal" | "abnormal" | "high" | "low" | undefined {
-  const text = value.toLowerCase().replace(/\([^)]*\)/g, "");
-  if (/\b(not|no|possibly|possible|uncertain|unknown)\b/.test(text)) return undefined;
-  if (/\b(high|elevated|raised)\b/.test(text)) return "high";
-  if (/\b(low|decreased|reduced)\b/.test(text)) return "low";
-  if (/\b(abnormal|positive)\b/.test(text)) return "abnormal";
-  if (/\b(normal|negative|unremarkable)\b/.test(text)) return "normal";
-  return undefined;
+  return interpretations.get(value.trim().toLowerCase());
 }
 function linkedOwners(node: ReadNode, kind: HealthFactKind): import("@rdfjs/types").Term[] {
   if (kind !== "note" && kind !== "document") return [];
@@ -321,6 +333,7 @@ export function projectHealthFacts(
         recognised = false;
       for (const node of nodes) {
         for (const kind of kindsOf(node)) {
+          if (kind === "document" && !category && np.categories.length > 0) continue;
           const linked = linkedOwners(node, kind);
           if (isForeign(node)) {
             excluded = true;

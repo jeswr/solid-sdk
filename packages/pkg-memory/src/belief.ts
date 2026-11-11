@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6
 
 import type { Nanopublication, Nanopublications } from "./model.js";
@@ -10,6 +11,8 @@ export type Belief = "definitely" | "might" | "mentioned" | "past";
 /** A derived view; no belief triples are persisted into the nanopub. */
 export interface ClassifiedNanopublication extends Nanopublication {
   belief: Belief;
+  /** A later update could not be read; this claim must not be treated as definite. */
+  affectedBySkipped?: true;
   corroboration: number;
   replacedBy: string[];
 }
@@ -17,6 +20,7 @@ const past = new Set(["Superseded", "Historical", "Retracted"]);
 
 /** Classify with graph-scoped provenance and cross-batch revision/contradiction links. */
 export function classifyNanopublications(value: Nanopublications): ClassifiedNanopublication[] {
+  const affected = new Set(value.affected);
   const nanopubs = [...new Map(value.nanopubs.map((np) => [np.id, np])).values()];
   const byId = new Map(nanopubs.map((np) => [np.id, np]));
   const byAssertion = new Map<string, Nanopublication[]>();
@@ -71,9 +75,15 @@ export function classifyNanopublications(value: Nanopublications): ClassifiedNan
     )
       belief = "definitely";
     else belief = "might";
+    // A readable retraction or replacement is final, so past facts stay past. An
+    // unreadable later update only lowers "definitely" to "might"; "might" and
+    // "mentioned" keep their level but carry the marker.
+    const uncertain = affected.has(np.id) && belief !== "past";
+    if (uncertain && belief === "definitely") belief = "might";
     return {
       ...np,
       belief,
+      ...(uncertain ? { affectedBySkipped: true as const } : {}),
       corroboration: (byAssertion.get(np.assertionId) as Nanopublication[]).length,
       replacedBy: [...(replacements.get(np.id) ?? [])].sort(),
     };
