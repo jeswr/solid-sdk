@@ -1,4 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+import type { DateFormat } from "@jeswr/solid-money";
+
 /** Inert import data. Amounts are signed, canonical decimals; dates are YYYY-MM-DD. */
 export interface ImportedTransaction {
   readonly date: string;
@@ -11,7 +13,7 @@ export interface ImportedTransaction {
   readonly category?: string;
 }
 
-export type DateFormat = "YYYY-MM-DD" | "DD/MM/YYYY" | "MM/DD/YYYY";
+export type { DateFormat };
 export type Delimiter = "," | ";" | "\t" | "|";
 export type Column = string | number;
 export interface CsvMapping {

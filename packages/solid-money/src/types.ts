@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex (GPT-6.1 Sol)
 // AUTHORED-BY Codex GPT-6.1-Sol
 export interface Money {
   readonly amount: string;

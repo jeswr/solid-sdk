@@ -1,4 +1,6 @@
 // AUTHORED-BY Codex GPT-6
+
+import type { Category } from "@jeswr/solid-money";
 import type { PodSession } from "@/lib/session/pod-session";
 import type { AccountSummary } from "../lib/data/accounts";
 import { createAccount } from "../lib/data/accounts";
@@ -10,7 +12,7 @@ import {
   createTransfer,
   transactionKey,
 } from "../lib/data/ledger";
-import { type Category, MoneyIoError } from "../lib/model";
+import { MoneyIoError } from "../lib/model";
 
 const flights = new WeakMap<typeof globalThis.fetch, Promise<void>>();
 export function ensureSample(session: PodSession, now = new Date()): Promise<void> {
