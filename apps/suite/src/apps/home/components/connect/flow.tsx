@@ -13,6 +13,7 @@ import {
 import { EmptyState, ErrorState, Progress } from "@jeswr/suite-ui";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
+import { AppHeading } from "@/shell/app-frame";
 import { type ConnectorEntry, destinationsFor } from "../../lib/connect/catalogue";
 import type { ConnectionMode } from "../../lib/connect/connection-state";
 import {
@@ -317,9 +318,9 @@ function ServiceFlow({ entry }: { entry: ConnectorEntry }) {
       </p>
       {!online ? (
         <div className="hm-connect-offline">
-          <h1 ref={offlineHeading} tabIndex={-1}>
+          <AppHeading ref={offlineHeading} tabIndex={-1}>
             Connect {entry.name}
-          </h1>
+          </AppHeading>
           <EmptyState
             variant="not-available-offline"
             title="Connecting services needs a connection"
@@ -334,7 +335,7 @@ function ServiceFlow({ entry }: { entry: ConnectorEntry }) {
           <div className="hm-connect-flow-header">
             <ConnectorLogo entry={entry} />
             <div>
-              <h1>Synchronise your {entry.name} data</h1>
+              <AppHeading>Synchronise your {entry.name} data</AppHeading>
               <StatusBadge status={entry.status} />
             </div>
           </div>

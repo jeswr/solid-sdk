@@ -1,6 +1,8 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex
 "use client";
+
 /**
  * The Drive listing (04-drive §2.2–2.4, §4): toolbar with filter chips, sort
  * and view toggle; list (grid-pattern table) or grid of cards; selection,
@@ -52,6 +54,7 @@ import {
   useState,
 } from "react";
 import { encodeRef } from "@/lib/refs";
+import { AppHeading } from "@/shell/app-frame";
 import { type DriveItem, nameOf, parentOf } from "../lib/client/client";
 import { isOwnStorage } from "../lib/client/ownership";
 import {
@@ -934,7 +937,7 @@ export function FileBrowser(props: FileBrowserProps) {
   return (
     <div className="drv-page">
       <div className="drv-heading">
-        <h1>{title}</h1>
+        <AppHeading>{title}</AppHeading>
         {refreshing ? (
           <span className="drv-refreshing" role="status" aria-label="Refreshing" />
         ) : null}

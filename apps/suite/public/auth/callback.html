@@ -1,4 +1,5 @@
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 <!doctype html>
 <html lang="en">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Signing in · Solid Suite</title></head>
@@ -9,7 +10,8 @@
   try {
     if (window.opener && window.opener.location.origin === location.origin) {
       window.opener.postMessage({ type: "solid-suite:auth-callback", url: location.href }, location.origin);
-      window.close();
+      // The opener closes after validating this message. Closing here can race its
+      // user-cancellation poll before the queued postMessage reaches the opener.
       return;
     }
   } catch { /* A cross-origin opener must use the redirect fallback. */ }

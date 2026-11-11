@@ -2,6 +2,7 @@
 // AUTHORED-BY Codex
 // AUTHORED-BY Codex GPT-6
 "use client";
+
 /** Drive's route bodies: folder, Recent, Starred, Shared, Search, Trash and preview. */
 
 import { Alert, AlertDescription, Button, FileTypeIcon, IconButton } from "@jeswr/suite-ui";
@@ -9,6 +10,7 @@ import { Clock, FolderOpen, HardDrive, Search, Star, Trash2, Users } from "lucid
 import { notFound, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { decodeRef, InvalidRefError } from "@/lib/refs";
+import { AppHeading } from "@/shell/app-frame";
 import { usePageRouteParams } from "../../../lib/route-params";
 import {
   type DriveClient,
@@ -440,13 +442,13 @@ function ResolvedPreviewRouteView({ url }: { url: string }) {
     const status = error instanceof DriveError ? error.status : undefined;
     return (
       <div className="drv-state" role="alert">
-        <h1>
+        <AppHeading>
           {status === 401
             ? "Sign in to open this file"
             : status === 403
               ? "You don't have access to this file"
               : "Can't open this file"}
-        </h1>
+        </AppHeading>
         <p>
           {status === 401
             ? "Sign in again, then retry."
@@ -535,7 +537,7 @@ export function TrashView() {
   return (
     <div className="drv-page">
       <div className="drv-heading">
-        <h1>Trash</h1>
+        <AppHeading>Trash</AppHeading>
       </div>
       <Alert className="drv-banner">
         <Trash2 aria-hidden="true" size={16} />

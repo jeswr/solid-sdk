@@ -31,7 +31,11 @@ export interface ShellFrameProps {
   pageTitle: string;
   topBar: Omit<TopBarProps, "sidebarToggle" | "detailsToggle">;
   sidebar: SidebarNavProps;
-  details?: Omit<DetailsPaneProps, "onClose">;
+  details?: Omit<DetailsPaneProps, "onClose"> & {
+    /** Controlled visibility; when omitted, the shell preference owns visibility. */
+    open?: boolean;
+    onOpenChange?: (open: boolean) => void;
+  };
   /** Supply AppRail / BottomTabBar; their app registration belongs to the shell app. */
   rail: ReactNode;
   tabBar: ReactNode;
@@ -85,31 +89,38 @@ export function ShellFrame({
   const sidebarId = useId();
   const detailsId = useId();
   const sidebarOpen = preferences.sidebarOpen ?? desktop;
-  const detailsOpen = Boolean(details) && (preferences.detailsOpen ?? desktop);
+  const detailsOpen = Boolean(details) && (details?.open ?? preferences.detailsOpen ?? desktop);
   // Below 1024px the regions are modal sheets, so at most one can be active. Saved
   // preferences may still say both are open (chosen on a wide viewport); the
-  // sidebar wins, and every narrow-viewport change writes back a single sheet.
+  // sidebar wins unless the app explicitly opens controlled details. Narrow-viewport
+  // changes keep the app's controlled state and the effective sheet in sync.
   const narrowSheet: "sidebar" | "details" | null = desktop
     ? null
-    : sidebarOpen
-      ? "sidebar"
-      : detailsOpen
-        ? "details"
-        : null;
+    : details?.open && detailsOpen
+      ? "details"
+      : sidebarOpen
+        ? "sidebar"
+        : detailsOpen
+          ? "details"
+          : null;
   const sidebarExpanded = desktop ? sidebarOpen : narrowSheet === "sidebar";
   const detailsExpanded = desktop ? detailsOpen : narrowSheet === "details";
-  const setSidebar = (open: boolean) =>
+  const setSidebar = (open: boolean) => {
+    if (!desktop && detailsOpen) details?.onOpenChange?.(false);
     onPreferencesChange({
       ...preferences,
       sidebarOpen: open,
-      ...(!desktop && detailsOpen ? { detailsOpen: false } : {}),
+      ...(!desktop && detailsOpen && details?.open === undefined ? { detailsOpen: false } : {}),
     });
-  const setDetails = (open: boolean) =>
+  };
+  const setDetails = (open: boolean) => {
+    details?.onOpenChange?.(open);
     onPreferencesChange({
       ...preferences,
-      detailsOpen: open,
+      ...(details?.open === undefined ? { detailsOpen: open } : {}),
       ...(!desktop && sidebarOpen ? { sidebarOpen: false } : {}),
     });
+  };
   const toggleSidebar = () => setSidebar(!sidebarExpanded);
   const toggleDetails = () => setDetails(!detailsExpanded);
   const restoreFocus = useCallback(

@@ -45,6 +45,7 @@ it.each([
     client,
     driveRoot: DRIVE,
     rootError: undefined,
+    retryRoot: vi.fn(),
     session: {
       mode: "demo",
       webId: OWNER,

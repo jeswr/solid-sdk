@@ -2423,6 +2423,9 @@ importers:
       '@jeswr/pod-access':
         specifier: workspace:*
         version: link:../../packages/pod-access
+      '@jeswr/pod-auth':
+        specifier: workspace:*
+        version: link:../../packages/pod-auth
       '@jeswr/pod-connectors':
         specifier: workspace:*
         version: link:../../packages/pod-connectors
