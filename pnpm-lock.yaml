@@ -2456,6 +2456,9 @@ importers:
       '@jeswr/suite-sdk':
         specifier: workspace:*
         version: link:../../packages/suite-sdk
+      '@jeswr/suite-native':
+        specifier: workspace:*
+        version: link:../../packages/suite-native
       '@jeswr/suite-ui':
         specifier: workspace:*
         version: link:../../packages/suite-ui

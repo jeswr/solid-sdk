@@ -52,6 +52,7 @@ class MainViewController: CAPBridgeViewController {
         bridge.registerPluginInstance(SuitePushPlugin())
         bridge.registerPluginInstance(SuiteShareIntakePlugin())
         bridge.registerPluginInstance(SuiteShareStagingPlugin())
+        bridge.registerPluginInstance(SuiteFilesPlugin())
         let secureStore = SuiteSecureStorePlugin()
         bridge.registerPluginInstance(secureStore)
         // Takes over the "Share" name from @capacitor/share so only staged files can be shared.
