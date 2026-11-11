@@ -147,10 +147,16 @@ export class DocumentVersionStore {
       headers: { "content-type": "application/octet-stream", "if-none-match": "*" },
       body: new Uint8Array(bytes),
     });
-    if (!response.ok) throw new ResourceWriteError(version.snapshot, response.status);
+    // 412: a retried copy already published this snapshot under the same name.
+    if (!response.ok && response.status !== 412)
+      throw new ResourceWriteError(version.snapshot, response.status);
     const metadata = new Store();
     new VersionMetadata(version.url, metadata, DataFactory).write(version);
-    await writeRdf(version.url, metadata, { fetchImpl: this.http, createOnly: true });
+    try {
+      await writeRdf(version.url, metadata, { fetchImpl: this.http, createOnly: true });
+    } catch (error) {
+      if (!(error instanceof ResourceWriteError && error.status === 412)) throw error;
+    }
     return version;
   }
 
@@ -163,6 +169,12 @@ export class DocumentVersionStore {
     assertUpdateIdentities([bytes], instanceId);
     const doc = new Doc();
     applyUpdate(doc, bytes);
+    // assertUpdateIdentities admits identity-less legacy deltas; a version
+    // snapshot is a whole state, so it must carry this document's identity.
+    if (doc.getMap("document").get("instanceId") !== instanceId) {
+      doc.destroy();
+      throw new Error("This version belongs to a different document");
+    }
     return doc;
   }
 }

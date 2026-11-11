@@ -1,7 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // @vitest-environment jsdom
 import { Editor, getSchema, type JSONContent } from "@tiptap/react";
-import { prosemirrorJSONToYDoc, yDocToProsemirrorJSON } from "@tiptap/y-tiptap";
+import { prosemirrorJSONToYDoc, yDocToProsemirrorJSON, yUndoPluginKey } from "@tiptap/y-tiptap";
 import { useCallback, useState } from "react";
 import { afterEach, beforeEach, expect, it, type MockInstance, vi } from "vitest";
 import { applyUpdate, Doc, encodeStateAsUpdate, XmlElement } from "yjs";
@@ -12,6 +12,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "../../../packages/suite-ui/node_modules/@testing-library/react";
 import { VersionAction, VersionHistory } from "../src/apps/docs/components/version-history";
 import { baseExtensions, editorExtensions } from "../src/apps/docs/editor/extensions";
@@ -223,6 +224,56 @@ it("shows name failures, blocks repeat Enter while in flight and permits retry",
   expect(screen.getByRole("alert").textContent).toBe("quota exceeded");
   fireEvent.click(button("Save version"));
   await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+});
+
+// AUTHORED-BY Claude Opus 5.5
+it("keeps a naming failure inside its dialog and clears it when the dialog closes", async () => {
+  create.mockRejectedValue(new Error("quota exceeded"));
+  render(<Harness initiallyNaming />);
+  fireEvent.change(screen.getByLabelText("Version name"), { target: { value: "Plan" } });
+  fireEvent.click(button("Save version"));
+  await waitFor(() =>
+    expect(within(screen.getByRole("dialog")).getByRole("alert").textContent).toBe(
+      "quota exceeded",
+    ),
+  );
+  fireEvent.click(button("Cancel"));
+  await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  expect(screen.queryByText("quota exceeded")).toBeNull();
+  fireEvent.click(button("Name version"));
+  expect(within(screen.getByRole("dialog")).queryByRole("alert")).toBeNull();
+  fireEvent.change(screen.getByLabelText("Version name"), { target: { value: "Plan" } });
+  fireEvent.click(button("Save version"));
+  await within(screen.getByRole("dialog")).findByRole("alert");
+  fireEvent.keyDown(document.activeElement as HTMLElement, { key: "Escape" });
+  await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  fireEvent.click(button("Name version"));
+  expect(within(screen.getByRole("dialog")).queryByRole("alert")).toBeNull();
+});
+
+// AUTHORED-BY Claude Opus 5.5
+it("records a restore as its own undo step, so undo returns the replaced content intact", async () => {
+  render(<Harness />);
+  await select();
+  fireEvent.click(button("Restore this version"));
+  fireEvent.click(button("Restore"));
+  await waitFor(() => expect(editor.getText()).toBe("Old content"));
+  editor.commands.undo();
+  expect(editor.getText()).toBe("Live content");
+  editor.commands.redo();
+  expect(editor.getText()).toBe("Old content");
+});
+
+// AUTHORED-BY Claude Opus 5.5
+it("still restores when the editor has no collaborative undo state", async () => {
+  editor.destroy();
+  editor = new Editor({ extensions: baseExtensions(fetch), content: json("Live content") });
+  expect(yUndoPluginKey.getState(editor.state)).toBeUndefined();
+  render(<Harness />);
+  await select();
+  fireEvent.click(button("Restore this version"));
+  fireEvent.click(button("Restore"));
+  await waitFor(() => expect(editor.getText()).toBe("Old content"));
 });
 
 it.each([

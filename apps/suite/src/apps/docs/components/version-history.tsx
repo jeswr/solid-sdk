@@ -9,7 +9,7 @@ import {
   Input,
 } from "@jeswr/suite-ui";
 import { type Editor, EditorContent, type JSONContent, useEditor } from "@tiptap/react";
-import { yXmlFragmentToProsemirrorJSON } from "@tiptap/y-tiptap";
+import { ySyncPluginKey, yUndoPluginKey, yXmlFragmentToProsemirrorJSON } from "@tiptap/y-tiptap";
 import { type ReactNode, useEffect, useId, useMemo, useRef, useState } from "react";
 import { baseExtensions } from "../editor/extensions";
 import type { DocumentPersistence } from "../editor/persistence";
@@ -112,6 +112,7 @@ export function VersionHistory({
   const [selected, setSelected] = useState<DocumentVersion>();
   const [preview, setPreview] = useState<JSONContent>();
   const [error, setError] = useState<string>();
+  const [nameError, setNameError] = useState<string>();
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [name, setName] = useState("");
@@ -207,7 +208,7 @@ export function VersionHistory({
   const nameCurrent = async () => {
     if (reason || busy || !store || !name.trim()) return;
     setBusy(true);
-    setError(undefined);
+    setNameError(undefined);
     try {
       const version = await store.create(runtime.doc, {
         kind: "named",
@@ -218,7 +219,7 @@ export function VersionHistory({
       setName("");
       closeNaming();
     } catch (cause) {
-      setError(versionError(cause));
+      setNameError(versionError(cause));
     } finally {
       setBusy(false);
     }
@@ -236,7 +237,12 @@ export function VersionHistory({
       // Recheck permissions/connectivity after the asynchronous write.
       if (versionDisabledReason(!!runtime.stored, runtime.readOnly, runtime.online))
         throw new Error("Reconnect with edit access before restoring this version.");
-      runtime.doc.transact(() => editor.commands.setContent(content));
+      // One Yjs transaction, so collaborators receive the restore atomically. It
+      // carries ySyncPluginKey, the origin Collaboration's undo manager tracks
+      // (an untagged outer transaction would retag the edit and leave it out of
+      // the undo stack). stopCapturing keeps the restore its own undo step.
+      yUndoPluginKey.getState(editor.state)?.undoManager.stopCapturing();
+      runtime.doc.transact(() => editor.commands.setContent(content), ySyncPluginKey);
       await runtime.flush();
       setConfirm(false);
       close();
@@ -313,7 +319,13 @@ export function VersionHistory({
           )}
         </aside>
       )}
-      <Dialog open={naming} onOpenChange={closeNaming}>
+      <Dialog
+        open={naming}
+        onOpenChange={() => {
+          setNameError(undefined);
+          closeNaming();
+        }}
+      >
         <DialogContent {...namingFocus}>
           <DialogTitle>Name current version</DialogTitle>
           <DialogDescription>Save a named snapshot of this document.</DialogDescription>
@@ -327,11 +339,17 @@ export function VersionHistory({
               if (event.key === "Enter") void nameCurrent();
             }}
           />
-          {error && <p role="alert">{error}</p>}
+          {nameError && <p role="alert">{nameError}</p>}
           <VersionAction reason={reason} busy={busy || !name.trim()} run={() => void nameCurrent()}>
             Save version
           </VersionAction>
-          <Button variant="outline" onClick={closeNaming}>
+          <Button
+            variant="outline"
+            onClick={() => {
+              setNameError(undefined);
+              closeNaming();
+            }}
+          >
             Cancel
           </Button>
         </DialogContent>

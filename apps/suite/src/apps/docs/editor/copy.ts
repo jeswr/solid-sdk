@@ -105,6 +105,15 @@ export async function copyDocument(
     });
   }
   visit(captured);
+  const historyAssets = new Set<string>();
+  const missingHistoryAssets = new Set<string>();
+  function visitHistory(node: JSONContent) {
+    if (node.type === "image" && node.attrs?.src) {
+      const source = String(node.attrs.src);
+      if (isDirectChild(source, docContainerUrls(stored.url).assets)) historyAssets.add(source);
+    }
+    node.content?.forEach(visitHistory);
+  }
   let trash: Promise<string | undefined> | undefined;
   const sourceVersions = docContainerUrls(stored.url).versions;
   let historyContainer: string | undefined = sourceVersions;
@@ -159,16 +168,41 @@ export async function copyDocument(
       return session.fetch(input, init);
     };
     const history = new DocumentVersionStore(physical, historyHttp);
-    for (const version of await history.list()) {
-      const snapshot = await history.load(version, stored.data.instanceId as string);
+    // History is best effort: an unreadable, corrupt or foreign version is left
+    // behind rather than blocking the copy (or a recovery of unsaved edits).
+    const versions = await history.list().catch((error: unknown) => {
+      console.warn("Couldn't read version history for the copy", error);
+      return [];
+    });
+    for (const version of versions) {
+      let snapshot: Doc;
+      try {
+        snapshot = await history.load(version, stored.data.instanceId as string);
+      } catch (error) {
+        console.warn("Skipped an unreadable version while copying", error);
+        continue;
+      }
       try {
         const json = yDocToProsemirrorJSON(snapshot) as JSONContent;
-        visit(json);
+        visitHistory(json);
         historical.push({ version, json });
       } finally {
         snapshot.destroy();
       }
     }
+    // Images only an old version uses may have been deleted since; they become
+    // placeholders in that version instead of failing a normal copy.
+    await Promise.all(
+      [...historyAssets]
+        .filter((asset) => !assets.includes(asset))
+        .map(async (asset) => {
+          const response = await session
+            .fetch(asset, { method: "HEAD", redirect: "error" })
+            .catch(() => undefined);
+          if (response?.ok) assets.push(asset);
+          else missingHistoryAssets.add(asset);
+        }),
+    );
   }
   const remap = (mapping: ReadonlyMap<string, string>) => {
     const json = structuredClone(captured);
@@ -267,20 +301,29 @@ export async function copyDocument(
           seed.destroy();
         }
         await provider.persistFullState();
-        const versionStore = new DocumentVersionStore(docContainerUrls(url).versions, fetchImpl);
+        const target = docContainerUrls(url).versions;
+        const versionStore = new DocumentVersionStore(target, fetchImpl);
+        const historyMapping = new Map(mapping);
+        for (const asset of missingHistoryAssets) historyMapping.set(asset, "");
         for (const { version, json } of historical) {
           const content = structuredClone(json);
-          visit(content, mapping);
+          visit(content, historyMapping);
           const relocated = relocateAttributes(content, (iri) => mapping.get(iri) || iri);
           const snapshot = prosemirrorJSONToYDoc(getSchema(extensions), relocated);
           try {
             snapshot.getMap("document").set("instanceId", instanceId);
-            await versionStore.create(snapshot, {
-              kind: version.kind,
-              ...(version.name ? { name: version.name } : {}),
-              ...(version.creator ? { creator: version.creator } : {}),
-              now: new Date(version.created),
-            });
+            // Keep the source names so a resumed copy rewrites (412) rather than duplicates.
+            await versionStore.write(
+              {
+                url: `${target}${version.url.split("/").at(-1)}`,
+                snapshot: `${target}${version.snapshot.split("/").at(-1)}`,
+                created: version.created,
+                kind: version.kind,
+                name: version.name,
+                creator: version.creator,
+              },
+              encodeStateAsUpdate(snapshot),
+            );
           } finally {
             snapshot.destroy();
           }

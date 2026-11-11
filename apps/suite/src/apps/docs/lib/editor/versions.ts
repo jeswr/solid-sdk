@@ -13,9 +13,15 @@ export function versionDisabledReason(
   return undefined;
 }
 
-/** A single outstanding automatic snapshot per runtime; errors never reject a save. */
+const AUTOMATIC_INTERVAL = 30 * 60 * 1000;
+
+/** A single outstanding automatic snapshot per runtime; errors never reject a save.
+ * The newest version time is cached, so ordinary saves never re-read the history;
+ * it is listed again only once a new automatic version could be due. */
 export class AutomaticVersions {
   private pending: Promise<void> | undefined;
+  /** undefined: not yet listed; null: no versions exist. */
+  private latest: number | null | undefined;
   afterSave(
     store: DocumentVersionStore,
     doc: Doc,
@@ -40,8 +46,13 @@ export class AutomaticVersions {
     creator: string,
     now: number,
   ) {
-    const latest = (await store.list())[0];
-    if (latest ? now - Date.parse(latest.created) < 30 * 60 * 1000 : !hasContent) return;
-    await store.create(doc, { kind: "automatic", creator, now: new Date(now) });
+    if (this.latest === null && !hasContent) return;
+    if (typeof this.latest === "number" && now - this.latest < AUTOMATIC_INTERVAL) return;
+    // Another collaborator may have saved a version meanwhile: confirm before writing.
+    const newest = (await store.list())[0];
+    this.latest = newest ? Date.parse(newest.created) : null;
+    if (this.latest === null ? !hasContent : now - this.latest < AUTOMATIC_INTERVAL) return;
+    const created = await store.create(doc, { kind: "automatic", creator, now: new Date(now) });
+    this.latest = Date.parse(created.created);
   }
 }

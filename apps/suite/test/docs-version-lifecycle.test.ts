@@ -16,7 +16,7 @@ import { baseExtensions } from "../src/apps/docs/editor/extensions";
 import { deleteDocument, deleteForever, restoreDocument } from "../src/apps/docs/editor/operations";
 import { DocumentPersistence } from "../src/apps/docs/editor/persistence";
 import { createDocsStore, docContainerUrls } from "../src/apps/docs/lib/model";
-import { DocumentVersionStore } from "../src/apps/docs/lib/model/versions";
+import { type DocumentVersion, DocumentVersionStore } from "../src/apps/docs/lib/model/versions";
 import { createDemoPod } from "../src/lib/demo-pod/pod";
 import { buildDemoSeed, DEMO_ROOT, DEMO_WEBID } from "../src/lib/demo-pod/seed";
 import type { PodSession } from "../src/lib/session/pod-session";
@@ -236,4 +236,52 @@ it("recovers the retired document's archived versions instead of a replacement's
     snapshot.destroy();
   }
   expect(await (await pod.fetch(metadata)).text()).toBe(archived);
+});
+
+// AUTHORED-BY Claude Opus 5.5
+it("copies past unreadable versions and turns a deleted history-only image into a placeholder", async () => {
+  const { pod, session, store, original, versions, src, layout } = await fixture();
+  const [newest] = await versions.list();
+  // A corrupt snapshot must not block the copy; the other version still copies.
+  await pod.fetch((newest as NonNullable<typeof newest>).snapshot, {
+    method: "PUT",
+    headers: { "content-type": "application/octet-stream" },
+    body: new Uint8Array([255]),
+  });
+  await pod.fetch(src, { method: "DELETE" });
+  const log = vi.spyOn(console, "warn").mockImplementation(() => {});
+  const copy = await copyDocument(store, original, session, {
+    type: "doc",
+    content: [{ type: "paragraph", content: [{ type: "text", text: "Current text" }] }],
+  });
+  const history = new DocumentVersionStore(docContainerUrls(copy.url).versions, pod.fetch);
+  const rows = await history.list();
+  expect(rows).toHaveLength(1);
+  const snapshot = await history.load(rows[0] as DocumentVersion, copy.data.instanceId as string);
+  const replay = JSON.stringify(yDocToProsemirrorJSON(snapshot));
+  expect(replay).toContain("Old content");
+  expect(replay).toContain("[Image unavailable]");
+  snapshot.destroy();
+  expect(log).toHaveBeenCalledWith(
+    "Skipped an unreadable version while copying",
+    expect.any(Error),
+  );
+  // An unreadable history listing is skipped the same way.
+  const denied: typeof fetch = (input, init) =>
+    String(input) === layout.versions
+      ? Promise.resolve(new Response(null, { status: 500 }))
+      : pod.fetch(input, init);
+  const second = await copyDocument(
+    store,
+    original,
+    { ...session, fetch: denied },
+    {
+      type: "doc",
+      content: [{ type: "paragraph", content: [{ type: "text", text: "Current text" }] }],
+    },
+  );
+  expect(
+    await new DocumentVersionStore(docContainerUrls(second.url).versions, pod.fetch).list(),
+  ).toEqual([]);
+  log.mockRestore();
 });

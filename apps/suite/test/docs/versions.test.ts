@@ -159,7 +159,7 @@ it("lists only direct valid TTL/bin pairs, isolates malformed entries and sorts 
 
 it("fails safely before metadata publication on binary or container failures", async () => {
   const original = doc();
-  for (const status of [403, 412]) {
+  for (const status of [403, 500]) {
     const http = mockFetch({ [`PUT ${container}`]: {}, [`PUT ${entry.snapshot}`]: { status } });
     await expect(
       new DocumentVersionStore(container, http.fetch).write(entry, encodeStateAsUpdate(original)),
@@ -177,11 +177,71 @@ it("fails safely before metadata publication on binary or container failures", a
   const metadata = mockFetch({
     [`PUT ${container}`]: {},
     [`PUT ${entry.snapshot}`]: {},
-    [`PUT ${entry.url}`]: { status: 412 },
+    [`PUT ${entry.url}`]: { status: 403 },
   });
   await expect(
     new DocumentVersionStore(container, metadata.fetch).write(entry, encodeStateAsUpdate(original)),
-  ).rejects.toMatchObject({ status: 412 });
+  ).rejects.toMatchObject({ status: 403 });
+  original.destroy();
+});
+
+// AUTHORED-BY Claude Opus 5.5
+it("treats an already-written snapshot or metadata (412) as a resumed write, not a failure", async () => {
+  const original = doc();
+  const http = mockFetch({
+    [`PUT ${container}`]: { status: 412 },
+    [`PUT ${entry.snapshot}`]: { status: 412 },
+    [`PUT ${entry.url}`]: { status: 412 },
+  });
+  await expect(
+    new DocumentVersionStore(container, http.fetch).write(entry, encodeStateAsUpdate(original)),
+  ).resolves.toEqual(entry);
+  expect(http.calls.some((call) => call.url === entry.url)).toBe(true);
+  const pod = createDemoPod({ root: "https://pod.example/", seed: [] });
+  const store = new DocumentVersionStore(container, pod.fetch);
+  await store.write(entry, encodeStateAsUpdate(original));
+  await store.write(entry, encodeStateAsUpdate(original));
+  expect(await store.list()).toEqual([entry]);
+  original.destroy();
+});
+
+// AUTHORED-BY Claude Opus 5.5
+it("rejects a whole-state snapshot that carries no document identity", async () => {
+  const anonymous = new Doc();
+  anonymous.getText("text").insert(0, "Stray content");
+  const store = new DocumentVersionStore(
+    container,
+    async () => new Response(new Uint8Array(encodeStateAsUpdate(anonymous))),
+  );
+  await expect(store.load(entry, "plan")).rejects.toThrow("different document");
+  anonymous.destroy();
+});
+
+// AUTHORED-BY Claude Opus 5.5
+it("caches the newest version time so saves inside the window never re-read the history", async () => {
+  const original = doc();
+  const automatic = new AutomaticVersions();
+  const list = vi.fn<DocumentVersionStore["list"]>().mockResolvedValue([entry]);
+  const create = vi.fn<DocumentVersionStore["create"]>();
+  const store = { list, create } as unknown as DocumentVersionStore;
+  const start = Date.parse(entry.created);
+  await automatic.afterSave(store, original, true, webId, start + 60_000);
+  for (let minute = 2; minute < 30; minute++)
+    await automatic.afterSave(store, original, true, webId, start + minute * 60_000);
+  expect(list).toHaveBeenCalledOnce();
+  expect(create).not.toHaveBeenCalled();
+  // A collaborator's newer version, found when one becomes due, restarts the window.
+  const newer = { ...entry, created: new Date(start + 40 * 60_000).toISOString() };
+  list.mockResolvedValue([newer]);
+  await automatic.afterSave(store, original, true, webId, start + 45 * 60_000);
+  await automatic.afterSave(store, original, true, webId, start + 50 * 60_000);
+  expect(list).toHaveBeenCalledTimes(2);
+  expect(create).not.toHaveBeenCalled();
+  const empty = new AutomaticVersions();
+  list.mockResolvedValue([]);
+  await empty.afterSave(store, original, false, webId);
+  await empty.afterSave(store, original, false, webId);
+  expect(list).toHaveBeenCalledTimes(3);
   original.destroy();
 });
 
