@@ -19,7 +19,13 @@ const config: NextConfig = {
     : {}),
   ...(process.env.NEXT_PUBLIC_SUITE_TARGET === "native"
     ? ({ output: "export", trailingSlash: true, images: { unoptimized: true } } as const)
-    : {}),
+    : {
+        // DriveApp's client session gate defers its page's RSC redirect. Replaying
+        // that redirect can replace a later search navigation; redirect before render.
+        async redirects() {
+          return [{ source: "/drive", destination: "/drive/my", permanent: false }];
+        },
+      }),
   transpilePackages: ["@jeswr/suite-ui"],
   devIndicators: false,
   // Yjs must be a singleton across the app, TipTap, IndexedDB and the workspace provider.

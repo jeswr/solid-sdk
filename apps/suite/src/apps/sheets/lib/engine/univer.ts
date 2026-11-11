@@ -102,6 +102,8 @@ export const mountUniver: MountEngine = async (container, options) => {
   let charts = options.snapshot.charts;
   // Structural shifts never change revisions; manual replacements do, including deletion.
   const chartRevisions = new Map<string, number>();
+  let readOnly = options.readOnly ?? false;
+  workbook.setEditable(!readOnly);
   const listeners = new Set<() => void>();
   const valueListeners = new Set<() => void>();
   let disposed = false;
@@ -125,7 +127,7 @@ export const mountUniver: MountEngine = async (container, options) => {
     id: RESTORE_CHART_SOURCES,
     type: CommandType.MUTATION,
     handler: (_accessor, params: ChartSources) => {
-      if (params.unitId !== workbook.getId() || charts === undefined) return false;
+      if (readOnly || params.unitId !== workbook.getId() || charts === undefined) return false;
       const sources = new Map(params.sources.map((source) => [source.id, source]));
       // Inverse mutations already shifted every chart. Recover lost boundaries only
       // for charts that have not been manually edited since the original command.
@@ -146,6 +148,7 @@ export const mountUniver: MountEngine = async (container, options) => {
   const captureSources = (command: ICommandInfo) => {
     const params = command.params as IInsertRowMutationParams | undefined;
     if (
+      readOnly ||
       !CHART_SOURCE_DELETE_COMMANDS.has(command.id) ||
       params?.unitId !== workbook.getId() ||
       charts === undefined
@@ -210,6 +213,7 @@ export const mountUniver: MountEngine = async (container, options) => {
   const subscription = univerAPI.addEvent(univerAPI.Event.CommandExecuted, (event) => {
     if (
       event.type !== CommandType.MUTATION ||
+      readOnly ||
       loading ||
       event.options?.fromChangeset ||
       RECOMPUTE_MUTATIONS.has(event.id) ||
@@ -253,12 +257,14 @@ export const mountUniver: MountEngine = async (container, options) => {
     try {
       univerAPI.disposeUnit(workbook.getId());
       workbook = univerAPI.createWorkbook(data as Partial<IWorkbookData>);
+      workbook.setEditable(!readOnly);
     } finally {
       loading = false;
     }
   };
   return {
     setCharts(value) {
+      if (readOnly) return;
       const previous = new Map(
         readCharts({ charts } as Snapshot).charts.map((chart) => [chart.id, JSON.stringify(chart)]),
       );
@@ -302,6 +308,7 @@ export const mountUniver: MountEngine = async (container, options) => {
       );
     },
     importCsv(csv, config) {
+      if (readOnly) return;
       const rows = parseCsv(csv);
       const data = snapshot() as unknown as IWorkbookData;
       const active = workbook.getActiveSheet().getSheetId();
@@ -331,6 +338,12 @@ export const mountUniver: MountEngine = async (container, options) => {
     },
     setDark(dark) {
       univerAPI.toggleDarkMode(dark);
+    },
+    setReadOnly(value) {
+      readOnly = value;
+      ++generation;
+      queued = false;
+      workbook.setEditable(!readOnly);
     },
     dispose() {
       disposed = true;

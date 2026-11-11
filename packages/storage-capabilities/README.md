@@ -20,6 +20,13 @@ It also exports the header parsers `parseLinkHeaders(values, responseUrl, option
 `PIM`, `ACQ`, `ACL`, `ACP`, and `SSD` objects with full IRI values (for example, `LWS.Storage`).
 The package's TypeScript configuration includes DOM types for the ADR's Web Crypto `JsonWebKey` contract.
 
+`StorageDescription.owner: string | null` is advisory owner metadata: the Solid root's
+`solid:owner` IRI or the LWS CID's top-level `controller`. Only absolute HTTP(S) IRIs are
+accepted; missing, malformed, non-IRI or non-HTTP(S) values yield null. Verification method
+controllers do not supply the storage owner. Probe-only descriptions and assumed Solid roots
+have owner null. Owner data never authorizes a fetch. Parsed caches are versioned so older
+records without this field are rediscovered before reuse.
+
 `parseLwsDescription(json, storageUrl, requestUrl)` accepts an already decoded compact CID object,
 including bodies served as `application/lws+cid`, `application/cid`, or `application/ld+json`.
 It validates the normalised storage id, the Storage type, and exactly one StorageRoot. Both the
@@ -120,7 +127,7 @@ Internal helpers:
   8 KiB (UTF-8, including joining commas) are treated as absent while retaining raw evidence.
   Links with a different anchor context are ignored for access control.
 - `parseSolidDescription(dataset, rootUrl)` in `src/solid-description.ts` maps parsed RDF/JS
-  datasets to `{ services, capabilities }` (ADR-002 step 5c). Notifications on any subject become
+  datasets to `{ services, capabilities, owner }` (ADR-002 step 5c). Notifications on any subject become
   `SSD.SolidNotificationService` entries, with channel IRIs included in `type` and expanded
   `notify:channelType`/`notify:feature` extras. `did:service`, `lws:capability`, and ACQ
   `solid-sparql:endpoint` are read only on the supplied root. Generic entries retain unknown

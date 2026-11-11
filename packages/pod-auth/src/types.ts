@@ -10,6 +10,17 @@ export interface KvStore<T extends {} = {}> {
 export interface PodAuthOptions {
   clientId: string | { dynamicRegistration: true };
   redirectUri: string;
+  /**
+   * Opt into a native application's private-use scheme callback (RFC 8252 §7.1), e.g.
+   * `org.jeswr.suite:/oauth/callback`. Requires a lowercase reverse-domain scheme and an
+   * absolute path, with no authority, credentials, query, fragment or URL normalization.
+   * Only scheme callbacks are allowed in this mode; `clientId` must be an HTTPS Client ID
+   * Document URL (with `application_type: native` and this exact redirect registered), and
+   * `allowInsecureLoopback` must not be true. The callback may differ from the WebView's origin.
+   * `ui.getCode` must return the complete callback URL, including code, state and iss.
+   * The callback never grants resource access or supplies a resource/storage context.
+   */
+  nativeRedirect?: true;
   /** Explicit grants plus WebID-profile roots loaded on login/restore; server hints never grant access. */
   boundary?: {
     roots?: string[];

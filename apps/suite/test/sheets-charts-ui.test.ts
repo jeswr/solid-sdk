@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { expect, it, vi } from "vitest";
 import { ChartSvg, ChartWorkspace } from "../src/apps/sheets/components/chart-workspace";
 import {
@@ -60,6 +61,7 @@ function fixture(initial = source(), background = true) {
     importCsv: vi.fn(),
     exportCsv: () => "",
     setDark: vi.fn(),
+    setReadOnly: vi.fn(),
     dispose: vi.fn(),
   };
   return {
@@ -174,6 +176,40 @@ it("rerenders source values and formula results without closing the editor draft
   expect(field("Chart title").value).toBe("Unsaved draft");
   await ui.render(h(ChartWorkspace, { engine: f.engine, snapshot: next }));
   expect(field("Chart title").value).toBe("Unsaved draft");
+  await ui.unmount();
+});
+
+it("renders view-only charts and blocks insert, edit and delete after write access is lost", async () => {
+  const initial = withCharts(source(), [spec]);
+  const f = fixture(initial);
+  const ui = await mount(
+    h(ChartWorkspace, { engine: f.engine, snapshot: initial, readOnly: true }),
+  );
+  const expectViewOnly = async () => {
+    expect(document.querySelector('[aria-label="Workbook charts"] svg')).not.toBeNull();
+    expect(document.querySelector("svg title")?.textContent).toBe("Revenue");
+    expect(button("Insert chart").disabled).toBe(true);
+    expect(button("Edit chart").disabled).toBe(true);
+    await click(button("Insert chart"));
+    await click(button("Edit chart"));
+    expect(document.querySelector('aside[aria-label="Chart editor"]')).toBeNull();
+    expect(f.engine.setCharts).not.toHaveBeenCalled();
+    expect(f.engine.snapshot()).toEqual(initial);
+  };
+  await expectViewOnly();
+  await ui.render(h(ChartWorkspace, { engine: f.engine, snapshot: initial, readOnly: false }));
+  await click(button("Edit chart"));
+  await fill("Chart title", "Local draft");
+  expect(button("Apply").disabled).toBe(false);
+  expect(button("Delete chart").disabled).toBe(false);
+  const pendingForm = document.querySelector("form");
+  const pendingDelete = button("Delete chart");
+  await ui.render(h(ChartWorkspace, { engine: f.engine, snapshot: initial, readOnly: true }));
+  await act(() => {
+    pendingForm?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    pendingDelete.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  });
+  await expectViewOnly();
   await ui.unmount();
 });
 

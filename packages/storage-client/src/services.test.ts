@@ -30,6 +30,7 @@ function features(protocol: "solid" | "lws"): Features {
     fetchedAt: 0,
     etag: null,
     maxAgeMs: 0,
+    owner: null,
     verificationMethods: [],
   });
   value.trash = { state: "available", detail: { endpoint: TRASH }, evidence: "test" };

@@ -112,6 +112,7 @@
   background: var(--surface-2);
 }
 .sht-title {
+  flex: 1;
   min-width: 0;
 }
 .sht-title .suite-label,
@@ -145,12 +146,21 @@
   color: var(--foreground-muted);
   font-size: var(--text-xs);
 }
+.sht-save > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .sht-actions {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   gap: var(--space-2);
 }
 .sht-editor {
+  min-width: 0;
+  max-width: 100%;
   height: 100%;
   min-height: 0;
   overflow: hidden;
@@ -191,6 +201,11 @@
   overflow: hidden;
 }
 @media (max-width: 639px) {
+  .ish-frame[data-app="sheets"],
+  .ish-frame[data-app="sheets"] .ish-main {
+    min-width: 0;
+    max-width: 100%;
+  }
   .sht-list {
     padding: var(--space-4);
   }
@@ -220,6 +235,33 @@
   }
   .sht-actions button {
     padding-inline: var(--space-2);
+  }
+  /* Univer's compact preset hides the ribbon; File is the single overflow menu. */
+  .sht-univer [data-u-comp="formula-bar"] {
+    height: 28px;
+    min-width: 0;
+    overflow: hidden;
+    flex-wrap: nowrap;
+  }
+  .sht-univer [data-u-comp="formula-bar"] > :first-child {
+    width: 56px;
+    flex: 0 0 56px;
+  }
+  .sht-univer [data-u-comp="formula-bar"] > :nth-child(2) {
+    min-width: 0;
+    flex: 1;
+  }
+  .sht-univer [data-u-comp="formula-bar-actions"] {
+    width: 64px;
+  }
+  .sht-univer [data-u-comp="slide-tab-bar"] {
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scrollbar-width: thin;
+  }
+  .sht-univer [data-u-comp="slide-tab-item"],
+  .sht-univer :has(> [data-u-comp="sheet-bar-append-button"]) {
+    flex-shrink: 0;
   }
   .sht-save {
     line-height: 1.2;

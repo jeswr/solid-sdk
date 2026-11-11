@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import type { ISheetDataValidationRule, IWorkbookData } from "@univerjs/core";
 import { describe, expect, it, vi } from "vitest";
 import type { Snapshot } from "../src/apps/sheets/lib/contract";
@@ -265,6 +266,35 @@ const chartSnapshot = () => {
 };
 
 describe("chart references through real Univer structural command history", () => {
+  it("blocks chart source restoration on the real command bus while view-only", async () => {
+    const initial = chartSnapshot();
+    const engine = await mountUniver({} as HTMLElement, {
+      snapshot: initial,
+      dark: false,
+      compact: true,
+      readOnly: true,
+    });
+    try {
+      const commands = headless.current?.univer.__getInjector().get(headless.core.ICommandService);
+      const restore = () =>
+        commands?.executeCommand("sheets.mutation.restore-chart-sources", {
+          unitId: engine.snapshot().id,
+          sources: [{ id: chart.id, sheetId: chart.sheetId, range: null, revision: 0 }],
+        });
+      expect(await restore()).toBe(false);
+      expect(readCharts(engine.snapshot()).charts).toEqual(readCharts(initial).charts);
+      engine.setReadOnly(false);
+      expect(await restore()).toBe(true);
+      expect(readCharts(engine.snapshot()).charts[0]?.range).toBeNull();
+      engine.load(initial);
+      engine.setReadOnly(true);
+      expect(await restore()).toBe(false);
+      expect(readCharts(engine.snapshot()).charts).toEqual(readCharts(initial).charts);
+    } finally {
+      engine.dispose();
+    }
+  });
+
   it.each([
     ["row", "insert", 0, 1, "A2:B5"],
     ["row", "insert", 2, 2, "A1:B6"],

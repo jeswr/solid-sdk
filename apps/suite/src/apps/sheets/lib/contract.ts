@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 /**
  * The Sheets app's two seams (SHT-01), shared by the data layer and the editor UI:
@@ -52,6 +53,8 @@ export interface WorkbookVersion {
 }
 
 export interface OpenedWorkbook {
+  /** Confirmed lack of write access; missing permission hints remain unknown. */
+  readonly readOnly?: boolean;
   readonly container: string;
   readonly metadata: WorkbookMetadata;
   readonly snapshot: Snapshot;
@@ -97,6 +100,16 @@ export class WorkbookNotFoundError extends Error {
   }
 }
 
+/** Unsafe shared link or a shared resource that cannot be opened anonymously. */
+export class WorkbookLinkError extends Error {
+  constructor(
+    message = "Shared spreadsheets must use a container URL on the same origin as your pod.",
+  ) {
+    super(message);
+    this.name = "WorkbookLinkError";
+  }
+}
+
 export interface CreateWorkbookInput {
   readonly title: string;
   /** Engine snapshot; omitted means one empty sheet named "Sheet1". */
@@ -121,6 +134,8 @@ export interface WorkbookService {
   /** Imports a browser-read Excel workbook, preserving supported formats and formulas. */
   createFromXlsx(input: { title: string; data: Uint8Array }): Promise<OpenedWorkbook>;
   open(container: string): Promise<OpenedWorkbook>;
+  /** Public same-origin shared links only; anonymous and view-only, with no redirects. */
+  openShared(container: string): Promise<OpenedWorkbook>;
   /**
    * Writes `workbook.json` with If-Match `base.snapshotEtag` (a freshly read ETag
    * when `force`); that guarded snapshot write owns the revision. Derived CSVs and
@@ -150,6 +165,8 @@ export interface WorkbookService {
 
 export interface WorkbookServiceOptions {
   readonly fetch: typeof globalThis.fetch;
+  /** Pristine, credential-free transport for public shared workbooks. Defaults to global fetch. */
+  readonly publicFetch?: typeof globalThis.fetch;
   /** Storage root (ends in `/`). */
   readonly podRoot: string;
   readonly webId: string;
@@ -182,10 +199,12 @@ export interface SheetEngine {
   /** Adds a sheet with the CSV as text cells, or replaces the active sheet's cells. */
   importCsv(csv: string, options: { mode: "new-sheet" | "replace-active"; name?: string }): void;
   setDark(dark: boolean): void;
+  setReadOnly(readOnly: boolean): void;
   dispose(): void;
 }
 
 export interface MountEngineOptions {
+  readonly readOnly?: boolean;
   readonly snapshot: Snapshot;
   readonly dark: boolean;
   /** Narrow viewport (< 640 px): no ribbon toolbar; formula bar, grid and sheet tabs only. */

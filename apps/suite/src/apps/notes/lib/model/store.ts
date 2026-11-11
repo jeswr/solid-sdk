@@ -4,6 +4,7 @@ import { RdfFetchError } from "@jeswr/fetch-rdf";
 import { normalizePodBase, refuseRedirects } from "@jeswr/guarded-fetch";
 import { Container, ContainerDataset } from "@solid/object";
 import { DataFactory, Store } from "n3";
+import { uploadPodImage } from "../../../docs/lib/editor/image-upload";
 import { documentSubject, type Revision } from "../../../docs/lib/model/document";
 import {
   ConcurrencyValidatorError,
@@ -19,6 +20,7 @@ import {
   ensureTypeRegistrations,
 } from "../../../docs/lib/model/type-index";
 import { DOCUMENT_CLASS, NS, PREFIXES } from "../../../docs/lib/model/vocab";
+import { notesMediaContainer } from "../images";
 import { deleteLabel, mergeLabels } from "../organise/labels";
 import { type NoteAction, reduceNoteState } from "../state";
 import { NoteConflictError, NoteMoveUncertainError } from "./errors";
@@ -70,6 +72,11 @@ export class NotesStore {
       archived: `${active}archive/`,
       trashed: `${active}.trash/`,
     });
+  }
+
+  async uploadImage(file: Blob): Promise<string> {
+    await this.ensureContainers();
+    return uploadPodImage(file, notesMediaContainer(this.podRoot), this.fetchImpl);
   }
 
   private scope(url: string, location?: NoteLocation): NoteLocation {
@@ -151,7 +158,7 @@ export class NotesStore {
 
   private ensureContainers(): Promise<void> {
     this.initialization ??= (async () => {
-      for (const url of Object.values(this.containers)) {
+      for (const url of [...Object.values(this.containers), notesMediaContainer(this.podRoot)]) {
         const dataset = new Store();
         new Container(url, dataset, DataFactory).type.add(`${NS.LDP}BasicContainer`);
         try {

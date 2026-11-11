@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 "use client";
 import { Button } from "@jeswr/suite-ui";
 import { useEffect, useId, useRef, useState } from "react";
@@ -82,10 +83,12 @@ function ChartCard({
   spec,
   snapshot,
   onEdit,
+  readOnly,
 }: {
   spec: ChartSpec;
   snapshot: Snapshot;
   onEdit: () => void;
+  readOnly: boolean;
 }) {
   let values: unknown[][] = [];
   let error = "";
@@ -101,7 +104,7 @@ function ChartCard({
     <article className="sht-chart-card" aria-label={spec.title || "Untitled chart"}>
       <div className="sht-chart-heading">
         <h2>{spec.title || "Untitled chart"}</h2>
-        <Button variant="ghost" size="sm" onClick={onEdit}>
+        <Button variant="ghost" size="sm" onClick={onEdit} disabled={readOnly}>
           Edit chart
         </Button>
       </div>
@@ -114,9 +117,11 @@ function ChartCard({
 export function ChartWorkspace({
   engine,
   snapshot,
+  readOnly = false,
 }: {
   engine: SheetEngine | null;
   snapshot: Snapshot;
+  readOnly?: boolean;
 }) {
   const [current, setCurrent] = useState(snapshot);
   const [draft, setDraft] = useState<ChartSpec>();
@@ -145,13 +150,14 @@ export function ChartWorkspace({
     insert.current?.focus();
   };
   const persist = (next: ChartSpec[]) => {
-    if (!engine?.setCharts) return;
+    if (readOnly || !engine?.setCharts) return;
     const updated = withCharts(engine.snapshot(), next);
     engine.setCharts(updated.charts);
     setCurrent(updated);
     close();
   };
   const start = () => {
+    if (readOnly) return;
     const selected = engine?.selection?.();
     if (!selected) {
       setError("Select cells in the grid before inserting a chart.");
@@ -176,7 +182,7 @@ export function ChartWorkspace({
           ref={insert}
           variant="outline"
           size="sm"
-          disabled={!engine?.setCharts || charts.length >= 100}
+          disabled={readOnly || !engine?.setCharts || charts.length >= 100}
           onClick={start}
         >
           Insert chart
@@ -195,6 +201,7 @@ export function ChartWorkspace({
                 key={spec.id}
                 spec={spec}
                 snapshot={current}
+                readOnly={readOnly}
                 onEdit={() => {
                   setDraft(spec);
                   setInserting(false);
@@ -204,7 +211,7 @@ export function ChartWorkspace({
             ))}
           </section>
         )}
-        {draft && (
+        {draft && !readOnly && (
           <aside className="sht-chart-editor" aria-label="Chart editor">
             <form
               onSubmit={(event) => {

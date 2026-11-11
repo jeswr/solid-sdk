@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import type { ReactNode } from "react";
 import { expect, it, vi } from "vitest";
 import type {
@@ -85,6 +86,7 @@ it("autosaves chart insert, source edits and deletion through SheetEditor, then 
       exportCsv: () => "",
       importCsv: vi.fn(),
       setDark: vi.fn(),
+      setReadOnly: vi.fn(),
       dispose: vi.fn(),
     } satisfies SheetEngine;
   });

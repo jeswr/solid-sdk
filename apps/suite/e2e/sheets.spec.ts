@@ -143,3 +143,26 @@ test("invalid references have a useful not-found state", async ({ page }) => {
     "/sheets",
   );
 });
+
+test("reads and edits a spreadsheet at 375 px without page overflow", async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 812 });
+  await page.goto("/sheets/new");
+  await waitForEngine(page);
+  const grid = page.getByTestId("univer-container");
+  await expect(grid.locator('[data-u-comp="formula-bar"]')).toBeVisible();
+  await expect(grid.getByRole("tablist")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Share", exact: true })).toBeVisible();
+  const canvas = grid.locator('canvas[data-u-comp="render-canvas"]').first();
+  await canvas.click({ position: { x: 80, y: 32 } });
+  await page.keyboard.type("Mobile edit");
+  await page.keyboard.press("Enter");
+  await expect
+    .poll(() => page.evaluate(() => window.__sheetsEngine?.exportCsv()))
+    .toBe("Mobile edit\r\n");
+  const add = grid.locator('[data-u-comp="sheet-bar-append-button"]').first();
+  for (let index = 0; index < 8; index++) await add.click();
+  await expect(add).toBeInViewport();
+  await expect(grid.getByRole("tablist")).toBeVisible();
+  await expect(page.getByText("Saved to your pod", { exact: true })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});

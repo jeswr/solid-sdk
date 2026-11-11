@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { type ChartSpec, withCharts } from "../src/apps/sheets/lib/charts/spec";
 import type { Snapshot } from "../src/apps/sheets/lib/contract";
 
 const mock = vi.hoisted(() => {
@@ -24,6 +25,7 @@ const mock = vi.hoisted(() => {
       getSheetName: () => (data.sheets as Record<string, { name: string }>)[active]?.name,
       getActiveRange: () => (selection === null ? null : { getA1Notation: () => selection }),
     }),
+    setEditable: vi.fn(),
     setActiveSheet: vi.fn((id: string) => {
       active = id;
     }),
@@ -60,6 +62,7 @@ const mock = vi.hoisted(() => {
   };
   return {
     api,
+    workbook,
     univer,
     subscription,
     calculation,
@@ -411,4 +414,86 @@ it("refreshes chart values after applied formula results without another autosav
   mock.calculated();
   expect(values).toHaveBeenCalledOnce();
   expect(mock.calculation.dispose).toHaveBeenCalledOnce();
+});
+
+it("enforces view-only access at mount, after reload and after losing write access", async () => {
+  const engine = await (await loadEngine())({} as HTMLElement, {
+    snapshot: initial(),
+    dark: false,
+    compact: true,
+    readOnly: true,
+  });
+  expect(mock.workbook.setEditable).toHaveBeenLastCalledWith(false);
+  const change = vi.fn();
+  engine.onChange(change);
+  engine.importCsv("Blocked", { mode: "replace-active" });
+  mock.emit(mutation);
+  await Promise.resolve();
+  expect(engine.snapshot()).toEqual(initial());
+  expect(change).not.toHaveBeenCalled();
+  engine.load(initial());
+  expect(mock.workbook.setEditable).toHaveBeenLastCalledWith(false);
+  engine.setReadOnly(false);
+  expect(mock.workbook.setEditable).toHaveBeenLastCalledWith(true);
+  mock.emit(mutation);
+  engine.setReadOnly(true);
+  await Promise.resolve();
+  expect(change).not.toHaveBeenCalled();
+  engine.setReadOnly(false);
+  mock.emit(mutation);
+  await Promise.resolve();
+  expect(change).toHaveBeenCalledOnce();
+  engine.dispose();
+});
+
+it.each([
+  "insert",
+  "edit",
+  "delete",
+] as const)("blocks chart %s in view-only snapshots and suppresses queued saves after losing write access", async (operation) => {
+  const chart: ChartSpec = {
+    id: "chart",
+    sheetId: "data",
+    range: "A1:B3",
+    type: "column",
+    title: "Revenue",
+    legend: true,
+    series: "columns",
+  };
+  const data = withCharts(initial(), operation === "insert" ? [] : [chart]);
+  const next = withCharts(
+    initial(),
+    operation === "delete" ? [] : [{ ...chart, title: "Changed revenue" }],
+  ).charts;
+  const engine = await (await loadEngine())({} as HTMLElement, {
+    snapshot: data,
+    dark: false,
+    compact: false,
+    readOnly: true,
+  });
+  const change = vi.fn();
+  engine.onChange(change);
+  engine.setCharts?.(next);
+  await Promise.resolve();
+  expect(engine.snapshot()).toEqual(data);
+  expect(change).not.toHaveBeenCalled();
+  engine.load(data);
+  engine.setCharts?.(next);
+  await Promise.resolve();
+  expect(engine.snapshot()).toEqual(data);
+  expect(change).not.toHaveBeenCalled();
+  engine.setReadOnly(false);
+  engine.setCharts?.(next);
+  expect(engine.snapshot().charts).toEqual(next);
+  engine.setReadOnly(true);
+  engine.setCharts?.(data.charts);
+  await Promise.resolve();
+  expect(engine.snapshot().charts).toEqual(next);
+  expect(change).not.toHaveBeenCalled();
+  engine.setReadOnly(false);
+  engine.setCharts?.(data.charts);
+  await Promise.resolve();
+  expect(engine.snapshot()).toEqual(data);
+  expect(change).toHaveBeenCalledOnce();
+  engine.dispose();
 });

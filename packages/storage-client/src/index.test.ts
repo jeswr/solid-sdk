@@ -13,7 +13,12 @@ import * as trash from "./trash.js";
 import * as versions from "./versions.js";
 
 test("entry points expose the storage client and testing surface", () => {
-  expect(Object.keys(api).sort()).toEqual(["StorageError", "createPodClient", "toStorageError"]);
+  expect(Object.keys(api).sort()).toEqual([
+    "StorageError",
+    "createPodClient",
+    "displayNameOf",
+    "toStorageError",
+  ]);
   expect(Object.keys(errors).sort()).toEqual([
     "MAX_PROBLEM_BYTES",
     "StorageError",
@@ -25,6 +30,7 @@ test("entry points expose the storage client and testing surface", () => {
   expect(Object.keys(helpers).sort()).toEqual([
     "JsonPatchError",
     "applyJsonPatch",
+    "displayNameOf",
     "jsonEqual",
     "retryOnConflict",
   ]);

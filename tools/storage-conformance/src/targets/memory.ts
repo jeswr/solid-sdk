@@ -5,24 +5,47 @@ import { LWS, SSD } from "@jeswr/storage-capabilities/vocab";
 import { StorageError } from "@jeswr/storage-client";
 import { createMemoryStorage } from "@jeswr/storage-client/memory";
 import type { ConformanceTarget } from "../types.js";
+import { memoryTransport } from "./memory-transport.js";
 
 /** Reference target with actual in-memory storage semantics, including LWS pagination. */
 export function memoryTarget(
   protocol: "solid" | "lws",
-  { pageSize = 100 }: { pageSize?: number } = {},
+  {
+    pageSize = 100,
+    accessModel = "wac",
+    trash = true,
+    versioning = true,
+  }: {
+    pageSize?: number;
+    accessModel?: "wac" | "acp";
+    trash?: boolean;
+    versioning?: boolean;
+  } = {},
 ): ConformanceTarget {
   return {
-    name: `memory-${protocol}`,
+    name: `memory-${protocol}${protocol === "solid" && accessModel === "acp" ? "-acp" : ""}`,
     async start() {
       const root = `https://memory-${protocol}.example/`;
       const webId = "https://identity.example/alice#me";
-      const storage = createMemoryStorage({ protocol, root, pageSize });
+      const storage = createMemoryStorage({ protocol, root, pageSize, trash, versioning });
+      const transport = await memoryTransport(storage, webId, accessModel);
       const description: StorageDescription = {
         protocol,
         id: root,
         root,
         descriptionUrl: `${root}description`,
-        services: [],
+        services: [
+          ...(trash ? [{ type: [SSD.TrashService], endpoint: `${root}.trash/`, extra: {} }] : []),
+          ...(versioning
+            ? [
+                {
+                  type: [SSD.VersioningService],
+                  endpoint: `${root}.versions/?resource={resource}`,
+                  extra: {},
+                },
+              ]
+            : []),
+        ],
         capabilities: [
           {
             type: [SSD.PatchSupport],
@@ -39,19 +62,52 @@ export function memoryTarget(
         etag: null,
         maxAgeMs: 0,
         verificationMethods: [],
+        owner: null,
       };
       if (protocol === "lws") {
-        description.services = [{ type: [LWS.StorageRoot], endpoint: root, extra: {} }];
+        description.services = [
+          ...description.services,
+          { type: [LWS.StorageRoot], endpoint: root, extra: {} },
+          {
+            type: [LWS.AccessGrantService],
+            endpoint: transport.grantsEndpoint as string,
+            conformsTo: [LWS.AccessProfile],
+            extra: {},
+          },
+          { type: [LWS.TypeIndexService], endpoint: transport.indexEndpoint as string, extra: {} },
+          {
+            type: [LWS.TypeSearchService],
+            endpoint: transport.searchEndpoint as string,
+            extra: {},
+          },
+        ];
+      } else {
+        description.capabilities = [
+          ...description.capabilities,
+          {
+            type: [SSD.AccessControl],
+            extra: { model: accessModel === "wac" ? SSD.WAC : SSD.ACP },
+          },
+        ];
       }
-      const noTransport: typeof fetch = async () => {
-        throw new Error("The memory target has no HTTP transport");
-      };
+      const features = deriveFeatures(description);
+      Object.assign(storage.features, {
+        accessControl: features.accessControl,
+        accessGrants: features.accessGrants,
+        typeIndex: features.typeIndex,
+      });
       return {
         root,
         webId,
         storage,
         jsonLdWrites: true,
-        fetch: noTransport,
+        fetch: transport.fetch,
+        accessModel,
+        serviceEndpoints: {
+          trash: `${root}.trash/`,
+          versioning: `${root}.versions/?resource={resource}`,
+          typeSearch: transport.searchEndpoint,
+        },
         paginationWitnessSize: protocol === "lws" ? pageSize + 1 : undefined,
         claims: {
           protocol,
@@ -74,12 +130,39 @@ export function memoryTarget(
             evidence: "target",
             detail: undefined,
           },
+          trash: {
+            state: trash ? "available" : "unknown",
+            evidence: "target",
+            detail: trash ? { endpoint: `${root}.trash/` } : {},
+          },
+          versioning: {
+            state: versioning ? "available" : "unknown",
+            evidence: "target",
+            detail: versioning ? { endpoint: `${root}.versions/?resource={resource}` } : {},
+          },
+          accessControl: {
+            state: "available",
+            evidence: "target",
+            detail: { model: protocol === "lws" ? "odrl-grants" : accessModel },
+          },
+          typeIndex: {
+            state: "available",
+            evidence: "target",
+            detail:
+              protocol === "solid"
+                ? { mode: "client" }
+                : {
+                    mode: "server",
+                    indexEndpoint: transport.indexEndpoint,
+                    searchEndpoint: transport.searchEndpoint,
+                  },
+          },
         },
         async resolveFeatures() {
           return deriveFeatures(description);
         },
         async authFetchFor(identity) {
-          if (identity === webId) return noTransport;
+          if (identity === webId) return transport.fetch;
           throw new StorageError("unsupported", { method: "AUTH", url: root });
         },
         async stop() {},
