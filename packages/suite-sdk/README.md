@@ -2,7 +2,7 @@
 
 # @jeswr/suite-sdk
 
-> **Experimental — AI-agent-generated.** Private notification, search and preferences facades.
+> **Experimental — AI-agent-generated.** Private notification, search, preferences and offline facades.
 
 Mount `PodAuthProvider` from `@jeswr/pod-auth/react`, then use the provider's authenticated
 fetch and current actor through the hook:
@@ -37,6 +37,23 @@ limits match [pod-access](../pod-access/README.md). No read-state writes are per
 
 `./testing` re-exports `createNotify` for fixture-fetch tests. Run this package's `lint`, `build`,
 `typecheck` and `test` scripts; tests enforce 100% coverage.
+
+## Offline (`SDK-APP-08`)
+
+`@jeswr/suite-sdk/offline` re-exports `createOutbox`, `withOutbox`, `mergeRdf`, the outbox
+types and `useOfflineStatus`. `useOutbox(outbox: Outbox | null)` returns
+`{ pending, conflicts, retry, retryAll, resolve, replay }`. Its snapshots and actions remain
+stable between changes; a null outbox is empty and its actions resolve without doing work.
+The hook subscribes to both change and conflict events, including initial queue hydration.
+
+Create an outbox per authenticated WebID and decorate that session's StorageClient with
+`withOutbox(storage, outbox)`. Opt writes into persistence with `offline: 'queue'`; patch and
+move remain unqueueable. `retry(id?)` retries failed items, `retryAll()` calls `retry()`,
+`resolve(id, 'mine' | 'theirs' | 'both')` resolves a conflict, and `replay(storage, options?)`
+uses the supplied authenticated client. Replay again after resolution to resume held writes.
+The caller owns lifecycle: cancel replay when the session ends, close listeners and preserve
+unsent changes on sign-out. Only explicit `purge()` discards the queue. See
+[solid-offline](../solid-offline/SKILL.md) for durability, conflict and merge semantics.
 
 ## Search (`SDK-APP-09`)
 
