@@ -15,6 +15,7 @@ import type { DropContainer } from "../lib/dnd/types";
 import type { StoredProject } from "../lib/model/store";
 import type { Category } from "../lib/model/tracker";
 import type { ProjectGroups, Row } from "../lib/views/project-groups";
+import { expandedRows } from "../lib/views/tree";
 import { focusAddTask } from "../state/add-focus";
 import { TaskListFocus, useTaskListFocus } from "../state/list-focus";
 import { useTasksPreferences } from "../state/preferences";
@@ -22,6 +23,7 @@ import { useTasks } from "../state/tasks-context";
 import { AddTaskRow } from "./add-task-row";
 import { useDropTarget } from "./dnd/use-task-drag";
 import { TaskRow } from "./task-row";
+import { useCollapsedTasks } from "./tree-controls";
 
 /** A drop zone appending to a section (or No section): the add row in lists. */
 export function SectionEnd({
@@ -183,19 +185,36 @@ function TaskListBody({
   const { preferences } = useTasksPreferences();
   const { addSection } = useTasks();
   const focus = useTaskListFocus();
+  const tree = useCollapsedTasks();
   const [addingSection, setAddingSection] = useState(false);
   const [name, setName] = useState("");
   const sectionInput = useRef<HTMLInputElement>(null);
   // A group can collapse without rerendering the persistent focus owner.
   useLayoutEffect(() => focus?.refresh());
   const renderRows = (rows: Row[], label: string, container: DropContainer | undefined) => (
-    // biome-ignore lint/a11y/noNoninteractiveElementToInteractiveRole: the native table implements a grid with row selection and independent cell controls.
-    <table role="grid" aria-multiselectable="true" aria-label={label} className="tsk-list">
+    // biome-ignore lint/a11y/useAriaPropsSupportedByRole: both branches are interactive grids supporting multiple selection.
+    <table
+      role={groups ? "treegrid" : "grid"}
+      aria-multiselectable="true"
+      aria-label={label}
+      className="tsk-list"
+    >
       <tbody>
-        {rows.map((row) => (
+        {(groups ? expandedRows(rows, tree.collapsed) : rows).map((row) => (
           <TaskRow
             key={row.task.url}
             row={row}
+            tree={
+              groups
+                ? {
+                    expanded: !tree.collapsed.has(row.task.id),
+                    setExpanded: tree.setExpanded,
+                    hasChildren: rows.some(
+                      (child) => child.task.parentId === row.task.id && child.depth > row.depth,
+                    ),
+                  }
+                : undefined
+            }
             showProject={showProject}
             tabIndex={row.task.url === focus?.activeUrl ? 0 : -1}
             onFocus={() => focus?.onFocus(row.task.url)}

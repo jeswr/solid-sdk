@@ -656,6 +656,17 @@
   margin: 0;
 }
 
+.notes-reminder-chip[data-overdue="true"] {
+  color: var(--muted-foreground);
+  text-decoration: line-through;
+}
+.notes-reminder-picker,
+.notes-reminder-picker form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
 /* AUTHORED-BY Codex GPT-6.1-Sol */
 .notes-card-cover {
   display: block;
