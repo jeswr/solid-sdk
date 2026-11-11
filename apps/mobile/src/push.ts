@@ -37,6 +37,8 @@ export interface SuitePushPlugin {
     pushToken?: string;
   }): Promise<void>;
   silence(options: { registrationId: string }): Promise<void>;
+  /** One local notice a day before the earliest subscription expiry; null cancels it. */
+  scheduleRenewalReminder(options: { expiresAt: number | null }): Promise<void>;
   /** Exact UTF-8 body sent to the relay; url has no query. Native code supplies iat, body hash and a fresh jti. */
   sign(request: { method: string; url: string; body?: string }): Promise<{ proof: string }>;
   activate(options: { installationId: string }): Promise<{ nonce: string }>;
@@ -56,6 +58,7 @@ export const SuitePush: SuitePushPlugin = {
   enable: () => native.enable(),
   setTopicMap: (options) => native.setTopicMap(options),
   silence: (options) => native.silence(options),
+  scheduleRenewalReminder: (options) => native.scheduleRenewalReminder(options),
   sign: (request) => native.sign(request),
   activate: (options) => native.activate(options),
   disable: (options) => native.disable(options),

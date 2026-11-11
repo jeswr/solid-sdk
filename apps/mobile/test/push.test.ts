@@ -8,6 +8,7 @@ const native = vi.hoisted(() => ({
   enable: vi.fn(),
   setTopicMap: vi.fn(),
   silence: vi.fn(),
+  scheduleRenewalReminder: vi.fn(),
   sign: vi.fn(),
   activate: vi.fn(),
   disable: vi.fn(),
@@ -91,6 +92,15 @@ test("separates local silence from confirmed remote cleanup", async () => {
   await SuitePush.disable();
   await SuitePush.disable({ deleteLocalData: true });
   expect(native.disable.mock.calls).toEqual([[undefined], [{ deleteLocalData: true }]]);
+});
+
+test("schedules and cancels the earliest subscription's local renewal notice", async () => {
+  await SuitePush.scheduleRenewalReminder({ expiresAt: 2_000_000_000_000 });
+  await SuitePush.scheduleRenewalReminder({ expiresAt: null });
+  expect(native.scheduleRenewalReminder.mock.calls).toEqual([
+    [{ expiresAt: 2_000_000_000_000 }],
+    [{ expiresAt: null }],
+  ]);
 });
 
 test("unwraps a launch route once, including the registration for account switching", async () => {

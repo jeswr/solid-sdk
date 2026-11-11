@@ -38,6 +38,8 @@ final class PushStore {
         // Hashes only: raw provider tokens are neither persisted here nor logged.
         var tokenHash: String?
         var registeredTokenHash: String?
+        var renewalExpiry: Double?
+        var notificationsLaunch: Bool?
     }
     enum PresentationSource {
         case remote(request: String, token: String?)
@@ -126,6 +128,19 @@ final class PushStore {
         }
     }
     func clear() throws { try transaction { $0 = State() } }
+    func hasAnyActive() throws -> Bool {
+        try transaction { $0.registrations.values.contains(where: { !$0.silenced }) }
+    }
+    func setRenewalExpiry(_ expiry: Double?) throws {
+        try transaction { $0.renewalExpiry = expiry }
+    }
+    func withRenewalReminder(_ expiry: Double, now: Double, action: () -> Void = {}) throws -> Bool {
+        try transaction { state in
+            guard state.renewalExpiry == expiry, expiry > now,
+                  state.registrations.values.contains(where: { !$0.silenced }) else { return false }
+            action(); return true
+        }
+    }
     private static func topic(_ state: State, _ registration: String, _ index: Int) -> Topic? {
         guard let reg = state.registrations[registration], !reg.silenced,
               let topic = reg.topics.first(where: { $0.index == index && $0.enabled }), PushPolicy.route(topic.route) else { return nil }
@@ -191,12 +206,20 @@ final class PushStore {
     func launch(registration: String, index: Int) throws {
         guard PushPolicy.identifier(registration), (0..<16).contains(index) else { throw PushCrypto.Failure.invalid }
         try transaction { state in
+            state.notificationsLaunch = nil
             state.launch = PendingLaunch(registrationId: registration, topicIndex: index)
             state.counts.removeValue(forKey: PushPolicy.group(registration, index))
         }
     }
+    func launchNotifications() throws {
+        try transaction { state in state.launch = nil; state.notificationsLaunch = true }
+    }
     func consumeLaunch() throws -> Launch? {
         try transaction { state in
+            if state.notificationsLaunch == true {
+                state.notificationsLaunch = nil; state.launch = nil
+                return Launch(registrationId: nil, route: "/notifications")
+            }
             guard let launch = state.launch else { return nil }; state.launch = nil
             let topic = launch.topicIndex.flatMap { Self.topic(state, launch.registrationId, $0) }
             return Launch(registrationId: state.registrations[launch.registrationId] == nil ? nil : launch.registrationId,
