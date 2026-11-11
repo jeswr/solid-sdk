@@ -2,6 +2,7 @@
 // AUTHORED-BY Codex GPT-6
 import type { PodAuth } from "@jeswr/pod-auth";
 import { type StorageClient, StorageError, type WriteResult } from "@jeswr/storage-client";
+import { createAt } from "@jeswr/storage-client/helpers";
 import { createMemoryStorage } from "@jeswr/storage-client/memory";
 import { checkedProposalResult, proposalResultKey } from "./proposal-results.js";
 import type { Checkpoints, ProcessLease, ProposalResult, ProposalResults } from "./types.js";
@@ -83,7 +84,27 @@ export function createMemoryPod(root = "https://pod.example/") {
           "if-none-match": "*",
         }),
       );
-      const result = await memory.create(parent, body, options);
+      let result: WriteResult;
+      try {
+        result = await memory.create(parent, body, options);
+      } catch (error) {
+        if (
+          !(error instanceof StorageError) ||
+          error.code !== "conflict" ||
+          error.status !== 409 ||
+          options.name === undefined ||
+          error.url !== url
+        )
+          throw error;
+        // SDK memory uses 409 for name clashes. Model HTTP Solid's 412 only when
+        // this exact target exists; a file/container path collision remains 409.
+        try {
+          await memory.head(url);
+        } catch {
+          throw error;
+        }
+        throw new StorageError("conflict", { method: "PUT", url, status: 412, cause: error });
+      }
       await snapshot(result.url);
       return result;
     },
@@ -98,10 +119,7 @@ export function createMemoryPod(root = "https://pod.example/") {
         const body = await request.text();
         let result: WriteResult;
         if (url.endsWith("/") || headers.get("if-none-match") === "*") {
-          const path = url.replace(/\/$/, "");
-          const slash = path.lastIndexOf("/");
-          result = await storage.create(path.slice(0, slash + 1), body, {
-            name: decodeURIComponent(path.slice(slash + 1)),
+          result = await createAt(storage, url, body, {
             kind: url.endsWith("/") ? "container" : "resource",
             contentType: headers.get("content-type") ?? "text/turtle",
           });

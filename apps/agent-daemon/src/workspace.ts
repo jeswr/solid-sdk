@@ -11,6 +11,7 @@ import { parseRdf } from "@jeswr/fetch-rdf";
 import type { PodAuth } from "@jeswr/pod-auth";
 import { serialize } from "@jeswr/rdf-serialize";
 import { type ReadResult, type StorageClient, StorageError } from "@jeswr/storage-client";
+import { createAt } from "@jeswr/storage-client/helpers";
 import {
   LiteralFrom,
   NamedNodeAs,
@@ -64,6 +65,7 @@ export class PodWorkspace {
     ownerWebId: string;
     privateTypeIndex: string;
   }) {
+    if (options.storage.protocol !== "solid") throw new Error("Workspace requires Solid storage");
     const root = safe(options.root);
     if (!root.pathname.endsWith("/") || root.hash) throw new Error("Invalid storage root");
     const owner = safe(options.ownerWebId);
@@ -126,11 +128,8 @@ export class PodWorkspace {
       return new Error("Pod redirect refused");
     return new Error(message);
   }
-  private conflict(error: unknown): boolean {
-    return (
-      error instanceof StorageError &&
-      (error.code === "precondition-failed" || error.code === "conflict")
-    );
+  private nameTaken(error: unknown): boolean {
+    return error instanceof StorageError && error.code === "conflict" && error.status === 412;
   }
   private async create(
     url: string,
@@ -138,18 +137,10 @@ export class PodWorkspace {
     kind: "resource" | "container" = "resource",
   ) {
     this.assertScope(url);
-    const target = new URL(url);
-    const path = target.pathname.replace(/\/$/, "");
-    const slash = path.lastIndexOf("/");
-    const parent = new URL(target.href);
-    parent.pathname = path.slice(0, slash + 1);
-    const result = await this.storage.create(parent.href, body, {
-      name: decodeURIComponent(path.slice(slash + 1)),
+    return createAt(this.storage, url, body, {
       kind,
       contentType: "text/turtle",
     });
-    // Workspace RDF and type registrations require stable destinations.
-    if (result.url !== url) throw new Error("Pod assigned a different workspace URL");
   }
 
   private async document(
@@ -199,7 +190,13 @@ export class PodWorkspace {
     try {
       await this.create(url, null, "container");
     } catch (error) {
-      if (!this.conflict(error)) throw this.failure("Container creation failed", error);
+      if (!(error instanceof StorageError) || error.code !== "conflict")
+        throw this.failure("Container creation failed", error);
+      try {
+        await this.storage.head(url);
+      } catch (cause) {
+        throw this.failure("Container creation failed", cause);
+      }
     }
   }
 
@@ -242,7 +239,7 @@ export class PodWorkspace {
     try {
       await this.create(proposal.id, await recordToTurtle(proposal));
     } catch (error) {
-      if (!this.conflict(error)) throw this.failure("Proposal write failed", error);
+      if (!this.nameTaken(error)) throw this.failure("Proposal write failed", error);
       const current = await this.document(proposal.id);
       if (
         !current.missing &&
@@ -318,7 +315,7 @@ export class PodWorkspace {
       } catch (error) {
         if (
           error instanceof StorageError &&
-          (error.code === "precondition-failed" || (current.missing && error.code === "conflict"))
+          (current.missing ? this.nameTaken(error) : error.code === "precondition-failed")
         )
           continue;
         throw this.failure("Type index registration failed", error);

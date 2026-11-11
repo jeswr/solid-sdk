@@ -14,15 +14,22 @@ an executor, verified authority stores, an audit writer and durable local state.
 `createDaemon` accepts the same already-composed capabilities for embedded hosts
 and offline tests. No provider, account or permission is inferred from pod content.
 
-`PodWorkspace` requires an injected `storage: StorageClient` alongside `io` and
+`PodWorkspace` requires an injected Solid `storage: StorageClient` alongside `io` and
 `root`. Composition shares the one `createPodClient` result with notifications.
 Workspace reads, writes and container creation use that client; `io` remains the
 scope-checked transport seam for the legacy inbound importer. Snapshot writes keep
 their unconditional semantics (`ifMatch: '*'`), while index edits use the observed
-ETag and proposals use conditional creation. Fixed workspace names must match the
-client's returned URLs. Read bounds and existing CLI error messages are retained.
+ETag and proposals use conditional creation. Non-Solid storage is refused at construction.
+Fixed destinations use the shared `createAt` helper, which rejects URL spellings that
+would change on name encoding before any create request (for example `x:y.ttl` and
+`x%3ay.ttl`; `x%3Ay.ttl` is accepted). Only a taken name reported as Solid's remapped
+412 permits proposal replay or index-create retry; a real 409 remains a write failure.
+After a container-create conflict, a fresh HEAD must confirm the container exists.
+Read bounds and existing CLI error messages are retained.
 `createMemoryPod(root?)` now exposes SDK memory `storage` and a fetch adapter sharing
 that state, with request records and resource snapshots for offline assertions.
+Its named-create adapter reports a verified existing target as Solid's name-taken
+412; collisions between resource and container paths retain 409.
 
 The deployment supplies the owner-discovered private Type Index URL (already linked
 from the owner's preferences document). Registration preserves existing RDF and

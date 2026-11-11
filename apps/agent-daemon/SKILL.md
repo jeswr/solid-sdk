@@ -11,11 +11,18 @@ README.md before changing behavior. Root exports the runtime, pod workspace,
 local state, process lease, CLI composition and installer. `./testing` contains
 only ephemeral synthetic state and an SDK memory StorageClient with a fetch adapter.
 
-Inject `storage: StorageClient` into `PodWorkspace`; `composeDaemon` shares the
+Inject a Solid `storage: StorageClient` into `PodWorkspace`; `composeDaemon` shares the
 single root-entry `createPodClient({ fetch: auth.fetch, storage })` result with
 notifications. Workspace operations use that client. Retain the scoped `io` seam
 for the legacy importer. Use `createMemoryPod(root?).storage` for offline workspace
 tests; its fetch adapter, request records and resource snapshots share the SDK state.
+The constructor refuses non-Solid clients. Workspace and memory fetch-adapter creates
+use `createAt` from `@jeswr/storage-client/helpers` so URL encoding mismatches fail
+before creation. Use canonical encoded child names (`x%3Ay.ttl`, not `x:y.ttl` or
+`x%3ay.ttl`). Replay/retry only remapped name-taken 412s; real 409s fail. Container
+creation conflicts require a confirming HEAD before provisioning continues.
+The memory adapter translates the SDK memory backend's 409 to HTTP Solid's 412
+only after HEAD confirms that exact named target exists; kind collisions retain 409.
 
 Use pod-auth/node client-credentials DPoP fetch for pod access. Keep the trusted
 host composition explicit. No credentials, provider implementations or account
