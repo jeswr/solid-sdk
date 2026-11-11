@@ -22,6 +22,7 @@ import { type ReactNode, type Ref, useId, useState } from "react";
 import type { MusicPlaylist } from "../lib/data/playlists";
 import { playlistHref } from "../lib/navigation";
 import { useMusic } from "../state/music-context";
+import { AddMusicFiles } from "./add-files";
 
 export function CreatePlaylist({ compact = false }: { compact?: boolean }) {
   const music = useMusic();
@@ -265,9 +266,16 @@ export function AddSongs({
               </li>
             ))}
           </ul>
-          {tracks.length === 0 && (
-            <EmptyState variant="no-results" query={query} onClearFilters={() => setQuery("")} />
-          )}
+          {tracks.length === 0 &&
+            (music.snapshot?.library.tracks.length ? (
+              <EmptyState variant="no-results" query={query} onClearFilters={() => setQuery("")} />
+            ) : (
+              <EmptyState
+                title="No tracks to add yet"
+                body="Add music files to your library, then choose songs for this playlist."
+                primaryAction={<AddMusicFiles />}
+              />
+            ))}
         </div>
         <p role="status">{selected.length} songs selected</p>
         <DialogFooter>

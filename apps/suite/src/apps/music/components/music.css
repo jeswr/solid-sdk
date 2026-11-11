@@ -740,6 +740,12 @@
 .mus-import-pick {
   display: grid;
   gap: var(--space-2);
+  min-width: 0;
+  max-width: 100%;
+}
+.mus-import .suite-async-actions > .mus-import-pick:first-child {
+  background: var(--surface);
+  color: var(--foreground);
 }
 .mus-import-pick label {
   font-weight: 600;
@@ -996,6 +1002,23 @@
   align-items: center;
   gap: var(--space-3);
   margin-block: var(--space-4);
+}
+/* AUTHORED-BY Codex GPT-6.1-Sol */
+.mus-read-notice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  margin-block: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--foreground);
+}
+.mus-read-notice p {
+  flex: 1 1 16rem;
+  overflow-wrap: anywhere;
 }
 .mus-collection-play > span {
   font-size: var(--text-sm);

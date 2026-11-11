@@ -1,6 +1,6 @@
 // AUTHORED-BY Claude Opus 5.5
 "use client";
-import { Button } from "@jeswr/suite-ui";
+import { Button, EmptyState } from "@jeswr/suite-ui";
 import { FileUp, History, LockKeyhole } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useId, useRef, useState } from "react";
@@ -12,7 +12,7 @@ import {
   scrobbleErrorMessage,
 } from "../lib/data/scrobbles";
 import { useMusic } from "../state/music-context";
-import { MusicSurface } from "./music-app";
+import { MusicSurface } from "./music-states";
 
 const count = (value: number, noun: string) =>
   `${value.toLocaleString("en")} ${noun}${value === 1 ? "" : "s"}`;
@@ -98,6 +98,27 @@ function Importer() {
     }
   }
 
+  const picker = (
+    <div className="mus-import-pick">
+      <label htmlFor={inputId}>Choose export files</label>
+      <input
+        ref={target}
+        id={inputId}
+        type="file"
+        multiple
+        accept=".csv,.json,.jsonl,text/csv,application/json"
+        disabled={!library}
+        aria-describedby={error ? errorId : undefined}
+        onChange={(event) => {
+          const files = event.target.files;
+          void choose(files).finally(() => {
+            event.target.value = "";
+          });
+        }}
+      />
+    </div>
+  );
+
   return (
     <section className="mus-import" aria-labelledby="mus-import-title">
       <span className="mus-import-icon">
@@ -117,28 +138,25 @@ function Importer() {
           <strong>Last.fm:</strong> a .csv file with artist, album, track and timestamp columns.
         </li>
       </ul>
-      {phase.name === "idle" && (
-        <div className="mus-import-pick">
-          <label htmlFor={inputId}>Choose export files</label>
-          <input
-            ref={target}
-            id={inputId}
-            type="file"
-            multiple
-            accept=".csv,.json,.jsonl,text/csv,application/json"
-            disabled={!library}
-            aria-describedby={error ? errorId : undefined}
-            onChange={(event) => {
-              const files = event.target.files;
-              void choose(files).finally(() => {
-                event.target.value = "";
-              });
-            }}
+      {phase.name === "idle" &&
+        (!music.snapshot?.history.length &&
+        !music.snapshot?.failures?.some((failure) => failure.area === "history") ? (
+          <EmptyState
+            title="No listening history yet"
+            body="Import your Last.fm or ListenBrainz exports to collect your listening history here."
+            primaryAction={picker}
           />
-        </div>
-      )}
+        ) : (
+          picker
+        ))}
       {phase.name === "reading" && (
-        <p ref={target} tabIndex={-1} className="mus-import-preview">
+        <p
+          ref={target}
+          tabIndex={-1}
+          className="mus-import-preview"
+          role="status"
+          aria-label="Reading your export"
+        >
           Reading your export…
         </p>
       )}
@@ -190,7 +208,7 @@ function Importer() {
       )}
       {phase.name === "saving" && (
         <div className="mus-import-preview">
-          <p ref={target} tabIndex={-1}>
+          <p ref={target} tabIndex={-1} role="status" aria-label="Saving your listens">
             {phase.total ? `Saving month ${phase.done} of ${phase.total}…` : "Saving your listens…"}
           </p>
           <progress
@@ -251,15 +269,16 @@ function Importer() {
 }
 
 export function ScrobbleImport() {
+  const music = useMusic();
   return (
     <>
       <header className="mus-page-header">
         <div>
           <p className="mus-eyebrow">Your library</p>
-          <h1>Import listening history</h1>
+          <h1 tabIndex={-1}>Import listening history</h1>
         </div>
       </header>
-      <MusicSurface>
+      <MusicSurface area="all" hasData={!!music.snapshot && !music.snapshot.libraryError}>
         <Importer />
       </MusicSurface>
     </>

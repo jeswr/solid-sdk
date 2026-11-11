@@ -11,13 +11,13 @@ import {
   DialogTitle,
   DialogTrigger,
   EmptyState,
-  ErrorState,
   FilterChips,
+  IconButton,
 } from "@jeswr/suite-ui";
-import { ArrowRight, Disc3, FileUp, Heart, ListMusic, Music2, Trash2 } from "lucide-react";
+import { ArrowRight, Disc3, FileUp, Heart, ListMusic, Music2, Trash2, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { decodeRef } from "@/lib/refs";
 import { computeTopArtists, mostPlayedTracks, recentlyPlayed } from "../lib/data/history";
 import { type MusicTrack, search } from "../lib/data/library";
@@ -30,7 +30,7 @@ import { albumHref, artistHref, playlistHref } from "../lib/navigation";
 import { useMusic } from "../state/music-context";
 import { AddFromDrive, AddMusicFiles } from "./add-files";
 import { Artwork } from "./artwork";
-import { MusicSurface } from "./music-app";
+import { MusicSurface } from "./music-states";
 import { PlayCollection } from "./player";
 import { AddSongs, CreatePlaylist, EditPlaylistDetails } from "./playlist-dialogs";
 import { Like, PlaylistTracks, TrackList, TrackName } from "./track-list";
@@ -60,16 +60,18 @@ const titles: Record<MusicView, string> = {
   playlist: "Playlist",
   search: "Search",
 };
-function Empty({ title, body }: { title: string; body: string }) {
+function Empty({ title, body, action }: { title: string; body: string; action?: ReactNode }) {
   return (
     <EmptyState
       title={title}
       body={body}
       icon={<Music2 size={24} aria-hidden="true" />}
       primaryAction={
-        <Button asChild>
-          <Link href="/music/tracks">Explore tracks</Link>
-        </Button>
+        action ?? (
+          <Button asChild>
+            <Link href="/music/tracks">Explore tracks</Link>
+          </Button>
+        )
       }
     />
   );
@@ -82,6 +84,7 @@ function AlbumCards({ ids }: { ids?: readonly string[] }) {
       <Empty
         title="No albums yet"
         body="Albums appear here when songs are added to your library."
+        action={<AddMusicFiles />}
       />
     );
   return (
@@ -159,7 +162,7 @@ function Home() {
           </ul>
         ) : (
           <Empty
-            title="Your listening story starts here"
+            title="No recently played songs yet"
             body="Recently played songs will appear here as your history grows."
           />
         )}
@@ -202,9 +205,23 @@ function Home() {
               })}
             </ol>
           ) : (
-            <Empty
+            <EmptyState
+              variant="filtered-empty"
               title="No plays in this period"
-              body="Try a longer listening period to see your top artists."
+              body={
+                period === "1Y"
+                  ? "Import your listening history to see your top artists here."
+                  : "Try a longer listening period to see your top artists."
+              }
+              primaryAction={
+                period === "1Y" ? (
+                  <Button asChild>
+                    <Link href="/music/import">Import history</Link>
+                  </Button>
+                ) : (
+                  <Button onClick={() => setPeriod("1Y")}>Show last year</Button>
+                )
+              }
             />
           )}
         </section>
@@ -229,10 +246,7 @@ function Home() {
               ))}
             </ul>
           ) : (
-            <Empty
-              title="Keep your favourites close"
-              body="Tap the heart beside a song to save it here."
-            />
+            <Empty title="No liked songs yet" body="Tap the heart beside a song to save it here." />
           )}
         </section>
       </div>
@@ -296,6 +310,8 @@ function HistoryView() {
   const snapshot = music.snapshot;
   // Imported history can hold tens of thousands of plays; render them in pages.
   const [shown, setShown] = useState(HISTORY_PAGE);
+  const [olderDismissed, setOlderDismissed] = useState(false);
+  const olderButton = useRef<HTMLButtonElement>(null);
   // "Show more" moves focus to the first newly shown play, since the button can disappear.
   const focusFrom = useRef<number | null>(null);
   const timeline = useRef<HTMLDivElement>(null);
@@ -365,7 +381,12 @@ function HistoryView() {
       ) : (
         <Empty
           title="No listening history yet"
-          body="Your listening history will appear here, grouped by day. You can also import it from Last.fm or ListenBrainz."
+          body="Keep your listening history here, grouped by day, with imports from Last.fm or ListenBrainz."
+          action={
+            <Button asChild>
+              <Link href="/music/import">Import history</Link>
+            </Button>
+          }
         />
       )}
       {snapshot.history.length > shown && (
@@ -385,12 +406,39 @@ function HistoryView() {
           </p>
         </div>
       )}
-      {music.olderError && <ErrorState error="unreachable" actions={{ retry: music.older }} />}
+      {music.olderError && !olderDismissed && (
+        <div className="mus-read-notice" role="alert">
+          <p>Couldn’t read older listening history. Your loaded plays are still available.</p>
+          <Button
+            variant="outline"
+            onClick={() => void music.older().then(() => olderButton.current?.focus())}
+          >
+            Retry
+          </Button>
+          <IconButton
+            label="Dismiss older history notice"
+            variant="ghost"
+            onClick={() => {
+              setOlderDismissed(true);
+              olderButton.current?.focus();
+            }}
+          >
+            <X size={18} aria-hidden="true" />
+          </IconButton>
+        </div>
+      )}
+      {music.olderLoading && (
+        <p role="status" aria-label="Loading older history">
+          Loading older history…
+        </p>
+      )}
       <div className="mus-load-older">
         <Button
+          ref={olderButton}
           variant="outline"
           disabled={music.olderLoading}
           onClick={() => {
+            setOlderDismissed(false);
             void music.older();
           }}
         >
@@ -409,6 +457,29 @@ function Content({ view, id, query }: { view: MusicView; id?: string | undefined
   const [yourFiles, setYourFiles] = useState(false);
   if (!snapshot) return null;
   const { library } = snapshot;
+  const firstRun = {
+    home: ["No music yet", "Collect your songs here and see what you’ve been listening to."],
+    tracks: ["No tracks yet", "Add your music files to build a library that stays with you."],
+    albums: ["No albums yet", "Find your albums here as you add music to your library."],
+    artists: ["No artists yet", "Find your artists here as you add music to your library."],
+    liked: [
+      "No liked songs yet",
+      "Add songs, then use the heart beside a song to keep your favourites here.",
+    ],
+    search: ["No music to search yet", "Add music to find songs by title, artist or album."],
+  };
+  const hasCollection =
+    view === "albums"
+      ? library.albums.length
+      : view === "artists"
+        ? library.artists.length
+        : view === "home"
+          ? snapshot.history.length
+          : false;
+  if (!library.tracks.length && !hasCollection && view in firstRun) {
+    const [title, body] = firstRun[view as keyof typeof firstRun] as [string, string];
+    return <Empty title={title} body={body} action={<AddMusicFiles />} />;
+  }
   if (view === "home") return <Home />;
   if (view === "tracks")
     return (
@@ -450,17 +521,31 @@ function Content({ view, id, query }: { view: MusicView; id?: string | undefined
         <PlayCollection
           tracks={yourFiles ? library.tracks.filter((track) => track.contentUrl) : library.tracks}
         />
-        <TrackList
-          tracks={yourFiles ? library.tracks.filter((track) => track.contentUrl) : library.tracks}
-        />
+        {yourFiles && !library.tracks.some((track) => track.contentUrl) ? (
+          <EmptyState
+            variant="filtered-empty"
+            title="No music files in your library"
+            body="Your library has songs without audio files; add your own files to play them here."
+            primaryAction={<Button onClick={() => setYourFiles(false)}>Show all tracks</Button>}
+          />
+        ) : (
+          <TrackList
+            tracks={yourFiles ? library.tracks.filter((track) => track.contentUrl) : library.tracks}
+          />
+        )}
       </>
     );
   if (view === "liked")
-    return (
+    return library.tracks.some((track) => track.loved) ? (
       <>
         <PlayCollection tracks={library.tracks.filter((track) => track.loved)} />
         <TrackList tracks={library.tracks.filter((track) => track.loved)} label="Liked songs" />
       </>
+    ) : (
+      <Empty
+        title="No liked songs yet"
+        body="Use the heart beside a song to keep your favourites here."
+      />
     );
   if (view === "search") {
     const results = search(library, query);
@@ -506,7 +591,11 @@ function Content({ view, id, query }: { view: MusicView; id?: string | undefined
         ))}
       </ul>
     ) : (
-      <Empty title="No artists yet" body="Your artists appear as you build your library." />
+      <Empty
+        title="No artists yet"
+        body="Your artists appear as you build your library."
+        action={<AddMusicFiles />}
+      />
     );
   if (view === "playlists")
     return snapshot.playlists.length ? (
@@ -526,7 +615,7 @@ function Content({ view, id, query }: { view: MusicView; id?: string | undefined
       </ul>
     ) : (
       <EmptyState
-        title="Make room for a new mood"
+        title="No playlists yet"
         body="Bring songs together in your own playlists."
         primaryAction={<CreatePlaylist />}
       />
@@ -630,7 +719,9 @@ function Content({ view, id, query }: { view: MusicView; id?: string | undefined
             <EmptyState
               title="Find your playlist’s first song"
               body="Choose songs from your library to start this collection."
-              primaryAction={<AddSongs playlist={playlist} />}
+              primaryAction={
+                library.tracks.length ? <AddSongs playlist={playlist} /> : <AddMusicFiles />
+              }
             />
           )}
         </>
@@ -641,15 +732,23 @@ function Content({ view, id, query }: { view: MusicView; id?: string | undefined
       title="This item is unavailable"
       body="It may have moved or been removed from your library."
       primaryAction={
-        <Button asChild>
-          <Link href="/music/tracks">Browse tracks</Link>
-        </Button>
+        library.tracks.length ? (
+          <Button asChild>
+            <Link href="/music/tracks">Browse tracks</Link>
+          </Button>
+        ) : (
+          <AddMusicFiles />
+        )
       }
       secondaryAction={
         <Button
           variant="outline"
-          onClick={() => {
-            void music.refresh();
+          onClick={async (event) => {
+            const heading = event.currentTarget
+              .closest(".mus-content")
+              ?.querySelector<HTMLElement>("h1");
+            await music.refresh();
+            heading?.focus();
           }}
         >
           Retry
@@ -683,6 +782,22 @@ export function MusicScreen({
         : view === "playlist"
           ? snapshot?.playlists.find((playlist) => playlist.id === id)?.name
           : undefined;
+  const hasData = Boolean(
+    snapshot &&
+      (view === "history"
+        ? snapshot.history.length
+        : view === "playlists"
+          ? snapshot.playlists.length
+          : view === "albums"
+            ? snapshot.library.albums.length
+            : view === "artists"
+              ? snapshot.library.artists.length
+              : ["album", "artist", "playlist"].includes(view)
+                ? title
+                : view === "home"
+                  ? snapshot.library.tracks.length || snapshot.history.length
+                  : snapshot.library.tracks.length),
+  );
   return (
     <>
       <header className="mus-page-header">
@@ -690,7 +805,7 @@ export function MusicScreen({
           <p className="mus-eyebrow">
             {view === "home" ? "A little closer to what you love" : "Your library"}
           </p>
-          <h1>{title ?? titles[view]}</h1>
+          <h1 tabIndex={-1}>{title ?? titles[view]}</h1>
           {view === "home" && <p className="mus-muted">Good music. All yours.</p>}
         </div>
         {view === "playlists" && <CreatePlaylist />}
@@ -709,7 +824,10 @@ export function MusicScreen({
         )}
         {view === "albums" && <Disc3 className="mus-header-icon" size={28} aria-hidden="true" />}
       </header>
-      <MusicSurface>
+      <MusicSurface
+        area={view === "history" ? "history" : view === "home" ? "all" : "library"}
+        hasData={hasData}
+      >
         <Content view={view} id={id} query={query} />
       </MusicSurface>
     </>

@@ -13,7 +13,7 @@ import {
   loadHistory as readMonths,
   recentlyPlayed,
 } from "../model";
-import { type Library, musicRoot } from "./library";
+import { type Library, musicRoot, type ReportMusicFailure } from "./library";
 
 export { computeTopArtists, recentlyPlayed };
 export async function loadHistory(
@@ -22,12 +22,30 @@ export async function loadHistory(
   now: Date,
   months = 12,
   offset = 0,
+  report?: ReportMusicFailure,
 ): Promise<Playback[]> {
   const dates = Array.from(
     { length: months },
     (_, index) => new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - index - offset, 1)),
   );
-  const history = await readMonths(fetch, musicRoot(storage), dates);
+  const history = report
+    ? (
+        await Promise.all(
+          dates.map(async (date) => {
+            try {
+              return await readMonths(fetch, musicRoot(storage), [date]);
+            } catch (error) {
+              report({
+                url: new URL(`history/${monthKey(date)}.ttl`, musicRoot(storage)).href,
+                error,
+                area: "history",
+              });
+              return [];
+            }
+          }),
+        )
+      ).flat()
+    : await readMonths(fetch, musicRoot(storage), dates);
   const selected = new Set(dates.map(monthKey));
   try {
     const doc = await loadMusic(
@@ -38,7 +56,14 @@ export async function loadHistory(
       ...readHistory(doc.dataset).filter((play) => selected.has(monthKey(play.startTime))),
     );
   } catch (error) {
-    if (!(error instanceof RdfFetchError) || error.status !== 404) throw error;
+    if (!(error instanceof RdfFetchError) || error.status !== 404) {
+      if (!report) throw error;
+      report({
+        url: new URL("integrations/spotify/music/recently-played.ttl", storage).href,
+        error,
+        area: "history",
+      });
+    }
   }
   return history.sort((a, b) => b.startTime.getTime() - a.startTime.getTime());
 }

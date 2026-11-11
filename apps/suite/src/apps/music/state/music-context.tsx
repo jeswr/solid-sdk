@@ -14,7 +14,13 @@ import type { PodSession } from "@/lib/session/pod-session";
 import { ensureSample } from "../demo/sample";
 import { importSpotifyFixture } from "../demo/spotify";
 import { loadHistory } from "../lib/data/history";
-import { type Library, loadLibrary, musicRoot } from "../lib/data/library";
+import {
+  type Library,
+  loadLibrary,
+  type MusicReadFailure,
+  musicRoot,
+  provision,
+} from "../lib/data/library";
 import { LikedSyncPendingError, retryLikedSync, setLiked } from "../lib/data/liked";
 import {
   addDriveAudio,
@@ -42,6 +48,8 @@ export interface MusicSnapshot {
   playlists: MusicPlaylist[];
   history: Playback[];
   preferences: PreferencesSnapshot;
+  failures?: MusicReadFailure[];
+  libraryError?: unknown;
 }
 type Patch = (snapshot: MusicSnapshot) => MusicSnapshot;
 type ConfirmedWrite = { apply: Patch; document?: Pick<MusicDocument, "url" | "etag"> };
@@ -121,22 +129,60 @@ export function MusicProvider({ session, children }: { session: PodSession; chil
   const publish = useCallback(() => {
     if (!mounted.current || !baseline.current) return;
     const snapshot = patches.current.reduce((value, patch) => patch.apply(value), baseline.current);
-    setState({ status: snapshot.library.tracks.length ? "ready" : "empty", snapshot });
+    setState({
+      status: snapshot.libraryError ? "error" : snapshot.library.tracks.length ? "ready" : "empty",
+      snapshot,
+      error: snapshot.libraryError,
+    });
     setSaving(patches.current.length > 0);
   }, []);
   const read = useCallback(
     async function read(): Promise<{ snapshot: MusicSnapshot; months: number }> {
       const range = months.current;
+      const failures: MusicReadFailure[] = [];
+      const report = (failure: MusicReadFailure) => failures.push(failure);
+      let libraryError: unknown;
       const [library, history, preferences] = await Promise.all([
-        loadLibrary(session.fetch, session.storageUrl),
-        loadHistory(session.fetch, session.storageUrl, new Date(), range),
-        preferencesStore(session.fetch, session.storageUrl).load(),
+        loadLibrary(session.fetch, session.storageUrl, report).catch((error: unknown): Library => {
+          libraryError = error;
+          report({ url: musicRoot(session.storageUrl), error, area: "library" });
+          return (
+            baseline.current?.library ?? {
+              tracks: [],
+              albums: [],
+              artists: [],
+              documents: new Map(),
+              models: { tracks: [], albums: [], artists: [], playlists: [] },
+            }
+          );
+        }),
+        loadHistory(session.fetch, session.storageUrl, new Date(), range, 0, report),
+        preferencesStore(session.fetch, session.storageUrl)
+          .load()
+          .catch((error: unknown) => {
+            report({
+              url: new URL("preferences.json", musicRoot(session.storageUrl)).href,
+              error,
+              area: "preferences",
+            });
+            return (
+              baseline.current?.preferences ?? { value: { artwork: "none" as const }, etag: null }
+            );
+          }),
       ]);
       // A pagination request may have extended the range while this read was in flight.
       // Retry the complete snapshot so neither refresh nor write reconciliation drops it.
       if (range !== months.current) return read();
       return {
-        snapshot: { library, playlists: listPlaylists(library), history, preferences },
+        snapshot: {
+          library,
+          playlists:
+            libraryError && baseline.current ? baseline.current.playlists : listPlaylists(library),
+          history,
+          preferences,
+          failures,
+          libraryError,
+        },
         months: range,
       };
     },
@@ -153,7 +199,10 @@ export function MusicProvider({ session, children }: { session: PodSession; chil
       await ensureSample(session);
       let loaded = await read();
       try {
-        if (await retryLikedSync(session.fetch, session.storageUrl, loaded.snapshot.library)) {
+        if (
+          !loaded.snapshot.failures?.some((failure) => failure.area === "library") &&
+          (await retryLikedSync(session.fetch, session.storageUrl, loaded.snapshot.library))
+        ) {
           loaded = await read();
           setNotice("Liked songs playlist synchronized.");
         }
@@ -168,11 +217,12 @@ export function MusicProvider({ session, children }: { session: PodSession; chil
       }
     } catch (error) {
       if (mounted.current && request === generation.current && !patches.current.length) {
-        if (reconciliationPending.current && baseline.current) publish();
-        else {
-          baseline.current = undefined;
-          setState({ status: "error", error });
-        }
+        // A failed re-read must not erase music that was already visible or saved.
+        setState((current) => ({
+          ...current,
+          status: reconciliationPending.current && baseline.current ? current.status : "error",
+          error,
+        }));
       }
     }
   }, [read, publish, session]);
@@ -280,6 +330,7 @@ export function MusicProvider({ session, children }: { session: PodSession; chil
       try {
         let loaded = await read();
         while (loaded.months !== months.current) loaded = await read();
+        if (loaded.snapshot.libraryError) throw loaded.snapshot.libraryError;
         baseline.current = loaded.snapshot;
         reconciliationPending.current = false;
       } catch {
@@ -332,6 +383,7 @@ export function MusicProvider({ session, children }: { session: PodSession; chil
       const created = await mutate(
         (snapshot) => snapshot,
         async () => {
+          await provision(session.fetch, session.storageUrl);
           const playlist = await createPlaylist(
             session.fetch,
             session.storageUrl,
@@ -468,6 +520,7 @@ export function MusicProvider({ session, children }: { session: PodSession; chil
     storage: session.storageUrl,
     async importListens(plan, onProgress) {
       try {
+        await provision(session.fetch, session.storageUrl);
         return await saveScrobbles(session.fetch, session.storageUrl, plan, onProgress);
       } finally {
         // Months saved before a failure are kept, so show them either way.
@@ -483,12 +536,14 @@ export function MusicProvider({ session, children }: { session: PodSession; chil
         setOlderError(false);
         setNotice("Loading older history…");
         try {
+          const failures: MusicReadFailure[] = [];
           const history = await loadHistory(
             session.fetch,
             session.storageUrl,
             new Date(),
             12,
             months.current,
+            (failure) => failures.push(failure),
           );
           months.current += 12;
           setNotice(
@@ -499,6 +554,7 @@ export function MusicProvider({ session, children }: { session: PodSession; chil
           if (baseline.current) {
             baseline.current = {
               ...baseline.current,
+              failures: [...(baseline.current.failures ?? []), ...failures],
               history: [
                 ...new Map(
                   [...baseline.current.history, ...history].map((play) => [play.iri, play]),

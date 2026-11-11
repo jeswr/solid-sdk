@@ -3,7 +3,6 @@
 "use client";
 import {
   Badge,
-  Button,
   ErrorState,
   IconButton,
   LoadingSkeleton,
@@ -97,7 +96,10 @@ function Settings() {
           <Switch
             id="mus-artwork"
             checked={music.snapshot?.preferences.value.artwork === "hot-link"}
-            disabled={!music.snapshot}
+            disabled={
+              !music.snapshot ||
+              music.snapshot.failures?.some((failure) => failure.area === "preferences")
+            }
             onCheckedChange={music.artwork}
             aria-describedby="mus-artwork-help"
           />
@@ -174,23 +176,4 @@ export function MusicApp({ children }: { children: ReactNode }) {
       <Toaster position="bottom-center" />
     </PodSessionProvider>
   );
-}
-export function MusicSurface({ children }: { children: ReactNode }) {
-  const music = useMusic();
-  if (music.status === "loading")
-    return <LoadingSkeleton label="Loading your music" preset="table" />;
-  if (music.status === "error")
-    return (
-      <ErrorState error="unreachable" actions={{ retry: music.refresh }}>
-        <Button
-          variant="outline"
-          onClick={() => {
-            void music.refresh();
-          }}
-        >
-          Refresh Music
-        </Button>
-      </ErrorState>
-    );
-  return children;
 }
