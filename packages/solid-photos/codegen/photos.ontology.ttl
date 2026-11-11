@@ -1,0 +1,29 @@
+# AUTHORED-BY Codex (GPT-6.1 Sol)
+# Minimal declaration projection of existing standard classes; no new vocabulary.
+@prefix schema: <https://schema.org/> .
+@prefix exif: <http://www.w3.org/2003/12/exif/ns#> .
+@prefix geo: <http://www.w3.org/2003/01/geo/wgs84_pos#> .
+@prefix dct: <http://purl.org/dc/terms/> .
+@prefix prov: <http://www.w3.org/ns/prov#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+
+schema:Photograph a owl:Class ; rdfs:label "Photograph"@en ;
+    skos:definition "The existing Suite photos Photograph view."@en .
+
+schema:ImageGallery a owl:Class ; rdfs:label "ImageGallery"@en ;
+    skos:definition "The existing Suite photos ImageGallery view."@en .
+
+schema:ListItem a owl:Class ; rdfs:label "ListItem"@en ;
+    skos:definition "The existing Suite photos ListItem view."@en .
+
+geo:Point a owl:Class ; rdfs:label "GeoPoint"@en ;
+    skos:definition "The existing Suite photos GeoPoint view."@en .
+
+prov:Entity a owl:Class ; rdfs:label "Trash"@en ;
+    skos:definition "The existing Suite photos Trash view."@en .
+
+schema:ImageObject a owl:Class ; rdfs:label "ImageObject"@en ;
+    skos:definition "A photograph imported by the Pod Manager connector."@en .

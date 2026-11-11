@@ -64,6 +64,7 @@ phase M composite kind, and pass solid-bookmark's 42-test suite verbatim through
 | P2 form runtime and generated RDFa forms (unify `solid-components`) | later | new package | sst-ild.4.4 |
 | P3 bounded N3 mapping layer for cross-vocabulary migration | later | federation-codegen | sst-ild.4.5 |
 | P4 ESM generation service | later | app or tool | sst-ild.4.6 |
+| W2 photos shared model | generated Photograph/ImageObject, GeoPoint, ImageGallery/ListItem and PROV trash fields in `packages/solid-photos`; Suite app consumes it, with package-local blank-node/repeated-child/numeric-union views | `packages/solid-photos`, `apps/suite` | sst-ild.7 |
 | P5 fleet migration (drawing, chat-interop; task-model split; memory needs a sector) | later | model packages | sst-ild.4.7 |
 | ild.9 `@jeswr/rdf-serialize/wrapper` helpers and consumer rewire | open | `packages/rdf-serialize` plus six consumers | sst-ild.9 |
 

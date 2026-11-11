@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex (GPT-6.1 Sol)
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex
@@ -12,6 +13,9 @@ if (
   throw new Error("Demo fixtures must be disabled for deployment builds");
 
 const config: NextConfig = {
+  // The custom webpack hook disables workers by default. Release each compiler's
+  // graph before building the next target, and avoid duplicate source buffers.
+  experimental: { webpackBuildWorker: true, webpackMemoryOptimizations: true },
   // The live OIDC harness needs next dev for HTTP loopback. Keep its warmed route
   // entries alive so eviction/recompilation cannot Fast Refresh the opener mid-login.
   ...(process.env.SUITE_E2E === "1" && process.env.NODE_ENV === "development"

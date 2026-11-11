@@ -1,6 +1,7 @@
+// AUTHORED-BY Codex (GPT-6.1 Sol)
 // AUTHORED-BY Codex GPT-6.1-Sol
-import type { Photo } from "./photograph.js";
-import { isoDate } from "./validation.js";
+import type { Photo } from "@jeswr/solid-photos";
+import { isoDate } from "@jeswr/solid-photos";
 
 /** UTC keys are deterministic across clients and do not move stored resources. */
 export function dayKey(photo: Photo): string {

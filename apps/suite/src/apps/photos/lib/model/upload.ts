@@ -1,8 +1,15 @@
+// AUTHORED-BY Codex (GPT-6.1 Sol)
 // AUTHORED-BY Codex GPT-6.1-Sol
+
+import type { Photo } from "@jeswr/solid-photos";
+import {
+  type ExifMetadata,
+  httpIri,
+  identifier,
+  isoDate,
+  normaliseExif,
+} from "@jeswr/solid-photos";
 import { parse } from "exifr";
-import { type ExifMetadata, normaliseExif } from "./exif.js";
-import type { Photo } from "./photograph.js";
-import { httpIri, identifier, isoDate } from "./validation.js";
 
 /** exifr is configured to retain numeric orientation and EXIF wall-clock dates. */
 export function mapExif(tags: Record<string, unknown>): ExifMetadata {

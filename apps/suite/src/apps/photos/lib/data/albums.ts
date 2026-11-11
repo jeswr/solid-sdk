@@ -1,14 +1,15 @@
+// AUTHORED-BY Codex (GPT-6.1 Sol)
 // AUTHORED-BY Codex GPT-6
-import { isomorphic } from "rdf-isomorphic";
+
 import {
   type Album,
   addMember,
   buildAlbum,
-  PhotoIoError,
-  type PhotoStorage,
   removeMember,
   reorderMembers,
-} from "../model";
+} from "@jeswr/solid-photos";
+import { isomorphic } from "rdf-isomorphic";
+import { PhotoIoError, type PhotoStorage } from "../model";
 import { confirmedRevisions } from "./revisions";
 import { children, collect, requireEtag, statusOf } from "./shared";
 

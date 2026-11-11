@@ -1,0 +1,29 @@
+@prefix schema: <https://schema.org/>.
+@prefix exif: <http://www.w3.org/2003/12/exif/ns#>.
+@prefix geo: <http://www.w3.org/2003/01/geo/wgs84_pos#>.
+@prefix dct: <http://purl.org/dc/terms/>.
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#>.
+
+<https://pod.example/photos/items/a.ttl#it> a schema:Photograph;
+    schema:name "Title";
+    schema:description "Caption";
+    schema:contentUrl <https://pod.example/photos/originals/a.jpg>;
+    schema:thumbnailUrl <https://pod.example/photos/thumbs/a.webp>;
+    dct:created "2026-01-01T00:00:00.000Z"^^xsd:dateTime;
+    dct:modified "2026-01-02T00:00:00.000Z"^^xsd:dateTime;
+    schema:keywords "Sunset", "bay";
+    exif:make "FUJIFILM";
+    exif:model "X-T5";
+    exif:lensModel "XF 35mm";
+    exif:focalLength "35"^^xsd:double;
+    exif:fNumber "1.4"^^xsd:double;
+    exif:exposureTime "0.008"^^xsd:double;
+    exif:isoSpeedRatings 200;
+    exif:orientation 1;
+    schema:width 6240;
+    schema:height 4160;
+    schema:dateCreated "2026-06-15T18:41:07.000Z"^^xsd:dateTime;
+    schema:geo <https://pod.example/photos/items/a.ttl#geo>.
+<https://pod.example/photos/items/a.ttl#geo> a geo:Point;
+    geo:lat "51.5"^^xsd:double;
+    geo:long "-0.12"^^xsd:double.

@@ -1,7 +1,9 @@
+// AUTHORED-BY Codex (GPT-6.1 Sol)
 // AUTHORED-BY Codex GPT-6
+
+import { buildPhoto } from "@jeswr/solid-photos";
 import { isomorphic } from "rdf-isomorphic";
 import {
-  buildPhoto,
   type CaptureMetadata,
   type ImageEncoder,
   type PreparedPhoto,

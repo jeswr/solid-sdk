@@ -1,9 +1,10 @@
+// AUTHORED-BY Codex (GPT-6.1 Sol)
 // AUTHORED-BY Codex GPT-6
 import { fetchRdf } from "@jeswr/fetch-rdf";
 import { createPodScopedFetch, refuseRedirects } from "@jeswr/guarded-fetch";
+import { parsePhotos } from "@jeswr/solid-photos";
 import { Container } from "@solid/object";
 import { DataFactory } from "n3";
-import { parsePhotos } from "../model";
 import type { LibraryPhoto } from "./library";
 import { children, collect, type Listed } from "./shared";
 
