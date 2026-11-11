@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import type { DataFactory as RdfDataFactory, Term } from "@rdfjs/types";
 import { DataFactory } from "n3";
 import { RdfFetchError } from "./errors.js";
@@ -88,6 +89,7 @@ export function snapshotJson(document: unknown, maxDepth: number): unknown {
 export function budgetFactory(
   options: ParseRdfOptions,
   signal: AbortSignal,
+  check?: () => void,
 ): {
   factory: RdfDataFactory;
   start: () => void;
@@ -103,6 +105,7 @@ export function budgetFactory(
   let allocatedCharacters = 0;
   const allocate = (value: string): void => {
     if (!started) return; // Parser constructors create a fixed set of vocabulary constants.
+    check?.();
     checkAbort(signal);
     if (value.length > maxTermLength) throw parseLimit("maxTermLength");
     allocatedCharacters += value.length;
@@ -146,6 +149,7 @@ export function budgetFactory(
       );
     },
     quad(subject, predicate, object, graph = DataFactory.defaultGraph()) {
+      check?.();
       checkAbort(signal);
       if (++quads > maxQuads) throw parseLimit("maxQuads");
       for (const part of [subject, predicate, object, graph]) term(part);
