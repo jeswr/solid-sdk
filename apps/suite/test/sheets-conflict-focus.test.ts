@@ -100,6 +100,9 @@ afterEach(() => vi.restoreAllMocks());
 it("loads the remote snapshot into a mounted engine and returns conflict focus to File", async () => {
   const { book, remote, entry } = await conflict();
   const editor = await mount(h(SheetEditor, { container: book.container }));
+  await act(async () => {
+    await vi.waitFor(() => expect(mocks.mount).toHaveBeenCalled());
+  });
   const engine = await mocks.mount.mock.results[0]?.value;
   expect(mocks.mount.mock.calls[0]?.[1].commentsLoading).toBe(true);
   expect(document.activeElement?.textContent).toBe("Load their version");
@@ -119,6 +122,9 @@ it("acknowledges saved workbook revisions for both renames and engine edits", as
     setWorkbookRevision: vi.fn(),
   }));
   const editor = await mount(h(SheetEditor, { container: book.container }));
+  await act(async () => {
+    await vi.waitFor(() => expect(mocks.mount).toHaveBeenCalled());
+  });
   const engine = await mocks.mount.mock.results[0]?.value;
   expect(mocks.mount.mock.calls[0]?.[1].workbookRevision).toBe(book.version.snapshotEtag);
   const entry = pendingSaves.get(book.container);

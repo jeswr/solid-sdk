@@ -34,9 +34,11 @@ export interface CellPosition {
 export interface StructuralEdit {
   readonly sheet: string;
   readonly axis: "row" | "column";
-  readonly kind: "insert" | "delete";
+  readonly kind: "insert" | "delete" | "reorder";
   readonly index: number;
   readonly count: number;
+  /** One-based destination in the original order, for whole-row/column moves. */
+  readonly destination?: number;
 }
 
 export function positiveIndex(value: number): number {

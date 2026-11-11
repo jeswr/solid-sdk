@@ -1,7 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 
-import { CanceledError, ICommandService } from "@univerjs/core";
+import { CanceledError, ICommandService, IUndoRedoService } from "@univerjs/core";
 import { UniverSheetsConditionalFormattingPreset } from "@univerjs/preset-sheets-conditional-formatting";
 import UniverPresetSheetsConditionalFormattingEnUS from "@univerjs/preset-sheets-conditional-formatting/locales/en-US";
 import { UniverSheetsCorePreset } from "@univerjs/preset-sheets-core";
@@ -18,12 +18,14 @@ import {
 import { SheetInterceptorService, SheetsSelectionsService } from "@univerjs/sheets";
 import { shiftChartRanges } from "../charts/range";
 import { type ChartSpec, readCharts, withCharts } from "../charts/spec";
+import { CollaborationBridge } from "../collaboration/bridge";
+import { type Axes, checkpoint } from "../collaboration/model";
 import { type AnchorDeletions, WorkbookCommentAnchors } from "../comments/anchors";
 import { type CellAnchor, commentStructuralEdit, shiftCellAnchor } from "../comments/selector";
 import type { MountEngine, Snapshot } from "../contract";
 import { serializeSnapshot } from "../model/snapshot";
-import type { StructuralEdit } from "../refs/model";
-import { indexToColumn } from "../refs/notation";
+import type { AxisRange, StructuralEdit } from "../refs/model";
+import { indexToColumn, parseA1 } from "../refs/notation";
 import { parseCsv } from "../univer-spike/csv";
 import { workbookToCsv } from "../univer-spike/workbook";
 
@@ -120,6 +122,97 @@ export const mountUniver: MountEngine = async (container, options) => {
   const listeners = new Set<() => void>();
   const valueListeners = new Set<() => void>();
   const anchors = new WorkbookCommentAnchors(options.snapshot);
+  type Identity = { sheetId: string; rowId: string; colId: string };
+  const identities = { anchors: new Map<string, Identity>(), drafts: new Map<string, Identity>() };
+  let identityRevision = -1;
+  const chartIdentities = new Map<
+    string,
+    { sheetId: string; rowIds: string[]; colIds: string[]; revision: number; lost: boolean }
+  >();
+  const metadata = (phase: "before" | "after", positions: Map<string, Axes>) => {
+    const checkpoint = anchors.identitySnapshot();
+    if (checkpoint.revision !== identityRevision) {
+      identities.anchors.clear();
+      identities.drafts.clear();
+      chartIdentities.clear();
+      identityRevision = checkpoint.revision;
+    }
+    const restore: AnchorDeletions = { revision: checkpoint.revision, anchors: {}, drafts: {} };
+    for (const kind of ["anchors", "drafts"] as const) {
+      if (phase === "before") {
+        for (const [id, anchor] of Object.entries(checkpoint[kind])) {
+          const axes = positions.get(anchor.sheetId);
+          const ref = parseA1(anchor.cell);
+          const rowId = axes?.rowIds[(ref.rows as AxisRange).start.index - 1];
+          const colId = axes?.colIds[(ref.columns as AxisRange).start.index - 1];
+          if (rowId && colId) identities[kind].set(id, { sheetId: anchor.sheetId, rowId, colId });
+        }
+      } else {
+        for (const [id, identity] of identities[kind]) {
+          const axes = positions.get(identity.sheetId) as Axes;
+          const row = axes.rowIds.indexOf(identity.rowId);
+          const col = axes.colIds.indexOf(identity.colId);
+          if (row >= 0 && col >= 0) {
+            const anchor = {
+              sheetId: identity.sheetId,
+              cell: `${indexToColumn(col + 1)}${row + 1}`,
+              deleted: false,
+            };
+            if (kind === "drafts") restore.drafts[id] = anchor;
+            else restore.anchors[id] = { sheetId: anchor.sheetId, cell: anchor.cell };
+          }
+        }
+      }
+    }
+    if (phase === "after") anchors.revive(restore);
+    const current = readCharts({ charts } as Snapshot).charts;
+    charts =
+      charts === undefined
+        ? charts
+        : withCharts(
+            {},
+            current.map((chart) => {
+              let identity = chartIdentities.get(chart.id);
+              const revision = chartRevisions.get(chart.id) ?? 0;
+              if (identity?.revision !== revision) {
+                chartIdentities.delete(chart.id);
+                identity = undefined;
+              }
+              const axes = positions.get(chart.sheetId);
+              if (!axes) return chart;
+              if (phase === "before" && !identity?.lost && chart.range !== null) {
+                const ref = parseA1(chart.range);
+                identity = {
+                  sheetId: chart.sheetId,
+                  rowIds: [
+                    axes.rowIds[(ref.rows as AxisRange).start.index - 1] as string,
+                    axes.rowIds[(ref.rows as AxisRange).end.index - 1] as string,
+                  ],
+                  colIds: [
+                    axes.colIds[(ref.columns as AxisRange).start.index - 1] as string,
+                    axes.colIds[(ref.columns as AxisRange).end.index - 1] as string,
+                  ],
+                  revision,
+                  lost: false,
+                };
+                chartIdentities.set(chart.id, identity);
+              }
+              if (phase === "after" && identity) {
+                const rows = identity.rowIds.map((id) => axes.rowIds.indexOf(id));
+                const cols = identity.colIds.map((id) => axes.colIds.indexOf(id));
+                if ([...rows, ...cols].some((index) => index < 0)) identity.lost = true;
+                else if (identity.lost) {
+                  identity.lost = false;
+                  return {
+                    ...chart,
+                    range: `${indexToColumn(Math.min(...cols) + 1)}${Math.min(...rows) + 1}:${indexToColumn(Math.max(...cols) + 1)}${Math.max(...rows) + 1}`,
+                  };
+                }
+              }
+              return chart;
+            }),
+          ).charts;
+  };
   // Keep the actual deletion records carried by native undo/redo. Late discovery
   // fills those same records so a future inverse can revive the newly found root.
   let savedRevision = options.workbookRevision;
@@ -153,6 +246,7 @@ export const mountUniver: MountEngine = async (container, options) => {
     });
   };
   const commands = injector.get(ICommandService);
+  let collaboration: CollaborationBridge | undefined;
   // setEditable does not guard native history replay. Cancel user commands before
   // they can mutate the workbook or consume undo/redo history while anchors load.
   // Operations (navigation) and background calculation mutations can still run.
@@ -255,7 +349,7 @@ export const mountUniver: MountEngine = async (container, options) => {
   const subscription = univerAPI.addEvent(univerAPI.Event.CommandExecuted, (event) => {
     if (
       event.type !== CommandType.MUTATION ||
-      readOnly ||
+      (readOnly && !event.options?.fromCollab) ||
       loading ||
       event.options?.fromChangeset ||
       RECOMPUTE_MUTATIONS.has(event.id) ||
@@ -293,6 +387,7 @@ export const mountUniver: MountEngine = async (container, options) => {
     Object.assign(data, anchors.snapshot());
     // Univer drops unknown top-level metadata when saving its canvas model.
     if (charts !== undefined) data.charts = JSON.parse(JSON.stringify(charts));
+    if (options.collaboration) data.collaboration = checkpoint(options.collaboration.doc);
     serializeSnapshot(data);
     snapshotCursors.set(data, { generation: logGeneration, cursor: structuralLog.length });
     return data;
@@ -322,7 +417,23 @@ export const mountUniver: MountEngine = async (container, options) => {
     } finally {
       loading = false;
     }
+    if (newerSnapshot) collaboration?.reset(data);
   };
+  if (options.collaboration) {
+    collaboration = new CollaborationBridge(
+      options.collaboration.doc,
+      commands,
+      injector.get(IUndoRedoService),
+      snapshot,
+      () => !readOnly && !commentsLoading,
+      options.snapshot,
+      (styles) => {
+        for (const [id, style] of styles)
+          workbook.getWorkbook().getStyles().addCustomStyle(id, style);
+      },
+      metadata,
+    );
+  }
   return {
     setCharts(value) {
       if (readOnly || commentsLoading) return;
@@ -466,6 +577,7 @@ export const mountUniver: MountEngine = async (container, options) => {
       // CSV import replaces canvas state, but unseen selectors still refer to
       // the mounted snapshot. Only an external snapshot reload resets the log.
       load(data as unknown as Snapshot, false);
+      collaboration?.importSheet(data as unknown as Snapshot, id);
       workbook.setActiveSheet(id);
       editedSinceLoad = true;
       notify();
@@ -476,12 +588,14 @@ export const mountUniver: MountEngine = async (container, options) => {
     },
     setReadOnly(value) {
       readOnly = value;
+      if (options.collaboration) options.collaboration.readOnly = value;
       ++generation;
       queued = false;
       setEditable();
     },
     dispose() {
       disposed = true;
+      collaboration?.dispose();
       ++generation;
       subscription.dispose();
       calculation.dispose();

@@ -91,6 +91,18 @@ export class WorkbookCommentAnchors {
       ? { commentAnchors: { version: 1, anchors: structuredClone(this.anchors) } }
       : {};
   }
+  /** In-memory identity checkpoint for remote structural deletion/undo. */
+  identitySnapshot(): AnchorDeletions {
+    return {
+      revision: this.revision,
+      anchors: Object.fromEntries(
+        Object.entries(this.anchors).filter(
+          (entry): entry is [string, { sheetId: string; cell: string }] => entry[1] !== "deleted",
+        ),
+      ),
+      drafts: Object.fromEntries([...this.drafts].filter(([, anchor]) => !anchor.deleted)),
+    };
+  }
   register(anchors: Record<string, CellAnchor>) {
     let changed = false;
     for (const [id, anchor] of Object.entries(anchors)) {

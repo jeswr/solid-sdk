@@ -9,8 +9,8 @@ The demo session uses the same service against the browser's persistent demo pod
 The editor and list menu open the shell's sharing dialog for the workbook container.
 WAC grants update both `acl:accessTo` and `acl:default`, covering metadata, the engine
 snapshot, sheet projections and versions that inherit this policy. Existing member ACLs
-remain authoritative. Sharing supports viewers, editors and public links; it adds no
-realtime collaboration. Unsupported ACL shapes and ACP fail closed. A missing own ACL
+remain authoritative. Sharing supports viewers, editors and public links.
+Unsupported ACL shapes and ACP fail closed. A missing own ACL
 is created conditionally only after verifying owner-only inherited access, or for the
 isolated demo pod. Inherited policies with other collaborators must be managed at their source.
 Verification includes both `acl:default` and legacy `acl:defaultForNew` grants. ACP discovery
@@ -130,8 +130,54 @@ Anyone with inherited Write can modify or delete resources directly, including
 another creator's comments. Servers enforce resource permissions, not this client
 policy. This implementation does not add signatures.
 
-Comments refresh when the window gains focus or via Refresh comments. Unsupported
-structural operations such as cut/move are outside the row/column mutation bridge.
+Comments refresh when the window gains focus or via Refresh comments. Cutting
+rectangular cell ranges remains outside the row/column mutation bridge.
+
+## Collaboration
+
+Cell values, formulas and styles, and whole-row/column insertions, removals and moves
+merge through a Yjs document. Each sheet has ordered `Y.Array<string>` row and column
+IDs and a cell `Y.Map` keyed by `${rowId}|${colId}`. IDs are random and remain attached
+to their cells through structural edits. Concurrent inserts use Yjs order; concurrent
+writes to one cell converge to Yjs' deterministic winner. Style definitions travel with
+their IDs so another editor can render them.
+
+`@jeswr/y-solid` persists binary updates in an append-only `<workbook>/collab/` container
+beside `workbook.json`, within the workbook's existing scope and inherited access policy.
+The log hydrates before the grid mounts. An empty log is initialized from `workbook.json`
+in one transaction; a create-only canonical seed lets racing first-openers share the same
+IDs. Later loads use Yjs for cells and row/column structure. A viewer with an empty log
+renders the legacy snapshot and never seeds or appends updates.
+
+Saves record `collaboration.stateVector` (base64) and each sheet's row/column IDs in
+`workbook.json`. The IDs locate snapshot coordinates when the vector is behind the log,
+allowing chart sources and comment anchors to follow the missing structural edits.
+CSV and JSON-LD projections continue to come from the merged engine snapshot.
+The snapshot and other metadata retain their existing If-Match/412 conflict flow.
+
+Remote changes run as `fromCollab` Univer mutations, through the same chart/comment
+structural pipeline, without adding undo entries or echoing updates. Local collaborative
+history uses `Y.UndoManager` tracking only the local command origin. Univer retains its
+history controls, command order and structural metadata checkpoints; its coordinate-based
+cell/row patches are replaced by references to each command's Yjs undo item. This keeps
+undo attached to the original rows after remote insertions and prevents undo of a remotely
+replaced edit from consuming an earlier command. Sheet-list and other snapshot operations
+retain their native history. CSV import retains its existing replacement behavior.
+
+Scoped pod notifications, window focus, reconnection and a 30-second poll while visible
+call `sync()`. View-only grids receive and render updates without writing the log or snapshot.
+The existing shared-link credential and origin boundaries still apply.
+The current authenticated session feed forwards focus events; the demo feed also forwards
+resource changes. Dedicated Solid push is not exposed by that session feed, and
+`@jeswr/pod-notifications` is not an installed Suite dependency. Under this slice's no-new-
+dependencies constraint, those pods use focus/reconnection and visible polling.
+
+Sheet add, rename, delete and reorder are outside collaboration in this slice, as are
+merges, chart creation/editing, data validation, conditional formatting and comment-anchor
+metadata edits. They retain the existing snapshot behavior and 412 conflict choices.
+Chart sources and comment anchors still follow collaborative row/column changes; their
+coordinates are saved with the guarded snapshot. Presence and cursors are out of scope:
+pods provide no ephemeral channel.
 
 Charts (SHT-05) are app-owned SVGs in a scrollable strip below the grid. This avoids
 coupling their position and keyboard controls to Univer's canvas coordinates or its Pro

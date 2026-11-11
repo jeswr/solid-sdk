@@ -2,6 +2,7 @@
 // AUTHORED-BY Codex GPT-6
 
 import { RedirectRefusedError } from "@jeswr/guarded-fetch";
+import type { WorkbookCollaboration } from "../collaboration/persistence";
 import { validateCommentSnapshot } from "../comments/anchors";
 import type {
   CreateWorkbookInput,
@@ -32,6 +33,7 @@ export function createWorkbookService(options: WorkbookServiceOptions): Workbook
   const now = options.now ?? (() => new Date());
   const register = registration(options, root);
   const checked = (container: string) => assertWorkbook(root, container);
+  const collaborations = new Map<string, WorkbookCollaboration>();
 
   async function writeSheets(
     container: string,
@@ -209,6 +211,7 @@ export function createWorkbookService(options: WorkbookServiceOptions): Workbook
     saveOptions: { force?: boolean; title?: string } = {},
   ): Promise<SaveResult> {
     container = checked(container);
+    await collaborations.get(container)?.flush();
     snapshot = validateCommentSnapshot(snapshot);
     if (snapshot.charts !== undefined)
       snapshot = (await import("../charts/spec")).validateChartSnapshot(snapshot);
@@ -389,6 +392,28 @@ export function createWorkbookService(options: WorkbookServiceOptions): Workbook
 
   return {
     root,
+    async collaborate(container, snapshot, readOnly) {
+      const own = container.startsWith(root) && directChild(root, container);
+      container = own ? checked(container) : assertSharedWorkbook(root, container);
+      const { WorkbookCollaboration } = await import("../collaboration/persistence");
+      const transport: typeof fetch = own
+        ? options.fetch
+        : (input, init) => publicFetch(input, { ...init, credentials: "omit" });
+      const collaboration = new WorkbookCollaboration(
+        new URL("collab/", container).href,
+        transport,
+        readOnly || !own,
+      );
+      await collaboration.open(snapshot);
+      collaborations.set(container, collaboration);
+      const destroy = collaboration.destroy.bind(collaboration);
+      collaboration.destroy = async () => {
+        if (collaborations.get(container) === collaboration) collaborations.delete(container);
+        await destroy();
+      };
+      if (typeof window !== "undefined") collaboration.watch(options.subscribe ?? (() => () => {}));
+      return collaboration;
+    },
     list,
     create,
     async createFromCsv({ title, csv, sheetName = "Sheet1" }) {

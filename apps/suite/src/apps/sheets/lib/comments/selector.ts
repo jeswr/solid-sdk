@@ -47,8 +47,33 @@ export function shiftCellAnchor(anchor: CellAnchor, edit: StructuralEdit): CellA
   return shifted ? { ...anchor, cell: formatA1(shifted) } : { ...anchor, deleted: true };
 }
 
-/** Decode the four Univer mutation payloads, including undo/redo's inverse mutations. */
+/** Decode Univer structural payloads, including undo/redo's inverse mutations. */
 export function commentStructuralEdit(id: string, params: unknown): StructuralEdit | undefined {
+  if (/^sheet\.mutation\.move-(rows|columns)$/.test(id) && params && typeof params === "object") {
+    const p = params as {
+      subUnitId: string;
+      sourceRange: { startRow: number; endRow: number; startColumn: number; endColumn: number };
+      targetRange: { startRow: number; startColumn: number };
+    };
+    if (!p.subUnitId || !p.sourceRange || !p.targetRange) return undefined;
+    const row = id.endsWith("rows");
+    const start = row ? p.sourceRange.startRow : p.sourceRange.startColumn;
+    const end = row ? p.sourceRange.endRow : p.sourceRange.endColumn;
+    const target = row ? p.targetRange.startRow : p.targetRange.startColumn;
+    if (
+      ![start, end, target].every((value) => Number.isSafeInteger(value) && value >= 0) ||
+      end < start
+    )
+      return undefined;
+    return {
+      sheet: p.subUnitId,
+      axis: row ? "row" : "column",
+      kind: "reorder",
+      index: start + 1,
+      count: end - start + 1,
+      destination: target + 1,
+    };
+  }
   const match = /^sheet\.mutation\.(insert-row|insert-col|remove-rows|remove-col)$/.exec(id);
   if (!match || !params || typeof params !== "object") return undefined;
   const p = params as {

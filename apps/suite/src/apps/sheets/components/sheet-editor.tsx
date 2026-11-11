@@ -84,6 +84,7 @@ export function SheetNotFound() {
 }
 
 function Grid({
+  container,
   snapshot,
   revision,
   onChange,
@@ -92,6 +93,7 @@ function Grid({
   onReady,
   readOnly,
 }: {
+  container: string;
   snapshot: Snapshot;
   revision: string;
   onChange: (read: () => Snapshot) => void;
@@ -101,6 +103,7 @@ function Grid({
   readOnly: boolean;
 }) {
   const host = useRef<HTMLDivElement>(null);
+  const service = useWorkbookService();
   const latestSnapshot = useRef({ snapshot, revision });
   latestSnapshot.current = { snapshot, revision };
   const { resolvedTheme } = useTheme();
@@ -123,12 +126,23 @@ function Grid({
     let engine: SheetEngine | undefined;
     let unsubscribe: (() => void) | undefined;
     let unsubscribeSaved: (() => void) | undefined;
+    let collaboration: Awaited<ReturnType<NonNullable<typeof service.collaborate>>> | undefined;
     setFailed(false);
     setReady(false);
     void (async () => {
       const mount = await loadEngine();
       if (!live || !host.current) return;
+      collaboration = await service.collaborate?.(
+        container,
+        latestSnapshot.current.snapshot,
+        viewOnly.current,
+      );
+      if (!live) {
+        await collaboration?.destroy();
+        return;
+      }
       engine = await mount(host.current, {
+        collaboration,
         snapshot: latestSnapshot.current.snapshot,
         workbookRevision: latestSnapshot.current.revision,
         dark: dark.current,
@@ -154,6 +168,7 @@ function Grid({
       if (process.env.NEXT_PUBLIC_DEV_FIXTURES === "1") window.__sheetsEngine = engine;
       setReady(true);
     })().catch(() => {
+      void collaboration?.destroy().catch(() => {});
       if (live) setFailed(true);
     });
     return () => {
@@ -164,8 +179,9 @@ function Grid({
       engineRef.current = null;
       onReady(null);
       engine?.dispose();
+      void collaboration?.destroy().catch(() => {});
     };
-  }, [engineRef, onChange, onSaved, onReady, attempt]);
+  }, [container, service, engineRef, onChange, onSaved, onReady, attempt]);
   return (
     <section
       className="sht-grid-region"
@@ -405,6 +421,7 @@ export function SheetEditor({ container }: { container: string }) {
         {state.workbook ? (
           <>
             <Grid
+              container={container}
               key={grid?.revision ?? 0}
               snapshot={state.workbook.snapshot}
               revision={state.workbook.version.snapshotEtag}
