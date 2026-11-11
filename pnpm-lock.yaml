@@ -2451,6 +2451,9 @@ importers:
       '@jeswr/solid-dav-bridge':
         specifier: workspace:*
         version: link:../../packages/solid-dav-bridge
+      '@jeswr/solid-publish':
+        specifier: workspace:*
+        version: link:../../packages/solid-publish
       '@jeswr/solid-task-model':
         specifier: workspace:*
         version: link:../../packages/solid-task-model
@@ -5292,6 +5295,58 @@ importers:
       '@types/node':
         specifier: ^25.9.2
         version: 25.9.5
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: ^4.1.9
+        version: 4.1.10(@opentelemetry/api@1.10.0)(@types/node@25.9.5)(@vitest/coverage-v8@4.1.10)(jsdom@29.1.1(@noble/hashes@2.4.0))(vite@8.1.4(@types/node@25.9.5)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1))
+
+  packages/solid-publish:
+    dependencies:
+      '@jeswr/fetch-rdf':
+        specifier: workspace:*
+        version: link:../fetch-rdf
+      '@jeswr/model-runtime':
+        specifier: workspace:*
+        version: link:../model-runtime
+      '@jeswr/pod-access':
+        specifier: workspace:*
+        version: link:../pod-access
+      '@jeswr/pod-type-index':
+        specifier: workspace:*
+        version: link:../pod-type-index
+      '@jeswr/storage-client':
+        specifier: workspace:*
+        version: link:../storage-client
+      marked:
+        specifier: 17.0.6
+        version: 17.0.6
+      sanitize-html:
+        specifier: 2.18.1
+        version: 2.18.1
+    devDependencies:
+      '@rdfjs/types':
+        specifier: 2.0.1
+        version: 2.0.1
+      '@biomejs/biome':
+        specifier: ^2.5.1
+        version: 2.5.3
+      '@jeswr/federation-codegen':
+        specifier: workspace:*
+        version: link:../federation-codegen
+      '@types/n3':
+        specifier: 1.26.1
+        version: 1.26.1
+      '@types/node':
+        specifier: ^25.9.2
+        version: 25.9.5
+      '@types/sanitize-html':
+        specifier: 2.16.2
+        version: 2.16.2
+      '@vitest/coverage-v8':
+        specifier: 4.1.10
+        version: 4.1.10(vitest@4.1.10)
       typescript:
         specifier: ^6.0.3
         version: 6.0.3

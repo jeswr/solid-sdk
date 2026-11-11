@@ -1,0 +1,175 @@
+// AUTHORED-BY Codex (GPT-6.1 Sol)
+// @vitest-environment jsdom
+import type { PublishRepository } from "@jeswr/solid-publish";
+import { toast } from "@jeswr/suite-ui";
+import { act, StrictMode } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { renderToString } from "react-dom/server";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { connectPublish } from "../src/apps/publish/lib/data/connect";
+import { PublishProvider, usePublish } from "../src/apps/publish/state/publish-context";
+import type { PodSession } from "../src/lib/session/pod-session";
+
+vi.mock("../src/apps/publish/lib/data/connect", () => ({ connectPublish: vi.fn() }));
+const session: PodSession = {
+  mode: "demo",
+  webId: "https://pod.example/me",
+  displayName: "Robin Fiction",
+  storageUrl: "https://pod.example/",
+  fetch: globalThis.fetch,
+  subscribe: () => () => {},
+  reset: async () => {},
+};
+function Child() {
+  const { snapshot, session } = usePublish();
+  return (
+    <p>
+      {session.displayName}:{snapshot.status}
+    </p>
+  );
+}
+function TriggerFailure() {
+  const { workspace } = usePublish();
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        void workspace.reorder("missing-site", []);
+      }}
+    >
+      Fail write
+    </button>
+  );
+}
+function fallback(error: boolean, retry: () => void) {
+  return (
+    <button type="button" onClick={retry}>
+      {error ? "retry connection" : "connecting"}
+    </button>
+  );
+}
+function repository() {
+  return {
+    listSites: vi.fn(async () => []),
+    listPages: vi.fn(async () => []),
+  } as unknown as PublishRepository;
+}
+let host: HTMLDivElement;
+let root: Root;
+beforeEach(() => {
+  vi.clearAllMocks();
+  (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+  host = document.createElement("div");
+  document.body.append(host);
+  root = createRoot(host);
+});
+afterEach(async () => {
+  await act(async () => root.unmount());
+  host.remove();
+});
+describe("Publish React session context", () => {
+  it("requires its provider", () => expect(() => renderToString(<Child />)).toThrow(/provider/));
+  it("opens a connected workspace in StrictMode", async () => {
+    vi.mocked(connectPublish).mockResolvedValue(repository());
+    await act(async () =>
+      root.render(
+        <StrictMode>
+          <PublishProvider session={session} fallback={fallback}>
+            <Child />
+          </PublishProvider>
+        </StrictMode>,
+      ),
+    );
+    expect(host.textContent).toBe("Robin Fiction:ready");
+  });
+  it("shows connection failures and retries", async () => {
+    vi.mocked(connectPublish)
+      .mockRejectedValueOnce(new Error("offline"))
+      .mockResolvedValueOnce(repository());
+    await act(async () =>
+      root.render(
+        <PublishProvider session={session} fallback={fallback}>
+          <Child />
+        </PublishProvider>,
+      ),
+    );
+    expect(host.textContent).toBe("retry connection");
+    await act(async () => host.querySelector("button")?.click());
+    expect(host.textContent).toBe("Robin Fiction:ready");
+    expect(connectPublish).toHaveBeenCalledTimes(2);
+  });
+  it("never shows a late connection from an earlier account", async () => {
+    let finish!: (repo: PublishRepository) => void;
+    vi.mocked(connectPublish)
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            finish = resolve;
+          }),
+      )
+      .mockResolvedValueOnce(repository());
+    await act(async () =>
+      root.render(
+        <PublishProvider session={session} fallback={fallback}>
+          <Child />
+        </PublishProvider>,
+      ),
+    );
+    expect(host.textContent).toBe("connecting");
+    const second = { ...session, webId: "https://other.example/me", displayName: "Another writer" };
+    await act(async () =>
+      root.render(
+        <PublishProvider session={second} fallback={fallback}>
+          <Child />
+        </PublishProvider>,
+      ),
+    );
+    expect(host.textContent).toBe("Another writer:ready");
+    await act(async () => finish(repository()));
+    expect(host.textContent).toBe("Another writer:ready");
+  });
+  it("ignores a failed connection after the account changes and reports write failures through toast", async () => {
+    const errorToast = vi.spyOn(toast, "error").mockReturnValue("test-toast");
+    let reject!: (error: unknown) => void;
+    vi.mocked(connectPublish)
+      .mockImplementationOnce(
+        () =>
+          new Promise((_resolve, no) => {
+            reject = no;
+          }),
+      )
+      .mockResolvedValueOnce(repository());
+    await act(async () =>
+      root.render(
+        <PublishProvider session={session} fallback={fallback}>
+          <Child />
+        </PublishProvider>,
+      ),
+    );
+    const second = {
+      ...session,
+      webId: "https://another.example/me",
+      displayName: "Another writer",
+    };
+    await act(async () =>
+      root.render(
+        <PublishProvider session={second} fallback={fallback}>
+          <Child />
+        </PublishProvider>,
+      ),
+    );
+    await act(async () => reject(new Error("late failure")));
+    expect(host.textContent).toBe("Another writer:ready");
+    await act(async () =>
+      root.render(
+        <PublishProvider session={second} fallback={fallback}>
+          <Child />
+          <TriggerFailure />
+        </PublishProvider>,
+      ),
+    );
+    await act(async () => host.querySelector("button")?.click());
+    expect(errorToast).toHaveBeenCalledWith(expect.stringContaining("site"));
+    errorToast.mockRestore();
+  });
+});

@@ -1,0 +1,22 @@
+{
+  "shapesBase": "https://jeswr.org/ns/publish/shapes#",
+  "prefixes": {
+    "pub": "https://jeswr.org/ns/publish#",
+    "schema": "https://schema.org/",
+    "dct": "http://purl.org/dc/terms/",
+    "xsd": "http://www.w3.org/2001/XMLSchema#"
+  },
+  "entities": [
+    {
+      "targetClass": "https://schema.org/WebSite",
+      "name": "Site",
+      "subject": { "convention": "hash-it" }
+    },
+    {
+      "targetClass": "https://schema.org/WebPage",
+      "name": "Page",
+      "subject": { "convention": "hash-it" },
+      "fields": { "keywords": { "trim": true, "dropBlank": true, "sortOnRead": true } }
+    }
+  ]
+}
