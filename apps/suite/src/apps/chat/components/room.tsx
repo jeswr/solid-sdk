@@ -27,7 +27,7 @@ import {
 import { Copy, Info, MessageSquare } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useId, useRef, useState } from "react";
-import { decodeRef } from "@/lib/refs";
+import { decodeIdentifierRef, decodeRef } from "@/lib/refs";
 import { usePageRouteParams } from "@/lib/route-params";
 import type { Message } from "../lib/client";
 import { roomContainer } from "../lib/model";
@@ -434,7 +434,7 @@ function RoomRouteContent({ reference }: { reference: string }) {
   }
   // A malformed message hint must never invalidate an otherwise usable room link.
   try {
-    if (messageReference) messageId = decodeRef(messageReference);
+    if (messageReference) messageId = decodeIdentifierRef(messageReference);
   } catch {
     messageId = undefined;
   }

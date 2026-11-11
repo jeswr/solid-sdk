@@ -142,13 +142,13 @@ it("never surfaces Likes or Undos as messages even if they have Note types or si
 
 it("accepts only emoji, stores the sanitised value and reads only the named document", () => {
   const dataset = messages();
-  for (const emoji of ["abc", "123", "#", "👍 ok"])
+  for (const emoji of ["abc", "123", "#", "👍 ok", "👍999", "1👍", "*️⃣9", "#👍"])
     expect(() => appendReaction(dataset, room, { ...input, id: "text", emoji })).toThrow(
       expect.objectContaining({ code: "invalid-input" }),
     );
   dataset.addQuads([...appendReaction(dataset, room, { ...input, emoji: " ❤️ " })]);
   expect(readReactions(dataset).get(message)?.[0]?.emoji).toBe("❤️");
-  for (const emoji of ["🇳🇿", "👍🏽", "1️⃣", "👩‍👩‍👧"])
+  for (const emoji of ["🇳🇿", "👍🏽", "1️⃣", "#⃣", "👩‍👩‍👧", "👍1️⃣"])
     expect(appendReaction(dataset, room, { ...input, id: `e${emoji.length}`, emoji }).size).toBe(5);
   foreign(dataset, `${day}#reaction-text`, "Like", message, bob, "spam");
   expect(readReactions(dataset).get(message)).toHaveLength(1);

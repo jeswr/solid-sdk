@@ -52,7 +52,9 @@ preference transport is isolated in `preferences-store.ts` until the SDK prefere
   `searchedRooms` counts successful room
   loads; unavailable indexes/day pages appear in `skipped` without discarding other rooms.
   `in:` accepts an exact room URL or an exact, case-insensitive joined room name (quote
-  names with spaces, e.g. `in:"Book club"`). Duplicate names resolve to the first listed room;
+  names with spaces, e.g. `in:"Book club"`). A direct message also matches the other member's
+  already-resolved display name. Results and skipped rooms carry `isDirect` and `members`, so the UI
+  names a direct message after the other person. Duplicate names resolve to the first listed room;
   negated room filters follow the same rule. Positive `in:` filters load only those rooms,
   including rooms beyond `maxRooms`. Rewritten queries are validated before message reads.
   Filters never discover or join other rooms. Author names use resolved cached profiles,

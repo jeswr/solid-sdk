@@ -55,7 +55,7 @@ const message: Message = {
 const response: ChatSearchResult = {
   results: [
     {
-      room: { url: ROOM, name: "Garden club" },
+      room: { url: ROOM, name: "Garden club", isDirect: false, members: [ME] },
       message,
       score: 1,
       snippet: { text: message.content, ranges: [[12, 18]] },
@@ -154,7 +154,7 @@ it("shows initial, loading, empty and skipped-room states with retry", async () 
     pending.resolve({
       results: [],
       searchedRooms: 2,
-      skipped: [{ url: ROOM, name: "Unavailable room" }],
+      skipped: [{ url: ROOM, name: "Unavailable room", isDirect: false, members: [] }],
       truncated: false,
       truncationReasons: [],
       searchedDays: 30,
@@ -284,4 +284,18 @@ it("keeps server pages independent of search params for native static export", a
   expect(search).toContain("<ChatSearchRoute />");
   expect(room).not.toContain("searchParams");
   expect(room).toContain("<RoomPageRoute />");
+});
+
+it("names a direct message result after the other person, like the sidebar", async () => {
+  const Bob = "https://bob.example/profile#me";
+  const dm = { url: `${ROOT}chat/rooms/dm/`, name: "", isDirect: true, members: [ME, Bob] };
+  vi.spyOn(ChatClient.prototype, "search").mockResolvedValue({
+    ...response,
+    results: [{ ...(response.results[0] as ChatSearchResult["results"][number]), room: dm }],
+    skipped: [{ ...dm, url: `${ROOT}chat/rooms/dm2/` }],
+  });
+  const view = await mount(tree("garden"));
+  expect(view.host.querySelector(".chat-search-result strong")?.textContent).toBe(Bob);
+  expect(view.host.querySelector(".chat-search-skipped p")?.textContent).toContain(Bob);
+  expect(view.host.textContent).not.toContain("Untitled");
 });

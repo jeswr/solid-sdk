@@ -39,3 +39,30 @@ export function decodeRef(ref: string): string {
     throw new InvalidRefError(ref);
   }
 }
+
+/**
+ * Lossless references for RDF identifiers (for example a message subject IRI). Unlike
+ * `encodeRef`, the IRI is not normalized through `new URL().href`, so `#café` survives as written
+ * and still matches the literal subject in the data. The value must still be an http(s) IRI.
+ */
+export function encodeIdentifierRef(iri: string): string {
+  assertHttpUrl(iri);
+  const bytes = new TextEncoder().encode(iri);
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+/** Reverses `encodeIdentifierRef`, returning the identifier exactly as encoded. */
+export function decodeIdentifierRef(ref: string): string {
+  try {
+    if (!/^[A-Za-z0-9_-]+$/.test(ref)) throw new InvalidRefError(ref);
+    const binary = atob(ref.replace(/-/g, "+").replace(/_/g, "/"));
+    const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+    const iri = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+    assertHttpUrl(iri);
+    return iri;
+  } catch {
+    throw new InvalidRefError(ref);
+  }
+}

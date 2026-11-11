@@ -32,9 +32,20 @@ export interface ReactionContext {
 }
 const PICTOGRAPH = /\p{Extended_Pictographic}|\p{Regional_Indicator}|\u20e3/u;
 const EMOJI_ONLY = /^(?:\p{Extended_Pictographic}|\p{Emoji_Component}|\p{Emoji_Presentation})+$/u;
-/** A reaction is a short run of emoji, never arbitrary text (at most 32 UTF-16 units). */
+// Digits, # and * are Emoji_Component but only form an emoji inside a keycap sequence.
+const KEYCAP = /[0-9#*]\ufe0f?\u20e3/gu;
+const BARE_KEYCAP_BASE = /[0-9#*]/u;
+/**
+ * A reaction is a short run of emoji, never arbitrary text (at most 32 UTF-16 units). Bare
+ * digits, # and * are refused, so "👍999" cannot pass itself off as a reaction count.
+ */
 export function isReactionEmoji(value: string): boolean {
-  return value.length <= 32 && EMOJI_ONLY.test(value) && PICTOGRAPH.test(value);
+  return (
+    value.length <= 32 &&
+    EMOJI_ONLY.test(value) &&
+    PICTOGRAPH.test(value) &&
+    !BARE_KEYCAP_BASE.test(value.replace(KEYCAP, ""))
+  );
 }
 
 /**

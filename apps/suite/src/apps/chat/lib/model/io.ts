@@ -219,6 +219,20 @@ export async function sendMessage(
     await ensureDayParents(fetch, base, url);
     return { url, dataset, etag: await saveChat(fetch, base, url, dataset, condition) };
   }
+  const etag = await insertData(fetch, base, url, delta, condition);
+  return { url, dataset, etag };
+}
+/**
+ * The one append-only write: PATCH INSERT DATA of `delta` under a strong If-Match.
+ * Moving this onto StorageClient.patch is bead sst-c4xg.
+ */
+async function insertData(
+  fetch: typeof globalThis.fetch,
+  base: string,
+  url: string,
+  delta: Store,
+  condition: { ifMatch: string },
+): Promise<string | null> {
   const response = checked(
     await scoped(fetch, base)(url, {
       method: "PATCH",
@@ -226,7 +240,7 @@ export async function sendMessage(
       body: `INSERT DATA {\n${await serializeChat(delta, "application/n-triples")}\n}`,
     }),
   );
-  return { url, dataset, etag: response.headers.get("etag") };
+  return response.headers.get("etag");
 }
 export async function loadMessages(
   fetch: typeof globalThis.fetch,
@@ -298,21 +312,10 @@ async function appendEvent(
           etag: await saveChat(fetch, base, url, delta, { ifNoneMatch: "*" }),
         };
       }
-      const response = checked(
-        await scoped(fetch, base)(url, {
-          method: "PATCH",
-          headers: {
-            "content-type": "application/sparql-update",
-            ...conditions({ ifMatch: strongEtag(document.etag) }),
-          },
-          body: `INSERT DATA {\n${await serializeChat(delta, "application/n-triples")}\n}`,
-        }),
-      );
-      return {
-        url,
-        dataset: new Store([...document.dataset, ...delta]),
-        etag: response.headers.get("etag"),
-      };
+      const etag = await insertData(fetch, base, url, delta, {
+        ifMatch: strongEtag(document.etag),
+      });
+      return { url, dataset: new Store([...document.dataset, ...delta]), etag };
     } catch (error) {
       if (!(error instanceof ChatIoError && error.status === 412) || attempt === 1) throw error;
     }

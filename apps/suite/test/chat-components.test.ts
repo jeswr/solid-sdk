@@ -8,7 +8,7 @@ import { PreferencesStore } from "../src/apps/chat/lib/client/preferences-store"
 import { buildRoom, loadChat, roomIndex, saveChat } from "../src/apps/chat/lib/model";
 import { ChatProvider, type ChatSession, useChat } from "../src/apps/chat/state/chat-context";
 import { createDemoPod } from "../src/lib/demo-pod/pod";
-import { encodeRef } from "../src/lib/refs";
+import { encodeIdentifierRef, encodeRef } from "../src/lib/refs";
 import { act, click, deferred, h, key, mount } from "./drive-ui-dom";
 
 vi.mock("@/lib/refs", async () => import("../src/lib/refs"));
@@ -266,6 +266,32 @@ it("honours an encoded message reference by paging backwards and focusing the ro
   expect(document.activeElement).toBe(article);
   expect(article?.hasAttribute("data-highlighted")).toBe(true);
 });
+it("focuses a linked message whose identifier is not in normalized URL form", async () => {
+  const pod = createDemoPod({ root: ROOT });
+  const client = new ChatClient(pod.fetch, ROOT, ME);
+  const room = await client.createRoom({ name: "Accents", members: [] });
+  const sent = await client.send(room.url, "Un café ?");
+  const id = `${sent.id.split("#")[0]}#café`;
+  const original = ChatClient.prototype.messages;
+  vi.spyOn(ChatClient.prototype, "messages").mockImplementation(async function (
+    this: ChatClient,
+    ...args: Parameters<ChatClient["messages"]>
+  ) {
+    const page = await original.apply(this, args);
+    return { ...page, messages: page.messages.map((item) => ({ ...item, id })) };
+  });
+  routing.params.set("message", encodeIdentifierRef(id));
+  const view = await mount(
+    h(ChatProvider, {
+      session: session(pod),
+      children: h(RoomRoute, { reference: encodeRef(room.url) }),
+    }),
+  );
+  const article = view.host.querySelector<HTMLElement>("article");
+  expect(article?.dataset.messageId).toBe(id);
+  expect(document.activeElement).toBe(article);
+  expect(view.host.textContent).not.toContain("couldn't find");
+});
 it("ignores a malformed message hint while opening a valid room", async () => {
   const pod = createDemoPod({ root: ROOT });
   const client = new ChatClient(pod.fetch, ROOT, ME);
@@ -504,6 +530,28 @@ it("keeps keyboard focus in the message after picking a reaction and when its la
   await view.render(tree([]));
   expect(view.host.querySelector(".chat-reactions")).toBeNull();
   expect(document.activeElement).toBe(trigger);
+});
+it("never moves focus on later refreshes when the reacted chip survives", async () => {
+  const pod = createDemoPod({ root: ROOT });
+  vi.spyOn(ChatClient.prototype, "react").mockResolvedValue();
+  const active = session(pod);
+  const base = message("survivor");
+  const tree = (reactions: Message["reactions"]) =>
+    h(ChatProvider, {
+      session: active,
+      children: h(Timeline, { ...timelineProps, messages: [{ ...base, reactions }] }),
+    });
+  const view = await mount(tree([{ emoji: "👍", count: 2, reactedByMe: false }]));
+  const chip = view.host.querySelector(".chat-reaction") as HTMLButtonElement;
+  await act(() => chip.focus());
+  await click(chip);
+  // The write's refresh keeps the chip: the focus request is used up.
+  await view.render(tree([{ emoji: "👍", count: 3, reactedByMe: true }]));
+  await act(() => chip.blur());
+  expect(document.activeElement).toBe(document.body);
+  // A later poll refresh must not pull focus into this message.
+  await view.render(tree([{ emoji: "👍", count: 4, reactedByMe: true }]));
+  expect(document.activeElement).toBe(document.body);
 });
 it("collapses a flood of distinct reactions, keeping the reader's own visible", async () => {
   const pod = createDemoPod({ root: ROOT });
