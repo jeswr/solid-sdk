@@ -66,6 +66,23 @@ vi.mock("@univerjs/preset-sheets-data-validation", () => ({
 vi.mock("@univerjs/preset-sheets-conditional-formatting", () => ({
   UniverSheetsConditionalFormattingPreset: () => ({}),
 }));
+vi.mock("@univerjs/preset-sheets-sort", () => ({
+  UniverSheetsSortPreset: () => ({}),
+  SortRangeCommand: { id: "sheet.command.sort-range" },
+  SortType: { ASC: "asc", DESC: "desc" },
+}));
+vi.mock("@univerjs/preset-sheets-filter", () => ({
+  UniverSheetsFilterPreset: () => ({}),
+  SHEET_FILTER_SNAPSHOT_ID: "SHEET_FILTER_PLUGIN",
+  FILTER_MUTATIONS: new Set(),
+}));
+vi.mock("@univerjs/preset-sheets-find-replace", () => ({
+  UniverSheetsFindReplacePreset: () => ({}),
+  OpenReplaceDialogOperation: { id: "ui.operation.open-replace-dialog" },
+}));
+vi.mock("@univerjs/preset-sheets-sort/locales/en-US", () => ({ default: {} }));
+vi.mock("@univerjs/preset-sheets-filter/locales/en-US", () => ({ default: {} }));
+vi.mock("@univerjs/preset-sheets-find-replace/locales/en-US", () => ({ default: {} }));
 vi.mock("@univerjs/preset-sheets-core/locales/en-US", () => ({ default: {} }));
 vi.mock("@univerjs/preset-sheets-data-validation/locales/en-US", () => ({ default: {} }));
 vi.mock("@univerjs/preset-sheets-conditional-formatting/locales/en-US", () => ({ default: {} }));
