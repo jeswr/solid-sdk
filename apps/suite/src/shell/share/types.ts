@@ -16,6 +16,8 @@ export interface SharingState {
   readOnly?: "forbidden" | "offline";
   /** Access is available even while the application's derived member list needs repair. */
   warning?: "members-sync";
+  /** A lost write response is still being reconciled with the resource's folder access. */
+  pendingAccess?: boolean;
 }
 export interface ShareCapabilities {
   publicLinks: boolean;

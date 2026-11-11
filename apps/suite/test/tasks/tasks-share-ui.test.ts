@@ -424,6 +424,32 @@ it("keeps the dialog usable with one member-sync warning across repeated opens",
   expect(toast.error).not.toHaveBeenCalled();
 });
 
+it("announces pending folder access while a sharing write is being reconciled", async () => {
+  const f = await frameCache();
+  cache = f.cache;
+  const home = await cache.createProject("Home");
+  if (!home) throw new Error("Missing project");
+  ref = encodeRef(home.url);
+  path = `/tasks/p/${ref}`;
+  const load = adapter.load.bind(adapter);
+  vi.spyOn(adapter, "load").mockImplementation(async (...args) => ({
+    ...(await load(...args)),
+    pendingAccess: true,
+  }));
+  const { host } = await mount(h(TasksApp, null, "Project"));
+  await click(button("Share", host.querySelector("header") as HTMLElement));
+  await act(async () => {
+    await vi.waitFor(() =>
+      expect(document.querySelector('[role="dialog"]')?.textContent).toContain("Updating access…"),
+    );
+  });
+  expect(
+    [...document.querySelectorAll('[role="status"]')].some(
+      (element) => element.textContent === "Updating access…",
+    ),
+  ).toBe(true);
+});
+
 it("keeps Shared with me per WebID and never shows another account's list", async () => {
   const project = { url: "https://bob.example/projects/home.ttl", title: "Bob's Home" };
   localStorage.setItem(sharedProjectsKey(webId), JSON.stringify([project]));

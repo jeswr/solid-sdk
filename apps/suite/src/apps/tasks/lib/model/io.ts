@@ -25,6 +25,12 @@ export class RdfIO {
         throw new TypeError("The RDF response URL must match the requested resource.");
       return { url: result.url, dataset: new Store([...result.dataset]), etag: result.etag };
     } catch (error) {
+      if (
+        error instanceof RdfFetchError &&
+        error.status === undefined &&
+        error.contentType !== undefined
+      )
+        throw new TypeError("Invalid RDF document.", { cause: error });
       if (error instanceof RdfFetchError)
         throw new ModelError(error.status ?? 0, url, null, { cause: error });
       throw error;

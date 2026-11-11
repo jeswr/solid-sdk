@@ -3,7 +3,12 @@ import { formatDue } from "../format/due";
 import type { StoredTask } from "../model/store";
 import type { TaskView } from "../views/types";
 import { createMemoryFiredStore, type FiredReminderStore } from "./fired-store";
-import { collectDueReminders, type DueReminder, type ReminderTask } from "./scheduler";
+import {
+  collectDueReminders,
+  type DueReminder,
+  type ReminderTask,
+  reminderFireTimes,
+} from "./scheduler";
 
 /** The slice of the Tasks cache snapshot the reminder runner reads. */
 export interface ReminderSnapshot {
@@ -35,7 +40,7 @@ export interface ReminderRun {
 export interface ReminderTickOptions {
   /** Earlier undelivered events, kept while their task is still due-able and in the window. */
   retry?: readonly ReminderEvent[];
-  /** Checked before each delivery, so a stopped scheduler delivers nothing more. */
+  /** Checked before each claim and delivery, so a stopped scheduler leaves later keys untouched. */
   active?: () => boolean;
 }
 const WINDOW = 86400000;
@@ -65,6 +70,7 @@ export function reminderTasks(snapshot: ReminderSnapshot): {
     const item = stored.get(view.url);
     if (view.state !== "open" || !view.hasReminders || !view.due || !item) continue;
     try {
+      const savedAt = item.task.modified ?? view.created;
       tasks.push({
         url: view.url,
         title: view.title || "Untitled task",
@@ -72,6 +78,7 @@ export function reminderTasks(snapshot: ReminderSnapshot): {
         ...(view.allDay ? { allDay: view.allDay } : {}),
         reminders: item.task.reminders,
         state: "open",
+        ...(savedAt ? { savedAt } : {}),
         // Moves keep the creation time and title, but not the URL or anonymous trigger ids.
         ...(view.created ? { identity: `${view.created.toISOString()}|${view.title}` } : {}),
       });
@@ -97,7 +104,7 @@ export async function runReminderTick(
   const { tasks, errors } = reminderTasks(snapshot);
   let due: DueReminder[] = [];
   try {
-    const result = await collectDueReminders(tasks, now, store);
+    const result = await collectDueReminders(tasks, now, store, WINDOW, options.active);
     due = result.due;
     errors.push(...result.errors);
   } catch (error) {
@@ -105,9 +112,20 @@ export async function runReminderTick(
   }
   const byUrl = new Map(tasks.map((task) => [task.url, task]));
   const events: ReminderEvent[] = [
-    ...(options.retry ?? []).filter(
-      (event) => byUrl.has(event.taskUrl) && event.fireTime.getTime() > now.getTime() - WINDOW,
-    ),
+    ...(options.retry ?? []).filter((event) => {
+      const task = byUrl.get(event.taskUrl);
+      if (!task || event.fireTime > now || event.fireTime.getTime() <= now.getTime() - WINDOW)
+        return false;
+      return task.reminders.some((reminder) => {
+        try {
+          return reminderFireTimes(task, reminder).some(
+            (time) => time.at.getTime() === event.fireTime.getTime(),
+          );
+        } catch {
+          return false;
+        }
+      });
+    }),
     ...due.map((reminder) => ({
       ...reminder,
       tag: `${reminder.taskUrl}@${reminder.fireTime.toISOString()}`,
@@ -132,25 +150,44 @@ export async function runReminderTick(
   return { delivered, errors, undelivered };
 }
 
-/** Keep reminders firing (deduplicated per tab only) when the durable store is unavailable.
- * Reports only the first failure; later claims still try the durable store first. */
+/** Keep a tab-local claim cache across primary/fallback transitions. Reports the first failure. */
 export function fallbackFiredStore(
   primary: FiredReminderStore,
   onError: (error: unknown) => void,
   fallback: FiredReminderStore = createMemoryFiredStore(),
 ): FiredReminderStore {
   let reported = false;
+  const known = new Set<string>();
+  function report(error: unknown) {
+    if (!reported) {
+      reported = true;
+      onError(error);
+    }
+  }
   return {
     async claim(key) {
+      if (known.has(key)) return false;
+      // Reserve synchronously so overlapping callers in this tab cannot both win.
+      known.add(key);
       try {
         return await primary.claim(key);
       } catch (error) {
-        if (!reported) {
-          reported = true;
-          onError(error);
+        report(error);
+        try {
+          return await fallback.claim(key);
+        } catch (error) {
+          known.delete(key);
+          throw error;
         }
-        return fallback.claim(key);
       }
+    },
+    async prune() {
+      try {
+        await primary.prune?.();
+      } catch (error) {
+        report(error);
+      }
+      await fallback.prune?.();
     },
   };
 }

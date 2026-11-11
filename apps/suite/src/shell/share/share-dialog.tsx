@@ -318,6 +318,11 @@ function SharingContent({
         </div>
       </header>
       {(error || warning) && <p role="alert">{error || warning}</p>}
+      {state?.pendingAccess && (
+        <p className="text-sm text-muted-foreground" role="status">
+          Updating access…
+        </p>
+      )}
       {!state ? (
         error ? (
           <Button variant="outline" onClick={() => setAttempt((value) => value + 1)}>

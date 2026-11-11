@@ -1851,7 +1851,14 @@ export class TasksCache {
           const folder = requireProjectFolder(project.url, current.tracker.stateStore, projects);
           const confirmed: StoredTask[] = [];
           if (!granted) {
-            const items = await this.store.listTasks(folder, { strict: true, skipInvalid: true });
+            const items = await this.store.listTasks(folder, {
+              strict: true,
+              skipInvalid: true,
+              onInvalid: async (resource) => {
+                if (await this.store.unassignInvalidTask(resource, webId))
+                  unassigned.add(resource.url);
+              },
+            });
             for (const item of items) {
               if (item.task.assignee !== webId) {
                 confirmed.push(item);

@@ -58,7 +58,7 @@ interface Options {
   ensurePrivate: (url: string, owner: string) => Promise<boolean>;
   syncMembers: (webId: string, granted: boolean) => Promise<void>;
 }
-type Reconcile = "none" | "narrow" | "all";
+type Reconcile = "none" | "narrow" | "all" | "recover";
 type People = SharingState["people"];
 /** Named grants only: narrow folder → tracker → folder; re-read to recover partial writes. */
 export class TasksSharingAdapter implements SharingAdapter {
@@ -69,8 +69,10 @@ export class TasksSharingAdapter implements SharingAdapter {
   private readonly io: RdfIO;
   private readonly tracker: WacSharingAdapter;
   private tail: Promise<unknown> = Promise.resolve();
-  // A failed write may still commit after its recovery read. Only an explicit action may widen.
+  // A failed write may still commit after recovery; widening waits for a confirmed newer revision.
   private unconfirmedChange = false;
+  private pendingEtag: string | undefined;
+  private recoveryEtag: string | undefined;
   constructor(private readonly options: Options) {
     this.fetch = refuseRedirects(options.fetch);
     this.io = new RdfIO(this.fetch);
@@ -134,7 +136,7 @@ export class TasksSharingAdapter implements SharingAdapter {
   }
   load(url: string, signal: AbortSignal): Promise<SharingState> {
     return this.enqueue(() =>
-      this.readState(url, signal, this.unconfirmedChange ? "narrow" : "all", false, true),
+      this.readState(url, signal, this.unconfirmedChange ? "recover" : "all", false, true),
     );
   }
   private async readState(
@@ -172,6 +174,11 @@ export class TasksSharingAdapter implements SharingAdapter {
         );
       } else this.state(url, acl);
       const state = await this.tracker.load(url, signal);
+      // A changed validator makes the failed PUT's If-Match stale. Confirm the recovery
+      // snapshot on a later load before allowing folder grants to widen again.
+      const recovered =
+        reconcile === "recover" && !!this.recoveryEtag && acl?.etag === this.recoveryEtag;
+      if (reconcile === "recover") reconcile = recovered ? "all" : "narrow";
       if (reconcile !== "none" && state.canManage && !state.readOnly) {
         try {
           await this.reconcile(
@@ -182,15 +189,18 @@ export class TasksSharingAdapter implements SharingAdapter {
             reconcile,
             forceFolderWrite,
           );
+          if (recovered) this.unconfirmedChange = false;
         } catch (error) {
           if (
             !(warnOnMembersFailure && error instanceof ShareError && error.code === "members-sync")
           )
             throw error;
-          return { ...state, warning: "members-sync" };
+          return { ...state, warning: "members-sync", pendingAccess: this.unconfirmedChange };
         }
       }
-      return state;
+      if (this.unconfirmedChange && acl?.etag && acl.etag !== this.pendingEtag)
+        this.recoveryEtag = acl.etag;
+      return { ...state, pendingAccess: this.unconfirmedChange };
     } catch (error) {
       throw this.error(error);
     }
@@ -248,7 +258,7 @@ export class TasksSharingAdapter implements SharingAdapter {
     folder: Resource | undefined,
     members: string[],
     signal: AbortSignal,
-    mode: Exclude<Reconcile, "none">,
+    mode: "narrow" | "all",
     forceFolderWrite: boolean,
   ) {
     if (state.general.mode !== "restricted") throw new ShareError("forbidden");
@@ -327,6 +337,8 @@ export class TasksSharingAdapter implements SharingAdapter {
           folder ? { etag: folder.etag } : { create: true },
         );
         const trackerAcl = (await this.acl(url, signal))?.etag;
+        if (!pending) this.pendingEtag = trackerAcl ?? undefined;
+        this.recoveryEtag = undefined;
         await this.tracker.setPerson(url, webId, role, opts);
         // Only a committed tracker write proves an earlier lost write can no longer land (its
         // If-Match is now stale). After a no-op, keep narrowing until a real write confirms.

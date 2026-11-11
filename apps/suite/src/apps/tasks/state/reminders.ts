@@ -4,6 +4,7 @@ import { toast } from "@jeswr/suite-ui";
 import { useEffect, useRef } from "react";
 import {
   createIndexedDbFiredStore,
+  createLocalStorageFiredStore,
   createMemoryFiredStore,
   type FiredReminderStore,
 } from "../lib/reminders/fired-store";
@@ -21,10 +22,18 @@ function report(...errors: unknown[]) {
 let sharedStore: FiredReminderStore | undefined;
 /** One store per tab, so a strict-mode remount claims against the same keys. */
 export function firedReminderStore(): FiredReminderStore {
+  if (sharedStore) return sharedStore;
+  let fallback = createMemoryFiredStore();
+  try {
+    if (typeof localStorage !== "undefined")
+      fallback = fallbackFiredStore(createLocalStorageFiredStore(localStorage), report, fallback);
+  } catch (error) {
+    report(error);
+  }
   sharedStore ??=
     typeof indexedDB === "undefined"
-      ? createMemoryFiredStore()
-      : fallbackFiredStore(createIndexedDbFiredStore(indexedDB), report);
+      ? fallback
+      : fallbackFiredStore(createIndexedDbFiredStore(indexedDB), report, fallback);
   return sharedStore;
 }
 

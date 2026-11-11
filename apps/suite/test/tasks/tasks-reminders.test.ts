@@ -3,6 +3,7 @@ import { afterEach, assert, describe, expect, it, vi } from "vitest";
 import { computeFireTimes } from "../../src/apps/tasks/lib/model/reminders";
 import {
   createIndexedDbFiredStore,
+  createLocalStorageFiredStore,
   createMemoryFiredStore,
   reminderKey,
 } from "../../src/apps/tasks/lib/reminders/fired-store";
@@ -38,6 +39,41 @@ describe("reminder identity and memory store", () => {
     expect(await store.claim("a")).toBe(true);
     expect(await store.claim("a")).toBe(false);
     expect(await createMemoryFiredStore().claim("a")).toBe(true);
+  });
+});
+
+describe("localStorage fired store", () => {
+  function local() {
+    const values = new Map<string, string>();
+    return {
+      getItem: (key: string) => values.get(key) ?? null,
+      setItem: (key: string, value: string) => {
+        values.set(key, value);
+      },
+    } as Storage;
+  }
+  it("retains claims across reloads and prunes only records older than 30 days", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(now);
+    const storage = local();
+    const first = createLocalStorageFiredStore(storage);
+    expect(await first.claim("key")).toBe(true);
+    const next = createLocalStorageFiredStore(storage);
+    expect(await next.claim("key")).toBe(false);
+    vi.setSystemTime(now.getTime() + 30 * 86400000);
+    await next.prune?.();
+    expect(await next.claim("key")).toBe(false);
+    vi.setSystemTime(now.getTime() + 30 * 86400000 + 1);
+    await next.prune?.();
+    expect(await next.claim("key")).toBe(true);
+  });
+  it("ignores invalid stored entries and tolerates non-object records", async () => {
+    const storage = local();
+    for (const record of ["null", '"old"', '{"bad":"wrong","valid":1}']) {
+      storage.setItem("tasks.firedReminders", record);
+      const store = createLocalStorageFiredStore(storage);
+      expect(await store.claim("bad")).toBe(true);
+    }
   });
 });
 
@@ -224,6 +260,8 @@ function fakeIndexedDB(existing = false, upgradeExisting = false) {
   let transactionFailure: "error" | "abort" | undefined;
   const databases: IDBDatabase[] = [];
   let transactionTail = Promise.resolve();
+  const transactions = vi.fn();
+  const scans = vi.fn();
   const factory = {
     open: vi.fn((name: string, nextVersion?: number) => {
       expect(name).toBe("tasks");
@@ -255,6 +293,7 @@ function fakeIndexedDB(existing = false, upgradeExisting = false) {
           },
           close: vi.fn(),
           transaction: (name: string, mode: IDBTransactionMode) => {
+            transactions();
             expect(name).toBe("firedReminders");
             expect(mode).toBe("readwrite");
             const tx = {} as IDBTransaction;
@@ -303,6 +342,7 @@ function fakeIndexedDB(existing = false, upgradeExisting = false) {
                 return req;
               },
               openCursor: () => {
+                scans();
                 const req = {} as IDBRequest;
                 const keys = [...values.keys()];
                 let index = 0;
@@ -350,6 +390,8 @@ function fakeIndexedDB(existing = false, upgradeExisting = false) {
     factory,
     values,
     databases,
+    transactions,
+    scans,
     failOpen: (mode: "error" | "blocked") => {
       openFailure = mode;
     },
@@ -398,20 +440,45 @@ describe("IndexedDB fired store", () => {
     expect(fake.values.size).toBe(2);
     expect([...fake.values.values()][0]).toMatch(/^\d{4}-\d\d-\d\dT/);
   });
-  it("prunes only entries older than 30 days, on claims", async () => {
+  it("prunes only entries older than 30 days, once per tick", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(now);
     const fake = fakeIndexedDB();
     fake.values.set("expired", new Date(now.getTime() - 30 * 86400000 - 1).toISOString());
     fake.values.set("boundary", new Date(now.getTime() - 30 * 86400000).toISOString());
     const store = createIndexedDbFiredStore(fake.factory);
+    await store.prune?.();
     expect(await store.claim("expired")).toBe(true);
     expect(await store.claim("boundary")).toBe(false);
     expect(fake.values.get("expired")).toBe(now.toISOString());
     vi.setSystemTime(new Date(now.getTime() + 1));
+    await store.prune?.();
     await store.claim("fresh");
     expect(fake.values.has("boundary")).toBe(false);
     expect(fake.values.get("fresh")).toBe(new Date(now.getTime() + 1).toISOString());
+  });
+  it("caches known fired keys and scans retention once per tick instead of per reminder", async () => {
+    const fake = fakeIndexedDB();
+    const store = createIndexedDbFiredStore(fake.factory);
+    const tasks = [task({ reminders: [{ time: now }, { time: new Date(now.getTime() - 1) }] })];
+    expect((await collectDueReminders(tasks, now, store)).due).toHaveLength(2);
+    expect(fake.scans).toHaveBeenCalledTimes(1);
+    expect(fake.transactions).toHaveBeenCalledTimes(3);
+    expect((await collectDueReminders(tasks, now, store)).due).toEqual([]);
+    expect(fake.scans).toHaveBeenCalledTimes(2);
+    expect(fake.transactions).toHaveBeenCalledTimes(4);
+  });
+  it("expires cached keys at retention and retries failed pruning", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(now);
+    const fake = fakeIndexedDB();
+    const store = createIndexedDbFiredStore(fake.factory);
+    await store.claim("key");
+    vi.setSystemTime(now.getTime() + 30 * 86400000 + 1);
+    fake.failTransaction("error");
+    await expect(store.prune?.()).rejects.toThrow("transaction failed");
+    await store.prune?.();
+    expect(await store.claim("key")).toBe(true);
   });
   it("adds the object store to an existing tasks database without deleting other stores", async () => {
     const fake = fakeIndexedDB(true);
@@ -434,6 +501,7 @@ describe("IndexedDB fired store", () => {
     fake.databases[0]?.onversionchange?.({} as IDBVersionChangeEvent);
     expect(fake.databases[0]?.close).toHaveBeenCalled();
     expect(await store.claim("key")).toBe(false);
+    await store.claim("next");
     expect(fake.factory.open).toHaveBeenCalledTimes(2);
   });
   it.each(["error", "blocked"] as const)("reports open %s and permits retry", async (mode) => {

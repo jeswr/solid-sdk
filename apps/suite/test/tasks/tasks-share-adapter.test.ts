@@ -119,6 +119,7 @@ describe("Tasks named sharing", () => {
     expect((await f.load()).people.some((person) => person.webId === bob)).toBe(false);
     expect((await f.store.readProject(f.project.url)).tracker.groupMembers).not.toContain(bob);
     expect((await f.store.readTask(task.url)).task.assignee).toBeUndefined();
+    expect((await f.store.readTask(invalid)).task.assignee).toBeUndefined();
     expect((await f.store.readTask(keep.url)).task.assignee).toBe(owner);
     expect(f.failures).not.toHaveBeenCalled();
     expect(f.notice).not.toHaveBeenCalled();
@@ -143,6 +144,26 @@ describe("Tasks named sharing", () => {
     update.mockRestore();
     expect((await f.load()).warning).toBeUndefined();
     expect((await f.store.readProject(f.project.url)).tracker.groupMembers).not.toContain(bob);
+  });
+
+  it("widens on load after confirming a committed grant whose response was lost", async () => {
+    const f = await fixture();
+    await f.load();
+    f.intercept(async (url, init) => {
+      if (url === `${f.project.url}.acl` && init.method === "PUT") {
+        await f.pod.fetch(url, init);
+        throw new Error("Lost tracker PUT response");
+      }
+    });
+    await expect(f.adapter.setPerson(f.project.url, bob, "editor")).rejects.toBeDefined();
+    expect((await f.grants(f.folder)).some((grant) => grant.agents.includes(bob))).toBe(false);
+    f.intercept(undefined);
+    const state = await f.load();
+    expect(state.people).toContainEqual({ webId: bob, role: "editor" });
+    expect(state.pendingAccess).toBe(false);
+    expect((await f.grants(f.folder)).find((grant) => grant.agents.includes(bob))?.modes).toContain(
+      `${ACL}Write`,
+    );
   });
 
   it("never widens after a failed revoke that commits after the recovery read", async () => {
@@ -462,7 +483,7 @@ describe("Tasks named sharing", () => {
     // The dialog still lists bob as an editor; re-submitting that role writes nothing.
     await f.adapter.setPerson(f.project.url, bob, "editor");
     expect((await f.grants(f.folder)).some((grant) => grant.agents.includes(bob))).toBe(false);
-    await f.load();
+    expect((await f.load()).pendingAccess).toBe(true);
     expect((await f.grants(f.folder)).some((grant) => grant.agents.includes(bob))).toBe(false);
     // The delayed revoke lands: the folder must still be no wider than the tracker.
     expect((await held?.())?.ok).toBe(true);

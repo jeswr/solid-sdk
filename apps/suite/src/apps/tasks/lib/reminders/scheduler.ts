@@ -11,6 +11,8 @@ export interface ReminderTask {
   state: "open" | "closed";
   /** Survives moves between projects, which change the URL and anonymous trigger ids. */
   identity?: string;
+  /** Last persisted edit (dct:modified, falling back to dct:created). */
+  savedAt?: Date;
 }
 export interface DueReminder {
   taskUrl: string;
@@ -20,6 +22,19 @@ export interface DueReminder {
 export interface ReminderTickResult {
   due: DueReminder[];
   errors: unknown[];
+}
+
+/** All-day markers are browser-local dates, regardless of the stored UTC due time. */
+export function reminderDue(task: ReminderTask): Date | undefined {
+  if (!task.allDay) return task.due;
+  const [year, month, day] = task.allDay.split("-").map(Number) as [number, number, number];
+  return new Date(year, month - 1, day);
+}
+
+export function reminderFireTimes(task: ReminderTask, reminder: Reminder) {
+  return computeFireTimes(task.url, reminderDue(task), [reminder]).filter(
+    (time) => !task.savedAt || time.at.getTime() >= task.savedAt.getTime(),
+  );
 }
 
 /**
@@ -36,32 +51,31 @@ export async function collectDueReminders(
   now: Date,
   store: FiredReminderStore,
   windowMs = 86400000,
+  active: () => boolean = () => true,
 ): Promise<ReminderTickResult> {
   if (!Number.isFinite(now.getTime()) || !Number.isFinite(windowMs) || windowMs < 0)
     throw new RangeError("Invalid reminder clock or window.");
   const lower = now.getTime() - Math.min(windowMs, 86400000);
   const due: DueReminder[] = [];
   const errors: unknown[] = [];
+  try {
+    if (active()) await store.prune?.();
+  } catch (error) {
+    errors.push(error);
+  }
   for (const task of tasks) {
     if (task.state !== "open" || !task.due) continue;
-    let date = task.due;
-    if (task.allDay) {
-      const [year, month, day] = task.allDay.split("-").map(Number) as [number, number, number];
-      date = new Date(year, month - 1, day);
-    }
     for (const reminder of task.reminders) {
       try {
-        const times = pendingReminders(
-          computeFireTimes(task.url, date, [reminder]),
-          now,
-          new Set(),
-        );
+        const times = pendingReminders(reminderFireTimes(task, reminder), now, new Set());
         for (const time of times) {
+          if (!active()) break;
           if (time.at.getTime() <= lower || !(await store.claim(time.key))) continue;
           // A moved task's new URL claims afresh; its identity key still records the fire.
           const trigger = reminder.offset ?? (reminder.time as Date).toISOString();
           if (
             task.identity &&
+            active() &&
             !(await store.claim(`${task.identity}|${trigger}@${time.at.toISOString()}`))
           )
             continue;

@@ -33,6 +33,7 @@ describe("sharing membership mutation queue", () => {
     expect(listing).toHaveBeenCalledWith(inbox.tracker.stateStore, {
       strict: true,
       skipInvalid: true,
+      onInvalid: expect.any(Function),
     });
     expect((await store.readTask(first.url)).task.assignee).toBeUndefined();
     expect((await store.readTask(second.url)).task.assignee).toBe(webId);
@@ -116,6 +117,74 @@ describe("sharing membership mutation queue", () => {
     await assign;
     await removal;
     expect((await store.readTask(task.url)).task.assignee).toBeUndefined();
+  });
+  it("skips malformed Turtle on removal but still propagates transport failures", async () => {
+    const { cache, inbox, store, pod, failures } = await frameCache();
+    await cache.syncProjectMember(inbox, bob, true);
+    const stray = `${inbox.tracker.stateStore}malformed.ttl`;
+    pod.seed(stray, "This is not Turtle");
+    expect(await cache.syncProjectMember(inbox, bob, false)).toBeDefined();
+    expect((await store.readProject(inbox.url)).tracker.groupMembers).not.toContain(bob);
+    expect(pod.files.get(stray)?.body).toBe("This is not Turtle");
+    expect(failures).not.toHaveBeenCalled();
+    await cache.syncProjectMember(inbox, bob, true);
+    pod.intercept = (request) => {
+      if (request.url === stray) throw new Error("Network unavailable");
+      return undefined;
+    };
+    expect(await cache.syncProjectMember(inbox, bob, false)).toBeUndefined();
+    expect((await store.readProject(inbox.url)).tracker.groupMembers).toContain(bob);
+    expect(failures).toHaveBeenCalledOnce();
+  });
+  it("conditionally removes only the revoked assignee from a parseable invalid task", async () => {
+    const { cache, inbox, store, pod, failures } = await frameCache();
+    await cache.syncProjectMember(inbox, bob, true);
+    const url = `${inbox.tracker.stateStore}invalid.ttl`;
+    const dataset = new Store();
+    const invalid = node(`${url}#it`, dataset);
+    invalid.types.add(`${NS.WF}Task`);
+    invalid.iris(`${NS.WF}assignee`).add(bob);
+    invalid.iris(`${NS.WF}assignee`).add(webId);
+    invalid.setText(`${NS.DCT}description`, "Keep invalid fields and foreign data");
+    pod.seed(url, await serialize(dataset));
+    expect(await cache.syncProjectMember(inbox, bob, false)).toBeDefined();
+    invalid.iris(`${NS.WF}assignee`).delete(bob);
+    expect((await pod.dataset(url)).equals(dataset)).toBe(true);
+    expect(
+      pod.requests
+        .find((request) => request.url === url && request.method === "PUT")
+        ?.headers.get("If-Match"),
+    ).toBe('"1"');
+    expect((await store.readProject(inbox.url)).tracker.groupMembers).not.toContain(bob);
+    expect(failures).not.toHaveBeenCalled();
+  });
+  it.each([
+    412,
+    503,
+    "lost",
+  ] as const)("handles invalid-task cleanup write failure %s", async (status) => {
+    const { cache, inbox, store, pod, failures } = await frameCache();
+    await cache.syncProjectMember(inbox, bob, true);
+    const url = `${inbox.tracker.stateStore}invalid.ttl`;
+    const dataset = new Store();
+    const invalid = node(`${url}#it`, dataset);
+    invalid.types.add(`${NS.WF}Task`);
+    invalid.setIri(`${NS.WF}assignee`, bob);
+    pod.seed(url, await serialize(dataset));
+    pod.intercept = async (request) => {
+      if (request.method !== "PUT" || request.url !== url) return undefined;
+      if (status !== "lost") return new Response(null, { status });
+      pod.intercept = undefined;
+      await pod.fetch(url, { method: "PUT", headers: request.headers, body: request.body });
+      throw new Error("Lost response");
+    };
+    const result = await cache.syncProjectMember(inbox, bob, false);
+    expect(result !== undefined).toBe(status === "lost");
+    expect((await store.readProject(inbox.url)).tracker.groupMembers.includes(bob)).toBe(
+      status !== "lost",
+    );
+    expect((await store.readTask(url)).task.assignee).toBe(status === "lost" ? undefined : bob);
+    expect(failures.mock.calls).toHaveLength(status === "lost" ? 0 : 1);
   });
   it.each([412, 503])("still fails removal on a real task write error (%s)", async (status) => {
     const { cache, inbox, store, pod, failures } = await frameCache();

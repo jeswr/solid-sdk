@@ -330,9 +330,118 @@ describe("reminder tick", () => {
     );
     expect(result).toEqual({ delivered: [], errors: [expect.any(RangeError)], undelivered: [] });
   });
+  it("ignores triggers earlier than the task's last save, including after reload", async () => {
+    const data = oneHourBefore();
+    const item = data.tasks[project]?.items[0] as StoredTask;
+    Object.assign(item.task, { modified: new Date(now.getTime() + 1) });
+    const notify = vi.fn();
+    expect((await runReminderTick(data, now, createMemoryFiredStore(), notify)).delivered).toEqual(
+      [],
+    );
+    Object.assign(item.task, { modified: now });
+    expect(
+      (await runReminderTick(data, now, createMemoryFiredStore(), notify)).delivered,
+    ).toHaveLength(1);
+  });
+  it("drops undelivered events when rescheduling or editing the reminder changes its fire time", async () => {
+    const store = createMemoryFiredStore();
+    const notify = vi.fn().mockRejectedValueOnce(new Error("Delivery failed"));
+    const { undelivered } = await runReminderTick(oneHourBefore(), now, store, notify);
+    for (const changed of [
+      snapshot(
+        [view({ due: new Date("2026-11-03T10:00:00Z") })],
+        [stored(url, [{ offset: "-PT1H" }])],
+      ),
+      snapshot([view()], [stored(url, [{ offset: "-PT30M" }])]),
+    ]) {
+      expect(await runReminderTick(changed, now, store, notify, { retry: undelivered })).toEqual({
+        delivered: [],
+        errors: [],
+        undelivered: [],
+      });
+    }
+    expect(notify).toHaveBeenCalledOnce();
+  });
+  it("leaves later reminders unclaimed if stopped during an earlier claim", async () => {
+    let active = true;
+    const memory = createMemoryFiredStore();
+    const claim = vi.fn(async (key: string) => {
+      active = false;
+      return memory.claim(key);
+    });
+    const data = snapshot([view()], [stored(url, [{ offset: "-PT1H" }, { offset: "-PT2H" }])]);
+    await runReminderTick(data, now, { claim }, vi.fn(), { active: () => active });
+    expect(claim).toHaveBeenCalledOnce();
+    expect((await runReminderTick(data, now, memory, vi.fn())).delivered).toHaveLength(1);
+  });
+  it("does not claim or prune when already inactive, and continues after a prune failure", async () => {
+    const failure = new Error("Prune failed");
+    const store = {
+      claim: vi.fn(async () => true),
+      prune: vi.fn(async () => {
+        throw failure;
+      }),
+    };
+    expect(
+      await runReminderTick(oneHourBefore(), now, store, vi.fn(), { active: () => false }),
+    ).toEqual({ delivered: [], errors: [], undelivered: [] });
+    expect(store.claim).not.toHaveBeenCalled();
+    expect(store.prune).not.toHaveBeenCalled();
+    const result = await runReminderTick(oneHourBefore(), now, store, vi.fn());
+    expect(result.errors).toEqual([failure]);
+    expect(result.delivered).toHaveLength(1);
+  });
+  it("drops retries with newly invalid reminder data or a fire time in the future", async () => {
+    const store = createMemoryFiredStore();
+    const { undelivered } = await runReminderTick(oneHourBefore(), now, store, async () => {
+      throw new Error("Delivery failed");
+    });
+    const invalid = snapshot([view()], [stored(url, [{ offset: "invalid" }])]);
+    const result = await runReminderTick(invalid, now, store, vi.fn(), { retry: undelivered });
+    expect(result.delivered).toEqual([]);
+    expect(result.undelivered).toEqual([]);
+    expect(result.errors).toHaveLength(1);
+    expect(
+      (
+        await runReminderTick(oneHourBefore(), new Date(now.getTime() - 1), store, vi.fn(), {
+          retry: undelivered,
+        })
+      ).delivered,
+    ).toEqual([]);
+  });
 });
 
 describe("fallback fired store", () => {
+  it("reports an outage once, prunes the fallback, and retries keys when both stores fail", async () => {
+    const failure = new Error("Storage unavailable");
+    const primary = {
+      claim: vi.fn().mockRejectedValue(failure),
+      prune: vi.fn().mockRejectedValue(failure),
+    };
+    const fallback = {
+      claim: vi.fn().mockRejectedValueOnce(failure).mockResolvedValue(true),
+      prune: vi.fn(async () => {}),
+    };
+    const onError = vi.fn();
+    const store = fallbackFiredStore(primary, onError, fallback);
+    await expect(store.claim("retry")).rejects.toBe(failure);
+    expect(await store.claim("retry")).toBe(true);
+    await store.prune?.();
+    expect(onError).toHaveBeenCalledExactlyOnceWith(failure);
+    expect(primary.prune).toHaveBeenCalledOnce();
+    expect(fallback.prune).toHaveBeenCalledOnce();
+  });
+  it("remembers claims across an IndexedDB outage and recovery", async () => {
+    const primary = createMemoryFiredStore();
+    const claim = vi.spyOn(primary, "claim");
+    const store = fallbackFiredStore(primary, vi.fn());
+    claim.mockRejectedValueOnce(new Error("Unavailable"));
+    expect(await store.claim("during-outage")).toBe(true);
+    expect(await store.claim("during-outage")).toBe(false);
+    expect(await store.claim("before-outage")).toBe(true);
+    claim.mockRejectedValueOnce(new Error("Unavailable again"));
+    expect(await store.claim("before-outage")).toBe(false);
+  });
   it("uses the durable store, then a memory store when it fails", async () => {
     const onError = vi.fn();
     const failure = new Error("IndexedDB unavailable");
