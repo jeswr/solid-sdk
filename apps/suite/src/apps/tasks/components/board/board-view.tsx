@@ -32,6 +32,7 @@ import { AddTaskRow } from "../add-task-row";
 import { AssigneeAvatar } from "../assignee-avatar";
 import { useTaskDrag } from "../dnd/use-task-drag";
 import { MoveMenuItems } from "../move-menu";
+import { ProjectDot } from "../project-dot";
 import { TaskCheck, useCompleting } from "../task-check";
 import { SectionEnd, SectionHeader } from "../task-list";
 import { ProjectError } from "../views/project-error";
@@ -290,6 +291,7 @@ export function BoardView({ projectUrl }: { projectUrl: string }) {
     <TaskListFocus className="tsk-content tsk-board-view">
       <header className="tsk-view-header">
         <h1>
+          {project && <ProjectDot colour={project.tracker.color} />}
           {project ? (
             <EditableText
               label="Project name"

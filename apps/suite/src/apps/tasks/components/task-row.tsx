@@ -36,6 +36,7 @@ import { reopenTask, rescheduleTasks } from "../state/view-actions";
 import { AssigneeAvatar } from "./assignee-avatar";
 import { useTaskDrag } from "./dnd/use-task-drag";
 import { MoveMenuItems, moveDown, moveUp, useTaskMoves } from "./move-menu";
+import { ProjectDot } from "./project-dot";
 import { RowProperties } from "./row-properties";
 import { TaskCheck, useCompleting } from "./task-check";
 import { ReschedulePopover } from "./views/reschedule-popover";
@@ -352,7 +353,16 @@ export function TaskRow({
                 +{labels.length - 3}
               </span>
             )}
-            {showProject && task.projectTitle && <span>{task.projectTitle}</span>}
+            {showProject && task.projectTitle && (
+              <span className="tsk-project-chip">
+                <ProjectDot
+                  colour={
+                    tasks.projects.find((project) => project.url === task.projectUrl)?.tracker.color
+                  }
+                />
+                {task.projectTitle}
+              </span>
+            )}
             <AssigneeAvatar task={task} />
           </div>
         )}
