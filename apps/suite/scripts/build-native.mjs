@@ -19,6 +19,7 @@ const www = browserTest ? join(stage, "www") : join(root, "www");
 const info = nativeSettings(process.env);
 const adaptations = [
   "api/ route handlers excluded; feedback uses the deployed suite or a local download",
+  "public/media excluded; the welcome videos are watched on the web suite",
   "dev/ routes excluded from the native build graph",
   ".well-known/ route handlers excluded (the Client ID Document is served by the deployed suite)",
   "native / entry redirects to /drive/my (the web / chooses by session)",
@@ -151,7 +152,8 @@ await writeFile(
 );
 await cp(join(root, "public"), join(stage, "public"), {
   recursive: true,
-  filter: (path) => path !== join(root, "public/fixtures"),
+  // Welcome videos stay on the web suite: they would push the bundle past its size budget.
+  filter: (path) => path !== join(root, "public/fixtures") && path !== join(root, "public/media"),
 });
 for (const path of await filesUnder(join(stage, "src/app"))) {
   if (!path.endsWith("/page.tsx")) continue;
