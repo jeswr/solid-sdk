@@ -54,8 +54,18 @@ test("anchors, replies, resolves, reopens and persists a comment after editing b
   await thread.getByRole("textbox", { name: "Reply", exact: true }).fill("Agreed");
   await thread.getByRole("button", { name: "Reply", exact: true }).click();
   await expect(thread).toContainText("Agreed");
-  await body.focus();
-  await page.keyboard.press("Control+Home");
+  // The reply left "word" selected: typing before the caret reaches the start
+  // would replace it, so retry until the caret is collapsed at the start.
+  await expect(async () => {
+    await body.focus();
+    await page.keyboard.press("Control+Home");
+    expect(
+      await body.evaluate(() => {
+        const selection = window.getSelection();
+        return !!selection?.isCollapsed && selection.anchorOffset === 0;
+      }),
+    ).toBe(true);
+  }).toPass();
   // A second "word" before the anchor: the highlight must stay on the original one.
   await page.keyboard.type("A word first. ");
   await expect(highlight).toHaveCount(1);
