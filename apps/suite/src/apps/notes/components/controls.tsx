@@ -17,7 +17,7 @@ import {
 import { Palette, Tag } from "lucide-react";
 import Link from "next/link";
 import { useId, useState } from "react";
-import { NoteConflictError } from "../lib/model/errors";
+import { NoteConflictError, NoteMoveBlockedError } from "../lib/model/errors";
 import { NoteColour } from "../lib/model/prefs";
 import { useNotesContext } from "../state/notes-context";
 
@@ -160,6 +160,8 @@ export function ConfirmDialog({
 }) {
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState<string>();
+  const [blocked, setBlocked] = useState<NoteMoveBlockedError>();
+  const { openShare } = useNotesContext();
   return (
     <Dialog
       open
@@ -177,6 +179,20 @@ export function ConfirmDialog({
         <DialogTitle>{title}</DialogTitle>
         <DialogDescription>{description}</DialogDescription>
         {failed && <p role="alert">{failed}</p>}
+        {blocked && (
+          <p role="alert">
+            {blocked.message}{" "}
+            <Button
+              variant="link"
+              onClick={() => {
+                close();
+                openShare(blocked.url);
+              }}
+            >
+              Share
+            </Button>
+          </p>
+        )}
         <div className="notes-confirm-actions">
           <Button id="notes-cancel-delete" variant="outline" disabled={busy} onClick={close}>
             Cancel
@@ -187,14 +203,19 @@ export function ConfirmDialog({
             onClick={() => {
               setBusy(true);
               setFailed(undefined);
+              setBlocked(undefined);
               void confirm()
-                .then(close, (error) =>
+                .then(close, (error) => {
+                  if (error instanceof NoteMoveBlockedError) {
+                    setBlocked(error);
+                    return;
+                  }
                   setFailed(
                     error instanceof NoteConflictError
                       ? "This note changed somewhere else. The list has been refreshed."
                       : "Couldn't complete this action. Please try again.",
-                  ),
-                )
+                  );
+                })
                 .finally(() => setBusy(false));
             }}
           >
