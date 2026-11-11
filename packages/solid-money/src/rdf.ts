@@ -11,7 +11,7 @@ import { migrateMoney } from "./migration.js";
 import { MoneyNode } from "./node.js";
 import { required } from "./records.js";
 import type { Account, Balance, Category, Money, Transaction } from "./types.js";
-import { instant, iri, validateMoney, validateTransaction } from "./validation.js";
+import { hasText, instant, iri, validateMoney, validateTransaction } from "./validation.js";
 import { V } from "./vocab.js";
 
 export { MoneyDocument, MoneyNode, migrateMoney, V };
@@ -32,7 +32,7 @@ function writeCore(document: MoneyDocument, id: string, name: keyof typeof entit
 }
 export function putAccount(document: MoneyDocument, value: Account): void {
   iri(value.id);
-  if (!value.label.trim()) throw new TypeError("Account label is required");
+  if (!hasText(value.label)) throw new TypeError("Account label is required");
   writeCore(document, value.id, "Account", entities.Account.build(value.id, value));
 }
 function putMoney(document: MoneyDocument, id: string, value: Money): Term {

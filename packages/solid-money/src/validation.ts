@@ -1,8 +1,17 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
-// AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
+import { sanitizeText } from "@jeswr/model-runtime";
 import { safeHttpIri } from "@jeswr/rdf-serialize";
 import type { Money, Range, Transaction } from "./types.js";
 import { parseDate } from "./values.js";
+
+/**
+ * True when `value` still has visible text after the generated writers strip
+ * control characters, so validation agrees with what is actually stored.
+ */
+export function hasText(value: string): boolean {
+  return sanitizeText(value).trim() !== "";
+}
 
 export function iri(value: string): string {
   if (safeHttpIri(value) !== value) throw new TypeError("Invalid money resource IRI");
@@ -38,7 +47,7 @@ export function validateTransaction(value: Transaction): void {
   iri(value.account);
   instant(value.postingTime);
   validateMoney(value);
-  if (!value.description.trim()) throw new TypeError("Transaction description is required");
+  if (!hasText(value.description)) throw new TypeError("Transaction description is required");
   for (const optional of [
     value.category,
     value.payee,

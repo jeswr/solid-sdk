@@ -79,7 +79,9 @@ apart from import paths. The app oracle remains untouched.
   choosing the first term. Ambiguous required account links reject the record.
 - Canonical `schema:currency` must be one `xsd:string`; language-tagged currencies no longer
   project. Existing `fin:currency` fallback reads still use their historical literal view.
-- Generated text builds/setters strip control characters. Public `types.add` rejects an
+- Generated text builds/setters strip control characters. Required account labels,
+  category labels and transaction descriptions are validated after that stripping, so a
+  value made only of control characters is rejected before writing. Public `types.add` rejects an
   unsafe type IRI immediately, before changing the dataset.
 - Generated record snapshots require safe absolute named subject IDs. The public partial
   view still supports blank subjects (including monetary nodes), but a blank account

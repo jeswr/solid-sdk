@@ -1,8 +1,15 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
-// AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 
 import type { Balance, Category, Money, Range, Transaction } from "./types.js";
-import { instant, iri, validateMoney, validateRange, validateTransaction } from "./validation.js";
+import {
+  hasText,
+  instant,
+  iri,
+  validateMoney,
+  validateRange,
+  validateTransaction,
+} from "./validation.js";
 import { parseAmount } from "./values.js";
 
 export function monthKey(at: string): string {
@@ -88,7 +95,7 @@ export function categoryTree(categories: readonly Category[]): CategoryNode[] {
   const nodes = new Map<string, CategoryNode>();
   for (const category of categories) {
     iri(category.id);
-    if (!category.label.trim() || nodes.has(category.id)) throw new TypeError("Invalid category");
+    if (!hasText(category.label) || nodes.has(category.id)) throw new TypeError("Invalid category");
     nodes.set(category.id, { ...category, children: [] });
   }
   const roots: CategoryNode[] = [];

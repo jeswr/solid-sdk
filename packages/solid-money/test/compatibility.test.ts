@@ -6,11 +6,12 @@ import {
   MoneyDocument,
   parseMoney,
   putAccount,
+  putCategories,
   putTransaction,
   serialiseMoney,
   V,
 } from "../src/index.js";
-import { account, base, row } from "./money-model-fixtures.js";
+import { account, balance, base, row } from "./money-model-fixtures.js";
 
 it.each([
   '"Current"@en',
@@ -89,6 +90,29 @@ it("uses runtime text sanitization for generated builds and public setters, incl
   expect(blank.label).toBe("ef");
   putTransaction(document, { ...row, description: "a\u0000b" });
   expect(document.transactions()[0]?.description).toBe("ab");
+});
+
+it("rejects text that is empty once control characters are stripped, before writing", () => {
+  const document = new MoneyDocument();
+  expect(() => putTransaction(document, { ...row, description: "\u0001" })).toThrow(
+    "Transaction description is required",
+  );
+  expect(() => putCategories(document, [{ id: `${base}#c`, label: " \u0007 " }])).toThrow(
+    "Invalid category",
+  );
+  expect(() => putAccount(document, { id: account, label: "\u0000" })).toThrow(
+    "Account label is required",
+  );
+  expect(document.dataset.size).toBe(0);
+});
+
+it("rejects a blank-node balance root that previously projected", async () => {
+  const document = await parseMoney(
+    `_:b a <${V.balanceClass}>; <${V.balanceAccount}> <${account}> .`,
+    base,
+  );
+  expect(() => document.balances()).toThrow();
+  expect(balance.id.startsWith("http")).toBe(true);
 });
 
 it("rejects unsafe public rdf:type additions before mutation", () => {

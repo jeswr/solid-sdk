@@ -1,5 +1,4 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
-// AUTHORED-BY Codex GPT-6.1-Sol
 import { copyFileSync, mkdirSync } from "node:fs";
 
 // tsc consumes the generated declarations but does not copy their JS sibling.

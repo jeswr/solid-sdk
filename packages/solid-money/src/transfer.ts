@@ -1,5 +1,4 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
-// AUTHORED-BY Codex GPT-6.1-Sol
 
 import { type MoneyDocument, putTransaction, V } from "./rdf.js";
 import type { Money } from "./types.js";
