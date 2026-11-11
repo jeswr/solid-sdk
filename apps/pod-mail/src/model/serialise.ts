@@ -1,5 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8
-// AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Codex (GPT-6.1 Sol)
 /**
  * Serialisation for the mail data layer. We serialise via `n3.Writer` only —
  * never by hand-concatenating Turtle. The resulting Turtle is what the store

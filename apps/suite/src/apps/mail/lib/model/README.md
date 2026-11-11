@@ -1,11 +1,14 @@
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
-<!-- AUTHORED-BY Codex GPT-6 -->
 # Mail model (MAI-00)
 
 The RDF model comes from `@jeswr/solid-mail`. Local compatibility modules re-export its
 `Message`, `Thread`, `Folder`, `Attachment`, `MailboxDataset`, well-known folders,
 vocabulary constants and complete-document serializer; `io.ts` re-exports its `parseMailbox`.
 Existing app import paths keep working. The entity wrappers use the package's generated core.
+Reads are stricter on malformed or third-party RDF than the old hand-written model (for
+example a language-tagged subject or an `xsd:date` timestamp drops, and a blank-node message is
+skipped); see the package's [exact divergences](../../../../../../../packages/solid-mail/README.md#exact-divergences).
+Data this app writes is unaffected.
 
 `@jeswr/pod-connectors/mail` owns the shared framework-free MAI-01 path slugs, reserved
 system-folder titles, linear HTML-to-text scanner and MIME address conversion. `paths.ts`

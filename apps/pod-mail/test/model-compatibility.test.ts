@@ -1,4 +1,4 @@
-// AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Codex (GPT-6.1 Sol)
 import { parseRdf } from "@jeswr/fetch-rdf";
 import { describe, expect, it } from "vitest";
 import { serialiseToTurtle } from "../src/model/serialise.js";

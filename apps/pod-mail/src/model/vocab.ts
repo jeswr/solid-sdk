@@ -1,6 +1,6 @@
 // AUTHORED-BY Claude Opus 4.8
 // AUTHORED-BY Codex GPT-6.1-Sol
-// AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Codex (GPT-6.1 Sol)
 /** Byte-identical shared IRIs; the standalone app retains its older predicate surface. */
 export {
   Classes,

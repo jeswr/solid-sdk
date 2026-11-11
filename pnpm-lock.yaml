@@ -1545,6 +1545,9 @@ importers:
       '@jeswr/solid-elements':
         specifier: workspace:*
         version: link:../../../packages/solid-elements
+      '@jeswr/solid-mail':
+        specifier: workspace:*
+        version: link:../../../packages/solid-mail
       '@jeswr/solid-session-restore':
         specifier: workspace:*
         version: link:../../../packages/solid-session-restore
