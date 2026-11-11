@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 "use client";
+import { type AppSlug, suiteApps } from "@jeswr/suite-ui";
 import { type ComponentProps, lazy, Suspense } from "react";
 import {
   SearchBox,
@@ -36,10 +37,10 @@ export function AppSessionGuard({ children }: { children: React.ReactNode }) {
 }
 
 /** Apps retain their sidebar and details; the shell owns global navigation and account UI. */
-export function AppFrame(props: Omit<SuiteFrameProps, "app"> & { app: "home" | "drive" }) {
+export function AppFrame(props: Omit<SuiteFrameProps, "app"> & { app: AppSlug }) {
   const accounts = useShellAccounts();
   if (!accounts) return <SuiteFrame {...props} />;
-  const title = props.app === "home" ? "Home" : "Drive";
+  const title = suiteApps.find((app) => app.slug === props.app)?.name ?? props.app;
   return (
     <Suspense>
       <Shell

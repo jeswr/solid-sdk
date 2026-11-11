@@ -11,7 +11,7 @@
  * into the shell instead and this folder is deleted.
  */
 
-import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@jeswr/suite-ui";
+import { type AppSlug, Sheet, SheetContent, SheetDescription, SheetTitle } from "@jeswr/suite-ui";
 import {
   Bot,
   CalendarDays,
@@ -72,7 +72,8 @@ const APPS: { id: SuiteAppId; label: string; href: string; icon: typeof HardDriv
 ];
 
 export interface SuiteFrameProps {
-  app: SuiteAppId;
+  /** Shell-registered apps without an interim rail entry render with no rail item current. */
+  app: SuiteAppId | AppSlug;
   /** The app's sidebar navigation (also the mobile drawer). */
   sidebar: ReactNode;
   /** Top bar context slot (breadcrumbs or title). */
@@ -88,7 +89,7 @@ export interface SuiteFrameProps {
   children: ReactNode;
 }
 
-function Rail({ app }: { app: SuiteAppId }) {
+function Rail({ app }: { app: SuiteAppId | AppSlug }) {
   return (
     <nav className="ish-rail" aria-label="Apps">
       <Link href="/drive" className="ish-brand" aria-label="Solid Suite home">
