@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex
 "use client";
 import {
@@ -121,6 +122,7 @@ export function EditorToolbar({
   print = () => {},
   outline = true,
   toggleOutline = () => {},
+  modeControl,
 }: {
   editor: Editor;
   actions: EditorAction[];
@@ -131,6 +133,7 @@ export function EditorToolbar({
   print?: () => void;
   outline?: boolean;
   toggleOutline?: () => void;
+  modeControl?: ReactNode;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const active = useRef<HTMLElement | null>(null);
@@ -422,7 +425,7 @@ export function EditorToolbar({
     ...groups.filter((group) => !OVERFLOW_FIRST.has(group.label)),
     ...groups.filter((group) => OVERFLOW_FIRST.has(group.label)),
   ];
-  let used = 76;
+  let used = modeControl ? 206 : 76;
   // At the smallest widths the primary undo buttons still fit beside the overflow trigger.
   const shown = new Set(ranked.slice(0, 2).map((group) => group.label));
   for (const group of ranked) {
@@ -552,6 +555,7 @@ export function EditorToolbar({
           )}
         </DropdownMenuContent>
       </DropdownMenu>
+      {modeControl}
       {colour && <ColourPopover editor={editor} kind={colour} close={() => setColour(null)} />}
     </div>
   );

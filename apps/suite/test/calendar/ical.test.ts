@@ -290,15 +290,50 @@ describe("ICS compatibility and validation", () => {
     const imported = importICal(source);
     expect(imported.events[0]?.start).toEqual(new Date("2026-07-01T08:00Z"));
     expect(imported.timeZones).toEqual(["Europe/London"]);
-    expect(() => exportICal({ events: imported.events, timeZone: "Europe/London" })).toThrow(
-      "VTIMEZONE",
-    );
+    expect(imported.events[0]?.timeZone).toBe("Europe/London");
+    const exported = exportICal({ events: imported.events, timeZone: "Europe/London" });
+    expect(exported).toContain('DTSTART;TZID="Europe/London":20260701T090000');
+    expect(exported).toContain('DTEND;TZID="Europe/London":20260701T100000');
+    expect(importICal(exported)).toEqual(imported);
     expect(parseICalDate("20260701T090000", "Europe/London")).toEqual(
       new Date("2026-07-01T08:00Z"),
     );
     expect(
       importICal(source.replace(/;TZID="?Europe\/London"?/g, ""), "Europe/London").events[0]?.start,
     ).toEqual(new Date("2026-07-01T08:00Z"));
+  });
+  it("round-trips a zoned series, cutoff, exceptions and instants across both DST changes", () => {
+    const source = `BEGIN:VCALENDAR\nBEGIN:VEVENT\nUID:ny\nSUMMARY:Weekly\nDTSTART;TZID=America/New_York:20260301T090000\nDTEND;TZID=America/New_York:20260301T100000\nRRULE:FREQ=WEEKLY;UNTIL=20261108T140000Z\nEXDATE;TZID=America/New_York:20260315T090000\nEND:VEVENT\nEND:VCALENDAR`;
+    const imported = importICal(source, "Europe/London");
+    expect(imported.skipped).toBe(0);
+    expect(imported.warnings).toEqual([]);
+    expect(imported.events[0]?.timeZone).toBe("America/New_York");
+    const exported = exportICal({ events: imported.events });
+    expect(exported).toContain('DTSTART;TZID="America/New_York":20260301T090000');
+    expect(exported).toContain('DTEND;TZID="America/New_York":20260301T100000');
+    expect(exported).toContain('EXDATE;TZID="America/New_York":20260315T090000');
+    expect(exported).toContain("UNTIL=20261108T140000Z");
+    const roundtrip = importICal(exported, "Asia/Tokyo");
+    expect(roundtrip).toEqual(imported);
+    const expand = (event: CalendarEvent) =>
+      expandEvent(event, new Date("2026-03-01Z"), new Date("2026-11-09Z"), "Europe/London");
+    const events = expand(roundtrip.events[0] as CalendarEvent);
+    expect(events).toEqual(expand(imported.events[0] as CalendarEvent));
+    expect(events.map((event) => event.start)).toContainEqual(new Date("2026-03-08T13:00Z"));
+    expect(events.map((event) => event.start)).toContainEqual(new Date("2026-11-01T14:00Z"));
+    expect(events.map((event) => event.start)).not.toContainEqual(new Date("2026-03-15T13:00Z"));
+  });
+  it("rejects zoned exports that would change a later overlap instant or lose precision", () => {
+    const event: CalendarEvent = {
+      uid: "fold",
+      name: "Fold",
+      start: new Date("2026-11-01T06:30Z"),
+      timeZone: "America/New_York",
+    };
+    expect(() => exportICal({ events: [event] })).toThrow("later overlap instant");
+    expect(() =>
+      exportICal({ events: [{ ...event, start: new Date("2026-03-01T14:00:00.100Z") }] }),
+    ).toThrow("whole-second precision");
   });
   it.each([
     undefined,

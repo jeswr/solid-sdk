@@ -34,12 +34,14 @@ function GoToShortcut({ letter, name, href }: { letter: string; name: string; hr
 }
 export function GlobalShortcuts({
   onOpenPalette,
+  onOpenApps,
   onOpenHelp,
   createActions,
   recent,
   onSearch,
 }: {
   onOpenPalette?: () => void;
+  onOpenApps?: () => void;
   onOpenHelp?: () => void;
   createActions?: readonly PaletteCreateAction[];
   recent?: readonly PaletteRecent[];
@@ -102,6 +104,7 @@ export function GlobalShortcuts({
           // The palette (Cmd/Ctrl+K) stays reachable when single keys are off, so the
           // help sheet and its switch can always be reopened (WCAG 2.1.4).
           onOpenHelp={openHelp}
+          {...(onOpenApps ? { onOpenApps } : {})}
           {...(createActions ? { createActions } : {})}
           {...(recent ? { recent } : {})}
           onSearch={onSearch ?? ((query) => router.push(`/search?q=${encodeURIComponent(query)}`))}

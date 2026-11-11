@@ -1,15 +1,8 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 "use client";
 
-import {
-  createContext,
-  type ReactNode,
-  useCallback,
-  useContext,
-  useEffect,
-  useRef,
-  useState,
-} from "react";
+import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import {
   ACCOUNTS_KEY,
   type AccountsAction,
@@ -21,6 +14,7 @@ import {
 } from "../lib/accounts-store";
 import { suiteEnv } from "../lib/env";
 import { clearRecentItems } from "../lib/recent-items";
+import { AccountsContext } from "./accounts-context";
 import { DemoBackend, demoAccount } from "./demo-backend";
 import { SolidBackend } from "./solid-backend";
 import {
@@ -28,6 +22,7 @@ import {
   type SessionStatus,
   SignInError,
   type SignInHint,
+  type SignInOptions,
   type SuiteAccount,
 } from "./types";
 
@@ -35,20 +30,23 @@ export interface AccountsContextValue {
   status: SessionStatus;
   active: SuiteAccount | null;
   accounts: SuiteAccount[];
-  signIn(hint: SignInHint): Promise<SuiteAccount>;
+  signIn(hint: SignInHint, options?: SignInOptions): Promise<SuiteAccount>;
   signInDemo(): Promise<SuiteAccount>;
   /** Sign in through a specific backend (e.g. "extension"); rejects when none is registered. */
-  signInWith(kind: SuiteAccount["kind"], hint: SignInHint): Promise<SuiteAccount>;
+  signInWith(
+    kind: SuiteAccount["kind"],
+    hint: SignInHint,
+    options?: SignInOptions,
+  ): Promise<SuiteAccount>;
   /** Backend kinds available in this deployment. */
   backendKinds: readonly SuiteAccount["kind"][];
-  add(hint: SignInHint): Promise<SuiteAccount>;
+  add(hint: SignInHint, options?: SignInOptions): Promise<SuiteAccount>;
   switchTo(id: string): void;
   signOut(id?: string): Promise<void>;
   signOutAll(): Promise<void>;
   reauth(): Promise<SuiteAccount>;
   fetch: typeof fetch;
 }
-const AccountsContext = createContext<AccountsContextValue | null>(null);
 
 export function AccountsProvider({
   children,
@@ -147,13 +145,17 @@ export function AccountsProvider({
     };
   }, [backends, changeStatus, publish]);
 
-  const signInWith = async (kind: SuiteAccount["kind"], hint: SignInHint) => {
+  const signInWith = async (
+    kind: SuiteAccount["kind"],
+    hint: SignInHint,
+    options?: SignInOptions,
+  ) => {
     const revision = generation.current;
     const attempt = ++signInAttempt.current;
     const backend = backends.find((item) => item.kind === kind);
     if (!backend || (kind === "demo" && !suiteEnv().NEXT_PUBLIC_SUITE_DEMO))
       throw new SignInError("unavailable");
-    const account = await backend.signIn(hint);
+    const account = await backend.signIn(hint, options);
     if (revision !== generation.current || attempt !== signInAttempt.current)
       throw new Error("The account changed while signing in. Please try again.");
     ++generation.current;
@@ -161,7 +163,7 @@ export function AccountsProvider({
     dispatch({ type: "remember", account });
     return account;
   };
-  const signIn = (hint: SignInHint) => signInWith("solid", hint);
+  const signIn = (hint: SignInHint, options?: SignInOptions) => signInWith("solid", hint, options);
   const signInDemo = () => signInWith("demo", { webId: demoAccount.webId });
   const signOut = async (id = current.current.activeId ?? "") => {
     ++generation.current;
@@ -239,8 +241,4 @@ export function AccountsProvider({
   );
 }
 
-export function useAccounts(): AccountsContextValue {
-  const value = useContext(AccountsContext);
-  if (!value) throw new Error("useAccounts requires AccountsProvider");
-  return value;
-}
+export { useAccounts } from "./accounts-context";

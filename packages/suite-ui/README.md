@@ -359,6 +359,7 @@ Run it again with `NEXT_PUBLIC_SHOW_BACKLOG_APPS=1` to capture the flagged backl
 
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 <!-- AUTHORED-BY Claude Opus 5.5 -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 ## DS-04 shell layout
 
 Shell components live in `@jeswr/suite-ui/shell`; also import `styles/shell.css`.
@@ -373,6 +374,10 @@ at `h2`. Set `skipLink={false}` when the root layout already provides that link.
 `preferences` / `onPreferencesChange` connect to the consuming app's preferences
 hook. Both `sidebarOpen` and `detailsOpen` accept `null` for the responsive default
 (open at ≥1024, closed below). Explicit boolean choices override that default.
+Apps that own details visibility can supply `details.open` and `details.onOpenChange`.
+Shell close buttons, shortcuts and sheet dismissal update that controlled state;
+the saved details preference is ignored. Explicitly opened app details take priority
+over the sidebar sheet on narrow viewports.
 The package performs no storage or network writes; the dev fixtures use a browser
 storage adapter until SDK-APP-11 is available. Bracket shortcuts ignore editable
 fields, modified/composing events and unrelated dialogs. Sheets trap focus and

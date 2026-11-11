@@ -399,8 +399,8 @@ async function createIndexDocument(
  * profile — when neither exists. Idempotent: existing registrations are left
  * untouched.
  *
- * @param fetchImpl - test-only override; **omit in production** so the
- *   auth-patched global fetch runs.
+ * @param fetchImpl - the session's authenticated fetch; defaults to the
+ *   unauthenticated global fetch.
  */
 export async function ensureTypeRegistrations(
   opts: {

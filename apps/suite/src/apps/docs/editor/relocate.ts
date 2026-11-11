@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex
 // AUTHORED-BY Codex GPT-6
+import { RdfFetchError } from "@jeswr/fetch-rdf";
 import { SolidUpdateStore } from "@jeswr/y-solid";
 import { SetFrom, TermAs, TermFrom, TermWrapper } from "@rdfjs/wrapper";
 import { DataFactory, Store } from "n3";
@@ -34,6 +35,42 @@ function relocateHtml(html: string, relocate: (iri: string) => string): string {
       },
     },
   });
+}
+
+/** Relocate URLs in a snapshot without changing document identity or text. */
+function relocateSnapshot(doc: Doc, relocate: (iri: string) => string): boolean {
+  let changed = false;
+  const visit = (node: XmlFragment | XmlElement | XmlText) => {
+    if (node instanceof XmlText) {
+      let offset = 0;
+      for (const part of node.toDelta()) {
+        const length = typeof part.insert === "string" ? part.insert.length : 1;
+        for (const [mark, attrs] of Object.entries(part.attributes ?? {})) {
+          if (!attrs || typeof attrs !== "object") continue;
+          const next = relocateAttributes(attrs, relocate, mark);
+          if (JSON.stringify(next) !== JSON.stringify(attrs)) {
+            node.format(offset, length, { [mark]: next });
+            changed = true;
+          }
+        }
+        offset += length;
+      }
+      return;
+    }
+    if (node instanceof XmlElement) {
+      for (const [key, value] of Object.entries(node.getAttributes())) {
+        const next = relocateAttributes(value, relocate, key);
+        if (JSON.stringify(next) !== JSON.stringify(value)) {
+          node.setAttribute(key, next);
+          changed = true;
+        }
+      }
+    }
+    for (const child of node.toArray())
+      if (child instanceof XmlFragment || child instanceof XmlText) visit(child);
+  };
+  doc.transact(() => visit(doc.getXmlFragment("prosemirror")));
+  return changed;
 }
 
 /** Restore through the existing binary update store, retaining all CRDT identities. */
@@ -77,37 +114,7 @@ async function relocateLog(
       // Keep unrecognised logs recoverable, as Drive's pre-trash compaction does.
       return;
     }
-    let changed = false;
-    const visit = (node: XmlFragment | XmlElement | XmlText) => {
-      if (node instanceof XmlText) {
-        let offset = 0;
-        for (const part of node.toDelta()) {
-          const length = typeof part.insert === "string" ? part.insert.length : 1;
-          for (const [mark, attrs] of Object.entries(part.attributes ?? {})) {
-            if (!attrs || typeof attrs !== "object") continue;
-            const next = relocateAttributes(attrs, relocate, mark);
-            if (JSON.stringify(next) !== JSON.stringify(attrs)) {
-              node.format(offset, length, { [mark]: next });
-              changed = true;
-            }
-          }
-          offset += length;
-        }
-        return;
-      }
-      if (node instanceof XmlElement) {
-        for (const [key, value] of Object.entries(node.getAttributes())) {
-          const next = relocateAttributes(value, relocate, key);
-          if (JSON.stringify(next) !== JSON.stringify(value)) {
-            node.setAttribute(key, next);
-            changed = true;
-          }
-        }
-      }
-      for (const child of node.toArray())
-        if (child instanceof XmlFragment || child instanceof XmlText) visit(child);
-    };
-    doc.transact(() => visit(doc.getXmlFragment("prosemirror")));
+    const changed = relocateSnapshot(doc, relocate);
     // Appending full state preserves pending structs in the untouched original updates.
     // Replaying on retry sees the rewrite already applied, including after a lost ack.
     if (changed) await store.appendUpdate(encodeStateAsUpdate(doc));
@@ -121,6 +128,7 @@ async function relocateComments(
   client: DriveClient,
   container: string,
   relocate: (iri: string) => string,
+  skipMalformed = false,
 ) {
   let children: Awaited<ReturnType<DriveClient["list"]>>;
   try {
@@ -131,7 +139,19 @@ async function relocateComments(
   }
   for (const child of children) {
     if (child.kind !== "file" || child.contentType !== "text/turtle") continue;
-    const resource = await client.readRdf(child.url);
+    let resource: Awaited<ReturnType<DriveClient["readRdf"]>>;
+    try {
+      resource = await client.readRdf(child.url);
+    } catch (error) {
+      if (
+        skipMalformed &&
+        error instanceof RdfFetchError &&
+        error.status === undefined &&
+        error.contentType !== undefined
+      )
+        continue;
+      throw error;
+    }
     if (!resource) throw new DriveError("not-found", 404, child.url);
     const relocated = new Store();
     for (const quad of resource.dataset) {
@@ -154,6 +174,47 @@ async function relocateComments(
       throw new DriveError("missing-validator", 409, child.url);
     await writeRestoreSnapshot(client, child.url, body, { ifMatch: resource.etag });
   }
+}
+
+/** Companion trees are already moved by Drive. Repair their internal snapshot and RDF links. */
+async function relocateVersions(
+  client: DriveClient,
+  container: string,
+  relocate: (iri: string) => string,
+) {
+  let children: Awaited<ReturnType<DriveClient["list"]>>;
+  try {
+    children = await client.list(container);
+  } catch (error) {
+    if (error instanceof DriveError && error.kind === "not-found") return;
+    throw error;
+  }
+  for (const child of children) {
+    if (child.kind !== "file" || !child.url.endsWith(".bin")) continue;
+    const resource = await client.readVersion(child.url);
+    const doc = new Doc();
+    try {
+      const bytes = new Uint8Array(await resource.body.arrayBuffer());
+      try {
+        assertUpdateIdentities([bytes]);
+        applyUpdate(doc, bytes);
+      } catch {
+        continue;
+      } // Keep malformed/orphan snapshots recoverable as stored bytes.
+      if (!relocateSnapshot(doc, relocate)) continue;
+      if (!resource.etag || resource.etag.startsWith("W/"))
+        throw new DriveError("missing-validator", 409, child.url);
+      await client.write(
+        child.url,
+        new Blob([new Uint8Array(encodeStateAsUpdate(doc))]),
+        { contentType: "application/octet-stream", ifMatch: resource.etag },
+        { kind: "protect-ancestors" },
+      );
+    } finally {
+      doc.destroy();
+    }
+  }
+  await relocateComments(client, container, relocate, true);
 }
 
 /** Idempotent create/replace: a lost response is success only for identical durable bytes. */
@@ -209,6 +270,7 @@ export async function relocateDocument(
   // Never fetch a log selected outside the relocated companion by snapshot metadata.
   if (log?.startsWith(after.container)) await relocateLog(client, log, relocate);
   await relocateComments(client, after.comments, relocate);
+  await relocateVersions(client, after.versions, relocate);
   return serializeTurtle(
     buildDocument(target, {
       ...data,

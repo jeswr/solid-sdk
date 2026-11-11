@@ -205,7 +205,7 @@ export function DriveSidebar({
               </p>
             ) : null}
           </div>
-        ) : (
+        ) : session.mode === "extension" ? (
           <div className="drv-demo">
             <p>
               Using your pod through the Solid extension as <strong>{session.displayName}</strong>
@@ -220,7 +220,7 @@ export function DriveSidebar({
             </Button>
             {disconnectError ? <p role="status">Couldn't disconnect. Please try again.</p> : null}
           </div>
-        )}
+        ) : null}
       </div>
     </div>
   );

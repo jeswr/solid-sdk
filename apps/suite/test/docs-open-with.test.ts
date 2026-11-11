@@ -50,7 +50,7 @@ describe("Drive's exported Open with Docs hook", () => {
         session(fetchImpl),
         vi.fn(),
       ),
-    ).rejects.toThrow("DOCX or Markdown");
+    ).rejects.toThrow("DOCX, HTML, Markdown or plain text");
     await expect(
       openWithDocs(
         { url: "https://pod.test/file.docx", name: "file.docx" },

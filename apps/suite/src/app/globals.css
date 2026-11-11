@@ -521,3 +521,33 @@ nav[aria-label="Component fixtures"] {
 .date-fixture-grid h2 {
   margin: 0 0 var(--space-2);
 }
+
+/* AUTHORED-BY Codex GPT-6.1: Drive and Docs reuse this dialog. */
+.drv-share-dialog {
+  width: min(34rem, calc(100vw - 2rem));
+  max-height: calc(100dvh - 2rem);
+  overflow-y: auto;
+}
+.drv-share-dialog :is(h2, p, strong, select) {
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+.drv-share-add {
+  border: 0;
+  padding: 0;
+  min-width: 0;
+  display: grid;
+  gap: var(--space-3);
+}
+.drv-share-people {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.drv-share-person {
+  border-bottom: 1px solid var(--border);
+  padding-block: var(--space-3);
+}
+.drv-share-dialog .su-wrap {
+  align-items: end;
+}
