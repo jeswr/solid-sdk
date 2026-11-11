@@ -32,6 +32,10 @@ class FakeAuth implements PodAuth {
   restore = vi.fn(() => this.deferred.promise);
   identity = async () => this.current;
   remembered = async () => [];
+  retireIfOwnedBy: PodAuth["retireIfOwnedBy"] = async () => ({
+    retired: false,
+    reason: "no-grant",
+  });
   loginError: unknown;
   logoutError: unknown;
   login = vi.fn(async () => {

@@ -32,6 +32,10 @@ export function fakePodAuth() {
     fetch: vi.fn<typeof fetch>(async () => new Response("private content")),
     restore: vi.fn<PodAuth["restore"]>(async () => null),
     remembered: vi.fn<PodAuth["remembered"]>(async () => []),
+    retireIfOwnedBy: vi.fn<PodAuth["retireIfOwnedBy"]>(async () => ({
+      retired: false,
+      reason: "no-grant",
+    })),
     identity: vi.fn<PodAuth["identity"]>(async () => null),
     login: vi.fn<PodAuth["login"]>(async () => {
       emit("login", identity);

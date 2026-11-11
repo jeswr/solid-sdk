@@ -3,6 +3,13 @@
 
 The Next.js application is `@jeswr/app-suite`. Use Node 24 and the root pnpm workspace.
 
+The Solid session backend retains the accepted pod-auth Identity, including its public `grantId`,
+beside the shell account. Sign-out, expired-session cleanup and rejected identities use conditional
+retirement. A newer grant, even for the same WebID, survives stale cleanup; skipped retirement
+preserves backend state and blocks reauthentication. Missing ownership metadata produces a warning;
+ownership changes produce an informational diagnostic. A remembered account row without an accepted
+Identity cannot authorize retirement after reload; restore must establish its grant snapshot first.
+
 ## Pilot feedback
 
 `/feedback` is available without signing in. It offers a guided interview and a quick note,

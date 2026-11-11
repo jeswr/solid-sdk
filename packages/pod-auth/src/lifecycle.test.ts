@@ -980,9 +980,39 @@ test.each([
   const auth = f.load();
   expect(await auth.restore()).toBeNull();
   expect(await auth.identity()).toBeNull();
-  // The catalog survives a provider-level failure long enough for a subsequent logout to purge it.
+  expect(f.record()).toBeUndefined();
+  for (const name of ["owner", "accounts", "active"])
+    expect([...f.values.keys()].some((key) => JSON.parse(key)[1] === name)).toBe(false);
   await auth.logout();
   expect(f.record()).toBeUndefined();
+});
+
+test.each([
+  false,
+  true,
+])("rejecting a selected identity clears the owner and catalog alongside credentials; forgetFails=%s", async (forgetFails) => {
+  const f = fixture();
+  f.options.ui.getWebId = async () => "https://id.example/bob";
+  if (forgetFails) {
+    const { DPoPTokenProvider } = await import("@jeswr/reactive-authentication");
+    const forget = DPoPTokenProvider.prototype.forget;
+    vi.spyOn(DPoPTokenProvider.prototype, "forget").mockImplementation(async function (
+      this: DPoPTokenProvider,
+    ) {
+      await forget.call(this);
+      throw new Error("forget failed");
+    });
+  }
+  await f.sessions.setItem("unrelated", { keep: true });
+  const auth = f.load();
+  await expect(auth.login()).rejects.toThrow(forgetFails ? "forget failed" : "selected account");
+  expect(await auth.identity()).toBeNull();
+  expect(f.record()).toBeUndefined();
+  for (const name of ["owner", "accounts", "active"])
+    expect(
+      [...f.values.keys()].some((key) => key !== "unrelated" && JSON.parse(key)[1] === name),
+    ).toBe(false);
+  expect(await f.sessions.getItem("unrelated")).toEqual({ keep: true });
 });
 
 test.each([

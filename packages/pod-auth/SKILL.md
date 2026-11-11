@@ -182,6 +182,14 @@ outside this coordination. Success returns `{ retired: true }` and emits logout;
 cleanup attempts. Skips return `{ retired: false, reason }` with `missing-grant`, `no-grant`,
 `owner-changed` or `grant-changed`, without credential, fence or lifecycle changes. Agents return
 `no-grant`. Issuer-only credentials remain private memory; their stored owner metadata contains no token.
+`grantId` is an ownership tag, not a secret or capability. If retirement wins the mutation lock
+before another tab's in-flight sign-in commits, it supersedes that sign-in and its stale commit
+fails with `SessionSupersededError`. A sign-in that commits first makes the older retirement skip.
+Retain the accepted Identity snapshot alongside application account state for sign-out and expired
+reauthentication cleanup too. Reset that state only on `{ retired: true }`; diagnose `missing-grant`
+and `no-grant` separately from the expected `owner-changed` / `grant-changed` concurrency skips.
+External `PodAuth` implementers and test fakes must implement the required `retireIfOwnedBy` method;
+this interface addition is a breaking change (see README).
 
 `on('login' | 'restore' | 'logout' | 'expired' | 'challenge', handler)` returns an idempotent
 unsubscribe function. Events carry identity snapshots and timestamps; observers cannot interrupt auth.

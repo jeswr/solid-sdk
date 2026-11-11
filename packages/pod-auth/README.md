@@ -308,6 +308,13 @@ alone cannot distinguish a newer sign-in for the same WebID. OIDC identities now
 rotation retains it; a new authorization gets a new value. Installing any new grant in this namespace,
 including another storage context, advances the stored owner. Refreshing an older grant never reclaims
 ownership. The owner is public metadata only; access tokens and issuer-only credentials remain in memory.
+`grantId` is an ownership tag, not a secret or a capability; knowing it does not authorize access.
+
+**Breaking interface change for external implementers:** `PodAuth.retireIfOwnedBy(expected)` is
+required. Update custom implementations and test fakes to return `GrantRetirementResult`, comparing
+the exact `{ webId, issuer, grantId }` under the same lock as credential commits and cleanup.
+Implementations without a stored OIDC grant return `{ retired: false, reason: 'no-grant' }`.
+Do not emulate conditional retirement with ownership reads followed by unconditional `logout()`.
 
 ```ts
 const identity = await auth.login(hint);
@@ -326,6 +333,9 @@ Skipped results leave credentials, fence generation, identity and events untouch
 `missing-grant` (no identifier supplied), `no-grant` (no usable owner record, including legacy sessions
 until their next commit), `owner-changed` (different WebID/issuer), and `grant-changed` (newer grant for
 the same account). Agents have no stored OIDC namespace and return `no-grant`; use their `logout()`.
+If retirement wins the lock before another tab's in-flight sign-in commits, retirement supersedes
+that sign-in: its stale commit fails with `SessionSupersededError`. A sign-in that commits first
+changes ownership, so retirement of the earlier snapshot skips.
 
 Web Locks coordinate cooperating pod-auth instances in all tabs/workers sharing the origin's storage
 partition and the same client/callback namespace and stores. Node's keyed FIFO fallback coordinates

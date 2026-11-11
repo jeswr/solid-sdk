@@ -362,7 +362,10 @@ test.each([
     release.resolve();
   }
   await expect(retiring).resolves.toEqual({ retired: true });
-  expect((await signingIn)[0]?.status).toBe("rejected");
+  expect((await signingIn)[0]).toMatchObject({
+    status: "rejected",
+    reason: { name: "SessionSupersededError" },
+  });
   expect(await second.identity()).toBeNull();
   expect(await second.remembered()).toEqual([]);
   await expect(second.login({ issuer: f.op.issuer })).resolves.toMatchObject({ webId: f.op.webId });

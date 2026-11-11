@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import type { SessionFence } from "@jeswr/reactive-authentication";
+import { boundProxy } from "./bound-proxy.js";
 
 /**
  * Lock order: namespace mutation, engine fence, credential catalog. Logout holds the namespace
@@ -13,11 +14,5 @@ export function namespaceFence(
 ): SessionFence {
   const commit: SessionFence["commit"] = (expected, write, signal) =>
     exclusive(() => fence.commit(expected, write, signal));
-  return new Proxy(fence, {
-    get(target, property) {
-      if (property === "commit") return commit;
-      const value = Reflect.get(target, property, target);
-      return typeof value === "function" ? value.bind(target) : value;
-    },
-  });
+  return boundProxy(fence, { commit });
 }

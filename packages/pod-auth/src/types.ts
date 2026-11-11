@@ -61,7 +61,7 @@ export interface CidSubject {
 }
 
 export interface Identity {
-  /** Opaque grant identifier. Stable across refresh rotation; a new sign-in gets a new value. */
+  /** Public ownership tag, not a secret/capability. Stable across refresh; new sign-ins change it. */
   grantId?: string;
   webId: string | null;
   issuer: string;

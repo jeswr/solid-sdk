@@ -27,6 +27,7 @@ import {
   WebIdIssuerProvider,
   XASProvider,
 } from "@jeswr/reactive-authentication";
+import { boundProxy } from "./bound-proxy.js";
 import { createBoundary } from "./boundary.js";
 import { protectStore, scopedStore } from "./kv.js";
 import { createLwsProvider } from "./lws-provider.js";
@@ -492,32 +493,22 @@ export function createProviders(
     sessionOptions,
   );
   // Interpose on the shared session read, so the exact ID token selected by UMA is checked before exchange.
-  const umaSession = new Proxy(solidProvider.session, {
-    get(target, property) {
-      if (property === "get")
-        return async (...args: Parameters<typeof target.get>) => {
-          const entry = await target.get(...args);
-          if (entry?.identity === undefined)
-            throw new Error("Authentication did not establish an identity");
-          const [url, webId, issuer] = JSON.parse(args[1]) as [
-            string,
-            string | null,
-            string | null,
-          ];
-          await hooks.session(
-            new Request(url, { signal: fence.signalFor(entry.generation!) }),
-            entry.identity,
-            "solid-oidc",
-            {
-              ...(webId === null ? {} : { webId }),
-              ...(issuer === null ? {} : { issuer }),
-            },
-          );
-          return entry;
-        };
-      // OidcSession's accessors and methods need the original receiver for their private fields.
-      const value: unknown = Reflect.get(target, property, target);
-      return typeof value === "function" ? value.bind(target) : value;
+  const umaSession = boundProxy(solidProvider.session, {
+    get: async (...args: Parameters<typeof solidProvider.session.get>) => {
+      const entry = await solidProvider.session.get(...args);
+      if (entry?.identity === undefined)
+        throw new Error("Authentication did not establish an identity");
+      const [url, webId, issuer] = JSON.parse(args[1]) as [string, string | null, string | null];
+      await hooks.session(
+        new Request(url, { signal: fence.signalFor(entry.generation!) }),
+        entry.identity,
+        "solid-oidc",
+        {
+          ...(webId === null ? {} : { webId }),
+          ...(issuer === null ? {} : { issuer }),
+        },
+      );
+      return entry;
     },
   });
   const umaProvider = new SolidUmaTokenProvider(
@@ -671,7 +662,7 @@ export function createProviders(
     persistence,
     contextFor,
     fence,
-    forget: async () => await persistence.exclusive(() => solidProvider.forget()),
+    forget: async () => await persistence.exclusive(forget),
     retireIfOwnedBy: async (expected: GrantOwner, retiring: () => void) =>
       await persistence.exclusive(async () => {
         const result = await persistence.retirement(expected);
@@ -693,7 +684,7 @@ export function createProviders(
       const claims = await solidProvider.restore(request);
       if (claims === undefined) return undefined;
       if (claims.webId !== account.webId || !sameIssuer(claims.issuer, account.issuer)) {
-        await persistence.exclusive(() => solidProvider.forget());
+        await persistence.exclusive(forget);
         throw new Error("Restored identity does not match the remembered account");
       }
       await hooks.session(request, claims, "solid-oidc", selected);
@@ -729,6 +720,13 @@ export function createProviders(
       }
     },
   };
+  async function forget() {
+    try {
+      await solidProvider.forget();
+    } finally {
+      await persistence.clear();
+    }
+  }
   async function logout() {
     boundary.clear();
     const failures: unknown[] = [];

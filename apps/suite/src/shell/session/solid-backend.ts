@@ -5,6 +5,7 @@ import { fetchRdf } from "@jeswr/fetch-rdf";
 import {
   AmbiguousIssuerError,
   createPodAuth,
+  type GrantOwner,
   type Identity,
   IssuerNotAuthorizedError,
   type PodAuth,
@@ -79,6 +80,7 @@ export class SolidBackend implements SessionBackend {
   #auth: PodAuth | undefined;
   #restoring: Promise<SuiteAccount | null> | undefined;
   #account: SuiteAccount | null = null;
+  #identity: Identity | null = null;
   #expired = false;
   #version = 0;
   #sessionVersion = 0;
@@ -166,17 +168,32 @@ export class SolidBackend implements SessionBackend {
     }
   }
 
+  async #retire(
+    identity: GrantOwner,
+    operation: "sign-out" | "reauthenticate" | "reject-identity",
+  ): Promise<boolean> {
+    const result = await this.#core().retireIfOwnedBy(identity);
+    if (!result.retired) {
+      const diagnose =
+        result.reason === "missing-grant" || result.reason === "no-grant"
+          ? console.warn
+          : console.info;
+      diagnose("Solid session retirement skipped", { operation, reason: result.reason });
+    }
+    return result.retired;
+  }
+
   async #rejectIdentity(identity: Identity, started: number, session: number): Promise<never> {
     const currentAttempt = () => started === this.#version && session === this.#sessionVersion;
     if (currentAttempt()) {
       this.#restoring = undefined;
-      const core = this.#core();
       try {
         // pod-auth compares the exact grant and cleans up under its namespace lock, including
         // across tabs. The rejected snapshot cannot retire a newer sign-in for the same WebID.
-        const result = await core.retireIfOwnedBy(identity);
-        if (result.retired && currentAttempt()) {
+        const retired = await this.#retire(identity, "reject-identity");
+        if (retired && currentAttempt()) {
           this.#account = null;
+          this.#identity = null;
           this.#expired = false;
           ++this.#sessionVersion;
         }
@@ -244,6 +261,7 @@ export class SolidBackend implements SessionBackend {
       const account = await this.#mapAccount(identity, started, session);
       if (started !== this.#version || session !== this.#sessionVersion) return null;
       this.#account = account;
+      this.#identity = identity;
       this.#expired = false;
       return account;
     })();
@@ -309,17 +327,15 @@ export class SolidBackend implements SessionBackend {
         throw new SignInError("invalid-url");
       attempt.signal.throwIfAborted();
       if (this.#expired) {
-        const identity = await core.identity();
-        const remembered = await core.remembered();
-        const owns = (value: { webId: string | null; issuer: string }) =>
-          value.webId === this.#account?.webId && value.issuer === this.#account.issuer;
-        // Another tab may already have signed into a newer account under the shared namespace.
-        // Reauthentication must not purge that account's grant.
-        if (identity ? !owns(identity) : remembered.some((value) => !owns(value)))
+        // Retain the accepted grant snapshot even after expiry. Reading current account metadata
+        // cannot distinguish a fresh authorization for that same account in another tab.
+        const identity = this.#identity ?? { webId: null, issuer: "" };
+        if (!(await this.#retire(identity, "reauthenticate")))
           throw new SignInError("account-active");
-        attempt.signal.throwIfAborted();
-        if (identity || remembered.length) await core.logout();
         this.#account = null;
+        this.#identity = null;
+        this.#expired = false;
+        this.#restoring = undefined;
       }
       attempt.signal.throwIfAborted();
       this.#authorizing = true;
@@ -336,6 +352,7 @@ export class SolidBackend implements SessionBackend {
       if (started !== this.#version || session !== this.#sessionVersion)
         throw new SignInError("cancelled");
       this.#account = account;
+      this.#identity = identity;
       this.#expired = false;
       ++this.#sessionVersion;
       this.#restoring = Promise.resolve(account);
@@ -353,20 +370,26 @@ export class SolidBackend implements SessionBackend {
 
   async signOut(account: SuiteAccount): Promise<void> {
     if (account.kind !== "solid" || account.id !== accountId(account.webId)) return;
-    const core = this.#core();
-    const remembered = await core.remembered();
-    const identity = await core.identity();
-    const owns = (value: { webId: string | null; issuer: string }) =>
-      value.webId === account.webId && (!account.issuer || value.issuer === account.issuer);
-    // Signing out a stale remembered shell row cannot purge the active account.
-    if (identity ? !owns(identity) : !remembered.some(owns)) return;
+    const identity = this.#identity;
+    if (
+      identity &&
+      (identity.webId !== account.webId || (account.issuer && identity.issuer !== account.issuer))
+    )
+      return;
+    const retired = await this.#retire(
+      identity ?? { webId: account.webId, issuer: account.issuer ?? "" },
+      "sign-out",
+    );
+    // A remembered shell row alone has no grant ownership. A skipped retirement preserves
+    // local state too, and a late success cannot clear an identity installed in the meantime.
+    if (!retired || this.#identity !== identity) return;
     ++this.#version;
     ++this.#sessionVersion;
     this.#attempt?.abort();
     this.#account = null;
+    this.#identity = null;
     this.#expired = false;
     this.#restoring = undefined;
-    await core.logout();
   }
 
   fetchFor(account: SuiteAccount): typeof fetch {
