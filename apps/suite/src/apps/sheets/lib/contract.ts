@@ -190,7 +190,11 @@ export type CsvImportResult =
 export interface SheetEngine {
   /** Hold editing independently of access permissions while missing anchors load. */
   setCommentsLoading?(loading: boolean): void;
-  registerCommentAnchors?(anchors: Record<string, CellAnchor>): void;
+  /** Listed selectors use the loaded snapshot; newly created roots use current coordinates. */
+  registerCommentAnchors?(
+    anchors: Record<string, CellAnchor>,
+    position?: "snapshot" | "current",
+  ): void;
   trackCommentDraft?(anchor: CellAnchor): DraftAnchor;
   selectedCell?(): CellAnchor | undefined;
   selectCell?(anchor: CellAnchor): void;

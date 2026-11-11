@@ -19,7 +19,7 @@ import { SheetInterceptorService, SheetsSelectionsService } from "@univerjs/shee
 import { shiftChartRanges } from "../charts/range";
 import { type ChartSpec, readCharts, withCharts } from "../charts/spec";
 import { type AnchorDeletions, WorkbookCommentAnchors } from "../comments/anchors";
-import { type CellAnchor, commentStructuralEdit } from "../comments/selector";
+import { type CellAnchor, commentStructuralEdit, shiftCellAnchor } from "../comments/selector";
 import type { MountEngine, Snapshot } from "../contract";
 import { serializeSnapshot } from "../model/snapshot";
 import type { StructuralEdit } from "../refs/model";
@@ -120,6 +120,13 @@ export const mountUniver: MountEngine = async (container, options) => {
   const listeners = new Set<() => void>();
   const valueListeners = new Set<() => void>();
   const anchors = new WorkbookCommentAnchors(options.snapshot);
+  // Keep the actual deletion records carried by native undo/redo. Late discovery
+  // fills those same records so a future inverse can revive the newly found root.
+  const structuralLog: {
+    edit: StructuralEdit;
+    deleted: AnchorDeletions;
+    inverse: AnchorDeletions | undefined;
+  }[] = [];
   let disposed = false;
   let loading = false;
   let queued = false;
@@ -258,12 +265,14 @@ export const mountUniver: MountEngine = async (container, options) => {
         ).charts;
       }
       const deleted = anchors.shift(edit);
+      let inverse: AnchorDeletions | undefined;
       if (activeOperation) {
         const { operation, direction } = activeOperation;
         operation[direction].push(deleted);
-        const inverse = operation[direction === "undo" ? "redo" : "undo"].pop();
+        inverse = operation[direction === "undo" ? "redo" : "undo"].pop();
         if (inverse) anchors.revive(inverse);
       }
+      structuralLog.push({ edit, deleted, inverse });
       for (const listener of structures) listener(edit);
     }
     editedSinceLoad = true;
@@ -278,7 +287,7 @@ export const mountUniver: MountEngine = async (container, options) => {
     serializeSnapshot(data);
     return data;
   };
-  const load = (data: Snapshot) => {
+  const load = (data: Snapshot, newerSnapshot = true) => {
     serializeSnapshot(data);
     loading = true;
     charts = data.charts;
@@ -290,6 +299,7 @@ export const mountUniver: MountEngine = async (container, options) => {
       workbook = univerAPI.createWorkbook(data as Partial<IWorkbookData>);
       setEditable();
       anchors.load(data);
+      if (newerSnapshot) structuralLog.length = 0;
       activeOperation = undefined;
       selectionChanged();
     } finally {
@@ -334,8 +344,25 @@ export const mountUniver: MountEngine = async (container, options) => {
       commentsLoading = value;
       setEditable();
     },
-    registerCommentAnchors(values) {
-      if (anchors.register(values) && !readOnly) notify();
+    registerCommentAnchors(values, position = "snapshot") {
+      const existing = anchors.snapshot().commentAnchors?.anchors ?? {};
+      const rebased: Record<string, CellAnchor> = {};
+      for (const [id, selector] of Object.entries(values)) {
+        if (Object.hasOwn(existing, id)) continue;
+        let anchor = selector;
+        if (position === "snapshot") {
+          for (const { edit, deleted, inverse } of structuralLog) {
+            const next = shiftCellAnchor(anchor, edit);
+            if (!anchor.deleted && next.deleted)
+              deleted.anchors[id] = { sheetId: anchor.sheetId, cell: anchor.cell };
+            anchor = next;
+            const revived = inverse?.anchors[id];
+            if (anchor.deleted && revived) anchor = { ...revived, deleted: false };
+          }
+        }
+        rebased[id] = anchor;
+      }
+      if (anchors.register(rebased) && !readOnly) notify();
     },
     trackCommentDraft(anchor) {
       const draft = anchors.track(anchor);
@@ -405,7 +432,9 @@ export const mountUniver: MountEngine = async (container, options) => {
           rows.map((row, r) => [r, Object.fromEntries(row.map((v, c) => [c, { v, t: 1 }]))]),
         ),
       };
-      load(data as unknown as Snapshot);
+      // CSV import replaces canvas state, but unseen selectors still refer to
+      // the mounted snapshot. Only an external snapshot reload resets the log.
+      load(data as unknown as Snapshot, false);
       workbook.setActiveSheet(id);
       editedSinceLoad = true;
       notify();

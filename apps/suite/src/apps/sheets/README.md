@@ -98,10 +98,14 @@ deletion history in the same undo/redo entries as the cells. Undo and redo shift
 all anchors and open drafts, including those created after the command. Only
 reversing the command that deleted a cell revives its anchors; an unrelated
 insertion leaves them deleted. Editing stays locked from engine mount until the
-initial comment list has loaded and missing anchors are registered. Refreshes
-also hold editing until registration completes. A failed load releases editing,
+initial comment load settles. Later refreshes leave editing available. A failed load releases editing,
 CSV import, chart editing and undo/redo, shows an error with Retry, and disables comment actions
-until a load succeeds. Registered anchors continue following edits. This lock cannot
+until a load succeeds. Anchor discovery runs independently of permissions, so a successful
+listing still registers anchors when permissions fail. The adapter keeps a per-mount log
+of structural transforms and their undo/redo deletion identities. Newly discovered selectors
+are rebased across this log before registration, including tombstones and their restoration.
+A newer snapshot reload clears the log; CSV import retains it. Locally created drafts already
+track current coordinates and bypass rebasing. Registered anchors continue following edits. This lock cannot
 override view-only access. These anchors
 commit atomically with the guarded workbook snapshot; reloading a winning revision
 discards the losing client's transformations. Moving anchors never writes comment RDF.

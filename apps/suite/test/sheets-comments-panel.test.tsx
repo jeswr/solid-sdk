@@ -174,12 +174,8 @@ it("shifts through row and column mutations, retains deleted cells and counts by
   expect(button("Comments (0 on this sheet)")).toBeTruthy();
 });
 
-it.each([
-  "mount",
-  "refresh",
-])("holds structural edits until a delayed %s registers a collaborator's missing anchor", async (when) => {
+it("holds structural edits until the first load registers a collaborator's missing anchor", async () => {
   const setCommentsLoading = engine.setCommentsLoading;
-  if (when === "refresh") await mount();
   root = await store.create("Collaborator comment", "https://collaborator.example/#me", anchor);
   const list = store.list.bind(store);
   let finish: () => Promise<void> = async () => {};
@@ -189,8 +185,7 @@ it.each([
         finish = async () => resolve(await list());
       }),
   );
-  if (when === "mount") render(<CellComments store={store} engine={engine} webId={webId} local />);
-  else fireEvent.focus(window);
+  render(<CellComments store={store} engine={engine} webId={webId} local />);
   expect(setCommentsLoading).toHaveBeenLastCalledWith(true);
   expect(engine.snapshot().commentAnchors).toBeUndefined();
   const insert = { sheet: "stable", axis: "row", kind: "insert", index: 2, count: 1 } as const;
@@ -210,6 +205,21 @@ it.each([
     anchors: { [root.url]: { sheetId: "stable", cell: "B4" } },
   });
   expect((await store.list())[0]?.root.anchor).toEqual(anchor);
+});
+it("keeps editing available during later refreshes while registered anchors follow edits", async () => {
+  await seed();
+  await mount();
+  const pending = Promise.withResolvers<Awaited<ReturnType<CellCommentStore["list"]>>>();
+  vi.spyOn(store, "list").mockReturnValueOnce(pending.promise);
+  vi.mocked(engine.setCommentsLoading)?.mockClear();
+  fireEvent.focus(window);
+  await act(async () =>
+    structure({ sheet: "stable", axis: "row", kind: "insert", index: 1, count: 1 }),
+  );
+  expect(engine.setCommentsLoading).not.toHaveBeenCalled();
+  await act(async () => pending.resolve([{ root, replies: [] }]));
+  fireEvent.click(button("Comments (1 on this sheet)"));
+  expect(button("Renamed sheet!B4")).toBeTruthy();
 });
 it("allows append-only comments on view-only grids while disabling changes to existing comments", async () => {
   await seed();

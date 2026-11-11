@@ -108,7 +108,7 @@ export function CellComments({
   const [busy, setBusy] = useState(false);
   // biome-ignore lint/correctness/useExhaustiveDependencies: each identity change starts a new asynchronous lifetime
   const lifetime = useMemo(
-    () => ({ active: false, locked: false, revision: 0 }),
+    () => ({ active: false, locked: false, revision: 0, initialLoadSettled: false }),
     [store, webId, local, engine],
   );
   const currentLifetime = useRef(lifetime);
@@ -121,16 +121,28 @@ export function CellComments({
   const refresh = async () => {
     const revision = ++lifetime.revision;
     setLoaded(false);
-    engine?.setCommentsLoading?.(true);
-    onLoadingChange?.(true);
+    setPermissions({ append: false, write: false });
+    if (!lifetime.initialLoadSettled) {
+      engine?.setCommentsLoading?.(true);
+      onLoadingChange?.(true);
+    }
     try {
-      const [rows, access] = await Promise.all([store.list(), store.permissions()]);
+      // Discover anchors independently: a rejected permission request must not
+      // discard a good listing, even if it completes after the failure.
+      const listing = store.list().then((rows) => {
+        if (isCurrent() && revision === lifetime.revision) {
+          engine?.registerCommentAnchors?.(
+            Object.fromEntries(rows.map(({ root }) => [root.url, root.anchor as CellAnchor])),
+          );
+          setThreads(rows);
+        }
+      });
+      const access = store.permissions().then((value) => {
+        if (isCurrent() && revision === lifetime.revision)
+          setPermissions(local ? value : { append: false, write: false });
+      });
+      await Promise.all([listing, access]);
       if (isCurrent() && revision === lifetime.revision) {
-        engine?.registerCommentAnchors?.(
-          Object.fromEntries(rows.map(({ root }) => [root.url, root.anchor as CellAnchor])),
-        );
-        setThreads(rows);
-        setPermissions(local ? access : { append: false, write: false });
         setLoaded(true);
         setError(undefined);
       }
@@ -138,7 +150,8 @@ export function CellComments({
       if (isCurrent() && revision === lifetime.revision)
         setError(cause instanceof Error ? cause.message : "Couldn't load comments.");
     } finally {
-      if (isCurrent() && revision === lifetime.revision) {
+      if (isCurrent() && revision === lifetime.revision && !lifetime.initialLoadSettled) {
+        lifetime.initialLoadSettled = true;
         engine?.setCommentsLoading?.(false);
         onLoadingChange?.(false);
       }
@@ -403,9 +416,10 @@ export function CellComments({
                           if (isCurrent()) {
                             if (composer.draft) composer.draft.commit(created.url);
                             else
-                              engine?.registerCommentAnchors?.({
-                                [created.url]: composer.anchor as CellAnchor,
-                              });
+                              engine?.registerCommentAnchors?.(
+                                { [created.url]: composer.anchor as CellAnchor },
+                                "current",
+                              );
                           }
                         })()
                       : composer.kind === "reply"
