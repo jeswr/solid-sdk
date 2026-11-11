@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Claude Opus 5.5
 import { DataFactory, Parser, Store } from "n3";
 import { describe, expect, it } from "vitest";
 import {
@@ -43,6 +44,23 @@ describe("Exact divergences", () => {
     expect(data?.creator).toBeUndefined();
     expect(data?.wordCount).toBeUndefined();
     expect(data?.created).toBeUndefined();
+  });
+  it("does not fall back to legacy content when the canonical value is ambiguous", () => {
+    const data = parseDocument(
+      url,
+      graph(`<#it> a pd:Document ; pd:body "a", "b" ; <${legacy}body> "stale" .`),
+    );
+    expect(data?.body).toBe("");
+    const legacyOnly = parseDocument(url, graph(`<#it> a pd:Document ; <${legacy}body> "kept" .`));
+    expect(legacyOnly?.body).toBe("kept");
+  });
+  it("drops a language-tagged revision label, so that revision reads as automatic", () => {
+    const data = parseDocument(
+      url,
+      graph(`<#it> a pd:Document ; pd:currentRevision <#rev-3> .
+      <#rev-3> a prov:Entity ; rdfs:label "Final"@en ; pd:body "x" .`),
+    );
+    expect(data?.revisions[0]?.label).toBeUndefined();
   });
   it("drops malformed dateTimes and uses the existing sparse-revision epoch default", () => {
     const data = parseDocument(

@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Claude Opus 5.5
 import type { EntityWrapper } from "@jeswr/model-runtime";
 import { LEGACY_NAMESPACES } from "@jeswr/suite-vocab";
 import {
@@ -29,6 +30,20 @@ function legacyText(view: TermWrapper, predicate: string): string | undefined {
     if (value !== undefined) return value;
   }
   return undefined;
+}
+/**
+ * Legacy aliases are read only when the canonical predicate is absent: an ambiguous or
+ * malformed canonical value stays dropped rather than falling back to stale legacy text.
+ */
+function canonicalOrLegacy(
+  view: TermWrapper,
+  predicate: string,
+  value: string | undefined,
+): string | undefined {
+  if (value !== undefined) return value;
+  if (SetFrom.subjectPredicate(view, predicate, TermAs.term, TermFrom.itself).size > 0)
+    return undefined;
+  return legacyText(view, predicate);
 }
 function clearLegacy(view: TermWrapper, predicate: string): void {
   for (const alias of aliases(predicate))
@@ -63,14 +78,14 @@ const RevisionBase = entities.Revision.Wrapper as new (
 /** Generated accessors with the legacy shared-content bridge and throwing count policy. */
 export class DocumentDoc extends DocumentBase {
   override get body(): string | undefined {
-    return super.body ?? legacyText(this, PD.body);
+    return canonicalOrLegacy(this, PD.body, super.body);
   }
   override set body(value: string | undefined) {
     clearLegacy(this, PD.body);
     super.body = value;
   }
   override get format(): string | undefined {
-    return super.format ?? legacyText(this, PD.format);
+    return canonicalOrLegacy(this, PD.format, super.format);
   }
   override set format(value: string | undefined) {
     clearLegacy(this, PD.format);
@@ -91,14 +106,14 @@ export function assertWordCount(value: number | undefined): void {
 /** Generated revision view with the same two legacy content predicates. */
 export class RevisionDoc extends RevisionBase {
   override get body(): string | undefined {
-    return super.body ?? legacyText(this, PD.body);
+    return canonicalOrLegacy(this, PD.body, super.body);
   }
   override set body(value: string | undefined) {
     clearLegacy(this, PD.body);
     super.body = value;
   }
   override get format(): string | undefined {
-    return super.format ?? legacyText(this, PD.format);
+    return canonicalOrLegacy(this, PD.format, super.format);
   }
   override set format(value: string | undefined) {
     clearLegacy(this, PD.format);
