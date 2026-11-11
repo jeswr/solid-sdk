@@ -24,10 +24,12 @@ cannot revive the removed shell session.
 
 A sign-in while this backend holds no account, including after a skipped sign-out, never
 calls login over another tab's live session, because a new grant would replace that tab's
-stored owner. Login proceeds only when `remembered()` is empty. A remembered session that
-matches the sign-in hint (the WebID for a WebID hint, the issuer for a provider hint) is
-restored and returned without login, as a reload would restore it. Any other remembered
-session, or one that cannot be restored while still remembered, refuses with `account-active`.
+stored owner. Login proceeds only when `remembered()` is empty. A remembered session is
+restored and returned without login only when a WebID hint names its WebID exactly. A
+provider hint cannot identify the account, so it refuses with `account-active` whenever a
+session is remembered, even on a shared issuer: an explicit sign-in never lands in a
+different account. Any other remembered session, or one that cannot be restored while
+still remembered, also refuses with `account-active`.
 
 The policy for explicitly signing out a remembered row without an accepted Identity snapshot
 is unchanged: the backend passes the row's WebID and issuer to pod-auth without inventing a

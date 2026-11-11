@@ -277,8 +277,9 @@ export class SolidBackend implements SessionBackend {
 
   /**
    * Returns null only when no session is remembered, so login cannot overwrite another owner.
-   * A remembered session that matches the sign-in target (WebID for a WebID hint, issuer for a
-   * provider hint) is restored and returned without login; any other session is refused.
+   * A remembered session is restored and returned without login only when a WebID hint names
+   * it exactly. A provider hint cannot identify the account, so it never lands in another
+   * account's session, even on a shared issuer; it and any other mismatch are refused.
    */
   async #adoptLiveSession(
     core: PodAuth,
@@ -291,8 +292,8 @@ export class SolidBackend implements SessionBackend {
       if (started !== this.#version || (session !== undefined && session !== this.#sessionVersion))
         throw new SignInError("cancelled");
     };
-    const matches = (owner: { webId: string | null; issuer: string }) =>
-      target.kind === "webid" ? owner.webId === target.webId : owner.issuer === target.issuer;
+    const matches = (owner: { webId: string | null }) =>
+      target.kind === "webid" && owner.webId === target.webId;
     const remembered = await core.remembered();
     current();
     if (remembered.length === 0) return null;

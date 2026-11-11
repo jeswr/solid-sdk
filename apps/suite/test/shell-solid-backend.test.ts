@@ -732,8 +732,14 @@ describe("Solid shell over pod-auth", () => {
       "Sign in to continue",
     );
     expect(h.auth.fetch).not.toHaveBeenCalled();
-    // Signing in again adopts the newer grant for the same account instead of replacing it.
-    expect((await h.backend.signIn({ issuer: alice.issuer })).webId).toBe(alice.webId);
+    // A provider hint cannot name the account, so it refuses rather than replace the grant.
+    h.auth.restore.mockClear();
+    await expect(h.backend.signIn({ issuer: alice.issuer })).rejects.toEqual(
+      new SignInError("account-active"),
+    );
+    expect(h.auth.restore).not.toHaveBeenCalled();
+    // The exact WebID adopts the newer grant for the same account instead of replacing it.
+    expect((await h.backend.signIn({ webId: alice.webId })).webId).toBe(alice.webId);
     expect(h.auth.login).toHaveBeenCalledOnce();
     expect(await h.auth.identity()).toEqual(newer);
     expect(h.auth.logout).not.toHaveBeenCalled();
@@ -764,6 +770,8 @@ describe("Solid shell over pod-auth", () => {
     it.each([
       { webId: alice.webId },
       { issuer: "https://other-id.example/" },
+      // A shared issuer cannot identify the account to adopt.
+      { issuer: bob.issuer },
     ])("refuses %o without calling login or replacing the owner", async (hint) => {
       const h = await skippedSignOut();
       await expect(h.backend.signIn(hint)).rejects.toEqual(new SignInError("account-active"));
@@ -774,12 +782,9 @@ describe("Solid shell over pod-auth", () => {
       expect(await h.backend.restore()).toBeNull();
     });
 
-    it.each([
-      { webId: bob.webId },
-      { issuer: bob.issuer },
-    ])("adopts the live session that matches %o without login", async (hint) => {
+    it("adopts the live session that the exact WebID hint names without login", async () => {
       const h = await skippedSignOut();
-      const account = await h.backend.signIn(hint);
+      const account = await h.backend.signIn({ webId: bob.webId });
       expect(account).toMatchObject({ id: bob.id, webId: bob.webId, storageUrl: bob.storageUrl });
       expect(h.auth.login).not.toHaveBeenCalled();
       expect(h.auth.restore).toHaveBeenCalledOnce();
@@ -890,7 +895,7 @@ describe("Solid shell over pod-auth", () => {
     h.setIdentity({ ...alice, grantId: "newer-grant" });
     await h.backend.signOut(account);
     h.emit("expired");
-    expect((await h.backend.signIn({ issuer: alice.issuer })).webId).toBe(alice.webId);
+    expect((await h.backend.signIn({ webId: alice.webId })).webId).toBe(alice.webId);
   });
 
   it("fences an old fetch identity read across skipped sign-out and explicit sign-in", async () => {
@@ -902,7 +907,7 @@ describe("Solid shell over pod-auth", () => {
     const failure = expect(fetching).rejects.toThrow("Sign in to continue");
     h.setIdentity({ ...alice, grantId: "newer-grant" });
     await h.backend.signOut(account);
-    const signedIn = await h.backend.signIn({ issuer: alice.issuer });
+    const signedIn = await h.backend.signIn({ webId: alice.webId });
     identity.resolve(null);
     await failure;
     expect((await h.backend.fetchFor(signedIn)(signedIn.storageUrl)).ok).toBe(true);
