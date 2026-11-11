@@ -1,6 +1,9 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 import { readFileSync } from "node:fs";
+import { MemoryLedger, PodMirror } from "@jeswr/agent-audit";
+import { createMemoryAuditPod } from "@jeswr/agent-audit/testing";
+import * as sharedVerifier from "@jeswr/agent-audit/verify";
 import { digestOf } from "@jeswr/agent-model";
 import { Writer } from "n3";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -12,7 +15,6 @@ import {
   auditJsonLd,
   auditToTurtle,
   GENESIS,
-  HEAD_MISSING,
   readAudit,
   readAuditHead,
   sealAudit,
@@ -202,77 +204,6 @@ describe("real daemon audit records", () => {
   });
 });
 
-describe("verifyRange", () => {
-  const entries = activityFixture(5);
-  it.each([
-    ["modify", () => entries.map((e, i) => (i === 2 ? { ...e, at: AT } : e)), "Hash mismatch", 3],
-    ["reorder", () => [entries[0], entries[2], entries[1], ...entries.slice(3)], "Sequence gap", 3],
-    ["drop middle", () => entries.filter((e) => e.seq !== 3), "Sequence gap", 4],
-    [
-      "broken link",
-      () => entries.map((e, i) => (i === 2 ? { ...e, prev: digestOf("other") } : e)),
-      "Broken link",
-      3,
-    ],
-    ["wrong genesis", () => [{ ...entries[0], prev: digestOf("other") }], "Broken link", 1],
-    ["malformed", () => [{ ...entries[0], at: "yesterday" }], "Malformed record", 1],
-  ] as const)("detects %s", (_, change, problem, firstBadSeq) => {
-    expect(verifyRange(change() as AuditEntry[])).toEqual({
-      ok: false,
-      firstBadSeq,
-      problem,
-      scope: AUDIT_SCOPE,
-    });
-  });
-  it("checks a matching head and reports a wrong head or entries past the head", () => {
-    const last = entries.at(-1) as AuditEntry;
-    expect(verifyRange(entries, last).ok).toBe(true);
-    expect(verifyRange(entries, { ...last, hash: digestOf("wrong") })).toMatchObject({
-      ok: false,
-      problem: "Head mismatch",
-      firstBadSeq: 5,
-    });
-    expect(verifyRange(entries, { ...last, seq: 4 }).ok).toBe(false);
-    expect(verifyRange(entries.slice(1, 4), last, 4).ok).toBe(true);
-    expect(verifyRange(entries.slice(1)).ok).toBe(true);
-    expect(verifyRange([], last)).toMatchObject({
-      ok: false,
-      firstBadSeq: 5,
-      problem: "Record 5 is missing",
-    });
-    expect(verifyRange(entries.slice(0, -1), last)).toMatchObject({
-      ok: false,
-      firstBadSeq: 5,
-      problem: "Record 5 is missing",
-    });
-    expect(verifyRange([]).ok).toBe(true);
-    expect(verifyRange([null] as unknown as AuditEntry[])).toMatchObject({
-      ok: false,
-      problem: "Malformed record",
-    });
-  });
-  it("never passes the latest range without a published head", () => {
-    const last = entries.at(-1) as AuditEntry;
-    // Deleting the newest record and chain.ttl together must not read as "Records check out".
-    expect(verifyLatestRange(entries.slice(0, -1), undefined)).toMatchObject({
-      ok: false,
-      problem: HEAD_MISSING,
-    });
-    expect(verifyLatestRange(entries, last).ok).toBe(true);
-    expect(verifyLatestRange(entries.slice(0, -1), last)).toMatchObject({
-      ok: false,
-      problem: "Record 5 is missing",
-    });
-    expect(verifyLatestRange(entries.slice(1, 4), last, 4).ok).toBe(true);
-    expect(verifyLatestRange([], undefined).ok).toBe(true);
-  });
-  it("checks five thousand retained entries", () => {
-    const large = activityFixture();
-    expect(large).toHaveLength(5000);
-    expect(verifyRange(large, large.at(-1)).ok).toBe(true);
-  });
-});
-
 describe("published range loading", () => {
   it("fetches a bounded newest range and retains an unreadable slot", async () => {
     const entries = activityFixture(16);
@@ -392,3 +323,46 @@ describe("published range loading", () => {
 function loadedAudit(rows: Awaited<ReturnType<typeof readAudit>>) {
   return rows.filter(isLoaded).map((row) => row.record);
 }
+
+it("re-exports the shared verifier without app-owned validation", () => {
+  expect(verifyRange).toBe(sharedVerifier.verifyRange);
+  expect(verifyLatestRange).toBe(sharedVerifier.verifyLatestRange);
+  expect(sealAudit).toBe(sharedVerifier.seal);
+});
+
+it.each([
+  "conversation",
+  "tool-call",
+  "model-call",
+] as const)("reads the package mirror's %s records with current instrumentation", async (type) => {
+  const ledger = new MemoryLedger();
+  const record = {
+    ...RECORD,
+    type,
+    taskId: "run-1",
+    conversation: "urn:conversation:1",
+    modelCall: "urn:model-call:1",
+    tool: "pod_read",
+    inputTokens: 2,
+    outputTokens: 3,
+    terms: {
+      action: "urn:send",
+      target: "urn:target",
+      binding: "direct",
+      accountId: "personal",
+      recipientHashes: [`sha256:${"a".repeat(64)}`],
+      messageDigest: digestOf("body"),
+      proposalDigest: digestOf("proposal"),
+    },
+  };
+  const entry = ledger.append(record, AT);
+  const pod = createMemoryAuditPod();
+  await new PodMirror(pod.fetch, ROOT).sync(ledger.entries());
+  const ttl = (pod.resources.get(URL1) as { body: string }).body;
+  expect(await auditFromTurtle(ttl, URL1)).toEqual(entry);
+  expect(await auditFromTurtle(await auditToTurtle(URL1, entry), URL1)).toEqual(entry);
+  expect(verifyRange([entry], entry).ok).toBe(true);
+  expect(auditJsonLd([entry], `${BASE}audit/`)["@graph"][0]).toMatchObject({
+    "prov:used": [{ "@id": record.modelCall }],
+  });
+});
