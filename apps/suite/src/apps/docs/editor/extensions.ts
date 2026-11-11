@@ -12,6 +12,7 @@ import { type Attribute, Extension } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import type { Doc } from "yjs";
 import { codeWhitespaceTextblocks, compatibleCodeExtensions } from "../lib/editor/code-mark";
+import { CommentDecorations } from "../lib/editor/comment-decorations";
 import { normaliseDestination, normaliseImageDestination } from "../lib/editor/destination";
 import { normaliseHtmlLists } from "../lib/editor/html-lists";
 import { editorShortcut, validLink } from "../lib/editor/logic";
@@ -264,6 +265,7 @@ export function baseExtensions(fetchImpl: typeof fetch) {
     PasteDestinations,
     EditorKeys,
     FindDecorations,
+    CommentDecorations,
   ];
 }
 export function editorExtensions(doc: Doc, fetchImpl: typeof fetch) {
