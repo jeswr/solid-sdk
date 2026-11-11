@@ -116,6 +116,90 @@ describe("tracker saved views", () => {
     ]);
     expect((await cache.store.readProject(inbox.url)).tracker.title).toBe("Inbox");
   });
+  it.each([
+    { edit: false, reconciliationFails: false },
+    { edit: true, reconciliationFails: false },
+    { edit: false, reconciliationFails: true },
+    { edit: true, reconciliationFails: true },
+  ])("confirms a committed filter on Retry after a lost response (%j)", async ({
+    edit,
+    reconciliationFails,
+  }) => {
+    const { cache, store, pod, inbox, failures } = await frameCache();
+    const original = edit ? await cache.saveFilter("Bills", { v: 1, text: "original" }) : undefined;
+    const name = edit ? " My bills " : " Bills ";
+    const query = { v: 1, text: "local" } as const;
+    const intended = {
+      iri: original?.iri ?? `${inbox.url}#view-bills`,
+      name: name.trim(),
+      payload: JSON.stringify(query),
+    };
+    let committed = false;
+    pod.intercept = (request) => {
+      if (request.url !== inbox.url) return undefined;
+      if (request.method === "PUT") {
+        pod.seed(request.url, request.body);
+        committed = true;
+        throw new TypeError("Filter response lost after commit");
+      }
+      if (committed && reconciliationFails) throw new TypeError("Reconciliation unavailable");
+      return undefined;
+    };
+    expect(await cache.saveFilter(name, query, original?.iri, original)).toBeUndefined();
+    expect(failures).toHaveBeenCalledOnce();
+    expect(committed).toBe(true);
+    pod.intercept = undefined;
+    expect((await store.readProject(inbox.url)).tracker.savedViews).toEqual([intended]);
+    const writes = pod.mutations().length;
+    const requests = pod.requests.length;
+    failures.mock.calls[0]?.[1]();
+    await vi.waitFor(() => expect(cache.getSnapshot().saving).toEqual([]));
+    expect(pod.requests.slice(requests)).toContainEqual(
+      expect.objectContaining({ url: inbox.url, method: "GET" }),
+    );
+    expect(pod.mutations()).toHaveLength(writes);
+    expect(failures).toHaveBeenCalledOnce();
+    expect((await store.readProject(inbox.url)).tracker.savedViews).toEqual([intended]);
+    expect(cache.getSnapshot().projects[0]?.tracker.savedViews).toEqual([intended]);
+  });
+  it("keeps the reserved slug across an uncommitted failure and a lost commit response", async () => {
+    const { cache, store, pod, inbox, failures } = await frameCache();
+    const original = await cache.saveFilter("Bills", { v: 1, text: "original" });
+    if (!original) throw new Error("Missing filter");
+    let commit = false;
+    const loseResponse = (request: { url: string; method: string; body: string }) => {
+      if (request.url === inbox.url && request.method === "PUT") {
+        if (commit) pod.seed(request.url, request.body);
+        throw new TypeError("Filter response lost");
+      }
+      return undefined;
+    };
+    pod.intercept = loseResponse;
+    const query = { v: 1, text: "local" } as const;
+    expect(await cache.saveFilter("Bills", query)).toBeUndefined();
+    pod.intercept = undefined;
+    await store.updateProject(await store.readProject(inbox.url), (tracker) => {
+      tracker.removeSavedView(original.iri);
+    });
+    commit = true;
+    pod.intercept = loseResponse;
+    failures.mock.calls[0]?.[1]();
+    await vi.waitFor(() => expect(cache.getSnapshot().saving).toEqual([]));
+    expect(failures).toHaveBeenCalledTimes(2);
+    const intended = {
+      iri: `${inbox.url}#view-bills-2`,
+      name: "Bills",
+      payload: JSON.stringify(query),
+    };
+    expect((await store.readProject(inbox.url)).tracker.savedViews).toEqual([intended]);
+    const writes = pod.mutations().length;
+    pod.intercept = undefined;
+    failures.mock.calls.at(-1)?.[1]();
+    await vi.waitFor(() => expect(cache.getSnapshot().saving).toEqual([]));
+    expect(pod.mutations()).toHaveLength(writes);
+    expect(failures).toHaveBeenCalledTimes(2);
+    expect(cache.getSnapshot().projects[0]?.tracker.savedViews).toEqual([intended]);
+  });
   it("resolves new filter slugs against the freshly read tracker", async () => {
     const { cache, store, inbox, failures } = await frameCache();
     const remote = await store.updateProject(inbox, (tracker) => {

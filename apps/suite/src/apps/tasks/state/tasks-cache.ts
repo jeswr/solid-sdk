@@ -5,7 +5,7 @@ import { missingLabels } from "../lib/compose/planning";
 import { projectMoveData } from "../lib/detail/task-data";
 import { ModelError, ProjectMembersSyncError } from "../lib/model/errors";
 import type { TaskMove } from "../lib/model/move";
-import { DataFactory, isSharedTrackerUrl, requireProjectFolder } from "../lib/model/rdf";
+import { DataFactory, isSharedTrackerUrl, NS, requireProjectFolder } from "../lib/model/rdf";
 import type { ProjectCreation, StoredProject, StoredTask, TaskStore } from "../lib/model/store";
 import { createTask, type TaskDetails, TaskItem } from "../lib/model/task";
 import { createTracker, type SavedViewDef, type TaskTracker } from "../lib/model/tracker";
@@ -1742,6 +1742,8 @@ export class TasksCache {
     if (!inbox) return Promise.resolve(undefined);
     // Editors retain their opening definition; Retry must keep the same precondition.
     const expected = original ?? inbox.tracker.savedViews.find((view) => view.iri === iri);
+    // Retain the actual PUT's target and definition even when its response is lost.
+    let intended: SavedViewDef | undefined;
     const attempt = (): Promise<SavedViewDef | undefined> =>
       this.mutate(
         (state) => {
@@ -1750,15 +1752,18 @@ export class TasksCache {
             ? replaceProject(
                 state,
                 changeProject(current, (tracker) => {
-                  tracker.defineSavedView(name, payload, iri);
+                  tracker.defineSavedView(name, payload, intended?.iri ?? iri);
                 }),
               )
             : state;
         },
         async () => {
           const current = await this.store.readProject(this.inboxUrl);
+          let target = intended?.iri ?? iri;
+          const existing = current.tracker.savedViews.find((view) => view.iri === target);
+          if (intended && existing?.name === intended.name && existing.payload === intended.payload)
+            return { result: existing, commit: (state) => replaceProject(state, current) };
           if (iri !== undefined) {
-            const existing = current.tracker.savedViews.find((view) => view.iri === iri);
             if (
               !expected ||
               expected.iri !== iri ||
@@ -1768,10 +1773,21 @@ export class TasksCache {
             )
               throw new ModelError(412, current.url, current.etag);
           }
+          // A create keeps its reservation unless another definition occupies it.
+          if (
+            iri === undefined &&
+            target !== undefined &&
+            (current.dataset.match(DataFactory.namedNode(target)).size > 0 ||
+              current.dataset.match(
+                DataFactory.namedNode(current.tracker.id),
+                DataFactory.namedNode(`${NS.WF}savedView`),
+                DataFactory.namedNode(target),
+              ).size > 0)
+          )
+            target = undefined;
           let saved: SavedViewDef | undefined;
           const project = await this.store.updateProject(current, (tracker) => {
-            // Creates choose a free slug from this fresh dataset on every attempt.
-            saved = tracker.defineSavedView(name, payload, iri);
+            intended = saved = tracker.defineSavedView(name, payload, target);
           });
           return { result: saved, commit: (state) => replaceProject(state, project) };
         },
