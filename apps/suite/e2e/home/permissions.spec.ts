@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Codex GPT-6.1-Sol
 // Run all six configured viewport/theme projects with SUITE_E2E_PORT=3313.
 import AxeBuilder from "@axe-core/playwright";
 import { expect, type Page, test } from "@playwright/test";
@@ -164,7 +165,7 @@ test("Apps: Advanced modes, relative path, gated grant link, saved view and data
   await page.getByRole("radio", { name: "Advanced", exact: true }).click();
   await expect(app.getByText("Read", { exact: true })).toBeVisible();
   await expect(app.getByText("Change", { exact: true })).toBeVisible();
-  await expect(app.locator("code")).toHaveText(["health/"]);
+  await expect(app.locator("code")).toHaveText(["health/activity.ttl"]);
   const grant = app.getByRole("button", { name: "View grant", exact: true });
   await expect(grant).toBeDisabled();
   await app
