@@ -318,19 +318,23 @@ export class TasksCache {
     this.emit();
     void this.start();
   };
-  async refreshProjects(strict = false): Promise<void> {
+  async refreshProjects(strict = false, collection?: string): Promise<void> {
     const epoch = this.epoch;
     const generation = ++this.projectRead;
+    const inScope = (url: string) => !collection || new URL("./", url).href === collection;
     const failures = new Map<string, unknown>();
     const projects = await this.store
-      .listProjects((url, error) => failures.set(url, error), { strict })
+      .listProjects((url, error) => failures.set(url, error), {
+        strict,
+        ...(collection ? { collection } : {}),
+      })
       .catch((error: unknown) => {
         this.completedDeletionBlocked = true;
         throw error;
       });
     const ownProjects = new Set(projects.map((project) => project.url));
     for (const url of this.sharedProjects.keys()) {
-      if (ownProjects.has(url)) continue;
+      if (ownProjects.has(url) || !inScope(url)) continue;
       try {
         const project = await this.store.readProject(url);
         this.validateSharedProject(project);
@@ -344,9 +348,14 @@ export class TasksCache {
       if (strict) throw new ModelError(412, this.store.projects);
       return;
     }
-    this.ownProjects = ownProjects;
+    if (collection) {
+      // Keep unrelated projects and their errors visible while refreshing this family.
+      projects.push(...this.baseline.projects.filter((project) => !inScope(project.url)));
+      for (const [url, error] of this.projectFailures) if (!inScope(url)) failures.set(url, error);
+    } else this.ownProjects = ownProjects;
     const tasks = { ...this.baseline.tasks };
     for (const project of projects) {
+      if (!inScope(project.url)) continue;
       const previous = this.baseline.projects.find((item) => item.url === project.url);
       if (
         this.projectFailures.has(project.url) ||
@@ -364,7 +373,7 @@ export class TasksCache {
     for (const [url, error] of failures) {
       tasks[url] = { status: "error", items: [], error };
       const previous = this.baseline.projects.find((project) => project.url === url);
-      if (previous) projects.push(previous);
+      if (previous && !projects.some((project) => project.url === url)) projects.push(previous);
     }
     for (const url of Object.keys(tasks))
       if (!projects.some((project) => project.url === url) && !failures.has(url)) delete tasks[url];
@@ -2122,8 +2131,15 @@ export class TasksCache {
     const settled = new Set<string>();
     let plan = planFor(this.snapshot);
     const scopeChanged = () => {
-      const expected = [...scope].filter((url) => !settled.has(url));
-      return expected.length !== plan.length || plan.some((node) => !scope.has(node.project.url));
+      const expected = new Set([...scope].filter((url) => !settled.has(url)));
+      const remaining = new Set(plan.map((node) => node.project.url));
+      return expected.size !== remaining.size || [...remaining].some((url) => !expected.has(url));
+    };
+    const collection = new URL("./", project.url).href;
+    const refreshFamily = async () => {
+      await this.refreshProjects(true, collection);
+      for (const [url, error] of this.projectFailures)
+        if (new URL("./", url).href === collection) throw error;
     };
     const confirmation = (): ProjectFamilyConfirmation => ({
       project: this.project(project.url),
@@ -2156,10 +2172,9 @@ export class TasksCache {
       this.mutate(
         patch,
         async () => {
-          // A retry is a new destructive operation: read every parent link again, fail closed
-          // on incomplete reads, and compare only the portion not already settled by us.
-          await this.refreshProjects(true);
-          if (this.projectFailures.size) throw this.projectFailures.values().next().value;
+          // Re-read every parent link in this collection, fail closed on incomplete reads,
+          // and compare only the portion not already settled by us.
+          await refreshFamily();
           const root = this.project(project.url);
           plan = planFor(this.baseline);
           if (scopeChanged())
@@ -2204,8 +2219,7 @@ export class TasksCache {
           // mutate has reconciled before invoking this handler. Never turn an incomplete
           // reconciliation into a narrower confirmation or resume the old plan.
           try {
-            await this.refreshProjects(true);
-            if (this.projectFailures.size) throw error;
+            await refreshFamily();
             plan = planFor(this.baseline);
             if (scopeChanged()) {
               this.baseline = { ...this.baseline, projectFamilyConfirmation: confirmation() };

@@ -90,12 +90,15 @@ export class TaskStore {
   }
   async listProjects(
     onError?: (url: string, error: unknown) => void,
-    { strict = false } = {},
+    { strict = false, collection }: { strict?: boolean; collection?: string } = {},
   ): Promise<StoredProject[]> {
+    // Family mutations need only the collection whose trackers can share parent links.
     const urls = new Set(
-      (await this.io.list(this.projects, { strict })).filter((url) => url.endsWith(".ttl")),
+      (await this.io.list(collection ?? this.projects, { strict })).filter(
+        (url) => url.endsWith(".ttl") && (!collection || new URL("./", url).href === collection),
+      ),
     );
-    if (this.options.typeIndex !== false)
+    if (!collection && this.options.typeIndex !== false)
       for (const reg of await this.index.locations(`${NS.WF}Tracker`)) {
         if (reg.kind === "instance") urls.add(documentUrl(reg.location));
         else {

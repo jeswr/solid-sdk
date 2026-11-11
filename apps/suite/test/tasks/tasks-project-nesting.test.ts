@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { expect, it, vi } from "vitest";
 import { NS, node, serialize } from "../../src/apps/tasks/lib/model/rdf";
+import { createTracker } from "../../src/apps/tasks/lib/model/tracker";
 import {
   canMoveProject,
   projectBreadcrumb,
@@ -387,6 +388,156 @@ it.each([
       .find((request) => request.url === project.url && request.method === "PUT");
     expect(write?.headers.get("If-Match")).toBe(etags.get(project.url));
   }
+});
+
+it.each([
+  ["archive", "reconciliation"],
+  ["delete", "reconciliation"],
+  ["archive", "retry"],
+  ["delete", "retry"],
+] as const)("reconfirms %s when a settled child replaces a moved project during %s", async (kind, phase) => {
+  const { cache, store, pod, failures, a, b, c, d } = await family();
+  const replaceRemainingChild = async () => {
+    const moved = await store.readProject(b.url);
+    moved.tracker.parent = d.tracker.id;
+    pod.seed(b.url, await serialize(moved.dataset));
+    const recreated = createTracker(
+      c.url,
+      "Acme recreated",
+      c.tracker.stateStore as string,
+      [],
+      now,
+    );
+    recreated.tracker.parent = a.tracker.id;
+    pod.seed(c.url, await serialize(recreated.dataset));
+    await pod.emptyContainer(c.tracker.stateStore as string);
+  };
+  let failed = false;
+  pod.intercept = async (request) => {
+    if (!failed && request.url === b.url && request.method === "PUT") {
+      failed = true;
+      if (phase === "reconciliation") await replaceRemainingChild();
+      return new Response(null, { status: 412 });
+    }
+  };
+  await (kind === "archive"
+    ? cache.archiveProject(a, "cascade")
+    : cache.deleteProject(a, "cascade"));
+  pod.intercept = undefined;
+  if (phase === "retry") {
+    expect(failures).toHaveBeenCalledTimes(1);
+    expect(cache.getSnapshot().projectFamilyConfirmation).toBeUndefined();
+    await replaceRemainingChild();
+    const before = pod.mutations().length;
+    failures.mock.lastCall?.[1]();
+    await vi.waitFor(() => expect(cache.getSnapshot().saving).toEqual([]));
+    expect(pod.mutations()).toHaveLength(before);
+  }
+  expect(cache.getSnapshot().projectFamilyConfirmation).toMatchObject({
+    project: { url: a.url },
+    kind,
+    children: "cascade",
+    projects: [{ url: c.url }],
+  });
+  for (const item of [a, b, c])
+    expect((await store.readProject(item.url)).tracker.archivedAt).toBeUndefined();
+  expect((await store.readProject(b.url)).tracker.parent).toBe(d.tracker.id);
+  expect((await store.readProject(c.url)).tracker.title).toBe("Acme recreated");
+});
+
+it.each([
+  ["archive", "https://foreign.test/tasks/projects/shared.ttl"],
+  ["delete", "https://foreign.test/tasks/projects/shared.ttl"],
+  ["archive", "https://pod.test/alice/issues/shared.ttl"],
+  ["delete", "https://pod.test/alice/issues/shared.ttl"],
+] as const)("isolates %s and its retry from an unreadable project at %s", async (kind, url) => {
+  const { cache, store, pod, failures, a, b, c } = await family();
+  const shared = createTracker(url, "Unreadable", `${url.slice(0, -4)}/`, [], now);
+  pod.seed(url, await serialize(shared.dataset));
+  await pod.emptyContainer(shared.tracker.stateStore as string);
+  await cache.setSharedProjects([{ url, title: "Unreadable" }]);
+  let conflicted = false;
+  pod.intercept = (request) => {
+    if (request.url === url && request.method === "GET") return new Response(null, { status: 403 });
+    if (!conflicted && request.url === c.url && request.method === "PUT") {
+      conflicted = true;
+      return new Response(null, { status: 412 });
+    }
+  };
+  await cache.refreshProjects();
+  expect(cache.getSnapshot().tasks[url]?.status).toBe("error");
+  await (kind === "archive"
+    ? cache.archiveProject(a, "cascade")
+    : cache.deleteProject(a, "cascade"));
+  expect(conflicted).toBe(true);
+  expect(failures).toHaveBeenCalledTimes(1);
+  expect(cache.getSnapshot().projectFamilyConfirmation).toBeUndefined();
+  failures.mock.lastCall?.[1]();
+  await vi.waitFor(() => expect(cache.getSnapshot().saving).toEqual([]));
+  expect(failures).toHaveBeenCalledTimes(1);
+  for (const item of [a, b, c]) {
+    expect(cache.projectTree.some((node) => node.project.url === item.url)).toBe(false);
+    if (kind === "archive")
+      expect((await store.readProject(item.url)).tracker.archivedAt).toBeTruthy();
+    else expect(pod.files.has(item.url)).toBe(false);
+  }
+  expect(cache.getSnapshot().tasks[url]?.status).toBe("error");
+  expect(cache.getSnapshot().projects.filter((project) => project.url === url)).toHaveLength(1);
+});
+
+it.each([
+  "archive",
+  "delete",
+] as const)("blocks %s when a potential descendant cannot be read", async (kind) => {
+  const { cache, pod, failures, a, d } = await family();
+  pod.intercept = (request) =>
+    request.url === d.url && request.method === "GET"
+      ? new Response(null, { status: 403 })
+      : undefined;
+  const before = pod.mutations().length;
+  await (kind === "archive"
+    ? cache.archiveProject(a, "cascade")
+    : cache.deleteProject(a, "cascade"));
+  expect(failures).toHaveBeenCalledExactlyOnceWith(
+    expect.objectContaining({ status: 403, url: d.url }),
+    expect.any(Function),
+  );
+  expect(pod.mutations()).toHaveLength(before);
+  expect(cache.getSnapshot().projectFamilyConfirmation).toBeUndefined();
+});
+
+it("preflights a shared archive family independently of the local collection", async () => {
+  const { cache, store, pod, failures, a } = await family();
+  const collection = "https://foreign.test/tasks/projects/";
+  await pod.emptyContainer(collection);
+  const rootUrl = `${collection}team.ttl`;
+  const childUrl = `${collection}child.ttl`;
+  const root = createTracker(rootUrl, "Team", `${collection}team/`, [], now);
+  const child = createTracker(childUrl, "Child", `${collection}child/`, [], now);
+  child.tracker.parent = root.tracker.id;
+  for (const [url, project] of [
+    [rootUrl, root],
+    [childUrl, child],
+  ] as const) {
+    pod.seed(url, await serialize(project.dataset));
+    await pod.emptyContainer(project.tracker.stateStore as string);
+  }
+  await cache.setSharedProjects([
+    { url: rootUrl, title: "Team" },
+    { url: childUrl, title: "Child" },
+  ]);
+  const project = await store.readProject(rootUrl);
+  pod.intercept = (request) =>
+    request.url === store.projects && request.method === "GET"
+      ? new Response(null, { status: 403 })
+      : undefined;
+  const before = pod.requests.length;
+  expect(await cache.archiveProject(project, "cascade")).toBe(true);
+  expect(pod.requests.slice(before).some((request) => request.url === store.projects)).toBe(false);
+  expect(failures).not.toHaveBeenCalled();
+  for (const url of [rootUrl, childUrl])
+    expect((await store.readProject(url)).tracker.archivedAt).toBeTruthy();
+  expect(cache.projectTree.some((node) => node.project.url === a.url)).toBe(true);
 });
 
 it("persists expanded state and tolerates malformed local preferences", () => {
