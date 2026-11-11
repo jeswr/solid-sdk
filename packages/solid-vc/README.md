@@ -97,6 +97,14 @@ over the base-free graph, which merges relative forms (`.#x` reads as `#x`) and,
 relative-IRI triples, so issuing refuses policy content whose relative IRIs (datatypes included) are
 anything but fragment references (`<#x>`), and JSON-LD content with any relative IRI.
 
+`digestQuads` and `digestRdfContent` refuse literals with a base direction or the
+`rdf:dirLangString` datatype, including Turtle `"v"@en--ltr` and JSON-LD `@direction`.
+RDFC-1.0 canonicalization loses their language and direction, allowing distinct content to share
+a digest. Policy-content issuance throws a clear error for these literals. Presented content
+containing them makes `verifyCredential` and `verifyRelatedResources` return
+`verified: false` with `RELATED_RESOURCE_MISMATCH`, without throwing. Ordinary language-tagged
+literals such as `"v"@en` remain supported.
+
 ## Key API
 
 - Credentials: builders, RDF/JSON-LD serializers, and parsers from the root; presentation types
