@@ -24,8 +24,11 @@ for AS2 and LongChat messages. No hooks, React, shell or suite-sdk imports.
   aliases; tombstones erase bodies and task overlay, preserving author/time/id.
   Task overlays use the SAME message subject and existing wf:Task vocabulary.
   The corresponding I/O functions re-read the original day and conditionally PUT.
-- `appendReaction` / `appendUndo` (hand-written for now; generating this model in
-  `@jeswr/solid-chat-interop` is bead sst-v8od): return only a new `as:Like` / `as:Undo`
+- `appendReaction` / `appendUndo` (hand-written for now: the chat-interop codegen profile has
+  no Like/Undo shape yet. These Like/Undo field mappings move into the generated
+  `@jeswr/solid-chat-interop` model once its codegen flip, sst-m3nr, lands. That move is bead sst-v8od,
+  which depends on sst-m3nr. After it, this file keeps only the domain policy below as a thin
+  facade): return only a new `as:Like` / `as:Undo`
   subject in the target message's day, retaining the sanitised emoji in `as:content`.
   Reactions are emoji only (`isReactionEmoji`: at most 32 UTF-16 units; digits, `#` and `*`
   only inside keycap sequences, so `👍999` is refused). `appendUndo`
