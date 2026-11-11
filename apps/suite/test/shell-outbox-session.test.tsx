@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { createRequire } from "node:module";
 import { createPodClient } from "@jeswr/storage-client";
 import { createMemoryStorage } from "@jeswr/storage-client/memory";
@@ -38,6 +39,9 @@ const bob: SuiteAccount = {
   storageUrl: "https://pod.example/bob/",
 };
 let session: ReturnType<typeof useOutboxSession>;
+type DelegateFactory = Parameters<
+  NonNullable<ReturnType<typeof useOutboxSession>>["registerReplayDelegate"]
+>[1];
 function present<T>(value: T | null | undefined): T {
   if (value == null) throw new Error("Expected a session fixture value");
   return value;
@@ -172,4 +176,177 @@ test("the session storage writes through, queues network failures and surfaces o
       offline: "queue",
     }),
   ).rejects.toThrow("Denied");
+});
+
+test("replay factories receive the session transport and registration expires on account replacement", async () => {
+  const view = render(contents());
+  await waitFor(() => expect(session?.storage).toBeTruthy());
+  const first = present(session);
+  const delegate = vi.fn().mockResolvedValue(undefined);
+  const factory = vi.fn<DelegateFactory>(() => delegate);
+  const unregister = first.registerReplayDelegate("test.policy", factory);
+  const bound = present(factory.mock.calls[0])[0];
+  expect(bound.webId).toBe(alice.webId);
+  expect(bound.storageUrl).toBe(alice.storageUrl);
+  expect(bound.storage).toBe(
+    (await present(vi.mocked(createPodClient).mock.results[0]).value).storage,
+  );
+  expect(bound.signal).toBe(first.signal);
+  expect(bound.fetch).toBe(present(vi.mocked(createPodClient).mock.calls[0])[0].fetch);
+  await bound.fetch(alice.storageUrl);
+  expect(fixture.accounts.fetch).toHaveBeenCalledOnce();
+  await first.outbox.enqueue({
+    op: "write",
+    url: `${alice.storageUrl}guarded`,
+    body: "local",
+    guard: { tag: "test.policy", assertions: { policy: "captured" } },
+  });
+  await first.outbox.replay(present(first.storage));
+  expect(delegate).toHaveBeenCalledOnce();
+  fixture.accounts = { ...fixture.accounts, active: bob };
+  view.rerender(contents());
+  await waitFor(() => expect(session?.storage?.root).toBe(bob.storageUrl));
+  const second = present(session);
+  expect(bound.signal.aborted).toBe(true);
+  await expect(bound.fetch(bob.storageUrl)).rejects.toThrow();
+  expect(() => first.registerReplayDelegate("test.policy", factory)).toThrow();
+  await second.outbox.enqueue({
+    op: "write",
+    url: `${bob.storageUrl}guarded`,
+    guard: { tag: "test.policy" },
+  });
+  await second.outbox.replay(present(second.storage));
+  expect(second.outbox.pending()).toMatchObject([{ status: "waiting", blocked: "no-delegate" }]);
+  expect(delegate).toHaveBeenCalledOnce();
+  expect(factory).toHaveBeenCalledOnce();
+  const nextDelegate = vi.fn().mockResolvedValue(undefined);
+  const nextFactory = vi.fn(() => nextDelegate);
+  const stop = second.registerReplayDelegate("test.policy", nextFactory);
+  unregister(); // Old cleanup cannot unregister the new account's delegate.
+  await second.outbox.replay(present(second.storage));
+  expect(nextDelegate).toHaveBeenCalledOnce();
+  expect(second.outbox.pending()).toEqual([]);
+  stop();
+});
+
+test("a retained registration refuses inactive sessions even before cleanup and does not invoke its factory", async () => {
+  render(contents());
+  await waitFor(() => expect(session?.storage).toBeTruthy());
+  const first = present(session);
+  const factory = vi.fn(() => vi.fn().mockResolvedValue(undefined));
+  fixture.accounts.isActiveAccount = () => false;
+  expect(() => first.registerReplayDelegate("test.policy", factory)).toThrow("no longer active");
+  expect(factory).not.toHaveBeenCalled();
+});
+
+test("registered delivery and fetch are fenced when account authority changes without a new render", async () => {
+  render(contents());
+  await waitFor(() => expect(session?.storage).toBeTruthy());
+  const first = present(session);
+  const delegate = vi.fn().mockResolvedValue(undefined);
+  let transport!: typeof fetch;
+  first.registerReplayDelegate("test.policy", (bound) => {
+    transport = bound.fetch;
+    return delegate;
+  });
+  await first.outbox.enqueue({
+    op: "write",
+    url: `${alice.storageUrl}guarded`,
+    guard: { tag: "test.policy" },
+  });
+  fixture.accounts.isActiveAccount = () => false;
+  await first.outbox.replay(present(first.storage));
+  expect(delegate).not.toHaveBeenCalled();
+  expect(first.outbox.pending()).toMatchObject([
+    { status: "failed", error: expect.stringContaining("no longer active") },
+  ]);
+  await expect(transport(alice.storageUrl)).rejects.toThrow("no longer active");
+});
+
+test("trusted guard policies block bare delivery and expire on account replacement", async () => {
+  const view = render(contents());
+  await waitFor(() => expect(session?.storage).toBeTruthy());
+  const first = present(session);
+  const raw = (await present(vi.mocked(createPodClient).mock.results[0]).value).storage;
+  const write = vi.spyOn(raw, "write");
+  const matches = vi.fn((operation: { url: string }) => operation.url.startsWith(alice.storageUrl));
+  const stop = first.registerGuardPolicy("test.policy", matches);
+  const target = `${alice.storageUrl}guard-stripped`;
+  await first.outbox.enqueue({ op: "write", url: target, body: "unsent" });
+  await first.outbox.replay(present(first.storage));
+  expect(first.outbox.pending()).toMatchObject([{ status: "waiting", blocked: "guard-required" }]);
+  expect(write).not.toHaveBeenCalled();
+  await expect(
+    present(first.storage).write(target, "body", {
+      contentType: "text/plain",
+      ifMatch: "*",
+    }),
+  ).rejects.toThrow("guard required");
+  expect(write).not.toHaveBeenCalled();
+  const delegate = vi.fn().mockResolvedValue(undefined);
+  first.registerReplayDelegate("test.policy", () => delegate);
+  await present(first.storage).write(target, "body", {
+    contentType: "text/plain",
+    ifMatch: "*",
+    guard: { tag: "test.policy" },
+    keepalive: true,
+  });
+  expect(delegate).toHaveBeenCalledWith(
+    expect.objectContaining({ keepalive: true }),
+    expect.anything(),
+  );
+
+  fixture.accounts = { ...fixture.accounts, active: bob };
+  view.rerender(contents());
+  await waitFor(() => expect(session?.storage?.root).toBe(bob.storageUrl));
+  expect(() => first.registerGuardPolicy("test.policy", matches)).toThrow();
+  const second = present(session);
+  const bobRaw = (await present(vi.mocked(createPodClient).mock.results[1]).value).storage;
+  const bobWrite = vi
+    .spyOn(bobRaw, "write")
+    .mockResolvedValue({ url: `${bob.storageUrl}file`, etag: null, created: false });
+  const opts = { contentType: "text/plain", ifMatch: "*" };
+  await present(second.storage).write(`${bob.storageUrl}file`, "legacy", opts);
+  expect(bobWrite).toHaveBeenCalledOnce();
+  const stopBob = second.registerGuardPolicy("test.policy", () => true);
+  stop();
+  await expect(
+    present(second.storage).write(`${bob.storageUrl}file`, "local", opts),
+  ).rejects.toThrow("guard required");
+  expect(bobWrite).toHaveBeenCalledOnce();
+  stopBob();
+  stopBob();
+  await present(second.storage).write(`${bob.storageUrl}file`, "legacy", opts);
+  expect(bobWrite).toHaveBeenCalledTimes(2);
+});
+
+test("policies can register while storage opens and retained registrations reject inactive accounts", async () => {
+  let resolve!: (value: Awaited<ReturnType<typeof createPodClient>>) => void;
+  vi.mocked(createPodClient).mockReturnValueOnce(
+    new Promise((done) => {
+      resolve = done;
+    }),
+  );
+  render(contents());
+  await waitFor(() => expect(session?.outbox).toBeTruthy());
+  const first = present(session);
+  const matches = vi.fn(() => true);
+  first.registerGuardPolicy("test.policy", matches);
+  expect(first.storage).toBeNull();
+  const raw = createMemoryStorage({ root: alice.storageUrl });
+  const write = vi.spyOn(raw, "write");
+  await act(async () => {
+    resolve({ storage: raw } as Awaited<ReturnType<typeof createPodClient>>);
+  });
+  await waitFor(() => expect(session?.storage).toBeTruthy());
+  fixture.accounts.isActiveAccount = () => false;
+  expect(() => first.registerGuardPolicy("other.policy", matches)).toThrow("no longer active");
+  await expect(
+    present(session?.storage).write(`${alice.storageUrl}file`, "body", {
+      contentType: "text/plain",
+      ifMatch: "*",
+    }),
+  ).rejects.toThrow("guard required");
+  expect(matches).not.toHaveBeenCalled();
+  expect(write).not.toHaveBeenCalled();
 });

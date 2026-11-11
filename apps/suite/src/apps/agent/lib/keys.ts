@@ -132,13 +132,12 @@ export async function publishApprovalKey(session: ProfileSession, key: KeyPair) 
 
 /** Is `key` one of the owner's assertion methods in this profile graph? */
 const listsKey = (store: Store, owner: string, key: string) =>
-  store.has(
-    DataFactory.quad(
-      DataFactory.namedNode(owner),
-      DataFactory.namedNode(SEC_ASSERTION_METHOD),
-      DataFactory.namedNode(key),
-    ),
-  );
+  store.countQuads(
+    DataFactory.namedNode(owner),
+    DataFactory.namedNode(SEC_ASSERTION_METHOD),
+    DataFactory.namedNode(key),
+    null,
+  ) > 0;
 
 /**
  * Remove one key from the profile: its owner links and its own description. Every conditional
