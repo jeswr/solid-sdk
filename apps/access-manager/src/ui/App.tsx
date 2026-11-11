@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Fable 5
 //
 // App root: logged out → <jeswr-login-panel> (suite login + silent session
@@ -142,8 +143,6 @@ export function Shell({
             <InboxView
               inboxUrl={data.inboxUrl}
               storageRoot={data.storageRoot}
-              registrations={data.registrations}
-              nodes={data.nodes}
               onChanged={data.refresh}
             />
           ) : (

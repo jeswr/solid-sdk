@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Fable 5
 //
 // The app's data-loading hook: resolve the storage root(s) from the profile
@@ -8,8 +9,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import type { Session } from "../auth/SessionContext.js";
-import { discoverInbox } from "../lib/inbox.js";
-import { storageRoots } from "../lib/profile.js";
+import { discoverInbox, storageRoots } from "../lib/profile.js";
 import { type WalkedNode, walkStorage } from "../lib/storage-walk.js";
 import { readTypeRegistrations, type TypeRegistration } from "../lib/type-index.js";
 

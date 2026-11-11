@@ -1,5 +1,6 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
-// Deprecated app compatibility API: new consumers use @jeswr/pod-access/requests-solid.
+// HTTP helpers for dashboard edits and history; requests use the package transport.
 // AUTHORED-BY Claude Fable 5
 //
 // The HTTP seam of the whole app. EVERY pod interaction goes through an
@@ -9,7 +10,6 @@
 //
 // Writes are ALWAYS conditional (the suite CAS discipline, proposal §3.5):
 //   - `putIfMatch`     — update guarded by the ETag from the read (lost race → 412)
-//   - `putIfNoneMatch` — create-only (`If-None-Match: *`; already-exists → 412)
 // A 412 is a first-class, typed outcome (`PreconditionFailedError`) the caller
 // re-reads and reconciles on — never a swallowed error.
 
@@ -30,12 +30,8 @@ export interface ReadRdf {
 /** Thrown when a conditional write loses the race (HTTP 412). */
 export class PreconditionFailedError extends Error {
   readonly url: string;
-  constructor(url: string, kind: "if-match" | "if-none-match") {
-    super(
-      kind === "if-match"
-        ? `Conditional write to ${url} failed: the resource changed since it was read (412).`
-        : `Create-only write to ${url} failed: the resource already exists (412).`,
-    );
+  constructor(url: string) {
+    super(`Conditional write to ${url} failed: the resource changed since it was read (412).`);
     this.name = "PreconditionFailedError";
     this.url = url;
   }
@@ -109,27 +105,6 @@ export async function putIfMatch(
   const headers: Record<string, string> = { "content-type": "text/turtle" };
   if (etag !== null) headers["if-match"] = etag;
   const res = await fetchFn(url, { method: "PUT", headers, body: turtle });
-  if (res.status === 412) throw new PreconditionFailedError(url, "if-match");
+  if (res.status === 412) throw new PreconditionFailedError(url);
   if (!res.ok) throw new WriteFailedError(url, res.status);
-}
-
-/** Create-only PUT (`If-None-Match: *`). 412 = already exists. */
-export async function putIfNoneMatch(
-  url: string,
-  turtle: string,
-  fetchFn: SolidFetch,
-): Promise<void> {
-  const res = await fetchFn(url, {
-    method: "PUT",
-    headers: { "content-type": "text/turtle", "if-none-match": "*" },
-    body: turtle,
-  });
-  if (res.status === 412) throw new PreconditionFailedError(url, "if-none-match");
-  if (!res.ok) throw new WriteFailedError(url, res.status);
-}
-
-/** DELETE a resource. 404 is treated as already-gone (idempotent). */
-export async function deleteResource(url: string, fetchFn: SolidFetch): Promise<void> {
-  const res = await fetchFn(url, { method: "DELETE" });
-  if (!res.ok && res.status !== 404) throw new WriteFailedError(url, res.status);
 }

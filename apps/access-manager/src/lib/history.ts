@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Fable 5
 //
 // History / receipts + revocation. Grant records and DPV consent receipts are
@@ -8,8 +9,8 @@
 // record to withdrawn. Honest residual (§6.1): revocation of already-issued
 // tokens is eventually-consistent; this app retracts the policy + records.
 
+import { DPV, ODRL, RDF } from "@jeswr/pod-access/requests-solid";
 import { policyFromRdf } from "@jeswr/solid-odrl";
-import { AclResource } from "@solid/object";
 import { DataFactory } from "n3";
 import {
   NoAclFoundError,
@@ -26,10 +27,9 @@ import {
   readRdf,
   type SolidFetch,
 } from "./http.js";
-import { toTurtle, tryRead } from "./rdf.js";
-import { AccmRecord, ConsentReceipt } from "./records.js";
+import { objectIris, toTurtle, tryRead } from "./rdf.js";
+import { ConsentReceipt, GrantHistory } from "./records.js";
 import { containerMembers } from "./storage-walk.js";
-import { DPV } from "./vocab.js";
 
 const MODE_FROM_IRI: Record<string, WacMode> = {
   "http://www.w3.org/ns/auth/acl#Read": "Read",
@@ -45,6 +45,7 @@ export interface GrantRecord {
   agent?: string;
   modes: WacMode[];
   targets: string[];
+  modesByTarget: Record<string, WacMode[]>;
   requestRef?: string;
   createdAt?: Date;
   revokedAt?: Date;
@@ -72,7 +73,8 @@ export async function readGrantRecord(
 ): Promise<GrantRecord | null> {
   const read = await readRdf(url, fetchFn);
   if (!read) return null;
-  const record = new AccmRecord(read.url, read.dataset, DataFactory);
+  if (!objectIris(read.dataset, read.url, RDF.type).includes(ODRL.Agreement)) return null;
+  const record = new GrantHistory(read.url, read.dataset, DataFactory);
   const policy = tryRead(() => policyFromRdf(read.dataset));
   let purpose: string | undefined;
   for (const rule of policy?.permissions ?? []) {
@@ -82,7 +84,33 @@ export async function readGrantRecord(
       }
     }
   }
-  const agent = tryRead(() => record.snapshotAgent);
+  const agent =
+    policy?.assignee ??
+    policy?.permissions?.find((rule) => rule.assignee)?.assignee ??
+    tryRead(() => record.agent);
+  const legacyModes = (tryRead(() => [...record.modes]) ?? [])
+    .map((mode) => MODE_FROM_IRI[mode])
+    .filter((mode): mode is WacMode => mode !== undefined);
+  const modesByTarget: Record<string, WacMode[]> = Object.create(null);
+  for (const rule of policy?.permissions ?? []) {
+    if (!rule.target || !isHttpUrl(rule.target)) continue;
+    const mode = ({ read: "Read", write: "Write", append: "Append" } as const)[
+      rule.action as "read" | "write" | "append"
+    ];
+    if (!mode) continue;
+    const modes = modesByTarget[rule.target] ?? [];
+    modesByTarget[rule.target] = modes;
+    if (!modes.includes(mode)) modes.push(mode);
+  }
+  const targets = [
+    ...new Set([
+      ...Object.keys(modesByTarget),
+      ...(tryRead(() => [...record.resolvesTo]) ?? []).filter(isHttpUrl),
+    ]),
+  ].sort();
+  for (const target of targets) {
+    if (legacyModes.length) modesByTarget[target] = legacyModes;
+  }
   const grantId = tryRead(() => record.grantId);
   const requestRef = tryRead(() => record.requestRef);
   const createdAt = tryRead(() => record.created);
@@ -92,10 +120,9 @@ export async function readGrantRecord(
     etag: read.etag,
     ...(grantId !== undefined ? { grantId } : {}),
     ...(agent !== undefined ? { agent } : {}),
-    modes: (tryRead(() => [...record.snapshotModes]) ?? [])
-      .map((m) => MODE_FROM_IRI[m])
-      .filter((m): m is WacMode => m !== undefined),
-    targets: (tryRead(() => [...record.resolvesTo]) ?? []).filter(isHttpUrl).sort(),
+    modes: [...new Set(Object.values(modesByTarget).flat())],
+    modesByTarget,
+    targets,
     ...(requestRef !== undefined ? { requestRef } : {}),
     ...(createdAt !== undefined ? { createdAt } : {}),
     ...(revokedAt !== undefined ? { revokedAt } : {}),
@@ -127,6 +154,7 @@ export async function listGrants(
 export async function readReceipt(url: string, fetchFn: SolidFetch): Promise<ReceiptRecord | null> {
   const read = await readRdf(url, fetchFn);
   if (!read) return null;
+  if (!objectIris(read.dataset, read.url, RDF.type).includes(DPV.ConsentRecord)) return null;
   const receipt = new ConsentReceipt(read.url, read.dataset, DataFactory);
   const status = tryRead(() => receipt.consentStatus);
   const owner = tryRead(() => receipt.dataSubject);
@@ -136,6 +164,7 @@ export async function readReceipt(url: string, fetchFn: SolidFetch): Promise<Rec
   const requestRef = tryRead(() => receipt.requestRef);
   const createdAt = tryRead(() => receipt.created);
   const revokedAt = tryRead(() => receipt.revokedAt);
+  const linkedGrant = grantRef !== undefined ? await readGrantRecord(grantRef, fetchFn) : null;
   return {
     url: read.url,
     ...(status !== undefined ? { status } : {}),
@@ -144,7 +173,9 @@ export async function readReceipt(url: string, fetchFn: SolidFetch): Promise<Rec
     ...(purpose !== undefined ? { purpose } : {}),
     ...(grantRef !== undefined ? { grantRef } : {}),
     ...(requestRef !== undefined ? { requestRef } : {}),
-    targets: (tryRead(() => [...receipt.resolvesTo]) ?? []).filter(isHttpUrl).sort(),
+    targets:
+      linkedGrant?.targets ??
+      (tryRead(() => [...receipt.resolvesTo]) ?? []).filter(isHttpUrl).sort(),
     ...(createdAt !== undefined ? { createdAt } : {}),
     ...(revokedAt !== undefined ? { revokedAt } : {}),
   };
@@ -205,10 +236,8 @@ export async function retractGrantFromTarget(
   // means this grant's entry no longer exists (or never did) — nothing to do.
   if (!effective.owned) return;
   await updateAclWithRetry(effective.aclUrl, fetchFn, (dataset) => {
-    const acl = new AclResource(dataset, DataFactory);
-    const authIris = [...acl.authorizations].map((a) => a.value);
-    for (const authIri of authIris) {
-      const entry = projectEntries(dataset).find((e) => e.authIri === authIri);
+    for (const entry of projectEntries(dataset)) {
+      const authIri = entry.authIri;
       if (
         entry?.agents.includes(agent) === true &&
         !entry.isPublic &&
@@ -245,7 +274,7 @@ export async function revokeGrant(
         target,
         ctx.storageRoot,
         agent,
-        grant.modes,
+        grant.modesByTarget[target] ?? grant.modes,
         ctx.ownerWebId,
         ctx.fetch,
       );
@@ -268,7 +297,7 @@ async function casSetRevoked(url: string, when: Date, fetchFn: SolidFetch): Prom
   for (let attempt = 0; attempt < 3; attempt += 1) {
     const read = await readRdf(url, fetchFn);
     if (!read) return;
-    const record = new AccmRecord(read.url, read.dataset, DataFactory);
+    const record = new GrantHistory(read.url, read.dataset, DataFactory);
     if (tryRead(() => record.revokedAt) !== undefined) return; // already revoked
     record.revokedAt = when;
     try {

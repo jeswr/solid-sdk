@@ -1,17 +1,19 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // @vitest-environment jsdom
 // AUTHORED-BY Claude Fable 5
 // DashboardView through the stubbed-fetch seam: rendering (public flagged,
 // direct vs inherited), optimistic revoke persisting a real If-Match ACL
 // write, and revert-on-failure.
 import "@testing-library/jest-dom/vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { decide, listRequests } from "@jeswr/pod-access/requests-solid";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { SessionProvider } from "../../src/auth/SessionContext.js";
 import { readEffectiveAcl } from "../../src/lib/acl.js";
 import type { WalkedNode } from "../../src/lib/storage-walk.js";
 import { walkStorage } from "../../src/lib/storage-walk.js";
 import { DashboardView } from "../../src/ui/DashboardView.jsx";
-import { BOB, buildPod, OWNER, POD } from "../fixtures.js";
+import { BOB, buildPod, INBOX, OWNER, POD, REQUESTER } from "../fixtures.js";
 import type { PodStub } from "../pod-stub.js";
 
 async function walkAll(pod: PodStub): Promise<WalkedNode[]> {
@@ -49,6 +51,28 @@ describe("DashboardView", () => {
       expect(effective.entries.some((e) => e.agents.includes(BOB))).toBe(false);
     });
     await screen.findByText("Saved");
+  });
+
+  it("revokes a blank-node grant created by the package after re-reading its ACL", async () => {
+    const pod = buildPod();
+    const options = { fetch: pod.fetch, webId: OWNER, storage: POD };
+    const request = (await listRequests({ ...options, inbox: INBOX }))[0];
+    if (!request) throw new Error("missing request");
+    await decide(request, { approve: true }, options);
+    renderDashboard(pod, await walkAll(pod));
+    const row = screen.getByText("/contacts/alice.ttl").closest("li");
+    if (!row) throw new Error("missing grant row");
+    fireEvent.click(within(row).getByTestId(`revoke-${REQUESTER}`));
+    await screen.findByText("Saved");
+    const alice = await readEffectiveAcl(`${POD}contacts/alice.ttl`, POD, pod.fetch);
+    expect(alice.entries.some((entry) => entry.agents.includes(REQUESTER))).toBe(false);
+    expect(
+      alice.entries.some(
+        (entry) => entry.agents.includes(OWNER) && entry.modes.includes("Control"),
+      ),
+    ).toBe(true);
+    const carol = await readEffectiveAcl(`${POD}contacts/carol.ttl`, POD, pod.fetch);
+    expect(carol.entries.some((entry) => entry.agents.includes(REQUESTER))).toBe(true);
   });
 
   it("removing public access clears foaf:Agent from the governing ACL", async () => {

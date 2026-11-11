@@ -1,9 +1,11 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Fable 5
 //
 // History / receipts: the DPV consent-record audit trail — what was granted,
 // to whom, for what purpose, when, and revoked-when — plus revocation of the
 // still-active grants (retracts the pinned WAC + flips the records).
 
+import { DPV } from "@jeswr/pod-access/requests-solid";
 import { useCallback, useEffect, useState } from "react";
 import { useSession } from "../auth/SessionContext.js";
 import {
@@ -14,7 +16,6 @@ import {
   revokeGrant,
 } from "../lib/history.js";
 import { classLabel } from "../lib/type-index.js";
-import { DPV } from "../lib/vocab.js";
 import { AgentLabel, resourceLabel, SavingIndicator, useOptimistic } from "./bits.jsx";
 
 function statusLabel(iri: string | undefined): string {
@@ -38,8 +39,8 @@ export function HistoryView({
   const [loading, setLoading] = useState(false);
   const { state, error, run } = useOptimistic();
 
-  const grantsContainer = storageRoot ? `${storageRoot}access-manager/grants/` : null;
-  const receiptsContainer = storageRoot ? `${storageRoot}access-manager/receipts/` : null;
+  const grantsContainer = storageRoot ? `${storageRoot}settings/access-records/` : null;
+  const receiptsContainer = storageRoot ? `${storageRoot}settings/access-records/` : null;
 
   const reload = useCallback(() => {
     if (!grantsContainer || !receiptsContainer) return;

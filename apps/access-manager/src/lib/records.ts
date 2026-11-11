@@ -1,68 +1,21 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
-// Deprecated app compatibility API: new consumers use @jeswr/pod-access/requests-solid.
+// History projection only; no request state or approval recovery setters.
 // AUTHORED-BY Claude Fable 5
 //
-// Typed @rdfjs/wrapper accessors for the three record shapes the app writes:
-// the access-request lifecycle fields (accm: status + the §3.5 CAS-persisted
-// snapshot), the grant record, and the DPV 2.2 consent receipt. These are the
-// ONLY write paths — every mutation goes through these wrapper setters (the
-// house RDF discipline: typed accessors + n3.Writer, never hand-built triples).
+// Typed history accessors for legacy grant metadata and DPV receipts.
+// The app only changes revocation metadata; request decisions belong to the SDK.
 
+import { ACCM, DCT, DPV } from "@jeswr/pod-access/requests-solid";
 import { LiteralAs, LiteralFrom, NamedNodeAs, NamedNodeFrom, TermWrapper } from "@rdfjs/wrapper";
-import { accmTerm } from "./canonical-vocab.js";
 import {
   AliasOptionalAs as OptionalAs,
   AliasOptionalFrom as OptionalFrom,
   AliasSetFrom as SetFrom,
 } from "./legacy.js";
-import { ACCM, DCT, DPV } from "./vocab.js";
 
-/** The request lifecycle status values (proposal §3.5 state machine). */
-export type RequestStatus = "Pending" | "Approving" | "Approved" | "Denied";
-
-const STATUS_IRI: Record<RequestStatus, string> = {
-  Pending: ACCM.Pending,
-  Approving: ACCM.Approving,
-  Approved: ACCM.Approved,
-  Denied: ACCM.Denied,
-};
-const IRI_STATUS: Record<string, RequestStatus> = Object.fromEntries(
-  Object.entries(STATUS_IRI).map(([k, v]) => [v, k as RequestStatus]),
-);
-
-export function statusFromIri(iri: string | undefined): RequestStatus | undefined {
-  return iri === undefined ? undefined : IRI_STATUS[accmTerm(iri)];
-}
-export function statusToIri(status: RequestStatus): string {
-  return STATUS_IRI[status];
-}
-
-/**
- * The accm: lifecycle + snapshot fields carried on a request resource (and
- * mirrored onto grant records / receipts). One wrapper class serves all three
- * documents — they share the vocabulary.
- */
-export class AccmRecord extends TermWrapper {
-  get statusIri(): string | undefined {
-    const iri = OptionalFrom.subjectPredicate(this, ACCM.status, NamedNodeAs.string);
-    return iri === undefined ? undefined : accmTerm(iri);
-  }
-  set statusIri(value: string | undefined) {
-    OptionalAs.object(
-      this,
-      ACCM.status,
-      value === undefined ? undefined : accmTerm(value),
-      NamedNodeFrom.string,
-    );
-  }
-
-  get status(): RequestStatus | undefined {
-    return statusFromIri(this.statusIri);
-  }
-  set status(value: RequestStatus) {
-    this.statusIri = statusToIri(value);
-  }
-
+/** Legacy history fields; request lifecycle and recovery are owned by the SDK. */
+export class GrantHistory extends TermWrapper {
   /** The deterministic grant id (hex digest — proposal §3.5). */
   get grantId(): string | undefined {
     return OptionalFrom.subjectPredicate(this, ACCM.grantId, LiteralAs.string);
@@ -82,23 +35,16 @@ export class AccmRecord extends TermWrapper {
   }
 
   /** The snapshotted grantee agent. */
-  get snapshotAgent(): string | undefined {
+  get agent(): string | undefined {
     return OptionalFrom.subjectPredicate(this, ACCM.agent, NamedNodeAs.string);
   }
-  set snapshotAgent(value: string | undefined) {
+  set agent(value: string | undefined) {
     OptionalAs.object(this, ACCM.agent, value, NamedNodeFrom.string);
   }
 
   /** The snapshotted WAC mode IRIs. */
-  get snapshotModes(): Set<string> {
+  get modes(): Set<string> {
     return SetFrom.subjectPredicate(this, ACCM.mode, NamedNodeAs.string, NamedNodeFrom.string);
-  }
-
-  get schemaVersion(): string | undefined {
-    return OptionalFrom.subjectPredicate(this, ACCM.schemaVersion, LiteralAs.string);
-  }
-  set schemaVersion(value: string | undefined) {
-    OptionalAs.object(this, ACCM.schemaVersion, value, LiteralFrom.string);
   }
 
   get grantRef(): string | undefined {
@@ -113,19 +59,6 @@ export class AccmRecord extends TermWrapper {
   }
   set requestRef(value: string | undefined) {
     OptionalAs.object(this, ACCM.requestRef, value, NamedNodeFrom.string);
-  }
-
-  get dataClass(): string | undefined {
-    const iri = OptionalFrom.subjectPredicate(this, ACCM.dataClass, NamedNodeAs.string);
-    return iri === undefined ? undefined : accmTerm(iri);
-  }
-  set dataClass(value: string | undefined) {
-    OptionalAs.object(
-      this,
-      ACCM.dataClass,
-      value === undefined ? undefined : accmTerm(value),
-      NamedNodeFrom.string,
-    );
   }
 
   get created(): Date | undefined {
@@ -144,7 +77,7 @@ export class AccmRecord extends TermWrapper {
 }
 
 /** The DPV 2.2 consent-record fields (proposal §2.1 — receipts adopt DPV/27560). */
-export class ConsentReceipt extends AccmRecord {
+export class ConsentReceipt extends GrantHistory {
   get types(): Set<string> {
     return SetFrom.subjectPredicate(
       this,

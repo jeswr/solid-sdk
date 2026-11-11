@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Fable 5
 // Conditional-write semantics through the stubbed pod: the CAS primitive the
 // whole approval pipeline rests on (If-Match / If-None-Match / 412 mapping).
@@ -6,7 +7,6 @@ import {
   isHttpUrl,
   PreconditionFailedError,
   putIfMatch,
-  putIfNoneMatch,
   readRdf,
   WriteFailedError,
 } from "../../src/lib/http.js";
@@ -63,18 +63,6 @@ describe("putIfMatch", () => {
     const pod = createPodStub();
     pod.intercept = () => new Response("nope", { status: 500 });
     await expect(putIfMatch(URL_A, "x", null, pod.fetch)).rejects.toBeInstanceOf(WriteFailedError);
-  });
-});
-
-describe("putIfNoneMatch (create-only)", () => {
-  it("creates when absent; 412 when present", async () => {
-    const pod = createPodStub();
-    await putIfNoneMatch(URL_A, "<https://x.example/s> a <https://x.example/T> .", pod.fetch);
-    expect(pod.has(URL_A)).toBe(true);
-    await expect(putIfNoneMatch(URL_A, "other", pod.fetch)).rejects.toBeInstanceOf(
-      PreconditionFailedError,
-    );
-    expect(pod.body(URL_A)).toContain("x.example/s"); // first write survives
   });
 });
 

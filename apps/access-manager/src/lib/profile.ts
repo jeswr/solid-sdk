@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Fable 5
 //
 // Requester-profile resolution for the inbox + dashboard: WebID → display name
@@ -9,7 +10,7 @@
 import { Agent } from "@solid/object";
 import { DataFactory } from "n3";
 import { isHttpUrl, readRdf, type SolidFetch } from "./http.js";
-import { tryRead } from "./rdf.js";
+import { objectIri, tryRead } from "./rdf.js";
 
 export interface AgentDisplay {
   webId: string;
@@ -65,4 +66,13 @@ export async function storageRoots(webId: string, fetchFn: SolidFetch): Promise<
   } catch {
     return [];
   }
+}
+
+/** Profile discovery for the shell; request listing and parsing belong to the SDK. */
+export async function discoverInbox(
+  webId: string,
+  fetchFn: SolidFetch,
+): Promise<string | undefined> {
+  const profile = await readRdf(webId, fetchFn);
+  return profile ? objectIri(profile.dataset, webId, "http://www.w3.org/ns/ldp#inbox") : undefined;
 }

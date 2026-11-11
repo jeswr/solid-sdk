@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Fable 5
 //
 // The Ada & Bex demo scenario — INERT SAMPLE DATA for the ?demo mode, matching
@@ -27,6 +28,8 @@
 // test/fixtures.ts) — not an app write path; all real writes still go through
 // the typed accessors in src/lib.
 
+import { ACCM, ACL, FOAF, RDF } from "@jeswr/pod-access/requests-solid";
+import { DataFactory, Writer } from "n3";
 import type { Session } from "../auth/SessionContext.js";
 import { createDemoPod, type DemoPod } from "./pod.js";
 
@@ -45,8 +48,8 @@ export const CARE_COORDINATION = "https://vocab.example/purpose#CareCoordination
 
 export const DEMO_INBOX = `${DEMO_POD}inbox/`;
 export const DEMO_REQUEST = `${DEMO_INBOX}request-clinic.ttl`;
-export const DEMO_GRANTS = `${DEMO_POD}access-manager/grants/`;
-export const DEMO_RECEIPTS = `${DEMO_POD}access-manager/receipts/`;
+export const DEMO_GRANTS = `${DEMO_POD}settings/access-records/`;
+export const DEMO_RECEIPTS = `${DEMO_POD}settings/access-records/`;
 
 export const HEALTH = `${DEMO_POD}health/`;
 export const BLOOD = `${HEALTH}results/blood.ttl`;
@@ -94,9 +97,17 @@ function bexProfile(): string {
 
 /** The Clinic App's identity document — only read for its display name. */
 function clinicProfile(): string {
-  return `${PREFIXES}
-<${CLINIC}> foaf:name "Clinic App" .
-`;
+  return clinicName();
+}
+
+function clinicName(): string {
+  return new Writer().quadsToString([
+    DataFactory.quad(
+      DataFactory.namedNode(CLINIC),
+      DataFactory.namedNode(FOAF.name),
+      DataFactory.literal("Clinic App"),
+    ),
+  ]);
 }
 
 /** Root ACL: Ada alone controls the pod; everything inherits from here. */
@@ -132,6 +143,23 @@ function healthAcl(): string {
   acl:default <${HEALTH}> ;
   acl:mode acl:Read .
 `;
+}
+
+/** A sealed owner-only sample history folder, matching requests-solid's storage layout. */
+function recordsAcl(): string {
+  const { namedNode, literal, quad } = DataFactory;
+  const url = `${DEMO_GRANTS}.acl`;
+  const owner = namedNode(`${url}#owner`);
+  return new Writer().quadsToString([
+    quad(owner, namedNode(RDF.type), namedNode(ACL.Authorization)),
+    quad(owner, namedNode(ACL.agent), namedNode(ADA)),
+    quad(owner, namedNode(ACL.accessTo), namedNode(DEMO_GRANTS)),
+    quad(owner, namedNode(ACL.default), namedNode(DEMO_GRANTS)),
+    ...[ACL.Read, ACL.Write, ACL.Control].map((mode) =>
+      quad(owner, namedNode(ACL.mode), namedNode(mode)),
+    ),
+    quad(namedNode(url), namedNode(`${ACCM.ns}recordsKey`), literal("demo-records-key")),
+  ]);
 }
 
 /** /profile/card ACL: Ada controls it; ANYONE on the web can read it. */
@@ -185,6 +213,7 @@ function clinicRequest(): string {
       odrl:rightOperand "2026-08-09T00:00:00Z"^^xsd:dateTime
     ]
   ] .
+${clinicName()}
 `;
 }
 
@@ -298,6 +327,7 @@ export function demoFixtures(): Record<string, string> {
     [`${DEMO_POD}profile/card`]: adaProfile(),
     [`${DEMO_POD}profile/card.acl`]: profileCardAcl(),
     [`${DEMO_POD}.acl`]: rootAcl(),
+    [`${DEMO_GRANTS}.acl`]: recordsAcl(),
     [`${HEALTH}.acl`]: healthAcl(),
     [BLOOD]: healthDoc(BLOOD, "Blood test results"),
     [PANEL]: healthDoc(PANEL, "Metabolic panel results"),
@@ -310,8 +340,8 @@ export function demoFixtures(): Record<string, string> {
     [`${DEMO_RECEIPTS}receipt-${BEX_GRANT_ID}.ttl`]: bexReceipt(),
     [`${DEMO_RECEIPTS}receipt-${REVOKED_CLINIC_GRANT_ID}.ttl`]: revokedClinicReceipt(),
     // Dr. Bex's + the Clinic App's identity docs (display names only).
-    ["https://bex.example/profile/card"]: bexProfile(),
-    ["https://clinic.example/id"]: clinicProfile(),
+    "https://bex.example/profile/card": bexProfile(),
+    "https://clinic.example/id": clinicProfile(),
   };
 }
 

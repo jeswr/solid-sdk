@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Fable 5
 //
 // Data-class view: read the profile's solid:publicTypeIndex /
@@ -7,11 +8,11 @@
 // solid-type-index skill's read pattern). All foreign RDF reads are guarded:
 // a malformed registration drops, never aborts the view.
 
+import { RDFS, SOLID } from "@jeswr/pod-access/requests-solid";
 import type { DatasetCore } from "@rdfjs/types";
 import { readRdf, type SolidFetch } from "./http.js";
 import { objectIri, objectIris, objectLiteral, subjectsOfType, tryRead } from "./rdf.js";
 import type { WalkedNode } from "./storage-walk.js";
-import { RDFS, SOLID } from "./vocab.js";
 
 export interface TypeRegistration {
   /** The registration node IRI. */

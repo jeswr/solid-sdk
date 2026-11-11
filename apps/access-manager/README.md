@@ -1,3 +1,4 @@
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 <!-- AUTHORED-BY Claude Fable 5 -->
 <!-- AUTHORED-BY Codex GPT-6 -->
 
@@ -35,19 +36,12 @@ Phase 1 (the proposal's P2): it works **entirely against existing pod surfaces**
   constraint carrying a DPV purpose, and an `odrl:dateTime` expiry).
   Parsing is lenient — inbox contents are untrusted RDF; a malformed message
   drops fields or is listed as unparseable, never breaking the inbox.
-- **Approve / deny** — the proposal's §3.5 CAS-pinned pipeline, client-side:
-  approval first resolves the request's data class to the **concrete target
-  set** and shows it ("approving shares exactly these N resources"); the
-  `Pending → Approving` transition is an `If-Match` compare-and-set that
-  persists the resolved snapshot + a deterministic
-  `grantId = sha256(requestId ∥ resolvedTargetSet ∥ ownerWebID ∥ schemaVersion)`
-  into the request; then the grant record and DPV consent receipt are written
-  **create-only** (`If-None-Match: *`), then the WAC is materialised, then a
-  CAS to `Approved`. Retries are idempotent from the stored snapshot — an
-  interrupted approval offers a user-confirmed "finish approving exactly
-  these" that never re-resolves. Concurrent approvals: the second CAS loses
-  with a 412 and observes the winner — never two grants. Deny is a CAS to
-  `Denied` plus a `dpv:ConsentRefused` receipt.
+- **Approve / deny** — `@jeswr/pod-access/requests-solid` owns listing,
+  resolution, decisions and recovery; the UI reviews requested data classes and
+  calls `decide` once for each confirmed action. The package seals owner-only
+  `settings/access-records/`, pins concrete targets in per-generation decision
+  records, and resumes only those records; ACP and unknown storage models show
+  that approval is unavailable.
 - **History / receipts** — DPV 2.2 consent records
   (`dpv:hasConsentStatus` ∈ ConsentGiven / ConsentRefused / ConsentWithdrawn,
   purpose, recipient, targets, timestamps) as the audit trail, plus one-click
@@ -124,8 +118,8 @@ grant policies go through `@jeswr/solid-odrl` (`policyFromRdf` /
   applicable inherited entries — always including the owner's Control.
 - **Targets are confined to your storage**: a request naming an off-pod IRI
   can never reach the ACL-write path, and a resumed approval re-validates the
-  stored snapshot (in-storage targets + grantId recomputes) before any write.
-- **Resume is user-confirmed**, showing the pinned targets — never an
+  owner-only decision record (in-storage targets + grantId recomputes) before any write.
+- **Resume is user-confirmed**, using the private saved decision — never an
   automatic sweep (see `docs/DECISIONS.md` D9 for the inbox-integrity residual).
 - **Revocation is immediate** (proposal §6.1): WAC is evaluated fresh on every
   request against the current ACL, so retracting a grant takes effect on the

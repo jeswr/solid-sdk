@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Fable 5
 //
 // RDF plumbing shared by the data layer: n3.Writer serialisation (the sanctioned
@@ -5,13 +6,12 @@
 // foreign RDF (a malformed literal drops the field, never aborts the parse), and
 // small dataset read helpers used by the typed wrappers.
 
-import type { DatasetCore, Quad, Quad_Object, Quad_Subject, Term } from "@rdfjs/types";
+import { canonicalizeAccmDataset } from "@jeswr/pod-access/requests-solid";
+import type { DatasetCore, Quad } from "@rdfjs/types";
 import { DataFactory, Writer } from "n3";
-import { canonicalizeAccmDataset } from "./canonical-vocab.js";
 import { isHttpUrl } from "./http.js";
-import { XSD } from "./vocab.js";
 
-const { namedNode, literal, quad } = DataFactory;
+const { namedNode } = DataFactory;
 
 /** Serialise a dataset to Turtle via n3.Writer (async wrapped). */
 export function toTurtle(dataset: DatasetCore, baseIRI?: string): Promise<string> {
@@ -73,84 +73,3 @@ export function subjectsOfType(dataset: DatasetCore, typeIri: string): string[] 
   }
   return out;
 }
-
-/** Replace all (subject, predicate, *) with a single IRI object. */
-export function setIri(
-  dataset: DatasetCore,
-  subject: string,
-  predicate: string,
-  value: string,
-): void {
-  removeAll(dataset, subject, predicate);
-  dataset.add(quad(namedNode(subject), namedNode(predicate), namedNode(value)));
-}
-
-/** Add one (subject, predicate, IRI) triple. */
-export function addIri(
-  dataset: DatasetCore,
-  subject: string,
-  predicate: string,
-  value: string,
-): void {
-  dataset.add(quad(namedNode(subject), namedNode(predicate), namedNode(value)));
-}
-
-/** Replace all (subject, predicate, *) with one string literal. */
-export function setStringLiteral(
-  dataset: DatasetCore,
-  subject: string,
-  predicate: string,
-  value: string,
-): void {
-  removeAll(dataset, subject, predicate);
-  dataset.add(quad(namedNode(subject), namedNode(predicate), literal(value)));
-}
-
-/** Replace all (subject, predicate, *) with one xsd:dateTime literal. */
-export function setDateTimeLiteral(
-  dataset: DatasetCore,
-  subject: string,
-  predicate: string,
-  value: Date,
-): void {
-  removeAll(dataset, subject, predicate);
-  dataset.add(
-    quad(
-      namedNode(subject),
-      namedNode(predicate),
-      literal(value.toISOString(), namedNode(XSD.dateTime)),
-    ),
-  );
-}
-
-/** Remove every (subject, predicate, *) quad. */
-export function removeAll(dataset: DatasetCore, subject: string, predicate: string): void {
-  for (const q of [...dataset.match(namedNode(subject), namedNode(predicate), null)]) {
-    dataset.delete(q);
-  }
-}
-
-/** Remove a specific (subject, predicate, objectIri) quad. */
-export function removeIri(
-  dataset: DatasetCore,
-  subject: string,
-  predicate: string,
-  value: string,
-): void {
-  dataset.delete(quad(namedNode(subject), namedNode(predicate), namedNode(value)));
-}
-
-/** Remove every quad whose SUBJECT is `subject` (delete a node's description). */
-export function removeSubject(dataset: DatasetCore, subject: Quad_Subject | string): void {
-  const s: Term = typeof subject === "string" ? namedNode(subject) : subject;
-  for (const q of [...dataset.match(s as Quad_Subject, null, null)]) dataset.delete(q);
-}
-
-/** Whether the dataset has any quad with this subject IRI. */
-export function hasSubject(dataset: DatasetCore, subject: string): boolean {
-  for (const _q of dataset.match(namedNode(subject), null, null)) return true;
-  return false;
-}
-
-export type { Quad_Object };
-export { literal, namedNode, quad };

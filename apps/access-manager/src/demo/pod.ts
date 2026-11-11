@@ -1,3 +1,5 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
+import { DataFactory, Writer } from "n3";
 // AUTHORED-BY Claude Fable 5
 //
 // The DEMO pod: a strictly READ-ONLY in-memory `fetch` over a fixed map of
@@ -47,11 +49,26 @@ function containerListing(url: string, resources: ReadonlyMap<string, string>): 
       children.add(url + rest.slice(0, slash + 1));
     }
   }
-  const lines = [...children].map((c) => `<${url}> <http://www.w3.org/ns/ldp#contains> <${c}> .`);
-  lines.push(
-    `<${url}> a <http://www.w3.org/ns/ldp#BasicContainer>, <http://www.w3.org/ns/ldp#Container> .`,
-  );
-  return `${lines.join("\n")}\n`;
+  const { namedNode, quad } = DataFactory;
+  const writer = new Writer();
+  for (const child of children)
+    writer.addQuad(
+      quad(namedNode(url), namedNode("http://www.w3.org/ns/ldp#contains"), namedNode(child)),
+    );
+  for (const type of ["BasicContainer", "Container"])
+    writer.addQuad(
+      quad(
+        namedNode(url),
+        namedNode("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"),
+        namedNode(`http://www.w3.org/ns/ldp#${type}`),
+      ),
+    );
+  let body = "";
+  writer.end((error, result) => {
+    if (error) throw error;
+    body = result;
+  });
+  return body;
 }
 
 /**
@@ -101,7 +118,7 @@ export function createDemoPod(fixtures: Record<string, string>): DemoPod {
     }
     if (url.endsWith("/")) {
       const listing = containerListing(url, resources);
-      if (listing.includes("ldp#contains")) {
+      if ([...resources.keys()].some((key) => key.startsWith(url) && key !== url)) {
         return new Response(method === "HEAD" ? null : listing, {
           status: 200,
           headers: headers(true),

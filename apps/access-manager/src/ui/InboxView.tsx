@@ -1,71 +1,114 @@
-// AUTHORED-BY Claude Fable 5
-//
-// The access-request inbox. Each pending request shows requester (profile-
-// resolved name), requested data class / targets, modes, purpose and expiry.
-// APPROVAL IS ON THE RESOLVED CONCRETE SET (§3.4 step 2): the approve flow
-// first previews exactly which resources would be shared, then runs the §3.5
-// CAS-pinned pipeline. An interrupted (Approving) request offers a USER-
-// CONFIRMED resume showing the PINNED snapshot targets — never automatic.
-
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { useSession } from "../auth/SessionContext.js";
+// AUTHORED-BY Codex GPT-6.1-Sol
+// The SDK owns request parsing, target resolution, decisions and recovery.
 import {
-  ApprovalConflictError,
-  type ApprovalContext,
-  approveRequest,
-  denyRequest,
-  previewApproval,
-  resumeApproval,
-} from "../lib/approval.js";
-import { listInbox, type ParsedAccessRequest } from "../lib/inbox.js";
-import type { WalkedNode } from "../lib/storage-walk.js";
-import type { TypeRegistration } from "../lib/type-index.js";
+  type AccessRequestEntry,
+  accessModel,
+  decide,
+  listRequests,
+  RequestConflictError,
+  UnsupportedAccessModelError,
+} from "@jeswr/pod-access/requests-solid";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useSession } from "../auth/SessionContext.js";
 import { classLabel } from "../lib/type-index.js";
-import { AgentLabel, ModeBadges, resourceLabel, SavingIndicator, useOptimistic } from "./bits.jsx";
+import { SavingIndicator, useOptimistic } from "./bits.jsx";
+
+type ReadableRequest = Exclude<AccessRequestEntry, { status: "unreadable" }>;
+const UNAVAILABLE = "Approving requests isn't available on this storage yet.";
 
 export function InboxView({
   inboxUrl,
   storageRoot,
-  registrations,
-  nodes,
   onChanged,
 }: {
   inboxUrl: string | null;
   storageRoot: string | null;
-  registrations: TypeRegistration[];
-  nodes: WalkedNode[];
   onChanged: () => void;
 }) {
   const session = useSession();
-  const [requests, setRequests] = useState<ParsedAccessRequest[]>([]);
+  const [requests, setRequests] = useState<AccessRequestEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [confirming, setConfirming] = useState<string | null>(null);
-  const { state, error, run } = useOptimistic();
+  const [canApprove, setCanApprove] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
-
-  const ctx: ApprovalContext | null = useMemo(() => {
-    if (!storageRoot) return null;
-    return {
-      ownerWebId: session.webId,
-      storageRoot,
-      grantsContainer: `${storageRoot}access-manager/grants/`,
-      receiptsContainer: `${storageRoot}access-manager/receipts/`,
-      fetch: session.fetch,
-      registrations,
-      knownResources: nodes.map((n) => n.url),
-    };
-  }, [session, storageRoot, registrations, nodes]);
+  const { state, error, run } = useOptimistic();
+  const deciding = useRef(false);
+  const activeRead = useRef<AbortController | null>(null);
 
   const reload = useCallback(() => {
-    if (!inboxUrl) return;
+    activeRead.current?.abort();
+    const controller = new AbortController();
+    activeRead.current = controller;
+    setRequests([]);
+    setCanApprove(false);
+    if (!inboxUrl || !storageRoot) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
-    listInbox(inboxUrl, session.fetch)
-      .then(setRequests)
-      .catch(() => setNotice("The inbox could not be read."))
-      .finally(() => setLoading(false));
-  }, [inboxUrl, session.fetch]);
+    const options = { fetch: session.fetch, webId: session.webId, storage: storageRoot };
+    void listRequests({ ...options, inbox: inboxUrl, signal: controller.signal })
+      .then((entries) => {
+        if (!controller.signal.aborted) setRequests(entries);
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setNotice("The inbox could not be read.");
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false);
+      });
+    void accessModel(options).then(
+      (model) => {
+        if (controller.signal.aborted) return;
+        setCanApprove(model === "wac");
+        setNotice(model === "wac" ? null : UNAVAILABLE);
+      },
+      () => {
+        if (!controller.signal.aborted) setNotice(UNAVAILABLE);
+      },
+    );
+  }, [inboxUrl, storageRoot, session]);
 
-  useEffect(reload, [reload]);
+  useEffect(() => {
+    reload();
+    return () => activeRead.current?.abort();
+  }, [reload]);
+
+  const makeDecision = (request: ReadableRequest, approve: boolean) => {
+    if (!storageRoot || deciding.current) return;
+    deciding.current = true;
+    setConfirming(null);
+    setNotice(null);
+    void run({
+      apply: () => undefined,
+      revert: () => {
+        reload();
+      },
+      persist: async () => {
+        try {
+          await decide(
+            request,
+            { approve },
+            {
+              fetch: session.fetch,
+              webId: session.webId,
+              storage: storageRoot,
+            },
+          );
+        } catch (error) {
+          if (error instanceof UnsupportedAccessModelError) throw new Error(UNAVAILABLE);
+          if (error instanceof RequestConflictError) {
+            throw new Error(`This request was already handled elsewhere (now ${error.current}).`);
+          }
+          throw error;
+        }
+        onChanged();
+        reload();
+      },
+    }).finally(() => {
+      deciding.current = false;
+    });
+  };
 
   if (!inboxUrl) {
     return (
@@ -78,73 +121,15 @@ export function InboxView({
     );
   }
 
-  const approve = (request: ParsedAccessRequest) => {
-    if (!ctx) return;
-    setConfirming(null);
-    void run({
-      apply: () =>
-        setRequests((prev) =>
-          prev.map((r) => (r.url === request.url ? { ...r, status: "Approved" as const } : r)),
-        ),
-      revert: () => reload(),
-      persist: async () => {
-        try {
-          await approveRequest(request, ctx);
-        } catch (e) {
-          if (e instanceof ApprovalConflictError) {
-            setNotice(
-              `This request was already handled elsewhere (now ${e.current?.status ?? "gone"}).`,
-            );
-          }
-          throw e;
-        }
-        onChanged();
-        reload();
-      },
-    });
-  };
-
-  const deny = (request: ParsedAccessRequest) => {
-    if (!ctx) return;
-    void run({
-      apply: () =>
-        setRequests((prev) =>
-          prev.map((r) => (r.url === request.url ? { ...r, status: "Denied" as const } : r)),
-        ),
-      revert: () => reload(),
-      persist: async () => {
-        try {
-          await denyRequest(request, ctx);
-        } catch (e) {
-          if (e instanceof ApprovalConflictError) {
-            setNotice(
-              `This request was already handled elsewhere (now ${e.current?.status ?? "gone"}).`,
-            );
-          }
-          throw e;
-        }
-        reload();
-      },
-    });
-  };
-
-  const resume = (request: ParsedAccessRequest) => {
-    if (!ctx) return;
-    void run({
-      apply: () => undefined,
-      revert: () => reload(),
-      persist: async () => {
-        await resumeApproval(request.url, ctx);
-        onChanged();
-        reload();
-      },
-    });
-  };
-
   return (
     <section aria-label="Access requests">
       <div className="view-toolbar">
-        <button type="button" onClick={reload}>
+        <button
+          type="button"
+          onClick={() => {
+            reload();
+          }}
+        >
           Refresh
         </button>
         {loading ? <span className="walking">Reading inbox…</span> : null}
@@ -160,31 +145,27 @@ export function InboxView({
       ) : (
         <ul className="request-list">
           {requests.map((request) => (
-            <li key={request.url} className={`request status-${request.status.toLowerCase()}`}>
-              {request.malformed ? (
+            <li key={request.id} className={`request status-${request.status}`}>
+              {request.status === "unreadable" ? (
                 <p className="malformed">
-                  Unparseable message <code>{request.url}</code> — not a valid access request.
+                  Unparseable message <code>{request.id}</code> — not a valid access request.
                 </p>
               ) : (
                 <>
                   <div className="request-head">
-                    {request.requester ? (
-                      <AgentLabel agent={request.requester} fetchFn={session.fetch} />
-                    ) : (
-                      <span className="agent unknown">Unknown requester</span>
-                    )}
-                    <span className={`status-badge ${request.status.toLowerCase()}`}>
-                      {request.status}
+                    <span className="agent" title={request.requester}>
+                      {request.requesterName ?? request.requester}
+                    </span>
+                    <span className={`status-badge ${request.status}`}>
+                      {request.status[0]?.toUpperCase()}
+                      {request.status.slice(1)}
                     </span>
                   </div>
                   <dl className="request-fields">
                     <dt>Requests</dt>
                     <dd>
-                      <ModeBadges modes={request.modes.length > 0 ? request.modes : ["Read"]} />{" "}
-                      {request.dataClass
-                        ? `your ${classLabel(request.dataClass)} data`
-                        : request.targets.map((t) => resourceLabel(t, storageRoot)).join(", ") ||
-                          "(no targets named)"}
+                      {request.modes.join(", ")} — your{" "}
+                      {request.dataTypes.map(classLabel).join(", ")} data
                     </dd>
                     {request.purpose ? (
                       <>
@@ -192,46 +173,88 @@ export function InboxView({
                         <dd>{classLabel(request.purpose)}</dd>
                       </>
                     ) : null}
-                    {request.expiry ? (
+                    {request.expiresAt ? (
                       <>
-                        <dt>Until</dt>
-                        <dd>{request.expiry}</dd>
+                        <dt>Requested until</dt>
+                        <dd>{request.expiresAt}</dd>
+                      </>
+                    ) : null}
+                    {request.requestedDuration ? (
+                      <>
+                        <dt>Requested duration</dt>
+                        <dd>{request.requestedDuration}</dd>
                       </>
                     ) : null}
                   </dl>
-                  {request.status === "Pending" && ctx ? (
-                    confirming === request.url ? (
-                      <ApprovePreview
-                        request={request}
-                        ctx={ctx}
-                        storageRoot={storageRoot}
-                        onConfirm={() => approve(request)}
-                        onCancel={() => setConfirming(null)}
-                      />
+                  {request.status === "pending" && storageRoot ? (
+                    confirming === request.id ? (
+                      <div className="approve-preview" data-testid="approve-preview">
+                        <p>
+                          Approve the requested access to your{" "}
+                          {request.dataTypes.map(classLabel).join(", ")} data?
+                        </p>
+                        <p>
+                          Your registered data locations are resolved and the concrete resources are
+                          pinned when you approve. Data added later is not included.
+                        </p>
+                        <p>
+                          Purpose and requested expiry are metadata. WAC does not enforce an expiry
+                          or automatically revoke access.
+                        </p>
+                        <div className="request-actions">
+                          <button
+                            type="button"
+                            disabled={!canApprove || state === "saving"}
+                            onClick={() => makeDecision(request, true)}
+                            data-testid="confirm-approve"
+                          >
+                            Approve request
+                          </button>
+                          <button type="button" onClick={() => setConfirming(null)}>
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
                     ) : (
                       <div className="request-actions">
-                        <button type="button" onClick={() => setConfirming(request.url)}>
+                        <button
+                          type="button"
+                          disabled={!canApprove || state === "saving"}
+                          onClick={() => setConfirming(request.id)}
+                        >
                           Review &amp; approve…
                         </button>
-                        <button type="button" className="danger" onClick={() => deny(request)}>
+                        <button
+                          type="button"
+                          disabled={state === "saving"}
+                          className="danger"
+                          onClick={() => makeDecision(request, false)}
+                        >
                           Deny
                         </button>
                       </div>
                     )
                   ) : null}
-                  {request.status === "Approving" ? (
+                  {request.status === "approving" && storageRoot ? (
                     <div className="request-actions interrupted">
                       <p>
-                        This approval was interrupted. It is pinned to{" "}
-                        {request.snapshot?.targets.length ?? 0} resource(s):
+                        This approval was interrupted. Continue only the approval saved in your
+                        private access records. If that record is missing, approval will be refused.
                       </p>
-                      <ul>
-                        {(request.snapshot?.targets ?? []).map((t) => (
-                          <li key={t}>{resourceLabel(t, storageRoot)}</li>
-                        ))}
-                      </ul>
-                      <button type="button" onClick={() => resume(request)}>
-                        Finish approving exactly these
+                      <button
+                        type="button"
+                        disabled={!canApprove || state === "saving"}
+                        onClick={() => makeDecision(request, true)}
+                      >
+                        Finish saved approval
+                      </button>
+                      <button
+                        type="button"
+                        disabled={state === "saving"}
+                        className="danger"
+                        onClick={() => makeDecision(request, false)}
+                      >
+                        Deny
                       </button>
                     </div>
                   ) : null}
@@ -242,63 +265,5 @@ export function InboxView({
         </ul>
       )}
     </section>
-  );
-}
-
-/** §3.4 step 2: approval is on the RESOLVED CONCRETE SET, shown before consent. */
-function ApprovePreview({
-  request,
-  ctx,
-  storageRoot,
-  onConfirm,
-  onCancel,
-}: {
-  request: ParsedAccessRequest;
-  ctx: ApprovalContext;
-  storageRoot: string | null;
-  onConfirm: () => void;
-  onCancel: () => void;
-}) {
-  const preview = useMemo(() => previewApproval(request, ctx), [request, ctx]);
-  return (
-    <div className="approve-preview" data-testid="approve-preview">
-      {preview.targets.length === 0 ? (
-        <>
-          <p>
-            This request resolves to <strong>no concrete resources</strong> in your storage — there
-            is nothing to grant.
-          </p>
-          <button type="button" onClick={onCancel}>
-            Back
-          </button>
-        </>
-      ) : (
-        <>
-          <p>
-            Approving will share these <strong>{preview.targets.length}</strong> resource(s) with
-            the requester (
-            <ModeBadges modes={preview.modes.length > 0 ? preview.modes : ["Read"]} />
-            ):
-          </p>
-          <ul>
-            {preview.targets.map((t) => (
-              <li key={t}>{resourceLabel(t, storageRoot)}</li>
-            ))}
-          </ul>
-          <p className="pin-note">
-            Only these exact resources are shared — data added later is NOT included (a new request
-            is needed).
-          </p>
-          <div className="request-actions">
-            <button type="button" onClick={onConfirm} data-testid="confirm-approve">
-              Approve these {preview.targets.length}
-            </button>
-            <button type="button" onClick={onCancel}>
-              Cancel
-            </button>
-          </div>
-        </>
-      )}
-    </div>
   );
 }
