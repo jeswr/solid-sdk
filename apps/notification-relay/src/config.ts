@@ -3,10 +3,11 @@
 import { createIdTokenVerifier } from "./auth.js";
 import { nodeHandler } from "./node.js";
 import { createRelayOutboundFetch, isTestOutboundFetch } from "./outbound.js";
+import type { PushSink } from "./push.js";
 import { createRelay } from "./relay.js";
 import type { RelayStore } from "./store.js";
 
-type RelayDependencies = { outboundFetch?: typeof fetch; store?: RelayStore };
+type RelayDependencies = { outboundFetch?: typeof fetch; store?: RelayStore; pushSink?: PushSink };
 
 /** Deployment configuration is explicit and fails closed when trust is missing. */
 export function configuredRelay(
@@ -23,6 +24,7 @@ export function configuredRelay(
     allowInsecureLoopback: isTestOutboundFetch(fetch),
     mobileClientId: env.RELAY_MOBILE_CLIENT_ID,
     store: dependencies.store,
+    pushSink: dependencies.pushSink,
     verifyIdToken: createIdTokenVerifier({
       audience: env.RELAY_ID_TOKEN_AUDIENCE,
       issuers: JSON.parse(env.RELAY_TRUSTED_ISSUERS),

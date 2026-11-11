@@ -666,3 +666,58 @@
   flex-direction: column;
   gap: 0.5rem;
 }
+
+/* AUTHORED-BY Codex GPT-6.1-Sol */
+.notes-card-cover {
+  display: block;
+  width: 100%;
+  max-height: 240px;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  border-radius: 8px;
+  margin-bottom: 12px;
+}
+.notes-editor .docs-private-image {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin-block: 8px;
+}
+.notes-editor .ProseMirror-selectednode {
+  outline: 2px solid var(--ring);
+}
+
+.notes-dialog .docs-popover-anchor {
+  position: absolute;
+  top: 64px;
+  left: 50%;
+  width: 1px;
+  height: 1px;
+}
+.notes-image-upload .docs-form {
+  display: grid;
+  gap: 12px;
+}
+.notes-image-upload h2 {
+  font-size: 16px;
+  font-weight: 600;
+}
+.notes-image-upload label {
+  font-size: 13px;
+}
+.notes-image-upload .docs-checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.notes-image-upload input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  min-height: 16px;
+  accent-color: var(--primary);
+}
+.notes-image-upload .docs-upload-placeholder {
+  background: var(--surface-2);
+  padding: 16px;
+  border-radius: var(--radius-md);
+}

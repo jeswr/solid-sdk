@@ -25,7 +25,7 @@ it("loads capture HTML and card checkbox edits into the Notes editor profile", (
     expect(list?.type).toBe("taskList");
     expect(list?.content?.map((item) => item.attrs?.checked)).toEqual([true, true, false]);
     expect(list?.content?.[1]?.content?.[0]?.content?.[0]?.text).toBe("Bread & eggs");
-    for (const node of ["image", "table", "codeBlock", "blockquote"])
+    for (const node of ["table", "codeBlock", "blockquote"])
       expect(editor.schema.nodes[node]).toBeUndefined();
     editor.commands.setContent("<h1>One</h1><h2>Two</h2><h3>Three</h3><h4>Four</h4>");
     expect(editor.getHTML()).toContain("<h3>Three</h3>");

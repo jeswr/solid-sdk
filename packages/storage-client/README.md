@@ -18,7 +18,7 @@ Entry points:
 - `@jeswr/storage-client/errors`: the error model, plus `storageErrorFrom(method, url, response)`, which reads at most 64 KiB of an RFC 9457 body.
 - `@jeswr/storage-client/helpers`: `retryOnConflict(fn, read, attempts = 3)` and an RFC 6902 `applyJsonPatch`.
 - `@jeswr/storage-client/memory`: `createMemoryStorage({ protocol: 'solid' | 'lws', pageSize, moveResource, strictConditional })`, a full in-memory `StorageClient` for tests.
-- `@jeswr/storage-client/solid`: `createSolidBackend({ fetch, root, features?, etagFollowUp? })` and `buildN3Patch({ inserts, deletes, where? })`. Solid moves use copy/delete emulation with rollback; ACLs and describedby metadata are not copied.
+- `@jeswr/storage-client/solid`: `createSolidBackend({ fetch, root, features?, etagFollowUp? })` and `buildN3Patch({ inserts, deletes, where? })`. Solid moves use copy/delete emulation with rollback; emulated moves drop ACLs and do not copy describedby metadata. ACL-preserving moves belong to pod-access (SDK-APP-04).
 - `@jeswr/storage-client/lws`: `createLwsBackend({ fetch, root, storage?, features? })`, the LWS HTTP backend with scoped paging, conditional writes, and RFC 9264 metadata. `storage` defaults to `root`.
 - `@jeswr/storage-client/testing`: Node-only `createRecordingFetch({ fetch, directory })` (enabled by `RECORD=1`), `loadFixtures(directory)`, and strict offline `createReplayFetch(fixtures)` with `assertDone()`. Recording removes Authorization, DPoP, Set-Cookie, Cookie and Proxy-Authorization headers from both persisted sides; bodies are base64 bytes. Use a fresh directory per recorded scenario; review URLs and bodies before committing captures.
 
@@ -77,6 +77,32 @@ the **metadata document's ETag**, and refuses server-managed `type`, `up`, and `
 Recursive deletion preflights logical containment and deletes children before containers, with
 conditional requests throughout. `RecursiveDeleteService` availability does not establish
 `Depth: infinity` support, so deletion retains client traversal even when that service is advertised.
+
+### Keepalive writes and display names
+
+`WriteOptions` and `CreateOptions` accept `keepalive?: boolean`, forwarded to the injected
+fetch for `write`, `writeRdf` and `create`. Browsers cap keepalive bodies at **64 KiB**.
+The client measures encoded bytes (UTF-8 for strings, the view's byte length for Uint8Array,
+and Blob.size), accepts exactly 65,536 bytes and rejects larger or unknown-size bodies with
+non-retryable `StorageError('bad-request')` before sending. ReadableStreams and Blobs without
+a known finite size are refused with keepalive. Callers can fall back to their outbox.
+Omitting keepalive retains ordinary streaming and upload behavior; the memory backend
+applies the same body-size check.
+
+`MetadataOp.title?: string` carries a display title when the server chooses a different
+identifier from the requested name. On LWS, an add writes RFC 9264's `title` target attribute;
+adding an existing href with a title updates that attribute and retains the others. On Solid,
+an add sets `dct:title` on the anchor in its describedby document, through the existing N3
+Patch builder. Empty titles are valid. A remove still removes matching hrefs on LWS; on
+Solid, supplying title also removes that exact title literal from the anchor. Use the
+metadata document's ETag for these edits.
+
+Every listing `Entry` now has `displayName: string | null`: LWS reads the listing target's
+`title`, Solid reads the member's `dct:title` in the container listing. Missing or malformed
+fields are null; no extra metadata requests are made. `displayNameOf(entry)`, exported from
+both the package root and `./helpers`, returns `displayName ?? decodedLastPathSegment`.
+It removes a container's trailing slash before choosing the segment and keeps the raw segment
+when percent decoding fails. An empty displayName remains empty.
 
 From the workspace root:
 
