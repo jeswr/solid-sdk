@@ -1,0 +1,57 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
+
+import { createPodClient } from "@jeswr/storage-client";
+import { type FamilySpace, ownerOnlyAccess } from "@jeswr/suite-groups";
+import { createCalendar, eventContainer } from "@/apps/calendar/state/repository";
+import { createAlbum } from "@/apps/photos/lib/data/albums";
+import { photoStorage } from "@/apps/photos/lib/model";
+import { TaskStore } from "@/apps/tasks/lib/model/store";
+import type { GroupsSession } from "./client";
+
+export function familySpaces(
+  session: GroupsSession,
+  chosen: string[],
+  role: "viewer" | "editor",
+): FamilySpace[] {
+  const client = () => createPodClient({ fetch: session.fetch, storage: session.storageUrl });
+  const privateAccess = async (url: string, owner: string) =>
+    owner === session.webId &&
+    ownerOnlyAccess({ ...session, storage: (await client()).storage }, url);
+  return chosen.map(
+    (key): FamilySpace => ({
+      key,
+      role,
+      create: async () => {
+        if (key === "calendar") {
+          await createCalendar(session, "Family", "blue");
+          const url = new URL("calendar/family.ttl", session.storageUrl).href;
+          return [url, eventContainer(url)];
+        }
+        if (key === "photos") {
+          const album = await createAlbum(
+            photoStorage(session.fetch, session.storageUrl),
+            "Family",
+            new Date().toISOString(),
+          );
+          // The dedicated photo container is a space for future original image uploads.
+          const { storage } = await client();
+          const container = await storage.create(
+            new URL("photos/", session.storageUrl).href,
+            null,
+            { name: `family-${crypto.randomUUID()}`, kind: "container" },
+          );
+          return [album.url, container.url];
+        }
+        const store = new TaskStore({
+          storage: session.storageUrl,
+          webId: session.webId,
+          fetch: session.fetch,
+          ensurePrivateTasksAccess: privateAccess,
+          ensurePrivateIndexAccess: privateAccess,
+        });
+        const project = await store.createProject("Family");
+        return [project.url, project.tracker.stateStore as string];
+      },
+    }),
+  );
+}

@@ -22,7 +22,9 @@ import { setPreferencesIdentity, useTasksPreferences } from "./preferences";
 import { TasksCache } from "./tasks-cache";
 
 export type { NewTask, TaskLoad, TasksSnapshot } from "./tasks-cache";
-export type TasksContextValue = ReturnType<typeof useTasksValue>;
+export type TasksContextValue = Omit<ReturnType<typeof useTasksValue>, "groupSession"> & {
+  groupSession?: PodSession;
+};
 const TasksContext = createContext<TasksContextValue | null>(null);
 function useTasksValue(session: PodSession) {
   const [cache] = useState(
@@ -103,6 +105,7 @@ function useTasksValue(session: PodSession) {
     () => ({
       ...snapshot,
       cache,
+      groupSession: session,
       webId: session.webId,
       storageUrl: session.storageUrl,
       sharingAvailable: supportsTasksSharing(session),

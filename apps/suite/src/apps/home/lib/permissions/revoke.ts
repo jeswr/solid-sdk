@@ -12,7 +12,7 @@ import { SetFrom, TermAs, TermFrom } from "@rdfjs/wrapper";
 import { AclResource } from "@solid/object";
 import { DataFactory, Store, Writer } from "n3";
 import { isomorphic } from "rdf-isomorphic";
-import { parseResource, readResource, serializeTurtle } from "../model/rdf";
+import { httpUrl, parseResource, readResource, serializeTurtle } from "../model/rdf";
 import type { AgentRow, ModeId, PermissionLine, PermissionsSnapshot } from "./types";
 import {
   ACL,
@@ -142,6 +142,9 @@ function selector(subject: Subject): [string, string] {
   switch (subject.kind) {
     case "agent":
       return ["agent", subject.webId];
+    case "group":
+      if (!httpUrl(subject.group)) throw new UnsupportedAccessError();
+      return ["agentGroup", subject.group];
     case "origin":
       return ["origin", subject.origin];
     case "public":

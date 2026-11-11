@@ -1,0 +1,16 @@
+---
+name: suite-groups
+description: Use when managing suite shareable vCard groups, Family setup, group grants or group notification receipts.
+---
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+
+Use GroupDirectory with an existing public StorageClient and the current account's bounded fetch.
+Read README.md and pod-access/SKILL.md. WAC only; refuse ACP/LWS/unknown capability states.
+Use the existing solid-task-model ContactGroup; do not add hand-written RDF or fields.
+Shareable groups are publicly readable in groups/, separate from private Contacts labels.
+Never widen access to the whole pod or to private group settings. Show GROUP_PRIVACY in the UI.
+Refuse unsafe or private group documents, and never publish a nonempty private groups container.
+Require owner-only access to existing settings before trusting space URLs or notification receipts.
+Share multi-resource items in one call so each member receives at most one notification attempt.
+Keep conditional writes, deletion reviews, complete scans and notification claims before delivery.
+Run lint, dependency-first build, typecheck, exhaustive tests, root lint and suite demo e2e.

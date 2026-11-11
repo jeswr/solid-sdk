@@ -22,6 +22,8 @@ export function ShareProject({
       onOpenChange={(open) => {
         if (!open) onClose();
       }}
+      groupSession={tasks.groupSession}
+      groupTargets={[project.url, project.tracker.stateStore as string]}
       url={project.url}
       name={name}
       kind="folder"

@@ -10,7 +10,7 @@ import type {
 import type { DatasetCore } from "@rdfjs/types";
 import type { Classification } from "../model/domains";
 
-export type AgentKind = "person" | "app" | "public" | "authenticated";
+export type AgentKind = "person" | "group" | "app" | "public" | "authenticated";
 export type RoleId = "viewer" | "commenter" | "editor" | "manager";
 export type ModeId = Mode;
 export interface PermissionResource {
@@ -49,6 +49,7 @@ export interface PermissionLine {
   inherited: boolean;
 }
 export interface AgentRow {
+  members?: string[];
   key: string;
   kind: AgentKind;
   id: string;

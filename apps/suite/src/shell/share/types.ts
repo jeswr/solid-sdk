@@ -10,6 +10,7 @@ export interface SharePerson {
   expires?: Date;
 }
 export interface SharingState {
+  groups?: readonly string[];
   people: SharePerson[];
   general: { mode: "restricted" | "link" | "signed-in"; role?: "viewer" | "commenter" | "editor" };
   canManage: boolean;

@@ -34,6 +34,8 @@ import {
   toast,
 } from "@jeswr/suite-ui";
 import { useEffect, useId, useRef, useState } from "react";
+import type { GroupsSession } from "../groups/client";
+import { GroupSharing } from "../groups/group-sharing";
 import {
   generalAccessOptions,
   grantExpires,
@@ -62,6 +64,8 @@ export interface ShareDialogProps {
   caps: ShareCapabilities;
   suiteHref: string;
   contacts?: SharingPerson[];
+  groupSession?: GroupsSession | undefined;
+  groupTargets?: string[] | undefined;
   onPeopleAdded?: (count: number) => void;
   useProfile?: (webId: string) => SharingProfile;
 }
@@ -117,6 +121,8 @@ function SharingContent({
   onOpenChange,
   onPeopleAdded,
   contacts = [],
+  groupSession,
+  groupTargets,
   useProfile = emptyProfile,
   mobile,
 }: ShareDialogProps & { mobile: boolean }) {
@@ -520,6 +526,15 @@ function SharingContent({
                 ))}
             </ul>
           </section>
+          {groupSession && (
+            <GroupSharing
+              session={groupSession}
+              url={url}
+              targets={groupTargets}
+              disabled={disabled}
+              onSaved={() => setAttempt((value) => value + 1)}
+            />
+          )}
           <section className={styles.section} aria-label="General access">
             <Label htmlFor={`${id}-general`}>General access</Label>
             <Select
