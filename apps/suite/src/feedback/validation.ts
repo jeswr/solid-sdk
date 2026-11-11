@@ -1,6 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { z } from "zod";
-import { type Answers, questions } from "./guide";
+import { type Answers, questionById, questions } from "./guide";
 
 const answerFields = Object.fromEntries(
   questions.map((q) => [
@@ -36,14 +36,53 @@ export type Message = z.infer<typeof messageSchema>;
 export function validateAnswers(input: unknown): Answers {
   return answersSchema.parse(input) as Answers;
 }
+/** Convert the small model wire format, then apply the existing answer constraints. */
+export function coerceUpdates(updates: { id: string; value: string }[]): Answers {
+  const answers: Answers = {};
+  for (const { id, value } of updates) {
+    const q = questionById(id);
+    if (!q && id !== "summary") continue;
+    if (value === "(skipped)") answers[id] = value;
+    else if (q?.type === "scale") {
+      const number = Number(value.trim());
+      // Refuse fractional, non-numeric and out-of-range ratings rather than inventing one.
+      if (!value.trim() || !Number.isInteger(number) || number < 1 || number > (q.max ?? 7))
+        continue;
+      answers[id] = number;
+    } else if (q?.type === "multi") {
+      answers[id] = [
+        ...new Set(
+          value
+            .split("|")
+            .map((v) => v.trim())
+            .filter(Boolean),
+        ),
+      ];
+    } else answers[id] = value;
+  }
+  return validateAnswers(answers);
+}
+export const MAX_TURN_CHARACTERS = 24_000;
 export function validateTurn(input: unknown) {
   const r = z
     .object({ pathway, messages: messages.min(1), answers: answersSchema })
     .strict()
+    .refine(
+      (r) =>
+        r.messages.at(-1)?.role === "user" &&
+        r.messages.every((m, i) => i === 0 || m.role !== r.messages[i - 1]?.role),
+      "Conversation must strictly alternate and end with a user answer.",
+    )
     .parse(input);
+  // Keep the opening and newest exchange, dropping older pairs to preserve alternation.
+  const bounded = [...r.messages];
+  const contextSize = JSON.stringify(r.answers).length + 80;
+  const total = () => contextSize + bounded.reduce((n, m) => n + m.content.length, 0);
+  while (total() > MAX_TURN_CHARACTERS && bounded.length > 3) bounded.splice(1, 2);
+  z.number().max(MAX_TURN_CHARACTERS).parse(total());
   return {
     pathway: r.pathway,
-    messages: r.messages.map((m) => ({ role: m.role, content: m.content })),
+    messages: bounded.map((m) => ({ role: m.role, content: m.content })),
     answers: validateAnswers(r.answers),
   };
 }

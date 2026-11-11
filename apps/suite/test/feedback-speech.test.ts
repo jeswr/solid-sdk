@@ -20,7 +20,10 @@ function setup(speech: boolean) {
     ondataavailable?: (e: { data: Blob }) => void;
     onstop?: () => void;
     onerror?: () => void;
-    constructor() {
+    constructor(
+      _stream: unknown,
+      readonly options: MediaRecorderOptions,
+    ) {
       recorder = this;
     }
     start() {
@@ -63,6 +66,7 @@ it("records while dictating, emits live text and attaches the recording", async 
     end = vi.fn();
   const session = await startVoice(text, clip, error, end);
   expect(s.recorder().state).toBe("recording");
+  expect(s.recorder().options.audioBitsPerSecond).toBe(32000);
   s.recognition().onresult?.({ results: [{ isFinal: false, 0: { transcript: "hello" } }] });
   expect(text).toHaveBeenCalledWith("hello");
   s.recognition().onerror?.({ error: "no-speech" });

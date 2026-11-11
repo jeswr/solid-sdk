@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { feedbackApps } from "../src/feedback/apps";
 import { interviewPlan, questions, readWalkthrough, stages } from "../src/feedback/guide";
 import { buildModelRequest, buildPrompt } from "../src/feedback/prompt";
-import { validateSubmission, validateTurn } from "../src/feedback/validation";
+import { coerceUpdates, validateSubmission, validateTurn } from "../src/feedback/validation";
 
 const turn = {
   pathway: "guided",
@@ -59,7 +59,7 @@ it("builds a stable cached prompt with the documented behaviour and a bounded re
   expect(buildPrompt()).toContain("three to five bullets");
   expect(request).toMatchObject({
     model: "claude-opus-5-5",
-    max_tokens: 4000,
+    max_tokens: 1500,
     system: [{ cache_control: { type: "ephemeral" } }],
     output_config: { effort: "low", format: { type: "json_schema" } },
   });
@@ -69,8 +69,8 @@ it("builds a stable cached prompt with the documented behaviour and a bounded re
   expect(buildModelRequest(turn, "configured-model").model).toBe("configured-model");
   expect(request.messages.at(-1)).toEqual(turn.messages[0]);
   const schema = request.output_config.format.schema;
-  expect(schema.properties.answers.additionalProperties).toBe(false);
-  expect(schema.properties.answers.required).toContain("summary");
+  expect(schema.properties.updates.items.additionalProperties).toBe(false);
+  expect(schema.properties.updates.items.properties.id.enum).toContain("summary");
 });
 describe("strict input rebuild", () => {
   it("returns independent validated fields", () => {
@@ -108,4 +108,98 @@ describe("strict input rebuild", () => {
       validateSubmission({ ...input, metadata: { ...input.metadata, token: "secret" } }),
     ).toThrow();
   });
+});
+
+it("emits a constraint-free structured-output schema with zero unions and fully required objects", () => {
+  const forbidden = new Set([
+    "anyOf",
+    "oneOf",
+    "minimum",
+    "maximum",
+    "minLength",
+    "maxLength",
+    "minItems",
+    "maxItems",
+    "pattern",
+    "format",
+  ]);
+  let unions = 0;
+  function walk(value: unknown) {
+    if (!value || typeof value !== "object") return;
+    if (Array.isArray(value)) {
+      value.forEach(walk);
+      return;
+    }
+    const node = value as Record<string, unknown>;
+    if (node.anyOf || node.oneOf || Array.isArray(node.type)) unions++;
+    for (const key of Object.keys(node)) expect(forbidden.has(key), key).toBe(false);
+    expect(Array.isArray(node.type)).toBe(false);
+    expect(node.type).not.toBe("null");
+    if (node.type === "object") {
+      expect(node.additionalProperties).toBe(false);
+      expect(node.required).toEqual(Object.keys(node.properties as object));
+    }
+    Object.values(node).forEach(walk);
+  }
+  walk(buildModelRequest(turn).output_config.format.schema);
+  expect(unions).toBe(0);
+});
+it("coerces updates, ignores unknown ids and invalid ratings, and retains answer validation", () => {
+  expect(
+    coerceUpdates([
+      { id: "seq_drive", value: " 6 " },
+      { id: "likelihood", value: "6" },
+      { id: "umux_ease", value: "1.5" },
+      { id: "umux_capabilities", value: "NaN" },
+      { id: "seq_tasks", value: "(skipped)" },
+      { id: "apps", value: "drive| tasks |drive" },
+      { id: "unknown", value: "ignored" },
+      { id: "summary", value: "Their own words" },
+    ]),
+  ).toEqual({
+    seq_drive: 6,
+    seq_tasks: "(skipped)",
+    apps: ["drive", "tasks"],
+    summary: "Their own words",
+  });
+  expect(coerceUpdates([{ id: "apps", value: "" }])).toEqual({ apps: [] });
+  expect(() => coerceUpdates([{ id: "apps", value: "unknown" }])).toThrow();
+  expect(() => coerceUpdates([{ id: "summary", value: "x".repeat(4001) }])).toThrow();
+});
+it("keeps the first and newest messages under a 24k total input budget without breaking alternation", () => {
+  const messages = Array.from({ length: 40 }, (_, i) => ({
+    role: i % 2 ? "user" : "assistant",
+    content: `${i}:${"x".repeat(3990)}`,
+  }));
+  const request = buildModelRequest({ ...turn, messages });
+  expect(request.messages[1]).toEqual(messages[0]);
+  expect(request.messages.at(-1)).toEqual(messages.at(-1));
+  expect(request.messages.reduce((n, m) => n + m.content.length, 0)).toBeLessThanOrEqual(24_000);
+  const kept = request.messages.slice(1);
+  expect(kept.every((m, i) => i === 0 || m.role !== kept[i - 1]?.role)).toBe(true);
+  for (const roles of [
+    ["user", "assistant", "assistant", "user"],
+    ["assistant", "assistant", "user"],
+    ["user", "user"],
+    ["user", "assistant"],
+  ])
+    expect(() =>
+      validateTurn({ ...turn, messages: roles.map((role) => ({ role, content: "x" })) }),
+    ).toThrow();
+  expect(() =>
+    validateTurn({
+      ...turn,
+      answers: Object.fromEntries(
+        [
+          "context_work",
+          "context_tools",
+          "incident_best",
+          "incident_stuck",
+          "values_control",
+          "values_ladders",
+          "summary",
+        ].map((id) => [id, "x".repeat(4000)]),
+      ),
+    }),
+  ).toThrow();
 });

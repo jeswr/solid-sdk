@@ -17,8 +17,9 @@ import {
   readWalkthrough,
   stages,
 } from "./guide";
+import type { AudioReceipt } from "./receipts";
 import { useVoice, type VoiceClip } from "./speech";
-import type { Message, Submission } from "./validation";
+import { type Message, type Submission, validateAnswers } from "./validation";
 
 type TranscriptMessage = Message & { audio?: number[] };
 export function feedbackApiBase(): string {
@@ -30,6 +31,15 @@ export function feedbackApiBase(): string {
   } catch {
     return "";
   }
+}
+/** Platform errors may be HTML or plain text; never display upstream error bodies. */
+async function feedbackResponse(response: Response) {
+  if (!response.ok || !response.headers.get("content-type")?.includes("application/json"))
+    throw new Error("Feedback request failed.");
+  const value = await response.json().catch(() => undefined);
+  if (!value || typeof value !== "object" || Array.isArray(value))
+    throw new Error("Feedback response is unavailable.");
+  return value;
 }
 function Controls({
   question: q,
@@ -148,6 +158,10 @@ export function FeedbackPage() {
   const [email, setEmail] = useState("");
   const [reference, setReference] = useState<number>();
   const [clips, setClips] = useState<VoiceClip[]>([]);
+  const clipsRef = useRef<VoiceClip[]>([]);
+  const receipts = useRef<(AudioReceipt | undefined)[]>([]);
+  const [savingRecordings, setSavingRecordings] = useState(0);
+  const uploading = useRef(0);
   const [pending, setPending] = useState<number[]>([]);
   const [walkthrough, setWalkthrough] = useState<string[]>([]);
   const voiceBase = useRef("");
@@ -156,8 +170,19 @@ export function FeedbackPage() {
   const voice = useVoice(
     (text) => setInput([voiceBase.current, text].filter(Boolean).join(" ").slice(0, 4000)),
     (clip) => {
-      setClips((current) => [...current, clip]);
-      setPending((current) => [...current, clips.length]);
+      if (clipsRef.current.length >= 10 || clip.blob.size > 3 * 1024 * 1024) {
+        setError("You can attach up to ten recordings of 3 MB each. Please use a shorter answer.");
+        return;
+      }
+      const index = clipsRef.current.length;
+      clipsRef.current = [...clipsRef.current, clip];
+      setClips(clipsRef.current);
+      setPending((current) => [...current, index]);
+      void uploadRecording(clip, index).catch(() =>
+        setError(
+          "We couldn't save that recording. Your audio is still here. Try submitting again, or use Download my feedback.",
+        ),
+      );
     },
   );
   useEffect(() => {
@@ -172,7 +197,7 @@ export function FeedbackPage() {
       signal: controller.signal,
       credentials: "omit",
     })
-      .then((r) => (r.ok ? r.json() : { hosted: false }))
+      .then(feedbackResponse)
       .then((r) => setHosted(r.hosted === true))
       .catch(() => setHosted(false))
       .finally(() => clearTimeout(timer));
@@ -184,6 +209,42 @@ export function FeedbackPage() {
   useEffect(() => {
     if (messages.length) transcriptEnd.current?.scrollIntoView?.({ block: "nearest" });
   }, [messages.length]);
+  async function uploadRecording(clip: VoiceClip, index: number): Promise<AudioReceipt> {
+    uploading.current++;
+    setSavingRecordings(uploading.current);
+    try {
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          const response = await fetch(`${feedbackApiBase()}/api/feedback/audio`, {
+            method: "POST",
+            credentials: "omit",
+            signal: AbortSignal.timeout(45_000),
+            headers: { "Content-Type": clip.blob.type },
+            body: clip.blob,
+          });
+          const receipt = await feedbackResponse(response);
+          if (
+            typeof receipt.sha !== "string" ||
+            !/^[a-f0-9]{40,64}$/.test(receipt.sha) ||
+            receipt.size !== clip.blob.size ||
+            !["webm", "ogg", "m4a"].includes(receipt.ext) ||
+            typeof receipt.sig !== "string" ||
+            !/^\d{13}\.[a-f0-9]{64}$/.test(receipt.sig)
+          )
+            throw new Error("Recording receipt is unavailable.");
+          receipts.current[index] = receipt;
+          return receipt;
+        } catch {
+          if (attempt === 1) throw new Error("Recording could not be saved.");
+          await new Promise((resolve) => setTimeout(resolve, 300));
+        }
+      }
+      throw new Error("Recording could not be saved.");
+    } finally {
+      uploading.current--;
+      setSavingRecordings(uploading.current);
+    }
+  }
   function start(p: Pathway) {
     const q = questionById(p === "quick" ? "general" : "context_work");
     setPathway(p);
@@ -192,7 +253,7 @@ export function FeedbackPage() {
     setMessages([
       {
         role: "assistant",
-        content: `${p === "guided" ? opening : "Tell us anything, in your own words. You can type or record it, and nothing is submitted to the team until you press Submit."}\n\n${q?.text}`,
+        content: `${p === "guided" ? opening : "Tell us anything, in your own words. You can type or record it. Recordings are saved privately when you stop recording. Press Submit to send your interview record to the team."}\n\n${q?.text}`,
       },
     ]);
   }
@@ -290,14 +351,20 @@ export function FeedbackPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           pathway,
-          messages: transcript.slice(-40).map((m) => ({ role: m.role, content: m.content })),
+          messages: (transcript.length > 40
+            ? [...transcript.slice(0, 1), ...transcript.slice(-39)]
+            : transcript
+          ).map((m) => ({ role: m.role, content: m.content })),
           answers: nextAnswers,
         }),
       });
-      const result = await r.json();
-      if (!r.ok) throw new Error(result.error || "The interviewer couldn't reply.");
-      setAnswers(result.answers);
-      setQuestion(result.question);
+      const result = await feedbackResponse(r);
+      if (typeof result.reply !== "string" || typeof result.done !== "boolean")
+        throw new Error("The interviewer couldn't reply.");
+      const nextQuestion = result.question ? questionById(result.question.id) : undefined;
+      if (!result.done && !nextQuestion) throw new Error("The next question is unavailable.");
+      setAnswers(validateAnswers(result.answers));
+      setQuestion(nextQuestion);
       setDone(result.done === true);
       setMessages([...transcript, { role: "assistant", content: result.reply }]);
     } catch {
@@ -338,33 +405,31 @@ export function FeedbackPage() {
     };
   }
   async function submit() {
-    if (sending.current || voice.listening || voice.starting) return;
+    if (sending.current || voice.listening || voice.starting || uploading.current) return;
     setError("");
     sending.current = true;
     setBusy(true);
     try {
-      const form = new FormData();
-      form.set("json", JSON.stringify(record()));
-      clips.forEach((clip, i) => {
-        form.append("audio", clip.blob, `audio-${i + 1}`);
-      });
+      const saved: AudioReceipt[] = [];
+      for (const [i, clip] of clipsRef.current.entries()) {
+        const receipt = receipts.current[i];
+        const expires = Number(receipt?.sig.split(".")[0] ?? 0);
+        saved.push(receipt && expires > Date.now() ? receipt : await uploadRecording(clip, i));
+      }
       const r = await fetch(`${feedbackApiBase()}/api/feedback/submit`, {
         method: "POST",
         signal: AbortSignal.timeout(75_000),
         credentials: "omit",
-        body: form,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ record: record(), receipts: saved }),
       });
-      const result = await r.json();
-      if (!r.ok || !Number.isSafeInteger(result.reference))
-        throw new Error(
-          result.error || "We couldn't submit your feedback. Download a copy to keep it.",
-        );
+      const result = await feedbackResponse(r);
+      if (!Number.isSafeInteger(result.reference) || result.reference < 1)
+        throw new Error("Feedback reference is unavailable.");
       setReference(result.reference);
-    } catch (e) {
+    } catch {
       setError(
-        e instanceof Error
-          ? e.message
-          : "We couldn't submit your feedback. Download a copy to keep it.",
+        "We couldn't submit your feedback. Your answers and recordings are still here. Try again, or use Download my feedback to keep a copy.",
       );
     } finally {
       sending.current = false;
@@ -401,10 +466,11 @@ export function FeedbackPage() {
           them. Please don't include anything confidential.
         </p>
         <p>
-          Each answer sent to the interviewer is processed by Anthropic. Your recordings stay in
-          this page until you submit or download them. Your browser's speech service may process
-          audio for live dictation. Check the transcript before sending. Keep this page open until
-          you have submitted or downloaded your feedback.
+          Each answer sent to the interviewer is processed by Anthropic. Recordings are saved
+          privately as soon as you stop recording; Submit sends your answers and creates the team
+          feedback record. Copies also stay in this page for download. Your browser's speech service
+          may process audio for live dictation. Check the transcript before sending. Keep this page
+          open until you have submitted or downloaded your feedback.
         </p>
       </aside>
       {hosted === false && (
@@ -496,6 +562,7 @@ export function FeedbackPage() {
                   variant="outline"
                   disabled={
                     busy ||
+                    savingRecordings > 0 ||
                     voice.starting ||
                     (!voice.listening && (!voice.supported || clips.length >= 10))
                   }
@@ -531,6 +598,11 @@ export function FeedbackPage() {
               {voice.error && <p role="status">{voice.error}</p>}
             </div>
           )}
+          {savingRecordings > 0 && (
+            <p role="status" className="text-sm">
+              Saving recording...
+            </p>
+          )}
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
               <Label htmlFor="feedback-name">Name (optional)</Label>
@@ -560,7 +632,11 @@ export function FeedbackPage() {
           )}
           <div className="flex flex-wrap gap-3">
             <Button
-              disabled={locked || (messages.length < 2 && !input.trim() && !pending.length)}
+              disabled={
+                locked ||
+                savingRecordings > 0 ||
+                (messages.length < 2 && !input.trim() && !pending.length)
+              }
               onClick={() => void submit()}
             >
               {busy ? "Please wait" : done ? "Submit" : "Submit what I've said so far"}

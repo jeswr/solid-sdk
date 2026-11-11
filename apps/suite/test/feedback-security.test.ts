@@ -93,8 +93,21 @@ describe("audio admission", () => {
     await expect(validateAudio(new File([webm], "a", { type: "audio/mp4" }))).rejects.toThrow();
     await expect(validateAudio(new File([webm], "a", { type: "image/png" }))).rejects.toThrow();
     await expect(
-      validateAudio(new File([new Uint8Array(4 * 1024 * 1024 + 1)], "a", { type: "audio/webm" })),
+      validateAudio(new File([new Uint8Array(3 * 1024 * 1024 + 1)], "a", { type: "audio/webm" })),
     ).rejects.toThrow();
     await expect(validateAudio(new File([], "a", { type: "audio/webm" }))).rejects.toThrow();
   });
+});
+
+it("limits audio uploads to twenty per visitor per hour and applies an instance cap", () => {
+  let now = 0;
+  const limit = createLimiter(() => now);
+  for (let i = 0; i < 20; i++) expect(limit("a", "audio")).toBeUndefined();
+  expect(limit("a", "audio")).toBe(3_600_000);
+  expect(limit("b", "audio")).toBeUndefined();
+  now += 3_600_000;
+  expect(limit("a", "audio")).toBeUndefined();
+  const instance = createLimiter(() => now, { turn: 1, submit: 1, audio: 1 });
+  expect(instance("a", "audio")).toBeUndefined();
+  expect(instance("b", "audio")).toBeGreaterThan(0);
 });

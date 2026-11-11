@@ -1,4 +1,5 @@
 <!-- AUTHORED-BY Claude Opus 5.5 -->
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 # Pilot feedback interview
 
 The suite asks pilot participants for feedback through a short interview led by an LLM
@@ -17,7 +18,7 @@ themselves live in `src/feedback/guide.ts`; keep the two in step.
 | **Value Sensitive Design** (Friedman, Kahn and Borning; Friedman and Hendry, 2019) | Ask about human values, not just usability: control and ownership of data, privacy, trust, autonomy, and who else is affected (indirect stakeholders such as people in your contacts, photos or shared documents). Ask where values pull against each other, such as convenience against control. |
 | **Laddering** (means-end chains, Reynolds and Gutman, 1988) | When a participant names something they care about, ask "why does that matter to you?" up to twice, to climb from a feature to a consequence to a value. |
 | **Jobs to be done** (switch interview, forces of progress) | "If you used this for real, what would you use it for? What would it replace? What would make you hesitate?" Push and pull, anxiety and habit. |
-| **Member checking** | At the end the interviewer reads back a short summary and asks "did I get that right?" before anything is sent. |
+| **Member checking** | At the end the interviewer reads back a short summary and asks "did I get that right?" before the interview record is submitted. |
 
 ## The interview, stage by stage
 
@@ -25,7 +26,8 @@ About ten minutes. The interviewer may skip or merge questions the participant h
 answered, and every question can be skipped.
 
 1. **Opening.** Thanks, how long it takes, that honest criticism is the most useful thing,
-   that it can be typed or spoken, and that nothing is sent until they press Submit.
+   that it can be typed or spoken, and that recordings are saved privately when stopped.
+   Submit sends the interview record to the team.
 2. **Context.** What they do day to day with documents, files, tasks and calendars, and
    which tools they use now. Which device they used for the pilot.
 3. **Walk back through it.** "Tell me what you did first, and then what." Per app they

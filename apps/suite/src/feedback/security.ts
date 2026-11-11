@@ -74,22 +74,26 @@ export function visitorOf(request: Request): string {
   );
 }
 const DAY = 86_400_000;
-export function createLimiter(now = Date.now, instanceCaps = { turn: 2000, submit: 200 }) {
-  const visitors = new Map<string, { turn: number[]; submit: number[] }>();
+export function createLimiter(
+  now = Date.now,
+  instanceCaps: { turn: number; submit: number; audio?: number } = { turn: 2000, submit: 200 },
+) {
+  const caps = { audio: 2000, ...instanceCaps };
+  const visitors = new Map<string, { turn: number[]; submit: number[]; audio: number[] }>();
   let day = -1;
-  let instance = { turn: 0, submit: 0 };
-  return (key: string, kind: "turn" | "submit"): number | undefined => {
+  let instance = { turn: 0, submit: 0, audio: 0 };
+  return (key: string, kind: "turn" | "submit" | "audio"): number | undefined => {
     const t = now();
     if (Math.floor(t / DAY) !== day) {
       day = Math.floor(t / DAY);
-      instance = { turn: 0, submit: 0 };
+      instance = { turn: 0, submit: 0, audio: 0 };
     }
-    if (instance[kind] >= instanceCaps[kind]) return (day + 1) * DAY - t;
+    if (instance[kind] >= caps[kind]) return (day + 1) * DAY - t;
     // Fail closed at capacity rather than evicting active visitors and resetting allowances.
     for (const [id, v] of visitors)
-      if (![...v.turn, ...v.submit].some((at) => t - at < DAY)) visitors.delete(id);
+      if (![...v.turn, ...v.submit, ...v.audio].some((at) => t - at < DAY)) visitors.delete(id);
     if (!visitors.has(key) && visitors.size >= 20_000) return 60_000;
-    const v = visitors.get(key) ?? { turn: [], submit: [] };
+    const v = visitors.get(key) ?? { turn: [], submit: [], audio: [] };
     v[kind] = v[kind].filter((at) => t - at < DAY);
     const windows =
       kind === "turn"
@@ -97,7 +101,7 @@ export function createLimiter(now = Date.now, instanceCaps = { turn: 2000, submi
             [600_000, 30],
             [DAY, 120],
           ]
-        : [[3_600_000, 5]];
+        : [[3_600_000, kind === "audio" ? 20 : 5]];
     for (const [span = 0, limit = 0] of windows) {
       const recent = v[kind].filter((at) => t - at < span);
       if (recent.length >= limit) return span - (t - (recent[0] ?? t));

@@ -46,7 +46,7 @@ export async function startVoice(
     ].find((type) => MediaRecorder.isTypeSupported(type));
     recorder = new MediaRecorder(stream, {
       ...(mimeType ? { mimeType } : {}),
-      audioBitsPerSecond: 64000,
+      audioBitsPerSecond: 32000,
     });
     const chunks: Blob[] = [];
     let size = 0;
@@ -63,7 +63,7 @@ export async function startVoice(
         chunks.push(e.data);
         size += e.data.size;
       }
-      if (size >= 3_800_000 && recorder.state !== "inactive") session.stop();
+      if (size >= 2_800_000 && recorder.state !== "inactive") session.stop();
     };
     recorder.onerror = () => {
       cancelled = true;
@@ -74,7 +74,7 @@ export async function startVoice(
       cleanup();
       if (cancelled) return;
       const blob = new Blob(chunks, { type: recorder.mimeType || mimeType || "audio/webm" });
-      if (blob.size && blob.size <= 4 * 1024 * 1024) onClip({ blob, text: latest });
+      if (blob.size && blob.size <= 3 * 1024 * 1024) onClip({ blob, text: latest });
       else onError("That recording could not be attached. Please try a shorter answer.");
     };
     const w = window as unknown as {

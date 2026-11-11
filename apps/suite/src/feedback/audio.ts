@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+import { MAX_AUDIO_BYTES } from "./receipts";
 import { FeedbackError } from "./security";
 export interface AudioFile {
   bytes: Uint8Array;
@@ -19,8 +20,8 @@ export function sniffAudio(bytes: Uint8Array): AudioFile["ext"] | undefined {
   return undefined;
 }
 export async function validateAudio(file: File): Promise<AudioFile> {
-  if (!file.type.startsWith("audio/") || file.size === 0 || file.size > 4 * 1024 * 1024)
-    throw new FeedbackError(400, "Each recording must be an audio file of at most 4 MB.");
+  if (!file.type.startsWith("audio/") || file.size === 0 || file.size > MAX_AUDIO_BYTES)
+    throw new FeedbackError(400, "Each recording must be an audio file of at most 3 MB.");
   const bytes = new Uint8Array(await file.arrayBuffer());
   const ext = sniffAudio(bytes);
   const mime = (file.type.split(";")[0] ?? "").toLowerCase();

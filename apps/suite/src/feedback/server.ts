@@ -4,6 +4,7 @@ import { z } from "zod";
 import { validateAudio } from "./audio";
 import { questionById } from "./guide";
 import { buildModelRequest } from "./prompt";
+import { MAX_AUDIO_BYTES, verifyReceipts } from "./receipts";
 import {
   allowedOrigin,
   type FeedbackEnv,
@@ -14,7 +15,7 @@ import {
   visitorOf,
 } from "./security";
 import { createGithubStore, type FeedbackStore } from "./store";
-import { validateAnswers, validateSubmission, validateTurn } from "./validation";
+import { coerceUpdates, validateAnswers, validateSubmission, validateTurn } from "./validation";
 
 type ModelRequest = ReturnType<typeof buildModelRequest>;
 export interface InterviewClient {
@@ -43,9 +44,11 @@ export function createFeedbackHandlers(options: {
 }) {
   const { env } = options;
   const limiter = options.limiter ?? rateLimiter;
+  // Recheck repository privacy and current credentials for each upload/submission.
+  const storage = () => options.store ?? createGithubStore(env);
   async function protect(
     request: Request,
-    kind: "turn" | "submit",
+    kind: "turn" | "submit" | "audio",
     action: () => Promise<Response>,
   ): Promise<Response> {
     const origin = allowedOrigin(request, env);
@@ -137,18 +140,18 @@ export function createFeedbackHandlers(options: {
         const r = z
           .object({
             reply: z.string().min(1).max(4000),
-            answers: z.record(z.string(), z.unknown()),
-            nextQuestionId: z.string().nullable(),
+            updates: z
+              .array(z.object({ id: z.string(), value: z.string().max(4000) }).strict())
+              .max(100),
+            nextQuestionId: z.string(),
             done: z.boolean(),
           })
           .strict()
           .parse(result);
-        const answers = validateAnswers(
-          Object.fromEntries(Object.entries(r.answers).filter(([, v]) => v !== null)),
-        );
-        const merged = { ...input.answers, ...answers };
-        const question = r.nextQuestionId ? questionById(r.nextQuestionId) : undefined;
-        if (r.nextQuestionId && !question)
+        const answers = coerceUpdates(r.updates);
+        const merged = validateAnswers({ ...input.answers, ...answers });
+        const question = r.nextQuestionId !== "none" ? questionById(r.nextQuestionId) : undefined;
+        if (r.nextQuestionId !== "none" && !question)
           throw new FeedbackError(
             502,
             "The interviewer returned an unknown question. Please use the plain form.",
@@ -175,35 +178,28 @@ export function createFeedbackHandlers(options: {
         return json({ reply: r.reply, answers: merged, ...(question ? { question } : {}), done });
       });
     },
+    audio(request: Request) {
+      return protect(request, "audio", async () => {
+        const bytes = await readBody(request, MAX_AUDIO_BYTES);
+        const file = new File([bytes as Uint8Array<ArrayBuffer>], "recording", {
+          type: request.headers.get("content-type") ?? "",
+        });
+        return json(await storage().upload(await validateAudio(file)));
+      });
+    },
     submit(request: Request) {
       return protect(request, "submit", async () => {
-        const contentType = request.headers.get("content-type") ?? "";
-        if (!contentType.startsWith("multipart/form-data;"))
-          throw new FeedbackError(415, "Send a feedback form with recordings.");
-        const bytes = await readBody(request, 42 * 1024 * 1024);
-        const form = await new Request("https://feedback.invalid", {
-          method: "POST",
-          headers: { "Content-Type": contentType },
-          body: new Blob([bytes as Uint8Array<ArrayBuffer>]),
-        }).formData();
-        for (const key of form.keys())
-          if (key !== "json" && key !== "audio")
-            throw new FeedbackError(400, "Unexpected feedback field.");
-        const data = form.get("json");
-        if (
-          form.getAll("json").length !== 1 ||
-          typeof data !== "string" ||
-          new TextEncoder().encode(data).length > 1_000_000
-        )
-          throw new FeedbackError(400, "The feedback record is too large or missing.");
-        const submission = validateSubmission(JSON.parse(data));
-        const files = form.getAll("audio");
-        if (files.length > 10 || files.some((f) => typeof f === "string"))
-          throw new FeedbackError(400, "Attach at most ten audio recordings.");
-        if (submission.transcript.some((m) => m.audio?.some((i) => i >= files.length)))
+        if (!request.headers.get("content-type")?.startsWith("application/json"))
+          throw new FeedbackError(415, "Send JSON feedback with recording receipts.");
+        const data = z
+          .object({ record: z.unknown(), receipts: z.unknown() })
+          .strict()
+          .parse(JSON.parse(new TextDecoder().decode(await readBody(request, 1_000_000))));
+        const submission = validateSubmission(data.record);
+        const receipts = verifyReceipts(data.receipts, env);
+        if (submission.transcript.some((m) => m.audio?.some((i) => i >= receipts.length)))
           throw new FeedbackError(400, "A recording is missing from the feedback.");
-        const audio = await Promise.all((files as File[]).map(validateAudio));
-        return json(await (options.store ?? createGithubStore(env)).save(submission, audio));
+        return json(await storage().save(submission, receipts));
       });
     },
   };

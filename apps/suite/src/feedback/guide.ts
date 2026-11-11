@@ -27,7 +27,7 @@ export const stages = [
   "Read-back and close",
 ] as const;
 export const opening =
-  "Thank you for trying the Solid Suite. This takes about ten minutes. Honest criticism helps us most. You can type or speak, and skip any question. Nothing is submitted to the suite team until you press Submit. The interviewer processes each answer as you send it.";
+  "Thank you for trying the Solid Suite. This takes about ten minutes. Honest criticism helps us most. You can type or speak, and skip any question. Recordings are saved privately when you stop recording. Press Submit to send your interview record to the suite team. The interviewer processes each answer as you send it.";
 const text = (id: string, stage: number, content: string, optional = false): Question => ({
   id,
   stage,
