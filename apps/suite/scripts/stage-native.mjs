@@ -2,6 +2,11 @@
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
+/** Web server routes never enter the static native build graph. */
+export function includeNativeSource(path, root) {
+  return !["dev", ".well-known", "api"].some((name) => path === join(root, "src/app", name));
+}
+
 /** Native client references must enter the build graph only during staging. */
 export async function stageCalendarRoutes(sourceRoot) {
   const calendar = join(sourceRoot, "app/(suite)/calendar");

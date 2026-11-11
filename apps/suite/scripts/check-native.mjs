@@ -1,9 +1,19 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
-import { readFile, stat } from "node:fs/promises";
+import { access, readFile, stat } from "node:fs/promises";
 import { assertCspHashes } from "./csp-hashes.mjs";
 import { filesUnder } from "./route-manifest.mjs";
 
 export async function checkNative(exportDir, limit = 40_000_000) {
+  for (const name of ["api", "api.html"]) {
+    if (
+      await access(`${exportDir}/${name}`).then(
+        () => true,
+        () => false,
+      )
+    )
+      throw new Error("Server API routes must not enter the native export");
+  }
   let bytes = 0;
   for (const path of await filesUnder(exportDir)) {
     bytes += (await stat(path)).size;
