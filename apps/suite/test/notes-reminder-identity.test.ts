@@ -189,6 +189,122 @@ it.each([
 });
 
 it.each([
+  [403, "indexedDB"],
+  [503, "indexedDB"],
+  ["offline", "indexedDB"],
+  ["offline", "memory"],
+])("remembers URL-keyed delivery after identification recovers from %s (%s history)", async (failure, history) => {
+  const s = await fixture();
+  const factory = new IDBFactory();
+  const durable = createIndexedDbFiredStore(ACCOUNT, factory);
+  if (history === "memory") {
+    vi.spyOn(durable, "claim").mockRejectedValueOnce(new Error("Storage quota exceeded"));
+    vi.spyOn(durable, "deliver").mockRejectedValueOnce(new Error("Storage quota exceeded"));
+  }
+  const fired = createBrowserFiredStore(ACCOUNT, createMemoryFiredStore(), durable);
+  let recovered = false;
+  const store = createNotesStore({
+    ...s.options,
+    fired,
+    fetch: (url, init) => {
+      if (recovered || init?.method !== "PUT") return s.pod.fetch(url, init);
+      if (failure === "offline") return Promise.reject(new TypeError("Offline"));
+      return Promise.resolve(new Response(null, { status: failure as number }));
+    },
+  });
+  const notify = vi.fn();
+  const scheduler = createReminderScheduler({
+    fired,
+    identify: (note) => store.identifyReminder(note as StoredNote),
+    notify,
+  });
+  await scheduler.tick([s.external], NOW.getTime());
+  expect(notify).toHaveBeenCalledExactlyOnceWith(s.external);
+  recovered = true;
+  await createReminderScheduler({
+    fired:
+      history === "memory"
+        ? fired
+        : createBrowserFiredStore(ACCOUNT, createMemoryFiredStore(), durable),
+    identify: (note) => store.identifyReminder(note as StoredNote),
+    notify,
+  }).tick([s.external], NOW.getTime());
+  const identified = (await store.read(NOTE_URL)) as StoredNote;
+  expect(identified.reminderId).toBeTruthy();
+  await createReminderScheduler({
+    fired: createBrowserFiredStore(ACCOUNT, createMemoryFiredStore(), durable),
+    notify,
+  }).tick([identified], NOW.getTime());
+  expect(notify).toHaveBeenCalledExactlyOnceWith(s.external);
+  expect(await fired.claim(reminderKey(identified), NOW.getTime())).toBe(false);
+  expect(await durable.claim(reminderKey(identified), NOW.getTime())).toBe(false);
+});
+
+it.each([
+  "read",
+  "mark",
+])("keeps pod identification successful when delivery history %s fails", async (failure) => {
+  const s = await fixture();
+  const fired = createMemoryFiredStore();
+  const notify = vi.fn();
+  if (failure === "mark") {
+    await createReminderScheduler({ fired, notify }).tick([s.external], NOW.getTime());
+    vi.spyOn(fired, "markDelivered").mockRejectedValue(new Error("Storage unavailable"));
+  } else {
+    vi.spyOn(fired, "wasDelivered").mockRejectedValue(new Error("Storage unavailable"));
+  }
+  await createReminderScheduler({
+    fired,
+    identify: (note) => s.store.identifyReminder(note as StoredNote),
+    notify,
+  }).tick([s.external], NOW.getTime());
+  expect((await s.store.read(NOTE_URL))?.reminderId).toBeTruthy();
+  expect(notify).toHaveBeenCalledTimes(1);
+});
+
+it("saves the identifier before waiting on delivery history", async () => {
+  const s = await fixture();
+  const fired = createMemoryFiredStore();
+  let resume!: (delivered: boolean) => void;
+  let checked!: () => void;
+  const checking = new Promise<void>((resolve) => {
+    checked = resolve;
+  });
+  vi.spyOn(fired, "wasDelivered").mockImplementation(() => {
+    checked();
+    return new Promise((resolve) => {
+      resume = resolve;
+    });
+  });
+  const tick = createReminderScheduler({
+    fired,
+    identify: (note) => s.store.identifyReminder(note as StoredNote),
+    notify: vi.fn(),
+  }).tick([s.external], NOW.getTime());
+  await checking;
+  expect((await s.store.read(NOTE_URL))?.reminderId).toBeTruthy();
+  resume(false);
+  await tick;
+});
+
+it("allows a changed trigger returned by identification after a URL-keyed delivery", async () => {
+  const s = await fixture();
+  const fired = createMemoryFiredStore();
+  const notify = vi.fn();
+  await createReminderScheduler({ fired, notify }).tick([s.external], NOW.getTime());
+  const changed = {
+    ...s.external,
+    reminderId: "changed",
+    reminder: new Date(NOW.getTime() - 1).toISOString(),
+  };
+  await createReminderScheduler({ fired, notify, identify: async () => changed }).tick(
+    [s.external],
+    NOW.getTime(),
+  );
+  expect(notify.mock.calls.map(([note]) => note)).toEqual([s.external, changed]);
+});
+
+it.each([
   "text save",
   "archive",
 ])("suppresses an overdue external reminder after its first %s assigns an identifier", async (action) => {

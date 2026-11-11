@@ -35,6 +35,16 @@ export function createReminderScheduler(options: {
           try {
             const identified = await options.identify(note);
             if (!identified) continue;
+            if (
+              identified.reminderId &&
+              identified.reminder === note.reminder &&
+              (await options.fired.wasDelivered(reminderKey(note), clock()).catch(() => false))
+            ) {
+              // Identification already reached the pod. Preserve a prior URL-keyed
+              // delivery before claiming the new identity, without delaying writes.
+              await options.fired.markDelivered(reminderKey(identified), clock()).catch(() => {});
+              continue;
+            }
             note = identified;
           } catch {
             // Read-only and offline pods still get best-effort URL-keyed delivery.

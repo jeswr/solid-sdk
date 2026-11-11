@@ -290,10 +290,15 @@ it.each(["memory", "indexedDB"])("records overdue identities as delivered in %s"
       ? createMemoryFiredStore()
       : createIndexedDbFiredStore("alice", new IDBFactory());
   await store.markDelivered("identified", NOW);
+  expect(await store.wasDelivered("identified", NOW)).toBe(true);
+  expect(await store.wasDelivered("missing", NOW)).toBe(false);
+  expect(await store.wasDelivered("identified", NOW + 30 * DAY)).toBe(false);
+  await store.markDelivered("identified", NOW);
   expect(await store.claim("identified", NOW)).toBe(false);
   expect(await store.owns("identified", NOW)).toBe(false);
   expect(await store.owns("missing", NOW)).toBe(false);
   await store.claim("pending", NOW, "owner");
+  expect(await store.wasDelivered("pending", NOW)).toBe(false);
   expect(await store.owns("pending", NOW, "other")).toBe(false);
   expect(await store.owns("pending", NOW, "owner")).toBe(true);
   expect(await store.owns("pending", NOW + CLAIM_TTL, "owner")).toBe(false);
@@ -322,6 +327,7 @@ it("keeps fallback deliveries deduplicated when durable completion and cancellat
     deliver: vi.fn().mockRejectedValue(failure),
     release: vi.fn().mockRejectedValue(failure),
     owns: vi.fn().mockRejectedValue(failure),
+    wasDelivered: vi.fn().mockRejectedValue(failure),
     markDelivered: vi.fn().mockRejectedValue(failure),
   };
   const fired = createBrowserFiredStore("fallback", memory, durable);
@@ -333,12 +339,34 @@ it("keeps fallback deliveries deduplicated when durable completion and cancellat
   expect(await fired.claim("cancelled", NOW + CLAIM_TTL, "third")).toBe(false);
   await fired.markDelivered("identified", NOW);
   expect(await memory.claim("identified", NOW, "another")).toBe(false);
+  expect(await fired.wasDelivered("identified", NOW)).toBe(true);
+  expect(await fired.wasDelivered("missing", NOW)).toBe(false);
+});
+
+it("delivers from memory when durable claims fail but durable ownership checks return false", async () => {
+  const durable = {
+    ...createMemoryFiredStore(),
+    claim: vi.fn().mockRejectedValue(new Error("Storage quota exceeded")),
+    owns: vi.fn().mockResolvedValue(false),
+  };
+  const fired = createBrowserFiredStore("quota", createMemoryFiredStore(), durable);
+  const notify = vi.fn();
+  const scheduler = createReminderScheduler({ fired, notify });
+  await scheduler.tick([due], NOW);
+  await scheduler.tick([due], NOW);
+  expect(notify).toHaveBeenCalledExactlyOnceWith(due);
 });
 
 it("records page history when IndexedDB is absent", async () => {
+  const defaultStore = createBrowserFiredStore("default-memory-only");
+  await defaultStore.claim("delivered", NOW);
+  await defaultStore.deliver("delivered", NOW);
+  expect(await createBrowserFiredStore("default-memory-only").claim("delivered", NOW)).toBe(false);
   const memory = createMemoryFiredStore();
   const fired = createBrowserFiredStore("memory-only", memory, memory);
   await fired.markDelivered("identified", NOW);
+  expect(await fired.wasDelivered("identified", NOW)).toBe(true);
+  expect(await fired.wasDelivered("missing", NOW)).toBe(false);
   expect(await fired.claim("identified", NOW, "another")).toBe(false);
   expect(await fired.owns("identified", NOW, "another")).toBe(false);
   await fired.claim("pending", NOW, "owner");
@@ -404,4 +432,38 @@ it("checks durable ownership and the clock again after a delayed lease validatio
     notify,
   }).tick([due], NOW);
   expect(notify).not.toHaveBeenCalled();
+});
+
+it("keeps a successor's durable ownership after a fallback claim expires and the stale owner finishes", async () => {
+  const durable = createMemoryFiredStore();
+  vi.spyOn(durable, "claim").mockRejectedValueOnce(new Error("Storage quota exceeded"));
+  const fired = createBrowserFiredStore("recovered", createMemoryFiredStore(), durable);
+  expect(await fired.claim("key", NOW, "old")).toBe(true);
+  expect(await fired.claim("other", NOW, "other")).toBe(true);
+  expect(await fired.claim("key", NOW + CLAIM_TTL, "new")).toBe(true);
+  await fired.release("key", "old");
+  await fired.deliver("key", NOW + CLAIM_TTL, "old");
+  expect(await fired.owns("key", NOW + CLAIM_TTL, "new")).toBe(true);
+  await durable.release("key", "new");
+  expect(await fired.owns("key", NOW + CLAIM_TTL, "new")).toBe(false);
+});
+
+it("uses memory ownership if durable validation fails after granting the claim", async () => {
+  const durable = createMemoryFiredStore();
+  vi.spyOn(durable, "owns").mockRejectedValue(new Error("Storage unavailable"));
+  const fired = createBrowserFiredStore("unavailable", createMemoryFiredStore(), durable);
+  expect(await fired.claim("key", NOW, "owner")).toBe(true);
+  expect(await fired.owns("key", NOW, "owner")).toBe(true);
+});
+
+it("checks durable ownership and deliveries when a wrapper shares memory with an earlier wrapper", async () => {
+  const durable = createMemoryFiredStore();
+  const memory = createMemoryFiredStore();
+  const first = createBrowserFiredStore("shared", memory, durable);
+  const second = createBrowserFiredStore("shared", memory, durable);
+  await first.claim("key", NOW, "owner");
+  expect(await second.owns("key", NOW, "owner")).toBe(true);
+  await durable.markDelivered("delivered", NOW);
+  expect(await second.wasDelivered("delivered", NOW)).toBe(true);
+  expect(await second.wasDelivered("missing", NOW)).toBe(false);
 });

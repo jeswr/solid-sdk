@@ -15,6 +15,7 @@ export interface FiredReminderStore {
   owns(key: string, now: number, owner?: string): Promise<boolean>;
   deliver(key: string, now: number, owner?: string): Promise<void>;
   release(key: string, owner?: string): Promise<void>;
+  wasDelivered(key: string, now: number): Promise<boolean>;
   /** Best-effort suppression when a save identifies an already overdue reminder. */
   markDelivered(key: string, now: number): Promise<void>;
 }
@@ -71,6 +72,9 @@ function operations(update: Update): FiredReminderStore {
         history.delete(key);
         return true;
       });
+    },
+    wasDelivered(key, now) {
+      return update((history) => history.get(key)?.state === "delivered", now);
     },
     async markDelivered(key, now) {
       await update((history) => {
@@ -148,13 +152,27 @@ export function createBrowserFiredStore(
     : createIndexedDbFiredStore(account, indexedDB),
 ): FiredReminderStore {
   pageMemory.set(account, memory);
+  const claims = new Map<
+    string,
+    { owner: string | undefined; store: FiredReminderStore; expires: number }
+  >();
+  const forget = (key: string, owner: string | undefined) => {
+    if (claims.get(key)?.owner === owner) claims.delete(key);
+  };
   return {
     async claim(key, now, owner) {
+      for (const [claimedKey, claim] of claims) if (claim.expires <= now) claims.delete(claimedKey);
       if (!(await memory.claim(key, now, owner))) return false;
+      const claim = { owner, store: memory, expires: now + CLAIM_TTL };
+      claims.set(key, claim);
       try {
-        if (durable === memory || (await durable.claim(key, now, owner))) return true;
+        if (durable === memory || (await durable.claim(key, now, owner))) {
+          claim.store = durable;
+          return true;
+        }
         // Rejected is not delivered. Retry against durable storage next time.
         await memory.release(key, owner);
+        forget(key, owner);
         return false;
       } catch {
         return true;
@@ -162,12 +180,15 @@ export function createBrowserFiredStore(
     },
     async deliver(key, now, owner) {
       await memory.deliver(key, now, owner);
+      forget(key, owner);
       if (durable !== memory) await durable.deliver(key, now, owner).catch(() => {});
     },
     async owns(key, now, owner) {
       if (!(await memory.owns(key, now, owner))) return false;
+      const claim = claims.get(key);
+      const store = claim && claim.owner === owner ? claim.store : durable;
       try {
-        return durable === memory || (await durable.owns(key, now, owner));
+        return store === memory || (await store.owns(key, now, owner));
       } catch {
         return true;
       }
@@ -175,6 +196,11 @@ export function createBrowserFiredStore(
     async release(key, owner) {
       if (durable !== memory) await durable.release(key, owner).catch(() => {});
       await memory.release(key, owner);
+      forget(key, owner);
+    },
+    async wasDelivered(key, now) {
+      if (await memory.wasDelivered(key, now)) return true;
+      return durable !== memory && durable.wasDelivered(key, now).catch(() => false);
     },
     async markDelivered(key, now) {
       await memory.markDelivered(key, now);

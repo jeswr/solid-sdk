@@ -8,6 +8,8 @@ new one. Trash removes the reminder.
 The pod is the source of identity. For an external reminder without an identifier,
 the scheduler first saves one with If-Match; on 412 it re-reads the winning note.
 Other failures fall back to the URL and trigger time for best-effort delivery.
+If identification later succeeds for that same trigger, the scheduler copies any
+known URL-keyed delivery to the identifier key after the pod write succeeds.
 An ordinary save or move that identifies an overdue reminder records it as delivered
 locally, without waiting for storage. IndexedDB failures never block pod writes.
 
@@ -16,6 +18,8 @@ IndexedDB keeps one record per reminder key, either pending (owner and a
 pending record. Ownership and expiry are checked immediately before notification.
 Cancelled delivery releases the record; abandoned claims expire.
 Rejected tabs discard their local reservation and recheck on subsequent ticks.
+Claims granted by the memory fallback validate ownership in memory even if
+IndexedDB can still read history but cannot add a claim.
 
 Retention removes delivered records older than thirty days and bounds each
 account's history to 2,000 entries. An older caller does not discard a newer
