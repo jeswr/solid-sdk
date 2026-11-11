@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 export * from "./attachment.js";
+export * from "./drafts.js";
 export * from "./folder.js";
 export * from "./helpers.js";
 export * from "./importer.js";
