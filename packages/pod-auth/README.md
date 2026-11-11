@@ -91,6 +91,17 @@ loopback callback outside production. Plain HTTP additionally requires `allowIns
 it is checked on every protocol hop and never authorizes non-loopback HTTP. Browser callback origins
 must match the current application origin. Loopback includes localhost, 127.0.0.0/8 and ::1.
 
+Native apps explicitly set `nativeRedirect: true` and a callback such as
+`redirectUri: "org.jeswr.suite:/oauth/callback"`. This requires a lowercase reverse-domain private-use
+scheme, an absolute path, and no authority, credentials, query, fragment or URL normalization. Supply
+an HTTPS Client ID Document URL with `application_type: "native"` and the exact callback registered.
+Dynamic registration, `allowInsecureLoopback: true` and HTTP(S) callbacks are forbidden in this mode.
+Only the native callback bypasses the application-origin check; protocol and resource transport
+policies still apply. The scheme URI is preserved in authorization and token requests. Login without
+known storage roots uses an unfetched synthetic HTTPS URL on the client document's origin as its
+session context; neither that URL nor the callback grants resource access. `ui.getCode` still returns
+the complete callback URL with `code`, `state` and `iss` and honors cancellation.
+
 ## Provider directory and sign-in addresses
 
 `@jeswr/pod-auth/directory` exports the deeply frozen `KNOWN_PROVIDERS`, `SolidProvider` metadata,
