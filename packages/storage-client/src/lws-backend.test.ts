@@ -181,6 +181,7 @@ describe("sparq fixtures and pagination", () => {
     expect(new Set(all.map(({ url }) => url)).size).toBe(1500);
     expect(all[0]).toEqual({
       url: NOTE,
+      displayName: null,
       kind: "resource",
       contentType: "text/turtle",
       size: 17,
@@ -467,6 +468,7 @@ describe("listing validation and advisory fields", () => {
       {
         url: `${CONTAINER}z`,
         kind: "resource",
+        displayName: null,
         contentType: "text/turtle",
         size: 0,
         modified: new Date("2026-10-02T10:30:00Z"),
@@ -475,6 +477,7 @@ describe("listing validation and advisory fields", () => {
       {
         url: `${ROOT}elsewhere`,
         kind: "container",
+        displayName: null,
         contentType: null,
         size: 2,
         modified: null,
@@ -483,6 +486,7 @@ describe("listing validation and advisory fields", () => {
       {
         url: `${CONTAINER}a/`,
         kind: "resource",
+        displayName: null,
         contentType: "image/png",
         size: null,
         modified: null,
@@ -1333,6 +1337,7 @@ describe("construction and parentOf", () => {
       fetchedAt: 0,
       etag: null,
       maxAgeMs: 0,
+      owner: null,
       verificationMethods: [],
     });
     expect(createLwsBackend({ root: ROOT, fetch, features }).features).toBe(features);

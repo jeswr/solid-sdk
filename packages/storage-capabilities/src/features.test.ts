@@ -28,6 +28,7 @@ function solid(
     fetchedAt: 0,
     etag: null,
     maxAgeMs: 3_600_000,
+    owner: null,
     verificationMethods: [],
     ...extra,
   };
