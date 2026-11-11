@@ -19,18 +19,35 @@ export function mediaImportKey(entry: MediaEntry): string {
 }
 export interface MediaImportIndex {
   has(entry: MediaEntry): boolean;
+  /** An undated want/in-progress item that this completion should update, if not a duplicate. */
+  completionTarget(entry: MediaEntry): MediaEntry | undefined;
   add(entry: MediaEntry): void;
 }
 /** Build identity keys once: large CSVs and complete libraries need linear indexing. */
 export function mediaImportIndex(entries: Iterable<MediaEntry> = []): MediaImportIndex {
   const dates = new Map<string, Set<string>>();
+  const unfinished = new Map<string, MediaEntry>();
+  let building = true;
   const index: MediaImportIndex = {
     has(entry) {
       const known = dates.get(mediaImportKey(entry));
+      if (entry.status !== "finished") return !!known || unfinished.has(mediaImportKey(entry));
       return !!known && (!entry.finished || known.has("") || known.has(entry.finished));
+    },
+    completionTarget(entry) {
+      return entry.status === "finished" && !index.has(entry)
+        ? unfinished.get(mediaImportKey(entry))
+        : undefined;
     },
     add(entry) {
       const key = mediaImportKey(entry);
+      if (!entry.finished && (entry.status === "want" || entry.status === "in-progress")) {
+        if (!unfinished.has(key)) unfinished.set(key, entry);
+        return;
+      }
+      // Existing history may coexist with a new watchlist/reread cycle. Only newly
+      // accepted completions consume its pending target, once, during this import.
+      if (!building && entry.status === "finished") unfinished.delete(key);
       let known = dates.get(key);
       if (!known) {
         known = new Set();
@@ -40,6 +57,7 @@ export function mediaImportIndex(entries: Iterable<MediaEntry> = []): MediaImpor
     },
   };
   for (const entry of entries) index.add(entry);
+  building = false;
   return index;
 }
 /** Dated rewatches remain distinct; undated watched/ratings rows match any dated log. */

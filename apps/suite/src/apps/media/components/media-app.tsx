@@ -374,6 +374,12 @@ function Tracker({ session }: { session: PodSession }) {
             void store
               .importEntries(entries, skipped)
               .then((job) => {
+                if (job.error === "incomplete-library") {
+                  toast.error(
+                    "Couldn't check your whole library for duplicates, so nothing was imported. Refresh and try again.",
+                  );
+                  return;
+                }
                 const message = `${job.cancelled ? "Import cancelled. " : ""}Imported ${job.imported} · skipped ${job.skipped} · failed ${job.failed}`;
                 if (job.failed) toast.error(message);
                 else toast.success(message);

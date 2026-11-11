@@ -25,6 +25,7 @@ export interface MediaImportJob {
   skipped: number;
   failed: number;
   cancelled: boolean;
+  error?: "incomplete-library";
 }
 export interface MediaSnapshot {
   records: MediaRecord[];
@@ -93,9 +94,15 @@ export class MediaStore {
         return;
       const records = new Map(result.records.map((record) => [record.id, record]));
       const confirmedUrls = new Set(result.records.map((record) => record.url));
-      if (result.incomplete) {
+      const skippedUrls = new Set(result.skipped?.map((item) => item.url));
+      if (result.incomplete || skippedUrls.size) {
         for (const record of this.baseline.values())
-          if (record.unconfirmed && !confirmedUrls.has(record.url)) records.set(record.id, record);
+          if (
+            record.unconfirmed &&
+            !confirmedUrls.has(record.url) &&
+            (result.incomplete || (record.url && skippedUrls.has(record.url)))
+          )
+            records.set(record.id, record);
       }
       this.baseline = records;
       this.publish({
@@ -163,19 +170,31 @@ export class MediaStore {
       failed: 0,
       cancelled: false,
     };
-    const publish = () => this.publish({ importJob: { ...job } });
+    let scan: Partial<MediaSnapshot> = {};
+    const publish = () => this.publish({ ...scan, importJob: { ...job } });
     publish();
     const edits: PendingEdit[] = [];
+    const targets = new Map<string, MediaRecord>();
     try {
       await this.queue;
       const repository = await this.repository;
       const listing = await repository.load({ complete: true, signal: controller.signal });
       if (controller.signal.aborted || !this.active) return job;
-      if (listing.incomplete)
+      scan = { incomplete: listing.incomplete, skipped: listing.skipped ?? [] };
+      if (listing.incomplete) {
+        job.error = "incomplete-library";
         throw new Error("Could not check the complete library for duplicates");
-      const known = mediaImportIndex(
-        [...listing.records, ...this.snapshot.records].map((record) => record.data),
+      }
+      // Prefer freshly observed ETags while retaining optimistic records' stable local IDs.
+      const records = new Map(
+        this.snapshot.records.map((record) => [record.url ?? record.id, record]),
       );
+      for (const record of listing.records) {
+        const key = record.url ?? record.id;
+        records.set(key, { ...record, id: records.get(key)?.id ?? record.id });
+      }
+      const byData = new Map([...records.values()].map((record) => [record.data, record]));
+      const known = mediaImportIndex(byData.keys());
       for (const input of entries) {
         try {
           const data = validateEntry(input);
@@ -184,12 +203,26 @@ export class MediaStore {
             job.processed++;
             continue;
           }
+          const targetData = known.completionTarget(data);
+          const target = targetData ? byData.get(targetData) : undefined;
+          const next = target
+            ? validateEntry({
+                ...target.data,
+                ...Object.fromEntries(
+                  Object.entries(data).filter(([, value]) => value !== undefined),
+                ),
+              })
+            : data;
           known.add(data);
+          if (target) {
+            targets.set(target.id, target);
+            this.baseline.set(target.id, target);
+          }
           edits.push({
-            id: `new:${crypto.randomUUID()}`,
+            id: target?.id ?? `new:${crypto.randomUUID()}`,
             generation: ++this.generation,
-            patch: data,
-            initial: data,
+            patch: target ? entryPatch(target.data, next) : next,
+            initial: target ? undefined : next,
           });
         } catch {
           job.failed++;
@@ -208,7 +241,11 @@ export class MediaStore {
         await Promise.all(
           batch.map(async (edit) => {
             try {
-              const saved = await repository.save(edit.initial as MediaEntry);
+              const target = targets.get(edit.id);
+              const saved = await repository.save(
+                validateEntry({ ...target?.data, ...edit.patch } as MediaEntry),
+                target,
+              );
               if (this.active) this.baseline.set(edit.id, { ...saved, id: edit.id });
               job.imported++;
             } catch {

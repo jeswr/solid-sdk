@@ -5,6 +5,7 @@ import {
   MAX_IMPORT_CHARS,
   MAX_IMPORT_ROWS,
   mediaImportDuplicate,
+  mediaImportIndex,
   mediaImportKey,
   parseGoodreadsCsv,
   parseLetterboxdCsv,
@@ -192,4 +193,49 @@ it("decodes valid UTF-8 and falls back to Windows-1252 for legacy exports with a
     legacyEncoding: true,
   });
   expect(() => decodeMediaCsv(new Uint8Array(MAX_IMPORT_CHARS + 1))).toThrow(/4 MiB/);
+});
+it.each([
+  "want",
+  "in-progress",
+] as const)("matches a later diary completion to an undated %s record without skipping it", (status) => {
+  const watchlist = parseLetterboxdCsv("Name,Year\nThe Copper Shore,2025", "want").entries[0];
+  const diary = parseLetterboxdCsv(`${lb}The Copper Shore,2025,2026-11-09,4.5,A favourite,No,`)
+    .entries[0];
+  if (!watchlist || !diary) throw new Error("Missing fixture");
+  const pending = { ...watchlist, status };
+  const index = mediaImportIndex([pending]);
+  expect(index.has(pending)).toBe(true);
+  expect(index.has(diary)).toBe(false);
+  expect(index.completionTarget(diary)).toBe(pending);
+  expect(index.completionTarget(pending)).toBeUndefined();
+  index.add(diary);
+  expect(index.has(diary)).toBe(true);
+  expect(index.completionTarget(diary)).toBeUndefined();
+  const rewatch = { ...diary, finished: "2026-11-10" };
+  expect(index.has(rewatch)).toBe(false);
+  expect(index.completionTarget(rewatch)).toBeUndefined();
+  expect(index.has({ ...diary, finished: undefined })).toBe(true);
+});
+it("updates a watchlist item from an undated finished export as well", () => {
+  const [want] = parseLetterboxdCsv("Name,Year\nA,2025", "want").entries;
+  const [finished] = parseLetterboxdCsv("Name,Year\nA,2025").entries;
+  if (!want || !finished) throw new Error("Missing fixture");
+  expect(mediaImportIndex([want]).completionTarget(finished)).toBe(want);
+  expect(mediaImportIndex().completionTarget(finished)).toBeUndefined();
+});
+it("keeps a pending reread as a completion target alongside existing dated history in either order", () => {
+  const pending = { title: "A", kind: "book" as const, status: "in-progress" as const };
+  const history = { ...pending, status: "finished" as const, finished: "2025-01-01" };
+  const completion = { ...history, finished: "2026-11-10" };
+  for (const records of [
+    [pending, history],
+    [history, pending],
+  ]) {
+    const index = mediaImportIndex(records);
+    expect(index.has(history)).toBe(true);
+    expect(index.completionTarget(history)).toBeUndefined();
+    expect(index.completionTarget(completion)).toBe(pending);
+    index.add(completion);
+    expect(index.completionTarget({ ...completion, finished: "2026-11-11" })).toBeUndefined();
+  }
 });

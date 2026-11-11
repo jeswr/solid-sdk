@@ -1,9 +1,10 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
 
-import { Book } from "@jeswr/pod-connectors/core/vocab";
+import { Book, WatchAction } from "@jeswr/pod-connectors/core/vocab";
 import type { TypeIndex } from "@jeswr/pod-type-index";
 import { StorageError } from "@jeswr/storage-client";
 import { createMemoryStorage } from "@jeswr/storage-client/memory";
+import { createSolidBackend } from "@jeswr/storage-client/solid";
 import { DataFactory, Store } from "n3";
 import { describe, expect, it, vi } from "vitest";
 import { entities, nodes } from "../src/generated/model.js";
@@ -216,7 +217,8 @@ it("reuses an LWS instance's server-reported parent after reopening", async () =
 it("skips stale registrations, forbidden and non-RDF resources and facade validation failures", async () => {
   const storage = createMemoryStorage({ root, protocol: "solid" });
   const missing = `${root}gone`;
-  const index = typeIndex(new Map([[LOG_ENTRY, [missing]]]));
+  const sources = new Map([[LOG_ENTRY, [missing]]]);
+  const index = typeIndex(sources);
   const repo = mediaRepository(storage, index);
   const good = await repo.save(entry);
   const badTitle = await repo.save({ ...entry, title: "Will become invalid" });
@@ -259,6 +261,8 @@ it("skips stale registrations, forbidden and non-RDF resources and facade valida
   expect(new Set(listing.skipped?.map((item) => item.url))).toEqual(
     new Set([missing, badTitle.url, badRating.url, forbidden.url, nonRdf.url]),
   );
+  sources.clear();
+  expect(await repo.load()).toMatchObject({ incomplete: false });
 });
 it("keeps loading and saving when Type Index lookup and registration are forbidden, registering only once", async () => {
   const storage = createMemoryStorage({ root, protocol: "solid" });
@@ -375,15 +379,40 @@ it("retains a committed new or edited item as unconfirmed if read-back fails", a
   });
   expect(await repo.save(entry)).toMatchObject({ unconfirmed: true, etag: null, data: entry });
 });
-it("best-effort deletes an empty reservation after a failed write without deleting another writer's content", async () => {
+it("best-effort deletes an empty reservation after a failed write under its observed ETag", async () => {
   const storage = createMemoryStorage({ root, protocol: "solid" });
   const repo = mediaRepository(storage, typeIndex());
   await repo.load();
   const remove = vi.spyOn(storage, "delete");
+  const read = vi.spyOn(storage, "read");
   vi.spyOn(storage, "write").mockRejectedValue(new Error("Offline"));
   await expect(repo.save(entry)).rejects.toThrow("Offline");
   expect(remove).toHaveBeenCalledTimes(1);
+  const reserved = await read.mock.results[0]?.value;
+  expect(remove).toHaveBeenCalledWith(reserved?.url, { ifMatch: reserved?.etag });
   expect((await repo.load()).records).toHaveLength(0);
+});
+it("conditionally deletes a failed reservation without deleting another writer's content on 412", async () => {
+  const storage = createMemoryStorage({ root, protocol: "solid" });
+  const repo = mediaRepository(storage, typeIndex());
+  await repo.load();
+  const write = storage.write.bind(storage);
+  const read = vi.spyOn(storage, "read");
+  const remove = vi.spyOn(storage, "delete");
+  vi.spyOn(storage, "write").mockImplementationOnce(async (url, _body, options) => {
+    await write(url, "Another writer's content", options);
+    throw new Error("Lost write response");
+  });
+  await expect(repo.save(entry)).rejects.toThrow("Lost write response");
+  const reserved = await read.mock.results[0]?.value;
+  expect(remove).toHaveBeenCalledWith(reserved?.url, { ifMatch: reserved?.etag });
+  await expect(remove.mock.results[0]?.value).rejects.toMatchObject({
+    code: "precondition-failed",
+    status: 412,
+  });
+  expect(await (await storage.read(reserved?.url as string)).text()).toBe(
+    "Another writer's content",
+  );
 });
 it("fails when the media container's first listing page cannot be read", async () => {
   const storage = createMemoryStorage({ root, protocol: "solid" });
@@ -394,4 +423,134 @@ it("fails when the media container's first listing page cannot be read", async (
     throw new StorageError("forbidden", { url: `${root}media/`, method: "GET" });
   });
   await expect(repo.load()).rejects.toMatchObject({ code: "forbidden" });
+});
+it("keeps rejected resources separate from an unscanned library and ignores generic connector documents", async () => {
+  const storage = createMemoryStorage({ root, protocol: "solid" });
+  const index = typeIndex();
+  const repo = mediaRepository(storage, index);
+  const good = await repo.save(entry);
+  const forbidden = await repo.save({ ...entry, title: "Private" });
+  const nonRdf = await storage.create(`${root}media/`, "plain text", { contentType: "text/plain" });
+  const connector = new Store();
+  const watch = new WatchAction(`${root}takeout#watch`, connector, DataFactory).mark();
+  watch.name = "A recorded stream";
+  watch.sourceUrl = "https://www.twitch.tv/fictional";
+  const document = await storage.create(root, null, { contentType: "text/turtle" });
+  await storage.writeRdf(document.url, connector, {
+    contentType: "text/turtle",
+    ifMatch: document.etag as string,
+  });
+  vi.mocked(index.findAll).mockResolvedValue(
+    new Map([["https://schema.org/WatchAction", [document.url]]]),
+  );
+  const read = storage.readRdf.bind(storage);
+  vi.spyOn(storage, "readRdf").mockImplementation((url, options) =>
+    url === forbidden.url
+      ? Promise.reject(new StorageError("forbidden", { url, method: "GET", status: 403 }))
+      : read(url, options),
+  );
+  for (const complete of [false, true]) {
+    const listing = await repo.load({ complete });
+    expect(listing.records.map((record) => record.url)).toEqual([good.url]);
+    expect(listing.incomplete).toBe(false);
+    expect(listing.skipped).toHaveLength(2);
+    expect(new Set(listing.skipped?.map((skip) => skip.url))).toEqual(
+      new Set([forbidden.url, nonRdf.url]),
+    );
+  }
+});
+it("retries Type Index discovery on refresh without retaining initialisation failures", async () => {
+  const storage = createMemoryStorage({ root, protocol: "solid" });
+  const index = typeIndex();
+  vi.mocked(index.find).mockRejectedValueOnce(new Error("Transient discovery failure"));
+  vi.mocked(index.findAll).mockRejectedValueOnce(new Error("Still unavailable"));
+  const repo = mediaRepository(storage, index);
+  expect(await repo.load()).toMatchObject({
+    incomplete: true,
+    skipped: [{ reason: "type-index-unavailable" }],
+  });
+  expect(await repo.load({ complete: true })).toMatchObject({ incomplete: false, skipped: [] });
+  expect(index.findAll).toHaveBeenCalledTimes(2);
+});
+it.each([
+  false,
+  true,
+])("bounds initialisation when a HEAD fetch ignores abort (complete: %s)", async (complete) => {
+  let started!: () => void;
+  const waiting = new Promise<void>((resolve) => {
+    started = resolve;
+  });
+  const fetch = vi.fn<typeof globalThis.fetch>(() => {
+    started();
+    return new Promise(() => {});
+  });
+  const controller = new AbortController();
+  const timeout = vi.spyOn(AbortSignal, "timeout").mockReturnValue(controller.signal);
+  try {
+    const repo = mediaRepository(createSolidBackend({ root, fetch }), typeIndex());
+    const task = repo.load({ complete });
+    const rejected = expect(task).rejects.toMatchObject({ name: "TimeoutError" });
+    await waiting;
+    expect(fetch.mock.calls[0]?.[1]?.method).toBe("HEAD");
+    controller.abort(new DOMException("Timed out", "TimeoutError"));
+    await rejected;
+  } finally {
+    timeout.mockRestore();
+  }
+});
+it.each([
+  "read",
+  "bytes",
+  "etag",
+] as const)("cleans up an empty reservation conditionally after %s fails", async (failure) => {
+  const storage = createMemoryStorage({ root, protocol: "solid" });
+  const repo = mediaRepository(storage, typeIndex());
+  await repo.load();
+  const create = vi.spyOn(storage, "create");
+  const read = storage.read.bind(storage);
+  vi.spyOn(storage, "read").mockImplementationOnce(async (...args) => {
+    if (failure === "read") throw new Error("Read failed");
+    const fresh = await read(...args);
+    return failure === "etag"
+      ? { ...fresh, etag: null }
+      : {
+          ...fresh,
+          bytes: async () => {
+            throw new Error("Body failed");
+          },
+        };
+  });
+  const remove = vi.spyOn(storage, "delete");
+  await expect(repo.save(entry)).rejects.toThrow();
+  const reserved = await create.mock.results[0]?.value;
+  expect(remove).toHaveBeenCalledWith(reserved?.url, { ifMatch: reserved?.etag });
+  await expect(storage.head(reserved?.url as string)).rejects.toMatchObject({ code: "not-found" });
+  expect(await repo.load()).toEqual({ records: [], incomplete: false, skipped: [] });
+});
+it.each([
+  ["missing", "read"],
+  ["missing", "etag"],
+  ["follow-up", "read"],
+  ["follow-up", "etag"],
+] as const)("leaves an ignorable empty reservation without a safe ETag (%s, %s)", async (source, failure) => {
+  const storage = createMemoryStorage({ root, protocol: "solid" });
+  const repo = mediaRepository(storage, typeIndex());
+  await repo.load();
+  const create = storage.create.bind(storage);
+  vi.spyOn(storage, "create").mockImplementationOnce(async (...args) => ({
+    ...(await create(...args)),
+    ...(source === "missing" ? { etag: null } : { etagSource: "follow-up" as const }),
+  }));
+  const read = storage.read.bind(storage);
+  vi.spyOn(storage, "read").mockImplementationOnce(async (...args) => {
+    if (failure === "read") throw new Error("Read failed");
+    return { ...(await read(...args)), etag: null };
+  });
+  const remove = vi.spyOn(storage, "delete");
+  await expect(repo.save(entry)).rejects.toThrow(failure === "read" ? "Read failed" : /reserve/);
+  expect(remove).not.toHaveBeenCalled();
+  const remaining = [];
+  for await (const resource of storage.listAll(`${root}media/`)) remaining.push(resource);
+  expect(remaining).toHaveLength(1);
+  expect(await repo.load()).toEqual({ records: [], incomplete: false, skipped: [] });
 });

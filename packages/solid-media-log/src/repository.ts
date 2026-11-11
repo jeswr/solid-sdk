@@ -2,7 +2,12 @@
 import { createTypeIndex, type TypeHint, type TypeIndex } from "@jeswr/pod-type-index";
 import { createPodClient, type StorageClient, StorageError } from "@jeswr/storage-client";
 import { createSolidBackend } from "@jeswr/storage-client/solid";
-import { CONNECTOR_CLASSES, connectorEntries, groupNetflixEntries } from "./connectors.js";
+import {
+  CONNECTOR_CLASSES,
+  connectorEntries,
+  groupNetflixEntries,
+  isConnectorDocument,
+} from "./connectors.js";
 import {
   LOG_ENTRY,
   type MediaEntry,
@@ -25,6 +30,7 @@ export interface MediaSkip {
 }
 export interface MediaListing {
   records: MediaRecord[];
+  /** Discovery or a source scan did not finish; rejected individual items do not count. */
   incomplete: boolean;
   skipped?: MediaSkip[];
 }
@@ -52,50 +58,58 @@ function reason(error: unknown): string {
 /** Injection seam keeps domain storage reusable by any app, CLI or importer. */
 export function mediaRepository(storage: StorageClient, index: TypeIndex): MediaRepository {
   let initialising: Promise<{ container: string; hint?: TypeHint | undefined }> | undefined;
-  const discoverySkips = new Map<string, string>();
-  function initialise() {
+  function initialise(callerSignal?: AbortSignal) {
     if (initialising) return initialising;
+    const signal = AbortSignal.any([
+      AbortSignal.timeout(20000),
+      ...(callerSignal ? [callerSignal] : []),
+    ]);
     initialising = (async () => {
       let locations: string[] = [];
       try {
-        locations = await interrupted(index.find(LOG_ENTRY), AbortSignal.timeout(20000));
+        locations = await interrupted(index.find(LOG_ENTRY), signal);
       } catch {
-        discoverySkips.set(storage.root, "type-index-unavailable");
+        signal.throwIfAborted();
+        // load() retries discovery for each scan; a transient failure is not session state.
       }
       let container: string | undefined;
       for (const url of locations) {
         try {
-          const head = await storage.head(url);
+          const head = await interrupted(storage.head(url, { signal }), signal);
           if (head.kind === "container") {
             container = head.url;
             break;
           }
           if (storage.protocol === "lws" && head.parent) {
-            const parent = await storage.head(head.parent);
+            const parent = await interrupted(storage.head(head.parent, { signal }), signal);
             if (parent.kind === "container") {
               container = parent.url;
               break;
             }
           }
-        } catch (error) {
-          discoverySkips.set(url, reason(error));
+        } catch {
+          signal.throwIfAborted();
         }
       }
       if (!container) {
         const conventional = new URL("media/", storage.root).href;
         try {
-          const head = await storage.head(conventional);
+          const head = await interrupted(storage.head(conventional, { signal }), signal);
           if (head.kind !== "container") throw new TypeError("Media storage must be a container");
           container = head.url;
         } catch (error) {
           if (!(error instanceof StorageError) || error.code !== "not-found") throw error;
+          signal.throwIfAborted();
           try {
             container = (
-              await storage.create(storage.root, null, { kind: "container", name: "media" })
+              await interrupted(
+                storage.create(storage.root, null, { kind: "container", name: "media", signal }),
+                signal,
+              )
             ).url;
           } catch (conflict) {
             if (!(conflict instanceof StorageError) || conflict.code !== "conflict") throw conflict;
-            const head = await storage.head(conventional);
+            const head = await interrupted(storage.head(conventional, { signal }), signal);
             if (head.kind !== "container") throw new TypeError("Media storage must be a container");
             container = head.url;
           }
@@ -103,11 +117,9 @@ export function mediaRepository(storage: StorageClient, index: TypeIndex): Media
       }
       let hint: TypeHint | undefined;
       try {
-        hint = await interrupted(
-          index.register(LOG_ENTRY, { container }),
-          AbortSignal.timeout(20000),
-        );
+        hint = await interrupted(index.register(LOG_ENTRY, { container }), signal);
       } catch {
+        signal.throwIfAborted();
         console.warn("Media Type Index registration unavailable; using the media container.");
       }
       return { container, hint };
@@ -119,14 +131,14 @@ export function mediaRepository(storage: StorageClient, index: TypeIndex): Media
   }
   return {
     async load(options = {}) {
-      const { container } = await initialise();
       const signal = options.complete
         ? (options.signal ?? new AbortController().signal)
         : AbortSignal.any([
             AbortSignal.timeout(20000),
             ...(options.signal ? [options.signal] : []),
           ]);
-      const skipped = new Map(discoverySkips);
+      const { container } = await interrupted(initialise(signal), signal);
+      const skipped = new Map<string, string>();
       let sources = [container];
       let incomplete = false;
       try {
@@ -136,6 +148,7 @@ export function mediaRepository(storage: StorageClient, index: TypeIndex): Media
         );
         sources = [...new Set([container, ...[...locations.values()].flat()])];
       } catch {
+        incomplete = true;
         skipped.set(storage.root, "type-index-unavailable");
       }
       if (!options.complete && sources.length > 32) {
@@ -150,11 +163,14 @@ export function mediaRepository(storage: StorageClient, index: TypeIndex): Media
         try {
           const result = await interrupted(storage.readRdf(url, { signal }), signal);
           if (signal.aborted) throw signal.reason;
+          // Failed creates can leave empty reservations without an observed validator.
+          if (!result.dataset.size) return;
           const data = parseMediaLog(url, result.dataset);
           if (data) records.push({ id: url, url, etag: result.etag, data });
           else {
             const imported = connectorEntries(result.dataset);
-            if (!imported.length) throw new TypeError("Invalid media entry");
+            if (!imported.length && !isConnectorDocument(result.dataset))
+              throw new TypeError("Invalid media entry");
             for (const item of imported) {
               try {
                 records.push({
@@ -169,6 +185,7 @@ export function mediaRepository(storage: StorageClient, index: TypeIndex): Media
             }
           }
         } catch (error) {
+          if (signal.aborted) incomplete = true;
           skipped.set(url, signal.aborted ? "timeout-or-cancelled" : reason(error));
         }
       }
@@ -202,6 +219,7 @@ export function mediaRepository(storage: StorageClient, index: TypeIndex): Media
           }
         } catch (error) {
           if (source === container && !listed && !signal.aborted) throw error;
+          incomplete = true;
           skipped.set(source, signal.aborted ? "timeout-or-cancelled" : reason(error));
         } finally {
           await Promise.all(batch);
@@ -223,7 +241,7 @@ export function mediaRepository(storage: StorageClient, index: TypeIndex): Media
             .filter((r) => !owned.has(r.data.origin))
             .map((r) => ({ ...r, url: null, etag: null })),
         ],
-        incomplete: incomplete || signal.aborted || skipped.size > 0,
+        incomplete: incomplete || signal.aborted,
         skipped: [...skipped].map(([url, reason]) => ({ url, reason })),
       };
     },
@@ -232,7 +250,7 @@ export function mediaRepository(storage: StorageClient, index: TypeIndex): Media
       const { container, hint } = await initialise();
       let url = existing?.url;
       let etag = existing?.etag;
-      let reserved = false;
+      let reservationEtag: string | null = null;
       if (url && !etag) throw new TypeError("Reload this item before editing it");
       if (!url) {
         const created = await storage.create(container, null, {
@@ -240,22 +258,29 @@ export function mediaRepository(storage: StorageClient, index: TypeIndex): Media
           ...hint,
         });
         url = created.url;
-        const fresh = await storage.read(url);
-        etag = fresh.etag;
-        if ((await fresh.bytes()).length || !etag)
-          throw new TypeError("Couldn't reserve a new media entry safely");
-        reserved = true;
+        // A follow-up HEAD may already describe someone else's content.
+        reservationEtag = created.etagSource === "response" ? created.etag : null;
       }
       try {
+        if (!existing?.url) {
+          const fresh = await storage.read(url);
+          if ((await fresh.bytes()).length) {
+            reservationEtag = null;
+            throw new TypeError("Couldn't reserve a new media entry safely");
+          }
+          reservationEtag = fresh.etag ?? reservationEtag;
+          if (!fresh.etag) throw new TypeError("Couldn't reserve a new media entry safely");
+          etag = fresh.etag;
+        }
         await storage.write(url, await serializeMediaLog(url, data), {
           contentType: "text/turtle",
           ifMatch: etag as string,
         });
       } catch (error) {
         // Delete only our observed empty reservation; a concurrent writer's ETag prevents deletion.
-        if (reserved) {
+        if (reservationEtag) {
           try {
-            await storage.delete(url, { ifMatch: etag as string });
+            await storage.delete(url, { ifMatch: reservationEtag });
           } catch {}
         }
         throw error;

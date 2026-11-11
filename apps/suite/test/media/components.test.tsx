@@ -109,3 +109,29 @@ it("previews diary rows as duplicates of existing watched rows despite different
     true,
   );
 });
+it("keeps a diary completion ready to import when the work is still on the watchlist", async () => {
+  const onImport = vi.fn();
+  render(
+    <MediaImportDialog records={[record]} offline={false} onClose={() => {}} onImport={onImport} />,
+  );
+  await chooseCsv(
+    new TextEncoder().encode(
+      "Name,Year,Watched Date,Rating,Review\nThe Copper Shore,2025,2026-11-10,4.5,A favourite",
+    ),
+  );
+  expect(
+    screen.getByText("1 ready to import · 0 skipped · 0 already in your library"),
+  ).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "Import 1 item" }));
+  expect(onImport).toHaveBeenCalledWith(
+    [
+      expect.objectContaining({
+        status: "finished",
+        finished: "2026-11-10",
+        rating: 4.5,
+        review: "A favourite",
+      }),
+    ],
+    0,
+  );
+});

@@ -41,14 +41,21 @@ The repository best-effort registers `log:LogEntry` once per repository session 
 load/save still work. LWS creation hints are cached and passed to each create. Existing
 registered containers win; stale/unreadable registrations are skipped. Creates reserve a
 server-returned URL before writing subject-relative RDF; edits require the observed ETag.
-Failed writes best-effort delete only the still-empty reservation under its observed ETag.
+Failed reservation reads and writes best-effort delete only the empty reservation under its
+observed ETag (or the create response's own ETag). A follow-up HEAD validator is never used
+for cleanup. Without a safe validator, the empty reservation stays and is ignored by loads.
 A successful write with failed read-back returns `unconfirmed: true` and a null ETag; the app
 keeps it visible and asks for refresh before the next edit, rather than reporting a rollback.
 
 Discovery follows scoped SDK locations and paginated listing. View scans cap source locations
 at 32, use six concurrent resource reads and a 20-second deadline, and return partial records
-with `incomplete` and `skipped: [{url, reason}]`. There is no 1,000-record cap. Invalid entries,
-forbidden/non-RDF resources, stale source HEADs and later-page errors are counted. Only an
+with `incomplete` and `skipped: [{url, reason}]`. There is no 1,000-record cap. Only unscanned
+sources (discovery/listing failures, source caps or timeouts) set `incomplete` and prevent imports.
+Individual invalid entries and forbidden/non-RDF resources are rejected and reported in `skipped`
+without making the library incomplete. Empty reservations and recognised connector documents
+that project no media are ignored. Discovery is retried on every load; initialisation failures
+are not retained in later scans. Initialisation, including container HEAD/create, has a 20-second
+deadline even for complete scans. Only an
 unreadable primary container (first page, outside a timeout) fails the load. Other source failures
 never discard readable records. `load({complete: true, signal})` scans every source without the
 view's deadline, still at six reads at a time; imports use it to check duplicates against the
@@ -59,8 +66,10 @@ capability discovery; do not infer this option from arbitrary pod data.
 
 `connectorEntries` reads **the existing typed pod-connectors wrappers**, without mutating imports:
 
-- Netflix `schema:WatchAction`: title and `startTime`; episode titles (`Series: Season: Episode`)
-  group into one in-progress series with an episode count across documents. Standalone titles
+- Netflix `schema:WatchAction`: title and `startTime`; `groupNetflixEntries` groups episode titles
+  with explicit `Season N`, `Series N`, `Limited Series` or `Part N` markers after a show name
+  into one in-progress series across documents. Progress counts distinct episode titles, so
+  rewatches do not inflate it. Film subtitles and `Episode IV` alone do not imply TV. Standalone titles
   are films by default and can be corrected by the user. No episode count implies series completion.
 - Goodreads `schema:Book`: title, author, personal rating and reading shelf. The existing
   adapter discards Date Read, review and read count; these cannot be reconstructed from RDF.
@@ -88,8 +97,13 @@ The browser additionally caps file bytes before reading, decodes UTF-8 strictly 
 to Windows-1252 with a preview notice. Identity is normalised kind/title/year plus watched date
 when present, not Letterboxd's differing diary/film URLs. An undated watched/ratings row matches
 any dated log of the same work; distinct dated rewatches remain distinct. Duplicate detection
-uses an indexed map so large imports do not repeatedly scan titles. An existing record wins;
-merging richer review/rating metadata from a later CSV remains a separate feature.
+uses an indexed map so large imports do not repeatedly scan titles. A finished row matching
+an undated want/in-progress record updates that record's status, finish date, rating and review
+through the usual conditional save, retaining its URL and any metadata absent from the CSV.
+For example, importing watchlist.csv then diary.csv completes the existing watchlist item.
+An existing finished record wins; merging richer metadata into finished duplicates remains
+a separate feature. `mediaImportIndex().completionTarget(entry)` exposes the pending item
+to hosts that implement import jobs.
 The app runs imports as one cancellable job, publishes optimistic additions together and settles
 six items per batch, reports counts, and emits one summary toast. Cancelling stops new batches;
 already-started writes are allowed to settle and stay in the library. Formula-like review/title text stays inert.

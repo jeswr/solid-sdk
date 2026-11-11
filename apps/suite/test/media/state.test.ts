@@ -5,6 +5,8 @@ import type {
   MediaRecord,
   MediaRepository,
 } from "@jeswr/solid-media-log";
+import { mediaRepository, parseLetterboxdCsv, parseMediaLog } from "@jeswr/solid-media-log";
+import { createMemoryStorage } from "@jeswr/storage-client/memory";
 import { describe, expect, it, vi } from "vitest";
 import { MediaStore } from "../../src/apps/media/state/media-store";
 
@@ -275,13 +277,23 @@ it("cancels between batches, retaining the completed batch and removing unstarte
   expect(repo.save).toHaveBeenCalledTimes(6);
   expect(store.getSnapshot().records).toHaveLength(7);
 });
-it("refuses duplicates when discovery is partial, and reports one failed job", async () => {
+it.each([
+  "source-cap",
+  "timeout-or-cancelled",
+  "listing-failure",
+  "type-index-unavailable",
+])("refuses imports when sources remain unscanned: %s", async (reason) => {
   const { repo, store } = await ready();
-  vi.mocked(repo.load).mockResolvedValue({ records: [], incomplete: true });
+  vi.mocked(repo.load).mockResolvedValue({
+    records: [],
+    incomplete: true,
+    skipped: reason === "source-cap" ? [] : [{ url: "https://pod.example/source/", reason }],
+  });
   expect(await store.importEntries([{ ...entry, title: "A" }])).toMatchObject({
     failed: 1,
     imported: 0,
     running: false,
+    error: "incomplete-library",
   });
   expect(repo.save).not.toHaveBeenCalled();
 });
@@ -314,12 +326,17 @@ it("cancels duplicate checking and drops late import updates after account dispo
   expect(repo.save).not.toHaveBeenCalled();
   expect(store.getSnapshot()).toBe(snapshot);
 });
-it("shows skipped items from a partial listing", async () => {
+it("reports rejected items without treating them as an unscanned library or blocking imports", async () => {
   const { repo, store } = await ready();
   const skipped = [{ url: "https://pod.example/media/bad", reason: "not-rdf" }];
-  vi.mocked(repo.load).mockResolvedValue({ records: [original], incomplete: true, skipped });
+  vi.mocked(repo.load).mockResolvedValue({ records: [original], incomplete: false, skipped });
   await store.load();
-  expect(store.getSnapshot()).toMatchObject({ incomplete: true, skipped });
+  expect(store.getSnapshot()).toMatchObject({ incomplete: false, skipped });
+  expect(await store.importEntries([{ ...entry, title: "A new film" }])).toMatchObject({
+    imported: 1,
+    failed: 0,
+    skipped: 0,
+  });
 });
 it("preserves an unconfirmed committed item when a background refresh cannot read it", async () => {
   const { repo, store } = await ready();
@@ -332,15 +349,79 @@ it("preserves an unconfirmed committed item when a background refresh cannot rea
   await store.save({ ...entry, rating: 5 }, original);
   vi.mocked(repo.load).mockResolvedValueOnce({
     records: [],
-    incomplete: true,
+    incomplete: false,
     skipped: [{ url: original.url as string, reason: "network" }],
   });
   await store.load();
   expect(store.getSnapshot().records[0]).toMatchObject({ unconfirmed: true, data: { rating: 5 } });
+  expect(store.getSnapshot().incomplete).toBe(false);
   vi.mocked(repo.load).mockResolvedValueOnce({
     records: [{ ...original, data: { ...entry, rating: 5 } }],
     incomplete: false,
   });
   await store.load();
   expect(store.getSnapshot().records[0]?.unconfirmed).toBeUndefined();
+});
+it.each([
+  "solid",
+  "lws",
+] as const)("imports watchlist.csv then diary.csv by updating the same record conditionally (%s)", async (protocol) => {
+  const storage = createMemoryStorage({ root: "https://pod.example/", protocol });
+  const repo = mediaRepository(storage, {
+    find: async () => [],
+    findAll: async () => new Map(),
+    register: async () => undefined,
+    unregister: async () => {},
+    listClasses: async () => [],
+  });
+  const store = new MediaStore(Promise.resolve(repo));
+  await store.load();
+  const watchlist = parseLetterboxdCsv("Name,Year\nThe Copper Shore,2025", "want");
+  expect(await store.importEntries(watchlist.entries)).toMatchObject({ imported: 1, failed: 0 });
+  const record = store.getSnapshot().records[0] as MediaRecord;
+  // Another client enriches the item after this store's watchlist snapshot.
+  const current = await repo.save({ ...record.data, creator: "Aster Vale" }, record);
+  const save = vi.spyOn(repo, "save");
+  const write = vi.spyOn(storage, "write");
+  const diary = parseLetterboxdCsv(
+    "Name,Year,Watched Date,Rating,Review\nThe Copper Shore,2025,2026-11-09,4.5,A favourite",
+  );
+  expect(await store.importEntries(diary.entries)).toMatchObject({
+    imported: 1,
+    skipped: 0,
+    failed: 0,
+  });
+  expect(save.mock.calls[0]?.[1]).toMatchObject({ url: record.url, etag: current.etag });
+  expect(write.mock.calls[0]?.[2]?.ifMatch).toBe(current.etag);
+  expect(store.getSnapshot().records).toHaveLength(1);
+  const updated = store.getSnapshot().records[0] as MediaRecord;
+  expect(updated).toMatchObject({
+    id: record.id,
+    url: record.url,
+    data: {
+      status: "finished",
+      finished: "2026-11-09",
+      rating: 4.5,
+      review: "A favourite",
+      creator: "Aster Vale",
+    },
+  });
+  expect(updated.etag).not.toBe(record.etag);
+  expect(
+    parseMediaLog(updated.url as string, (await storage.readRdf(updated.url as string)).dataset),
+  ).toMatchObject(updated.data);
+});
+it("rolls back a failed optimistic completion import and retains the watchlist item", async () => {
+  const { repo, store } = await ready();
+  const write = deferred<MediaRecord>();
+  vi.mocked(repo.save).mockReturnValueOnce(write.promise);
+  const task = store.importEntries([
+    { ...entry, status: "finished", finished: "2026-11-09", rating: 4 },
+  ]);
+  await tick();
+  expect(store.getSnapshot().records).toHaveLength(1);
+  expect(store.getSnapshot().records[0]?.data.status).toBe("finished");
+  write.reject(new Error("Precondition failed"));
+  expect(await task).toMatchObject({ failed: 1, imported: 0 });
+  expect(store.getSnapshot().records).toEqual([original]);
 });

@@ -10,13 +10,26 @@ export interface ConnectorEntry {
   id: string;
   data: MediaEntry;
 }
-/** Read the adapters' actual typed output. Source documents are never mutated. */
-export function connectorEntries(dataset: DatasetCore): ConnectorEntry[] {
+function subjectIds(dataset: DatasetCore): Set<string> {
   const subjects = new Set<string>();
   for (const quad of dataset)
     if (quad.subject.termType === "NamedNode") subjects.add(quad.subject.value);
+  return subjects;
+}
+/** Recognised connector documents may intentionally project no media (for example Twitch). */
+export function isConnectorDocument(dataset: DatasetCore): boolean {
+  for (const id of subjectIds(dataset)) {
+    const types = new Book(id, dataset, DataFactory).types;
+    if (CONNECTOR_CLASSES.some((type) => types.has(type))) return true;
+  }
+  return false;
+}
+/** Read individual adapter items; group only after collecting every document's episodes.
+ * Source documents are never mutated.
+ */
+export function connectorEntries(dataset: DatasetCore): ConnectorEntry[] {
   const entries: ConnectorEntry[] = [];
-  for (const id of subjects) {
+  for (const id of subjectIds(dataset)) {
     if (!mediaUrl(id)) continue;
     const book = new Book(id, dataset, DataFactory);
     const title = book.name?.trim();
@@ -88,41 +101,38 @@ export function connectorEntries(dataset: DatasetCore): ConnectorEntry[] {
       });
     }
   }
-  return groupNetflixEntries(entries);
+  return entries;
 }
 /** Netflix exports encode series/season/episode in their display title, not typed links.
  * Keep series in progress: watching some episodes does not prove a series is finished.
  * Group across documents as well as within one export; the stable origin survives edits.
  */
 export function groupNetflixEntries(entries: readonly ConnectorEntry[]): ConnectorEntry[] {
-  const series = new Map<string, ConnectorEntry>();
+  const series = new Map<string, { record: ConnectorEntry; episodes: Set<string> }>();
   const result: ConnectorEntry[] = [];
   for (const entry of entries) {
     if (entry.data.source !== "Netflix") {
       result.push(entry);
       continue;
     }
-    const separator = entry.data.title.indexOf(": ");
-    const grouped = entry.data.kind === "tv" && entry.data.progressUnit === "episode";
-    const episodic =
-      separator > 0 &&
-      (entry.data.title.indexOf(": ", separator + 2) > 0 ||
-        /^(?:season|series|episode|limited series|volume|part)\b/i.test(
-          entry.data.title.slice(separator + 2),
-        ));
-    if (!episodic && !grouped) {
+    const episodic = /^(.+?):\s*((?:(?:season|series|part)\s+\d+|limited series)\b.*)$/i.exec(
+      entry.data.title,
+    );
+    if (!episodic) {
       result.push(entry);
       continue;
     }
-    const title = grouped ? entry.data.title : entry.data.title.slice(0, separator).trim();
+    const title = (episodic[1] as string).trim();
+    const episode = (episodic[2] as string).trim().replace(/\s+/g, " ").toLocaleLowerCase("en-GB");
     const id = new URL(
       `./#series-${encodeURIComponent(title.toLocaleLowerCase("en-GB"))}`,
       entry.id,
     ).href;
     const previous = series.get(id);
-    if (previous)
-      previous.data.progress = (previous.data.progress ?? 0) + (entry.data.progress ?? 1);
-    else {
+    if (previous) {
+      previous.episodes.add(episode);
+      previous.record.data.progress = previous.episodes.size;
+    } else {
       const record: ConnectorEntry = {
         id,
         data: {
@@ -131,12 +141,12 @@ export function groupNetflixEntries(entries: readonly ConnectorEntry[]): Connect
           kind: "tv",
           status: "in-progress",
           finished: undefined,
-          progress: entry.data.progress ?? 1,
+          progress: 1,
           progressUnit: "episode",
           origin: id,
         },
       };
-      series.set(id, record);
+      series.set(id, { record, episodes: new Set([episode]) });
       result.push(record);
     }
   }

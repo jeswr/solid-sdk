@@ -3,7 +3,7 @@ import { Provenance } from "@jeswr/pod-connectors/core/provenance";
 import { Book, VideoGame, WatchAction } from "@jeswr/pod-connectors/core/vocab";
 import { DataFactory, Store } from "n3";
 import { expect, it } from "vitest";
-import { connectorEntries, groupNetflixEntries } from "../src/connectors.js";
+import { connectorEntries, groupNetflixEntries, isConnectorDocument } from "../src/connectors.js";
 
 it("projects the exact typed Goodreads, Netflix and Steam output without mutating it", () => {
   const store = new Store();
@@ -162,15 +162,56 @@ it("groups Netflix episodes into one in-progress series across source documents 
     "Unclassified stream";
   expect(connectorEntries(store)).toEqual([]);
 });
-it("does not turn a film subtitle into a series", () => {
+it.each([
+  "Mosslight: The Return",
+  "Star Wars: Episode IV – A New Hope",
+  "Mission: Impossible: Fallout",
+  "A Film: Parting Ways",
+  "A Film: Season of Rain",
+])("does not turn the film subtitle %s into a series", (title) => {
   const item = {
     id: "https://pod.example/netflix#film",
     data: {
-      title: "Mosslight: The Return",
+      title,
       kind: "film" as const,
       status: "finished" as const,
       source: "Netflix",
     },
   };
   expect(groupNetflixEntries([item])).toEqual([item]);
+});
+it.each([
+  "Season 1",
+  "Series 2",
+  "Limited Series",
+  "Part 3",
+])("groups explicit %s episodes and counts distinct titles across documents", (marker) => {
+  const entries = [1, 1, 2].flatMap((episode, i) => {
+    const dataset = new Store();
+    const id = `https://pod.example/netflix/history-${i}#watch`;
+    const watch = new WatchAction(id, dataset, DataFactory).mark();
+    watch.name = `Harbour Days: ${marker}: Chapter ${episode}`;
+    new Provenance(id, dataset, DataFactory).derivedFrom.add("urn:solid:connector:netflix:export");
+    return connectorEntries(dataset);
+  });
+  const before = structuredClone(entries);
+  const grouped = groupNetflixEntries(entries);
+  expect(grouped).toHaveLength(1);
+  expect(grouped[0]?.data).toMatchObject({
+    title: "Harbour Days",
+    kind: "tv",
+    status: "in-progress",
+    progress: 2,
+  });
+  expect(entries).toEqual(before);
+  expect(groupNetflixEntries(grouped)).toEqual(grouped);
+});
+it("recognises connector documents even when their WatchActions have no media projection", () => {
+  const dataset = new Store();
+  expect(isConnectorDocument(dataset)).toBe(false);
+  new Book("https://pod.example/untyped", dataset, DataFactory).name = "Untyped";
+  expect(isConnectorDocument(dataset)).toBe(false);
+  new WatchAction("https://pod.example/takeout#watch", dataset, DataFactory).mark();
+  expect(isConnectorDocument(dataset)).toBe(true);
+  expect(connectorEntries(dataset)).toEqual([]);
 });
