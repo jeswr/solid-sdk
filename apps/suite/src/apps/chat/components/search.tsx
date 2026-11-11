@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { type ReactNode, useCallback, useEffect } from "react";
 import { encodeRef } from "@/lib/refs";
+import { AppHeading } from "@/shell/app-frame";
 import { SearchError, type SearchSnippet } from "../lib/search";
 import { useAsync, useChat } from "../state/chat-context";
 import { ChatFailure, PersonName } from "./chat-app";
@@ -65,7 +66,7 @@ export function ChatSearchPage({ query }: { query: string }) {
   const roomCount = new Set(data?.results.map(({ room }) => room.url)).size;
   return (
     <div className="chat-search-page">
-      <h1>Search</h1>
+      <AppHeading>Search</AppHeading>
       <ChatSearchField query={query} page />
       <p role="status" aria-atomic="true">
         {term && search.status === "loading" ? (

@@ -5,6 +5,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { ChatClient } from "../src/apps/chat/lib/client";
 import type { ChatSession } from "../src/apps/chat/state/chat-context";
 import { createDemoPod } from "../src/lib/demo-pod/pod";
+import { ShortcutsProvider } from "../src/shell/shortcuts/provider";
 import { act, click, h, key, mount } from "./drive-ui-dom";
 
 const mocks = vi.hoisted(() => ({
@@ -196,4 +197,35 @@ it("leaves slash in dialogs, alerts, menus and listboxes and only cancels an act
   const idle = new KeyboardEvent("keydown", { key: "/", bubbles: true, cancelable: true });
   await act(() => main.dispatchEvent(idle));
   expect(idle.defaultPrevented).toBe(false);
+});
+
+it("disables the window fallback when a standalone host supplies ShortcutsProvider", async () => {
+  const client = setup();
+  const room = await client.createRoom({ name: "Provider room", members: [] });
+  const view = await mount(
+    h(ShortcutsProvider, null, h(ChatApp, { children: h(RoomView, { url: room.url }) })),
+  );
+  const main = view.host.querySelector("main") as HTMLElement;
+  await act(() => main.focus());
+  const event = new KeyboardEvent("keydown", { key: "/", cancelable: true });
+  await act(() => window.dispatchEvent(event));
+  expect(event.defaultPrevented).toBe(false);
+  expect(document.activeElement).toBe(main);
+  await key(main, "]");
+  expect(view.host.querySelector(".chat-details")).toBeNull();
+  await key(main, "/");
+  expect(document.activeElement).toBe(view.host.querySelector('[data-chat-search="sidebar"]'));
+});
+
+it("keeps the standalone window details shortcut and close control", async () => {
+  const client = setup();
+  const room = await client.createRoom({ name: "Preview room", members: [] });
+  const view = await mount(h(ChatApp, { children: h(RoomView, { url: room.url }) }));
+  const main = view.host.querySelector("main") as HTMLElement;
+  await key(main, "]");
+  expect(view.host.querySelector(".chat-details")).not.toBeNull();
+  await click(view.host.querySelector('[aria-label="Close details"]') as Element);
+  expect(view.host.querySelector(".chat-details")).toBeNull();
+  await key(main, "]");
+  expect(view.host.querySelector(".chat-details")).not.toBeNull();
 });

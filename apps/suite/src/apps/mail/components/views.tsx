@@ -5,6 +5,7 @@ import { ErrorState, LoadingSkeleton } from "@jeswr/suite-ui";
 import { useSearchParams } from "next/navigation";
 import { decodeRef } from "@/lib/refs";
 import { usePageRouteParams } from "@/lib/route-params";
+import { AppHeading } from "@/shell/app-frame";
 import { folderIriFromKey } from "../lib/client";
 import { useFolders, useMail, useMailSearch, useThreads } from "../state/mail-context";
 import { MailAsync, MailEmptyState, MissingFolder } from "./async";
@@ -30,7 +31,7 @@ function FolderContent({ folderKey }: { folderKey: string }) {
         if (!folder) return <MissingFolder />;
         return (
           <div className="mail-page">
-            <h1 className="mail-page-title">{folder.title}</h1>
+            <AppHeading className="mail-page-title">{folder.title}</AppHeading>
             <div className="mail-split" data-reading={!!selected}>
               <div className="mail-list-panel">
                 <MailAsync state={threads}>
@@ -99,7 +100,7 @@ export function SearchPage() {
   const selected = selectedThread(params.get("t"));
   return (
     <div className="mail-page">
-      <h1 className="mail-page-title">Search mail</h1>
+      <AppHeading className="mail-page-title">Search mail</AppHeading>
       <p className="mail-muted">
         Results for “{query}”. Searches the newest 5,000 messages in this account.
       </p>
@@ -147,7 +148,7 @@ export function ThreadPage({ reference }: { reference: string }) {
         <ThreadView key={iri} iri={iri} back={back} />
       ) : (
         <>
-          <h1>This conversation doesn't exist</h1>
+          <AppHeading>This conversation doesn't exist</AppHeading>
           <ErrorState error="not-found" actions={{ goToParent: "/mail/inbox" }}>
             <a href="/mail/inbox">Go to Inbox</a>
           </ErrorState>

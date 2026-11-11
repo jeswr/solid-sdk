@@ -17,6 +17,7 @@ import Link from "next/link";
 import { useTheme } from "next-themes";
 import { useEffect, useRef, useState } from "react";
 import { encodeRef } from "@/lib/refs";
+import { AppHeading } from "@/shell/app-frame";
 import { type MessageView, mailErrorMessage } from "../lib/client";
 import { useFolders, useMail, useMailActions, useThread } from "../state/mail-context";
 import { MailAsync } from "./async";
@@ -195,7 +196,7 @@ export function ThreadView({
   back?: string;
   headingLevel?: 1 | 2;
 }) {
-  const Heading = headingLevel === 1 ? "h1" : "h2";
+  const Heading = headingLevel === 1 ? AppHeading : "h2";
   const state = useThread(iri);
   const folders = useFolders();
   const { client, invalidate } = useMail();

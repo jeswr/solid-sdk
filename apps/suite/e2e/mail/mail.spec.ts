@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import AxeBuilder from "@axe-core/playwright";
 import { expect, type Page, type TestInfo, test } from "@playwright/test";
 import { encodeRef } from "../../src/lib/refs";
+import { seedDemoSession } from "../demo-session";
 
 const sample = fileURLToPath(new URL("../../public/samples/sample-mailbox.mbox", import.meta.url));
 test.use({ locale: "en" });
@@ -27,6 +28,9 @@ test.beforeEach(async ({ page }) => {
     });
   });
   await page.unroute("**/__mail-test-reset");
+  await seedDemoSession(page);
+  await page.goto("/mail");
+  await expect(page.getByRole("heading", { name: "Mail", level: 1, exact: true })).toBeVisible();
 });
 async function capture(page: Page, info: TestInfo, view: string) {
   await page.evaluate(() => document.fonts.ready);
@@ -37,23 +41,25 @@ async function capture(page: Page, info: TestInfo, view: string) {
   await page.screenshot({ path: `${directory}/${info.project.name}-${view}.png`, fullPage: true });
 }
 async function accessible(page: Page) {
-  await expect(page).toHaveTitle("Mail · Solid Suite");
+  await expect(page).toHaveTitle("Mail · Mail · Solid Suite");
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 }
 async function nav(page: Page, folder: string) {
   if ((page.viewportSize()?.width ?? 1280) < 1024) {
-    await page.getByRole("button", { name: "Open navigation", exact: true }).click();
+    await page.getByRole("button", { name: "Toggle sidebar", exact: true }).click();
     await page
-      .getByRole("dialog", { name: "Navigation", exact: true })
+      .getByRole("dialog", { name: "Mail navigation", exact: true })
       .getByRole("link", { name: new RegExp(`^${folder}(?: \\d+ unread)?$`) })
       .click();
+    await page.getByRole("button", { name: "Close mail navigation", exact: true }).click();
+    await expect(page.getByRole("dialog", { name: "Mail navigation", exact: true })).toBeHidden();
   } else
     await page
       .getByRole("navigation", { name: "Mail", exact: true })
       .getByRole("link", { name: new RegExp(`^${folder}(?: \\d+ unread)?$`) })
       .click();
-  await expect(page.getByRole("heading", { name: folder, exact: true, level: 1 })).toBeVisible();
+  await expect(page.getByRole("heading", { name: folder, exact: true, level: 2 })).toBeVisible();
 }
 test("imports, reads with the keyboard, stars, archives and searches a mailbox", async ({
   page,
@@ -104,7 +110,7 @@ test("imports, reads with the keyboard, stars, archives and searches a mailbox",
   await page.keyboard.press("ArrowUp");
   await expect(rows.first()).toBeFocused();
   if ((page.viewportSize()?.width ?? 1280) < 1024)
-    await page.getByRole("button", { name: "Open navigation", exact: true }).click();
+    await page.getByRole("button", { name: "Toggle sidebar", exact: true }).click();
   const compose = page
     .getByRole("link", { name: "Compose", exact: true })
     .filter({ visible: true });
@@ -113,12 +119,9 @@ test("imports, reads with the keyboard, stars, archives and searches a mailbox",
     "Drafts save to your pod. Sending needs a connected mail account.",
   );
   if ((page.viewportSize()?.width ?? 1280) < 1024) {
-    // The drawer autofocuses its Close button, whose tooltip takes the first Escape.
-    const drawer = page.getByRole("dialog", { name: "Navigation", exact: true });
-    await expect(async () => {
-      await page.keyboard.press("Escape");
-      await expect(drawer).toBeHidden({ timeout: 500 });
-    }).toPass();
+    const drawer = page.getByRole("dialog", { name: "Mail navigation", exact: true });
+    await drawer.getByRole("button", { name: "Close mail navigation", exact: true }).click();
+    await expect(drawer).toBeHidden();
   }
   const iri = await rows.first().getAttribute("data-thread");
   await rows.first().focus();
@@ -129,7 +132,7 @@ test("imports, reads with the keyboard, stars, archives and searches a mailbox",
   ).toBeVisible();
   await expect(
     page.getByRole("heading", { name: "Saturday at the garden", exact: true }),
-  ).toHaveJSProperty("tagName", (page.viewportSize()?.width ?? 1280) < 1024 ? "H1" : "H2");
+  ).toHaveJSProperty("tagName", "H2");
   await page.getByRole("button", { name: "Star thread", exact: true }).click();
   await expect(page.getByRole("button", { name: "Unstar thread", exact: true })).toHaveAttribute(
     "aria-pressed",
@@ -207,18 +210,18 @@ test("shows import ZIP guidance and query errors without losing navigation", asy
 });
 test("composes, saves, edits and discards a draft in the pod", async ({ page }, info) => {
   await page.goto("/mail/compose");
-  await expect(page.getByRole("heading", { name: "New message", level: 1 })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "New message", level: 2 })).toBeVisible();
   await expect(page.getByRole("button", { name: "Send", exact: true })).toBeDisabled();
   await page.getByLabel("To", { exact: true }).fill("Bob Example <bob@example.org>");
   await page.getByLabel("Subject", { exact: true }).fill("Allotment rota");
   await page.getByLabel("Message", { exact: true }).fill("Can you water on Thursday?");
   await page.getByRole("button", { name: "Save draft", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "Edit draft", level: 1 })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Edit draft", level: 2 })).toBeVisible();
   await expect(page).toHaveURL(/\/mail\/compose\?draft=/);
   await accessible(page);
   await capture(page, info, "compose");
   await page.goto("/mail/drafts");
-  await expect(page.getByRole("heading", { name: "Drafts", level: 1 })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Drafts", level: 2 })).toBeVisible();
   await page
     .getByRole("link", { name: /Allotment rota/ })
     .first()
@@ -231,7 +234,7 @@ test("composes, saves, edits and discards a draft in the pod", async ({ page }, 
   );
   page.once("dialog", (dialog) => void dialog.accept());
   await page.getByRole("button", { name: "Discard", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "Drafts", level: 1 })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Drafts", level: 2 })).toBeVisible();
   await expect(page.getByRole("link", { name: /Allotment rota/ })).toHaveCount(0);
   await page.goto("/mail/compose?draft=not-a-ref");
   await expect(page.getByRole("heading", { name: "This draft isn't here any more" })).toBeVisible();

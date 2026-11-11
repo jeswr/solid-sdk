@@ -336,7 +336,7 @@
   max-width: 800px;
   margin-inline: auto;
 }
-.mail-import h1 {
+.mail-import > :is(h1, h2) {
   font-size: var(--text-xl);
   font-weight: 600;
 }

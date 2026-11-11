@@ -8,7 +8,9 @@ import { SearchError } from "../src/apps/chat/lib/search";
 import { ChatProvider, type ChatSession } from "../src/apps/chat/state/chat-context";
 import { createDemoPod } from "../src/lib/demo-pod/pod";
 import { encodeRef } from "../src/lib/refs";
+import { AccountsContext } from "../src/shell/session/accounts-context";
 import { act, click, deferred, h, mount } from "./drive-ui-dom";
+import { shellTestAccounts } from "./shell-test-accounts";
 
 const routing = vi.hoisted(() => ({ push: vi.fn(), params: new URLSearchParams() }));
 vi.mock("next/navigation", () => ({
@@ -92,10 +94,16 @@ afterEach(() => {
   routing.push.mockClear();
 });
 
-it("renders safe highlighted text, local time, counts and a native message link", async () => {
+it.each([
+  false,
+  true,
+])("renders the frame heading level, safe highlighted text, local time, counts and a native message link (shell: %s)", async (inShell) => {
   vi.spyOn(ChatClient.prototype, "search").mockResolvedValue(response);
-  const view = await mount(tree("garden"));
-  expect(view.host.querySelector("h1")?.textContent).toBe("Search");
+  const view = await mount(
+    h(AccountsContext, { value: inShell ? shellTestAccounts() : null }, tree("garden")),
+  );
+  expect(view.host.querySelector(inShell ? "h2" : "h1")?.textContent).toBe("Search");
+  if (inShell) expect(view.host.querySelector("h1")).toBeNull();
   expect(view.host.querySelector("mark")?.textContent).toBe("garden");
   expect(view.host.querySelector("img")).toBeNull();
   expect(view.host.querySelector(".chat-search-snippet")?.textContent).toBe(message.content);
@@ -282,5 +290,5 @@ it("keeps server pages independent of search params for native static export", a
   expect(search).toContain("<Suspense>");
   expect(search).toContain("<ChatSearchRoute />");
   expect(room).not.toContain("searchParams");
-  expect(room).toContain("<RoomRoute reference={ref} />");
+  expect(room).toContain("<RoomPageRoute />");
 });

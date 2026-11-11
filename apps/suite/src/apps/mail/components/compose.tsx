@@ -1,9 +1,11 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 5.5
 "use client";
 import { Button, Input, Label, Textarea, toast } from "@jeswr/suite-ui";
 import { useRouter, useSearchParams } from "next/navigation";
 import { type FormEvent, useEffect, useId, useState } from "react";
 import { decodeRef, encodeRef } from "@/lib/refs";
+import { AppHeading } from "@/shell/app-frame";
 import { mailErrorMessage } from "../lib/client";
 import type { SavedDraft } from "../lib/model";
 import { useMail } from "../state/mail-context";
@@ -138,7 +140,7 @@ function ComposeForm({ requested }: { requested: string | null }) {
   if (status === "missing")
     return (
       <div className="mail-page mail-compose">
-        <h1 className="mail-page-title">This draft isn't here any more</h1>
+        <AppHeading className="mail-page-title">This draft isn't here any more</AppHeading>
         <p className="mail-muted">It may have been discarded or sent from another device.</p>
         <a className="mail-action-link" href="/mail/compose">
           Start a new message
@@ -147,7 +149,9 @@ function ComposeForm({ requested }: { requested: string | null }) {
     );
   return (
     <div className="mail-page mail-compose">
-      <h1 className="mail-page-title">{saved || editing ? "Edit draft" : "New message"}</h1>
+      <AppHeading className="mail-page-title">
+        {saved || editing ? "Edit draft" : "New message"}
+      </AppHeading>
       {status === "loading" ? (
         <p className="mail-muted" role="status">
           Loading draft…

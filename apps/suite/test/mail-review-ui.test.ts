@@ -12,7 +12,9 @@ import type {
 import { MailClient } from "../src/apps/mail/lib/client";
 import { createDemoPod } from "../src/lib/demo-pod/pod";
 import { encodeRef } from "../src/lib/refs";
+import { AccountsContext } from "../src/shell/session/accounts-context";
 import { act, click, deferred, h, key, mount } from "./drive-ui-dom";
+import { shellTestAccounts } from "./shell-test-accounts";
 
 const mocks = vi.hoisted(() => ({
   router: { push: vi.fn() },
@@ -359,12 +361,22 @@ it.each([
   expect(mocks.actions.markRead).toHaveBeenCalledOnce();
   await view.unmount();
 });
-it("uses h1 on full threads, medium dates, compact labels and a bounded body's original download", async () => {
+it.each([
+  false,
+  true,
+])("uses the frame heading level on full threads, medium dates, compact labels and a bounded body's original download (shell: %s)", async (inShell) => {
   conversation.messages[0]!.labels = [folders[0]!.iri];
   conversation.messages[0]!.truncated = true;
   conversation.messages[0]!.originalUrl = "https://mail.example/original.eml";
-  const view = await mount(h(ThreadView, { iri: conversation.iri }));
-  expect(view.host.querySelector("h1")?.textContent).toBe(conversation.subject);
+  const view = await mount(
+    h(
+      AccountsContext,
+      { value: inShell ? shellTestAccounts() : null },
+      h(ThreadView, { iri: conversation.iri }),
+    ),
+  );
+  expect(view.host.querySelector(inShell ? "h2" : "h1")?.textContent).toBe(conversation.subject);
+  if (inShell) expect(view.host.querySelector("h1")).toBeNull();
   expect(view.host.querySelector("time")?.textContent).toBe(
     new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(
       conversation.messages[0]!.date,

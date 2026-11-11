@@ -29,6 +29,7 @@ import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useId, useRef, useState } from "react";
 import { decodeRef } from "@/lib/refs";
 import { usePageRouteParams } from "@/lib/route-params";
+import { AppHeading } from "@/shell/app-frame";
 import type { Message } from "../lib/client";
 import { roomContainer } from "../lib/model";
 import {
@@ -254,9 +255,9 @@ export function RoomView({ url, messageId }: { url: string; messageId?: string |
           <MessageSquare size={22} />
         </span>
         <div className="chat-room-heading">
-          <h1>
+          <AppHeading>
             <RoomName room={data} />
-          </h1>
+          </AppHeading>
           <ul className="chat-members" aria-label={`${data.members.length} members`}>
             {data.members.slice(0, 4).map((member) => (
               <MemberAvatar key={member} webId={member} />
@@ -413,7 +414,7 @@ function RoomRouteContent({ reference }: { reference: string }) {
   } catch {
     return (
       <div className="chat-state" role="alert">
-        <h1>This room link isn't valid</h1>
+        <AppHeading>This room link isn't valid</AppHeading>
         <p>Ask the sender to copy the invite link again.</p>
         <a href="/chat">Back to Chat</a>
       </div>
@@ -428,7 +429,7 @@ function RoomRouteContent({ reference }: { reference: string }) {
   if (!client.canOpen(url))
     return (
       <div className="chat-state" role="alert">
-        <h1>This conversation is in another pod</h1>
+        <AppHeading>This conversation is in another pod</AppHeading>
         <p>
           This conversation is in another pod. Opening conversations in other pods arrives with
           sign-in.

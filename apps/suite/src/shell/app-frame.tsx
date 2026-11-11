@@ -18,6 +18,19 @@ function useShellAccounts() {
   return nativeTarget ? null : accounts;
 }
 
+/** Whether this app uses the authenticated web shell rather than the preview frame. */
+export function useAppShell() {
+  return !!useShellAccounts();
+}
+
+const appTitles = { home: "Home", drive: "Drive", mail: "Mail", chat: "Chat" } as const;
+type AppFrameProps = Omit<SuiteFrameProps, "app"> & {
+  app: keyof typeof appTitles;
+  /** Keep details content available while closed so the shell can reopen it. */
+  detailsOpen?: boolean;
+  onDetailsOpenChange?: (open: boolean) => void;
+};
+
 const Shell = lazy(async () => ({ default: (await loadShell()).SuiteShell }));
 const Guard = lazy(async () => ({
   default: (await loadGuard()).SessionGuard,
@@ -36,10 +49,10 @@ export function AppSessionGuard({ children }: { children: React.ReactNode }) {
 }
 
 /** Apps retain their sidebar and details; the shell owns global navigation and account UI. */
-export function AppFrame(props: Omit<SuiteFrameProps, "app"> & { app: "home" | "drive" }) {
+export function AppFrame({ detailsOpen, onDetailsOpenChange, ...props }: AppFrameProps) {
   const accounts = useShellAccounts();
   if (!accounts) return <SuiteFrame {...props} />;
-  const title = props.app === "home" ? "Home" : "Drive";
+  const title = appTitles[props.app];
   return (
     <Suspense>
       <Shell
@@ -54,8 +67,9 @@ export function AppFrame(props: Omit<SuiteFrameProps, "app"> & { app: "home" | "
               details: {
                 title: "Details",
                 children: props.details,
-                open: true,
-                onOpenChange: (open: boolean) => !open && props.onDetailsClose?.(),
+                open: detailsOpen ?? true,
+                onOpenChange:
+                  onDetailsOpenChange ?? ((open: boolean) => !open && props.onDetailsClose?.()),
               },
             }
           : {})}
