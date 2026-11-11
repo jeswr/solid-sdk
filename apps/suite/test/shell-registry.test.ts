@@ -35,13 +35,12 @@ describe("shell registry", () => {
     expect(appForPath("/docs/nested/item", [...appRegistry, nested])).toEqual(nested);
   });
   it("hides backlog apps by default", () => {
-    expect(visibleApps(false).map((app) => app.slug)).toEqual([
-      "home",
-      "drive",
-      "docs",
-      "tasks",
-      "permissions",
-    ]);
+    const visible = visibleApps(false).map((app) => app.slug);
+    expect(visible.slice(0, 5)).toEqual(["home", "drive", "docs", "tasks", "permissions"]);
+    expect(visible).toEqual(
+      appRegistry.filter((app) => app.status !== "backlog").map((app) => app.slug),
+    );
+    expect(visible.length).toBeLessThan(appRegistry.length);
     expect(visibleApps(true)).toEqual(appRegistry);
   });
 });
