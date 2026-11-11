@@ -557,9 +557,14 @@ describe("Android project", () => {
     expect(source).toContain("private static PdfPreviewStore store;");
     expect(source).toMatch(/handleOnResume\(\)[\s\S]*sweep\(SystemClock\.elapsedRealtime\(\)\)/);
     expect(source).not.toContain("currentTimeMillis");
-    // Only sign-out's pdfClear empties the whole store (sst-8wx.18).
+    // Only sign-out's pdfClear empties the whole store (sst-8wx.18). It first revokes every
+    // viewer grant under pdf-preview/, independently of the delete.
     const clearCall =
-      /public void pdfClear\(PluginCall call\) \{\s*try \{\s*store\(\)\.clear\(\);[\s\S]*?\n {4}\}\n/;
+      /public void pdfClear\(PluginCall call\) \{\s*boolean revoked = false;\s*try \{[\s\S]*?\.path\(PREVIEW_PATH_NAME\)[\s\S]*?revokeUriPermission\(previews, Intent\.FLAG_GRANT_READ_URI_PERMISSION\);\s*revoked = true;\s*\} catch \(RuntimeException ignored\) \{[\s\S]*?\}\s*try \{\s*store\(\)\.clear\(\);[\s\S]*?if \(revoked\) call\.resolve\(\);\s*else call\.reject\([\s\S]*?\n {4}\}\n/;
+    expect(source).toContain('PREVIEW_PATH_NAME = "pdf_preview";');
+    expect(read("android/app/src/main/res/xml/file_paths.xml")).toContain(
+      '<cache-path name="pdf_preview" path="pdf-preview/" />',
+    );
     expect(source).toMatch(clearCall);
     expect(source.replace(clearCall, "")).not.toContain("store().clear()");
     expect(manifest).toMatch(
