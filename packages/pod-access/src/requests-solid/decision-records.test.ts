@@ -23,7 +23,7 @@ import {
   sealedKey,
 } from "../../test/requests/fixtures.js";
 import type { PodStub } from "../../test/requests/pod-stub.js";
-import { ACCM, ACL, decide, listRequests, RequestConflictError } from "./index.js";
+import { ACCM, ACL, decide, listRequests, previewDecision, RequestConflictError } from "./index.js";
 import { set, turtle, values } from "./rdf.js";
 
 const ID = REQUEST;
@@ -792,22 +792,39 @@ describe("recorded decision choices", () => {
 
   it("infers the applied role when resuming legacy records with only chosen.viewer", async () => {
     for (const role of ["editor", "viewer"] as const) {
-      const pod = buildPod();
-      pod.seed(ID, readWrite());
-      await pinOnly(pod, { approve: true, role });
-      const url = await decisionUrl(pod, { asked: READ_WRITE });
-      const { snapshot } = await record(pod, url);
-      delete snapshot.chosen.role;
-      delete snapshot.targetDataTypes;
-      // Legacy default Viewer approvals could have viewer=false: it meant no narrowing.
-      snapshot.chosen.viewer = false;
-      pod.seed(url, await recordTurtle(url, { outcome: "approving", snapshot }));
-      expect((await decide({ id: ID }, { approve: true, role }, opts(pod))).status).toBe(
-        "approved",
-      );
-      expect(await modesOf(pod, `${ALICE}.acl`)).toEqual(
-        role === "editor" ? [ACL.Append, ACL.Read, ACL.Write] : [ACL.Read],
-      );
+      for (const resumedRole of [undefined, role]) {
+        const pod = buildPod();
+        pod.seed(ID, readWrite());
+        await pinOnly(pod, { approve: true, role });
+        const url = await decisionUrl(pod, { asked: READ_WRITE });
+        const { snapshot } = await record(pod, url);
+        delete snapshot.chosen.role;
+        delete snapshot.targetDataTypes;
+        // Legacy default Viewer approvals could have viewer=false: it meant no narrowing.
+        snapshot.chosen.viewer = false;
+        pod.seed(url, await recordTurtle(url, { outcome: "approving", snapshot }));
+        const before = pod.log.length;
+        for (const operation of [previewDecision, decide])
+          await expect(
+            operation(
+              { id: ID },
+              { approve: true, role: role === "editor" ? "viewer" : "editor" },
+              opts(pod),
+            ),
+          ).rejects.toThrow(
+            `An earlier approval of this request is still finishing with role "${role}"; omit role or repeat "${role}" to resume it`,
+          );
+        const decision = { approve: true, role: resumedRole };
+        const expected = await previewDecision({ id: ID }, decision, opts(pod));
+        expect(expected.targets.every((target) => target.role === role)).toBe(true);
+        expect(puts(pod, before)).toEqual([]);
+        expect((await decide({ id: ID }, decision, { ...opts(pod), expected })).status).toBe(
+          "approved",
+        );
+        expect(await modesOf(pod, `${ALICE}.acl`)).toEqual(
+          role === "editor" ? [ACL.Append, ACL.Read, ACL.Write] : [ACL.Read],
+        );
+      }
     }
   });
 

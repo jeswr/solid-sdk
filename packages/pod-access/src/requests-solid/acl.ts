@@ -251,25 +251,43 @@ async function ownerOnlyContainer(
 ): Promise<string | undefined> {
   scoped(storage, container);
   const head = await fetchFn(container, { method: "HEAD" });
-  const settings = {
+  const settings = (url: string) => ({
     unverified: UNVERIFIED,
     recordsKey: RECORDS_KEY,
     assertEmpty: (refusal: string) => assertEmpty(container, url, fetchFn, refusal),
     notPrivate: NOT_PRIVATE,
     missingKey: MISSING_KEY,
     readOnly,
-  };
+  });
   if (head.status === 404) {
-    const parent = await accessDocument(storage, storage, fetchFn, expected);
+    const storageDocument = await accessDocument(storage, storage, fetchFn, expected);
+    // Preview and decide both check the nearest existing parent, including its model.
+    // Missing intermediate folders contribute no own rules; unreadable ones still refuse.
+    let parentResource = scoped(storage, new URL("..", container).href);
+    while (parentResource !== storage) {
+      const parentHead = await fetchFn(parentResource, { method: "HEAD" });
+      if (parentHead.status !== 404) {
+        if (!parentHead.ok) throw new Error(`Access model discovery failed (${parentHead.status})`);
+        break;
+      }
+      parentResource = scoped(storage, new URL("..", parentResource).href);
+    }
+    const parent =
+      parentResource === storage
+        ? storageDocument
+        : await accessDocument(parentResource, storage, fetchFn, expected);
     if (readOnly) {
       return parent.model === "acp"
-        ? acpRecords(container, storage, owner, fetchFn, parent.url, { ...settings, absent: true })
+        ? acpRecords(container, storage, owner, fetchFn, parent.url, {
+            ...settings(parent.url),
+            absent: true,
+          })
         : undefined;
     }
     await put(container, "", fetchFn, null, true);
   } else if (!head.ok) throw new Error(`Records folder check failed (${head.status})`);
   const { url, model } = await accessDocument(container, storage, fetchFn, expected);
-  if (model === "acp") return acpRecords(container, storage, owner, fetchFn, url, settings);
+  if (model === "acp") return acpRecords(container, storage, owner, fetchFn, url, settings(url));
   for (let attempt = 0; attempt < 3; attempt++) {
     const existing = await read(url, fetchFn);
     if (!existing) {

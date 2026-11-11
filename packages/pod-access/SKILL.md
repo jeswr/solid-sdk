@@ -171,7 +171,9 @@ ordinary encoded names (spaces, non-ASCII) stay shareable; access-control and me
 (`.acl`, `.acr`, `.meta`) are never targets. A resumed approval
 (pending or Approving) compares role and expiry including their absence; only `dataTypes` may
 be omitted to keep the pinned subset. Legacy records with only `chosen.viewer` infer their role
-from pinned modes; repeat that role to resume. New records distinguish an omitted role explicitly.
+from pinned modes; omit `role` or repeat that role to resume, preserving the older API's default.
+New records distinguish an omitted role explicitly. Explicitly different legacy
+roles refuse with the inferred role in the error, in both `decide` and `previewDecision`.
 Different choices refuse. Approval results include `choices`
 with the actual granted types, strongest applied `role`, exact roles per target URL in
 `targetRoles`, and recorded expiry (`Date`), including on
@@ -182,11 +184,18 @@ For ACP records, use the roles layer's raw bounded ACR discovery, preserving all
 than projecting conditions to role rows. Verify every reachable local control/policy/matcher and
 all additive ancestor ACRs through the origin root, including ancestors above storage. Privacy-check
 the folder's own accessControl/memberAccessControl and ACR access, plus every ancestor's
-memberAccessControl. Ancestor own-resource accessControl does not reach descendants: public Read
-of a parent listing is safe. Require every ancestor to advertise readable rules; missing links and
-401/403 refuse with an explanation that the server's parent access rules cannot be checked. Owners
+memberAccessControl. Ancestor own-resource accessControl does not reach descendants: public Read,
+Append and Write are safe. Still privacy-check Control in every ancestor direct and ACR-self
+policy: non-owner Control can rewrite the ACR to add inherited access to the records and key.
+Skip nonexistent folders (HEAD 404) to the nearest existing ancestor; preview and decide both
+check this parent when the records folder is missing, including WAC. Require every existing
+ancestor to advertise readable rules; missing links, 401/403 and server errors refuse with an
+explanation that the server's parent access rules cannot be checked. Owners
 must be able to read every ancestor's access rules. This holds on single-pod servers and subdomain
-pods, but not necessarily on path-based multi-pod servers. Keep strict discovery opt-in for this
+pods, but not necessarily on path-based multi-pod servers. An owner on `https://host/alice/` who
+cannot read `https://host/.acr` sees "The server's root access rules are unreadable at https://host/";
+approval and preview refuse because server-wide inherited access and ACR controllers cannot be
+proven owner-only, even when the pod's own ACR is private. Keep strict discovery opt-in for this
 proof; shared roles discovery retains its default. Refuse external definitions, unknown
 predicates/structure, public,
 authenticated or other-agent allows, including access to the ACR itself. Owner-only alternatives

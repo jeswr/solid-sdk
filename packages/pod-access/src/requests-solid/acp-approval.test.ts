@@ -330,7 +330,16 @@ describe("ACP approval and sealed owner records", () => {
   });
 
   it("refuses unreadable parent rules above storage, including missing advertisements", async () => {
-    for (const fault of ["head-401", "head-403", "get-401", "get-403", "link"] as const) {
+    for (const fault of [
+      "head-401",
+      "head-403",
+      "head-404",
+      "head-500",
+      "get-401",
+      "get-403",
+      "get-500",
+      "link",
+    ] as const) {
       const pod = await acpPod();
       const storage = `${POD}alice/`;
       const records = `${storage}settings/access-records/`;
@@ -343,10 +352,10 @@ describe("ACP approval and sealed owner records", () => {
           (method === "HEAD" && url === POD && fault.startsWith("head")) ||
           (method === "GET" && url === `${POD}.acr` && fault.startsWith("get"))
         )
-          return new Response(null, { status: fault.endsWith("401") ? 401 : 403 });
+          return new Response(null, { status: Number(fault.split("-")[1]) });
       });
       await expect(ensureOwnerOnlyContainer(records, storage, OWNER, pod.fetch)).rejects.toThrow(
-        `server's parent access rules can't be checked at ${POD}`,
+        `server's root access rules are unreadable at ${POD}`,
       );
       expect(writes(pod)).toEqual([]);
     }
@@ -387,6 +396,137 @@ describe("ACP approval and sealed owner records", () => {
           "folder is shared",
         );
       else expect(await ensureOwnerOnlyContainer(RECORDS, POD, OWNER, pod.fetch)).toBeDefined();
+    }
+  });
+
+  it("refuses another agent's direct Control on root, intermediate and ACR-self policies", async () => {
+    for (const ancestor of [POD, `${POD}settings/`]) {
+      for (const self of [false, true]) {
+        for (const agent of [REQUESTER, `${ACP}PublicAgent`, `${ACP}AuthenticatedAgent`]) {
+          const pod = await acpPod();
+          await seedRecords(pod);
+          const url = `${ancestor}.acr`;
+          const data = acr(ancestor);
+          const root = self ? `${url}#self` : url;
+          if (self) properties(nn(root), data).add(`${ACP}resource`, url);
+          bind(
+            data,
+            url,
+            "controller",
+            addPolicy(data, url, "controller", agent, [ACL.Read, ACL.Control]),
+            false,
+            root,
+          );
+          pod.seed(url, await turtle(data));
+          for (const operation of [previewDecision, decide])
+            await expect(
+              operation({ id: REQUEST }, { approve: true }, options(pod)),
+            ).rejects.toThrow("folder is shared");
+          expect(writes(pod)).toEqual([]);
+          expect(values(await parseRdf(pod.body(ACR) as string, "text/turtle"), ACR, KEY)).toEqual(
+            [],
+          );
+        }
+      }
+    }
+  });
+
+  it("allows owner-only ancestor Control and public resource Read, Append and Write", async () => {
+    for (const ancestor of [POD, `${POD}settings/`]) {
+      for (const self of [false, true]) {
+        const pod = await acpPod();
+        await seedRecords(pod);
+        const url = `${ancestor}.acr`;
+        const data = acr(ancestor);
+        const root = self ? `${url}#self` : url;
+        if (self) properties(nn(root), data).add(`${ACP}resource`, url);
+        bind(
+          data,
+          url,
+          "controller",
+          addPolicy(data, url, "controller", OWNER, [ACL.Control]),
+          false,
+          root,
+        );
+        bind(
+          data,
+          url,
+          "listing",
+          addPolicy(data, url, "listing", `${ACP}PublicAgent`, [ACL.Read, ACL.Append, ACL.Write]),
+          false,
+        );
+        pod.seed(url, await turtle(data));
+        const expected = await previewDecision({ id: REQUEST }, { approve: true }, options(pod));
+        expect(writes(pod)).toEqual([]);
+        expect(
+          (await decide({ id: REQUEST }, { approve: true }, { ...options(pod), expected })).status,
+        ).toBe("approved");
+      }
+    }
+  });
+
+  it("refuses unsupported ACP Control modes on ancestor resource and ACR-self policies", async () => {
+    for (const self of [false, true]) {
+      const pod = await acpPod();
+      await seedRecords(pod);
+      const url = `${POD}.acr`;
+      const data = acr(POD);
+      const root = self ? `${url}#self` : url;
+      if (self) properties(nn(root), data).add(`${ACP}resource`, url);
+      bind(
+        data,
+        url,
+        "controller",
+        addPolicy(data, url, "controller", REQUESTER, [`${ACP}Control`]),
+        false,
+        root,
+      );
+      pod.seed(url, await turtle(data));
+      await expect(
+        previewDecision({ id: REQUEST }, { approve: true }, options(pod)),
+      ).rejects.toBeInstanceOf(UnsupportedAccessModelError);
+      expect(writes(pod)).toEqual([]);
+    }
+  });
+
+  it("walks existing ACP ancestors when records, settings, or both folders are missing", async () => {
+    const settings = `${POD}settings/`;
+    for (const [missingRecords, missingSettings] of [
+      [true, false],
+      [false, true],
+      [true, true],
+    ]) {
+      const pod = await acpPod();
+      if (!missingRecords) await seedRecords(pod);
+      if (missingSettings)
+        intercept(pod, (method, url) =>
+          method === "HEAD" && url === settings ? new Response(null, { status: 404 }) : undefined,
+        );
+      const expected = await previewDecision({ id: REQUEST }, { approve: true }, options(pod));
+      expect(writes(pod)).toEqual([]);
+      expect(pod.has(RECORDS)).toBe(!missingRecords);
+      expect(
+        (await decide({ id: REQUEST }, { approve: true }, { ...options(pod), expected })).status,
+      ).toBe("approved");
+      expect(pod.has(ACR)).toBe(true);
+    }
+  });
+
+  it("refuses unreadable intermediate ancestors even when the records folder is missing", async () => {
+    const settings = `${POD}settings/`;
+    for (const missingRecords of [false, true]) {
+      for (const status of [401, 403, 500]) {
+        const pod = await acpPod();
+        if (!missingRecords) await seedRecords(pod);
+        intercept(pod, (method, url) =>
+          method === "HEAD" && url === settings ? new Response(null, { status }) : undefined,
+        );
+        for (const operation of [previewDecision, decide])
+          await expect(
+            operation({ id: REQUEST }, { approve: true }, options(pod)),
+          ).rejects.toThrow();
+        expect(writes(pod)).toEqual([]);
+      }
     }
   });
 

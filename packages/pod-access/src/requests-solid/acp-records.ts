@@ -61,10 +61,13 @@ function verify(document: AccessDocument, owner: string, container: string) {
     const deny = p.iris(`${ACP}deny`);
     for (const mode of [...allow, ...deny])
       if (!CSS_MODES.includes(mode)) throw new UnsupportedAccessModelError("acp");
-    const all = p.nodes(`${ACP}allOf`).map((m) => matcher(m as Term, relevant && allow.length > 0));
-    const any = p.nodes(`${ACP}anyOf`).map((m) => matcher(m as Term, relevant && allow.length > 0));
+    // CSS Control lets its holder rewrite this ACR, including its member policies. This
+    // applies to ancestor resource and ACR-self policies even when their Read does not inherit.
+    const privateAllow = allow.length > 0 && (relevant || allow.includes(ACL.Control));
+    const all = p.nodes(`${ACP}allOf`).map((m) => matcher(m as Term, privateAllow));
+    const any = p.nodes(`${ACP}anyOf`).map((m) => matcher(m as Term, privateAllow));
     const none = p.nodes(`${ACP}noneOf`).map((m) => matcher(m as Term, false));
-    if (relevant && allow.length)
+    if (privateAllow)
       privateShape(all.some((m) => m.private) || (any.length > 0 && any.every((m) => m.private)));
     const full =
       (all.length > 0 || any.length > 0) &&
@@ -108,7 +111,7 @@ function verify(document: AccessDocument, owner: string, container: string) {
           // ACP §6.1 and CSS resolve direct accessControl only for that resource;
           // descendants collect memberAccessControl from every ancestor. Public Read
           // on an ancestor's listing does not share this folder or reveal its ACR key.
-          // Still validate the closed graph, but privacy-check only applicable scopes.
+          // Still validate the closed graph and privacy-check Control in every scope.
           const relevant = resource === container || name === "memberAccessControl";
           const modes = policy(p as Term, relevant);
           if (!relevant) continue;

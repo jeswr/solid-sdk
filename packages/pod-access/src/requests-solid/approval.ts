@@ -299,15 +299,21 @@ async function settleRecord(
   throw new Error("The decision record kept changing");
 }
 
-/** Omission is a choice too: it must match the recorded role and expiry. */
+/** New pins preserve omission; legacy pins accept omission or their inferred applied role. */
 function assertSameChoices(snapshot: Snapshot, decision: RequestDecision): void {
   const pinned = snapshot.chosen;
+  if (pinned.role === undefined && decision.role !== undefined) {
+    const role = roleFor(snapshot.modes);
+    if (decision.role !== role)
+      throw new Error(
+        `An earlier approval of this request is still finishing with role "${role}"; omit role or repeat "${role}" to resume it`,
+      );
+  }
   if (
     (decision.dataTypes !== undefined &&
       [...new Set(decision.dataTypes)].sort().join("\n") !== pinned.dataTypes.join("\n")) ||
     (pinned.role !== undefined && (decision.role === "viewer") !== pinned.viewer) ||
-    decision.role !==
-      (pinned.role === undefined ? roleFor(snapshot.modes) : (pinned.role ?? undefined)) ||
+    (pinned.role !== undefined && decision.role !== (pinned.role ?? undefined)) ||
     decision.expiresAt?.toISOString() !== snapshot.expiresAt
   )
     throw new Error(

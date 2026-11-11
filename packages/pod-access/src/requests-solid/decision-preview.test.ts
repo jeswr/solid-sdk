@@ -342,6 +342,35 @@ describe("decision previews and bound consent", () => {
     expect(writes(pod)).toEqual([]);
   });
 
+  it("checks the existing WAC parent in previews and decisions when records are missing", async () => {
+    for (const status of [401, 403, 500]) {
+      const pod = buildPod();
+      const settings = `${POD}settings/`;
+      pod.intercept = (method, url) =>
+        method === "HEAD" && url === settings ? new Response(null, { status }) : undefined;
+      for (const operation of [previewDecision, decide])
+        await expect(operation({ id: REQUEST }, { approve: false }, opts(pod))).rejects.toThrow(
+          `Access model discovery failed (${status})`,
+        );
+      expect(pod.log).toContainEqual({ method: "HEAD", url: settings });
+      expect(pod.has(RECORDS)).toBe(false);
+      expect(writes(pod)).toEqual([]);
+    }
+  });
+
+  it("previews WAC records under a missing settings folder using the existing root", async () => {
+    const pod = buildPod();
+    const settings = `${POD}settings/`;
+    pod.intercept = (method, url) =>
+      method === "HEAD" && url === settings ? new Response(null, { status: 404 }) : undefined;
+    const decision = { approve: false };
+    const expected = await previewDecision({ id: REQUEST }, decision, opts(pod));
+    expect(writes(pod)).toEqual([]);
+    expect((await decide({ id: REQUEST }, decision, { ...opts(pod), expected })).status).toBe(
+      "denied",
+    );
+  });
+
   it("refuses a preview when a needed request or sealing validator is missing", async () => {
     for (const target of [REQUEST, `${RECORDS}.acl`]) {
       const pod = buildPod();

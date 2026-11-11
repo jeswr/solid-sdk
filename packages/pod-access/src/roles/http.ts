@@ -163,7 +163,7 @@ export async function detectModel(
 }
 /**
  * Read ACRs without projecting conditional/deny policies into roles. Privacy proofs opt into
- * requireAncestorAccess: every walked resource must advertise readable access rules.
+ * requireAncestorAccess: every existing walked resource must advertise readable access rules.
  */
 export async function readAccessDocuments(
   resource: string,
@@ -195,12 +195,20 @@ async function discover(
     if (depth === 64)
       throw roleError("invalid-response", resource, "Ancestor walk exceeds 64 documents");
     const head = await request(current, options, { method: "HEAD" });
+    // A not-yet-created container has no rules of its own. Continue from its parent;
+    // other failures (and a missing root) must still refuse discovery.
+    if (head.status === 404 && current.endsWith("/") && current !== root) {
+      current = scoped(new URL("..", current).href, root);
+      continue;
+    }
     const strictAncestor = options.requireAncestorAccess;
     const parentRefusal = () =>
       roleError(
         "invalid-response",
         current,
-        `The server's parent access rules can't be checked at ${current}`,
+        current === root
+          ? `The server's root access rules are unreadable at ${current}`
+          : `The server's parent access rules can't be checked at ${current}`,
       );
     if (strictAncestor && !head.ok) throw parentRefusal();
     requireOk(head, current);

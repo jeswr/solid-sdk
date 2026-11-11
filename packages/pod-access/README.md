@@ -667,7 +667,8 @@ the re-read winner's status. Explicitly retrying resumes the pinned decision wit
 again or rolling back access documents. A retry may omit `dataTypes` to keep the pinned subset.
 It must repeat the recorded `role` and `expiresAt`, including their absence: adding or omitting
 either is a mismatch. Legacy records that stored only `chosen.viewer` infer the applied role
-from their pinned modes; repeat that role to resume them. Different choices fail with an error saying an earlier approval is still
+from their pinned modes; omit `role` or repeat that inferred role to resume them. An explicit
+different role is refused with the recorded role in the error. Different choices fail with an error saying an earlier approval is still
 finishing, rather than silently granting something other than what the owner just chose.
 Completed decisions are idempotent; reversing
 approval/denial is rejected. Denial receipt writes can also be retried. Requester-supplied grant/receipt
@@ -784,15 +785,22 @@ Public/authenticated/other agents are refused, including readers of the ACR itse
 are retained, and denials that could remove owner access refuse sealing. Unconditional owner Read,
 Write and Control must cover both folder and members. The folder's own `accessControl` and
 `memberAccessControl`, and any controls governing its ACR, are privacy-checked. Ancestors contribute
-only `memberAccessControl`; public Read of an ancestor's own listing via `accessControl` does not
+`memberAccessControl`; direct Read, Append or Write of an ancestor via `accessControl` does not
 share the records folder ([ACP resolution](https://solidproject.org/TR/acp#resolved-access-control)).
+Control in any ancestor resource or ACR-self policy must still be owner-only: another controller
+could rewrite that ancestor's ACR to add inherited access to the records folder and its key.
 
 ACP inheritance is additive, so the proof walks every ancestor through the **origin root**, including
-ancestors above a path-based `storage` root. Every ancestor must advertise readable access rules;
-401/403 or a missing access link refuses because the server's parent access rules cannot be checked.
+ancestors above a path-based `storage` root. Missing folders (HEAD 404) are skipped to their nearest
+existing ancestor, including when `settings/` or the records folder has not been created yet.
+Every existing ancestor must advertise readable access rules; 401/403, server errors or a missing
+access link refuse because the server's parent access rules cannot be checked.
 The owner must be able to read every ancestor's rules. This holds for single-pod servers and
 subdomain pods (`storage` equals the origin root), but not necessarily for path-based multi-pod
-servers. An own private ACR cannot cancel inherited public access. Shared roles discovery keeps its
+servers. For example, on `https://host/alice/`, an owner who cannot read the server's `https://host/.acr`
+sees "The server's root access rules are unreadable at https://host/" and approval/preview stops.
+The client cannot prove that server-wide policies exclude other readers or controllers, so it
+refuses even when Alice's own ACR is private. An own private ACR cannot cancel inherited public access. Shared roles discovery keeps its
 existing default of skipping ancestors without access links; strict discovery is specific to this proof.
 
 A missing own ACR follows the WAC sealing protocol: check emptiness, create an owner-only ACR
