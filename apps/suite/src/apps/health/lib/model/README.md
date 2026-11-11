@@ -54,3 +54,40 @@ read aliases come from `@jeswr/suite-vocab`. The original deployable is unchange
 HLT-01 supplies hooks, subscriptions, Type Index discovery/registration, offline caching/outbox
 and UI. This model does not assume their APIs. No new vocabulary terms or dependencies on the
 old private deployable are introduced.
+
+## Food and symptom diary
+
+`lib/data/diary.ts` uses `@jeswr/solid-health-diary` builders, parsers and exposure derivation
+for all diary entities. Health canonicalizes schema.org to HTTPS; a read-only adapter presents
+HTTP schema.org predicates to the package parser. Thin typed accessors add optional
+`schema:keywords` tags on meals and `schema:duration` (`PT<n>M`) on symptoms.
+An omitted package severity remains “not recorded”; it is never converted to zero.
+
+Entries occupy one resource each at `health/diary/<yyyy-mm>/<uuid>.ttl`, rooted at `#it`.
+The package README specifies no mandatory storage layout, so Health uses the lane's default
+month partition. Explicitly created intermediate containers inherit the verified owner-only
+Health ACL; the diary writes no ACL. The month follows the entry's local date. Timestamp edits
+across months create the destination conditionally and delete the source with its ETag;
+a source conflict rolls back the destination. Undo moves the entry back conditionally.
+Listing reads only month containers overlapping the requested local range (inclusive start,
+exclusive end), with at most six entry reads in flight. Foreign resources are skipped;
+malformed/inaccessible entries are collected and shown as a small unreadable-entry count.
+Timeline dates, pagination, search links and displayed times all use the user's local zone;
+the package stores absolute dateTime instants. Each signed-in account shares a lazy month cache
+across diary pages, the recent dashboard summary and search. Diary writes and diary notifications
+invalidate it; unrelated Health writes do not. Meal edits retain product metadata and per-item
+ingredients, and derive exposures from the preserved items.
+
+Creates/restores use `If-None-Match: *`; updates and deletes require a strong `If-Match`.
+A 412 re-reads: an identical RDF graph (apart from creation time on create retries), or an
+already absent deletion, succeeds. Other conflicts surface to the user. Undo is another
+conditional operation and never overwrites a concurrent change.
+
+Patterns are descriptive co-occurrences, not tolerance conclusions or a diagnosis. Names/tags
+are trimmed and case-folded; each meal counts once per food/tag and symptom type, with onset
+inside the inclusive configured window (default 2–48 hours). Meals without a complete follow-up
+window are excluded. Both meals with/without a following symptom and symptom-entry counts are
+shown; each symptom URL counts only once per food/tag, even across overlapping meal windows.
+At the fixed demo clock 2026-11-01T12:00Z, the oats/bloating row is 3 meals followed, 2 without,
+2 distinct symptoms; porridge/headache is 2, 3, 1. Ingredients are searchable text,
+not automatically inferred food names. The existing FHIR R4 exporter does not include diary data.
