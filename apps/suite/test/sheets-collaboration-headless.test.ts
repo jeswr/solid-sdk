@@ -161,13 +161,13 @@ async function mounted(doc: Y.Doc, snapshot = initial(), readOnly = false) {
   };
 }
 
-async function pair() {
+async function pair(snapshot = initial()) {
   const a = new Y.Doc();
-  a.transact(() => seedSheets(a, initial()));
+  a.transact(() => seedSheets(a, snapshot));
   const b = new Y.Doc();
   Y.applyUpdate(b, Y.encodeStateAsUpdate(a));
-  const left = await mounted(a);
-  const right = await mounted(b);
+  const left = await mounted(a, structuredClone(snapshot));
+  const right = await mounted(b, structuredClone(snapshot));
   const transport = {};
   const queueA: Uint8Array[] = [];
   const queueB: Uint8Array[] = [];
@@ -191,6 +191,111 @@ async function pair() {
   };
   return { left, right, sync, dispose };
 }
+
+it.each([
+  "row",
+  "col",
+] as const)("resolves formulas after concurrent %s insertions and invalidates deleted references", async (axis) => {
+  const base = initial() as unknown as IWorkbookData;
+  (base.sheets.data as IWorkbookData["sheets"][string]).cellData = {
+    0: { 0: { f: "=B3" } },
+    2: { 1: { v: 42, t: 2 } },
+  };
+  const p = await pair(base as unknown as Snapshot);
+  try {
+    await p.left.structural(axis, "insert", axis === "row" ? 2 : 1);
+    await p.right.structural(axis, "insert", axis === "row" ? 2 : 1);
+    p.sync();
+    const expected = axis === "row" ? "=B5" : "=D3";
+    for (const replica of [p.left, p.right]) {
+      expect(replica.data()?.cellData?.[0]?.[0]?.f).toBe(expected);
+    }
+    await vi.waitFor(() => {
+      for (const replica of [p.left, p.right])
+        expect(replica.data()?.cellData?.[0]?.[0]?.v).toBe(42);
+    });
+    await p.left.structural(axis, "remove", axis === "row" ? 4 : 3);
+    p.sync();
+    for (const replica of [p.left, p.right])
+      expect(replica.data()?.cellData?.[0]?.[0]?.f).toBe("=#REF!");
+    await vi.waitFor(() => {
+      for (const replica of [p.left, p.right])
+        expect(replica.data()?.cellData?.[0]?.[0]?.v).toBe("#REF!");
+    });
+  } finally {
+    p.dispose();
+  }
+});
+
+it("keeps absolute/mixed range and other-sheet formula references attached to their targets", async () => {
+  const base = initial() as unknown as IWorkbookData;
+  const data = base.sheets.data as IWorkbookData["sheets"][string];
+  data.name = "Data Sheet";
+  data.cellData = {
+    0: { 0: { f: "=SUM($B$3:B$4)+$B3+B$3" } },
+    2: { 1: { v: 42, t: 2 } },
+    3: { 1: { v: 8, t: 2 } },
+  };
+  base.sheetOrder.push("other");
+  base.sheets.other = {
+    ...structuredClone(data),
+    id: "other",
+    name: "Other Sheet",
+    cellData: { 0: { 0: { f: "='Data Sheet'!$B$3" } } },
+  };
+  const p = await pair(base as unknown as Snapshot);
+  try {
+    for (const axis of ["row", "col"] as const) {
+      await p.left.structural(axis, "insert", axis === "row" ? 2 : 1);
+      await p.right.structural(axis, "insert", axis === "row" ? 2 : 1);
+      p.sync();
+    }
+    for (const replica of [p.left, p.right]) {
+      expect(replica.data()?.cellData?.[0]?.[0]?.f).toBe("=SUM($D$5:D$6)+$D5+D$5");
+      expect(replica.data()?.cellData?.[4]?.[3]?.v).toBe(42);
+      expect(replica.data()?.cellData?.[5]?.[3]?.v).toBe(8);
+      expect(
+        (replica.engine.snapshot() as unknown as IWorkbookData).sheets.other?.cellData?.[0]?.[0]?.f,
+      ).toBe("='Data Sheet'!$D$5");
+    }
+  } finally {
+    p.dispose();
+  }
+});
+
+it("restores chart and comment checkpoints against a concurrent insertion when undoing a deletion", async () => {
+  const base = initial();
+  base.commentAnchors = { version: 1, anchors: { root: { sheetId: "data", cell: "B2" } } };
+  const p = await pair(base);
+  const draft = p.left.engine.trackCommentDraft?.({ sheetId: "data", cell: "B2", deleted: false });
+  try {
+    await p.left.structural("row", "remove", 1);
+    await p.right.structural("row", "insert", 0);
+    p.sync();
+    await p.left.undo();
+    p.sync();
+    for (const replica of [p.left, p.right]) {
+      expect(readCharts(replica.engine.snapshot()).charts[0]?.range).toBe("A2:B4");
+      expect(replica.engine.snapshot().commentAnchors).toMatchObject({
+        anchors: { root: { sheetId: "data", cell: "B3" } },
+      });
+    }
+    expect(draft?.current()).toMatchObject({ cell: "B3", deleted: false });
+    await p.left.redo();
+    p.sync();
+    await p.left.undo();
+    p.sync();
+    expect(readCharts(p.left.engine.snapshot()).charts).toEqual(
+      readCharts(p.right.engine.snapshot()).charts,
+    );
+    expect(p.left.engine.snapshot().commentAnchors).toEqual(
+      p.right.engine.snapshot().commentAnchors,
+    );
+  } finally {
+    draft?.dispose();
+    p.dispose();
+  }
+});
 
 it("merges concurrent edits to different cells, converges one cell, and only undoes the local edit", async () => {
   const p = await pair();

@@ -403,6 +403,8 @@ export function createWorkbookService(options: WorkbookServiceOptions): Workbook
         new URL("collab/", container).href,
         transport,
         readOnly || !own,
+        undefined,
+        own ? options.webId : undefined,
       );
       await collaboration.open(snapshot);
       collaborations.set(container, collaboration);

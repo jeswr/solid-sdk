@@ -11,6 +11,7 @@ import {
 } from "@univerjs/core";
 import * as Y from "yjs";
 import type { Snapshot } from "../contract";
+import { decodeCell, encodeCell } from "./formulas";
 import {
   type Axes,
   axes,
@@ -171,7 +172,12 @@ export class CollaborationBridge {
         for (const [c, cell] of Object.entries(row)) {
           cells(state).set(
             `${next.rowIds[Number(r)]}|${next.colIds[Number(c)]}`,
-            jsonCopy(cell as ICellData),
+            encodeCell(
+              jsonCopy(cell as ICellData),
+              id,
+              workbook,
+              new Map([...sheetStates(this.doc)].map(([id, state]) => [id, axes(state)])),
+            ),
           );
         }
       }
@@ -196,7 +202,9 @@ export class CollaborationBridge {
           if (rowId === undefined || colId === undefined) continue;
           const key = `${rowId}|${colId}`;
           const cell = sheet?.cellData?.[Number(r)]?.[Number(c)];
-          const value = cell ? jsonCopy(cell) : undefined;
+          const value = cell
+            ? encodeCell(jsonCopy(cell), params.subUnitId, snapshot, this.positions)
+            : undefined;
           const style = typeof value?.s === "string" ? snapshot.styles[value.s] : undefined;
           this.pending.push(() => {
             if (style && typeof value?.s === "string")
@@ -279,6 +287,9 @@ export class CollaborationBridge {
     try {
       this.metadata("before", this.positions);
       let workbook = this.read() as unknown as IWorkbookData;
+      const mergedPositions = new Map(
+        [...sheetStates(this.doc)].map(([id, state]) => [id, axes(state)]),
+      );
       this.installStyles(new Map(this.doc.getMap<IStyleData>("styles")));
       for (const [id, state] of sheetStates(this.doc)) {
         if (!workbook.sheets[id]) continue; // Sheet list remains snapshot-managed.
@@ -329,7 +340,7 @@ export class CollaborationBridge {
           const col = cols.get(c as string);
           if (row === undefined || col === undefined) continue;
           desired[row] ??= {};
-          desired[row][col] = cell;
+          desired[row][col] = decodeCell(cell, workbook, mergedPositions);
         }
         for (const r of new Set([...Object.keys(before), ...Object.keys(desired)])) {
           for (const c of new Set([

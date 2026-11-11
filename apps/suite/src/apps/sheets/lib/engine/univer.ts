@@ -19,7 +19,7 @@ import { SheetInterceptorService, SheetsSelectionsService } from "@univerjs/shee
 import { shiftChartRanges } from "../charts/range";
 import { type ChartSpec, readCharts, withCharts } from "../charts/spec";
 import { CollaborationBridge } from "../collaboration/bridge";
-import { type Axes, checkpoint } from "../collaboration/model";
+import { type Axes, axes, checkpoint, sheetStates } from "../collaboration/model";
 import { type AnchorDeletions, WorkbookCommentAnchors } from "../comments/anchors";
 import { type CellAnchor, commentStructuralEdit, shiftCellAnchor } from "../comments/selector";
 import type { MountEngine, Snapshot } from "../contract";
@@ -49,7 +49,13 @@ const RECOMPUTE_MUTATIONS = new Set(["sheet.mutation.data-validation-formula-mar
 interface StructuralOperation {
   chartSources?: {
     sheetId: string;
-    sources: { id: string; sheetId: string; range: ChartSpec["range"]; revision: number }[];
+    sources: {
+      id: string;
+      sheetId: string;
+      range: ChartSpec["range"];
+      revision: number;
+      identity?: Axes | undefined;
+    }[];
   };
   redo: AnchorDeletions[];
   undo: AnchorDeletions[];
@@ -246,6 +252,63 @@ export const mountUniver: MountEngine = async (container, options) => {
     });
   };
   const commands = injector.get(ICommandService);
+  const stableRange = (sheetId: string, range: string | null): Axes | undefined => {
+    const state = options.collaboration && sheetStates(options.collaboration.doc).get(sheetId);
+    if (!state || range === null) return undefined;
+    const position = axes(state);
+    const ref = parseA1(range);
+    return {
+      rowIds: position.rowIds.slice(
+        (ref.rows as AxisRange).start.index - 1,
+        (ref.rows as AxisRange).end.index,
+      ),
+      colIds: position.colIds.slice(
+        (ref.columns as AxisRange).start.index - 1,
+        (ref.columns as AxisRange).end.index,
+      ),
+    };
+  };
+  const resolveRange = (sheetId: string, identity: Axes): string | null => {
+    const state = options.collaboration && sheetStates(options.collaboration.doc).get(sheetId);
+    if (!state) return null;
+    const position = axes(state);
+    const rows = identity.rowIds
+      .map((id) => position.rowIds.indexOf(id))
+      .filter((index) => index >= 0);
+    const cols = identity.colIds
+      .map((id) => position.colIds.indexOf(id))
+      .filter((index) => index >= 0);
+    if (!rows.length || !cols.length) return null;
+    return `${indexToColumn(Math.min(...cols) + 1)}${Math.min(...rows) + 1}:${indexToColumn(Math.max(...cols) + 1)}${Math.max(...rows) + 1}`;
+  };
+  const anchorCheckpoints = new WeakMap<AnchorDeletions, Map<string, Axes>>();
+  const captureAnchors = (deleted: AnchorDeletions, fromCollab = false) => {
+    if (!options.collaboration) return;
+    const stable = new Map<string, Axes>();
+    for (const kind of ["anchors", "drafts"] as const) {
+      for (const [id, anchor] of Object.entries(deleted[kind])) {
+        const known = fromCollab && identities[kind].get(id);
+        const identity = known
+          ? { rowIds: [known.rowId, known.rowId], colIds: [known.colId, known.colId] }
+          : stableRange(anchor.sheetId, anchor.cell);
+        if (identity) stable.set(`${kind}:${id}`, identity);
+      }
+    }
+    anchorCheckpoints.set(deleted, stable);
+  };
+  const restoreAnchors = (deleted: AnchorDeletions) => {
+    const stable = anchorCheckpoints.get(deleted);
+    if (!stable) return deleted;
+    const restored: AnchorDeletions = { revision: deleted.revision, anchors: {}, drafts: {} };
+    for (const kind of ["anchors", "drafts"] as const) {
+      for (const [id, anchor] of Object.entries(deleted[kind])) {
+        const identity = stable.get(`${kind}:${id}`);
+        const range = identity && resolveRange(anchor.sheetId, identity);
+        if (range) restored[kind][id] = { ...anchor, cell: range.split(":")[0] as string };
+      }
+    }
+    return restored;
+  };
   let collaboration: CollaborationBridge | undefined;
   // setEditable does not guard native history replay. Cancel user commands before
   // they can mutate the workbook or consume undo/redo history while anchors load.
@@ -274,6 +337,7 @@ export const mountUniver: MountEngine = async (container, options) => {
               sheetId: chart.sheetId,
               range: chart.range,
               revision: chartRevisions.get(chart.id) ?? 0,
+              identity: stableRange(chart.sheetId, chart.range),
             }));
         }
       } else {
@@ -288,7 +352,12 @@ export const mountUniver: MountEngine = async (container, options) => {
               const source = sources.get(chart.id);
               return source?.sheetId === chart.sheetId &&
                 source.revision === (chartRevisions.get(chart.id) ?? 0)
-                ? { ...chart, range: source.range }
+                ? {
+                    ...chart,
+                    range: source.identity
+                      ? resolveRange(source.sheetId, source.identity)
+                      : source.range,
+                  }
                 : chart;
             }),
           ).charts;
@@ -368,12 +437,13 @@ export const mountUniver: MountEngine = async (container, options) => {
         ).charts;
       }
       const deleted = anchors.shift(edit);
+      captureAnchors(deleted, event.options?.fromCollab);
       let inverse: AnchorDeletions | undefined;
       if (activeOperation) {
         const { operation, direction } = activeOperation;
         operation[direction].push(deleted);
         inverse = operation[direction === "undo" ? "redo" : "undo"].pop();
-        if (inverse) anchors.revive(inverse);
+        if (inverse) anchors.revive(restoreAnchors(inverse));
       }
       structuralLog.push({ revision: savedRevision, edit, deleted, inverse });
       for (const listener of structures) listener(edit);
@@ -387,7 +457,9 @@ export const mountUniver: MountEngine = async (container, options) => {
     Object.assign(data, anchors.snapshot());
     // Univer drops unknown top-level metadata when saving its canvas model.
     if (charts !== undefined) data.charts = JSON.parse(JSON.stringify(charts));
-    if (options.collaboration) data.collaboration = checkpoint(options.collaboration.doc);
+    if (options.collaboration)
+      data.collaboration =
+        options.collaboration.checkpoint?.() ?? checkpoint(options.collaboration.doc);
     serializeSnapshot(data);
     snapshotCursors.set(data, { generation: logGeneration, cursor: structuralLog.length });
     return data;

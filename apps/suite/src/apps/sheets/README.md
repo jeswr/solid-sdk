@@ -46,9 +46,10 @@ cover the list and editor chrome, excluding the Univer container; they do not ce
 accessibility. CSV export provides a text representation of the active sheet's values.
 
 Autosave serializes all writes, debounces edits for one second, holds edits offline, retries
-on reconnection, and stops on conflicts until a version is chosen. Visibility/pagehide and
-unmount flushes are best effort under the current service contract; browser termination is
-not a durable offline queue, and the contract has no keepalive option.
+on reconnection, and stops on conflicts until a version is chosen. Collaborative edits also
+have a durable IndexedDB mirror scoped to the signed-in WebID and workbook URL. Reopening
+merges that mirror with the pod log and re-sends unconfirmed edits. Snapshot metadata and
+other snapshot-only features retain best-effort teardown saves; the contract has no keepalive option.
 
 `window.__sheetsEngine` exists only in builds with `NEXT_PUBLIC_DEV_FIXTURES=1` for browser
 round-trip tests. The list route never imports the Univer preset or its facade at runtime.
@@ -139,8 +140,11 @@ Cell values, formulas and styles, and whole-row/column insertions, removals and 
 merge through a Yjs document. Each sheet has ordered `Y.Array<string>` row and column
 IDs and a cell `Y.Map` keyed by `${rowId}|${colId}`. IDs are random and remain attached
 to their cells through structural edits. Concurrent inserts use Yjs order; concurrent
-writes to one cell converge to Yjs' deterministic winner. Style definitions travel with
-their IDs so another editor can render them.
+writes to one cell converge to Yjs' deterministic winner. Formula references, including
+range endpoints, absolute/mixed references and references to other workbook sheets, store
+stable sheet/row/column IDs. They resolve to A1 against the merged structure; deleted targets
+resolve to `#REF!`. String literals and function names remain unchanged. Style definitions
+travel with their IDs so another editor can render them.
 
 `@jeswr/y-solid` persists binary updates in an append-only `<workbook>/collab/` container
 beside `workbook.json`, within the workbook's existing scope and inherited access policy.
@@ -149,7 +153,7 @@ in one transaction; a create-only canonical seed lets racing first-openers share
 IDs. Later loads use Yjs for cells and row/column structure. A viewer with an empty log
 renders the legacy snapshot and never seeds or appends updates.
 
-Saves record `collaboration.stateVector` (base64) and each sheet's row/column IDs in
+Saves record only a pod-confirmed `collaboration.stateVector` (base64) and each sheet's row/column IDs in
 `workbook.json`. The IDs locate snapshot coordinates when the vector is behind the log,
 allowing chart sources and comment anchors to follow the missing structural edits.
 CSV and JSON-LD projections continue to come from the merged engine snapshot.
@@ -162,7 +166,8 @@ history controls, command order and structural metadata checkpoints; its coordin
 cell/row patches are replaced by references to each command's Yjs undo item. This keeps
 undo attached to the original rows after remote insertions and prevents undo of a remotely
 replaced edit from consuming an earlier command. Sheet-list and other snapshot operations
-retain their native history. CSV import retains its existing replacement behavior.
+retain their native history. Chart and comment undo checkpoints also retain stable row/column
+IDs and resolve them against the current merged structure. CSV import retains its existing replacement behavior.
 
 Scoped pod notifications, window focus, reconnection and a 30-second poll while visible
 call `sync()`. View-only grids receive and render updates without writing the log or snapshot.

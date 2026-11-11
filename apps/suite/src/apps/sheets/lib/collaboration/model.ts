@@ -1,13 +1,14 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import type { ICellData, IStyleData, IWorkbookData } from "@univerjs/core";
+import type { IStyleData, IWorkbookData } from "@univerjs/core";
 import * as Y from "yjs";
 import type { Snapshot } from "../contract";
+import { encodeCell, type StoredCell } from "./formulas";
 
 export type Axes = {
   rowIds: string[];
   colIds: string[];
 };
-export type SheetState = Y.Map<Y.Array<string> | Y.Map<ICellData> | Axes>;
+export type SheetState = Y.Map<Y.Array<string> | Y.Map<StoredCell> | Axes>;
 export const LOCAL_ORIGIN = Symbol("Sheets local command");
 export const SEED_ORIGIN = Symbol("Sheets snapshot seed");
 
@@ -21,7 +22,7 @@ export function axes(state: SheetState): Axes {
   };
 }
 export function cells(state: SheetState) {
-  return state.get("cells") as Y.Map<ICellData>;
+  return state.get("cells") as Y.Map<StoredCell>;
 }
 export function jsonCopy<T>(value: T): T {
   return JSON.parse(JSON.stringify(value));
@@ -30,6 +31,7 @@ export function jsonCopy<T>(value: T): T {
 /** A sheet's identity is external to the CRDT in slice 1. Never store names/order here. */
 export function seedSheets(doc: Y.Doc, snapshot: Snapshot) {
   const workbook = snapshot as unknown as IWorkbookData;
+  const created = new Set<string>();
   for (const [id, style] of Object.entries(workbook.styles ?? {})) {
     if (style && !doc.getMap<IStyleData>("styles").has(id))
       doc.getMap<IStyleData>("styles").set(id, jsonCopy(style));
@@ -38,6 +40,7 @@ export function seedSheets(doc: Y.Doc, snapshot: Snapshot) {
     if (sheetStates(doc).has(id)) continue;
     const sheet = workbook.sheets[id];
     if (!sheet) continue;
+    created.add(id);
     const state: SheetState = new Y.Map();
     const saved = (
       snapshot.collaboration as unknown as { sheets: Record<string, Axes> } | undefined
@@ -53,12 +56,23 @@ export function seedSheets(doc: Y.Doc, snapshot: Snapshot) {
     state.set("rowIds", rows);
     state.set("colIds", cols);
     state.set("initial", { rowIds, colIds });
-    const values = new Y.Map<ICellData>();
+    const values = new Y.Map<StoredCell>();
     state.set("cells", values);
     sheetStates(doc).set(id, state);
+  }
+  const positions = new Map([...sheetStates(doc)].map(([id, state]) => [id, axes(state)]));
+  for (const id of workbook.sheetOrder) {
+    const sheet = workbook.sheets[id];
+    const state = sheetStates(doc).get(id);
+    if (!sheet || !state || !created.has(id)) continue;
+    const { rowIds, colIds } = axes(state);
     for (const [r, columns] of Object.entries(sheet.cellData ?? {})) {
       for (const [c, cell] of Object.entries(columns)) {
-        if (cell) values.set(`${rowIds[Number(r)]}|${colIds[Number(c)]}`, jsonCopy(cell));
+        if (cell)
+          cells(state).set(
+            `${rowIds[Number(r)]}|${colIds[Number(c)]}`,
+            encodeCell(jsonCopy(cell), id, workbook, positions),
+          );
       }
     }
   }

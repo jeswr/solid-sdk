@@ -1,8 +1,14 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { SolidPersistence, SolidUpdateStore } from "@jeswr/y-solid";
+import { IndexeddbPersistence } from "y-indexeddb";
 import * as Y from "yjs";
+import { hasUnconfirmedLocalState } from "../../../docs/editor/local-state";
 import type { Snapshot } from "../contract";
-import { SEED_ORIGIN, seedSheets, sheetStates } from "./model";
+import { checkpoint, SEED_ORIGIN, seedSheets, sheetStates } from "./model";
+
+export function workbookMirrorName(webId: string, workbook: string) {
+  return `suite.sheets.workbook:${JSON.stringify([webId, workbook])}`;
+}
 
 /** One append-only update log, with an atomic, create-only initial seed. */
 export class WorkbookCollaboration {
@@ -10,8 +16,11 @@ export class WorkbookCollaboration {
   readonly provider: SolidPersistence;
   private stopped = false;
   private failure: Error | undefined;
+  private failureVersion = 0;
   private syncing: Promise<unknown> = Promise.resolve();
   private unwatch: (() => void) | undefined;
+  private mirror: IndexeddbPersistence | undefined;
+  private confirmedVector = "AA==";
   readOnly: boolean;
 
   constructor(
@@ -19,6 +28,7 @@ export class WorkbookCollaboration {
     private readonly fetch: typeof globalThis.fetch,
     readOnly: boolean,
     store = new SolidUpdateStore({ container, fetch }),
+    private readonly webId?: string,
   ) {
     this.container = store.container;
     this.readOnly = readOnly;
@@ -31,6 +41,7 @@ export class WorkbookCollaboration {
     this.provider = new SolidPersistence({ doc: this.doc, store });
     this.provider.on("error", (error) => {
       this.failure = error;
+      ++this.failureVersion;
     });
   }
 
@@ -38,7 +49,10 @@ export class WorkbookCollaboration {
     try {
       await this.provider.whenSynced;
       if (this.failure) throw this.failure;
-      if (sheetStates(this.doc).size) return;
+      if (sheetStates(this.doc).size) {
+        await this.openMirror();
+        return;
+      }
       if (this.readOnly) {
         // Legacy view-only workbooks render their snapshot without creating a log.
         return;
@@ -67,10 +81,32 @@ export class WorkbookCollaboration {
       } finally {
         seed.destroy();
       }
+      await this.openMirror();
     } catch (error) {
       await this.destroy();
       throw error;
     }
+  }
+
+  private async openMirror() {
+    const confirmed = Y.encodeStateAsUpdate(this.doc);
+    this.confirmedVector = checkpoint(this.doc).stateVector;
+    // Public/shared viewers never consume the owner's pending local updates.
+    if (!this.webId || this.readOnly || typeof indexedDB === "undefined") return;
+    this.mirror = new IndexeddbPersistence(
+      workbookMirrorName(this.webId, new URL("../", this.container).href),
+      this.doc,
+    );
+    await this.mirror.whenSynced;
+    if (await hasUnconfirmedLocalState(this.mirror, async () => confirmed)) {
+      // The mirror may include edits whose earlier append failed before teardown.
+      await this.provider.persistFullState();
+    }
+    await this.flush();
+  }
+
+  checkpoint() {
+    return { ...checkpoint(this.doc), stateVector: this.confirmedVector };
   }
 
   sync() {
@@ -88,14 +124,21 @@ export class WorkbookCollaboration {
   }
 
   async flush() {
+    const confirmed = Y.encodeStateAsUpdate(this.doc);
+    const vector = checkpoint(this.doc).stateVector;
     await this.provider.flush();
     if (this.readOnly) return;
     if (this.failure) {
       // y-solid reports background append errors through events. Retain all
       // edits in the live doc and repair the log before acknowledging a save.
+      const version = this.failureVersion;
       await this.provider.persistFullState();
-      this.failure = undefined;
+      // A later append can fail while this full-state write is in flight. Its
+      // edits may postdate the encoded repair, so retain that failure for retry.
+      if (this.failureVersion === version) this.failure = undefined;
     }
+    this.confirmedVector = vector;
+    if (this.mirror) await this.mirror.set("confirmed", Uint8Array.from(confirmed).buffer);
   }
 
   watch(subscribe: (listener: (url: string) => void) => () => void) {
@@ -137,7 +180,18 @@ export class WorkbookCollaboration {
       await this.flush();
     } finally {
       this.provider.destroy();
-      this.doc.destroy();
+      try {
+        if (this.mirror) {
+          try {
+            // Reading the updates store waits for outstanding delta transactions.
+            await hasUnconfirmedLocalState(this.mirror);
+          } finally {
+            await this.mirror.destroy();
+          }
+        }
+      } finally {
+        this.doc.destroy();
+      }
     }
   }
 }

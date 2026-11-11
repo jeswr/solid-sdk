@@ -1,17 +1,22 @@
 // @vitest-environment jsdom
 // AUTHORED-BY Codex GPT-6.1-Sol
+import { createRequire } from "node:module";
 import { SolidUpdateStore } from "@jeswr/y-solid";
 import { afterEach, expect, it, vi } from "vitest";
+import * as Y from "yjs";
 import {
   cells,
   checkpoint,
   LOCAL_ORIGIN,
   sheetStates,
 } from "../src/apps/sheets/lib/collaboration/model";
-import { WorkbookCollaboration } from "../src/apps/sheets/lib/collaboration/persistence";
+import {
+  WorkbookCollaboration,
+  workbookMirrorName,
+} from "../src/apps/sheets/lib/collaboration/persistence";
 import type { Snapshot } from "../src/apps/sheets/lib/contract";
 import { createWorkbookService } from "../src/apps/sheets/lib/workbook";
-import { harness, POD } from "./sheets-workbook-helpers";
+import { harness, POD, WEBID } from "./sheets-workbook-helpers";
 
 const container = `${POD}sheets/shared/collab/`;
 const snapshot: Snapshot = {
@@ -92,6 +97,107 @@ function edit(runtime: WorkbookCollaboration, value: string) {
 
 afterEach(() => vi.useRealTimers());
 
+it("recovers an offline edit from the WebID-scoped mirror after failed teardown and persists it before snapshot saves", async () => {
+  const { IDBFactory, IDBKeyRange } = createRequire(
+    `${process.cwd()}/../../packages/solid-offline/package.json`,
+  )("fake-indexeddb") as {
+    IDBFactory: new () => IDBFactory;
+    IDBKeyRange: typeof globalThis.IDBKeyRange;
+  };
+  vi.stubGlobal("indexedDB", new IDBFactory());
+  vi.stubGlobal("IDBKeyRange", IDBKeyRange);
+  const h = await harness();
+  const runtimes: WorkbookCollaboration[] = [];
+  try {
+    const book = await h.service.create({ title: "Offline", snapshot });
+    const first = (await h.service.collaborate?.(
+      book.container,
+      book.snapshot,
+      false,
+    )) as WorkbookCollaboration;
+    runtimes.push(first);
+    const baseline = first.checkpoint();
+    h.setHook((call) =>
+      call.method === "PUT" && call.url.includes("/collab/")
+        ? new Response(null, { status: 503 })
+        : undefined,
+    );
+    edit(first, "Offline edit");
+    await expect(first.flush()).rejects.toThrow();
+    const pending = {
+      ...structuredClone(book.snapshot),
+      collaboration: first.checkpoint(),
+      sheets: {
+        data: {
+          ...(book.snapshot.sheets as Record<string, object>).data,
+          cellData: { 0: { 0: { v: "Offline edit" } } },
+        },
+      },
+    };
+    expect(pending.collaboration.stateVector).toBe(baseline.stateVector);
+    expect(checkpoint(first.doc).stateVector).not.toBe(baseline.stateVector);
+    await expect(first.destroy()).rejects.toThrow();
+    // A snapshot can finish after collaboration teardown. Its vector must still
+    // describe only the confirmed log, even if the grid contains offline edits.
+    h.setHook(() => undefined);
+    const saved = await h.service.save(book.container, pending, book.version);
+    const other = createWorkbookService({ ...h.options, webId: "https://other.example/#me" });
+    const isolated = (await other.collaborate?.(
+      book.container,
+      pending,
+      false,
+    )) as WorkbookCollaboration;
+    runtimes.push(isolated);
+    expect(JSON.stringify(sheetStates(isolated.doc).toJSON())).not.toContain("Offline edit");
+    const viewer = (await h.service.collaborate?.(
+      book.container,
+      pending,
+      true,
+    )) as WorkbookCollaboration;
+    runtimes.push(viewer);
+    expect(JSON.stringify(sheetStates(viewer.doc).toJSON())).not.toContain("Offline edit");
+    const recovered = (await h.service.collaborate?.(
+      book.container,
+      pending,
+      false,
+    )) as WorkbookCollaboration;
+    runtimes.push(recovered);
+    expect(JSON.stringify(sheetStates(recovered.doc).toJSON())).toContain("Offline edit");
+    const next = structuredClone(book.snapshot);
+    next.collaboration = recovered.checkpoint();
+    next.sheets = {
+      data: {
+        ...(next.sheets as Record<string, object>).data,
+        cellData: { 0: { 0: { v: "Offline edit" } } },
+      },
+    };
+    await h.service.save(book.container, next, saved.version);
+    const persisted = await h.storage.loadSnapshot(book.container);
+    expect(persisted.value.collaboration).toEqual(next.collaboration);
+    const fresh = (await other.collaborate?.(
+      book.container,
+      persisted.value,
+      true,
+    )) as WorkbookCollaboration;
+    runtimes.push(fresh);
+    expect(JSON.stringify(sheetStates(fresh.doc).toJSON())).toContain("Offline edit");
+    const log = new Y.Doc();
+    for (const entry of await fresh.provider.store.loadUpdates()) Y.applyUpdate(log, entry.update);
+    expect(checkpoint(log).stateVector).toBe(next.collaboration.stateVector);
+    log.destroy();
+    expect(workbookMirrorName(WEBID, book.container)).not.toBe(
+      workbookMirrorName("other", book.container),
+    );
+    expect(workbookMirrorName(WEBID, book.container)).not.toBe(
+      workbookMirrorName(WEBID, `${book.container}other/`),
+    );
+  } finally {
+    h.setHook(() => undefined);
+    await Promise.all(runtimes.map((runtime) => runtime.destroy().catch(() => {})));
+    vi.unstubAllGlobals();
+  }
+});
+
 it("uses a single canonical seed for racing first-openers and never reseeds a later load", async () => {
   const t = transport();
   const [a, b] = await Promise.all([t.open(), t.open()]);
@@ -166,6 +272,45 @@ it("repairs failed appends with full state before a flush can acknowledge persis
   await a.runtime.destroy();
   await a.runtime.sync();
   await b.runtime.destroy();
+});
+
+it("retains a newer append failure while an older full-state repair is in flight", async () => {
+  const t = transport();
+  const a = await t.open();
+  let release: () => void = () => {};
+  const waiting = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let repairing = false;
+  const append = a.store.appendUpdate.bind(a.store);
+  try {
+    a.store.failWrite = true;
+    edit(a.runtime, "First offline edit");
+    await a.runtime.provider.flush();
+    vi.spyOn(a.store, "appendUpdate").mockImplementationOnce(async (update) => {
+      repairing = true;
+      await waiting;
+      return append(update);
+    });
+    const repair = a.runtime.flush();
+    await vi.waitFor(() => expect(repairing).toBe(true));
+    a.store.failWrite = true;
+    edit(a.runtime, "Newer offline edit");
+    await a.runtime.provider.flush();
+    release();
+    await repair;
+    await a.runtime.flush();
+    const b = await t.open();
+    try {
+      expect(sheetStates(b.runtime.doc).toJSON()).toEqual(sheetStates(a.runtime.doc).toJSON());
+      expect(a.runtime.checkpoint().stateVector).toBe(checkpoint(b.runtime.doc).stateVector);
+    } finally {
+      await b.runtime.destroy();
+    }
+  } finally {
+    release();
+    await a.runtime.destroy();
+  }
 });
 
 it("cleans up rejected hydration and seed writes and serializes sync retries", async () => {
