@@ -1,5 +1,4 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-// AUTHORED-BY Codex GPT-6
 "use client";
 import { useEffect, useState } from "react";
 import { linearScale, toTime } from "./scale.js";

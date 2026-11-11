@@ -1,5 +1,4 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-// AUTHORED-BY Codex GPT-6
 // @vitest-environment jsdom
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { renderToString } from "react-dom/server";
@@ -93,12 +92,12 @@ describe("shared chart contract", () => {
     expect(container.querySelector("figcaption")?.textContent).toContain("Use arrow keys");
     if (name === "Line")
       expect(container.querySelector("figcaption")?.textContent).toContain("Daily values");
-    const toggle = screen.getByRole("button", { name: `Show ${name} as a table` });
+    const toggle = screen.getByRole("button", { name: `Show table for ${name}` });
     expect(toggle.hasAttribute("aria-pressed")).toBe(false);
     fireEvent.click(toggle);
     expect(screen.getByRole("table").querySelectorAll("tbody tr")).toHaveLength(count);
     expect(container.querySelector("svg[role='group']")).toBeNull();
-    expect(screen.getByRole("button", { name: `Show ${name} as a chart` })).toBe(toggle);
+    expect(screen.getByRole("button", { name: `Show chart for ${name}` })).toBe(toggle);
     expect(toggle.hasAttribute("aria-pressed")).toBe(false);
     fireEvent.click(toggle);
     expect(container.querySelector("svg[role='group']")).toBeTruthy();
@@ -144,7 +143,7 @@ describe("shared chart contract", () => {
     render(chart);
     expect(screen.getByRole("figure", { name: "Empty" })).toBeTruthy();
     expect(screen.getByText("No data yet")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: /^Show .+ as a table$/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Show table for .+$/ }));
     expect(screen.getByRole("table")).toBeTruthy();
   });
   it("can hide the visible title without hiding the accessible name", () => {
@@ -274,7 +273,7 @@ describe("LineChart and Legend", () => {
     );
     expect(chartPoints(container)).toHaveLength(1);
     expect(screen.getByText(/2 values could not be plotted/)).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: /^Show .+ as a table$/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Show table for .+$/ }));
     expect(screen.getByRole("table").querySelectorAll("tbody tr")).toHaveLength(3);
     expect(within(screen.getByRole("table")).getByText("NaN")).toBeTruthy();
   });
@@ -316,7 +315,7 @@ describe("LineChart and Legend", () => {
     expect(chartPoints(container).filter((p) => p.tabIndex === 0)).toEqual([event]);
     fireEvent.keyDown(event, { key: "ArrowRight" });
     expect(document.activeElement).toBe(point);
-    fireEvent.click(screen.getByRole("button", { name: "Show Health as a table" }));
+    fireEvent.click(screen.getByRole("button", { name: "Show table for Health" }));
     expect(screen.getByText("Reference range: 60.0–80.0 bpm (Reference)")).toBeTruthy();
     const eventsTable = screen.getByRole("table", { name: "Health events — chart data" });
     expect(within(eventsTable).getByText("2026-01-02")).toBeTruthy();
@@ -385,6 +384,18 @@ describe("LineChart and Legend", () => {
     expect(new Set(labels).size).toBe(labels.length);
     expect(error).not.toHaveBeenCalled();
   });
+  it("omits an invalid reference band from the table", () => {
+    render(
+      <LineChart
+        title="Bad band"
+        unit="bpm"
+        series={series}
+        band={{ from: Number.NaN, to: 10, label: "Normal" }}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Show table for Bad band" }));
+    expect(screen.queryByText(/Reference range/)).toBeNull();
+  });
   it("counts observations outside yDomain separately and retains them in the table", () => {
     const { container } = render(
       <LineChart title="Clipped" series={series} unit="bpm" yDomain={[12, 18]} />,
@@ -392,7 +403,7 @@ describe("LineChart and Legend", () => {
     expect(chartPoints(container)).toHaveLength(1);
     expect(screen.getByText("2 values are outside the shown range.")).toBeTruthy();
     expect(screen.queryByText("No data yet")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Show Clipped as a table" }));
+    fireEvent.click(screen.getByRole("button", { name: "Show table for Clipped" }));
     expect(screen.getByRole("table").querySelectorAll("tbody tr")).toHaveLength(3);
   });
   it("shows the empty state when no observations are within yDomain", () => {
@@ -414,7 +425,7 @@ describe("LineChart and Legend", () => {
       />,
     );
     expect(chartPoints(container)).toHaveLength(0);
-    expect(screen.getByText("No data yet")).toBeTruthy();
+    expect(screen.getByText("No values in the shown range")).toBeTruthy();
     expect(screen.getByText(/1 value is outside the shown range/)).toBeTruthy();
     expect(screen.getByText(/1 value could not be plotted/)).toBeTruthy();
   });
@@ -565,10 +576,10 @@ describe("TimelineChart", () => {
     expect(
       screen.getByRole("button", { name: /Current course/ }).getAttribute("aria-label"),
     ).toContain("2026-01-08");
-    fireEvent.click(screen.getByRole("button", { name: "Show Treatment as a table" }));
+    fireEvent.click(screen.getByRole("button", { name: "Show table for Treatment" }));
     expect(screen.getByText("Ongoing (through 2026-01-08T00:00:00.000Z)")).toBeTruthy();
     vi.setSystemTime(Date.UTC(2026, 0, 9));
-    fireEvent.click(screen.getByRole("button", { name: "Show Treatment as a chart" }));
+    fireEvent.click(screen.getByRole("button", { name: "Show chart for Treatment" }));
     expect(
       screen.getByRole("button", { name: /Current course/ }).getAttribute("aria-label"),
     ).toContain("ongoing through 2026-01-08");
@@ -606,7 +617,7 @@ describe("TimelineChart", () => {
         ]}
       />,
     );
-    fireEvent.click(screen.getByRole("button", { name: "Show UTC as a table" }));
+    fireEvent.click(screen.getByRole("button", { name: "Show table for UTC" }));
     const rows = Array.from(screen.getByRole("table").querySelectorAll("tbody tr"));
     const times = rows.map((row) =>
       Array.from(row.children)
@@ -669,7 +680,7 @@ describe("TimelineChart", () => {
       />,
     );
     expect(container.querySelectorAll(".sc-diamond")).toHaveLength(2);
-    fireEvent.click(screen.getByRole("button", { name: /^Show .+ as a table$/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Show table for .+$/ }));
     expect(within(screen.getByRole("table")).getByText("Outside")).toBeTruthy();
   });
   it("counts nonfinite endpoints and reversed intervals", () => {

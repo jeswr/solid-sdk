@@ -1,5 +1,4 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-// AUTHORED-BY Codex GPT-6
 "use client";
 import { linearScale } from "./scale.js";
 import { extent, numberText } from "./shared.js";

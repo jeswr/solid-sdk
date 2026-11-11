@@ -1,5 +1,4 @@
 /* AUTHORED-BY Codex GPT-6.1-Sol */
-/* AUTHORED-BY Codex GPT-6 */
 .sc-chart {
   margin: 0;
   min-width: 0;
@@ -186,12 +185,12 @@
   --sc-series: var(--foreground-muted);
 }
 .sc-tone-past .sc-mark {
-  fill-opacity: 0.35;
-  stroke-dasharray: 3 2;
+  fill-opacity: 0.15;
+  stroke-dasharray: 6 3;
 }
 .sc-tone-neutral .sc-interval {
-  fill-opacity: 0.35;
-  stroke-dasharray: 4 3;
+  fill-opacity: 0.45;
+  stroke-dasharray: 1 3;
 }
 .sc-tone-active .sc-interval {
   fill-opacity: 0.65;

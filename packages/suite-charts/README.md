@@ -1,5 +1,4 @@
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
-<!-- AUTHORED-BY Codex GPT-6 -->
 # @jeswr/suite-charts
 
 Shared, accessible SVG charts for Solid Suite: Health, knowledge graphs, Insights,
@@ -82,7 +81,7 @@ recessive; events have dashed vertical markers. Pointer movement snaps a vertica
 crosshair to the nearest observed x or event. Points are sorted by x within their series.
 Event markers join the chart's keyboard navigation. The table includes formatted events
 and the reference range. Values outside an explicit `yDomain` are counted in the
-caption and retained in the table; when none are visible the plot says “No data yet”.
+caption and retained in the table; when none are visible the plot says “No values in the shown range”.
 Constant or nearly constant value domains are padded; all-zero domains use [0, 1].
 Constant time domains are padded by one day on each side.
 
@@ -158,8 +157,9 @@ interface TimelineChartProps extends ChartBase {
   ] }]} />
 ```
 
-Intervals use rounded bars: active intervals have solid borders and neutral intervals
-have dashed borders, so colour is not the only status cue. An active item without an
+Intervals use rounded bars: active intervals have solid borders, neutral intervals have
+dotted borders, and past intervals are faint with dashed borders, so colour is not the
+only status cue. An active item without an
 end extends to `now` with an open right edge; other items without an end are diamonds.
 Omitted `now` is captured in an effect at mount. Server and initial client rendering
 show the start marker without an open-ended extension until that effect runs; inject

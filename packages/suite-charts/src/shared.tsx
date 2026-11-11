@@ -1,5 +1,4 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-// AUTHORED-BY Codex GPT-6
 "use client";
 import { type KeyboardEvent, type ReactNode, useEffect, useId, useRef, useState } from "react";
 import { niceTicks } from "./scale.js";
@@ -22,7 +21,8 @@ export function extent(values: readonly number[], zero = false, time = false): [
       max = Math.max(max, value);
     }
   if (!Number.isFinite(min)) return [0, 1];
-  if (max - min <= 1e-9 * Math.max(Math.abs(min), Math.abs(max), 1)) {
+  // Time domains use an absolute 1 ms threshold: a relative one is ~1.8 s at epoch scale.
+  if (time ? max - min < 1 : max - min <= 1e-12 * Math.max(Math.abs(min), Math.abs(max), 1)) {
     if (!time && min === 0 && max === 0) return [0, 1];
     const pad = time ? 86_400_000 : Math.max(Math.abs(min), Math.abs(max)) * 0.05 || 1;
     return [zero && min >= 0 ? 0 : min - pad, zero && max <= 0 ? 0 : max + pad];
@@ -79,7 +79,7 @@ export function Frame({
         <button
           type="button"
           aria-controls={`${id}-data`}
-          aria-label={`Show ${title} as a ${showTable ? "chart" : "table"}`}
+          aria-label={`${showTable ? "Show chart" : "Show table"} for ${title}`}
           onClick={() => setShowTable(!showTable)}
         >
           {showTable ? "Show chart" : "Show table"}
@@ -275,10 +275,18 @@ export function Tooltip({
     </div>
   );
 }
-export function Empty({ width, height }: { width: number; height: number }) {
+export function Empty({
+  width,
+  height,
+  message = "No data yet",
+}: {
+  width: number;
+  height: number;
+  message?: string;
+}) {
   return (
     <text className="sc-empty" x={width / 2} y={height / 2} textAnchor="middle">
-      No data yet
+      {message}
     </text>
   );
 }

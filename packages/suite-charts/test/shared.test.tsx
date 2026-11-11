@@ -1,4 +1,4 @@
-// AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Codex GPT-6.1-Sol
 import { renderToString } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { extent, XAxis } from "../src/shared.js";
@@ -20,6 +20,11 @@ describe("chart domains", () => {
     for (const time of [0, Date.UTC(2026, 10, 11)]) {
       expect(extent([time], false, true)).toEqual([time - 86_400_000, time + 86_400_000]);
     }
+  });
+  it("keeps sub-second time spans and small changes on large values", () => {
+    const time = Date.UTC(2026, 10, 11);
+    expect(extent([time, time + 1000], false, true)).toEqual([time, time + 1000]);
+    expect(extent([1.2e9, 1.2e9 + 1])).toEqual([1.2e9, 1.2e9 + 1]);
   });
   it("uses [0, 1] for all-zero values and preserves the sign of bar domains", () => {
     expect(extent([0, 0])).toEqual([0, 1]);
