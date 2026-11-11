@@ -159,7 +159,12 @@ describe("stdio executable", () => {
         name: "chat_get",
         arguments: { provider: conversation.provider, conversationId: conversation.conversationId },
       });
-      expect(JSON.parse(text(chat))).toEqual({ ...conversation, url });
+      expect(JSON.parse(text(chat))).toEqual({
+        ...conversation,
+        url,
+        channel: "mcp",
+        generatedAtTime: expect.any(String),
+      });
       const exported = await callTool({
         name: "chat_export",
         arguments: { provider: conversation.provider, conversationId: conversation.conversationId },
