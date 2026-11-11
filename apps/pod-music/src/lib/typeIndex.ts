@@ -71,15 +71,9 @@ export class TypeRegistration extends TermWrapper {
 
   /** Stamp the solid:TypeRegistration rdf:type. Idempotent. */
   stampType(): this {
-    if (!this.types.has(SOLID_TYPE_REGISTRATION)) {
-      this.dataset.add(
-        this.factory.quad(
-          this as never,
-          this.factory.namedNode(RDF_TYPE),
-          this.factory.namedNode(SOLID_TYPE_REGISTRATION),
-        ),
-      );
-    }
+    SetFrom.subjectPredicate(this, RDF_TYPE, NamedNodeAs.string, NamedNodeFrom.string).add(
+      SOLID_TYPE_REGISTRATION,
+    );
     return this;
   }
 }
@@ -154,22 +148,14 @@ export class TypeIndexDataset extends DatasetWrapper {
   /** Stamp the document subject as a solid:TypeIndex + solid:ListedDocument. */
   stampPublicIndex(documentIri: string): this {
     const doc = new TermWrapper(documentIri, this, this.factory);
+    const docTypes = SetFrom.subjectPredicate(
+      doc,
+      RDF_TYPE,
+      NamedNodeAs.string,
+      NamedNodeFrom.string,
+    );
     for (const klass of [SOLID_TYPE_INDEX, SOLID_LISTED_DOCUMENT]) {
-      const already = SetFrom.subjectPredicate(
-        doc,
-        RDF_TYPE,
-        NamedNodeAs.string,
-        NamedNodeFrom.string,
-      );
-      if (!already.has(klass)) {
-        this.add(
-          this.factory.quad(
-            this.factory.namedNode(documentIri),
-            this.factory.namedNode(RDF_TYPE),
-            this.factory.namedNode(klass),
-          ),
-        );
-      }
+      docTypes.add(klass);
     }
     return this;
   }

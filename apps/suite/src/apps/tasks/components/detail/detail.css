@@ -1,6 +1,7 @@
 /* AUTHORED-BY Codex GPT-6.1-Sol */
 /* AUTHORED-BY Codex GPT-6 */
 .tsk-detail {
+  container: task-detail / inline-size;
   padding: var(--space-4);
   min-width: 0;
   color: var(--foreground);
@@ -236,7 +237,7 @@
   width: 560px;
   max-width: 100vw;
 }
-@media (max-width: 767px) {
+@container task-detail (max-width: 420px) {
   .tsk-detail-property {
     grid-template-columns: minmax(0, 1fr);
     gap: 4px;
@@ -244,6 +245,8 @@
   .tsk-detail-property > span {
     padding-top: 0;
   }
+}
+@media (max-width: 767px) {
   .ish-details-sheet:has(.tsk-detail) {
     inset: 0;
     height: 100dvh;
