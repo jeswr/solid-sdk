@@ -72,10 +72,12 @@ function discover(value: StorageClient) {
   vi.mocked(createPodClient).mockResolvedValue({ storage: value } as PodClient);
 }
 function Consumer() {
-  source = useShellSearchSource();
+  const current = useShellSearchSource();
+  source = current;
   const [response, setResponse] = useState<SearchResponse>();
   // Like GlobalSearch and the /search page, a new source clears displayed results.
-  useEffect(() => setResponse(undefined), [source]);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the source identity is the trigger
+  useEffect(() => setResponse(undefined), [current]);
   return h(
     "main",
     null,
