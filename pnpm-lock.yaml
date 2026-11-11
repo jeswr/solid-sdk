@@ -5723,6 +5723,9 @@ importers:
       '@jeswr/rdf-engine':
         specifier: workspace:*
         version: link:../rdf-engine
+      '@jeswr/solid-offline':
+        specifier: workspace:*
+        version: link:../solid-offline
       '@jeswr/storage-capabilities':
         specifier: workspace:*
         version: link:../storage-capabilities
