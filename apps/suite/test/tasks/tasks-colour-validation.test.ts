@@ -1,14 +1,15 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { readFileSync } from "node:fs";
+import { PROJECT_COLOURS } from "@jeswr/suite-ui/tokens";
 import { describe, expect, it, vi } from "vitest";
 import { DataFactory, SCHEMA } from "../../src/apps/tasks/lib/model/rdf";
-import {
-  PROJECT_COLOURS,
-  projectColour,
-  projectColourStyle,
-} from "../../src/apps/tasks/lib/views/project-colours";
+import { projectColour, projectColourStyle } from "../../src/apps/tasks/lib/views/project-colours";
 import { deferred } from "../drive-ui-dom";
 import { frameCache } from "./tasks-frame-fixtures";
+
+const blue = PROJECT_COLOURS[8].hex;
+// Change one digit to exercise valid hex outside the named palette.
+const unknownColour = `${PROJECT_COLOURS[0].hex.slice(0, -1)}0`;
 
 describe("project colour validation", () => {
   it("maps twelve named hex colours to tokens, accepting case differences", () => {
@@ -17,7 +18,7 @@ describe("project colour validation", () => {
     for (const colour of PROJECT_COLOURS) {
       expect(projectColour(colour.hex.toLowerCase())).toBe(colour);
       expect(projectColourStyle(colour.hex)).toEqual({
-        backgroundColor: `var(--tsk-project-${colour.token})`,
+        backgroundColor: `var(--project-${colour.token})`,
       });
     }
   });
@@ -26,12 +27,12 @@ describe("project colour validation", () => {
       undefined,
       "",
       "blue",
-      "#123",
-      "#1234567",
+      blue.slice(0, 4),
+      `${blue}0`,
       "#gggggg",
-      "#123456",
-      " #1D4ED8",
-      "#1D4ED8; background: url(https://bad.test)",
+      unknownColour,
+      ` ${blue}`,
+      `${blue}; background: url(https://bad.test)`,
     ]) {
       expect(projectColour(value)).toBeUndefined();
       expect(projectColourStyle(value)).toEqual({ backgroundColor: "var(--foreground-muted)" });
@@ -41,7 +42,6 @@ describe("project colour validation", () => {
 
 it("writes and clears schema:color through the store with the current If-Match validator", async () => {
   const { cache, inbox, pod, store } = await frameCache();
-  const blue = "#1D4ED8";
   await cache.setProjectColor(inbox, blue.toLowerCase());
   const written = await store.readProject(inbox.url);
   expect(
@@ -70,8 +70,8 @@ it("shows the colour optimistically, rolls back failures and retains later title
   pod.intercept = (request) =>
     request.method === "PUT" && request.url === inbox.url ? response.promise : undefined;
   const before = pod.mutations().length;
-  const colour = cache.setProjectColor(inbox, "#1D4ED8");
-  expect(cache.getSnapshot().projects[0]?.tracker.color).toBe("#1D4ED8");
+  const colour = cache.setProjectColor(inbox, blue);
+  expect(cache.getSnapshot().projects[0]?.tracker.color).toBe(blue);
   await vi.waitFor(() => expect(pod.mutations()).toHaveLength(before + 1));
   const rename = cache.renameProject(inbox, "Renamed");
   pod.intercept = undefined;
@@ -98,13 +98,11 @@ function surfaceLuminance(l: number, c: number, hue: number) {
 }
 
 it("keeps every palette dot above 3:1 on light/dark sidebar, hover and selected backgrounds", () => {
-  const css = readFileSync("src/apps/tasks/components/tasks.css", "utf8");
-  const tokens = readFileSync("../../packages/suite-ui/src/styles/tokens.css", "utf8");
+  const css = readFileSync("../../packages/suite-ui/src/styles/tokens.css", "utf8");
   for (const [index, selector] of [":root", ".dark"].entries()) {
     const palette = css.split(`${selector} {`)[1]?.split("}")[0] ?? "";
-    const surfaces = tokens.split(`${selector} {`)[1]?.split("}")[0] ?? "";
     for (const colour of PROJECT_COLOURS) {
-      const hex = palette.match(new RegExp(`--tsk-project-${colour.token}: (#\\w{6})`))?.[1];
+      const hex = palette.match(new RegExp(`--project-${colour.token}: (#\\w{6})`))?.[1];
       expect(hex).toBeTruthy();
       const channels = [1, 3, 5].map((offset) => {
         const value = Number.parseInt((hex as string).slice(offset, offset + 2), 16) / 255;
@@ -115,7 +113,7 @@ it("keeps every palette dot above 3:1 on light/dark sidebar, hover and selected 
         (channels[1] as number) * 0.7152 +
         (channels[2] as number) * 0.0722;
       for (const surface of ["surface", "surface-2", "primary-soft"]) {
-        const values = surfaces
+        const values = palette
           .match(new RegExp(`--${surface}: oklch\\(([^)]+)\\)`))?.[1]
           ?.split(" ")
           .map(Number);

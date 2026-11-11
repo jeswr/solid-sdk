@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+import { PROJECT_COLOURS } from "@jeswr/suite-ui/tokens";
 import { useSyncExternalStore } from "react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { setPreferencesIdentity } from "../../src/apps/tasks/state/preferences";
@@ -6,6 +7,10 @@ import type { TasksCache } from "../../src/apps/tasks/state/tasks-cache";
 import { act, click, h, key, mount } from "../drive-ui-dom";
 import { webId } from "./pod";
 import { frameCache } from "./tasks-frame-fixtures";
+
+const blue = PROJECT_COLOURS[8].hex;
+// Change one digit to exercise valid hex outside the named palette.
+const unknownColour = `${PROJECT_COLOURS[0].hex.slice(0, -1)}0`;
 
 vi.stubGlobal("HTMLFormElement", window.HTMLFormElement);
 let cache: TasksCache;
@@ -99,14 +104,14 @@ it("clears an unknown stored colour when the already checked No colour option is
   const home = await cache.createProject("Home");
   if (!home) throw new Error("Missing project");
   await cache.updateProject(home, (tracker) => {
-    tracker.color = "#123456";
+    tracker.color = unknownColour;
   });
   const { host } = await mount(h(TasksSidebar));
   await openColour(host);
   const neutral = document.querySelector<HTMLElement>('[role="radio"][aria-label="No colour"]');
   if (!neutral) throw new Error("Missing No colour");
   expect(neutral.getAttribute("aria-checked")).toBe("true");
-  expect((await cache.store.readProject(home.url)).tracker.color).toBe("#123456");
+  expect((await cache.store.readProject(home.url)).tracker.color).toBe(unknownColour);
   await click(neutral);
   await settle(() =>
     expect(
@@ -137,18 +142,7 @@ it("opens Colour from the keyboard, names all swatches, saves with arrows and re
   const radios = [...(picker?.querySelectorAll<HTMLElement>('[role="radio"]') ?? [])];
   expect(radios).toHaveLength(13);
   expect(radios.map((radio) => radio.getAttribute("aria-label"))).toEqual([
-    "Red",
-    "Orange",
-    "Amber",
-    "Yellow",
-    "Lime",
-    "Green",
-    "Teal",
-    "Cyan",
-    "Blue",
-    "Violet",
-    "Purple",
-    "Pink",
+    ...PROJECT_COLOURS.map((colour) => colour.name),
     "No colour",
   ]);
   const neutral = radios.at(-1) as HTMLElement;
@@ -158,7 +152,7 @@ it("opens Colour from the keyboard, names all swatches, saves with arrows and re
   await settle(() => expect(radios[0]?.getAttribute("aria-checked")).toBe("true"));
   expect(document.activeElement).toBe(radios[0]);
   await settle(() => expect(cache.getSnapshot().saving).toEqual([]));
-  expect((await cache.store.readProject(home.url)).tracker.color).toBe("#B91C1C");
+  expect((await cache.store.readProject(home.url)).tracker.color).toBe(PROJECT_COLOURS[0].hex);
   await key(radios[0] as HTMLElement, "ArrowLeft");
   await settle(() => expect(neutral.getAttribute("aria-checked")).toBe("true"));
   await settle(() => expect(cache.getSnapshot().saving).toEqual([]));
@@ -187,10 +181,10 @@ it("uses colour tokens on the sidebar, project header and cross-project chips; h
   }
   const { host } = await mount(h(Views));
   for (const value of [
-    "#1D4ED8",
-    "#1D4ED8; background: url(https://evil.test)",
+    blue,
+    `${blue}; background: url(https://evil.test)`,
     "unknown",
-    "#123456",
+    unknownColour,
   ]) {
     await act(() =>
       cache.updateProject(home, (tracker) => {
@@ -205,7 +199,7 @@ it("uses colour tokens on the sidebar, project header and cross-project chips; h
     for (const dot of dots) {
       expect(dot).toBeTruthy();
       expect(dot?.getAttribute("style")).toBe(
-        `background-color: var(--${value === "#1D4ED8" ? "tsk-project-blue" : "foreground-muted"});`,
+        `background-color: var(--${value === blue ? "project-blue" : "foreground-muted"});`,
       );
       expect(dot?.getAttribute("aria-hidden")).toBe("true");
     }
