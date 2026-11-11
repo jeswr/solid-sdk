@@ -10,6 +10,7 @@ import type { ProjectCreation, StoredProject, StoredTask, TaskStore } from "../l
 import { createTask, type TaskDetails, TaskItem } from "../lib/model/task";
 import { createTracker, type TaskTracker } from "../lib/model/tracker";
 import { runBulk } from "../lib/views/bulk";
+import { completedHistoryToKeep, completedParentsToKeep } from "../lib/views/clear-completed";
 import { type CompletionPlan, planComplete, planUndo } from "../lib/views/completion";
 import { type DropPosition, positionForDrop } from "../lib/views/positions";
 import { projectColour } from "../lib/views/project-colours";
@@ -134,6 +135,8 @@ export class TasksCache {
   /** Where each task moved by this session went (original URL → its copy's URL). */
   private movedTasks = new Map<string, string>();
   private hiddenTasks = new Set<string>();
+  /** Failed commit-time reads block queued completed deletes until an explicit strict refresh. */
+  private completedDeletionBlocked = true;
   private undoOperations = new WeakMap<CompletionPlan, () => Promise<boolean | undefined>>();
   private completionCopies = new WeakMap<CompletionPlan, StoredTask>();
   private undoRepairs = new Map<string, UndoRepair>();
@@ -307,11 +310,16 @@ export class TasksCache {
     this.emit();
     void this.start();
   };
-  async refreshProjects(): Promise<void> {
+  async refreshProjects(strict = false): Promise<void> {
     const epoch = this.epoch;
     const generation = ++this.projectRead;
     const failures = new Map<string, unknown>();
-    const projects = await this.store.listProjects((url, error) => failures.set(url, error));
+    const projects = await this.store
+      .listProjects((url, error) => failures.set(url, error), { strict })
+      .catch((error: unknown) => {
+        this.completedDeletionBlocked = true;
+        throw error;
+      });
     const ownProjects = new Set(projects.map((project) => project.url));
     for (const url of this.sharedProjects.keys()) {
       if (ownProjects.has(url)) continue;
@@ -323,6 +331,7 @@ export class TasksCache {
         failures.set(url, error);
       }
     }
+    if (failures.size) this.completedDeletionBlocked = true;
     if (epoch !== this.epoch || generation !== this.projectRead) return;
     this.ownProjects = ownProjects;
     const tasks = { ...this.baseline.tasks };
@@ -387,7 +396,7 @@ export class TasksCache {
     this.reads.set(project.url, request);
     return request;
   }
-  private async readTasks(project: StoredProject) {
+  private async readTasks(project: StoredProject, strict = false) {
     const epoch = this.epoch;
     const generation = this.taskReadGenerations.get(project.url);
     const stateStore = project.tracker.stateStore as string;
@@ -412,7 +421,7 @@ export class TasksCache {
     };
     this.emit();
     try {
-      const items = await this.store.listTasks(stateStore);
+      const items = await this.store.listTasks(stateStore, { strict });
       if (!isCurrent()) return;
       if (epoch !== this.epoch) {
         this.dirtyReads.add(project.url);
@@ -426,6 +435,7 @@ export class TasksCache {
         },
       };
     } catch (error) {
+      this.completedDeletionBlocked = true;
       if (!isCurrent()) return;
       if (epoch !== this.epoch) {
         this.dirtyReads.add(project.url);
@@ -489,6 +499,7 @@ export class TasksCache {
     urls: string[] = [],
     onFailure: MutationFailure = this.onFailure,
     signal?: AbortSignal,
+    strictReconciliation = false,
   ): Promise<T | undefined> {
     const entry = { apply, urls };
     this.pending.push(entry);
@@ -504,11 +515,13 @@ export class TasksCache {
       } catch (error) {
         // A section/project operation can partially succeed; reconcile its confirmed resources.
         try {
-          await this.refreshProjects();
+          await this.refreshProjects(strictReconciliation);
           for (const project of this.baseline.projects)
             if (this.baseline.tasks[project.url] && !this.baseline.tasks[project.url]?.error)
-              await this.readTasks(project);
+              await this.readTasks(project, strictReconciliation);
+          if (this.completedDeletionIncomplete()) this.completedDeletionBlocked = true;
         } catch {
+          this.completedDeletionBlocked = true;
           /* The baseline plus the remaining queue is still safe to render. */
         }
         onFailure(error, retry);
@@ -1037,21 +1050,122 @@ export class TasksCache {
     this.unresolvedMoves.set(item.url, { target: target.url, run });
     return run();
   }
-  deleteTask(item: StoredTask): Promise<boolean | undefined> {
-    const project = this.baseline.projects.find((project) =>
-      this.baseline.tasks[project.url]?.items.some((task) => task.url === item.url),
+  /** Include hidden rows: Undo visibility must never change recurrence or ancestry planning. */
+  completedDeletionPlan(candidates?: ReadonlySet<string>) {
+    const tasks = Object.values(this.baseline.tasks).flatMap((load) =>
+      load.items.map(({ task }) => ({
+        id: task.id,
+        parentId: task.parent,
+        state: task.state === "closed" ? ("closed" as const) : ("open" as const),
+        derivedFrom: task.clonedFrom,
+      })),
     );
+    const history = completedHistoryToKeep(tasks, candidates);
+    return { ...completedParentsToKeep(tasks, candidates, history), history };
+  }
+  private completedDeletionIncomplete(tasks = this.baseline.tasks): boolean {
+    return (
+      this.baseline.status !== "ready" ||
+      this.projectFailures.size > 0 ||
+      this.baseline.projects.some((project) => !tasks[project.url]) ||
+      Object.values(tasks).some(
+        (load) => load.status !== "ready" || load.refreshing || (load.warningCount ?? 0) > 0,
+      )
+    );
+  }
+  /** Strict refresh shares the write queue; failed reads cannot authorize destructive planning. */
+  refreshCompletedDeletion(): Promise<TaskView[] | undefined> {
+    return this.mutate(
+      (state) => state,
+      async () => {
+        this.completedDeletionBlocked = true;
+        const tasks = { ...this.baseline.tasks };
+        const views: TaskView[] = [];
+        for (const project of this.baseline.projects) {
+          const current = this.project(project.url);
+          const items = await this.store.listTasks(current.tracker.stateStore as string, {
+            strict: true,
+          });
+          const projected = projectTasks(current, items);
+          tasks[current.url] = { status: "ready", ...projected };
+          views.push(...projected.views);
+        }
+        if (this.completedDeletionIncomplete(tasks))
+          throw new Error("Couldn't refresh tasks before deletion");
+        this.completedDeletionBlocked = false;
+        return { result: views, commit: (state) => ({ ...state, tasks }) };
+      },
+      () => {},
+      [],
+      () => {},
+      undefined,
+      true,
+    );
+  }
+  deleteTask(
+    item: StoredTask,
+    options: { silent?: boolean; completedOnly?: boolean } = {},
+  ): Promise<boolean | undefined> {
+    const project = this.baseline.projects.find((project) => {
+      const folder = project.tracker.stateStore;
+      return (
+        this.baseline.tasks[project.url]?.items.some((task) => task.url === item.url) ||
+        (folder !== undefined && item.url.startsWith(folder))
+      );
+    });
     if (!project) return Promise.resolve(undefined);
     const remove: Patch = (state) => replaceTask(state, project.url, item.url);
     return this.mutate(
       remove,
       async () => {
-        await this.store.deleteTask(this.task(project.url, item.url));
+        if (
+          options.completedOnly &&
+          (this.completedDeletionBlocked || this.completedDeletionIncomplete())
+        ) {
+          this.completedDeletionBlocked = true;
+          throw new Error("Couldn't revalidate tasks before deletion. Retry to refresh them.");
+        }
+        const optionalTask = (url: string) =>
+          this.optionalTask(url).catch((error: unknown) => {
+            this.completedDeletionBlocked = true;
+            throw error;
+          });
+        const current = this.baseline.tasks[project.url]?.items.find(
+          (task) => task.url === item.url,
+        );
+        // Retry may follow reconciliation of a committed DELETE whose response was lost.
+        if (!current) {
+          if (await optionalTask(item.url)) throw new ModelError(409, item.url);
+          return { result: true, commit: remove };
+        }
+        if (options.completedOnly) {
+          // Descendants settle first. Any remaining child (including a failed DELETE)
+          // protects its ancestors, as does all recurring-task history.
+          if (
+            current.task.state !== "closed" ||
+            Object.values(this.baseline.tasks).some((load) =>
+              load.items.some(({ task }) => task.parent === current.task.id),
+            ) ||
+            this.completedDeletionPlan(new Set([current.task.id])).history.has(current.task.id)
+          )
+            return { result: false, commit: (state) => state };
+        }
+        try {
+          await this.store.deleteTask(current);
+        } catch (error) {
+          // A transport failure or error response can follow a successful deletion.
+          // Only a confirmed 404/410 makes that ambiguous outcome successful.
+          if (await optionalTask(current.url)) throw error;
+        }
         return { result: true, commit: remove };
       },
       () => {
-        void this.deleteTask(item);
+        void this.deleteTask(item, options);
       },
+      [item.url],
+      options.silent ? () => {} : this.onFailure,
+      undefined,
+      options.completedOnly,
     );
   }
   /** Temporary visibility owned by the delayed-delete controller, independent of pod writes. */
