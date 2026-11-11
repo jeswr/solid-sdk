@@ -16,14 +16,12 @@ variables; pass the app's base URL, client ID, development flag and provider set
 React is an optional peer used by `/react`; `/testing` requires the consumer's Vitest environment.
 
 ```tsx
-import { appUrl, createAppPodAuth } from '@jeswr/app-session';
+import { createAppPodAuth } from '@jeswr/app-session';
 import { SessionProvider, LoginScreen } from '@jeswr/app-session/react';
 
-const getPodAuth = createAppPodAuth({
-  clientId: 'https://app.example/clientid.jsonld',
-  redirectUri: appUrl('callback.html', '/', 'https://app.example'),
-  dev: false,
-});
+// Module scope: one getter for the page lifetime. Defaults to <base>clientid.jsonld and
+// <base>callback.html on the current origin, resolved on first use.
+const getPodAuth = createAppPodAuth({ base: import.meta.env.BASE_URL, dev: import.meta.env.DEV });
 
 export function SignIn() {
   return (
@@ -40,14 +38,24 @@ export function SignIn() {
 It registers the authorization element lazily and reads the current holder at login time, including
 under StrictMode. Dynamic registration and insecure HTTP require both `dev: true` and a loopback
 page hostname. Production client IDs are validated by pod-auth as HTTPS Client Identifier Document
-URLs; an undefined client ID outside development loopback rejects. Optional `chooseIssuer`,
+URLs; a missing client ID (and no `base` to derive one) outside development loopback rejects.
+Explicit `clientId`/`redirectUri` override the `base` defaults. Optional `chooseIssuer`,
 `boundary`, `storage` and `maxReplayBodyBytes` are forwarded to pod-auth.
+
+Create the getter once at module scope and pass the same function on every render:
+`SessionProvider` restarts its startup (restore) whenever `getPodAuth` changes identity, which
+also aborts any pending login.
 
 `SessionProvider` accepts an optional `auth` for tests, `lookupTimeoutMs` (default 15 seconds),
 and a `readProfile` seam. Pass `dev` to enable development HTTP address/deep-link handling.
 `useSession` preserves the apps' context contract, including fetch, restore, startup retry,
 recent accounts/providers and explicit issuer choice. Login attempts receive abort signals;
 unmount and logout abort pending work. Cancellation does not call logout.
+
+Behaviour change against the Docs/Drive copies this package replaced: a login still in flight
+when the provider unmounts or the user signs out is now aborted through `login(hint, { signal })`,
+so pod-auth discards any grant it obtained; before, such a late login could still persist a
+session. Both cases are pinned in tests.
 
 `LoginScreen` accepts `appName`, `knownProviders` (comma-separated addresses), `homeIdp`,
 `homeIdpName` and `dev`. Its default home is `https://idp.solid-test.jeswr.org`; remaining providers

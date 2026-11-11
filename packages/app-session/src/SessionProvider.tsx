@@ -346,7 +346,7 @@ export function SessionProvider({
   };
   return (
     <SessionContext.Provider value={value}>
-      <authorization-code-flow data-app-name={appName} ref={flowRef} data-testid="solid-auth-flow">
+      <authorization-code-flow ref={flowRef} data-testid="solid-auth-flow">
         <span slot="new-text">Open your provider's sign-in window to continue.</span>
         <span slot="switch-text">Finish signing in in the other window.</span>
       </authorization-code-flow>

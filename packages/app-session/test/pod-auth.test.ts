@@ -122,7 +122,6 @@ describe("page-lifetime pod-auth core", () => {
     vi.stubGlobal("window", undefined);
     const { createAppPodAuth, allowInsecureLoopback } = await import("../src/pod-auth");
     const getPodAuth = createAppPodAuth({
-      clientId: undefined,
       redirectUri: "https://app.example/callback.html",
       dev: true,
     });
@@ -165,7 +164,6 @@ describe("page-lifetime pod-auth core", () => {
     vi.stubGlobal("location", new URL("https://app.example/"));
     const { createAppPodAuth } = await import("../src/pod-auth");
     const get = createAppPodAuth({
-      clientId: undefined,
       redirectUri: "https://app.example/callback.html",
       dev: true,
     });
@@ -178,7 +176,6 @@ describe("page-lifetime pod-auth core", () => {
     vi.stubGlobal("location", new URL("http://localhost:5173"));
     const { createAppPodAuth, isLoopbackHost } = await import("../src/pod-auth");
     await createAppPodAuth({
-      clientId: undefined,
       redirectUri: "http://localhost:5173/callback.html",
       dev: true,
     })();
@@ -187,5 +184,54 @@ describe("page-lifetime pod-auth core", () => {
     );
     expect(isLoopbackHost("::1")).toBe(true);
     expect(isLoopbackHost("127.256.0.1")).toBe(false);
+  });
+
+  it("derives the client identifier and callback from the app base, lazily", async () => {
+    vi.stubGlobal("location", new URL("https://jeswr.github.io/solid-sdk/pod-docs/"));
+    const { createAppPodAuth } = await import("../src/pod-auth");
+    const get = createAppPodAuth({ base: "/solid-sdk/pod-docs/", dev: false });
+    expect(factory.create).not.toHaveBeenCalled();
+    await get();
+    expect(factory.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        clientId: "https://jeswr.github.io/solid-sdk/pod-docs/clientid.jsonld",
+        redirectUri: "https://jeswr.github.io/solid-sdk/pod-docs/callback.html",
+        allowInsecureLoopback: false,
+      }),
+    );
+  });
+
+  it("uses dynamic registration instead of the derived identifier on development loopback", async () => {
+    vi.stubGlobal("location", new URL("http://localhost:5173/"));
+    const { createAppPodAuth } = await import("../src/pod-auth");
+    await createAppPodAuth({ base: "/", dev: true })();
+    expect(factory.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        clientId: { dynamicRegistration: true },
+        redirectUri: "http://localhost:5173/callback.html",
+        allowInsecureLoopback: true,
+      }),
+    );
+  });
+
+  it("keeps the derived identifier for a production build served on localhost", async () => {
+    vi.stubGlobal("location", new URL("http://localhost:4173/"));
+    const { createAppPodAuth } = await import("../src/pod-auth");
+    await createAppPodAuth({ base: "/", dev: false })();
+    expect(factory.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        clientId: "http://localhost:4173/clientid.jsonld",
+        allowInsecureLoopback: false,
+      }),
+    );
+  });
+
+  it("requires a redirect URI or an app base", async () => {
+    vi.stubGlobal("location", new URL("https://app.example/"));
+    const { createAppPodAuth } = await import("../src/pod-auth");
+    await expect(createAppPodAuth({ dev: false })()).rejects.toThrow(
+      "A redirect URI or app base is required",
+    );
+    expect(factory.create).not.toHaveBeenCalled();
   });
 });

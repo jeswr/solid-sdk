@@ -497,10 +497,14 @@ describe("App session shared authentication", () => {
     mount(fake);
     await chooseProvider();
     await waitFor(() => expect(fake.auth.login).toHaveBeenCalledTimes(1));
+    const signal = fake.auth.login.mock.calls[0]?.[1]?.signal;
+    expect(signal?.aborted).toBe(false);
     await act(async () => {
       await session.logout();
       result.resolve(identity);
     });
+    // Logout aborts the pending attempt, so pod-auth discards any grant it obtained.
+    expect(signal?.aborted).toBe(true);
     expect(session.webId).toBeNull();
     expect(session.pending).toBeNull();
     expect(session.recentProviders).toEqual([]);
