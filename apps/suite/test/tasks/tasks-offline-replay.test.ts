@@ -1,102 +1,11 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { createRequire } from "node:module";
-import type { StorageClient } from "@jeswr/storage-client";
-import { createMemoryStorage } from "@jeswr/storage-client/memory";
-import { createOutbox } from "@jeswr/suite-sdk/offline";
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { TaskStore } from "../../src/apps/tasks/lib/model/store";
+import { describe, expect, it, vi } from "vitest";
 import { DelayedDeletes } from "../../src/apps/tasks/state/delayed-delete";
-import { OfflineTaskStore, TASKS_REPLAY, TasksOffline } from "../../src/apps/tasks/state/offline";
+import { OfflineTaskStore, TasksOffline } from "../../src/apps/tasks/state/offline";
 import { TasksCache } from "../../src/apps/tasks/state/tasks-cache";
-import { createRealOutbox } from "../../src/shell/lib/real-outbox";
-import { now, Pod, storage, webId } from "./pod";
+import { now, storage, webId } from "./pod";
 
-const { IDBFactory } = createRequire(
-  new URL("../../../../packages/solid-offline/package.json", import.meta.url),
-)("fake-indexeddb") as { IDBFactory: new () => IDBFactory };
-const cleanups: (() => void)[] = [];
-afterEach(() => {
-  for (const close of cleanups.splice(0)) close();
-  vi.restoreAllMocks();
-});
-async function setup() {
-  const pod = new Pod();
-  let online = true;
-  const outbox = createOutbox({ webId, idb: new IDBFactory() });
-  cleanups.push(() => outbox.close());
-  await outbox.ready;
-  const values = new Map<string, string>();
-  const cacheStorage = {
-    getItem: (key: string) => values.get(key) ?? null,
-    setItem: (key: string, value: string) => {
-      values.set(key, value);
-    },
-    removeItem: (key: string) => {
-      values.delete(key);
-    },
-  };
-  const transport: typeof fetch = (input, init) => {
-    if (!online) return Promise.reject(new TypeError("Offline"));
-    return pod.fetch(input, init);
-  };
-  const offlineOptions = {
-    webId,
-    storageUrl: storage,
-    fetch: transport,
-    online: () => online,
-    outbox: () => outbox,
-    storage: cacheStorage,
-  };
-  const offline = new TasksOffline(offlineOptions);
-  outbox.registerDelegate(TASKS_REPLAY, offline.replay);
-  const storeOptions = {
-    storage,
-    webId,
-    fetch: offline.fetch,
-    now: () => now,
-    typeIndex: false,
-    ensurePrivateTasksAccess: pod.ensurePrivateIndexAccess,
-  };
-  const store = new OfflineTaskStore(storeOptions, () => online);
-  const remote = new TaskStore({ ...storeOptions, fetch: pod.fetch });
-  const failures = vi.fn();
-  const cache = new TasksCache(store, failures, webId);
-  offline.subscribeReceipts(cache.confirmOfflineWrite);
-  await cache.start();
-  const inbox = cache.getSnapshot().projects[0];
-  if (!inbox) throw new Error("Missing Inbox");
-  await cache.loadTasks(inbox);
-  const raw = createMemoryStorage({ root: storage });
-  vi.spyOn(raw, "head").mockImplementation(async (url) => {
-    const response = await pod.fetch(url);
-    return { url, etag: response.headers.get("ETag") } as Awaited<
-      ReturnType<StorageClient["head"]>
-    >;
-  });
-  const adapter = createRealOutbox({
-    outbox,
-    storage: () => raw,
-    signal: new AbortController().signal,
-  });
-  cleanups.push(() => adapter.dispose());
-  return {
-    pod,
-    cache,
-    store,
-    inbox,
-    outbox,
-    failures,
-    offline,
-    offlineOptions,
-    storeOptions,
-    adapter,
-    raw,
-    remote,
-    connect: (next: boolean) => {
-      online = next;
-    },
-  };
-}
+import { setupOffline as setup } from "./tasks-offline-fixtures";
 
 describe("Tasks uses the shell's durable outbox", () => {
   it("queues create, edit, complete, reorder, move and title-only rename; preserves optimistic rows", async () => {
@@ -223,7 +132,7 @@ describe("Tasks uses the shell's durable outbox", () => {
     expect(f.outbox.conflicts()).toHaveLength(1);
   });
 
-  it("retains failed replay and holds later intents, including dependent moves", async () => {
+  it("retains failed replay and later edits to the same resource", async () => {
     const f = await setup();
     const task = await f.cache.createTask(f.inbox, { title: "Task" });
     if (!task) throw new Error("Missing task");
@@ -429,13 +338,14 @@ it("keeps a network-failed replay waiting for reconnection", async () => {
   expect((await f.remote.readTask(task.url)).task.title).toBe("Queued");
 });
 
-it("collision-checks Keep both copy names with create-only writes", async () => {
+it("retries Keep both at the same create-only URL after a lost response", async () => {
   const f = await setup();
   const task = await f.cache.createTask(f.inbox, { title: "Task" });
   if (!task) throw new Error("Missing task");
   f.connect(false);
   await f.cache.updateTask(task, (value) => {
     value.title = "Mine";
+    value.created = undefined;
   });
   await f.remote.updateTask(task, (value) => {
     value.title = "Theirs";
@@ -448,14 +358,20 @@ it("collision-checks Keep both copy names with create-only writes", async () => 
   f.pod.intercept = (request) => {
     if (request.method === "PUT" && request.headers.get("If-None-Match") === "*") {
       attempts.push(request.url);
-      if (attempts.length === 1) return new Response(null, { status: 412 });
+      if (attempts.length === 1) {
+        f.pod.seed(request.url, request.body);
+        throw new TypeError("Lost copy response");
+      }
     }
     return undefined;
   };
+  await expect(f.adapter.resolve(conflict.id, "both")).rejects.toThrow();
   await f.adapter.resolve(conflict.id, "both");
   expect(attempts).toHaveLength(2);
-  expect(new Set(attempts).size).toBe(2);
+  expect(attempts[0]).toBe(new URL(`tasks-copy-${conflict.itemId}.ttl`, task.url).href);
+  expect(new Set(attempts).size).toBe(1);
   expect(f.outbox.pending()).toEqual([]);
+  expect(await f.remote.listTasks(f.inbox.tracker.stateStore as string)).toHaveLength(2);
 });
 
 it("retains the document belonging to an older mutation validator during background reads", async () => {
@@ -517,4 +433,232 @@ it("preserves the model's redirect rejection without caching the redirected docu
   await expect(f.store.readTask(task.url)).rejects.toThrow();
   f.connect(false);
   expect((await f.store.readTask(task.url)).task.title).toBe("Original");
+});
+
+it.each([
+  "mine",
+  "theirs",
+] as const)("conflicts a queued delete after any remote change, then keeps %s", async (choice) => {
+  const f = await setup();
+  const task = await f.cache.createTask(f.inbox, { title: "Task" });
+  if (!task) throw new Error("Missing task");
+  f.connect(false);
+  await f.cache.deleteTask(task);
+  const changed = await f.remote.updateTask(task, (value) => {
+    value.description = "Remote notes";
+  });
+  f.connect(true);
+  const writes = f.pod.mutations().length;
+  await f.adapter.reconnected();
+  expect(f.pod.mutations()).toHaveLength(writes);
+  expect(f.pod.files.has(task.url)).toBe(true);
+  const conflict = f.outbox.conflicts()[0];
+  if (!conflict) throw new Error("Missing delete conflict");
+  await f.adapter.resolve(conflict.id, choice);
+  expect(f.outbox.pending()).toEqual([]);
+  expect(f.pod.files.has(task.url)).toBe(choice === "theirs");
+  if (choice === "mine")
+    expect(f.pod.mutations().at(-1)?.headers.get("If-Match")).toBe(changed.etag);
+});
+
+it.each([
+  "mine",
+  "theirs",
+  "both",
+] as const)("replays unrelated resources and resumes waiting edits after Keep %s", async (choice) => {
+  const f = await setup();
+  const first = await f.cache.createTask(f.inbox, { title: "First" });
+  const second = await f.cache.createTask(f.inbox, { title: "Second" });
+  if (!first || !second) throw new Error("Missing tasks");
+  f.connect(false);
+  await f.cache.updateTask(first, (value) => {
+    value.title = "Local first";
+  });
+  await f.cache.updateTask(first, (value) => {
+    value.rank = 7;
+  });
+  await f.cache.updateTask(second, (value) => {
+    value.title = "Local second";
+  });
+  await f.remote.updateTask(first, (value) => {
+    value.title = "Remote first";
+  });
+  f.connect(true);
+  await f.adapter.reconnected();
+  expect((await f.remote.readTask(second.url)).task.title).toBe("Local second");
+  expect(f.outbox.pending().map((item) => item.status)).toEqual(["conflict", "waiting"]);
+  const conflict = f.outbox.conflicts()[0];
+  if (!conflict) throw new Error("Missing conflict");
+  await f.adapter.resolve(conflict.id, choice);
+  expect(f.outbox.pending()).toEqual([]);
+  expect((await f.remote.readTask(first.url)).task.rank).toBe(7);
+});
+
+it("overlays pending creates and deletes on listing refresh and offline reload", async () => {
+  const f = await setup();
+  const removed = await f.cache.createTask(f.inbox, { title: "Remove" });
+  if (!removed) throw new Error("Missing task");
+  f.connect(false);
+  await f.cache.createTask(f.inbox, { title: "Pending" });
+  await f.cache.deleteTask(removed);
+  f.connect(true);
+  await f.cache.loadTasks(f.inbox, true);
+  expect(f.cache.getSnapshot().views.map((task) => task.title)).toEqual(["Pending"]);
+  f.connect(false);
+  const reloaded = new TasksOffline(f.offlineOptions);
+  const store = new OfflineTaskStore({ ...f.storeOptions, fetch: reloaded.fetch }, () => false);
+  expect(
+    (await store.listTasks(f.inbox.tracker.stateStore as string)).map((task) => task.task.title),
+  ).toEqual(["Pending"]);
+});
+
+it("ignores a listing response begun before a newer local project change", async () => {
+  const f = await setup();
+  const folder = f.inbox.tracker.stateStore as string;
+  const stale = await f.pod.fetch(folder);
+  const started = Promise.withResolvers<void>();
+  const response = Promise.withResolvers<Response>();
+  f.pod.intercept = (request) => {
+    if (request.url === folder && request.method === "GET") {
+      started.resolve();
+      return response.promise;
+    }
+    return undefined;
+  };
+  const reading = f.store.listTasks(folder);
+  await started.promise;
+  f.connect(false);
+  await f.cache.createTask(f.inbox, { title: "Newer local task" });
+  response.resolve(stale);
+  expect((await reading).map((task) => task.task.title)).toEqual(["Newer local task"]);
+  expect((await f.store.listTasks(folder)).map((task) => task.task.title)).toEqual([
+    "Newer local task",
+  ]);
+});
+
+it("acknowledges a committed create after losing its response and adopts its ETag", async () => {
+  const f = await setup();
+  f.pod.intercept = (request) => {
+    if (request.method === "PUT" && request.url.includes("/inbox/")) {
+      f.pod.seed(request.url, request.body);
+      throw new TypeError("Lost create response");
+    }
+    return undefined;
+  };
+  const task = await f.cache.createTask(f.inbox, { title: "Created once" });
+  if (!task) throw new Error("Missing create");
+  expect(f.outbox.pending()).toHaveLength(1);
+  f.pod.intercept = undefined;
+  const receipt = vi.fn();
+  f.offline.subscribeReceipts(receipt);
+  await f.adapter.reconnected();
+  expect(f.outbox.pending()).toEqual([]);
+  expect(f.outbox.conflicts()).toEqual([]);
+  const remote = await f.remote.readTask(task.url);
+  expect(receipt).toHaveBeenCalledWith(task.url, task.etag, remote.etag);
+  expect(await f.remote.listTasks(f.inbox.tracker.stateStore as string)).toHaveLength(1);
+});
+
+it.each([
+  404, 410,
+])("acknowledges a delete pre-read returning %s and unblocks later entries", async (status) => {
+  const f = await setup();
+  const task = await f.cache.createTask(f.inbox, { title: "Remove" });
+  if (!task) throw new Error("Missing task");
+  f.connect(false);
+  await f.cache.deleteTask(task);
+  const id = task.url.slice(task.url.lastIndexOf("/") + 1, -4);
+  await f.store.createTask(f.inbox, { title: "Replacement", state: "open" }, id);
+  await f.cache.createTask(f.inbox, { title: "Independent" });
+  f.pod.files.delete(task.url);
+  f.pod.intercept = (request) =>
+    request.url === task.url && request.method === "GET"
+      ? new Response(null, { status })
+      : undefined;
+  f.connect(true);
+  await f.adapter.reconnected();
+  expect(f.outbox.pending()).toEqual([]);
+  f.pod.intercept = undefined;
+  expect((await f.remote.readTask(task.url)).task.title).toBe("Replacement");
+  expect(
+    (await f.remote.listTasks(f.inbox.tracker.stateStore as string)).map((task) => task.task.title),
+  ).toEqual(expect.arrayContaining(["Replacement", "Independent"]));
+});
+
+it.each([404, 410])("acknowledges a replay DELETE returning %s", async (status) => {
+  const f = await setup();
+  const task = await f.cache.createTask(f.inbox, { title: "Remove" });
+  if (!task) throw new Error("Missing task");
+  f.connect(false);
+  await f.cache.deleteTask(task);
+  f.pod.intercept = (request) => {
+    if (request.url === task.url && request.method === "DELETE") {
+      f.pod.files.delete(task.url);
+      return new Response(null, { status });
+    }
+    return undefined;
+  };
+  f.connect(true);
+  await f.adapter.reconnected();
+  expect(f.outbox.pending()).toEqual([]);
+  expect(f.pod.files.has(task.url)).toBe(false);
+});
+
+it("retains a Keep both conflict if the deterministic copy URL contains different data", async () => {
+  const f = await setup();
+  const task = await f.cache.createTask(f.inbox, { title: "Task" });
+  if (!task) throw new Error("Missing task");
+  f.connect(false);
+  await f.cache.updateTask(task, (value) => {
+    value.title = "Mine";
+  });
+  await f.remote.updateTask(task, (value) => {
+    value.title = "Theirs";
+  });
+  f.connect(true);
+  await f.adapter.reconnected();
+  const conflict = f.outbox.conflicts()[0];
+  if (!conflict) throw new Error("Missing conflict");
+  const attempts: string[] = [];
+  f.pod.intercept = (request) => {
+    if (request.method === "PUT" && request.headers.get("If-None-Match") === "*") {
+      attempts.push(request.url);
+      if (attempts.length === 1)
+        f.pod.seed(request.url, request.body.replace('"Mine (copy)"', '"Occupied"'));
+    }
+    return undefined;
+  };
+  await expect(f.adapter.resolve(conflict.id, "both")).rejects.toThrow();
+  await expect(f.adapter.resolve(conflict.id, "both")).rejects.toThrow();
+  expect(new Set(attempts).size).toBe(1);
+  expect(f.outbox.conflicts()).toHaveLength(1);
+  expect((await f.remote.readTask(attempts[0] as string)).task.title).toBe("Occupied");
+});
+
+it("persists the confirmed base ETag for a delete queued behind its own edit", async () => {
+  const f = await setup();
+  const task = await f.cache.createTask(f.inbox, { title: "Task" });
+  if (!task) throw new Error("Missing task");
+  f.connect(false);
+  const edited = await f.cache.updateTask(task, (value) => {
+    value.title = "Edited";
+  });
+  if (!edited) throw new Error("Missing edit");
+  await f.cache.deleteTask(edited);
+  f.connect(true);
+  // Stop immediately after the edit is acknowledged, before the queued delete.
+  const controller = new AbortController();
+  f.offline.subscribeReceipts(() => controller.abort());
+  await f.outbox.replay(f.raw, { signal: controller.signal });
+  expect(f.outbox.pending()).toHaveLength(1);
+  const reloaded = new TasksOffline(f.offlineOptions);
+  const confirmed = await f.remote.readTask(task.url);
+  expect(reloaded.baseEtag(task.url, edited.etag)).toBe(confirmed.etag);
+  // An ETag change remains a conflict even if all the document's fields are identical.
+  const file = f.pod.files.get(task.url);
+  if (!file) throw new Error("Missing task file");
+  f.pod.seed(task.url, file.body);
+  await f.adapter.reconnected();
+  expect(f.outbox.conflicts()).toHaveLength(1);
+  expect(f.pod.files.has(task.url)).toBe(true);
 });

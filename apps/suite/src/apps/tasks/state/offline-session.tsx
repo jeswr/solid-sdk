@@ -34,6 +34,12 @@ export function useTasksOffline(session: PodSession) {
           ? current.current.shell.outbox
           : null,
       storage,
+      onEnqueue: () => {
+        const { connection, shell } = current.current;
+        if (connection === "online" && shell?.account.webId === session.webId)
+          // The durable outbox serializes this drain after any active replay.
+          void shell.adapter.reconnected().catch(() => {});
+      },
     });
   });
   useEffect(
@@ -54,7 +60,8 @@ export function useTasksOffline(session: PodSession) {
             fetch: (input, init) => fetch(input, { ...init, signal: ctx.signal }),
             online: () => true,
             outbox: () => shell.outbox,
-            onCreate: offline.confirm,
+            onConfirm: offline.confirm,
+            baseEtag: offline.baseEtag,
           });
           return replay.replay(delivery, ctx);
         },

@@ -1,9 +1,10 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { StorageError } from "@jeswr/storage-client";
-import type { Outbox, ReplayDelegate } from "@jeswr/suite-sdk/offline";
+import type { Outbox, OutboxItem, ReplayDelegate } from "@jeswr/suite-sdk/offline";
+import { isomorphic } from "rdf-isomorphic";
 import { z } from "zod";
 import { ModelError } from "../lib/model/errors";
-import { RdfIO } from "../lib/model/io";
+import { RdfIO, type Resource } from "../lib/model/io";
 import { DataFactory, NS, node, parse, SCHEMA, serialize } from "../lib/model/rdf";
 import { TaskStore } from "../lib/model/store";
 import { createTask, TaskItem, taskDetails, validateTask } from "../lib/model/task";
@@ -51,8 +52,16 @@ export class TasksOffline {
     };
   };
   readonly confirm = (url: string, local: string, remote: string | null) => {
+    this.validators.set(`${url}\u0000${local}`, remote);
+    this.save();
     for (const listener of this.receipts) listener(url, local, remote);
   };
+  readonly baseEtag = (url: string, local: string | null) =>
+    this.validators.get(`${url}\u0000${local}`) ?? local;
+  // A later queued delete must compare the server generation of its own earlier
+  // write, including when the app reloads between deliveries.
+  private readonly validators = new Map<string, string | null>();
+  private readonly changes = new Map<string, number>();
   private readonly versions = new Map<string, Saved>();
   private readonly documents = new Map<string, Saved>();
   private readonly key: string;
@@ -65,17 +74,25 @@ export class TasksOffline {
       online: () => boolean;
       outbox: () => Outbox | null;
       storage?: Pick<Storage, "getItem" | "setItem" | "removeItem"> | undefined;
-      onCreate?: (url: string, local: string, remote: string | null) => void;
+      onConfirm?: (url: string, local: string, remote: string | null) => void;
+      baseEtag?: (url: string, local: string | null) => string | null;
+      onEnqueue?: () => void;
     },
   ) {
     this.key = `suite.tasks.cache.v1.${options.webId}\u0000${options.storageUrl}`;
     this.io = new RdfIO(options.fetch);
     try {
       const stored = z
-        .object({ webId: z.string(), documents: z.record(z.string(), savedSchema) })
+        .object({
+          webId: z.string(),
+          documents: z.record(z.string(), savedSchema),
+          validators: z.record(z.string(), z.string().nullable()).default({}),
+        })
         .parse(JSON.parse(options.storage?.getItem(this.key) ?? "null"));
-      if (stored.webId === options.webId)
+      if (stored.webId === options.webId) {
         for (const [url, saved] of Object.entries(stored.documents)) this.documents.set(url, saved);
+        for (const [key, etag] of Object.entries(stored.validators)) this.validators.set(key, etag);
+      }
     } catch {
       /* Missing, corrupt or unavailable cache is a miss. */
     }
@@ -88,6 +105,7 @@ export class TasksOffline {
         JSON.stringify({
           webId: this.options.webId,
           documents: Object.fromEntries(this.documents),
+          validators: Object.fromEntries(this.validators),
         }),
       );
     } catch {
@@ -98,6 +116,8 @@ export class TasksOffline {
     this.cleared = true;
     this.documents.clear();
     this.versions.clear();
+    this.validators.clear();
+    this.changes.clear();
     try {
       this.options.storage?.removeItem(this.key);
     } catch {
@@ -130,10 +150,11 @@ export class TasksOffline {
   }
   private async remember(url: string, body: string | null, etag: string | null, local: boolean) {
     if (this.cleared) return;
+    const parent = new URL(".", url).href;
+    for (const key of [url, parent]) this.changes.set(key, (this.changes.get(key) ?? 0) + 1);
     this.keepVersion(url, this.documents.get(url));
     if (body === null) this.documents.set(url, { body: "", etag, local, deleted: true });
     else this.documents.set(url, { body, etag, local });
-    const parent = new URL(".", url).href;
     const listing = this.documents.get(parent);
     if (listing) {
       const dataset = await parse(parent, listing.body);
@@ -144,6 +165,17 @@ export class TasksOffline {
     }
     this.save();
   }
+  private async overlay(url: string, body: string): Promise<string> {
+    if (!url.endsWith("/")) return body;
+    const dataset = await parse(url, body);
+    const members = node(url, dataset).iris(`${NS.LDP}contains`);
+    for (const item of this.options.outbox()?.pending() ?? []) {
+      if (item.guard?.tag !== TASKS_REPLAY || new URL(".", item.url).href !== url) continue;
+      if (item.op === "create") members.add(item.url);
+      if (item.op === "delete") members.delete(item.url);
+    }
+    return serialize(dataset);
+  }
   readonly fetch: typeof fetch = async (input, init) => {
     if (this.cleared) throw new Error("The Tasks account is no longer active");
     const url = String(input);
@@ -151,6 +183,12 @@ export class TasksOffline {
     const outbox = this.options.outbox();
     const cached = this.documents.get(url);
     if (method === "GET") {
+      const generation = this.changes.get(url);
+      const newer = () => {
+        if (generation === this.changes.get(url)) return null;
+        const saved = this.documents.get(url);
+        return saved ? this.response(url, saved) : this.fetch(input, init);
+      };
       if (cached && (!this.options.online() || (cached.local && this.waiting(url))))
         return this.response(url, cached);
       if (!this.options.online()) {
@@ -166,24 +204,32 @@ export class TasksOffline {
       }
       try {
         const response = await this.options.fetch(input, init);
+        const latest = newer();
+        if (latest) return latest;
         if (
           response.ok &&
           (!response.url || response.url === url) &&
           response.headers.get("Content-Type")?.includes("turtle")
         ) {
-          this.keepVersion(url, cached);
-          this.documents.set(url, {
-            body: await response.clone().text(),
+          const saved = {
+            body: await this.overlay(url, await response.clone().text()),
             etag: response.headers.get("ETag"),
             local: false,
-          });
+          };
+          const latest = newer();
+          if (latest) return latest;
+          this.keepVersion(url, cached);
+          this.documents.set(url, saved);
           this.save();
+          return this.response(url, saved);
         } else if ([401, 403, 404, 410].includes(response.status)) {
           this.documents.delete(url);
           this.save();
         }
         return response;
       } catch (error) {
+        const latest = newer();
+        if (latest) return latest;
         if (cached && networkError(error)) return this.response(url, cached);
         throw error;
       }
@@ -219,7 +265,7 @@ export class TasksOffline {
       etag: headers.get("If-Match"),
       dependsOn: outbox
         .pending()
-        .filter((item) => item.guard?.tag === TASKS_REPLAY)
+        .filter((item) => item.guard?.tag === TASKS_REPLAY && item.url === url)
         .slice(-1)
         .map((item) => item.id),
     };
@@ -244,6 +290,7 @@ export class TasksOffline {
     });
     const etag = `"tasks-offline-${intent.revision}"`;
     await this.remember(url, after, etag, true);
+    this.options.onEnqueue?.();
     return new Response(null, { status: 204, headers: { ETag: etag } });
   };
 
@@ -292,7 +339,7 @@ export class TasksOffline {
         this.options
           .outbox()
           ?.pending()
-          .some((item) => item.id === id),
+          .some((item) => item.id === id && item.url === intent.url),
       )
     )
       throw new Error("An earlier Tasks change must sync first");
@@ -309,33 +356,65 @@ export class TasksOffline {
       if (!after) throw new Error("A deleted task cannot be copied");
       const data = taskDetails(intent.url, after);
       if (!data) throw new Error("Only tasks can be copied");
-      for (let attempt = 0; attempt < 10; attempt++) {
-        const url = new URL(`${crypto.randomUUID()}.ttl`, intent.url).href;
-        const dataset = createTask(url, { ...data, title: `${data.title} (copy)` });
-        try {
-          await this.io.write(url, dataset, { create: true });
-          return;
-        } catch (error) {
-          if (!(error instanceof Error && "status" in error && error.status === 412)) throw error;
+      const outbox = this.options.outbox();
+      let entry: OutboxItem | undefined;
+      for (const item of outbox?.pending() ?? []) {
+        if (
+          item.url !== intent.url ||
+          item.guard?.tag !== TASKS_REPLAY ||
+          item.status !== "conflict"
+        )
+          continue;
+        const body = await outbox?.localBody(item.id);
+        if (body && equal([...body], [...(delivery.body ?? [])])) {
+          entry = item;
+          break;
         }
       }
-      throw new Error("Couldn't find an available name for the copy");
+      if (!entry) throw new Error("Missing Tasks queue entry");
+      // Both the destination and model defaults must survive a lost response.
+      const url = new URL(`tasks-copy-${encodeURIComponent(entry.id)}.ttl`, intent.url).href;
+      const dataset = createTask(url, {
+        ...data,
+        title: `${data.title} (copy)`,
+        created: data.created ?? new Date(entry.createdAt),
+      });
+      await this.createOnce(url, dataset);
+      return;
     }
     if (!before && delivery.purpose === "resolve-mine")
       before = (await this.io.read(intent.url)).dataset;
     if (!before) {
       if (!after) throw new Error("Missing task contents");
-      const result = await this.io.write(intent.url, after, { create: true });
+      const result = await this.createOnce(intent.url, after);
       const local = `"tasks-offline-${intent.revision}"`;
       this.confirm(intent.url, local, result.etag);
-      this.options.onCreate?.(intent.url, local, result.etag);
+      this.options.onConfirm?.(intent.url, local, result.etag);
       return;
     }
-    const current = await this.io.read(intent.url);
+    let current: Resource;
+    try {
+      current = await this.io.read(intent.url);
+    } catch (error) {
+      if (!after && error instanceof ModelError && [404, 410].includes(error.status)) return;
+      throw error;
+    }
+    if (!after) {
+      const base = (this.options.baseEtag ?? this.baseEtag)(intent.url, intent.etag);
+      if (delivery.purpose === "replay" && (!base || current.etag !== base))
+        throw conflictError(intent.url, current.etag);
+      try {
+        await this.io.remove(intent.url, current.etag);
+      } catch (error) {
+        if (!(error instanceof ModelError && [404, 410].includes(error.status))) throw error;
+      }
+      return;
+    }
     const original = taskDetails(intent.url, before);
     const theirs = taskDetails(intent.url, current.dataset);
-    const ours = after ? taskDetails(intent.url, after) : undefined;
-    // Title, due and completion changes always need a decision, even for a different local edit.
+    const ours = taskDetails(intent.url, after);
+    // The first edit asks about remote title/due/completion changes. Later field
+    // patches rebase after the earlier queued revision's conflict decision.
     const keys = ["title", "dueDate", "allDay", "state"] as const;
     const changed =
       original && theirs
@@ -344,12 +423,12 @@ export class TasksOffline {
               !equal(original[key], theirs[key]) && (!ours || !equal(ours[key], theirs[key])),
           )
         : [];
-    if (delivery.purpose === "replay" && changed.length)
+    if (
+      delivery.purpose === "replay" &&
+      !intent.etag?.startsWith('"tasks-offline-') &&
+      changed.length
+    )
       throw conflictError(intent.url, current.etag);
-    if (!after) {
-      await this.io.remove(intent.url, current.etag);
-      return;
-    }
     if (original && ours && theirs) {
       const target = new TaskItem(`${intent.url}#it`, current.dataset, DataFactory);
       for (const key of Object.keys({ ...original, ...ours }) as (keyof typeof ours)[]) {
@@ -440,13 +519,26 @@ export class TasksOffline {
       target.modified = new Date();
     }
     try {
-      await this.io.write(intent.url, current.dataset, { etag: current.etag });
+      const result = await this.io.write(intent.url, current.dataset, { etag: current.etag });
+      const local = `"tasks-offline-${intent.revision}"`;
+      this.confirm(intent.url, local, result.etag);
+      this.options.onConfirm?.(intent.url, local, result.etag);
     } catch (error) {
       if (error instanceof Error && "status" in error && error.status === 412)
         throw conflictError(intent.url, null);
       throw error;
     }
   };
+  private async createOnce(url: string, dataset: Parameters<RdfIO["write"]>[1]) {
+    try {
+      return await this.io.write(url, dataset, { create: true });
+    } catch (error) {
+      if (!(error instanceof ModelError && error.status === 412)) throw error;
+      const current = await this.io.read(url);
+      if (!isomorphic([...dataset], [...current.dataset])) throw error;
+      return current;
+    }
+  }
 }
 
 /** Offline startup uses the already protected Inbox; it must not provision ACLs without a connection. */
