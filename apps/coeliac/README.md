@@ -1,3 +1,5 @@
+<!-- AUTHORED-BY GPT-6.1 Sol -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 # coeliac-app
 
 A privacy-first food-and-symptom diary for coeliac disease and other food intolerances. Log meals, exposures, and symptoms; the app helps surface likely trigger patterns, run structured elimination protocols, and shape a personalised diet plan — while keeping all of your health data in your own [Solid](https://solidproject.org/) pod rather than on someone else's server. The diary is written with the reusable [`@jeswr/solid-health-diary`](https://github.com/jeswr/solid-health-diary) model (the shared `diet:` sector of the @jeswr federation vocabulary), so it stays portable and readable by other pod-native apps.
@@ -22,7 +24,38 @@ Open [http://localhost:3000](http://localhost:3000) with your browser to see the
 
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+The app uses local fonts and builds without downloading font assets. Production builds use
+Webpack with two workers; Turbopack's PostCSS worker requires a listening port unavailable
+in the restricted build environment.
+
+## Sign-in and diary sessions
+
+`@jeswr/app-session` owns the shared two-step sign-in screen, remembered accounts,
+explicit provider choice, popup authorization and one restore per page. The client-only
+adapter in `src/lib/pod-auth.ts` resolves URLs after mount, so custom elements and browser
+location are never evaluated during Next.js prerendering. `/clientid.jsonld` registers only
+`/callback.html`. Dynamic registration and insecure HTTP are limited to development on
+a loopback host.
+
+The diary context keeps its existing API. It passes the core's authenticated fetch explicitly
+to provisioning, the private type index and outbox synchronization. Public reads use
+app-session's pristine fetch with cookies omitted; global fetch is never patched. Diary writes
+require a verified storage root from the core. A WebID without advertised storage can view cached
+data, with a warning; logging and syncing require an advertised pod.
+
+Login and restore provision the diary and flush pending changes in the background; reconnect
+flushes again. Logout attempts a final flush, calls the same core's logout and purges the
+WebID-scoped health cache. On page startup, expiry or a restore that finds no session purges
+the previously remembered account's cache before offering sign-in, without activating a diary
+session. Logout through the same core also purges an active cache; cross-tab logout is not
+observed. Purge and revoke warnings remain independent, with separate retries. The local
+adapter calls core logout directly so it can report revocation failures.
+
+On first mount the shared cleanup removes exactly the old controller's
+`coeliac-diary-session` IndexedDB database and localStorage keys `coeliac-diary:last-account`
+and `coeliac-diary:accounts`. These were its `dbName`, `rememberedAccountsKey` and
+`recentAccountsKey` options. The health-data database, theme and other apps' storage stay intact.
+Legacy credential cleanup is best-effort.
 
 ## Learn More
 

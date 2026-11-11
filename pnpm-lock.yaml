@@ -321,6 +321,9 @@ importers:
 
   apps/coeliac:
     dependencies:
+      '@jeswr/app-session':
+        specifier: workspace:*
+        version: link:../../packages/app-session
       '@jeswr/app-shell':
         specifier: workspace:*
         version: link:../../packages/app-shell
@@ -330,45 +333,27 @@ importers:
       '@jeswr/guarded-fetch':
         specifier: workspace:*
         version: link:../../packages/guarded-fetch
-      '@jeswr/solid-elements':
+      '@jeswr/pod-auth':
         specifier: workspace:*
-        version: link:../../packages/solid-elements
+        version: link:../../packages/pod-auth
       '@jeswr/solid-health-diary':
         specifier: workspace:*
         version: link:../../packages/solid-health-diary
       '@jeswr/solid-offline':
         specifier: workspace:*
         version: link:../../packages/solid-offline
-      '@jeswr/solid-session-restore':
-        specifier: workspace:*
-        version: link:../../packages/solid-session-restore
-      '@lit/react':
-        specifier: ^1.0.8
-        version: 1.0.8(@types/react@19.2.17)
       '@rdfjs/wrapper':
         specifier: ^0.34.0
         version: 0.34.0
       '@solid/object':
         specifier: ^0.6.0
         version: 0.6.0
-      '@solid/reactive-authentication':
-        specifier: ^0.1.5
-        version: 0.1.5
-      dpop:
-        specifier: ^2.1.1
-        version: 2.1.1
-      lit:
-        specifier: ^3.3.3
-        version: 3.3.3
       n3:
         specifier: ^2.0.3
         version: 2.1.1
       next:
         specifier: 16.2.10
         version: 16.2.10(@opentelemetry/api@1.10.0)(@playwright/test@1.61.1)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
-      oauth4webapi:
-        specifier: ^3.8.6
-        version: 3.8.6
       react:
         specifier: 19.1.0
         version: 19.1.0

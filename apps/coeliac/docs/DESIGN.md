@@ -1,3 +1,4 @@
+<!-- AUTHORED-BY GPT-6.1 Sol -->
 <!-- AUTHORED-BY Claude Fable 5 -->
 
 # Coeliac & Multi-Intolerance App — Design (the build contract)
@@ -54,11 +55,12 @@ Rationale:
 **The suite stack applies regardless of framework** (this is the non-negotiable
 part):
 - **Login/chrome:** `@jeswr/app-shell` (ThemeProvider/AccountMenu/FeedbackButton)
-  + `@jeswr/solid-elements` `<jeswr-login-panel>` (wraps reactive-auth) —
-  same as Pod Manager and the pod-apps. Do NOT hand-roll login.
-- **Session:** `@jeswr/solid-session-restore` for silent DPoP refresh-token
-  restore on load (cross-app UX invariant #1 — `AGENTS.md`). Reopening the tab
-  restores silently, no re-login.
+  + `@jeswr/app-session/react` (shared LoginScreen over SignInCard). Do not
+  hand-roll login or copy another app's auth wiring.
+- **Session:** `@jeswr/app-session` owns one lazy `@jeswr/pod-auth` core and one
+  restore on mount. Refresh-token restore is silent; failures offer remembered
+  accounts for interactive popup login. Credentials attach only within verified
+  storage roots; global fetch stays pristine.
 - **Auth seam:** every data view takes an **injectable `fetch`** (`.fetch` /
   `.publicFetch` / `.webId` seam) so the whole app is unit-testable with a
   stubbed fetch and no server (suite convention).
@@ -426,9 +428,10 @@ public US-gov/EMBL open data, no key, attribute politely. None require a server.
   in the pod** (minimise egress, enable offline). No health data is ever sent to
   them (we send only a barcode / a public search term).
 - **Genetics raw file never leaves the device** (§7) — the strongest invariant.
-- **DPoP-bound auth** via the suite login stack; silent restore via
-  `@jeswr/solid-session-restore` (WebID-scoped refresh token in IndexedDB,
-  cleared on logout).
+- **DPoP-bound auth** via `@jeswr/pod-auth` and the shared `@jeswr/app-session`
+  lifecycle (app-scoped persisted refresh records, cleared on logout). The diary
+  adapter preserves final outbox flush, mandatory health-cache purge and separate
+  purge/revoke warnings. Writes use only the core's verified storage roots.
 - **No analytics on health data.** FeedbackButton (via `@jeswr/solid-feedback-
   proxy`) is the only telemetry and it files a GitHub issue, carries no health
   data.

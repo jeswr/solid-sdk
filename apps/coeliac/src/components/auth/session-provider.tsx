@@ -1,117 +1,211 @@
-// AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
+// AUTHORED-BY GPT-6.1 Sol
 "use client";
-/**
- * The real auth wiring (client-only). Owns the reactive-auth `LoginController`
- * (`@jeswr/solid-elements/auth`), drives silent session restore on load (UX
- * invariant #1), resolves the pod storage root, provisions the diary
- * (owner-only ACL), registers the private type index (best-effort), and flushes
- * the optimistic outbox on login + reconnect. Everything reactive-auth /
- * solid-elements is dynamically imported inside an effect so `next build`
- * prerendering never touches `customElements.define`.
- *
- * All of this is exposed to the app ONLY through the plain `SessionContext`
- * (`@/lib/session/context`), so views stay testable with a stubbed fetch.
- */
-import type { LoginController, SessionChangeDetail } from "@jeswr/solid-elements/react";
+
+import { publicFetch } from "@jeswr/app-session";
+import {
+  SessionProvider as AppSessionProvider,
+  useSession as useAppSession,
+  type SessionProviderProps,
+} from "@jeswr/app-session/react";
+import type { Identity, PodAuth } from "@jeswr/pod-auth";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DiaryStore } from "@/lib/cache/diary-store";
 import { defaultKv } from "@/lib/cache/kv";
 import { flushOutbox } from "@/lib/diary/sync";
 import { ensureDiaryReady, resetDiaryReadyMemo } from "@/lib/pod/pod-fs";
-import { podRootFallback, resolveStorageRoot } from "@/lib/pod/storage";
 import { registerDiaryTypes } from "@/lib/pod/type-index";
-import {
-  anonymousSession,
-  SessionContext,
-  type SessionValue,
-} from "@/lib/session/context";
+import { anonymousSession, SessionContext, type SessionValue } from "@/lib/session/context";
 import { runSecureLogout } from "@/lib/session/logout";
 import { warningsFromOutcome } from "@/lib/session/logout-warnings";
+import { restoreDiarySession } from "@/lib/session/restore";
+import { APP_NAME, DEV, getPodAuth, LEGACY_CREDENTIALS } from "@/lib/pod-auth";
 import { LoginArea } from "./login-area";
 import { LogoutPurgeWarning } from "./logout-purge-warning";
 import { LogoutRevokeWarning } from "./logout-revoke-warning";
 import { RestoringSplash } from "./restoring-splash";
 
-export function SessionProvider({ children }: { children: ReactNode }) {
-  const controllerRef = useRef<LoginController | null>(null);
-  const [controller, setController] = useState<LoginController | null>(null);
+/** Shared auth lifecycle and UI, wrapped by Coeliac's health-data lifecycle. */
+export function SessionProvider({
+  children,
+  auth,
+  readProfile,
+}: {
+  children: ReactNode;
+  auth?: PodAuth;
+  readProfile?: SessionProviderProps["readProfile"];
+}) {
+  const [restorePurgeFailure, setRestorePurgeFailure] = useState<DiaryStore | null>(null);
+  const getCore = useMemo(() => {
+    let adapter: PodAuth | undefined;
+    return async () => {
+      const core = auth ?? (await getPodAuth());
+      adapter ??= {
+        ...core,
+        restore: () => restoreDiarySession(core, setRestorePurgeFailure),
+      };
+      return adapter;
+    };
+  }, [auth]);
+  return (
+    <AppSessionProvider
+      getPodAuth={getCore}
+      readProfile={readProfile}
+      appName={APP_NAME}
+      dev={DEV}
+      legacyCredentials={LEGACY_CREDENTIALS}
+    >
+      <DiarySession getCore={getCore} restorePurgeFailure={restorePurgeFailure}>
+        {children}
+      </DiarySession>
+    </AppSessionProvider>
+  );
+}
+
+/** Preserve the public diary context without owning login, restore or profile discovery. */
+function DiarySession({
+  children,
+  getCore,
+  restorePurgeFailure,
+}: {
+  children: ReactNode;
+  getCore: () => Promise<PodAuth>;
+  restorePurgeFailure: DiaryStore | null;
+}) {
+  const shared = useAppSession();
   const [value, setValue] = useState<SessionValue>(() => ({ ...anonymousSession }));
   const valueRef = useRef(value);
-  // The store of the just-departed account whose logout purge FAILED — retained
-  // (only for that case) so "Clear local data" can re-attempt the purge after the
-  // session has already gone anonymous. Cleared once a purge finally succeeds.
   const failedPurgeStoreRef = useRef<DiaryStore | null>(null);
-  // Keep the ref in sync post-commit (react-hooks v6 forbids ref writes during
-  // render); `reconcile` only reads it from event handlers, so this is safe.
+  const activation = useRef(0);
+  const signingOut = useRef(false);
+  const [loggingOut, setLoggingOut] = useState(false);
+  const [checkedWebId, setCheckedWebId] = useState<string | null>(null);
   useEffect(() => {
     valueRef.current = value;
   }, [value]);
-
-  /** Bring an authenticated controller online: resolve storage + provision + flush. */
-  const activateSession = useCallback(async (c: LoginController) => {
-    const webId = c.webId;
-    if (!webId) return;
-    const authedFetch = c.authenticatedFetch;
-    const publicFetch = c.publicFetch;
-    let storageRoot: string;
-    try {
-      storageRoot = await resolveStorageRoot(webId, authedFetch);
-    } catch {
-      storageRoot = podRootFallback(webId);
-    }
-    const store = new DiaryStore(defaultKv(), webId);
-    // A successful (re)activation clears BOTH stale logout warnings + the retained store
-    // (the session is now genuinely live under a fresh credential, so neither the
-    // "may still be signed in" nor the "data may remain" warning still applies).
-    failedPurgeStoreRef.current = null;
+  useEffect(() => {
+    if (!restorePurgeFailure) return;
+    failedPurgeStoreRef.current = restorePurgeFailure;
     setValue((v) => ({
       ...v,
-      status: "authed",
+      ...warningsFromOutcome({ purgeFailed: true, revokeFailed: false }),
+      revokeWarning: v.revokeWarning,
+    }));
+  }, [restorePurgeFailure]);
+
+  const activateSession = useCallback((identity: Identity, core: PodAuth) => {
+    if (!identity.webId) throw new Error("No WebID returned");
+    const webId = identity.webId;
+    // Authority comes from the core, never a guessed WebID path or a second profile read.
+    const storageRoot = identity.storages[0] ?? null;
+    const authedFetch = core.fetch;
+    const store = new DiaryStore(defaultKv(), webId);
+    const epoch = ++activation.current;
+    failedPurgeStoreRef.current = null;
+    resetDiaryReadyMemo();
+    const next = {
+      ...anonymousSession,
+      status: "authed" as const,
       webId,
       authedFetch,
       publicFetch,
       storageRoot,
       store,
-      purgeWarning: null,
-      revokeWarning: null,
-    }));
-    // Background provisioning — never blocks the UI; each step is best-effort.
+    };
+    valueRef.current = next;
+    setValue(next);
+    if (!storageRoot) return;
     void (async () => {
+      const current = () => activation.current === epoch;
       try {
         await ensureDiaryReady(authedFetch, storageRoot, webId);
       } catch {
-        /* provisioned lazily on first write */
+        /* Provisioned lazily on first write. */
       }
+      if (!current()) return;
       try {
         await registerDiaryTypes(authedFetch, { webId, storageRoot });
       } catch {
-        /* interop nicety */
+        /* Best-effort interoperability. */
       }
+      if (!current()) return;
       try {
         await flushOutbox({ authedFetch, webId, storageRoot }, store);
       } catch {
-        /* retried on reconnect */
+        /* Retried on reconnect. */
       }
     })();
   }, []);
 
+  const depart = useCallback(() => {
+    setCheckedWebId(null);
+    ++activation.current;
+    resetDiaryReadyMemo();
+    const store = valueRef.current.store;
+    const next = {
+      ...anonymousSession,
+      status: "anonymous" as const,
+      purgeWarning: valueRef.current.purgeWarning,
+      revokeWarning: valueRef.current.revokeWarning,
+    };
+    valueRef.current = next;
+    setValue(next);
+    if (!signingOut.current && store) {
+      // Also clear an active cache when another caller logs out through this core.
+      void store.purge().catch(() => {
+        failedPurgeStoreRef.current = store;
+        setValue((v) => ({
+          ...v,
+          ...warningsFromOutcome({ purgeFailed: true, revokeFailed: false }),
+          revokeWarning: v.revokeWarning,
+        }));
+      });
+    }
+  }, []);
+  // The shared display profile can fall back to the WebID origin. Health writes
+  // use only the core's verified storages, never that public browsing fallback.
+  useEffect(() => {
+    if (!shared.webId) {
+      depart();
+      return;
+    }
+    if (valueRef.current.webId && valueRef.current.webId !== shared.webId) depart();
+    let disposed = false;
+    const epoch = ++activation.current;
+    void getCore()
+      .then(async (core) => {
+        const identity = await core.identity();
+        if (disposed || activation.current !== epoch) return;
+        if (identity && identity.webId === shared.webId) activateSession(identity, core);
+        else depart();
+        setCheckedWebId(shared.webId);
+      })
+      .catch(() => {
+        if (!disposed && activation.current === epoch) {
+          depart();
+          setCheckedWebId(shared.webId);
+        }
+      });
+    return () => {
+      disposed = true;
+    };
+  }, [shared.webId, getCore, activateSession, depart]);
+
+  const { loginWithAccount, recentAccounts } = shared;
   const login = useCallback(
     async (webId?: string) => {
-      const c = controllerRef.current;
-      if (!c) return;
-      await c.login(webId);
-      await activateSession(c);
+      const account = webId ?? recentAccounts[0]?.webId;
+      if (account) await loginWithAccount(account);
     },
-    [activateSession],
+    [loginWithAccount, recentAccounts],
   );
 
   const logout = useCallback(async () => {
-    const c = controllerRef.current;
+    if (signingOut.current) return;
+    signingOut.current = true;
+    setLoggingOut(true);
+    ++activation.current;
     const { store, webId, storageRoot, authedFetch, status } = valueRef.current;
     resetDiaryReadyMemo();
-    // Best-effort final flush (online only) BEFORE the credential is revoked, then
-    // a MANDATORY purge of the WebID-scoped private health cache so no logged/read
-    // data survives on a shared device. Extracted + unit-tested in session/logout.
     const flush =
       store && webId && storageRoot && status === "authed"
         ? () => flushOutbox({ authedFetch, webId, storageRoot }, store)
@@ -119,20 +213,20 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     const outcome = await runSecureLogout({
       store,
       flush,
-      revokeCredentials: c ? () => c.logout() : undefined,
+      // Shared logout intentionally catches failures; Coeliac must report them.
+      revokeCredentials: async () => (await getCore()).logout(),
     });
-    // Go anonymous (never trap the user in a half-logged-in UI), but NEVER silently
-    // claim a clean sign-out. The two failures are tracked as FULLY INDEPENDENT state
-    // (purgeWarning vs revokeWarning) so resolving one never hides the other:
-    //  - purgeFailed → purgeWarning: the local health cache may not be wiped; offer a
-    //    "Clear local data" retry (retain the store ONLY in this case).
-    //  - revokeFailed → revokeWarning: the credential may not be revoked → the session
-    //    could still be live; a persistent SECURITY banner, cleared only by a revoke
-    //    retry or reactivation — never by the purge retry or a dismiss.
     failedPurgeStoreRef.current = outcome.purgeFailed ? store : null;
-    const { purgeWarning, revokeWarning } = warningsFromOutcome(outcome);
-    setValue(() => ({ ...anonymousSession, status: "anonymous", purgeWarning, revokeWarning }));
-  }, []);
+    const next = {
+      ...anonymousSession,
+      status: "anonymous" as const,
+      ...warningsFromOutcome(outcome),
+    };
+    valueRef.current = next;
+    setValue(next);
+    signingOut.current = false;
+    setLoggingOut(false);
+  }, [getCore]);
 
   /** Re-attempt the failed logout purge; clears the warning only when it succeeds. */
   const retryPurge = useCallback(async () => {
@@ -168,13 +262,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
    * warning. There is no plain "dismiss" for this banner: the user IS still signed in.
    */
   const retryRevoke = useCallback(async () => {
-    const c = controllerRef.current;
-    if (!c) {
-      // No controller to revoke through — a reload is the only path; keep the banner.
-      return;
-    }
     try {
-      await c.logout();
+      await (await getCore()).logout();
       setValue((v) => (v.revokeWarning === null ? v : { ...v, revokeWarning: null }));
     } catch (err) {
       setValue((v) => ({
@@ -185,116 +274,92 @@ export function SessionProvider({ children }: { children: ReactNode }) {
             : "Sign-out still failed — you may still be signed in on this device. Reload the page and sign out again.",
       }));
     }
-  }, []);
+  }, [getCore]);
 
   const reconcile = useCallback(async () => {
     const v = valueRef.current;
     if (!v.store || !v.webId || !v.storageRoot) return;
-    await flushOutbox({ authedFetch: v.authedFetch, webId: v.webId, storageRoot: v.storageRoot }, v.store);
+    await flushOutbox(
+      { authedFetch: v.authedFetch, webId: v.webId, storageRoot: v.storageRoot },
+      v.store,
+    );
   }, []);
 
-  // Merge the stable callbacks into the context value during render (react-hooks
-  // v6 forbids the old inject-via-effect setValue; this also drops a render pass).
+  // Never render the previous account while the shared core is signing out or
+  // the next account's verified identity is being read.
+  const status: SessionValue["status"] =
+    loggingOut ||
+    (!shared.ready && !shared.error) ||
+    (shared.webId !== null && checkedWebId !== shared.webId)
+      ? "loading"
+      : shared.webId && value.webId === shared.webId && value.status === "authed"
+        ? "authed"
+        : "anonymous";
   const contextValue = useMemo(
-    () => ({ ...value, login, logout, reconcile, retryPurge, dismissPurgeWarning, retryRevoke }),
-    [value, login, logout, reconcile, retryPurge, dismissPurgeWarning, retryRevoke],
+    () => ({
+      ...(status === "authed"
+        ? value
+        : {
+            ...anonymousSession,
+            purgeWarning: value.purgeWarning,
+            revokeWarning: value.revokeWarning,
+          }),
+      status,
+      login,
+      logout,
+      reconcile,
+      retryPurge,
+      dismissPurgeWarning,
+      retryRevoke,
+    }),
+    [value, status, login, logout, reconcile, retryPurge, dismissPurgeWarning, retryRevoke],
   );
-
-  // Build the controller + silent-restore on mount (client-only).
   useEffect(() => {
-    let cancelled = false;
-    const toAnonymous = () =>
-      setValue((v) => (v.status === "loading" ? { ...v, status: "anonymous" } : v));
-    // Fail-closed guard (UX invariant #1): if init / restore hangs, never trap the
-    // user on the restoring splash — fall back to the login prompt.
-    const fallback = setTimeout(() => {
-      if (!cancelled) toAnonymous();
-    }, 6000);
-
-    void (async () => {
-      try {
-        const { createReactiveAuthController } = await import("@jeswr/solid-elements/auth");
-        // Import the registerElements entrypoint — on @solid/reactive-authentication
-        // 0.1.5 the bare package import no longer self-registers the custom element;
-        // ./registerElements is the export that defines <authorization-code-flow>.
-        await import("@solid/reactive-authentication/registerElements");
-        const flowEl = document.createElement("authorization-code-flow") as HTMLElement & {
-          getCode: (uri: URL, signal: AbortSignal) => Promise<string>;
-        };
-        document.body.appendChild(flowEl);
-        const origin = window.location.origin;
-        const c = createReactiveAuthController({
-          authFlow: { getCode: (uri, signal) => flowEl.getCode(uri, signal) },
-          callbackUri: new URL("/callback.html", origin).toString(),
-          clientId: new URL("/clientid.jsonld", origin).toString(),
-          dbName: "coeliac-diary-session",
-          rememberedAccountsKey: "coeliac-diary:last-account",
-          recentAccountsKey: "coeliac-diary:accounts",
-          allowInsecureLoopback: true,
-        });
-        controllerRef.current = c;
-        setController(c);
-        // Bound the restore so a stuck network read can't hang the splash forever.
-        const outcome = await Promise.race([
-          c.restore(),
-          new Promise<{ outcome: "login" }>((resolve) =>
-            setTimeout(() => resolve({ outcome: "login" }), 5000),
-          ),
-        ]);
-        if (cancelled) return;
-        if (outcome.outcome === "restored") await activateSession(c);
-        else toAnonymous();
-      } catch (err) {
-        if (typeof console !== "undefined") console.warn("[session] init failed:", err);
-        if (!cancelled) toAnonymous();
-      } finally {
-        clearTimeout(fallback);
-      }
-    })();
-    return () => {
-      cancelled = true;
-      clearTimeout(fallback);
+    const onOnline = () => {
+      void reconcile().catch(() => {});
     };
-  }, [activateSession]);
-
-  // Reconcile the outbox when connectivity returns.
-  useEffect(() => {
-    const onOnline = () => void reconcile();
     window.addEventListener("online", onOnline);
     return () => window.removeEventListener("online", onOnline);
   }, [reconcile]);
-
-  const onSessionChange = useCallback(
-    (detail: SessionChangeDetail) => {
-      const c = controllerRef.current;
-      if (detail.loggedIn && c) void activateSession(c);
+  useEffect(
+    () => () => {
+      ++activation.current;
     },
-    [activateSession],
+    [],
   );
 
   return (
     <SessionContext.Provider value={contextValue}>
-      {value.status === "loading" ? (
+      {status === "loading" ? (
         <RestoringSplash />
-      ) : value.status === "authed" ? (
-        children
+      ) : status === "authed" ? (
+        <>
+          {!value.storageRoot && (
+            <p role="alert">
+              You’re signed in, but your WebID does not advertise a verified pod storage location.
+              You can view cached data; logging and syncing are unavailable. Add a storage location
+              to your WebID profile, then sign out and sign in again.
+            </p>
+          )}
+          {children}
+        </>
       ) : (
         <>
-          {value.revokeWarning !== null ? (
+          {value.revokeWarning !== null && (
             <LogoutRevokeWarning
               message={value.revokeWarning}
               onRetry={retryRevoke}
               onReload={() => window.location.reload()}
             />
-          ) : null}
-          {value.purgeWarning !== null ? (
+          )}
+          {value.purgeWarning !== null && (
             <LogoutPurgeWarning
               message={value.purgeWarning}
               onRetry={retryPurge}
               onDismiss={dismissPurgeWarning}
             />
-          ) : null}
-          <LoginArea controller={controller} onSessionChange={onSessionChange} />
+          )}
+          <LoginArea />
         </>
       )}
     </SessionContext.Provider>

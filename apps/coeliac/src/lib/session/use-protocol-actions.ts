@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
+// AUTHORED-BY Codex GPT-6
 "use client";
 /**
  * The elimination-protocol actions the UI calls — optimistic + non-blocking (UX
@@ -26,7 +27,7 @@ import {
   type StartProtocolInput,
 } from "../protocol/fsm";
 import { newConclusionRecord, newProtocolRecord, storedProtocolToData, updateProtocolRecord } from "../protocol/persist";
-import { NotSignedInError } from "./use-diary-actions";
+import { NoStorageError, NotSignedInError } from "./use-diary-actions";
 import { useSession } from "./context";
 
 /** The result of a protocol mutation: the updated record + a settle-when-synced promise. */
@@ -55,7 +56,8 @@ export function useProtocolActions() {
   const { store, storageRoot, webId, authedFetch } = useSession();
 
   const requireCtx = useCallback(() => {
-    if (!store || !storageRoot || !webId) throw new NotSignedInError();
+    if (!store || !webId) throw new NotSignedInError();
+    if (!storageRoot) throw new NoStorageError();
     return { store, storageRoot, webId, authedFetch };
   }, [store, storageRoot, webId, authedFetch]);
 

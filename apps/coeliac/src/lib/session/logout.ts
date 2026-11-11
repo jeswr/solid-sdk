@@ -1,3 +1,4 @@
+// AUTHORED-BY GPT-6.1 Sol
 // AUTHORED-BY Claude Fable 5
 /**
  * The secure sign-out sequence, extracted from the client `SessionProvider` so it
@@ -6,7 +7,7 @@
  * Health data is securityCritical, so logout does three things in a fixed order:
  *   1. **Best-effort final flush** of the optimistic outbox, so an ONLINE logout
  *      never silently drops writes that were logged but not yet synced to the pod.
- *   2. **Revoke the persisted credential** (reactive-auth `controller.logout()`),
+ *   2. **Revoke the persisted credential** (pod-auth `auth.logout()`),
  *      clearing the DPoP refresh token so the session cannot be silently restored.
  *   3. **MANDATORY purge** of the WebID-scoped private cache, so nothing the
  *      departed user logged or read survives on a shared browser/device (the
@@ -36,7 +37,7 @@ export interface SecureLogoutContext {
    * is revoked (it needs the authed fetch). Any rejection is swallowed.
    */
   flush?: () => Promise<unknown>;
-  /** Revoke the persisted credential (reactive-auth `controller.logout()`). */
+  /** Revoke the persisted credential (pod-auth `auth.logout()`). */
   revokeCredentials?: () => Promise<void>;
 }
 

@@ -1,3 +1,4 @@
+<!-- AUTHORED-BY GPT-6.1 Sol -->
 <!-- AUTHORED-BY Claude Fable 5 -->
 <!-- AUTHORED-BY Claude Sonnet 5 (status banner, 2026-07-04) -->
 
@@ -121,8 +122,8 @@ proceed against draft terms; reconcile IRIs before 1A's `dist` is finalised).
 branch off `design/product-buildout` (or a fresh feat branch off `origin/main`
 after this design lands). **Depends on 1A.**
 **Implement (DESIGN §1, §5):**
-- Adopt suite stack: `@jeswr/app-shell` chrome, `@jeswr/solid-elements`
-  `<jeswr-login-panel>`, `@jeswr/solid-session-restore` silent restore,
+- Adopt suite stack: `@jeswr/app-shell` chrome, `@jeswr/app-session/react`
+  shared login and session lifecycle over `@jeswr/pod-auth`,
   injectable-`fetch` seam, `@jeswr/solid-offline` SW. Publish a stable **Client
   ID Document** at `/clientid.jsonld` (solid-client-id skill — Next/Vercel recipe).
 - **Logging (the make-or-break, §5):** camera-live **barcode scan** (`zxing-wasm`)
