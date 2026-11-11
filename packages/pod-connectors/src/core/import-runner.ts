@@ -34,6 +34,8 @@ export interface RunImportOptions extends ConnectorStateOptions {
   /** Explicit, host-owned storage port for this adapter. */
   podWriter: PodWriter;
   mode: ImportMode;
+  /** Optional item attribution for demo fixtures; ignored for live imports. */
+  demoAgent?: { readonly iri: string; readonly label: string };
   /** Required for live mode; already authenticated by the host. */
   sourceAuth?: SourceAuth;
   /** Cursor from the previous import (incremental, where supported). */
@@ -107,6 +109,7 @@ export async function runImport(opts: RunImportOptions): Promise<ImportReport> {
     source ? `${new URL(source).origin}/` : `urn:solid:connector:${encodeURIComponent(id)}:source`,
     opts,
     adapter.vocabMap,
+    mode === "demo" ? opts.demoAgent : undefined,
   );
   try {
     const outcome = await adapter.import({

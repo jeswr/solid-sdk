@@ -1,7 +1,11 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
+import { Provenance as ItemProvenance } from "@jeswr/pod-connectors/core/provenance";
+import { MusicRecording, PodThing } from "@jeswr/pod-connectors/core/vocab";
+import { DataFactory, Store } from "n3";
 import { describe, expect, it } from "vitest";
+import { DEMO_CONNECTOR } from "../../src/apps/home/lib/connect/catalogue";
 import {
   CONNECTORS,
   connectorForUrl,
@@ -24,6 +28,48 @@ describe("Home §5.3 provenance", () => {
       ["https://blank.example/", { kind: "app", label: " " }],
     ]),
   };
+
+  it("recognises demo attribution without saved connections or an agent description", () => {
+    const dataset = new Store();
+    new ItemProvenance(subject, dataset, DataFactory).attributedTo.add(DEMO_CONNECTOR.iri);
+    expect(provenanceOf(dataset, subject, STORAGE, context)).toEqual({
+      kind: "source",
+      label: DEMO_CONNECTOR.label,
+      demo: true,
+    });
+  });
+
+  it("keeps real source and agent provenance alongside the demo flag", () => {
+    for (const [source, expected] of [
+      [true, { kind: "source", label: "Spotify", logoId: "spotify" }],
+      [false, { kind: "app", label: "MyHealth" }],
+    ] as const) {
+      const dataset = new Store();
+      const item = new ItemProvenance(subject, dataset, DataFactory);
+      item.attributedTo.add(DEMO_CONNECTOR.iri);
+      if (source) item.sourceUrl = "https://open.spotify.com/track/1";
+      else item.attributedTo.add(app);
+      new PodThing(DEMO_CONNECTOR.iri, dataset, DataFactory).name = DEMO_CONNECTOR.label;
+      expect(provenanceOf(dataset, subject, STORAGE, context)).toEqual({ ...expected, demo: true });
+      expect(identitiesIn(dataset, subject).has(DEMO_CONNECTOR.iri)).toBe(false);
+    }
+  });
+
+  it("keeps container provenance and scopes demo attribution to the item subject", () => {
+    const dataset = new Store();
+    new ItemProvenance(subject, dataset, DataFactory).attributedTo.add(DEMO_CONNECTOR.iri);
+    new MusicRecording(`${STORAGE}item.ttl#other`, dataset, DataFactory).mark();
+    expect(provenanceOf(dataset, subject, `${STORAGE}integrations/spotify/`, context)).toEqual({
+      kind: "source",
+      label: "Spotify",
+      logoId: "spotify",
+      demo: true,
+    });
+    expect(provenanceOf(dataset, `${STORAGE}item.ttl#other`, STORAGE, context)).toEqual({
+      kind: "you",
+      label: "Added by you",
+    });
+  });
 
   it("rule 1: recognises connector sources ahead of attributed agents and folders", async () => {
     const dataset = await rdf(

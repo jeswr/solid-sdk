@@ -40,6 +40,7 @@ export function createImportSession(
   source: string,
   options: ImportSessionOptions,
   vocabMap?: VocabMap,
+  attribution?: { readonly iri: string; readonly label: string },
 ) {
   const requestedSources = options.maxRunSources ?? MAX_RUN_SOURCES;
   if (!Number.isSafeInteger(requestedSources) || requestedSources < 1)
@@ -128,8 +129,10 @@ export function createImportSession(
       document.derivedFrom.add(origin);
       item.generatedBy.clear();
       item.generatedBy.add(activityUrl);
+      if (attribution) item.attributedTo.add(attribution.iri);
       if (used.size < maxRunSources) used.add(origin);
     }
+    if (attribution) new Provenance(attribution.iri, dataset, DataFactory).name = attribution.label;
     const result = await writer.write({ ...doc, dataset }, conditions ?? conditionFor(previous));
     let registered = result;
     if (doc.registrationContainer !== undefined) {

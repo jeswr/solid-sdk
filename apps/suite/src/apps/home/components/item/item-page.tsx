@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
 "use client";
@@ -20,12 +21,16 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { AppHeading } from "@/shell/app-frame";
 import { typedViewData } from "../../../../components/typed-view-data";
 import { decodeRef } from "../../../../lib/refs";
+import { DEMO_CONNECTOR } from "../../lib/connect/catalogue";
+import { isDemoImport } from "../../lib/connect/demo";
 import { classificationForType } from "../../lib/model/classify";
 import { DOMAINS, UNCATEGORISED } from "../../lib/model/domains";
 import { identitiesIn, provenanceOf } from "../../lib/model/provenance";
 import { inStorage } from "../../lib/model/rdf";
+import { useConnectors } from "../../state/connectors";
 import { asOfTime, itemActions, itemHref, itemTitle, relativeTime } from "../../state/presentation";
 import { domainStore } from "../../state/use-domain-items";
+import { DemoDataBadge } from "../connect/shared";
 import { useHomeSession } from "../home-app";
 import { domainHref } from "../home-sidebar";
 import { type ItemRead, ItemReadError, readExternalProfile, readItem } from "./data";
@@ -47,6 +52,7 @@ function reference(value: string | null): string | undefined {
 }
 export function ItemPage({ domain, itemRef }: { domain: string; itemRef: string }) {
   const session = useHomeSession();
+  const [connections] = useConnectors(session.webId);
   const router = useRouter();
   const query = useSearchParams();
   const url = reference(itemRef);
@@ -186,6 +192,9 @@ export function ItemPage({ domain, itemRef }: { domain: string; itemRef: string 
       identities: identitiesIn(read.item.dataset, read.item.subject),
     });
   const source = actions.find((action) => action.id === "source");
+  const demo = provenance?.demo || (read && isDemoImport(read.item.url, connections));
+  const onlyDemo =
+    provenance?.demo && provenance.kind === "source" && provenance.label === DEMO_CONNECTOR.label;
   const copy = async () => {
     try {
       if (read) {
@@ -220,11 +229,15 @@ export function ItemPage({ domain, itemRef }: { domain: string; itemRef: string 
         <LoadingSkeleton preset="detail" label="Loading item" />
       ) : (
         <>
-          {provenance?.kind === "you" ? (
-            <p className="hm-you">Added by you</p>
-          ) : (
-            <ProvenanceBadge source={provenance?.label ?? "source"} />
-          )}
+          <div className="flex flex-wrap items-center gap-2">
+            {demo ? <DemoDataBadge /> : null}
+            {!onlyDemo &&
+              (provenance?.kind === "you" ? (
+                <p className="hm-you">Added by you</p>
+              ) : (
+                <ProvenanceBadge source={provenance?.label ?? "source"} />
+              ))}
+          </div>
           {!online || state.cached ? (
             <p role="status">
               Showing saved copies

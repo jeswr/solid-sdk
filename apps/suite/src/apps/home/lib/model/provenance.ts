@@ -4,6 +4,7 @@
 // Host patterns ported from PM docs/typed-data-views.md §2.1 and typed-views/sources.ts.
 import { NS } from "@jeswr/suite-vocab";
 import type { DatasetCore, Term } from "@rdfjs/types";
+import { DEMO_CONNECTOR } from "../connect/catalogue";
 import { httpUrl, inStorage, subjectOf } from "./rdf";
 
 export interface Provenance {
@@ -11,6 +12,8 @@ export interface Provenance {
   kind: "source" | "app" | "person" | "other" | "you";
   label: string;
   logoId?: string;
+  /** Demo status is additional to the item's real source or author. */
+  demo?: true;
 }
 export interface Connector {
   id: string;
@@ -85,6 +88,7 @@ export function identitiesIn(
   const identities = new Map<string, { kind: "app" | "person"; label: string }>();
   for (const predicate of ["wasAttributedTo", "wasGeneratedBy"]) {
     for (const iri of node.iris(NS.PROV + predicate)) {
+      if (iri === DEMO_CONNECTOR.iri) continue;
       const label = subjectOf(dataset, iri).name?.trim();
       if (!label || /http/i.test(label)) continue;
       identities.set(iri, { kind: isPerson(dataset, iri) ? "person" : "app", label });
@@ -129,6 +133,20 @@ export function provenanceOf(
   containerUrl: string,
   context: ProvenanceContext = {},
 ): Provenance {
+  const source = sourceOf(dataset, subject, containerUrl, context);
+  if (!subjectOf(dataset, subject).iris(`${NS.PROV}wasAttributedTo`).includes(DEMO_CONNECTOR.iri))
+    return source;
+  return source.kind === "you"
+    ? { kind: "source", label: DEMO_CONNECTOR.label, demo: true }
+    : { ...source, demo: true };
+}
+
+function sourceOf(
+  dataset: DatasetCore,
+  subject: string | Term,
+  containerUrl: string,
+  context: ProvenanceContext,
+): Provenance {
   const node = subjectOf(dataset, subject);
   let attributedToAnother = false;
   let attributedToPerson = false;
@@ -139,7 +157,7 @@ export function provenanceOf(
   }
   for (const predicate of ["wasAttributedTo", "wasGeneratedBy"]) {
     for (const iri of node.iris(NS.PROV + predicate)) {
-      if (iri === context.userWebId) continue;
+      if (iri === context.userWebId || iri === DEMO_CONNECTOR.iri) continue;
       attributedToAnother = true;
       const identity = context.identities?.get(iri);
       // A person's WebID is labelled with that profile's name, never as an app.
