@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 "use client";
 import {
   isNativeApp,
@@ -98,11 +99,13 @@ export function ShareBatchView({
         {batch.items.map((item, index) => {
           const state = progress[index];
           const task = state?.task;
-          const queue = state?.queue;
+          const attached = task && uploads.tasks.some((current) => current.id === task.id);
           const detached =
-            task &&
-            !uploads.tasks.some((current) => current.id === task.id) &&
-            ["failed", "skipped", "conflict"].includes(task.status);
+            task && !attached && ["failed", "skipped", "conflict"].includes(task.status);
+          // Drive an attached task through the current queue's handlers. Reauthentication keeps
+          // the same queue but retires the client its earlier callbacks captured, so a stored
+          // handler would retry with the retired session forever.
+          const queue = attached ? uploads : state?.queue;
           const saving = state?.status === "saving" && !detached;
           const failed = state?.status === "failed" || detached;
           const label =
@@ -199,8 +202,12 @@ export function ShareBatchView({
         variant="outline"
         disabled={busy}
         onClick={() => {
-          for (const item of Object.values(progress))
-            if (item.task) item.queue?.cancel(item.task.id);
+          for (const item of Object.values(progress)) {
+            const id = item.task?.id;
+            if (id === undefined) continue;
+            if (uploads.tasks.some((current) => current.id === id)) uploads.cancel(id);
+            else item.queue?.cancel(id);
+          }
           void intake.discard(batch);
         }}
       >
