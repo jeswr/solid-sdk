@@ -1,0 +1,61 @@
+{
+  "$comment": "AUTHORED-BY Claude Opus 5.5. Every Solid identity provider the suite advertises on a sign-in screen, and the app clients checked against each. test/sign-in-providers.test.mjs fails when a provider is advertised without an entry here; scripts/sign-in-live/check.mjs and the live Playwright suite run against these entries on a schedule (.github/workflows/sign-in-live.yml).",
+  "apps": [
+    {
+      "id": "drive",
+      "name": "Pod Drive (GitHub Pages)",
+      "url": "https://jeswr.github.io/solid-sdk/pod-drive/",
+      "clientId": "https://jeswr.github.io/solid-sdk/pod-drive/clientid.jsonld",
+      "redirectUri": "https://jeswr.github.io/solid-sdk/pod-drive/callback.html"
+    },
+    {
+      "id": "suite",
+      "name": "Solid Suite (Vercel)",
+      "url": "https://solid-suite.vercel.app/",
+      "clientId": "https://solid-suite.vercel.app/.well-known/solid-client-id.jsonld",
+      "redirectUri": "https://solid-suite.vercel.app/auth/callback.html"
+    }
+  ],
+  "providers": [
+    {
+      "id": "test-idp",
+      "name": "idp.solid-test.jeswr.org",
+      "issuer": "https://idp.solid-test.jeswr.org",
+      "server": "prod-solid-server IdP broker (Keycloak upstream)",
+      "advertisedBy": "Home provider default in the Vite apps, Pod Manager and the App Store",
+      "fullLogin": "Playwright signs up a throwaway account through Drive, then signs in again with it (apps/pod-drive/web/tests/live)"
+    },
+    {
+      "id": "solidcommunity",
+      "name": "solidcommunity.net",
+      "issuer": "https://solidcommunity.net/",
+      "server": "Community Solid Server",
+      "advertisedBy": "@jeswr/pod-auth KNOWN_PROVIDERS and the suite's default provider list",
+      "fullLogin": "Not automated: needs a maintainer-provided account. The protocol check proves the app's request reaches the login page."
+    },
+    {
+      "id": "inrupt",
+      "name": "Inrupt PodSpaces",
+      "issuer": "https://login.inrupt.com/",
+      "server": "Inrupt Enterprise Solid Server",
+      "advertisedBy": "@jeswr/pod-auth KNOWN_PROVIDERS and the suite's default provider list",
+      "fullLogin": "Not automated: needs a maintainer-provided account. The protocol check proves the app's request reaches the login page."
+    },
+    {
+      "id": "solidweb",
+      "name": "solidweb.org",
+      "issuer": "https://solidweb.org/",
+      "server": "Node Solid Server",
+      "advertisedBy": "@jeswr/pod-auth KNOWN_PROVIDERS",
+      "fullLogin": "Not automated: needs a maintainer-provided account. The protocol check proves the app's request reaches the login page."
+    },
+    {
+      "id": "teamid",
+      "name": "teamid.live",
+      "issuer": "https://teamid.live/",
+      "server": "Community Solid Server",
+      "advertisedBy": "@jeswr/pod-auth KNOWN_PROVIDERS and the suite's default provider list",
+      "fullLogin": "Not automated: needs a maintainer-provided account. The protocol check proves the app's request reaches the login page."
+    }
+  ]
+}
