@@ -112,7 +112,7 @@ function server(push: boolean | "stream" = true) {
   };
 }
 async function settle() {
-  await vi.advanceTimersByTimeAsync(0);
+  await vi.advanceTimersByTimeAsync(1);
 }
 beforeEach(() => {
   vi.useFakeTimers();
@@ -123,6 +123,69 @@ afterEach(() => {
 });
 
 describe("Issues notification integration", () => {
+  it("polls every 25 seconds for an out-of-origin notification gateway without rediscovering", async () => {
+    const f = server();
+    f.setService("https://gateway.example/subscribe");
+    const { sync, onChange } = f.start();
+    try {
+      await settle();
+      expect(onChange).toHaveBeenCalledTimes(1);
+      f.edit();
+      await vi.advanceTimersByTimeAsync(25_000);
+      expect(onChange).toHaveBeenCalledTimes(2);
+      await vi.advanceTimersByTimeAsync(575_000);
+      expect(
+        f.doFetch.mock.calls.filter(([url]) => String(url).endsWith("description")),
+      ).toHaveLength(1);
+      expect(
+        f.doFetch.mock.calls.every(
+          ([url]) => new URL(String(url)).origin === new URL(f.root).origin,
+        ),
+      ).toBe(true);
+    } finally {
+      sync.close();
+    }
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("refreshes a collaborator tracker by polling even when its storage cannot be discovered", async () => {
+    const changed = vi.fn();
+    const doFetch = vi.fn<typeof fetch>(async () => new Response(null, { status: 404 }));
+    const sync = watchContainer("https://collaborator.example/trackers/team/", changed, {
+      ownStorageUrls: ["https://own.example/pod/"],
+      fetch: doFetch,
+    });
+    try {
+      await settle();
+      await vi.advanceTimersByTimeAsync(25_000);
+      expect(changed).toHaveBeenCalled();
+      expect(
+        doFetch.mock.calls.every(
+          ([url]) => new URL(String(url)).origin === "https://collaborator.example",
+        ),
+      ).toBe(true);
+    } finally {
+      sync.close();
+    }
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("discovers once initially and discovers again only after a push interruption", async () => {
+    const f = server();
+    const { sync } = f.start();
+    const discoveries = () =>
+      f.doFetch.mock.calls.filter(([url]) => String(url).endsWith("description"));
+    try {
+      await settle();
+      expect(discoveries()).toHaveLength(1);
+      f.sockets[0].open();
+      f.sockets[0].error();
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(discoveries()).toHaveLength(2);
+    } finally {
+      sync.close();
+    }
+  });
   it("refreshes container membership even when its ETag stays unchanged", async () => {
     const f = server(false);
     const { sync, onChange } = f.start(vi.fn(), [f.root], `${f.root}issues/`);

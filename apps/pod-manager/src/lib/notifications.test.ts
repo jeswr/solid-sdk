@@ -181,18 +181,158 @@ it("retains the app's same-origin service restriction", async () => {
 
 it("honors cancellation during discovery without leaving transports behind", async () => {
   const pending = Promise.withResolvers<Response>();
+  const entered = Promise.withResolvers<void>();
   const controller = new AbortController();
-  const doFetch = vi.fn<typeof fetch>(() => pending.promise);
+  const doFetch = vi.fn<typeof fetch>(() => {
+    entered.resolve();
+    return pending.promise;
+  });
   const changed = vi.fn();
   const subscribing = subscribeToResource("https://cancel.example/pod/", changed, {
     fetchImpl: doFetch,
     signal: controller.signal,
   });
+  await entered.promise;
   controller.abort();
   pending.resolve(new Response(null, { status: 404 }));
   const stop = await subscribing;
   stop();
   expect(doFetch.mock.calls[0]?.[1]?.signal?.aborted).toBe(true);
   expect(changed).not.toHaveBeenCalled();
+  expect(vi.getTimerCount()).toBe(0);
+});
+
+function solidServer() {
+  const root = `https://solid-manager-${++sequence}.example/pod/`;
+  const topic = `${root}note`;
+  const description = `${root}description`;
+  const service = `${root}subscribe`;
+  const id = `${root}channel`;
+  let endpoint = service;
+  let receiveFrom = root.replace("https:", "wss:") + "socket";
+  let etag = '"one"';
+  const sockets: FakeWebSocket[] = [];
+  const doFetch = vi.fn<typeof fetch>(async (input, init) => {
+    const url = input instanceof Request ? input.url : String(input);
+    if (init?.method === "POST") return Response.json({ id, receiveFrom });
+    if (init?.method === "DELETE") return new Response(null, { status: 204 });
+    if (init?.method === "OPTIONS") return new Response(null);
+    if (init?.method === "HEAD")
+      return new Response(null, {
+        headers: {
+          etag,
+          link: `<${description}>; rel="http://www.w3.org/ns/solid/terms#storageDescription"${url === root ? ', <http://www.w3.org/ns/pim/space#Storage>; rel="type"' : ""}`,
+        },
+      });
+    if (url === description)
+      return Response.json(
+        [
+          {
+            "@id": root,
+            "http://www.w3.org/ns/solid/notifications#subscription": [{ "@id": endpoint }],
+          },
+          {
+            "@id": endpoint,
+            "http://www.w3.org/ns/solid/notifications#channelType": [
+              { "@id": "http://www.w3.org/ns/solid/notifications#WebSocketChannel2023" },
+            ],
+          },
+        ],
+        { headers: { "content-type": "application/ld+json" } },
+      );
+    throw new Error(`Unexpected request: ${url}`);
+  });
+  class Socket extends FakeWebSocket {
+    constructor(url: string) {
+      super(url);
+      sockets.push(this);
+    }
+  }
+  return {
+    root,
+    topic,
+    id,
+    doFetch,
+    sockets,
+    service: (url: string) => {
+      endpoint = url;
+    },
+    socket: (url: string) => {
+      receiveFrom = url;
+    },
+    edit: () => {
+      etag = '"two"';
+    },
+    start: (changed = vi.fn(), url = topic) =>
+      subscribeToResource(url, changed, {
+        fetchImpl: doFetch,
+        webSocketImpl: Socket as unknown as typeof WebSocket,
+      }),
+  };
+}
+
+it("uses Solid WebSocketChannel2023 and DELETEs its channel on unsubscribe", async () => {
+  const f = solidServer();
+  const changed = vi.fn();
+  const stop = await f.start(changed);
+  try {
+    await vi.advanceTimersByTimeAsync(0);
+    expect(f.sockets).toHaveLength(1);
+    f.sockets[0].open();
+    expect(changed).toHaveBeenCalledTimes(1);
+    f.sockets[0].message(JSON.stringify({ type: "Update", object: f.topic }));
+    expect(changed).toHaveBeenLastCalledWith(
+      expect.objectContaining({ type: "Update", object: f.topic }),
+    );
+  } finally {
+    stop();
+  }
+  await vi.advanceTimersByTimeAsync(0);
+  expect(
+    f.doFetch.mock.calls
+      .filter(([, init]) => init?.method === "DELETE")
+      .map(([url]) => String(url)),
+  ).toEqual([f.id]);
+  expect(vi.getTimerCount()).toBe(0);
+});
+
+it.each([
+  "service",
+  "socket",
+])("polls at 30 seconds after rejecting a foreign %s without rediscovery", async (kind) => {
+  const f = solidServer();
+  if (kind === "service") f.service("https://gateway.example/subscribe");
+  else f.socket("wss://gateway.example/socket");
+  const changed = vi.fn();
+  const stop = await f.start(changed);
+  try {
+    await vi.advanceTimersByTimeAsync(1);
+    expect(f.sockets).toHaveLength(0);
+    expect(changed).toHaveBeenCalledTimes(1);
+    f.edit();
+    await vi.advanceTimersByTimeAsync(29_999);
+    expect(changed).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(changed).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(570_000);
+    expect(
+      f.doFetch.mock.calls.filter(([url]) => String(url).endsWith("description")),
+    ).toHaveLength(1);
+    expect(f.doFetch.mock.calls.some(([url]) => String(url).includes("gateway.example"))).toBe(
+      false,
+    );
+  } finally {
+    stop();
+  }
+  expect(vi.getTimerCount()).toBe(0);
+});
+
+it("rejects userinfo in the watched URL before any request", async () => {
+  const f = solidServer();
+  const stop = await f.start(vi.fn(), f.topic.replace("https://", "https://user:secret@"));
+  await vi.advanceTimersByTimeAsync(60_000);
+  expect(f.doFetch).not.toHaveBeenCalled();
+  expect(f.sockets).toHaveLength(0);
+  stop();
   expect(vi.getTimerCount()).toBe(0);
 });
