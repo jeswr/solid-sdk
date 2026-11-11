@@ -1,0 +1,52 @@
+/* AUTHORED-BY Codex GPT-6.1-Sol */
+.tsk-filter-dialog {
+  max-height: 90dvh;
+  overflow-y: auto;
+}
+.tsk-filter-form,
+.tsk-filter-form > fieldset {
+  display: grid;
+  gap: var(--space-4);
+}
+.tsk-filter-form fieldset {
+  min-width: 0;
+  border: 0;
+  padding: 0;
+  margin: 0;
+}
+.tsk-filter-form label {
+  display: grid;
+  gap: var(--space-1);
+}
+.tsk-filter-form .tsk-filter-check,
+.tsk-filter-projects label,
+.tsk-filter-priorities label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.tsk-filter-projects {
+  max-height: 160px;
+  overflow-y: auto;
+}
+.tsk-filter-projects p {
+  color: var(--foreground-muted);
+  font-size: var(--text-sm);
+}
+.tsk-filter-priorities {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+}
+.tsk-filter-form select {
+  background: var(--background);
+  color: var(--foreground);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  padding: var(--space-2);
+}
+.tsk-filter-form input:focus-visible,
+.tsk-filter-form select:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
