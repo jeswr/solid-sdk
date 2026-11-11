@@ -34,7 +34,7 @@ type Writes = Pick<
 >;
 type Context = { anchor: string } & Record<string, unknown>;
 type Linkset = { linkset: Context[] };
-type Target = { href: string };
+type Target = { href: string; title?: string };
 const LWS = "https://www.w3.org/ns/lws#";
 const JSON_PATCH = "application/json-patch+json";
 const SPARQL = "application/sparql-update";
@@ -159,9 +159,18 @@ function metadataPatch(
         const context = raw.linkset[i] as Context;
         return (
           Object.hasOwn(context, rel) &&
-          (context[rel] as Target[]).some(
-            (target) => new URL(target.href, meta.url).href === op.href,
-          )
+          (context[rel] as Target[]).some((target, j) => {
+            if (new URL(target.href, meta.url).href !== op.href) return false;
+            if (op.title !== undefined && target.title !== op.title) {
+              target.title = op.title;
+              patch.push({
+                op: "add",
+                path: `/linkset/${i}/${pointer(rel)}/${j}/title`,
+                value: op.title,
+              });
+            }
+            return true;
+          })
         );
       })
     )
@@ -179,8 +188,9 @@ function metadataPatch(
       patch.push({ op: "add", path, value: [] });
     }
     const targets = context[rel] as Target[];
-    targets.push({ href: op.href });
-    patch.push({ op: "add", path: `${path}/-`, value: { href: op.href } });
+    const value = { href: op.href, ...(op.title === undefined ? {} : { title: op.title }) };
+    targets.push({ ...value });
+    patch.push({ op: "add", path: `${path}/-`, value });
   }
   return patch;
 }
@@ -208,8 +218,18 @@ export function lwsWrites(
     headers: Record<string, string>,
     signal?: AbortSignal,
     body?: Body,
+    keepalive?: boolean,
   ): Promise<Response> {
-    const response = await send(fetch, method, target(method, url), headers, signal, body);
+    const response = await send(
+      fetch,
+      method,
+      target(method, url),
+      headers,
+      signal,
+      body,
+      false,
+      keepalive,
+    );
     inspect(method, url, response);
     if (response.status >= 400) {
       const error = await storageErrorFrom(method, url, response);
@@ -277,6 +297,7 @@ export function lwsWrites(
           { "Content-Type": opts.contentType, "If-Match": opts.ifMatch },
           opts.signal,
           body,
+          opts.keepalive,
         ),
         opts.signal,
       );
@@ -294,7 +315,7 @@ export function lwsWrites(
     },
     async create(url, body, opts = {}) {
       if (isTrashEndpoint(client(), url)) {
-        return postTrash(client(), fetch, url, body, opts.signal, inspect);
+        return postTrash(client(), fetch, url, body, opts.signal, inspect, opts.keepalive);
       }
       const parent = target("POST", url);
       const kind = opts.kind ?? "resource";
@@ -324,7 +345,14 @@ export function lwsWrites(
         links.push(value);
       }
       headers.Link = links.join(", ");
-      const response = await request("POST", parent, headers, opts.signal, body ?? "");
+      const response = await request(
+        "POST",
+        parent,
+        headers,
+        opts.signal,
+        body ?? "",
+        opts.keepalive,
+      );
       const location = response.headers.get("location");
       let dest: string;
       try {
@@ -480,6 +508,8 @@ export function lwsWrites(
           throw new TypeError("Invalid metadata operation");
         relation(op.rel);
         iri(op.href);
+        if (op.title !== undefined && typeof op.title !== "string")
+          throw new TypeError("title must be a string");
         if (["linkset", "type", "up"].includes(op.rel.toLowerCase()))
           throw unsupported("PATCH", source, "patch");
         return {

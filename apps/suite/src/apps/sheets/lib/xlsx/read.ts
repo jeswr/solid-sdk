@@ -47,13 +47,13 @@ const BUILTIN_FORMATS = new Map<number, string>([
   [49, "@"],
 ]);
 
-function targetPath(target: string): string {
+function targetPath(target: string, source: string): string {
   requireXlsx(
     // biome-ignore lint/suspicious/noControlCharactersInRegex: reject package path controls
     !/[\\?#:%\u0000-\u0020]/u.test(target) && !target.startsWith("//") && target.length > 0,
     "Invalid Excel relationship target",
   );
-  const parts = target.startsWith("/") ? [] : ["xl"];
+  const parts = target.startsWith("/") ? [] : source.split("/").slice(0, -1);
   for (const part of target.split("/")) {
     if (part === "..")
       requireXlsx(parts.pop() !== undefined, "Excel relationship leaves the package");
@@ -80,6 +80,12 @@ function parseXml(bytes: Uint8Array | undefined, name: string): Document {
       ? new TextDecoder(bigEndian ? "utf-16be" : "utf-16le").decode(bytes)
       : strFromU8(bytes);
   requireXlsx(!/<!DOCTYPE/i.test(text), "Excel XML must not contain a DOCTYPE");
+  let elements = 0;
+  for (let i = 0; i < text.length; i++)
+    if (text.charCodeAt(i) === 60) {
+      elements++;
+      requireXlsx(elements <= LIMITS.elements, "This Excel file is too complex");
+    }
   const doc = new DOMParser().parseFromString(text, "application/xml");
   requireXlsx(doc.getElementsByTagNameNS("*", "parsererror").length === 0, "Invalid Excel XML");
   return doc;
@@ -161,8 +167,12 @@ function readSheet(
   const shared = new Map<string, { id: string; range: Range }>();
   const arrays: Range[] = [];
   const rows = new Set<number>();
+  const rowNumbers = new Map<Element, number>();
+  let previousRow = 0;
   for (const row of children(doc, "sheetData", "row")) {
-    const r = numberAttribute(row, "r", 0);
+    const r = numberAttribute(row, "r", previousRow + 1);
+    previousRow = r;
+    rowNumbers.set(row, r);
     requireXlsx(Number.isInteger(r) && r > 0, "Invalid Excel row");
     requireXlsx(!rows.has(r), "Duplicate Excel row");
     rows.add(r);
@@ -197,75 +207,85 @@ function readSheet(
       widths.push({ min, max, w });
     }
   }
-  for (const element of children(doc, "sheetData", "row", "c")) {
-    countCell();
-    const { row, column } = coordinate(element.getAttribute("r") ?? "");
-    touch(row, column);
-    const cell: ICellData = {};
-    const value = children(element, "v")[0]?.textContent;
-    const formulaElement = children(element, "f")[0];
-    const type = element.getAttribute("t");
-    if (type === "s") {
-      const index = Number(value);
-      requireXlsx(
-        value != null && Number.isInteger(index) && index >= 0 && index < strings.length,
-        "Invalid Excel shared string",
-      );
-      cell.v = strings[index];
-      cell.t = 1;
-    } else if (type === "inlineStr") {
-      cell.v = richText(element);
-      cell.t = 1;
-    } else if (value != null) {
-      if (type === "b") {
-        cell.v = /^(?:1|true)$/i.test(value.trim()) ? 1 : 0;
-        cell.t = 3;
-      } else if (type === "str" || type === "e" || type === "d") {
-        cell.v = value;
+  for (const [rowElement, r] of rowNumbers) {
+    let previousColumn = -1;
+    for (const element of children(rowElement, "c")) {
+      countCell();
+      const ref = element.getAttribute("r");
+      const { row, column } =
+        ref === null ? { row: r - 1, column: previousColumn + 1 } : coordinate(ref);
+      previousColumn = column;
+      requireXlsx(column < LIMITS.columns, "Excel row or column limit exceeded");
+      touch(row, column);
+      const cell: ICellData = {};
+      const value = children(element, "v")[0]?.textContent;
+      const formulaElement = children(element, "f")[0];
+      const type = element.getAttribute("t");
+      if (type === "s") {
+        const index = Number(value);
+        requireXlsx(
+          value != null && Number.isInteger(index) && index >= 0 && index < strings.length,
+          "Invalid Excel shared string",
+        );
+        cell.v = strings[index];
         cell.t = 1;
-      } else if (value !== "") {
-        requireXlsx(value.trim() !== "" && Number.isFinite(Number(value)), "Invalid Excel number");
-        cell.v = Number(value);
-        cell.t = 2;
+      } else if (type === "inlineStr") {
+        cell.v = richText(element);
+        cell.t = 1;
+      } else if (value != null) {
+        if (type === "b") {
+          cell.v = /^(?:1|true)$/i.test(value.trim()) ? 1 : 0;
+          cell.t = 3;
+        } else if (type === "str" || type === "e" || type === "d") {
+          cell.v = value;
+          cell.t = 1;
+        } else if (value !== "") {
+          requireXlsx(
+            value.trim() !== "" && Number.isFinite(Number(value)),
+            "Invalid Excel number",
+          );
+          cell.v = Number(value);
+          cell.t = 2;
+        }
       }
+      const formula = fromExcelFormula(formulaElement?.textContent ?? "");
+      const kind = formulaElement?.getAttribute("t");
+      const group = formulaElement?.getAttribute("si") ?? "";
+      if (formula) {
+        cell.f = `=${formula}`;
+        const ref = formulaElement?.getAttribute("ref");
+        const range = ref ? rangeOf(ref) : undefined;
+        // A shared formula's first cell holds the text; Univer gives the group one id.
+        if (kind === "shared" && range && !shared.has(group)) {
+          const sharedId = `${id}-f${shared.size}`;
+          shared.set(group, { id: sharedId, range });
+          cell.si = sharedId;
+        }
+        // An array formula's other cells hold cached results. Univer spills the formula
+        // into them itself, and refuses to spill over values, so those are dropped below.
+        if (kind === "array" && range && area(range) > 1) {
+          countCell(area(range));
+          arrays.push({ ...range, anchorRow: row, anchorColumn: column });
+        }
+      } else if (kind === "shared") {
+        // The other cells of a shared formula. Excel's group always starts at the first
+        // cell; a cell outside it keeps only its cached value.
+        const owner = shared.get(group);
+        if (owner && inside(owner.range, row, column)) cell.si = owner.id;
+      }
+      const style = numberAttribute(element, "s", 0);
+      const pattern = formats[style];
+      if (pattern && pattern !== "General") cell.s = { n: { pattern } };
+      // Each cell carries its own copy of strings and formats in the snapshot, so count them all.
+      countText(
+        (typeof cell.v === "string" ? cell.v.length : 0) +
+          formula.length +
+          (cell.s ? (pattern as string).length : 0),
+      );
+      cells[row] ??= {};
+      requireXlsx(!Object.hasOwn(cells[row], column), "Duplicate Excel cell reference");
+      cells[row][column] = cell;
     }
-    const formula = fromExcelFormula(formulaElement?.textContent ?? "");
-    const kind = formulaElement?.getAttribute("t");
-    const group = formulaElement?.getAttribute("si") ?? "";
-    if (formula) {
-      cell.f = `=${formula}`;
-      const ref = formulaElement?.getAttribute("ref");
-      const range = ref ? rangeOf(ref) : undefined;
-      // A shared formula's first cell holds the text; Univer gives the group one id.
-      if (kind === "shared" && range && !shared.has(group)) {
-        const sharedId = `${id}-f${shared.size}`;
-        shared.set(group, { id: sharedId, range });
-        cell.si = sharedId;
-      }
-      // An array formula's other cells hold cached results. Univer spills the formula
-      // into them itself, and refuses to spill over values, so those are dropped below.
-      if (kind === "array" && range && area(range) > 1) {
-        countCell(area(range));
-        arrays.push({ ...range, anchorRow: row, anchorColumn: column });
-      }
-    } else if (kind === "shared") {
-      // The other cells of a shared formula. Excel's group always starts at the first
-      // cell; a cell outside it keeps only its cached value.
-      const owner = shared.get(group);
-      if (owner && inside(owner.range, row, column)) cell.si = owner.id;
-    }
-    const style = numberAttribute(element, "s", 0);
-    const pattern = formats[style];
-    if (pattern && pattern !== "General") cell.s = { n: { pattern } };
-    // Each cell carries its own copy of strings and formats in the snapshot, so count them all.
-    countText(
-      (typeof cell.v === "string" ? cell.v.length : 0) +
-        formula.length +
-        (cell.s ? (pattern as string).length : 0),
-    );
-    cells[row] ??= {};
-    requireXlsx(!Object.hasOwn(cells[row], column), "Duplicate Excel cell reference");
-    cells[row][column] = cell;
   }
   for (const range of arrays)
     for (let r = range.startRow; r <= range.endRow; r++)
@@ -358,6 +378,43 @@ function relationshipId(sheet: Element): string {
   return sheet.getAttributeNS(REL, "id") ?? sheet.getAttributeNS(STRICT_REL, "id") ?? "";
 }
 
+function hasRelationshipType(rel: Element, kind: string): boolean {
+  const type = rel.getAttribute("Type");
+  return type === `${REL}/${kind}` || type === `${STRICT_REL}/${kind}`;
+}
+
+function readRelationships(bytes: Uint8Array | undefined, name: string): Map<string, Element> {
+  const relationships = new Map<string, Element>();
+  for (const rel of parseXml(bytes, name).getElementsByTagNameNS(PACKAGE_REL, "Relationship")) {
+    const id = rel.getAttribute("Id") ?? "";
+    requireXlsx(!relationships.has(id), "Duplicate Excel relationship");
+    relationships.set(id, rel);
+  }
+  return relationships;
+}
+
+function relationshipTarget(rel: Element, source: string): string {
+  requireXlsx(
+    rel.getAttribute("TargetMode") !== "External",
+    "External Excel relationships are not supported",
+  );
+  return targetPath(rel.getAttribute("Target") ?? "", source);
+}
+
+function resolvePart(
+  relationships: Map<string, Element>,
+  kind: string,
+  source: string,
+  conventional: string,
+  names: Set<string>,
+): string | undefined {
+  const rel = [...relationships.values()].find((rel) => hasRelationshipType(rel, kind));
+  if (!rel) return names.has(conventional) ? conventional : undefined;
+  const path = relationshipTarget(rel, source);
+  requireXlsx(names.has(path), `Excel file is missing ${path}`);
+  return path;
+}
+
 /** Bytes of input fed to the inflater per step, which bounds the work done past a size limit. */
 const CHUNK = 16 * 1024;
 
@@ -370,7 +427,7 @@ function extract(
   data: Uint8Array,
   wanted: (name: string) => boolean,
   budget: { total: number },
-): Map<string, Uint8Array> {
+): { files: Map<string, Uint8Array>; names: Set<string> } {
   const files = new Map<string, Uint8Array>();
   const names = new Set<string>();
   let failure: unknown;
@@ -420,20 +477,23 @@ function extract(
     unzip.push(data.subarray(offset, offset + CHUNK), offset + CHUNK >= data.length);
   if (failure) throw failure;
   requireXlsx(names.size > 0, "Couldn't read this Excel file. Choose a valid .xlsx file.");
-  return files;
+  return { files, names };
 }
 
 export function readXlsx(data: Uint8Array, options: { title: string }): Snapshot {
   try {
-    const metadata = new Set([
-      "[Content_Types].xml",
-      "xl/workbook.xml",
-      "xl/_rels/workbook.xml.rels",
-      "xl/styles.xml",
-      "xl/sharedStrings.xml",
-    ]);
+    requireXlsx(data.byteLength <= LIMITS.compressedBytes, "Excel files must be 50 MiB or smaller");
     const budget = { total: 0 };
-    const parts = extract(data, (name) => metadata.has(name), budget);
+    const { files: parts, names: entryNames } = extract(
+      data,
+      (name) => name === "[Content_Types].xml" || name === "_rels/.rels",
+      budget,
+    );
+    // Resolve each stage before inflating its parts. A part shared by stages is counted once.
+    const loadParts = (wanted: Set<string>) => {
+      const next = extract(data, (name) => wanted.has(name) && !parts.has(name), budget);
+      for (const [name, bytes] of next.files) parts.set(name, bytes);
+    };
     const content = parseXml(parts.get("[Content_Types].xml"), "content types");
     requireXlsx(
       ![...content.getElementsByTagNameNS("*", "Override")].some((part) =>
@@ -441,33 +501,49 @@ export function readXlsx(data: Uint8Array, options: { title: string }): Snapshot
       ),
       "Macro-enabled Excel files are not supported",
     );
-    const workbook = parseXml(parts.get("xl/workbook.xml"), "workbook");
+    const rootRelationships = parts.has("_rels/.rels")
+      ? readRelationships(parts.get("_rels/.rels"), "package relationships")
+      : new Map<string, Element>();
+    const workbookPath = resolvePart(
+      rootRelationships,
+      "officeDocument",
+      "",
+      "xl/workbook.xml",
+      entryNames,
+    );
+    requireXlsx(workbookPath, "Excel file is missing workbook");
+    const slash = workbookPath.lastIndexOf("/");
+    const workbookRelsPath = `${workbookPath.slice(0, slash + 1)}_rels/${workbookPath.slice(slash + 1)}.rels`;
+    loadParts(new Set([workbookPath, workbookRelsPath]));
+    const workbook = parseXml(parts.get(workbookPath), "workbook");
     const date1904 = children(workbook, "workbookPr")[0]?.getAttribute("date1904");
     requireXlsx(
       date1904 !== "1" && date1904 !== "true",
       "Excel's 1904 date system is not supported",
     );
-    const relationships = parseXml(
-      parts.get("xl/_rels/workbook.xml.rels"),
-      "workbook relationships",
+    const relationships = readRelationships(parts.get(workbookRelsPath), "workbook relationships");
+    const stringsPath = resolvePart(
+      relationships,
+      "sharedStrings",
+      workbookPath,
+      "xl/sharedStrings.xml",
+      entryNames,
+    );
+    const stylesPath = resolvePart(
+      relationships,
+      "styles",
+      workbookPath,
+      "xl/styles.xml",
+      entryNames,
     );
     const targets = new Map<string, string>();
-    const relationshipIds = new Set<string>();
-    for (const rel of relationships.getElementsByTagNameNS(PACKAGE_REL, "Relationship")) {
-      const id = rel.getAttribute("Id") ?? "";
-      requireXlsx(!relationshipIds.has(id), "Duplicate Excel relationship");
-      relationshipIds.add(id);
-      const type = rel.getAttribute("Type");
-      if (type !== `${REL}/worksheet` && type !== `${STRICT_REL}/worksheet`) continue;
-      requireXlsx(
-        rel.getAttribute("TargetMode") !== "External",
-        "External Excel worksheets are not supported",
-      );
-      targets.set(id, targetPath(rel.getAttribute("Target") ?? ""));
+    for (const [id, rel] of relationships) {
+      if (hasRelationshipType(rel, "worksheet"))
+        targets.set(id, relationshipTarget(rel, workbookPath));
     }
     const sheets = children(workbook, "sheets", "sheet").filter((sheet) => {
       const id = relationshipId(sheet);
-      requireXlsx(relationshipIds.has(id), "Missing Excel sheet relationship");
+      requireXlsx(relationships.has(id), "Missing Excel sheet relationship");
       return targets.has(id);
     });
     requireXlsx(
@@ -477,13 +553,15 @@ export function readXlsx(data: Uint8Array, options: { title: string }): Snapshot
     const needed = new Set(sheets.map((sheet) => targets.get(relationshipId(sheet)) as string));
     // Each worksheet part is read once: repeated references would multiply its cost.
     requireXlsx(needed.size === sheets.length, "Excel worksheets must be separate parts");
-    const worksheets = extract(data, (name) => needed.has(name), budget);
-    const strings = parts.get("xl/sharedStrings.xml")
-      ? children(parseXml(parts.get("xl/sharedStrings.xml"), "shared strings"), "si").map(richText)
+    if (stringsPath) needed.add(stringsPath);
+    if (stylesPath) needed.add(stylesPath);
+    loadParts(needed);
+    const strings = stringsPath
+      ? children(parseXml(parts.get(stringsPath), "shared strings"), "si").map(richText)
       : [];
     const formats: (string | undefined)[] = [];
-    if (parts.get("xl/styles.xml")) {
-      const styles = parseXml(parts.get("xl/styles.xml"), "styles");
+    if (stylesPath) {
+      const styles = parseXml(parts.get(stylesPath), "styles");
       const codes = new Map(BUILTIN_FORMATS);
       for (const format of children(styles, "numFmts", "numFmt")) {
         const code = format.getAttribute("formatCode") ?? "General";
@@ -513,7 +591,7 @@ export function readXlsx(data: Uint8Array, options: { title: string }): Snapshot
       const path = targets.get(relationshipId(sheet)) as string;
       snapshot.sheetOrder.push(id);
       snapshot.sheets[id] = readSheet(
-        parseXml(worksheets.get(path), path),
+        parseXml(parts.get(path), path),
         id,
         names[i] as string,
         strings,

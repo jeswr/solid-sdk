@@ -8,6 +8,7 @@ exports[`parses the sparq LWS CID into the expected StorageDescription 1`] = `
   "fetchedAt": 1793000000000,
   "id": "https://lws.example/.well-known/storage",
   "maxAgeMs": 3600000,
+  "owner": "https://id.example/alice#me",
   "protocol": "lws",
   "root": "https://lws.example/",
   "services": [

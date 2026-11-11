@@ -167,3 +167,23 @@ it("downloads the current engine snapshot as Excel from File", async () => {
   await vi.waitFor(() => expect(revoke).toHaveBeenCalledWith("blob:excel"));
   await ui.unmount();
 });
+
+// File size is metadata: reject before allocating a file buffer or calling the service.
+it.each([
+  "too-large.xlsx",
+  "too-large.bin",
+])("refuses oversized Excel file %s before reading it", async (name) => {
+  const ui = await mount(h(SheetsSidebar));
+  const file = new File(["tiny"], name, {
+    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  });
+  Object.defineProperty(file, "size", { value: 50 * 1024 * 1024 + 1 });
+  const buffer = vi.spyOn(file, "arrayBuffer");
+  const create = vi.spyOn(mocks.service as WorkbookService, "createFromXlsx");
+  await choose(file);
+  expect(mocks.toast.error).toHaveBeenCalledWith("Excel files must be 50 MiB or smaller");
+  expect(buffer).not.toHaveBeenCalled();
+  expect(create).not.toHaveBeenCalled();
+  expect(mocks.push).not.toHaveBeenCalled();
+  await ui.unmount();
+});

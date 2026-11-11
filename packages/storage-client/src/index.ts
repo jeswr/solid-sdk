@@ -9,4 +9,5 @@ export {
   type StorageErrorInit,
   toStorageError,
 } from "./errors.js";
+export { displayNameOf } from "./helpers.js";
 export type * from "./types.js";

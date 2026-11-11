@@ -22,19 +22,36 @@ export const USER_CANCELLED = "USER_CANCELLED";
 /** ADR-004 D2 `ui.getCode`: hand over an authorization URL, receive the authorization code. */
 export type GetCode = (authorizationUrl: URL, signal: AbortSignal) => Promise<string>;
 
-export interface NativeCodeDriverOptions {
+interface DriverBase {
   plugin: AuthSessionPlugin;
   /** Private-use scheme redirect (RFC 8252 §7.1), e.g. `org.jeswr.suite:/oauth/callback`. */
   redirectUri: string;
-  /**
-   * The issuer identifier of the authorization server behind an authorization URL, from the
-   * metadata pod-auth discovered. Mix-up defence (RFC 9207, Solid-OIDC §8): the callback must
-   * carry exactly one `iss` equal to it.
-   */
-  resolveIssuer(authorizationUrl: URL): string | Promise<string>;
   /** Accept `http://localhost` / loopback authorization endpoints (local CSS in development only). */
   allowInsecureLoopback?: boolean;
 }
+export type NativeCodeDriverOptions = DriverBase &
+  (
+    | {
+        /** Resolve with the authorization code only (the original ADR-004 D2 contract). */
+        returns?: "code";
+        /**
+         * The issuer identifier of the authorization server behind an authorization URL, from the
+         * metadata pod-auth discovered. Mix-up defence (RFC 9207, Solid-OIDC §8): the callback must
+         * carry exactly one `iss` equal to it.
+         */
+        resolveIssuer(authorizationUrl: URL): string | Promise<string>;
+      }
+    | {
+        /**
+         * Resolve with the whole validated callback URL, for pod-auth's current `ui.getCode`, which
+         * runs RFC 9207 validation itself against the issuer metadata of the pending request. The
+         * driver still requires exactly one `iss`, so a missing one can never pass as legacy mode;
+         * with `resolveIssuer` it also checks the value before handing the URL over.
+         */
+        returns: "callback";
+        resolveIssuer?(authorizationUrl: URL): string | Promise<string>;
+      }
+  );
 
 const SCHEME = /^[a-z][a-z0-9+.-]*\.[a-z0-9+.-]*[a-z0-9]$/;
 const RESERVED_SCHEMES = new Set(["http", "https", "file", "data", "javascript", "blob", "about"]);
@@ -104,7 +121,12 @@ function checkAuthorizationUrl(url: URL, redirect: Redirect, allowLoopback: bool
   return single(params, "state", bad("needs one state"));
 }
 
-function checkCallback(raw: string, redirect: Redirect, state: string, issuer: string) {
+function checkCallback(
+  raw: string,
+  redirect: Redirect,
+  state: string,
+  issuer: string | undefined,
+): { url: URL; code: string } {
   const bad = (why: string) => () => new AuthorizationRequestError(`Callback ${why}`);
   let url: URL;
   try {
@@ -120,7 +142,8 @@ function checkCallback(raw: string, redirect: Redirect, state: string, issuer: s
   const returned = params.getAll("state");
   if (returned.length !== 1 || returned[0] !== state)
     throw new StateMismatchError("State mismatch");
-  if (single(params, "iss", bad("needs exactly one iss")) !== issuer) {
+  const iss = single(params, "iss", bad("needs exactly one iss"));
+  if (issuer !== undefined && iss !== issuer) {
     throw bad("iss does not match the authorization server")();
   }
   if (params.has("error")) {
@@ -137,7 +160,7 @@ function checkCallback(raw: string, redirect: Redirect, state: string, issuer: s
         : undefined,
     );
   }
-  return single(params, "code", bad("needs exactly one code"));
+  return { url, code: single(params, "code", bad("needs exactly one code")) };
 }
 
 function abortError(): DOMException {
@@ -149,17 +172,21 @@ function abortError(): DOMException {
  * `SuiteAuthSession` plugin and returns the authorization code. Fails closed on any request or
  * callback that does not match the configured redirect, PKCE S256, the request's `state` and the
  * resolved issuer.
- * Only the code leaves this function; PKCE verifier, DPoP and tokens stay in pod-auth.
+ * Only the code (or, with `returns: "callback"`, the validated callback URL holding it) leaves
+ * this function; PKCE verifier, DPoP and tokens stay in pod-auth.
  */
 export function createNativeCodeDriver(options: NativeCodeDriverOptions): GetCode {
   const redirect = parseRedirect(options.redirectUri);
   const { plugin } = options;
   const allowLoopback = options.allowInsecureLoopback === true;
   let busy = false;
-  const resolve = async (authorizationUrl: URL): Promise<string> => {
+  const callback = options.returns === "callback";
+  const resolveIssuer = options.resolveIssuer;
+  const resolve = async (authorizationUrl: URL): Promise<string | undefined> => {
+    if (!resolveIssuer) return undefined;
     let issuer: unknown;
     try {
-      issuer = await options.resolveIssuer(authorizationUrl);
+      issuer = await resolveIssuer(authorizationUrl);
     } catch {
       throw new AuthorizationRequestError("Unknown authorization server");
     }
@@ -199,7 +226,8 @@ export function createNativeCodeDriver(options: NativeCodeDriverOptions): GetCod
         }
         throw new NativeAuthError("The system browser sign-in failed");
       }
-      return checkCallback(String(result?.url), redirect, state, issuer);
+      const checked = checkCallback(String(result?.url), redirect, state, issuer);
+      return callback ? checked.url.href : checked.code;
     })();
     // A result that arrives after an abort is dropped.
     work.catch(() => undefined);

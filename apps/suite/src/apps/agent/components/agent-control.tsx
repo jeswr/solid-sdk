@@ -13,7 +13,7 @@ import {
   DropdownMenuTrigger,
   Input,
 } from "@jeswr/suite-ui";
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { useAgentWorkspace } from "../lib/hooks";
 import { createAgentSigner } from "../lib/sign";
 import { useApprovalDevice } from "./approval-key-setup-sheet";
@@ -24,12 +24,14 @@ export function AgentControl({
   link = false,
   trigger,
   triggerLabel,
+  request = 0,
 }: {
   stopped: boolean;
   unknown?: boolean;
   link?: boolean;
   trigger?: ReactNode;
   triggerLabel?: string;
+  request?: number;
 }) {
   const { session, client } = useAgentWorkspace();
   const device = useApprovalDevice();
@@ -46,6 +48,11 @@ export function AgentControl({
       setError(false);
       setOpen(true);
     });
+  const beginRef = useRef(begin);
+  beginRef.current = begin;
+  useEffect(() => {
+    if (request > 0) beginRef.current(false);
+  }, [request]);
   const confirm = async () => {
     if (busy || (resume && confirmation !== "RESUME")) return;
     setBusy(true);
