@@ -206,19 +206,25 @@ export async function readMandateCurrent(client: AgentClient) {
 export interface Heartbeat {
   id: string;
   at: string;
+  state?: "running" | "paused" | "stopped";
 }
 export async function readHeartbeat(client: AgentClient): Promise<Row<Heartbeat>[]> {
   const doc = await optional(() => client.graph(client.paths.heartbeat));
   if (!doc) return [];
   const node = metadataNode(doc.dataset, client.paths.heartbeat);
   const at = node.text(`${PROV}generatedAtTime`);
+  const state = node.text(`${AGENT}state`);
   if (!node.iris(`${RDF}type`).has(`${AGENT}Heartbeat`) || !at || !Number.isFinite(Date.parse(at)))
     throw new Error("Invalid agent heartbeat");
   return [
     {
       url: client.paths.heartbeat,
       etag: doc.etag,
-      record: { id: client.paths.heartbeat, at },
+      record: {
+        id: client.paths.heartbeat,
+        at,
+        ...(state === "running" || state === "paused" || state === "stopped" ? { state } : {}),
+      },
       verified: "unchecked",
     },
   ];

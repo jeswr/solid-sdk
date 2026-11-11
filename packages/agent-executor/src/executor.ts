@@ -534,6 +534,11 @@ export function createExecutor(options: ExecutorOptions) {
     };
     function assertAuthority(): void {
       checkExecutorFailure();
+      try {
+        o.controls.assertNotHalted();
+      } catch {
+        throw new ProviderRejectedError("Send gate closed");
+      }
       // Bindings may await approval/preflight after receiving credentials. Fence the effect itself.
       if (!authority || temporalFailure(authority) || revision !== state.revision)
         throw new ProviderRejectedError("Send gate closed");
@@ -652,6 +657,27 @@ export function createExecutor(options: ExecutorOptions) {
   return {
     transmit,
     runOutboxOnce,
+    /** Display only; every send still runs the full gate with fresh authority. */
+    async status(): Promise<"running" | "paused" | "stopped"> {
+      const control = await controls();
+      if (control.halted) return "stopped";
+      try {
+        const mandate = await o.mandates.load();
+        const now = o.clock.now().getTime();
+        if (
+          !mandate ||
+          mandate.issuer !== o.ownerWebId ||
+          mandate.subject !== o.agentWebId ||
+          !(Date.parse(mandate.validFrom) <= now) ||
+          !(Date.parse(mandate.validUntil) > now) ||
+          control.statements.some((c) => c.kind === "RevokeMandate" && c.target === mandate.id)
+        )
+          return "paused";
+        return "running";
+      } catch {
+        return "paused";
+      }
+    },
     /** Daemon notifications/polling MUST call this for every control or mandate change. */
     onControlOrMandateChange: onAuthorityChange,
     /** Daemon MUST call this for every approval change, including denials or removal. */

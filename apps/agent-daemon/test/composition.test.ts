@@ -48,6 +48,7 @@ it("uses only pod-auth client-credentials DPoP fetch for storage and notificatio
         ...state,
         agentWebId: "https://pod.example/agent#me",
         executor: {
+          status: vi.fn(async () => "running" as const),
           drain: vi.fn(),
           runOutboxOnce: vi.fn(),
           onApprovalChange: vi.fn(),

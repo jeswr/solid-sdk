@@ -40,6 +40,7 @@ export function AgentControl({
   const [confirmation, setConfirmation] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
   const label = stopped ? "Resume" : "Stop the agent";
   const begin = (resume: boolean) =>
     void device.requireKey(() => {
@@ -71,7 +72,7 @@ export function AgentControl({
       {trigger ? (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" aria-label={triggerLabel}>
+            <Button ref={triggerRef} variant="ghost" aria-label={triggerLabel}>
               {trigger}
             </Button>
           </DropdownMenuTrigger>
@@ -81,7 +82,7 @@ export function AgentControl({
           </DropdownMenuContent>
         </DropdownMenu>
       ) : (
-        <Button variant={link ? "link" : "outline"} onClick={() => begin(stopped)}>
+        <Button ref={triggerRef} variant={link ? "link" : "outline"} onClick={() => begin(stopped)}>
           {label}
         </Button>
       )}
@@ -91,7 +92,13 @@ export function AgentControl({
           if (!busy) setOpen(value);
         }}
       >
-        <AlertDialogContent className="agent-app">
+        <AlertDialogContent
+          className="agent-app"
+          onCloseAutoFocus={(event) => {
+            event.preventDefault();
+            triggerRef.current?.focus();
+          }}
+        >
           <AlertDialogTitle>{resume ? "Resume your agent" : "Stop the agent"}</AlertDialogTitle>
           <AlertDialogDescription>
             {resume

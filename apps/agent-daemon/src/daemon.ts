@@ -301,7 +301,7 @@ export function createDaemon(o: DaemonOptions): Daemon {
       await authority;
       if (fault) throw new Error("Authority reconciliation failed");
       if (now() >= heartbeat) {
-        await o.workspace.heartbeat(new Date(now()));
+        await o.workspace.heartbeat(new Date(now()), await o.executor.status());
         heartbeat = now() + HEARTBEAT_MS;
       }
     };

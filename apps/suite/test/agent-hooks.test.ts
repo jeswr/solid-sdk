@@ -25,7 +25,8 @@ async function session() {
   const pod = createDemoPod({ root: DEMO_ROOT, seed: await buildDemoSeed(Date.now()) });
   const listeners = new Set<(url: string) => void>();
   const session: PodSession = {
-    mode: "demo",
+    mode: "solid",
+    publicFetch: pod.fetch,
     webId: DEMO_WEBID,
     displayName: "Alice",
     storageUrl: DEMO_ROOT,
@@ -36,7 +37,6 @@ async function session() {
         listeners.delete(listener);
       };
     },
-    reset: async () => {},
   };
   return {
     session,

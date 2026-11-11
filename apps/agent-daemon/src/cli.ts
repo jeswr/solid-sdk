@@ -11,6 +11,7 @@ import {
   taskStatsJson,
 } from "@jeswr/agent-audit";
 import { type Deps, login } from "@jeswr/agent-credentials";
+import type { ControlStore } from "@jeswr/agent-executor";
 // biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
 import { existsSync } from "fs";
 import { installLaunchd } from "./launchd.js";
@@ -31,6 +32,7 @@ export interface CliHost {
   run(signal: AbortSignal): Promise<void>;
   once(signal?: AbortSignal): Promise<void>;
   halt(): Promise<void>;
+  resume(): Promise<void>;
   status(): Promise<unknown>;
   accounts(): Promise<readonly { id: string; binding: string; enabled: boolean }[]>;
   login(profile: string): Promise<void>;
@@ -41,6 +43,8 @@ export interface CliHost {
 export interface CliHostOptions {
   daemon: Daemon | (() => Promise<AuthenticatedComposition>);
   local: ReturnType<typeof createLocalState>;
+  /** Same owner-proof-verifying control adapter as the executor; never parsed controls. */
+  resumeAuthority?: { ownerWebId: string; controls: Pick<ControlStore, "listVerified"> };
   accounts: CliHost["accounts"];
   credentials: Deps;
   /** Explicit login only. The URL may contain OAuth state: open it, never log it. */
@@ -64,6 +68,26 @@ export function createCliHost(o: CliHostOptions): CliHost {
     run: (signal) => execute("run", signal),
     once: (signal) => execute("once", signal),
     halt: () => o.local.halt(),
+    resume: () =>
+      o.local.resume(async (haltedAt) => {
+        if (!o.resumeAuthority) return false;
+        const { ownerWebId, controls } = o.resumeAuthority;
+        const statements = await controls.listVerified(ownerWebId);
+        const now = Date.now();
+        const latest = statements
+          .filter(
+            (c) =>
+              c.attributedTo === ownerWebId &&
+              (c.kind === "Halt" || c.kind === "Resume") &&
+              Date.parse(c.createdAt) <= now &&
+              Date.parse(c.expires) > now,
+          )
+          .sort(
+            (a, b) =>
+              Date.parse(b.createdAt) - Date.parse(a.createdAt) || (a.kind === "Halt" ? -1 : 1),
+          )[0];
+        return latest?.kind === "Resume" && Date.parse(latest.createdAt) > haltedAt;
+      }),
     status: () => o.local.status(),
     accounts: o.accounts,
     async login(profile) {
@@ -77,7 +101,7 @@ export function createCliHost(o: CliHostOptions): CliHost {
   };
 }
 const usage =
-  "Usage: awp run | once | halt | status | accounts | login <profile> | stats [--ledger <events.jsonl>] [--task <id>] [--format json|csv] | audit <artifact> [--at <instant>] | install-launchd";
+  "Usage: awp run | once | halt | resume | status | accounts | login <profile> | stats [--ledger <events.jsonl>] [--task <id>] [--format json|csv] | audit <artifact> [--at <instant>] | install-launchd";
 const statsUsage = "Usage: awp stats [--ledger <events.jsonl>] [--task <id>] [--format json|csv]";
 const compositionRequired = "awp requires a trusted composition module (Node --import)";
 function readLedger(path: string): readonly LedgerEntry[] {
@@ -170,6 +194,10 @@ export async function runCli(
       case "halt":
         await host.halt();
         io.print("halted");
+        break;
+      case "resume":
+        await host.resume();
+        io.print("local stop cleared; signed controls and permissions still apply");
         break;
       case "status":
         io.print(scrubLog(JSON.stringify(await host.status())));

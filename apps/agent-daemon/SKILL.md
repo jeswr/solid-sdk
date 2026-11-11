@@ -16,6 +16,9 @@ host composition explicit. No credentials, provider implementations or account
 permissions may be inferred from model output or unverified pod statements.
 Executor controls/approvals/mandates must verify owner proofs; structural parsing
 never grants authority. Channel send imports remain executor-only.
+Wire local.halted and local.assertNotHalted into the executor's asynchronous gate and
+synchronous dispatch fence. CLI resume uses the same verified control adapter and
+removes HALT only after a fresh signed owner Resume; never parse a control as authority.
 
 Keep owner-only ACLs before content, bounded ingestion, per-account cursor commits
 after persistence, deterministic-first Reader extraction, and Proposer eligibility

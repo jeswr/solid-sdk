@@ -48,7 +48,8 @@ async function fixture() {
   const pod = createDemoPod({ root: DEMO_ROOT, seed: await buildDemoSeed(NOW) });
   const listeners = new Set<(url: string) => void>();
   const session: PodSession = {
-    mode: "demo",
+    mode: "solid",
+    publicFetch: pod.fetch,
     webId: DEMO_WEBID,
     displayName: "Alice",
     storageUrl: DEMO_ROOT,
@@ -59,7 +60,6 @@ async function fixture() {
         listeners.delete(listener);
       };
     },
-    reset: async () => {},
   };
   return {
     session,
@@ -382,7 +382,7 @@ it("keeps the approvals list mounted, with focus, across workspace clock ticks",
   vi.useRealTimers();
 });
 
-it("ticks status every five seconds, refreshes on visibility and accepts a newly notified heartbeat", async () => {
+it("ticks real-session status every five seconds, refreshes on visibility and accepts a newly notified heartbeat", async () => {
   vi.useFakeTimers({ toFake: ["Date", "setInterval", "clearInterval"] });
   vi.setSystemTime(NOW);
   const f = await fixture();

@@ -10,6 +10,7 @@ import {
   StatusDot,
 } from "@jeswr/suite-ui";
 import { useState } from "react";
+import { isDemoAgentSession } from "../lib/demo-agent";
 import { formatRelativeTime } from "../lib/format";
 import { useAgentClock, useAgentQuery, useAgentWorkspace } from "../lib/hooks";
 import { loadedRecords, readControl, readHeartbeat } from "../lib/readers";
@@ -27,13 +28,15 @@ export function useDaemonStatus() {
   }));
   const status = agentStatus({
     heartbeatAt: query.status === "ready" ? loadedRecords(query.data.heartbeat)[0]?.at : undefined,
+    heartbeatState:
+      query.status === "ready" ? loadedRecords(query.data.heartbeat)[0]?.state : undefined,
     controls: query.status === "ready" ? loadedRecords(query.data.controls) : [],
     now,
     loading: query.status === "loading",
     owner: session.webId,
     controlsComplete: query.status !== "ready" || query.data.controls.complete,
   });
-  return { ...status, query };
+  return { ...status, demo: isDemoAgentSession(session), query };
 }
 export function StatusPill({ status }: { status: AgentStatus }) {
   const labels = {
@@ -46,6 +49,7 @@ export function StatusPill({ status }: { status: AgentStatus }) {
   const now = useAgentClock();
   return (
     <div className="agent-status">
+      {status.demo && <small>Demo agent</small>}
       <AgentControl
         stopped={status.state === "stopped"}
         unknown={status.controlLimit === true}

@@ -3,7 +3,7 @@
 import { CredentialStore } from "@jeswr/agent-credentials";
 import { canonicalJson } from "@jeswr/agent-model";
 import { randomUUID } from "crypto";
-import { constants } from "fs";
+import { constants, lstatSync } from "fs";
 import { lstat, open, rename, unlink } from "fs/promises";
 import { join } from "path";
 import { checkedProposalResult, proposalResultKey } from "./proposal-results.js";
@@ -97,6 +97,28 @@ export function createProcessLease(directory: string): ProcessLease {
 }
 export function createLocalState(directory: string) {
   new CredentialStore({ dir: directory });
+  // Serialize CLI writers across processes. Verification stays outside this short
+  // filesystem critical section; a concurrent halt replaces the checked identity.
+  const mutateHalt = async (work: () => Promise<void>) => {
+    const path = join(directory, "halt.lock");
+    let lock: Awaited<ReturnType<typeof open>> | undefined;
+    for (let attempt = 0; attempt < 100; attempt++) {
+      try {
+        lock = await open(path, "wx", 0o600);
+        break;
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException)?.code !== "EEXIST") throw error;
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
+    }
+    if (!lock) throw new Error("Local stop is locked");
+    try {
+      await work();
+    } finally {
+      await lock.close();
+      await unlink(path);
+    }
+  };
   const proposalResults: ProposalResults = {
     async get(key) {
       const text = await readPrivate(join(directory, `proposal-${proposalResultKey(key)}.json`));
@@ -137,8 +159,42 @@ export function createLocalState(directory: string) {
     checkpoints,
     proposalResults,
     halted,
+    assertNotHalted() {
+      try {
+        lstatSync(join(directory, "HALT"));
+      } catch (error) {
+        if (missing(error)) return;
+        throw error;
+      }
+      throw new Error("Local stop active");
+    },
     async halt() {
-      await writePrivate(directory, "HALT", "halted\n");
+      await mutateHalt(() => writePrivate(directory, "HALT", "halted\n"));
+    },
+    /** The trusted host verifies a fresh owner Resume before removing the local stop. */
+    async resume(authorize: (haltedAt: number) => Promise<boolean>) {
+      const path = join(directory, "HALT");
+      let halted: Awaited<ReturnType<typeof lstat>>;
+      try {
+        halted = await lstat(path);
+      } catch (error) {
+        if (missing(error)) return;
+        throw error;
+      }
+      if (!halted.isFile() || !(await authorize(halted.mtimeMs)))
+        throw new Error("A fresh signed Resume is required");
+      await mutateHalt(async () => {
+        const current = await lstat(path);
+        if (
+          current.ino !== halted.ino ||
+          current.dev !== halted.dev ||
+          current.mtimeMs !== halted.mtimeMs ||
+          current.ctimeMs !== halted.ctimeMs
+        )
+          throw new Error("HALT changed during resume");
+        await unlink(path);
+        await syncDirectory(directory);
+      });
     },
     async status() {
       let leasePresent = false;

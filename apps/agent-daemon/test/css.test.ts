@@ -220,6 +220,7 @@ it("composes an in-memory CSS pod and direct binding: inbound, proposal, signed 
       },
       controls: {
         haltFileExists: async () => false,
+        assertNotHalted: () => {},
         async listVerified() {
           const response = await io(controlUrl);
           if (response.status === 404) return [];

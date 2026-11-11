@@ -27,6 +27,20 @@ describe("agent verified status table", () => {
     { heartbeatAt: at(1), controls: [], state: "offline" },
     { heartbeatAt: at(-120000), controls: [], state: "running" },
     { heartbeatAt: at(-30000), controls: [], state: "running" },
+    { heartbeatAt: at(-30000), heartbeatState: "paused" as const, controls: [], state: "paused" },
+    { heartbeatAt: at(-30000), heartbeatState: "stopped" as const, controls: [], state: "stopped" },
+    {
+      heartbeatAt: at(-120001),
+      heartbeatState: "stopped" as const,
+      controls: [],
+      state: "offline",
+    },
+    {
+      heartbeatAt: at(-30000),
+      heartbeatState: "running" as const,
+      controls: [control("Halt", -1)],
+      state: "stopped",
+    },
     { heartbeatAt: undefined, controls: [control("Halt", -1)], state: "stopped" },
     {
       heartbeatAt: at(-30000),
