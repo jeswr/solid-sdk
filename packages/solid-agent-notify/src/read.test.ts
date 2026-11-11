@@ -262,6 +262,19 @@ test("auxiliary resources and LDP containers never become notifications through 
   expect(parseInboxNotification(`${inbox}folder/`, new Store())).toBeUndefined();
 });
 
+test("an ActivityStreams subject wins over an LDP-typed document subject", async () => {
+  const url = `${inbox}mixed`;
+  const ds = await parseRdf(
+    `<> a <http://www.w3.org/ns/ldp#Resource>.
+     <#it> a <https://www.w3.org/ns/activitystreams#Announce>;
+       <https://www.w3.org/ns/activitystreams#actor> <https://alice.example/profile#me>.`,
+    "text/turtle",
+    { baseIRI: url },
+  );
+  expect(findActivitySubject(url, ds)?.value).toBe(`${url}#it`);
+  expect(parseInboxNotification(url, ds)?.actor).toBe("https://alice.example/profile#me");
+});
+
 test.each([
   "document",
   "fragment",

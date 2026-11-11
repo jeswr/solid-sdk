@@ -123,12 +123,13 @@ export function findActivitySubject(
   ) {
     return undefined;
   }
-  for (const q of dataset.match(null, DataFactory.namedNode(RDF_TYPE), null)) {
-    if (
-      q.object.termType === "NamedNode" &&
-      (q.object.value.startsWith(AS) || q.object.value.startsWith("http://www.w3.org/ns/ldp#"))
-    ) {
-      return q.subject as NamedNode | BlankNode;
+  // Prefer an ActivityStreams-typed subject; an LDP type (often on the document itself) is
+  // only a fallback, so `<> a ldp:Resource` cannot shadow `<#it> a as:Announce`.
+  for (const namespace of [AS, "http://www.w3.org/ns/ldp#"]) {
+    for (const q of dataset.match(null, DataFactory.namedNode(RDF_TYPE), null)) {
+      if (q.object.termType === "NamedNode" && q.object.value.startsWith(namespace)) {
+        return q.subject as NamedNode | BlankNode;
+      }
     }
   }
   for (const q of dataset.match(null, DataFactory.namedNode(`${AS}actor`), null)) {
