@@ -29,6 +29,7 @@ function accounts(active: SuiteAccount | null = alice): AccountsContextValue {
     active,
     accounts: active ? [active] : [],
     status: active ? "ready" : "signed-out",
+    isActiveAccount: (id) => active?.id === id,
     fetch: vi.fn(async () => new Response("private pod data")),
     signIn: vi.fn(),
     signInDemo: vi.fn(),

@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6.1-Sol
 "use client";
 /**
  * The shell's offline layer (02-suite-shell §10): connection state for the OfflinePill, the
@@ -189,7 +190,7 @@ function writeLastSeen(value: LastSeen) {
 }
 
 function OfflineEffects({ pageTitle, outbox }: { pageTitle?: string; outbox: Outbox | null }) {
-  const { active, status } = useAccounts();
+  const { active, status, isActiveAccount } = useAccounts();
   const { preferences, update, ready } = useAllPreferences();
   const state = useConnectionState();
   const pathname = usePathname();
@@ -251,6 +252,8 @@ function OfflineEffects({ pageTitle, outbox }: { pageTitle?: string; outbox: Out
     // Next may apply a route's title after its pathname changes, including streamed metadata.
     let recordedTitle: string | undefined;
     const record = () => {
+      // Account changes invalidate writes synchronously, before React cleans up this effect.
+      if (!isActiveAccount(accountId)) return;
       const title = pageTitle ?? document.title;
       if (title === recordedTitle) return;
       recordedTitle = title;
@@ -275,7 +278,7 @@ function OfflineEffects({ pageTitle, outbox }: { pageTitle?: string; outbox: Out
       window.clearTimeout(timer);
       observer.disconnect();
     };
-  }, [status, accountId, ready, preferences.offline, pageTitle, pathname]);
+  }, [status, accountId, ready, preferences.offline, pageTitle, pathname, isActiveAccount]);
   return null;
 }
 

@@ -139,14 +139,17 @@ export function ShareDialog({
     // Disabling the saving control can strand focus on the modal container.
     // A successful add clears its selection and leaves Share disabled; a removal
     // deletes its trigger. Done remains available in both cases.
-    const target = previous.isConnected && !previous.matches(":disabled") ? previous : done.current;
-    target?.focus();
+    // Done is always rendered while the dialog is open.
+    const target =
+      previous.isConnected && !previous.matches(":disabled")
+        ? previous
+        : (done.current as HTMLButtonElement);
+    target.focus();
   }, [saving]);
 
   const save = async (selection: SharingSelection) => {
     if (!snapshot || saving || disabledReason) return;
-    focusAfterSave.current =
-      document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    focusAfterSave.current = document.activeElement as HTMLElement | null;
     setSaving(true);
     setError("");
     try {

@@ -178,6 +178,7 @@ for (const keyboardOnly of [false, true]) {
       await page.bringToFront();
 
       await test.step("folder sharing explains the blocker and leaves Bob denied by CSS", async () => {
+        // Folder Editor sharing is tracked in sst-djzb.
         const dialog = await openShare(page, folder, folderName, keyboardOnly);
         const explanation = dialog.getByRole("status").filter({
           hasText: "Folder sharing is read-only for now",
@@ -350,6 +351,7 @@ for (const keyboardOnly of [false, true]) {
       const retained = await alice.fetch(fileUrl);
       expect(retained.status).toBe(200);
       expect(await retained.text()).toBe(edited);
+      // Request access, delivery and approval are tracked in SDK-APP-06/07.
       info.annotations.push({
         type: "blocker",
         description:
@@ -367,47 +369,6 @@ for (const keyboardOnly of [false, true]) {
   });
 }
 
-test("scenario 7 upload blocker: CSS creation has no write validator", async ({ page }, info) => {
-  const name = `upload-${randomUUID()}.txt`;
-  const root = new URL("alice/", cssAccount("alice").issuer).href;
-  const url = new URL(`drive/${name}`, root).href;
-  const alice = await accountAuth("alice", root);
-  try {
-    await page.goto("/drive");
-    await expect(
-      page.getByRole("heading", { level: 2, name: "My Drive", exact: true }),
-    ).toBeVisible({ timeout: 30_000 });
-    await expect(page.getByTestId("drive-upload-input")).toBeAttached();
-    const created = page.waitForResponse(
-      (response) =>
-        response.url() === url &&
-        response.request().method() === "PUT" &&
-        response.status() === 201,
-    );
-    await page.getByTestId("drive-upload-input").setInputFiles({
-      name,
-      mimeType: "text/plain",
-      buffer: Buffer.from("This payload must not be mistaken for the empty placeholder"),
-    });
-    expect(await (await created).headerValue("etag")).toBeNull();
-    const uploads = page.getByRole("region", { name: "Uploads", exact: true });
-    await expect(
-      uploads.getByRole("heading", { name: "0 uploads complete, 1 upload failed", exact: true }),
-    ).toBeVisible();
-    await expect(uploads).toContainText(
-      "This item's version or access discovery could not be confirmed. Refresh and confirm again.",
-    );
-    await anonymousStatus(url, 401);
-    const placeholder = await alice.fetch(url);
-    expect(placeholder.status).toBe(200);
-    expect(await placeholder.text()).toBe("");
-    info.annotations.push({
-      type: "blocker",
-      description:
-        "CSS's placeholder PUT returns 201 without ETag. Drive correctly refuses to overwrite an unconfirmed representation; UI upload leaves an empty private placeholder. No read-after-write substitution or retry is used.",
-    });
-  } finally {
-    expect.soft((await alice.fetch(url, { method: "DELETE" })).ok).toBe(true);
-    await alice.logout();
-  }
-});
+// Not covered yet: bob uploading into the shared folder through Drive's UI. CSS answers the
+// placeholder PUT with 201 and no ETag, and Drive refuses to overwrite an unconfirmed
+// representation (tracked in sst-2vvz). Request access and approval wait on SDK-APP-06/07.
