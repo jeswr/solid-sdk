@@ -11,7 +11,14 @@
  * into the shell instead and this folder is deleted.
  */
 
-import { type AppSlug, Sheet, SheetContent, SheetDescription, SheetTitle } from "@jeswr/suite-ui";
+import {
+  APP_ICONS,
+  type AppSlug,
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetTitle,
+} from "@jeswr/suite-ui";
 import {
   Bot,
   CalendarDays,
