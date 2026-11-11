@@ -228,6 +228,73 @@ keep working. An unsupported-only archive returns its report even when it writes
 Only adapters declaring `streaming: true` bypass the runner's 64 MiB whole-upload size check;
 they must enforce their own streaming limits. Legacy Takeout JSON still has the 64 MiB cap.
 
+## Garmin account export
+
+The existing `garmin` file adapter accepts the **full account ZIP**, recommended from
+[Garmin Account → Data Management → Export Your Data](https://www.garmin.com/account/datamanagement/).
+Select the downloaded ZIP directly. Activities CSV, GPX and TCX remain supported under
+the same catalog id. No Garmin API credentials or Garmin network requests are needed.
+Entries identify the export regardless of its filename. ZIPs require Takeout's `stream()`
+and reopenable `slice()` ports.
+
+Supported paths tolerate account/email/UserID prefixes and filename date suffixes:
+
+- `DI_CONNECT/DI-Connect-Fitness/*summarizedActivities*.json`: flat arrays, object-wrapped
+  arrays or `[{ summarizedActivitiesExport: [...] }]`. Activity IDs become
+  `health/activities.ttl#activity-<id>` or `mobility/journeys.ttl#journey-<id>`.
+  Runs/indoor cycling are exercise actions; outdoor rides/commutes are travel actions.
+  Archive distance/elevation are converted from cm to m, duration from ms to s and
+  ISO duration text; calories remain kcal. Pulse/elevation summaries are labelled notes.
+- `DI_CONNECT/DI-Connect-Aggregator/UDSFile_*.json`: steps, distance, resting/minimum/
+  maximum/average pulse, active kcal and floors. Numeric strings and zero counts work;
+  invalid dates and non-finite/negative values are omitted.
+- Wellness `*sleepData*.json`: asleep seconds (deep + light + REM, excluding awake time).
+  The source window, stages, awake seconds and overall score remain labelled notes.
+  Time in bed alone never becomes asleep time.
+- Wellness `*healthStatusData*`/`*hrv*` and Metrics `*MetricsMaxMetData*`: recognizable
+  overnight HRV summaries in ms and running/cycling VO₂max in mL/(kg.min).
+
+Daily measurements use `health/observations/<metric>/<YYYY-MM>.ttl`, deterministic
+metric/day subjects, and existing HealthRecord/Observation/CodeableConcept/OWL-Time terms.
+Steps, pulse and sleep use the Health model's QUDT/UCUM units; other quantities use generic
+observations and source field codes without new IRIs. Effective instants use the calendar
+date (UTC midnight), following Health's current measurement reader. Reimports merge matching
+subjects under ETags; overlapping exports preserve older dates. File imports have no cursor
+or deletion reconciliation. Raw JSON files are not retained.
+
+The connector Apple Health adapter currently imports workouts only. The suite Health
+model's separate Apple importer supplies the observation mapping used here. **Health charts
+currently read native monthly shards rather than connector metric directories**, and have no
+separate HRV/VO₂max charts. Observations are stored and registered using existing health
+terms; automatic chart discovery needs follow-up app work. This change includes no app edits.
+
+Stress, Body Battery and intensity minutes have no terms in the current health sector.
+They produce counted vocabulary-gap notes in `report.unsupported`. Unknown files and
+malformed/oversized records also increment `report.skipped`; grouped notes retain no account
+paths. Uploaded-Files nested ZIPs are counted without opening them; their note directs users
+to the `activity-files` adapter for FIT import. Unknown record shapes are reported, not guessed.
+
+Garmin reuses Takeout's ZIP/ZIP64 directory, local-header, overlap, size and CRC validation.
+Defaults: 10,000 dispatched entries, 64 MiB decompressed per entry, 32 MiB JSON per entry,
+512 MiB actual inflation per run, 100,000 records per file, 1,000,000 attempted records
+per run (including malformed/oversized rows), 100,000 observations/activities
+per run (including duplicates), and a declared compression-ratio ceiling of 1,000:1.
+The reader independently rejects directories above 64 MiB or 100,000 entries. Shared JSON
+limits are 1 MiB per token, 4 MiB per record and 64 nesting levels. Entry bytes are bounded
+and CRC-verified before JSON dispatch; wrapper arrays are parsed record by record. DEFLATE
+receives 1 KiB pieces to bound transient expansion. Metric batches flush at 250 observations;
+each monthly metric document has at most one value per day. Activities are retained under
+the run cap and written once to avoid repeated collection growth. Cancellation is checked
+between entries, inflater chunks, records and Pod operations. Corrupt entries are skipped;
+decoder exceptions abort because their unreported work cannot be charged safely. Caps retain
+successful records with warning notes. Valid records before a late JSON error may be kept;
+no destructive reconciliation occurs.
+
+`createGarminFileAdapter(partialLimits)` from `./adapters/garmin` can lower these limits;
+`GARMIN_ARCHIVE_LIMITS` and `GarminArchiveLimits` expose the ceilings. Legacy text remains
+capped at 64 MiB despite ZIP's `streaming: true`. Tests use only synthetic archives;
+maintainer validation with real account exports remains necessary.
+
 ## Node CLI
 
 Build the package and run `pod-connectors import spotify`, or
