@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 import type { JWK } from "jose";
 
 export interface Installation {
@@ -13,6 +14,8 @@ export interface Installation {
   activated: boolean;
   challengeHash: string;
   challengeAttempts: number[];
+  /** Admission time; an installation no registration ever attaches to expires from here. */
+  createdAt: number;
 }
 export interface PushTopic {
   index: number;
@@ -53,4 +56,15 @@ export function removeRegistration(state: PushState, id: string): void {
 export function expireRegistrations(state: PushState, now: number): void {
   for (const [id, registration] of state.registrations)
     if (registration.expiresAt <= now) removeRegistration(state, id);
+}
+
+/**
+ * An installation lives on only through its registrations: removeRegistration drops it with the
+ * last one, and one that never gains a registration is removed once lifetimeMs has passed.
+ */
+export function expireUnattached(state: PushState, now: number, lifetimeMs: number): void {
+  const attached = new Set([...state.registrations.values()].map((r) => r.installationId));
+  for (const [id, installation] of state.installations)
+    if (!attached.has(id) && installation.createdAt <= now - lifetimeMs)
+      state.installations.delete(id);
 }

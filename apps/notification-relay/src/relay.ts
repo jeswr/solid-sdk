@@ -58,6 +58,9 @@ export function createRelay(options: {
   mobileClientId?: string;
   store?: RelayStore;
   pushSink?: PushSink;
+  /** Push admission limits; see createPushApi. */
+  maxPushInstallations?: number;
+  unattachedPushLifetimeMs?: number;
   allowedOrigins?: readonly string[];
   now?: () => number;
   allowInsecureLoopback?: boolean;
@@ -83,6 +86,8 @@ export function createRelay(options: {
     now,
     pushSink: options.pushSink,
     allowLoopback: options.allowInsecureLoopback,
+    maxInstallations: options.maxPushInstallations,
+    unattachedLifetimeMs: options.unattachedPushLifetimeMs,
     authorize: async (request) => {
       if (!pushPolicy) throw new Error("Push is not configured");
       const identity = await verifyResourceToken(request);

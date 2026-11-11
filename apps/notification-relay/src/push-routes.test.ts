@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 import { afterEach, expect, test, vi } from "vitest";
 import { epoch } from "../test/fixtures.js";
 import { phone, pushFixture } from "../test/push-fixtures.js";
@@ -10,6 +11,7 @@ import {
   webid,
 } from "../test/resource-fixtures.js";
 import { matchesHash } from "./device-proof.js";
+import { createPushApi } from "./push.js";
 import type { Installation, PushRegistration } from "./push-state.js";
 import { createRelay } from "./relay.js";
 
@@ -19,8 +21,8 @@ afterEach(() => {
   vi.useRealTimers();
   vi.restoreAllMocks();
 });
-async function setup() {
-  const f = await pushFixture();
+async function setup(overrides: Parameters<typeof pushFixture>[0] = {}) {
+  const f = await pushFixture(overrides);
   active.push(f.relay);
   return f;
 }
@@ -459,6 +461,61 @@ test("expires registrations at thirty days, retains refreshed siblings and sweep
   expect((await f.state()).installations.has(id)).toBe(false);
   vi.spyOn(f.store, "transaction").mockRejectedValueOnce(new Error("unavailable"));
   await vi.advanceTimersByTimeAsync(60_000);
+});
+
+test("admits installations atomically up to capacity and expires ones never attached", async () => {
+  const f = await setup({ maxPushInstallations: 2 });
+  const devices = [await phone(), await phone(), await phone()];
+  const created = await Promise.all(
+    devices.map((device) => f.call("POST", "/push/installations", device.body, { phone: device })),
+  );
+  expect(created.map((response) => response.status).sort()).toEqual([201, 201, 503]);
+  expect((await f.state()).installations.size).toBe(2);
+  const admitted = await Promise.all(
+    created.flatMap((response, index) =>
+      response.status === 201
+        ? [
+            response
+              .json()
+              .then((data) => ({ id: data.installationId as string, device: devices[index] })),
+          ]
+        : [],
+    ),
+  );
+  const [attached, waiting] = admitted.map((entry) => entry.id);
+  expect(
+    (
+      await f.call("PUT", "/push/registrations/a", f.registration(attached as string), {
+        phone: admitted[0]?.device,
+      })
+    ).status,
+  ).toBe(201);
+  f.time(epoch + 86_400_000 - 1000);
+  expect((await f.call("POST", "/push/installations", f.owner.body)).status).toBe(503);
+  expect((await f.state()).installations.has(waiting as string)).toBe(true);
+  f.time(epoch + 86_400_000);
+  // The unattached installation's lifetime is over, which frees its slot; attachment keeps the other.
+  expect((await f.call("POST", "/push/installations", f.owner.body)).status).toBe(201);
+  const state = await f.state();
+  expect(state.installations.has(waiting as string)).toBe(false);
+  expect(state.installations.has(attached as string)).toBe(true);
+  for (const limits of [
+    { maxInstallations: 0 },
+    { maxInstallations: 1.5 },
+    { unattachedLifetimeMs: 0 },
+    { unattachedLifetimeMs: Number.POSITIVE_INFINITY },
+  ])
+    expect(() =>
+      createPushApi({
+        publicOrigin: publicUrl,
+        store: f.store,
+        now: f.now,
+        authorize: async () => {
+          throw new Error("unused");
+        },
+        ...limits,
+      }),
+    ).toThrow(/Invalid/u);
 });
 
 test("routes only the specified methods and paths and exposes proof CORS headers", async () => {

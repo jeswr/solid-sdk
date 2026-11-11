@@ -1,8 +1,10 @@
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 import { randomBytes } from "node:crypto";
 import { matchesHash, sha256, verifyDeviceProof } from "./device-proof.js";
 import {
   expireRegistrations,
+  expireUnattached,
   type Installation,
   type PushState,
   removeRegistration,
@@ -43,12 +45,26 @@ export function createPushApi(options: {
   authorize: (request: Request) => Promise<ResourceIdentity>;
   pushSink?: PushSink;
   allowLoopback?: boolean;
+  /**
+   * Total installations admitted at once (default 10,000). Registrations are bounded by it too,
+   * since each needs a live installation and an installation carries at most 4.
+   */
+  maxInstallations?: number;
+  /** How long an installation may wait for its first registration (default 24 hours). */
+  unattachedLifetimeMs?: number;
 }) {
   const { store, now, publicOrigin } = options;
+  const maxInstallations = options.maxInstallations ?? 10_000;
+  const unattachedLifetime = options.unattachedLifetimeMs ?? 86_400_000;
+  if (!Number.isSafeInteger(maxInstallations) || maxInstallations <= 0)
+    throw new Error("Invalid installation capacity");
+  if (!Number.isSafeInteger(unattachedLifetime) || unattachedLifetime <= 0)
+    throw new Error("Invalid unattached installation lifetime");
   function transaction<T>(operation: (state: PushState, at: number) => T) {
     const at = now();
     return store.transaction((state) => {
       expireRegistrations(state, at);
+      expireUnattached(state, at, unattachedLifetime);
       return operation(state, at);
     });
   }
@@ -155,9 +171,12 @@ export function createPushApi(options: {
             activated: false,
             challengeHash: sha256(nonce),
             challengeAttempts: [now()],
+            createdAt: now(),
           };
           await proof(request, body, installation);
           await transaction((state) => {
+            // Admission and insertion share one commit, so concurrent creates cannot overshoot.
+            requirePush(state.installations.size < maxInstallations, 503);
             state.installations.set(installation.installationId, installation);
           });
           return respond(201, {

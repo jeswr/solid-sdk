@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 import { randomUUID } from "node:crypto";
 import { exportJWK, generateKeyPair, type JWTHeaderParameters, SignJWT } from "jose";
 import { vi } from "vitest";
@@ -25,7 +26,7 @@ export async function phone() {
   };
   return { keys, jwk, body };
 }
-export async function pushFixture() {
+export async function pushFixture(overrides: Partial<Parameters<typeof createRelay>[0]> = {}) {
   let clock = epoch;
   const now = () => clock;
   const store = new InMemoryRelayStore(now);
@@ -40,6 +41,7 @@ export async function pushFixture() {
     now,
     store,
     pushSink: { send },
+    ...overrides,
   };
   const relay = createRelay(options);
   async function request(
