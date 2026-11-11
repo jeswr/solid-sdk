@@ -68,6 +68,7 @@ const ONTOLOGIES = [
     file: "collectibles.ttl",
     ns: "https://jeswr.org/ns/sectors/collectibles#",
   },
+  { dir: "environment", file: "environment.ttl", ns: "https://jeswr.org/ns/sectors/environment#" },
   { dir: "equine", file: "equine.ttl", ns: "https://jeswr.org/ns/sectors/equine#" },
 ];
 
