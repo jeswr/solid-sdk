@@ -283,6 +283,108 @@ test("a GitHub cooldown asks the participant to try later and preserves their do
   );
 });
 
+for (const recovery of ["retry", "reload", "start new"] as const)
+  test(`partial save freezes answers and contact details: ${recovery}`, async ({ page }) => {
+    const github = feedbackGithub();
+    const env = { FEEDBACK_GITHUB_TOKEN: "secret", FEEDBACK_GITHUB_REPO: "private/feedback" };
+    github.holdIssue(async () => {
+      throw new Error("Issue creation failed after the record was committed");
+    });
+    const bodies: string[] = [];
+    await page.route("**/api/feedback/turn", (route) => route.fulfill({ json: { hosted: false } }));
+    await page.route("**/api/feedback/submit", async (route) => {
+      bodies.push(route.request().postData() ?? "");
+      const handlers = createFeedbackHandlers({
+        env,
+        store: createGithubStore(env, github.transport),
+        limiter: () => undefined,
+      });
+      const response = await handlers.submit(
+        new Request(route.request().url(), {
+          method: "POST",
+          headers: {
+            Origin: new URL(route.request().url()).origin,
+            "Content-Type": "application/json",
+          },
+          body: route.request().postData(),
+        }),
+      );
+      await route.fulfill({
+        status: response.status,
+        headers: Object.fromEntries(response.headers),
+        body: await response.text(),
+      });
+    });
+    await page.goto("/feedback");
+    await page.getByRole("button", { name: "Just tell us", exact: true }).click();
+    const answer = page.getByLabel("Your answer", { exact: true });
+    const name = page.getByLabel("Name (optional)", { exact: true });
+    const email = page.getByLabel("Email (optional)", { exact: true });
+    await answer.fill("Alice found the demo confusing.");
+    await name.fill("Alice");
+    await email.fill("alice@example.test");
+    await page.getByRole("button", { name: "Submit what I've said so far", exact: true }).click();
+    await expect(page.getByRole("main").getByRole("alert")).toContainText("Download my feedback");
+    expect(github.records).toHaveLength(1);
+    expect(github.issues).toHaveLength(0);
+    // Attempt actual keyboard edits after the partial save; the frozen inputs retain their values.
+    for (const [field, value] of [
+      [answer, "Alice found the demo confusing."],
+      [name, "Alice"],
+      [email, "alice@example.test"],
+    ] as const) {
+      await expect(field).not.toBeEditable();
+      await field.press("ControlOrMeta+A");
+      await field.pressSequentially("Changed");
+      await expect(field).toHaveValue(value);
+    }
+    await expect(page.getByRole("button", { name: "Send answer", exact: true })).toBeDisabled();
+    await expect(page.getByRole("button", { name: "Skip", exact: true })).toBeDisabled();
+    await expect(
+      page.getByRole("button", { name: "Speak your answer", exact: true }),
+    ).toBeDisabled();
+    const original = JSON.parse(bodies[0] ?? "");
+    const draft = await page.evaluate(() =>
+      JSON.parse(localStorage.getItem("suite.feedback.draft.v1") ?? "null"),
+    );
+    expect(draft.submissionId).toBe(original.submissionId);
+    expect(draft.record).toBe(JSON.stringify(original.record));
+    github.holdIssue(async () => {});
+    if (recovery === "reload") {
+      // Fresh browser context must not rebuild the reserved record with new walkthrough metadata.
+      await page.evaluate(() =>
+        localStorage.setItem("suite.walkthrough.v1", JSON.stringify({ done: ["drive"] })),
+      );
+      await page.reload();
+      await expect(name).toHaveValue("Alice");
+      await expect(email).not.toBeEditable();
+    } else if (recovery === "start new") {
+      await page.getByRole("button", { name: "Start a new submission", exact: true }).click();
+      await expect(answer).toBeEditable();
+      await expect(name).toHaveValue("");
+      await expect(email).toHaveValue("");
+      expect(await page.evaluate(() => localStorage.getItem("suite.feedback.draft.v1"))).toBeNull();
+      await answer.fill("Bob liked the demo.");
+    }
+    await page
+      .getByRole("button", {
+        name: recovery === "reload" ? "Submit" : "Submit what I've said so far",
+        exact: true,
+      })
+      .click();
+    await expect(page.getByRole("status").filter({ hasText: "Thanks" })).toContainText(`#${123}`);
+    expect(bodies).toHaveLength(2);
+    if (recovery === "start new") {
+      expect(JSON.parse(bodies[1] ?? "").submissionId).not.toBe(original.submissionId);
+      expect(github.records).toHaveLength(2);
+    } else {
+      expect(bodies[1]).toBe(bodies[0]);
+      expect(github.records).toHaveLength(1);
+    }
+    expect(github.issues).toHaveLength(1);
+    expect(await page.evaluate(() => localStorage.getItem("suite.feedback.draft.v1"))).toBeNull();
+  });
+
 for (const outcome of [
   "lost response",
   "resume without issue",

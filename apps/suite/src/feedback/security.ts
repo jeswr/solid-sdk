@@ -147,20 +147,25 @@ export const rateLimiter = createLimiter();
 
 // Shared by uploads and submissions, even though each request creates a fresh store.
 export function createGithubBackoff(now = () => Date.now()) {
-  let until = 0;
-  function check() {
-    if (until > now())
+  const until = { core: 0, search: 0 };
+  function check(resource: "core" | "search" = "core") {
+    if (until[resource] > now())
       throw new FeedbackError(
         503,
         "Feedback storage is busy. Please try again later, or download your feedback to keep a copy.",
-        Math.ceil((until - now()) / 1000),
+        Math.ceil((until[resource] - now()) / 1000),
       );
   }
   return {
     check,
     async observe(response: Response) {
+      const resource =
+        response.headers.get("x-ratelimit-resource") === "search" ? "search" : "core";
       const remaining = response.headers.get("x-ratelimit-remaining");
-      const low = remaining !== null && /^\d+$/.test(remaining) && Number(remaining) < 50;
+      const low =
+        remaining !== null &&
+        /^\d+$/.test(remaining) &&
+        (resource === "search" ? Number(remaining) <= 5 : Number(remaining) < 50);
       const retry = response.headers.get("retry-after");
       let secondary = response.status === 429;
       if (response.status === 403) {
@@ -180,10 +185,10 @@ export function createGithubBackoff(now = () => Date.now()) {
         : 0;
       const deadlines = [low ? reset : 0, retryAt].filter((at) => Number.isFinite(at) && at > t);
       // GitHub asks for at least a minute when a secondary limit has no retry header.
-      until = Math.max(until, ...(deadlines.length ? deadlines : [t + 60_000]));
+      until[resource] = Math.max(until[resource], ...(deadlines.length ? deadlines : [t + 60_000]));
       // Only an actual rate-limit failure interrupts an admitted submission;
       // ordinary responses (including the label fallback) can still finish.
-      if (secondary || (response.status === 403 && low)) check();
+      if (secondary || (response.status === 403 && low)) check(resource);
     },
   };
 }

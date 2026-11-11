@@ -35,9 +35,9 @@ async function client() {
   const receipts = [signReceipt({ submissionId, sha: "a".repeat(40), size: 12, ext: "webm" }, env)];
   // A new handler/store per request exercises the same lifecycle as the production route.
   return {
-    submit: (nextRecord = record, nextReceipts = receipts) =>
+    submit: (nextRecord = record, nextReceipts = receipts, id = submissionId) =>
       createFeedbackHandlers({ env, limiter: () => undefined }).submit(
-        request({ submissionId, record: nextRecord, receipts: nextReceipts }),
+        request({ submissionId: id, record: nextRecord, receipts: nextReceipts }),
       ),
     audio: () =>
       createFeedbackHandlers({ env, limiter: () => undefined }).audio(
@@ -186,6 +186,33 @@ it("recovers the reference after an issue was created but its response was lost"
   expect(await retry.json()).toEqual({ reference: 123 });
   expect(api.records).toHaveLength(1);
   expect(api.issues).toHaveLength(1);
+});
+
+it.each([
+  29, 5,
+])("recovery at search budget %i/30 keeps new submissions available", async (remaining) => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date("2026-11-11T12:00:00Z"));
+  const api = github();
+  const h = await client();
+  api.searchBudget(remaining);
+  expect((await h.submit()).status).toBe(200);
+  expect((await h.submit()).status).toBe(200);
+  const calls = api.calls.length;
+  const retry = await h.submit();
+  expect(retry.status).toBe(remaining <= 5 ? 503 : 200);
+  expect(api.calls.length - calls).toBe(remaining <= 5 ? 3 : 4);
+  if (remaining <= 5) expect(retry.headers.get("retry-after")).toBe("60");
+  const next = await h.submit(
+    { ...record, transcript: [{ role: "user", content: "Another demo note", audio: [] }] },
+    [],
+    "22222222-2222-4222-8222-222222222222",
+  );
+  expect(next.status).toBe(200);
+  expect(api.records).toHaveLength(2);
+  expect(api.issues).toHaveLength(2);
+  vi.advanceTimersByTime(60_000);
+  expect((await h.submit()).status).toBe(200);
 });
 
 it("resumes a committed submission without an issue, linking the original files after a restart", async () => {

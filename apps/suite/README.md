@@ -57,6 +57,11 @@ and the issue body's submission marker, including closed issues and excluding pu
 Recovery never paginates through the repository's issue history. If the search finds no issue,
 the store resumes issue creation using the original record directory, without another record commit.
 Overlapping issue creation within one instance returns 503 until the current request finishes.
+The first submit attempt freezes the serialized record and keeps it with its submission ID and
+recording receipts in `suite.feedback.draft.v1` local storage. Retries, including after a reload,
+resend that record verbatim. Answers and contact details stay read-only until completion;
+**Start a new submission** clears the frozen draft and starts a fresh interview with a new ID.
+Completion clears the local draft. Audio files remain in the open page for download and receipt renewal.
 The store reads the private repo's default branch once and uses the current head tree as the
 base, preserving path segments in branch names such as `team/main`. A non-fast-forward 422
 re-reads the head and retries the tree/commit/ref update up to
@@ -88,11 +93,14 @@ continues with the plain guide while preserving its full transcript. Per visitor
 five submits per hour. IPv6 addresses share a /64 allowance. Each server instance caps 2000
 turns, 2000 audio uploads and 200 submissions per UTC day. **All these limits are per instance**;
 in-memory counters reset on restart and do not coordinate across instances.
-GitHub responses with fewer than 50 remaining requests or a 403/429 rate limit start a cooldown.
+GitHub core responses with fewer than 50 remaining requests or a 403/429 rate limit start a cooldown.
 Uploads and new submissions check it before their first write. An admitted submission finishes
 its commit and issue creation even if a successful response starts the cooldown; an actual
 403/429 still fails without retrying. Uploads and submissions share an instance cooldown
 until the primary reset or `Retry-After` deadline (60 seconds when neither is available).
+The `x-ratelimit-resource: search` budget has its own cooldown at five or fewer requests
+remaining (out of GitHub's 30-request search limit). It skips recovery searches until reset,
+asking only the affected submissions to retry later; uploads and new submissions remain available.
 The API returns a friendly 503 with `Retry-After`; the page asks participants to try later
 and keeps their answers and audio available through **Download my feedback**.
 

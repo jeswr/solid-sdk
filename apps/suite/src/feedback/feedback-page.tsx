@@ -19,9 +19,10 @@ import {
 } from "./guide";
 import type { AudioReceipt } from "./receipts";
 import { useVoice, type VoiceClip, voiceInThisBuild } from "./speech";
-import { type Message, type Submission, validateAnswers } from "./validation";
+import { type Message, type Submission, validateAnswers, validateSubmission } from "./validation";
 
 type TranscriptMessage = Message & { audio?: number[] };
+const draftKey = "suite.feedback.draft.v1";
 class FeedbackRetryLater extends Error {}
 const retryLaterMessage =
   "Feedback storage is busy. Please try again later. Your answers and recordings are still here. Use Download my feedback to keep a copy.";
@@ -166,6 +167,7 @@ export function FeedbackPage() {
   const clipsRef = useRef<VoiceClip[]>([]);
   const receipts = useRef<(AudioReceipt | undefined)[]>([]);
   const submissionId = useRef("");
+  const [frozenRecord, setFrozenRecord] = useState<string>();
   const [savingRecordings, setSavingRecordings] = useState(0);
   const uploading = useRef(0);
   const [pending, setPending] = useState<number[]>([]);
@@ -194,6 +196,32 @@ export function FeedbackPage() {
     },
   );
   useEffect(() => {
+    try {
+      const draft = JSON.parse(localStorage.getItem(draftKey) ?? "null");
+      if (draft) {
+        if (
+          typeof draft.record !== "string" ||
+          !/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(
+            draft.submissionId,
+          ) ||
+          !Array.isArray(draft.receipts) ||
+          draft.receipts.length > 10
+        )
+          throw new Error("Invalid feedback draft.");
+        const saved = validateSubmission(JSON.parse(draft.record));
+        submissionId.current = draft.submissionId;
+        receipts.current = draft.receipts;
+        setFrozenRecord(draft.record);
+        setPathway(saved.pathway);
+        setAnswers(saved.answers);
+        setMessages(saved.transcript);
+        setName(saved.contact.name);
+        setEmail(saved.contact.email);
+        setDone(true);
+      }
+    } catch {
+      /* Private browsing or an invalid local draft must not prevent a new interview. */
+    }
     try {
       setWalkthrough(readWalkthrough(localStorage.getItem("suite.walkthrough.v1")));
     } catch {
@@ -260,6 +288,17 @@ export function FeedbackPage() {
   }
   function start(p: Pathway) {
     submissionId.current = crypto.randomUUID();
+    setFrozenRecord(undefined);
+    clearDraft();
+    setInput("");
+    setName("");
+    setEmail("");
+    setDone(false);
+    setError("");
+    setClips([]);
+    clipsRef.current = [];
+    receipts.current = [];
+    setPending([]);
     const q = questionById(p === "quick" ? "general" : "context_work");
     setPathway(p);
     setQuestion(q);
@@ -317,6 +356,7 @@ export function FeedbackPage() {
     if (
       !pathway ||
       !question ||
+      frozenRecord !== undefined ||
       sending.current ||
       voice.listening ||
       voice.starting ||
@@ -424,30 +464,31 @@ export function FeedbackPage() {
     sending.current = true;
     setBusy(true);
     try {
-      const saved: AudioReceipt[] = [];
+      // The ID reserves this exact record, even if GitHub commits it but issue creation fails.
+      const serialized = frozenRecord ?? JSON.stringify(record());
+      setFrozenRecord(serialized);
+      saveDraft(serialized);
       for (const [i, clip] of clipsRef.current.entries()) {
         const receipt = receipts.current[i];
         // Re-upload ten minutes early, so a device clock running slow cannot send expired receipts.
         const expires = Number(receipt?.sig.split(".")[0] ?? 0);
-        saved.push(
-          receipt && expires - 10 * 60_000 > Date.now() ? receipt : await uploadRecording(clip, i),
-        );
+        receipts.current[i] =
+          receipt && expires - 10 * 60_000 > Date.now() ? receipt : await uploadRecording(clip, i);
       }
+      const saved = receipts.current.filter((receipt): receipt is AudioReceipt => !!receipt);
+      saveDraft(serialized);
       const r = await fetch(`${feedbackApiBase()}/api/feedback/submit`, {
         method: "POST",
         signal: AbortSignal.timeout(75_000),
         credentials: "omit",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          submissionId: submissionId.current,
-          record: record(),
-          receipts: saved,
-        }),
+        body: `{"submissionId":${JSON.stringify(submissionId.current)},"record":${serialized},"receipts":${JSON.stringify(saved)}}`,
       });
       const result = await feedbackResponse(r);
       if (!Number.isSafeInteger(result.reference) || result.reference < 1)
         throw new Error("Feedback reference is unavailable.");
       setReference(result.reference);
+      clearDraft();
     } catch (error) {
       setError(
         error instanceof FeedbackRetryLater
@@ -459,11 +500,35 @@ export function FeedbackPage() {
       setBusy(false);
     }
   }
+  function saveDraft(serialized: string) {
+    try {
+      localStorage.setItem(
+        draftKey,
+        JSON.stringify({
+          submissionId: submissionId.current,
+          record: serialized,
+          receipts: receipts.current.filter(Boolean),
+        }),
+      );
+    } catch {
+      /* Keep the in-memory record available when local storage is blocked or full. */
+    }
+  }
+  function clearDraft() {
+    try {
+      localStorage.removeItem(draftKey);
+    } catch {
+      /* Private browsing may block storage. */
+    }
+  }
   async function download() {
     setError("");
     setBusy(true);
     try {
-      const bytes = await feedbackArchive(record(), clips);
+      const bytes = await feedbackArchive(
+        frozenRecord ? JSON.parse(frozenRecord) : record(),
+        clips,
+      );
       if (!(await saveFeedbackArchive(bytes)))
         setError("The save was cancelled. Your feedback is still here.");
     } catch {
@@ -560,7 +625,7 @@ export function FeedbackPage() {
               <Controls
                 key={question.id}
                 question={question}
-                disabled={locked}
+                disabled={locked || frozenRecord !== undefined}
                 selected={question.id === "apps" ? walkthrough : []}
                 onAnswer={(text, value) => void send(text, value)}
               />
@@ -571,12 +636,15 @@ export function FeedbackPage() {
                 rows={4}
                 value={input}
                 disabled={locked}
+                readOnly={frozenRecord !== undefined}
                 onChange={(e) => setInput(e.target.value)}
                 placeholder="Type here, or use the microphone"
               />
               <div className="flex flex-wrap items-center gap-2">
                 <Button
-                  disabled={locked || (!input.trim() && !pending.length)}
+                  disabled={
+                    locked || frozenRecord !== undefined || (!input.trim() && !pending.length)
+                  }
                   onClick={() => void send()}
                 >
                   Send answer
@@ -586,6 +654,7 @@ export function FeedbackPage() {
                     variant="outline"
                     disabled={
                       busy ||
+                      frozenRecord !== undefined ||
                       savingRecordings > 0 ||
                       voice.starting ||
                       (!voice.listening && (!voice.supported || clips.length >= 10))
@@ -606,7 +675,7 @@ export function FeedbackPage() {
                 )}
                 <Button
                   variant="ghost"
-                  disabled={locked}
+                  disabled={locked || frozenRecord !== undefined}
                   onClick={() => void send("Skip", "(skipped)")}
                 >
                   Skip
@@ -641,6 +710,8 @@ export function FeedbackPage() {
                 id="feedback-name"
                 value={name}
                 maxLength={120}
+                disabled={busy}
+                readOnly={frozenRecord !== undefined}
                 onChange={(e) => setName(e.target.value)}
               />
             </div>
@@ -651,11 +722,19 @@ export function FeedbackPage() {
                 type="email"
                 maxLength={254}
                 value={email}
+                disabled={busy}
+                readOnly={frozenRecord !== undefined}
                 onChange={(e) => setEmail(e.target.value)}
               />
             </div>
             <p className="text-sm text-muted-foreground">Leave both blank to stay anonymous.</p>
           </div>
+          {frozenRecord !== undefined && (
+            <p className="text-sm text-muted-foreground">
+              This submission is saved for retry. Answers and contact details are read-only until it
+              finishes. Start a new submission to give different feedback.
+            </p>
+          )}
           {error && (
             <p role="alert" className="rounded-lg border p-3">
               {error}
@@ -679,6 +758,15 @@ export function FeedbackPage() {
             >
               Download my feedback
             </Button>
+            {frozenRecord !== undefined && (
+              <Button
+                variant="outline"
+                disabled={locked || savingRecordings > 0}
+                onClick={() => start(pathway)}
+              >
+                Start a new submission
+              </Button>
+            )}
           </div>
         </>
       )}

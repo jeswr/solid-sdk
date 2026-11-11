@@ -170,6 +170,7 @@ export function createGithubStore(
           // Search and both possible POSTs share one completion deadline.
           const options = { signal: AbortSignal.timeout(30_000) };
           if (recover) {
+            githubBackoff.check("search");
             // One bounded search includes closed issues and excludes pull requests.
             const query = new URLSearchParams({
               q: `repo:${repo} is:issue in:body "feedback-submission:${id}"`,

@@ -12,6 +12,7 @@ export function feedbackGithub() {
   let beforeIssue = async () => {};
   let issueHeaders = {};
   let refHeaders = {};
+  let searchRemaining = 29;
   let loseIssueResponse = false;
   let loseRefResponse = false;
   let conflicts = 0;
@@ -69,13 +70,23 @@ export function feedbackGithub() {
     }
     if (path === "/search/issues") {
       const id = url.searchParams.get("q")?.match(/[a-f0-9-]{36}/)?.[0];
-      return Response.json({
-        incomplete_results: false,
-        items: issues.filter(
-          (issue) =>
-            !issue.pull_request && issue.body.endsWith(`<!-- feedback-submission:${id} -->`),
-        ),
-      });
+      return Response.json(
+        {
+          incomplete_results: false,
+          items: issues.filter(
+            (issue) =>
+              !issue.pull_request && issue.body.endsWith(`<!-- feedback-submission:${id} -->`),
+          ),
+        },
+        {
+          headers: {
+            "x-ratelimit-resource": "search",
+            "x-ratelimit-limit": "30",
+            "x-ratelimit-remaining": String(searchRemaining),
+            "x-ratelimit-reset": String(Date.now() / 1000 + 60),
+          },
+        },
+      );
     }
     throw new Error(`Unexpected GitHub request: ${method} ${url}`);
   };
@@ -97,8 +108,13 @@ export function feedbackGithub() {
     holdIssue(callback: () => Promise<void>) {
       beforeIssue = callback;
     },
+    searchBudget(remaining: number) {
+      searchRemaining = remaining;
+    },
     lowBudget(at: "issue" | "ref" = "issue") {
       const headers = {
+        "x-ratelimit-resource": "core",
+        "x-ratelimit-limit": "5000",
         "x-ratelimit-remaining": "49",
         "x-ratelimit-reset": String(Date.now() / 1000 + 120),
       };
