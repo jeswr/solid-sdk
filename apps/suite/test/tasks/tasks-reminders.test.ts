@@ -24,7 +24,7 @@ const task = (extra: Partial<ReminderTask> = {}): ReminderTask => ({
 afterEach(() => vi.useRealTimers());
 
 describe("reminder identity and memory store", () => {
-  it("matches model keys for anonymous, named, absolute and recurring triggers", async () => {
+  it("keys suppression on scheduling inputs for anonymous, named and absolute triggers", async () => {
     for (const reminder of [
       { offset: "-PT1H" },
       { time: now },
@@ -32,8 +32,14 @@ describe("reminder identity and memory store", () => {
     ]) {
       const fire = computeFireTimes(task().url, task().due, [reminder])[0];
       assert.isDefined(fire);
-      expect(reminderKey(task().url, reminder, fire.at)).toBe(fire.key);
-      expect(reminderKey(task().url, reminder, new Date(fire.at.getTime() + 1))).not.toBe(fire.key);
+      const key = reminderKey(task().url, reminder, fire.at, task().due);
+      expect(
+        reminderKey(task().url, { ...reminder, id: "https://other.test/id" }, fire.at, task().due),
+      ).toBe(key);
+      expect(
+        reminderKey(task().url, reminder, new Date(fire.at.getTime() + 1), task().due),
+      ).not.toBe(key);
+      expect(reminderKey(task().url, reminder, fire.at, new Date(now.getTime() + 1))).not.toBe(key);
     }
     const store = createMemoryFiredStore();
     expect(await store.claim("a")).toBe(true);
@@ -96,7 +102,9 @@ describe("scheduler", () => {
       errors: [],
     });
     expect(
-      await store.claim(reminderKey(task().url, task().reminders[0] as { offset: string }, now)),
+      await store.claim(
+        reminderKey(task().url, task().reminders[0] as { offset: string }, now, task().due),
+      ),
     ).toBe(false);
     expect(await collectDueReminders(tasks, new Date(now.getTime() + 60000), store)).toEqual({
       due: [],

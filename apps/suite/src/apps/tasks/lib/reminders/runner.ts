@@ -8,6 +8,7 @@ import {
   type DueReminder,
   type ReminderTask,
   reminderFireTimes,
+  reminderSchedule,
 } from "./scheduler";
 
 /** The slice of the Tasks cache snapshot the reminder runner reads. */
@@ -29,6 +30,8 @@ export interface ReminderEvent extends DueReminder {
   tag: string;
   /** Due-time text, e.g. "Due today 17:00". */
   body: string;
+  /** Scheduling inputs for delivery retries; unrelated task edits keep these unchanged. */
+  schedules?: readonly string[];
 }
 export type ReminderNotifier = (event: ReminderEvent) => void | Promise<void>;
 export interface ReminderRun {
@@ -70,7 +73,6 @@ export function reminderTasks(snapshot: ReminderSnapshot): {
     const item = stored.get(view.url);
     if (view.state !== "open" || !view.hasReminders || !view.due || !item) continue;
     try {
-      const savedAt = item.task.modified ?? view.created;
       tasks.push({
         url: view.url,
         title: view.title || "Untitled task",
@@ -78,7 +80,6 @@ export function reminderTasks(snapshot: ReminderSnapshot): {
         ...(view.allDay ? { allDay: view.allDay } : {}),
         reminders: item.task.reminders,
         state: "open",
-        ...(savedAt ? { savedAt } : {}),
         // Moves keep the creation time and title, but not the URL or anonymous trigger ids.
         ...(view.created ? { identity: `${view.created.toISOString()}|${view.title}` } : {}),
       });
@@ -119,7 +120,9 @@ export async function runReminderTick(
       return task.reminders.some((reminder) => {
         try {
           return reminderFireTimes(task, reminder).some(
-            (time) => time.at.getTime() === event.fireTime.getTime(),
+            (time) =>
+              time.at.getTime() === event.fireTime.getTime() &&
+              (!event.schedules || event.schedules.includes(reminderSchedule(task, reminder))),
           );
         } catch {
           return false;
@@ -130,6 +133,18 @@ export async function runReminderTick(
       ...reminder,
       tag: `${reminder.taskUrl}@${reminder.fireTime.toISOString()}`,
       body: reminderBody(byUrl.get(reminder.taskUrl) as ReminderTask, now),
+      schedules: (byUrl.get(reminder.taskUrl) as ReminderTask).reminders.flatMap((trigger) => {
+        const task = byUrl.get(reminder.taskUrl) as ReminderTask;
+        try {
+          return reminderFireTimes(task, trigger).some(
+            (time) => time.at.getTime() === reminder.fireTime.getTime(),
+          )
+            ? [reminderSchedule(task, trigger)]
+            : [];
+        } catch {
+          return [];
+        }
+      }),
     })),
   ];
   const delivered: ReminderEvent[] = [];
@@ -170,7 +185,22 @@ export function fallbackFiredStore(
       // Reserve synchronously so overlapping callers in this tab cannot both win.
       known.add(key);
       try {
-        return await primary.claim(key);
+        // Keep consulting and merging the durable fallback, including after page reload.
+        // Mirroring new claims there also covers the next primary outage.
+        let previousKeys: string[] = [];
+        try {
+          previousKeys = (await fallback.keys?.()) ?? [];
+        } catch (error) {
+          report(error);
+        }
+        for (const previous of previousKeys) await primary.claim(previous);
+        if (!(await primary.claim(key))) return false;
+        try {
+          return await fallback.claim(key);
+        } catch (error) {
+          report(error);
+          return true;
+        }
       } catch (error) {
         report(error);
         try {
@@ -180,6 +210,15 @@ export function fallbackFiredStore(
           throw error;
         }
       }
+    },
+    async keys() {
+      let primaryKeys: string[] = [];
+      try {
+        primaryKeys = (await primary.keys?.()) ?? [];
+      } catch (error) {
+        report(error);
+      }
+      return [...new Set([...known, ...primaryKeys, ...((await fallback.keys?.()) ?? [])])];
     },
     async prune() {
       try {

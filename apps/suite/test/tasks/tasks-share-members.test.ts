@@ -16,6 +16,38 @@ import { frameCache } from "./tasks-frame-fixtures";
 const bob = "https://bob.example/profile#me";
 
 describe("sharing membership mutation queue", () => {
+  it.each([
+    new TypeError("Body connection lost"),
+    new Error("Stream reset"),
+  ])("stops member removal when reading an assigned task's response body fails: %s", async (failure) => {
+    const { cache, inbox, store, pod, failures } = await frameCache();
+    await cache.syncProjectMember(inbox, bob, true);
+    const task = await cache.createTask(inbox, { title: "Assigned", assignee: bob });
+    if (!task) throw new Error("Missing task");
+    pod.intercept = (request) => {
+      if (request.method !== "GET" || request.url !== task.url) return;
+      return new Response(
+        new ReadableStream({
+          start(stream) {
+            stream.enqueue(new TextEncoder().encode(pod.files.get(task.url)?.body ?? ""));
+          },
+          pull: (stream) => stream.error(failure),
+        }),
+        {
+          headers: { "content-type": "text/turtle", etag: task.etag as string },
+        },
+      );
+    };
+    expect(await cache.syncProjectMember(inbox, bob, false)).toBeUndefined();
+    expect((await store.readProject(inbox.url)).tracker.groupMembers).toContain(bob);
+    expect(failures).toHaveBeenCalledOnce();
+    expect(failures.mock.calls[0]?.[0].cause).toMatchObject({ status: 0 });
+    pod.intercept = undefined;
+    expect((await store.readTask(task.url)).task.assignee).toBe(bob);
+    expect(await cache.syncProjectMember(inbox, bob, false)).toBeDefined();
+    expect((await store.readTask(task.url)).task.assignee).toBeUndefined();
+  });
+
   it("adds once, clears freshly listed assignments on removal, and reports only the affected tasks", async () => {
     const { cache, inbox, store, failures } = await frameCache();
     await cache.syncProjectMember(inbox, bob, true);

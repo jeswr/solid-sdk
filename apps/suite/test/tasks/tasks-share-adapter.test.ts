@@ -90,6 +90,82 @@ const puts = (f: Awaited<ReturnType<typeof fixture>>) =>
   f.requests.filter((request) => request.init.method === "PUT");
 
 describe("Tasks named sharing", () => {
+  it("stops if the tracker ACL disappears after narrowing the folder", async () => {
+    const f = await fixture();
+    await f.load();
+    let narrowed = false;
+    f.intercept((url, init) => {
+      if (url === `${f.folder}.acl` && init.method === "PUT") narrowed = true;
+      if (narrowed && url === `${f.project.url}.acl` && init.method !== "PUT")
+        return new Response(null, { status: 404 });
+    });
+    const changing = vi.spyOn(WacSharingAdapter.prototype, "setPerson");
+    try {
+      await expect(f.adapter.setPerson(f.project.url, bob, "editor")).rejects.toMatchObject({
+        code: "conflict",
+      });
+      expect(changing).not.toHaveBeenCalled();
+      expect((await f.grants(f.folder)).some((grant) => grant.agents.includes(bob))).toBe(false);
+    } finally {
+      changing.mockRestore();
+    }
+  });
+
+  it("keeps a second lost write narrow instead of recovering from the first write's ETag", async () => {
+    const f = await fixture();
+    await f.load();
+    let revoke: (() => Promise<Response>) | undefined;
+    let writes = 0;
+    f.intercept(async (url, init) => {
+      if (url !== `${f.project.url}.acl` || init.method !== "PUT") return;
+      if (++writes === 1) await f.pod.fetch(url, init);
+      else revoke = () => f.pod.fetch(url, init);
+      throw new Error("Lost tracker response");
+    });
+    await expect(f.adapter.setPerson(f.project.url, bob, "editor")).rejects.toBeDefined();
+    f.requests.length = 0;
+    await expect(f.adapter.setPerson(f.project.url, bob, null)).rejects.toBeDefined();
+    expect(revoke).toBeDefined();
+    for (const request of puts(f).filter((request) => request.url === `${f.folder}.acl`)) {
+      const dataset = new Store(new Parser().parse(String(request.init.body)));
+      expect(
+        [...new AclResource(dataset, DataFactory).authorizations].some((grant) =>
+          [...grant.agent].includes(bob),
+        ),
+      ).toBe(false);
+    }
+    f.intercept(undefined);
+    for (let attempt = 0; attempt < 3; attempt++) {
+      expect((await f.load()).pendingAccess).toBe(true);
+      expect((await f.grants(f.folder)).some((grant) => grant.agents.includes(bob))).toBe(false);
+    }
+    expect((await revoke?.())?.ok).toBe(true);
+    expect((await f.grants(f.folder)).some((grant) => grant.agents.includes(bob))).toBe(false);
+    expect((await f.load()).pendingAccess).toBe(false);
+  });
+
+  it("waits for member recovery before starting the next sharing write", async () => {
+    const f = await fixture();
+    const entered = Promise.withResolvers<void>();
+    const resume = Promise.withResolvers<void>();
+    f.syncMembers.mockImplementationOnce(async () => {
+      entered.resolve();
+      await resume.promise;
+      throw new Error("Member recovery failed");
+    });
+    const grant = f.adapter.setPerson(f.project.url, bob, "editor");
+    const result = expect(grant).rejects.toMatchObject({ code: "members-sync" });
+    await entered.promise;
+    const requests = f.requests.length;
+    const revoke = f.adapter.setPerson(f.project.url, bob, null);
+    await Promise.resolve();
+    expect(f.requests).toHaveLength(requests);
+    resume.resolve();
+    await result;
+    await revoke;
+    expect((await f.grants(f.folder)).some((grant) => grant.agents.includes(bob))).toBe(false);
+  });
+
   it("revokes an editor despite stray non-task and invalid-task Turtle documents", async () => {
     const f = await fixture();
     await f.adapter.setPerson(f.project.url, bob, "editor");
@@ -480,15 +556,18 @@ describe("Tasks named sharing", () => {
     });
     await expect(f.adapter.setPerson(f.project.url, bob, null)).rejects.toBeDefined();
     f.intercept(undefined);
-    // The dialog still lists bob as an editor; re-submitting that role writes nothing.
-    await f.adapter.setPerson(f.project.url, bob, "editor");
+    // The dialog still lists bob as an editor; refuse another change until the revoke settles.
+    await expect(f.adapter.setPerson(f.project.url, bob, "editor")).rejects.toMatchObject({
+      code: "network",
+    });
     expect((await f.grants(f.folder)).some((grant) => grant.agents.includes(bob))).toBe(false);
     expect((await f.load()).pendingAccess).toBe(true);
     expect((await f.grants(f.folder)).some((grant) => grant.agents.includes(bob))).toBe(false);
     // The delayed revoke lands: the folder must still be no wider than the tracker.
     expect((await held?.())?.ok).toBe(true);
     expect((await f.grants(f.folder)).some((grant) => grant.agents.includes(bob))).toBe(false);
-    // A real tracker write confirms the state, so later changes widen again.
+    expect((await f.load()).pendingAccess).toBe(false);
+    // The settled revoke allows another change to widen again.
     await f.adapter.setPerson(f.project.url, bob, "viewer");
     expect((await f.grants(f.folder)).some((grant) => grant.agents.includes(bob))).toBe(true);
   });

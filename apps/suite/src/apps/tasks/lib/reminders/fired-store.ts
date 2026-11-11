@@ -4,20 +4,30 @@ import { computeFireTimes, type Reminder } from "../model/reminders";
 export interface FiredReminderStore {
   /** Atomically record a new fire key; true only for the caller that claims it first. */
   claim(key: string): Promise<boolean>;
+  /** Claims to merge into a recovered primary store before it accepts new claims. */
+  keys?(): Promise<string[]>;
   /** Called once per scheduler tick, outside the individual claim transactions. */
   prune?(): Promise<void>;
 }
 
-/** Same trigger identity used by the RDF model, followed by the actual ISO fire time. */
-export function reminderKey(taskUrl: string, reminder: Reminder, fireTime: Date): string {
-  // Due is needed only to validate the trigger, not to derive its stable identity.
-  const [trigger] = computeFireTimes(taskUrl, fireTime, [reminder]);
-  return `${(trigger as { id: string }).id}@${fireTime.toISOString()}`;
+/** Device identity uses scheduling inputs, independent of RDF node ids or task edits. */
+export function reminderKey(
+  taskUrl: string,
+  reminder: Reminder,
+  fireTime: Date,
+  due = fireTime,
+): string {
+  computeFireTimes(taskUrl, due, [reminder]);
+  const trigger = reminder.offset ?? (reminder.time as Date).toISOString();
+  return `${taskUrl}/reminder-${encodeURIComponent(trigger)}@${fireTime.toISOString()}|due=${due.toISOString()}`;
 }
 
 export function createMemoryFiredStore(): FiredReminderStore {
   const keys = new Set<string>();
   return {
+    async keys() {
+      return [...keys];
+    },
     async claim(key) {
       if (keys.has(key)) return false;
       keys.add(key);
@@ -45,6 +55,9 @@ export function createLocalStorageFiredStore(storage: Storage): FiredReminderSto
     storage.setItem(LOCAL_KEY, JSON.stringify(Object.fromEntries(keys)));
   }
   return {
+    async keys() {
+      return [...read().keys()];
+    },
     async claim(key) {
       const keys = read();
       if (keys.has(key)) return false;

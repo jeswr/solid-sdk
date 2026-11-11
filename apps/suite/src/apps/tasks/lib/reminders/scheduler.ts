@@ -1,6 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { computeFireTimes, pendingReminders, type Reminder } from "../model/reminders";
-import type { FiredReminderStore } from "./fired-store";
+import { type FiredReminderStore, reminderKey } from "./fired-store";
 
 export interface ReminderTask {
   url: string;
@@ -11,8 +11,6 @@ export interface ReminderTask {
   state: "open" | "closed";
   /** Survives moves between projects, which change the URL and anonymous trigger ids. */
   identity?: string;
-  /** Last persisted edit (dct:modified, falling back to dct:created). */
-  savedAt?: Date;
 }
 export interface DueReminder {
   taskUrl: string;
@@ -32,9 +30,16 @@ export function reminderDue(task: ReminderTask): Date | undefined {
 }
 
 export function reminderFireTimes(task: ReminderTask, reminder: Reminder) {
-  return computeFireTimes(task.url, reminderDue(task), [reminder]).filter(
-    (time) => !task.savedAt || time.at.getTime() >= task.savedAt.getTime(),
-  );
+  return computeFireTimes(task.url, reminderDue(task), [reminder]);
+}
+
+/** Only scheduling inputs identify an edit; titles, priorities and modified timestamps do not. */
+export function reminderSchedule(task: ReminderTask, reminder: Reminder): string {
+  return JSON.stringify([
+    task.url,
+    reminder.offset ?? (reminder.time as Date).toISOString(),
+    reminderDue(task)?.toISOString(),
+  ]);
 }
 
 /**
@@ -70,13 +75,19 @@ export async function collectDueReminders(
         const times = pendingReminders(reminderFireTimes(task, reminder), now, new Set());
         for (const time of times) {
           if (!active()) break;
-          if (time.at.getTime() <= lower || !(await store.claim(time.key))) continue;
+          if (
+            time.at.getTime() <= lower ||
+            !(await store.claim(reminderKey(task.url, reminder, time.at, reminderDue(task))))
+          )
+            continue;
           // A moved task's new URL claims afresh; its identity key still records the fire.
           const trigger = reminder.offset ?? (reminder.time as Date).toISOString();
           if (
             task.identity &&
             active() &&
-            !(await store.claim(`${task.identity}|${trigger}@${time.at.toISOString()}`))
+            !(await store.claim(
+              `${task.identity}|${trigger}@${time.at.toISOString()}|due=${reminderDue(task)?.toISOString()}`,
+            ))
           )
             continue;
           due.push({ taskUrl: task.url, title: task.title, fireTime: time.at });
