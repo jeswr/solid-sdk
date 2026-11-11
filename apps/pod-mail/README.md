@@ -48,7 +48,7 @@ This package follows the suite RDF house rules:
 ```ts
 import { MailStore, mailRoot, folderDocument, WellKnownFolders } from "@jeswr/pod-mail";
 
-const store = new MailStore(); // uses the ambient (authenticated) globalThis.fetch
+const store = new MailStore({ fetch: auth.fetch }); // auth is the host's @jeswr/pod-auth core
 const inboxUrl = folderDocument(podRoot, WellKnownFolders.inbox);
 
 // Load (or start empty), add a message reference, write back conditionally.
@@ -63,10 +63,10 @@ inbox.addMessage("https://pod.example/mail/messages/m1.ttl#it");
 await store.save(loaded);
 ```
 
-Auth is the caller's concern: the suite default is
-[`@solid/reactive-authentication`](https://www.npmjs.com/package/@solid/reactive-authentication),
-which patches `globalThis.fetch`, so `new MailStore()` is authenticated automatically. Pass
-`{ fetch }` to inject a specific fetch.
+Auth is the caller's concern: pass the session's
+[`@jeswr/pod-auth`](../../packages/pod-auth/README.md) `auth.fetch` through
+`{ fetch: auth.fetch }` (or `<Inbox fetch={auth.fetch} />`). Without it the store
+uses public `globalThis.fetch`; the host never patches global fetch.
 
 ## Federation
 

@@ -95,14 +95,6 @@ export default defineConfig({
       // (transitive) deps of solid-elements; pin them to the host's single copy.
       "lit",
       "@lit/react",
-      // The @jeswr/solid-session-restore package (silent-restore CORE) and this host
-      // BOTH depend on oauth4webapi + dpop. Dedupe to ONE copy each so the package's
-      // restoreSession and the host's login flow share the same module — important
-      // because oauth4webapi keys its request options off module-level Symbols
-      // (allowInsecureRequests / customFetch); a second copy would mint distinct
-      // Symbols. (Both pin the same range, so npm already hoists one — this pins it.)
-      "oauth4webapi",
-      "dpop",
     ],
   },
   // Let Vite read the library source one directory up from the host root. The

@@ -1,13 +1,12 @@
+<!-- AUTHORED-BY Codex GPT-6 -->
 <!-- AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate -->
 
 # `web/` — the Pod Mail static host shell
 
 This directory turns the framework-agnostic `@jeswr/pod-mail/ui` React component
 library (`../src/ui`) into a **deployable, statically-served single-page app**
-with standalone Solid login. It is the canonical "host shell" pattern, stamped
-from `pod-docs/web`: the auth seam (`src/auth/`) is copied **verbatim** from that
-already-hardened host (two roborev rounds) so this app inherits the same
-cross-user-leak / StrictMode / per-probe-proof fixes.
+with standalone Solid login. Its shared auth adapter follows the finished
+Pod Docs and Pod Drive hosts, with Mail's own storage keys and mailbox discovery.
 
 The host is intentionally tiny: log in → derive the user's pod from the session →
 discover the inbox mailbox document → mount `<Inbox>` → let it read the pod. All
@@ -18,44 +17,56 @@ wires **auth + a mailbox URL**.
 
 ```
 index.html → src/main.tsx
-  └─ <SessionProvider>            (src/auth/SessionProvider.tsx — the ONE auth seam, copied verbatim)
+  └─ <SessionProvider>            (@jeswr/app-session/react)
        └─ <App>                   (src/App.tsx)
-            ├─ logged out → <LoginScreen>          (WebID-first login)
-            └─ logged in  → discover mailbox → <Inbox mailboxUrl />   (@jeswr/pod-mail/ui)
+            ├─ logged out → <LoginScreen>          (@jeswr/app-session/react)
+            └─ logged in  → discover mailbox → <Inbox mailboxUrl fetch />   (@jeswr/pod-mail/ui)
 ```
 
 ### Auth (standalone, no server)
 
-`SessionProvider` is the only place auth is wired, and it is **copied verbatim**
-from `pod-docs/web/src/auth/` (do not re-derive it). On mount it:
+Mail configures `@jeswr/app-session` in `src/auth/pod-auth.ts` and passes its name and
+exact legacy credential keys to the shared `SessionProvider` in `src/main.tsx`. The package
+owns the page-lifetime `@jeswr/pod-auth` core and `@jeswr/suite-ui/sign-in` card,
+as in Pod Docs and Pod Drive. Recent accounts appear
+first; users can also enter an address, choose the home provider or another listed
+provider, or enter a custom provider address. Addresses are resolved through a
+pristine public fetch. A WebID with several providers asks the user to choose a
+provider explicitly.
 
-1. snapshots the pristine `globalThis.fetch` (for the pre-popup public profile
-   read, so it can never recurse on a 401);
-2. **dynamically** imports `@solid/reactive-authentication` (so the browser-only
-   custom element + oauth stack never evaluate at module-eval / SSR / prerender
-   time — verified by the build: `customElements.define` is `0` in the main
-   bundle and lives only in the lazily-imported chunk);
-3. builds a `WebIdDPoPTokenProvider` (ported from `create-solid-app`) bound to
-   this origin's **static Client Identifier Document** at `${origin}/clientid.jsonld`,
-   so the consent screen shows "Pod Mail" instead of a throwaway dynamic
-   registration;
-4. calls `manager.registerGlobally()` — **this is what patches the global
-   `fetch`** (the 0.1.3 constructor does NOT). Forgetting it is the #1
-   reactive-auth bug.
+The core restores once on mount, including React StrictMode replay, and owns all
+credentials, persistence and logout. `auth.fetch` is passed explicitly to
+the profile/Type Index discovery and `Inbox`; global fetch stays public. The default automatic credential
+boundary uses only the authenticated WebID's advertised storage roots. Public
+profile reads for the display name, avatar and pod root use the pristine public
+transport.
 
-Once patched, every plain `fetch()` — including the ones inside `@jeswr/fetch-rdf`
-and the `@jeswr/pod-mail` data layer — transparently upgrades on a 401 with a
-DPoP token. So `<Inbox>` is mounted with **no `fetch` prop**: its `fetch?:` seam
-falls back to the now-authenticated ambient global.
+The popup element is lazily registered from `@jeswr/reactive-authentication/registerElements`.
+A StrictMode-safe holder adapts its disposable result to the full callback URL.
+`allowInsecureLoopback` and pod-auth's dynamic client registration are enabled only
+in a development build (`npm run dev`) whose hostname is localhost, 127.0.0.0/8 or
+::1; every other build uses the HTTPS `clientid.jsonld`, so `vite preview` over HTTP
+cannot sign in. Silent `prompt=none` re-authentication during restore is declined
+(no popup without a click). The popup supports cancellation; errors use plain
+messages without raw protocol details. On first load the app removes the
+obsolete credentials through the package's `clearLegacyCredentials` helper:
+IndexedDB database `pod-mail:sessions` (refresh tokens and DPoP keys), localStorage
+key `pod-mail.remembered-account` (public remembered-account pointer), and sessionStorage
+keys `pod-mail:pss.autologin.flow` and `pod-mail:autologin-attempted` (redirect state
+and loop guard). Other applications' storage and Mail's theme preference are preserved.
+
+A `#autologin/<encoded-webid>` deep link adds a one-click account row and is
+removed from the address bar. It never opens a popup or redirects without a click.
+Only `callback.html` is registered as an OAuth redirect URI.
 
 ### How the mailbox document is derived from the session
 
-`<Inbox mailboxUrl />` needs a mailbox **DOCUMENT** URL (a Pod Mail mailbox is a
+`<Inbox mailboxUrl fetch />` needs a mailbox **DOCUMENT** URL (a Pod Mail mailbox is a
 document, `…/mail/folders/inbox.ttl`, not a container). `src/mailbox-discovery.ts`
 derives it:
 
 1. **pod root** = the **first `pim:storage`** on the WebID profile (else the WebID
-   origin), exactly as `src/auth/session-derivation.ts` derives it.
+   origin), exactly as the shared `@jeswr/app-session` `deriveSession` helper derives it.
 2. **inbox document** — discovered from the user's **Type Index**: read the
    `solid:publicTypeIndex` (else `solid:privateTypeIndex`) pointer off the
    profile, fetch that index, and `locate(schema:EmailMessage)`. A registration
@@ -73,11 +84,6 @@ reader (`TypeIndexDataset`) — never a bespoke parser, never hand-built triples
 > registration is container-scoped, so the host derives the inbox document itself
 > via the data-layer path conventions (`folderDocument` / `WellKnownFolders`).
 
-> Tokens are in-memory only — closing the tab logs out. Durable session restore
-> (DPoP refresh token in IndexedDB, proactive refresh) is the Pod-Manager
-> enhancement and a documented follow-up; `scope` already requests
-> `offline_access` so it is a provider-level add, not a redesign.
-
 ### The per-origin static auth artifacts
 
 Solid-OIDC **dereferences** the `client_id` URL, so each deployment must serve
@@ -93,8 +99,9 @@ files from a single `APP_ORIGIN` env, written into `public/` before every build:
 - `public/callback.html` — the OAuth popup → opener post-back. It targets the
   message at **our origin only** (`postMessage(href, "${origin}")`), never `"*"`.
 
-Both are git-ignored (a per-origin artifact; the script + `APP_ORIGIN` are the
-source of truth) and copied by Vite into `dist/` at the root.
+Both are committed with the development origin and regenerated for each build;
+the script and `APP_ORIGIN` are the source of truth. Set `CLIENT_BASE_PATH`
+for Pages deployments (Mail uses `/solid-sdk/pod-mail/`). Vite copies them into `dist/`.
 
 > `ignore-scripts=true` (supply-chain hardening) means **npm lifecycle hooks do
 > NOT run** — so the generator is chained INLINE in the `build`/`dev` scripts
@@ -124,7 +131,7 @@ directly** — no pre-built `dist/ui` is required.
 
 Gates: `npm run lint` (Biome), `npm run typecheck` (tsc — the library source is
 NOT re-typechecked here; `src/pod-mail-ui.d.ts` + `src/pod-mail.d.ts` declare the
-consumed surface), `npm test` (the verbatim auth-seam unit tests), `npm run build`.
+consumed surface), `npm test` (the shared-auth and mailbox tests), `npm run build`.
 
 ## Env
 
@@ -132,4 +139,10 @@ consumed surface), `npm test` (the verbatim auth-seam unit tests), `npm run buil
 |---|---|---|---|
 | `APP_ORIGIN` | `gen-clientid.mjs` (build) | `http://localhost:5173` | The deployment origin. Set per-subdomain for prod (`https://mail.solid-test.jeswr.org`). |
 | `VITE_APP_ORIGIN` | UI label only | `http://localhost:5173` | Mirror of `APP_ORIGIN`; non-load-bearing (the runtime `client_id` derives from the actual window origin). |
-| `VITE_HOME_IDP` | `LoginScreen` hint | `https://idp.solid-test.jeswr.org` | Display only — the auth issuer always comes from the WebID profile. |
+| `VITE_HOME_IDP` | `LoginScreen` | `https://idp.solid-test.jeswr.org` | Home provider shown first; explicit WebID hints are checked by pod-auth. |
+
+`VITE_HOME_IDP_NAME` labels the home provider. `VITE_KNOWN_PROVIDERS` accepts
+comma-separated HTTPS provider URLs; otherwise the shared directory is used.
+
+`pnpm run test:e2e` drives real popup sign-in against local CSS, lists the seeded
+private messages, and checks anonymous and ambient browser fetches receive 401/403.

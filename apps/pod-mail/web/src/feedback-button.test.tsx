@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 //
 // Pins the header FeedbackButton wiring the App uses (App.tsx): the shared
@@ -13,13 +14,14 @@
 import { FeedbackButton } from "@jeswr/app-shell";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
+import { FEEDBACK_APP_NAME, FEEDBACK_REPO } from "./App";
 
 describe("header FeedbackButton (pod-mail adoption)", () => {
   it("renders the Feedback trigger with repo=jeswr/pod-mail wiring", () => {
     render(
       <FeedbackButton
-        repo="jeswr/pod-mail"
-        appName="Pod Mail"
+        repo={FEEDBACK_REPO}
+        appName={FEEDBACK_APP_NAME}
         appVersion="testsha"
         webId="https://alice.example/profile/card#me"
       />,
@@ -30,7 +32,9 @@ describe("header FeedbackButton (pod-mail adoption)", () => {
   });
 
   it("opens the feedback dialog targeting the app's own repo", async () => {
-    render(<FeedbackButton repo="jeswr/pod-mail" appName="Pod Mail" />);
+    expect(FEEDBACK_REPO).toBe("jeswr/pod-mail");
+    expect(FEEDBACK_APP_NAME).toBe("Pod Mail");
+    render(<FeedbackButton repo={FEEDBACK_REPO} appName={FEEDBACK_APP_NAME} />);
     // Closed by default — no dialog in the tree until the trigger is clicked.
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /feedback/i }));
