@@ -18,3 +18,9 @@ the protocol check only, because a full login there needs an account the maintai
 
 Run the protocol check locally with `node scripts/sign-in-live/check.mjs`. Set
 `SIGN_IN_PROVIDERS=test-idp,teamid` to run a subset.
+
+## Removed providers
+
+`providers.json` → `removed` records providers taken off the sign-in screens because the check
+showed apps cannot sign in there. solidweb.org (Node Solid Server) was removed on 2026-11-11: its
+`/authorize` rejects Client Identifier Document client IDs with 401.

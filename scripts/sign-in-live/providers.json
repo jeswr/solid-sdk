@@ -57,19 +57,6 @@
       }
     },
     {
-      "id": "solidweb",
-      "name": "solidweb.org",
-      "issuer": "https://solidweb.org/",
-      "server": "Node Solid Server",
-      "advertisedBy": "@jeswr/pod-auth KNOWN_PROVIDERS",
-      "fullLogin": "Not automated: needs a maintainer-provided account. The protocol check proves the app's request reaches the login page.",
-      "loginPage": {
-        "at": "^solidweb\\.org/login",
-        "marker": "type=\"password\"",
-        "$comment": "NSS's server-rendered password form"
-      }
-    },
-    {
       "id": "teamid",
       "name": "teamid.live",
       "issuer": "https://teamid.live/",
@@ -81,6 +68,14 @@
         "marker": "<title>\\s*Solid\\s*</title>",
         "$comment": "CSS renders its sign-in UI client-side from the account app at /.account/"
       }
+    }
+  ],
+  "removed": [
+    {
+      "issuer": "https://solidweb.org/",
+      "server": "Node Solid Server 6",
+      "removedOn": "2026-11-11",
+      "why": "Its /authorize answers 401 to every Client Identifier Document client_id (checked from GitHub Actions for Drive and the suite), so no suite app can sign in there. Removed from @jeswr/pod-auth KNOWN_PROVIDERS; re-add with a live entry here once it accepts Client ID Documents or pod-auth gains a registration fallback."
     }
   ]
 }

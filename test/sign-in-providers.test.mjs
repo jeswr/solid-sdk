@@ -74,7 +74,7 @@ describe("sign-in provider matrix", () => {
 
   it("finds the advertised providers (the guard is not vacuous)", () => {
     const fromDirectory = advertised.filter((a) => a.from === "pod-auth KNOWN_PROVIDERS");
-    expect(fromDirectory.length).toBeGreaterThanOrEqual(4);
+    expect(fromDirectory.length).toBeGreaterThanOrEqual(3);
     expect(advertised.some((a) => a.from === "suite default providers")).toBe(true);
     expect(advertised.some((a) => a.from.startsWith("apps/"))).toBe(true);
     expect(advertised.map((a) => a.from)).toContain("packages/app-session/src/LoginScreen.tsx");
