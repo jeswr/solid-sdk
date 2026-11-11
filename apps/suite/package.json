@@ -72,7 +72,6 @@
     "@univerjs/preset-sheets-data-validation": "1.2.0",
     "@univerjs/presets": "1.2.0",
     "@univerjs/sheets": "1.2.0",
-    "@vercel/blob": "2.9.0",
     "chrono-node": "^2.10.3",
     "docx": "9.14.0",
     "exifr": "^7.1.3",
