@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex
+// AUTHORED-BY Codex GPT-6
 import { DataFactory, Parser, Store } from "n3";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
@@ -42,6 +43,24 @@ const DAY = 86_400_000;
 const DRIVE = `${DEMO_ROOT}drive/`;
 const INDEX = `${DRIVE}.trash/index.ttl`;
 const NOTES = `${DRIVE}notes.md`;
+
+it("preserves a native intake type override instead of reactivating HTML or SVG by extension", async () => {
+  const { client, fetch } = await setup();
+  for (const name of ["incoming.html", "incoming.svg"]) {
+    const saved = await uploadFile(
+      client,
+      DRIVE,
+      new Blob(["shared bytes"], { type: "application/octet-stream" }),
+      name,
+      "fail",
+      undefined,
+      "application/octet-stream",
+    );
+    expect(saved?.contentType).toBe("application/octet-stream");
+    const request = puts(fetch).find(([url]) => String(url) === `${DRIVE}${name}`);
+    expect(new Headers(request?.[1]?.headers).get("content-type")).toBe("application/octet-stream");
+  }
+});
 
 async function setup() {
   const pod = createDemoPod({ root: DEMO_ROOT, seed: await buildDemoSeed(NOW), now: () => NOW });

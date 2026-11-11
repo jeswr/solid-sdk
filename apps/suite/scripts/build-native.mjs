@@ -23,7 +23,7 @@ const adaptations = [
   "dev/ routes excluded from the native build graph",
   ".well-known/ route handlers excluded (the Client ID Document is served by the deployed suite)",
   "native / entry redirects to /drive/my (the web / chooses by session)",
-  "demo pod session replaced by the native sign-in placeholder (mobile auth integration pending)",
+  "app sessions follow the native shell account, with signed-out fallback outside the shell",
   "shell demo account disabled; demo-pod modules replaced by inert stand-ins",
   "Drive preview interception uses the plain /drive/p/[ref] route on native",
 ];
@@ -106,6 +106,7 @@ await writeFile(
 export class DemoStorageError extends Error {}
 interface DemoPodStandIn {
   fetch: typeof globalThis.fetch;
+  subscribe(listener: (url: string) => void): () => void;
   snapshot(): { resources: [string, { body: Uint8Array }][] };
 }
 export async function getDemoPod(): Promise<DemoPodStandIn> {

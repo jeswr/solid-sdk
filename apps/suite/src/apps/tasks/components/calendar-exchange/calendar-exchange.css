@@ -1,0 +1,17 @@
+/* AUTHORED-BY Codex GPT-6.1-Sol */
+.tsk-calendar-fields {
+  display: grid;
+  gap: 12px;
+}
+.tsk-calendar-preview {
+  max-height: 30dvh;
+  overflow: auto;
+  overflow-wrap: anywhere;
+  padding-inline-start: 24px;
+}
+.tsk-calendar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
