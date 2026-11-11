@@ -1,6 +1,6 @@
 ---
 name: ldp-container
-description: Use when reading LDP container memberships, sharing listing parsing across Solid clients, filtering untrusted ldp:contains entries, or maintaining @jeswr/ldp-container.
+description: Use when reading LDP container memberships, building typed listing metadata, sharing listing parsing across Solid clients, filtering untrusted ldp:contains entries, or maintaining @jeswr/ldp-container.
 ---
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 
@@ -30,3 +30,20 @@ datasets are unsupported; `containerUrl` is the resolution base and containment 
 Keep scope guards in `@jeswr/guarded-fetch`; do not re-export them here. Keep stricter
 compatibility filters, sorting, non-container filters, and read caps in callers. Never
 weaken those policies while consolidating listings. The runtime must remain browser-safe.
+
+`buildListingDataset(containerUrl, entries: Iterable<ListingMetadata>)` constructs synthetic
+default-graph membership and metadata through the generated `ListingMember` and
+`ListingContainer` wrappers interpreted by `@jeswr/model-runtime`. Supply `url`, `title`, nullable `modified` (Date),
+`size` and `contentType`, plus `types`. Null fields are omitted; zero, epoch dates and empty
+strings survive. Only supplied types are emitted; never call `build()` or `mark()` here.
+Generated guards reject unsafe subject/type IRIs and drop invalid optional values. The facade
+keeps invalid dates throwing `RangeError`. Callers enforce HTTP(S)/pod-scope policy and collect
+a complete successful listing before replacing a cached graph; the builder does no I/O.
+
+Generation uses `codegen/`'s ontology/SHACL plus `codegen.config.json`. All fields are sets,
+and text sanitization is disabled to preserve literal contents. `rdf:type` is a reserved
+structural predicate: its explicit property shape fails admission, so use the generated
+wrapper's built-in `.types` set. README documents the exact rejection for the generator follow-up.
+After building federation-codegen, run `pnpm --filter @jeswr/ldp-container run codegen`.
+Never edit `src/generated/`; the byte-for-byte drift test, including the lockfile, must pass.
+The build copies generated JS/declarations into dist. Keep the listing facade at 100% coverage.

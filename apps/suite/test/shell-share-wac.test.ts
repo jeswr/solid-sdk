@@ -79,6 +79,41 @@ async function server() {
   };
 }
 describe("WAC sharing adapter", () => {
+  it("refuses added modes in narrow-only plans before any PUT and keeps no-ops available", async () => {
+    const { adapter, fetch } = await server();
+    await adapter.load(FILE, signal());
+    await expect(
+      adapter.setPerson(FILE, BOB, "viewer", { narrowOnly: true }),
+    ).rejects.toMatchObject({ code: "would-grant" });
+    await expect(
+      adapter.setGeneral(FILE, { mode: "link" }, { narrowOnly: true }),
+    ).rejects.toMatchObject({ code: "would-grant" });
+    await adapter.setPerson(FILE, BOB, null, { narrowOnly: true });
+    await adapter.setGeneral(FILE, { mode: "restricted" }, { narrowOnly: true });
+    expect(fetch.mock.calls.some(([, init]) => init?.method === "PUT")).toBe(false);
+    await adapter.setPerson(FILE, BOB, "viewer");
+    await adapter.setPerson(FILE, BOB, null, { narrowOnly: true });
+    expect((await adapter.load(FILE, signal())).people.some((person) => person.webId === BOB)).toBe(
+      false,
+    );
+  });
+  it("checks every resource in a narrow-only plan, including a lower role that adds comments access", async () => {
+    const { fetch, documents, doc } = await server();
+    authorization(doc, BOB, ["Read", "Write"]);
+    const comments = document("wac", false, COMMENTS);
+    authorization(comments, ALICE, ["Read", "Write", "Control"]);
+    documents.set(comments.source, comments);
+    const adapter = new WacSharingAdapter({ fetch, webId: ALICE, commentsUrl: COMMENTS });
+    await adapter.load(FILE, signal());
+    await expect(
+      adapter.setPerson(FILE, BOB, "commenter", { narrowOnly: true }),
+    ).rejects.toMatchObject({ code: "would-grant" });
+    expect(fetch.mock.calls.some(([, init]) => init?.method === "PUT")).toBe(false);
+    expect((await adapter.load(FILE, signal())).people).toContainEqual({
+      webId: BOB,
+      role: "editor",
+    });
+  });
   it("discovers ACLs, adds a viewer conditionally, and emits no empty writes", async () => {
     const { adapter, fetch } = await server();
     expect(await adapter.load(FILE, signal())).toMatchObject({

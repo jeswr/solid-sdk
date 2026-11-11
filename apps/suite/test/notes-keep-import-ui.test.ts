@@ -1,5 +1,7 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 5.5
 import { beforeEach, expect, it, vi } from "vitest";
+import { NoteMoveBlockedError } from "../src/apps/notes/lib/model/errors";
 import type { StoredNote } from "../src/apps/notes/lib/model/store";
 import { act, click, deferred, h, mount } from "./drive-ui-dom";
 
@@ -82,6 +84,7 @@ beforeEach(() => {
     refresh: vi.fn(async () => {}),
     labels: [],
     persistLabels: vi.fn(),
+    openShare: vi.fn(),
   };
 });
 
@@ -251,5 +254,34 @@ it("handles empty choices, nothing to import, unreadable files and choosing agai
     "Couldn't read those files. Try choosing them again.",
   );
   expect(text()).toContain("Choose note files");
+  await ui.unmount();
+});
+
+it("continues Keep import after a sharing refusal and reports the note with a Share action", async () => {
+  archive().mockImplementationOnce(async (note: StoredNote) => {
+    throw new NoteMoveBlockedError(note.url);
+  });
+  const ui = await mount(h(KeepImportDialog, { open: true, close: vi.fn() }));
+  await choose("Keep note files", [
+    keepFile("A.json", {
+      title: "A",
+      textContent: "a",
+      isArchived: true,
+      isPinned: true,
+      color: "YELLOW",
+    }),
+    keepFile("B.json", { title: "B", textContent: "b", isArchived: true }),
+  ]);
+  await click(button("Import 2 notes"));
+  expect(create()).toHaveBeenCalledTimes(2);
+  expect(archive()).toHaveBeenCalledTimes(2);
+  expect(text()).toContain("Imported 2 notes.");
+  expect(text()).toContain("1 note couldn't be moved to the Archive and is in Notes instead.");
+  expect(text()).toContain("Stop sharing this note before archiving or deleting it.");
+  const source = archive().mock.calls[0]?.[0] as StoredNote;
+  expect(prefs.pinned).toContain(source.url);
+  expect(prefs.colours[source.url]).toBe("yellow");
+  await click(button("Share"));
+  expect(mocks.context.openShare).toHaveBeenCalledExactlyOnceWith(source.url);
   await ui.unmount();
 });

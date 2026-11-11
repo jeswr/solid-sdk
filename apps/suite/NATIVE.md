@@ -1,4 +1,4 @@
-<!-- AUTHORED-BY Codex GPT-6 -->
+<!-- // AUTHORED-BY Codex GPT-6 -->
 # Native static export (MOB-P3a)
 
 Run `pnpm --filter @jeswr/app-suite build:native` after building its workspace dependencies.
@@ -57,8 +57,7 @@ so its `Function` probe never meets the eval-free script policy.
 
 Staging excludes `src/app/dev/`, the `src/app/.well-known/` route handlers (the deployed suite serves the Client ID Document, E7) and public fixtures. The web session uses the installed Solid
 extension's granted pod, falling back to a seeded demo pod. Native staging replaces the web
-session with a sign-in placeholder and omits the demo code. Native authentication is a later
-integration. Native `/` opens `/drive/my/`,
+session with a sign-in placeholder and omits the demo code. Native authentication uses the shell account backend and pod-auth through the native browser handoff. Native `/` opens `/drive/my/`,
 and Drive preview interception falls back to `/drive/p/[ref]`. The manifest reports these
 adaptations. 
 
@@ -107,3 +106,32 @@ The adaptation is recorded in `route-manifest.json`; `check-native.mjs` rejects 
 which must allow the native Origin through `FEEDBACK_ALLOWED_ORIGINS`. When that service
 cannot be reached, the guide works locally and Download my feedback preserves JSON,
 Markdown and audio together. See [README.md](README.md#pilot-feedback) for server setup.
+
+## Cached pod reads (MOB-P3e)
+
+The bundled app opens without a network. A first launch without a restored account still
+needs a connection to sign in. With a usable restored account, previously read cacheable
+pod resources survive page reloads and can be read offline from that account's IndexedDB
+cache. This replaces the earlier narrower promise of in-memory pod data only. Resources
+that have not been read, bodies over 25 MiB, explicit freshness reads and uncachable responses still need the
+network; the cache does not restore or bypass authentication.
+
+The native `ShellPodSessionProvider` wraps its existing authenticated fetch with
+solid-offline's `createPageCache`, through the SDK offline facade. It shares the worker's
+request/response policy, canonical keys, IndexedDB bodies and metadata, notification
+invalidation and ETag resync. Reads try the network first online, write successful cacheable
+responses through, and label provisional fallback bytes `X-Solid-Offline-Cache: stale`
+and `X-Offline: stale`. The shell continues to show its connectivity indicator.
+The adapter starts change subscriptions after commit, forwards updates to session
+subscribers, and retries initial subscription setup on reconnect.
+
+The live `usable()` account/version fence checks cached and network reads, including
+switches React has not committed. Account switches and both sign-out paths immediately
+fence the old adapter and purge its database through the existing accounts provider.
+Sign-out attempts cleanup even when the identity provider's logout fails. Pending outbox
+writes are retained. Reload/unmount closes handles while retaining reads for that account.
+The web target keeps its service-worker registration; native never registers or messages it.
+
+Unit tests exercise IndexedDB with fake-indexeddb (already installed), shared policy,
+notifications and transition races, plus native/web provider selection. Real iOS/Android
+persistence, cold offline launch and bridge authentication remain device/e2e checks.
