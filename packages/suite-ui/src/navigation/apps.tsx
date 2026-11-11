@@ -24,11 +24,11 @@ export const suiteApps: readonly NavigationApp[] = [
   { slug: "docs", name: "Docs", basePath: "/docs", status: "first-cut" },
   { slug: "tasks", name: "Tasks", basePath: "/tasks", status: "first-cut" },
   { slug: "permissions", name: "Permissions", basePath: "/permissions", status: "first-cut" },
+  { slug: "notes", name: "Notes", basePath: "/notes", status: "first-cut" },
   ...(
     [
       "calendar",
       "contacts",
-      "notes",
       "photos",
       "chat",
       "sheets",
