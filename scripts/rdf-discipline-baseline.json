@@ -47,12 +47,6 @@
   "apps/pod-manager/src/lib/resource-acl.ts": {
     "rdf-factory": 2
   },
-  "apps/pod-migrator/src/engine/executor.ts": {
-    "rdf-factory": 1
-  },
-  "apps/pod-migrator/src/engine/isomorphism.ts": {
-    "rdf-factory": 1
-  },
   "apps/pod-music/src/lib/model.ts": {
     "rdf-factory": 5
   },

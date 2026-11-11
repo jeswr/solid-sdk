@@ -132,6 +132,7 @@
     "framework": "vite",
     "originEnv": "APP_ORIGIN",
     "vercelIgnore": "node ../../scripts/vercel-ignore-build.mjs @jeswr/app-pod-migrator",
-    "gitDeploymentEnabled": false
+    "gitDeploymentEnabled": false,
+    "clientIdDocument": false
   }
 ]

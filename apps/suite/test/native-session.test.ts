@@ -79,6 +79,7 @@ it("maps the native shell account and preserves its session through expiry and r
     accounts: [account],
     status: "ready",
     fetch,
+    fetchFor: () => fetch,
     isActiveAccount: (id) => id === account.id,
     signIn: vi.fn(),
     signInDemo: vi.fn(),
@@ -144,6 +145,7 @@ it("refuses a session fetch once the live account changes, before React re-rende
     accounts: [account],
     status: "ready",
     fetch,
+    fetchFor: () => fetch,
     isActiveAccount: (id: string) => live && id === account.id,
   } as unknown as AccountsContextValue);
   let state!: ReturnType<typeof usePodSessionState>;

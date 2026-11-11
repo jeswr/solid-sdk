@@ -14,6 +14,7 @@ const sections = [
   ["account", "Account"],
   ["appearance", "Appearance"],
   ["storage", "Storage"],
+  ["move-pod", "Move to another pod"],
   ["notifications", "Notifications"],
   ["offline", "Offline"],
   ["shortcuts", "Shortcuts"],

@@ -122,6 +122,16 @@
           }
         }
       }
+    },
+    {
+      "includes": ["packages/pod-migrator/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "useNamingConvention": "off"
+          }
+        }
+      }
     }
   ]
 }
