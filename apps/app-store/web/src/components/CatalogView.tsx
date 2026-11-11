@@ -8,7 +8,7 @@
 // link to the machine representations. (On the static box, Caddy Accept-routes the
 // `/catalog` IRI to catalog.ttl / catalog.jsonld for RDF clients, and to this view's
 // index.html for text/html — see the README deploy notes.)
-import { appUrl } from "../auth/app-url";
+import { appUrl } from "@jeswr/app-session";
 import { type AppEntry, CATEGORY_ORDER } from "../lib/catalog";
 
 export function CatalogView({ apps }: { apps: AppEntry[] }) {
@@ -19,8 +19,8 @@ export function CatalogView({ apps }: { apps: AppEntry[] }) {
         This page is a human rendering of the store catalog, which is published as Linked Data: a{" "}
         <code>dcat:Catalog</code> of <code>dcat:CatalogRecord</code>s, each pointing at a{" "}
         <code>schema:SoftwareApplication</code>. The same graph is available as{" "}
-        <a href={appUrl("catalog.ttl")}>Turtle</a> and{" "}
-        <a href={appUrl("catalog.jsonld")}>JSON-LD</a>.
+        <a href={appUrl("catalog.ttl", import.meta.env.BASE_URL)}>Turtle</a> and{" "}
+        <a href={appUrl("catalog.jsonld", import.meta.env.BASE_URL)}>JSON-LD</a>.
       </p>
 
       {CATEGORY_ORDER.map((category) => {

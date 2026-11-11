@@ -209,18 +209,18 @@ importers:
 
   apps/app-store/web:
     dependencies:
+      '@jeswr/app-session':
+        specifier: workspace:*
+        version: link:../../../packages/app-session
       '@jeswr/app-shell':
         specifier: workspace:*
         version: link:../../../packages/app-shell
-      '@jeswr/fetch-rdf':
-        specifier: workspace:*
-        version: link:../../../packages/fetch-rdf
       '@jeswr/solid-elements':
         specifier: workspace:*
         version: link:../../../packages/solid-elements
-      '@jeswr/solid-session-restore':
+      '@jeswr/suite-ui':
         specifier: workspace:*
-        version: link:../../../packages/solid-session-restore
+        version: link:../../../packages/suite-ui
       '@lit/react':
         specifier: ^1.0.8
         version: 1.0.8(@types/react@19.2.17)
@@ -233,15 +233,6 @@ importers:
       '@rdfjs/wrapper':
         specifier: ^0.34.0
         version: 0.34.0
-      '@solid/object':
-        specifier: ^0.6.0
-        version: 0.6.0
-      '@solid/reactive-authentication':
-        specifier: ^0.1.3
-        version: 0.1.5
-      dpop:
-        specifier: ^2.1.1
-        version: 2.1.1
       jsonld:
         specifier: ^9.0.0
         version: 9.0.0
@@ -254,9 +245,6 @@ importers:
       n3:
         specifier: ^2.0.3
         version: 2.1.1
-      oauth4webapi:
-        specifier: ^3.8.6
-        version: 3.8.6
       react:
         specifier: ^19.2.0
         version: 19.2.7
