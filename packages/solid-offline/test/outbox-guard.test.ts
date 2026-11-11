@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { type StorageClient, StorageError } from '@jeswr/storage-client';
 import { createMemoryStorage } from '@jeswr/storage-client/memory';
 import { IDBFactory } from 'fake-indexeddb';
@@ -86,6 +87,31 @@ afterEach(() => {
 
 describe('guarded delivery', () => {
   it.each([
+    true,
+    false,
+  ])('preserves legacy createOptions.keepalive=%s in delivery snapshots', async (keepalive) => {
+    const original = box();
+    await enqueue(original, {
+      op: 'create',
+      container: root,
+      name: 'file.bin',
+      createOptions: { name: 'file.bin', keepalive },
+    });
+    await stored((record) => {
+      Reflect.deleteProperty(record, 'keepalive');
+    });
+    original.close();
+    const outbox = box();
+    const delegate = vi.fn<ReplayDelegate>().mockResolvedValue(undefined);
+    outbox.registerDelegate(tag, delegate);
+    await outbox.replay(storage().client);
+    expect(delegate).toHaveBeenCalledWith(
+      expect.objectContaining({ keepalive, createOptions: { name: 'file.bin', keepalive } }),
+      expect.anything(),
+    );
+  });
+
+  it.each([
     'write',
     'create',
     'delete',
@@ -102,6 +128,7 @@ describe('guarded delivery', () => {
       name: 'file.bin',
       createOptions,
       deleteOptions: { recursive: true },
+      keepalive: true,
     });
     assertions.policies[0] = 'changed';
     body.fill(1);
@@ -123,6 +150,7 @@ describe('guarded delivery', () => {
         ifMatch: '"old"',
         createOptions,
         deleteOptions: { recursive: true },
+        keepalive: true,
         assertions: { policies: ['"captured"'] },
         purpose: 'replay',
       });
@@ -297,6 +325,270 @@ describe('guarded delivery', () => {
   });
 });
 
+describe('trusted guard policies', () => {
+  it('accepts the matching guard for replay and online delivery, even if its matcher throws', async () => {
+    const outbox = box();
+    outbox.registerGuardPolicy(tag, () => {
+      throw new Error('unavailable');
+    });
+    const delegate = vi.fn<ReplayDelegate>().mockResolvedValue(undefined);
+    outbox.registerDelegate(tag, delegate);
+    const client = storage();
+    await enqueue(outbox);
+    await outbox.replay(client.client);
+    await withOutbox(client.client, outbox).write(url, 'online', { ...writeOptions, guard });
+    expect(delegate).toHaveBeenCalledTimes(2);
+    expect(outbox.pending()).toEqual([]);
+    expectNoDelivery(client);
+    outbox.registerGuardPolicy('another.policy', () => true);
+    await expect(
+      withOutbox(client.client, outbox).write(url, 'online', { ...writeOptions, guard }),
+    ).rejects.toThrow('guard required');
+    expect(delegate).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([
+    'write',
+    'writeRdf',
+    'create',
+    'delete',
+  ] as const)('refuses unguarded online %s with and without queue opt-in', async (op) => {
+    const outbox = box();
+    outbox.registerGuardPolicy(tag, () => true);
+    const client = storage();
+    const rdf = vi.spyOn(client.client, 'writeRdf');
+    const wrapped = withOutbox(client.client, outbox);
+    for (const queue of [false, true]) {
+      const opts = { ...writeOptions, ...(queue ? { offline: 'queue' as const } : {}) };
+      const call = async () => {
+        if (op === 'write') return wrapped.write(url, 'body', opts);
+        if (op === 'writeRdf')
+          return wrapped.writeRdf(url, [], { ...opts, contentType: 'text/turtle' });
+        if (op === 'create') return wrapped.create(root, 'body', { ...opts, name: 'file.bin' });
+        return wrapped.delete(url, opts);
+      };
+      await expect(call()).rejects.toThrow('guard required');
+    }
+    await expect(wrapped.create(root, null)).rejects.toThrow('guard required');
+    await expect(wrapped.delete(url)).rejects.toThrow('guard required');
+    expectNoDelivery(client);
+    expect(rdf).not.toHaveBeenCalled();
+    await outbox.ready;
+    expect(outbox.pending()).toEqual([]);
+  });
+
+  it.each([
+    'stripped',
+    'different-tag',
+  ] as const)('blocks %s records on hydrate without storage calls', async (tamper) => {
+    const original = box();
+    await enqueue(original);
+    await stored((record) => {
+      if (tamper === 'stripped') {
+        Reflect.deleteProperty(record, 'guard');
+        Reflect.deleteProperty(record.item, 'guard');
+      } else {
+        record.guard.tag = 'other.policy';
+        record.item.guard.tag = 'other.policy';
+      }
+      record.item.status = 'replaying';
+    });
+    original.close();
+    const outbox = box();
+    outbox.registerGuardPolicy(tag, (operation) => operation.url === url);
+    const delegate = vi.fn<ReplayDelegate>().mockResolvedValue(undefined);
+    outbox.registerDelegate('other.policy', delegate);
+    await outbox.ready;
+    expect(outbox.pending()).toMatchObject([{ status: 'waiting', blocked: 'guard-required' }]);
+    const client = storage();
+    const progress = vi.fn();
+    await outbox.replay(client.client, { onProgress: progress });
+    await outbox.retry();
+    expect(outbox.pending()).toMatchObject([{ status: 'waiting', blocked: 'guard-required' }]);
+    expect(progress).not.toHaveBeenCalled();
+    expect(delegate).not.toHaveBeenCalled();
+    expect(client.head).not.toHaveBeenCalled();
+    expectNoDelivery(client);
+  });
+
+  it('checks policies registered after hydration, holds the same URL and lets other URLs proceed', async () => {
+    const outbox = box();
+    await enqueue(outbox, { guard: undefined });
+    await enqueue(outbox);
+    await enqueue(outbox, { url: `${root}other`, guard: undefined });
+    const matches = vi.fn((operation) => operation.url === url);
+    const stop = outbox.registerGuardPolicy(tag, matches);
+    const delegate = vi.fn<ReplayDelegate>().mockResolvedValue(undefined);
+    outbox.registerDelegate(tag, delegate);
+    const client = storage();
+    client.write.mockResolvedValue({ url, etag: null, created: false });
+    await outbox.replay(client.client);
+    expect(client.write.mock.calls.map(([target]) => target)).toEqual([`${root}other`]);
+    expect(outbox.pending()).toMatchObject([
+      { status: 'waiting', blocked: 'guard-required' },
+      { status: 'waiting' },
+    ]);
+    expect(delegate).not.toHaveBeenCalled();
+    expect(matches).toHaveBeenCalledWith({ op: 'write', url, container: undefined });
+    stop();
+    await outbox.retry();
+    expect(delegate).toHaveBeenCalledOnce();
+    expect(outbox.pending()).toEqual([]);
+  });
+
+  it('fails closed when a matcher throws, without exposing mutable records to it', async () => {
+    const outbox = box();
+    await enqueue(outbox, { guard: undefined });
+    outbox.registerGuardPolicy(tag, (operation) => {
+      operation.url = `${root}changed`;
+      throw new Error('unavailable');
+    });
+    const client = storage();
+    await outbox.replay(client.client);
+    expect(outbox.pending()).toMatchObject([{ url, status: 'waiting', blocked: 'guard-required' }]);
+    expectNoDelivery(client);
+  });
+
+  it('preserves delivery of legacy records without a policy and clears policies on close', async () => {
+    const original = box();
+    await enqueue(original, { guard: undefined });
+    original.registerGuardPolicy(tag, () => true);
+    original.close();
+    const outbox = box();
+    const client = storage();
+    client.write.mockResolvedValue({ url, etag: null, created: false });
+    await outbox.replay(client.client);
+    expect(client.write).toHaveBeenCalledOnce();
+    expect(outbox.pending()).toEqual([]);
+  });
+
+  it('validates tags, rejects duplicates, unregisters idempotently and emits changes', async () => {
+    const outbox = box();
+    await enqueue(outbox, { guard: undefined });
+    const change = vi.fn();
+    outbox.on('change', change);
+    expect(() => outbox.registerGuardPolicy('INVALID', () => true)).toThrow('guard tag');
+    const stop = outbox.registerGuardPolicy(tag, () => true);
+    expect(() => outbox.registerGuardPolicy(tag, () => false)).toThrow('duplicate');
+    expect(outbox.pending()[0]?.blocked).toBe('guard-required');
+    stop();
+    const next = outbox.registerGuardPolicy(tag, () => true);
+    stop();
+    expect(outbox.pending()[0]?.blocked).toBe('guard-required');
+    next();
+    expect(outbox.pending()[0]?.blocked).toBeUndefined();
+    expect(change).toHaveBeenCalledTimes(4);
+    outbox.close();
+    expect(() => outbox.registerGuardPolicy(tag, () => true)).toThrow('closed');
+  });
+
+  it.each([
+    'persist',
+    'progress',
+  ] as const)('checks again when a policy is registered during %s', async (when) => {
+    const outbox = box();
+    await enqueue(outbox, { guard: undefined });
+    let installed = false;
+    const install = () => {
+      if (!installed && outbox.pending()[0]?.status === 'replaying') {
+        installed = true;
+        outbox.registerGuardPolicy(tag, () => true);
+      }
+    };
+    if (when === 'persist') outbox.on('change', install);
+    const client = storage();
+    await outbox.replay(client.client, { onProgress: when === 'progress' ? install : undefined });
+    expect(installed).toBe(true);
+    expect(outbox.pending()).toMatchObject([{ status: 'waiting', blocked: 'guard-required' }]);
+    expectNoDelivery(client);
+  });
+
+  it.each([
+    'mine',
+    'both',
+  ] as const)('rejects %s under a late policy before any storage call', async (strategy) => {
+    const outbox = box();
+    const { client, conflictId } = await guardedConflict(outbox);
+    outbox.registerGuardPolicy('other.policy', () => true);
+    await expect(outbox.resolve(conflictId, strategy)).rejects.toThrow('guard required');
+    expect(outbox.conflicts()).toHaveLength(1);
+    expect(client.head).not.toHaveBeenCalled();
+    expectNoDelivery(client);
+    await outbox.resolve(conflictId, 'theirs');
+    expect(outbox.pending()).toEqual([]);
+  });
+
+  it.each([
+    'mine',
+    'both',
+  ] as const)('rejects %s after both guard fields are removed from a conflict', async (strategy) => {
+    const outbox = box();
+    const { client, conflictId } = await guardedConflict(outbox);
+    await stored((record) => {
+      Reflect.deleteProperty(record, 'guard');
+      Reflect.deleteProperty(record.item, 'guard');
+    });
+    outbox.registerGuardPolicy(tag, () => true);
+    await expect(outbox.resolve(conflictId, strategy)).rejects.toThrow('guard required');
+    expect(outbox.conflicts()).toHaveLength(1);
+    expect(client.head).not.toHaveBeenCalled();
+    expectNoDelivery(client);
+  });
+
+  it('checks a policy installed while buffering an online request', async () => {
+    const outbox = box();
+    const client = storage();
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        outbox.registerGuardPolicy(tag, () => true);
+        controller.enqueue(new Uint8Array([1]));
+        controller.close();
+      },
+    });
+    await expect(
+      withOutbox(client.client, outbox).write(url, body, { ...writeOptions, offline: 'queue' }),
+    ).rejects.toThrow('guard required');
+    expectNoDelivery(client);
+    await outbox.ready;
+    expect(outbox.pending()).toEqual([]);
+  });
+
+  it.each([
+    'mine',
+    'both',
+  ] as const)('checks late policies after preparing %s resolution', async (strategy) => {
+    const outbox = box();
+    const { client, conflictId } = await guardedConflict(outbox);
+    const install = () => outbox.registerGuardPolicy('another.policy', () => true);
+    if (strategy === 'mine')
+      client.head.mockImplementationOnce(async () => {
+        install();
+        return { etag: '"latest"' } as Awaited<ReturnType<StorageClient['head']>>;
+      });
+    else
+      vi.spyOn(client.client, 'parentOf').mockImplementationOnce(async () => {
+        install();
+        return root;
+      });
+    await expect(outbox.resolve(conflictId, strategy)).rejects.toThrow('guard required');
+    expect(outbox.conflicts()).toHaveLength(1);
+    expectNoDelivery(client);
+  });
+
+  it('checks the transformed copy request against policies before bare delivery', async () => {
+    const outbox = box();
+    const { client, conflictId } = await guardedConflict(outbox);
+    await stored((record) => {
+      Reflect.deleteProperty(record, 'guard');
+      Reflect.deleteProperty(record.item, 'guard');
+    });
+    outbox.registerGuardPolicy(tag, ({ op }) => op === 'create');
+    await expect(outbox.resolve(conflictId, 'both')).rejects.toThrow('guard required');
+    expect(outbox.conflicts()).toHaveLength(1);
+    expectNoDelivery(client);
+  });
+});
+
 describe('guard validation', () => {
   const cyclic: Record<string, unknown> = {};
   cyclic.self = cyclic;
@@ -382,6 +674,36 @@ describe('guard validation', () => {
     expect(delivered).toEqual([...values, undefined]);
   });
 
+  it('bounds depth and node count before reaching later properties', async () => {
+    const outbox = box();
+    let deep: JsonValue = null;
+    for (let i = 0; i < 10000; i++) deep = { nested: deep };
+    await expect(enqueue(outbox, { guard: { tag, assertions: deep } })).rejects.toThrow('depth');
+    await expect(
+      enqueue(outbox, { guard: { tag, assertions: Array.from({ length: 2000 }, () => null) } }),
+    ).rejects.toThrow('2,000 nodes');
+    let boundary: JsonValue = null;
+    for (let i = 0; i < 32; i++) boundary = [boundary];
+    await enqueue(outbox, { guard: { tag, assertions: boundary } });
+    await enqueue(outbox, {
+      guard: { tag, assertions: Array.from({ length: 1999 }, () => 0) },
+    });
+    expect(outbox.pending()).toHaveLength(2);
+  });
+
+  it.each([
+    ['large string', { first: 'é'.repeat(100000), later: undefined }],
+    ['large key', { ['é'.repeat(100000)]: null, later: undefined }],
+    ['backslash', '\\'.repeat(8192)],
+    ['control', '\u0000'.repeat(3000)],
+    ['lone surrogate', '\ud800'.repeat(3000)],
+    ['surrogate pair', '😀'.repeat(4096)],
+  ])('stops at the running serialized UTF-8 budget: %s', async (_name, assertions) => {
+    await expect(enqueue(box(), { guard: { tag, assertions } as OutboxGuard })).rejects.toThrow(
+      '16 KiB',
+    );
+  });
+
   it.each([
     (record: TestStoredItem) => {
       record.guard.tag = 'INVALID';
@@ -431,7 +753,11 @@ describe('guard validation', () => {
 });
 
 async function guardedConflict(outbox: Outbox, op: OutboxOperation['op'] = 'write') {
-  await enqueue(outbox, { op, ...(op === 'create' ? { container: root, name: 'file.bin' } : {}) });
+  await enqueue(outbox, {
+    op,
+    keepalive: true,
+    ...(op === 'create' ? { container: root, name: 'file.bin' } : {}),
+  });
   const delegate = vi
     .fn<ReplayDelegate>()
     .mockRejectedValueOnce(failure('precondition-failed', { status: 412 }));
@@ -460,6 +786,7 @@ describe('guarded conflicts', () => {
         body: new TextEncoder().encode('hello'),
         assertions: guard.assertions,
         purpose: 'resolve-mine',
+        keepalive: true,
       }),
       expect.objectContaining({ storage: client.client, signal: expect.any(AbortSignal) }),
     );
@@ -481,9 +808,14 @@ describe('guarded conflicts', () => {
         url: `${root}file-conflict-1000.bin`,
         container: root,
         name: 'file-conflict-1000.bin',
-        createOptions: { name: 'file-conflict-1000.bin', contentType: writeOptions.contentType },
+        createOptions: {
+          name: 'file-conflict-1000.bin',
+          contentType: writeOptions.contentType,
+          keepalive: true,
+        },
         assertions: guard.assertions,
         purpose: 'resolve-both',
+        keepalive: true,
       }),
       expect.anything(),
     );
@@ -530,6 +862,7 @@ describe('guarded online writes', () => {
     const wrapped = withOutbox(client, outbox);
     const opts = {
       ...writeOptions,
+      keepalive: true,
       guard: customGuard,
       ...(queue ? { offline: 'queue' as const } : {}),
     };
@@ -569,6 +902,7 @@ describe('guarded online writes', () => {
       url,
       assertions: guard.assertions,
       purpose: 'replay',
+      keepalive: true,
     });
     if (op === 'writeRdf')
       expect(new TextDecoder().decode(delivery.body as Uint8Array)).toContain(
@@ -608,6 +942,7 @@ describe('guarded online writes', () => {
     outbox.registerDelegate(tag, delegate);
     await outbox.replay(client.client);
     expect(delegate).toHaveBeenCalledTimes(4);
+    expect(delegate.mock.calls.every(([delivery]) => delivery.keepalive === true)).toBe(true);
     expect(
       delegate.mock.calls.every(
         ([delivery]) => JSON.stringify(delivery.assertions) === JSON.stringify(guard.assertions),

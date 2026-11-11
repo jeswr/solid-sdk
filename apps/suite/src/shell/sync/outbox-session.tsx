@@ -1,9 +1,11 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 "use client";
 
 import { createPodClient, type StorageClient } from "@jeswr/storage-client";
 import {
   createOutbox,
+  type GuardPolicy,
   type Outbox,
   type QueueingStorageClient,
   type ReplayDelegate,
@@ -20,6 +22,8 @@ interface OutboxSession {
   adapter: ReturnType<typeof createRealOutbox>;
   storage: QueueingStorageClient | null;
   signal: AbortSignal;
+  /** Register trusted scope requirements for this session, including while storage opens. */
+  registerGuardPolicy(tag: string, matches: GuardPolicy): () => void;
   /**
    * Register after storage opens, in a useEffect keyed on this session. Replacement
    * unregisters automatically; callers must register again for the next session.
@@ -50,6 +54,10 @@ export function OutboxSessionProvider({ children }: { children: ReactNode }) {
     const controller = new AbortController();
     const active = () =>
       latest.current.active === account && latest.current.isActiveAccount(account.id);
+    const check = () => {
+      controller.signal.throwIfAborted();
+      if (!active()) throw new Error("The outbox account is no longer active");
+    };
     const fetch = outboxTransport(
       (input, init) => latest.current.fetch(input, init),
       active,
@@ -68,11 +76,14 @@ export function OutboxSessionProvider({ children }: { children: ReactNode }) {
       adapter,
       storage: null,
       signal: controller.signal,
+      registerGuardPolicy(tag, matches) {
+        check();
+        return outbox.registerGuardPolicy(tag, (operation) => {
+          check();
+          return matches(operation);
+        });
+      },
       registerReplayDelegate(tag, factory) {
-        const check = () => {
-          controller.signal.throwIfAborted();
-          if (!active()) throw new Error("The outbox account is no longer active");
-        };
         check();
         if (!storage) throw new Error("Your storage is still opening. Please try again.");
         const delegate = factory({

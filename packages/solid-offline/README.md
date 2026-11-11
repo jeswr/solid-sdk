@@ -138,7 +138,8 @@ const unsubscribe = outbox.on('change', () => renderQueue(outbox.pending()));
 `write`, `writeRdf`, `create`, and `delete` queue only with `offline: 'queue'`, when the
 browser reports offline or the operation fails with a network error. Other failures still
 throw. A queued write/create returns `{ url, etag: null, created: false, queued: true }`;
-`delete` continues to return void. Calls without `offline` or `guard` pass through to storage.
+`delete` continues to return void. Calls without `offline` or `guard` pass through to storage
+when no registered guard policy requires a guard.
 `patch` and `move` remain unqueueable in v1. Bodies, including streams, are captured before
 an opted-in attempt, so a failed upload cannot consume the only local copy. This buffers
 the complete body in memory. Queued `writeRdf` bodies retain Turtle or expanded, context-free JSON-LD as requested.
@@ -160,6 +161,10 @@ For application policy checks, pass `guard: { tag, assertions? }` to `enqueue` o
 decorated `write`, `writeRdf`, `create`, and `delete` options alongside `offline: 'queue'`:
 
 ```ts
+// Trusted application scope, registered independently of the editable queue records.
+const stopPolicy = outbox.registerGuardPolicy('app.policy-v1', ({ url, container }) =>
+  (container ?? url).startsWith(protectedContainerUrl),
+);
 const unregister = outbox.registerDelegate('app.policy-v1', async (delivery, { storage, signal }) => {
   await verifyPolicy(delivery.assertions, delivery.url, signal);
   // Dispatch delivery.op using delivery's actual URL, bytes, validators and create/delete options.
@@ -169,24 +174,42 @@ await queuedStorage.write(documentUrl, bytes, {
   contentType: 'text/plain', ifMatch: documentEtag, offline: 'queue',
   guard: { tag: 'app.policy-v1', assertions: { policyEtag: capturedPolicyEtag } },
 });
-// Later: unregister();
+// Later: unregister(); stopPolicy();
 ```
 
 `OutboxGuard` tags match `/^[a-z][a-z0-9.-]{0,63}$/`. Assertions must be plain JSON
-(`JsonValue`), at most 16 KiB serialized as UTF-8; undefined, non-finite numbers, sparse
+(`JsonValue`), at most 16 KiB serialized as UTF-8, depth 32 (assertion root at depth zero),
+and 2,000 visited values. The byte budget counts keys, strings, escaping and punctuation
+during copying and stops before full serialization; undefined, non-finite numbers, sparse
 arrays, accessors, class instances and cycles are rejected. Guards are snapshotted at enqueue
 and validated again on hydration. Invalid stored guards become failed items and cannot be sent,
 including through retry. `pending()` exposes only the read-only `guard.tag`, never assertions.
 
+`registerGuardPolicy(tag, matches: GuardPolicy)` binds a trusted requirement to operations
+described only by `{ op, url, container? }`. On hydration and immediately before delivery,
+each matching policy requires its own tag; a throwing matcher counts as a match. Stripped
+guards and guards with another tag leave replay waiting with `blocked: 'guard-required'`,
+hold later same-URL work and allow other URLs to proceed. Online calls through `withOutbox`
+reject before network I/O, even without queue opt-in; `mine`/`both` reject and retain conflicts.
+Checks also cover the transformed conflict-copy request. For unnamed online creates, the
+description uses the container URL until storage assigns a resource URL. Policies are
+session-local, never persisted, and must be reinstalled for each active session before replay.
+The shell session exposes the same `registerGuardPolicy(tag, matches)` lifecycle alongside
+`registerReplayDelegate`. No registered matching policy preserves legacy unguarded delivery.
+Delegates still verify assertions against trusted application state.
+
 Every guarded delivery uses the registered `ReplayDelegate`, including online attempts and
 conflict resolutions. Its `GuardedDelivery` snapshot contains `op`, `url`, optional `container`,
-`name`, `contentType`, `ifMatch`, `createOptions`, `deleteOptions`, private `assertions`, and a
+`name`, `contentType`, `ifMatch`, `keepalive`, `createOptions`, `deleteOptions`, private `assertions`, and a
 `Uint8Array | null` body. `purpose` is `replay`, `resolve-mine`, or `resolve-both`. Resolution
 supplies the actual overwrite or copy request, with the fresh validator or create-only name.
 Delegates receive the underlying StorageClient and an AbortSignal; use that client rather than
 the queue decorator to avoid recursive delivery. Body, options and assertions are defensive copies.
 Delegate network, precondition and other replay errors follow the usual queue classification.
 Failed resolution retains the conflict, as it does for unguarded requests.
+`keepalive` survives guarded write/writeRdf/create/delete online attempts, queuing and conflict
+resolution. Guarded delete accepts it for delegate transports; the underlying StorageClient
+delete API does not itself provide a keepalive option.
 
 Registrations belong to one outbox instance and session. Duplicate tags throw; unregister is
 idempotent. Missing delegates leave replay items waiting with `blocked: 'no-delegate'`, hold
@@ -194,7 +217,7 @@ later work for the same URL, and allow other URLs to proceed without reporting d
 Register later and replay explicitly to deliver them. Online guarded attempts refuse a missing
 delegate; guarded `mine`/`both` resolutions refuse and retain the conflict. `theirs` needs no
 delegate. Guard enforcement also applies when queue opt-in is omitted, without queuing failures.
-`close()` clears registrations and aborts guarded requests. Delegates and credentials are never persisted.
+`close()` clears delegate and policy registrations and aborts guarded requests. Delegates and credentials are never persisted.
 
 `conflicts()` returns metadata; `await localBody(conflictId)` retrieves the local bytes without
 putting bodies in snapshots or broadcasts. `resolve(id, 'mine')` HEADs for a current ETag and

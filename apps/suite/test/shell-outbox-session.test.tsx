@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { createRequire } from "node:module";
 import { createPodClient } from "@jeswr/storage-client";
 import { createMemoryStorage } from "@jeswr/storage-client/memory";
@@ -260,4 +261,92 @@ test("registered delivery and fetch are fenced when account authority changes wi
     { status: "failed", error: expect.stringContaining("no longer active") },
   ]);
   await expect(transport(alice.storageUrl)).rejects.toThrow("no longer active");
+});
+
+test("trusted guard policies block bare delivery and expire on account replacement", async () => {
+  const view = render(contents());
+  await waitFor(() => expect(session?.storage).toBeTruthy());
+  const first = present(session);
+  const raw = (await present(vi.mocked(createPodClient).mock.results[0]).value).storage;
+  const write = vi.spyOn(raw, "write");
+  const matches = vi.fn((operation: { url: string }) => operation.url.startsWith(alice.storageUrl));
+  const stop = first.registerGuardPolicy("test.policy", matches);
+  const target = `${alice.storageUrl}guard-stripped`;
+  await first.outbox.enqueue({ op: "write", url: target, body: "unsent" });
+  await first.outbox.replay(present(first.storage));
+  expect(first.outbox.pending()).toMatchObject([{ status: "waiting", blocked: "guard-required" }]);
+  expect(write).not.toHaveBeenCalled();
+  await expect(
+    present(first.storage).write(target, "body", {
+      contentType: "text/plain",
+      ifMatch: "*",
+    }),
+  ).rejects.toThrow("guard required");
+  expect(write).not.toHaveBeenCalled();
+  const delegate = vi.fn().mockResolvedValue(undefined);
+  first.registerReplayDelegate("test.policy", () => delegate);
+  await present(first.storage).write(target, "body", {
+    contentType: "text/plain",
+    ifMatch: "*",
+    guard: { tag: "test.policy" },
+    keepalive: true,
+  });
+  expect(delegate).toHaveBeenCalledWith(
+    expect.objectContaining({ keepalive: true }),
+    expect.anything(),
+  );
+
+  fixture.accounts = { ...fixture.accounts, active: bob };
+  view.rerender(contents());
+  await waitFor(() => expect(session?.storage?.root).toBe(bob.storageUrl));
+  expect(() => first.registerGuardPolicy("test.policy", matches)).toThrow();
+  const second = present(session);
+  const bobRaw = (await present(vi.mocked(createPodClient).mock.results[1]).value).storage;
+  const bobWrite = vi
+    .spyOn(bobRaw, "write")
+    .mockResolvedValue({ url: `${bob.storageUrl}file`, etag: null, created: false });
+  const opts = { contentType: "text/plain", ifMatch: "*" };
+  await present(second.storage).write(`${bob.storageUrl}file`, "legacy", opts);
+  expect(bobWrite).toHaveBeenCalledOnce();
+  const stopBob = second.registerGuardPolicy("test.policy", () => true);
+  stop();
+  await expect(
+    present(second.storage).write(`${bob.storageUrl}file`, "local", opts),
+  ).rejects.toThrow("guard required");
+  expect(bobWrite).toHaveBeenCalledOnce();
+  stopBob();
+  stopBob();
+  await present(second.storage).write(`${bob.storageUrl}file`, "legacy", opts);
+  expect(bobWrite).toHaveBeenCalledTimes(2);
+});
+
+test("policies can register while storage opens and retained registrations reject inactive accounts", async () => {
+  let resolve!: (value: Awaited<ReturnType<typeof createPodClient>>) => void;
+  vi.mocked(createPodClient).mockReturnValueOnce(
+    new Promise((done) => {
+      resolve = done;
+    }),
+  );
+  render(contents());
+  await waitFor(() => expect(session?.outbox).toBeTruthy());
+  const first = present(session);
+  const matches = vi.fn(() => true);
+  first.registerGuardPolicy("test.policy", matches);
+  expect(first.storage).toBeNull();
+  const raw = createMemoryStorage({ root: alice.storageUrl });
+  const write = vi.spyOn(raw, "write");
+  await act(async () => {
+    resolve({ storage: raw } as Awaited<ReturnType<typeof createPodClient>>);
+  });
+  await waitFor(() => expect(session?.storage).toBeTruthy());
+  fixture.accounts.isActiveAccount = () => false;
+  expect(() => first.registerGuardPolicy("other.policy", matches)).toThrow("no longer active");
+  await expect(
+    present(session?.storage).write(`${alice.storageUrl}file`, "body", {
+      contentType: "text/plain",
+      ifMatch: "*",
+    }),
+  ).rejects.toThrow("guard required");
+  expect(matches).not.toHaveBeenCalled();
+  expect(write).not.toHaveBeenCalled();
 });

@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { createRequire } from "node:module";
 import type { StorageClient } from "@jeswr/storage-client";
 import { createMemoryStorage } from "@jeswr/storage-client/memory";
@@ -22,6 +23,7 @@ function fake() {
     conflicts: () => [...conflicts],
     enqueue: vi.fn(),
     registerDelegate: vi.fn(),
+    registerGuardPolicy: vi.fn(),
     localBody: vi.fn(),
     purge: vi.fn(),
     close: vi.fn(),

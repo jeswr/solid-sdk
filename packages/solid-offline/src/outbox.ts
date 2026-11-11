@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import {
   type Body,
   type CreateOptions,
@@ -36,7 +37,7 @@ export interface OutboxItem {
   status: 'waiting' | 'replaying' | 'failed' | 'conflict';
   error?: string;
   readonly guard?: { readonly tag: string };
-  readonly blocked?: 'no-delegate';
+  readonly blocked?: 'no-delegate' | 'guard-required';
 }
 
 export interface ConflictRecord {
@@ -56,6 +57,7 @@ export interface OutboxOperation {
   body?: Body | null;
   contentType?: string;
   ifMatch?: string;
+  keepalive?: boolean;
   container?: string;
   name?: string;
   label?: string;
@@ -73,6 +75,7 @@ export interface GuardedDelivery {
   contentType?: string;
   body: Uint8Array | null;
   ifMatch?: string;
+  keepalive?: boolean;
   createOptions?: OutboxOperation['createOptions'];
   deleteOptions?: OutboxOperation['deleteOptions'];
   assertions?: JsonValue;
@@ -84,6 +87,9 @@ export type ReplayDelegate = (
   ctx: { storage: StorageClient; signal: AbortSignal },
   // biome-ignore lint/suspicious/noConfusingVoidType: Delegates may intentionally return no result.
 ) => Promise<WriteResult | void>;
+
+/** Trusted session policy, independent of editable queue records. Throwing fails closed. */
+export type GuardPolicy = (operation: Pick<OutboxOperation, 'op' | 'url' | 'container'>) => boolean;
 
 export interface ReplayOptions {
   /** Per-item byte progress, at start (0) and successful completion (size). */
@@ -102,6 +108,8 @@ export interface Outbox {
   enqueue(operation: OutboxOperation): Promise<OutboxItem>;
   /** Session-local registration. Duplicate tags throw; close unregisters everything. */
   registerDelegate(tag: string, delegate: ReplayDelegate): () => void;
+  /** Require this guard tag for matching operations. Session-local; duplicate tags throw. */
+  registerGuardPolicy(tag: string, matches: GuardPolicy): () => void;
   /** Accepts a conflict ID or an item ID; returns a defensive copy. */
   localBody(id: string): Promise<Uint8Array | null>;
   replay(client: StorageClient, options?: ReplayOptions): Promise<void>;
@@ -115,7 +123,7 @@ export interface Outbox {
   close(): void;
 }
 
-export type QueueOption = { offline?: 'queue'; guard?: OutboxGuard };
+export type QueueOption = { offline?: 'queue'; guard?: OutboxGuard; keepalive?: boolean };
 type RdfOptions = Parameters<StorageClient['writeRdf']>[2];
 type DeleteOptions = NonNullable<Parameters<StorageClient['delete']>[1]>;
 export type QueueingWriteResult = WriteResult & { queued?: true };
@@ -139,6 +147,7 @@ interface StoredItem {
   item: OutboxItem;
   body: Uint8Array | null;
   ifMatch?: string;
+  keepalive?: boolean;
   createOptions?: OutboxOperation['createOptions'];
   deleteOptions?: OutboxOperation['deleteOptions'];
   conflict?: ConflictRecord;
@@ -148,7 +157,11 @@ interface StoredItem {
 const clients = new WeakMap<Outbox, StorageClient>();
 const sessions = new WeakMap<
   Outbox,
-  { delegates: Map<string, ReplayDelegate>; signal: AbortSignal }
+  {
+    delegates: Map<string, ReplayDelegate>;
+    policies: Map<string, GuardPolicy>;
+    signal: AbortSignal;
+  }
 >();
 const underlying = new WeakMap<StorageClient, StorageClient>();
 // Also serialize instances in the same realm, including tests without Web Locks.
@@ -163,6 +176,36 @@ const networkFailure = (error: unknown) =>
   (error instanceof TypeError && /fetch|network/i.test(error.message));
 
 class MissingDelegateError extends Error {}
+class GuardRequiredError extends Error {}
+
+function guardRequired(
+  policies: Map<string, GuardPolicy> | undefined,
+  operation: Pick<OutboxOperation, 'op' | 'url' | 'container'>,
+  guard: OutboxGuard | undefined,
+): boolean {
+  if (!policies) return false;
+  for (const [tag, matches] of policies) {
+    if (guard?.tag === tag) continue;
+    try {
+      // Matchers receive only a disposable description, never queue records or assertions.
+      if (!matches({ op: operation.op, url: operation.url, container: operation.container }))
+        continue;
+    } catch {
+      // A policy whose scope cannot be established still requires its guard.
+    }
+    return true;
+  }
+  return false;
+}
+
+function assertGuardPolicy(
+  outbox: Outbox,
+  operation: Pick<OutboxOperation, 'op' | 'url' | 'container'>,
+  guard?: OutboxGuard,
+): void {
+  if (guardRequired(sessions.get(outbox)?.policies, operation, guard))
+    throw new GuardRequiredError('[solid-offline] guard required by registered policy');
+}
 
 function errorMessage(error: unknown): string {
   try {
@@ -183,15 +226,71 @@ function snapshotGuard(value: unknown): OutboxGuard | undefined {
   if (value === undefined) return undefined;
   const invalid = () =>
     new TypeError('[solid-offline] invalid guard: assertions must be plain JSON');
+  if (
+    value === null ||
+    typeof value !== 'object' ||
+    ![Object.prototype, null].includes(Object.getPrototypeOf(value))
+  )
+    throw invalid();
+  const fields = new Map<string, unknown>();
+  for (const key of Reflect.ownKeys(value)) {
+    const property = Object.getOwnPropertyDescriptor(value, key);
+    if (
+      (key !== 'tag' && key !== 'assertions') ||
+      !property?.enumerable ||
+      !Object.hasOwn(property, 'value')
+    )
+      throw invalid();
+    fields.set(key, property.value);
+  }
+  const tag = fields.get('tag');
+  validateTag(tag);
+  let nodes = 0;
+  let size = 0;
+  const count = (bytes: number) => {
+    size += bytes;
+    if (size > 16 * 1024) throw new TypeError('[solid-offline] guard assertions exceed 16 KiB');
+  };
+  // Count JSON escaping and UTF-8 incrementally, without allocating an encoded large string.
+  const stringSize = (text: string) => {
+    count(2);
+    for (let i = 0; i < text.length; i++) {
+      const code = text.charCodeAt(i);
+      if (code === 34 || code === 92 || [8, 9, 10, 12, 13].includes(code)) count(2);
+      else if (code < 32) count(6);
+      else if (code < 128) count(1);
+      else if (code < 2048) count(2);
+      else if (code >= 0xd800 && code <= 0xdfff) {
+        const next = text.charCodeAt(i + 1);
+        if (code <= 0xdbff && next >= 0xdc00 && next <= 0xdfff) {
+          count(4);
+          i++;
+        } else count(6);
+      } else count(3);
+    }
+  };
   const ancestors = new Set<object>();
-  const copy = (input: unknown): JsonValue => {
-    if (input === null || typeof input === 'string' || typeof input === 'boolean') return input;
-    if (typeof input === 'number' && Number.isFinite(input)) return input;
+  const copy = (input: unknown, depth = 0): JsonValue => {
+    if (depth > 32) throw new TypeError('[solid-offline] guard assertions exceed depth 32');
+    if (++nodes > 2000) throw new TypeError('[solid-offline] guard assertions exceed 2,000 nodes');
+    if (typeof input === 'string') {
+      stringSize(input);
+      return input;
+    }
+    if (
+      input === null ||
+      typeof input === 'boolean' ||
+      (typeof input === 'number' && Number.isFinite(input))
+    ) {
+      count(JSON.stringify(input).length);
+      return input;
+    }
     if (typeof input !== 'object' || input === null || ancestors.has(input)) throw invalid();
     const array = Array.isArray(input);
     if (array && Object.getPrototypeOf(input) !== Array.prototype) throw invalid();
     if (!array && ![Object.prototype, null].includes(Object.getPrototypeOf(input))) throw invalid();
     ancestors.add(input);
+    count(2); // Brackets/braces.
     const entries: [string, JsonValue][] = [];
     for (const key of Reflect.ownKeys(input)) {
       if (array && key === 'length') continue;
@@ -203,7 +302,12 @@ function snapshotGuard(value: unknown): OutboxGuard | undefined {
         (array && (!/^(0|[1-9][0-9]*)$/.test(key) || Number(key) >= input.length))
       )
         throw invalid();
-      entries.push([key, copy(property.value)]);
+      if (entries.length) count(1); // Comma.
+      if (!array) {
+        stringSize(key);
+        count(1); // Colon.
+      }
+      entries.push([key, copy(property.value, depth + 1)]);
     }
     ancestors.delete(input);
     if (array) {
@@ -212,17 +316,7 @@ function snapshotGuard(value: unknown): OutboxGuard | undefined {
     }
     return Object.fromEntries(entries);
   };
-  const guard = copy(value);
-  if (!guard || Array.isArray(guard) || typeof guard !== 'object') throw invalid();
-  validateTag(guard.tag);
-  if (Object.keys(guard).some((key) => key !== 'tag' && key !== 'assertions')) throw invalid();
-  if (Object.hasOwn(guard, 'assertions')) {
-    if (encoder.encode(JSON.stringify(guard.assertions)).byteLength > 16 * 1024) {
-      throw new TypeError('[solid-offline] guard assertions exceed 16 KiB');
-    }
-    return { tag: guard.tag, assertions: guard.assertions };
-  }
-  return { tag: guard.tag };
+  return fields.has('assertions') ? { tag, assertions: copy(fields.get('assertions')) } : { tag };
 }
 
 function storedGuard(record: StoredItem): OutboxGuard | undefined {
@@ -252,6 +346,7 @@ async function deliverGuarded(
   storage: StorageClient,
   signal?: AbortSignal,
 ): ReturnType<ReplayDelegate> {
+  assertGuardPolicy(outbox, delivery, guard);
   const delegate = delegateFor(outbox, guard.tag);
   const session = sessions.get(outbox) as NonNullable<ReturnType<typeof sessions.get>>;
   const activeSignal = signal ? AbortSignal.any([session.signal, signal]) : session.signal;
@@ -412,6 +507,7 @@ export function createOutbox(options: {
   let closed = false;
   const controller = new AbortController();
   const delegates = new Map<string, ReplayDelegate>();
+  const policies = new Map<string, GuardPolicy>();
   const channel =
     typeof BroadcastChannel === 'undefined' ? undefined : new BroadcastChannel(dbName);
   // Node's BroadcastChannel should not keep tooling/SSR processes alive.
@@ -447,7 +543,12 @@ export function createOutbox(options: {
       request.onsuccess = () => {
         for (const record of request.result as StoredItem[]) {
           try {
-            storedGuard(record);
+            const guard = storedGuard(record);
+            const required = guardRequired(policies, record.item, guard);
+            if (record.item.status === 'replaying' && required) {
+              record.item.status = 'waiting';
+              store.put(record);
+            }
           } catch (error) {
             const message = `[solid-offline] invalid stored guard: ${errorMessage(error)}`;
             if (record.item.status !== 'failed' || record.item.error !== message) {
@@ -548,6 +649,8 @@ export function createOutbox(options: {
   ): Promise<void> {
     const { item } = record;
     const guard = storedGuard(record);
+    const keepalive = record.keepalive ?? record.createOptions?.keepalive;
+    assertGuardPolicy(outbox, item, guard);
     if (guard) {
       await deliverGuarded(
         outbox,
@@ -560,6 +663,7 @@ export function createOutbox(options: {
           contentType: item.contentType,
           body: record.body,
           ifMatch: record.ifMatch,
+          keepalive,
           createOptions: record.createOptions,
           deleteOptions: record.deleteOptions,
           purpose: 'replay',
@@ -574,12 +678,14 @@ export function createOutbox(options: {
     } else if (item.op === 'create') {
       await storage.create(item.container as string, record.body, {
         ...record.createOptions,
+        keepalive,
         signal,
       });
     } else {
       await storage.write(item.url, record.body ?? new Uint8Array(), {
         contentType: item.contentType as string,
         ifMatch: record.ifMatch as string,
+        keepalive,
         signal,
       });
     }
@@ -598,7 +704,10 @@ export function createOutbox(options: {
       if (closed || opts.signal?.aborted) break;
       if (!['waiting', 'replaying'].includes(record.item.status) || blocked.has(record.item.url))
         continue;
-      if (record.guard && !delegates.has(record.guard.tag)) {
+      if (
+        guardRequired(policies, record.item, record.guard) ||
+        (record.guard && !delegates.has(record.guard.tag))
+      ) {
         if (record.item.status !== 'waiting') {
           record.item.status = 'waiting';
           await save(record);
@@ -609,7 +718,10 @@ export function createOutbox(options: {
       record.item.status = 'replaying';
       await save(record);
       // Registration can disappear while persistence yields to a component cleanup.
-      if (record.guard && !delegates.has(record.guard.tag)) {
+      if (
+        guardRequired(policies, record.item, record.guard) ||
+        (record.guard && !delegates.has(record.guard.tag))
+      ) {
         record.item.status = 'waiting';
         await save(record);
         blocked.add(record.item.url);
@@ -619,7 +731,7 @@ export function createOutbox(options: {
       try {
         await send(record, storage, opts.signal);
       } catch (error) {
-        if (error instanceof MissingDelegateError) {
+        if (error instanceof MissingDelegateError || error instanceof GuardRequiredError) {
           record.item.status = 'waiting';
           blocked.add(record.item.url);
           await save(record);
@@ -670,8 +782,12 @@ export function createOutbox(options: {
         return {
           ...item,
           ...(r.guard && typeof r.guard.tag === 'string' ? { guard: { tag: r.guard.tag } } : {}),
-          ...(r.item.status === 'waiting' && r.guard && !delegates.has(r.guard.tag)
-            ? { blocked: 'no-delegate' as const }
+          ...(r.item.status === 'waiting'
+            ? guardRequired(policies, r.item, r.guard)
+              ? { blocked: 'guard-required' as const }
+              : r.guard && !delegates.has(r.guard.tag)
+                ? { blocked: 'no-delegate' as const }
+                : {}
             : {}),
         };
       }),
@@ -698,6 +814,7 @@ export function createOutbox(options: {
           item,
           body,
           ifMatch: operation.ifMatch,
+          keepalive: operation.keepalive ?? operation.createOptions?.keepalive,
           createOptions: operation.createOptions,
           deleteOptions: operation.deleteOptions,
           guard,
@@ -717,6 +834,20 @@ export function createOutbox(options: {
         if (!registered) return;
         registered = false;
         delegates.delete(tag);
+        emit('change');
+      };
+    },
+    registerGuardPolicy(tag, matches) {
+      if (closed) throw new Error('[solid-offline] outbox is closed');
+      validateTag(tag);
+      if (policies.has(tag)) throw new Error(`[solid-offline] duplicate guard policy for "${tag}"`);
+      policies.set(tag, matches);
+      emit('change');
+      let registered = true;
+      return () => {
+        if (!registered) return;
+        registered = false;
+        policies.delete(tag);
         emit('change');
       };
     },
@@ -753,12 +884,21 @@ export function createOutbox(options: {
           return;
         }
         const guard = storedGuard(record);
+        const keepalive = record.keepalive ?? record.createOptions?.keepalive;
+        assertGuardPolicy(outbox, item, guard);
         if (guard) delegateFor(outbox, guard.tag);
         const storage = client();
         if (strategy === 'mine') {
           const head = await storage.head(item.url, { revalidate: true });
           if (!head.etag)
             throw new Error('[solid-offline] cannot overwrite without a current ETag');
+          const delivery = {
+            op: item.op === 'delete' ? ('delete' as const) : ('write' as const),
+            url: item.url,
+            container: item.container,
+          };
+          assertGuardPolicy(outbox, item, guard);
+          assertGuardPolicy(outbox, delivery, guard);
           if (guard) {
             await deliverGuarded(
               outbox,
@@ -771,6 +911,7 @@ export function createOutbox(options: {
                 contentType: item.contentType ?? 'application/octet-stream',
                 body: record.body,
                 ifMatch: head.etag,
+                keepalive,
                 deleteOptions: record.deleteOptions,
                 purpose: 'resolve-mine',
               },
@@ -782,6 +923,7 @@ export function createOutbox(options: {
             await storage.write(item.url, record.body ?? new Uint8Array(), {
               contentType: item.contentType ?? 'application/octet-stream',
               ifMatch: head.etag,
+              keepalive,
             });
           }
         } else if (strategy === 'both') {
@@ -799,9 +941,17 @@ export function createOutbox(options: {
           // StorageClient.create's named Solid PUT uses If-None-Match: *.
           const createOptions = {
             ...record.createOptions,
+            keepalive,
             name,
             contentType: item.contentType,
           };
+          const delivery = {
+            op: 'create' as const,
+            url: `${childUrl(container, name)}${createOptions.kind === 'container' ? '/' : ''}`,
+            container,
+          };
+          assertGuardPolicy(outbox, item, guard);
+          assertGuardPolicy(outbox, delivery, guard);
           if (guard) {
             await deliverGuarded(
               outbox,
@@ -814,6 +964,7 @@ export function createOutbox(options: {
                 contentType: item.contentType,
                 body: record.body,
                 createOptions,
+                keepalive,
                 purpose: 'resolve-both',
               },
               storage,
@@ -842,6 +993,7 @@ export function createOutbox(options: {
       closed = true;
       controller.abort();
       delegates.clear();
+      policies.clear();
       sessions.delete(outbox);
       clients.delete(outbox);
       channel?.close();
@@ -849,7 +1001,7 @@ export function createOutbox(options: {
       listeners.conflict.clear();
     },
   };
-  sessions.set(outbox, { delegates, signal: controller.signal });
+  sessions.set(outbox, { delegates, policies, signal: controller.signal });
   return outbox;
 }
 
@@ -866,10 +1018,12 @@ export function withOutbox(client: StorageClient, outbox: Outbox): QueueingStora
   ): Promise<QueueingWriteResult> {
     signal?.throwIfAborted();
     const guard = snapshotGuard(operation.guard);
+    assertGuardPolicy(outbox, operation, guard);
     if (!raw.isWithinStorage(operation.container ?? operation.url)) {
       throw new StorageError('scope', { url: operation.url, method: operation.op.toUpperCase() });
     }
     const body = await bytes(operation.body);
+    assertGuardPolicy(outbox, operation, guard);
     const offline = typeof navigator !== 'undefined' && navigator.onLine === false;
     if (!offline || !queue) {
       try {
@@ -885,6 +1039,7 @@ export function withOutbox(client: StorageClient, outbox: Outbox): QueueingStora
                 contentType: operation.contentType,
                 body,
                 ifMatch: operation.ifMatch,
+                keepalive: operation.keepalive,
                 createOptions: operation.createOptions,
                 deleteOptions: operation.deleteOptions,
                 purpose: 'replay',
@@ -904,35 +1059,64 @@ export function withOutbox(client: StorageClient, outbox: Outbox): QueueingStora
   }
 
   const overrides: Pick<QueueingStorageClient, 'write' | 'writeRdf' | 'create' | 'delete'> = {
-    write(url, body, opts) {
-      if (opts.offline !== 'queue' && opts.guard === undefined)
+    async write(url, body, opts) {
+      if (opts.offline !== 'queue' && opts.guard === undefined) {
+        assertGuardPolicy(outbox, { op: 'write', url });
         return client.write(url, body, opts);
+      }
       const { offline: _offline, guard, ...writeOpts } = opts;
       return attempt(
-        { op: 'write', url, body, contentType: opts.contentType, ifMatch: opts.ifMatch, guard },
+        {
+          op: 'write',
+          url,
+          body,
+          contentType: opts.contentType,
+          ifMatch: opts.ifMatch,
+          keepalive: opts.keepalive,
+          guard,
+        },
         (copy) => raw.write(url, copy ?? new Uint8Array(), writeOpts),
         opts.signal,
         opts.offline === 'queue',
       );
     },
     async writeRdf(url, dataset, opts) {
-      if (opts.offline !== 'queue' && opts.guard === undefined)
+      if (opts.offline !== 'queue' && opts.guard === undefined) {
+        assertGuardPolicy(outbox, { op: 'write', url });
         return client.writeRdf(url, dataset, opts);
+      }
       const guard = snapshotGuard(opts.guard);
       const quads = [...dataset];
       const contentType = opts.contentType ?? 'text/turtle';
       const body = await serializeRdf(quads, contentType);
       const { offline: _offline, guard: _guard, ...rdfOpts } = opts;
       return attempt(
-        { op: 'write', url, body, contentType, ifMatch: opts.ifMatch, guard },
+        {
+          op: 'write',
+          url,
+          body,
+          contentType,
+          ifMatch: opts.ifMatch,
+          keepalive: opts.keepalive,
+          guard,
+        },
         () => raw.writeRdf(url, quads, rdfOpts),
         opts.signal,
         opts.offline === 'queue',
       );
     },
     async create(container, body, opts) {
-      if (opts?.offline !== 'queue' && opts?.guard === undefined)
+      if (opts?.offline !== 'queue' && opts?.guard === undefined) {
+        if (sessions.get(outbox)?.policies.size)
+          assertGuardPolicy(outbox, {
+            op: 'create',
+            url: opts?.name
+              ? `${childUrl(container, opts.name)}${opts.kind === 'container' ? '/' : ''}`
+              : container,
+            container,
+          });
         return client.create(container, body, opts);
+      }
       const { offline: _offline, signal, guard, ...createOpts } = opts;
       const name = opts.name ?? `offline-${crypto.randomUUID()}`;
       const url = `${childUrl(container, name)}${opts.kind === 'container' ? '/' : ''}`;
@@ -945,6 +1129,7 @@ export function withOutbox(client: StorageClient, outbox: Outbox): QueueingStora
           body,
           contentType: opts.contentType,
           createOptions: { ...createOpts, name },
+          keepalive: opts.keepalive,
           guard,
         },
         (copy) => raw.create(container, copy, { ...createOpts, name, signal }),
@@ -953,7 +1138,10 @@ export function withOutbox(client: StorageClient, outbox: Outbox): QueueingStora
       );
     },
     async delete(url, opts) {
-      if (opts?.offline !== 'queue' && opts?.guard === undefined) return client.delete(url, opts);
+      if (opts?.offline !== 'queue' && opts?.guard === undefined) {
+        assertGuardPolicy(outbox, { op: 'delete', url });
+        return client.delete(url, opts);
+      }
       const { offline: _offline, guard, ...deleteOpts } = opts;
       await attempt(
         {
@@ -961,6 +1149,7 @@ export function withOutbox(client: StorageClient, outbox: Outbox): QueueingStora
           url,
           ifMatch: opts.ifMatch,
           deleteOptions: { recursive: opts.recursive },
+          keepalive: opts.keepalive,
           guard,
         },
         () => raw.delete(url, deleteOpts),
