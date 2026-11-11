@@ -189,6 +189,9 @@ describe("shared mail primitives", () => {
       });
       assert.equal(typeof mail.HTML_TEXT_TRUNCATION_NOTICE, "string");
       assert.equal(typeof mail.createMailWriter, "function");
+      assert.equal(typeof mail.createMailMarkupWriter, "function");
+      assert.equal(typeof mail.rescanMailMarkup, "function");
+      assert.deepEqual(mail.extractEmailMarkup('<script type="application/ld+json">{"@type":"Order"}</script>'), [{ type: "Order", properties: {} }]);
     `,
       ],
       { cwd: new URL("../..", import.meta.url), encoding: "utf8", timeout: 10_000 },

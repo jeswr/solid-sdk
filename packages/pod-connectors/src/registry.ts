@@ -203,7 +203,7 @@ export const TIER_C: readonly CatalogEntry[] = [
     "google-takeout",
     "Google Takeout",
     ["documents", "media", "calendar", "contacts", "mail", "mobility", "health"],
-    "Mail, calendar, contacts, Drive files, activity history, location visits and Fit daily metrics from supported Takeout exports; unsupported products are reported.",
+    "Mail with sender-asserted purchases and reservations, calendar, contacts, Drive files, activity history, location visits and Fit daily metrics from supported Takeout exports; unsupported products are reported.",
     "Takeout archive",
   ),
 ];

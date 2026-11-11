@@ -114,6 +114,7 @@ export async function runImport(opts: RunImportOptions): Promise<ImportReport> {
       cursor: opts.cursor ?? opts.state?.cursor,
       resolve: (slug) => opts.podWriter.resolve(slug),
       read: checked(session.read),
+      releaseRead: session.releaseRead,
       progress: (p) => {
         signal?.throwIfAborted();
         opts.onProgress?.(p);

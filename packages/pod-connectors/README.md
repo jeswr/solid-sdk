@@ -154,6 +154,75 @@ collections it reconciles so each dataset uses the ETag from its own read. An in
 retains its cleanup inventory in that RDF for replay; a missing document is a no-op. Attachment
 media types from mail are untrusted: RDF and malformed types are stored as `application/octet-stream`.
 
+## Transactional email markup (CON-A8)
+
+`./mail` exports `extractEmailMarkup(html, { maxBytes?, maxItems? })`,
+`createMailMarkupWriter(ctx, account, options?)` and `rescanMailMarkup(ctx, account, options?)`.
+The pure extractor returns discriminated `EmailMarkupItem` values (`type`, `properties`), with
+allowlisted schema.org properties containing arrays of inert scalars or nested `MarkupNode`s.
+It supports Order (including OrderItem, Offer and ParcelDelivery), ParcelDelivery,
+FlightReservation, TrainReservation, BusReservation, LodgingReservation,
+FoodEstablishmentReservation, EventReservation and RentalCarReservation.
+
+Extraction accepts JSON-LD scripts, arrays and `@graph`, plus nested microdata scopes.
+Schema.org HTTP/HTTPS type IRIs and optional trailing slashes are normalized to mail's
+`http://schema.org/` vocabulary when written. Compact JSON-LD terms use an implied schema.org
+context; schema.org context strings and a single inline `@vocab` are accepted. Foreign or
+redefining contexts are refused. Nothing is executed or fetched, including contexts, script
+sources, tracking URLs and microdata `itemref`. This is a closed metadata reader, not a full
+JSON-LD processor or browser HTML tree builder. Untyped nested property objects are retained;
+unsupported explicitly typed objects and unknown properties are omitted. URLs remain literals.
+
+The default whole-HTML UTF-8 cap is 1 MiB (configurable up to 8 MiB); an oversized email yields
+no items. Default root item cap is 100 (hard ceiling 1,000). Further fixed caps are 32 script
+blocks (including non-JSON scripts), 50,000 HTML elements, nesting depth 32, 4,096 normalized
+nodes, 4,096 microdata scopes, 16,384 visited property values across the email, 64 values per
+property, 64 attributes per tag, 16 KiB per tag,
+8,192 UTF-16 units per scalar and 50,000 JSON separators per script. JSON depth/structural/string
+guards run before `JSON.parse`. Malformed blocks are skipped, oversized scalar values omitted,
+and unfinished microdata scopes discarded. Tokenization scans forward through the bounded
+input and skips comments and raw script/style/textarea bodies without parsing their HTML.
+
+`createMailWriter(ctx, account, { extractMarkup: false })` disables automatic extraction;
+the default is on after the message RDF and bytes have been stored. The source factories
+`createGmailAdapter(options)` and `createGoogleTakeoutFileAdapter(options)` accept the same
+`MailWriterOptions` (`extractMarkup`, and `markup: { maxBytes, maxItems }`). The existing adapter
+singletons and registry use defaults. Markup write failures fail the import without advancing
+its cursor; replay repairs partial writes.
+
+The writer stores schema.org resources under `mail/<account>/purchases/` (orders/deliveries)
+and `mail/<account>/trips/` (reservations) inside the integration container, registering their
+classes there. SHA-256 identifiers use type + provider + reservation/order number (tracking
+number for a delivery); missing provider or number uses source message IRI + extraction index.
+Provider identity prefers its URL, identifier, then name, with ASCII case and whitespace
+normalization for names (URL paths and identifiers retain case). Nested airlines, hotel/restaurant
+businesses and event organizers can supply the provider. Change emails therefore update the same resource, including removal of omitted
+fields and nested resources. `schema:dateModified` uses the stored receiver timestamp, then
+sent timestamp; direct writer calls without either can use markup dateModified/modifiedTime,
+otherwise epoch. Older assertions cannot replace newer data. Every resource carries
+`prov:wasDerivedFrom` naming the source message, plus `fedcon:emailMarkupTrust`.
+
+Markup is always sender-asserted. **The current mail model has no stored receiver authentication
+results**, so automatic Gmail/Takeout imports are `unverified`, even when raw MIME headers claim
+a pass. Hosts with independently stored receiver results may pass `MailMarkupSource.authentication`
+to the markup writer or `RescanMailMarkupOptions.authentication(messageIri)` to the re-scan.
+Only DMARC pass, or SPF and DKIM pass with both explicitly aligned (and no DMARC fail), produces
+`verified`. This flag describes sender authentication, not verification of a purchase or booking.
+An unverified assertion targeting an already verified booking is stored separately using its
+message/index identity, so it cannot replace the verified record. A verified assertion can
+replace an unverified one even if its sender-asserted timestamp was further in the future.
+
+Re-scan reads only stored `schema:EmailMessage` HTML from the account's messages listing;
+`maxMessages` bounds visited listing entries (10,000 default, 100,000 hard ceiling). It returns
+`{ messages, items }`. `maxTotalItems` caps root items across the entire re-scan (10,000 default,
+100,000 hard ceiling), independently of the per-message `maxItems` limit. Supply import-session `resolve/read/write/signal` ports and serialize
+against other runs for that integration, as with the shared MailWriter; this preserves ETags,
+run provenance, cancellation and Type Index registration. The optional `ctx.releaseRead(slug)`
+port releases read-only datasets and preconditions: API/file runners supply it, and re-scan
+releases source-message reads immediately rather than retaining a mailbox in the session.
+Custom ports that cache reads must implement it; hosts without retained reads can omit it.
+Re-scan needs no provider API access.
+
 ## Google Takeout
 
 `./adapters/google-takeout` accepts the downloaded `.zip` directly, plus legacy single

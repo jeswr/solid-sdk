@@ -73,6 +73,9 @@ export function createImportSession(
     reads.set(writer.resolve(slug), existing);
     return existing ? copyDataset(existing.dataset) : undefined;
   }
+  function releaseRead(slug: string): void {
+    reads.delete(writer.resolve(slug));
+  }
   async function write(input: NormalisedDoc, conditions?: WriteConditions): Promise<WrittenDoc> {
     const url = writer.resolve(input.slug);
     if (url.split(/[?#]/, 1)[0] === writer.resolve(RUNS))
@@ -222,6 +225,7 @@ export function createImportSession(
   }
   return {
     read,
+    releaseRead,
     write,
     writeBinary,
     remove,

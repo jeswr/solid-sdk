@@ -19,6 +19,8 @@ import { Container } from "@solid/object";
 import { DataFactory, Store } from "n3";
 import type { ImportContext } from "../core/types.js";
 import { mailBodyText } from "./html-text.js";
+import type { EmailMarkupOptions } from "./markup-types.js";
+import { createMailMarkupWriter } from "./markup-writer.js";
 import { parseMail } from "./parse.js";
 import {
   accountRoot,
@@ -35,7 +37,7 @@ export { MailParseError } from "./parse.js";
 /** The connector ports the writer needs (API and file imports both provide them). */
 export type MailPorts = Pick<
   ImportContext,
-  "resolve" | "read" | "write" | "writeBinary" | "remove"
+  "resolve" | "read" | "write" | "writeBinary" | "remove" | "signal" | "releaseRead"
 >;
 
 /**
@@ -99,7 +101,21 @@ export function binaryType(contentType: string): string {
 
 const docOf = (iri: string) => iri.split("#", 1)[0] as string;
 
-export function createMailWriter(ctx: MailPorts, account: string): MailWriter {
+export interface MailWriterOptions {
+  /** Extract transactional schema.org markup after storing the source message. Default true. */
+  readonly extractMarkup?: boolean;
+  readonly markup?: EmailMarkupOptions;
+}
+
+export function createMailWriter(
+  ctx: MailPorts,
+  account: string,
+  options: MailWriterOptions = {},
+): MailWriter {
+  const markup =
+    options.extractMarkup === false
+      ? undefined
+      : createMailMarkupWriter(ctx, account, options.markup);
   const accountDir = accountRoot(account);
   const base = ctx.resolve("mail/").slice(0, -"mail/".length);
   const slugOf = (url: string) => {
@@ -270,6 +286,12 @@ export function createMailWriter(ctx: MailPorts, account: string): MailWriter {
         contentType: binaryType(part.contentType),
         body: part.content,
         mode: "replace",
+      });
+    if (mail.html !== undefined)
+      await markup?.add({
+        messageIri: iri,
+        html: mail.html,
+        dateModified: item.receivedAt ?? mail.date,
       });
     if (mail.messageId) messageIds.set(mail.messageId, id);
     return { slug, iri, thread: iriOf(threadDoc), id };

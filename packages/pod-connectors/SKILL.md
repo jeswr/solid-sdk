@@ -251,3 +251,32 @@ placeVisit values (including missing/invalid location or duration) and all other
 shapes count as skips and make location incomplete. Contacts use an independent
 run-level row counter, including duplicate cards, across retained and capped paths;
 manifest release never resets the counter. Excess rows skip before any Pod writes.
+
+
+CON-A8 adds transactional schema.org email markup to `./mail`: `extractEmailMarkup`,
+`createMailMarkupWriter`, `rescanMailMarkup` and their public types. Preserve the closed
+schema/type/property allowlists and all byte, element, depth, node, script, string and item
+caps. Tokenization must stay forward-only, with ASCII folding that preserves source offsets,
+quoted attribute handling and raw/comment skipping. Never resolve JSON-LD contexts or itemref;
+foreign/redefining contexts must not reinterpret compact terms as schema.org. Keep parsing
+and typed RDF vocabulary modules free of runtime `core/` and Node imports.
+
+Gmail and Takeout use `createMailWriter` with extraction on by default; their factory
+functions accept `MailWriterOptions` for opt-out and lower parser limits. Store message RDF
+and bytes before markup. Keep markup writes in the same session, so failures retain the
+cursor, and enforce cancellation after each awaited read and before writes. Purchases and
+trips are account-local subcontainers. Deterministic hashes use provider + reservation/order
+number + type, otherwise message/index; deliveries may use tracking number. Reject older
+updates and preserve ETags. Every nested resource carries source-message derivation and trust.
+The current mail model has no trusted receiver authentication: automatic imports must remain
+unverified regardless of MIME Authentication-Results. Only host-supplied, already stored
+receiver evidence may verify trust. Unverified mail must never replace a verified booking.
+Cover every root type and nested order structures in both encodings, hostile/foreign contexts,
+parser bounds, replays/updates, import opt-out, stored-HTML re-scan and cancellation with
+synthetic fixtures and memory Pods. See README's CON-A8 section for the public contract.
+
+`ctx.releaseRead(slug)` releases a read-only session dataset and its ETag, with no Pod I/O;
+the next write to that slug must read again. Keep it optional for custom non-retaining ports.
+Mail markup re-scan releases listing/message reads immediately, and the markup writer releases
+skipped stale updates and protected verified records. Never release a read whose precondition
+is still needed for a subsequent write; this port prevents mailbox-sized dataset retention.

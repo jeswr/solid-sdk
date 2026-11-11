@@ -257,3 +257,14 @@ describe("document-level import item accounting", () => {
     expect(session.state({}).counts.items).toBe(0);
   });
 });
+
+it("releases read-only datasets and re-reads before the next conditional write", async () => {
+  const { writer, session, doc } = setup();
+  await writer.write(doc("source.ttl", ["original"]));
+  const read = vi.spyOn(writer, "read");
+  await session.read("source.ttl");
+  session.releaseRead("source.ttl");
+  await writer.write(doc("source.ttl", ["external-update"]));
+  await session.write(doc("source.ttl", ["replacement"]));
+  expect(read).toHaveBeenCalledTimes(2);
+});

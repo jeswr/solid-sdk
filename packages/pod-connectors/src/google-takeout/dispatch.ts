@@ -15,6 +15,7 @@ import {
   type MailFolder,
   MailParseError,
   type MailWriter,
+  type MailWriterOptions,
 } from "../mail/writer.js";
 import { parseMyActivity, writeActivities } from "./file-adapter.js";
 import { mailHeaders, mailLabels, mboxSink, sha256 } from "./mbox.js";
@@ -221,7 +222,7 @@ const MIME: Record<string, string> = {
   jsonld: "application/ld+json",
 };
 
-export interface ArchiveOptions {
+export interface ArchiveOptions extends MailWriterOptions {
   inflationBudget?: InflationBudget;
   maxReconciliationSubjects?: number;
   maxReconciliationBytes?: number;
@@ -341,7 +342,7 @@ export async function importArchive(
       skipped++;
       return;
     }
-    mail ??= createMailWriter(ctx, account);
+    mail ??= createMailWriter(ctx, account, options);
     for (const folder of labels.folders) folders.set(folder.key, folder);
     const thrid = headers.get("x-gm-thrid");
     const fallbackId = `takeout-${(await sha256(raw)).slice(0, 32)}`;

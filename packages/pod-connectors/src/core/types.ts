@@ -174,6 +174,9 @@ export interface ImportContext {
    * merge new items into an existing collection). `undefined` when absent.
    */
   read(slug: string): Promise<DatasetCore | undefined>;
+  /** Release a read-only dataset/precondition when no write will follow. A later write re-reads.
+   * Hosts without retained read state may omit this port. It performs no Pod I/O. */
+  releaseRead?(slug: string): void;
   /** Write RDF; defaults to the precondition retained by a preceding read of this URL. */
   write(doc: NormalisedDoc, conditions?: WriteConditions): Promise<WrittenDoc>;
   /**
