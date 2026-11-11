@@ -534,8 +534,11 @@ export class TasksCache {
     project: StoredProject,
     data: NewTask,
     onRetry?: () => void,
+    /** Stable import identity; a matching UID on 412 belongs to another import. */
+    reservation?: { id: string; onConflict: () => void },
   ): () => Promise<StoredTask | undefined> {
-    const id = crypto.randomUUID();
+    const id = reservation?.id ?? crypto.randomUUID();
+    if (!/^[a-zA-Z0-9-]+$/.test(id)) throw new TypeError("Invalid task identifier.");
     const url = `${project.tracker.stateStore}${id}.ttl`;
     const details: TaskDetails = {
       ...data,
@@ -598,6 +601,8 @@ export class TasksCache {
           const current = this.project(project.url);
           if (`${current.tracker.stateStore}${id}.ttl` !== url) throw new ModelError(409, url);
           const existing = reconcile ? await this.optionalTask(url) : undefined;
+          if (existing && reservation && existing.task.calendarUid !== data.calendarUid)
+            throw new ModelError(412, url);
           if (existing)
             return {
               result: existing,
@@ -612,7 +617,17 @@ export class TasksCache {
                 task.rank = patch.position;
               }),
             );
-          const task = await this.store.createTask(current, details, id);
+          let task: StoredTask;
+          try {
+            task = await this.store.createTask(current, details, id);
+          } catch (error) {
+            if (!reservation || !(error instanceof ModelError) || error.status !== 412) throw error;
+            const raced = await this.optionalTask(url);
+            if (!raced || !data.calendarUid || raced.task.calendarUid !== data.calendarUid)
+              throw error;
+            reservation.onConflict();
+            task = raced;
+          }
           return {
             result: task,
             commit: (state) => {

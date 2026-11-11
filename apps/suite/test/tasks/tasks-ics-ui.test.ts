@@ -185,6 +185,34 @@ describe("calendar exchange from the project row menu", () => {
     ).toHaveLength(2);
   });
 
+  it("previews the warning for recurrence that will be imported without repeating", async () => {
+    await mount(h(TasksSidebar));
+    await menu("Import from calendar (.ics)…");
+    await pick(
+      serializeVTodo({
+        productId: "tests",
+        tasks: [
+          {
+            uid: "utc",
+            title: "UTC daily",
+            state: "open",
+            stamp,
+            start: { kind: "utc", value: stamp },
+            rrule: "FREQ=DAILY",
+          },
+        ],
+      }),
+    );
+    expect(document.body.textContent).toContain(
+      "1 repeating tasks will be imported without repeating",
+    );
+    await click(button("Add tasks"));
+    await vi.waitFor(() =>
+      expect(document.body.textContent).toContain("Added 1 tasks. 0 skipped."),
+    );
+    expect(cache.getSnapshot().tasks[project.url]?.items[0]?.task.recurrence).toBeUndefined();
+  });
+
   it("shows a short error for a bad file, recovers with a new file and returns focus on Cancel", async () => {
     await mount(h(TasksSidebar));
     await menu("Import from calendar (.ics)…");

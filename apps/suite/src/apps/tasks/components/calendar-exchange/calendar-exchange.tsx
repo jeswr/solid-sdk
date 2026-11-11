@@ -175,6 +175,11 @@ function CalendarImportDialog({
           {preview.count} tasks, {preview.completed} completed. {preview.skipped} skipped.
         </p>
       )}
+      {Boolean(preview?.withoutRepeating) && (
+        <p role="status">
+          {preview?.withoutRepeating} repeating tasks will be imported without repeating
+        </p>
+      )}
       {calendar && (
         <ul className="tsk-calendar-preview" aria-label="Tasks to import">
           {calendar.tasks.map((task) => (

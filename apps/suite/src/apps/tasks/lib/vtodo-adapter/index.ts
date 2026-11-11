@@ -1,15 +1,68 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { fromRRule } from "@jeswr/suite-ui/date-time/model";
 import { fromEditorRule, recurrenceAnchor } from "../detail/recurrence-map";
-import { type RecurrenceRule, toRRule } from "../model/recurrence";
+import { humanise, type RecurrenceRule, toRRule, weekdays } from "../model/recurrence";
 import type { TaskDetails } from "../model/task";
+import { localDayKey } from "../views/days";
 import { priorityValue, type TaskView } from "../views/types";
-import { toTaskData, type VTodoCalendar, VTodoError, type VTodoTask } from "../vtodo";
+import {
+  toTaskData,
+  type VTodoCalendar,
+  type VTodoDate,
+  VTodoError,
+  type VTodoTask,
+} from "../vtodo";
 
 const seconds = (date: Date) => new Date(Math.floor(date.getTime() / 1000) * 1000);
 export interface CalendarSource {
   view: TaskView;
   recurrence?: RecurrenceRule | undefined;
+}
+
+function matchesAnchor(rule: RecurrenceRule, anchor: Date): boolean {
+  return (
+    (!rule.byDay ||
+      rule.byDay.includes(weekdays[(anchor.getDay() + 6) % 7] as (typeof weekdays)[number])) &&
+    (rule.byMonthDay === undefined || rule.byMonthDay === anchor.getDate())
+  );
+}
+function appendDescription(description: string | undefined, rule: string): string {
+  return description ? `${description}\n\n${rule}` : rule;
+}
+/** Tasks advances local wall time; UTC timed series cannot preserve that basis. */
+function exportRule(
+  view: TaskView,
+  rule: RecurrenceRule,
+  completed: number,
+): RecurrenceRule | undefined {
+  if (!view.allDay || view.state === "closed") return;
+  const anchor = new Date(`${view.allDay}T00:00:00`);
+  const until = rule.until instanceof Date ? localDayKey(rule.until) : rule.until;
+  const count = rule.count === undefined ? undefined : rule.count - completed;
+  if (
+    !matchesAnchor(rule, anchor) ||
+    (until !== undefined && until < view.allDay) ||
+    (count !== undefined && count < 1)
+  )
+    return;
+  return { ...rule, until, count };
+}
+function importRule(todo: VTodoTask): RecurrenceRule | undefined {
+  // DUE must be later than DTSTART in VTODO. A duration would shift the series' anchor.
+  if (!todo.rrule || todo.start?.kind !== "date" || todo.due) return;
+  try {
+    const parsed = fromRRule(todo.rrule.toUpperCase());
+    if (parsed.until && parsed.until.length !== 10) return;
+    const anchor = new Date(`${todo.start.value}T00:00:00`);
+    const rule = fromEditorRule(parsed, anchor) as RecurrenceRule;
+    if (
+      matchesAnchor(rule, anchor) &&
+      (parsed.until === undefined || parsed.until >= todo.start.value)
+    )
+      return rule;
+  } catch {
+    // Preserve unsupported rules as description text, with a preview warning.
+  }
 }
 
 /** Clock and label names are explicit inputs; task subjects are the stable calendar UIDs. */
@@ -18,6 +71,11 @@ export function toCalendar(
   labels: ReadonlyMap<string, string>,
   now: Date,
 ): VTodoCalendar {
+  const completions = new Map<string, number>();
+  for (const { view } of sources) {
+    if (view.state === "closed" && view.derivedFrom)
+      completions.set(view.derivedFrom, (completions.get(view.derivedFrom) ?? 0) + 1);
+  }
   return {
     productId: "-//Solid Suite//Tasks//EN",
     tasks: sources.map(({ view, recurrence }) => {
@@ -26,29 +84,26 @@ export function toCalendar(
         : view.due
           ? { kind: "utc" as const, value: seconds(view.due) }
           : undefined;
-      // VTODO requires DTSTART before DUE. Tasks has no start field: use the smallest
-      // representable duration, retaining DUE as the Tasks recurrence anchor on import.
-      const start = recurrence
-        ? due?.kind === "date"
-          ? {
-              kind: "date" as const,
-              value: new Date(Date.parse(due.value) - 86400000).toISOString().slice(0, 10),
-            }
-          : {
-              kind: "utc" as const,
-              value: due ? new Date(due.value.getTime() - 1000) : seconds(now),
-            }
+      const rule = recurrence
+        ? exportRule(view, recurrence, completions.get(view.id) ?? 0)
         : undefined;
+      const description =
+        recurrence && !rule
+          ? appendDescription(
+              view.description,
+              humanise(recurrence, recurrenceAnchor(view.due ?? now, view.allDay)),
+            )
+          : view.description;
       return {
         uid: view.id,
         stamp: seconds(now),
         title: view.title,
         state: view.state,
         status: view.state === "closed" ? "COMPLETED" : "NEEDS-ACTION",
-        ...(view.description !== undefined ? { description: view.description } : {}),
+        ...(description !== undefined ? { description } : {}),
         ...(view.completedAt ? { endedAt: seconds(view.completedAt) } : {}),
-        ...(due ? { due } : {}),
-        ...(start ? { start } : {}),
+        // With no duration, DTSTART itself is the recurring due anchor.
+        ...(due ? (rule ? { start: due } : { due }) : {}),
         ...(view.priority < 4
           ? { priority: priorityValue(view.priority) as "high" | "medium" | "low" }
           : {}),
@@ -58,7 +113,7 @@ export function toCalendar(
           if (name === undefined) throw new VTodoError("invalid-value");
           return name;
         }),
-        ...(recurrence ? { rrule: toRRule(recurrence) } : {}),
+        ...(rule ? { rrule: toRRule(rule) } : {}),
       };
     }),
   };
@@ -70,22 +125,22 @@ export function calendarTaskData(
   resourceIds: ReadonlyMap<string, string>,
   allDayDueInstant?: Date,
 ): TaskDetails {
-  const { task, dueDay } = toTaskData(todo, {
-    resourceIds,
-    ...(allDayDueInstant ? { allDayDueInstant } : {}),
-  });
-  let recurrence: RecurrenceRule | undefined;
-  if (todo.rrule) {
-    try {
-      recurrence = fromEditorRule(
-        fromRRule(todo.rrule.toUpperCase()),
-        recurrenceAnchor(task.dueDate ?? todo.stamp, dueDay),
-      );
-    } catch {
-      throw new VTodoError("invalid-value");
-    }
-  }
-  return { ...task, allDay: dueDay, recurrence, calendarUid: todo.uid };
+  const context = { resourceIds, ...(allDayDueInstant ? { allDayDueInstant } : {}) };
+  // Validate the original DTO before mapping a DTSTART-only series to the Tasks due field.
+  const mapped = toTaskData(todo, context);
+  const { start, rrule, ...fields } = todo;
+  const { task, dueDay } =
+    rrule && !todo.due ? toTaskData({ ...fields, due: start as VTodoDate }, context) : mapped;
+  const recurrence = importRule(todo);
+  return {
+    ...task,
+    allDay: dueDay,
+    recurrence,
+    calendarUid: todo.uid,
+    ...(todo.rrule && !recurrence
+      ? { description: appendDescription(task.description, `RRULE:${todo.rrule}`) }
+      : {}),
+  };
 }
 
 /** Validate the whole dependency graph before writing; independent tasks share a level. */

@@ -16,24 +16,31 @@ function identities(items: readonly StoredTask[]): Map<string, string> {
   return ids;
 }
 function dataFor(todo: VTodoTask, ids: ReadonlyMap<string, string>): TaskDetails {
+  const anchor = todo.due ?? todo.start;
   return calendarTaskData(
     todo,
     ids,
-    todo.due?.kind === "date" ? new Date(`${todo.due.value}T00:00:00`) : undefined,
+    anchor?.kind === "date" ? new Date(`${anchor.value}T00:00:00`) : undefined,
   );
 }
-/** Reject unsupported recurrence and invalid parents before the user confirms any writes. */
+/** Validate tasks and report recurrence fallbacks before the user confirms any writes. */
 export function previewCalendar(calendar: VTodoCalendar, items: readonly StoredTask[]) {
   const ids = identities(items);
   const plan = importLevels(calendar, ids);
   const placeholders = new Map(ids);
   for (const todo of calendar.tasks) placeholders.set(todo.uid, "https://calendar.invalid/task#it");
+  let withoutRepeating = 0;
   for (const level of plan.levels)
-    for (const todo of level) validateTask(dataFor(todo, placeholders));
+    for (const todo of level) {
+      const data = dataFor(todo, placeholders);
+      validateTask(data);
+      if (todo.rrule && !data.recurrence) withoutRepeating++;
+    }
   return {
     count: calendar.tasks.length,
     completed: calendar.tasks.filter((task) => task.state === "closed").length,
     skipped: plan.skipped,
+    withoutRepeating,
   };
 }
 async function loadedProject(cache: TasksCache, project: StoredProject) {
@@ -59,10 +66,16 @@ export async function exportCalendar(cache: TasksCache, project: StoredProject):
   );
 }
 
+async function calendarResourceId(uid: string): Promise<string> {
+  const hash = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(uid));
+  return `calendar-${Array.from(new Uint8Array(hash), (byte) => byte.toString(16).padStart(2, "0")).join("")}`;
+}
+
 /** One operation owns reservations across inline and toast retries, including lost responses. */
 export function calendarImport(cache: TasksCache, project: StoredProject, calendar: VTodoCalendar) {
   const creates = new Map<string, () => Promise<StoredTask | undefined>>();
   const added = new Set<string>();
+  const conflicts = new Set<string>();
   let running: Promise<{ added: number; skipped: number; failed: number }> | undefined;
   const run = (): NonNullable<typeof running> => {
     if (running) return running;
@@ -70,8 +83,15 @@ export function calendarImport(cache: TasksCache, project: StoredProject, calend
       const loaded = await loadedProject(cache, project);
       previewCalendar(calendar, loaded.items);
       const ids = identities(loaded.items);
-      for (const uid of creates.keys()) if (ids.has(uid)) added.add(uid);
+      for (const uid of creates.keys()) if (ids.has(uid) && !conflicts.has(uid)) added.add(uid);
       const { levels } = importLevels(calendar, ids);
+      const taskIds = new Map(
+        await Promise.all(
+          levels
+            .flat()
+            .map(async (todo) => [todo.uid, await calendarResourceId(todo.uid)] as const),
+        ),
+      );
       const names = [...new Set(levels.flat(1).flatMap((todo) => todo.categories ?? []))];
       const labelled = names.length
         ? await cache.ensureLabels(loaded.project, names, retry)
@@ -100,12 +120,16 @@ export function calendarImport(cache: TasksCache, project: StoredProject, calend
                     .map((label) => label.id),
                 },
                 retry,
+                {
+                  id: taskIds.get(todo.uid) as string,
+                  onConflict: () => conflicts.add(todo.uid),
+                },
               );
               creates.set(todo.uid, create);
             }
             const saved = await create();
             if (!saved) throw new Error("Couldn't add task.");
-            added.add(todo.uid);
+            if (!conflicts.has(todo.uid)) added.add(todo.uid);
             ids.set(todo.uid, saved.task.id);
           },
           { concurrency: 4 },
