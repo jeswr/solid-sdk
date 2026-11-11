@@ -1,7 +1,7 @@
 // AUTHORED-BY Codex GPT-6
 import { canonicalJson } from "@jeswr/agent-model";
-import { CHAIN_SCOPE, verifyLedger } from "./ledger.js";
 import { type AuditRecord, type LedgerEntry, taskIdSchema } from "./records.js";
+import { CHAIN_SCOPE, verifyLedger } from "./verify.js";
 
 export interface LatencyStats {
   readonly samples: number;
