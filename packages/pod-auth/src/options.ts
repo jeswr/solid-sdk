@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import type { PodAuthOptions } from "./types.js";
 
 export function isLoopback(url: URL): boolean {
@@ -25,24 +26,62 @@ export function secureUrl(value: string, insecure: boolean, name: string): URL {
   return url;
 }
 
+function nativeRedirectUrl(value: string): URL {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    throw new TypeError("redirectUri must be an absolute URI");
+  }
+  const scheme = value.slice(0, value.indexOf(":"));
+  // Match suite-native's reverse-domain scheme grammar, using the raw spelling to require
+  // lowercase. The required dot excludes reserved schemes (http, https, ws, file, data, etc.).
+  if (!/^[a-z][a-z0-9+.-]*\.[a-z0-9+.-]*[a-z0-9]$/.test(scheme))
+    throw new TypeError("redirectUri must use a reverse-domain private-use scheme (RFC 8252 §7.1)");
+  if (
+    url.host !== "" ||
+    value.startsWith(`${scheme}://`) ||
+    !url.pathname.startsWith("/") ||
+    value.includes("?") ||
+    value.includes("#") ||
+    url.href !== value
+  )
+    // No authority also excludes credentials. Check raw delimiters, including empty ? and #,
+    // and reject normalization so the native driver's href and the registered URI stay exact.
+    throw new TypeError(
+      "redirectUri must be <scheme>:/<path> with no authority, credentials, query or fragment, and no URL normalization",
+    );
+  return url;
+}
+
 export function validateOptions(options: PodAuthOptions): void {
   if (!options || typeof options !== "object") throw new TypeError("PodAuthOptions are required");
   if (typeof options.redirectUri !== "string") throw new TypeError("redirectUri is required");
+  if (options.nativeRedirect !== undefined && options.nativeRedirect !== true)
+    throw new TypeError("nativeRedirect must be true when supplied");
+  const native = options.nativeRedirect === true;
   const insecure = options.allowInsecureLoopback === true;
-  const redirect = secureUrl(options.redirectUri, insecure, "redirectUri");
+  const redirect = native
+    ? nativeRedirectUrl(options.redirectUri)
+    : secureUrl(options.redirectUri, insecure, "redirectUri");
   if (redirect.hash || redirect.search)
     throw new TypeError("redirectUri must not contain a query or fragment");
   const production =
     (globalThis as { process?: { env: { NODE_ENV?: string } } }).process?.env.NODE_ENV ===
     "production";
-  if (insecure && (!isLoopback(redirect) || production))
+  if (insecure && (native || !isLoopback(redirect) || production))
     throw new TypeError("allowInsecureLoopback is for local development only");
-  if (typeof globalThis.location !== "undefined" && globalThis.location.origin !== redirect.origin)
+  if (
+    !native &&
+    typeof globalThis.location !== "undefined" &&
+    globalThis.location.origin !== redirect.origin
+  )
     throw new TypeError("redirectUri must use the application origin");
   if (typeof options.clientId === "string") {
     const client = secureUrl(options.clientId, false, "clientId");
     if (client.hash) throw new TypeError("clientId must not contain a fragment");
   } else if (
+    native ||
     !options.clientId ||
     options.clientId.dynamicRegistration !== true ||
     Object.keys(options.clientId).length !== 1 ||
