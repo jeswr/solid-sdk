@@ -1,6 +1,6 @@
 <!-- AUTHORED-BY Codex GPT-5 -->
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
-<!-- AUTHORED-BY Codex GPT-6 -->
+<!-- // AUTHORED-BY Codex GPT-6 -->
 
 # @jeswr/solid-offline
 
@@ -71,7 +71,7 @@ transport already injected into `storage`, and cache state is scoped by WebID.
 Warming uses `storage.head`, `read`, and paginated `listAll`; explicit `warm.seeds` are
 combined with profile/type-index seeds inside the storage boundary. For a WebID outside
 that boundary, supply explicit seeds (or a pre-fetched profile to the low-level warmer).
-Large binary members remain lazy. Existing SW cache names and metadata schemas are retained.
+Large binary members remain lazy. Pod bodies and metadata now share the account-scoped IndexedDB database; the Cache API remains for public app-shell assets.
 
 Notifications use `@jeswr/pod-notifications` for transport selection, polling, scope checks,
 and reconnect. Pass an existing `notificationsClient` to share the app's client; otherwise
@@ -86,6 +86,59 @@ HTTP cache policy remains authoritative: invalidation retains original response 
 the worker transport boundary. A low-level injected storage without that HTTP evidence
 conservatively evicts changed bytes instead of inventing cacheable responses.
 React/status surfaces, BroadcastChannel updates, and `purgeForWebId` retain their contracts.
+
+## Native page cache (MOB-P3e)
+
+```ts
+import { createPageCache } from '@jeswr/solid-offline';
+
+const offline = createPageCache({
+  webId: account.webId,
+  storageRoot: account.storageUrl,
+  fetch: authenticatedFetch,
+  usable: () => isCurrentLiveAccount(account),
+  onEvent: event => { /* Re-read views on event.event === 'updated'. */ },
+});
+await offline.start(); // Optional built-in pod-notifications subscriptions.
+const response = await offline.fetch(resourceUrl);
+// On logout or account switch, fence immediately and await shared cleanup:
+const purge = await offline.logout();
+if (purge.dbBlocked || purge.errors.length) { /* Surface incomplete cleanup. */ }
+```
+
+This driver needs IndexedDB and no service worker or Cache API. It uses the worker's
+`handleFetch`, cache policy, canonical keys, metadata builder, notification handler,
+ETag sweep and `purgeForWebId`; it does not implement a second cache policy.
+Native reads are network-first with conditional ETag validation. The existing worker
+keeps its default stale-while-revalidate delivery mode over the same engine and store.
+Both drivers commit response bytes and their metadata in one IndexedDB transaction.
+The page adapter checks the live session and resource revision after buffering and before
+that transaction. Notifications fence their resource and membership targets, including cached
+cursor pages; unrelated resources and matching-ETag no-ops leave pending reads valid.
+Offline or a transport TypeError may return provisional bytes marked
+`X-Solid-Offline-Cache: stale` and `X-Offline: stale`. HTTP failures, cancellation,
+session errors and explicit freshness requests never become stale successes.
+`no-store` bypasses reads and writes even offline. HEAD stays a network passthrough;
+mutations, ranges, auth endpoints and requests outside the storage boundary bypass caching.
+Redirected, opaque, credential-varying, private and no-store responses are not stored.
+Neither request credentials nor sensitive response headers are persisted.
+
+`usable()` is mandatory: pass the session's live account/generation fence, including
+changes React has not committed. It is checked around network and disk awaits and before
+delivery. `close()` permanently fences this adapter and releases subscriptions/DB handles,
+but retains its reads for reopening by the same identity. `logout()` fences synchronously,
+then deletes the same database (bodies and metadata) as the worker; it retains the outbox.
+The database namespace includes the full encoded WebID, so 32-bit hash collisions cannot
+cross accounts. Old hash-only databases and Cache API copies are also purged on logout.
+Old stores are not migrated or served; the first online read populates the new namespace.
+
+`start()` watches the root plus up to 49 read resources using pod-notifications; resource
+subscriptions cover edits that Solid container subscriptions cannot observe. It reconciles
+on setup, first-live and resync. Call it again on reconnect if initial setup failed/offline.
+You may instead feed normalized changes through `notify(frame)` and call `resync()` yourself.
+`indexedDB`, `isOnline`, `now` and `notificationsClient` are injectable test seams. Individual bodies are limited to 25 MiB (declared and streamed); larger reads stay
+network-only. Cache storage failure preserves an available network answer; offline disk failures fail closed.
+Actual WebView persistence and service-worker lifecycle still require device/browser checks.
 
 ## Response cache provenance
 
@@ -234,9 +287,10 @@ Enumeration of keys on a same-origin caller's own objects is not bounded by thes
 Array lengths are checked against the remaining value budget before enumeration. Undefined,
 non-finite numbers, sparse arrays, accessors, class instances and cycles are rejected.
 Guards are snapshotted at enqueue, with validated assertions serialized once into a canonical
-JSON string for IndexedDB. Hydration checks that string's UTF-8 byte length against 16 KiB
-before `JSON.parse`, then applies the same depth, value-count and byte validation to the
-parsed value. Legacy object-valued assertions fail closed; no guarded records have shipped.
+JSON string for IndexedDB. Hydration reads only the stored envelope's `tag` and
+`assertions` fields, without enumerating its keys, and ignores any other stored key.
+It checks the assertion string's UTF-8 byte length against 16 KiB before `JSON.parse`,
+then applies the same depth, value-count and byte validation to the parsed value. Legacy object-valued assertions fail closed; no guarded records have shipped.
 Invalid stored guards become failed items and cannot be sent, including through retry.
 `pending()` exposes only the read-only `guard.tag`, never assertions.
 
@@ -322,7 +376,7 @@ by exactly one terminal message:
 | Event | Meaning | Status for a tracked URL |
 | --- | --- | --- |
 | `revalidating` | Revalidation started | `pending` |
-| `revalidated` | A conditional 304 or matching sweep HEAD confirmed the existing bytes | `fresh`, preserving an unread `updated` |
+| `revalidated` | A conditional 304, matching sweep HEAD, or completed authoritative read without a cached representation change | `fresh`, preserving an unread `updated` |
 | `updated` | Replacement, deletion, revocation, or a purge completed | `updated`; re-read |
 | `revalidate-failed` | Network/offline, storage, or non-authoritative HTTP failure | Retain settled freshness, including manual marks |
 
@@ -334,6 +388,12 @@ Direct delete purges also emit balanced `revalidating` / `updated` events (or
 `revalidate-failed` if the purge fails), without fetching. Offline cache hits,
 ETag notification short-circuits, and skipped SWR validations emit no lifecycle events.
 An unsolicited 304 on an unconditional listing refresh fails confirmation.
+Network-first and forced reads emit `updated` only when a previously cached representation
+changes (ETag, status, content type or bounded body comparison) or is evicted. Initial cache
+fills and repeated uncacheable reads complete with `revalidated`, so subscribers can reread
+on `updated` without creating a refresh loop. Real notifications retain their change events.
+Custom invalidation drivers can supply `InvalidateDeps.beforeChange(url)` to fence pending
+reads before resource, membership or cursor-page invalidation; ETag no-ops skip that callback.
 
 The status surface updates only URLs already tracked by `markFresh`, `markStale`, or
 `markPending`. Parallel observed attempts keep a URL pending until all settle. Attempt IDs
