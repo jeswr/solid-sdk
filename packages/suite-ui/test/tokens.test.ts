@@ -23,16 +23,25 @@ test("project palette preserves wire values independently of the active theme", 
     });
   }
 });
-test("CSS exactly equals every exported value in both themes and densities", () => {
+test("CSS exactly equals every exported value and the shared chart palette in both themes and densities", () => {
   const css = readFileSync(new URL("../src/styles/tokens.css", import.meta.url), "utf8");
   const density = readFileSync(new URL("../src/styles/density.css", import.meta.url), "utf8");
   const actual = parseTokens(css);
+  const shared = parseTokens(
+    readFileSync(new URL("../../app-shell/src/styles/tokens.css", import.meta.url), "utf8"),
+  );
   const comfortable = declarations(density.match(/comfortable"\]\s*\{([^}]+)\}/)?.[1] ?? "");
   const compact = declarations(density.match(/compact"\]\s*\{([^}]+)\}/)?.[1] ?? "");
   for (const theme of ["light", "dark"] as const) {
-    expect({ ...actual[theme], ...comfortable }).toEqual(
-      Object.fromEntries(tokens.map((t) => [t.name, normalizeCssValue(t[theme])])),
-    );
+    expect({ ...actual[theme], ...comfortable }).toEqual({
+      ...Object.fromEntries(tokens.map((t) => [t.name, normalizeCssValue(t[theme])])),
+      ...Object.fromEntries(
+        Array.from({ length: 5 }, (_, i) => {
+          const name = `--chart-${i + 1}`;
+          return [name, shared[theme][name]];
+        }),
+      ),
+    });
   }
   expect(compact).toEqual(
     Object.fromEntries(

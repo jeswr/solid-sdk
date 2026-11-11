@@ -31,7 +31,7 @@ import { ArrowLeft, ChevronDown, Table2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
-import { useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { SuiteFrame } from "@/components/interim-shell/suite-frame";
 import { useNeedsConnection } from "../../../shell/sync/requires-online";
 import { useWorkbook } from "../hooks/use-workbook";
@@ -50,6 +50,10 @@ import { SheetsSidebar, workbookHref } from "./sheets-sidebar";
 import "@univerjs/preset-sheets-core/lib/index.css";
 import "@univerjs/preset-sheets-conditional-formatting/lib/index.css";
 import "@univerjs/preset-sheets-data-validation/lib/index.css";
+
+const ChartWorkspace = lazy(() =>
+  import("./chart-workspace").then((module) => ({ default: module.ChartWorkspace })),
+);
 
 declare global {
   interface Window {
@@ -81,11 +85,13 @@ function Grid({
   snapshot,
   onChange,
   engineRef,
+  onReady,
   readOnly,
 }: {
   snapshot: Snapshot;
   onChange: (read: () => Snapshot) => void;
   engineRef: { current: SheetEngine | null };
+  onReady: (engine: SheetEngine | null) => void;
   readOnly: boolean;
 }) {
   const host = useRef<HTMLDivElement>(null);
@@ -126,6 +132,7 @@ function Grid({
         return;
       }
       engineRef.current = engine;
+      onReady(engine);
       engine.setDark(dark.current);
       engine.setReadOnly(viewOnly.current);
       const active = engine;
@@ -142,9 +149,10 @@ function Grid({
       unsubscribe?.();
       if (window.__sheetsEngine === engine) delete window.__sheetsEngine;
       engineRef.current = null;
+      onReady(null);
       engine?.dispose();
     };
-  }, [engineRef, onChange, attempt]);
+  }, [engineRef, onChange, onReady, attempt]);
   return (
     <section
       className="sht-grid-region"
@@ -181,6 +189,8 @@ export function SheetEditor({ container }: { container: string }) {
   const service = useWorkbookService();
   const router = useRouter();
   const engine = useRef<SheetEngine | null>(null);
+  const [chartEngine, setChartEngine] = useState<SheetEngine | null>(null);
+  const [chartRevision, setChartRevision] = useState(0);
   const fileTrigger = useRef<HTMLButtonElement>(null);
   const loadTheirVersion = useRef<HTMLButtonElement>(null);
   const input = useRef<HTMLInputElement>(null);
@@ -345,13 +355,24 @@ export function SheetEditor({ container }: { container: string }) {
       <div className="sht-editor">
         <h1 className="sr-only">{title}</h1>
         {state.workbook ? (
-          <Grid
-            key={grid?.revision ?? 0}
-            snapshot={state.workbook.snapshot}
-            onChange={state.scheduleSave}
-            engineRef={engine}
-            readOnly={state.readOnly}
-          />
+          <>
+            <Grid
+              key={grid?.revision ?? 0}
+              snapshot={state.workbook.snapshot}
+              onChange={state.scheduleSave}
+              engineRef={engine}
+              onReady={setChartEngine}
+              readOnly={state.readOnly}
+            />
+            <Suspense fallback={null}>
+              <ChartWorkspace
+                key={chartRevision}
+                engine={chartEngine}
+                snapshot={state.workbook.snapshot}
+                readOnly={state.readOnly}
+              />
+            </Suspense>
+          </>
         ) : (
           <div className="sht-skeleton" role="status" aria-label="Opening spreadsheet">
             <span />
@@ -488,6 +509,7 @@ export function SheetEditor({ container }: { container: string }) {
                 event.preventDefault();
                 void action(async () => {
                   const snapshot = await state.reload();
+                  setChartRevision((revision) => revision + 1);
                   if (engine.current) engine.current.load(snapshot);
                   else
                     setGrid((current) => ({

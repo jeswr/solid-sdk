@@ -121,6 +121,8 @@ export default defineConfig({
         "src/apps/sheets/lib/xlsx/**/*.ts",
         "src/apps/sheets/lib/format/**/*.ts",
         "src/apps/sheets/lib/condformat/**/*.ts",
+        "src/apps/sheets/lib/charts/**/*.ts",
+        "src/apps/sheets/components/chart-workspace.tsx",
         "src/apps/calendar/lib/layout/**/*.ts",
         "src/apps/calendar/lib/invites/**/*.ts",
         "src/apps/calendar/lib/recurrence/**/*.ts",
