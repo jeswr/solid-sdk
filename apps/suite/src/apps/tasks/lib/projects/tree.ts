@@ -64,6 +64,34 @@ export function projectDescendants(tree: readonly ProjectNode[], url: string): P
   return children.flatMap((child) => [child, ...projectDescendants(tree, child.project.url)]);
 }
 
+/** Stored edges are authoritative for mutations, including edges hidden for display. */
+function storedParents(tree: readonly ProjectNode[]): Map<string, string> {
+  const byId = new Map(tree.map((node) => [node.project.tracker.id, node.project]));
+  const parents = new Map<string, string>();
+  for (const { project } of tree) {
+    const parent = byId.get(project.tracker.parent ?? "");
+    if (parent && collection(parent) === collection(project)) parents.set(project.url, parent.url);
+  }
+  return parents;
+}
+
+export function storedProjectDescendants(tree: readonly ProjectNode[], url: string): ProjectNode[] {
+  const parents = storedParents(tree);
+  const seen = new Set([url]);
+  const result: ProjectNode[] = [];
+  const pending = tree.filter((node) => parents.get(node.project.url) === url).reverse();
+  while (pending.length) {
+    const node = pending.pop() as ProjectNode;
+    if (seen.has(node.project.url)) continue;
+    seen.add(node.project.url);
+    result.push({ ...node, parentUrl: parents.get(node.project.url) });
+    pending.push(
+      ...tree.filter((child) => parents.get(child.project.url) === node.project.url).reverse(),
+    );
+  }
+  return result;
+}
+
 export function canMoveProject(
   tree: readonly ProjectNode[],
   url: string,
@@ -71,19 +99,29 @@ export function canMoveProject(
 ): boolean {
   const source = tree.find((node) => node.project.url === url);
   if (!source?.readable) return false;
-  if (parentUrl === undefined) return true;
   const parent = tree.find((node) => node.project.url === parentUrl);
   if (
-    !parent?.readable ||
-    parentUrl === url ||
-    collection(source.project) !== collection(parent.project)
+    parentUrl !== undefined &&
+    (!parent?.readable ||
+      parentUrl === url ||
+      collection(source.project) !== collection(parent.project))
   )
     return false;
-  const descendants = projectDescendants(tree, url);
-  if (descendants.some((node) => node.project.url === parentUrl)) return false;
-  const height =
-    Math.max(source.depth, ...descendants.map((node) => node.depth)) - source.depth + 1;
-  return parent.depth + height <= MAX_PROJECT_DEPTH;
+  const parents = storedParents(tree);
+  const affected = [source, ...storedProjectDescendants(tree, url)];
+  if (parentUrl === undefined) parents.delete(url);
+  else parents.set(url, parentUrl);
+  // Walk the proposed stored chains. The depth bound also bounds corrupt cyclic input.
+  for (const node of affected) {
+    let current: string | undefined = node.project.url;
+    const seen = new Set<string>();
+    while (current) {
+      if (seen.has(current) || seen.size === MAX_PROJECT_DEPTH) return false;
+      seen.add(current);
+      current = parents.get(current);
+    }
+  }
+  return true;
 }
 
 export function projectBreadcrumb(tree: readonly ProjectNode[], url: string): StoredProject[] {

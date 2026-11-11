@@ -1,6 +1,14 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 "use client";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
   Breadcrumbs,
   Button,
   Dialog,
@@ -10,11 +18,73 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@jeswr/suite-ui";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { encodeRef } from "@/lib/refs";
+import { useRoutePathname } from "@/lib/route-params";
 import type { StoredProject } from "../lib/model/store";
 import { canMoveProject, projectBreadcrumb } from "../lib/projects/tree";
 import { useTasks } from "../state/tasks-context";
+
+/** Kept outside individual rows, which may unmount during an optimistic cascade. */
+export function ProjectFamilyConfirmationDialog() {
+  const tasks = useTasks();
+  const router = useRouter();
+  const path = useRoutePathname();
+  const confirmation = tasks.projectFamilyConfirmation;
+  if (!confirmation) return null;
+  const { project, kind, children, projects } = confirmation;
+  const action = kind === "archive" ? "Archive" : "Delete";
+  const affected = [project, ...projects];
+  return (
+    <AlertDialog
+      open
+      onOpenChange={(open) => {
+        if (!open) tasks.cache.dismissProjectFamilyConfirmation();
+      }}
+    >
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>
+            {action} {project.tracker.title ?? "Untitled"}?
+          </AlertDialogTitle>
+          <AlertDialogDescription>
+            The sub-projects changed. Review the updated scope before continuing. {affected.length}{" "}
+            {affected.length === 1 ? "project" : "projects"}:{" "}
+            {affected.map((item) => item.tracker.title ?? "Untitled").join(", ")}.
+            {children === "promote" && " Sub-projects will be moved to top level."}
+            {kind === "delete" && " This can't be undone."}
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction
+            onClick={() => {
+              tasks.cache.dismissProjectFamilyConfirmation();
+              const scope = projects.map((item) => item.url);
+              const operation =
+                kind === "archive"
+                  ? tasks.cache.archiveProject(project, children, scope)
+                  : tasks.cache.deleteProject(project, children, scope);
+              void operation.then((removed) => {
+                if (
+                  removed &&
+                  (children === "cascade" ? affected : [project]).some((item) => {
+                    const href = `/tasks/p/${encodeRef(item.url)}`;
+                    return path === href || path === `${href}/board`;
+                  })
+                )
+                  router.push("/tasks/inbox");
+              });
+            }}
+          >
+            {action}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
 
 export function ProjectMoveDialog({
   project,

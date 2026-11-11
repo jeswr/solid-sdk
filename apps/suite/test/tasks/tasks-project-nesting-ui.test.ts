@@ -1,24 +1,33 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { useSyncExternalStore } from "react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import type { StoredProject } from "../../src/apps/tasks/lib/model/store";
+import { serialize } from "../../src/apps/tasks/lib/model/rdf";
+import type { StoredProject, TaskStore } from "../../src/apps/tasks/lib/model/store";
 import { setPreferencesIdentity } from "../../src/apps/tasks/state/preferences";
 import type { TasksCache } from "../../src/apps/tasks/state/tasks-cache";
 import { act, click, h, key, mount } from "../drive-ui-dom";
-import { webId } from "./pod";
+import { type Pod, webId } from "./pod";
 import { frameCache } from "./tasks-frame-fixtures";
 
 let cache: TasksCache;
 let work: StoredProject;
 let clients: StoredProject;
 let acme: StoredProject;
+let pod: Pod;
+let store: TaskStore;
+const dropElements = new Map<string, HTMLElement>();
 const push = vi.fn();
 vi.mock("next/navigation", () => ({
   usePathname: () => "/tasks/inbox",
   useRouter: () => ({ push }),
 }));
 vi.mock("../../src/apps/tasks/components/dnd/use-task-drag", () => ({
-  useDropTarget: () => ({ ref: () => {}, over: false }),
+  useDropTarget: (_id: string, data: { projectUrl: string }) => ({
+    ref: (element: HTMLElement | null) => {
+      if (element) dropElements.set(data.projectUrl, element);
+    },
+    over: false,
+  }),
 }));
 vi.mock("../../src/apps/tasks/state/tasks-context", () => ({
   useTasks: () => ({
@@ -38,7 +47,8 @@ beforeEach(async () => {
   setPreferencesIdentity(undefined);
   localStorage.clear();
   setPreferencesIdentity(webId);
-  ({ cache } = await frameCache());
+  dropElements.clear();
+  ({ cache, pod, store } = await frameCache());
   const projects = await Promise.all(
     ["Work", "Clients", "Acme"].map((name) => cache.createProject(name)),
   );
@@ -64,7 +74,7 @@ async function choose(name: string, action: string, root: ParentNode = document)
   await key(button(action), "Enter");
 }
 const linkNames = (host: ParentNode) =>
-  [...host.querySelectorAll(".tsk-projects > li > a")].map(
+  [...host.querySelectorAll(".tsk-projects li > a, .tsk-projects li > .tsk-project-row > a")].map(
     (link) => link.querySelector("span")?.textContent,
   );
 
@@ -74,12 +84,25 @@ it("uses tabbable disclosure buttons in tree order and persists collapse across 
   const toggle = button("Sub-projects of Work", first.host);
   expect(toggle.getAttribute("aria-expanded")).toBe("true");
   expect(toggle.tabIndex).toBe(0);
+  const workRow = toggle.closest("li");
+  const childList = workRow?.querySelector(":scope > ul");
+  expect(childList).toBeTruthy();
+  expect(dropElements.get(work.url)?.contains(childList ?? null)).toBe(false);
+  expect(dropElements.get(work.url)?.querySelector("a")?.textContent).toContain("Work");
+  expect(toggle.getAttribute("aria-controls")).toBe(childList?.id);
+  expect(childList?.querySelector(":scope > li > .tsk-project-row > a")?.textContent).toContain(
+    "Clients",
+  );
+  expect(
+    childList?.querySelector(":scope > li > ul > li > .tsk-project-row > a")?.textContent,
+  ).toContain("Acme");
   expect(toggle.parentElement?.nextElementSibling?.classList.contains("tsk-project-dot")).toBe(
     true,
   );
   expect(first.host.querySelector('[data-project-depth="3"] a')?.textContent).toContain("Acme");
   await click(toggle);
   expect(toggle.getAttribute("aria-expanded")).toBe("false");
+  expect(childList?.hasAttribute("hidden")).toBe(true);
   expect(linkNames(first.host)).toEqual(["Work"]);
   expect(JSON.parse(localStorage.getItem("suite.tasks.prefs") ?? "{}").collapsedProjects).toContain(
     work.url,
@@ -180,4 +203,51 @@ it.each(["Archive", "Delete"])("honours the 'Also %s sub-projects' radio", async
     await vi.waitFor(() => expect(cache.getSnapshot().saving).toEqual([]));
   });
   expect(cache.projectTree).toEqual([]);
+});
+
+it.each([
+  "Cancel",
+  "Delete",
+])("reopens changed cascade confirmation with fresh counts and names, then honours %s", async (action) => {
+  const other = await cache.createProject("Other");
+  const task = await cache.createTask(acme, { title: "Keep with Clients" });
+  if (!other || !task) throw new Error("Missing fixture");
+  await mount(h(TasksSidebar));
+  await choose("Work", "Delete");
+  const radio = document.querySelectorAll<HTMLInputElement>(
+    '[role="alertdialog"] input[type="radio"]',
+  )[1];
+  if (!radio) throw new Error("Missing cascade choice");
+  await click(radio);
+  let conflicted = false;
+  pod.intercept = async (request) => {
+    if (conflicted || request.url !== acme.url || request.method !== "PUT") return;
+    conflicted = true;
+    const moved = await store.readProject(clients.url);
+    moved.tracker.parent = undefined;
+    pod.seed(clients.url, await serialize(moved.dataset));
+    const added = await store.readProject(other.url);
+    added.tracker.parent = work.tracker.id;
+    pod.seed(other.url, await serialize(added.dataset));
+    return new Response(null, { status: 412 });
+  };
+  await click(button("Delete", document.querySelector('[role="alertdialog"]') ?? document));
+  await act(async () => {
+    await vi.waitFor(() => expect(cache.getSnapshot().saving).toEqual([]));
+  });
+  const dialog = document.querySelector('[role="alertdialog"]');
+  expect(dialog?.textContent).toContain("2 projects: Work, Other");
+  expect(dialog?.textContent).not.toContain("Clients");
+  expect(pod.files.has(work.url)).toBe(true);
+  expect(pod.files.has(other.url)).toBe(true);
+  pod.intercept = undefined;
+  await click(button(action, dialog ?? document));
+  await act(async () => {
+    await vi.waitFor(() => expect(cache.getSnapshot().saving).toEqual([]));
+  });
+  expect(pod.files.has(work.url)).toBe(action === "Cancel");
+  expect(pod.files.has(other.url)).toBe(action === "Cancel");
+  expect(pod.files.has(clients.url)).toBe(true);
+  expect(pod.files.has(acme.url)).toBe(true);
+  expect(pod.files.has(task.url)).toBe(true);
 });

@@ -9,7 +9,7 @@ import { DataFactory, isSharedTrackerUrl, requireProjectFolder } from "../lib/mo
 import type { ProjectCreation, StoredProject, StoredTask, TaskStore } from "../lib/model/store";
 import { createTask, type TaskDetails, TaskItem } from "../lib/model/task";
 import { createTracker, type TaskTracker } from "../lib/model/tracker";
-import { canMoveProject, projectDescendants, projectHierarchy } from "../lib/projects/tree";
+import { canMoveProject, projectHierarchy, storedProjectDescendants } from "../lib/projects/tree";
 import { runBulk } from "../lib/views/bulk";
 import { completedHistoryToKeep, completedParentsToKeep } from "../lib/views/clear-completed";
 import { type CompletionPlan, planComplete, planUndo } from "../lib/views/completion";
@@ -37,6 +37,13 @@ export interface TasksSnapshot {
   tasks: Record<string, TaskLoad>;
   saving: string[];
   views: TaskView[];
+  projectFamilyConfirmation?: ProjectFamilyConfirmation | undefined;
+}
+interface ProjectFamilyConfirmation {
+  project: StoredProject;
+  kind: "archive" | "delete";
+  children: "cascade" | "promote";
+  projects: StoredProject[];
 }
 export interface NewTask extends Omit<TaskDetails, "state"> {
   state?: TaskDetails["state"];
@@ -333,7 +340,10 @@ export class TasksCache {
       }
     }
     if (failures.size) this.completedDeletionBlocked = true;
-    if (epoch !== this.epoch || generation !== this.projectRead) return;
+    if (epoch !== this.epoch || generation !== this.projectRead) {
+      if (strict) throw new ModelError(412, this.store.projects);
+      return;
+    }
     this.ownProjects = ownProjects;
     const tasks = { ...this.baseline.tasks };
     for (const project of projects) {
@@ -525,7 +535,7 @@ export class TasksCache {
           this.completedDeletionBlocked = true;
           /* The baseline plus the remaining queue is still safe to render. */
         }
-        onFailure(error, retry);
+        await onFailure(error, retry);
         return undefined;
       } finally {
         this.pending = this.pending.filter((item) => item !== entry);
@@ -2003,8 +2013,11 @@ export class TasksCache {
       );
     return attempt();
   }
-  archiveProject = (project: StoredProject, children: "cascade" | "promote" = "promote") =>
-    this.changeProjectFamily(project, "archive", children);
+  archiveProject = (
+    project: StoredProject,
+    children: "cascade" | "promote" = "promote",
+    confirmedScope?: readonly string[],
+  ) => this.changeProjectFamily(project, "archive", children, confirmedScope);
   moveProject(project: StoredProject, direction: "up" | "down") {
     const tree = this.projectTree;
     const parent = tree.find((node) => node.project.url === project.url)?.parentUrl;
@@ -2079,27 +2092,47 @@ export class TasksCache {
       },
     );
   }
-  deleteProject(project: StoredProject, children: "cascade" | "promote" = "promote") {
-    return this.changeProjectFamily(project, "delete", children);
+  deleteProject(
+    project: StoredProject,
+    children: "cascade" | "promote" = "promote",
+    confirmedScope?: readonly string[],
+  ) {
+    return this.changeProjectFamily(project, "delete", children, confirmedScope);
   }
+  dismissProjectFamilyConfirmation = () => {
+    this.baseline = { ...this.baseline, projectFamilyConfirmation: undefined };
+    this.emit();
+  };
   /** Children settle first. A failed child write must never remove its parent. */
   private changeProjectFamily(
     project: StoredProject,
     kind: "archive" | "delete",
     children: "cascade" | "promote",
+    confirmedScope?: readonly string[],
   ) {
     const archivedAt = new Date();
     const planFor = (state: TasksSnapshot) => {
       const tree = this.nestingTree(state);
-      const descendants = projectDescendants(tree, project.url);
+      const descendants = storedProjectDescendants(tree, project.url);
       return children === "cascade"
         ? descendants.reverse()
         : descendants.filter((node) => node.parentUrl === project.url);
     };
-    let plan: ReturnType<typeof planFor> | undefined;
-    const deleted = new Set<string>();
+    const scope = new Set(confirmedScope ?? planFor(this.snapshot).map((node) => node.project.url));
+    const settled = new Set<string>();
+    let plan = planFor(this.snapshot);
+    const scopeChanged = () => {
+      const expected = [...scope].filter((url) => !settled.has(url));
+      return expected.length !== plan.length || plan.some((node) => !scope.has(node.project.url));
+    };
+    const confirmation = (): ProjectFamilyConfirmation => ({
+      project: this.project(project.url),
+      kind,
+      children,
+      projects: plan.map((node) => node.project),
+    });
     const patch: Patch = (state) => {
-      const relatives = plan ?? planFor(state);
+      const relatives = planFor(state);
       const affected = new Set([project.url, ...relatives.map((node) => node.project.url)]);
       const removing = (url: string) =>
         kind === "delete" && affected.has(url) && (children === "cascade" || url === project.url);
@@ -2123,12 +2156,20 @@ export class TasksCache {
       this.mutate(
         patch,
         async () => {
-          plan ??= planFor(this.baseline);
+          // A retry is a new destructive operation: read every parent link again, fail closed
+          // on incomplete reads, and compare only the portion not already settled by us.
+          await this.refreshProjects(true);
+          if (this.projectFailures.size) throw this.projectFailures.values().next().value;
+          const root = this.project(project.url);
+          plan = planFor(this.baseline);
+          if (scopeChanged())
+            return {
+              result: false,
+              commit: (state) => ({ ...state, projectFamilyConfirmation: confirmation() }),
+            };
           const confirmed: StoredProject[] = [];
-          for (const item of [...plan.map((node) => node.project), project]) {
-            if (deleted.has(item.url)) continue;
-            const current = this.baseline.projects.find((value) => value.url === item.url) ?? item;
-            if (this.projectFailures.has(item.url)) throw this.projectFailures.get(item.url);
+          for (const item of [...plan.map((node) => node.project), root]) {
+            const current = this.project(item.url);
             if (item.url !== project.url && children === "promote") {
               confirmed.push(
                 await this.store.updateProject(current, (tracker) => {
@@ -2143,8 +2184,8 @@ export class TasksCache {
               );
             } else {
               await this.store.deleteProject(current);
-              deleted.add(item.url);
             }
+            settled.add(item.url);
           }
           return {
             result: true,
@@ -2159,6 +2200,24 @@ export class TasksCache {
           void attempt();
         },
         [project.url],
+        async (error, retry) => {
+          // mutate has reconciled before invoking this handler. Never turn an incomplete
+          // reconciliation into a narrower confirmation or resume the old plan.
+          try {
+            await this.refreshProjects(true);
+            if (this.projectFailures.size) throw error;
+            plan = planFor(this.baseline);
+            if (scopeChanged()) {
+              this.baseline = { ...this.baseline, projectFamilyConfirmation: confirmation() };
+              return;
+            }
+          } catch {
+            // Retry must obtain a complete fresh scope before issuing another write.
+          }
+          this.onFailure(error, retry);
+        },
+        undefined,
+        true,
       );
     return attempt();
   }
