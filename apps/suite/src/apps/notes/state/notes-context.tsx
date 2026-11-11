@@ -16,8 +16,17 @@ import {
 } from "react";
 import { encodeRef } from "@/lib/refs";
 import type { PodSession } from "@/lib/session/pod-session";
+import { NoteFailures } from "../components/note-failures";
+import { ShareNote } from "../components/share-note";
+import { NoteMoveBlockedError } from "../lib/model/errors";
 import { type NoteColour, rekeyPreferences, togglePinned } from "../lib/model/prefs";
-import { createNotesStore, type NoteChanges, type StoredNote } from "../lib/model/store";
+import {
+  createNotesStore,
+  type NoteChanges,
+  type NoteFailure,
+  type StoredNote,
+} from "../lib/model/store";
+import { discoverNoteShares } from "../lib/sharing";
 import { getPendingDrafts } from "./draft-registry";
 import { useNotesMutations } from "./mutations";
 import { useNotesPreferences } from "./prefs";
@@ -26,10 +35,18 @@ import { useNotes } from "./use-notes";
 function useNotesValue(session: PodSession) {
   const store = useMemo(
     () =>
-      createNotesStore({ fetch: session.fetch, podRoot: session.storageUrl, webId: session.webId }),
+      createNotesStore({
+        fetch: session.fetch,
+        podRoot: session.storageUrl,
+        webId: session.webId,
+      }),
     [session],
   );
   const [prefs, updatePrefs] = useNotesPreferences(session.webId);
+  const [sharedNotes, setSharedNotes] = useState<Record<string, boolean>>({});
+  const [shareRevision, setShareRevision] = useState(0);
+  const [sharing, setSharing] = useState<StoredNote>();
+  const [batchFailures, setBatchFailures] = useState<NoteFailure[]>([]);
   const active = useNotes(store, { location: "active" });
   const archived = useNotes(store, { location: "archived" });
   const trashed = useNotes(store, { location: "trashed" });
@@ -67,8 +84,28 @@ function useNotesValue(session: PodSession) {
     );
   const notes = [
     ...projected.filter((note) => !recovered.some((entry) => entry.note.url === note.url)),
-    ...recovered.map(({ note, draft }) => ({ ...note, ...draft })),
+    ...recovered.map(({ note, draft }) => {
+      const current = projected.find((item) => item.url === note.url);
+      const freshPermission =
+        current?.readOnly !== undefined &&
+        current.localGeneration !== undefined &&
+        current.localGeneration > (note.localGeneration ?? -1);
+      return { ...note, ...draft, ...(freshPermission ? { readOnly: current.readOnly } : {}) };
+    }),
   ];
+  const shareUrls = JSON.stringify(
+    notes.filter((note) => note.etag !== null).map((note) => note.url),
+  );
+  // Discovery runs after rendering the list, never as part of its loading state.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: shareRevision explicitly invalidates ACL knowledge after the dialog closes
+  useEffect(() => {
+    const controller = new AbortController();
+    setSharedNotes({});
+    void discoverNoteShares(JSON.parse(shareUrls), session, controller.signal, (url, shared) => {
+      setSharedNotes((current) => ({ ...current, [url]: shared }));
+    });
+    return () => controller.abort();
+  }, [shareUrls, session, shareRevision]);
   const router = useRouter();
   const pathname = usePathname();
   const query = useSearchParams().toString();
@@ -133,10 +170,39 @@ function useNotesValue(session: PodSession) {
     updatePrefs((value) => rekeyPreferences(value, note.url, moved.url));
     return moved;
   };
-  const attempt = (work: () => Promise<unknown>, message = "Couldn't update this note") => {
-    void work().catch(() =>
-      toast.error(message, { action: { label: "Retry", onClick: () => attempt(work, message) } }),
+  const openShare = (url: string) => {
+    void store.read(url).then(
+      (note) => {
+        if (note) setSharing(note);
+        else toast.error("This note isn't here any more");
+      },
+      () => toast.error("Couldn't open sharing for this note"),
     );
+  };
+  const reportError = (error: NoteMoveBlockedError) => {
+    toast.error(error.message, {
+      action: { label: "Share", onClick: () => openShare(error.url) },
+    });
+  };
+  const attempt = (work: () => Promise<unknown>, message = "Couldn't update this note") => {
+    void work().catch((error) => {
+      if (error instanceof NoteMoveBlockedError) reportError(error);
+      else
+        toast.error(message, { action: { label: "Retry", onClick: () => attempt(work, message) } });
+    });
+  };
+  const moveMany = async (selected: readonly StoredNote[], action: "archive" | "trash") => {
+    const moved: StoredNote[] = [];
+    const failed: NoteFailure[] = [];
+    for (const note of selected) {
+      try {
+        moved.push(await move(note, action));
+      } catch (error) {
+        failed.push({ url: note.url, error });
+      }
+    }
+    setBatchFailures(failed);
+    return { moved, failed };
   };
   const create = async (input: NoteChanges, pinned: boolean, value: NoteColour) => {
     const note = await mutations.create(input);
@@ -167,14 +233,34 @@ function useNotesValue(session: PodSession) {
     pin,
     colour,
     move,
+    moveMany,
     attempt,
+    reportError,
+    openShare,
+    sharing,
+    batchFailures,
+    closeShare: () => {
+      setSharing(undefined);
+      setShareRevision((value) => value + 1);
+    },
     create,
+    sharedNotes,
+    refreshSharing: () => setShareRevision((value) => value + 1),
   };
 }
 type NotesContextValue = ReturnType<typeof useNotesValue>;
 const Context = createContext<NotesContextValue | null>(null);
 export function NotesProvider({ session, children }: { session: PodSession; children: ReactNode }) {
-  return <Context value={useNotesValue(session)}>{children}</Context>;
+  const value = useNotesValue(session);
+  return (
+    <Context value={value}>
+      {children}
+      <NoteFailures failures={value.batchFailures} />
+      {value.sharing && (
+        <ShareNote note={value.sharing} session={session} onClose={value.closeShare} />
+      )}
+    </Context>
+  );
 }
 export function useNotesContext() {
   const value = useContext(Context);

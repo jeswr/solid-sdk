@@ -1,12 +1,14 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
-import { RdfFetchError } from "@jeswr/fetch-rdf";
+import { parseRdf, RdfFetchError } from "@jeswr/fetch-rdf";
 import { normalizePodBase, refuseRedirects } from "@jeswr/guarded-fetch";
 import { documentSubject, type Revision } from "@jeswr/solid-docs/document";
 import { isDirectChild, toSlug } from "@jeswr/solid-docs/layout";
 import { DOCUMENT_CLASS, NS, PREFIXES } from "@jeswr/solid-docs/vocab";
-import { Container, ContainerDataset } from "@solid/object";
+import { NamedNodeAs, NamedNodeFrom, SetFrom } from "@rdfjs/wrapper";
+import { AclResource, Container, ContainerDataset } from "@solid/object";
 import { DataFactory, Store } from "n3";
+import { wacOnlyFetch } from "../../../../shell/share/verified-wac-adapter";
 import { uploadPodImage } from "../../../docs/lib/editor/image-upload";
 import {
   ConcurrencyValidatorError,
@@ -20,12 +22,19 @@ import {
   discoverRegistrations,
   ensureTypeRegistrations,
 } from "../../../docs/lib/model/type-index";
+import { verifyPrivateIndexAccess } from "../../../docs/lib/model/type-index-access";
+import { readSharing } from "../../../drive/lib/sharing";
 import { notesMediaContainer } from "../images";
 import { deleteLabel, mergeLabels } from "../organise/labels";
 import { createBrowserFiredStore, type FiredReminderStore } from "../reminders/fired-store";
 import { reminderKey } from "../reminders/scheduler";
 import { type NoteAction, reduceNoteState } from "../state";
-import { NoteConflictError, NoteMoveUncertainError } from "./errors";
+import {
+  NoteConflictError,
+  NoteMoveBlockedError,
+  NoteMoveUncertainError,
+  NotePermissionError,
+} from "./errors";
 import {
   type BuildNoteInput,
   buildNote,
@@ -37,6 +46,7 @@ import {
 
 export interface StoredNote extends Note {
   etag: string | null;
+  readOnly?: boolean | undefined;
   /** Local request/write order; independent of RDF dates and discarded on draft recovery. */
   localGeneration?: number;
 }
@@ -99,9 +109,17 @@ export class NotesStore {
   async read(url: string): Promise<StoredNote | undefined> {
     const location = this.scope(url);
     const localGeneration = ++this.generation;
-    const { dataset, etag } = await readRdf(url, this.fetchImpl);
+    let readOnly: boolean | undefined;
+    const { dataset, etag } = await readRdf(url, async (input, init) => {
+      const response = await this.fetchImpl(input, init);
+      const user = /(?:^|,)\s*user\s*=\s*"([^"]*)"/i.exec(response.headers.get("wac-allow") ?? "");
+      if (user) readOnly = !/\bwrite\b/i.test(user[1] as string);
+      return response;
+    });
     const note = parseNote(url, dataset, location);
-    return note && { ...note, etag, localGeneration };
+    return (
+      note && { ...note, etag, localGeneration, ...(readOnly === undefined ? {} : { readOnly }) }
+    );
   }
 
   async list(location: NoteLocation): Promise<StoredNote[]> {
@@ -189,7 +207,7 @@ export class NotesStore {
   private async allocate(
     container: string,
     filename: string,
-    build: (url: string) => Store,
+    build: (url: string) => Store | Promise<Store>,
   ): Promise<StoredNote> {
     const dot = filename.lastIndexOf(".");
     const stem = dot > 0 ? filename.slice(0, dot) : filename;
@@ -197,7 +215,7 @@ export class NotesStore {
     for (let suffix = 1; ; suffix++) {
       const url = `${container}${stem}${suffix === 1 ? "" : `-${suffix}`}${extension}`;
       const location = this.scope(url);
-      const dataset = build(url);
+      const dataset = await build(url);
       try {
         const { etag } = await writeRdf(url, dataset, {
           createOnly: true,
@@ -266,7 +284,10 @@ export class NotesStore {
 
   private async write(note: Note, input: NoteChanges, etag: string | null): Promise<StoredNote> {
     this.scope(note.url, note.location);
-    const dataset = buildNote(note.url, { ...this.input(note), ...input });
+    const dataset = buildNote(note.url, {
+      ...this.input(note),
+      ...input,
+    });
     try {
       const written = await writeRdf(note.url, dataset, {
         etag,
@@ -281,6 +302,8 @@ export class NotesStore {
     } catch (error) {
       if (error instanceof ResourceWriteError && error.status === 412)
         throw new NoteConflictError(note.url, { cause: error });
+      if (error instanceof ResourceWriteError && error.status === 403)
+        throw new NotePermissionError(note.url, ++this.generation, error);
       throw error;
     }
   }
@@ -314,8 +337,8 @@ export class NotesStore {
       action,
     );
     if (state.status === note.location) return note;
-    this.validator(note.url, note.etag);
     const sourceEtag = note.etag;
+    await this.assertMovable(note);
     await this.ensureContainers();
     const filename = new URL(note.url).pathname.split("/").at(-1) as string;
     const moved = await this.allocate(this.containers[state.status], filename, (url) => {
@@ -396,9 +419,82 @@ export class NotesStore {
     return this.move(note, { type: "restore" });
   }
 
+  /** Preflight conversions before they create content in another app. Moves check again. */
+  async assertMovable(note: StoredNote): Promise<void> {
+    this.scope(note.url, note.location);
+    this.validator(note.url, note.etag);
+    await this.assertUnshared(note.url);
+  }
+
   async deleteForever(url: string, etag: string | null): Promise<void> {
     this.scope(url, "trashed");
+    this.validator(url, etag);
+    await this.assertUnshared(url);
     await this.remove(url, etag);
+  }
+
+  /** Remove only a verified owner-only own ACL before returning to private inheritance. */
+  private async assertUnshared(url: string): Promise<void> {
+    try {
+      const http = wacOnlyFetch(this.fetchImpl);
+      const head = await http(url, { method: "HEAD", cache: "no-store" });
+      const links = [...(head.headers.get("link") ?? "").matchAll(/<([^>]+)>\s*;\s*rel="acl"/g)];
+      if (head.ok && links.length === 1 && links[0]?.[1] === `${url}.acl`) {
+        const acl = await http(`${url}.acl`, { cache: "no-store" });
+        if (acl.status === 404) return;
+        if (acl.ok) {
+          const etag = acl.headers.get("etag");
+          this.validator(`${url}.acl`, etag);
+          const dataset = await parseRdf(await acl.text(), acl.headers.get("content-type"), {
+            baseIRI: `${url}.acl`,
+          });
+          // Use the sharing adapter's projection to reject unsupported/malformed WAC.
+          const state = readSharing({
+            access: {
+              resource: url,
+              documents: [
+                {
+                  model: "wac",
+                  source: `${url}.acl`,
+                  governingResource: url,
+                  inherited: false,
+                  dataset,
+                },
+              ],
+            },
+          });
+          const ownerOnly = [...new AclResource(dataset, DataFactory).authorizations].every(
+            (auth) =>
+              [...auth.agent].every((agent) => agent === this.webId) &&
+              !auth.agentClass.size &&
+              !auth.origin.size &&
+              !SetFrom.subjectPredicate(
+                auth,
+                "http://www.w3.org/ns/auth/acl#agentGroup",
+                NamedNodeAs.string,
+                NamedNodeFrom.string,
+              ).size,
+          );
+          if (ownerOnly && state.people.some((person) => person.webId === this.webId)) {
+            // Verify the policy that would apply AFTER deletion, skipping only this
+            // own ACL so the existing verifier checks the nearest container defaults.
+            await verifyPrivateIndexAccess(url, this.webId, this.podRoot, (input, init) =>
+              String(input) === `${url}.acl`
+                ? Promise.resolve(new Response(null, { status: 404 }))
+                : http(input, { ...init, cache: "no-store" }),
+            );
+            const removed = await http(`${url}.acl`, {
+              method: "DELETE",
+              headers: { "if-match": etag as string },
+            });
+            if (removed.ok) return;
+          }
+        }
+      }
+    } catch (cause) {
+      throw new NoteMoveBlockedError(url, { cause });
+    }
+    throw new NoteMoveBlockedError(url);
   }
 
   async purgeTrash(olderThanDays = 30): Promise<{ deleted: string[]; failed: NoteFailure[] }> {
