@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { mkdir } from "node:fs/promises";
 import AxeBuilder from "@axe-core/playwright";
 import { expect, type Page, test } from "@playwright/test";
@@ -24,9 +25,7 @@ test("signed-out entry shows welcome, sign-in links and an optional demo", async
 }, info) => {
   await page.goto("/");
   await expect(page).toHaveURL(/\/welcome$/);
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText(
-    "Your documents, files and tasks — kept in a pod you control",
-  );
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Try the Solid Suite");
   await expect(page.getByRole("link", { name: "Sign in", exact: true })).toHaveAttribute(
     "href",
     "/signin",
@@ -37,7 +36,9 @@ test("signed-out entry shows welcome, sign-in links and an optional demo", async
   await screenshot(page, "welcome", info.project.name);
 });
 
-test("different-account validation and the provider preview seam", async ({ page }, info) => {
+test("different-account validation and unavailable production loopback auth", async ({
+  page,
+}, info) => {
   await page.goto("/signin");
   const address = page.getByRole("textbox", { name: "WebID", exact: true });
   await expect(address).toBeVisible();
@@ -53,22 +54,23 @@ test("different-account validation and the provider preview seam", async ({ page
   await address.fill("https://example.org/profile/card#me");
   await address.press("Enter");
   await expect(page.getByRole("alert").filter({ hasText: /\S/ })).toHaveText(
-    "Signing in with a Solid provider isn't switched on in this preview yet.",
+    "We couldn't sign you in. Please try again.",
   );
   const remembered = () =>
     page.evaluate(() => JSON.parse(localStorage.getItem("suite.recentProviders.v1") ?? "[]"));
   // A WebID is never remembered as a provider.
   expect(await remembered()).toEqual([]);
   await accessible(page);
-  // The provider field keeps its intent, even for a provider that lives under a path.
+  // The production HTTP loopback harness cannot authenticate. Real OAuth runs in shell-css
+  // with a development server; failed addresses must never become remembered providers.
   await page.getByRole("button", { name: "Other provider", exact: true }).click();
   const provider = page.getByRole("combobox", { name: "Provider address" });
   await provider.fill("https://login.example.org/realms/solid");
   await provider.press("Enter");
   await expect(page.getByRole("alert").filter({ hasText: /\S/ })).toHaveText(
-    "Signing in with a Solid provider isn't switched on in this preview yet.",
+    "We couldn't sign you in. Please try again.",
   );
-  expect(await remembered()).toEqual(["https://login.example.org/realms/solid"]);
+  expect(await remembered()).toEqual([]);
   await accessible(page);
   // Provider buttons: the known community providers, each a real button.
   await expect(page.getByRole("list", { name: "Providers" }).getByRole("button")).not.toHaveCount(
@@ -79,7 +81,9 @@ test("different-account validation and the provider preview seam", async ({ page
 test("pod explainer opens with the keyboard and returns focus", async ({ page }) => {
   await page.goto("/signin");
   const trigger = page.getByRole("button", { name: "What is a pod?" });
+  await expect(trigger).toBeEnabled();
   await trigger.focus();
+  await expect(trigger).toBeFocused();
   await page.keyboard.press("Enter");
   await expect(page.getByRole("dialog")).toBeVisible();
   await expect(page.getByRole("dialog")).toContainText(
@@ -96,7 +100,7 @@ test("pod explainer opens with the keyboard and returns focus", async ({ page })
 test("demo lands on the start page and the shell keeps the session", async ({ page }, info) => {
   await page.goto("/signin");
   await page.getByRole("button", { name: "Try it with a demo pod" }).click();
-  await expect(page).toHaveURL(/\/drive(\/my)?$/);
+  await expect(page).toHaveURL(/\/home$/);
   await page.goto("/search");
   await expect(page.getByRole("heading", { name: "Search", exact: true, level: 1 })).toBeVisible();
   await expect(
@@ -110,7 +114,7 @@ test("demo lands on the start page and the shell keeps the session", async ({ pa
   ).toBeVisible();
   await accessible(page);
   await page.goto("/");
-  await expect(page).toHaveURL(/\/drive(\/my)?$/);
+  await expect(page).toHaveURL(/\/home$/);
 });
 
 test("session guard keeps a safe return route", async ({ page }) => {
@@ -126,7 +130,7 @@ test("unsafe next cannot redirect the demo outside the suite", async ({ page }) 
   await page.goto("/signin?next=//evil.example");
   await accessible(page);
   await page.getByRole("button", { name: "Try it with a demo pod" }).click();
-  await expect(page).toHaveURL(/\/drive(\/my)?$/);
+  await expect(page).toHaveURL(/\/home$/);
   await accessible(page);
 });
 
@@ -164,20 +168,21 @@ test("expired sessions keep content inert until reauthentication or signout", as
   // The hidden, inert page still owns its one h1 while the dialog has its own h2.
   await accessible(page);
   await dialog.getByRole("button", { name: "Sign in again" }).click();
-  await expect(dialog.getByRole("alert")).toHaveText(
-    "Signing in with a Solid provider isn't switched on in this preview yet.",
-  );
+  await expect(dialog.getByRole("alert")).toHaveText("We couldn't sign you in. Please try again.");
   await dialog.getByRole("button", { name: "Sign out", exact: true }).click();
   await expect(page).toHaveURL(/\/signin\?next=%2Fsearch$/);
   await accessible(page);
 });
 
 test("invalid Drive reference renders the not-found page", async ({ page }) => {
+  await page.goto("/signin");
+  await page.getByRole("button", { name: "Try it with a demo pod" }).click();
+  await expect(page).toHaveURL(/\/home$/);
   await page.goto("/drive/f/not-a-ref");
   await expect(
     page.getByRole("heading", { name: "We couldn't find that page", exact: true }),
   ).toBeVisible();
-  await expect(page.getByRole("link", { name: "Go to Drive" })).toHaveAttribute("href", "/drive");
+  await expect(page.getByRole("link", { name: "Go to Home" })).toHaveAttribute("href", "/home");
   await expect(page.getByRole("link", { name: "Search", exact: true })).toHaveAttribute(
     "href",
     "/search",

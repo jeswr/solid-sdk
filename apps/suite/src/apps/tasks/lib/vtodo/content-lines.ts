@@ -31,6 +31,12 @@ export function unescapeText(value: string): string {
   return value.replace(/\\([\\nN;,])/g, (_, ch: string) => (/[nN]/.test(ch) ? "\n" : ch));
 }
 
+export function textList(value: string): string[] {
+  const parts = value.match(/(?:\\.|[^,\\])+/gu) ?? [];
+  requireValue(parts.length > 0 && parts.join(",") === value, "invalid-value");
+  return parts.map(unescapeText);
+}
+
 /** Strict RFC 5545 CRLF, unfolding exactly one SP/HTAB after a line break. */
 export function unfoldLines(input: string): string[] {
   requireValue(typeof input === "string", "invalid-input");

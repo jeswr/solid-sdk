@@ -53,6 +53,7 @@ export interface VTodoTask extends Omit<TaskDataProjection, "dueDate" | "parent"
   readonly rrule?: string;
   /** Calendar UID, resolved explicitly before writing dct:isPartOf. */
   readonly parentUid?: string;
+  readonly categories?: readonly string[];
 }
 
 export interface VTodoCalendar {

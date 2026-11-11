@@ -2,11 +2,12 @@
 "use client";
 
 import { X } from "lucide-react";
-import { useEffect, useId, useRef, useState } from "react";
+import { type ReactNode, useEffect, useId, useRef, useState } from "react";
 
 export interface TagOption {
   id: string;
   label: string;
+  icon?: ReactNode;
 }
 export interface TagInputProps {
   label: string;
@@ -81,7 +82,10 @@ export function TagInput({ label, options, value, onChange, disabled = false }: 
       <div className="suite-tag-field" data-disabled={disabled || undefined}>
         {selected.map((tag) => (
           <span className="suite-tag" key={tag.id}>
-            <span className="suite-tag-label">{tag.label}</span>
+            <span className="suite-tag-label">
+              {tag.icon}
+              {tag.label}
+            </span>
             <button
               type="button"
               className="suite-tag-remove"
@@ -170,6 +174,7 @@ export function TagInput({ label, options, value, onChange, disabled = false }: 
                 onMouseDown={(event) => event.preventDefault()}
                 onClick={() => add(option)}
               >
+                {option.icon}
                 {option.label}
               </div>
             ))}

@@ -23,11 +23,12 @@ import {
 } from "react";
 import { boundedRead } from "../../../lib/session/bounded-read";
 import type { PodSession } from "../../../lib/session/pod-session";
+import { ResourceWriteError } from "../../docs/lib/model/errors";
 import {
   discoverProfileRegistrations,
   ensureTypeRegistrations,
 } from "../../docs/lib/model/type-index";
-import { driveBootstrapFetch } from "../lib/client/bootstrap";
+import { BootstrapIdentityError, driveBootstrapFetch } from "../lib/client/bootstrap";
 import {
   createSolidDriveClient,
   type DriveClient,
@@ -47,6 +48,7 @@ export interface DriveContextValue {
   /** `undefined` while the root is being resolved. */
   readonly driveRoot: string | undefined;
   readonly rootError: unknown;
+  readonly retryRoot: () => void;
   readonly prefs: DrivePreferences;
   readonly updatePrefs: (change: (current: DrivePreferences) => DrivePreferences) => void;
   readonly uploads: UploadQueue;
@@ -71,6 +73,29 @@ async function resolveDriveRoot(
   client: DriveClient,
   session: PodSession,
   signal: AbortSignal,
+  provision: boolean,
+): Promise<string> {
+  for (let attempt = 0; ; attempt++) {
+    signal.throwIfAborted();
+    try {
+      return await resolveDriveRootAttempt(client, session, signal, provision);
+    } catch (error) {
+      const conflict =
+        error instanceof BootstrapIdentityError ||
+        (error instanceof DriveError && error.kind === "conflict") ||
+        (error instanceof ResourceWriteError && error.status === 412);
+      if (!conflict || attempt >= 3) throw error;
+      // Another tab may have linked or registered its index. Start with discovery
+      // again and fresh bootstrap captures, never replay a stale conditional write.
+    }
+  }
+}
+
+async function resolveDriveRootAttempt(
+  client: DriveClient,
+  session: PodSession,
+  signal: AbortSignal,
+  provision: boolean,
 ): Promise<string> {
   try {
     const discover = () =>
@@ -101,6 +126,7 @@ async function resolveDriveRoot(
   // needed to bootstrap a private Type Index. Browse the granted root without provisioning.
   if (session.mode === "extension") return session.storageUrl;
   const root = `${session.storageUrl}drive/`;
+  if (!provision) return root;
   try {
     await client.createFolder(root, { kind: "inherit-verified" });
   } catch (error) {
@@ -116,10 +142,21 @@ async function resolveDriveRoot(
   return root;
 }
 
-export function DriveProvider({ session, children }: { session: PodSession; children: ReactNode }) {
+export function DriveProvider({
+  session,
+  children,
+  provision = true,
+}: {
+  session: PodSession;
+  children: ReactNode;
+  /** Share intake may browse without provisioning or resuming any pod writes on mount. */
+  provision?: boolean;
+}) {
   const { confirmAccess, dialog } = useAccessConfirmation();
   const [driveRoot, setDriveRoot] = useState<string>();
   const [rootError, setRootError] = useState<unknown>();
+  const [rootAttempt, setRootAttempt] = useState(0);
+  const retryRoot = useCallback(() => setRootAttempt((attempt) => attempt + 1), []);
   const [prefs, updatePrefs] = useDrivePreferences(session.webId);
   const listeners = useRef(new Map<string, Set<() => void>>());
   const subtreeListeners = useRef(new Map<string, Set<() => void>>());
@@ -173,6 +210,7 @@ export function DriveProvider({ session, children }: { session: PodSession; chil
         fetch: session.fetch,
         confirmAccess,
         webId: session.webId,
+        provision,
         onProtectionChange: invalidate,
         onPrivateFolder: (url) =>
           toast(`${nameOf(url)} was restored as private`, {
@@ -180,12 +218,13 @@ export function DriveProvider({ session, children }: { session: PodSession; chil
               "Its original access was unknown. Only you can access this folder and new files in it.",
           }),
       }),
-    [session, confirmAccess, invalidate],
+    [session, confirmAccess, invalidate, provision],
   );
 
   useEffect(() => session.subscribe((url) => invalidate(url)), [session, invalidate]);
 
   useEffect(() => {
+    if (!provision) return;
     let live = true;
     const check = async () => {
       try {
@@ -207,12 +246,15 @@ export function DriveProvider({ session, children }: { session: PodSession; chil
     return () => {
       live = false;
     };
-  }, [client, invalidate, session.storageUrl]);
+  }, [client, invalidate, session.storageUrl, provision]);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: rootAttempt retries discovery without reloading the session
   useEffect(() => {
     let live = true;
     const controller = new AbortController();
-    resolveDriveRoot(client, session, controller.signal).then(
+    setDriveRoot(undefined);
+    setRootError(undefined);
+    resolveDriveRoot(client, session, controller.signal, provision).then(
       (root) => live && setDriveRoot(root),
       (error: unknown) => live && setRootError(error),
     );
@@ -220,7 +262,7 @@ export function DriveProvider({ session, children }: { session: PodSession; chil
       live = false;
       controller.abort();
     };
-  }, [client, session]);
+  }, [client, session, rootAttempt, provision]);
 
   const uploads = useUploadQueue(
     client,
@@ -234,13 +276,25 @@ export function DriveProvider({ session, children }: { session: PodSession; chil
       client,
       driveRoot,
       rootError,
+      retryRoot,
       prefs,
       updatePrefs,
       uploads,
       invalidate,
       changes,
     }),
-    [session, client, driveRoot, rootError, prefs, updatePrefs, uploads, invalidate, changes],
+    [
+      session,
+      client,
+      driveRoot,
+      rootError,
+      retryRoot,
+      prefs,
+      updatePrefs,
+      uploads,
+      invalidate,
+      changes,
+    ],
   );
   return (
     <DriveContext value={value}>

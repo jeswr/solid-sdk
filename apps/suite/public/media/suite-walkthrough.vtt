@@ -1,0 +1,157 @@
+WEBVTT
+
+1
+00:00:00.350 --> 00:00:01.829
+This is the Solid Suite.
+
+2
+00:00:01.829 --> 00:00:07.682
+It has the everyday apps you would expect, for files, documents, tasks, calendars and contacts.
+
+3
+00:00:07.682 --> 00:00:10.146
+The difference is where your data lives.
+
+4
+00:00:10.996 --> 00:00:17.200
+Today, every app keeps its own copy of your data, on its own servers, under its own rules.
+
+5
+00:00:17.200 --> 00:00:18.854
+Solid turns that around.
+
+6
+00:00:18.854 --> 00:00:23.404
+Your data lives in a pod that you control, and apps ask to use it.
+
+7
+00:00:24.254 --> 00:00:26.688
+You can sign in with any Solid pod provider.
+
+8
+00:00:26.688 --> 00:00:31.777
+For this walkthrough, we'll use the built-in demo pod, which lives entirely in your browser.
+
+9
+00:00:32.629 --> 00:00:36.547
+One click, and we're in, as Alice, a fictional demo user.
+
+10
+00:00:37.401 --> 00:00:39.423
+Home is the front door to your pod.
+
+11
+00:00:39.423 --> 00:00:45.028
+It shows what's stored there, sorted into everyday categories like documents, calendar and media.
+
+12
+00:00:45.878 --> 00:00:50.058
+And it keeps one question in view at all times: who else can see this?
+
+13
+00:00:50.908 --> 00:00:52.996
+Drive works the way you'd expect.
+
+14
+00:00:52.996 --> 00:00:56.159
+Folders, uploads, search, and a list or grid view.
+
+15
+00:01:01.223 --> 00:01:06.996
+Any file or folder can be shared, moved, starred, or renamed, with keyboard shortcuts for each.
+
+16
+00:01:07.848 --> 00:01:11.139
+Files open in a preview, read straight from the pod.
+
+17
+00:01:12.612 --> 00:01:14.510
+Docs is a full word processor.
+
+18
+00:01:14.510 --> 00:01:16.217
+Let's start a new document.
+
+19
+00:01:23.772 --> 00:01:25.918
+As you type, it saves to your pod.
+
+20
+00:01:25.918 --> 00:01:31.661
+Not as a file locked inside one app, but as open, linked data that other apps can read too.
+
+21
+00:01:33.669 --> 00:01:40.199
+Close the tab, come back on another device, and it's all still there, because it was never stored anywhere else.
+
+22
+00:01:41.049 --> 00:01:43.188
+Tasks is a simple to-do list.
+
+23
+00:01:43.188 --> 00:01:45.254
+Press Q anywhere to add one.
+
+24
+00:01:46.431 --> 00:01:47.381
+Type naturally.
+
+25
+00:01:47.381 --> 00:01:51.368
+Tasks picks up the word tomorrow and sets the due date for you.
+
+26
+00:01:55.275 --> 00:02:01.309
+Calendar has day, week, month and agenda views, with separate calendars for personal and work.
+
+27
+00:02:02.159 --> 00:02:09.473
+Contacts keeps your address book in the same pod, with labels, imports, and a tool that finds and merges duplicates.
+
+28
+00:02:10.324 --> 00:02:14.347
+Photos, Music and Money are earlier, but they already run on the same pod.
+
+29
+00:02:15.198 --> 00:02:17.262
+Your music library and playlists.
+
+30
+00:02:21.307 --> 00:02:24.807
+And your accounts and spending, with no bank connection needed.
+
+31
+00:02:28.413 --> 00:02:33.324
+Because everything is in one place, one page can show everyone who has access to your data.
+
+32
+00:02:34.834 --> 00:02:37.646
+Here, some files are open to anyone with the link.
+
+33
+00:02:37.646 --> 00:02:39.614
+One click makes them private again.
+
+34
+00:02:40.464 --> 00:02:43.133
+Bob has had access to some files since October.
+
+35
+00:02:43.133 --> 00:02:46.995
+You can see exactly what he can reach, and take it back at any time.
+
+36
+00:02:47.845 --> 00:02:54.716
+Underneath, the suite is built on open standards: Solid, and the W3C's work on Linked Web Storage.
+
+37
+00:02:55.565 --> 00:03:02.618
+The code is open source, as more than seventy reusable packages, so anyone can build their own apps on the same pods.
+
+38
+00:03:03.468 --> 00:03:12.246
+Next comes a personal agent that asks before it acts, mobile apps, and more apps reaching feature parity with the tools you use today.
+
+39
+00:03:13.096 --> 00:03:17.772
+Try the demo for yourself at solid dash suite dot vercel dot app.

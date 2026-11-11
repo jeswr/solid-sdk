@@ -37,6 +37,21 @@ export function collection<T>(
     Object.defineProperty(rows, name, { value });
   return rows as Collection<T>;
 }
+/** The metadata carried by a collection, for re-wrapping a filtered or mapped copy. */
+export function metadataOf(rows: readonly unknown[]): Partial<CollectionMetadata> {
+  const metadata = rows as Partial<CollectionMetadata>;
+  const names = [
+    "truncated",
+    "total",
+    "newest",
+    "complete",
+    "incompleteMessage",
+    "totalIsLowerBound",
+  ] as const;
+  return Object.fromEntries(
+    names.filter((name) => metadata[name] !== undefined).map((name) => [name, metadata[name]]),
+  ) as Partial<CollectionMetadata>;
+}
 export function isTruncated(rows: readonly unknown[]): boolean {
   return (rows as { truncated?: boolean }).truncated === true;
 }

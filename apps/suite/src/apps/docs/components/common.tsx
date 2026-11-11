@@ -10,18 +10,18 @@ import {
   TooltipTrigger,
 } from "@jeswr/suite-ui";
 import Link from "next/link";
-import type { ReactNode } from "react";
-export function Hint({ text, children }: { text: string; children: ReactNode }) {
+import { type ReactNode, useState } from "react";
+export function Hint({ text, children }: { text: string | undefined; children: ReactNode }) {
+  const [open, setOpen] = useState(false);
   return (
     <TooltipProvider>
-      <Tooltip>
+      <Tooltip open={!!text && open} onOpenChange={setOpen}>
         <TooltipTrigger asChild>
-          {/* biome-ignore lint/a11y/noNoninteractiveTabindex: disabled controls need a keyboard-focusable tooltip wrapper */}
-          <span className="docs-hint" tabIndex={0}>
+          <span className="docs-hint" tabIndex={text ? 0 : -1}>
             {children}
           </span>
         </TooltipTrigger>
-        <TooltipContent>{text}</TooltipContent>
+        {text && <TooltipContent>{text}</TooltipContent>}
       </Tooltip>
     </TooltipProvider>
   );

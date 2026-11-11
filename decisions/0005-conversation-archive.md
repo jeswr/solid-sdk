@@ -1,4 +1,5 @@
 <!-- AUTHORED-BY Claude Opus 5.5 -->
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 
 # 0005 — Conversation archive and cross-account sync on the pod
 
@@ -17,6 +18,16 @@ coding-agent hooks, export imports and MCP `chat_save`. "Sync" means the pod is 
 truth. Every account, and every assistant connected to the MCP server, reads from it through the
 `chat_*` tools. We don't write back into vendor accounts, which have no import API.
 
+**Redaction fidelity is decided (sst-5ax.36; Jesse, 10 November 2026):** redact only secret
+values, keep code lines, and err toward redaction. Keep assignment names, operators, quotes and
+surrounding code; use `[REDACTED]` for values. Apply this to secret-looking assignment/key names,
+CLI flags and query parameters, compact uppercase env assignments regardless of name, and URL
+userinfo passwords. Preserve ordinary code such as `x = 1`, comparisons and keyword arguments.
+Credential words match case-insensitive substrings, except `key` requires an underscore, hyphen,
+dot or camelCase/acronym word part (`key_count` and `apiKey` redact; `monkey` and `keyboard` stay).
+Keep existing token rules first, multiline/continued/unfinished-value handling and the redaction
+fixpoint. The package README documents the word list and delimiters.
+
 ## What already exists (merged in PR #212)
 
 | Need | Where | Notes |
@@ -32,10 +43,10 @@ truth. Every account, and every assistant connected to the MCP server, reads fro
 1. **Done in the first slice.** **Redaction is per channel, not per writer.** The capture CLI redacts, but MCP `chat_save` stores text
    verbatim. Move `redactSecrets` down into `solid-chat-interop` (its second user) and apply it in
    `ChatWriter` to titles and message text, so every channel redacts. Re-redaction is a fixpoint, so
-   already-redacted input is unchanged and message ids stay stable. Known cost: the shell and `.env`
-   rule redacts every `NAME=value` assignment to the end of its line, so code in a conversation (for
-   example `x = 1`) is lost from the archive. The strict rule stays until Jesse chooses between archive
-   fidelity and a narrower rule (bead sst-5ax.36, `needs:jesse`).
+   already-redacted input is unchanged and message ids stay stable. The original shell and `.env`
+   rule destroyed code by replacing every assignment to end of line. **Decided and implemented in
+   sst-5ax.36:** Jesse's 10 November 2026 value-only rule above preserves ordinary code while erring
+   toward redaction of secret-looking names and compact uppercase env lines.
 2. **No account provenance.** A conversation records its provider but not which account or channel it
    came from, or when it was imported. To sync across accounts, each conversation needs
    `prov:wasAttributedTo` an owner-chosen account label (never an email address in the path), plus
@@ -72,4 +83,5 @@ gate.
 ## Beads
 
 Filed under W9 (`sst-5ax`): sst-5ax.30 (gap 1), .31 (gap 2), .32 (gap 3), .33 (gap 4), .34 (gap 5)
-and .35 (gap 6); sst-5ax.36 (`needs:jesse`) for the redaction-fidelity choice.
+and .35 (gap 6); sst-5ax.36 is decided (Jesse, 10 November 2026) and implements value-only
+redaction with code preservation.

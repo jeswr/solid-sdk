@@ -11,6 +11,8 @@ import { usePodAuth } from "@jeswr/pod-auth/react";
 import { useLayoutEffect, useMemo, useRef } from "react";
 
 export type {
+  InboxNotification,
+  InboxReaderOptions,
   NotificationDraft,
   NotifyActivity,
   NotifyOptions,
@@ -19,9 +21,24 @@ export type {
 export {
   assignmentAnnounce,
   mentionNotification,
+  notificationKind,
   roomInvitation,
   shareNotification,
 } from "@jeswr/pod-access/notify";
+export type { UseInboxResult } from "./use-inbox.js";
+export { useInbox } from "./use-inbox.js";
+export type {
+  Registration,
+  RegistrationCreated,
+  RegistrationErrorCode,
+  RegistrationOperationOptions,
+  RegistrationPreview,
+  RegistrationRequest,
+  RegistrationStep,
+  UseRegistrationOptions,
+  UsernameAvailability,
+} from "./use-registration.js";
+export { RegistrationError, useRegistration } from "./use-registration.js";
 
 /** Deliver a template using the current actor, or a complete activity with an explicit actor. */
 export type NotifyAction = (

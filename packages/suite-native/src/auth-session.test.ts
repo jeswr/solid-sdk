@@ -411,3 +411,57 @@ describe("session lifecycle", () => {
     await expect(getCode(authUrl(), signal())).resolves.toBe("c");
   });
 });
+
+describe("callback-URL mode (pod-auth ui.getCode)", () => {
+  const good = `${REDIRECT}?code=the-code&state=s1&${ISS}`;
+  const run = (callback: string, options: { resolveIssuer?: () => string } = {}) =>
+    createNativeCodeDriver({
+      plugin: plugin(callback),
+      redirectUri: REDIRECT,
+      returns: "callback",
+      ...options,
+    })(authUrl(), signal());
+
+  test("returns the whole validated callback URL, with or without a resolver", async () => {
+    await expect(run(good)).resolves.toBe(new URL(good).href);
+    await expect(run(good, { resolveIssuer })).resolves.toBe(new URL(good).href);
+  });
+
+  test("still requires exactly one iss without a resolver, and checks it with one", async () => {
+    for (const callback of [
+      `${REDIRECT}?code=c&state=s1`,
+      `${REDIRECT}?code=c&state=s1&${ISS}&${ISS}`,
+      `${REDIRECT}?code=c&state=s1&iss=`,
+    ])
+      await expect(run(callback)).rejects.toBeInstanceOf(AuthorizationRequestError);
+    await expect(
+      run(`${REDIRECT}?code=c&state=s1&iss=https://evil.example/`, { resolveIssuer }),
+    ).rejects.toBeInstanceOf(AuthorizationRequestError);
+  });
+
+  test("keeps the state and redirect checks", async () => {
+    await expect(run(`${REDIRECT}?code=c&state=s2&${ISS}`)).rejects.toBeInstanceOf(
+      StateMismatchError,
+    );
+    await expect(
+      run(`org.jeswr.evil:/oauth/callback?code=c&state=s1&${ISS}`),
+    ).rejects.toBeInstanceOf(AuthorizationRequestError);
+  });
+
+  test("hands an error callback to pod-auth, so its issuer check runs first (sst-o1zg)", async () => {
+    const denied = `${REDIRECT}?error=access_denied&state=s1&${ISS}`;
+    await expect(run(denied)).resolves.toBe(new URL(denied).href);
+    // State, a single iss and a resolver's issuer are still enforced before handing it over.
+    await expect(run(`${REDIRECT}?error=access_denied&state=s2&${ISS}`)).rejects.toBeInstanceOf(
+      StateMismatchError,
+    );
+    await expect(run(`${REDIRECT}?error=access_denied&state=s1`)).rejects.toBeInstanceOf(
+      AuthorizationRequestError,
+    );
+    await expect(
+      run(`${REDIRECT}?error=access_denied&state=s1&iss=https://evil.example/`, {
+        resolveIssuer,
+      }),
+    ).rejects.toBeInstanceOf(AuthorizationRequestError);
+  });
+});

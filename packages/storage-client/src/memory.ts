@@ -29,6 +29,7 @@ import {
   pathParent,
   throwIfAborted,
   toBytes,
+  validateKeepalive,
   validateListingMaxBytes,
 } from "./internal.js";
 import { applyJsonPatch, type JsonPatchError } from "./json-patch.js";
@@ -93,6 +94,7 @@ const MAX_EMULATED_MOVE = 2_000;
 const BASE32 = "abcdefghijklmnopqrstuvwxyz234567";
 
 interface UserLink {
+  title?: string;
   anchor: string;
   rel: string;
   href: string;
@@ -108,6 +110,7 @@ interface Node {
   modified: number;
   types: string[];
   links: UserLink[];
+  titles: Map<string, string>;
   original?: string;
   trashedAt?: number;
   versionAt?: number;
@@ -153,6 +156,7 @@ export function createMemoryStorage(options: MemoryStorageOptions = {}): MemoryS
     protocol,
     id: lws ? `${root}.well-known/storage` : root,
     root,
+    owner: null,
     descriptionUrl: lws ? `${root}.well-known/storage` : `${root}.well-known/solid`,
     services: [
       ...(lws ? [{ type: [LWS.StorageRoot], endpoint: root, extra: {} }] : []),
@@ -208,6 +212,7 @@ export function createMemoryStorage(options: MemoryStorageOptions = {}): MemoryS
     modified: now,
     types: [],
     links: [],
+    titles: new Map(),
   });
 
   const histories = new Map<string, string>();
@@ -220,6 +225,7 @@ export function createMemoryStorage(options: MemoryStorageOptions = {}): MemoryS
       etag: nextEtag(),
       metaEtag: nextEtag(),
       links: [],
+      titles: new Map(),
       types: [],
     });
     touch(parent);
@@ -245,6 +251,7 @@ export function createMemoryStorage(options: MemoryStorageOptions = {}): MemoryS
       parent: history,
       body: node.body.slice(),
       links: [],
+      titles: new Map(),
       types: [...node.types],
       versionAt: clock(),
     });
@@ -358,6 +365,10 @@ export function createMemoryStorage(options: MemoryStorageOptions = {}): MemoryS
   function entry(node: Node): Entry {
     return {
       url: node.url,
+      displayName: lws
+        ? (node.links.find((link) => link.anchor === node.url && link.title !== undefined)?.title ??
+          null)
+        : (node.titles.get(node.url) ?? null),
       kind: node.kind,
       contentType: node.kind === "container" ? null : node.contentType,
       size: node.kind === "container" ? null : node.body.byteLength,
@@ -420,6 +431,7 @@ export function createMemoryStorage(options: MemoryStorageOptions = {}): MemoryS
               ...(child.kind === "container"
                 ? {}
                 : { format: child.contentType, size: child.body.byteLength }),
+              ...(entry(child).displayName === null ? {} : { title: entry(child).displayName }),
               modified: new Date(child.modified).toISOString(),
             })),
           }),
@@ -436,8 +448,19 @@ export function createMemoryStorage(options: MemoryStorageOptions = {}): MemoryS
         quad(self, namedNode(`${LDP}contains`), namedNode(child.url)),
       ),
     ];
+    const dataset = new Store(quads);
+    for (const child of children(node.url)) {
+      const title = child.titles.get(child.url);
+      if (title !== undefined)
+        RequiredAs.object(
+          new Resource(child.url, dataset, DataFactory),
+          "http://purl.org/dc/terms/title",
+          title,
+          LiteralFrom.string,
+        );
+    }
     return {
-      bytes: new TextEncoder().encode(await serializeQuads(quads, "text/turtle")),
+      bytes: new TextEncoder().encode(await serializeQuads(dataset, "text/turtle")),
       contentType: "text/turtle",
       next: null,
     };
@@ -450,7 +473,12 @@ export function createMemoryStorage(options: MemoryStorageOptions = {}): MemoryS
     const node = need(method, match ? (match[1] as string) : (historyAliases.get(url) ?? url));
     // Snapshot: later mutations replace fields, they never alter this copy.
     return {
-      node: { ...node, links: [...node.links], types: [...node.types] },
+      node: {
+        ...node,
+        links: [...node.links],
+        types: [...node.types],
+        titles: new Map(node.titles),
+      },
       page: match ? Number(match[2]) : 1,
     };
   }
@@ -539,6 +567,7 @@ export function createMemoryStorage(options: MemoryStorageOptions = {}): MemoryS
       modified: time,
       types: [],
       links: [],
+      titles: new Map(),
     });
     touch(pathParent(parent, root));
   }
@@ -596,6 +625,12 @@ export function createMemoryStorage(options: MemoryStorageOptions = {}): MemoryS
       for (const link of moved.links) {
         if (within(link.anchor, from)) link.anchor = to + link.anchor.slice(from.length);
       }
+      moved.titles = new Map(
+        [...moved.titles].map(([anchor, title]) => [
+          within(anchor, from) ? to + anchor.slice(from.length) : anchor,
+          title,
+        ]),
+      );
       moved.url = url;
       moved.etag = nextEtag();
       moved.metaEtag = nextEtag();
@@ -731,6 +766,7 @@ export function createMemoryStorage(options: MemoryStorageOptions = {}): MemoryS
         );
       }
       checkEtag("PUT", url, node, ifMatch);
+      validateKeepalive("PUT", url, body, opts.keepalive);
       const bytes = await toBytes(body, opts.signal, "PUT", url);
       throwIfAborted("PUT", url, opts.signal);
       if (node) {
@@ -739,7 +775,7 @@ export function createMemoryStorage(options: MemoryStorageOptions = {}): MemoryS
         node.etag = nextEtag();
         node.modified = clock();
         recordVersion(node);
-        return { url, etag: node.etag, created: false };
+        return { url, etag: node.etag, created: false, etagSource: "response" };
       }
       if (nodes.has(`${url}/`))
         throw fail("conflict", "PUT", url, 409, { message: `${url}/ is a container` });
@@ -755,11 +791,12 @@ export function createMemoryStorage(options: MemoryStorageOptions = {}): MemoryS
         modified: clock(),
         types: [],
         links: [],
+        titles: new Map(),
       };
       nodes.set(url, created);
       touch(created.parent);
       recordVersion(created);
-      return { url, etag: created.etag, created: true };
+      return { url, etag: created.etag, created: true, etagSource: "response" };
     }),
 
     async writeRdf(url, dataset, opts) {
@@ -776,6 +813,7 @@ export function createMemoryStorage(options: MemoryStorageOptions = {}): MemoryS
 
     create: serial("POST", async (url, body, opts: CreateOptions = {}) => {
       begin("POST", url, opts.signal);
+      validateKeepalive("POST", url, body, opts.keepalive);
       if (isTrashEndpoint(client, url)) {
         const command = trashCommand(body);
         const source = serviceUrl(
@@ -847,6 +885,7 @@ export function createMemoryStorage(options: MemoryStorageOptions = {}): MemoryS
         metaEtag: nextEtag(),
         modified: clock(),
         types: links.filter((link) => link.rel === "type").map((link) => link.target),
+        titles: new Map(),
         links: links
           .filter((link) => !LWS_SERVER_RELS.has(link.rel))
           .map((link) => ({ anchor: target, rel: link.rel, href: link.target })),
@@ -854,7 +893,7 @@ export function createMemoryStorage(options: MemoryStorageOptions = {}): MemoryS
       nodes.set(target, created);
       touch(parent.url);
       recordVersion(created);
-      return { url: target, etag: created.etag, created: true };
+      return { url: target, etag: created.etag, created: true, etagSource: "response" };
     }),
 
     patch: serial("PATCH", async (url, patch: Patch, opts) => {
@@ -1044,7 +1083,10 @@ export function createMemoryStorage(options: MemoryStorageOptions = {}): MemoryS
         node.original === undefined
           ? node.links
           : node.links.filter((link) => link.anchor !== url || link.rel !== originalRel);
-      for (const link of userLinks) add(link.anchor, link.rel, link.href);
+      for (const link of userLinks) {
+        const target = add(link.anchor, link.rel, link.href);
+        if (lws && link.title !== undefined) target.params.title = link.title;
+      }
       if (node.original !== undefined) {
         const original = add(url, originalRel, node.original);
         if (lws) original.params.modified = new Date(node.trashedAt as number).toISOString();
@@ -1070,6 +1112,15 @@ export function createMemoryStorage(options: MemoryStorageOptions = {}): MemoryS
           ),
         );
       }
+      if (!lws) {
+        for (const [anchor, title] of node.titles)
+          RequiredAs.object(
+            new Resource(anchor, raw as Store, DataFactory),
+            "http://purl.org/dc/terms/title",
+            title,
+            LiteralFrom.string,
+          );
+      }
       if (!lws && node.original !== undefined) {
         const resource = new Resource(url, raw as Store, DataFactory);
         RequiredAs.object(resource, `${IANA_REL}original`, node.original, NamedNodeFrom.string);
@@ -1092,7 +1143,10 @@ export function createMemoryStorage(options: MemoryStorageOptions = {}): MemoryS
         throw fail("precondition-failed", "PATCH", metadataUrl(url), 412, { etag: node.metaEtag });
       }
       const next = [...node.links];
+      const titles = new Map(node.titles);
       for (const op of ops) {
+        if (op.title !== undefined && typeof op.title !== "string")
+          throw new TypeError("title must be a string");
         const anchor = op.anchor ?? url;
         if (!isWithin(anchor, root)) throw fail("scope", "PATCH", anchor, null);
         if (lws && LWS_SERVER_RELS.has(op.rel)) {
@@ -1105,10 +1159,25 @@ export function createMemoryStorage(options: MemoryStorageOptions = {}): MemoryS
         const index = next.findIndex(
           (link) => link.anchor === anchor && link.rel === rel && link.href === op.href,
         );
-        if (op.op === "add" && index === -1) next.push({ anchor, rel, href: op.href });
+        if (op.op === "add") {
+          if (index === -1)
+            next.push({
+              anchor,
+              rel,
+              href: op.href,
+              ...(!lws || op.title === undefined ? {} : { title: op.title }),
+            });
+          else if (lws && op.title !== undefined)
+            next[index] = { ...(next[index] as UserLink), title: op.title };
+        }
         if (op.op === "remove" && index !== -1) next.splice(index, 1);
+        if (!lws && op.title !== undefined) {
+          if (op.op === "add") titles.set(anchor, op.title);
+          else if (titles.get(anchor) === op.title) titles.delete(anchor);
+        }
       }
       node.links = next;
+      node.titles = titles;
       node.metaEtag = nextEtag();
       return { etag: node.metaEtag };
     }),

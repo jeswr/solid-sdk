@@ -63,6 +63,11 @@ export const PD = {
   updateLog: `${NS.PD}updateLog`,
   assets: `${NS.PD}assets`,
   comments: `${NS.PD}comments`,
+  anchorStart: `${NS.PD}anchorStart`,
+  anchorEnd: `${NS.PD}anchorEnd`,
+  resolved: `${NS.PD}resolved`,
+  resolvedBy: `${NS.PD}resolvedBy`,
+  resolvedAt: `${NS.PD}resolvedAt`,
 } as const;
 
 /** Dublin Core Terms predicates used by the document. */
@@ -98,3 +103,35 @@ export const PREFIXES: Readonly<Record<string, string>> = {
 
 export const RDFS_LABEL = `${NS.RDFS}label`;
 export const WORD_COUNT = `${NS.SCHEMA}wordCount`;
+
+/** Web Annotation terms used by comments. */
+export const OA = Object.fromEntries(
+  [
+    "Annotation",
+    "motivatedBy",
+    "commenting",
+    "replying",
+    "bodyValue",
+    "hasTarget",
+    "hasSource",
+    "hasSelector",
+    "TextQuoteSelector",
+    "exact",
+    "prefix",
+    "suffix",
+  ].map((term) => [term, `http://www.w3.org/ns/oa#${term}`]),
+) as Record<
+  | "Annotation"
+  | "motivatedBy"
+  | "commenting"
+  | "replying"
+  | "bodyValue"
+  | "hasTarget"
+  | "hasSource"
+  | "hasSelector"
+  | "TextQuoteSelector"
+  | "exact"
+  | "prefix"
+  | "suffix",
+  string
+>;

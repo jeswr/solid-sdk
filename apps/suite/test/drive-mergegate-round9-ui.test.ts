@@ -325,8 +325,10 @@ it.each([
         states.map(({ rootError }) => rootError),
         ["name", "message", "cause", "url", "status"],
       ),
-    ).toHaveLength(absent ? 1 : 2);
-    expect(states.filter((state) => state.rootError)).toHaveLength(absent ? 1 : 0);
+    ).toHaveLength(2);
+    // The tab that loses the create race starts again from discovery and adopts the
+    // winner's registration; the write counts below prove it never replays its write.
+    expect(states.filter((state) => state.rootError)).toHaveLength(0);
   });
   expect(
     outcomes[absent ? "create" : "update"].filter((status) => status >= 200 && status < 300),

@@ -49,7 +49,8 @@ Read with [storage-client guidance](../SKILL.md) for shared contracts and Solid 
   counts, including duplicates and ids later dropped by scope checks. Exceeding either budget gives
   `invalid-response`; exact limits are accepted. These budgets apply independently of the streamed
   JSON byte cap and prevent short ids from amplifying a long cursor URL.
-- Entry order follows the server. Kind depends only on Container type, never a trailing slash.
+- Entry.displayName is the listing target title when it is a string, otherwise null.
+  Entry order follows the server. Kind depends only on Container type, never a trailing slash.
   Content type is valid RFC 6838 `format` (shared MEDIA_TYPE with Solid), null for containers;
   size is a non-negative safe integer; modified is a parseable date string; else null. Types retain
   only absolute IRIs, excluding compact/full Container and DataResource; malformed optional fields

@@ -14,12 +14,15 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect } from "react";
 import { useRoutePathname } from "@/lib/route-params";
 import { classifyError } from "../../lib/model/errors";
+import { replaceQuery } from "../../lib/route/replace-query";
 import { projectGroups } from "../../lib/views/project-groups";
 import { focusAddTask } from "../../state/add-focus";
 import { TaskListFocus } from "../../state/list-focus";
 import { useTasksPreferences } from "../../state/preferences";
 import { useTasks } from "../../state/tasks-context";
 import { BulkToolbar } from "../bulk-toolbar";
+import { LabelFilterBar } from "../label-filter-bar";
+import { ProjectDot } from "../project-dot";
 import { TaskList } from "../task-list";
 import { projectHref, useViewMode } from "../view-toggle";
 import { ProjectError } from "./project-error";
@@ -63,9 +66,9 @@ export function ProjectView({
     if (focusAddTask()) {
       const query = new URLSearchParams(params.toString());
       query.delete("add");
-      router.replace(`${pathname}${query.size ? `?${query}` : ""}`, { scroll: false });
+      replaceQuery(pathname, query);
     }
-  }, [add, load?.status, params, pathname, router]);
+  }, [add, load?.status, params, pathname]);
   const groups = projectGroups(
     tasks.views.filter((task) => task.projectUrl === url),
     project?.tracker.sections ?? [],
@@ -112,6 +115,7 @@ export function ProjectView({
     <TaskListFocus className="tsk-content">
       <header className="tsk-view-header">
         <h1>
+          {!inbox && project && <ProjectDot colour={project.tracker.color} />}
           {!inbox && project ? (
             <EditableText
               label="Project name"
@@ -126,6 +130,7 @@ export function ProjectView({
           )}
         </h1>
       </header>
+      <LabelFilterBar projectUrl={url} />
       <BulkToolbar />
       {renderAsync({
         loading:

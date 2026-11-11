@@ -16,15 +16,33 @@ import {
   EditableText,
   IconButton,
 } from "@jeswr/suite-ui";
-import { Bell, CalendarDays, Ellipsis, GripVertical, Pencil, Repeat2 } from "lucide-react";
+import {
+  Bell,
+  CalendarDays,
+  Ellipsis,
+  GripVertical,
+  Paperclip,
+  Pencil,
+  Repeat2,
+} from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import {
+  type CSSProperties,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import { encodeRef } from "@/lib/refs";
 import type { DropContainer } from "../lib/dnd/types";
 import { formatDue, isOverdue } from "../lib/format/due";
+import { attachmentCount } from "../lib/views/attachments";
 import { addDays, localDayKey } from "../lib/views/days";
+import { labelColour } from "../lib/views/label-colours";
 import type { Row } from "../lib/views/project-groups";
+import { planTreeMove, taskLevel, taskProgress } from "../lib/views/tree";
 import { priorityValue } from "../lib/views/types";
 import { completeTask, deleteTask } from "../state/actions";
 import { completeTasks } from "../state/bulk-actions";
@@ -32,17 +50,28 @@ import { useNow } from "../state/clock";
 import { useTaskListFocus } from "../state/list-focus";
 import { useTasksShortcuts } from "../state/shortcuts";
 import { useTasks } from "../state/tasks-context";
+import { changeTaskDepth } from "../state/tree-actions";
 import { reopenTask, rescheduleTasks } from "../state/view-actions";
 import { AssigneeAvatar } from "./assignee-avatar";
 import { useTaskDrag } from "./dnd/use-task-drag";
+import { LabelChip } from "./label-chip";
 import { MoveMenuItems, moveDown, moveUp, useTaskMoves } from "./move-menu";
+import { ProjectDot } from "./project-dot";
 import { RowProperties } from "./row-properties";
 import { TaskCheck, useCompleting } from "./task-check";
+import { TaskProgress, TreeToggle } from "./tree-controls";
 import { ReschedulePopover } from "./views/reschedule-popover";
 import "./views/views.css";
 import "./selection.css";
 export interface TaskRowProps {
   row: Row;
+  tree?:
+    | {
+        expanded: boolean;
+        hasChildren: boolean;
+        setExpanded: (id: string, expanded: boolean) => void;
+      }
+    | undefined;
   showProject?: boolean | undefined;
   tabIndex: number;
   onFocus: () => void;
@@ -57,6 +86,7 @@ export function TaskRow({
   onFocus,
   onMove,
   container,
+  tree,
 }: TaskRowProps) {
   const tasks = useTasks();
   const completing = useCompleting(task);
@@ -86,7 +116,7 @@ export function TaskRow({
   const query = new URLSearchParams(params.toString());
   query.set("task", encodeRef(task.url));
   const href = `${pathname}?${query}`;
-  const children = tasks.views.filter((child) => child.parentId === task.id);
+  const progress = taskProgress(tasks.views, task.id);
   const labels =
     tasks.projects
       .find((project) => project.url === task.projectUrl)
@@ -124,12 +154,16 @@ export function TaskRow({
   );
   const selecting = (focus?.selection.size ?? 0) > 0;
   const selected = focus?.selection.has(task.url) ?? false;
+  const attachments = attachmentCount(
+    tasks.tasks[task.projectUrl]?.items.find((item) => item.url === task.url),
+  );
   const hasMeta = Boolean(
     task.due ||
       task.allDay ||
       task.recurring ||
       task.hasReminders ||
-      children.length ||
+      attachments ||
+      progress.total ||
       orphanParentTitle ||
       labels.length ||
       (showProject && task.projectTitle) ||
@@ -178,12 +212,24 @@ export function TaskRow({
     }
     if (command.type === "reorder") void moves.run(command.direction === -1 ? moveUp : moveDown);
   });
+  const depthPlan = (outdent: boolean) =>
+    tree && moves.manual && !pending && !completing
+      ? planTreeMove(tasks.views, task, outdent)
+      : undefined;
+  const changeDepth = (outdent: boolean) => {
+    const plan = depthPlan(outdent);
+    if (plan?.parentId) tree?.setExpanded(plan.parentId, true);
+    void changeTaskDepth(tasks.cache, task, outdent, (message) => focus?.announce(message));
+  };
   return (
     <tr
       className="tsk-row"
       data-tsk-row={task.url}
       data-task-url={task.url}
       data-depth={depth}
+      style={{ "--tsk-depth": depth } as CSSProperties}
+      aria-level={tree ? taskLevel(task, tasks.views) : undefined}
+      aria-expanded={tree?.hasChildren ? tree.expanded : undefined}
       data-selecting={selecting || undefined}
       data-dragging={drag.dragging || undefined}
       data-drop={drag.hint}
@@ -196,7 +242,40 @@ export function TaskRow({
       }}
       aria-selected={selected}
       ref={rowRef}
-      onKeyDown={onKeyDown}
+      onKeyDown={(event) => {
+        if (
+          tree &&
+          event.target === event.currentTarget &&
+          !event.nativeEvent.isComposing &&
+          !event.ctrlKey &&
+          !event.metaKey &&
+          !event.altKey
+        ) {
+          if (event.key === "Tab" && depthPlan(event.shiftKey)) {
+            event.preventDefault();
+            changeDepth(event.shiftKey);
+            return;
+          }
+          if (event.key === "ArrowRight" && tree.hasChildren) {
+            event.preventDefault();
+            if (tree.expanded) onMove(1);
+            else tree.setExpanded(task.id, true);
+            return;
+          }
+          if (event.key === "ArrowLeft") {
+            event.preventDefault();
+            if (tree.hasChildren && tree.expanded) tree.setExpanded(task.id, false);
+            else if (task.parentId)
+              document
+                .querySelector<HTMLElement>(
+                  `[data-tsk-row="${CSS.escape(tasks.views.find((parent) => parent.id === task.parentId)?.url ?? "")}"]`,
+                )
+                ?.focus();
+            return;
+          }
+        }
+        onKeyDown(event);
+      }}
       onClickCapture={(event) => {
         if (Date.now() - longPressed.current > 700) return;
         longPressed.current = 0;
@@ -232,6 +311,13 @@ export function TaskRow({
         />
       </td>
       <td className="tsk-completion-cell">
+        {tree?.hasChildren && (
+          <TreeToggle
+            title={task.title}
+            expanded={tree.expanded}
+            onToggle={() => tree.setExpanded(task.id, !tree.expanded)}
+          />
+        )}
         <TaskCheck task={task} pending={pending} completing={completing} />
       </td>
       <td className="tsk-row-body">
@@ -328,19 +414,24 @@ export function TaskRow({
                 <Bell size={14} aria-label="Reminder set" />
               </span>
             )}
-            {children.length > 0 && (
+            <TaskProgress tasks={tasks.views} id={task.id} />
+            {attachments > 0 && (
               <span
+                className="tsk-attachment-count"
                 role="img"
-                aria-label={`${children.filter((child) => child.state === "closed").length} of ${children.length} sub-tasks complete`}
+                aria-label={`${attachments} attachments`}
               >
-                {children.filter((child) => child.state === "closed").length}/{children.length}
+                <Paperclip size={14} aria-hidden="true" />
+                <span aria-hidden="true">{attachments}</span>
               </span>
             )}
             {orphanParentTitle && <span>↳ {orphanParentTitle}</span>}
             {labels.slice(0, 3).map((label) => (
-              <span className="tsk-chip" key={label.id}>
-                @{label.name}
-              </span>
+              <LabelChip
+                key={label.id}
+                name={label.name}
+                colour={labelColour(label.name, tasks.projects)}
+              />
             ))}
             {labels.length > 3 && (
               <span
@@ -352,7 +443,16 @@ export function TaskRow({
                 +{labels.length - 3}
               </span>
             )}
-            {showProject && task.projectTitle && <span>{task.projectTitle}</span>}
+            {showProject && task.projectTitle && (
+              <span className="tsk-project-chip">
+                <ProjectDot
+                  colour={
+                    tasks.projects.find((project) => project.url === task.projectUrl)?.tracker.color
+                  }
+                />
+                {task.projectTitle}
+              </span>
+            )}
             <AssigneeAvatar task={task} />
           </div>
         )}
@@ -464,6 +564,22 @@ export function TaskRow({
                 >
                   Delete
                 </DropdownMenuItem>
+                {tree && menuOpen && (
+                  <>
+                    <DropdownMenuItem
+                      disabled={!depthPlan(false)}
+                      onSelect={() => changeDepth(false)}
+                    >
+                      Indent
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      disabled={!depthPlan(true)}
+                      onSelect={() => changeDepth(true)}
+                    >
+                      Outdent
+                    </DropdownMenuItem>
+                  </>
+                )}
                 <MoveMenuItems
                   task={task}
                   disabled={pending || completing}

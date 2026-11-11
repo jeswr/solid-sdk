@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { once } from "node:events";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { createRelay } from "./relay.js";
@@ -31,10 +32,12 @@ export function nodeHandler(relay: ReturnType<typeof createRelay>, publicUrl: st
             "content-digest",
             "content-type",
             "authorization",
+            "dpop",
+            "installation-proof",
             "host",
           ].includes(name)
         ) {
-          response.writeHead(401).end();
+          response.writeHead(401, { "www-authenticate": "DPoP" }).end();
           return;
         }
         unique.add(name);

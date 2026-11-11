@@ -400,8 +400,7 @@ describe("Excel hostile input", () => {
       { "xl/worksheets/data.xml": cellsXml(`<c r="${ref}"/>`) },
       ref === "A100001" || ref === "XFE1" ? "limit" : "reference",
     ));
-  it("rejects missing and duplicate cell refs", () => {
-    rejects({ "xl/worksheets/data.xml": cellsXml("<c/>") }, "reference");
+  it("rejects duplicate cell refs", () => {
     rejects({ "xl/worksheets/data.xml": cellsXml('<c r="A1"/><c r="A1"/>') }, "Duplicate");
   });
   it.each(["-1", "NaN", "Infinity"])("rejects invalid numeric attributes %s", (ht) =>
@@ -423,7 +422,7 @@ describe("Excel hostile input", () => {
       },
       "shared string",
     ));
-  it.each(["<row/>", '<row r="0"/>', '<row r="0.5"/>'])("rejects invalid row %s", (row) =>
+  it.each(['<row r="0"/>', '<row r="0.5"/>'])("rejects invalid row %s", (row) =>
     rejects(
       { "xl/worksheets/data.xml": worksheet(`<sheetData>${row}</sheetData>`) },
       "Invalid Excel row",
@@ -549,7 +548,7 @@ it("counts inflated bytes against the size limits, whatever sizes the ZIP declar
     expect(() =>
       read(understated(fixture({ "xl/worksheets/data.xml": worksheet(" ".repeat(5000)) }))),
     ).toThrow("uncompressed size");
-    // Parts within the entry limit add up past the total, across both extraction passes.
+    // Parts within the entry limit add up past the total, across all extraction passes.
     expect(() =>
       read(
         understated(

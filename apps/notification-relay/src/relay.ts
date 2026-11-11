@@ -1,7 +1,14 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import type { Identity } from "./auth.js";
+import { createPushApi } from "./push.js";
+import type { PushSink } from "./push-payload.js";
+import { createResourceTokenVerifier, mobileClientPolicy } from "./resource-auth.js";
 import { createWebhookVerifier, safeUrl } from "./signatures.js";
+import { InMemoryRelayStore, type RelayStore } from "./store.js";
 
 const retentionMs = 15 * 60_000;
 const maxBodyBytes = 1_048_576;
@@ -48,6 +55,14 @@ export function createRelay(options: {
   verifyIdToken: (token: string) => Promise<Identity>;
   /** Must be SSRF/DNS-pinning guarded in production; default deployment supplies it. */
   fetch: typeof fetch;
+  /** Push routes remain closed until the mobile Client ID Document is configured. */
+  mobileClientId?: string;
+  store?: RelayStore;
+  pushSink?: PushSink;
+  /** Push admission limits; see createPushApi. */
+  maxPushInstallations?: number;
+  unattachedPushLifetimeMs?: number;
+  maxPushInstallationsPerWebId?: number;
   allowedOrigins?: readonly string[];
   now?: () => number;
   allowInsecureLoopback?: boolean;
@@ -56,11 +71,44 @@ export function createRelay(options: {
   if (base.pathname !== "/" || base.search || base.hash)
     throw new Error("Relay URL must be an origin");
   const now = options.now ?? Date.now;
+  const store = options.store ?? new InMemoryRelayStore(now);
+  const verifyResourceToken = createResourceTokenVerifier({
+    publicUrl: base.origin,
+    outboundFetch: options.fetch,
+    store,
+    now,
+    allowLoopbackForTests: options.allowInsecureLoopback,
+  });
+  const pushPolicy = options.mobileClientId
+    ? mobileClientPolicy(options.mobileClientId)
+    : undefined;
   const verify = createWebhookVerifier({
     fetch: options.fetch,
     now,
     allowLoopback: options.allowInsecureLoopback,
   });
+  const push = createPushApi({
+    publicOrigin: base.origin,
+    store,
+    now,
+    pushSink: options.pushSink,
+    allowLoopback: options.allowInsecureLoopback,
+    maxInstallations: options.maxPushInstallations,
+    unattachedLifetimeMs: options.unattachedPushLifetimeMs,
+    maxInstallationsPerWebId: options.maxPushInstallationsPerWebId,
+    verifyResourceToken,
+    verifyWebhook: verify,
+    authorize: async (request) => {
+      if (!pushPolicy) throw new Error("Push is not configured");
+      const identity = await verifyResourceToken(request);
+      if (!pushPolicy(identity)) throw new Error("Unauthorized");
+      return identity;
+    },
+  });
+  const sweep = setInterval(() => {
+    void push.expire().catch(() => {});
+  }, 60_000);
+  sweep.unref();
   const registrations = new Map<string, Registration>();
   let stopped = false;
   function drop(id: string, registration: Registration) {
@@ -97,12 +145,17 @@ export function createRelay(options: {
       }
       if (
         request.method === "OPTIONS" &&
-        ["/register", "/stream/"].some((path) => url.pathname.startsWith(path))
+        ["/register", "/stream/", "/push/"].some((path) => url.pathname.startsWith(path))
       ) {
-        headers.set("access-control-allow-methods", "GET, POST, OPTIONS");
-        headers.set("access-control-allow-headers", "Authorization, Content-Type, Last-Event-ID");
+        headers.set("access-control-allow-methods", "GET, POST, PATCH, PUT, DELETE, OPTIONS");
+        headers.set(
+          "access-control-allow-headers",
+          "Authorization, DPoP, Installation-Proof, Content-Type, Last-Event-ID",
+        );
         return respond(204);
       }
+      if (url.pathname.startsWith("/push/") || /^\/inbox\/[^/]+\/[^/]+$/u.test(url.pathname))
+        return push.handle(request, headers);
       if (url.pathname === "/register" && request.method === "POST" && !url.search) {
         const bearer = /^Bearer (\S+)$/u.exec(request.headers.get("authorization") ?? "");
         if (!bearer) return respond(401);
@@ -244,8 +297,10 @@ export function createRelay(options: {
   };
   return {
     handle,
+    invalidatePush: push.invalidate,
     close() {
       stopped = true;
+      clearInterval(sweep);
       for (const [id, registration] of registrations) drop(id, registration);
     },
   };

@@ -1,31 +1,7 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 //
-// Playwright config for the Pod Docs static host's e2e layer. The first (and
-// currently only) suite is the task #123 401-BUDGET test: it proves the @jeswr/
-// solid-elements proactive auth-fetch (which REPLACED the raw ReactiveFetchManager)
-// attaches the DPoP token UP FRONT — so loading the documents (which lists the
-// documents container AND reads each child document — N+1 distinct pod reads) pays
-// ZERO wasted 401s, never the per-resource 401-dance the old reactive manager incurred
-// (one wasted 401 per pod document read).
-//
-// TWO webServers (the solid-test-infrastructure harness pattern):
-//   • CSS@7 on :3000 — it MUST own :3000 (the Solid issuer is keyed to that origin),
-//     in-memory + WAC. ~13s to boot, so ONE instance per suite (never per test).
-//   • the Vite host on :5173 — vite's default port, which is ALSO the dev clientid
-//     origin (`scripts/gen-clientid.mjs` DEV_DEFAULT = http://localhost:5173), so the
-//     generated `clientid.jsonld` / `callback.html` match the served origin with no
-//     APP_ORIGIN override needed.
-//
-// LOCAL-ONLY: this NEVER targets the live deploy (solid-test.jeswr.org). All auth +
-// reads run against the local CSS — per the suite rule that app e2e runs against a
-// LOCAL Solid server.
-//
-// HOW TO RUN (documented for the orchestrator / a sibling-app port):
-//   cd web
-//   npx playwright install chromium   # one-time: fetch the browser
-//   npx playwright test               # boots CSS + vite, seeds the pod, runs the spec
-// The webServers boot on demand; `reuseExistingServer` (non-CI) reuses an already-running
-// CSS/vite so local iteration skips the ~13s CSS boot.
+// Local CSS + Vite smoke test for shared sign-in and private document browsing.
+// The shared core owns credential challenges; Docs preserves public global fetch.
 import { defineConfig, devices } from "@playwright/test";
 
 const CSS_PORT = 3000;

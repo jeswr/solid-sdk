@@ -78,6 +78,7 @@ describe("list (CSS fixture)", () => {
       {
         url: `${NOTES}archive/`,
         kind: "container",
+        displayName: null,
         contentType: null,
         size: null,
         modified: new Date("2026-09-30T08:00:00.000Z"),
@@ -86,6 +87,7 @@ describe("list (CSS fixture)", () => {
       {
         url: `${NOTES}photo.png`,
         kind: "resource",
+        displayName: null,
         contentType: "image/png",
         size: 8,
         modified: null,
@@ -94,6 +96,7 @@ describe("list (CSS fixture)", () => {
       {
         url: `${NOTES}today.ttl`,
         kind: "resource",
+        displayName: null,
         contentType: "text/turtle",
         size: 143,
         modified: new Date("2026-10-02T10:30:00.000Z"),
@@ -419,6 +422,7 @@ describe("metadata and construction", () => {
       fetchedAt: 0,
       etag: null,
       maxAgeMs: 0,
+      owner: null,
       verificationMethods: [],
     });
     expect(createSolidBackend({ fetch, root: CSS_ROOT, features }).features).toBe(features);

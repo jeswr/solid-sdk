@@ -84,6 +84,17 @@ describe("renderTranscript", () => {
     ).toThrow(TypeError);
   });
 
+  it("handles more backtick runs than a function call accepts arguments", () => {
+    const text = "`a".repeat(300_000);
+    const out = renderTranscript({
+      provider: "claude",
+      conversationId: "c",
+      title: "T",
+      messages: [{ role: "user", text, createdAt: DAY1 }],
+    });
+    expect(out).toContain("```\n`a`a");
+  });
+
   it("names untitled conversations", () => {
     expect(
       renderTranscript({ provider: "claude", conversationId: "c", title: " ", messages: [] }),

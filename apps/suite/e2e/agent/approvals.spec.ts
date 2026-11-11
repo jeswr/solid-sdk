@@ -1,8 +1,10 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { mkdir } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import AxeBuilder from "@axe-core/playwright";
 import { expect, type Locator, type Page, type TestInfo, test } from "@playwright/test";
+import { seedDemoSession } from "../demo-session";
 import { daemonDouble } from "./daemon-double";
 
 async function accessible(page: Page, info: TestInfo, state: string) {
@@ -15,6 +17,7 @@ async function accessible(page: Page, info: TestInfo, state: string) {
   await page.screenshot({ path: `${path}/${state}-${info.project.name}.png`, fullPage: true });
 }
 async function open(page: Page, route = "approvals") {
+  await seedDemoSession(page);
   await page.goto(`/agent/${route}`);
   await page.waitForFunction(() => !!window.__suiteDemoPod);
   await expect(
@@ -112,9 +115,9 @@ test("2: live queue proposal verifies, sends and appears in Activity", async ({ 
   await expect(page.getByText("Sent", { exact: true })).toBeVisible();
   await accessible(page, info, "sent");
   await open(page, "activity");
-  await expect(page.getByText("Sent with your approval", { exact: true })).toBeVisible();
+  await expect(page.getByText(/Sent email to/).first()).toBeVisible();
   await accessible(page, info, "activity-approval");
-  await page.getByRole("link", { name: "View activity record 12", exact: true }).click();
+  await page.locator('.agent-timeline-row[data-seq="13"]').click();
   await page.getByText("Technical details", { exact: true }).click();
   await expect(page.locator("pre")).toContainText(proposal.id);
   await expect(page.locator("pre")).toContainText("approval");

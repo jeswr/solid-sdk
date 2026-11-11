@@ -139,6 +139,11 @@ export interface DriveClient {
     options?: { ifMatch: string; readonly verifyHeaders?: ResourceAssertion["verifyHeaders"] },
   ): Promise<DriveItem>;
   read(url: string): Promise<Blob>;
+  /**
+   * The body when it is at most `limit` bytes, else `undefined`. Checks Content-Length first and
+   * stops reading at the cap, so an oversized or lying response never fills memory.
+   */
+  readLimited(url: string, limit: number): Promise<Blob | undefined>;
   /** Bytes and validator from the same GET, for subsequent conditional deletion. */
   readVersion(url: string): Promise<{
     body: Blob;
@@ -507,6 +512,8 @@ export function createSolidDriveClient(options: {
   fetch: typeof globalThis.fetch;
   confirmAccess?: ConfirmAccess;
   webId?: string;
+  /** Automatic listings may repair recorded protection unless provisioning is disabled. */
+  provision?: boolean;
   onPrivateFolder?: (url: string) => void;
   onProtectionChange?: (url: string) => void;
 }): DriveClient {
@@ -631,7 +638,7 @@ export function createSolidDriveClient(options: {
   };
 
   const list: DriveClient["list"] = async (url, opts) => {
-    await provision.check(url);
+    await provision.check(url, false, options.provision !== false);
     return Promise.all(
       (await listing(url, opts)).items.map(async (item) => ({
         ...item,
@@ -701,6 +708,62 @@ export function createSolidDriveClient(options: {
   };
 
   const read: DriveClient["read"] = async (url) => (await readVersion(url)).body;
+
+  // Native preview and save reads hand bytes to the OS, so they stay inside the
+  // signed-in pod: the request and the final response must both be in storage,
+  // and redirects are refused rather than followed.
+  const storageRoot = new URL(storageUrl);
+  const storagePath = storageRoot.pathname.endsWith("/")
+    ? storageRoot.pathname
+    : `${storageRoot.pathname}/`;
+  const inStorage = (target: string): boolean => {
+    try {
+      const candidate = new URL(target);
+      return (
+        candidate.origin === storageRoot.origin &&
+        !candidate.username &&
+        !candidate.password &&
+        (candidate.pathname.startsWith(storagePath) || `${candidate.pathname}/` === storagePath)
+      );
+    } catch {
+      return false;
+    }
+  };
+
+  const readLimited: DriveClient["readLimited"] = async (url, limit) => {
+    if (!inStorage(url)) throw new DriveError("forbidden", 403, url);
+    await provision.check(url);
+    const response = await ensureOk(await http(url, { redirect: "error" }), url);
+    if (response.redirected || (response.url !== "" && !inStorage(response.url))) {
+      await response.body?.cancel().catch(() => undefined);
+      throw new DriveError("forbidden", 403, url);
+    }
+    rememberType(url, response.headers);
+    const type = response.headers.get("content-type") ?? "";
+    const declared = response.headers.get("content-length");
+    if (declared !== null && Number(declared) > limit) {
+      await response.body?.cancel().catch(() => undefined);
+      return undefined;
+    }
+    if (!response.body) {
+      const blob = await response.blob();
+      return blob.size > limit ? undefined : blob;
+    }
+    const reader = response.body.getReader();
+    const parts: Uint8Array[] = [];
+    let total = 0;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > limit) {
+        await reader.cancel().catch(() => undefined);
+        return undefined;
+      }
+      parts.push(value);
+    }
+    return new Blob(parts as BlobPart[], { type });
+  };
 
   const readRdf: DriveClient["readRdf"] = async (url) => {
     await provision.check(url);
@@ -845,6 +908,61 @@ export function createSolidDriveClient(options: {
     return retained;
   };
 
+  // Some servers (Community Solid Server 7) answer a successful PUT with 201 or
+  // 205 and no ETag (sst-2vvz). A read-back validator certifies that the stored
+  // representation is exactly what this flight sent (same media type, same bytes),
+  // but another writer could have stored identical bytes in between. So it is NOT a
+  // PUT receipt: it may serve as If-Match for the next write and as the identity
+  // for a non-destructive post-write check, never for compensation, rollback,
+  // cleanup or any captured resource identity. Any failure means "not certified".
+  const readBackValidator = async (
+    url: string,
+    sent: Blob | string,
+    contentType: string,
+  ): Promise<string | undefined> => {
+    const mediaType = (value: string | null) => value?.split(";")[0]?.trim().toLowerCase();
+    try {
+      const current = await http(url, { cache: "no-store" });
+      const etag = current.headers.get("etag");
+      if (
+        !current.ok ||
+        !etag ||
+        etag.startsWith("W/") ||
+        mediaType(current.headers.get("content-type")) !== mediaType(contentType)
+      ) {
+        await current.body?.cancel();
+        return undefined;
+      }
+      const expected = new Uint8Array(await new Response(sent).arrayBuffer());
+      // Compare incrementally and stop at the first mismatch or excess byte.
+      let offset = 0;
+      if (current.body) {
+        const reader = current.body.getReader();
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          if (
+            offset + value.length > expected.length ||
+            value.some((byte, index) => byte !== expected[offset + index])
+          ) {
+            await reader.cancel();
+            return undefined;
+          }
+          offset += value.length;
+        }
+      }
+      return offset === expected.length ? etag : undefined;
+    } catch {
+      return undefined;
+    }
+  };
+
+  const strongEtag = (etag: string | null) => (etag && !etag.startsWith("W/") ? etag : undefined);
+  // Read-back validators of committed writes, kept off the Response (and so out of
+  // onWritten captures and compensation). write() hands one to its caller only as
+  // the If-Match for a later, user-initiated edit.
+  const readBackValidators = new WeakMap<Response, string>();
+
   // The payload/container PUT seam; quarantine clears a privately retained PUT
   // directly through commitHttp without editing a concurrently changed ACL.
   // A provisioner skips only its own unfinished ACL while creating an empty
@@ -926,10 +1044,19 @@ export function createSolidDriveClient(options: {
         () => recheckScope(scope),
       );
       headers.delete("if-none-match");
-      headers.set("if-match", validator(url, placeholder.response.headers.get("etag")));
+      // The empty placeholder's validator authorizes only this conditional content PUT.
+      headers.set(
+        "if-match",
+        validator(
+          url,
+          strongEtag(placeholder.response.headers.get("etag")) ??
+            (await readBackValidator(url, "", init.headers["content-type"])),
+        ),
+      );
       if (placeholder.policy) binding.installed(placeholder.policy);
     }
     let response: Response;
+    let readBack: string | undefined;
     const compensation = new Compensation(async () => {
       const receipt = response.headers.get("etag");
       if (!receipt || receipt.startsWith("W/")) {
@@ -1052,6 +1179,8 @@ export function createSolidDriveClient(options: {
       error: (status, url) => errorFor(status === 404 || status === 410 ? 412 : status, url),
       response: async (response) => {
         await ensureOk(response, url);
+        if (!creating && !strongEtag(response.headers.get("etag")))
+          readBack = await readBackValidator(url, init.body, init.headers["content-type"]);
         if (headers.get("if-none-match") === "*") access.recordCreation(url, response.headers);
         effects.onWritten?.(response);
         return response;
@@ -1065,7 +1194,15 @@ export function createSolidDriveClient(options: {
       await verifyProtection();
       // Access HEADs cannot certify the bytes we just wrote. Keep recovery
       // armed until this PUT's own receipt survives every post-write await.
-      if (!creating) await checkResourceIdentity(url, response.headers.get("etag"), verifyHeaders);
+      // A read-back validator may stand in for this non-destructive check only; the
+      // compensation above still sees no receipt and keeps its retain-only path.
+      if (!creating)
+        await checkResourceIdentity(
+          url,
+          strongEtag(response.headers.get("etag")) ?? readBack,
+          verifyHeaders,
+        );
+      if (readBack) readBackValidators.set(response, readBack);
       // Transfer callers must record this PUT's validator before their post-write
       // access check can fail and invoke cleanup of the new representation.
       compensation.disarm();
@@ -1361,7 +1498,12 @@ export function createSolidDriveClient(options: {
     // A replacement supersedes the previous listing's declarations before its refresh completes.
     resources.delete(url);
     responseTypes.delete(url);
-    return { etag: validator(url, response.headers.get("etag")) };
+    return {
+      etag: validator(
+        url,
+        strongEtag(response.headers.get("etag")) ?? readBackValidators.get(response),
+      ),
+    };
   };
 
   const rawPut = async (
@@ -2879,6 +3021,7 @@ export function createSolidDriveClient(options: {
     list,
     stat,
     read,
+    readLimited,
     readVersion,
     readRdf,
     exclusive(urls, work) {

@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // @vitest-environment jsdom
 // AUTHORED-BY Codex
 import { File as NodeFile } from "node:buffer";
@@ -209,9 +210,25 @@ it("DOCX round trips generated documents covering every editor node and mark typ
         visitedNodes.add("doc");
         for (const embedded of [true, false]) {
           const imported = await roundTrip(original.toJSON(), embedded);
-          expect(imported.json).toEqual(original.toJSON());
+          // DOCX carries pending text as ordinary text. The embedded payload drops
+          // suggestion marks too: an imported file can't vouch for their authors.
+          const exported = (node: JSONContent): JSONContent => ({
+            ...node,
+            ...(node.marks
+              ? {
+                  marks: node.marks.filter(
+                    (mark) => !["suggestionInsert", "suggestionDelete"].includes(mark.type),
+                  ),
+                }
+              : {}),
+            ...(node.content ? { content: node.content.map(exported) } : {}),
+          });
+          const expected = schema.nodeFromJSON(exported(original.toJSON()));
+          expect(imported.json).toEqual(expected.toJSON());
+          // Dropping pending suggestions from an embedded payload is reported too.
+          const suggested = JSON.stringify(original.toJSON()).includes('"suggestion');
           expect(imported.skipped).toEqual(
-            embedded ? [] : [{ label: DOCX_FORMATTING_WARNING, count: 1 }],
+            embedded && !suggested ? [] : [{ label: DOCX_FORMATTING_WARNING, count: 1 }],
           );
         }
       },
@@ -331,4 +348,25 @@ it("reports unrecognised DOCX formatting instead of silently dropping it", async
     { label: DOCX_FORMATTING_WARNING, count: 1 },
     { label: expect.stringMatching(/Unsupported DOCX formatting:.*Unsupported style/), count: 1 },
   ]);
+});
+
+// AUTHORED-BY Claude Opus 5.5
+it("restores a legacy embedded payload exactly when it has no pending suggestions (tabs and line breaks included)", async () => {
+  const original = schema.nodeFromJSON({
+    type: "doc",
+    content: [
+      {
+        type: "paragraph",
+        content: [
+          { type: "text", text: "Before" },
+          { type: "hardBreak" },
+          { type: "text", text: "after break" },
+        ],
+      },
+      { type: "codeBlock", content: [{ type: "text", text: "code\ttab" }] },
+    ],
+  });
+  const imported = await roundTrip(original.toJSON());
+  expect(imported.json).toEqual(original.toJSON());
+  expect(imported.skipped).toEqual([]);
 });

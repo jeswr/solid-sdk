@@ -9,6 +9,7 @@ import {
   collection,
   isTruncated,
   mapBounded,
+  metadataOf,
   selectMembers,
   selectTrustMembers,
 } from "../src/apps/agent/lib/collections";
@@ -59,7 +60,7 @@ const families = [
   ],
   ["approvals", "approval", readers.readApprovals],
   ["control", "control-statement", readers.readControl],
-  ["audit", "audit-entry", readers.readAudit],
+  // The audit range reader has its own bounded, sequence-ordered tests in agent-audit.test.ts.
   ["inbox/direct/account", "inbound-message", (c: ReadersClient) => readers.readInbox(c, "direct")],
 ] as const;
 type ReadersClient = ReturnType<typeof createAgentClient>;
@@ -92,14 +93,9 @@ it.each(
       try {
         await new Promise<void>((resolve) => setImmediate(resolve));
         if (url.endsWith(".triage.ttl")) return new Response(null, { status: 404 });
-        const seq = Number(url.slice(url.lastIndexOf("/") + 1).replace(".ttl", ""));
         const body =
           template?.replaceAll(templateId, url) ??
-          (await recordToTurtle({
-            ...exampleRecords[type],
-            id: url,
-            ...(type === "audit-entry" ? { seq } : {}),
-          }));
+          (await recordToTurtle({ ...exampleRecords[type], id: url }));
         return new Response(body, {
           headers: { "content-type": template ? "application/trig" : "text/turtle" },
         });
@@ -266,4 +262,22 @@ it("sorts a displayed UUID-name sample by its records' timestamps without claimi
   expect(rows).toMatchObject({ truncated: true, newest: false, total: 501 });
   expect(rows[0]?.url).toBe(members[1]?.url);
   expect(rows.at(-1)?.url).toBe(members[500]?.url);
+});
+
+it("carries collection metadata, and only the flags that are set, onto a filtered copy", () => {
+  const source = collection([], {
+    truncated: true,
+    total: 900,
+    newest: false,
+    complete: true,
+    totalIsLowerBound: true,
+  });
+  expect(metadataOf(source)).toEqual({
+    truncated: true,
+    total: 900,
+    newest: false,
+    complete: true,
+    totalIsLowerBound: true,
+  });
+  expect(metadataOf([])).toEqual({});
 });

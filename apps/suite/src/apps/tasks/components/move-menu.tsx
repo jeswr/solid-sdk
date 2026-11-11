@@ -57,7 +57,7 @@ export const moveUp = relative(-1);
 export const moveDown = relative(1);
 
 /** The keyboard equivalents of every drag (06-tasks §4.4), for row and card ⋯ menus. */
-export function useTaskMoves(task: TaskView) {
+export function useTaskMoves(task: TaskView, flat = false) {
   const tasks = useTasks();
   const focus = useTaskListFocus();
   const pathname = usePathname();
@@ -65,7 +65,7 @@ export function useTaskMoves(task: TaskView) {
   // A list sorted by due date, priority or name offers no manual reordering.
   const manual = (preferences.sort[pathname] ?? "manual") === "manual";
   const all = tasks.views.filter((view) => view.projectUrl === task.projectUrl);
-  const options: PlanOptions = { all, manual };
+  const options: PlanOptions = { all, manual, flat };
   const views = visibleTasks(all, preferences.showCompletedInProject);
   const plan = (make: Planner) => make(task, views, options);
   /** Announces the outcome once the write settles; Retry plans again from fresh state. */
@@ -74,17 +74,19 @@ export function useTaskMoves(task: TaskView) {
     const first = make(task, views, options);
     if (first.kind === "none") return Promise.resolve(false);
     const names = projectNames(tasks.projects);
-    const message = dropMessage(task, first, views, names, manual);
+    const message = dropMessage(task, first, views, names, manual, flat);
     const showCompleted = preferences.showCompletedInProject;
     const replan = replanner(tasks.cache, task.url, (fresh, project) =>
-      make(fresh, visibleTasks(project, showCompleted), { all: project, manual }),
+      make(fresh, visibleTasks(project, showCompleted), { all: project, manual, flat }),
     );
     const retried = announceRetries(tasks.cache, {
       task,
       plan: first,
       message,
       showCompleted,
-      describe: (plan) => dropMessage(task, plan, tasks.cache.getSnapshot().views, names, manual),
+      flat,
+      describe: (plan) =>
+        dropMessage(task, plan, tasks.cache.getSnapshot().views, names, manual, flat),
       announce: (text) => focus?.announce(text),
     });
     return applyDropPlan(first, tasks, replan, retried).then((written) => {
@@ -102,6 +104,7 @@ export function MoveMenuItems({
   disabled,
   reorder = true,
   nesting = reorder,
+  flat = false,
 }: {
   task: TaskView;
   disabled: boolean;
@@ -109,9 +112,11 @@ export function MoveMenuItems({
   reorder?: boolean;
   /** Rows offer Make sub-task of…/Promote to task; board cards do not. */
   nesting?: boolean;
+  /** Board ordering is flat even when a card has an RDF parent. */
+  flat?: boolean;
 }) {
   const tasks = useTasks();
-  const moves = useTaskMoves(task);
+  const moves = useTaskMoves(task, flat);
   const project = tasks.projects.find((item) => item.url === task.projectUrl);
   const up = moves.plan(moveUp);
   const down = moves.plan(moveDown);

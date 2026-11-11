@@ -44,6 +44,8 @@ export interface CommandPaletteProps {
    * element focused before the palette opened, so help can return focus there.
    */
   onOpenHelp?: (returnTo: HTMLElement | null) => void;
+  /** Opens the app launcher (02-suite-shell §3: Cmd/Ctrl+K → "Open app…"). */
+  onOpenApps?: () => void;
   showBacklog?: boolean;
 }
 export const appShortcutKeys: Partial<Record<AppSlug, string>> = {
@@ -67,6 +69,7 @@ export function CommandPalette({
   recent = [],
   onSearch,
   onOpenHelp,
+  onOpenApps,
   showBacklog = process.env.NEXT_PUBLIC_SHOW_BACKLOG_APPS === "1",
 }: CommandPaletteProps) {
   const router = useRouter();
@@ -152,6 +155,13 @@ export function CommandPalette({
                 </CommandItem>
               ))}
             </CommandGroup>
+            {onOpenApps && (
+              <CommandGroup heading="Apps">
+                <CommandItem value="Open app…" onSelect={() => select(onOpenApps)}>
+                  Open app…
+                </CommandItem>
+              </CommandGroup>
+            )}
             {onOpenHelp && (
               <CommandGroup heading="Help">
                 <CommandItem

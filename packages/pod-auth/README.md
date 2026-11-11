@@ -91,6 +91,17 @@ loopback callback outside production. Plain HTTP additionally requires `allowIns
 it is checked on every protocol hop and never authorizes non-loopback HTTP. Browser callback origins
 must match the current application origin. Loopback includes localhost, 127.0.0.0/8 and ::1.
 
+Native apps explicitly set `nativeRedirect: true` and a callback such as
+`redirectUri: "org.jeswr.suite:/oauth/callback"`. This requires a lowercase reverse-domain private-use
+scheme, an absolute path, and no authority, credentials, query, fragment or URL normalization. Supply
+an HTTPS Client ID Document URL with `application_type: "native"` and the exact callback registered.
+Dynamic registration, `allowInsecureLoopback: true` and HTTP(S) callbacks are forbidden in this mode.
+Only the native callback bypasses the application-origin check; protocol and resource transport
+policies still apply. The scheme URI is preserved in authorization and token requests. Login without
+known storage roots uses an unfetched synthetic HTTPS URL on the client document's origin as its
+session context; neither that URL nor the callback grants resource access. `ui.getCode` still returns
+the complete callback URL with `code`, `state` and `iss` and honors cancellation.
+
 ## Provider directory and sign-in addresses
 
 `@jeswr/pod-auth/directory` exports the deeply frozen `KNOWN_PROVIDERS`, `SolidProvider` metadata,
@@ -116,6 +127,93 @@ only on loopback with `allowInsecureLoopback: true`. The directory has no auth s
 recent first. It tolerates corrupt or unavailable storage and stores no credentials. Default providers
 use monograms; `label` and `iconUrl` are optional host configuration. Re-verify the provider directory
 and sign-up links live before release.
+
+## Self-registration (`./registration`, SDK-APP-05)
+
+```ts
+import { createRegistration, RegistrationError } from '@jeswr/pod-auth/registration';
+
+const registration = createRegistration({
+  accountApi: 'https://provider.example/.account/', // null disables registration
+  podAuth: auth, // the application's existing core; owns OIDC UI and the resulting session
+  // podHost: 'https://pods.example/', // defaults to the CSS issuer above the account index
+});
+
+if (await registration.available()) {
+  const { pod, webId } = registration.previewUrls('alice');
+  const availability = await registration.checkUsername('alice', { signal });
+  const identity = await registration.register(
+    { username: 'alice', displayName: 'Alice', password },
+    { signal, onStep: (step, created) => renderProgress(step, created) },
+  );
+  await auth.fetch(pod); // Identity contains public claims; fetch belongs to PodAuth.
+}
+```
+
+`available({ signal? })` GETs the CSS v7 JSON index and requires public `account.create` and
+`password.login` controls. Scoped password/pod/WebID controls are checked after account creation,
+when CSS can advertise them. Missing controls return false; transport/HTTP/parse failures reject.
+`methods` is frozen `['password']`; passkeys are not implemented or inferred.
+
+Usernames are 3–30 lowercase ASCII letters, digits or hyphens. Invalid names return `invalid`
+without network; HEAD on the predicted pod gives `available` for 404, `taken` for 2xx, and
+`unknown` for 401/403 (CSS also denies missing children of a non-public root, so a denial does
+not prove the name is used). `register` proceeds on `unknown`. A name registered before then
+fails at password enrollment, because its derived login ID exists: CSS answers 400 and `register`
+reports `username-taken` at step `password` (`weak-password` comes only from the local policy
+check, before any request). CSS 7 needs a login method before pod creation and removes the
+login-less account this leaves after 30 minutes. If only the pod name is taken, CSS's 400
+pod-name conflict becomes `username-taken` unless a re-probe sees 404.
+Other statuses, redirects and network failures throw. `previewUrls` is pure and returns
+`{ pod: '<podHost>/<name>/', webId: '<pod>profile/card#me' }`; invalid names throw.
+
+CSS requires an email-shaped password login ID. With this username-only contract, it is
+`<username>@registration.invalid`, exposed as `created.loginId` in progress/errors. Show that
+identifier when the user needs to sign in through CSS's password form. It is a reserved identifier,
+not a verified email or password-recovery destination; email enrollment is outside this API.
+Passwords require at least eight characters and no leading/trailing whitespace (CSS trims them).
+Display names must be nonblank and exclude control characters other than tab/newline/CR.
+
+`register` reports `account`, `password`, `pod`, `webid`, `profile`, `sign-in` before each step.
+It creates the account, adds and authenticates its password, creates the named pod with
+`linkStorage: true`, and verifies CSS's automatically linked WebID (linking it if absent).
+It then establishes OIDC via `auth.login({ issuer })`, verifies the exact new WebID/issuer,
+and PATCHes only that WebID's profile document through `auth.fetch`. The names are built with
+`@rdfjs/wrapper` and serialized by n3 into a SPARQL INSERT, preserving issuer/storage and other
+profile statements. Finally `login({ issuer })` returns the established Identity without a
+second authorization prompt. An unrelated existing identity fails before the profile write.
+
+Only index controls supply account-operation URLs. They must be same-origin with `accountApi`,
+HTTPS, and free of URL credentials, queries and fragments. Every request refuses redirects;
+account requests use a captured pristine transport, `credentials: 'omit'`, and per-call
+`CSS-Account-Token` authorization. Cookies are neither read nor stored. `fetch?` injects that
+pristine transport; never supply `auth.fetch`. HTTP requires `allowInsecureLoopback: true` and
+a loopback host outside production. Passwords/account tokens are never cached, logged, returned,
+included in URLs/errors/causes, or retained by the client after the call. The resulting OIDC
+session remains owned by PodAuth's normal credential lifecycle.
+
+Failures throw `RegistrationError` with `code`, `step` and frozen `created` public progress.
+Codes include `username-taken`, `weak-password`, `registration-closed`, `invalid-username`,
+`invalid-display-name`, `unsafe-control`, `invalid-response`, `identity-mismatch`,
+`registration-in-progress`, and `registration-failed` (including cancellation/network failures).
+Progress records confirmed `account`, `password`, `podUrl`, `webId`, `profile`, `loginId`, and
+`signInHint: { issuer }`. A successful account/password HTTP response remains recorded even
+if its JSON is corrupt. Ambiguous transport failures can have server-side effects; do not
+blindly retry the whole registration. Use progress to explain recovery/sign-in to the user.
+Concurrent registrations on one client reject; no credential-bearing resume state is stored.
+
+The shell adapter can map `webId` to `accountId`, retain `podUrl`/`signInHint`, and group these
+steps into its existing pod/account-ID/sign-in UI. This change does not wire application flows.
+
+The socket-based integration lane reuses in-process CSS 7.2.0 from storage-conformance:
+
+```sh
+pnpm exec turbo run build --filter=@jeswr/storage-conformance... --concurrency=2
+pnpm --filter @jeswr/storage-conformance run test:registration
+```
+
+It exercises real password/OIDC consent, RDF names, and a private-pod read. It has no skip flag
+and runs separately from the offline unit gate per ADR-009. Unit coverage for registration is 100%.
 
 ## Generate the suite Client Identifier Document
 
@@ -240,6 +338,10 @@ Its caller must encrypt pending state and the private JWK envelope, consume call
 claim refresh ownership atomically, persist rotation before use, and scope every resource fetch.
 The envelope retains the original private JWK for JSON-only encrypted server vaults; signing
 keys are imported as non-extractable. Browser persistence continues to store CryptoKeys only.
+It also exports `storageDescriptionRoots(storage, { fetch }, { signal, allowInsecureLoopback? })`,
+the storage-description reader behind the LWS realm rule: it returns the roots an LWS or Solid
+description advertises (no credentials, no redirects, `[]` on any failure). The roots are claims;
+a broker must still require each one to lie inside the session's stored roots.
 
 Both factories establish an identity before returning. Client credentials use a DPoP grant and report
 the configured client identifier as the subject, with no inferred WebID. CID mode signs short-lived,

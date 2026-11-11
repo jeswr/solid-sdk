@@ -9,6 +9,7 @@ description: Work on @jeswr/storage-conformance, the shared storage conformance 
 
 T-080 implements the shared conformance runner, report generators, and SC-LIST/RW/RDF/DEL/ERR.
 T-081 adds CSS, SC-PATCH/MOVE/META/CAP and opt-in storage fixture recording/replay.
+SDK-APP-13 adds SC-ROLES/TRASH/VERSIONS/TYPEINDEX/PREFS and shared SQ-8 service cases.
 The root entry exports scenarios, targets, `runTarget`, `evaluateCase`, `compareClaims`,
 `generateMatrix`, and `writeReports`; `./testing` exports structured error and RDF isomorphism assertions.
 
@@ -27,6 +28,24 @@ Do not interpret arbitrary network/server errors as evidence of absence. An unad
 working operation fails with `advertisement-missing:<feature>`. Available features cannot skip.
 Compare target claims independently of the derive function; ignore evidence strings only.
 Network absence probes must try the real protocol operation, not the SDK's capability guard.
+
+`memory` expands to `memory-solid` (WAC), `memory-solid-acp` (CSS ACP) and `memory-lws`
+(ODRL). Memory uses public storage methods plus an in-process role/QUERY transport seam;
+do not add sockets or backend-internal access. Trash and versioning default enabled and can
+be disabled independently in `memoryTarget` options. Keep their independent feature claims.
+HTTP targets supply trusted `serviceEndpoints` routes for absence probes, separately from
+discovery. Never interpret authentication/precondition/network errors as absence. SQ-8 aliases
+must reuse `optionalServiceCases` run functions, prerequisites and checks unchanged.
+Solid role cases use readGrants/addGrant/removeGrant/setGrants, including inherited source
+provenance and snapshot replay. ODRL uses the public access client; manager and inheritance
+must refuse as SDK-APP-04 specifies. `SC-ROLES-movePreservingAccess` requires move and accessControl,
+uses the SDK helper and checks Bob’s own viewer grant and source disappearance after moving.
+Unavailable move/accessControl require companion absence probes. Keep the all-green memory integration
+assertions and never replace the SDK helper locally.
+SC-PREFS tests JSON create/update/stale-412 directly until the preferences facade exists.
+SC-TYPEINDEX uses Solid registrations or real LWS QUERY, never client-side container crawling.
+Matrix generation retains catalog/app feature rows even when reports have no evidence;
+show `not-run`, never fabricated passes. Preserve prior HTTP reports when sockets are unavailable.
 
 `--target css` starts pinned CSS 7.2.0 in process with disposable file storage and one account
 per test file, authenticated through pod-auth client credentials. Its root is seeded private;
@@ -62,3 +81,10 @@ Keep development tool versions aligned with the root manifest. The pinned pnpm 1
 `ignore-scripts` requires local tool declarations for filtered scripts.
 
 Validate changes with this package's `lint`, `build`, `typecheck`, and `test` scripts.
+
+
+SDK-APP-05 registration integration lives in `integration/registration.test.ts` and runs with
+`pnpm run test:registration` after dependency-first builds. It reuses cssTarget.start(), drives
+real CSS password/OIDC UI controls without mocking the protocol engine, and checks RDF names
+plus authenticated private-pod access. Preserve its anonymous 401/403 witness and finally cleanup.
+It is a separate socket-based lane per ADR-009, with no skips or environment opt-in flag.

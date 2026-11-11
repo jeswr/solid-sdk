@@ -1,9 +1,12 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { describe, expect, it } from "vitest";
 import {
+  type AddressFormValues,
   contactFormData,
   contactFormDefaults,
   contactFormSchema,
+  contactFormSchemaFor,
+  emptyAddress,
   secureContactUrl,
 } from "../src/apps/contacts/lib/form-schema";
 
@@ -30,6 +33,7 @@ describe("contact form validation and normalization", () => {
       organization: "",
       emails: [{ value: "" }],
       phones: [{ value: "" }],
+      addresses: [],
       webId: "",
       note: "",
       labels: [],
@@ -78,15 +82,97 @@ describe("contact form validation and normalization", () => {
       webId: "https://example.org/",
       emails: ["mailto:Mira@example.org", "mailto:other@example.org"],
       phones: ["tel:+12025550123"],
+      addresses: [],
     });
     expect(contactFormData({ ...contactFormDefaults(), name: "Mira" })).toEqual({
       name: "Mira",
       emails: [],
       phones: [],
+      addresses: [],
       organization: undefined,
       note: undefined,
       webId: undefined,
     });
+  });
+  // AUTHORED-BY Claude Opus 5.5
+  it("edits postal addresses: defaults, trimming, blank street lines and empty rows", () => {
+    const defaults = contactFormDefaults({
+      name: "Mira",
+      addresses: [
+        { kind: "work", street: "1 Way\nUnit 2", locality: "Paris", country: "France" },
+        { postalCode: "12345" },
+      ],
+    });
+    expect(defaults.addresses).toEqual([
+      {
+        kind: "work",
+        street: "1 Way\nUnit 2",
+        locality: "Paris",
+        region: "",
+        postalCode: "",
+        country: "France",
+      },
+      { kind: "", street: "", locality: "", region: "", postalCode: "12345", country: "" },
+    ]);
+    const [work, code] = defaults.addresses as [AddressFormValues, AddressFormValues];
+    expect(emptyAddress()).toEqual({ ...code, postalCode: "" });
+    const blank = {
+      kind: "home" as const,
+      street: " \n ",
+      locality: "",
+      region: "",
+      postalCode: "",
+      country: " ",
+    };
+    expect(
+      contactFormData({
+        ...defaults,
+        addresses: [
+          {
+            ...work,
+            street: "  1 Way \r\n\r\n Unit 2\r",
+            region: " IDF ",
+          },
+          code,
+          blank,
+        ],
+      }).addresses,
+    ).toEqual([
+      {
+        kind: "work",
+        street: "1 Way\nUnit 2",
+        locality: "Paris",
+        region: "IDF",
+        country: "France",
+      },
+      { postalCode: "12345" },
+    ]);
+    const long = contactFormSchema.safeParse({
+      ...defaults,
+      addresses: [{ ...blank, locality: "x".repeat(257), street: "y".repeat(2049) }],
+    });
+    expect(long.success).toBe(false);
+    const crowded = contactFormSchema.safeParse({
+      ...defaults,
+      addresses: Array.from({ length: 17 }, () => blank),
+    });
+    expect(crowded.success).toBe(false);
+    if (!crowded.success)
+      expect(crowded.error.issues.map((issue) => issue.message)).toEqual([
+        "A contact can have at most 16 addresses.",
+      ]);
+    if (!long.success)
+      expect(long.error.issues.map((issue) => [issue.path.join("."), issue.message])).toEqual([
+        ["addresses.0.street", "This address is too long."],
+        ["addresses.0.locality", "This address is too long."],
+      ]);
+    // Addresses loaded past the limits pass while unchanged (padding aside), and fail once edited.
+    const loaded = Array.from({ length: 17 }, () => ({ ...blank, locality: "x".repeat(300) }));
+    const schema = contactFormSchemaFor(loaded);
+    const padded = loaded.map((row) => ({ ...row, locality: ` ${row.locality} ` }));
+    expect(schema.safeParse({ ...defaults, addresses: padded }).success).toBe(true);
+    expect(contactFormData({ ...defaults, addresses: loaded }, schema).addresses).toHaveLength(17);
+    expect(schema.safeParse({ ...defaults, addresses: loaded.slice(1) }).success).toBe(false);
   });
   it("requires a name, valid email, a parsed international phone without extension and a secure WebID", () => {
     const invalid = contactFormSchema.safeParse({

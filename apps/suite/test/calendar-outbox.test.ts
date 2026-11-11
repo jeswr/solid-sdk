@@ -15,6 +15,7 @@ const write: EventWrite = {
     name: "2026-11-01T12:00:00Z",
     start: new Date("2026-11-01T12:00Z"),
     end: new Date("2026-11-01T13:00Z"),
+    timeZone: "America/New_York",
     recurrence: {
       frequency: "WEEKLY",
       until: new Date("2026-12-01"),
@@ -55,6 +56,7 @@ it("persists before sending and revives only known dates on next load", async ()
   const revived = next.changed.mock.calls[0]![0][0] as typeof write;
   expect(revived.data.start).toBeInstanceOf(Date);
   expect(revived.data.name).toBe(write.data.name);
+  expect(revived.data.timeZone).toBe("America/New_York");
   expect(revived.data.recurrence?.until).toBeInstanceOf(Date);
   expect(revived.data.recurrence?.exceptDate?.[0]).toBeInstanceOf(Date);
   expect(revived.data.recurrence?.exceptDate?.[1]).toBe("2026-11-15");

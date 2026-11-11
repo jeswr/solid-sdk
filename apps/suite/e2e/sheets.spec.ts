@@ -85,6 +85,14 @@ test("create, edit, add a sheet, download CSV, and persist across reload", async
   await expect
     .poll(() => page.evaluate(() => window.__sheetsEngine?.activeSheet().name))
     .toBe("Sheet1");
+  const selectedRange = await page.evaluate(() => window.__sheetsEngine?.selection?.().range);
+  await page.getByRole("button", { name: "Insert chart", exact: true }).click();
+  await expect(page.getByLabel("Data range (A1)")).toHaveValue(selectedRange as string);
+  await page.getByLabel("Data range (A1)").fill("A1:A4");
+  await page.getByLabel("Chart title", { exact: true }).fill("Totals");
+  await page.getByLabel("Chart type").selectOption("line");
+  await page.getByRole("button", { name: "Insert", exact: true }).click();
+  await expect(page.getByRole("img", { name: /^Totals/ })).toBeVisible();
   await expect(page.getByText("Saved to your pod", { exact: true })).toBeVisible();
   expect(
     (await new AxeBuilder({ page }).exclude('[data-testid="univer-container"]').analyze())
@@ -117,6 +125,14 @@ test("create, edit, add a sheet, download CSV, and persist across reload", async
       }),
     )
     .toBe("1\r\n2\r\n3\r\n6\r\n");
+  await expect(page.getByRole("img", { name: /^Totals/ })).toBeVisible();
+  await page.getByRole("button", { name: "Edit chart", exact: true }).click();
+  await page.getByLabel("Chart type").selectOption("bar");
+  await page.getByRole("button", { name: "Apply", exact: true }).click();
+  await page.getByRole("button", { name: "Edit chart", exact: true }).click();
+  await page.getByRole("button", { name: "Delete chart", exact: true }).click();
+  await expect(page.getByRole("img", { name: /^Totals/ })).toHaveCount(0);
+  await expect(page.getByText("Saved to your pod", { exact: true })).toBeVisible();
 });
 
 test("invalid references have a useful not-found state", async ({ page }) => {
@@ -126,4 +142,51 @@ test("invalid references have a useful not-found state", async ({ page }) => {
     "href",
     "/sheets",
   );
+});
+
+test("reads and edits a spreadsheet at 375 px without page overflow", async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 812 });
+  await page.goto("/sheets/new");
+  await waitForEngine(page);
+  const grid = page.getByTestId("univer-container");
+  await expect(grid.locator('[data-u-comp="formula-bar"]')).toBeVisible();
+  await expect(grid.getByRole("tablist")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Share", exact: true })).toBeVisible();
+  const canvas = grid.locator('canvas[data-u-comp="render-canvas"]').first();
+  await canvas.click({ position: { x: 80, y: 32 } });
+  await page.keyboard.type("Mobile edit");
+  await page.keyboard.press("Enter");
+  await expect
+    .poll(() => page.evaluate(() => window.__sheetsEngine?.exportCsv()))
+    .toBe("Mobile edit\r\n");
+  const add = grid.locator('[data-u-comp="sheet-bar-append-button"]').first();
+  for (let index = 0; index < 8; index++) await add.click();
+  await expect(add).toBeInViewport();
+  await expect(grid.getByRole("tablist")).toBeVisible();
+  await expect(page.getByText("Saved to your pod", { exact: true })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});
+
+test("persists a cell comment and its workbook anchor across reload", async ({ page }) => {
+  await page.goto("/sheets/new");
+  await waitForEngine(page);
+  await page.evaluate(() => {
+    const engine = window.__sheetsEngine;
+    const sheetId = engine?.activeSheet().id;
+    if (sheetId) engine?.selectCell?.({ sheetId, cell: "B3", deleted: false });
+  });
+  await page.getByRole("button", { name: "Comment", exact: true }).click();
+  await page.getByLabel("Comment on B3").fill("Review this cell");
+  await page.getByRole("button", { name: "Send", exact: true }).click();
+  await expect(page.getByText("Comment sent.", { exact: true })).toBeVisible();
+  await expect(page.getByText("Review this cell", { exact: true })).toBeVisible();
+  await expect
+    .poll(() => page.evaluate(() => window.__sheetsEngine?.snapshot().commentAnchors))
+    .toMatchObject({ version: 1 });
+  await expect(page.getByText("Saved to your pod", { exact: true })).toBeVisible();
+  await page.reload();
+  await waitForEngine(page);
+  await page.getByRole("button", { name: /^Comments \(/ }).click();
+  await expect(page.getByText("Review this cell", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Sheet1!B3", exact: true })).toBeEnabled();
 });

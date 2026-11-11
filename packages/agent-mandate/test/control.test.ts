@@ -37,7 +37,8 @@ const statement: ControlStatementClaims = {
   attributedTo: OWNER,
   createdAt: NOW.toISOString(),
   expires: "2026-10-27T12:00:00Z",
-  target: "https://pod.example/agent/proposals/1",
+  target: "https://pod.example/agent/accounts/1",
+  restrictions: { read: true },
   binding: "gmail",
   bindingState: "disabled",
 };
@@ -81,8 +82,10 @@ it.each([
   "DispatchNow",
   "RevokeMandate",
   "Forget",
+  "Archive",
 ] as const)("round trips %s with a non-extractable P-256 key and model-compatible claims", async (kind) => {
-  const claims = { ...statement, kind };
+  const { restrictions, ...base } = statement;
+  const claims = { ...base, kind, ...(kind === "SetBindingState" ? { restrictions } : {}) };
   const doc = await issueControlStatement({ type: "control-statement", ...claims }, key, NOW);
   expect(key.privateKey.extractable).toBe(false);
   expect(await verifyControlStatement(doc, options())).toEqual({ valid: true, statement: claims });
@@ -92,7 +95,13 @@ it.each([
 });
 it("round trips Halt and Resume without optional claims", async () => {
   for (const kind of ["Halt", "Resume"] as const) {
-    const { target: _target, binding: _binding, bindingState: _bindingState, ...base } = statement;
+    const {
+      target: _target,
+      binding: _binding,
+      bindingState: _bindingState,
+      restrictions: _restrictions,
+      ...base
+    } = statement;
     const claims = { ...base, kind };
     const doc = await issueControlStatement(claims, key, NOW);
     expect(await verifyControlStatement(doc, options())).toEqual({
@@ -100,6 +109,81 @@ it("round trips Halt and Resume without optional claims", async () => {
       statement: claims,
     });
   }
+});
+it("round trips binding state changes without restrictions", async () => {
+  const { restrictions: _restrictions, ...claims } = statement;
+  const doc = await issueControlStatement(claims, key, NOW);
+  expect(await verifyControlStatement(doc, options())).toEqual({ valid: true, statement: claims });
+  expect(await readControlClaims(doc, claims.id)).toEqual(claims);
+});
+it("rejects a changed restriction bit as a signature failure", async () => {
+  const doc = await issueControlStatement(statement, key, NOW);
+  const store = await parseRdf(doc, "application/trig");
+  const restrictionId = node(store, statement.id).iri(agent("restrictions"));
+  const restriction = node(store, restrictionId);
+  store.removeQuads(
+    [...store].filter(
+      (q) => q.subject.value === restrictionId && q.predicate.value === agent("send"),
+    ),
+  );
+  restriction.setValue(
+    agent("send"),
+    new Node(
+      DataFactory.literal("true", DataFactory.namedNode(`${XSD}boolean`)),
+      store,
+      restriction.factory,
+    ),
+  );
+  expect(await verifyControlStatement(await trig(store), options())).toEqual({
+    valid: false,
+    reason: "signature",
+  });
+});
+it.each([
+  "Halt",
+  "Resume",
+  "DispatchNow",
+  "RevokeMandate",
+  "Forget",
+  "Archive",
+] as const)("refuses restrictions on %s at issue and when validly signed by another implementation", async (kind) => {
+  await expect(issueControlStatement({ ...statement, kind }, key, NOW)).rejects.toThrow(
+    /only with/,
+  );
+  const doc = await signedChange((s) => {
+    remove(s, agent("controlKind"));
+    node(s, statement.id).setIri(agent("controlKind"), agent(kind));
+  });
+  expect(await verifyControlStatement(doc, options())).toEqual({
+    valid: false,
+    reason: "malformed",
+  });
+  expect(await readControlClaims(doc, statement.id)).toBeUndefined();
+});
+it.each([
+  "missing",
+  "wrong datatype",
+  "extra",
+] as const)("rejects a signed restrictions object with %s content", async (change) => {
+  const doc = await signedChange((s) => {
+    const restrictionId = node(s, statement.id).iri(agent("restrictions"));
+    const restriction = node(s, restrictionId);
+    if (change === "extra") restriction.setText(agent("note"), "unexpected");
+    else {
+      s.removeQuads(
+        [...s].filter(
+          (q) => q.subject.value === restrictionId && q.predicate.value === agent("read"),
+        ),
+      );
+      if (change === "wrong datatype") restriction.setText(agent("read"), "true");
+    }
+  });
+  expect(await verifyExportedRdf(doc, statement.id, key.publicKey)).toBe(true);
+  expect(await verifyControlStatement(doc, options())).toEqual({
+    valid: false,
+    reason: "malformed",
+  });
+  expect(await readControlClaims(doc, statement.id)).toBeUndefined();
 });
 it("exports a standard proof verifiable independently with WebCrypto", async () => {
   const doc = await issueControlStatement(statement, key, NOW);
@@ -112,7 +196,7 @@ it.each([
   ["attributedTo", statement.attributedTo, "https://other.example/#me"],
   ["createdAt", statement.createdAt, "2026-10-25T12:00:00.000Z"],
   ["expires", statement.expires, "2026-10-28T12:00:00Z"],
-  ["target", statement.target as string, "https://pod.example/agent/proposals/2"],
+  ["target", statement.target as string, "https://pod.example/agent/accounts/2"],
   ["binding", "gmail", "direct"],
   ["bindingState", "disabled", "connected"],
 ])("rejects tampered %s as signature", async (field, original, changed) => {
@@ -278,7 +362,10 @@ it.each([
   (s: Store) => changeText(s, agent("binding"), "x".repeat(16385)),
   (s: Store) => changeText(s, agent("bindingState"), "unknown"),
   (s: Store) => remove(s, agent("binding")),
-  (s: Store) => remove(s, agent("bindingState")),
+  (s: Store) => {
+    remove(s, agent("bindingState"));
+    remove(s, agent("restrictions"));
+  },
   (s: Store) => {
     remove(s, agent("controlKind"));
     node(s, statement.id).setIri(agent("controlKind"), agent("DispatchNow"));
@@ -319,7 +406,14 @@ it.each([
 });
 it("rejects a valid agent-model approval record presented as a control statement", async () => {
   const doc = await signedChange((s) => {
-    for (const predicate of [RDF_TYPE, "controlKind", "target", "binding", "bindingState"])
+    for (const predicate of [
+      RDF_TYPE,
+      "controlKind",
+      "target",
+      "binding",
+      "bindingState",
+      "restrictions",
+    ])
       remove(s, predicate === RDF_TYPE ? predicate : agent(predicate));
     const a = node(s, statement.id);
     a.setIri(RDF_TYPE, agent("Approval"));
@@ -375,4 +469,11 @@ it("reads altered and expired unsigned claims for display without granting autho
     valid: false,
     reason: "signature",
   });
+});
+
+it("signs and verifies a restrictions-only change without authority to reconnect", async () => {
+  const { bindingState: _, ...claims } = statement;
+  const doc = await issueControlStatement(claims, key, NOW);
+  expect(await verifyControlStatement(doc, options())).toEqual({ valid: true, statement: claims });
+  expect(await readControlClaims(doc, claims.id)).not.toHaveProperty("bindingState");
 });

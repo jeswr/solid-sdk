@@ -7,7 +7,9 @@
 Both directions preserve worksheet order and names, numbers, text, booleans,
 formulas and their cached values, cell number formats (including date/time formats),
 merged cells, frozen panes, column widths and row heights. Import reads shared
-strings and inline strings and joins rich text runs into plain text. Errors and
+strings and inline strings and joins rich text runs into plain text. Rows without
+`r` follow the previous row (starting at 1); cells without `r` follow the previous
+cell in their row (starting at column A). Duplicate positions are rejected. Errors and
 ISO date strings become text. Booleans accept `1` and `TRUE`. Export uses inline strings. Dates stored as Excel
 serial numbers keep their number format. Width conversion is approximate:
 Excel characters × 7 + 5 pixels; row points × 96/72 pixels.
@@ -42,13 +44,26 @@ The 1904 date system is not supported; those workbooks are rejected.
 
 Import rejects DTDs, malformed XML, unsafe relationship targets, duplicate cell
 references, rows and ZIP entries, worksheets that share a part, overlapping column
-ranges or merged cells, and files over these
-limits: 1,000 ZIP entries, 20 MiB per part and 100 MiB in total inflated (counted
-as the bytes inflate, since the sizes a ZIP declares can't be trusted), 200
-worksheets, 100,000 rows, 16,384 columns, 2 million cells or occupied grid
-positions (row heights and merges count as cells), 10,000 merges per workbook, and 20 million characters of cell text and
-formulas (a shared string counts once per cell that uses it). Only workbook
-metadata and referenced worksheets are inflated, so media doesn't count. Empty
-rows past the row limit and one-cell merges are skipped. Elements are read only
-at their schema positions (cells in `sheetData` rows, and so on), so nesting can't
-multiply the work. Sheet IDs are generated.
+ranges or merged cells, and files over these limits: 50 MiB compressed (also checked
+before the sidebar reads a file), 1,000 ZIP entries, 20 MiB per part and 100 MiB in
+total inflated (counted as the bytes inflate, since the sizes a ZIP declares can't
+be trusted), 2 million `<` delimiters per decoded XML part (checked before DOM
+parsing), 200 worksheets, 100,000 rows, 16,384 columns, 2 million cells or occupied
+grid positions (row heights and merges count as cells), 10,000 merges per workbook,
+and 20 million characters of cell text and formulas (a shared string counts once
+per cell that uses it).
+
+The workbook part is resolved from the package's `officeDocument` relationship in
+`_rels/.rels`; worksheets, shared strings and styles are resolved relative to that
+workbook through its relationships. Transitional and strict relationship types are
+accepted. Conventional workbook, strings and styles paths are used only when the
+corresponding relationship is absent and the conventional part exists; an explicit
+missing or unsafe target is rejected. Only content types, package/workbook
+relationships and resolved workbook, strings, styles and worksheet parts are
+inflated, so media and unreferenced conventional parts don't count. Discovery and
+part extraction share one inflated-byte budget; each selected part is inflated
+once.
+
+Empty rows past the row limit and one-cell merges are skipped. Elements are read
+only at their schema positions (cells in `sheetData` rows, and so on), so nesting
+can't multiply the work. Sheet IDs are generated.

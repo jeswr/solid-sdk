@@ -20,6 +20,7 @@ import { useRouteParams, useRoutePathname } from "@/lib/route-params";
 import { PodSessionProvider, usePodSessionState } from "@/lib/session/pod-session";
 import { parseQuickAdd } from "../lib/compose/quick-add";
 import { classifyError } from "../lib/model/errors";
+import { replaceQuery } from "../lib/route/replace-query";
 import { isEditing, openAddTask } from "../state/add-focus";
 import { useTasksPreferences } from "../state/preferences";
 import { useReminderScheduler } from "../state/reminders";
@@ -108,9 +109,9 @@ function TasksChrome({ children }: { children: ReactNode }) {
         if (taskUrl !== from) return;
         const query = new URLSearchParams(params.toString());
         query.set("task", encodeRef(to));
-        router.replace(`${pathname}?${query}`, { scroll: false });
+        replaceQuery(pathname, query);
       }),
-    [tasks.cache, taskUrl, params, pathname, router],
+    [tasks.cache, taskUrl, params, pathname],
   );
   // Reminder notifications and toasts open the same `?task=` detail pane as a task row.
   useReminderScheduler(tasks.cache, (url) => {
@@ -156,11 +157,11 @@ function TasksChrome({ children }: { children: ReactNode }) {
     if (document.querySelector('.tsk-detail input[role="combobox"][aria-expanded="true"]')) return;
     // The sub-task composer consumes Escape to collapse its own row first.
     if (document.activeElement?.matches('.tsk-detail input[aria-label="Sub-task title"]')) return;
+    if (document.activeElement?.closest(".tsk-detail [data-tsk-attachment-form]")) return;
     const query = new URLSearchParams(params.toString());
     query.delete("task");
-    // Native replaceState syncs with useSearchParams. router.replace ignores a same-pathname
-    // replace after a hard load of a `?task=` URL, so a shared link's pane could not close.
-    window.history.replaceState(null, "", `${pathname}${query.size ? `?${query}` : ""}`);
+    // A shared link's pane must close after a hard load too (see replaceQuery).
+    replaceQuery(pathname, query);
   }, [params, pathname]);
   useEffect(() => {
     if (taskRef === null) return;

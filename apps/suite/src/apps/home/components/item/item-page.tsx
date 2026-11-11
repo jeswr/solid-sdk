@@ -17,6 +17,7 @@ import {
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { AppHeading } from "@/shell/app-frame";
 import { typedViewData } from "../../../../components/typed-view-data";
 import { decodeRef } from "../../../../lib/refs";
 import { classificationForType } from "../../lib/model/classify";
@@ -202,7 +203,9 @@ export function ItemPage({ domain, itemRef }: { domain: string; itemRef: string 
       <Link href={domainHref(entry.id)} className="hm-item-back">
         {entry.label}
       </Link>
-      <h1>{read ? title : state.error === 404 ? "This item isn't here any more" : "Item"}</h1>
+      <AppHeading>
+        {read ? title : state.error === 404 ? "This item isn't here any more" : "Item"}
+      </AppHeading>
       {state.error !== undefined ? (
         <>
           {state.error !== 404 ? (

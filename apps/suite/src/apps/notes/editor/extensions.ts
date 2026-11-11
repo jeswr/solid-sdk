@@ -3,7 +3,9 @@ import { TaskItem, TaskList } from "@tiptap/extension-list";
 import { Placeholder } from "@tiptap/extensions";
 import type { Attribute } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
+import { privateImage } from "../../docs/editor/private-image";
 import { validLink } from "../../docs/lib/editor/logic";
+import { noteImageSource } from "../lib/images";
 
 // Pasted rel attributes cannot weaken the link policy.
 const SafeStarterKit = StarterKit.extend({
@@ -26,7 +28,7 @@ const SafeStarterKit = StarterKit.extend({
     );
   },
 });
-export function notesExtensions() {
+export function notesExtensions(fetchImpl: typeof fetch = fetch, podRoot?: string) {
   return [
     SafeStarterKit.configure({
       heading: { levels: [1, 2, 3] },
@@ -38,6 +40,7 @@ export function notesExtensions() {
         HTMLAttributes: { rel: "noopener noreferrer", target: null },
       },
     }),
+    privateImage(fetchImpl, (src) => (podRoot ? noteImageSource(src, podRoot) : null)),
     TaskList,
     TaskItem.configure({ nested: true }),
     Placeholder.configure({ placeholder: "Note" }),

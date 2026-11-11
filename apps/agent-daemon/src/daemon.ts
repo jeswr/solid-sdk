@@ -319,6 +319,7 @@ export function createDaemon(o: DaemonOptions): Daemon {
       signal?.throwIfAborted();
       release = await o.lease.acquire();
       await o.workspace.initialize();
+      await o.workspace.introduce(o.agentWebId);
       if (signal) {
         try {
           subscription = await o.notifications.subscribe(
