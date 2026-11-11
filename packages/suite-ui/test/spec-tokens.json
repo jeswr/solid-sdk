@@ -506,45 +506,45 @@
   },
   {
     "name": "--app-bookmarks",
-    "light": "oklch(0.50 0.11 65)",
-    "dark": "oklch(0.74 0.10 65)",
+    "light": "oklch(0.50 0.11 55)",
+    "dark": "oklch(0.74 0.10 55)",
     "use": "identifier tile; 3:1 glyph",
     "category": "colour",
     "tag": "graphic"
   },
   {
     "name": "--app-bookmarks-soft",
-    "light": "oklch(0.94 0.03 65)",
-    "dark": "oklch(0.30 0.05 65)",
+    "light": "oklch(0.94 0.03 55)",
+    "dark": "oklch(0.30 0.05 55)",
     "use": "file-type badges and hover tints",
     "category": "colour"
   },
   {
     "name": "--presence-bookmarks",
-    "light": "oklch(0.60 0.14 65)",
-    "dark": "oklch(0.60 0.14 65)",
+    "light": "oklch(0.60 0.14 55)",
+    "dark": "oklch(0.60 0.14 55)",
     "use": "collaborator cursor hue",
     "category": "colour"
   },
   {
     "name": "--app-insights",
-    "light": "oklch(0.50 0.11 195)",
-    "dark": "oklch(0.74 0.10 195)",
+    "light": "oklch(0.50 0.11 187)",
+    "dark": "oklch(0.74 0.10 187)",
     "use": "identifier tile; 3:1 glyph",
     "category": "colour",
     "tag": "graphic"
   },
   {
     "name": "--app-insights-soft",
-    "light": "oklch(0.94 0.03 195)",
-    "dark": "oklch(0.30 0.05 195)",
+    "light": "oklch(0.94 0.03 187)",
+    "dark": "oklch(0.30 0.05 187)",
     "use": "file-type badges and hover tints",
     "category": "colour"
   },
   {
     "name": "--presence-insights",
-    "light": "oklch(0.60 0.14 195)",
-    "dark": "oklch(0.60 0.14 195)",
+    "light": "oklch(0.60 0.14 187)",
+    "dark": "oklch(0.60 0.14 187)",
     "use": "collaborator cursor hue",
     "category": "colour"
   },
@@ -572,45 +572,45 @@
   },
   {
     "name": "--app-recipes",
-    "light": "oklch(0.50 0.11 30)",
-    "dark": "oklch(0.74 0.10 30)",
+    "light": "oklch(0.50 0.11 70)",
+    "dark": "oklch(0.74 0.10 70)",
     "use": "identifier tile; 3:1 glyph",
     "category": "colour",
     "tag": "graphic"
   },
   {
     "name": "--app-recipes-soft",
-    "light": "oklch(0.94 0.03 30)",
-    "dark": "oklch(0.30 0.05 30)",
+    "light": "oklch(0.94 0.03 70)",
+    "dark": "oklch(0.30 0.05 70)",
     "use": "file-type badges and hover tints",
     "category": "colour"
   },
   {
     "name": "--presence-recipes",
-    "light": "oklch(0.60 0.14 30)",
-    "dark": "oklch(0.60 0.14 30)",
+    "light": "oklch(0.60 0.14 70)",
+    "dark": "oklch(0.60 0.14 70)",
     "use": "collaborator cursor hue",
     "category": "colour"
   },
   {
     "name": "--app-media",
-    "light": "oklch(0.50 0.11 345)",
-    "dark": "oklch(0.74 0.10 345)",
+    "light": "oklch(0.50 0.11 310)",
+    "dark": "oklch(0.74 0.10 310)",
     "use": "identifier tile; 3:1 glyph",
     "category": "colour",
     "tag": "graphic"
   },
   {
     "name": "--app-media-soft",
-    "light": "oklch(0.94 0.03 345)",
-    "dark": "oklch(0.30 0.05 345)",
+    "light": "oklch(0.94 0.03 310)",
+    "dark": "oklch(0.30 0.05 310)",
     "use": "file-type badges and hover tints",
     "category": "colour"
   },
   {
     "name": "--presence-media",
-    "light": "oklch(0.60 0.14 345)",
-    "dark": "oklch(0.60 0.14 345)",
+    "light": "oklch(0.60 0.14 310)",
+    "dark": "oklch(0.60 0.14 310)",
     "use": "collaborator cursor hue",
     "category": "colour"
   },
@@ -638,23 +638,23 @@
   },
   {
     "name": "--app-events",
-    "light": "oklch(0.50 0.11 5)",
-    "dark": "oklch(0.74 0.10 5)",
+    "light": "oklch(0.50 0.11 0)",
+    "dark": "oklch(0.74 0.10 0)",
     "use": "identifier tile; 3:1 glyph",
     "category": "colour",
     "tag": "graphic"
   },
   {
     "name": "--app-events-soft",
-    "light": "oklch(0.94 0.03 5)",
-    "dark": "oklch(0.30 0.05 5)",
+    "light": "oklch(0.94 0.03 0)",
+    "dark": "oklch(0.30 0.05 0)",
     "use": "file-type badges and hover tints",
     "category": "colour"
   },
   {
     "name": "--presence-events",
-    "light": "oklch(0.60 0.14 5)",
-    "dark": "oklch(0.60 0.14 5)",
+    "light": "oklch(0.60 0.14 0)",
+    "dark": "oklch(0.60 0.14 0)",
     "use": "collaborator cursor hue",
     "category": "colour"
   },
@@ -682,23 +682,23 @@
   },
   {
     "name": "--app-wallet",
-    "light": "oklch(0.50 0.11 120)",
-    "dark": "oklch(0.74 0.10 120)",
+    "light": "oklch(0.50 0.11 115)",
+    "dark": "oklch(0.74 0.10 115)",
     "use": "identifier tile; 3:1 glyph",
     "category": "colour",
     "tag": "graphic"
   },
   {
     "name": "--app-wallet-soft",
-    "light": "oklch(0.94 0.03 120)",
-    "dark": "oklch(0.30 0.05 120)",
+    "light": "oklch(0.94 0.03 115)",
+    "dark": "oklch(0.30 0.05 115)",
     "use": "file-type badges and hover tints",
     "category": "colour"
   },
   {
     "name": "--presence-wallet",
-    "light": "oklch(0.60 0.14 120)",
-    "dark": "oklch(0.60 0.14 120)",
+    "light": "oklch(0.60 0.14 115)",
+    "dark": "oklch(0.60 0.14 115)",
     "use": "collaborator cursor hue",
     "category": "colour"
   },
@@ -770,45 +770,45 @@
   },
   {
     "name": "--app-trips",
-    "light": "oklch(0.50 0.11 235)",
-    "dark": "oklch(0.74 0.10 235)",
+    "light": "oklch(0.50 0.11 237)",
+    "dark": "oklch(0.74 0.10 237)",
     "use": "identifier tile; 3:1 glyph",
     "category": "colour",
     "tag": "graphic"
   },
   {
     "name": "--app-trips-soft",
-    "light": "oklch(0.94 0.03 235)",
-    "dark": "oklch(0.30 0.05 235)",
+    "light": "oklch(0.94 0.03 237)",
+    "dark": "oklch(0.30 0.05 237)",
     "use": "file-type badges and hover tints",
     "category": "colour"
   },
   {
     "name": "--presence-trips",
-    "light": "oklch(0.60 0.14 235)",
-    "dark": "oklch(0.60 0.14 235)",
+    "light": "oklch(0.60 0.14 237)",
+    "dark": "oklch(0.60 0.14 237)",
     "use": "collaborator cursor hue",
     "category": "colour"
   },
   {
     "name": "--app-ask",
-    "light": "oklch(0.50 0.11 270)",
-    "dark": "oklch(0.74 0.10 270)",
+    "light": "oklch(0.50 0.11 30)",
+    "dark": "oklch(0.74 0.10 30)",
     "use": "identifier tile; 3:1 glyph",
     "category": "colour",
     "tag": "graphic"
   },
   {
     "name": "--app-ask-soft",
-    "light": "oklch(0.94 0.03 270)",
-    "dark": "oklch(0.30 0.05 270)",
+    "light": "oklch(0.94 0.03 30)",
+    "dark": "oklch(0.30 0.05 30)",
     "use": "file-type badges and hover tints",
     "category": "colour"
   },
   {
     "name": "--presence-ask",
-    "light": "oklch(0.60 0.14 270)",
-    "dark": "oklch(0.60 0.14 270)",
+    "light": "oklch(0.60 0.14 30)",
+    "dark": "oklch(0.60 0.14 30)",
     "use": "collaborator cursor hue",
     "category": "colour"
   },
