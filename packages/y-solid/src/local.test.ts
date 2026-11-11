@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { createRequire } from "node:module";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { IndexeddbPersistence, storeState } from "y-indexeddb";
@@ -20,6 +21,7 @@ const {
   IDBFactory,
   IDBKeyRange,
   IDBDatabase: FakeDatabase,
+  IDBObjectStore: FakeObjectStore,
 } = createRequire(new URL("../../solid-offline/package.json", import.meta.url))("fake-indexeddb");
 vi.mock("y-indexeddb", async (original) => {
   const actual = await original<typeof import("y-indexeddb")>();
@@ -313,7 +315,7 @@ it("rejects corrupt persisted hydration without changing the live document", asy
   }
 });
 
-it("contains a hydration transaction abort and closes its database", async () => {
+it("contains a preliminary probe transaction abort and closes its database", async () => {
   const transact = FakeDatabase.prototype.transaction;
   const close = vi.spyOn(FakeDatabase.prototype, "close");
   vi.spyOn(FakeDatabase.prototype, "transaction").mockImplementation(function (
@@ -326,6 +328,102 @@ it("contains a hydration transaction abort and closes its database", async () =>
   });
   await expect(prepareLocalMirror("aborted", "next")).rejects.toBeInstanceOf(LocalMirrorError);
   expect(close).toHaveBeenCalled();
+});
+
+it.each([
+  "abort",
+  "request error",
+])("rejects and destroys the real provider if hydration fails after synced (%s)", async (fault) => {
+  if (fault === "request error") {
+    const seed = await open("aborted-hydration");
+    await seed.mirror.destroy();
+    seed.doc.destroy();
+  }
+  const add = FakeObjectStore.prototype.add;
+  const destroyed = vi.spyOn(IndexeddbPersistence.prototype, "destroy");
+  let aborted = false;
+  let injected = false;
+  vi.spyOn(FakeObjectStore.prototype, "add").mockImplementation(function (
+    this: IDBObjectStore,
+    ...args: unknown[]
+  ) {
+    if (this.name === "updates" && !injected) {
+      injected = true;
+      this.transaction.addEventListener("abort", () => {
+        aborted = true;
+      });
+      // The seeded update at key 1 makes the write fail and abort naturally.
+      const request =
+        fault === "request error" ? add.call(this, args[0], 1) : add.apply(this, args);
+      if (fault === "abort") request.addEventListener("success", () => this.transaction.abort());
+      return request;
+    }
+    return add.apply(this, args);
+  });
+  const doc = new Doc();
+  try {
+    doc.getText("body").insert(0, "Online state to persist");
+    await expect(openLocalMirror("aborted-hydration", doc)).rejects.toMatchObject({
+      name: "LocalMirrorError",
+      mirrorName: "aborted-hydration",
+    });
+    expect(aborted).toBe(true);
+    expect(destroyed).toHaveBeenCalledOnce();
+    expect(doc.getText("body").toString()).toBe("Online state to persist");
+    // Reopening queues behind the abort and its failed requests. Vitest also
+    // fails this test if the upstream initialization leaks a rejection.
+    expect((await open("aborted-hydration")).doc.getText("body").toString()).toBe("");
+  } finally {
+    doc.destroy();
+  }
+});
+
+it.each(["abort", "missing updates"])("rejects if hydration verification has %s", async (fault) => {
+  const getAll = FakeObjectStore.prototype.getAll;
+  let reads = 0;
+  vi.spyOn(FakeObjectStore.prototype, "getAll").mockImplementation(function (
+    this: IDBObjectStore,
+    ...args: unknown[]
+  ) {
+    if (this.name === "updates" && this.transaction.mode === "readonly" && ++reads === 2) {
+      if (fault === "abort") queueMicrotask(() => this.transaction.abort());
+      else return getAll.call(this, 0);
+    }
+    return getAll.apply(this, args);
+  });
+  const destroyed = vi.spyOn(IndexeddbPersistence.prototype, "destroy");
+  const doc = new Doc();
+  try {
+    doc.getText("body").insert(0, "Online state to persist");
+    await expect(openLocalMirror("failed-verification", doc)).rejects.toBeInstanceOf(
+      LocalMirrorError,
+    );
+    expect(reads).toBe(2);
+    expect(destroyed).toHaveBeenCalledOnce();
+  } finally {
+    doc.destroy();
+  }
+});
+
+it("only reports readiness after hydration and verification transactions commit", async () => {
+  const transact = FakeDatabase.prototype.transaction;
+  const committed: string[] = [];
+  vi.spyOn(FakeDatabase.prototype, "transaction").mockImplementation(function (
+    this: IDBDatabase,
+    ...args: unknown[]
+  ) {
+    const transaction = transact.apply(this, args);
+    transaction.addEventListener("complete", () => committed.push(transaction.mode));
+    return transaction;
+  });
+  const doc = new Doc();
+  doc.getText("body").insert(0, "Durable online state");
+  const mirror = await openLocalMirror("committed-hydration", doc);
+  opened.push({ doc, mirror });
+  expect(committed).toEqual(["versionchange", "readonly", "readwrite", "readonly"]);
+  expect((await open("committed-hydration")).doc.getText("body").toString()).toBe(
+    "Durable online state",
+  );
 });
 
 it.each(
@@ -355,6 +453,6 @@ it("removes database readiness listeners after a successful hydration", async ()
   const database = mirror.db as NonNullable<IndexeddbPersistence["db"]>;
   const remove = vi.spyOn(database, "removeEventListener");
   await waitForLocalMirror(mirror);
-  expect(remove).toHaveBeenCalledWith("error", expect.any(Function));
+  expect(remove).toHaveBeenCalledWith("error", expect.any(Function), true);
   expect(remove).toHaveBeenCalledWith("abort", expect.any(Function));
 });

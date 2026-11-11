@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { clearDocument, IndexeddbPersistence } from "y-indexeddb";
-import { applyUpdate, Doc, encodeStateAsUpdate } from "yjs";
+import { applyUpdate, Doc, encodeStateAsUpdate, mergeUpdates } from "yjs";
 import { hasUnconfirmedLocalState, loadPersistedLocalState } from "./local.js";
 import { coversUpdates } from "./update-coverage.js";
 
@@ -57,7 +58,7 @@ export async function openLocalMirror(name: string, doc: Doc) {
   return mirror;
 }
 
-/** whenSynced alone never rejects when y-indexeddb fails to open its database. */
+/** whenSynced neither reports open failures nor waits for hydration to commit. */
 export async function waitForLocalMirror(mirror: IndexeddbPersistence) {
   let database: Awaited<IndexeddbPersistence["_db"]> | undefined;
   let finished = false;
@@ -65,19 +66,43 @@ export async function waitForLocalMirror(mirror: IndexeddbPersistence) {
   const failure = new Promise<never>((_resolve, reject) => {
     failed = reject;
   });
-  const databaseError = (event: Event) => failed(event);
+  const databaseError = (event: Event) => {
+    if (event.type === "error" && (event.target as IDBRequest | null)?.transaction) {
+      // lib0's request handlers reject promises discarded by y-indexeddb. Route
+      // these errors through the transaction's abort instead. Do not prevent the
+      // default abort; wait for all failed requests before removing listeners.
+      event.stopImmediatePropagation();
+      return;
+    }
+    failed(event);
+  };
   // Observable<string> permits error events, including adapters that expose
   // hydration errors. The pinned upstream version only emits "synced".
   mirror.on("error", failed);
   const opening = mirror._db.then((db) => {
-    if (finished) return mirror.whenSynced;
+    if (finished) return;
     database = db;
-    db?.addEventListener("error", databaseError);
+    db?.addEventListener("error", databaseError, true);
     db?.addEventListener("abort", databaseError);
-    return mirror.whenSynced;
+    return db;
+  });
+  const hydration = Promise.all([opening, mirror.whenSynced]).then(async ([db]) => {
+    if (finished || !db) return;
+    const state = encodeStateAsUpdate(mirror.doc);
+    // IndexedDB queues this read behind the overlapping hydration readwrite
+    // transaction. Request success (and "synced") alone cannot prove durability.
+    const updates = await new Promise<Uint8Array[]>((resolve, reject) => {
+      const transaction = db.transaction("updates", "readonly");
+      const request = transaction.objectStore("updates").getAll();
+      transaction.oncomplete = () => resolve(request.result);
+      transaction.onabort = transaction.onerror = () => reject(transaction.error);
+    });
+    if (!coversUpdates(mergeUpdates(updates), [state])) {
+      throw new Error("Local document hydration was not persisted");
+    }
   });
   try {
-    await Promise.race([mirror.whenSynced, opening, failure]);
+    await Promise.race([hydration, failure]);
   } catch (cause) {
     // destroy itself rejects if _db rejected. Preserve the initialization cause.
     void mirror.destroy().catch(() => {});
@@ -85,7 +110,7 @@ export async function waitForLocalMirror(mirror: IndexeddbPersistence) {
   } finally {
     finished = true;
     mirror.off("error", failed);
-    database?.removeEventListener("error", databaseError);
+    database?.removeEventListener("error", databaseError, true);
     database?.removeEventListener("abort", databaseError);
   }
 }

@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 
 import { createRequire } from "node:module";
 import { afterEach, expect, it, vi } from "vitest";
@@ -97,37 +98,44 @@ it("preserves the database-open cause even when provider destruction rejects", a
   });
 });
 
-it("removes readiness listeners after success and ignores a later open completion", async () => {
-  let opened!: (database: EventTarget) => void;
-  const database = new EventTarget();
-  const add = vi.spyOn(database, "addEventListener");
+it("waits for database opening even if an in-memory adapter has already synced", async () => {
+  let opened!: (database: null) => void;
   const mirror = {
     name: "already synced",
     whenSynced: Promise.resolve(),
     // biome-ignore lint/style/useNamingConvention: y-indexeddb initialization contract.
-    _db: new Promise<EventTarget>((resolve) => {
+    _db: new Promise<null>((resolve) => {
       opened = resolve;
     }),
     on: vi.fn(),
     off: vi.fn(),
     destroy: vi.fn(),
   } as unknown as Parameters<typeof waitForLocalMirror>[0];
-  await waitForLocalMirror(mirror);
-  opened(database);
+  const ready = waitForLocalMirror(mirror);
   await Promise.resolve();
-  expect(add).not.toHaveBeenCalled();
+  expect(mirror.off).not.toHaveBeenCalled();
+  opened(null);
+  await ready;
   expect(mirror.destroy).not.toHaveBeenCalled();
   expect(mirror.off).toHaveBeenCalledWith("error", expect.any(Function));
 });
 
-it("rejects an early provider error even while database opening and destruction remain pending", async () => {
+it.each([
+  "event",
+  "rejection",
+])("rejects an early provider %s even while database opening and destruction remain pending", async (signal) => {
   const cause = new Error("Hydration stopped");
+  let opened!: (database: EventTarget) => void;
   const mirror = {
     name: "opening",
-    whenSynced: new Promise<never>(() => {}),
+    whenSynced: signal === "rejection" ? Promise.reject(cause) : new Promise<never>(() => {}),
     // biome-ignore lint/style/useNamingConvention: y-indexeddb initialization contract.
-    _db: new Promise<never>(() => {}),
-    on: vi.fn((_event, listener) => queueMicrotask(() => listener(cause))),
+    _db: new Promise<EventTarget>((resolve) => {
+      opened = resolve;
+    }),
+    on: vi.fn((_event, listener) => {
+      if (signal === "event") queueMicrotask(() => listener(cause));
+    }),
     off: vi.fn(),
     destroy: vi.fn(() => new Promise<void>(() => {})),
   } as unknown as Parameters<typeof waitForLocalMirror>[0];
@@ -137,4 +145,9 @@ it("rejects an early provider error even while database opening and destruction 
   });
   expect(mirror.destroy).toHaveBeenCalledOnce();
   expect(mirror.off).toHaveBeenCalledWith("error", expect.any(Function));
+  const database = new EventTarget();
+  const add = vi.spyOn(database, "addEventListener");
+  opened(database);
+  await Promise.resolve();
+  expect(add).not.toHaveBeenCalled();
 });
