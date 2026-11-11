@@ -547,11 +547,23 @@ it.each([
   await s.store.deleteForever(trashed.url, trashed.etag);
   expect(s.pod.has(trashed.url)).toBe(false);
   expect(s.pod.has(SRC)).toBe(true);
-  expect(s.fetchImpl).toHaveBeenCalledExactlyOnceWith(
+  expect(s.fetchImpl).toHaveBeenCalledTimes(3);
+  expect(s.fetchImpl).toHaveBeenNthCalledWith(
+    1,
+    trashed.url,
+    expect.objectContaining({ method: "HEAD", cache: "no-store" }),
+  );
+  expect(s.fetchImpl).toHaveBeenNthCalledWith(
+    2,
+    `${trashed.url}.acl`,
+    expect.objectContaining({ cache: "no-store" }),
+  );
+  expect(s.fetchImpl).toHaveBeenNthCalledWith(
+    3,
     trashed.url,
     expect.objectContaining({ method: "DELETE", redirect: "manual" }),
   );
-  const headers = new Headers(s.fetchImpl.mock.calls[0]?.[1]?.headers);
+  const headers = new Headers(s.fetchImpl.mock.calls.at(-1)?.[1]?.headers);
   expect(headers.get("if-match")).toBe(trashed.etag);
 });
 
