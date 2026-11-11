@@ -25,7 +25,8 @@ import {
   recordsKey,
 } from "./acl.js";
 import { acpRecords } from "./acp-records.js";
-import { decide } from "./approval.js";
+import { decide, previewDecision } from "./approval.js";
+import { UnsupportedAccessModelError } from "./errors.js";
 import { set, turtle, values } from "./rdf.js";
 import { ACCM, ACL, LDP, SOLID } from "./vocab.js";
 
@@ -185,7 +186,11 @@ describe("ACP approval and sealed owner records", () => {
       typeIndex: new Store(),
     });
     expect(result.status).toBe("approved");
-    expect(result.choices).toEqual({ dataTypes: [CONTACTS_CLASS], role: "viewer" });
+    expect(result.choices).toEqual({
+      dataTypes: [CONTACTS_CLASS],
+      role: "viewer",
+      targetRoles: { [ALICE]: "viewer" },
+    });
     expect(pod.body(`${ALICE}.acr`)).toContain(REQUESTER);
     expect(pod.etag(result.grantUrl as string)).toBe('"v1"');
   });
@@ -276,7 +281,9 @@ describe("ACP approval and sealed owner records", () => {
       const dataset = acr(RECORDS);
       mutate(dataset);
       await seedRecords(pod, dataset);
-      await expect(decide({ id: REQUEST }, { approve: true }, options(pod))).rejects.toThrow();
+      await expect(decide({ id: REQUEST }, { approve: true }, options(pod))).rejects.toThrow(
+        "folder is shared",
+      );
       expect(accessWrites(pod)).toEqual([]);
       expect(writes(pod)).toEqual([]);
     }
@@ -299,6 +306,165 @@ describe("ACP approval and sealed owner records", () => {
       );
       expect(accessWrites(pod)).toEqual([]);
     }
+  });
+
+  it("checks public member policies above a path-based storage root", async () => {
+    const pod = await acpPod();
+    const storage = `${POD}alice/`;
+    const records = `${storage}settings/access-records/`;
+    pod.seed(`${storage}.acr`, await turtle(acr(storage)));
+    pod.seed(records, "");
+    pod.seed(`${records}.acr`, await turtle(acr(records)));
+    const server = acr(POD);
+    bind(
+      server,
+      `${POD}.acr`,
+      "public",
+      addPolicy(server, `${POD}.acr`, "public", `${ACP}PublicAgent`, [ACL.Read, ACL.Control]),
+    );
+    pod.seed(`${POD}.acr`, await turtle(server));
+    await expect(ensureOwnerOnlyContainer(records, storage, OWNER, pod.fetch)).rejects.toThrow(
+      "folder is shared",
+    );
+    expect(writes(pod)).toEqual([]);
+  });
+
+  it("refuses unreadable parent rules above storage, including missing advertisements", async () => {
+    for (const fault of ["head-401", "head-403", "get-401", "get-403", "link"] as const) {
+      const pod = await acpPod();
+      const storage = `${POD}alice/`;
+      const records = `${storage}settings/access-records/`;
+      pod.seed(`${storage}.acr`, await turtle(acr(storage)));
+      pod.seed(records, "");
+      pod.seed(`${records}.acr`, await turtle(acr(records)));
+      intercept(pod, (method, url) => {
+        if (method === "HEAD" && url === POD && fault === "link") return new Response(null);
+        if (
+          (method === "HEAD" && url === POD && fault.startsWith("head")) ||
+          (method === "GET" && url === `${POD}.acr` && fault.startsWith("get"))
+        )
+          return new Response(null, { status: fault.endsWith("401") ? 401 : 403 });
+      });
+      await expect(ensureOwnerOnlyContainer(records, storage, OWNER, pod.fetch)).rejects.toThrow(
+        `server's parent access rules can't be checked at ${POD}`,
+      );
+      expect(writes(pod)).toEqual([]);
+    }
+  });
+
+  it("makes strict ancestor advertisements opt-in without changing roles discovery", async () => {
+    const pod = await acpPod();
+    await seedRecords(pod);
+    const settings = `${POD}settings/`;
+    intercept(pod, (method, url) =>
+      method === "HEAD" && url === settings ? new Response(null) : undefined,
+    );
+    expect((await readAccessDocuments(RECORDS, { fetch: pod.fetch, root: POD })).model).toBe("acp");
+    expect(await grantsWithRoles(RECORDS, { fetch: pod.fetch, root: POD })).toContainEqual(
+      expect.objectContaining({ agent: { type: "webid", id: OWNER }, role: "manager" }),
+    );
+    await expect(recordsKey(RECORDS, POD, OWNER, pod.fetch)).rejects.toThrow(
+      `server's parent access rules can't be checked at ${settings}`,
+    );
+    expect(writes(pod)).toEqual([]);
+  });
+
+  it("allows direct public listing access on ancestors but refuses inherited access", async () => {
+    for (const member of [false, true]) {
+      const pod = await acpPod();
+      await seedRecords(pod);
+      const root = acr(POD);
+      bind(
+        root,
+        `${POD}.acr`,
+        "listing",
+        addPolicy(root, `${POD}.acr`, "listing", `${ACP}PublicAgent`, [ACL.Read]),
+        member,
+      );
+      pod.seed(`${POD}.acr`, await turtle(root));
+      if (member)
+        await expect(recordsKey(RECORDS, POD, OWNER, pod.fetch)).rejects.toThrow(
+          "folder is shared",
+        );
+      else expect(await ensureOwnerOnlyContainer(RECORDS, POD, OWNER, pod.fetch)).toBeDefined();
+    }
+  });
+
+  it("previews ACP approvals on a subdomain pod whose storage is its origin root", async () => {
+    const pod = await acpPod();
+    expect(POD).toBe(`${new URL(POD).origin}/`);
+    const preview = await previewDecision({ id: REQUEST }, { approve: true }, options(pod));
+    expect(preview).toMatchObject({
+      model: "acp",
+      targets: [{ url: ALICE, role: "viewer", modes: ["read"], dataTypes: [CONTACTS_CLASS] }],
+    });
+    expect(pod.calls.every(({ method }) => method === "GET" || method === "HEAD")).toBe(true);
+    const result = await decide(
+      { id: REQUEST },
+      { approve: true },
+      { ...options(pod), expected: preview },
+    );
+    expect(result.choices?.targetRoles).toEqual({ [ALICE]: "viewer" });
+    expect(pod.body(`${ALICE}.acr`)).toContain(REQUESTER);
+    const before = writes(pod).length;
+    expect(await previewDecision({ id: REQUEST }, { approve: true }, options(pod))).toEqual(
+      preview,
+    );
+    expect(writes(pod)).toHaveLength(before);
+  });
+
+  it("previews every unsealed ACP state without changing its ACR or minting a key", async () => {
+    for (const state of ["no-acr", "no-key", "unverified"] as const) {
+      const pod = await acpPod();
+      const data = acr(RECORDS);
+      if (state === "unverified") {
+        set(data, ACR, MARK, "true");
+        set(data, ACR, KEY, "planted");
+      }
+      await seedRecords(pod, data);
+      if (state === "no-acr") pod.delete(ACR);
+      const before = pod.body(ACR);
+      const expected = await previewDecision({ id: REQUEST }, { approve: true }, options(pod));
+      expect(pod.body(ACR)).toBe(before);
+      expect(writes(pod)).toEqual([]);
+      pod.seed(`${RECORDS}untrusted.ttl`, "");
+      await expect(
+        previewDecision({ id: REQUEST }, { approve: true }, options(pod)),
+      ).rejects.toThrow(state === "no-key" ? "can't read" : "already has files");
+      expect(writes(pod)).toEqual([]);
+      pod.delete(`${RECORDS}untrusted.ttl`);
+      expect(
+        (await decide({ id: REQUEST }, { approve: true }, { ...options(pod), expected })).status,
+      ).toBe("approved");
+    }
+  });
+
+  it("keeps ordinary ACP key lookup read-only without an ACR and seals an existing private one", async () => {
+    const pod = await acpPod();
+    pod.seed(RECORDS, "");
+    expect(await recordsKey(RECORDS, POD, OWNER, pod.fetch)).toBeUndefined();
+    expect(writes(pod)).toEqual([]);
+    await seedRecords(pod);
+    const key = await recordsKey(RECORDS, POD, OWNER, pod.fetch);
+    expect(key).toMatch(/^[0-9a-f-]{36}$/);
+    expect(writes(pod).map(({ url }) => url)).toEqual([ACR]);
+  });
+
+  it("refuses an ACP preview whose unsealed ACR lacks a conditional-write validator", async () => {
+    const pod = await acpPod();
+    await seedRecords(pod);
+    const original = pod.fetch;
+    pod.fetch = async (input, init) => {
+      const response = await original(input, init);
+      if (String(input) !== ACR || init?.method === "HEAD") return response;
+      const headers = new Headers(response.headers);
+      headers.delete("etag");
+      return new Response(response.body, { status: response.status, headers });
+    };
+    await expect(previewDecision({ id: REQUEST }, { approve: true }, options(pod))).rejects.toThrow(
+      "strong ETag is required",
+    );
+    expect(writes(pod)).toEqual([]);
   });
 
   it("requires unconditional owner Read, Write and Control on both scopes", async () => {
@@ -528,12 +694,14 @@ describe("ACP graph boundaries and discovery races", () => {
         );
       },
     ];
-    for (const mutate of mutations) {
+    for (const [index, mutate] of mutations.entries()) {
       const pod = await acpPod();
       const dataset = acr(RECORDS);
       mutate(dataset);
       await seedRecords(pod, dataset);
-      await expect(decide({ id: REQUEST }, { approve: true }, options(pod))).rejects.toThrow();
+      await expect(decide({ id: REQUEST }, { approve: true }, options(pod))).rejects.toThrow(
+        index < 4 ? UnsupportedAccessModelError : "folder is shared",
+      );
       expect(writes(pod)).toEqual([]);
     }
     // Target policy shapes refused by the roles mapper use the typed ACP error.

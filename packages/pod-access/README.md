@@ -596,18 +596,21 @@ are automatic. Native moves retain the existing storage backend path unchanged.
 ### Solid access requests
 
 ```ts
-import { listRequests, decide, accessModel } from "@jeswr/pod-access/requests-solid";
+import { listRequests, previewDecision, decide, accessModel } from "@jeswr/pod-access/requests-solid";
 
 const options = { fetch: authenticatedFetch, webId, storage };
 const requests = await listRequests(options);
 const request = requests.find((entry) => entry.status === "pending");
 if (request) {
-  const result = await decide(request, {
+  const decision = {
     approve: true,
-    role: "viewer",
+    role: "viewer" as const,
     dataTypes: request.dataTypes,
     expiresAt: new Date("2027-01-01T00:00:00Z"),
-  }, options);
+  };
+  const preview = await previewDecision(request, decision, options);
+  // Show preview.targets (url, dataTypes, role, modes) and preview.model for consent.
+  const result = await decide(request, decision, { ...options, expected: preview });
   // result.status, grantUrl, receiptUrl, notified, expiryEnforced, choices
 }
 // Deny: await decide(request, { approve: false }, options).
@@ -663,16 +666,36 @@ retried, and a lost race against another approver that finished reports the appr
 the re-read winner's status. Explicitly retrying resumes the pinned decision without resolving
 again or rolling back access documents. A retry may omit `dataTypes` to keep the pinned subset.
 It must repeat the recorded `role` and `expiresAt`, including their absence: adding or omitting
-either is a mismatch. Different choices fail with an error saying an earlier approval is still
+either is a mismatch. Legacy records that stored only `chosen.viewer` infer the applied role
+from their pinned modes; repeat that role to resume them. Different choices fail with an error saying an earlier approval is still
 finishing, rather than silently granting something other than what the owner just chose.
 Completed decisions are idempotent; reversing
 approval/denial is rejected. Denial receipt writes can also be retried. Requester-supplied grant/receipt
 references never select write locations.
 
-Approval results include `choices: { dataTypes, role, expiresAt? }`: the types actually granted,
-the highest applied role (individual targets can have narrower roles), and the recorded expiry as
-a `Date`. Completed-decision replays report these recorded values even if the caller supplies
+Approval results include `choices: { dataTypes, role, targetRoles, expiresAt? }`: the types actually granted,
+the strongest applied role, the exact role per target URL in `targetRoles`, and the recorded expiry as
+a `Date`. Mixed Viewer/Editor approvals therefore retain both roles explicitly. Completed-decision replays report these recorded values even if the caller supplies
 different choices. Denials omit `choices`.
+
+`previewDecision(entry, decision, options): Promise<DecisionPreview>` runs the same resolution,
+recovery, records-privacy and grant preflight as `decide`, using only GET/HEAD. It never creates
+or seals a records folder, mints a key, updates the request, grants access or sends notifications.
+Read/preflight refusals are thrown unchanged. `DecisionPreview` is JSON-serialisable and includes
+`requestId`, `webId`, `storage`, `requester`, `approve`, `model`, `dataTypes`, `targets`, and optional
+ISO `expiresAt` and `purpose`. Every `DecisionTarget` in `targets` has `url`, `role`, `modes` and
+its source `dataTypes`. Several classes can resolve to one URL; that target gets their combined
+role. Only legacy pinned records omit target `dataTypes`, because they never saved that provenance;
+they are not re-resolved against today's Type Index. Denials have empty targets and data types.
+
+Pass the displayed preview as `options.expected` to `decide`. The shared path checks the resolved
+target set, roles, modes, source classes, model, recipient and receipt metadata before any writes.
+A changed container listing or registration refuses with exported `DecisionPreviewConflictError`;
+show a fresh preview and obtain consent again. The comparison also applies to a concurrent winning
+pin and to resumed/completed decisions; recovery previews show the pinned grants. JSON round trips
+and set ordering are supported. Exported types are `DecisionPreview`, `DecisionTarget`,
+`RequestDecision`, `DecideOptions` and `DecisionResult`. A preview does not lock the server: later
+transport failures, conditional-write conflicts and concurrent policy edits can still refuse a write.
 
 **WAC/ACP roles do not enforce expiry.** An explicit decision `expiresAt` is receipt metadata, persisted in
 the recovery snapshot. It does not expire or automatically revoke WAC/ACP access; results always report
@@ -755,12 +778,22 @@ ACRs. ESS `acp:*` modes and `access`/`memberAccess` management forms are also un
 
 For ACP records, verification reads raw ACRs through the roles layer's bounded discovery, without
 flattening policies into roles. Every reachable control, policy and matcher must be defined inside
-that ACR; unknown structure and predicates fail closed. Allow policies must restrict every possible
+that ACR; unknown structure and predicates fail closed. Applicable allow policies must restrict every possible
 recipient to the owner; owner-only `anyOf` and additional `allOf` client/issuer constraints are safe.
 Public/authenticated/other agents are refused, including readers of the ACR itself. Deny policies
 are retained, and denials that could remove owner access refuse sealing. Unconditional owner Read,
-Write and Control must cover both folder and members. Ancestor ACRs are checked too because ACP
-inheritance is additive: an own private ACR cannot cancel inherited public access.
+Write and Control must cover both folder and members. The folder's own `accessControl` and
+`memberAccessControl`, and any controls governing its ACR, are privacy-checked. Ancestors contribute
+only `memberAccessControl`; public Read of an ancestor's own listing via `accessControl` does not
+share the records folder ([ACP resolution](https://solidproject.org/TR/acp#resolved-access-control)).
+
+ACP inheritance is additive, so the proof walks every ancestor through the **origin root**, including
+ancestors above a path-based `storage` root. Every ancestor must advertise readable access rules;
+401/403 or a missing access link refuses because the server's parent access rules cannot be checked.
+The owner must be able to read every ancestor's rules. This holds for single-pod servers and
+subdomain pods (`storage` equals the origin root), but not necessarily for path-based multi-pod
+servers. An own private ACR cannot cancel inherited public access. Shared roles discovery keeps its
+existing default of skipping ancestors without access links; strict discovery is specific to this proof.
 
 A missing own ACR follows the WAC sealing protocol: check emptiness, create an owner-only ACR
 with the unverified mark using `If-None-Match: *`, then re-read privacy and emptiness before minting

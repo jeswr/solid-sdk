@@ -5,7 +5,7 @@ import { ACP, RDF } from "../rdf.js";
 import { type AccessDocument, isMixedModel, readAccessDocuments } from "../roles/http.js";
 import { appendAcp, properties, roots } from "../roles/rdf.js";
 import { UnsupportedAccessModelError } from "./errors.js";
-import { put } from "./http.js";
+import { put, requireStrongEtag } from "./http.js";
 import { set, turtle, values } from "./rdf.js";
 import { ACCM, ACL } from "./vocab.js";
 
@@ -18,7 +18,7 @@ function privateShape(condition: boolean): asserts condition {
 }
 
 /** A closed CSS graph proof, separate from the roles layer's unconditional role projection. */
-function verify(document: AccessDocument, owner: string) {
+function verify(document: AccessDocument, owner: string, container: string) {
   const { url, resource } = document;
   const dataset: DatasetCore = document.dataset;
   const visited = new Set<string>();
@@ -55,16 +55,16 @@ function verify(document: AccessDocument, owner: string) {
         !agents.length || agents.some((agent) => agent === owner || agent.startsWith(ACP)),
     };
   }
-  function policy(term: Term) {
+  function policy(term: Term, relevant: boolean) {
     const p = node(term, ["allow", "deny", "allOf", "anyOf", "noneOf"], "Policy");
     const allow = p.iris(`${ACP}allow`);
     const deny = p.iris(`${ACP}deny`);
     for (const mode of [...allow, ...deny])
       if (!CSS_MODES.includes(mode)) throw new UnsupportedAccessModelError("acp");
-    const all = p.nodes(`${ACP}allOf`).map((m) => matcher(m as Term, allow.length > 0));
-    const any = p.nodes(`${ACP}anyOf`).map((m) => matcher(m as Term, allow.length > 0));
+    const all = p.nodes(`${ACP}allOf`).map((m) => matcher(m as Term, relevant && allow.length > 0));
+    const any = p.nodes(`${ACP}anyOf`).map((m) => matcher(m as Term, relevant && allow.length > 0));
     const none = p.nodes(`${ACP}noneOf`).map((m) => matcher(m as Term, false));
-    if (allow.length)
+    if (relevant && allow.length)
       privateShape(all.some((m) => m.private) || (any.length > 0 && any.every((m) => m.private)));
     const full =
       (all.length > 0 || any.length > 0) &&
@@ -105,7 +105,13 @@ function verify(document: AccessDocument, owner: string) {
         const policies = c.nodes(`${ACP}apply`);
         privateShape(policies.length > 0);
         for (const p of policies) {
-          const modes = policy(p as Term);
+          // ACP §6.1 and CSS resolve direct accessControl only for that resource;
+          // descendants collect memberAccessControl from every ancestor. Public Read
+          // on an ancestor's listing does not share this folder or reveal its ACR key.
+          // Still validate the closed graph, but privacy-check only applicable scopes.
+          const relevant = resource === container || name === "memberAccessControl";
+          const modes = policy(p as Term, relevant);
+          if (!relevant) continue;
           if (targets[0] === resource) {
             for (const mode of modes.allow) allowed.add(mode);
             for (const mode of modes.deny) denied.add(mode);
@@ -139,23 +145,29 @@ export async function acpRecords(
     notPrivate: string;
     missingKey: string;
     peek?: boolean;
+    readOnly?: boolean;
+    /** A not-yet-created folder: check its existing parent chain only. */
+    absent?: boolean;
   },
 ): Promise<string | undefined> {
-  const { unverified, recordsKey, assertEmpty, notPrivate, missingKey, peek } = settings;
+  const { unverified, recordsKey, assertEmpty, notPrivate, missingKey, peek, readOnly, absent } =
+    settings;
   for (let attempt = 0; attempt < 3; attempt++) {
-    const snapshot = await readAccessDocuments(container, { fetch: fetchFn, root: storage }).catch(
-      (error: unknown) => {
-        if (isMixedModel(error)) throw new UnsupportedAccessModelError("unknown");
-        throw error;
-      },
-    );
+    const snapshot = await readAccessDocuments(absent ? new URL("..", container).href : container, {
+      fetch: fetchFn,
+      root: `${new URL(storage).origin}/`,
+      requireAncestorAccess: true,
+    }).catch((error: unknown) => {
+      if (isMixedModel(error)) throw new UnsupportedAccessModelError("unknown");
+      throw error;
+    });
     if (snapshot.model !== "acp") throw new UnsupportedAccessModelError("unknown");
-    if (snapshot.ownUrl !== url) throw new Error("The advertised ACL is ambiguous");
+    if (!absent && snapshot.ownUrl !== url) throw new Error("The advertised ACL is ambiguous");
     const own = snapshot.documents.find((document) => document.resource === container);
     if (!own && peek) return undefined;
     const checked = snapshot.documents.map((document) => ({
       document,
-      proof: verify(document, owner),
+      proof: verify(document, owner, container),
     }));
     const inheritedDenials = new Set(
       checked
@@ -176,7 +188,8 @@ export async function acpRecords(
     )
       throw new Error(FULL);
     if (!own) {
-      await assertEmpty(notPrivate);
+      if (!absent) await assertEmpty(notPrivate);
+      if (readOnly) return undefined;
       const dataset = new Store();
       appendAcp(
         dataset,
@@ -194,6 +207,8 @@ export async function acpRecords(
     const pending = values(own.dataset, url, unverified).length > 0;
     if (!pending && key !== undefined) return key;
     await assertEmpty(pending ? notPrivate : missingKey);
+    requireStrongEtag(own.etag);
+    if (readOnly) return undefined;
     const sealed = crypto.randomUUID();
     set(own.dataset, url, unverified, undefined);
     set(own.dataset, url, recordsKey, sealed);

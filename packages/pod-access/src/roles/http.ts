@@ -161,17 +161,22 @@ export async function detectModel(
   const { model, ownUrl } = await discover(resource, options, true);
   return { model: model ?? "unknown", ownUrl };
 }
-/** Read ACRs through bounded discovery without projecting conditional/deny policies into roles. */
+/**
+ * Read ACRs without projecting conditional/deny policies into roles. Privacy proofs opt into
+ * requireAncestorAccess: every walked resource must advertise readable access rules.
+ */
 export async function readAccessDocuments(
   resource: string,
-  options: Pick<RolesOptions, "fetch" | "root">,
+  options: Pick<RolesOptions, "fetch" | "root"> & { requireAncestorAccess?: boolean },
 ) {
   const snapshot = await discover(resource, options, true);
   return { model: snapshot.model ?? "unknown", ownUrl: snapshot.ownUrl, documents: snapshot.raw };
 }
 async function discover(
   resource: string,
-  options: Pick<RolesOptions, "fetch" | "root" | "implementation">,
+  options: Pick<RolesOptions, "fetch" | "root" | "implementation"> & {
+    requireAncestorAccess?: boolean;
+  },
   detecting: boolean,
 ): Promise<
   Omit<Snapshot, "model"> & { model: Snapshot["model"] | undefined; raw: AccessDocument[] }
@@ -190,6 +195,14 @@ async function discover(
     if (depth === 64)
       throw roleError("invalid-response", resource, "Ancestor walk exceeds 64 documents");
     const head = await request(current, options, { method: "HEAD" });
+    const strictAncestor = options.requireAncestorAccess;
+    const parentRefusal = () =>
+      roleError(
+        "invalid-response",
+        current,
+        `The server's parent access rules can't be checked at ${current}`,
+      );
+    if (strictAncestor && !head.ok) throw parentRefusal();
     requireOk(head, current);
     if (current === resource) resourceEtag = head.headers.get("etag");
     const endpoints = [
@@ -201,6 +214,7 @@ async function discover(
     if (endpoints.length > 1)
       throw roleError("invalid-response", current, "Multiple access endpoints");
     const endpoint = endpoints[0];
+    if (strictAncestor && endpoint === undefined) throw parentRefusal();
     if (current === resource && endpoint === undefined)
       throw roleError("unsupported", resource, "Resource advertises no access document");
     if (endpoint !== undefined) {
@@ -209,6 +223,7 @@ async function discover(
         headers: { accept: "text/turtle, application/ld+json;q=0.9" },
       });
       const exists = response.status !== 404;
+      if (strictAncestor && exists && !response.ok) throw parentRefusal();
       if (exists) {
         requireOk(response, endpoint);
         if (response.status !== 200)

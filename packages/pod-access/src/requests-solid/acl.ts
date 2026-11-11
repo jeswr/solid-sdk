@@ -15,7 +15,7 @@ import {
 } from "../roles/http.js";
 import { acpRecords } from "./acp-records.js";
 import { UnsupportedAccessModelError } from "./errors.js";
-import { put, read, scoped, transport } from "./http.js";
+import { put, read, requireStrongEtag, scoped, transport } from "./http.js";
 import type { RequestMode } from "./inbox.js";
 import { set, turtle, values } from "./rdf.js";
 import { ACCM, ACL, LDP } from "./vocab.js";
@@ -237,25 +237,44 @@ export async function ensureOwnerOnlyContainer(
   fetchFn: typeof fetch,
   expected?: "wac" | "acp",
 ): Promise<string> {
+  return (await ownerOnlyContainer(container, storage, owner, fetchFn, expected, false)) as string;
+}
+
+/** The same privacy/sealing checks, optionally stopping before every write. */
+async function ownerOnlyContainer(
+  container: string,
+  storage: string,
+  owner: string,
+  fetchFn: typeof fetch,
+  expected: "wac" | "acp" | undefined,
+  readOnly: boolean,
+): Promise<string | undefined> {
   scoped(storage, container);
   const head = await fetchFn(container, { method: "HEAD" });
+  const settings = {
+    unverified: UNVERIFIED,
+    recordsKey: RECORDS_KEY,
+    assertEmpty: (refusal: string) => assertEmpty(container, url, fetchFn, refusal),
+    notPrivate: NOT_PRIVATE,
+    missingKey: MISSING_KEY,
+    readOnly,
+  };
   if (head.status === 404) {
-    await accessDocument(storage, storage, fetchFn, expected);
+    const parent = await accessDocument(storage, storage, fetchFn, expected);
+    if (readOnly) {
+      return parent.model === "acp"
+        ? acpRecords(container, storage, owner, fetchFn, parent.url, { ...settings, absent: true })
+        : undefined;
+    }
     await put(container, "", fetchFn, null, true);
   } else if (!head.ok) throw new Error(`Records folder check failed (${head.status})`);
   const { url, model } = await accessDocument(container, storage, fetchFn, expected);
-  if (model === "acp")
-    return (await acpRecords(container, storage, owner, fetchFn, url, {
-      unverified: UNVERIFIED,
-      recordsKey: RECORDS_KEY,
-      assertEmpty: (refusal) => assertEmpty(container, url, fetchFn, refusal),
-      notPrivate: NOT_PRIVATE,
-      missingKey: MISSING_KEY,
-    })) as string;
+  if (model === "acp") return acpRecords(container, storage, owner, fetchFn, url, settings);
   for (let attempt = 0; attempt < 3; attempt++) {
     const existing = await read(url, fetchFn);
     if (!existing) {
       await assertEmpty(container, url, fetchFn, NOT_PRIVATE);
+      if (readOnly) return undefined;
       // Created or lost a create race: either way, re-read and verify on the next pass.
       await put(url, await ownerOnlyAcl(url, container, owner), fetchFn, null, true);
       continue;
@@ -293,6 +312,9 @@ export async function ensureOwnerOnlyContainer(
     // folder with no key lost it or was sealed by older code: its records can no longer be found,
     // so refuse rather than silently orphan them.
     await assertEmpty(container, url, fetchFn, unverified ? NOT_PRIVATE : MISSING_KEY);
+    requireStrongEtag(existing.etag);
+    await turtle(existing.dataset);
+    if (readOnly) return undefined;
     const sealed = crypto.randomUUID();
     set(existing.dataset, url, UNVERIFIED, undefined);
     set(existing.dataset, url, RECORDS_KEY, sealed);
@@ -312,7 +334,9 @@ export async function recordsKey(
   owner: string,
   fetchFn: typeof fetch,
   expected?: "wac" | "acp",
+  readOnly = false,
 ): Promise<string | undefined> {
+  if (readOnly) return ownerOnlyContainer(container, storage, owner, fetchFn, expected, true);
   scoped(storage, container);
   const head = await fetchFn(container, { method: "HEAD" });
   if (head.status === 404) return undefined;

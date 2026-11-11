@@ -790,6 +790,27 @@ describe("recorded decision choices", () => {
     }
   });
 
+  it("infers the applied role when resuming legacy records with only chosen.viewer", async () => {
+    for (const role of ["editor", "viewer"] as const) {
+      const pod = buildPod();
+      pod.seed(ID, readWrite());
+      await pinOnly(pod, { approve: true, role });
+      const url = await decisionUrl(pod, { asked: READ_WRITE });
+      const { snapshot } = await record(pod, url);
+      delete snapshot.chosen.role;
+      delete snapshot.targetDataTypes;
+      // Legacy default Viewer approvals could have viewer=false: it meant no narrowing.
+      snapshot.chosen.viewer = false;
+      pod.seed(url, await recordTurtle(url, { outcome: "approving", snapshot }));
+      expect((await decide({ id: ID }, { approve: true, role }, opts(pod))).status).toBe(
+        "approved",
+      );
+      expect(await modesOf(pod, `${ALICE}.acl`)).toEqual(
+        role === "editor" ? [ACL.Append, ACL.Read, ACL.Write] : [ACL.Read],
+      );
+    }
+  });
+
   it("returns applied types, role and expiry from the record on every replay", async () => {
     const pod = buildPod();
     pod.seed(ID, readWrite());
@@ -797,7 +818,12 @@ describe("recorded decision choices", () => {
     const decision = { approve: true, role: "viewer" as const, expiresAt };
     await pinOnly(pod, decision);
     const applied = await decide({ id: ID }, decision, opts(pod));
-    expect(applied.choices).toEqual({ dataTypes: [CONTACTS_CLASS], role: "viewer", expiresAt });
+    expect(applied.choices).toEqual({
+      dataTypes: [CONTACTS_CLASS],
+      role: "viewer",
+      targetRoles: { [ALICE]: "viewer", [CAROL]: "viewer" },
+      expiresAt,
+    });
     const replay = await decide(
       { id: ID },
       { approve: true, role: "editor", expiresAt: new Date("2029-01-01Z") },
