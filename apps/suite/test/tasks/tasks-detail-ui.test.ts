@@ -480,6 +480,7 @@ describe("detail edits", () => {
       );
     // Without a due date there is nothing to save, so nothing is offered.
     expect(addButton()?.disabled).toBe(true);
+    expect(addButton()?.getAttribute("data-variant")).toBe("outline");
     await act(() =>
       cache.updateTask(parent, (task) => {
         task.dueDate = new Date("2026-11-10T17:00:00Z");

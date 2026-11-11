@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
 "use client";
 /**
@@ -11,6 +12,7 @@ import { useCallback } from "react";
 import type { StoredMeal, StoredSymptom } from "../cache/diary-store";
 import { type NewMealInput, type NewSymptomInput, cloneForRelog, newMealRecord, newSymptomRecord } from "../diary/log";
 import { syncMeal, syncSymptom } from "../diary/sync";
+import { podErrorMessage } from "../pod/errors";
 import { useSession } from "./context";
 
 /** A record written optimistically, with a promise that settles when it syncs. */
@@ -28,12 +30,12 @@ export class NotSignedInError extends Error {
 }
 
 export function useDiaryActions() {
-  const { store, storageRoot, webId, authedFetch } = useSession();
+  const { store, storageRoot, webId, storage } = useSession();
 
   const requireCtx = useCallback(() => {
-    if (!store || !storageRoot || !webId) throw new NotSignedInError();
-    return { store, storageRoot, webId, authedFetch };
-  }, [store, storageRoot, webId, authedFetch]);
+    if (!store || !storageRoot || !webId || !storage) throw new NotSignedInError();
+    return { store, storageRoot, webId, storage };
+  }, [store, storageRoot, webId, storage]);
 
   const logMeal = useCallback(
     async (input: Omit<NewMealInput, "storageRoot">): Promise<LogResult<StoredMeal>> => {
@@ -42,10 +44,10 @@ export function useDiaryActions() {
       await ctx.store.putMeal(record);
       const syncing = (async () => {
         try {
-          await syncMeal({ authedFetch: ctx.authedFetch, webId: ctx.webId, storageRoot: ctx.storageRoot }, record);
+          await syncMeal({ storage: ctx.storage, webId: ctx.webId, storageRoot: ctx.storageRoot }, record);
           await ctx.store.markMealSync(record.ulid, "synced");
         } catch (err) {
-          await ctx.store.markMealSync(record.ulid, "error", (err as Error).message);
+          await ctx.store.markMealSync(record.ulid, "error", podErrorMessage(err));
           throw err;
         }
       })();
@@ -61,10 +63,10 @@ export function useDiaryActions() {
       await ctx.store.putMeal(record);
       const syncing = (async () => {
         try {
-          await syncMeal({ authedFetch: ctx.authedFetch, webId: ctx.webId, storageRoot: ctx.storageRoot }, record);
+          await syncMeal({ storage: ctx.storage, webId: ctx.webId, storageRoot: ctx.storageRoot }, record);
           await ctx.store.markMealSync(record.ulid, "synced");
         } catch (err) {
-          await ctx.store.markMealSync(record.ulid, "error", (err as Error).message);
+          await ctx.store.markMealSync(record.ulid, "error", podErrorMessage(err));
           throw err;
         }
       })();
@@ -80,10 +82,10 @@ export function useDiaryActions() {
       await ctx.store.putSymptom(record);
       const syncing = (async () => {
         try {
-          await syncSymptom({ authedFetch: ctx.authedFetch, webId: ctx.webId, storageRoot: ctx.storageRoot }, record);
+          await syncSymptom({ storage: ctx.storage, webId: ctx.webId, storageRoot: ctx.storageRoot }, record);
           await ctx.store.markSymptomSync(record.ulid, "synced");
         } catch (err) {
-          await ctx.store.markSymptomSync(record.ulid, "error", (err as Error).message);
+          await ctx.store.markSymptomSync(record.ulid, "error", podErrorMessage(err));
           throw err;
         }
       })();

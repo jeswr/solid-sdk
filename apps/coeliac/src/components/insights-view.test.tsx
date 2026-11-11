@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
 /**
  * The Insights view acceptance (DESIGN §4): it runs the pure engine over the cached
@@ -193,7 +194,6 @@ describe("InsightsView — safety-context load gate (roborev finding, health-dat
       webId,
       storageRoot: "https://alice.example/",
       store,
-      authedFetch: (...a) => globalThis.fetch(...a),
       publicFetch: (...a) => globalThis.fetch(...a),
     };
 
