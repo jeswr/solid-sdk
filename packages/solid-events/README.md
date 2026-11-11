@@ -1,3 +1,4 @@
+<!-- AUTHORED-BY Codex GPT-6 -->
 <!-- AUTHORED-BY Codex (GPT-6.1 Sol) -->
 # @jeswr/solid-events
 
@@ -65,8 +66,10 @@ detail and invite page, with lazy loading and no referrer.
 
 An Append grant authenticates access to the container, **not the WebID in a submitted reply**.
 The default WAC flow cannot prove authorship, so WebID and anonymous claims appear under
-**Unverified replies**, separately from the verified tally. Each unverified resource is retained;
-a claimed WebID or copied guest hash cannot replace any verified reply or another claim.
+**Unverified replies**, separately from the verified tally. Unverified revisions are grouped by claimed WebID, or by guest receipt hash when there is no WebID.
+The latest claim is counted only in a separately labelled unverified tally; superseded claims appear
+as earlier replies. A claimed WebID or copied guest hash cannot replace any verified reply.
+Anyone can copy these public correlation keys, so this grouping does not establish identity.
 A successful authenticated POST alone does not prove the submitted agent owns its WebID.
 
 `readReplies` accepts an optional `authenticatedCreator(url, response)` deployment adapter. It
@@ -77,28 +80,37 @@ field only after equivalent verification. The Events UI supplies no such adapter
 makes no verified identity claims. Own-pod link verification is not implemented.
 
 Verified replies use server `Last-Modified` when available, otherwise the submitted `repliedAt`.
-The server must keep that metadata outside the appender's control. Claims or server times more
-than five minutes ahead of the supplied/current clock are invalid. Latest verified reply per
+The server must keep that metadata outside the appender's control. When server time exists, the claimed time is ignored. Otherwise the claimed time is used.
+The effective time must be no more than five minutes ahead of the supplied/current clock. Latest verified reply per
 agent wins, with lexical URL ties; the effective server time also flags deadline lateness for both verified
 replies and unverified claims.
-Additional guests are whole numbers from 0 to 20; only verified Yes replies count them.
+Additional guests are whole numbers from 0 to 20 and count only for Yes replies in each tally.
+Remaining capacity estimates use verified plus unverified going (including additional guests);
+the UI explicitly labels this advisory estimate and the separate trust levels.
 
 The browser retains the random receipt key locally, scoped by account and event. `appendRsvp`
 serialises only its SHA-256 hash, including on publicly readable guest lists. The hash is a
-correlation hint, **not** a bearer credential or identity proof, and is never used for replacement.
-Clearing browser storage loses the local receipt. Older unverified claims remain visible when a
-guest changes their reply; they do not affect the verified tally. Historical reply files may
+correlation hint, **not** a bearer credential or identity proof. It groups only unverified revisions.
+Clearing browser storage loses the local receipt. Earlier unverified replies are collapsed and
+do not affect either current tally. Historical reply files may
 contain plaintext keys; readers never use those keys to authenticate anyone. Capacity is advisory.
 
 Replies are created by POST to `rsvps/` with a Slug hint and the server's scoped Location is used
 as the receipt URL. The subject is generated independently of the final document name. No guest
-child Write or inherited Append is needed. `readReplies` returns `{ replies, invalid }`: individual
+child Write or inherited Append is needed. `readReplies` returns `{ replies, invalid, total, nextOffset, listingLimited }`: individual
 malformed, unreadable, unrelated or over-64-KiB resources increment `invalid`; container denial
 still rejects. The reader reuses fetch-rdf's streaming byte cap (storage-client's `boundedText`
-is internal), refuses redirects, and reads all members of Solid's complete container listing,
-including lists beyond 500 entries. The organiser view also uses `publicEventFetch` outside demo.
+is internal), refuses redirects, and reads at most 200 eligible files per call, with at most
+six requests active, in listing order. Pass `offset: nextOffset` to read another page without
+re-fetching earlier files. The UI shows loaded/total files and a Load more control; counts apply
+only to loaded replies. Listings are capped at 2 MiB. Parser/transport safety-limit refusals return
+`listingLimited: true`, `total: null` and no replies, with a notice instead of an error state.
+Access denials and ordinary listing failures still reject. The organiser view also uses `publicEventFetch` outside demo.
 Invitation folders are isolated per read, and the app displays a notice when any fails. Queued
 organiser saves continue after React unmount; failures use the shared module-level toast.
+A module-level save-settlement signal refreshes remounted controllers for the same event base.
+Cancellation preserves owner grants, revokes only non-owner Append-only rules, and refuses mixed
+Append rules or rule IDs shared with the owner before making any access changes.
 The first cut has no durable outbox and cannot guarantee writes after browser termination.
 
 ## Deferred

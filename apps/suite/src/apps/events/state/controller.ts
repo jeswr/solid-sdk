@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Codex GPT-6
 import type {
   createEventsRepository,
   EventData,
@@ -7,6 +8,9 @@ import type {
 } from "@jeswr/solid-events";
 
 type Repository = ReturnType<typeof createEventsRepository>;
+// A controller can outlive its provider while a save completes. Carry only an invalidation
+// signal across remounts; each listener re-reads through its own account's repository.
+const savesSettled = new Set<(source: EventsController) => void>();
 export interface EventsSnapshot {
   events: Invitation[];
   loading: boolean;
@@ -23,6 +27,10 @@ export class EventsController {
   private queue: Promise<unknown> = Promise.resolve();
   private active = true;
   private state: EventsSnapshot = { events: [], loading: true, error: false, saving: 0 };
+  private onSavesSettled = (source: EventsController) => {
+    if (source !== this && source.repository.base === this.repository.base && !this.edits.size)
+      void this.refresh();
+  };
   constructor(
     readonly repository: Repository,
     readonly onFailure: () => void,
@@ -77,6 +85,7 @@ export class EventsController {
           this.emit();
           if (!this.edits.size) void this.refresh();
         }
+        if (!this.edits.size) for (const listener of savesSettled) listener(this);
       });
     return url;
   }
@@ -85,9 +94,11 @@ export class EventsController {
   }
   activate() {
     this.active = true;
+    savesSettled.add(this.onSavesSettled);
   }
   dispose() {
     this.active = false;
+    savesSettled.delete(this.onSavesSettled);
     ++this.generation;
     this.listeners.clear();
   }

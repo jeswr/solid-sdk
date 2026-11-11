@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Codex GPT-6
 
 import { parseRdf } from "@jeswr/fetch-rdf";
 import { readWac } from "@jeswr/pod-access";
@@ -117,7 +118,7 @@ it("round-trips replies, changes and visible guest-list access", async () => {
   await appendRsvp(
     pod.fetch,
     event,
-    { ...first, response: RSVP_RESPONSE.maybe, repliedAt: new Date() },
+    { ...first, guestKey: "tavi", response: RSVP_RESPONSE.maybe, repliedAt: new Date() },
     "two",
   );
   const replies = await readReplies(pod.fetch, event.url);
@@ -128,7 +129,11 @@ it("round-trips replies, changes and visible guest-list access", async () => {
       maybe: 0,
       attending: 0,
       invalid: 0,
-      unverified: expect.arrayContaining([expect.objectContaining({ displayName: "Tavi Moss" })]),
+      unverifiedTally: { yes: 0, no: 0, maybe: 1, attending: 0, additionalGuests: 0 },
+      unverified: [
+        expect.objectContaining({ displayName: "Tavi Moss", response: RSVP_RESPONSE.maybe }),
+      ],
+      earlierReplies: [expect.objectContaining({ response: RSVP_RESPONSE.yes })],
     },
   );
   const container = new URL("rsvps/", event.url).href;

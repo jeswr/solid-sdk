@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Codex GPT-6
 "use client";
 import {
   EVENT_STATUS,
@@ -7,6 +8,7 @@ import {
   type InviteeData,
   publicEventFetch,
   type Reply,
+  type ReplyList,
   RSVP_RESPONSE,
   readReplies,
   summariseRsvps,
@@ -26,7 +28,7 @@ import {
   toast,
 } from "@jeswr/suite-ui";
 import { ArrowLeft, CalendarDays, Clock3, Copy, Globe2, MapPin, Users } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { PodSession } from "@/lib/session/pod-session";
 import { AppHeading } from "@/shell/app-frame";
 import { useEvents } from "../state/events-context";
@@ -64,22 +66,37 @@ export function InvitationDetail({
 }) {
   const [replies, setReplies] = useState<Reply[]>([]);
   const [invalid, setInvalid] = useState(0);
+  const [page, setPage] = useState<Pick<ReplyList, "total" | "nextOffset" | "listingLimited">>({
+    total: 0,
+    nextOffset: null,
+    listingLimited: false,
+  });
+  const readGeneration = useRef(0);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [moreError, setMoreError] = useState(false);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [attempt, setAttempt] = useState(0);
   const canRead = organiser || event.guestListVisible;
   // biome-ignore lint/correctness/useExhaustiveDependencies: attempt explicitly retries the read
   useEffect(() => {
     let live = true;
+    ++readGeneration.current;
     if (!canRead) {
       setStatus("ready");
       return;
     }
     setStatus("loading");
+    setReplies([]);
+    setInvalid(0);
+    setMoreError(false);
+    setLoadingMore(false);
+    setPage({ total: 0, nextOffset: null, listingLimited: false });
     void readReplies(fetch, event.url).then(
       (result) => {
         if (live) {
           setReplies(result.replies);
           setInvalid(result.invalid);
+          setPage(result);
           setStatus("ready");
         }
       },
@@ -89,8 +106,31 @@ export function InvitationDetail({
     );
     return () => {
       live = false;
+      ++readGeneration.current;
     };
   }, [fetch, event.url, canRead, attempt]);
+  const loadMore = () => {
+    if (page.nextOffset === null || loadingMore) return;
+    const generation = readGeneration.current;
+    setLoadingMore(true);
+    setMoreError(false);
+    void readReplies(fetch, event.url, { offset: page.nextOffset }).then(
+      (result) => {
+        if (generation !== readGeneration.current) return;
+        setReplies((rows) => [
+          ...new Map([...rows, ...result.replies].map((r) => [r.url, r])).values(),
+        ]);
+        setInvalid((count) => count + result.invalid);
+        setPage(result);
+        setLoadingMore(false);
+      },
+      () => {
+        if (generation !== readGeneration.current) return;
+        setLoadingMore(false);
+        setMoreError(true);
+      },
+    );
+  };
   const summary = summariseRsvps(replies, { ...event, url: entities.Event.subject(event.url) });
   let image: string | undefined;
   try {
@@ -253,11 +293,40 @@ export function InvitationDetail({
                 <>
                   {invalid + summary.invalid > 0 && (
                     <p role="status" className="ev-muted">
-                      {invalid + summary.invalid} replies could not be loaded or were invalid. The
-                      available replies are shown.
+                      {invalid + summary.invalid}{" "}
+                      {invalid + summary.invalid === 1
+                        ? "reply could not be loaded or was invalid"
+                        : "replies could not be loaded or were invalid"}
+                      . The available replies are shown.
                     </p>
                   )}
-                  <p className="ev-muted">Only verified replies contribute to these counts.</p>
+                  {page.listingLimited && (
+                    <p role="status" className="ev-muted">
+                      The reply listing exceeds the safety limits or could not be read safely. Some
+                      replies cannot be shown. Try again later.
+                    </p>
+                  )}
+                  {page.total !== null && page.total > 200 && (
+                    <p role="status" className="ev-muted">
+                      Showing {Math.min(page.nextOffset ?? page.total, page.total)} of {page.total}{" "}
+                      reply files. Counts cover the replies loaded so far.
+                    </p>
+                  )}
+                  {page.nextOffset !== null && (
+                    <Button variant="outline" disabled={loadingMore} onClick={loadMore}>
+                      {loadingMore
+                        ? "Loading more replies…"
+                        : moreError
+                          ? "Retry loading more replies"
+                          : "Load more replies"}
+                    </Button>
+                  )}
+                  {moreError && (
+                    <p role="status">
+                      Couldn't load more replies. The available replies are shown.
+                    </p>
+                  )}
+                  <p className="ev-muted">Verified replies</p>
                   <div className="ev-tally">
                     <div>
                       <strong>{summary.attending}</strong>
@@ -272,18 +341,25 @@ export function InvitationDetail({
                       <span>can't go</span>
                     </div>
                   </div>
+                  <p>
+                    Replies (not verified): {summary.unverifiedTally.attending} going,{" "}
+                    {summary.unverifiedTally.maybe} maybe, {summary.unverifiedTally.no} can't go.
+                    Going includes additional guests.
+                  </p>
                   {summary.remaining !== null && (
                     <p className="ev-muted">
-                      {summary.remaining} places remaining
+                      {summary.remaining} places remaining (verified + unverified going)
                       {summary.overCapacity > 0 ? ` · ${summary.overCapacity} over capacity` : ""}.
                       Capacity is a guide; places are not reserved.
                     </p>
                   )}
                   {!summary.latest.length && !summary.unverified.length ? (
-                    <EmptyState
-                      title="The first yes is on its way"
-                      body="Replies will appear here as your guests respond."
-                    />
+                    page.listingLimited ? null : (
+                      <EmptyState
+                        title="The first yes is on its way"
+                        body="Replies will appear here as your guests respond."
+                      />
+                    )
                   ) : (
                     <>
                       {summary.latest.length > 0 && (
@@ -294,10 +370,17 @@ export function InvitationDetail({
                           <h4 id="ev-unverified-title">Unverified replies</h4>
                           <p className="ev-muted">
                             These replies claim a name or WebID. They cannot replace a verified
-                            reply and are excluded from the counts above.
+                            reply. Revisions are grouped by the claimed WebID or guest receipt,
+                            which does not prove identity.
                           </p>
                           <GuestReplies replies={summary.unverified} late={summary.late} />
                         </section>
+                      )}
+                      {summary.earlierReplies.length > 0 && (
+                        <details>
+                          <summary>Earlier replies ({summary.earlierReplies.length})</summary>
+                          <GuestReplies replies={summary.earlierReplies} late={summary.late} />
+                        </details>
                       )}
                     </>
                   )}

@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Codex GPT-6
 import { fetchRdf, RdfFetchError } from "@jeswr/fetch-rdf";
 import { assertWithinPodScope } from "@jeswr/guarded-fetch";
 import { createAccessClient, type EffectivePolicy, readWac, writeWac } from "@jeswr/pod-access";
@@ -88,11 +89,23 @@ export async function publishAccess(
 }
 
 /** Revoke each Append rule by id, retaining separate owner and guest Read rules. */
-export async function closeReplies(storage: StorageClient, eventUrl: string): Promise<void> {
+export async function closeReplies(
+  storage: StorageClient,
+  eventUrl: string,
+  owner: string,
+): Promise<void> {
   const access = createAccessClient({ storage });
   if (access.model() !== "wac") throw new Error("WAC sharing is required");
   const replies = new URL("rsvps/", eventUrl).href;
-  const grants = (await access.grants(replies)).filter((grant) => grant.modes.includes("append"));
+  const rules = await access.grants(replies);
+  const ownerRules = new Set(
+    rules.filter((grant) => grant.agent === owner).map((grant) => grant.id),
+  );
+  const grants = rules.filter((grant) => grant.agent !== owner && grant.modes.includes("append"));
+  if (grants.some((grant) => grant.modes.length !== 1))
+    throw new Error("Cannot safely revoke mixed reply grants");
+  if (grants.some((grant) => grant.id && ownerRules.has(grant.id)))
+    throw new Error("Cannot safely revoke reply grants shared with the owner");
   if (grants.some((grant) => !grant.id)) throw new Error("Cannot safely identify reply grants");
   for (const grant of grants) await access.revoke(replies, grant.id as string);
 }

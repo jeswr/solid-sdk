@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Codex GPT-6
 import { parseRdf } from "@jeswr/fetch-rdf";
 import { createAccessClient, type EffectivePolicy, readWac } from "@jeswr/pod-access";
 import { createMemoryStorage } from "@jeswr/storage-client/memory";
@@ -249,14 +250,41 @@ it("revokes Append by rule id and refuses unidentifiable grants before touching 
   access.grants.mockResolvedValue([
     { id: `${acl}#append`, agent: { public: true }, modes: ["append"] },
     { id: `${acl}#read`, agent: { public: true }, modes: ["read"] },
-    { id: `${acl}#owner`, agent: owner, modes: ["write", "control"] },
+    { id: `${acl}#owner`, agent: owner, modes: ["read", "write", "control", "append"] },
+    { agent: owner, modes: ["append"] },
+    { id: `${acl}#shared-owner`, agent: owner, modes: ["append", "write"] },
   ]);
-  await closeReplies(storage, `${target}index.ttl`);
+  await closeReplies(storage, `${target}index.ttl`, owner);
   expect(access.revoke.mock.calls).toEqual([[`${target}rsvps/`, `${acl}#append`]]);
   access.revoke.mockClear();
   access.grants.mockResolvedValue([{ agent: { public: true }, modes: ["append"] }]);
-  await expect(closeReplies(storage, target)).rejects.toThrow("identify");
+  await expect(closeReplies(storage, target, owner)).rejects.toThrow("identify");
   expect(access.revoke).not.toHaveBeenCalled();
   access.model.mockReturnValue("acp");
-  await expect(closeReplies(storage, target)).rejects.toThrow("WAC");
+  await expect(closeReplies(storage, target, owner)).rejects.toThrow("WAC");
+});
+it("refuses mixed non-owner Append rules before revoking any grant", async () => {
+  const { storage } = await fixture();
+  const access = accessFixture();
+  for (const agent of [{ public: true }, "https://guest.example/me"]) {
+    access.grants.mockResolvedValue([
+      { id: `${acl}#append`, agent: { public: true }, modes: ["append"] },
+      { id: `${acl}#mixed`, agent, modes: ["append", "read"] },
+    ]);
+    await expect(closeReplies(storage, target, owner)).rejects.toThrow("mixed");
+    expect(access.revoke).not.toHaveBeenCalled();
+  }
+});
+it("refuses Append rules shared with the owner before revoking any grant", async () => {
+  const { storage } = await fixture();
+  const access = accessFixture();
+  for (const modes of [["append"], ["append", "read"]]) {
+    access.grants.mockResolvedValue([
+      { id: `${acl}#append`, agent: { public: true }, modes: ["append"] },
+      { id: `${acl}#shared`, agent: owner, modes },
+      { id: `${acl}#shared`, agent: { public: true }, modes },
+    ]);
+    await expect(closeReplies(storage, target, owner)).rejects.toThrow(/mixed|shared/);
+    expect(access.revoke).not.toHaveBeenCalled();
+  }
 });

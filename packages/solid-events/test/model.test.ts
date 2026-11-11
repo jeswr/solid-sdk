@@ -1,34 +1,16 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Codex GPT-6
 import { describe, expect, it } from "vitest";
 import {
-  EVENT_STATUS,
-  type EventData,
   entities,
   eventDocumentUrl,
-  RSVP_RESPONSE,
   type RsvpData,
   validateEvent,
   validateInvitee,
   validateRsvp,
 } from "../src/index.js";
-export const event: EventData = {
-  name: "Lantern supper",
-  startDate: new Date("2027-02-01T18:00:00Z"),
-  organizer: "https://host.example/profile#me",
-  eventStatus: EVENT_STATUS.scheduled,
-  guestListVisible: false,
-  visibility: "link",
-  publication: "published",
-  created: new Date("2026-11-11T12:00:00Z"),
-  modified: new Date("2026-11-11T12:00:00Z"),
-};
-export const rsvp: RsvpData = {
-  agent: "https://guest.example/profile#me",
-  event: "https://host.example/events/1/index.ttl#it",
-  response: RSVP_RESPONSE.yes,
-  additionalGuests: 1,
-  repliedAt: new Date("2026-11-12T12:00:00Z"),
-};
+import { event, rsvp } from "./fixtures.js";
+
 describe("generated independent entities", () => {
   it("round-trips every invitation property and schema.org IRI enums", async () => {
     const data = {

@@ -1,10 +1,12 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Codex GPT-6
 import { fetchRdf, RdfFetchError } from "@jeswr/fetch-rdf";
 import {
   assertWithinPodScope,
   createGuardedFetch,
   createPodScopedFetch,
   refuseRedirects,
+  SsrfError,
 } from "@jeswr/guarded-fetch";
 import { readContainerMembers } from "@jeswr/ldp-container";
 import { createNotify, roomInvitation } from "@jeswr/pod-access/notify";
@@ -63,6 +65,8 @@ export function publicEventFetch(fetch: typeof globalThis.fetch): typeof globalT
 }
 
 export interface ReplyReadOptions {
+  /** Offset into listing order; each call reads at most 200 files. */
+  offset?: number;
   /** Trusted deployment adapter for server-authenticated creator metadata.
    * Must verify the server's contract; arbitrary headers/RDF are not identity evidence. */
   authenticatedCreator?: (url: string, response: Response) => string | undefined;
@@ -70,10 +74,13 @@ export interface ReplyReadOptions {
 export interface ReplyList {
   replies: Reply[];
   invalid: number;
+  total: number | null;
+  nextOffset: number | null;
+  listingLimited: boolean;
 }
 
 /** Keep per-file failures separate from container access denial.
- * Solid listings contain all members; process every member, including batches beyond 500.
+ * Solid listings have no ordering/offset contract: page the first members in listing order.
  * fetch-rdf's exported streaming reader supplies the byte cap (storage boundedText is internal). */
 export async function readReplies(
   fetch: typeof globalThis.fetch,
@@ -83,14 +90,29 @@ export async function readReplies(
   const document = eventDocumentUrl(eventUrl);
   const container = new URL("rsvps/", document).href;
   const transport = refuseRedirects(fetch);
-  const members = await readContainerMembers(transport, container, {
-    scope: container,
-    maxBytes: 16 * 1024 * 1024,
-  });
-  const replies: Reply[] = [];
+  const offset = options.offset ?? 0;
+  if (!Number.isSafeInteger(offset) || offset < 0) throw new TypeError("Invalid reply offset");
+  let members: Awaited<ReturnType<typeof readContainerMembers>>;
+  try {
+    members = await readContainerMembers(transport, container, {
+      scope: container,
+      maxBytes: 2 * 1024 * 1024,
+    });
+  } catch (error) {
+    if (
+      (error instanceof RdfFetchError && error.code === "PARSE_LIMIT") ||
+      error instanceof SsrfError
+    )
+      return { replies: [], invalid: 0, total: null, nextOffset: null, listingLimited: true };
+    throw error;
+  }
+  const files = (members ?? []).filter(
+    ({ url }) => !url.endsWith("/") && !url.endsWith(".acl") && !url.endsWith(".acr"),
+  );
+  const page = files.slice(offset, offset + 200);
+  const replies: (Reply | undefined)[] = new Array(page.length);
   let invalid = 0;
-  for (const { url } of members ?? []) {
-    if (url.endsWith("/") || url.endsWith(".acl") || url.endsWith(".acr")) continue;
+  async function read({ url }: { url: string }, index: number) {
     try {
       assertWithinPodScope(container, url, { allowRoot: false });
       const result = await fetchRdf(url, { fetch: transport, maxBytes: 64 * 1024 });
@@ -98,9 +120,14 @@ export async function readReplies(
       // Discover subjects only; every field and type is read by the generated parser.
       const subjects = new Set(
         [...result.dataset]
-          .filter((q) => q.subject.termType === "NamedNode")
-          .map((q) => q.subject.value)
-          .filter((subject) => subject.endsWith("#it")),
+          .filter(
+            (q) =>
+              q.subject.termType === "NamedNode" &&
+              q.predicate.value === "http://www.w3.org/1999/02/22-rdf-syntax-ns#type" &&
+              q.object.termType === "NamedNode" &&
+              q.object.value === entities.Rsvp.typeIri,
+          )
+          .map((q) => q.subject.value),
       );
       const parsed = [...subjects]
         .map((subject) => entities.Rsvp.parse(subject.slice(0, -3), result.dataset))
@@ -112,17 +139,26 @@ export async function readReplies(
       const modified = result.headers.get("last-modified");
       const receivedAt = modified ? new Date(modified) : undefined;
       const creator = options.authenticatedCreator?.(url, result.response);
-      replies.push({
+      replies[index] = {
         ...reply,
         url,
         ...(receivedAt && Number.isFinite(+receivedAt) ? { receivedAt } : {}),
         ...(creator === reply.agent && creator ? { verifiedAgent: creator } : {}),
-      });
+      };
     } catch {
       invalid++;
     }
   }
-  return { replies, invalid };
+  // Each batch finishes before another starts; preserve listing order despite response races.
+  for (let start = 0; start < page.length; start += 6)
+    await Promise.all(page.slice(start, start + 6).map((member, i) => read(member, start + i)));
+  return {
+    replies: replies.filter((reply): reply is Reply => reply !== undefined),
+    invalid,
+    total: files.length,
+    nextOffset: offset + page.length < files.length ? offset + page.length : null,
+    listingLimited: false,
+  };
 }
 
 /** Append one immutable reply; changing a reply appends a newer one. No Read/Write grant needed.
@@ -222,7 +258,7 @@ export function createEventsRepository(options: EventsRepositoryOptions) {
       const members = await readContainerMembers(fetch, base, { scope: base });
       if (!members) return [];
       const events: Invitation[] = [];
-      for (const { url: folder } of members)
+      for (const { url: folder } of members) {
         if (folder.endsWith("/")) {
           try {
             events.push(await readInvitation(fetch, new URL("index.ttl", folder).href));
@@ -230,6 +266,7 @@ export function createEventsRepository(options: EventsRepositoryOptions) {
             if (!(e instanceof RdfFetchError) || e.status !== 404) options.onInvalidInvitation?.();
           }
         }
+      }
       return events;
     },
     async create(
@@ -312,7 +349,7 @@ export function createEventsRepository(options: EventsRepositoryOptions) {
         await publishAccess(storage, existing.url, data, invitees);
       }
       if (data.eventStatus !== EVENT_STATUS.scheduled && existing.publication === "published")
-        await closeReplies(storage, existing.url);
+        await closeReplies(storage, existing.url, owner);
       await storage.write(existing.url, await entities.Event.serialize(existing.url, data), {
         contentType: "text/turtle",
         ifMatch: existing.etag,
@@ -324,12 +361,13 @@ export function createEventsRepository(options: EventsRepositoryOptions) {
       const members = await readContainerMembers(fetch, container, { scope: base });
       if (!members) return [];
       const result: InviteeData[] = [];
-      for (const { url } of members)
+      for (const { url } of members) {
         if (url.endsWith(".ttl")) {
           const read = await fetchRdf(url, { fetch });
           const guest = entities.Invitee.parse(url, read.dataset);
           if (guest?.event === entities.Event.subject(event.url)) result.push(guest);
         }
+      }
       return result;
     },
     async notify(event: Invitation, webIds: readonly string[]) {

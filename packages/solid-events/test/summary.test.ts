@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Codex GPT-6
 import { expect, it } from "vitest";
 import { type Reply, RSVP_RESPONSE, summariseRsvps } from "../src/index.js";
 
@@ -65,7 +66,7 @@ it("uses the latest agent response, deterministic ties, and only yes plus-guests
     latest: summary.latest,
   });
 });
-it("keeps anonymous claims separate even with the same name or a copied guest hash", () => {
+it("groups guest claims by receipt hash without merging names or verifying identity", () => {
   const anonymous = reply({ agent: undefined, guestKey: "one", displayName: "Alex" });
   const other = reply({
     agent: undefined,
@@ -83,8 +84,10 @@ it("keeps anonymous claims separate even with the same name or a copied guest ha
     yes: 0,
     maybe: 0,
     attending: 0,
-    remaining: 8,
-    unverified: [changed, anonymous, other],
+    remaining: 5,
+    unverified: [changed, other],
+    earlierReplies: [anonymous],
+    unverifiedTally: { yes: 1, maybe: 1, no: 0, attending: 3, additionalGuests: 2 },
   });
 });
 it("ignores older replies even when received later, invalid data and other event claims", () => {
@@ -123,7 +126,46 @@ it("never lets a claimed WebID or a copied guest hash override verified authorsh
   const copied = { ...forged, agent: undefined, displayName: "Alex", guestKey: "sha256:copied" };
   expect(
     summariseRsvps([copied, { ...copied, url: `${copied.url}2` }], event).unverified,
-  ).toHaveLength(2);
+  ).toHaveLength(1);
+});
+it("groups WebID claims by server time, retains earlier replies and estimates capacity separately", () => {
+  const old = reply({ verifiedAgent: undefined, receivedAt: new Date("2026-11-11T12:00Z") });
+  const changed = reply({
+    verifiedAgent: undefined,
+    url: `${old.url}2`,
+    response: RSVP_RESPONSE.no,
+    repliedAt: new Date("2026-11-10T12:00Z"),
+    receivedAt: new Date("2026-11-11T12:01Z"),
+  });
+  const guest = reply({
+    agent: undefined,
+    displayName: "Tavi",
+    guestKey: "sha256:tavi",
+    verifiedAgent: undefined,
+  });
+  const verified = reply({ agent: "https://verified.example/me", additionalGuests: 0 });
+  const result = summariseRsvps([old, changed, guest, verified], { ...event, capacity: 6 });
+  expect(result).toMatchObject({
+    yes: 1,
+    attending: 1,
+    remaining: 2,
+    overCapacity: 0,
+    unverifiedTally: { yes: 1, no: 1, maybe: 0, attending: 3, additionalGuests: 2 },
+    unverified: [changed, guest],
+    earlierReplies: [old],
+  });
+  expect(summariseRsvps([verified, guest, changed, old], { ...event, capacity: 2 })).toMatchObject({
+    remaining: 0,
+    overCapacity: 2,
+    unverified: result.unverified,
+  });
+});
+it("ignores a future claimed time when a valid server time exists", () => {
+  const serverReply = reply({
+    repliedAt: new Date("2099-01-01"),
+    receivedAt: new Date("2026-11-11T12:00Z"),
+  });
+  expect(summariseRsvps([serverReply], event)).toMatchObject({ yes: 1, invalid: 0 });
 });
 it("rejects future claims and orders verified replies by server time ahead of claimed time", () => {
   const agent = "https://guest.example/me";

@@ -1,9 +1,13 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Codex GPT-6
 
+import { RdfFetchError } from "@jeswr/fetch-rdf";
+import { SsrfError } from "@jeswr/guarded-fetch";
 import { readContainerMembers } from "@jeswr/ldp-container";
 import { createTypeIndex } from "@jeswr/pod-type-index";
 import { createPodClient, StorageError } from "@jeswr/storage-client";
 import { createMemoryStorage } from "@jeswr/storage-client/memory";
+import { createSolidBackend } from "@jeswr/storage-client/solid";
 import { beforeEach, expect, it, vi } from "vitest";
 import { publishAccess, sealNewResource } from "../src/access.js";
 import {
@@ -23,6 +27,7 @@ vi.mock("@jeswr/storage-client", async (original) => ({
   createPodClient: vi.fn(),
 }));
 vi.mock("@jeswr/ldp-container", () => ({ readContainerMembers: vi.fn() }));
+vi.mock("@jeswr/storage-client/solid", () => ({ createSolidBackend: vi.fn() }));
 vi.mock("@jeswr/pod-type-index", () => ({ createTypeIndex: vi.fn() }));
 vi.mock("@jeswr/pod-access/notify", () => ({
   createNotify: () => vi.fn().mockResolvedValue({ delivered: true }),
@@ -140,7 +145,7 @@ it("persists and discovers invitations, independent invitees, replies, notificat
     additionalGuests: 1,
     repliedAt: new Date(),
   });
-  expect(await readReplies(fetch, event.url)).toEqual({ replies: [first], invalid: 0 });
+  expect(await readReplies(fetch, event.url)).toMatchObject({ replies: [first], invalid: 0 });
   const changed = await repository.update(event, { ...event, name: "Updated" });
   expect(changed.name).toBe("Updated");
   await expect(repository.update(event, { ...event, name: "Stale" })).rejects.toMatchObject({
@@ -190,7 +195,7 @@ it("bounds lists, filters unrelated reply entities, and keeps read errors distin
   expect(
     await repository.invitees({ ...eventData(), url: `${ROOT}events/e/index.ttl`, etag: null }),
   ).toEqual([]);
-  expect(await readReplies(fetch, `${ROOT}events/e/index.ttl`)).toEqual({
+  expect(await readReplies(fetch, `${ROOT}events/e/index.ttl`)).toMatchObject({
     replies: [],
     invalid: 0,
   });
@@ -201,7 +206,7 @@ it("bounds lists, filters unrelated reply entities, and keeps read errors distin
   expect(
     await repository.invitees({ ...eventData(), url: `${ROOT}events/e/index.ttl`, etag: null }),
   ).toEqual([]);
-  expect(await readReplies(fetch, `${ROOT}events/e/index.ttl`)).toEqual({
+  expect(await readReplies(fetch, `${ROOT}events/e/index.ttl`)).toMatchObject({
     replies: [],
     invalid: 0,
   });
@@ -209,7 +214,7 @@ it("bounds lists, filters unrelated reply entities, and keeps read errors distin
     { url: `${ROOT}events/note.txt`, container: false },
   ]);
   expect(await repository.list()).toEqual([]);
-  expect(await readReplies(fetch, `${ROOT}events/e/index.ttl`)).toEqual({
+  expect(await readReplies(fetch, `${ROOT}events/e/index.ttl`)).toMatchObject({
     replies: [],
     invalid: 1,
   });
@@ -392,7 +397,7 @@ it("keeps good replies when individual files are malformed, inaccessible, oversi
     replies: [{ url: urls[0], receivedAt: new Date("2026-11-11T12:00:00Z") }],
   });
 });
-it("reads beyond 500 replies and skips a bad invitation folder", async () => {
+it("reads at most 200 replies per page with six concurrent requests and can load beyond 500", async () => {
   const { repository } = harness();
   const event = await repository.create(eventData(), [], "good");
   vi.mocked(readContainerMembers).mockResolvedValueOnce([
@@ -402,8 +407,14 @@ it("reads beyond 500 replies and skips a bad invitation folder", async () => {
   expect(await repository.list()).toHaveLength(1);
   const urls = Array.from({ length: 501 }, (_, i) => `${ROOT}events/good/rsvps/${i}.ttl`);
   vi.mocked(readContainerMembers).mockResolvedValue(urls.map((url) => ({ url, container: false })));
-  const fetch: typeof globalThis.fetch = async (input) =>
-    new Response(
+  let active = 0;
+  let peak = 0;
+  const fetch = vi.fn<typeof globalThis.fetch>(async (input) => {
+    active++;
+    peak = Math.max(peak, active);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    active--;
+    return new Response(
       await entities.Rsvp.serialize(String(input), {
         event: entities.Event.subject(event.url),
         agent: OWNER,
@@ -413,8 +424,53 @@ it("reads beyond 500 replies and skips a bad invitation folder", async () => {
       }),
       { headers: { "content-type": "text/turtle" } },
     );
-  expect((await readReplies(fetch, event.url)).replies).toHaveLength(501);
+  });
+  const first = await readReplies(fetch, event.url);
+  expect(first).toMatchObject({ total: 501, nextOffset: 200, listingLimited: false });
+  expect(first.replies).toHaveLength(200);
+  expect(fetch).toHaveBeenCalledTimes(200);
+  expect(peak).toBe(6);
+  const second = await readReplies(fetch, event.url, { offset: 200 });
+  const third = await readReplies(fetch, event.url, { offset: 400 });
+  expect(second.nextOffset).toBe(400);
+  expect(third.nextOffset).toBeNull();
+  expect(
+    new Set([...first.replies, ...second.replies, ...third.replies].map((r) => r.url)).size,
+  ).toBe(501);
+  expect(vi.mocked(readContainerMembers).mock.calls.at(-1)?.[2]).toMatchObject({
+    maxBytes: 2 * 1024 * 1024,
+  });
 }, 30000);
+it("degrades an oversized listing to a notice while retaining access-denial errors", async () => {
+  harness();
+  vi.mocked(readContainerMembers).mockRejectedValueOnce(
+    new RdfFetchError("budget", { code: "PARSE_LIMIT" }),
+  );
+  await expect(readReplies(vi.fn(), `${ROOT}events/e/index.ttl`)).resolves.toMatchObject({
+    replies: [],
+    invalid: 0,
+    total: null,
+    nextOffset: null,
+    listingLimited: true,
+  });
+});
+it("also degrades the outer transport's size cap and the real streaming listing cap", async () => {
+  harness();
+  vi.mocked(readContainerMembers).mockRejectedValueOnce(new SsrfError("Response exceeds cap"));
+  expect(await readReplies(vi.fn(), `${ROOT}events/e/index.ttl`)).toMatchObject({
+    listingLimited: true,
+  });
+  const actual =
+    await vi.importActual<typeof import("@jeswr/ldp-container")>("@jeswr/ldp-container");
+  vi.mocked(readContainerMembers).mockImplementationOnce(actual.readContainerMembers);
+  const listing = `#${"x".repeat(2 * 1024 * 1024)}`;
+  expect(
+    await readReplies(
+      async () => new Response(listing, { headers: { "content-type": "text/turtle" } }),
+      `${ROOT}events/e/index.ttl`,
+    ),
+  ).toMatchObject({ listingLimited: true, total: null });
+});
 it("rejects unknown acl predicates in existing owner ACLs", async () => {
   const { repository, storage, fetch } = harness();
   await repository.create({ ...eventData(), publication: "draft" }, [], "unknown");
@@ -467,7 +523,7 @@ it("uses a server-assigned POST location even when the Slug is renamed", async (
   expect(sent.verifiedAgent).toBeUndefined();
   vi.mocked(readContainerMembers).mockResolvedValue([{ url: assigned, container: false }]);
   const read = await readReplies(fetch, event.url);
-  expect(read).toEqual({ replies: [sent], invalid: 0 });
+  expect(read).toMatchObject({ replies: [sent], invalid: 0 });
   expect(read.replies[0]?.verifiedAgent).toBeUndefined();
   const proven = await readReplies(fetch, event.url, {
     authenticatedCreator: (_url, response) =>
@@ -547,4 +603,154 @@ it("cancels public guest appending and retains visible guest Read access", async
   expect(guest[0]?.appliesTo).toBe("both");
   const response = await storage.readRdf(`${container}.acl`);
   expect(response.dataset.size).toBeGreaterThan(0);
+});
+it("validates page offsets before listing or fetching", async () => {
+  const fetch = vi.fn();
+  for (const offset of [-1, 1.5, Infinity])
+    await expect(readReplies(fetch, `${ROOT}events/e/index.ttl`, { offset })).rejects.toThrow(
+      "offset",
+    );
+  expect(fetch).not.toHaveBeenCalled();
+});
+it("handles existing empty invitation and invitee listings without fetching any files", async () => {
+  const { repository } = harness();
+  vi.mocked(readContainerMembers).mockResolvedValue([]);
+  expect(await repository.list()).toEqual([]);
+  expect(
+    await repository.invitees({ ...eventData(), url: `${ROOT}events/e/index.ttl`, etag: null }),
+  ).toEqual([]);
+});
+it("requires exactly one typed reply, ignoring unrelated subjects that end in #it", async () => {
+  harness();
+  const url = `${ROOT}events/e/rsvps/r.ttl`;
+  const event = `${ROOT}events/e/index.ttl`;
+  vi.mocked(readContainerMembers).mockResolvedValue([{ url, container: false }]);
+  const data = {
+    agent: OWNER,
+    event: entities.Event.subject(event),
+    response: RSVP_RESPONSE.yes,
+    additionalGuests: 0,
+    repliedAt: new Date(),
+  };
+  const body = await entities.Rsvp.serialize(url, data);
+  const read = (text: string) =>
+    readReplies(
+      async () => new Response(text, { headers: { "content-type": "text/turtle" } }),
+      event,
+    );
+  expect(await read("")).toMatchObject({ invalid: 1, replies: [] });
+  expect(await read(body + (await entities.Rsvp.serialize(`${url}2`, data)))).toMatchObject({
+    invalid: 1,
+    replies: [],
+  });
+  const parse = vi.spyOn(entities.Rsvp, "parse");
+  try {
+    const unrelated = await entities.Event.serialize("urn:unrelated", eventData());
+    expect((await read(body + unrelated)).replies).toHaveLength(1);
+    expect(parse).toHaveBeenCalledWith(url, expect.anything());
+    expect(parse).not.toHaveBeenCalledWith("urn:unrelated", expect.anything());
+  } finally {
+    parse.mockRestore();
+  }
+});
+it("retains valid POST server times and ignores malformed ones", async () => {
+  const event = { ...eventData(), url: `${ROOT}events/e/index.ttl`, etag: null };
+  for (const modified of ["Wed, 11 Nov 2026 12:00:00 GMT", "invalid"]) {
+    const reply = await appendRsvp(
+      async () =>
+        new Response(null, {
+          status: 201,
+          headers: {
+            location: "r.ttl",
+            "last-modified": modified,
+          },
+        }),
+      event,
+      {
+        agent: OWNER,
+        event: entities.Event.subject(event.url),
+        response: RSVP_RESPONSE.yes,
+        additionalGuests: 0,
+        repliedAt: new Date(),
+      },
+    );
+    expect(reply.receivedAt).toEqual(modified === "invalid" ? undefined : new Date(modified));
+  }
+});
+it("requires the explicit demo header, retries adapter discovery and builds only demo storage", async () => {
+  const { storage, fetch } = harness();
+  vi.mocked(createSolidBackend).mockReturnValue(storage);
+  let permitted = false;
+  const transport: typeof globalThis.fetch = async (input, init) =>
+    String(input) === ROOT && init?.method === "HEAD"
+      ? new Response(null, { headers: permitted ? { "x-solid-demo-access-control": "none" } : {} })
+      : fetch(input, init);
+  const repository = createEventsRepository({
+    fetch: transport,
+    storageRoot: ROOT,
+    owner: OWNER,
+    demo: true,
+  });
+  await expect(repository.create(eventData(), [], "demo")).rejects.toThrow("demo adapter");
+  permitted = true;
+  const event = await repository.create(eventData(), [], "demo");
+  expect(event.name).toBe("Supper");
+  expect(createSolidBackend).toHaveBeenCalledTimes(2);
+  expect(vi.mocked(createSolidBackend).mock.calls[1]?.[0]?.features?.accessControl).toMatchObject({
+    evidence: "explicit-demo-fixture",
+  });
+});
+it("preserves container HEAD failures and requires a publishing version", async () => {
+  const { repository, storage } = harness();
+  const head = storage.head.bind(storage);
+  storage.head = async (url, opts) => {
+    if (url === repository.base)
+      throw new StorageError("forbidden", { url, method: "HEAD", status: 403 });
+    return head(url, opts);
+  };
+  await expect(repository.create(eventData())).rejects.toMatchObject({ code: "forbidden" });
+  storage.head = async () => {
+    throw new Error("offline");
+  };
+  await expect(repository.create(eventData())).rejects.toThrow("offline");
+  storage.head = async (url, opts) => ({
+    ...(await head(url, opts)),
+    etag: url.endsWith("index.ttl") ? null : (await head(url, opts)).etag,
+  });
+  await expect(repository.create(eventData(), [], "missing-version")).rejects.toThrow(
+    "version is required to publish",
+  );
+});
+it("rechecks and reuses pre-existing protected containers", async () => {
+  const { repository } = harness();
+  await repository.create({ ...eventData(), publication: "draft" }, [], "one");
+  const second = await repository.create({ ...eventData(), publication: "draft" }, [], "two");
+  expect(second.publication).toBe("draft");
+  expect(await repository.list()).toHaveLength(2);
+});
+it("refuses edits to another organiser or sharing changes and ignores unrelated invitees", async () => {
+  const { repository, storage } = harness();
+  const event = await repository.create(eventData(), [], "edit");
+  await expect(
+    repository.update({ ...event, organizer: "https://other.example/me" }, event),
+  ).rejects.toThrow("organiser");
+  await expect(repository.update(event, { ...event, guestListVisible: true })).rejects.toThrow(
+    "Sharing",
+  );
+  await expect(repository.update(event, { ...event, publication: "draft" })).rejects.toThrow(
+    "Sharing",
+  );
+  const container = new URL("invitees/", event.url).href;
+  await storage.create(container, "notes", { name: "readme.txt", contentType: "text/plain" });
+  await storage.create(container, "", { name: "invalid.ttl", contentType: "text/turtle" });
+  await storage.create(
+    container,
+    await entities.Invitee.serialize(`${container}other.ttl`, {
+      webId: OWNER,
+      event: `${ROOT}other#it`,
+      invitedAt: new Date(),
+    }),
+    { name: "other.ttl", contentType: "text/turtle" },
+  );
+  expect(await repository.invitees(event)).toEqual([]);
 });

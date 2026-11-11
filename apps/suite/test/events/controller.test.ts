@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Codex GPT-6
 
 import { EVENT_STATUS, type Invitation } from "@jeswr/solid-events";
 import { expect, it, vi } from "vitest";
@@ -188,4 +189,33 @@ it("finishes both queued saves after unmount, uses the confirmed ETag and report
   expect(repository.update.mock.calls[1]?.[0].etag).toBe('"two"');
   expect(failure).toHaveBeenCalledOnce();
   expect(listener).not.toHaveBeenCalled();
+});
+it("refreshes a remounted controller when an old controller's save settles, fencing its stale list", async () => {
+  const { repository, controller } = fixture();
+  const pending = deferred<Invitation>();
+  repository.create.mockReturnValue(pending.promise);
+  controller.save(event);
+  controller.dispose();
+  const remounted = new EventsController(repository, vi.fn());
+  const other = fixture();
+  other.repository.base = "https://other.example/events/";
+  other.controller.activate();
+  remounted.activate();
+  remounted.activate();
+  repository.list.mockResolvedValue([]);
+  await remounted.refresh();
+  expect(remounted.snapshot().events).toEqual([]);
+  const stale = deferred<Invitation[]>();
+  repository.list.mockReturnValueOnce(stale.promise);
+  const reading = remounted.refresh();
+  repository.list.mockResolvedValue([event]);
+  pending.resolve(event);
+  await controller.settled();
+  await vi.waitFor(() => expect(remounted.snapshot().events).toEqual([event]));
+  stale.resolve([]);
+  await reading;
+  expect(remounted.snapshot().events).toEqual([event]);
+  expect(other.repository.list).not.toHaveBeenCalled();
+  remounted.dispose();
+  other.controller.dispose();
 });
