@@ -41,7 +41,8 @@ export function proofOf(request, token) {
   return { ...claims, jwk };
 }
 
-export function mockCss() {
+/** `chatAcl: false` withholds chat ACL discovery (no `rel="acl"` Link) to exercise refusal. */
+export function mockCss({ chatAcl = true } = {}) {
   const stats = { tokens: 0, discoveries: 0, reads: 0, writes: 0 };
   const proofs = [];
   const chats = new Map();
@@ -84,7 +85,7 @@ export function mockCss() {
       if (request.method === "HEAD")
         return new Response(null, {
           status: resource === undefined ? 404 : 200,
-          headers: { link: `<${request.url}.acl>; rel="acl"` },
+          headers: chatAcl ? { link: `<${request.url}.acl>; rel="acl"` } : {},
         });
       if (request.method === "PUT") {
         stats.writes++;

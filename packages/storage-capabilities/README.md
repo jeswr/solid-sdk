@@ -11,6 +11,11 @@ Storage description discovery and feature flags. Design of record: SDK core `ADR
 `solid-suite-planning/specs/sdk-core/`.
 
 Private at version 0.1.0 pending the first gate-green conformance run (ADR-001 D5).
+
+This package is security-critical (`"securityCritical": true`): solid-mcp, solid-seed and
+agent-session-capture rely on its Link parser and auxiliary/ambiguous-target guards to refuse
+access-control and description mutations, so changes keep 100% coverage, adversarial tests and
+review, and are never auto-merged.
 Requires Node.js >=24 and the root pnpm workspace tooling.
 
 The package root exports the ADR-002 type contracts, including `StorageDescription`, `Features`,

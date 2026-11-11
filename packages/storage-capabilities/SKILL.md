@@ -106,6 +106,8 @@ spaces and UTF-8 characters remain valid. Reuse these guards in seed and generic
 ACL-specific capabilities may use the ambiguity guard while validating advertised ACLs separately.
 On servers without suffix ACL naming, an arbitrary ACL path is caught only when the resource or
 its parent advertises it; lexical checks cannot discover an unadvertised association.
+The package is `securityCritical`: these guards and `parseLinkHeaders` sit on other packages'
+mutation boundaries, so keep 100% coverage, add adversarial tests and never auto-merge changes.
 Regenerate the public declaration report using the command in README.md after changing exports.
 
 `src/probe-headers.ts` converts supplied response headers into `ProbeResult` without fetching.

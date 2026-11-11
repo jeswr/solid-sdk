@@ -142,26 +142,32 @@ describe("stdio executable", () => {
           },
         ],
       };
-      const saved = await client.callTool({ name: "chat_save", arguments: conversation });
-      expect(saved.isError).toBe(true);
-      expect(text(saved)).toMatch(/access-control/);
-      calledTools.add("chat_save");
+      const url = `${POD}private/chats/codex/stdio-fixture/`;
+      const saved = await callTool({ name: "chat_save", arguments: conversation });
+      expect(JSON.parse(text(saved))).toEqual({ url, saved: 1, skipped: 0 });
       const chats = await callTool({ name: "chat_list", arguments: {} });
       expect(JSON.parse(text(chats))).toEqual({
-        conversations: [],
+        conversations: [
+          {
+            url,
+            provider: conversation.provider,
+            conversationId: conversation.conversationId,
+            title: conversation.title,
+            updatedAt: conversation.messages[0]?.createdAt,
+          },
+        ],
       });
-      const chat = await client.callTool({
+      const chat = await callTool({
         name: "chat_get",
         arguments: { provider: conversation.provider, conversationId: conversation.conversationId },
       });
-      expect(chat.isError).toBe(true);
-      calledTools.add("chat_get");
-      const exported = await client.callTool({
+      expect(JSON.parse(text(chat))).toEqual({ ...conversation, url });
+      const exported = await callTool({
         name: "chat_export",
         arguments: { provider: conversation.provider, conversationId: conversation.conversationId },
       });
-      expect(exported.isError).toBe(true);
-      calledTools.add("chat_export");
+      expect(JSON.parse(text(exported))).toMatchObject({ url });
+      expect(JSON.parse(text(exported)).markdown).toContain(conversation.messages[0]?.text);
       const context = await callTool({ name: "context_read", arguments: {} });
       expect(JSON.parse(text(context))).toEqual({
         status: "ok",
@@ -213,6 +219,48 @@ describe("stdio executable", () => {
         expect(write.isError).toBe(true);
         expect(text(write)).toMatch(/read-only/);
       }
+    } finally {
+      await client.close();
+    }
+  });
+  it("refuses chat_save without writing when the pod withholds ACL discovery", async () => {
+    const client = new Client({ name: "fixture-client", version: "1" });
+    const transport = new StdioClientTransport({
+      command: process.execPath,
+      args: ["--import", preload, cli],
+      env: env({ ...credentials, SOLID_MCP_READONLY: "false", SOLID_MCP_TEST_NO_CHAT_ACL: "true" }),
+      stderr: "pipe",
+    });
+    try {
+      await client.connect(transport);
+      const saved = await client.callTool({
+        name: "chat_save",
+        arguments: {
+          provider: "codex",
+          conversationId: "stdio-refused",
+          title: "Refused fixture",
+          messages: [
+            {
+              id: "m1",
+              role: "user",
+              text: "must not persist",
+              createdAt: "2026-10-25T12:00:00.000Z",
+            },
+          ],
+        },
+      });
+      // chat-acl.ts refuses with "Chat protection unavailable"; podOutputError keeps
+      // that internal diagnostic generic at the MCP boundary.
+      expect(saved.isError).toBe(true);
+      expect(text(saved)).toBe("Pod operation failed");
+      const chats = await client.callTool({ name: "chat_list", arguments: {} });
+      expect(chats.isError, text(chats)).toBeFalsy();
+      expect(JSON.parse(text(chats))).toEqual({ conversations: [] });
+      const stats = await client.callTool({
+        name: "solid_read",
+        arguments: { url: `${POD}stats` },
+      });
+      expect(text(stats)).toContain('"writes":0');
     } finally {
       await client.close();
     }
