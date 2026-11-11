@@ -103,7 +103,10 @@ function GrantDetails({
         ))}
       </div>
       {line.resources.map((resource) => (
-        <div className="hm-permission-path" key={`${resource.url}:${resource.node}`}>
+        <div
+          className="hm-permission-path"
+          key={`${resource.url}:${resource.node}:${resource.scope}`}
+        >
           <code>{relativePath(resource.url, storage)}</code>
           {technical ? (
             <a href={resource.source} target="_blank" rel="noopener noreferrer">
@@ -145,6 +148,12 @@ export function PermissionLines({
       {row.lines.map((line) => {
         const removed = binding.removed[line.key];
         const label = dataTypeLabel(line, storage);
+        const scopeLabel = line.folderScope
+          ? line.folderScope === "resource"
+            ? "This folder"
+            : "Everything in it"
+          : undefined;
+        const accessLabel = `${label}${scopeLabel ? ` · ${scopeLabel}` : ""} for ${name}`;
         // Offline and unsupported lines are truly disabled. A save in flight only marks
         // controls aria-disabled, so the focused switch or Undo keeps keyboard focus.
         const blocked = !binding.online
@@ -154,17 +163,14 @@ export function PermissionLines({
             : "";
         const reason = blocked || (binding.busy ? "Saving access changes" : "");
         return (
-          <section
-            className="hm-permission-line"
-            key={line.key}
-            aria-label={`${label} for ${name}`}
-          >
+          <section className="hm-permission-line" key={line.key} aria-label={accessLabel}>
             <div className="hm-permission-line-main">
               <div>
                 <p>
                   <strong>{label}</strong> → {featureLabel(line, name)} · {durationLabel(line)}
                 </p>
                 <p className="hm-permission-muted">{roleLabel(line.role)}</p>
+                {scopeLabel && <p className="hm-permission-muted">{scopeLabel}</p>}
               </div>
               <DisabledHint reason={reason} focusable={!blocked}>
                 <Switch
@@ -176,18 +182,20 @@ export function PermissionLines({
                   checked={!removed}
                   disabled={!!blocked}
                   aria-disabled={reason || removed?.stale ? true : undefined}
-                  aria-label={`${label} for ${name}`}
+                  aria-label={accessLabel}
                   onCheckedChange={(checked) => {
                     if (!reason && !removed?.stale) onChange(line, checked);
                   }}
                 />
               </DisabledHint>
             </div>
-            {parentNames(line).map((parent) => (
-              <p className="hm-permission-muted" key={parent}>
-                Inherited from {parent}
-              </p>
-            ))}
+            {!scopeLabel &&
+              line.inherited &&
+              parentNames(line).map((parent) => (
+                <p className="hm-permission-muted" key={parent}>
+                  Inherited from {parent}
+                </p>
+              ))}
             {view === "advanced" && (
               <GrantDetails line={line} storage={storage} technical={technical} />
             )}

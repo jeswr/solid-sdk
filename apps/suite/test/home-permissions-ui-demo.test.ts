@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 
 import { parseRdf } from "@jeswr/fetch-rdf";
@@ -109,7 +110,7 @@ describe("permissions demo seed", () => {
     if (!line) throw new Error("Missing Bob grant");
     expect(dataTypeLabel(line, DEMO_ROOT)).toBe("Files");
     expect(line.inherited).toBe(true);
-    const app = snapshot.rows.find((r) => r.kind === "app");
+    const app = snapshot.rows.find((r) => r.id === "https://maracoach.example");
     expect(app?.lines[0]?.purpose?.label).toBe("Personalise the service");
     expect(app?.lines[0]?.dataType?.label).toBe("Activity");
     const result = await applyRevoke(planRevoke(line, "line"), options);

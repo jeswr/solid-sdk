@@ -127,15 +127,17 @@ describe("Home permission holdings", () => {
     expect(result.rows.map((row) => row.key)).toEqual(["public", "authenticated", bob]);
     expect(result.summary).toEqual({ apps: 0, people: 1, publicItems: 2 });
     const lines = result.rows[2]!.lines;
-    expect(lines).toHaveLength(2);
-    expect(lines.find((line) => line.inherited)?.resources).toEqual([
+    expect(lines).toHaveLength(1);
+    expect(lines[0]!.inherited).toBe(false);
+    expect(lines[0]!.resources).toEqual([
+      expect.objectContaining({ url: "https://pod.test/docs/", scope: "resource" }),
       expect.objectContaining({
         url: "https://pod.test/docs/",
         inheritedFrom: "https://pod.test/docs/",
         scope: "members",
       }),
     ]);
-    expect(lines.every((line) => line.resources.length === 1)).toBe(true);
+    expect(lines[0]!.folderScope).toBeUndefined();
     const inheritedOnly = aggregateHoldings(
       [
         node([grant(person, { appliesTo: "members" })], {
@@ -146,6 +148,109 @@ describe("Home permission holdings", () => {
       { webId: owner, classify },
     );
     expect(inheritedOnly.rows[0]!.lines[0]!.resources[0]!.inheritedFrom).toBe("https://pod.test/");
+    expect(inheritedOnly.rows[0]!.lines[0]!.inherited).toBe(true);
+    expect(inheritedOnly.rows[0]!.lines[0]!.folderScope).toBeUndefined();
+  });
+  it("merges separate equal authorizations in either order and retains each scope for revoke", () => {
+    const grants = [
+      grant(person, {
+        modes: new Set(["read", "write"]),
+        source: { url: "https://pod.test/docs/.acl", node: "own" },
+      }),
+      grant(person, {
+        appliesTo: "members",
+        modes: new Set(["write", "read"]),
+        source: { url: "https://pod.test/docs/.acl", node: "members" },
+      }),
+    ];
+    for (const ordered of [grants, [...grants].reverse()]) {
+      const lines = aggregateHoldings([node(ordered)], { webId: owner, classify }).rows[0]!.lines;
+      expect(lines).toHaveLength(1);
+      expect(lines[0]).toMatchObject({ inherited: false, modes: ["read", "append", "write"] });
+      expect(lines[0]!.folderScope).toBeUndefined();
+      expect(
+        planRevoke(lines[0]!, "line").changes.map((change) => [change.node, change.scope]),
+      ).toEqual([
+        ["own", "resource"],
+        ["members", "members"],
+      ]);
+    }
+  });
+  it("labels unequal own scopes without confusing them with ancestor grants", () => {
+    const own = grant(person);
+    const members = grant(person, { appliesTo: "members", modes: new Set(["write"]) });
+    for (const ordered of [
+      [own, members],
+      [members, own],
+    ]) {
+      const lines = aggregateHoldings([node(ordered)], { webId: owner, classify }).rows[0]!.lines;
+      expect(lines).toHaveLength(2);
+      expect(lines.find((line) => line.folderScope === "resource")).toMatchObject({
+        inherited: false,
+        modes: ["read"],
+      });
+      expect(lines.find((line) => line.folderScope === "members")).toMatchObject({
+        inherited: true,
+        modes: ["append", "write"],
+      });
+    }
+    const lines = aggregateHoldings(
+      [node([own]), node([members], { inherited: true, inheritedFrom: "https://pod.test/" })],
+      { webId: owner, classify },
+    ).rows[0]!.lines;
+    expect(lines).toHaveLength(2);
+    expect(lines.every((line) => !line.folderScope)).toBe(true);
+  });
+  it("keeps different purposes, expiry and conditions apart across folder scopes", () => {
+    for (const field of ["purpose", "expiresAt", "conditions"]) {
+      const own = grant(person, { source: { url: "https://pod.test/docs/.acl", node: "own" } });
+      const members = grant(person, {
+        appliesTo: "members",
+        source: { ...own.source, node: "members" },
+        ...(field === "conditions"
+          ? { who: [[person, { kind: "origin" as const, origin: "https://app.test" }]] }
+          : {}),
+      });
+      const records = new Map<string, GrantRecord>([
+        [
+          "members",
+          field === "purpose"
+            ? { purpose: { label: "Preview" } }
+            : field === "expiresAt"
+              ? { expiresAt: "2030-01-01" }
+              : {},
+        ],
+      ]);
+      const lines = aggregateHoldings([node([own, members])], {
+        webId: owner,
+        classify,
+        records,
+      }).rows.find((row) => row.id === bob)!.lines;
+      expect(lines).toHaveLength(2);
+      expect(lines.every((line) => !line.folderScope)).toBe(true);
+    }
+  });
+  it("does not compact a shared ACL line that includes unrelated resources or ancestors", () => {
+    const both = grant(person, { appliesTo: "both" });
+    for (const extra of [
+      node([grant(person)], { url: "https://pod.test/other/" }),
+      node([grant(person, { appliesTo: "members" })], {
+        url: "https://pod.test/other/",
+        inherited: true,
+        inheritedFrom: "https://pod.test/docs/",
+      }),
+    ]) {
+      const lines = aggregateHoldings([node([both]), extra], { webId: owner, classify }).rows[0]!
+        .lines;
+      expect(lines).toHaveLength(2);
+      expect(lines.every((line) => !line.folderScope)).toBe(true);
+    }
+    expect(
+      aggregateHoldings([node([both], { inheritedFrom: "https://pod.test/" })], {
+        webId: owner,
+        classify,
+      }).rows[0]!.lines,
+    ).toHaveLength(2);
   });
   it("unions modes, deduplicates resources, preserves metadata and uses earliest/latest grant dates", () => {
     const early: GrantRecord = {

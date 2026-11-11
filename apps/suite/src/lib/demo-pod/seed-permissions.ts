@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 import { NS } from "@jeswr/suite-vocab";
 import {
@@ -90,6 +91,23 @@ export async function seedPermissions(
         .iri(`${ACL}mode`, `${ACL}Read`)
         .iri(`${ACL}mode`, `${ACL}Write`)
         .iri(`${NS.ACCESS_MANAGER}grantRef`, `${root}settings/access-records/maracoach.ttl`);
+    }),
+    document("notes/.acl", root, now, (node) => {
+      const resource = auth(node, "notes/", true);
+      node(`${resource}.acl#notenest`)
+        .iri(`${NS.RDF}type`, `${ACL}Authorization`)
+        .iri(`${ACL}agent`, `${root}apps/notenest/client-id.jsonld`)
+        .iri(`${ACL}accessTo`, resource)
+        .iri(`${ACL}default`, resource)
+        .iri(`${ACL}mode`, `${ACL}Read`);
+    }),
+    document("apps/notenest/.acl", root, now, (node) => {
+      const resource = auth(node, "apps/notenest/", true);
+      node(`${resource}.acl#public`)
+        .iri(`${NS.RDF}type`, `${ACL}Authorization`)
+        .iri(`${ACL}agentClass`, "http://xmlns.com/foaf/0.1/Agent")
+        .iri(`${ACL}default`, resource)
+        .iri(`${ACL}mode`, `${ACL}Read`);
     }),
     document("health/activity.ttl", root, now, (node) => {
       node(`${root}health/activity.ttl#it`)

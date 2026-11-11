@@ -10,6 +10,7 @@ import type {
   AgentRow,
   GrantRecordIndex,
   ModeId,
+  PermissionLine,
   PermissionsSnapshot,
   RoleId,
   WalkedAccess,
@@ -85,6 +86,10 @@ export function aggregateHoldings(
     },
   }));
   const rows = new Map<string, AgentRow>();
+  const ownScopes = new Map<
+    string,
+    { row: AgentRow; url: string; resource?: PermissionLine; members?: PermissionLine }
+  >();
   const publicItems = new Set<string>();
   for (const node of nodes) {
     const classification = ctx.classify(node.url);
@@ -158,16 +163,20 @@ export function aggregateHoldings(
             row.since = record.created;
           const changed = record.modified ?? record.created;
           if (changed && (!row.lastChanged || changed > row.lastChanged)) row.lastChanged = changed;
-          const key = JSON.stringify([
+          const identity = [
             agent.key,
             classification?.dataType?.id,
             grant.source.url,
-            inheritedFrom,
             record.purpose?.iri,
             record.purpose?.label,
             record.expiresAt,
             clauseSignature(conditions),
             conditionEnforcement,
+          ];
+          const key = JSON.stringify([
+            ...identity.slice(0, 3),
+            inheritedFrom,
+            ...identity.slice(3),
           ]);
           let line = row.lines.find((line) => line.key === key);
           if (!line) {
@@ -188,10 +197,17 @@ export function aggregateHoldings(
             };
             row.lines.push(line);
           }
+          if (!node.inherited && node.isContainer) {
+            const folderKey = JSON.stringify([node.url, ...identity]);
+            const pair = ownScopes.get(folderKey) ?? { row, url: node.url };
+            pair[scope] = line;
+            ownScopes.set(folderKey, pair);
+          }
           const existing = line.resources.find(
             (r) =>
               r.url === node.url &&
               r.node === grant.source.node &&
+              r.scope === scope &&
               JSON.stringify(r.subject) === JSON.stringify(subject),
           );
           if (existing) {
@@ -228,6 +244,23 @@ export function aggregateHoldings(
           line.inherited = line.resources.every((r) => r.inherited);
         }
       }
+    }
+  }
+  for (const { row, url, resource, members } of ownScopes.values()) {
+    if (!resource || !members) continue;
+    // A shared ACL may also govern other resources. Only compact this folder's
+    // own two scopes, never an ancestor's defaults or an unrelated target.
+    if (
+      resource.resources.some((r) => r.url !== url) ||
+      members.resources.some((r) => r.url !== url || r.inheritedFrom !== url)
+    )
+      continue;
+    if (JSON.stringify(resource.modes) === JSON.stringify(members.modes)) {
+      resource.resources.push(...members.resources);
+      row.lines = row.lines.filter((line) => line !== members);
+    } else {
+      resource.folderScope = "resource";
+      members.folderScope = "members";
     }
   }
   const rank = (row: AgentRow) =>

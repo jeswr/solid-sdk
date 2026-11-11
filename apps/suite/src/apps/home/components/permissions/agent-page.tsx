@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 "use client";
 
@@ -7,6 +8,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { AppHeading } from "@/shell/app-frame";
 import type { ClientMetadata } from "../../lib/permissions";
+import { clientLogoSource } from "../../lib/permissions/demo-client";
 import { agentId, agentName, permissionDate, sameAgent } from "../../lib/permissions/view";
 import { usePermissions } from "../../state/permissions";
 import { useHomeSession } from "../home-app";
@@ -18,7 +20,7 @@ import {
 } from "./permissions-page";
 
 export function ClientCard({ metadata }: { metadata: ClientMetadata }) {
-  const [showLogo, setShowLogo] = useState(false);
+  const [logo, setLogo] = useState<string>();
   return (
     <section className="hm-permission-about" aria-labelledby="client-about">
       <h2 id="client-about">What this app says about itself</h2>
@@ -41,18 +43,21 @@ export function ClientCard({ metadata }: { metadata: ClientMetadata }) {
         )}
       </div>
       {metadata.logoUri &&
-        (showLogo ? (
+        (logo ? (
           // biome-ignore lint/performance/noImgElement: A consented remote logo must load directly with no referrer, as specified.
           <img
             className="hm-permission-logo"
-            src={metadata.logoUri}
+            src={logo}
             referrerPolicy="no-referrer"
             alt={`${metadata.name || "App"} logo`}
             width={56}
             height={56}
           />
         ) : (
-          <Button variant="outline" onClick={() => setShowLogo(true)}>
+          <Button
+            variant="outline"
+            onClick={async () => setLogo(await clientLogoSource(metadata.logoUri as string))}
+          >
             Show logo
           </Button>
         ))}
