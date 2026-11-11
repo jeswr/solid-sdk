@@ -11,6 +11,7 @@ import android.widget.TextView;
 import androidx.webkit.WebViewCompat;
 import androidx.webkit.WebViewFeature;
 import com.getcapacitor.BridgeActivity;
+import com.getcapacitor.CapConfig;
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
 
@@ -38,6 +39,13 @@ public class MainActivity extends BridgeActivity {
     protected void load() {
         if (!WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)
                 || !WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
+            refuse();
+            return;
+        }
+        try {
+            if (config == null) config = CapConfig.loadDefault(this);
+            SecureStoreMigrationStartup.prepare(this, config);
+        } catch (Exception e) {
             refuse();
             return;
         }

@@ -167,6 +167,7 @@ describe("iOS project", () => {
       return dir;
     };
     const good = {
+      predecessorOrigins: ["https://suite.example"],
       target: "native",
       clientIdUrl: "https://suite.example/.well-known/solid-client-id-mobile.jsonld",
     };
@@ -196,11 +197,49 @@ describe("iOS project", () => {
         );
       }));
 
-    test.each([
+    test.each<[string, Record<string, unknown>, string, string]>([
       ["a web export", { ...good, target: "web" }, "", "native target"],
       ["an http Client ID", { ...good, clientIdUrl: "http://suite.example/id" }, "", "https"],
       ["no Client ID", { target: "native" }, "", "https"],
       ["credentials", { ...good, clientIdUrl: "https://a:b@suite.example/id" }, "", "https"],
+      ["no predecessor list", { ...good, predecessorOrigins: undefined }, "", "predecessorOrigins"],
+      [
+        "hostile predecessor",
+        { ...good, predecessorOrigins: ["https://suite.example", "https://localhost"] },
+        "",
+        "predecessorOrigins",
+      ],
+      [
+        "path predecessor",
+        { ...good, predecessorOrigins: ["https://suite.example/path"] },
+        "",
+        "predecessorOrigins",
+      ],
+      ...[
+        undefined,
+        null,
+        {},
+        "https://old.example",
+        [true],
+        ["https://old.example/"],
+        ["http://old.example"],
+        ["https://u@old.example"],
+        ["https://old.example?"],
+        ["https://old.example#"],
+        ["https://localhost"],
+        ["capacitor://localhost"],
+        ["https://old.example", "https://old.example"],
+        ["https://old.example:0"],
+        ["https://old.example", "https://bad.example/path"],
+      ].map(
+        (predecessorOrigins) =>
+          [
+            "invalid predecessor plan",
+            { ...good, predecessorOrigins },
+            "",
+            "predecessorOrigins",
+          ] as [string, Record<string, unknown>, string, string],
+      ),
       ["no route manifest", good, "route-manifest.json", "route-manifest.json"],
       ["no 404 page", good, "404.html", "404.html"],
     ])("refuses %s", (_, info, skip, message) =>

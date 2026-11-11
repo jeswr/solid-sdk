@@ -113,3 +113,12 @@ pnpm --filter @jeswr/suite-native run build
 pnpm --filter @jeswr/suite-native run typecheck
 pnpm --filter @jeswr/suite-native run test   # 100% coverage thresholds
 ```
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+`store.takeMigrationNotice()` returns a one-shot boolean for MOB-P3d. Call it only when the
+native sign-in surface is ready to display “Sign in again to continue”. The native plugin
+returns exactly `{ signInAgain: boolean }` and clears the pending notice atomically; malformed
+responses reject with `SecureStoreError("failed")`. The method takes no origin, namespace or
+other arguments. Native startup performs the migration from the signed bundle's predecessor
+list before starting the bridge; JavaScript cannot initiate it or clear another namespace.
+Remote builds return false. The journal survives interruption and app restarts until consumed.

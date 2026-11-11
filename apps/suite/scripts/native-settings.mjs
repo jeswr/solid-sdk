@@ -19,5 +19,29 @@ export function nativeSettings(env) {
   }
   if (!["https://localhost", "capacitor://localhost"].includes(appBaseUrl))
     throw new Error("Native APP_BASE_URL must be a bundled local origin");
-  return { target: "native", appBaseUrl, publicSuiteUrl, clientIdUrl };
+  const predecessors =
+    env.PREDECESSOR_ORIGINS === undefined
+      ? [new URL(publicSuiteUrl).origin]
+      : JSON.parse(env.PREDECESSOR_ORIGINS);
+  if (!Array.isArray(predecessors) || predecessors.length > 32)
+    throw new Error("PREDECESSOR_ORIGINS must be a JSON array of https origins");
+  const predecessorOrigins = [
+    ...new Set(
+      predecessors.map((value) => {
+        const url = typeof value === "string" ? URL.parse(value) : null;
+        if (
+          url?.protocol !== "https:" ||
+          url.origin !== value ||
+          url.username ||
+          url.password ||
+          url.port === "0" ||
+          url.hostname === "localhost" ||
+          url.hostname.endsWith(".localhost")
+        )
+          throw new Error("PREDECESSOR_ORIGINS must contain canonical remote https origins");
+        return value;
+      }),
+    ),
+  ];
+  return { target: "native", appBaseUrl, publicSuiteUrl, clientIdUrl, predecessorOrigins };
 }

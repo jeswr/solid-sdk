@@ -23,6 +23,16 @@ class MainViewController: CAPBridgeViewController {
             return base
         }
         let root = instanceConfiguration.appLocation
+        do {
+            let support = try FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask,
+                                                      appropriateFor: nil, create: true)
+            let info = try Data(contentsOf: root.appendingPathComponent("build-info.json"))
+            guard info.count <= 65536 else { throw SecureStoreFailure.invalid }
+            try SecureStoreMigration(support: support, keys: SecureStoreMigrationKeychain()).run(info)
+        } catch {
+            // Stop before CapacitorBridge is constructed; never include plan or storage details.
+            fatalError("Secure store migration failed")
+        }
         guard let data = try? Data(contentsOf: root.appendingPathComponent("route-manifest.json")),
               let resolver = try? RouteResolver(manifest: data) else {
             fatalError("Bundled mode needs public/route-manifest.json")

@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { afterEach, expect, it, vi } from "vitest";
 import { nativeSettings } from "../scripts/native-settings.mjs";
@@ -60,4 +61,51 @@ it("rejects an invalid explicit Client ID URL in the web URL helper too", async 
   vi.stubEnv("NEXT_PUBLIC_CLIENT_ID_URL", "https://suite.example/id.jsonld#a");
   vi.resetModules();
   await expect(import("../src/lib/urls.ts")).rejects.toThrow("Client ID URLs");
+});
+
+it("bakes a deduplicated predecessor plan and defaults to the public deployed origin", () => {
+  expect(nativeSettings({}).predecessorOrigins).toEqual(["https://solid-suite.vercel.app"]);
+  expect(
+    nativeSettings({ PUBLIC_SUITE_URL: "https://suite.example/base" }).predecessorOrigins,
+  ).toEqual(["https://suite.example"]);
+  expect(
+    nativeSettings({
+      PREDECESSOR_ORIGINS: JSON.stringify([
+        "https://old.example",
+        "https://other.example:8443",
+        "https://old.example",
+      ]),
+    }).predecessorOrigins,
+  ).toEqual(["https://old.example", "https://other.example:8443"]);
+  expect(nativeSettings({ PREDECESSOR_ORIGINS: "[]" }).predecessorOrigins).toEqual([]);
+});
+it.each([
+  null,
+  true,
+  {},
+  "https://old.example",
+  [null],
+  [1],
+  [true],
+  ["https://old.example", "http://evil.example"],
+  ["https://old.example/"],
+  ["https://old.example/path"],
+  ["https://u:p@old.example"],
+  ["https://old.example?"],
+  ["https://old.example#"],
+  ["https://localhost"],
+  ["capacitor://localhost"],
+  ["https://localhost:443"],
+  ["https://old.example:0"],
+  ["https://old.example:65536"],
+  ["https://OLD.example"],
+  ["https://old.example/../"],
+  ["https://old.example\\evil"],
+])("rejects hostile predecessor settings %#", (value) => {
+  expect(() => nativeSettings({ PREDECESSOR_ORIGINS: JSON.stringify(value) })).toThrow(
+    "PREDECESSOR_ORIGINS",
+  );
+});
+it("rejects malformed predecessor JSON", () => {
+  expect(() => nativeSettings({ PREDECESSOR_ORIGINS: "[" })).toThrow();
 });

@@ -112,3 +112,17 @@ Read `solid-suite-planning/specs/mobile/P4-SECURE-STORE.md` completely before ch
   Store only refresh tokens. Gate them when user presence is supported and unlock is enabled.
 - Keep the root pure and `secureStorePlugin` in `./capacitor`. There is no web fallback;
   off native, keep IndexedDB. pod-auth wiring belongs to MOB-06 after T-031 lands.
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+## Predecessor-session notice (MOB-P3d)
+
+- `createSecureStore(plugin).takeMigrationNotice()` returns `Promise<boolean>`. Native
+  `SuiteSecureStore.takeMigrationNotice()` takes no arguments and returns exactly
+  `{ signInAgain: boolean }`, atomically consuming the pending notice. Validate the exact shape
+  and map failures through `SecureStoreError`; never expose origin, namespace, key or value.
+- Consume only on the native sign-in surface that can display “Sign in again to continue”.
+  No web fallback. Remote shells return false. This method cannot perform migration.
+- Migration stays native, before bridge startup, scoped to the complete validated
+  `build-info.json.predecessorOrigins` plan. Check every artifact even with completion markers,
+  persist notice intent before deletion, and preserve the current namespace and share inbox.
+  Keep JVM/XCTest isolation, interruption and malformed-plan tests with changes to this seam.

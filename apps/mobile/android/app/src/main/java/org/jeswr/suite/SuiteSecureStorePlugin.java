@@ -44,6 +44,16 @@ public class SuiteSecureStorePlugin extends Plugin {
         return store;
     }
 
+    @PluginMethod public void takeMigrationNotice(PluginCall call) {
+        queue.execute(() -> {
+            try {
+                JSObject result = new JSObject();
+                result.put("signInAgain", SecureStoreMigrationStartup.takeNotice(bridge.getServerUrl() == null));
+                call.resolve(result);
+            } catch (Exception e) { reject(call, e); }
+        });
+    }
+
     @PluginMethod public void status(PluginCall call) {
         queue.execute(() -> {
             SecureStore.Status status;
