@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate; see docs/MODEL-PROVENANCE.md
 /**
  * MANDATORY LOGOUT-PURGE (§7).
@@ -25,7 +26,7 @@
  * reports which half succeeded so the caller can decide.
  */
 
-import { cacheNameForWebId, dbNameForWebId } from './scope.js';
+import { CACHE_PREFIX, cacheNameForWebId, DB_PREFIX, dbNameForWebId, scopeHash } from './scope.js';
 
 /** Minimal `CacheStorage` surface we need to purge the bytes cache. */
 export interface CacheStorageLike {
@@ -159,6 +160,25 @@ export async function purgeForWebId(
       }
     } catch (error) {
       result.errors.push(error);
+    }
+  }
+
+  // Reclaim the former hash-only namespaces too. They are never read by this
+  // format, but sign-out must also remove copies written before the upgrade.
+  if (webId) {
+    const legacyScope = scopeHash(webId);
+    try {
+      await cacheStore?.delete(`${CACHE_PREFIX}${legacyScope}`);
+    } catch (error) {
+      result.errors.push(error);
+    }
+    if (idb) {
+      try {
+        if ((await deleteDatabase(idb, `${DB_PREFIX}${legacyScope}`)) === 'blocked')
+          result.dbBlocked = true;
+      } catch (error) {
+        result.errors.push(error);
+      }
     }
   }
 
