@@ -3223,10 +3223,140 @@ describe("createSolidAuth — the token provider (origin gate + refresh)", () =>
 });
 
 describe("createSolidAuth — session changes during proof signing (sst-8xm.9.15)", () => {
+  async function expectProofBinding(request: Request, key: CryptoKeyPair) {
+    const authorization = request.headers.get("Authorization");
+    const proof = request.headers.get("DPoP");
+    if (authorization === null) {
+      expect(proof).toBeNull();
+      return;
+    }
+    expect(authorization.startsWith("DPoP ")).toBe(true);
+    if (!proof) throw new Error("Expected a DPoP proof");
+    const [header, payload, signature] = proof.split(".");
+    const claims = JSON.parse(Buffer.from(payload, "base64url").toString());
+    expect(claims.ath).toBe(
+      Buffer.from(
+        await crypto.subtle.digest("SHA-256", new TextEncoder().encode(authorization.slice(5))),
+      ).toString("base64url"),
+    );
+    const jwk = JSON.parse(Buffer.from(header, "base64url").toString()).jwk;
+    const proofKey = await crypto.subtle.importKey(
+      "jwk",
+      jwk,
+      { name: "ECDSA", namedCurve: "P-256" },
+      true,
+      ["verify"],
+    );
+    const { calculateThumbprint } = await vi.importActual<typeof import("dpop")>("dpop");
+    expect(await calculateThumbprint(proofKey)).toBe(await calculateThumbprint(key.publicKey));
+    expect(
+      await crypto.subtle.verify(
+        { name: "ECDSA", hash: "SHA-256" },
+        key.publicKey,
+        Buffer.from(signature, "base64url"),
+        new TextEncoder().encode(`${header}.${payload}`),
+      ),
+    ).toBe(true);
+  }
+
   for (const route of ["authenticatedFetch", "global fetch"] as const) {
-    for (const phase of ["initial", "nonce retry", "refresh retry"] as const) {
+    for (const change of ["token", "key", "token and key"] as const) {
+      it(`${route} discards a proof when a same-session refresh replaces the ${change}`, async () => {
+        const { generateKeyPair, generateProof } =
+          await vi.importActual<typeof import("dpop")>("dpop");
+        const oldKey = await generateKeyPair("ES256");
+        const newKey = change === "token" ? oldKey : await generateKeyPair("ES256");
+        const oauth = await import("oauth4webapi");
+        vi.mocked(oauth.generateKeyPair).mockResolvedValueOnce(oldKey);
+        loginExpiresIn = 3600;
+        refreshAccessToken = change === "key" ? loginAccessToken : "refreshed-access-token";
+        refreshDpopKey = newKey;
+        const originalFetch = globalThis.fetch;
+        const sent: Request[] = [];
+        const store = new RecordingStore();
+        const refreshUrl = `${POD}/force-refresh`;
+        const controller = createSolidAuth({
+          authFlow,
+          callbackUri: "https://app.example/callback",
+          clientId: "https://app.example/clientid.jsonld",
+          store,
+          allowedOrigins: [new URL(POD).origin],
+          patchGlobalFetch: route === "global fetch",
+          publicFetch: async (input, init) => {
+            const request = new Request(input, init);
+            sent.push(request);
+            return request.url === refreshUrl && sent.length === 1
+              ? new Response(null, { status: 401 })
+              : new Response("ok");
+          },
+        });
+        let releaseProof!: () => void;
+        const proofGate = new Promise<void>((resolve) => {
+          releaseProof = resolve;
+        });
+        let signingStarted!: () => void;
+        const signing = new Promise<void>((resolve) => {
+          signingStarted = resolve;
+        });
+        const signer = vi.mocked(DPoP.generateProof);
+        const defaultSigner = signer.getMockImplementation();
+        const previousCalls = signer.mock.calls.length;
+        try {
+          await controller.login("https://alice.pod.example/profile/card#me");
+          signer.mockImplementation(generateProof).mockImplementationOnce(async (...args) => {
+            const proof = await generateProof(...args);
+            signingStarted();
+            await proofGate;
+            return proof;
+          });
+          const requestFetch =
+            route === "global fetch" ? globalThis.fetch : controller.authenticatedFetch;
+          const pending = requestFetch(POD, { redirect: "error" });
+          await signing;
+          expect(sent).toHaveLength(0);
+          // This concurrent 401 forces a real controller refresh of the SAME session.
+          expect((await requestFetch(refreshUrl)).status).toBe(200);
+          expect(refreshGrantCalls).toBe(1);
+          expect(restoreRotationsAttempted).toBe(1);
+          expect(store.map.get("https://idp.example/")?.refreshToken).toBe("rotated-refresh-token");
+          expect(sent).toHaveLength(2);
+          expect(sent[0].headers.get("Authorization")).toBe(`DPoP ${loginAccessToken}`);
+          expect(sent[1].headers.get("Authorization")).toBe(`DPoP ${refreshAccessToken}`);
+          releaseProof();
+          expect((await pending).status).toBe(200);
+          expect(sent).toHaveLength(3);
+          // Check every emitted proof's ath, jkt and signature, including any leaked
+          // stale proof. Token-only and key-only changes exercise each fence separately.
+          await expectProofBinding(sent[0], oldKey);
+          await expectProofBinding(sent[1], newKey);
+          await expectProofBinding(sent[2], newKey);
+          expect(sent[2].headers.get("Authorization")).toBeNull();
+          expect(sent[2].headers.get("DPoP")).toBeNull();
+          expect(sent[2].redirect).toBe("error");
+
+          // A later request still uses the refreshed pair, without another rotation.
+          expect((await requestFetch(POD)).status).toBe(200);
+          expect(sent).toHaveLength(4);
+          expect(sent[3].headers.get("Authorization")).toBe(`DPoP ${refreshAccessToken}`);
+          await expectProofBinding(sent[3], newKey);
+          expect(refreshGrantCalls).toBe(1);
+          expect(signer.mock.calls.length - previousCalls).toBe(4); // No re-sign loop.
+        } finally {
+          releaseProof();
+          signer.mockReset();
+          if (defaultSigner) signer.mockImplementation(defaultSigner);
+          globalThis.fetch = originalFetch;
+        }
+      });
+    }
+
+    for (const phase of ["initial", "nonce retry", "refresh retry", "redirect hop"] as const) {
       for (const change of ["logout", "account switch", "unchanged"] as const) {
-        it(`${route} revalidates ${change} during ${phase} proof signing`, async () => {
+        it.each(
+          phase === "redirect hop"
+            ? (["follow", "error", "manual"] as const)
+            : (["error"] as const),
+        )(`${route} revalidates ${change} during ${phase} proof signing (redirect=%s)`, async (redirect) => {
           const originalFetch = globalThis.fetch;
           const sent: Request[] = [];
           loginExpiresIn = 3600; // The initial upgrade must not refresh.
@@ -3239,6 +3369,14 @@ describe("createSolidAuth — session changes during proof signing (sst-8xm.9.15
             patchGlobalFetch: route === "global fetch",
             publicFetch: async (input, init) => {
               sent.push(new Request(input, init));
+              if (phase === "redirect hop") {
+                return sent.length === 1 || change !== "unchanged"
+                  ? new Response(null, {
+                      status: 307,
+                      headers: { Location: `${POD}/${sent.length === 1 ? "next" : "final"}` },
+                    })
+                  : new Response("ok");
+              }
               return sent.length === 1 && phase !== "initial"
                 ? new Response(null, {
                     status: 401,
@@ -3272,7 +3410,7 @@ describe("createSolidAuth — session changes during proof signing (sst-8xm.9.15
             });
             const requestFetch =
               route === "global fetch" ? globalThis.fetch : controller.authenticatedFetch;
-            const pending = requestFetch(POD, { redirect: "error" });
+            const pending = requestFetch(POD, { redirect });
             await signing;
             expect(sent).toHaveLength(phase === "initial" ? 0 : 1);
             if (change === "logout") {
@@ -3288,7 +3426,9 @@ describe("createSolidAuth — session changes during proof signing (sst-8xm.9.15
               expect(controller.webId).toBe(webIdClaim);
             }
             releaseProof();
-            expect((await pending).status).toBe(200);
+            expect((await pending).status).toBe(
+              phase === "redirect hop" && change !== "unchanged" ? 307 : 200,
+            );
             const outgoing = sent.at(-1);
             expect(outgoing?.headers.get("Authorization")).toBe(
               change === "unchanged"
@@ -3298,8 +3438,16 @@ describe("createSolidAuth — session changes during proof signing (sst-8xm.9.15
             expect(outgoing?.headers.get("DPoP")).toBe(
               change === "unchanged" ? "delayed-proof" : null,
             );
-            expect(outgoing?.redirect).toBe(change === "unchanged" ? "manual" : "error");
+            expect(outgoing?.redirect).toBe(change === "unchanged" ? "manual" : redirect);
             expect(refreshGrantCalls).toBe(phase === "refresh retry" ? 1 : 0);
+            if (phase === "redirect hop") {
+              expect(sent).toHaveLength(2); // No SDK following of the second redirect.
+              expect(sent[0].url).toBe(POD);
+              expect(sent[0].headers.get("Authorization")).toBe("DPoP access-token");
+              expect(sent[0].headers.get("DPoP")).toBe("initial-proof");
+              expect(sent[0].redirect).toBe("manual");
+              expect(outgoing?.url).toBe(`${POD}/next`);
+            }
           } finally {
             releaseProof();
             globalThis.fetch = originalFetch;

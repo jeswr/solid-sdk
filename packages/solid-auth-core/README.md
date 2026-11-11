@@ -69,7 +69,14 @@ headers do not force manual redirects; these requests retain the caller's policy
 After token refresh and DPoP proof signing, credential attachment rechecks that the same
 session is live and the request origin is still allowed. Logout, account switching, or
 origin revocation during either operation returns the original request without adding
-SDK credentials, retaining the caller's redirect policy.
+SDK credentials, retaining the caller's redirect policy. Proof signing and the
+Authorization header use one snapshot of the access token and DPoP key. If a concurrent
+refresh changes either value during signing, the original request is returned without
+SDK credentials; the upgrade does not re-sign or force another refresh. Later requests
+use the refreshed pair normally.
+
+The final check runs before `upgrade()` resolves for dispatch. A logout in the microtask
+gap after it resolves cannot recall the already-built request, which may still be sent.
 
 Derived requests preserve the caller's referrer, referrer policy, mode, credentials,
 cache, integrity, keepalive, abort signal, and priority where supported, on passthrough,
