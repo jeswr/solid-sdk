@@ -140,6 +140,7 @@ export default defineConfig({
         "src/apps/contacts/lib/list/**/*.ts",
         "src/apps/money/lib/rules/**/*.ts",
         "src/apps/tasks/lib/vtodo/**/*.ts",
+        "src/apps/tasks/lib/vtodo-adapter/**/*.ts",
         "src/apps/mail/lib/rules/**/*.ts",
         "src/apps/money/lib/reports/**/*.ts",
         "src/apps/mail/lib/compose/**/*.ts",
