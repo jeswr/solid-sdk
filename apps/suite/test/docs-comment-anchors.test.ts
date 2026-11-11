@@ -184,3 +184,50 @@ it("never moves a comment to another occurrence when its own text is deleted", (
     to: 11,
   });
 });
+
+// AUTHORED-BY Claude Opus 5.5
+it("keeps the highlight on its text through local typing (mapped) and remote edits (re-resolved)", () => {
+  const { doc, editor } = setup();
+  const anchor = captureCommentAnchor(editor.state);
+  const comment: DocumentComment = {
+    url: "https://pod.example/comment.ttl",
+    etag: '"one"',
+    text: "Discuss",
+    creator: "https://me.example/#me",
+    created: "2026-01-01",
+    kind: "root",
+    target: "https://pod.example/doc.ttl",
+    anchor,
+    resolved: false,
+  };
+  editor.view.dispatch(editor.state.tr.setMeta(commentKey, { comments: [comment] }));
+  const highlighted = () =>
+    Array.from(editor.view.dom.querySelectorAll(".docs-comment-anchor")).map(
+      (element) => element.textContent,
+    );
+  expect(highlighted()).toEqual(["word"]);
+  // Local keystrokes: Yjs lags the ProseMirror state, so decorations are mapped.
+  editor.commands.insertContentAt(1, "A ");
+  editor.commands.insertContentAt(3, "word. ");
+  expect(editor.getText()).toBe("A word. Before word after");
+  expect(highlighted()).toEqual(["word"]);
+  expect(commentKey.getState(editor.state)?.decorations.find()[0]).toMatchObject({
+    from: 16,
+    to: 20,
+  });
+  // A remote edit arrives through the sync binding and re-resolves the Yjs anchor.
+  const peer = new Doc();
+  applyUpdate(peer, encodeStateAsUpdate(doc));
+  peer.on("update", (update: Uint8Array) => applyUpdate(doc, update));
+  const paragraph = peer.getXmlFragment("prosemirror").get(0) as unknown as {
+    get: (index: number) => { insert: (at: number, text: string) => void };
+  };
+  paragraph.get(0).insert(0, "Remote ");
+  expect(editor.getText()).toBe("Remote A word. Before word after");
+  expect(commentKey.getState(editor.state)?.decorations.find()[0]).toMatchObject({
+    from: 23,
+    to: 27,
+  });
+  expect(highlighted()).toEqual(["word"]);
+  peer.destroy();
+});
