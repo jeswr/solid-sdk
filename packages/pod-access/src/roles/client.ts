@@ -41,11 +41,12 @@ function rows(
   snapshot: Snapshot,
   documents = snapshot.documents,
   members = false,
+  excludeOwnAcrManagement = false,
 ): Map<string, Row> {
   const result = new Map<string, Row>();
   for (const document of documents)
     for (const grant of document.policy.grants) {
-      if (!grant.modes.size) continue;
+      if (!grant.modes.size || (excludeOwnAcrManagement && grant.ownAcrManagement)) continue;
       const scope = !members && document.resource === snapshot.resource ? "resource" : "members";
       if (grant.appliesTo !== scope && grant.appliesTo !== "both") continue;
       if (grant.except.length || grant.who.some((clause) => clause.length !== 1))
@@ -154,11 +155,10 @@ function folderScope(snapshot: Snapshot, options: RolesOptions): boolean {
 /** A folder role must describe the same permissions on the folder and its members. */
 function requireFolderScope(snapshot: Snapshot, options: RolesOptions): void {
   if (!folderScope(snapshot, options) || !snapshot.own) return;
-  const direct = rows(snapshot, [snapshot.own]);
-  const members = rows(snapshot, [snapshot.own], true);
-  // ESS own-ACR management is separate from resource/member access.
-  if (snapshot.model === "acp" && options.implementation === "ess")
-    for (const row of [...direct.values(), ...members.values()]) row.modes.delete("control");
+  // Exempt only grants placed as own-ACR management, before merging modes.
+  // ESS member-ACR management must remain visible as an unrepresentable scope difference.
+  const direct = rows(snapshot, [snapshot.own], false, true);
+  const members = rows(snapshot, [snapshot.own], true, true);
   for (const key of new Set([...direct.keys(), ...members.keys()]))
     if (!sameModes(direct.get(key)?.modes ?? new Set(), members.get(key)?.modes ?? new Set()))
       throw roleError(

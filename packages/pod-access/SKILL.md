@@ -276,6 +276,9 @@ revocation removes both. Non-folder operations preserve their resource-only cont
 Before reads and every mutation, refuse own-folder permissions whose per-principal modes
 differ between resource and member scope with typed `partial-scope` (mutations report it
 in `failed`, without writes). This includes members-only rules and no-op selections.
-ESS own-ACR management is separate from this comparison. Never rewrite descendant access
+Track each policy placement's management provenance: exempt only ESS own-ACR `access`
+and own-ACR `accessControl` management. Member `memberAccess` and own-ACR
+`memberAccessControl` management must still cause `partial-scope`, including policies
+shared with own-ACR management. Never rewrite descendant access
 documents. Test shared principals, foreign targets, metadata, both scopes, owner lockout
 and ETag races; preserve 100% coverage.

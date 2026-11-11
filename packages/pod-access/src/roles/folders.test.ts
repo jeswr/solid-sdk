@@ -160,6 +160,48 @@ for (const model of ["wac", "acp"] as const)
         // A non-folder read keeps the previous direct-resource contract.
         await expect(readGrants(folder, mem.options)).resolves.toHaveProperty("grants");
       });
+    it.each([
+      "resource",
+      "members",
+    ] as const)("refuses %s-only Control even when folder/member data access is symmetric", async (scope) => {
+      const { mem, options } = await setup([manager, selection()]);
+      const dataset = await graph(mem);
+      if (model === "wac") {
+        const node = properties(DataFactory.blankNode(), dataset);
+        node.add("http://www.w3.org/1999/02/22-rdf-syntax-ns#type", `${ACL}Authorization`);
+        node.add(`${ACL}${scope === "resource" ? "accessTo" : "default"}`, folder);
+        node.add(`${ACL}agent`, bob);
+        node.add(`${ACL}mode`, `${ACL}Control`);
+      } else {
+        const extra = new Store();
+        appendAcp(
+          extra,
+          folder,
+          folder + suffix,
+          [{ agent: selection().agent, modes: new Set(["control"]) }],
+          "css",
+          true,
+        );
+        for (const acr of roots(extra))
+          properties(acr, extra)
+            .terms(`${ACP}${scope === "resource" ? "memberAccessControl" : "accessControl"}`)
+            .clear();
+        for (const quad of extra) dataset.add(quad);
+      }
+      const bytes = await serialize(dataset);
+      mem.put(folder + suffix, bytes);
+      await expect(readGrants(folder, options)).rejects.toMatchObject({ code: "partial-scope" });
+      for (const result of [
+        await addGrant([folder], selection("editor"), options),
+        await setGrants([folder], [manager, selection("editor")], options),
+        await removeGrant([folder], selection().agent, options),
+      ]) {
+        expect(result.failed[0]?.error).toMatchObject({ code: "partial-scope" });
+        expect(isRoleError(result.failed[0]?.error)).toBe(true);
+      }
+      expect(mem.writes()).toHaveLength(0);
+      expect(mem.docs.get(folder + suffix)?.body).toBe(bytes);
+    });
     for (const operation of ["set", "remove"] as const)
       it(`${operation} preserves shared principals, foreign targets and unrelated annotations in both scopes`, async () => {
         const { mem, options } = await setup([manager, selection("editor")]);
@@ -307,7 +349,10 @@ for (const model of ["wac", "acp"] as const)
     });
   });
 
-it("compares ESS folder resource/member modes independently of own-ACR management", async () => {
+it.each([
+  "access",
+  "accessControl",
+] as const)("round-trips symmetric ESS folder owner access with own-ACR %s management", async (placement) => {
   const mem = memoryAccess("acp");
   const dataset = new Store();
   appendAcp(
@@ -318,6 +363,17 @@ it("compares ESS folder resource/member modes independently of own-ACR managemen
     "ess",
     true,
   );
+  if (placement === "accessControl") {
+    const node = properties(required(roots(dataset)[0]), dataset);
+    const self = properties(DataFactory.blankNode(), dataset);
+    self.add(`${ACP}resource`, `${folder}.acr`);
+    for (const policy of node.terms(`${ACP}access`)) {
+      const control = properties(DataFactory.blankNode(), dataset);
+      control.terms(`${ACP}apply`).add(policy);
+      self.terms(`${ACP}accessControl`).add(control);
+    }
+    node.terms(`${ACP}access`).clear();
+  }
   mem.attach(folder, await serialize(dataset));
   const options = {
     ...mem.options,
@@ -328,6 +384,12 @@ it("compares ESS folder resource/member modes independently of own-ACR managemen
   expect((await readGrants(folder, options)).grants).toEqual([
     { ...manager, source: `${folder}.acr` },
   ]);
+  const expected = await readGrants(folder, options);
+  const count = mem.writes().length;
+  expect((await setGrants([folder], expected.grants, { ...options, expected })).failed).toEqual([]);
+  expect(mem.writes()).toHaveLength(count);
+  // ACR-self bindings are readable; canonical-root collision checks still refuse changes.
+  if (placement === "accessControl") return;
   expect((await addGrant([folder], selection("editor"), options)).failed).toEqual([]);
   expect((await removeGrant([folder], { type: "webid", id: bob }, options)).failed).toEqual([]);
   expect((await readGrants(folder, options)).grants).toEqual([
@@ -335,41 +397,63 @@ it("compares ESS folder resource/member modes independently of own-ACR managemen
   ]);
 });
 
-it("removes ESS folder member-management paths along with matching resource/member access", async () => {
-  const mem = memoryAccess("acp");
-  const dataset = new Store();
-  appendAcp(
-    dataset,
-    folder,
-    `${folder}.acr`,
-    [manager.agent, selection().agent].map((agent) => ({
-      agent,
-      modes: new Set(["read", "write", "append", "control"] as const),
-    })),
-    "ess",
-    true,
-  );
-  const root = required(roots(dataset)[0]);
-  const node = properties(root, dataset);
-  for (const p of node.nodes(`${ACP}access`)) node.terms(`${ACP}memberAccess`).add(p);
-  mem.attach(folder, await serialize(dataset));
-  const options = {
-    ...mem.options,
-    kind: "folder" as const,
-    implementation: "ess" as const,
-    webId: owner,
-  };
-  expect((await setGrants([folder], [manager], options)).failed).toEqual([]);
-  const after = await parseRdf(required(mem.docs.get(`${folder}.acr`)).body, "text/turtle");
-  expect(
-    readPolicy(after, folder, `${folder}.acr`, "acp", "ess")
-      .grants.flatMap((g) => g.who.flat())
-      .some((s) => s.kind === "agent" && s.webId === bob),
-  ).toBe(false);
-  expect((await readGrants(folder, options)).grants).toEqual([
-    { ...manager, source: `${folder}.acr` },
-  ]);
-});
+for (const placement of ["memberAccess", "memberAccessControl"] as const)
+  for (const variant of ["member-only", "own-and-members", "management-only", "owner"] as const)
+    it(`refuses ESS ${placement} ${variant} management on read and every mutation without a PUT`, async () => {
+      const mem = memoryAccess("acp");
+      const acr = `${folder}.acr`;
+      const principal = variant === "owner" ? owner : bob;
+      // Independent fixture: identical folder/member data access, with extra member-ACR
+      // management. Sharing the management policy must not hide its member provenance.
+      const bytes = `@prefix acp: <${ACP}>.
+        <${acr}> a acp:AccessControlResource; acp:resource <${folder}>;
+          acp:accessControl <urn:owner-access>; acp:memberAccessControl <urn:owner-access>;
+          acp:access <urn:owner-management>.
+        <urn:owner-access> acp:apply [ acp:allow acp:Read, acp:Write, acp:Append;
+          acp:allOf [ acp:agent <${owner}> ] ].
+        <urn:owner-management> acp:allow acp:Read, acp:Write;
+          acp:allOf [ acp:agent <${owner}> ].
+        <urn:member-management> acp:allow acp:Read, acp:Write;
+          acp:allOf [ acp:agent <${principal}> ].
+        ${
+          placement === "memberAccess"
+            ? `<${acr}> acp:memberAccess <urn:member-management>.`
+            : `[] a acp:AccessControlResource; acp:resource <${acr}>;
+                acp:memberAccessControl [ acp:apply <urn:member-management> ].`
+        }
+        ${variant === "own-and-members" ? `<${acr}> acp:access <urn:member-management>.` : ""}
+        ${
+          variant === "management-only"
+            ? ""
+            : `<${acr}> acp:accessControl <urn:reader>; acp:memberAccessControl <urn:reader>.
+                <urn:reader> acp:apply [ acp:allow acp:Read; acp:allOf [ acp:agent <${bob}> ] ].`
+        }`;
+      mem.attach(folder, bytes);
+      const options = {
+        ...mem.options,
+        kind: "folder" as const,
+        implementation: "ess" as const,
+        webId: owner,
+      };
+      const read = readGrants(folder, options);
+      await expect(read).rejects.toMatchObject({ code: "partial-scope", url: folder });
+      await expect(read).rejects.toSatisfy(isRoleError);
+      for (const result of [
+        await addGrant([folder], selection("editor"), options),
+        await setGrants([folder], [manager, selection("editor")], options),
+        await removeGrant([folder], selection().agent, options),
+        // Even a no-op or an unrelated addition must refuse before planning a write.
+        await addGrant([folder], selection("viewer", { type: "webid", id: other }), options),
+        await setGrants([folder], [manager, selection()], options),
+      ]) {
+        expect(result.applied).toEqual([]);
+        expect(result.failed).toHaveLength(1);
+        expect(result.failed[0]?.error).toMatchObject({ code: "partial-scope", url: folder });
+        expect(isRoleError(result.failed[0]?.error)).toBe(true);
+      }
+      expect(mem.writes()).toHaveLength(0);
+      expect(mem.docs.get(acr)?.body).toBe(bytes);
+    });
 
 it("removes NSS legacy defaults for a folder without leaving inherited access behind", async () => {
   const mem = memoryAccess();

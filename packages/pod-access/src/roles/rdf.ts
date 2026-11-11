@@ -15,6 +15,11 @@ import type { AgentRef } from "./types.js";
 
 export const MATERIALIZED_FROM = "https://jeswr.org/ns/pod-access#materializedFrom";
 
+/** Role-local provenance; the offline policy API keeps its existing grant shape. */
+export interface RolePolicy extends EffectivePolicy {
+  grants: (Grant & { ownAcrManagement?: boolean })[];
+}
+
 export class Properties extends RdfNode {
   terms(predicate: string) {
     return SetFrom.subjectPredicate(
@@ -197,7 +202,7 @@ export function readPolicy(
   model: "wac" | "acp",
   implementation: PodImplementation,
   selectedResource = resource,
-): EffectivePolicy {
+): RolePolicy {
   for (const q of dataset) {
     if (q.graph.termType !== "DefaultGraph")
       throw new TypeError("Access RDF must use the default graph");
@@ -240,7 +245,7 @@ export function readPolicy(
       allowed(auth.mode, model, implementation);
     return readWac(dataset, resource, url, implementation);
   }
-  const result: EffectivePolicy = { grants: [], denials: [] };
+  const result: RolePolicy = { grants: [], denials: [] };
   const visited = new Set<string>();
   const visit = (term: Term) => visited.add(JSON.stringify([term.termType, term.value]));
   for (const root of roots(dataset)) {
@@ -281,6 +286,9 @@ export function readPolicy(
         except: [],
         appliesTo: scope,
         source: { url, node: policy.value },
+        // The same policy may be linked in both scopes. Classify each placement,
+        // so exempting own-ACR management never discards member-ACR management.
+        ownAcrManagement: management && scope === "resource",
       });
     }
     for (const [controls, scope] of [
