@@ -64,6 +64,8 @@ const KINDS = {
   control: "Agent control changed",
   "mandate-change": "Permissions changed",
   "model-call": "Model consulted",
+  "tool-call": "Tool used",
+  conversation: "Conversation recorded",
   "tamper-suspected": "Record mismatch suspected",
 };
 const ICONS = {
@@ -76,6 +78,8 @@ const ICONS = {
   control: Square,
   "mandate-change": FileCheck,
   "model-call": Brain,
+  "tool-call": Activity,
+  conversation: FileText,
   "tamper-suspected": CircleAlert,
   "ledger-checkpoint": Activity,
 };
