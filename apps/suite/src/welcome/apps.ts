@@ -63,7 +63,11 @@ export const companionApps: readonly CompanionApp[] = [
   companion("mcp-server", "MCP server", "Connect an assistant to your pod."),
   companion("access-manager", "Access manager", "Manage access to your pod.", true),
   companion("pod-manager", "Pod manager", "Manage pod storage and accounts."),
-  companion("issues", "Issues", "Track issues using your pod."),
+  {
+    ...companion("issues", "Issues", "Track issues in Tasks using your pod."),
+    href: "/tasks/issues",
+    statusLabel: "Ready to try",
+  },
   companion("coeliac", "Coeliac", "Explore a pod app for coeliac health."),
   companion("agent-daemon", "Agent daemon", "Run a pod assistant in the background."),
   companion("notification-relay", "Notification relay", "Deliver pod notifications to devices."),

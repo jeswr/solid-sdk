@@ -1,5 +1,7 @@
 # Solid Issues
 
+Issues is now folded into the Solid Suite's Tasks app at `/tasks/issues`. It reads and writes the same trackers and issue documents in your pod, so no data migration is needed. Set `SUITE_ORIGIN` to the suite's origin (for example `https://suite.example`) to redirect the standalone app's pages, preserving a `tracker` query parameter in old bookmarks. Leave it unset for standalone local development; `/clientid.jsonld` continues to be served for existing sessions.
+
 > ⚠️ **Experimental — AI-agent-generated.** This project was created by an AI coding agent (Claude Opus 4.8, @jeswr's PSS agent) and is under active development. It is not yet production-hardened; review before relying on it.
 
 An issue tracker where the data lives in **your own Solid Pod**, not a central

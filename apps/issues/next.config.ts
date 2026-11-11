@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import type { NextConfig } from "next";
+import { normaliseOrigin } from "./src/lib/app-origin";
 
 // Static-export deploy (Caddy `file_server` on a subdomain) vs. the default
 // server build (Vercel / `next start`, used by the e2e harness).
@@ -39,6 +40,12 @@ function buildVersion(): string {
 }
 
 const baseConfig: NextConfig = {
+  async redirects() {
+    const suite = process.env.SUITE_ORIGIN?.trim();
+    // Next forwards the original query (including tracker) to the destination.
+    // Only pages redirect; the client identifier and authentication assets stay served.
+    return suite ? [{ source: "/", destination: `${normaliseOrigin(suite)}/tasks/issues`, permanent: false }] : [];
+  },
   // Bake the build version into the client bundle so the FeedbackButton can
   // attach it to issue diagnostics without a runtime lookup.
   env: { NEXT_PUBLIC_APP_VERSION: buildVersion() },

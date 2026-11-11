@@ -19,12 +19,15 @@ import { usePathname, useSearchParams } from "next/navigation";
 import { type CSSProperties, useEffect, useId, useRef, useState } from "react";
 import { encodeRef } from "@/lib/refs";
 import { duplicateTaskData } from "../../lib/detail/task-data";
+import { isIssuesProject } from "../../lib/issues/model";
+import { IssuesTaskStore } from "../../lib/issues/store";
 import type { StoredProject, StoredTask } from "../../lib/model/store";
 import { compareTasks, treeRows } from "../../lib/views/project-groups";
 import { expandedRows, taskLevel, taskProgress } from "../../lib/views/tree";
 import { toTaskView } from "../../lib/views/types";
 import { completeTask, deleteTask } from "../../state/actions";
 import { useTasks } from "../../state/tasks-context";
+import { IssuesDetail } from "../issues/issues-detail";
 import { TaskProgress, TreeToggle, useCollapsedTasks } from "../tree-controls";
 import { TaskAttachments } from "./attachments";
 import { ProjectFields, TaskProperties } from "./fields";
@@ -170,6 +173,32 @@ export function TaskDetail({
     !creator || creator === tasks.webId
       ? "You"
       : (new URL(creator).pathname.split("/").filter(Boolean).at(-1) ?? new URL(creator).hostname);
+  const issue = isIssuesProject(project);
+  if (
+    issue &&
+    tasks.cache.store instanceof IssuesTaskStore &&
+    !tasks.cache.store.canEdit(project, stored)
+  )
+    return (
+      <section className="tsk-detail" aria-label={`Issue details: ${view.title}`}>
+        <Button variant="ghost" onClick={onClose}>
+          Close
+        </Button>
+        <h2>{view.title}</h2>
+        <p>You can view this tracker but not edit it</p>
+        <p>{description}</p>
+        <p>Due: {view.due?.toLocaleString("en-GB") ?? "None"}</p>
+        <p>Assignee: {view.assignee ?? "Unassigned"}</p>
+        <p>
+          Labels:{" "}
+          {project.tracker.labels
+            .filter((label) => view.labelIds.includes(label.id))
+            .map((label) => label.name)
+            .join(", ")}
+        </p>
+        <IssuesDetail stored={stored} readOnly />
+      </section>
+    );
   return (
     <section className="tsk-detail" aria-labelledby={`${id}-heading`}>
       <h2 id={`${id}-heading`} className="sr-only">
@@ -464,6 +493,7 @@ export function TaskDetail({
           void move(target);
         }}
       />
+      {issue && <IssuesDetail stored={stored} />}
       <footer className="tsk-detail-footer">
         {view.created && (
           <p>
