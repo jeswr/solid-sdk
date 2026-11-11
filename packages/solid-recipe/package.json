@@ -1,0 +1,37 @@
+{
+  "name": "@jeswr/solid-recipe",
+  "version": "0.1.0",
+  "type": "module",
+  "license": "MIT",
+  "description": "Generated schema.org recipes, meal plans, importers and ingredient scaling.",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "codegen",
+    "codegen.config.json",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "pnpm -w exec tsc -p packages/solid-recipe/tsconfig.build.json && node scripts/copy-generated.mjs",
+    "codegen": "node node_modules/@jeswr/federation-codegen/dist/cli.js gen --ontology codegen/recipe.ontology.ttl --shapes codegen/recipe.shapes.ttl --config codegen.config.json --out src/generated",
+    "lint": "pnpm -w exec biome check packages/solid-recipe",
+    "typecheck": "pnpm -w exec tsc -p packages/solid-recipe/tsconfig.json --noEmit",
+    "test": "pnpm -w exec vitest run --root packages/solid-recipe"
+  },
+  "dependencies": {
+    "@jeswr/model-runtime": "workspace:*",
+    "@jeswr/pod-type-index": "workspace:*",
+    "@jeswr/storage-client": "workspace:*"
+  },
+  "devDependencies": {
+    "@jeswr/federation-codegen": "workspace:*"
+  }
+}

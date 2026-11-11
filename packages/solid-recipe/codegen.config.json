@@ -1,0 +1,77 @@
+{
+  "shapesBase": "https://jeswr.org/ns/recipe/shapes#",
+  "prefixes": {
+    "schema": "https://schema.org/",
+    "recipe": "https://jeswr.org/ns/recipe#",
+    "dct": "http://purl.org/dc/terms/",
+    "xsd": "http://www.w3.org/2001/XMLSchema#"
+  },
+  "entities": [
+    {
+      "name": "Recipe",
+      "kind": "composite",
+      "root": "recipe",
+      "nodes": {
+        "recipe": {
+          "targetClass": "https://schema.org/Recipe",
+          "fragment": "it",
+          "fields": {
+            "name": {},
+            "description": {},
+            "image": {},
+            "url": {},
+            "author": {},
+            "recipeYield": {},
+            "prepTime": {},
+            "cookTime": {},
+            "totalTime": {},
+            "category": {},
+            "cuisine": {},
+            "keywords": {},
+            "ingredients": {},
+            "instructions": {},
+            "favourite": {
+              "default": false,
+              "materializeDefault": true
+            },
+            "created": {},
+            "modified": {}
+          },
+          "links": {
+            "nutrition": "nutrition",
+            "personalReview": "review"
+          }
+        },
+        "nutrition": {
+          "targetClass": "https://schema.org/NutritionInformation",
+          "fragment": "nutrition",
+          "fields": {
+            "calories": {}
+          }
+        },
+        "review": {
+          "targetClass": "https://schema.org/Review",
+          "fragment": "review",
+          "fields": {},
+          "links": {
+            "personalRating": "rating"
+          }
+        },
+        "rating": {
+          "targetClass": "https://schema.org/Rating",
+          "fragment": "rating",
+          "fields": {
+            "rating": {}
+          }
+        }
+      }
+    },
+    {
+      "name": "MealPlan",
+      "targetClass": "https://jeswr.org/ns/recipe#MealPlan",
+      "subject": {
+        "convention": "hash-it"
+      }
+    }
+  ]
+}

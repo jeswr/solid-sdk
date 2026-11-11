@@ -1,0 +1,45 @@
+# AUTHORED-BY Codex (GPT-6.1 Sol)
+# No federation recipes sector exists at this revision. This local schema.org profile
+# narrows author to a literal name, image/source to HTTP(S) IRIs, yield to text,
+# ingredients/instructions to position-prefixed repeated strings (no RDF lists),
+# nutrition to one NutritionInformation node with optional text calories. Ratings
+# are personal 0-5 values, never aggregateRating. Plans have one recipe IRI per day.
+@prefix schema: <https://schema.org/> .
+@prefix recipe: <https://jeswr.org/ns/recipe#> .
+@prefix dct: <http://purl.org/dc/terms/> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+
+recipe:RecipeShape a sh:NodeShape ; sh:targetClass schema:Recipe ;
+ sh:property [ sh:path schema:name ; sh:name "name" ; sh:datatype xsd:string ; sh:maxCount 1 ; sh:minCount 1 ; sh:pattern "\\S" ] ;
+ sh:property [ sh:path schema:description ; sh:name "description" ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
+ sh:property [ sh:path schema:image ; sh:name "image" ; sh:nodeKind sh:IRI ; sh:pattern "^https?://" ; sh:maxCount 1 ] ;
+ sh:property [ sh:path schema:url ; sh:name "url" ; sh:nodeKind sh:IRI ; sh:pattern "^https?://" ; sh:maxCount 1 ] ;
+ sh:property [ sh:path schema:author ; sh:name "author" ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
+ sh:property [ sh:path schema:recipeYield ; sh:name "recipeYield" ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
+ sh:property [ sh:path schema:prepTime ; sh:name "prepTime" ; sh:datatype xsd:duration ; sh:maxCount 1 ] ;
+ sh:property [ sh:path schema:cookTime ; sh:name "cookTime" ; sh:datatype xsd:duration ; sh:maxCount 1 ] ;
+ sh:property [ sh:path schema:totalTime ; sh:name "totalTime" ; sh:datatype xsd:duration ; sh:maxCount 1 ] ;
+ sh:property [ sh:path schema:recipeCategory ; sh:name "category" ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
+ sh:property [ sh:path schema:recipeCuisine ; sh:name "cuisine" ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
+ sh:property [ sh:path schema:keywords ; sh:name "keywords" ; sh:datatype xsd:string ] ;
+ sh:property [ sh:path schema:recipeIngredient ; sh:name "ingredients" ; sh:datatype xsd:string ] ;
+ sh:property [ sh:path schema:recipeInstructions ; sh:name "instructions" ; sh:datatype xsd:string ] ;
+ sh:property [ sh:path recipe:favourite ; sh:name "favourite" ; sh:datatype xsd:boolean ; sh:maxCount 1 ] ;
+ sh:property [ sh:path dct:created ; sh:name "created" ; sh:datatype xsd:dateTime ; sh:maxCount 1 ] ;
+ sh:property [ sh:path dct:modified ; sh:name "modified" ; sh:datatype xsd:dateTime ; sh:maxCount 1 ] ;
+ sh:property [ sh:path schema:review ; sh:name "personalReview" ; sh:nodeKind sh:IRI ; sh:maxCount 1 ; sh:node recipe:ReviewShape ] ;
+ sh:property [ sh:path schema:nutrition ; sh:name "nutrition" ; sh:nodeKind sh:IRI ; sh:maxCount 1 ; sh:node recipe:NutritionShape ] .
+recipe:NutritionShape a sh:NodeShape ; sh:targetClass schema:NutritionInformation ; sh:property [ sh:path schema:calories ; sh:name "calories" ; sh:datatype xsd:string ; sh:maxCount 1 ] .
+recipe:MealPlanShape a sh:NodeShape ; sh:targetClass recipe:MealPlan ; sh:property [ sh:path schema:name ; sh:name "name" ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ; sh:pattern "\\S" ] ;
+ sh:property [ sh:path recipe:monday ; sh:name "monday" ; sh:nodeKind sh:IRI ; sh:pattern "^https?://" ; sh:maxCount 1 ] ;
+ sh:property [ sh:path recipe:tuesday ; sh:name "tuesday" ; sh:nodeKind sh:IRI ; sh:pattern "^https?://" ; sh:maxCount 1 ] ;
+ sh:property [ sh:path recipe:wednesday ; sh:name "wednesday" ; sh:nodeKind sh:IRI ; sh:pattern "^https?://" ; sh:maxCount 1 ] ;
+ sh:property [ sh:path recipe:thursday ; sh:name "thursday" ; sh:nodeKind sh:IRI ; sh:pattern "^https?://" ; sh:maxCount 1 ] ;
+ sh:property [ sh:path recipe:friday ; sh:name "friday" ; sh:nodeKind sh:IRI ; sh:pattern "^https?://" ; sh:maxCount 1 ] ;
+ sh:property [ sh:path recipe:saturday ; sh:name "saturday" ; sh:nodeKind sh:IRI ; sh:pattern "^https?://" ; sh:maxCount 1 ] ;
+ sh:property [ sh:path recipe:sunday ; sh:name "sunday" ; sh:nodeKind sh:IRI ; sh:pattern "^https?://" ; sh:maxCount 1 ] .
+recipe:ReviewShape a sh:NodeShape ; sh:targetClass schema:Review ; sh:property [ sh:path schema:reviewRating ; sh:name "personalRating" ; sh:nodeKind sh:IRI ; sh:maxCount 1 ; sh:node recipe:RatingShape ] .
+recipe:RatingShape a sh:NodeShape ; sh:targetClass schema:Rating ; sh:property [ sh:path schema:ratingValue ; sh:name "rating" ; sh:datatype xsd:decimal ; sh:maxCount 1 ; sh:minInclusive 0 ; sh:maxInclusive 5 ] .
