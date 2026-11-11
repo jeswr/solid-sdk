@@ -58,6 +58,12 @@ The stdio CLI must keep stdout exclusively for MCP messages.
 Chat save/export use the shared normalization and adjacent-field boundary rules in
 [solid-chat-interop](../solid-chat-interop/SKILL.md); do not pre-redact individual fields
 before that conversation-aware pass, since a marker can hide a split token's prefix.
+Boundary replacement preserves per-field markers, keeping IDs stable on incremental
+saves when the earlier message was already fully detected. URL password context
+includes `@`; orphan private-key END lines redact the entire field prefix. Windows
+stop at code-point boundaries, lone surrogates are stripped, and flag tags follow
+the subdivision grammar. Checks are pairwise: secrets requiring three fields are
+outside the bounded policy.
 
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 Memory tools use `NanopubStore` through the current PodPort and PodOutput. Trusted

@@ -95,7 +95,7 @@ describe("renderTranscript", () => {
     });
     expect(out).not.toContain("sk-fixture-export-token");
     expect(out).not.toContain("ghp_fixtureExportToken1");
-    expect(out).toContain("[REDACTED]");
+    expect(out).toContain("[REDACTED TOKEN]");
   });
 
   it.each([

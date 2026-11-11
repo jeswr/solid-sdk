@@ -89,7 +89,7 @@ describe("ChatWriter", () => {
       "Before ghp_fixture",
       "Token123 After",
       "Safe",
-      "Before [REDACTED]",
+      "Before [REDACTED TOKEN]",
       "[REDACTED] After",
     ],
   ])("redacts title/message and message/message joins before IDs or writes %#", async (title, first, second, a, b, c) => {
@@ -228,10 +228,10 @@ describe("ChatWriter", () => {
       }
     const got = await writer.get("claude", "thread-1");
     // Separator-free joins also cover the following word after a token-ending title.
-    expect(got.title).toBe("Deploy with [REDACTED]");
+    expect(got.title).toBe("Deploy with [REDACTED TOKEN]");
     expect(got.messages.map((m) => m.text)).toEqual([
       "[REDACTED] [REDACTED TOKEN]\n[REDACTED PRIVATE KEY]\nthanks",
-      "[REDACTED]",
+      "[REDACTED AUTHORIZATION]",
     ]);
     // Input a capture caller already redacted maps to the same derived ID, so it is a replay.
     const preRedacted = new ChatWriter(pod);
@@ -243,6 +243,48 @@ describe("ChatWriter", () => {
         messages: raw.messages.map((m, index) => ({ ...m, text: fields[index + 1] as string })),
       }),
     ).toMatchObject({ saved: 0, skipped: 2 });
+  });
+
+  it.each([
+    "sk-abc",
+    "ghp_fixtureToken",
+    "github_pat_fixtureToken",
+    "AKIA0000000000000000",
+    "ASIA0000000000000000",
+    "AIDA0000000000000000",
+    "AROA0000000000000000",
+    "eyJabc.def.ghi",
+    "Authorization: Bearer fixture",
+    "Proxy-Authorization: Basic fixture",
+    "-----BEGIN PRIVATE KEY-----\nfixture\n-----END PRIVATE KEY-----",
+    "-----BEGIN RSA PRIVATE KEY-----\nfixture",
+    "fixture\n-----END EC PRIVATE KEY-----",
+    "password=hunter2",
+    'const apiKey = "hunter2"',
+    "const token: string = 'hunter2'",
+    "\nVALUE=hunter2",
+    "tool --password hunter2",
+    "?token=hunter2",
+    "https://bob:hunter2@h.test/",
+  ])("keeps content-derived IDs stable on incremental saves: %s", async (secret) => {
+    const pod = new MemoryPod();
+    const writer = new ChatWriter(pod);
+    const first = { role: "user" as const, text: `Here's my key ${secret}`, createdAt: DAY1 };
+    const input = conversation({ title: "t", messages: [first] });
+    expect(await writer.save(input)).toMatchObject({ saved: 1, skipped: 0 });
+    const before = (await writer.get("claude", "thread-1")).messages[0];
+    const appended = {
+      ...input,
+      messages: [first, { role: "assistant" as const, text: "Thanks", createdAt: DAY2 }],
+    };
+    expect(await writer.save(appended)).toMatchObject({ saved: 1, skipped: 1 });
+    const after = await writer.get("claude", "thread-1");
+    expect(after.messages).toHaveLength(2);
+    expect(after.messages[0]).toEqual(before);
+    expect([...pod.resources.keys()].filter((url) => /m-[a-f0-9]+\.ttl$/.test(url))).toHaveLength(
+      2,
+    );
+    expect(await writer.save(appended)).toMatchObject({ saved: 0, skipped: 2 });
   });
 
   it("writes only owner ACLs before containers and content", async () => {

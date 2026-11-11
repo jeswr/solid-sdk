@@ -142,7 +142,14 @@ multiline quoted values. All title/message and content-part boundaries are check
 with separator-free 512-code-unit windows before queueing, timestamp filtering or
 100-message import batches. Replay checks complete snapshots before one-message saves.
 The shared normalizer removes Unicode format characters except admitted emoji ZWJs
-and complete subdivision-flag tags; see the exact [redaction rule](../solid-chat-interop/README.md#redaction).
+and subdivision flags (two tag lowercase country letters, then 1–4 tag lowercase
+letters/digits, then the terminator), and strips lone surrogates. Window edges retain
+whole code points. Capture reuses the shared `redactConversation`; existing markers
+stay byte-for-byte stable across repeated passes. URL password detection includes the
+trailing `@` across a join. An orphan private-key END line redacts the field prefix,
+including long PEM bodies split after BEGIN. Adjacent-pair checks cannot detect a
+secret requiring three fields or context beyond 512 code units; see the exact
+[redaction rule](../solid-chat-interop/README.md#redaction).
 Queue replay redacts again. Source IDs are hashed; titles
 are fixed provider labels. Pattern redaction does not identify every possible
 secret format, so use project opt-out for sensitive work.

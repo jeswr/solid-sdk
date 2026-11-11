@@ -17,7 +17,7 @@ import { DataFactory, Store } from "n3";
 import { buildAs2Message, parseAs2Message } from "./as2.js";
 import { safeHttpIri } from "./iri.js";
 import { storeToTurtle } from "./reconcile.js";
-import { redactSecretFields } from "./redact.js";
+import { redactConversation } from "./redact.js";
 import { AS_COLLECTION, AS_NAME, DCT, RDF_TYPE } from "./vocab.js";
 
 /** Structural subset of DESIGN §3 PodPort; implementations enforce pod scope. */
@@ -195,17 +195,13 @@ export class ChatWriter {
   ): Promise<{ url: string; saved: number; skipped: number }> {
     const url = this.conversationUrl(conversation.provider, conversation.conversationId);
     // Validate and serialize everything before the first write.
-    const fields = redactSecretFields([
-      conversation.title,
-      ...conversation.messages.map((message) => message.text),
-    ]);
+    conversation = redactConversation(conversation);
     const messages = await Promise.all(
-      conversation.messages.map(async (message, index) => {
+      conversation.messages.map(async (message) => {
         if (!CHAT_ROLES.includes(message.role)) throw new TypeError("Unsupported chat role");
         // Redact before deriving the ID, so no stored value or name depends on a secret.
         const normalized = {
           ...message,
-          text: fields[index + 1] as string,
           createdAt: timestamp(message.createdAt),
         };
         const id = await messageId(normalized);
@@ -229,7 +225,7 @@ export class ChatWriter {
     const room = new ChatDoc(`${url}_conversation.ttl#it`, metadata, DataFactory);
     room.types.add(AS_COLLECTION);
     room.identifier = conversation.conversationId;
-    room.title = fields[0];
+    room.title = conversation.title;
     const roomTurtle = await storeToTurtle(metadata);
     for (const container of [this.base, `${this.base}${conversation.provider}/`, url]) {
       const containerStore = new Store();

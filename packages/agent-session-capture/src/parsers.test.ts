@@ -48,7 +48,7 @@ describe("real-shaped redacted JSONL", () => {
     const parser = provider === "claude" ? parseClaudeTranscript : parseCodexTranscript;
     expect(parser(jsonl(rows)).conversation.messages.map((message) => message.text)).toEqual([
       "[REDACTED]",
-      "[REDACTED] Safe [REDACTED]",
+      "[REDACTED] Safe [REDACTED TOKEN]",
       "[REDACTED]",
     ]);
   });
@@ -82,8 +82,35 @@ describe("real-shaped redacted JSONL", () => {
       ),
     ]);
     const parsed = parseClaudeTranscript(input);
-    expect(parsed.conversation.messages.map((m) => m.text)).toEqual(["[REDACTED]", "[REDACTED]"]);
+    expect(parsed.conversation.messages.map((m) => m.text)).toEqual([
+      "[REDACTED TOKEN]",
+      "[REDACTED TOKEN]",
+    ]);
     expect(JSON.stringify(parsed)).not.toMatch(/sk-|ghp_/);
+  });
+
+  it.each([
+    "claude",
+    "codex",
+  ] as const)("uses shared conversation redaction for URL right context and long PEM bodies in %s", (provider) => {
+    const texts = [
+      "https://bob:hunter2",
+      "@h.test/",
+      "-----BEGIN PRIVATE KEY-----\n",
+      `${"fixtureKeyMaterial\n".repeat(26)}-----END PRIVATE KEY-----\nSafe`,
+    ];
+    const content = texts.map((text) => ({ type: "text", text }));
+    const rows =
+      provider === "claude"
+        ? [claudeRow({ role: "user", content })]
+        : [codexRow({ type: "message", role: "user", content })];
+    const parser = provider === "claude" ? parseClaudeTranscript : parseCodexTranscript;
+    expect(parser(jsonl(rows)).conversation.messages.map((message) => message.text)).toEqual([
+      "https://bob:[REDACTED]",
+      "@h.test/",
+      "[REDACTED PRIVATE KEY]",
+      "[REDACTED PRIVATE KEY]\nSafe",
+    ]);
   });
 
   it.each([

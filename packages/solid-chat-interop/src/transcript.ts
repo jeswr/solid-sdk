@@ -2,7 +2,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { CHAT_PROVIDERS, CHAT_ROLES, type ChatConversation } from "./chat-writer.js";
 import { sanitizeText } from "./iri.js";
-import { redactSecretFields } from "./redact.js";
+import { redactConversation } from "./redact.js";
 
 /** A fence one backtick longer than any backtick run in `text`, so content cannot close it. */
 function fence(text: string): string {
@@ -34,18 +34,15 @@ export function renderTranscript(conversation: ChatConversation): string {
     conversation.messages.some((m) => !CHAT_ROLES.includes(m.role))
   )
     throw new TypeError("Invalid chat conversation");
-  const fields = redactSecretFields([
-    conversation.title,
-    ...conversation.messages.map((message) => message.text),
-  ]);
-  const title = line(fields[0] as string) || "Untitled conversation";
+  conversation = redactConversation(conversation);
+  const title = line(conversation.title) || "Untitled conversation";
   const parts = [
     `# ${title}`,
     "",
     `Archived ${conversation.provider} conversation \`${conversation.conversationId}\`, exported from a Solid pod. Continue it from here.`,
   ];
-  for (const [index, message] of conversation.messages.entries()) {
-    const text = (fields[index + 1] as string).replace(/\r\n?/g, "\n");
+  for (const message of conversation.messages) {
+    const text = message.text.replace(/\r\n?/g, "\n");
     const marks = fence(text);
     parts.push(
       "",

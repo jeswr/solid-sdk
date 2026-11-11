@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+import type { ChatConversation } from "./chat-writer.js";
 import { sanitizeText } from "./iri.js";
 
 const VALUE_MARKER = "[REDACTED]";
@@ -16,6 +17,16 @@ function markerLength(text: string, offset: number): number {
   return text[offset] === "["
     ? (MARKERS.find((marker) => text.startsWith(marker, offset))?.length ?? 0)
     : 0;
+}
+
+function onlyMarkers(text: string, start: number, end: number): boolean {
+  if (start >= end) return false;
+  while (start < end) {
+    const length = markerLength(text, start);
+    if (!length || start + length > end) return false;
+    start += length;
+  }
+  return true;
 }
 
 function secretName(name: string): boolean {
@@ -171,6 +182,7 @@ interface Span {
 interface SecretSpan extends Span {
   /** Include the key/operator in detection, but replace only the value. */
   contextStart: number;
+  contextEnd: number;
 }
 interface Edit extends Span {
   length: number;
@@ -199,8 +211,8 @@ function redactValues(text: string, inspect?: (span: SecretSpan) => void): strin
   let copied = 0;
   let previousName = "";
   let previousEnd = 0;
-  const replace = (start: number, end: number, contextStart: number) => {
-    inspect?.({ start, end, contextStart });
+  const replace = (start: number, end: number, contextStart: number, contextEnd = end) => {
+    inspect?.({ start, end, contextStart, contextEnd });
     chunks.push(text.slice(copied, start), VALUE_MARKER);
     copied = end;
   };
@@ -232,7 +244,7 @@ function redactValues(text: string, inspect?: (span: SecretSpan) => void): strin
         if (char === ":" && colon < 0) colon = offset;
         if (char === "@") at = offset;
       }
-      if (colon >= 0 && colon < at) replace(colon + 1, at, match.index);
+      if (colon >= 0 && colon < at) replace(colon + 1, at, match.index, at + 1);
       candidates.lastIndex = offset;
       previousEnd = offset;
       continue;
@@ -285,7 +297,7 @@ function redactValues(text: string, inspect?: (span: SecretSpan) => void): strin
       while (text[offset] === " " || text[offset] === "\t") offset += 1;
     }
     const span = valueSpan(text, offset, syntax, Boolean(env));
-    replace(span.start, span.end, match.index);
+    replace(span.start, span.end, match.index, span.next);
     candidates.lastIndex = span.next;
     previousEnd = span.next;
   }
@@ -299,6 +311,9 @@ const TOKEN_RULES: readonly (readonly [RegExp, string])[] = [
     /-----BEGIN (?:[A-Z0-9]+ )*PRIVATE KEY-----[\s\S]*?(?:-----END (?:[A-Z0-9]+ )*PRIVATE KEY-----|$)/g,
     "[REDACTED PRIVATE KEY]",
   ],
+  // Conservatively cover orphan END lines from the field start, including bodies
+  // longer than a boundary window. Complete BEGIN/END blocks were removed above.
+  [/^[\s\S]*-----END (?:[A-Z0-9]+ )*PRIVATE KEY-----/g, "[REDACTED PRIVATE KEY]"],
   // Letter/digit boundaries let Markdown emphasis surround tokens without hiding them.
   [/(?<![A-Za-z0-9])sk-[A-Za-z0-9_-]+/g, "[REDACTED TOKEN]"],
   [/(?<![A-Za-z0-9])(?:gh[pousr]_[A-Za-z0-9_]+|github_pat_[A-Za-z0-9_]+)/g, "[REDACTED TOKEN]"],
@@ -330,7 +345,7 @@ function redactNormalized(
         edits.push({ start: offset, end: offset + match.length, length: marker.length });
       if (positions) {
         const span = sourceSpan(offset, offset + match.length);
-        inspect?.({ ...span, contextStart: span.start });
+        inspect?.({ ...span, contextStart: span.start, contextEnd: span.end });
         for (let i = copied; i < offset; i++) next.push(positions[i] as Span);
         for (let i = 0; i < marker.length; i++) next.push(span);
         copied = offset + match.length;
@@ -347,11 +362,12 @@ function redactNormalized(
   const result = redactValues(
     text,
     inspect || covered.length
-      ? ({ start, end, contextStart }) => {
+      ? ({ start, end, contextStart, contextEnd }) => {
           if (covered.length) edits.push({ start, end, length: VALUE_MARKER.length });
           inspect?.({
             ...sourceSpan(start, end),
             contextStart: sourceSpan(contextStart, contextStart).start,
+            contextEnd: sourceSpan(contextEnd, contextEnd).end,
           });
         }
       : undefined,
@@ -366,33 +382,71 @@ function boundarySpans(fields: readonly string[]): Span[][] {
   for (let i = 1; i < fields.length; i++) {
     const left = fields[i - 1] as string;
     const right = fields[i] as string;
-    const offset = Math.max(0, left.length - BOUNDARY_WINDOW);
+    let offset = Math.max(0, left.length - BOUNDARY_WINDOW);
+    let limit = Math.min(right.length, BOUNDARY_WINDOW);
+    // Snap inward so both bounded windows contain complete code points.
+    if (/[\uDC00-\uDFFF]/.test(left[offset] ?? "")) offset += 1;
+    if (/[\uD800-\uDBFF]/.test(right[limit - 1] ?? "")) limit -= 1;
     const join = left.length - offset;
-    const window = left.slice(offset) + right.slice(0, BOUNDARY_WINDOW);
-    redactNormalized(window, ({ start, end, contextStart }) => {
+    const window = left.slice(offset) + right.slice(0, limit);
+    redactNormalized(window, ({ start, end, contextStart, contextEnd }) => {
       // A key/operator may span the join while its value lies entirely on the right.
-      if (contextStart >= join || end <= join) return;
-      if (start < join) spans[i - 1]?.push({ start: offset + start, end: offset + join });
-      spans[i]?.push({ start: Math.max(0, start - join), end: end - join });
+      // URL userinfo also needs the @ on the right even if its value is on the left.
+      if (contextStart >= join || contextEnd <= join || start >= end) return;
+      // A previously redacted value completes the left field's contribution.
+      // Otherwise retained assignment names would consume another 512 units of
+      // the next field on every replay. Original source windows still detect
+      // plaintext fragments before any per-field markers are introduced.
+      if (onlyMarkers(window, start, Math.min(end, join))) return;
+      if (start < join)
+        spans[i - 1]?.push({ start: offset + start, end: offset + Math.min(end, join) });
+      if (end > join) spans[i]?.push({ start: Math.max(0, start - join), end: end - join });
     });
   }
   return spans;
 }
 
 function replaceSpans(text: string, spans: Span[]): string {
+  if (!spans.length) return text;
   // Each field participates in at most two fixed-size windows. Merge overlaps before
   // replacing, so a middle field is not repeatedly copied or given duplicate markers.
   spans.sort((a, b) => a.start - b.start || a.end - b.end);
+  const markers: Span[] = [];
+  for (let offset = 0; offset < text.length; offset++) {
+    const length = markerLength(text, offset);
+    if (!length) continue;
+    markers.push({ start: offset, end: offset + length });
+    offset += length - 1;
+  }
   const merged: Span[] = [];
+  let markerIndex = 0;
   for (const span of spans) {
+    if (span.start >= span.end) continue;
+    // Preserve any existing marker touched by a mapped span. Absorb newly exposed
+    // fragments into its coverage; a span contained in a marker changes nothing.
+    while (markerIndex < markers.length && (markers[markerIndex] as Span).end < span.start)
+      markerIndex++;
+    while (markerIndex < markers.length && (markers[markerIndex] as Span).start <= span.end) {
+      const marker = markers[markerIndex++] as Span;
+      span.start = Math.min(span.start, marker.start);
+      span.end = Math.max(span.end, marker.end);
+    }
     const last = merged.at(-1);
     if (last && span.start <= last.end) last.end = Math.max(last.end, span.end);
     else merged.push({ ...span });
   }
   const parts: string[] = [];
   let copied = 0;
+  markerIndex = 0;
   for (const { start, end } of merged) {
-    parts.push(text.slice(copied, start), VALUE_MARKER);
+    while (markerIndex < markers.length && (markers[markerIndex] as Span).end <= start)
+      markerIndex++;
+    const retained: string[] = [];
+    while (markerIndex < markers.length && (markers[markerIndex] as Span).start < end) {
+      const marker = markers[markerIndex++] as Span;
+      retained.push(text.slice(marker.start, marker.end));
+    }
+    parts.push(text.slice(copied, start), retained.length ? retained.join("") : VALUE_MARKER);
     copied = end;
   }
   parts.push(text.slice(copied));
@@ -402,7 +456,9 @@ function replaceSpans(text: string, spans: Span[]): string {
 /**
  * Normalize/redact fields in persistence order (title, then messages or capture chunks).
  * Inspect each adjacent suffix/prefix of at most 512 UTF-16 code units, joined without
- * a separator. Only detections spanning the join add value-only [REDACTED] markers.
+ * a separator, with edges snapped inward to complete code points. Only detections
+ * whose full context spans the join add value-only [REDACTED] markers. Existing
+ * markers are preserved; a marker-only left value ends boundary continuation.
  * Source windows are inspected too: per-field redaction may already have hidden `sk-`
  * or an assignment head while leaving its continuation in the next field exposed.
  * Apply this before splitting a conversation into independent saves/queued snapshots.
@@ -419,7 +475,33 @@ export function redactSecretFields(fields: readonly string[]): string[] {
   const spans = boundarySpans(redacted);
   // A window edge may remove an emoji's base while leaving its ZWJ/tags beyond the
   // match. Normalize once more so the rendered result and the RDF serializer agree.
-  return redacted.map((field, i) => sanitizeText(replaceSpans(field, spans[i] as Span[])));
+  return redacted.map((field, i) => {
+    const replaced = sanitizeText(replaceSpans(field, spans[i] as Span[]));
+    // Removing a boundary fragment can expose syntax that was previously inside
+    // a URL or another detector's context. Finish per-field detection in this
+    // call so replay does not discover a new assignment in the edited text.
+    return sourceSpans[i]?.length || spans[i]?.length ? redactNormalized(replaced) : replaced;
+  });
+}
+
+/**
+ * Redact a conversation's title and ordered messages together before storage,
+ * export, queueing or splitting saves. Returns a copy, preserving message metadata.
+ * Uses the bounded, adjacent-pair policy of {@link redactSecretFields}.
+ */
+export function redactConversation(conversation: ChatConversation): ChatConversation {
+  const fields = redactSecretFields([
+    conversation.title,
+    ...conversation.messages.map((message) => message.text),
+  ]);
+  return {
+    ...conversation,
+    title: fields[0] as string,
+    messages: conversation.messages.map((message, index) => ({
+      ...message,
+      text: fields[index + 1] as string,
+    })),
+  };
 }
 
 /**
@@ -432,7 +514,8 @@ export function redactSecretFields(fields: readonly string[]): string[] {
  * Multiline, continued and unfinished values err toward redaction. Value scanning is linear.
  * Normalization strips C0/C1 controls (except tab/CR/LF) and every Unicode Cf character,
  * except ZWJ between Extended_Pictographic emoji (optional FE0F/skin-tone modifiers),
- * and complete U+1F3F4 subdivision-flag tag runs through U+E007F. Other Cf, including
+ * and U+1F3F4 subdivision flags with two tag lowercase country letters, then 1–4
+ * tag lowercase letters/digits and U+E007F. Lone surrogates and other Cf, including
  * orphan ZWJs, soft hyphens, bidi controls and incomplete/orphan tags, are removed.
  *
  * {@link ChatWriter} uses {@link redactSecretFields} to add conversation boundary checks.

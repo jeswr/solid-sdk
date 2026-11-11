@@ -50,7 +50,7 @@ describe("bounded export parsers", () => {
           );
     expect(parsed[0]?.title).toBe("[REDACTED]");
     expect(parsed[0]?.messages.map((message) => message.text)).toEqual([
-      "[REDACTED] Safe [REDACTED]\n[REDACTED] Safe [REDACTED]",
+      "[REDACTED] Safe [REDACTED]\n[REDACTED] Safe [REDACTED TOKEN]",
       "[REDACTED]",
     ]);
   });
@@ -136,8 +136,8 @@ describe("bounded export parsers", () => {
         }),
       ),
     ]) {
-      expect(parsed[0]?.title).toBe("[REDACTED]");
-      expect(parsed[0]?.messages[0]?.text).toBe("[REDACTED]");
+      expect(parsed[0]?.title).toBe("[REDACTED TOKEN]");
+      expect(parsed[0]?.messages[0]?.text).toBe("[REDACTED TOKEN]");
     }
   });
   it("uses deterministic dates and source identity fallbacks, and de-duplicates message IDs", () => {

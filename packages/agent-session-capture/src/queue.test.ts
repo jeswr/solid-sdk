@@ -69,7 +69,7 @@ describe("offline queue", () => {
     const save = vi.fn().mockResolvedValue({});
     await replay(directory, target, save, signal());
     expect(save.mock.calls.map(([chat]) => [chat.title, chat.messages[0].text])).toEqual([
-      ["[REDACTED]", "[REDACTED] Safe [REDACTED]"],
+      ["[REDACTED]", "[REDACTED] Safe [REDACTED TOKEN]"],
       ["[REDACTED]", "[REDACTED]"],
     ]);
   });
@@ -154,8 +154,8 @@ describe("offline queue", () => {
     await replay(directory, target, save, signal());
     expect(save).toHaveBeenCalledWith({
       ...entry.conversation,
-      title: "[REDACTED]",
-      messages: [{ ...entry.conversation.messages[0], text: "[REDACTED]" }],
+      title: "[REDACTED TOKEN]",
+      messages: [{ ...entry.conversation.messages[0], text: "[REDACTED TOKEN]" }],
     });
     expect(await files()).toEqual([]);
     expect((await fs.stat(progress())).mode & 0o7777).toBe(0o600);
