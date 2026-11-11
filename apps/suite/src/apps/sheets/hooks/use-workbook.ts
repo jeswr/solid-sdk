@@ -27,6 +27,7 @@ export function useWorkbook(container: string) {
       (opened) => {
         if (!live) return;
         const pending = pendingSaves.get(container);
+        if (opened.readOnly && pending) pending.reset({ ...pending.workbook, readOnly: true });
         const entry = pendingSaves.acquire(service, pending?.workbook ?? opened);
         writer.current = entry;
         const update = () => {
@@ -77,6 +78,7 @@ export function useWorkbook(container: string) {
   };
   return {
     workbook,
+    readOnly: workbook?.readOnly === true,
     metadata: workbook?.metadata,
     version: workbook?.version,
     error,

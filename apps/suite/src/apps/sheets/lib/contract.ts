@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 /**
  * The Sheets app's two seams (SHT-01), shared by the data layer and the editor UI:
@@ -51,6 +52,8 @@ export interface WorkbookVersion {
 }
 
 export interface OpenedWorkbook {
+  /** Confirmed lack of write access; missing permission hints remain unknown. */
+  readonly readOnly?: boolean;
   readonly container: string;
   readonly metadata: WorkbookMetadata;
   readonly snapshot: Snapshot;
@@ -175,10 +178,12 @@ export interface SheetEngine {
   /** Adds a sheet with the CSV as text cells, or replaces the active sheet's cells. */
   importCsv(csv: string, options: { mode: "new-sheet" | "replace-active"; name?: string }): void;
   setDark(dark: boolean): void;
+  setReadOnly(readOnly: boolean): void;
   dispose(): void;
 }
 
 export interface MountEngineOptions {
+  readonly readOnly?: boolean;
   readonly snapshot: Snapshot;
   readonly dark: boolean;
   /** Narrow viewport (< 640 px): no ribbon toolbar; formula bar, grid and sheet tabs only. */

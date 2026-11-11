@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { OpenedWorkbook, WorkbookService } from "../src/apps/sheets/lib/contract";
@@ -274,4 +275,25 @@ describe("workbook editor lifecycle", () => {
     expect(pendingSaves.get(book.container)).toBeUndefined();
     await editor.unmount();
   });
+});
+
+it("suppresses detached pending saves when re-opening reveals view-only access", async () => {
+  const { service, book } = await setup(false);
+  const entry = pendingSaves.acquire(service, book);
+  entry.setOnline(false);
+  const local = snapshot("Preserved copy");
+  entry.schedule(() => local);
+  await entry.flush();
+  vi.spyOn(service, "open").mockResolvedValue({ ...book, readOnly: true });
+  const save = vi.spyOn(service, "save");
+  const editor = await mount(h(Editor, { container: book.container }));
+  expect(state.readOnly).toBe(true);
+  expect(state.workbook?.snapshot).toEqual(local);
+  await act(async () => {
+    state.rename("Blocked");
+    state.scheduleSave(() => snapshot());
+    await state.retry();
+  });
+  await editor.unmount();
+  expect(save).not.toHaveBeenCalled();
 });

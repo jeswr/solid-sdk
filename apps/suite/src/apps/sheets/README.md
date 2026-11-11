@@ -1,8 +1,25 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 
-Sheets uses `WorkbookService` for storage and a lazy Univer 1.2.0 adapter for the editor.
-The service in `lib/workbook/index.ts` is a temporary, account-scoped in-memory stand-in;
-replace it with SHT-01's pod service at integration. It does not survive a page reload.
+Sheets uses `WorkbookService` for pod storage and a lazy Univer 1.2.0 adapter for the editor.
+The demo session uses the same service against the browser's persistent demo pod.
+
+The editor and list menu open the shell's sharing dialog for the workbook container.
+WAC grants update both `acl:accessTo` and `acl:default`, covering metadata, the engine
+snapshot, sheet projections and versions that inherit this policy. Existing member ACLs
+remain authoritative. Sharing supports viewers, editors and public links; it adds no
+realtime collaboration. Unsupported ACL shapes and ACP fail closed. A missing own ACL
+is created conditionally only after verifying owner-only inherited access, or for the
+isolated demo pod. Inherited policies with other collaborators must be managed at their source.
+
+An explicit lack of Write in either authoritative resource's `WAC-Allow` header opens
+the editor with “View only”. A save rejected with 403 switches the mounted engine to
+the same mode and stops subsequent autosaves, including reconnection and teardown saves.
+Unknown permission hints allow editing until a save supplies a definitive response.
+Existing local edits remain available to download or copy after write access is lost.
+
+At phone widths the compact engine hides the ribbon, leaving the File menu, a single-line
+formula bar and horizontally scrolling sheet tabs with a fixed add button. The header
+truncates long titles and save messages to leave room for Share.
 
 The list and editor chrome use native links, labelled controls and suite dialogs. The grid
 is engine-rendered: canvas cell contents and cell navigation are not fully exposed to screen

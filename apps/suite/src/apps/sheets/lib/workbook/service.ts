@@ -149,6 +149,7 @@ export function createWorkbookService(options: WorkbookServiceOptions): Workbook
         container,
         metadata: index.value,
         snapshot: snapshot.value,
+        ...(index.readOnly === true || snapshot.readOnly === true ? { readOnly: true } : {}),
         version: {
           snapshotEtag: strongEtag(snapshot.etag, layout.snapshot),
           indexEtag: strongEtag(index.etag, layout.index),

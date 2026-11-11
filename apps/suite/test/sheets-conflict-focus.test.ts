@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
@@ -13,8 +14,12 @@ import { harness, snapshot } from "./sheets-workbook-helpers";
 
 const mocks = vi.hoisted(() => ({
   service: null as WorkbookService | null,
+  session: null as { fetch: typeof fetch; storageUrl: string; webId: string; mode: "demo" } | null,
   mount: vi.fn<MountEngine>(),
   push: vi.fn(),
+}));
+vi.mock("@/lib/session/pod-session", () => ({
+  usePodSessionState: () => ({ status: "ready", session: mocks.session }),
 }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: mocks.push }) }));
 vi.mock("next-themes", () => ({ useTheme: () => ({ resolvedTheme: "light" }) }));
@@ -48,6 +53,7 @@ function fakeEngine(initial: Snapshot) {
     snapshot: vi.fn(() => current),
     onChange: vi.fn(() => () => {}),
     setDark: vi.fn(),
+    setReadOnly: vi.fn(),
     dispose: vi.fn(),
     exportCsv: vi.fn(() => ""),
     activeSheet: vi.fn(() => ({ id: "data", name: "Data" })),
@@ -66,6 +72,7 @@ async function setup(online = true) {
   const pod = await harness();
   const book = await pod.service.create({ title: "Conflict", snapshot: snapshot() });
   mocks.service = pod.service;
+  mocks.session = { ...pod.options, storageUrl: pod.options.podRoot, mode: "demo" };
   vi.spyOn(window.navigator, "onLine", "get").mockReturnValue(online);
   return { ...pod, book };
 }
@@ -260,4 +267,106 @@ it.each([
   expect(save).not.toHaveBeenCalled();
   if (view === "editor") expect(mocks.push).toHaveBeenCalledWith("/sheets");
   await screen.unmount();
+});
+
+it.each([
+  "editor",
+  "list",
+])("opens the shell sharing dialog for the workbook container from the %s", async (view) => {
+  const { book, calls } = await setup();
+  for (const name of [
+    "HTMLFormElement",
+    "HTMLSelectElement",
+    "HTMLButtonElement",
+    "SVGElement",
+    "DocumentFragment",
+  ] as const)
+    vi.stubGlobal(name, window[name]);
+  window.HTMLElement.prototype.scrollIntoView = vi.fn();
+  const screen = await mount(
+    view === "editor" ? h(SheetEditor, { container: book.container }) : h(SheetsList),
+  );
+  if (view === "editor") await click(button(screen.host, "Share"));
+  else {
+    const trigger = screen.host.querySelector<HTMLButtonElement>(
+      '[aria-label="Actions for Conflict"]',
+    );
+    if (!trigger) throw new Error("Missing menu");
+    await key(trigger, "ArrowDown");
+    const share = [...document.querySelectorAll('[role="menuitem"]')].find(
+      (item) => item.textContent === "Share",
+    );
+    if (!share) throw new Error("Missing Share");
+    await click(share);
+  }
+  await vi.waitFor(() =>
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain("People with access"),
+  );
+  expect(document.querySelector('[role="dialog"]')?.textContent).toContain("Share Conflict");
+  expect(calls.some((call) => call.method === "HEAD" && call.url === book.container)).toBe(true);
+  expect(calls.some((call) => call.method === "PUT" && call.url === `${book.container}.acl`)).toBe(
+    true,
+  );
+  expect(document.querySelector('[role="dialog"]')?.textContent).not.toContain("Commenter");
+  await click(button(document, "Done"));
+  expect(document.querySelector('[role="dialog"]')).toBeNull();
+  await screen.unmount();
+});
+
+it("shows View only, disables engine editing and skips autosave for a reader", async () => {
+  const { book, pod, service, setHook } = await setup();
+  setHook(async (call) => {
+    if (call.method !== "GET" || !call.url.startsWith(book.container)) return undefined;
+    const response = await pod.fetch(call.url, call.init);
+    const headers = new Headers(response.headers);
+    headers.set("wac-allow", 'user="read",public=""');
+    return new Response(response.body, { status: response.status, headers });
+  });
+  const save = vi.spyOn(service, "save");
+  const editor = await mount(h(SheetEditor, { container: book.container }));
+  const engine = await mocks.mount.mock.results[0]?.value;
+  expect(mocks.mount.mock.calls[0]?.[1].readOnly).toBe(true);
+  expect(engine.setReadOnly).toHaveBeenCalledWith(true);
+  expect(editor.host.textContent).toContain("View only");
+  expect(button(editor.host, "Share").disabled).toBe(true);
+  await act(async () => {
+    vi.mocked(engine.onChange).mock.calls[0]?.[0]();
+    window.dispatchEvent(new Event("pagehide"));
+    window.dispatchEvent(new Event("online"));
+    await pendingSaves.get(book.container)?.flush();
+  });
+  expect(save).not.toHaveBeenCalled();
+  await key(button(editor.host, "File"), "ArrowDown");
+  const items = [...document.querySelectorAll('[role="menuitem"]')];
+  expect(
+    items.find((item) => item.textContent === "Import CSV")?.getAttribute("aria-disabled"),
+  ).toBe("true");
+  expect(items.find((item) => item.textContent === "Delete")?.getAttribute("aria-disabled")).toBe(
+    "true",
+  );
+  await key(button(editor.host, "File"), "Escape");
+  await editor.unmount();
+  expect(save).not.toHaveBeenCalled();
+});
+
+it("switches the mounted editor to View only after a forbidden save", async () => {
+  const { book, service, setHook } = await setup();
+  const editor = await mount(h(SheetEditor, { container: book.container }));
+  const engine = await mocks.mount.mock.results[0]?.value;
+  const save = vi.spyOn(service, "save");
+  setHook((call) => (call.method === "PUT" ? new Response(null, { status: 403 }) : undefined));
+  await act(async () => {
+    vi.mocked(engine.onChange).mock.calls[0]?.[0]();
+    await pendingSaves.get(book.container)?.flush();
+  });
+  expect(editor.host.textContent).toContain("View only");
+  expect(engine.setReadOnly).toHaveBeenLastCalledWith(true);
+  await act(async () => {
+    vi.mocked(engine.onChange).mock.calls[0]?.[0]();
+    window.dispatchEvent(new Event("online"));
+    await pendingSaves.get(book.container)?.retry();
+  });
+  expect(save).toHaveBeenCalledOnce();
+  await editor.unmount();
+  pendingSaves.drop(book.container);
 });

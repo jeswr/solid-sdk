@@ -64,6 +64,8 @@ export const mountUniver: MountEngine = async (container, options) => {
     ],
   });
   let workbook = univerAPI.createWorkbook(options.snapshot as Partial<IWorkbookData>);
+  let readOnly = options.readOnly ?? false;
+  workbook.setEditable(!readOnly);
   const listeners = new Set<() => void>();
   let disposed = false;
   let loading = false;
@@ -83,6 +85,7 @@ export const mountUniver: MountEngine = async (container, options) => {
   const subscription = univerAPI.addEvent(univerAPI.Event.CommandExecuted, (event) => {
     if (
       event.type !== CommandType.MUTATION ||
+      readOnly ||
       loading ||
       event.options?.fromChangeset ||
       RECOMPUTE_MUTATIONS.has(event.id) ||
@@ -109,6 +112,7 @@ export const mountUniver: MountEngine = async (container, options) => {
     try {
       univerAPI.disposeUnit(workbook.getId());
       workbook = univerAPI.createWorkbook(data as Partial<IWorkbookData>);
+      workbook.setEditable(!readOnly);
     } finally {
       loading = false;
     }
@@ -131,6 +135,7 @@ export const mountUniver: MountEngine = async (container, options) => {
       );
     },
     importCsv(csv, config) {
+      if (readOnly) return;
       const rows = parseCsv(csv);
       const data = snapshot() as unknown as IWorkbookData;
       const active = workbook.getActiveSheet().getSheetId();
@@ -160,6 +165,12 @@ export const mountUniver: MountEngine = async (container, options) => {
     },
     setDark(dark) {
       univerAPI.toggleDarkMode(dark);
+    },
+    setReadOnly(value) {
+      readOnly = value;
+      ++generation;
+      queued = false;
+      workbook.setEditable(!readOnly);
     },
     dispose() {
       disposed = true;

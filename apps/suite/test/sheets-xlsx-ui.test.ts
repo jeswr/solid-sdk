@@ -67,6 +67,7 @@ beforeEach(async () => {
         load: vi.fn(),
         onChange: vi.fn(() => () => {}),
         setDark: vi.fn(),
+        setReadOnly: vi.fn(),
         dispose: vi.fn(),
         exportCsv: vi.fn(() => ""),
         activeSheet: vi.fn(() => ({ id: "sheet1", name: "Data" })),
