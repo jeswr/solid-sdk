@@ -39,6 +39,7 @@ import type { SaveStatus } from "../lib/autosave";
 import {
   type SheetEngine,
   type Snapshot,
+  type SnapshotSaved,
   WorkbookLinkError,
   WorkbookNotFoundError,
 } from "../lib/contract";
@@ -84,20 +85,24 @@ export function SheetNotFound() {
 
 function Grid({
   snapshot,
+  revision,
   onChange,
+  onSaved,
   engineRef,
   onReady,
   readOnly,
 }: {
   snapshot: Snapshot;
+  revision: string;
   onChange: (read: () => Snapshot) => void;
+  onSaved: (listener: SnapshotSaved) => (() => void) | undefined;
   engineRef: { current: SheetEngine | null };
   onReady: (engine: SheetEngine | null) => void;
   readOnly: boolean;
 }) {
   const host = useRef<HTMLDivElement>(null);
-  const latestSnapshot = useRef(snapshot);
-  latestSnapshot.current = snapshot;
+  const latestSnapshot = useRef({ snapshot, revision });
+  latestSnapshot.current = { snapshot, revision };
   const { resolvedTheme } = useTheme();
   const dark = useRef(resolvedTheme === "dark");
   const [ready, setReady] = useState(false);
@@ -117,13 +122,15 @@ function Grid({
     let live = true;
     let engine: SheetEngine | undefined;
     let unsubscribe: (() => void) | undefined;
+    let unsubscribeSaved: (() => void) | undefined;
     setFailed(false);
     setReady(false);
     void (async () => {
       const mount = await loadEngine();
       if (!live || !host.current) return;
       engine = await mount(host.current, {
-        snapshot: latestSnapshot.current,
+        snapshot: latestSnapshot.current.snapshot,
+        workbookRevision: latestSnapshot.current.revision,
         dark: dark.current,
         compact: matchMedia("(max-width: 639px)").matches,
         readOnly: viewOnly.current,
@@ -138,6 +145,9 @@ function Grid({
       engine.setDark(dark.current);
       engine.setReadOnly(viewOnly.current);
       const active = engine;
+      unsubscribeSaved = onSaved((data, savedRevision) =>
+        active.setWorkbookRevision?.(savedRevision, data),
+      );
       unsubscribe = engine.onChange(() => {
         if (!viewOnly.current) onChange(() => active.snapshot());
       });
@@ -149,12 +159,13 @@ function Grid({
     return () => {
       live = false;
       unsubscribe?.();
+      unsubscribeSaved?.();
       if (window.__sheetsEngine === engine) delete window.__sheetsEngine;
       engineRef.current = null;
       onReady(null);
       engine?.dispose();
     };
-  }, [engineRef, onChange, onReady, attempt]);
+  }, [engineRef, onChange, onSaved, onReady, attempt]);
   return (
     <section
       className="sht-grid-region"
@@ -396,7 +407,9 @@ export function SheetEditor({ container }: { container: string }) {
             <Grid
               key={grid?.revision ?? 0}
               snapshot={state.workbook.snapshot}
+              revision={state.workbook.version.snapshotEtag}
               onChange={state.scheduleSave}
+              onSaved={state.onSaved}
               engineRef={engine}
               onReady={setChartEngine}
               readOnly={state.readOnly}
@@ -555,10 +568,11 @@ export function SheetEditor({ container }: { container: string }) {
               onClick={(event) => {
                 event.preventDefault();
                 void action(async () => {
-                  const snapshot = await state.reload();
+                  await state.reload((snapshot, revision) =>
+                    engine.current?.load(snapshot, revision),
+                  );
                   setChartRevision((revision) => revision + 1);
-                  if (engine.current) engine.current.load(snapshot);
-                  else
+                  if (!engine.current)
                     setGrid((current) => ({
                       container,
                       revision: (current?.revision ?? 0) + 1,

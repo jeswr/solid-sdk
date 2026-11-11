@@ -133,6 +133,8 @@ export function CellComments({
         if (isCurrent() && revision === lifetime.revision) {
           engine?.registerCommentAnchors?.(
             Object.fromEntries(rows.map(({ root }) => [root.url, root.anchor as CellAnchor])),
+            "snapshot",
+            Object.fromEntries(rows.map(({ root }) => [root.url, root.workbookRevision])),
           );
           setThreads(rows);
         }
@@ -412,6 +414,8 @@ export function CellComments({
                             text,
                             webId,
                             (composer.draft?.current() ?? composer.anchor) as CellAnchor,
+                            new Date(),
+                            engine?.commentRevision?.(),
                           );
                           if (isCurrent()) {
                             if (composer.draft) composer.draft.commit(created.url);

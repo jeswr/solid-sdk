@@ -122,7 +122,16 @@ export const mountUniver: MountEngine = async (container, options) => {
   const anchors = new WorkbookCommentAnchors(options.snapshot);
   // Keep the actual deletion records carried by native undo/redo. Late discovery
   // fills those same records so a future inverse can revive the newly found root.
+  let savedRevision = options.workbookRevision;
+  let mountRevision = savedRevision;
+  let logGeneration = 0;
+  // Saves acknowledge the snapshot captured before I/O, even if more edits ran
+  // before the response. Never associate that ETag with the response-time cursor.
+  const savedCursors = new Map<string, number>();
+  const snapshotCursors = new WeakMap<Snapshot, { generation: number; cursor: number }>();
+  snapshotCursors.set(options.snapshot, { generation: logGeneration, cursor: 0 });
   const structuralLog: {
+    revision: string | undefined;
     edit: StructuralEdit;
     deleted: AnchorDeletions;
     inverse: AnchorDeletions | undefined;
@@ -272,7 +281,7 @@ export const mountUniver: MountEngine = async (container, options) => {
         inverse = operation[direction === "undo" ? "redo" : "undo"].pop();
         if (inverse) anchors.revive(inverse);
       }
-      structuralLog.push({ edit, deleted, inverse });
+      structuralLog.push({ revision: savedRevision, edit, deleted, inverse });
       for (const listener of structures) listener(edit);
     }
     editedSinceLoad = true;
@@ -285,9 +294,10 @@ export const mountUniver: MountEngine = async (container, options) => {
     // Univer drops unknown top-level metadata when saving its canvas model.
     if (charts !== undefined) data.charts = JSON.parse(JSON.stringify(charts));
     serializeSnapshot(data);
+    snapshotCursors.set(data, { generation: logGeneration, cursor: structuralLog.length });
     return data;
   };
-  const load = (data: Snapshot, newerSnapshot = true) => {
+  const load = (data: Snapshot, newerSnapshot = true, revision?: string) => {
     serializeSnapshot(data);
     loading = true;
     charts = data.charts;
@@ -299,7 +309,14 @@ export const mountUniver: MountEngine = async (container, options) => {
       workbook = univerAPI.createWorkbook(data as Partial<IWorkbookData>);
       setEditable();
       anchors.load(data);
-      if (newerSnapshot) structuralLog.length = 0;
+      if (newerSnapshot) {
+        structuralLog.length = 0;
+        savedCursors.clear();
+        ++logGeneration;
+        mountRevision = revision;
+        savedRevision = revision;
+        snapshotCursors.set(data, { generation: logGeneration, cursor: 0 });
+      }
       activeOperation = undefined;
       selectionChanged();
     } finally {
@@ -344,14 +361,26 @@ export const mountUniver: MountEngine = async (container, options) => {
       commentsLoading = value;
       setEditable();
     },
-    registerCommentAnchors(values, position = "snapshot") {
+    commentRevision: () => savedRevision,
+    setWorkbookRevision(revision, data) {
+      const checkpoint = snapshotCursors.get(data);
+      if (disposed || !revision || checkpoint?.generation !== logGeneration) return;
+      savedCursors.set(revision, checkpoint.cursor);
+      savedRevision = revision;
+    },
+    registerCommentAnchors(values, position = "snapshot", revisions = {}) {
       const existing = anchors.snapshot().commentAnchors?.anchors ?? {};
       const rebased: Record<string, CellAnchor> = {};
       for (const [id, selector] of Object.entries(values)) {
         if (Object.hasOwn(existing, id)) continue;
         let anchor = selector;
-        if (position === "snapshot") {
-          for (const { edit, deleted, inverse } of structuralLog) {
+        const revision = revisions[id];
+        // An absent/foreign baseline cannot safely be inferred from coordinates.
+        const start = revision
+          ? (savedCursors.get(revision) ?? (revision === mountRevision ? 0 : -1))
+          : -1;
+        if (position === "snapshot" && start >= 0) {
+          for (const { edit, deleted, inverse } of structuralLog.slice(start)) {
             const next = shiftCellAnchor(anchor, edit);
             if (!anchor.deleted && next.deleted)
               deleted.anchors[id] = { sheetId: anchor.sheetId, cell: anchor.cell };
@@ -374,7 +403,9 @@ export const mountUniver: MountEngine = async (container, options) => {
         },
       };
     },
-    load,
+    load(data, revision) {
+      load(data, true, revision);
+    },
     snapshot,
     selectedCell,
     selectCell(anchor) {

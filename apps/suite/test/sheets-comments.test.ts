@@ -371,3 +371,25 @@ it("requires resource Write for a claimed matching creator even when the contain
     "Cell deleted",
   );
 });
+
+it("round-trips selector revision provenance and preserves it through text and resolution updates", async () => {
+  const revision = '"opaque-etag\\"escaped"';
+  const root = await store.create("Revision", author, anchor, now, revision);
+  expect(root.workbookRevision).toBe(revision);
+  const read = (await store.list())[0]?.root as CellComment;
+  expect(read.workbookRevision).toBe(revision);
+  const { dataset } = await readRdf(root.url, pod.fetch);
+  expect(
+    new SheetResource(root.url, dataset, DataFactory).text(
+      "https://jeswr.org/ns/sheets#workbookRevision",
+    ),
+  ).toBe(revision);
+  await store.edit(read, "Edited", author);
+  const edited = (await store.list())[0]?.root as CellComment;
+  await store.resolve(edited, true);
+  expect((await store.list())[0]?.root.workbookRevision).toBe(revision);
+  const legacy = await store.create("Legacy", author, anchor, now);
+  expect(
+    (await store.list()).find(({ root }) => root.url === legacy.url)?.root.workbookRevision,
+  ).toBeUndefined();
+});

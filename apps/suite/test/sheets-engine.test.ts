@@ -634,6 +634,33 @@ it("registers a persisted draft on view-only workbooks without scheduling a work
   engine.dispose();
 });
 
+it("accepts revision acknowledgements only for snapshots from the active mount", async () => {
+  const engine = await mount();
+  expect(engine.commentRevision?.()).toBeUndefined();
+  const saved = engine.snapshot();
+  engine.setWorkbookRevision?.("", saved);
+  engine.setWorkbookRevision?.('"foreign"', initial());
+  expect(engine.commentRevision?.()).toBeUndefined();
+  engine.setWorkbookRevision?.('"saved"', saved);
+  expect(engine.commentRevision?.()).toBe('"saved"');
+  engine.load(initial(), '"reloaded"');
+  engine.setWorkbookRevision?.('"stale-save"', saved);
+  expect(engine.commentRevision?.()).toBe('"reloaded"');
+  engine.registerCommentAnchors?.(
+    { older: { sheetId: "data", cell: "B3", deleted: false } },
+    "snapshot",
+    { older: '"saved"' },
+  );
+  expect(engine.snapshot().commentAnchors).toEqual({
+    version: 1,
+    anchors: { older: { sheetId: "data", cell: "B3" } },
+  });
+  const active = engine.snapshot();
+  engine.dispose();
+  engine.setWorkbookRevision?.('"disposed"', active);
+  expect(engine.commentRevision?.()).toBe('"reloaded"');
+});
+
 it.each([
   "insert",
   "edit",

@@ -107,10 +107,12 @@ describe("workbook editor lifecycle", () => {
     const second = await mount(h(Editor, { container: book.container }));
     expect(state.status).toBe("conflict");
     let loaded: unknown;
+    const onLoad = vi.fn();
     await act(async () => {
-      loaded = await state.reload();
+      loaded = await state.reload(onLoad);
     });
     expect(loaded).toEqual(book.snapshot);
+    expect(onLoad).toHaveBeenCalledExactlyOnceWith(book.snapshot, state.version?.snapshotEtag);
     expect(state.metadata?.title).toBe("Remote title");
     await act(async () => {
       state.rename("Local title");

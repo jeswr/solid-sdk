@@ -704,3 +704,18 @@ it("retains an in-flight draft through panel closure and registers its moved loc
   expect(button("Renamed sheet!B4")).toBeTruthy();
   expect((await store.list())[0]?.root.anchor?.cell).toBe("B3");
 });
+
+it("records the engine's saved revision on a new root and supplies it during discovery", async () => {
+  const revision = '"workbook-revision"';
+  engine.commentRevision = () => revision;
+  const register = vi.spyOn(engine, "registerCommentAnchors");
+  await mount();
+  await add("Revision-aware comment");
+  const root = (await store.list())[0]?.root as CellComment;
+  expect(root?.workbookRevision).toBe(revision);
+  await waitFor(() =>
+    expect(register).toHaveBeenCalledWith({ [root.url]: root.anchor }, "snapshot", {
+      [root.url]: revision,
+    }),
+  );
+});

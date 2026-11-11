@@ -114,7 +114,13 @@ it.each([
     },
   });
   const store = new CellCommentStore(book.container, pod.fetch);
-  const root = await store.create("Unseen comment", WEBID, anchor);
+  const root = await store.create(
+    "Unseen comment",
+    WEBID,
+    anchor,
+    new Date(),
+    book.version.snapshotEtag,
+  );
   const rows = await store.list();
   const pending = Promise.withResolvers<typeof rows>();
   const list = vi.spyOn(store, "list");
@@ -124,6 +130,7 @@ it.each([
     vi.spyOn(store, "permissions").mockRejectedValueOnce(new Error("Permissions failed"));
   const engine = await mountUniver({} as HTMLElement, {
     snapshot: book.snapshot,
+    workbookRevision: book.version.snapshotEtag,
     dark: false,
     compact: true,
     commentsLoading: true,
@@ -262,11 +269,127 @@ it.each([
   }
 });
 
+it.each([
+  "saved",
+  "missing",
+  "unknown",
+] as const)("discovers a collaborator's comment created after the structural save (%s revision)", async (baseline) => {
+  const pod = await harness();
+  const book = await pod.service.create({
+    title: "Comment after save",
+    snapshot: snapshot("Header,Value\nA,1\nB,2"),
+  });
+  const engine = await mountUniver({} as HTMLElement, {
+    snapshot: book.snapshot,
+    workbookRevision: book.version.snapshotEtag,
+    dark: false,
+    compact: true,
+  });
+  const current = headless.current as ReturnType<typeof headless.create>;
+  const injector = current.univer.__getInjector();
+  injector.get(headless.core.IUniverInstanceService).focusUnit(book.snapshot.id as string);
+  const commands = injector.get(headless.core.ICommandService);
+  const insert = () =>
+    commands.executeCommand("sheet.command.insert-row", {
+      unitId: book.snapshot.id,
+      subUnitId: "data",
+      direction: headless.core.Direction.UP,
+      range: { startRow: 0, endRow: 0, startColumn: 0, endColumn: 1 },
+    });
+  try {
+    expect(await insert()).toBe(true);
+    const saved = engine.snapshot();
+    const result = await pod.service.save(book.container, saved, book.version);
+    engine.setWorkbookRevision?.(result.version.snapshotEtag, saved);
+    const collaborator = await pod.service.open(book.container);
+    const anchor = { sheetId: "data", cell: "B4", deleted: false };
+    const store = new CellCommentStore(book.container, pod.fetch);
+    const root = await store.create(
+      "Created after insertion",
+      "https://collaborator.example/#me",
+      anchor,
+      new Date(),
+      baseline === "saved"
+        ? collaborator.version.snapshotEtag
+        : baseline === "unknown"
+          ? '"another-mount"'
+          : undefined,
+    );
+    const discover = async () => {
+      const rows = await store.list();
+      engine.registerCommentAnchors?.(
+        Object.fromEntries(rows.map(({ root }) => [root.url, root.anchor as typeof anchor])),
+        "snapshot",
+        Object.fromEntries(rows.map(({ root }) => [root.url, root.workbookRevision])),
+      );
+    };
+    await discover();
+    expect(currentCommentAnchor(engine.snapshot(), root.url, anchor)).toEqual(anchor);
+    // Discovery itself can be saved without ever moving B4 to B5.
+    let version = (await pod.service.save(book.container, engine.snapshot(), result.version))
+      .version;
+    expect(
+      currentCommentAnchor((await pod.service.open(book.container)).snapshot, root.url, anchor),
+    ).toEqual(anchor);
+    expect(await insert()).toBe(true);
+    await discover();
+    expect(currentCommentAnchor(engine.snapshot(), root.url, anchor).cell).toBe("B5");
+    expect(await current.univerAPI.undo()).toBe(true);
+    expect(currentCommentAnchor(engine.snapshot(), root.url, anchor)).toEqual(anchor);
+    version = (await pod.service.save(book.container, engine.snapshot(), version)).version;
+    expect(version.snapshotEtag).not.toBe(book.version.snapshotEtag);
+    expect((await store.list())[0]?.root.anchor).toEqual(anchor);
+  } finally {
+    engine.dispose();
+  }
+});
+
+it("replays only edits after the exact saved snapshot when edits continue during a save", async () => {
+  const pod = await harness();
+  const book = await pod.service.create({
+    title: "In-flight save",
+    snapshot: snapshot("H,V\nA,1\nB,2"),
+  });
+  const engine = await mountUniver({} as HTMLElement, {
+    snapshot: book.snapshot,
+    workbookRevision: book.version.snapshotEtag,
+    dark: false,
+    compact: true,
+  });
+  const current = headless.current as ReturnType<typeof headless.create>;
+  const injector = current.univer.__getInjector();
+  injector.get(headless.core.IUniverInstanceService).focusUnit(book.snapshot.id as string);
+  const commands = injector.get(headless.core.ICommandService);
+  const insert = () =>
+    commands.executeCommand("sheet.command.insert-row", {
+      unitId: book.snapshot.id,
+      subUnitId: "data",
+      direction: headless.core.Direction.UP,
+      range: { startRow: 0, endRow: 0, startColumn: 0, endColumn: 1 },
+    });
+  try {
+    expect(await insert()).toBe(true);
+    const saved = engine.snapshot();
+    const saving = pod.service.save(book.container, saved, book.version);
+    expect(await insert()).toBe(true);
+    const { version } = await saving;
+    engine.setWorkbookRevision?.(version.snapshotEtag, saved);
+    const anchor = { sheetId: "data", cell: "B4", deleted: false };
+    engine.registerCommentAnchors?.({ later: anchor }, "snapshot", { later: version.snapshotEtag });
+    expect(currentCommentAnchor(engine.snapshot(), "later", anchor).cell).toBe("B5");
+    expect(await current.univerAPI.undo()).toBe(true);
+    expect(currentCommentAnchor(engine.snapshot(), "later", anchor)).toEqual(anchor);
+  } finally {
+    engine.dispose();
+  }
+});
+
 it("rebases from the newer snapshot after reload, preserving its registered anchors", async () => {
   const initial = snapshot("Header,Value\nA,1\nB,2");
   const anchor = { sheetId: "data", cell: "B3", deleted: false };
   const engine = await mountUniver({} as HTMLElement, {
     snapshot: initial,
+    workbookRevision: '"mount"',
     dark: false,
     compact: true,
   });
@@ -282,7 +405,7 @@ it("rebases from the newer snapshot after reload, preserving its registered anch
     });
   try {
     expect(await insert()).toBe(true);
-    engine.registerCommentAnchors?.({ discovered: anchor });
+    engine.registerCommentAnchors?.({ discovered: anchor }, "snapshot", { discovered: '"mount"' });
     expect(currentCommentAnchor(engine.snapshot(), "discovered", anchor).cell).toBe("C3");
     const newer = {
       ...initial,
@@ -291,10 +414,12 @@ it("rebases from the newer snapshot after reload, preserving its registered anch
         anchors: { registered: { sheetId: "data", cell: "A2" } },
       },
     };
-    engine.load(newer);
+    engine.load(newer, '"newer"');
     injector?.get(headless.core.IUniverInstanceService).focusUnit(initial.id as string);
     expect(await insert()).toBe(true);
-    engine.registerCommentAnchors?.({ discovered: anchor, registered: anchor });
+    engine.registerCommentAnchors?.({ discovered: anchor, registered: anchor }, "snapshot", {
+      discovered: '"newer"',
+    });
     expect(currentCommentAnchor(engine.snapshot(), "discovered", anchor).cell).toBe("C3");
     expect(currentCommentAnchor(engine.snapshot(), "registered", anchor).cell).toBe("B2");
     expect(await commands?.executeCommand("univer.command.undo")).toBe(true);

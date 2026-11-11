@@ -2,7 +2,7 @@
 // AUTHORED-BY Codex GPT-6
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { OpenedWorkbook, Snapshot } from "../lib/contract";
+import type { OpenedWorkbook, Snapshot, SnapshotSaved } from "../lib/contract";
 import { WorkbookNotFoundError } from "../lib/contract";
 import { pendingSaves } from "../lib/pending-saves";
 import { directChild } from "../lib/workbook/layout";
@@ -77,9 +77,11 @@ export function useWorkbook(container: string) {
   }, [container, service, open, own, attempt]);
 
   const scheduleSave = useCallback((read: () => Snapshot) => writer.current?.schedule(read), []);
-  const reload = async () => {
+  const onSaved = useCallback((listener: SnapshotSaved) => writer.current?.onSaved(listener), []);
+  const reload = async (loaded?: SnapshotSaved) => {
     try {
       const { opened, shared } = await open();
+      loaded?.(opened.snapshot, opened.version.snapshotEtag);
       if (shared) setWorkbook(opened);
       else writer.current?.reset(opened);
       return opened.snapshot;
@@ -99,6 +101,7 @@ export function useWorkbook(container: string) {
     error,
     status,
     scheduleSave,
+    onSaved,
     rename: (title: string) => writer.current?.rename(title),
     reload,
     retry: (force = false) => writer.current?.retry(force),

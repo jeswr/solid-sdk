@@ -15,8 +15,9 @@ const HAS_BODY = `${ANNOTATION}hasBody`;
 const TEXTUAL_BODY = `${ANNOTATION}TextualBody`;
 const FRAGMENT = `${ANNOTATION}FragmentSelector`;
 const VALUE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#value";
-// Reuse Docs' resolved vocabulary; only deletion is Sheets-specific.
+// Reuse Docs' resolved vocabulary; selector provenance is Sheets-specific.
 const DELETED = "https://jeswr.org/ns/sheets#cellDeleted";
+const WORKBOOK_REVISION = "https://jeswr.org/ns/sheets#workbookRevision";
 export const MAX_COMMENT_LENGTH = 10_000;
 export interface CellComment {
   url: string;
@@ -29,6 +30,8 @@ export interface CellComment {
   text: string;
   target: string;
   anchor?: CellAnchor;
+  /** workbook.json ETag against which the immutable creation selector was written. */
+  workbookRevision?: string | undefined;
   resolved: boolean;
 }
 export interface CellThread {
@@ -131,7 +134,7 @@ export class CellCommentStore {
         modified: date(node, DCT.modified),
         text,
         target: source,
-        ...(anchor ? { anchor } : {}),
+        ...(anchor ? { anchor, workbookRevision: node.text(WORKBOOK_REVISION) } : {}),
         resolved: boolean(node, PD.resolved),
       },
     };
@@ -195,10 +198,11 @@ export class CellCommentStore {
     creator: string,
     anchor: CellAnchor,
     now = new Date(),
+    workbookRevision?: string,
   ): Promise<CellComment> {
     formatCellSelector(anchor);
     if (anchor.deleted) throw new Error("Cell deleted");
-    return this.publish(text, creator, this.workbook, anchor, now);
+    return this.publish(text, creator, this.workbook, anchor, now, workbookRevision);
   }
   async reply(
     root: CellComment,
@@ -216,6 +220,7 @@ export class CellCommentStore {
     target: string,
     anchor: CellAnchor | undefined,
     now: Date,
+    workbookRevision?: string,
   ) {
     const comment: CellComment = {
       url: `${this.container}${crypto.randomUUID()}.ttl`,
@@ -226,7 +231,7 @@ export class CellCommentStore {
       created: now.toISOString(),
       modified: now.toISOString(),
       target,
-      ...(anchor ? { anchor } : {}),
+      ...(anchor ? { anchor, workbookRevision } : {}),
       resolved: false,
     };
     const dataset = new Store();
@@ -241,6 +246,7 @@ export class CellCommentStore {
     textual.types.add(TEXTUAL_BODY);
     textual.setText(VALUE, comment.text);
     if (anchor) {
+      if (workbookRevision) node.setText(WORKBOOK_REVISION, workbookRevision);
       node.setIri(OA.hasTarget, `${comment.url}#target`);
       const specific = new SheetResource(`${comment.url}#target`, dataset, DataFactory);
       specific.types.add(`${ANNOTATION}SpecificResource`);

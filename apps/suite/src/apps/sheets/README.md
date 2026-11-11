@@ -71,6 +71,10 @@ break the anchor. It needs no text-quote or fuzzy anchoring from Docs. Bodies ar
 are separate annotations motivated by `oa:replying` targeting the root annotation.
 All entries carry a creator WebID and created/modified dates. Resolution reuses
 Docs' `pd:resolved`. Selectors remain the address where each thread was created.
+New roots also record that selector's workbook revision as the string property
+`https://jeswr.org/ns/sheets#workbookRevision` on the annotation: the last saved
+`workbook.json` ETag, preserved verbatim through the normal RDF read/write path.
+Older annotations and other clients may omit it.
 Malformed/foreign targets and empty or over-10,000-character bodies are isolated
 when listing; missing dates, body nodes and selector fields are rejected.
 
@@ -102,8 +106,13 @@ initial comment load settles. Later refreshes leave editing available. A failed 
 CSV import, chart editing and undo/redo, shows an error with Retry, and disables comment actions
 until a load succeeds. Anchor discovery runs independently of permissions, so a successful
 listing still registers anchors when permissions fail. The adapter keeps a per-mount log
-of structural transforms and their undo/redo deletion identities. Newly discovered selectors
-are rebased across this log before registration, including tombstones and their restoration.
+of structural transforms, each tagged with the last saved workbook revision before it,
+and their undo/redo deletion identities. Save acknowledgements retain the exact snapshot's
+position in this log, including when editing continues during the write. Newly discovered
+selectors replay only edits after their recorded revision, including tombstones and their
+restoration. If that revision is absent from the log, only an exact match with the mount
+snapshot's revision permits replay from the mount; unknown, older or missing revisions
+register the selector as written.
 A newer snapshot reload clears the log; CSV import retains it. Locally created drafts already
 track current coordinates and bypass rebasing. Registered anchors continue following edits. This lock cannot
 override view-only access. These anchors

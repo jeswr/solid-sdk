@@ -28,6 +28,9 @@ import type { StructuralEdit } from "./refs/model";
 
 export type { Snapshot, WorkbookMetadata };
 
+/** The exact snapshot accepted by the authoritative workbook write and its ETag. */
+export type SnapshotSaved = (snapshot: Snapshot, revision: string) => void;
+
 /** One row in the Sheets list. */
 export interface WorkbookSummary {
   /** The workbook container URL (ends in `/`). Route refs encode this URL. */
@@ -190,11 +193,16 @@ export type CsvImportResult =
 export interface SheetEngine {
   /** Hold editing independently of access permissions while missing anchors load. */
   setCommentsLoading?(loading: boolean): void;
-  /** Listed selectors use the loaded snapshot; newly created roots use current coordinates. */
+  /** Listed selectors replay only history after their recorded workbook ETag. */
   registerCommentAnchors?(
     anchors: Record<string, CellAnchor>,
     position?: "snapshot" | "current",
+    revisions?: Record<string, string | undefined>,
   ): void;
+  /** Last saved workbook ETag, recorded on new comment annotations. */
+  commentRevision?(): string | undefined;
+  /** Acknowledge the exact saved snapshot, even if editing continued during its write. */
+  setWorkbookRevision?(revision: string, snapshot: Snapshot): void;
   trackCommentDraft?(anchor: CellAnchor): DraftAnchor;
   selectedCell?(): CellAnchor | undefined;
   selectCell?(anchor: CellAnchor): void;
@@ -208,7 +216,7 @@ export interface SheetEngine {
   /** Includes background formula results, without scheduling another save. */
   onValuesChange?(listener: () => void): () => void;
   /** Replace the whole workbook (e.g. "reload theirs" after a conflict). Does not fire `onChange`. */
-  load(snapshot: Snapshot): void;
+  load(snapshot: Snapshot, workbookRevision?: string): void;
   /** The current workbook as a JSON-safe snapshot (passes `serializeSnapshot`). */
   snapshot(): Snapshot;
   /** Fires after every user mutation (cell edit, format, sheet add/rename/move/delete…). */
@@ -227,6 +235,7 @@ export interface SheetEngine {
 }
 
 export interface MountEngineOptions {
+  readonly workbookRevision?: string;
   readonly commentsLoading?: boolean;
   readonly readOnly?: boolean;
   readonly snapshot: Snapshot;
