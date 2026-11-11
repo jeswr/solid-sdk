@@ -241,7 +241,16 @@ async function legacyWarnings(
   incoming: ReadonlySet<string>,
 ): Promise<string[]> {
   ctx.signal?.throwIfAborted();
-  const stored = await ctx.read(SLUG);
+  let stored: Awaited<ReturnType<FileImportContext["read"]>>;
+  try {
+    stored = await ctx.read(SLUG);
+  } catch (error) {
+    // The comparison is advisory: only cancellation may fail the import.
+    if (ctx.signal?.aborted) throw error;
+    return [
+      "Could not check the older shared bank document for duplicate transactions; check it manually.",
+    ];
+  }
   ctx.signal?.throwIfAborted();
   if (!stored || !incoming.size) return [];
   const capped = [
