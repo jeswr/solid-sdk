@@ -183,11 +183,75 @@
   gap: 16px;
 }
 .notes-card {
+  position: relative;
   min-width: 0;
   border: 1px solid color-mix(in srgb, var(--note-fg) 24%, transparent);
   border-radius: 12px;
   overflow-wrap: anywhere;
   transition: box-shadow 120ms ease;
+}
+.notes-card[data-selected="true"] {
+  outline: 2px solid var(--ring);
+}
+.notes-card-select {
+  position: absolute;
+  inset-block-start: -12px;
+  inset-inline-start: -10px;
+  z-index: 1;
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+.notes-card-select input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+.notes-card-select span {
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--foreground);
+  border: 1px solid var(--border);
+}
+.notes-card-select:has(:checked) span {
+  background: var(--primary);
+  color: var(--primary-foreground);
+}
+.notes-card-select:has(:focus-visible) span {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+.notes-selection-heading,
+.notes-bulk-failure {
+  margin-bottom: 24px;
+}
+.notes-selection-heading h1 {
+  font-size: 24px;
+  margin-bottom: 12px;
+}
+.notes-bulk-picker form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+@media (hover: hover) and (pointer: fine) and (min-width: 640px) {
+  .notes-card-select {
+    opacity: 0;
+  }
+  .notes-card:hover .notes-card-select,
+  .notes-card:focus-within .notes-card-select,
+  .notes-card[data-selected="true"] .notes-card-select {
+    opacity: 1;
+  }
 }
 .notes-card:hover,
 .notes-card:focus-within {

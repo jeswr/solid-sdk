@@ -26,7 +26,7 @@ export function ColourPicker({
   onChange,
   disabled = false,
 }: {
-  value: NoteColour;
+  value: NoteColour | undefined;
   onChange: (value: NoteColour) => void;
   disabled?: boolean;
 }) {
