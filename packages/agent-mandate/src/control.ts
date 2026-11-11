@@ -77,6 +77,22 @@ export async function readControlClaims(
   }
 }
 
+/**
+ * The verification method a control's proof names, for display and key management only. It is
+ * not authority: only {@link verifyControlStatement} establishes that the key signed the claims.
+ */
+export async function readControlVerificationMethod(
+  document: string,
+  id: string,
+): Promise<string | undefined> {
+  try {
+    const { p } = readProof(await parseRdf(document, "application/trig"), id);
+    return p.iri(`${SEC}verificationMethod`);
+  } catch {
+    return undefined;
+  }
+}
+
 /** Verify the owner's assertion key and complete signed graph before interpreting control claims. */
 export async function verifyControlStatement(
   document: string,

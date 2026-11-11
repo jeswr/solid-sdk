@@ -11,7 +11,14 @@
  * into the shell instead and this folder is deleted.
  */
 
-import { type AppSlug, Sheet, SheetContent, SheetDescription, SheetTitle } from "@jeswr/suite-ui";
+import {
+  APP_ICONS,
+  type AppSlug,
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetTitle,
+} from "@jeswr/suite-ui";
 import {
   Bot,
   CalendarDays,
@@ -87,6 +94,13 @@ export interface SuiteFrameProps {
   onDetailsClose?: () => void;
   detailsReturnFocus?: RefObject<HTMLElement | null>;
   children: ReactNode;
+}
+
+function appLabel(app: SuiteAppId | AppSlug): string {
+  return (
+    APPS.find((a) => a.id === app)?.label ??
+    (app in APP_ICONS ? APP_ICONS[app as AppSlug].label : app)
+  );
 }
 
 function Rail({ app }: { app: SuiteAppId | AppSlug }) {
@@ -194,12 +208,11 @@ export function SuiteFrame({
   return (
     <div className="ish-frame" data-app={app} data-has-details={details ? "" : undefined}>
       <Rail app={app} />
-      <aside
-        className="ish-sidebar"
-        aria-label={`${APPS.find((a) => a.id === app)?.label} navigation`}
-      >
-        {sidebar}
-      </aside>
+      {sidebar ? (
+        <aside className="ish-sidebar" aria-label={`${appLabel(app)} navigation`}>
+          {sidebar}
+        </aside>
+      ) : null}
       <Sheet open={drawer} onOpenChange={setDrawer}>
         <SheetContent
           side="left"
@@ -215,15 +228,17 @@ export function SuiteFrame({
         </SheetContent>
       </Sheet>
       <header className="ish-topbar">
-        <button
-          type="button"
-          className="ish-menu-button"
-          ref={navigationTrigger}
-          aria-label="Open navigation"
-          onClick={() => setDrawer(true)}
-        >
-          <Menu aria-hidden="true" size={20} strokeWidth={1.75} />
-        </button>
+        {sidebar ? (
+          <button
+            type="button"
+            className="ish-menu-button"
+            ref={navigationTrigger}
+            aria-label="Open navigation"
+            onClick={() => setDrawer(true)}
+          >
+            <Menu aria-hidden="true" size={20} strokeWidth={1.75} />
+          </button>
+        ) : null}
         <div className="ish-context">{context}</div>
         {search ? <SearchBox search={search} /> : <div className="ish-spacer" />}
         <div className="ish-actions">
