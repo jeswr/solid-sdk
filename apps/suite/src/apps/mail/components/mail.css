@@ -468,3 +468,28 @@
   color: var(--app-mail);
   background: var(--app-mail-soft);
 }
+.mail-compose {
+  max-width: 800px;
+}
+.mail-compose-form {
+  max-width: none;
+}
+.mail-compose-form textarea {
+  min-height: 12rem;
+  resize: vertical;
+}
+.mail-compose-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.mail-error {
+  color: var(--destructive);
+  font-size: var(--text-sm);
+}
+.mail-draft-note {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
