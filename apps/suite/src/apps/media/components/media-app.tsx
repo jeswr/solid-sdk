@@ -5,14 +5,7 @@ import {
   type MediaRecord,
   type MediaRepository,
 } from "@jeswr/solid-media-log";
-import {
-  Button,
-  EmptyState,
-  ErrorState,
-  Input,
-  LoadingSkeleton,
-  toast,
-} from "@jeswr/suite-ui";
+import { Button, EmptyState, ErrorState, Input, LoadingSkeleton, toast } from "@jeswr/suite-ui";
 import {
   BarChart3,
   BookOpen,
