@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // @vitest-environment jsdom
+import { toast } from "@jeswr/suite-ui";
 import { Editor, EditorContent } from "@tiptap/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import {
@@ -245,4 +246,158 @@ it("does not offer suggesting or bulk resolution in read-only documents", async 
   await screen.findByRole("menuitem", { name: /Word count/ });
   expect(screen.queryByRole("menuitem", { name: "Accept all suggestions" })).toBeNull();
   expect(screen.queryByRole("menuitem", { name: "Reject all suggestions" })).toBeNull();
+});
+
+it("announces the current suggestion and supports keyboard review with Escape returning editor focus", async () => {
+  insert();
+  render(
+    <>
+      <EditorContent editor={editor} />
+      <SuggestionPopover editor={editor} />
+    </>,
+  );
+  await screen.findByRole("dialog", { name: "Review suggestion" });
+  expect(screen.getByRole("status").textContent).toContain(`${author} suggested insertion`);
+  await act(async () => editor.view.focus());
+  fireEvent.keyDown(editor.view.dom, {
+    key: "A",
+    code: "KeyA",
+    ctrlKey: true,
+    altKey: true,
+    shiftKey: true,
+  });
+  await waitFor(() => expect(document.activeElement).toBe(button("Accept")));
+  fireEvent.keyDown(button("Accept"), { key: "Escape" });
+  await waitFor(() => expect(document.activeElement).toBe(editor.view.dom));
+  fireEvent.keyDown(editor.view.dom, {
+    key: "A",
+    code: "KeyA",
+    metaKey: true,
+    altKey: true,
+    shiftKey: true,
+  });
+  await waitFor(() => expect(document.activeElement).toBe(button("Accept")));
+  fireEvent.click(button("Accept"));
+  expect(suggestions(editor.state.doc)).toEqual([]);
+});
+
+it("leaves unrelated shortcuts alone, clears the announcement outside a suggestion, and ignores unavailable reviews", async () => {
+  render(
+    <>
+      <EditorContent editor={editor} />
+      <SuggestionPopover editor={editor} />
+    </>,
+  );
+  fireEvent.keyDown(editor.view.dom, {
+    key: "A",
+    code: "KeyA",
+    ctrlKey: true,
+    altKey: true,
+    shiftKey: true,
+  });
+  fireEvent(editor.view.dom, new Event("docs-review-suggestion"));
+  expect(screen.queryByRole("dialog", { name: "Review suggestion" })).toBeNull();
+  await act(async () => insert());
+  await screen.findByRole("dialog", { name: "Review suggestion" });
+  fireEvent.keyDown(editor.view.dom, { key: "a", code: "KeyA" });
+  fireEvent.keyDown(editor.view.dom, { key: "A", code: "KeyA", ctrlKey: true, altKey: true });
+  await act(async () => editor.commands.setTextSelection(1));
+  expect(screen.getByRole("status").textContent).toBe("");
+  await act(async () => {
+    editor.commands.setTextSelection(5);
+    editor.setEditable(false);
+  });
+  fireEvent.keyDown(editor.view.dom, {
+    key: "A",
+    code: "KeyA",
+    ctrlKey: true,
+    altKey: true,
+    shiftKey: true,
+  });
+  fireEvent(editor.view.dom, new Event("docs-review-suggestion"));
+  expect(suggestions(editor.state.doc)).toHaveLength(1);
+});
+it("opens the current suggestion from Tools with its keyboard shortcut label", async () => {
+  insert();
+  render(
+    <>
+      <EditorMenubar {...menuProps()} resolveSuggestions={noop} />
+      <SuggestionPopover editor={editor} />
+    </>,
+  );
+  await openMenu("Tools");
+  const review = await screen.findByRole("menuitem", { name: /Review current suggestion/ });
+  expect(review.textContent).toContain("Ctrl+Alt+Shift+A");
+  fireEvent.click(review);
+  await waitFor(() => expect(document.activeElement).toBe(button("Accept")));
+});
+
+it("keeps typing focus when a new suggestion opens after an earlier keyboard review", async () => {
+  insert();
+  render(
+    <>
+      <EditorContent editor={editor} />
+      <SuggestionPopover editor={editor} />
+    </>,
+  );
+  await screen.findByRole("dialog", { name: "Review suggestion" });
+  await act(async () => new Promise((resolve) => setTimeout(resolve, 20)));
+  await act(async () => editor.view.focus());
+  fireEvent.keyDown(editor.view.dom, {
+    key: "A",
+    code: "KeyA",
+    ctrlKey: true,
+    altKey: true,
+    shiftKey: true,
+  });
+  await waitFor(() => expect(document.activeElement).toBe(button("Accept")));
+  fireEvent.click(button("Accept"));
+  await waitFor(() => expect(document.activeElement).toBe(editor.view.dom));
+  await act(async () => editor.commands.insertContent("again"));
+  await screen.findByRole("dialog", { name: "Review suggestion" });
+  await act(async () => new Promise((resolve) => setTimeout(resolve, 20)));
+  expect(document.activeElement).toBe(editor.view.dom);
+});
+
+it("reviews the deletion over another author's insertion first and restores that pending insertion on reject", async () => {
+  editor.view.dispatch(editor.state.tr.setMeta(suggestionKey, { enabled: true, author: "bob" }));
+  editor.commands.setTextSelection(4);
+  editor.commands.insertContent("new");
+  enable();
+  editor.view.dispatch(editor.state.tr.delete(4, 7));
+  render(
+    <>
+      <EditorContent editor={editor} />
+      <SuggestionPopover editor={editor} />
+    </>,
+  );
+  const popup = await screen.findByRole("dialog", { name: "Review suggestion" });
+  expect(popup.textContent).toContain("Suggested deletion");
+  expect(popup.textContent).toContain(author);
+  fireEvent.click(button("Reject"));
+  expect(suggestions(editor.state.doc)).toMatchObject([
+    { author: "bob", kind: "suggestionInsert" },
+  ]);
+  await waitFor(() =>
+    expect(screen.getByRole("dialog", { name: "Review suggestion" }).textContent).toContain(
+      "Suggested addition",
+    ),
+  );
+});
+
+it("shows the unsupported-change toast when suggesting blocks a structural edit", () => {
+  const error = vi.spyOn(toast, "error").mockImplementation(() => "toast");
+  try {
+    render(<SuggestionPopover editor={editor} />);
+    act(() => {
+      enable();
+      editor.commands.toggleBlockquote();
+    });
+    expect(error).toHaveBeenCalledWith(
+      "This change can't be suggested yet. Switch to Editing to make it.",
+    );
+    expect(editor.isActive("blockquote")).toBe(false);
+  } finally {
+    error.mockRestore();
+  }
 });

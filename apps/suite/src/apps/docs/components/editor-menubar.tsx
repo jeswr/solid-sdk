@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex
 "use client";
 import {
@@ -355,6 +356,11 @@ export function EditorMenubar(props: EditorMenubarProps) {
         {!readOnly && resolveAll && (
           <>
             <DropdownMenuSeparator />
+            {item(
+              "Review current suggestion",
+              () => editor.view.dom.dispatchEvent(new Event("docs-review-suggestion")),
+              "Mod+Alt+Shift+A",
+            )}
             {item("Accept all suggestions", () => resolveAll(true))}
             {item("Reject all suggestions", () => resolveAll(false))}
           </>

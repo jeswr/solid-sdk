@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { Mark } from "@tiptap/react";
 
 export function suggestionColour(author: string): string {
@@ -8,11 +9,11 @@ export function suggestionColour(author: string): string {
   const colours = ["var(--primary)", "var(--success)", "var(--info)", "var(--destructive)"];
   return colours[Math.abs(hash) % colours.length] as string;
 }
-function suggestionMark(name: string, tag: string, other: string) {
+function suggestionMark(name: string, tag: string) {
   return Mark.create({
     name,
     inclusive: false,
-    excludes: `${name} ${other}`,
+    excludes: name,
     keepOnSplit: false,
     addAttributes() {
       return Object.fromEntries(
@@ -43,5 +44,5 @@ function suggestionMark(name: string, tag: string, other: string) {
     },
   });
 }
-export const SuggestionInsert = suggestionMark("suggestionInsert", "ins", "suggestionDelete");
-export const SuggestionDelete = suggestionMark("suggestionDelete", "del", "suggestionInsert");
+export const SuggestionInsert = suggestionMark("suggestionInsert", "ins");
+export const SuggestionDelete = suggestionMark("suggestionDelete", "del");

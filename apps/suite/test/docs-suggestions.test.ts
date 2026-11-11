@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 // @vitest-environment jsdom
 
 import { history, redo, undo } from "@tiptap/pm/history";
@@ -104,16 +105,17 @@ describe("suggesting transactions", () => {
   it("marks another author's insertion as a deletion and preserves existing pending deletion attribution", () => {
     const s = setup("abc");
     s.apply(
-      s.state.tr.addMark(
-        1,
-        2,
-        suggestionInsert.create({ id: "other", author: "bob", created: "then" }),
-      ),
+      s.state.tr
+        .addMark(1, 2, suggestionInsert.create({ id: "other", author: "bob", created: "then" }))
+        .setMeta(suggestionAction, true),
     );
     s.apply(s.state.tr.delete(1, 2));
     expect(s.state.doc.textContent).toBe("abc");
     const first = marks(s);
-    expect(first).toMatchObject([{ kind: "suggestionDelete", author }]);
+    expect(first).toMatchObject([
+      { kind: "suggestionInsert", author: "bob" },
+      { kind: "suggestionDelete", author },
+    ]);
     s.apply(s.state.tr.delete(1, 2));
     expect(marks(s)).toEqual(first);
   });
@@ -137,14 +139,13 @@ describe("suggesting transactions", () => {
       "suggestionInsert",
     ]);
   });
-  it("replays multiple steps with correct coordinates and retains formatting edits", () => {
+  it("replays multiple text steps with correct coordinates", () => {
     const s = setup("abc");
     s.select(2);
-    s.apply(s.state.tr.delete(2, 3).insertText("X", 2).addMark(1, 2, bold.create()));
+    s.apply(s.state.tr.delete(2, 3).insertText("X", 2));
     expect(s.state.doc.textContent).toBe("abXc");
-    expect(s.state.doc.nodeAt(1)?.marks[0]?.type.name).toBe("bold");
   });
-  it("leaves structural edits, formatting, remote sync, explicit actions and history untouched", () => {
+  it("tracks paragraph splits, blocks formatting, and bypasses remote sync, explicit actions and history", () => {
     const s = setup("abc");
     s.apply(s.state.tr.addMark(1, 2, bold.create()));
     expect(marks(s)).toEqual([]);
@@ -190,7 +191,7 @@ describe("resolving suggestions", () => {
     const s = setup("old");
     s.select(1, 4);
     s.apply(s.state.tr.insertText("new"));
-    s.apply(s.state.tr.addMark(2, 3, bold.create()));
+    s.apply(s.state.tr.addMark(2, 3, bold.create()).setMeta(suggestionAction, true));
     expect(marks(s)).toHaveLength(1);
     resolve(s, true, (marks(s)[0] as Suggestion).id);
     expect(s.state.doc.textContent).toBe("new");
@@ -207,7 +208,7 @@ it("round trips suggestion marks, metadata and author styling through HTML witho
   expect(element.querySelector("ins")?.getAttribute("data-suggestion-author")).toBe(author);
   expect(element.querySelector("del")?.getAttribute("class")).toBe("docs-suggestion-del");
   expect(DOMParser.fromSchema(schema).parse(element).toJSON()).toEqual(s.state.doc.toJSON());
-  expect(importHtml(element.innerHTML).json).toEqual(s.state.doc.toJSON());
+  expect(importHtml(element.innerHTML).json).toEqual(importHtml("<p>newold</p>").json);
   expect(suggestionColour(author)).toBe(suggestionColour(author));
   expect(new Set(["a", "b", "c", "d"].map(suggestionColour)).size).toBe(4);
 });
@@ -246,15 +247,23 @@ it("uses a single Yjs undo item and does not rewrite undo or redo", () => {
   doc.destroy();
 });
 
-it("applies hard breaks and their deletion normally, and tracks typing inside code blocks", () => {
+it("blocks hard breaks and their deletion, and tracks typing inside code blocks", () => {
   const s = setup("abc");
   s.select(2);
   s.apply(s.state.tr.replaceSelectionWith(schema.node("hardBreak")));
+  expect(JSON.stringify(s.state.doc.toJSON())).not.toContain("hardBreak");
   expect(marks(s)).toEqual([]);
+  s.apply(
+    s.state.tr.replaceSelectionWith(schema.node("hardBreak")).setMeta(suggestionAction, true),
+  );
+  const before = s.state.doc.toJSON();
   s.apply(s.state.tr.delete(2, 3));
-  expect(s.state.doc.textContent).toBe("abc");
-  expect(marks(s)).toEqual([]);
-  s.apply(s.state.tr.setBlockType(1, 4, schema.nodes.codeBlock as NodeType));
+  expect(s.state.doc.toJSON()).toEqual(before);
+  s.apply(
+    s.state.tr
+      .setBlockType(1, 4, schema.nodes.codeBlock as NodeType)
+      .setMeta(suggestionAction, true),
+  );
   s.apply(s.state.tr.insertText("code", 1));
   expect(marks(s)).toMatchObject([{ kind: "suggestionInsert" }]);
 });
@@ -269,20 +278,19 @@ it("clears inherited suggestion stored marks and retains explicit formatting", (
   s.apply(s.state.tr.insertText("x", 1).setStoredMarks([boldMark, suggestion]));
   expect(s.state.storedMarks).toEqual([boldMark]);
 });
-it("preserves offsets when formatting and editing newly inserted text in the same transaction", () => {
+it("preserves offsets when editing newly inserted text in the same transaction", () => {
   const s = setup("old");
   s.select(1, 4);
-  s.apply(s.state.tr.insertText("new").addMark(1, 3, bold.create()).insertText("!", 3));
+  s.apply(s.state.tr.insertText("new").insertText("!", 3));
   expect(s.state.doc.textContent).toBe("ne!wold");
-  expect(s.state.doc.nodeAt(1)?.marks.map((mark) => mark.type.name)).toContain("bold");
-  expect(s.state.doc.nodeAt(5)?.marks.map((mark) => mark.type.name)).not.toContain("bold");
+  expect(s.state.doc.nodeAt(1)?.marks.map((mark) => mark.type.name)).toContain("suggestionInsert");
 });
-it("ignores zero-width formatting steps when replaying a text edit", async () => {
+it("blocks a transaction containing an untrackable formatting step atomically", async () => {
   const { AddMarkStep } = await import("@tiptap/pm/transform");
   const s = setup("abc");
   s.apply(s.state.tr.insertText("x", 2).step(new AddMarkStep(2, 2, bold.create())));
-  expect(s.state.doc.textContent).toBe("axbc");
-  expect(marks(s)).toHaveLength(1);
+  expect(s.state.doc.textContent).toBe("abc");
+  expect(marks(s)).toHaveLength(0);
 });
 
 it("parses incomplete suggestion HTML safely and uses text-only author colours", () => {

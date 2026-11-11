@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { expect, test } from "@playwright/test";
 
 test.beforeEach(async ({ page }) => {
@@ -77,4 +78,57 @@ test("tracks typing and deletion, reviews changes, persists the result and retur
   await page.keyboard.type(" plain");
   await expect(body).toHaveText("Before word after added plain");
   await expect(body.locator("ins, del")).toHaveCount(0);
+});
+
+test("select-all replacement preserves the original as a deletion suggestion", async ({ page }) => {
+  await page.goto("/docs/new");
+  const body = page.getByRole("textbox", { name: "Document body", exact: true });
+  await body.fill("Original first paragraph");
+  await body.press("End");
+  await body.press("Enter");
+  await page.keyboard.type("Original second paragraph");
+  await expect(page).toHaveURL(/\/docs\/d\//);
+  await page
+    .getByRole("combobox", { name: "Editing mode", exact: true })
+    .selectOption("suggesting");
+  await body.focus();
+  await page.keyboard.press("ControlOrMeta+A");
+  await page.keyboard.type("Replacement");
+  await expect(body.locator("del[data-suggestion-id]")).toHaveText([
+    "Original first paragraph",
+    "Original second paragraph",
+  ]);
+  await expect(body.locator("ins[data-suggestion-id]")).toHaveText("Replacement");
+  await expect(body).toContainText("Original first paragraph");
+  await expect(body).toContainText("Original second paragraph");
+  await page.reload();
+  await expect(body.locator("ins[data-suggestion-id]")).toHaveText("Replacement");
+  await expect(body.locator("del[data-suggestion-id]")).toHaveText([
+    "Original first paragraph",
+    "Original second paragraph",
+  ]);
+});
+
+test("reviews a single suggestion by keyboard and returns focus with Escape", async ({ page }) => {
+  await page.goto("/docs/new");
+  const body = page.getByRole("textbox", { name: "Document body", exact: true });
+  await body.fill("Original");
+  await expect(page).toHaveURL(/\/docs\/d\//);
+  await page
+    .getByRole("combobox", { name: "Editing mode", exact: true })
+    .selectOption("suggesting");
+  await body.focus();
+  await page.keyboard.press("ControlOrMeta+End");
+  await page.keyboard.type(" addition");
+  const review = page.getByRole("dialog", { name: "Review suggestion", exact: true });
+  await page.keyboard.press("ControlOrMeta+Alt+Shift+A");
+  await expect(review.getByRole("button", { name: "Accept", exact: true })).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(body).toBeFocused();
+  await page.keyboard.press("ControlOrMeta+Alt+Shift+A");
+  await expect(review.getByRole("button", { name: "Accept", exact: true })).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(body.locator("ins, del")).toHaveCount(0);
+  await expect(body).toHaveText("Original addition");
+  await expect(body).toBeFocused();
 });

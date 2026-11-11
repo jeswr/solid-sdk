@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex
 import Collaboration from "@tiptap/extension-collaboration";
 import Highlight from "@tiptap/extension-highlight";
@@ -83,6 +84,13 @@ const PasteDestinations = Extension.create({
             const fragment = document.createElement("template");
             fragment.innerHTML = html;
             normaliseHtmlLists(fragment.content);
+            for (const element of fragment.content.querySelectorAll("ins, del")) {
+              if (element.getAttributeNames().some((key) => key.startsWith("data-suggestion-")))
+                element.replaceWith(...element.childNodes);
+            }
+            for (const element of fragment.content.querySelectorAll("*"))
+              for (const key of element.getAttributeNames())
+                if (key.startsWith("data-suggestion-")) element.removeAttribute(key);
             for (const element of fragment.content.querySelectorAll("a[href], img[src]")) {
               const key = element.tagName === "A" ? "href" : "src";
               const url = element.getAttribute(key) as string;
