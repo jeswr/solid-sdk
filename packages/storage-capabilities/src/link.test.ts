@@ -412,3 +412,40 @@ test("parses pathological whitespace, escapes, and unterminated input in under 5
   expect(results).toEqual([[], [], []]);
   expect(elapsed).toBeLessThan(50);
 });
+
+// AUTHORED-BY Codex GPT-6.1-Sol
+describe("authoritative Link syntax", () => {
+  test.each([
+    "garbage",
+    "<x>; rel=acl;",
+    "<x>; rel=acl trailing",
+    "<x>; title=no-rel",
+    '<x>; rel=""',
+    "<http://[>; rel=acl",
+    '<x>; rel=acl; anchor="http://["',
+    "<>; rel=acl",
+    "<x>; rel=acl; rel=alternate",
+    '<x>; rel=acl; anchor=""; anchor="other"',
+    "<x>; rel=acl; title=a; title=b",
+    "<x>; rel=acl; hreflang=en; hreflang=de",
+    '<x>; rel="unfinished',
+    "<unfinished",
+    '<x>; rel=acl; title="unfinished\\',
+    "<x y>; rel=acl",
+    "<x\ty>; rel=acl",
+    "<x\\y>; rel=acl",
+  ])("rejects malformed or ambiguous member %j without partial results", (member) => {
+    for (const values of [member, `<good>; rel=acl, ${member}`, ["<good>; rel=acl", member]]) {
+      expect(() =>
+        parseLinkHeaders(values, base, { onMalformed: "throw", onOverflow: "throw" }),
+      ).toThrow("Invalid or ambiguous Link header");
+    }
+  });
+  test("strict syntax accepts quoted delimiters, flags, empty fields and same-context anchors", () => {
+    const header = '<a,b>; rel="ACL describedBy"; title="a, b; \\"quote\\""; flag; anchor=""';
+    const options = { onMalformed: "throw", onOverflow: "throw" } as const;
+    expect(parseLinkHeaders(header, base, options)).toEqual(parseLinkHeaders(header, base));
+    expect(parseLinkHeaders(["", " , , ", header], base, options)).toHaveLength(1);
+    expect(parseLinkHeaders(null, base, options)).toEqual([]);
+  });
+});

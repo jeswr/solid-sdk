@@ -5120,6 +5120,9 @@ importers:
       '@jeswr/solid-memory':
         specifier: workspace:*
         version: link:../solid-memory
+      '@jeswr/storage-capabilities':
+        specifier: workspace:*
+        version: link:../../packages/storage-capabilities
       '@jeswr/storage-client':
         specifier: workspace:*
         version: link:../storage-client

@@ -43,6 +43,23 @@ function server(protocol: "css" | "ess" = "css") {
 describe("mutation review regressions", () => {
   it.each(
     [
+      "x.acl",
+      "x.ac%6C",
+      "x.ACL",
+      "x.acl.",
+      "x.acl%20",
+      "x.ac\tl",
+      "x.ac\nl",
+      "x.acl\t",
+      "existing.acl/",
+      "x%2Eacl",
+      "x.acl%2F",
+      "x.acl//",
+      "sub/.acl",
+      ".meta",
+      "x.acr",
+      "x%C0%AEacl",
+      "../data/x.acl",
       "notes;v2.acl",
       "leak;.acl",
       "x;y.meta",
@@ -72,7 +89,7 @@ describe("mutation review regressions", () => {
       kind === "write"
         ? writeResource(f.pod, target, "x", "text/plain")
         : new PodOutput(f.pod).delete(target),
-    ).rejects.toThrow(/access-control|description|pod-scope/);
+    ).rejects.toThrow(/access-control|description|pod-scope|purpose-limited/);
     expect(f.mutations).toEqual([]);
   });
 

@@ -39,7 +39,7 @@ export interface PodReadOptions {
 
 /** Server metadata for an exact resource, including a not-yet-created resource. */
 export interface PodHeadResult {
-  /** Absolute WAC ACL URL from a unique, unanchored server Link relation. */
+  /** Absolute WAC ACL URL from a unique server Link relation with the response resource as context. */
   acl?: string;
   /** Complete absolute ACL, ACP access-control, describedby and linkset links; absent means unknown. */
   auxiliaryResources?: readonly string[];
@@ -168,9 +168,9 @@ export function createFetchPodPort(input: SolidMcpConfig): PodPort {
         // Missing completeness fails closed at the generic mutation boundary.
       }
       try {
-        metadata.acl = new URL(wacAclLink(header), target).href;
+        metadata.acl = wacAclLink(header, target);
       } catch {
-        // Audit/memory still require a unique, unanchored WAC link and reject ACP.
+        // Audit/memory still require a unique, same-context WAC link and reject ACP.
       }
       return metadata;
     },

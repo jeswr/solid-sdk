@@ -16,8 +16,7 @@ import {
   writesEnabled,
 } from "./auth.js";
 import { chatAclAccess } from "./chat-acl.js";
-import { requireContainerCreationBody } from "./container-mutation.js";
-import { WRITE_ETAG_REQUIRED } from "./generic-mutation.js";
+import { WRITE_CONFLICT, WRITE_ETAG_REQUIRED } from "./generic-mutation.js";
 import { PodOutput, podOutputError } from "./output.js";
 import { containerCandidates } from "./pod.js";
 import { withPodReadLimits } from "./pod-operation.js";
@@ -106,9 +105,8 @@ export function createChatPodPort(config: SolidMcpConfig, pod?: PodPort): ChatPo
         try {
           return await new PodOutput(currentPod).write(url, body, contentType, cond);
         } catch (error) {
-          // The generic boundary already approved target/parent metadata, but
-          // requires read-first guidance for existing data. ChatWriter preserves
-          // atomic create requests on replay and handles the server's 412 itself.
+          // Discovery already established that the create-only target exists.
+          // Preserve ChatWriter's 412 replay handling without a redundant mutation.
           if (
             cond.ifNoneMatch === "*" &&
             cond.ifMatch === undefined &&
@@ -116,8 +114,7 @@ export function createChatPodPort(config: SolidMcpConfig, pod?: PodPort): ChatPo
             error instanceof Error &&
             error.message === WRITE_ETAG_REQUIRED
           ) {
-            await requireContainerCreationBody(target, body, contentType);
-            return currentPod.write(target, body, contentType, { ifNoneMatch: "*" });
+            throw Object.assign(new Error(WRITE_CONFLICT), { status: 412 });
           }
           throw error;
         }

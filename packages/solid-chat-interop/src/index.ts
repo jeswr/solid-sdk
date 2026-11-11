@@ -97,6 +97,7 @@ export {
   CHAT_ROLES,
   ChatWriter,
   chatPortStatus,
+  ownerOnlyChatAcl,
   validateWacAcl,
 } from "./chat-writer.js";
 // --- credential redaction, applied by ChatWriter to every stored title and message ---

@@ -1,14 +1,11 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { validateDedicatedWacAcl } from "@jeswr/pkg-memory";
-import { Authorization } from "@solid/object";
-import { DataFactory, Store } from "n3";
+import { ownerOnlyChatAcl } from "@jeswr/solid-chat-interop";
+import { isAmbiguousResourceTarget } from "@jeswr/storage-capabilities";
+import type { Store } from "n3";
 import { requirePodScopedWriteUrl } from "./auth.js";
 import { parseBoundedRdf } from "./bounded-rdf.js";
-import {
-  ambiguousMutationTarget,
-  requireDataMutationPath,
-  strongWriteEtag,
-} from "./generic-mutation.js";
+import { requireDataMutationPath, strongWriteEtag } from "./generic-mutation.js";
 import { PodOutput } from "./output.js";
 import type { PodConditions, PodPort } from "./pod-port.js";
 
@@ -22,7 +19,7 @@ export function chatAclAccess(pod: PodPort) {
 
   function scoped(url: string): string {
     const target = requirePodScopedWriteUrl({ podRoot: pod.root }, url);
-    if (target !== url || !target.startsWith(base) || ambiguousMutationTarget(url))
+    if (target !== url || !target.startsWith(base) || isAmbiguousResourceTarget(url))
       throw unavailable();
     return target;
   }
@@ -54,15 +51,7 @@ export function chatAclAccess(pod: PodPort) {
       cond.ifNoneMatch !== undefined
     )
       throw unavailable();
-    const expected = new Store();
-    const owner = new Authorization(`${acl}#owner`, expected, DataFactory);
-    owner.type.add("http://www.w3.org/ns/auth/acl#Authorization");
-    owner.accessTo = target;
-    if (target.endsWith("/")) owner.default = target;
-    owner.agent.add(pod.webId);
-    owner.canRead = true;
-    owner.canWrite = true;
-    owner.canReadWriteAcl = true;
+    const expected = ownerOnlyChatAcl(acl, target, pod.webId);
     const supplied = await parseBoundedRdf(new TextDecoder().decode(body), contentType, acl);
     const same = (dataset: Store) =>
       dataset.size === expected.size && [...expected].every((quad) => dataset.has(quad));

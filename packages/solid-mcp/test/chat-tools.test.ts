@@ -135,7 +135,7 @@ async function seedChat(pod: ReturnType<typeof fakePod>, conversation: ChatConve
 }
 
 describe("MCP chat tools over the scoped fetch port", () => {
-  it("preserves ChatWriter's atomic create-conflict requests on replay", async () => {
+  it("reports ChatWriter's create conflict on replay without a redundant PUT", async () => {
     const f = fakePod();
     const url = `${ROOT}private/chats/claude/chat/m-message.ttl`;
     f.resources.set(url, { body: "existing", contentType: "text/plain" });
@@ -148,8 +148,48 @@ describe("MCP chat tools over the scoped fetch port", () => {
     await expect(
       port.write(url, new TextEncoder().encode("replacement"), "text/plain", { ifNoneMatch: "*" }),
     ).rejects.toMatchObject({ status: 412 });
-    expect(f.requests.filter((r) => r.method === "PUT")).toHaveLength(1);
+    expect(f.requests.filter((r) => r.method === "PUT")).toHaveLength(0);
     expect(f.resources.get(url)?.body).toBe("existing");
+  });
+
+  it("does not apply the chat conflict fallback outside private/chats/", async () => {
+    const f = fakePod();
+    const url = `${ROOT}data/existing.ttl`;
+    f.resources.set(url, { body: "existing", contentType: "text/plain" });
+    const port = createChatPodPort({
+      fetch: f.fetch,
+      podRoot: ROOT,
+      webId: OWNER,
+      readOnly: false,
+    });
+    await expect(
+      port.write(url, new TextEncoder().encode("replacement"), "text/plain", { ifNoneMatch: "*" }),
+    ).rejects.toThrow("Replacement requires an ETag");
+    expect(f.requests.filter((r) => r.method === "PUT")).toEqual([]);
+  });
+
+  it.each([
+    ["private/chats/.acl", {}],
+    ["private/chats/x/.acl", {}],
+    ["private/chats/x.acl", { ifNoneMatch: "*" }],
+    ["private/chats/existing.acl", { ifNoneMatch: "*" }],
+    ["data/existing", { ifNoneMatch: "*" }],
+  ] as const)("refuses round-2 direct chat write probe %s", async (path, cond) => {
+    const f = fakePod();
+    const url = `${ROOT}${path}`;
+    if (path.includes("existing"))
+      f.resources.set(url, { body: "existing", contentType: "text/plain" });
+    const config = { fetch: f.fetch, podRoot: ROOT, webId: OWNER, readOnly: false };
+    const port = createChatPodPort(config);
+    const store = new Store();
+    const rule = new Authorization(`${url}#public`, store, DataFactory);
+    rule.type.add("http://www.w3.org/ns/auth/acl#Authorization");
+    rule.agentClass.add("http://xmlns.com/foaf/0.1/Agent");
+    rule.accessTo = new URL("./", url).href;
+    rule.canRead = true;
+    const body = new TextEncoder().encode(await serialize([...store], { format: "text/turtle" }));
+    await expect(port.write(url, body, "text/turtle", cond)).rejects.toThrow();
+    expect(f.requests.filter((r) => r.method === "PUT")).toEqual([]);
   });
 
   it("allows only the exact owner-only ACL body on a discovered chat ACL", async () => {

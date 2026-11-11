@@ -214,7 +214,7 @@ chat ACL discovery and all pod operations, including current decorators.
 
 `PodPort` exposes raw-byte `read`, `list`, conditional `write` and `delete`, `root` and
 `webId`. Its optional `head` returns `PodHeadResult.acl`, an absolute WAC ACL URL
-discovered from a unique, unanchored `rel="acl"` Link on the exact target, including
+discovered from a unique, same-context `rel="acl"` Link on the exact target, including
 HTTP 404 for resources not yet created. It also returns `exists` and
 `auxiliaryResources`: the complete absolute URLs advertised by `acl`, `describedby`, `linkset`
 and ACP `http://www.w3.org/ns/solid/acp#accessControl` relations. An empty array
@@ -260,11 +260,16 @@ Advertised targets are compared with their query and fragment intact. Before a
 mutation, `PodOutput` HEADs the target and its parent through the current PodPort.
 It refuses any target advertised by either as a WAC ACL, ACP access-control or
 description resource, including URLs without a reserved suffix. Redirects, failed
-HEAD requests (including 401/403/405), malformed/anchored Link metadata, absent
-HEAD support, or missing `auxiliaryResources` fail closed with
+HEAD requests (including 401/403/405), malformed Link metadata, anchors with a
+different context, absent HEAD support, or missing `auxiliaryResources` fail closed with
 `Access-control and description discovery unavailable; mutation refused`.
 A successful 404 still supplies discovery metadata for a not-yet-created target.
 Custom ports must return complete auxiliary metadata to enable generic mutations.
+On servers without suffix ACL naming, an ACL at an arbitrary path is caught only
+when the resource or its parent advertises it. The guard cannot identify an
+unadvertised ACL association at an otherwise ordinary data URL.
+Link discovery uses storage-capabilities' shared parser with overflow and malformed-member
+rejection; anchors with a different resolved context fail closed.
 Generic container bodies may declare only LDP container types; arbitrary description
 metadata is refused on both adapters. Dedicated memory and audit ACL provisioning
 retains its existing protected-area and purpose checks.
@@ -497,7 +502,9 @@ JSON-LD context loads. ChatWriter provisions only server-advertised WAC ACLs ins
 only the exact owner-only body built by ChatWriter and rechecks the association before
 mutation. New ACLs use `If-None-Match: *`; changed existing ACLs must be dedicated to
 the target and have a strong ETag for `If-Match`. Identical owner-only ACLs need no
-replacement on replay. Missing/unsafe discovery and shared ACLs fail before content;
+replacement on replay. Existing chat data requested with `If-None-Match: *` returns
+412 locally without sending a redundant PUT; this replay handling is confined to
+`private/chats/`. Missing/unsafe discovery and shared ACLs fail before content;
 there is no fallback to inherited permissions. Generic `pod_write` and `solid_write`
 continue to refuse these ACLs.
 Listing skips containers whose conversation metadata returns 404,

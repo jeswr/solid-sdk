@@ -1,3 +1,4 @@
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 <!-- AUTHORED-BY GPT-6.1-Sol -->
 <!-- AUTHORED-BY Codex GPT-6 -->
 <!-- AUTHORED-BY Claude Opus 5.5 -->
@@ -103,7 +104,20 @@ It returns parsed Accept-Patch, Accept-Post, WAC-Allow, ACL/ACP links and Allow 
 evidence. Denied HEAD responses can still supply observations. Run it only for Solid; LWS
 descriptions are authoritative. See "Feature flags" below for `deriveFeatures` and `capabilities()`.
 
-Internal helpers:
+Resource target guards:
+
+- `encodesPlainCharacter(target)` detects percent-encoded RFC 3986 unreserved characters,
+  `/`, `\` and `%`, including repeated-encoding aliases.
+- `isAmbiguousResourceTarget(target)` also rejects raw `;`, `?`, `#`, `\`, encoded
+  delimiters, and dots/spaces at segment ends (including `%20`).
+- `isAuxiliaryResourceTarget(target)` additionally detects `.acl`, `.acr` and `.meta`
+  suffixes, ignoring case and trailing slashes. Both solid-seed and solid-mcp use this guard.
+
+Pass the original path or URL before URL normalisation. Interior escaped spaces and UTF-8
+characters remain valid. These lexical checks do not discover arbitrary auxiliary locations:
+servers without suffix ACL naming require the resource or its parent to advertise the ACL.
+
+Header and description helpers:
 
 - `parseLinkHeaders(values, responseUrl, options?)` in `src/link.ts` accepts one combined Link field,
   an array of separate field values, or `null`. It resolves targets and anchor contexts independently,
@@ -115,7 +129,16 @@ Internal helpers:
   relations are ignored. Options `maxBytes` (per field) and `maxMembers` (across fields) accept
   non-negative safe integers. Set `onOverflow: 'throw'` to reject incomplete inspection with the
   exported `LinkHeaderOverflowError`, whose `limit` is `maxBytes` or `maxMembers`; exact limits
-  are accepted. The default `onOverflow: 'truncate'` preserves the original behaviour.
+  are accepted. `maxResolvedBytes` additionally bounds cumulative resolved target and context
+  lengths (UTF-16 code units), counting both URLs per member, including duplicates; its default
+  is unlimited and its error uses `limit: 'maxResolvedBytes'`.
+  The default `onOverflow: 'truncate'` preserves the original behaviour.
+  Set `onMalformed: 'throw'` for authoritative discovery: malformed members, missing relations,
+  invalid URLs, duplicate parameters, empty targets and target whitespace/backslashes throw
+  `SyntaxError`. The default `onMalformed: 'skip'` retains the original tolerant parsing.
+  Combine both throwing options to require complete, unambiguous metadata. Callers must also
+  reject links whose resolved `context` differs from the response URL; an anchor naming the
+  response resource itself preserves that context.
 - `parseProbeHeaders(url, headers, observedAt)` in `src/probe-headers.ts` parses ordered raw header
   pairs (or a `Headers` instance) into the architect's `ProbeResult`. Raw pairs preserve response order;
   `Headers` iteration may sort and combine fields. Recognised fields remain as evidence, including
@@ -221,3 +244,7 @@ if (features.liveUpdates.state === 'available') subscribe(features.liveUpdates.d
 a replaying fake `fetch` that records each request as `"<METHOD> <URL>"`. The fixtures follow each
 server's public behaviour. They are not captured responses.
 
+
+The public declaration report is in `etc/storage-capabilities.api.md`. After building, regenerate
+it with the workspace's existing API Extractor installation:
+`pnpm --filter @jeswr/solid-mcp exec api-extractor run --local --config ../storage-capabilities/api-extractor.json`.

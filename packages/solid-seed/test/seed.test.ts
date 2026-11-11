@@ -1208,6 +1208,17 @@ describe("access-controlled resources: the ACL lands before any data", () => {
 
 describe("resource path guard", () => {
   for (const path of [
+    "/x.ACL",
+    "/x.acl/",
+    "/x.acl//",
+    "/x;y",
+    "/x%3By",
+    "/x%3Fy",
+    "/x%23y",
+    "/x.",
+    "/x./child",
+    "/x%20",
+    "/x%20/child",
     "/x%2Eacl",
     "/x%2eacl",
     "/x.acr",

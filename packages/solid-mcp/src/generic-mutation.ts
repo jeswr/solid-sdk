@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+import { isAuxiliaryResourceTarget } from "@jeswr/storage-capabilities";
 import { pathAliases } from "./personal-data.js";
 import type { PodConditions, PodHeadResult } from "./pod-port.js";
 
@@ -30,20 +31,9 @@ export function requireWriteConditions(
   throw new Error(WRITE_ETAG_REQUIRED);
 }
 
-/** Refuse ambiguous server path interpretations before URL normalization. */
-export function ambiguousMutationTarget(target: string): boolean {
-  if (/[;?#\\]/u.test(target) || /[. ](?:\/|$)/u.test(target)) return true;
-  for (const [, hex] of target.matchAll(/%([\da-f]{2})/giu)) {
-    const character = String.fromCharCode(Number.parseInt(hex as string, 16));
-    if (/[A-Za-z0-9._~%/\\;?#-]/u.test(character)) return true;
-  }
-  return /%20(?:\/|$)/iu.test(target);
-}
-
 /** Check untruncated paths; reject encodings and delimiters before alias normalization. */
 export function requireDataMutationPath(target: string): void {
-  if (ambiguousMutationTarget(target) || /\.(acl|acr|meta)\/*$/iu.test(target))
-    throw new Error(AUXILIARY_MUTATION_DENIED);
+  if (isAuxiliaryResourceTarget(target)) throw new Error(AUXILIARY_MUTATION_DENIED);
 }
 
 /** HEAD must affirm a complete set of auxiliary links, even when that set is empty. */

@@ -2,6 +2,8 @@
 name: storage-capabilities
 description: Use when discovering Solid or LWS storage, selecting features with @jeswr/storage-capabilities, handling unknown support, or maintaining description parsing and caches.
 ---
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+
 <!-- AUTHORED-BY GPT-6.1-Sol -->
 <!-- AUTHORED-BY Codex GPT-6 -->
 <!-- AUTHORED-BY Claude Opus 5.5 -->
@@ -89,6 +91,23 @@ is checked before retaining each member; truncation stops at the first overflowi
 For authoritative links, set `onOverflow: 'throw'`: exceeding any limit throws the root-exported
 `LinkHeaderOverflowError` (`limit`: `maxBytes`, `maxMembers` or `maxResolvedBytes`) instead of returning
 partial results; exact limits are accepted. `onOverflow: 'truncate'` is the default. The parser never fetches.
+For mutation guards also set `onMalformed: 'throw'`: malformed members, missing relations,
+invalid URLs, duplicate parameters, empty targets and target whitespace/backslashes throw
+`SyntaxError`. The default `onMalformed: 'skip'` preserves tolerant parsing and first-singleton
+handling. Both throwing options are needed for complete, unambiguous inspection. Check resolved
+`context` against the canonical response URL; an anchor naming that same URL is acceptable.
+
+Reuse the root-exported `encodesPlainCharacter`, `isAmbiguousResourceTarget` and
+`isAuxiliaryResourceTarget` from `src/auxiliary.ts` before URL normalisation. The first detects
+encoded unreserved characters, `/`, `\` and `%`. The ambiguity guard adds raw `;`, `?`, `#`, `\`,
+encoded delimiters and segment-ending dots/spaces (including `%20`). The auxiliary guard also
+rejects case-insensitive `.acl`/`.acr`/`.meta` suffixes with trailing slashes. Interior escaped
+spaces and UTF-8 characters remain valid. Reuse these guards in seed and generic mutation paths;
+ACL-specific capabilities may use the ambiguity guard while validating advertised ACLs separately.
+On servers without suffix ACL naming, an arbitrary ACL path is caught only when the resource or
+its parent advertises it; lexical checks cannot discover an unadvertised association.
+Regenerate the public declaration report using the command in README.md after changing exports.
+
 `src/probe-headers.ts` converts supplied response headers into `ProbeResult` without fetching.
 Pass ordered raw header pairs when response evidence order matters; a `Headers` instance may
 already have sorted/combined the fields. Network probing belongs to the resolver task.

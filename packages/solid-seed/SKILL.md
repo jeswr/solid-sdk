@@ -2,6 +2,8 @@
 name: solid-seed
 description: Use when provisioning Solid pod targets, seeding @jeswr/synthetic-rdf output, defining pod layouts or resource expanders, choosing create/ensure/replace behavior, recovering partial expander groups, or authoring seed ACLs.
 ---
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+
 <!-- AUTHORED-BY GPT-5.6 Sol via codex -->
 
 # Deterministic Solid pod seeding
@@ -14,6 +16,10 @@ harness or server package into application code that defines a layout.
 
 - Paths are pod-root-relative and begin with `/`; never target `.acl`, `.acr` or `.meta`, and
   never percent-encode an unreserved character, `/`, `\` or `%`. `baseUrl` is an origin, not a path-based pod.
+- Reuse storage-capabilities' `isAuxiliaryResourceTarget` before normalisation. It also
+  refuses suffix case/trailing-slash aliases, semicolons, query/fragment delimiters
+  (raw or encoded), and dots/spaces at segment ends, including `%20`. Interior escaped
+  spaces remain valid.
 - Prefer `{ instance }` for generated RDF, `{ dataset }` for caller-owned RDF/JS data, and
   `{ body }` only for already-issued artifacts such as JSON-LD VCs.
 - Assign one generated instance to one resource per pod. Cross-instance references are rebased

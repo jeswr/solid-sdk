@@ -56,9 +56,13 @@ and `.meta` suffixes and all ACL, ACP access-control, describedby and linkset UR
 by HEAD of the target or parent. Use the current guarded PodPort, never raw fetch.
 PodHeadResult.auxiliaryResources is the complete absolute link set (empty is known;
 absent is unknown), and exists distinguishes an existing target from a 404. Missing
-HEAD support, failed/redirected HEAD, or malformed/anchored metadata fails closed
+HEAD support, failed/redirected HEAD, or malformed metadata or anchors with a different context fail closed
 with `Access-control and description discovery unavailable; mutation refused`.
-404 retains links for safe create discovery. Personal memory/audit provisioning
+404 retains links for safe create discovery. Reuse storage-capabilities' auxiliary target
+guards and `parseLinkHeaders` with `onOverflow: "throw"` and `onMalformed: "throw"`.
+Reject a link whose resolved context differs from the response URL. On servers without
+suffix ACL naming, an ACL at an arbitrary path is caught only when the resource or its
+parent advertises it; an unadvertised association cannot be inferred from the path. Personal memory/audit provisioning
 uses its dedicated path and keeps its existing protections.
 writeResource and pod_write/solid_write default to `If-None-Match: *`. Replacements
 require an optional ifMatch argument containing one strong ETag, never `*`, weak
@@ -75,6 +79,9 @@ chat_save and capture use a dedicated ChatWriter ACL capability: discover throug
 the current PodPort, confine target and ACL to private/chats/, validate the exact
 owner-only body, recheck discovery, and use conditional writes. Existing ACLs must
 be dedicated to that target; identical owner-only ACLs need no replacement on replay.
+Reuse solid-chat-interop's `ownerOnlyChatAcl` dataset builder to validate the exact body.
+For existing chat data requested with `If-None-Match: *`, report WRITE_CONFLICT with status
+412 locally without another PUT; keep that replay handling confined to `private/chats/`.
 Never expose that capability to generic pod_write/solid_write or guess ACL URLs.
 
 Use fetch-rdf and typed wrappers for RDF reads, rdf-serialize for serialization.

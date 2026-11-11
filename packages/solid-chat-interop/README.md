@@ -82,6 +82,11 @@ the exact target and reject unsupported models and unsafe targets. The associati
 is checked again after each create attempt; existing non-WAC ACL documents abort the
 save. Shared ACL documents with `acl:accessTo` or `acl:default` grants for other
 resources are rejected before replacing the ACL or writing the target resource.
+`ownerOnlyChatAcl(acl, target, owner)` returns the exact owner-only `n3.Store` used by
+ChatWriter and MCP's ACL validator: one authorization at `<acl>#owner`, owner Read/Write/Control,
+`acl:accessTo` for the target and `acl:default` only for containers. It builds RDF in memory;
+callers remain responsible for discovering the association and enforcing conditional writes.
+
 The caller's port must enforce pod scope, refuse write redirects, and reject
 HTTP failures with a numeric `status` property. There is no permissive ACL fallback.
 

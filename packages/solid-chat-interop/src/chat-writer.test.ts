@@ -5,6 +5,7 @@ import { AclResource, Authorization } from "@solid/object";
 import { DataFactory, Store } from "n3";
 import { describe, expect, it } from "vitest";
 import { type ChatConversation, type ChatPodPort, ChatWriter } from "./chat-writer.js";
+import { ownerOnlyChatAcl } from "./index.js";
 import { parseAs2, storeToTurtle } from "./reconcile.js";
 import { redactSecrets } from "./redact.js";
 
@@ -612,4 +613,23 @@ describe("ChatWriter", () => {
     expect((await writer.list()).conversations[0]?.updatedAt).toBeUndefined();
     expect((await writer.list({ since: DAY1 })).conversations).toEqual([]);
   });
+});
+
+// AUTHORED-BY Codex GPT-6.1-Sol
+it("exports the exact owner-only ACL used for every protected chat write", async () => {
+  const pod = new MemoryPod();
+  await new ChatWriter(pod).save(conversation());
+  const writes = pod.writes.filter(({ url }) => url.endsWith(".acl"));
+  expect(writes.length).toBeGreaterThan(0);
+  for (const { url, body } of writes) {
+    const target = url.slice(0, -4);
+    const expected = ownerOnlyChatAcl(url, target, OWNER);
+    expect(decoder.decode(body)).toBe(await storeToTurtle(expected));
+    const auth = new Authorization(`${url}#owner`, expected, DataFactory);
+    expect([...auth.agent]).toEqual([OWNER]);
+    expect(auth.accessTo).toBe(target);
+    expect(auth.default).toBe(target.endsWith("/") ? target : undefined);
+    expect(auth.canRead && auth.canWrite && auth.canReadWriteAcl).toBe(true);
+    expect(expected.size).toBe(target.endsWith("/") ? 7 : 6);
+  }
 });
