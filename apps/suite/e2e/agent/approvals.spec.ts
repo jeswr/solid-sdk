@@ -3,7 +3,17 @@
 import { mkdir } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import AxeBuilder from "@axe-core/playwright";
+import { evaluateIntent } from "@jeswr/agent-mandate/verify";
 import { expect, type Locator, type Page, type TestInfo, test } from "@playwright/test";
+import { loadVerifiedMandate, proposalIntent } from "../../src/apps/agent/lib/mandates";
+import {
+  loadedRecords,
+  readApprovals,
+  readOutbox,
+  readProposals,
+} from "../../src/apps/agent/lib/readers";
+import { createAgentVerifier } from "../../src/apps/agent/lib/verify";
+import { DEMO_WEBID } from "../../src/lib/demo-pod/constants";
 import { seedDemoSession } from "../demo-session";
 import { daemonDouble } from "./daemon-double";
 
@@ -64,7 +74,7 @@ test("1: first approval sets up this device and publishes assertionMethod", asyn
   await page.getByRole("button", { name: "Approve", exact: true }).click();
   await sheet.getByRole("button", { name: "Set up this device", exact: true }).click();
   await expect(page.getByText("This device can now approve", { exact: true })).toBeVisible();
-  await expect(page.getByText("Approved, the agent will send within a minute")).toBeVisible();
+  await expect(page.getByText("Approved — the agent will send within a minute")).toBeVisible();
   expect(
     await (await daemonDouble(page).fetch("https://alice.demo.pod/profile/card")).text(),
   ).toContain("assertionMethod");
@@ -105,12 +115,30 @@ test("2: live queue proposal verifies, sends and appears in Activity", async ({ 
   await expect(page.getByRole("link", { name: "Review A live approval", exact: true })).toBeVisible(
     { timeout: 10000 },
   );
+  const row = page
+    .getByRole("list", { name: "Approval requests" })
+    .locator("li")
+    .filter({ has: page.getByRole("link", { name: "Review A live approval", exact: true }) });
+  await expect(row.locator("svg")).toBeVisible();
+  await expect(row).toContainText("send");
+  await expect(row).toContainText(proposal.intent.binding);
+  await expect(row).toContainText(proposal.intent.recipientHash.slice(0, 8));
+  await expect(row).toContainText(
+    `${proposal.intent.amount.value} ${proposal.intent.amount.currency}`,
+  );
+  await expect(row).toContainText("Expires");
+  await expect(row).toContainText("Ask first");
+  await expect(row).toContainText("Your permissions require approval for this action");
   await accessible(page, info, "queue");
   await page.getByRole("link", { name: "Review A live approval", exact: true }).click();
   await expect(page.locator("pre")).toHaveText(proposal.renderedPreview);
   await accessible(page, info, "detail");
   await page.getByRole("button", { name: "Approve", exact: true }).click();
-  await expect(page.getByText("Approved, the agent will send within a minute")).toBeVisible();
+  await expect(page.getByText("Approved — the agent will send within a minute")).toBeVisible();
+  await expect(page.getByText("Approved (waiting for agent)", { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Stop the agent", exact: true }).last(),
+  ).toBeVisible();
   await expect.poll(() => daemon.tick(proposal)).toBe("sent");
   await expect(page.getByText("Sent", { exact: true })).toBeVisible();
   await accessible(page, info, "sent");
@@ -152,7 +180,7 @@ test("2 keyboard: review and approve without a pointer", async ({ page }, info) 
     page.getByRole("dialog").getByRole("button", { name: "Set up this device", exact: true }),
   ).toBeFocused();
   await page.keyboard.press("Enter");
-  await expect(page.getByText("Approved, the agent will send within a minute")).toBeVisible();
+  await expect(page.getByText("Approved — the agent will send within a minute")).toBeVisible();
   const { daemon, proposal } = await proposalOnPod(page);
   await expect.poll(() => daemon.tick(proposal)).toBe("sent");
   await expect(page.getByText("Sent", { exact: true })).toBeVisible();
@@ -177,7 +205,7 @@ test("3: changed terms refuse the old approval and enable a new approval", async
   await setup(page);
   await open(page, "approvals/send-reply");
   await page.getByRole("button", { name: "Approve", exact: true }).click();
-  await expect(page.getByText("Approved, the agent will send within a minute")).toBeVisible();
+  await expect(page.getByText("Approved — the agent will send within a minute")).toBeVisible();
   const { daemon, proposal } = await proposalOnPod(page);
   const changed = await daemon.edit(proposal);
   await expect.poll(() => daemon.tick(changed)).toBe("terms-digest-mismatch");
@@ -308,7 +336,167 @@ test("prohibitions stay disabled, and bulk approval requires matching kinds and 
   await expect(page.getByRole("button", { name: "Approve all", exact: true })).toBeEnabled();
   await accessible(page, info, "bulk-selected");
   await page.getByRole("button", { name: "Approve all", exact: true }).click();
-  await expect(page.getByText("Approved, the agent will send within a minute")).toHaveCount(2);
+  await expect(page.getByText("Approved — the agent will send within a minute")).toHaveCount(2);
   await expect.poll(() => daemon.tick(first)).toBe("sent");
   await expect.poll(() => daemon.tick(second)).toBe("sent");
+  const approvals = loadedRecords(
+    await readApprovals(
+      daemon.client,
+      createAgentVerifier({ fetch: daemon.fetch, webId: DEMO_WEBID }),
+    ),
+  ).filter((a) => [first.id, second.id].includes(a.approves));
+  expect(approvals).toHaveLength(2);
+  expect(new Set(approvals.map((a) => a.id)).size).toBe(2);
+  expect(approvals.every((a) => a.verification === "verified")).toBe(true);
+});
+
+test("exact email preview preserves headers, the full plain body and a muted footer; digest is copyable", async ({
+  page,
+}, info) => {
+  await open(page);
+  const { daemon, proposal: template } = await proposalOnPod(page);
+  const footer =
+    "— Sent by an agent · https://jeswr.org/agent · spec: https://jeswr.org/agentic-web";
+  const preview = `Subject: Complete preview\nTo: Alice <alice@example.test>\n\nFirst line\n\n  Indented line <script>literal text</script>\nLast line\n\n${footer}`;
+  const proposal = await daemon.propose("exact-email", { ...template, renderedPreview: preview });
+  await open(page, "approvals/exact-email");
+  expect(await page.locator("pre").textContent()).toBe(preview);
+  await expect(page.locator("pre script")).toHaveCount(0);
+  await expect(page.locator(".agent-preview-footer")).toHaveText(footer);
+  expect(
+    await page.locator(".agent-preview-footer").evaluate((el) => getComputedStyle(el).color),
+  ).not.toBe(await page.locator("pre").evaluate((el) => getComputedStyle(el).color));
+  await expect(page.getByText(/Rule requiring approval:/)).toBeVisible();
+  await expect(page.getByText(proposal.intent.termsDigest, { exact: true })).toBeHidden();
+  await page.getByText("Advanced", { exact: true }).click();
+  await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
+  await page.getByRole("button", { name: "Copy digest", exact: true }).click();
+  await expect(page.getByText("Digest copied", { exact: true })).toBeVisible();
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
+    proposal.intent.termsDigest,
+  );
+  await accessible(page, info, "exact-email-preview");
+});
+
+test("chat and remember requests preserve their exact text and canonical kind", async ({
+  page,
+}, info) => {
+  await open(page);
+  const { daemon, proposal: template } = await proposalOnPod(page);
+  const preview = "Hello\n  Keep this line break and indentation. <b>Plain text</b>";
+  await daemon.propose("chat-preview", {
+    ...template,
+    intent: { ...template.intent, binding: "matrix" },
+    renderedPreview: preview,
+  });
+  await open(page, "approvals/chat-preview");
+  expect(await page.locator("pre").textContent()).toBe(preview);
+  await expect(page.locator("pre b")).toHaveCount(0);
+  await open(page, "approvals/remember-preference");
+  await expect(page.locator(".agent-card .agent-row").first()).toContainText("remember");
+  await expect(page.locator(".lucide-brain")).toBeVisible();
+  await expect(page.locator("pre")).toHaveText("Remember: I prefer afternoon meetings.");
+  await accessible(page, info, "remember-preview");
+});
+
+test("allow similar signs a separate approval and a rule bounded to seven days", async ({
+  page,
+}, info) => {
+  await setup(page);
+  await open(page, "approvals/send-reply");
+  const { daemon, proposal } = await proposalOnPod(page);
+  const session = { fetch: daemon.fetch, webId: DEMO_WEBID };
+  await page
+    .getByRole("button", { name: "Approve and allow similar for 7 days", exact: true })
+    .click();
+  await expect(page.getByText("Approved — the agent will send within a minute")).toBeVisible();
+  await expect
+    .poll(async () => {
+      const current = await loadVerifiedMandate(daemon.client, session);
+      return (
+        current?.autonomous.permissions?.some((rule) => rule.action === proposal.intent.action) ??
+        false
+      );
+    })
+    .toBe(true);
+  const m = await loadVerifiedMandate(daemon.client, session);
+  if (!m) throw new Error("Missing signed permissions");
+  const allowance = m.autonomous.permissions?.at(-1);
+  expect(allowance?.action).toBe(proposal.intent.action);
+  const dates = allowance?.constraints?.filter((c) => c.leftOperand === "dateTime");
+  const start = String(dates?.find((c) => c.operator === "gteq")?.rightOperand);
+  const end = String(dates?.find((c) => c.operator === "lt")?.rightOperand);
+  expect(Date.parse(end) - Date.parse(start)).toBe(7 * 86400000);
+  expect(
+    (await evaluateIntent(m, proposalIntent(proposal, m.subject, new Date(start)))).decision,
+  ).toBe("permit");
+  expect(
+    (await evaluateIntent(m, proposalIntent(proposal, m.subject, new Date(end)))).decision,
+  ).toBe("confirm-required");
+  await expect
+    .poll(
+      async () =>
+        loadedRecords(await readApprovals(daemon.client, createAgentVerifier(session))).filter(
+          (a) => a.approves === proposal.id,
+        ).length,
+    )
+    .toBe(1);
+  const approvals = loadedRecords(
+    await readApprovals(daemon.client, createAgentVerifier(session)),
+  ).filter((a) => a.approves === proposal.id);
+  expect(approvals).toHaveLength(1);
+  expect(approvals[0]).toMatchObject({
+    verification: "verified",
+    termsDigest: proposal.intent.termsDigest,
+  });
+  await accessible(page, info, "allow-similar");
+});
+
+test("expired requests leave an empty queue and appear in Activity with reason expired", async ({
+  page,
+}, info) => {
+  await open(page);
+  const daemon = daemonDouble(page);
+  for (const proposal of loadedRecords(await readProposals(daemon.client))) {
+    await daemon.write({ ...proposal, validUntil: new Date(Date.now() - 1).toISOString() });
+  }
+  await expect(page.getByText("Nothing waiting for you", { exact: true })).toBeVisible();
+  await accessible(page, info, "approvals-empty");
+  await open(page, "activity");
+  const expired = page.getByRole("region", { name: "Expired approvals" });
+  await expect(expired).toBeVisible();
+  await expect(expired.getByText("Reason: expired", { exact: true })).toHaveCount(3);
+  await accessible(page, info, "expired-approvals");
+});
+
+test("6: revoking permissions after approval refuses the queued item", async ({ page }, info) => {
+  await setup(page);
+  await open(page, "approvals/send-reply");
+  await page.getByRole("button", { name: "Approve", exact: true }).click();
+  await expect(page.getByText("Approved — the agent will send within a minute")).toBeVisible();
+  const { daemon, proposal } = await proposalOnPod(page);
+  await open(page, "permissions");
+  await page.getByRole("button", { name: "Stop using these permissions", exact: true }).click();
+  await expect(
+    page.getByText("No verified permissions are active.", { exact: false }),
+  ).toBeVisible();
+  await expect.poll(() => daemon.tick(proposal)).toBe("mandate-invalid");
+  const tx = loadedRecords(await readOutbox(daemon.client)).find((t) => t.proposal === proposal.id);
+  expect(tx).toMatchObject({ status: "refused" });
+  expect(tx?.externalId).toBeUndefined();
+  await accessible(page, info, "revoked-after-approval");
+});
+
+test("returning from approval details restores focus to the reviewed row", async ({ page }) => {
+  await open(page);
+  await page.getByRole("link", { name: "Review Calendar invitation", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Approval details", exact: true })).toBeVisible();
+  if ((page.viewportSize()?.width ?? 1280) < 768) {
+    await page.getByRole("dialog").getByRole("button", { name: "Close", exact: true }).click();
+  } else {
+    await page.goBack();
+  }
+  await expect(
+    page.getByRole("link", { name: "Review Calendar invitation", exact: true }),
+  ).toBeFocused();
 });

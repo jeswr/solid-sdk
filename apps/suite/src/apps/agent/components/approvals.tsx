@@ -10,7 +10,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@jeswr/suite-ui";
-import { Ban, Brain, Calendar, CreditCard, Mail, Plug } from "lucide-react";
+import { Brain, Calendar, CreditCard, Mail, Plug } from "lucide-react";
 import Link from "next/link";
 import {
   type KeyboardEvent as ReactKeyboardEvent,
@@ -19,8 +19,10 @@ import {
   useRef,
   useState,
 } from "react";
+import { approvalExplanation, approvalKind, previewParts } from "../lib/approval-details";
 import type { Row } from "../lib/client";
 import { collection, isComplete, metadataOf } from "../lib/collections";
+import { saveTabState, tabState } from "../lib/device-state";
 import { formatRelativeTime } from "../lib/format";
 import { type Query, useAgentQuery, useAgentWorkspace } from "../lib/hooks";
 import { mandateBoundaries } from "../lib/mandate-rules";
@@ -78,6 +80,7 @@ function useQueue(): Query<Row<PendingApproval>[]> {
                   await proposalBadge(policy, row.record.proposal, new Date(now)),
                 ),
                 similarAllowed: await canAllowSimilar(policy, row.record.proposal, new Date(now)),
+                explanation: await approvalExplanation(policy, row.record.proposal, new Date(now)),
               },
             }
           : row,
@@ -116,6 +119,7 @@ function useQueue(): Query<Row<PendingApproval>[]> {
         ...row.record,
         reason: reason === "Allowed" ? "Ask first" : reason,
         similarAllowed: false,
+        explanation: { reason: "Checking your permissions", rule: "Checking your permissions" },
       },
     };
   });
@@ -142,12 +146,13 @@ function Recipient({ hash, accounts }: { hash: string; accounts: Account[] }) {
 }
 function ApprovalSummary({ row, accounts }: { row: PendingApproval; accounts: Account[] }) {
   const { proposal, reason } = row;
+  const kind = approvalKind(proposal.intent.action);
   const icons = { send: Mail, remember: Brain, book: Calendar, pay: CreditCard, connect: Plug };
-  const Icon =
-    reason === "Never" ? Ban : (icons[proposal.intent.action as keyof typeof icons] ?? Mail);
+  const Icon = icons[kind as keyof typeof icons] ?? Mail;
   return (
     <>
       <Icon size={18} aria-hidden="true" />
+      <span>{kind}</span>
       <strong>{String(proposal.intent.parameters.summary ?? proposal.intent.action)}</strong>
       <Badge variant="secondary">{proposal.intent.binding}</Badge>
       <Recipient hash={proposal.intent.recipientHash} accounts={accounts} />
@@ -156,6 +161,9 @@ function ApprovalSummary({ row, accounts }: { row: PendingApproval; accounts: Ac
       </span>
       <span>{formatRelativeTime(row.expiresIn, 0, true)}</span>
       <Badge variant={reason === "Never" ? "destructive" : "secondary"}>{reason}</Badge>
+      <span>
+        {reason === "Never" ? "Your permissions never allow this" : row.explanation?.reason}
+      </span>
     </>
   );
 }
@@ -173,6 +181,8 @@ function ApprovalDetail({
   similar(row: PendingApproval): void;
 }) {
   const [confirmation, setConfirmation] = useState("");
+  const [copyState, setCopyState] = useState("");
+  const preview = previewParts(row.proposal.renderedPreview);
   const needsConfirmation =
     row.proposal.intent.amount.value > 0 ||
     ["pay", "Transfer", "https://jeswr.org/ns/agent#Transfer"].includes(row.proposal.intent.action);
@@ -216,8 +226,12 @@ function ApprovalDetail({
         <ApprovalSummary row={row} accounts={accounts} />
       </div>
       <h2>Exact preview</h2>
-      <pre>{row.proposal.renderedPreview}</pre>
-      {row.reason === "Never" && <p>Your permissions never allow this</p>}
+      <pre>
+        {preview.text}
+        <span className="agent-preview-footer">{preview.footer}</span>
+      </pre>
+      <p>Rule requiring approval: {row.explanation?.rule ?? "Checking your permissions"}</p>
+      <Link href="/agent/permissions">View permissions</Link>
       <DecisionState row={row} />
       <details>
         <summary>Advanced</summary>
@@ -225,14 +239,24 @@ function ApprovalDetail({
         <code>{row.proposal.intent.termsDigest}</code>
         <Button
           variant="outline"
-          onClick={() => void navigator.clipboard.writeText(row.proposal.intent.termsDigest)}
+          onClick={async () => {
+            try {
+              await navigator.clipboard.writeText(row.proposal.intent.termsDigest);
+              setCopyState("Digest copied");
+            } catch {
+              setCopyState("Couldn't copy the digest. Select the text to copy it.");
+            }
+          }}
         >
           Copy digest
         </Button>
-        <p>
-          Rule requiring approval:{" "}
-          {String(row.proposal.intent.parameters.approvalRule ?? "Ask before this action")}
-        </p>
+        <p role="status">{copyState}</p>
+        {row.explanation?.ruleDetails && (
+          <>
+            <p>Permission rule</p>
+            <code>{row.explanation.ruleDetails}</code>
+          </>
+        )}
         <p>
           {row.verification === "verified"
             ? "Verified"
@@ -286,7 +310,8 @@ function DecisionState({ row }: { row: PendingApproval }) {
     <div role="status">
       {row.state === "approved" && (
         <>
-          <p>Approved, the agent will send within a minute</p>
+          <p>Approved (waiting for agent)</p>
+          <p>Approved — the agent will send within a minute</p>
           <AgentControl stopped={false} link />
         </>
       )}
@@ -310,6 +335,24 @@ export function ApprovalsScreen({ id }: { id?: string }) {
   const inFlight = useRef(false);
   const [error, setError] = useState(false);
   const [pendingRevocation, setPendingRevocation] = useState<PendingRevocation>();
+  useEffect(() => {
+    if (id || query.status !== "ready") return;
+    const stored = tabState("agent.approvals.returnFocus");
+    if (!stored) return;
+    let frame = 0;
+    let handle = 0;
+    const restore = () => {
+      const target = document.querySelector<HTMLElement>(
+        `[data-agent-approval-id="${CSS.escape(stored)}"]`,
+      );
+      if (target && !document.querySelector('[role="dialog"]')) {
+        target.focus();
+        saveTabState("agent.approvals.returnFocus", undefined);
+      } else if (++frame < 120) handle = requestAnimationFrame(restore);
+    };
+    handle = requestAnimationFrame(restore);
+    return () => cancelAnimationFrame(handle);
+  }, [id, query.status]);
   const decide = (rows: PendingApproval[], decision: "approve" | "deny", similar = false) => {
     if (inFlight.current) return;
     void device.requireKey(() => {
@@ -464,6 +507,8 @@ export function ApprovalsScreen({ id }: { id?: string }) {
                     <DecisionState row={row} />
                     <Link
                       data-agent-approval-link
+                      data-agent-approval-id={row.proposal.id}
+                      onClick={() => saveTabState("agent.approvals.returnFocus", row.proposal.id)}
                       href={`/agent/approvals/${encodeURIComponent(resourceSlug(row.proposal.id) ?? "")}`}
                       onKeyDown={(event: ReactKeyboardEvent<HTMLAnchorElement>) => {
                         if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;

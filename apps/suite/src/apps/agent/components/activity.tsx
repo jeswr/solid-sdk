@@ -51,6 +51,7 @@ import {
   readProposals,
 } from "../lib/readers";
 import { createAgentVerifier } from "../lib/verify";
+import { ExpiredApprovalRequests } from "./expired-approvals";
 import { useMobileSheet } from "./responsive-sheet";
 import { QueryRows, Screen } from "./states";
 
@@ -83,6 +84,7 @@ function Summary({ entry }: { entry: AuditEntry }) {
   const r = entry.record;
   if (r.type === "ledger-checkpoint")
     return <>Earlier records were removed under the retention policy</>;
+  if (r.reason === "expired") return <>Approval request expired</>;
   if (r.type !== "transmission") return <>{KINDS[r.type]}</>;
   if (r.status === "uncertain")
     return <>The agent couldn't confirm whether this message was sent</>;
@@ -123,6 +125,7 @@ function activityLine(entry: AuditEntry): string {
   const r = entry.record;
   if (r.type === "ledger-checkpoint")
     return "Earlier records were removed under the retention policy";
+  if (r.reason === "expired") return "Approval request expired";
   if (r.type !== "transmission") return KINDS[r.type];
   if (r.status === "uncertain") return "The agent couldn't confirm whether this message was sent";
   if (r.status === "attempting") return "The agent is trying to send this message";
@@ -396,6 +399,12 @@ function RecordDetail({ entry, entries }: { entry: AuditEntry; entries: AuditEnt
         <dd>{new Date(entry.at).toLocaleString()}</dd>
         <dt>Approval key</dt>
         <dd>{key ?? "Not recorded"}</dd>
+        {entry.record.type !== "ledger-checkpoint" && entry.record.reason === "expired" && (
+          <>
+            <dt>Reason</dt>
+            <dd>expired</dd>
+          </>
+        )}
       </dl>
       <h2>How this action is connected</h2>
       <ProvenanceChain
@@ -504,6 +513,7 @@ export function ActivityScreen({ seq }: { seq?: string }) {
     check && query.status === "ready" && check.rows === query.data ? check.result : undefined;
   return (
     <Screen title={seq ? `Activity record ${seq}` : "Activity"}>
+      {!seq && <ExpiredApprovalRequests />}
       <p>{AUDIT_SCOPE}</p>
       <div className="agent-row">
         <Button disabled={query.status !== "ready" || head.status !== "ready"} onClick={runCheck}>
