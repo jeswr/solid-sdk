@@ -6,6 +6,14 @@ import { SuiteFrame, type SuiteFrameProps } from "@/components/interim-shell/sui
 import { loadGuard, loadShell } from "./app-frame-loaders";
 import { useOptionalAccounts } from "./session/accounts-context";
 
+// The native export keeps its sign-in placeholder (mobile auth integration pending), so its
+// apps stay on the interim frame instead of the shell's web sign-in redirect.
+const nativeTarget = process.env.NEXT_PUBLIC_SUITE_TARGET === "native";
+function useShellAccounts() {
+  const accounts = useOptionalAccounts();
+  return nativeTarget ? null : accounts;
+}
+
 const Shell = lazy(async () => ({ default: (await loadShell()).SuiteShell }));
 const Guard = lazy(async () => ({
   default: (await loadGuard()).SessionGuard,
@@ -13,7 +21,7 @@ const Guard = lazy(async () => ({
 
 /** Preserve standalone/native previews while real app routes share shell authentication. */
 export function AppSessionGuard({ children }: { children: React.ReactNode }) {
-  const accounts = useOptionalAccounts();
+  const accounts = useShellAccounts();
   return accounts && (accounts.status === "loading" || accounts.status === "signed-out") ? (
     <Suspense>
       <Guard>{children}</Guard>
@@ -25,7 +33,7 @@ export function AppSessionGuard({ children }: { children: React.ReactNode }) {
 
 /** Apps retain their sidebar and details; the shell owns global navigation and account UI. */
 export function AppFrame(props: Omit<SuiteFrameProps, "app"> & { app: "home" | "drive" }) {
-  const accounts = useOptionalAccounts();
+  const accounts = useShellAccounts();
   if (!accounts) return <SuiteFrame {...props} />;
   const title = props.app === "home" ? "Home" : "Drive";
   return (
@@ -46,6 +54,6 @@ export function AppFrame(props: Omit<SuiteFrameProps, "app"> & { app: "home" | "
 
 /** ShellFrame supplies the page h1; app content keeps its heading in standalone previews. */
 export function AppHeading(props: ComponentProps<"h1">) {
-  const accounts = useOptionalAccounts();
+  const accounts = useShellAccounts();
   return accounts ? <h2 {...props} /> : <h1 {...props} />;
 }
