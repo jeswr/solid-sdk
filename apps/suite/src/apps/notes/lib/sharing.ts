@@ -86,7 +86,7 @@ export class NoteSharingAdapter implements SharingAdapter {
       ...(grantDisabledReason ? { grantDisabledReason } : {}),
       ...(failedImages.length
         ? {
-            updateWarning: `Note access was updated. Image access couldn't be updated: ${failedImages.join(", ")}`,
+            updateWarning: `Image access couldn't be confirmed: ${failedImages.join(", ")}`,
           }
         : {}),
     };
@@ -114,18 +114,61 @@ export class NoteSharingAdapter implements SharingAdapter {
   }
   private async revokeImages(
     key: string,
-    update: (image: string, state: SharingState) => Promise<void>,
+    revoked: (state: SharingState) => boolean,
+    update: (image: string) => Promise<void>,
   ) {
-    const failed = new Set<string>();
+    const failed = new Set(this.images);
     for (const image of this.images) {
       try {
-        await update(image, await this.imagePolicy(image, new AbortController().signal));
+        if (!revoked(await this.imagePolicy(image, new AbortController().signal))) {
+          await update(image);
+          if (!revoked(await this.imagePolicy(image, new AbortController().signal))) continue;
+        }
+        failed.delete(image);
       } catch {
-        failed.add(image);
+        // Includes writes that committed but could not be read back. Keep them unconfirmed.
       }
     }
     if (failed.size) this.failedImages.set(key, failed);
     else this.failedImages.delete(key);
+  }
+  private async revokeAfterNoteWrite(
+    key: string,
+    write: () => Promise<void>,
+    revoked: (state: SharingState) => boolean,
+    update: (image: string) => Promise<void>,
+  ) {
+    const previous = this.failedImages.get(key);
+    const restore = () => {
+      if (previous) this.failedImages.set(key, previous);
+      else this.failedImages.delete(key);
+    };
+    // The setter may commit its PUT and then reject during read-back. Account for
+    // every image before that ambiguous operation starts, including failed reconciliation.
+    this.failedImages.set(key, new Set(this.images));
+    let failure: { error: unknown } | undefined;
+    try {
+      await write();
+    } catch (error) {
+      if (error instanceof ShareError && error.code === "would-grant") {
+        // This typed refusal guarantees no PUT. Report the grant instead of using
+        // the revocation path to bypass the image preflight.
+        restore();
+        throw error;
+      }
+      failure = { error };
+    }
+    let committed: SharingState;
+    try {
+      committed = await this.loadNote(this.note.url, new AbortController().signal);
+    } catch (error) {
+      throw failure ? failure.error : error;
+    }
+    if (!revoked(committed)) {
+      restore();
+      throw failure ? failure.error : new ShareError("conflict");
+    }
+    await this.revokeImages(key, revoked, update);
   }
   async setPerson(
     url: string,
@@ -150,12 +193,17 @@ export class NoteSharingAdapter implements SharingAdapter {
       );
       await this.access.setPerson(url, webId, role);
     } else {
-      await this.access.setPerson(url, webId, role);
-      await this.revokeImages(`person:${webId}`, async (image, current) => {
-        const existing = current.people.find((person) => person.webId === webId);
-        if (existing && (role === null || shareRoleRank[role] < shareRoleRank[existing.role]))
-          await this.access.setPerson(image, webId, role);
-      });
+      await this.revokeAfterNoteWrite(
+        `person:${webId}`,
+        () => this.access.setPerson(url, webId, role, { narrowOnly: true }),
+        (current) => {
+          const existing = current.people.find((person) => person.webId === webId);
+          return (
+            !existing || (role !== null && shareRoleRank[existing.role] <= shareRoleRank[role])
+          );
+        },
+        (image) => this.access.setPerson(image, webId, role, { narrowOnly: true }),
+      );
     }
   }
   async setGeneral(url: string, general: SharingState["general"]) {
@@ -175,17 +223,17 @@ export class NoteSharingAdapter implements SharingAdapter {
       await this.grantImages({ ...state, general }, signal);
       await this.access.setGeneral(url, general);
     } else {
-      await this.access.setGeneral(url, general);
-      await this.revokeImages("general", async (image, current) => {
-        if (
-          current.general.mode !== "restricted" &&
-          (general.mode === "restricted" ||
-            (current.general.mode === "link" &&
-              shareRoleRank[general.role ?? "viewer"] <
-                shareRoleRank[current.general.role ?? "viewer"]))
-        )
-          await this.access.setGeneral(image, general);
-      });
+      await this.revokeAfterNoteWrite(
+        "general",
+        () => this.access.setGeneral(url, general, { narrowOnly: true }),
+        (current) =>
+          current.general.mode === "restricted" ||
+          (general.mode === "link" &&
+            current.general.mode === "link" &&
+            shareRoleRank[current.general.role ?? "viewer"] <=
+              shareRoleRank[general.role ?? "viewer"]),
+        (image) => this.access.setGeneral(image, general, { narrowOnly: true }),
+      );
     }
   }
 }

@@ -489,12 +489,16 @@ it("does not widen private images during a downgrade or touch images after a ref
   const general = vi.spyOn(memory, "setGeneral");
   await adapter.setPerson(note.url, BOB, "viewer");
   await adapter.setGeneral(note.url, { mode: "link", role: "viewer" });
-  expect(person).toHaveBeenCalledExactlyOnceWith(note.url, BOB, "viewer");
-  expect(general).toHaveBeenCalledExactlyOnceWith(note.url, { mode: "link", role: "viewer" });
+  expect(person).toHaveBeenCalledExactlyOnceWith(note.url, BOB, "viewer", { narrowOnly: true });
+  expect(general).toHaveBeenCalledExactlyOnceWith(
+    note.url,
+    { mode: "link", role: "viewer" },
+    { narrowOnly: true },
+  );
   person.mockRejectedValueOnce(new ShareError("conflict"));
   const load = vi.spyOn(memory, "load");
   await expect(adapter.setPerson(note.url, BOB, null)).rejects.toMatchObject({ code: "conflict" });
-  expect(load.mock.calls.map(([url]) => url)).toEqual([note.url]);
+  expect(load.mock.calls.map(([url]) => url)).toEqual([note.url, note.url]);
 });
 
 it("reports an image write failure and continues updating later images", async () => {

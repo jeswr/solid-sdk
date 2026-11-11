@@ -29,6 +29,7 @@ import {
   SheetContent,
   SheetDescription,
   SheetTitle,
+  sharingGrantPolicy,
   Toaster,
   TooltipProvider,
   toast,
@@ -38,7 +39,6 @@ import {
   generalAccessOptions,
   grantExpires,
   shareRoleOptions,
-  shareRoleRank,
   shareSubtitle,
 } from "../lib/share-options";
 import { RequiresOnline, useNeedsConnection } from "../sync/requires-online";
@@ -187,7 +187,8 @@ function SharingContent({
   }, [adapter, url, attempt]);
   const readOnly = !online || state?.readOnly || !state?.canManage;
   const disabled = !!readOnly || !!saving;
-  const grantsDisabled = disabled || !!state?.grantDisabledReason;
+  const grants = sharingGrantPolicy(state);
+  const grantsDisabled = disabled || grants.disabled;
   const warning =
     state?.updateWarning || (state?.warning ? new ShareError(state.warning).message : "");
   const roles = shareRoleOptions(kind, caps, !!state?.canManage, adapter.supportsCommenter);
@@ -254,12 +255,14 @@ function SharingContent({
         toasts.current.push(
           toast(`Removed access for ${person.name ?? person.webId}`, {
             duration: 8000,
-            ...(!loaded.grantDisabledReason && {
+            ...(!sharingGrantPolicy(loaded).disabled && {
               action: {
                 label: "Undo",
                 onClick: () => {
                   // Undo must not overwrite a newer role, owner grant or inherited permission.
                   if (current.current?.people.some((entry) => entry.webId === person.webId)) return;
+                  if (!sharingGrantPolicy(current.current).allowsPerson(undefined, previousRole))
+                    return;
                   void act(person.webId, () =>
                     adapter.setPerson(
                       url,
@@ -277,6 +280,7 @@ function SharingContent({
     );
   }
   async function add() {
+    if (sharingGrantPolicy(current.current).disabled) return;
     const newRole = roles.includes(role) ? role : "viewer";
     let expires: Date | undefined;
     try {
@@ -452,8 +456,9 @@ function SharingContent({
                                 ? `${person.expires.getFullYear()}-${String(person.expires.getMonth() + 1).padStart(2, "0")}-${String(person.expires.getDate()).padStart(2, "0")}`
                                 : ""
                             }
-                            disabled={disabled}
+                            disabled={grantsDisabled}
                             onBlur={(event) => {
+                              if (sharingGrantPolicy(current.current).disabled) return;
                               const value = event.target.value;
                               const remount = () => setExpiryRevision((value) => value + 1);
                               if (value === event.target.defaultValue) return;
@@ -482,17 +487,19 @@ function SharingContent({
                         person.expires && (
                           <Button
                             variant="link"
-                            disabled={disabled}
+                            disabled={grantsDisabled}
                             onClick={() =>
                               void act(
                                 person.webId,
-                                () =>
-                                  adapter.setPerson(
+                                async () => {
+                                  if (sharingGrantPolicy(current.current).disabled) return;
+                                  await adapter.setPerson(
                                     url,
                                     person.webId,
                                     person.role as ShareRole,
                                     {},
-                                  ),
+                                  );
+                                },
                                 // On success this button unmounts and the dialog's focus trap
                                 // would park focus on the dialog: keep focus in the row.
                                 () => setFocusAfterSave(`${id}-expiry-${person.webId}`),
@@ -514,21 +521,16 @@ function SharingContent({
                         label={`Role for ${person.name ?? person.webId}`}
                         value={person.role}
                         roles={roles}
-                        options={Object.fromEntries(
-                          roles
-                            .filter(
-                              (role) =>
-                                !!state.grantDisabledReason &&
-                                shareRoleRank[role] > shareRoleRank[person.role],
-                            )
-                            .map((role) => [
-                              role,
-                              { disabled: true, reason: state.grantDisabledReason },
-                            ]),
-                        )}
+                        options={grants.roleOptions(person.role)}
                         disabled={disabled || !!person.inherited}
                         onChange={(next) => {
-                          if (roles.includes(next))
+                          const latest = current.current?.people.find(
+                            (entry) => entry.webId === person.webId,
+                          );
+                          if (
+                            roles.includes(next) &&
+                            sharingGrantPolicy(current.current).allowsPerson(latest?.role, next)
+                          )
                             void act(person.webId, () =>
                               adapter.setPerson(
                                 url,
@@ -553,7 +555,14 @@ function SharingContent({
               disabled={disabled}
               onValueChange={(mode) => {
                 const option = generalAccessOptions(caps).find((entry) => entry.value === mode);
-                if (option && !option.disabled)
+                if (
+                  option &&
+                  !option.disabled &&
+                  current.current &&
+                  sharingGrantPolicy(current.current).allowsGeneral(current.current.general, {
+                    mode: option.value,
+                  })
+                )
                   void act("general", () =>
                     adapter.setGeneral(url, {
                       mode: option.value,
@@ -574,9 +583,7 @@ function SharingContent({
                     value={option.value}
                     disabled={
                       option.disabled ||
-                      (!!state.grantDisabledReason &&
-                        option.value !== "restricted" &&
-                        option.value !== state.general.mode)
+                      !grants.allowsGeneral(state.general, { mode: option.value })
                     }
                   >
                     {option.label}
@@ -598,18 +605,19 @@ function SharingContent({
                     (entry !== "commenter" || adapter.supportsGeneralCommenter !== false),
                 )}
                 value={state.general.role ?? "viewer"}
-                options={Object.fromEntries(
-                  roles
-                    .filter(
-                      (role) =>
-                        !!state.grantDisabledReason &&
-                        shareRoleRank[role] > shareRoleRank[state.general.role ?? "viewer"],
-                    )
-                    .map((role) => [role, { disabled: true, reason: state.grantDisabledReason }]),
-                )}
+                options={grants.roleOptions(state.general.role ?? "viewer")}
                 disabled={disabled || !generalAllowed}
                 onChange={(next) => {
-                  if (next !== "manager" && generalAllowed && roles.includes(next))
+                  if (
+                    next !== "manager" &&
+                    generalAllowed &&
+                    roles.includes(next) &&
+                    current.current &&
+                    sharingGrantPolicy(current.current).allowsGeneral(current.current.general, {
+                      ...state.general,
+                      role: next,
+                    })
+                  )
                     void act("general", () =>
                       adapter.setGeneral(url, { ...state.general, role: next }),
                     );
@@ -625,7 +633,7 @@ function SharingContent({
             onCustomDateChange={setCustom}
             {...(!caps.grantExpiry
               ? { disabled: true, reason: "Not available on this storage" }
-              : disabled
+              : grantsDisabled
                 ? { disabled: true, reason: "Reconnect or ask the owner to change sharing" }
                 : {})}
           />
@@ -637,7 +645,7 @@ function SharingContent({
                 id={`${id}-purpose`}
                 value={purpose}
                 onChange={(event) => setPurpose(event.target.value)}
-                disabled={disabled}
+                disabled={grantsDisabled}
               />
             </div>
           )}
@@ -647,7 +655,10 @@ function SharingContent({
       {additionalAction && (
         <Button
           disabled={grantsDisabled}
-          onClick={() => void act("additional", additionalAction.run)}
+          onClick={() => {
+            if (!sharingGrantPolicy(current.current).disabled)
+              void act("additional", additionalAction.run);
+          }}
         >
           {additionalAction.label}
         </Button>
