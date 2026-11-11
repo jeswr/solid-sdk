@@ -3,7 +3,7 @@
 import { parseRdf } from "@jeswr/fetch-rdf";
 import { serialize } from "@jeswr/rdf-serialize";
 import { createWebIdKeyResolver, type KeyPair, publishVerificationMethod } from "@jeswr/solid-vc";
-import { Store } from "n3";
+import { DataFactory, Store } from "n3";
 import { type ProfileSession, profileReader } from "./profile";
 
 const PREFERENCE = "agent.approvalKey";
@@ -79,14 +79,10 @@ async function activeKey(owner: string, store: ApprovalKeyStore): Promise<KeyPai
   return key?.verificationMethod === id ? key : undefined;
 }
 
-export async function publishApprovalKey(session: ProfileSession, key: KeyPair) {
+/** Conditionally rewrite the owner's profile, retrying conflicts on the winner's graph. */
+async function editProfile(session: ProfileSession, edit: (store: Store) => void) {
   const profile = new URL(session.webId);
   profile.hash = "";
-  const publication = await publishVerificationMethod({
-    controller: session.webId,
-    verificationMethod: key.verificationMethod,
-    key: key.publicKey,
-  });
   // Initial attempt plus three conflict retries; each retry preserves the winner's graph.
   for (let attempt = 0; attempt <= 3; attempt++) {
     const response = await session.fetch(profile.href, {
@@ -102,7 +98,7 @@ export async function publishApprovalKey(session: ProfileSession, key: KeyPair) 
         baseIRI: profile.href,
       })),
     ]);
-    store.addQuads([...publication.quads]);
+    edit(store);
     const put = await session.fetch(profile.href, {
       method: "PUT",
       redirect: "error",
@@ -111,14 +107,40 @@ export async function publishApprovalKey(session: ProfileSession, key: KeyPair) 
     });
     if (put.status === 412) continue;
     if (!put.ok) throw new Error("Couldn't update your account profile. Try again.");
-    // A fresh resolver re-reads and confirms assertionMethod AND the key's controller binding.
-    const resolver = createWebIdKeyResolver({ fetch: profileReader(session) });
-    if (!(await resolver.isControlledBy(key.verificationMethod, session.webId)))
-      throw new Error("Your account profile hasn't confirmed this key. Try again.");
     return;
   }
   throw new Error("Your account profile kept changing. Try again.");
 }
+
+export async function publishApprovalKey(session: ProfileSession, key: KeyPair) {
+  const publication = await publishVerificationMethod({
+    controller: session.webId,
+    verificationMethod: key.verificationMethod,
+    key: key.publicKey,
+  });
+  await editProfile(session, (store) => store.addQuads([...publication.quads]));
+  // A fresh resolver re-reads and confirms assertionMethod AND the key's controller binding.
+  const resolver = createWebIdKeyResolver({ fetch: profileReader(session) });
+  if (!(await resolver.isControlledBy(key.verificationMethod, session.webId)))
+    throw new Error("Your account profile hasn't confirmed this key. Try again.");
+}
+
+/** Remove one key from the profile: its owner links and its own description. */
+export async function removeApprovalKey(session: ProfileSession, id: string) {
+  await editProfile(session, (store) => {
+    const key = DataFactory.namedNode(id);
+    store.removeQuads([
+      ...store.match(DataFactory.namedNode(session.webId), null, key),
+      ...store.match(key, null, null),
+    ]);
+  });
+  const resolver = createWebIdKeyResolver({ fetch: profileReader(session) });
+  if (await resolver.isControlledBy(id, session.webId))
+    throw new Error("Your account profile still lists this key. Try again.");
+}
+
+/** This device's selected approval key id, if any. */
+export const deviceKeyId = () => localStorage.getItem(PREFERENCE) ?? undefined;
 
 export async function approvalKeyStatus(
   session: ProfileSession,

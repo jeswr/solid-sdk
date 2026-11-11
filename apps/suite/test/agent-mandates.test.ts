@@ -52,6 +52,7 @@ import {
   demoMandateFiles,
   withDemoAgentKey,
 } from "../src/apps/agent/lib/demo-mandate";
+import { revocationImpact } from "../src/apps/agent/lib/key-admin";
 import { ApprovalKeyStore, setupApprovalKey } from "../src/apps/agent/lib/keys";
 import {
   allowSimilar,
@@ -603,6 +604,29 @@ describe("signed mandate activation and revocation", () => {
     expect(await mandateHistory(client, session, NOW)).toMatchObject([
       { id: m.id, status: "active", key: key.verificationMethod.split("#").at(-1) },
     ]);
+  });
+  it("warns before revoking the key that signed the current permissions", async () => {
+    const { client, session } = await fixture();
+    const signing = (await getKey()).verificationMethod;
+    const m = mandate(at("mandates/first.trig"));
+    await activateMandate(client, session, m, NOW);
+    await setupApprovalKey(session);
+    expect(await revocationImpact(client, session, signing, NOW)).toMatchObject({
+      permissions: true,
+    });
+    // A pointer that no longer matches its credential grants nothing, so there's no warning.
+    const pointer = (await readMandateCurrent(client))[0];
+    if (!pointer) throw new Error("Missing pointer");
+    const doc = await client.graph(pointer.url);
+    await replace(
+      client,
+      pointer.url,
+      doc.text.replace(pointer.record.digest, "0".repeat(pointer.record.digest.length)),
+      doc.contentType,
+    );
+    expect(await revocationImpact(client, session, signing, NOW)).toMatchObject({
+      permissions: false,
+    });
   });
   it("replaces without reusing status indices, preserves revocation bits and emits a verified revoke control", async () => {
     const { client, session } = await fixture();

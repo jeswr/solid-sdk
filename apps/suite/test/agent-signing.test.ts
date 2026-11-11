@@ -10,6 +10,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createAgentClient, isLoaded } from "../src/apps/agent/lib/client";
 import { archivedMessages } from "../src/apps/agent/lib/inbox";
 import {
+  listApprovalKeys,
+  revocationImpact,
+  revokeApprovalKey,
+} from "../src/apps/agent/lib/key-admin";
+import {
   ApprovalKeyStore,
   approvalKeyStatus,
   publishApprovalKey,
@@ -586,6 +591,219 @@ describe("signed approvals and controls", () => {
           createAgentVerifier(session, () => now),
         ),
       ).some((r) => typeof r.verification === "object" && r.verification.invalid === "attribution"),
+    ).toBe(true);
+  });
+});
+
+describe("approval key revocation", () => {
+  const target = `${DEMO_ROOT}agent/inbox/gmail/gmail/message-1.ttl`;
+  async function twoDevices() {
+    const env = await fixture();
+    await setupApprovalKey(env.session);
+    const old = localStorage.getItem(PREF) as string;
+    const signer = createAgentSigner(env.session, env.client, () => now);
+    const halt = await signer.signControl("Halt");
+    const archive = await signer.signControl("Archive", { target });
+    const connect = await signer.signControl("SetBindingState", {
+      target: `${DEMO_ROOT}agent/accounts/gmail.ttl`,
+      binding: "gmail",
+      bindingState: "connected",
+    });
+    const disconnect = await signer.signControl("SetBindingState", {
+      target: `${DEMO_ROOT}agent/accounts/gmail.ttl`,
+      binding: "gmail",
+      bindingState: "disabled",
+    });
+    const restrict = await signer.signControl("SetBindingState", {
+      target: `${DEMO_ROOT}agent/accounts/gmail.ttl`,
+      binding: "gmail",
+      restrictions: { send: false },
+    });
+    const resume = await signer.signControl("Resume");
+    await setupApprovalKey(env.session);
+    const device = localStorage.getItem(PREF) as string;
+    // Signed by the key that stays, so revocation leaves it alone.
+    const own = await signer.signControl("Halt");
+    return { ...env, old, device, halt, archive, connect, disconnect, restrict, resume, own };
+  }
+  const verified = async (
+    client: Awaited<ReturnType<typeof fixture>>["client"],
+    session: Awaited<ReturnType<typeof fixture>>["session"],
+    container: string,
+  ) =>
+    loadedRecords(
+      await readControl(
+        client,
+        createAgentVerifier(session, () => now),
+        container,
+      ),
+    ).filter((c) => c.verification === "verified");
+
+  it("lists keys by creation date without device names and marks this device", async () => {
+    const { session, old, device } = await twoDevices();
+    const keys = await listApprovalKeys(session);
+    expect(keys.map((k) => k.id).sort()).toEqual([old, device].sort());
+    expect(keys.find((k) => k.id === device)?.thisDevice).toBe(true);
+    expect(keys.find((k) => k.id === old)?.thisDevice).toBe(false);
+    for (const key of keys) expect(key.created).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  });
+
+  it("re-signs only restrictive controls, then removes the key; permissive ones lapse", async () => {
+    const {
+      session,
+      client,
+      old,
+      device,
+      halt,
+      archive,
+      connect,
+      disconnect,
+      restrict,
+      resume,
+      own,
+    } = await twoDevices();
+    expect(await revocationImpact(client, session, old, now)).toEqual({
+      statements: 4,
+      lapsing: 2,
+      permissions: false,
+    });
+    expect(await revokeApprovalKey(client, session, old, () => now)).toEqual({ resigned: 4 });
+    const resolver = createWebIdKeyResolver({ fetch: session.fetch });
+    expect(await resolver.isControlledBy(old, DEMO_WEBID)).toBe(false);
+    expect(await resolver.isControlledBy(device, DEMO_WEBID)).toBe(true);
+    expect((await listApprovalKeys(session)).map((k) => k.id)).toEqual([device]);
+
+    const control = await verified(client, session, client.paths.control);
+    const ids = control.map((c) => c.id);
+    // The originals no longer verify; each restrictive copy names its original and keeps its time.
+    for (const original of [halt, connect, disconnect, restrict, resume])
+      expect(ids).not.toContain(original.id);
+    expect(ids).toContain(own.id);
+    expect(ids.filter((id) => id.includes(".resigned-"))).toHaveLength(3);
+    for (const original of [halt, disconnect, restrict]) {
+      const copy = control.find((c) =>
+        c.id.startsWith(`${original.id.replace(/\.trig$/, "")}.resigned-`),
+      );
+      const { id: _id, verification: _v, ...claims } = copy ?? { id: "", verification: "" };
+      const { id: _original, ...expected } = original;
+      expect(claims).toEqual(expected);
+    }
+    for (const lapsed of [connect, resume])
+      expect(ids.some((id) => id.startsWith(lapsed.id.replace(/\.trig$/, "")))).toBe(false);
+    const archived = await verified(client, session, client.paths.archive);
+    expect(archived.map((c) => [c.kind, c.target])).toEqual([["Archive", target]]);
+    expect(archived[0]?.id.startsWith(archive.id.replace(/\.trig$/, ""))).toBe(true);
+  });
+
+  it("refuses this device's key, unknown keys, an unready device and an off-storage profile", async () => {
+    const { session, client, old, device, pod } = await twoDevices();
+    await expect(revokeApprovalKey(client, session, device, () => now)).rejects.toThrow(
+      /its own key/,
+    );
+    await expect(revocationImpact(client, session, device, now)).rejects.toThrow(/its own key/);
+    await expect(
+      revokeApprovalKey(client, session, `${profile}#other-key`, () => now),
+    ).rejects.toThrow(/isn't one of your/);
+    const offStorage = {
+      ...session,
+      storageUrl: "https://elsewhere.example/",
+      publicFetch: ((input, init) => pod.fetch(input, init)) as typeof pod.fetch,
+    };
+    await expect(revokeApprovalKey(client, offStorage, old, () => now)).rejects.toThrow(
+      /outside the storage/,
+    );
+    localStorage.removeItem(PREF);
+    await expect(revokeApprovalKey(client, session, old, () => now)).rejects.toThrow(
+      /Set up this device/,
+    );
+    expect(
+      await createWebIdKeyResolver({ fetch: session.fetch }).isControlledBy(old, DEMO_WEBID),
+    ).toBe(true);
+  });
+
+  it("lists only this profile's approval-key IRIs and reports unreadable profiles", async () => {
+    const body = `<${DEMO_WEBID}> <https://w3id.org/security#assertionMethod>
+      <${profile}#agent-approval-20261101-0123abcd>, <${profile}#other-key>, "literal",
+      <https://elsewhere.example/card#agent-approval-20261101-0123abcd>,
+      <${profile}#agent-approval-20261102-89abcdef>.`;
+    const respond = (status: number) => async () =>
+      new Response(body, { status, headers: { "content-type": "text/turtle" } });
+    const keys = await listApprovalKeys({ webId: DEMO_WEBID, fetch: respond(200) });
+    expect(keys).toEqual([
+      {
+        id: `${profile}#agent-approval-20261102-89abcdef`,
+        created: "2026-11-02",
+        thisDevice: false,
+      },
+      {
+        id: `${profile}#agent-approval-20261101-0123abcd`,
+        created: "2026-11-01",
+        thisDevice: false,
+      },
+    ]);
+    await expect(listApprovalKeys({ webId: DEMO_WEBID, fetch: respond(500) })).rejects.toThrow(
+      /Couldn't read your account profile/,
+    );
+  });
+
+  it("keeps the key when a re-signed copy doesn't verify", async () => {
+    const { session, client, old, device } = await twoDevices();
+    // Once signing starts, the profile stops listing this device's key after the signing check,
+    // so the first re-signed copy fails verification.
+    let reads = -1;
+    vi.spyOn(crypto, "randomUUID").mockImplementationOnce(() => {
+      reads = 0;
+      return "00000000-0000-4000-8000-000000000000";
+    });
+    const fetch: typeof session.fetch = async (input, init) => {
+      const response = await session.fetch(input, init);
+      const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+      if (reads < 0 || (init?.method ?? "GET") !== "GET" || !url.startsWith(profile))
+        return response;
+      if (reads++ === 0) return response;
+      const text = (await response.text()).replaceAll(device, `${profile}#gone`);
+      return new Response(text, { status: response.status, headers: response.headers });
+    };
+    await expect(revokeApprovalKey(client, { ...session, fetch }, old, () => now)).rejects.toThrow(
+      /so the key was kept/,
+    );
+    expect(
+      await createWebIdKeyResolver({ fetch: session.fetch }).isControlledBy(old, DEMO_WEBID),
+    ).toBe(true);
+    expect((await readControl(client)).some((row) => row.url.includes(".resigned-"))).toBe(false);
+  });
+
+  it("keeps the key when a re-signed copy can't be stored", async () => {
+    const { session, client, old, halt } = await twoDevices();
+    vi.spyOn(client, "create").mockRejectedValueOnce(new Error("disk full"));
+    await expect(revokeApprovalKey(client, session, old, () => now)).rejects.toThrow("disk full");
+    expect(
+      await createWebIdKeyResolver({ fetch: session.fetch }).isControlledBy(old, DEMO_WEBID),
+    ).toBe(true);
+    expect((await verified(client, session, client.paths.control)).map((c) => c.id)).toContain(
+      halt.id,
+    );
+  });
+
+  it("reports a profile edit that the server accepted but didn't keep", async () => {
+    const { session, client, old } = await twoDevices();
+    const fetch: typeof session.fetch = async (input, init) =>
+      init?.method === "PUT" ? new Response(null, { status: 205 }) : session.fetch(input, init);
+    await expect(revokeApprovalKey(client, { ...session, fetch }, old, () => now)).rejects.toThrow(
+      /still lists this key/,
+    );
+  });
+
+  it("fails closed when the control listing is incomplete", async () => {
+    const { session, client, old } = await twoDevices();
+    vi.spyOn(client, "list").mockImplementation(async (container) =>
+      Array.from({ length: 5001 }, (_, i) => ({ url: `${container}${i}.trig`, container: false })),
+    );
+    await expect(revokeApprovalKey(client, session, old)).rejects.toThrow(
+      /too many agent controls/,
+    );
+    expect(
+      await createWebIdKeyResolver({ fetch: session.fetch }).isControlledBy(old, DEMO_WEBID),
     ).toBe(true);
   });
 });

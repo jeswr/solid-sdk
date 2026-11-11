@@ -92,7 +92,7 @@ function resolverOptions(client: AgentClient, session: Session, now: Date) {
     }),
   };
 }
-async function currentCredential(client: AgentClient) {
+export async function currentCredential(client: AgentClient) {
   const reference = (await readMandateCurrent(client))[0];
   if (!reference) return undefined;
   const doc = await client.graph(reference.record.credential);
