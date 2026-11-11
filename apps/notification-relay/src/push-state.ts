@@ -7,6 +7,7 @@ export interface Installation {
   platform: "android" | "ios";
   pushToken: string;
   tokenVersion: number;
+  tokenUpdatedAt: number;
   /** RFC 8291 uncompressed P-256 point (65 bytes), base64url. */
   devicePublicKey: string;
   authSecret: string;
@@ -16,6 +17,8 @@ export interface Installation {
   challengeAttempts: number[];
   /** Admission time; an installation no registration ever attaches to expires from here. */
   createdAt: number;
+  /** WebID whose token admitted it; bounds per-principal admission (sst-1qsu). */
+  admittedBy: string;
 }
 export interface PushTopic {
   index: number;
@@ -34,6 +37,8 @@ export interface PushRegistration {
   topics: PushTopic[];
   expiresAt: number;
   inboxSecretHash: string;
+  /** At least one accepted Solid delivery relied on the secret alone. */
+  unauthenticated?: boolean;
 }
 export interface PushState {
   installations: Map<string, Installation>;

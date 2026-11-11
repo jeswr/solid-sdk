@@ -63,7 +63,7 @@ export function installationPatch(value: unknown): Partial<Omit<InstallationInpu
 }
 export type RegistrationInput = Omit<
   PushRegistration,
-  "registrationId" | "expiresAt" | "inboxSecretHash"
+  "registrationId" | "expiresAt" | "inboxSecretHash" | "unauthenticated"
 >;
 export function registrationInput(value: unknown, allowLoopback?: boolean): RegistrationInput {
   const body = object(value, ["installationId", "webId", "protocol", "storage", "topics"]);
@@ -93,14 +93,16 @@ export function registrationInput(value: unknown, allowLoopback?: boolean): Regi
 }
 
 /** JSON only, strict UTF-8, at most 64 KiB. Empty cleanup/rotation bodies hash as empty bytes. */
-export async function pushBody(request: Request, empty: boolean): Promise<Buffer> {
+export async function pushBody(
+  request: Request,
+  empty: boolean,
+  contentType = /^application\/json(?:;\s*charset=utf-8)?$/iu,
+): Promise<Buffer> {
   if (!request.body) {
     requirePush(empty);
     return Buffer.alloc(0);
   }
-  requirePush(
-    /^application\/json(?:;\s*charset=utf-8)?$/iu.test(request.headers.get("content-type") ?? ""),
-  );
+  requirePush(contentType.test(request.headers.get("content-type") ?? ""));
   const reader = request.body.getReader();
   const chunks: Uint8Array[] = [];
   let length = 0;
