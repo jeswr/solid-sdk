@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+import { setTimeout as delay } from "node:timers/promises";
 import { fetchRdf } from "@jeswr/fetch-rdf";
 import { isWithinPodScope } from "@jeswr/guarded-fetch";
 import { createNodeGuardedFetch, refuseRedirects } from "@jeswr/guarded-fetch/node";
@@ -76,6 +77,13 @@ interface StoredPodSession {
   accessExpiresAt: number;
   refreshing: boolean;
 }
+
+/** The caller can retry this request while the durable pod session remains active. */
+export class PodRefreshRetryableError extends Error {
+  readonly retryable = true;
+}
+
+class RefreshMismatchError extends Error {}
 
 /** Solid-OIDC public client configuration; MCP-11 serves the Client ID Document. */
 export interface PodSessionProviderOptions {
@@ -281,6 +289,7 @@ export function createPodSessionProvider(options: PodSessionProviderOptions): Po
           pendingKey(authorization.state.state),
           undefined,
           encode(pending),
+          LOGIN_TTL,
         ))
       )
         throw new Error("Login collision");
@@ -297,12 +306,13 @@ export function createPodSessionProvider(options: PodSessionProviderOptions): Po
       const bytes = await vault.get(id);
       if (!bytes) throw new Error("Unknown pod login");
       const pending = JSON.parse(Buffer.from(bytes).toString("utf8")) as Pending;
+      const loginTtl = Math.max(1, pending.expiresAt - now());
       if (
         pending.kind !== "pending" ||
-        !(await vault.compareAndSwap(id, bytes, encode({ kind: "used" })))
+        !(await vault.compareAndSwap(id, bytes, encode({ kind: "used" }), loginTtl))
       )
         throw new Error("Pod login already consumed");
-      await vault.delete(id);
+      await vault.delete(id, loginTtl);
       if (pending.expiresAt <= now()) throw new Error("Expired pod login");
       const sessionId = opaque();
       const client = await clientFor(pending.issuer, pending.key, sessionId);
@@ -370,22 +380,26 @@ export function createPodSessionProvider(options: PodSessionProviderOptions): Po
         let cached: CachedClient | undefined = clients.get(id);
         if (!cached || !Buffer.from(cached.bytes).equals(bytes) || value.accessExpiresAt <= now()) {
           forgetClient(id);
-          if (value.refreshing) throw new Error("Pod refresh is already claimed");
+          if (value.refreshing)
+            throw new PodRefreshRetryableError("Pod refresh is already claimed; retry request");
           const claimed = encode({ ...value, refreshing: true });
           if (!(await vault.compareAndSwap(sessionKey(id), bytes, claimed)))
-            throw new Error("Pod session conflict");
+            throw new PodRefreshRetryableError("Pod session conflict; retry request");
+          let refreshed = false;
           try {
             const client = await clientFor(value.issuer, value.key, id);
             const tokens = await client.refresh(value.refreshToken);
+            refreshed = true;
             if (tokens.idToken !== undefined) {
               const claims = verifiedIdTokenClaims(tokens.idToken);
-              if (claims.sub !== value.subject) throw new Error("Refreshed subject mismatch");
+              if (claims.sub !== value.subject)
+                throw new RefreshMismatchError("Refreshed subject mismatch");
               if (claims.nonce !== undefined && claims.nonce !== value.nonce)
-                throw new Error("Refreshed nonce mismatch");
+                throw new RefreshMismatchError("Refreshed nonce mismatch");
             }
             const webId = client.currentWebId();
             if (webId !== undefined && webId !== value.identity.webId)
-              throw new Error("Refreshed WebID mismatch");
+              throw new RefreshMismatchError("Refreshed WebID mismatch");
             const updated = {
               ...value,
               refreshToken: tokens.refreshToken,
@@ -398,7 +412,38 @@ export function createPodSessionProvider(options: PodSessionProviderOptions): Po
             cached = cacheClient(updated, secret, client);
           } catch (error) {
             forgetClient(id);
-            await vault.delete(sessionKey(id));
+            // oauth4webapi's definitive token error is surfaced by pod-auth unchanged.
+            const invalidGrant =
+              error instanceof Error &&
+              error.name === "ResponseBodyError" &&
+              "error" in error &&
+              error.error === "invalid_grant";
+            if (invalidGrant || error instanceof RefreshMismatchError) {
+              await vault.delete(sessionKey(id));
+              throw error;
+            }
+            if (!refreshed) {
+              // A concurrent revoke or rotation wins: CAS never resurrects or overwrites it.
+              try {
+                for (;;) {
+                  if (await vault.compareAndSwap(sessionKey(id), claimed, bytes)) break;
+                  const current = await vault.get(sessionKey(id));
+                  if (!current || !Buffer.from(current).equals(claimed)) break;
+                  await delay(10);
+                }
+              } catch (releaseError) {
+                throw new PodRefreshRetryableError(
+                  "Pod refresh claim release failed; retry request",
+                  {
+                    cause: releaseError,
+                  },
+                );
+              }
+              throw new PodRefreshRetryableError("Pod refresh failed; retry request", {
+                cause: error,
+              });
+            }
+            // Once rotation succeeded, never restore the spent credential after a write failure.
             throw error;
           }
         }

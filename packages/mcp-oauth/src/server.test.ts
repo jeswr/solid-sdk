@@ -1034,3 +1034,20 @@ describe("HTTP parser and configuration", () => {
     expect(() => fixture({ issuer: `${ISSUER}%3F`, resource: `${RESOURCE}%3F` })).not.toThrow();
   });
 });
+
+// AUTHORED-BY Codex GPT-6.1-Sol
+it("sets bounded retention for registration, pending login and unused authorization codes", async () => {
+  const f = fixture();
+  const clients = vi.spyOn(f.stores.clients, "put");
+  const pending = vi.spyOn(f.stores.pending, "put");
+  const codes = vi.spyOn(f.stores.codes, "put");
+  const id = await f.register();
+  expect(clients.mock.calls[0]?.[2]).toBe(30 * 24 * 60 * 60);
+  await f.server.handle(f.authRequest(id));
+  expect(pending.mock.calls[0]?.[2]).toBe(600);
+  const code = await f.code(id);
+  expect(codes.mock.calls[0]?.[2]).toBe(300);
+  const consume = vi.spyOn(f.stores.codes, "consume");
+  expect((await f.exchange(id, code)).status).toBe(200);
+  expect(consume.mock.calls[0]?.[1]).toBe(30 * 24 * 60 * 60);
+});

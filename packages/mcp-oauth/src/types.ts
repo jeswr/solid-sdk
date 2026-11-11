@@ -71,15 +71,21 @@ export interface RefreshToken {
   expiresAt: number;
 }
 
-/** Store operations return independent snapshots; writes must be durable before resolving. */
+/**
+ * Snapshot reads and durable writes. Optional TTLs are positive whole seconds; omission is permanent.
+ * An expired record behaves as missing. Production stores must enforce supplied TTLs.
+ */
 export interface RecordStore<T> {
   get(id: string): Promise<T | undefined>;
-  put(id: string, value: T): Promise<void>;
+  put(id: string, value: T, ttlSeconds?: number): Promise<void>;
 }
 
-/** Atomic consumption with retained tombstones for replay detection. */
+/**
+ * Atomic consumption with retained replay evidence. A supplied TTL sets first-use retention;
+ * otherwise preserve the original deadline. Repeated consumption must not extend retention.
+ */
 export interface OneTimeStore<T> extends RecordStore<T> {
-  consume(id: string): Promise<{ value: T; firstUse: boolean } | undefined>;
+  consume(id: string, ttlSeconds?: number): Promise<{ value: T; firstUse: boolean } | undefined>;
 }
 
 /** Revocation must be atomic and irreversible; never overwrite an existing grant with put. */

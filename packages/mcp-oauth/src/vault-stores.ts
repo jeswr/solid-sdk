@@ -5,21 +5,54 @@ import { resolve } from "node:path";
 import { createNodeGuardedFetch } from "@jeswr/guarded-fetch/node";
 import { secureUrl } from "./protocol.js";
 
-/** Opaque ciphertext storage. CAS must be atomic across every worker sharing the store. */
+/**
+ * Opaque ciphertext storage. CAS must be atomic across every worker sharing the store.
+ * TTLs are positive whole seconds; successful CAS replaces expiry, omission makes it permanent.
+ * Expired ciphertext behaves as missing, including for CAS; failed CAS never changes expiry.
+ */
 export interface VaultStore {
   get(id: string): Promise<string | undefined>;
-  compareAndSwap(id: string, expected: string | undefined, value: string): Promise<boolean>;
+  compareAndSwap(
+    id: string,
+    expected: string | undefined,
+    value: string,
+    ttlSeconds?: number,
+  ): Promise<boolean>;
 }
 
-/** Single-process fixture store; reads/writes contain ciphertext only. */
+/** Validate TTLs before touching storage; omission writes a permanent record. */
+export function expiry(ttlSeconds?: number): number | undefined {
+  if (ttlSeconds === undefined) return undefined;
+  if (!Number.isSafeInteger(ttlSeconds) || ttlSeconds <= 0)
+    throw new Error("Vault TTL must be a positive integer in seconds");
+  return Date.now() + ttlSeconds * 1000;
+}
+
+type Entry = { value: string; expiresAt?: number | undefined };
+const expired = (entry: Entry) => entry.expiresAt !== undefined && entry.expiresAt <= Date.now();
+
+/** Single-process fixture store; expired ciphertext is lazily purged on reads and writes. */
 export class MemoryVaultStore implements VaultStore {
-  private readonly values = new Map<string, string>();
-  async get(id: string) {
-    return this.values.get(id);
+  private readonly values = new Map<string, Entry>();
+  private purge() {
+    for (const [id, entry] of this.values) {
+      if (expired(entry)) this.values.delete(id);
+    }
   }
-  async compareAndSwap(id: string, expected: string | undefined, value: string) {
-    if (this.values.get(id) !== expected) return false;
-    this.values.set(id, value);
+  async get(id: string) {
+    this.purge();
+    return this.values.get(id)?.value;
+  }
+  async compareAndSwap(
+    id: string,
+    expected: string | undefined,
+    value: string,
+    ttlSeconds?: number,
+  ) {
+    const expiresAt = expiry(ttlSeconds);
+    this.purge();
+    if (this.values.get(id)?.value !== expected) return false;
+    this.values.set(id, { value, expiresAt });
     return true;
   }
 }
@@ -37,15 +70,40 @@ export class FileVaultStore implements VaultStore {
   private path(id: string) {
     return resolve(this.directory, createHash("sha256").update(id).digest("hex"));
   }
-  async get(id: string): Promise<string | undefined> {
+  private async read(id: string): Promise<Entry | undefined> {
     try {
-      return await readFile(this.path(id), "utf8");
+      const bytes = await readFile(this.path(id), "utf8");
+      // Existing permanent ciphertext files remain readable without migration.
+      return bytes.startsWith("ttl.") ? (JSON.parse(bytes.slice(4)) as Entry) : { value: bytes };
     } catch (error) {
       if (missing(error)) return undefined;
       throw error;
     }
   }
-  async compareAndSwap(id: string, expected: string | undefined, value: string) {
+  async get(id: string): Promise<string | undefined> {
+    const entry = await this.read(id);
+    if (entry && expired(entry)) {
+      // Recheck expiry under the writer lock before unlinking; never delete a replacement.
+      await this.swap(id, undefined, undefined);
+      return undefined;
+    }
+    return entry?.value;
+  }
+  async compareAndSwap(
+    id: string,
+    expected: string | undefined,
+    value: string,
+    ttlSeconds?: number,
+  ) {
+    return this.swap(id, expected, value, expiry(ttlSeconds));
+  }
+
+  private async swap(
+    id: string,
+    expected: string | undefined,
+    value: string | undefined,
+    expiresAt?: number,
+  ) {
     await mkdir(this.directory, { recursive: true, mode: 0o700 });
     const path = this.path(id);
     let lock: FileHandle;
@@ -57,10 +115,19 @@ export class FileVaultStore implements VaultStore {
     }
     const temporary = `${path}.${randomUUID()}.tmp`;
     try {
-      if ((await this.get(id)) !== expected) return false;
+      const entry = await this.read(id);
+      const current = entry && !expired(entry) ? entry.value : undefined;
+      if (current !== expected) return false;
+      if (value === undefined) {
+        await rm(path, { force: true });
+        return true;
+      }
       const file = await open(temporary, "wx", 0o600);
       try {
-        await file.writeFile(value, "utf8");
+        await file.writeFile(
+          expiresAt === undefined ? value : `ttl.${JSON.stringify({ value, expiresAt })}`,
+          "utf8",
+        );
         await file.sync();
       } finally {
         await file.close();
@@ -92,7 +159,11 @@ export interface KvVaultStoreOptions {
 
 const CAS = `local current = redis.call('GET', KEYS[1])
 if (ARGV[1] == 'missing' and not current) or (ARGV[1] == 'present' and current == ARGV[2]) then
-  redis.call('SET', KEYS[1], ARGV[3])
+  if ARGV[4] == '' then
+    redis.call('SET', KEYS[1], ARGV[3])
+  else
+    redis.call('SET', KEYS[1], ARGV[3], 'EX', ARGV[4])
+  end
   return 1
 end
 return 0`;
@@ -138,7 +209,13 @@ export class KvVaultStore implements VaultStore {
     if (typeof value !== "string") throw new Error("Invalid vault KV result");
     return value;
   }
-  async compareAndSwap(id: string, expected: string | undefined, value: string) {
+  async compareAndSwap(
+    id: string,
+    expected: string | undefined,
+    value: string,
+    ttlSeconds?: number,
+  ) {
+    expiry(ttlSeconds);
     const result = await this.command([
       "EVAL",
       CAS,
@@ -147,6 +224,7 @@ export class KvVaultStore implements VaultStore {
       expected === undefined ? "missing" : "present",
       expected ?? "",
       value,
+      ttlSeconds === undefined ? "" : String(ttlSeconds),
     ]);
     if (result !== 0 && result !== 1) throw new Error("Invalid vault KV result");
     return result === 1;

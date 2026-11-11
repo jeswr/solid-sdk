@@ -43,6 +43,7 @@ interface BrowserFlow {
   clientName?: string;
   scope?: string;
 }
+const LOGIN_TTL = 600;
 const opaque = () => randomBytes(32).toString("base64url");
 const failure = (status = 400) => Response.json({ error: "invalid_request" }, { status });
 
@@ -58,7 +59,7 @@ export async function createApp(
   const clientId = `${origin.origin}/client-id.jsonld`;
   const now = options.now ?? (() => Math.floor(Date.now() / 1000));
   const vault = options.vault;
-  const stores = createVaultOAuthStores(vault, issuer);
+  const stores = createVaultOAuthStores(vault, issuer, now);
   const signingKey = options.signingKey ?? (await vaultSigningKey(vault, issuer));
   const sessions =
     options.podSessions ??
@@ -73,7 +74,7 @@ export async function createApp(
         : { lwsAuthorizationServers: options.lwsAuthorizationServers }),
     });
   const cookieName = origin.protocol === "https:" ? "__Host-mcp-flow" : "mcp-flow";
-  const cookie = (id: string, age = 600) =>
+  const cookie = (id: string, age = LOGIN_TTL) =>
     `${cookieName}=${id}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${age}${origin.protocol === "https:" ? "; Secure" : ""}`;
   const flowKey = (id: string) => `browser:${digest(issuer)}:${digest(id)}`;
   const csrfInput = (flow: BrowserFlow) =>
@@ -149,7 +150,7 @@ export async function createApp(
     if (!bytes) throw new Error("Unknown browser flow");
     const flow = decode<BrowserFlow>(bytes);
     if (flow.expiresAt <= now()) {
-      await vault.delete(key);
+      await vault.delete(key, Math.max(1, flow.expiresAt - now()));
       if (flow.session) await sessions.revoke(flow.session.id);
       throw new Error("Expired browser flow");
     }
@@ -160,7 +161,9 @@ export async function createApp(
     bytes: Uint8Array | undefined,
     flow: BrowserFlow,
   ): Promise<void> {
-    if (!(await vault.compareAndSwap(key, bytes, encode(flow))))
+    if (
+      !(await vault.compareAndSwap(key, bytes, encode(flow), Math.max(1, flow.expiresAt - now())))
+    )
       throw new Error("Browser flow already used");
   }
   async function dispatch(request: Request): Promise<Response> {
@@ -232,7 +235,7 @@ export async function createApp(
       const flow: BrowserFlow = {
         phase: "login",
         csrf: opaque(),
-        expiresAt: now() + 600,
+        expiresAt: now() + LOGIN_TTL,
         authorizationUrl: authorizationUrl.href,
       };
       const id = opaque();
@@ -272,7 +275,7 @@ export async function createApp(
         login.searchParams.set("webid", fields.get("webid") as string);
         const response = await as(async () => false, provider).handle(new Request(login));
         if (!state || response.status !== 302) {
-          await vault.delete(key);
+          await vault.delete(key, Math.max(1, flow.expiresAt - now()));
           return response;
         }
         await transition(key, encode(starting), {
@@ -307,7 +310,7 @@ export async function createApp(
         await sessions.revoke(flow.session.id);
         throw new Error("Consent completion failed");
       } finally {
-        await vault.delete(key);
+        await vault.delete(key, Math.max(1, flow.expiresAt - now()));
       }
     }
     if (url.pathname === "/auth/callback" && request.method === "GET") {
@@ -333,7 +336,7 @@ export async function createApp(
         return false;
       }).handle(new Request(`${callback}${url.search}`));
       if (!context) {
-        await vault.delete(key);
+        await vault.delete(key, Math.max(1, flow.expiresAt - now()));
         return response;
       }
       const validated = context as ConsentContext;
@@ -352,9 +355,14 @@ export async function createApp(
         await sessions.revoke(validated.session.id);
         throw new Error("Consent persistence failed");
       }
+      const client = validated.client;
+      const clientIdentity = client.client_id.startsWith("https://")
+        ? `<p>Client: <strong>${escapeHtml(new URL(client.client_id).host)}</strong></p><p>Client name (self-declared): ${escapeHtml(client.client_name ?? "")}</p>`
+        : `<p>Client: ${escapeHtml(client.client_name ?? client.client_id)} (unverified (self-declared))</p>`;
+      const redirectUri = validated.authorization.redirectUri;
       return page(
         "Allow pod access?",
-        `<p>Client: ${escapeHtml(consent.clientName ?? consent.clientId ?? "")}</p><p>Client ID: ${escapeHtml(consent.clientId ?? "")}</p><p>Pod owner: ${escapeHtml(validated.session.webId)}</p><p>Access: ${options.readOnly !== false ? "read only" : "read and write"}. Scope: ${escapeHtml(consent.scope ?? "")}. Personal data remains subject to your pod policy.</p><form method="post" action="/auth/consent">${csrfInput(consent)}<button name="decision" value="allow">Allow</button><button name="decision" value="deny">Deny</button></form>`,
+        `${clientIdentity}<p>Redirect host: <strong>${escapeHtml(new URL(redirectUri).host)}</strong></p><p>Redirect URI: ${escapeHtml(redirectUri)}</p><p>Client ID: ${escapeHtml(consent.clientId ?? "")}</p><p>Pod owner: ${escapeHtml(validated.session.webId)}</p><p>Access: ${options.readOnly !== false ? "read only" : "read and write"}. Scope: ${escapeHtml(consent.scope ?? "")}. Personal data remains subject to your pod policy.</p><form method="post" action="/auth/consent">${csrfInput(consent)}<button name="decision" value="allow">Allow</button><button name="decision" value="deny">Deny</button></form>`,
       );
     }
     if (

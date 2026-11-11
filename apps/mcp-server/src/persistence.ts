@@ -14,7 +14,11 @@ export const decode = <T>(bytes: Uint8Array): T => JSON.parse(Buffer.from(bytes)
 export const digest = (value: string): string => createHash("sha256").update(value).digest("hex");
 
 /** Store grants and replay tombstones in the same atomic encrypted store as pod sessions. */
-export function createVaultOAuthStores(vault: SessionVault, namespace: string): OAuthStores {
+export function createVaultOAuthStores(
+  vault: SessionVault,
+  namespace: string,
+  now = () => Math.floor(Date.now() / 1000),
+): OAuthStores {
   const key = (kind: string, id: string) => `oauth:${digest(namespace)}:${kind}:${digest(id)}`;
   function records<T>(kind: string): OneTimeStore<T> {
     return {
@@ -22,17 +26,34 @@ export function createVaultOAuthStores(vault: SessionVault, namespace: string): 
         const bytes = await vault.get(key(kind, id));
         return bytes ? decode<{ value: T }>(bytes).value : undefined;
       },
-      async put(id, value) {
-        if (!(await vault.compareAndSwap(key(kind, id), undefined, encode({ value, used: false }))))
+      async put(id, value, ttlSeconds) {
+        const expiresAt = ttlSeconds === undefined ? undefined : now() + ttlSeconds;
+        if (
+          !(await vault.compareAndSwap(
+            key(kind, id),
+            undefined,
+            encode({ value, used: false, expiresAt }),
+            ttlSeconds,
+          ))
+        )
           throw new Error("OAuth record collision");
       },
-      async consume(id) {
+      async consume(id, ttlSeconds) {
         for (let attempt = 0; attempt < 16; attempt += 1) {
           const bytes = await vault.get(key(kind, id));
           if (!bytes) return undefined;
-          const record = decode<{ value: T; used: boolean }>(bytes);
+          const record = decode<{ value: T; used: boolean; expiresAt?: number }>(bytes);
           if (record.used) return { value: record.value, firstUse: false };
-          if (await vault.compareAndSwap(key(kind, id), bytes, encode({ ...record, used: true })))
+          const expiresAt = ttlSeconds === undefined ? record.expiresAt : now() + ttlSeconds;
+          const remaining = expiresAt === undefined ? undefined : Math.max(1, expiresAt - now());
+          if (
+            await vault.compareAndSwap(
+              key(kind, id),
+              bytes,
+              encode({ ...record, used: true, expiresAt }),
+              remaining,
+            )
+          )
             return { value: record.value, firstUse: true };
         }
         throw new Error("OAuth store contention");

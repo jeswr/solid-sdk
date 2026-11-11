@@ -135,7 +135,7 @@ export class AuthorizationServer {
             throw new OAuthError("invalid_client_metadata");
           }
           const client = clientMetadata(data, opaque(), this.now());
-          await this.stores.clients.put(client.client_id, client);
+          await this.stores.clients.put(client.client_id, client, GRANT_TTL);
           return json(client, 201);
         }
         if (mediaType(request) !== "application/x-www-form-urlencoded")
@@ -232,10 +232,14 @@ export class AuthorizationServer {
       );
       secureUrl(upstream.authorizeUrl);
       if (!upstream.state) throw new Error("Pod broker returned no state");
-      await this.stores.pending.put(digest(upstream.state), {
-        authorization,
-        expiresAt: this.now() + LOGIN_TTL,
-      });
+      await this.stores.pending.put(
+        digest(upstream.state),
+        {
+          authorization,
+          expiresAt: this.now() + LOGIN_TTL,
+        },
+        LOGIN_TTL,
+      );
       return redirect(upstream.authorizeUrl, {});
     });
   }
@@ -296,11 +300,15 @@ export class AuthorizationServer {
     this.jwt.assertSize(grant);
     await this.stores.grants.put(id, grant);
     const code = opaque();
-    await this.stores.codes.put(digest(code), {
-      authorization,
-      grantId: id,
-      expiresAt: this.now() + CODE_TTL,
-    });
+    await this.stores.codes.put(
+      digest(code),
+      {
+        authorization,
+        grantId: id,
+        expiresAt: this.now() + CODE_TTL,
+      },
+      CODE_TTL,
+    );
     return redirect(authorization.redirectUri, {
       code,
       state: authorization.state,
@@ -355,7 +363,7 @@ export class AuthorizationServer {
     const accessToken = this.jwt.issue(grant);
     const used =
       type === "authorization_code"
-        ? await this.stores.codes.consume(hash)
+        ? await this.stores.codes.consume(hash, Math.max(1, grant.expiresAt - this.now()))
         : await this.stores.refreshTokens.consume(hash);
     if (!used?.firstUse) {
       await this.revokeGrant(grant);

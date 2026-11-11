@@ -73,3 +73,38 @@ it("keeps grant and session revocation irreversible under concurrent workers", a
     keys[1]?.privateKey.export({ type: "pkcs8", format: "pem" }),
   );
 });
+
+it("expires pending records without extending them and keeps consumed code evidence through grant expiry", async () => {
+  const { vi } = await import("vitest");
+  vi.useFakeTimers({ toFake: ["Date"] });
+  try {
+    const vault = createSessionVault({
+      key: Buffer.alloc(32, 7).toString("base64"),
+      store: new MemoryVaultStore(),
+    });
+    const stores = createVaultOAuthStores(vault, "issuer");
+    const authorization = {
+      clientId: "c",
+      redirectUri: "https://client.example/cb",
+      resource: "https://mcp.example/mcp",
+      state: "state",
+      scope: "mcp",
+      challenge: "challenge",
+    };
+    const code = { authorization, grantId: "g", expiresAt: Date.now() / 1000 + 300 };
+    await stores.codes.put("unused", code, 300);
+    await stores.codes.put("used", code, 300);
+    await stores.pending.put("pending", { authorization, expiresAt: Date.now() / 1000 + 600 }, 600);
+    vi.advanceTimersByTime(200_000);
+    expect((await stores.codes.consume("used", 1000))?.firstUse).toBe(true);
+    expect((await stores.pending.consume("pending"))?.firstUse).toBe(true);
+    vi.advanceTimersByTime(400_000);
+    expect(await stores.codes.get("unused")).toBeUndefined();
+    expect(await stores.pending.get("pending")).toBeUndefined();
+    expect((await stores.codes.consume("used"))?.firstUse).toBe(false);
+    vi.advanceTimersByTime(600_000);
+    expect(await stores.codes.get("used")).toBeUndefined();
+  } finally {
+    vi.useRealTimers();
+  }
+});

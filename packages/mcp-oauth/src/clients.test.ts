@@ -7,6 +7,15 @@ import { MemoryStore } from "./testing.js";
 import type { Client } from "./types.js";
 
 describe("registration metadata", () => {
+  it("caps redirect URIs at ten, including duplicates", () => {
+    const redirects = Array.from({ length: 10 }, (_, i) => `https://client.example/cb/${i}`);
+    expect(clientMetadata({ redirect_uris: redirects }, "id", 100).redirect_uris).toHaveLength(10);
+    for (const uris of [[...redirects, REDIRECT], Array(11).fill(REDIRECT)])
+      expect(() => clientMetadata({ redirect_uris: uris }, "id", 100)).toThrow(
+        "invalid_redirect_uri",
+      );
+  });
+
   it("preserves exact redirect spelling and accepts HTTPS/loopback HTTP", () => {
     const redirects = [
       REDIRECT,

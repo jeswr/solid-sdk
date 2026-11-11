@@ -20,7 +20,11 @@ LWS exact create-only operations fail closed because its names are hints.
 Routes: `/mcp`, `/healthz`, `/client-id.jsonld`, `/auth/{authorize,login,callback,consent,
 register,token,revoke,jwks}`, `/.well-known/oauth-authorization-server/auth`, and
 `/.well-known/oauth-protected-resource/mcp`. The authorize form collects a WebID/issuer;
-upstream Solid-OIDC login precedes explicit approval of the MCP client. Forms require the
+upstream Solid-OIDC login precedes explicit approval of the MCP client. Consent shows the exact
+redirect URI for this request and emphasizes its host. Dynamically registered names carry an
+"unverified (self-declared)" label; metadata-document clients are identified by their client_id
+URL host, with their self-declared name shown separately. Registration accepts at most ten
+redirect URIs and expires after thirty days. Forms require the
 browser's HttpOnly SameSite cookie, same-origin POST and CSRF secret. Callback state and
 consent are consumed atomically. HTML escapes metadata, has no script or inline styles,
 and carries CSP, frame denial, nosniff, no-referrer and no-store headers.
@@ -58,9 +62,14 @@ OAuth grants, replay/revocation tombstones, browser transactions, the signing ke
 refresh credentials all share the encrypted atomic store, allowing multiple workers and
 restarts. Keep `MCP_VAULT_KEY` stable. Explicit `memory` is for one process; `file` needs a
 private local filesystem. Vercel rejects either local store. Operators must supply rate
-limits and expiry cleanup; retain replay/revocation tombstones through grant expiry, and
-never reuse retired session IDs. Abandoned browser sessions expire after ten minutes;
-upstream sessions have the broker's absolute thirty-day lifetime.
+limits and cleanup for legacy permanent records; retain replay/revocation tombstones through grant expiry, and
+never reuse retired session IDs. Browser flows, pending login and their consumption markers have a ten-minute storage TTL;
+transitions preserve their original deadline. Unused authorization codes expire after five
+minutes; consumed code evidence is retained through grant expiry for replay revocation. TTLs are
+implemented by memory, file and shared KV vaults. Upstream sessions have the broker's absolute
+thirty-day lifetime. Transient pod refresh failures release the ownership claim and return a
+retryable error; concurrent refresh requests also receive a retryable error. Definitive
+invalid_grant and identity mismatches still retire the session.
 
 The app adapts two CSS PUT differences: a verified existing-container 409 becomes a
 create-only 412, and missing binary write ETags are recovered through exact byte readback

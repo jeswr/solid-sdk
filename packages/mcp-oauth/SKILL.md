@@ -23,11 +23,21 @@ the public Solid Client ID Document, and HTTP composition.
 - Keep MCP_VAULT_KEY canonical base64 of exactly 32 bytes. Default to Upstash/Vercel KV;
   memory is explicit and single-process; files use a private local directory and atomic writes.
 - Never weaken vault CAS or deletion tombstones. Consume callbacks once and claim refresh
-  ownership before contacting the issuer. Crashed refreshes fail closed and require new login.
+  ownership before contacting the issuer. Return PodRefreshRetryableError (retryable: true) on
+  contention and transient issuer failures; release a failed refresh claim only via CAS to its
+  original bytes. Retire only invalid_grant or subject/nonce/WebID mismatch. Never restore a spent
+  refresh token after successful rotation. Crashed refreshes fail closed and require new login.
 - Recheck broker `isActive` during MCP verification/issuance and before resource fetches;
   MCP revocation/reuse retires the pod session and invalidates all grants bound to it.
 - Resolve profiles through fetch-rdf + wrapper accessors, require profile issuer trust, scope
   authenticated fetch to advertised storage roots, refuse caller credentials and redirects.
+- Keep optional positive-integer ttlSeconds on vault CAS/put/delete and record put/consume.
+  Memory/file expiry must survive reads/CAS, and KV SET EX must be inside the atomic Lua script.
+  Bound login/pending/browser records and their consumption markers to the original ten-minute
+  deadline, unused codes to five minutes, DCR to thirty days (max ten redirect URIs). Retain used
+  code evidence through grant expiry; never expire permanent session retirement tombstones.
+- Treat client names as self-declared: escape all consent fields, label DCR names unverified,
+  identify CIMD by its client_id URL host, and show the request's exact redirect plus prominent host.
 - Require PKCE S256, nonempty state, exact redirects, and an exact configured resource.
 - Keep ES256 access tokens ten minutes and bind `aud` to the MCP resource.
 - Consume codes/refresh credentials atomically. Reuse revokes the entire family; never reset

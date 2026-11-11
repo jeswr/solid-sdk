@@ -64,6 +64,132 @@ function brokerFixture(
 }
 
 describe("Solid-OIDC pod broker", () => {
+  it.each([
+    "contention",
+    "outage",
+  ])("handles refresh claim release %s without retiring the session", async (failure) => {
+    const f = brokerFixture();
+    const { session } = await f.login();
+    const key = `session:${session.id}`;
+    const original = await f.vault.get(key);
+    const swap = f.vault.compareAndSwap.bind(f.vault);
+    let conflicts = 0;
+    vi.spyOn(f.vault, "compareAndSwap").mockImplementation(async (id, expected, secret, ttl) => {
+      if (id === key && original && Buffer.from(secret).equals(original) && conflicts++ < 2) {
+        if (failure === "outage") throw new Error("fixture vault outage");
+        return false;
+      }
+      return swap(id, expected, secret, ttl);
+    });
+    const provider = createPodSessionProvider({
+      ...f.options,
+      fetch: async (input, init) => {
+        const request = new Request(input, init);
+        if (request.url.endsWith("/token")) throw new Error("fixture timeout");
+        return f.op.fetch(request);
+      },
+    });
+    await expect((await provider.fetchFor(session.id))(`${POD_ROOT}notes`)).rejects.toMatchObject({
+      retryable: true,
+    });
+    expect(await provider.isActive(session.id)).toBe(true);
+    if (failure === "contention") expect(await f.vault.get(key)).toEqual(original);
+  });
+
+  it("expires login records and their consumed markers", async () => {
+    const f = brokerFixture();
+    const cas = vi.spyOn(f.vault, "compareAndSwap");
+    const retire = vi.spyOn(f.vault, "delete");
+    const { begin } = await f.login();
+    const calls = cas.mock.calls.filter(([key]) => key.startsWith("login:"));
+    expect(calls).toHaveLength(2);
+    for (const call of calls) expect(call[3]).toBe(LOGIN_TTL);
+    expect(retire).toHaveBeenCalledWith(`login:${digest(begin.state)}`, LOGIN_TTL);
+  });
+
+  it.each([
+    "503",
+    "429",
+    "timeout",
+    "discovery",
+  ])("releases refresh ownership and preserves the credential after %s", async (failure) => {
+    const f = brokerFixture();
+    const { session } = await f.login();
+    const key = `session:${session.id}`;
+    const original = await f.vault.get(key);
+    let failing = true;
+    const restored = createPodSessionProvider({
+      ...f.options,
+      fetch: async (input, init) => {
+        const request = new Request(input, init);
+        if (failing && (failure === "discovery" || request.url.endsWith("/token"))) {
+          if (failure === "timeout") throw new DOMException("fixture timeout", "TimeoutError");
+          return Response.json(
+            { error: "temporarily_unavailable" },
+            { status: failure === "429" ? 429 : 503 },
+          );
+        }
+        return f.op.fetch(request);
+      },
+    });
+    const fetcher = await restored.fetchFor(session.id);
+    await expect(fetcher(`${POD_ROOT}notes`)).rejects.toMatchObject({ retryable: true });
+    expect(await f.vault.get(key)).toEqual(original);
+    expect(await restored.isActive(session.id)).toBe(true);
+    expect(f.op.captured.filter((r) => r.url.startsWith(POD_ROOT))).toHaveLength(0);
+    failing = false;
+    expect((await fetcher(`${POD_ROOT}notes`)).status).toBe(200);
+  });
+
+  it("returns a retryable error to a concurrent worker without retiring the refresh owner", async () => {
+    const f = brokerFixture();
+    const { session } = await f.login();
+    let entered!: () => void;
+    let finish!: () => void;
+    const refreshing = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const waiting = new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+    f.op.controls.onToken = async () => {
+      entered();
+      await waiting;
+    };
+    const owner = await createPodSessionProvider(f.options).fetchFor(session.id);
+    const contender = await createPodSessionProvider(f.options).fetchFor(session.id);
+    const running = owner(`${POD_ROOT}notes`);
+    await refreshing;
+    try {
+      await expect(contender(`${POD_ROOT}notes`)).rejects.toMatchObject({ retryable: true });
+      expect(await f.provider.isActive(session.id)).toBe(true);
+    } finally {
+      finish();
+      await running;
+    }
+    f.op.controls.onToken = undefined;
+    expect((await contender(`${POD_ROOT}notes`)).status).toBe(200);
+  });
+
+  it("does not restore a session revoked while a transient refresh fails", async () => {
+    const f = brokerFixture();
+    const { session } = await f.login();
+    const provider = createPodSessionProvider({
+      ...f.options,
+      fetch: async (input, init) => {
+        const request = new Request(input, init);
+        if (request.url.endsWith("/token")) {
+          await f.provider.revoke(session.id);
+          throw new Error("fixture timeout");
+        }
+        return f.op.fetch(request);
+      },
+    });
+    await expect((await provider.fetchFor(session.id))(`${POD_ROOT}notes`)).rejects.toThrow();
+    expect(await f.provider.isActive(session.id)).toBe(false);
+    expect(await f.store.get(`session:${session.id}`)).toBe("deleted");
+  });
+
   it("authenticates private LWS reads through the default broker and refreshes after restore", async () => {
     let lws!: ReturnType<typeof lwsStorage>;
     const f = brokerFixture(
@@ -604,10 +730,10 @@ describe("Solid-OIDC pod broker", () => {
       const { session } = await f.login();
       return (await provider.fetchFor(session.id))(`${POD_ROOT}notes`);
     };
-    await expect(operation()).rejects.toMatchObject({
-      error: "invalid_request",
-      status: 413,
-    });
+    const sizeError = { error: "invalid_request", status: 413 };
+    await expect(operation()).rejects.toMatchObject(
+      phase === "restore" ? { retryable: true, cause: sizeError } : sizeError,
+    );
     expect(cancel).toHaveBeenCalledOnce();
     expect(response?.bodyUsed).toBe(true);
     expect(response?.body?.locked).toBe(false);

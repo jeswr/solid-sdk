@@ -5,7 +5,11 @@ import type { Client, RecordStore } from "./types.js";
 
 export function clientMetadata(value: unknown, id: string, now: number): Client {
   const data = object(value);
-  if (!Array.isArray(data.redirect_uris) || data.redirect_uris.length === 0) {
+  if (
+    !Array.isArray(data.redirect_uris) ||
+    data.redirect_uris.length === 0 ||
+    data.redirect_uris.length > 10
+  ) {
     throw new OAuthError("invalid_redirect_uri");
   }
   const redirects = data.redirect_uris.map((uri: unknown) => {

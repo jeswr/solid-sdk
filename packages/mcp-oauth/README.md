@@ -40,8 +40,8 @@ token responses and redirects carry `Cache-Control: no-store`.
 `metadataUrl(identifier, suffix)` from `@jeswr/mcp-oauth/metadata` shares this construction
 with the MCP HTTP transport without loading the authorization server.
 
-Registration accepts HTTPS or HTTP loopback (`localhost`, 127/8, `::1`) redirect URIs, without
-userinfo or fragments. Redirect comparison is exact, including loopback ports and URI spelling.
+Registration accepts at most ten redirect URI entries (counted before deduplication).
+URIs must use HTTPS or HTTP loopback (`localhost`, 127/8, `::1`), without userinfo or fragments. Redirect comparison is exact, including loopback ports and URI spelling.
 Only public clients are supported; specify `token_endpoint_auth_method: "none"`. Accepted grants
 are authorization_code and refresh_token (both returned by default). An explicit authorization_code
 only registration receives no refresh token. Unsupported authentication methods are rejected.
@@ -131,14 +131,30 @@ Default network transport pins DNS, refuses SSRF targets, caps responses at 1 Mi
 eight-second deadline. An injected `fetch` must supply equivalent network protections.
 
 Vault CAS operations atomically consume callbacks and claim refresh ownership across workers.
-Contention fails closed instead of redeeming a rotating refresh token twice. A process crash
+Concurrent refresh ownership/CAS contention throws `PodRefreshRetryableError` (`retryable: true`)
+instead of redeeming a rotating refresh token twice. Issuer transport/discovery failures, timeouts,
+rate limits and 5xx responses release ownership by CAS back to the original credential and throw
+that retryable error with the original cause. Only definitive `invalid_grant` or refreshed
+subject/nonce/WebID mismatches retire the session. Release cannot overwrite a concurrent revoke
+or rotation. After successful upstream rotation, a persistence failure never restores the spent
+refresh token; the claimed record remains closed until a new login. A process crash
 during a claimed refresh requires a new login. File lock files left by a crashed writer require
 operator cleanup while the store is offline. Deleted IDs retain irreversible tombstones: never
 reuse them or remove tombstones while an old request could still complete. Local `revoke()`
 destroys credentials and retires the session; it does not require a remote revocation endpoint.
 Retirement retries CAS contention until a deletion tombstone is durable.
-Sessions expire absolutely after thirty days; login state expires after ten minutes. Expired
-record/tombstone cleanup and request rate limits belong to the deployment.
+Sessions expire absolutely after thirty days; login state expires after ten minutes.
+`VaultStore.compareAndSwap` and `SessionVault.put`/`compareAndSwap` accept an optional
+`ttlSeconds` (a positive whole number). Successful writes replace the expiry; omission makes
+the record permanent. Expired values are missing for reads and CAS. Memory stores lazily purge
+expired entries on reads/writes, file stores persist expiry alongside ciphertext and remove expired
+files when read, and KV sets Redis `EX` atomically inside the CAS Lua script. Existing permanent
+files remain readable. `SessionVault.delete(id, ttlSeconds?)` bounds ephemeral login/browser
+consumption markers; omit its TTL for permanent session retirement. Never give a live session's
+revocation tombstone a shorter lifetime than its grants. The MCP composition expires browser
+flows/pending login at ten minutes, unused codes at five minutes, and registered clients at thirty
+days. Consumed code evidence remains through grant expiry. Record deadlines are preserved across
+transitions. Deployment rate limits and cleanup of legacy permanent records remain necessary.
 
 Default client-document fetches use `@jeswr/guarded-fetch/node` (DNS pinning, SSRF checks,
 64 KiB cap, eight-second timeout, no redirects). Documents must be JSON, HTTP 200, with a
@@ -146,14 +162,22 @@ Default client-document fetches use `@jeswr/guarded-fetch/node` (DNS pinning, SS
 The bounded 256-entry cache respects no-store/no-cache, max-age and Age, capped at five minutes.
 The optional metadataFetch seam is trusted and must provide equivalent SSRF/DNS protection;
 the core still enforces media type, response status and streaming size limits. Metadata strings
-are untrusted UI input; the composition must escape them when rendering consent.
+are untrusted UI input; the composition must escape them when rendering consent. Client names
+are self-declared. Show dynamically registered names as "unverified (self-declared)"; for a
+Client ID Metadata Document, use the client_id URL host as the identity. Show the exact redirect
+URI selected for this request and emphasize its host. Both registration and document metadata
+are limited to ten redirect URIs.
 
 `OAuthStores` is the persistence seam. Reads return snapshots; writes complete durably before
 resolving. `consume` must atomically mark a record used and retain it for replay detection;
 grant revocation must be irreversible. Reject overwrites/collisions. Keep replay tombstones
-through family expiry and never reuse IDs. Memory stores have no cleanup and are intended
-for tests/single-process bounded deployments; production composition supplies durable stores,
-expiry cleanup and request rate limits. Multiple workers must share stores and the signing key.
+through family expiry and never reuse IDs. `RecordStore.put` accepts the optional TTL;
+`OneTimeStore.consume` accepts optional first-use
+retention and otherwise preserves the original deadline. The core sets ten-minute pending-login,
+five-minute unused-code and thirty-day DCR TTLs; it retains consumed codes through family expiry.
+Memory record stores lazily purge expired records and are intended for tests/single-process bounded
+deployments; production composition supplies durable stores and request rate limits. Multiple workers
+must share stores and the signing key.
 `GrantStore.revokeSession` must durably and idempotently retain irreversible session tombstones;
 `isSessionRevoked` must observe them across workers. Keep these tombstones while any bound grant
 can be used, and never reuse retired session IDs. The `./testing` export supplies isolated

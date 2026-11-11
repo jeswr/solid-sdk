@@ -1,7 +1,11 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 /** ES256 signing-key generation for server configuration. */
 export { generateSigningKey } from "./jwt.js";
-export { createPodSessionProvider, type PodSessionProviderOptions } from "./pod-sessions.js";
+export {
+  createPodSessionProvider,
+  PodRefreshRetryableError,
+  type PodSessionProviderOptions,
+} from "./pod-sessions.js";
 /** Structured OAuth failures thrown by trusted completion and verification APIs. */
 export { OAuthError } from "./protocol.js";
 /** Web-standard authorization server and factory. */
