@@ -273,6 +273,7 @@ function importFailures(ctx, target, typeOnly = false, manifest = false) {
       // in lib; components stay RDF-free.
       if (ctx.uiData)
         for (const dependency of [
+          "@jeswr/agent-audit",
           "@jeswr/guarded-fetch",
           "@jeswr/fetch-rdf",
           "@jeswr/rdf-serialize",
@@ -287,6 +288,8 @@ function importFailures(ctx, target, typeOnly = false, manifest = false) {
         send
       )
         failures.push("agent UI dependency is outside DESIGN §2.2");
+      if (name === agent("audit") && target !== "@jeswr/agent-audit/verify")
+        failures.push("agent UI audit imports must use the browser-safe verify subpath");
       if (
         name === agent("mandate") &&
         !typeOnly &&

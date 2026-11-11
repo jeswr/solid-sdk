@@ -151,6 +151,47 @@ Run this package's `lint`, `build`, `typecheck` and `test` scripts. CSS and
 Components.js are development-only fixtures; production dependencies reuse
 existing workspace verification, canonical JSON and RDF libraries.
 
+## Browser verification
+
+Import `@jeswr/agent-audit/verify` in browser code. It has no Node builtins,
+filesystem, process or Buffer dependency, and performs no I/O. The root export
+continues to include the Node ledger, writer and auditor CLI.
+
+```ts
+import { parseAuditEntry, parseAuditHead, verifyLatestRange } from '@jeswr/agent-audit/verify';
+
+// Fetch and parse the pod documents through the application's storage client.
+const entries = fetchedRecords.map(parseAuditEntry); // oldest first; never sort away tampering
+const head = parseAuditHead(headSequenceText, headHash);
+const result = verifyLatestRange(entries, head);
+```
+
+The subpath exports the shared record schemas and types, `ENTRY_KINDS`, `GENESIS`,
+`MAX_AUDIT_SEQ`, `checkedRecord`, `seal`, `parseAuditEntry`, `auditHeadSchema`,
+`parseAuditHead`, `verifyLedger`, `verifyRange`, `verifyLatestRange`, and their
+result types and scope strings (`CHAIN_SCOPE`, `AUDIT_SCOPE`, `HEAD_MISSING`).
+`parseAuditEntry` enforces strict fields, canonical JSON and the 64 KiB UTF-8
+record limit on already-fetched values. Heads require a canonical positive
+sequence text bounded at 200,000 and a SHA-256 digest.
+
+`verifyLedger` validates a complete retained ledger: it starts at genesis or
+requires a matching checkpoint for its removed prefix. `verifyRange` validates
+an explicitly fetched subrange without claiming to verify an omitted prefix.
+Both use the same schema, sequence, genesis, link and digest checks.
+`verifyLatestRange` additionally refuses a nonempty range without a published
+head. A supplied head requires its sequence to be present unless an explicit
+historical `through` endpoint is passed. Entries past the head and a different
+hash at the head fail. These functions check consistency, never authority or
+independently trusted completeness; keep the scope text beside a verdict.
+The caller still validates the exact PROV projection against each parsed record.
+
+The suite adapter now accepts the package's existing `conversation` / `tool-call`
+kinds, task/conversation/model-call instrumentation and `terms.proposalDigest`.
+Unknown fields remain forbidden. Compared with the former app copy, entry
+metadata is strict, supplied records also obey the size and lossless-JSON checks,
+and a later sequence cannot restart at genesis. Node and browser consumers share
+head validation and the app's missing-head, endpoint and tail-mismatch checks.
+
 ## Task statistics (A-045)
 
 `aggregateTaskStats(ledger.entries(), taskId?)` verifies the retained hash chain

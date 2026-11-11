@@ -1246,3 +1246,20 @@ it("allows P0's browser-safe approval/control entry points and rejects the gener
     scan("apps/suite/src/apps/agent/lib/sign.ts", 'import "@jeswr/agent-mandate";').join("\n"),
   ).toContain("issue/verify");
 });
+
+it("permits only the browser audit verifier in the agent data adapter", () => {
+  const path = "apps/suite/src/apps/agent/lib/audit.ts";
+  expect(scan(path, 'import "@jeswr/agent-audit/verify";')).toEqual([]);
+  for (const target of [
+    "@jeswr/agent-audit",
+    "@jeswr/agent-audit/testing",
+    "@jeswr/agent-audit/verify/internal",
+  ])
+    expect(scan(path, `import "${target}";`).join("\n")).toContain("browser-safe verify subpath");
+  expect(
+    scan(
+      "apps/suite/src/apps/agent/components/activity.tsx",
+      'import "@jeswr/agent-audit/verify";',
+    ).join("\n"),
+  ).toContain("outside DESIGN");
+});
