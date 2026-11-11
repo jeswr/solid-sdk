@@ -27,7 +27,11 @@ export async function loadHistory(
     { length: months },
     (_, index) => new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - index - offset, 1)),
   );
-  const history = await readMonths(fetch, musicRoot(storage), dates);
+  const [history, importedSpotify] = await Promise.all([
+    readMonths(fetch, musicRoot(storage), dates),
+    readMonths(fetch, new URL("integrations/spotify/music/", storage).href, dates),
+  ]);
+  history.push(...importedSpotify);
   const selected = new Set(dates.map(monthKey));
   try {
     const doc = await loadMusic(

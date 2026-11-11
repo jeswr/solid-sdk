@@ -629,6 +629,46 @@ future writer port. JSON-only demo fixtures show metadata; sync tests wrap `fixt
 with synthetic byte responses for media/export routes, without changing its public behavior.
 ## Spotify Web API
 
+The `spotify` catalog id also supports `fileAdapterById('spotify')` (direct module:
+`./spotify/file-adapter`). Request Extended streaming history or Account data through
+Spotify Account → Privacy settings → Download your data. Select the ZIP or a single
+`Streaming_History_Audio_*.json`, `Streaming_History_Video_*.json` or
+`StreamingHistory_music_*.json`. No Web API application is needed for file import.
+
+File history merges into `integrations/spotify/music/history/YYYY-MM.ttl`, registered as
+`media:PlaybackEvent`, inside the connector container. It uses solid-listening's titled
+`media:Track`, artist/album nodes, `core:atTime` → `time:Instant`, and `media:msPlayed`.
+Episodes use their title and show name in that history representation. Music reads these
+monthly documents alongside its scrobble imports and live Spotify history. SHA-256 ids
+derive from the UTC timestamp and valid track URI, falling back to artist/title names.
+Basic `endTime` is interpreted as UTC at its exported minute precision. Duration is not
+subtracted to invent a start time. Plays under 30 seconds (including zero) are kept,
+matching Last.fm/ListenBrainz imports: their 30-second rule deduplicates nearby plays,
+and does not filter by duration. Spotify file import deduplicates exact natural keys only.
+
+Only timestamp, title, artist/show, album, validated track URI and milliseconds are kept.
+`ip_addr`, `conn_country`, `platform`, reasons, shuffle and skipped flags are dropped.
+Raw files and filenames are never written to the pod. Malformed rows count as skips.
+All selected input is verified before history writes; invalid JSON, CRC/size/DEFLATE
+errors and exceeded limits fail before history changes. Pod failures may leave earlier
+months saved; re-import finishes without duplicating them.
+
+The shared streaming JSON scanner caps tokens at 1 MiB, records at 4 MiB, nesting at 64,
+and each JSON file at 64 MiB. Per run: 100,000 rows including invalid/duplicate/oversized
+records, 16 MiB retained metadata, 600 months, 1,000 ZIP entries, 512 MiB compressed input
+and 256 MiB actual inflation across selected entries. ZIPs require `stream()` and `slice()`;
+the shared Takeout reader validates headers, directory, overlap, encryption, compression,
+ranges, size and CRC. Only documented history paths are dispatched; unknown files are not
+inflated. Split exports that exceed a cap.
+
+Suite Connect offers history import by default when no host client is configured, and
+live PKCE with a personal public Client ID. The setup form shows the exact
+`/oauth-callback.html` redirect URI to register in the Spotify Developer Dashboard,
+validates 32 hexadecimal characters, and saves `connect.spotify-client-id` through
+suite-sdk pod-backed preferences. `NEXT_PUBLIC_CONNECTOR_SPOTIFY_CLIENT_ID` takes
+precedence. Personal apps remain subject to Spotify's development-account and user limits.
+No client secret is requested, stored or used by this flow.
+
 The Spotify adapter imports saved tracks, playlists with ordered items, followed artists,
 short/medium/long-term top tracks and artists, and recently-played history. The existing
 `music/top-tracks.ttl` remains the medium-term snapshot. Other top ranges use explicit

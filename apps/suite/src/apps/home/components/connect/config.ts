@@ -36,3 +36,11 @@ export const entries = catalogue(
   registry,
   process.env.NEXT_PUBLIC_SHOW_COMING_SOON_CONNECTORS === "1",
 );
+
+/** Personal public clients never replace a client configured by the deployment. */
+export function spotifyAdapterFor(personalClientId: string) {
+  const adapter = registry.adapterById("spotify");
+  if (!adapter?.oauth || adapter.oauth.clientId || !/^[a-fA-F0-9]{32}$/.test(personalClientId))
+    return adapter;
+  return { ...adapter, oauth: { ...adapter.oauth, clientId: personalClientId } };
+}

@@ -210,7 +210,14 @@ export const TIER_C: readonly CatalogEntry[] = [
 
 /** All 32 catalog entries, A → B → C, in display order. */
 export function allCatalogEntries(): CatalogEntry[] {
-  return [...ADAPTERS.map((a) => ({ ...a.metadata })), ...TIER_B, ...TIER_C];
+  return [...ADAPTERS.map(catalogEntry), ...TIER_B, ...TIER_C];
+}
+
+function catalogEntry(adapter: IntegrationAdapter): CatalogEntry {
+  return {
+    ...adapter.metadata,
+    ...(adapter.metadata.id === "spotify" ? { exportFormat: "Streaming history ZIP / JSON" } : {}),
+  };
 }
 
 /** Public per-source configuration supplied by the host. Tokens stay in SourceAuth. */
@@ -244,11 +251,7 @@ export function createRegistry(config: ConnectorConfigs = {}) {
     TIER_B_ADAPTERS: tierB,
     ALL_ADAPTERS: configured,
     adapterById: (id: string) => byId.get(id),
-    allCatalogEntries: (): CatalogEntry[] => [
-      ...tierA.map((a) => ({ ...a.metadata })),
-      ...TIER_B,
-      ...TIER_C,
-    ],
+    allCatalogEntries: (): CatalogEntry[] => [...tierA.map(catalogEntry), ...TIER_B, ...TIER_C],
     statusOf: (entry: CatalogEntry): IntegrationStatus => {
       if (entry.tier === "B") return "approval-needed";
       if (entry.tier === "C") return "export-file";

@@ -1,6 +1,12 @@
 // AUTHORED-BY Codex GPT-6
-import { createRegistry, IntegrationError } from "@jeswr/pod-connectors";
-import { describe, expect, it } from "vitest";
+import { createRegistry, fileAdapterById, IntegrationError } from "@jeswr/pod-connectors";
+import { describe, expect, it, vi } from "vitest";
+
+vi.mock("@jeswr/pod-connectors", async (original) => {
+  const actual = await original<typeof import("@jeswr/pod-connectors")>();
+  return { ...actual, fileAdapterById: vi.fn(actual.fileAdapterById) };
+});
+
 import {
   catalogue,
   destinationsFor,
@@ -17,10 +23,17 @@ import {
 } from "../src/apps/home/lib/connect/copy";
 
 describe("connector catalogue", () => {
+  it("retains the registry description when optional Spotify file metadata is unavailable", () => {
+    const registry = createRegistry();
+    vi.mocked(fileAdapterById).mockReturnValueOnce(undefined);
+    expect(catalogue(registry).find((entry) => entry.id === "spotify")?.whatYouGet).toBe(
+      registry.adapterById("spotify")?.metadata.whatYouGet,
+    );
+  });
   it("uses configured registry status, file metadata and the coming-soon flag", () => {
     const entries = catalogue(createRegistry());
     expect(entries.find((entry) => entry.id === "spotify")).toMatchObject({
-      status: "demo",
+      status: "import",
       tier: "A",
       domains: ["media"],
       logoId: "spotify",

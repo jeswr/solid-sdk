@@ -11,6 +11,15 @@ export const SCHEMA = "https://schema.org/";
 
 /** Adapter-local typed accessors for the solid-listening/federation wire contract. */
 export class MediaThing extends PodThing {
+  set performedByArtist(value: string) {
+    OptionalAs.object(this, `${MEDIA}performedByArtist`, value, NamedNodeFrom.string);
+  }
+  set album(value: string) {
+    OptionalAs.object(this, `${MEDIA}inAlbum`, value, NamedNodeFrom.string);
+  }
+  set msPlayed(value: number) {
+    OptionalAs.object(this, `${MEDIA}msPlayed`, value, LiteralFrom.integer);
+  }
   set title(value: string | undefined) {
     OptionalAs.object(this, "http://purl.org/dc/terms/title", value, LiteralFrom.string);
   }

@@ -7,6 +7,19 @@ description: Use when maintaining source adapters, injected PodWriter/SourceAuth
 
 # Maintain Pod connectors
 
+Spotify file import shares the `spotify` catalog id with its live adapter. Route it through
+`fileAdapterById('spotify')`; see README's Spotify section and `src/spotify/file-adapter.ts`.
+Reuse the streaming JSON scanner and Takeout ZIP reader, retaining their grammar, byte,
+CRC/range and inflation checks. Stage only allowlisted history fields before any writes.
+Never persist IP, country, device, raw export or filename. Keep one merged
+`music/history/YYYY-MM.ttl` per month inside the connector container, with solid-listening's
+track/artist/album/instant scrobble vocabulary and SHA-256 timestamp/track-or-name ids.
+Keep short plays: the existing scrobble importer has no duration cutoff. All archive entries
+share row, retained-text and month budgets. Count invalid, oversized and duplicate rows.
+Suite Connect reads these shards in Music and saves personal public Spotify client IDs
+through suite-sdk preferences (`connect.spotify-client-id`); the host client id wins.
+Preserve the existing live adapter, transport isolation and PKCE refresh behavior.
+
 Read README.md and src/core/types.ts before changing the public contract. The package was
 moved from apps/pod-manager/src/lib/integrations; retain registry/types exports and the
 app's compatibility shims. Hosts create an isolated createRegistry(config); never read
