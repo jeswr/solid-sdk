@@ -426,8 +426,11 @@ each principal's modes in the own document. A resource-only, members-only, or di
 scoped permission causes a typed `RoleError` with code `partial-scope`: `readGrants` rejects,
 and mutations report the refusal in `failed` without a PUT, including no-op selections.
 This conservative boundary prevents an ordinary role row from silently widening or narrowing
-legacy folder access. ESS own-ACR management is checked separately from resource/member
-permissions. Inherited rows are read-only and must match their governing source. They never overwrite an explicit selection for the same
+legacy folder access. Only ESS own-ACR management (`acp:access` or own-ACR
+`acp:accessControl`) is exempt from this comparison. Member management through
+`acp:memberAccess` or own-ACR `acp:memberAccessControl` remains scoped and causes
+`partial-scope`, even when the same policy also grants own-ACR management.
+Inherited rows are read-only and must match their governing source. They never overwrite an explicit selection for the same
 principal, regardless of row order. An unchanged role selection preserves that principal's
 existing modes, including chatroom Write and partial ACP contributions completed by
 inheritance. A changed role is mapped using the requested kind and implementation.
