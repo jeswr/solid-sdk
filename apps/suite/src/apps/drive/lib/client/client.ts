@@ -12,6 +12,7 @@
 
 import { fetchRdf, parseRdf, RdfFetchError, SUPPORTED_RDF_MEDIA_TYPES } from "@jeswr/fetch-rdf";
 import { serialize } from "@jeswr/rdf-serialize";
+import { parseWacAllow } from "@jeswr/storage-capabilities";
 import { Container, Resource } from "@solid/object";
 import { DataFactory, Store } from "n3";
 import { isomorphic } from "rdf-isomorphic";
@@ -150,6 +151,10 @@ export interface DriveClient {
   readVersion(url: string): Promise<{
     body: Blob;
     etag?: string;
+    /** The GET's Content-Type, including its declared charset. */
+    contentType?: string;
+    /** The GET's effective user write permission, when advertised. */
+    writable?: boolean;
     readonly verifyHeaders?: ResourceAssertion["verifyHeaders"];
   }>;
   /** Parsed RDF and its validator; `undefined` when the resource does not exist. */
@@ -737,6 +742,11 @@ export function createSolidDriveClient(options: {
     return {
       body,
       ...(etag ? { etag } : {}),
+      ...(response.headers.has("content-type")
+        ? { contentType: response.headers.get("content-type") as string }
+        : {}),
+      writable:
+        parseWacAllow(response.headers.get("wac-allow") ?? "")?.user.includes("write") ?? false,
       verifyHeaders: access.captureEndpoint(url, response.headers),
     };
   };

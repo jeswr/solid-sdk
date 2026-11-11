@@ -471,3 +471,9 @@
     width: 100%;
   }
 }
+
+/* AUTHORED-BY Codex GPT-6.1-Sol */
+.sht-data-options {
+  display: grid;
+  gap: var(--space-3);
+}
