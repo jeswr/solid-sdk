@@ -1,0 +1,45 @@
+# AUTHORED-BY Codex (GPT-6.1 Sol)
+@prefix log: <https://jeswr.org/ns/media-log#> .
+@prefix media: <https://jeswr.org/ns/sectors/media#> .
+@prefix core: <https://jeswr.org/ns/core#> .
+@prefix schema: <https://schema.org/> .
+@prefix dc: <http://purl.org/dc/elements/1.1/> .
+@prefix dct: <http://purl.org/dc/terms/> .
+@prefix prov: <http://www.w3.org/ns/prov#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix shapes: <https://jeswr.org/ns/media-log/shapes#> .
+# Profile starts with sectors/media/media.shacl.ttl CreativeWorkShape.
+# Retains its MUST singleton dct:title; narrows to a nonblank title.
+# Omits advisory performedByArtist and hasLicense links and optional durationSeconds:
+# this tracker records display credits, not artist/licence graphs or timed playback.
+# Omits all playback, music, account, history and licence shapes: logs are core:Records,
+# not scrobbles. Adds a single required work link and schema.org film/TV/book/game kind.
+# Work kinds are IRIs without sh:class (schema classes are concepts, not typed records).
+# maxLength is not admitted; facade policy caps title/creator/source at 500 and review
+# at 20,000 characters. No generated accessor is replaced for this gap.
+# dct:issued is a year-only integer projection (not a fabricated full publication date).
+# Imported origins use prov:wasDerivedFrom; the log is not identical to its source work.
+# Dates are UTC calendar dates; ratings are a closed decimal half-star enum.
+# LogEntry and its personal status/progress/repeat predicates are package extensions.
+shapes:Work a sh:NodeShape ; sh:targetClass media:CreativeWork ;
+ sh:property [ sh:path dct:title ; sh:datatype xsd:string ; sh:minCount 1 ; sh:minLength 1 ; sh:pattern "\\S" ; sh:maxCount 1 ; sh:severity sh:Violation ] ;
+ sh:property [ sh:path schema:additionalType ; sh:nodeKind sh:IRI ; sh:minCount 1 ; sh:in (schema:Movie schema:TVSeries schema:TVEpisode schema:Book schema:VideoGame) ; sh:maxCount 1 ; sh:severity sh:Violation ] ;
+ sh:property [ sh:path dc:creator ; sh:datatype xsd:string ; sh:maxCount 1 ; sh:severity sh:Violation ] ;
+ sh:property [ sh:path dct:issued ; sh:datatype xsd:integer ; sh:minInclusive 1000 ; sh:maxInclusive 9999 ; sh:maxCount 1 ; sh:severity sh:Violation ] ;
+ sh:property [ sh:path schema:image ; sh:nodeKind sh:IRI ; sh:pattern "^https?://" ; sh:maxCount 1 ; sh:severity sh:Violation ] .
+shapes:Entry a sh:NodeShape ; sh:targetClass log:LogEntry ;
+ sh:property [ sh:path core:about ; sh:nodeKind sh:IRI ; sh:class media:CreativeWork ; sh:minCount 1 ; sh:maxCount 1 ; sh:severity sh:Violation ] ;
+ sh:property [ sh:path log:status ; sh:datatype xsd:string ; sh:minCount 1 ; sh:in ("want" "in-progress" "finished" "abandoned") ; sh:maxCount 1 ; sh:severity sh:Violation ] ;
+ sh:property [ sh:path schema:startDate ; sh:datatype xsd:date ; sh:maxCount 1 ; sh:severity sh:Violation ] ;
+ sh:property [ sh:path schema:endDate ; sh:datatype xsd:date ; sh:maxCount 1 ; sh:severity sh:Violation ] ;
+ sh:property [ sh:path schema:ratingValue ; sh:datatype xsd:decimal ; sh:in ("0.5"^^xsd:decimal "1"^^xsd:decimal "1.5"^^xsd:decimal "2"^^xsd:decimal "2.5"^^xsd:decimal "3"^^xsd:decimal "3.5"^^xsd:decimal "4"^^xsd:decimal "4.5"^^xsd:decimal "5"^^xsd:decimal) ; sh:maxCount 1 ; sh:severity sh:Violation ] ;
+ sh:property [ sh:path schema:reviewBody ; sh:datatype xsd:string ; sh:maxCount 1 ; sh:severity sh:Violation ] ;
+ sh:property [ sh:path log:repeatCount ; sh:datatype xsd:integer ; sh:minInclusive 0 ; sh:maxCount 1 ; sh:severity sh:Violation ] ;
+ sh:property [ sh:path log:progress ; sh:datatype xsd:integer ; sh:minInclusive 0 ; sh:maxCount 1 ; sh:severity sh:Violation ] ;
+ sh:property [ sh:path log:progressUnit ; sh:datatype xsd:string ; sh:in ("page" "episode") ; sh:maxCount 1 ; sh:severity sh:Violation ] ;
+ sh:property [ sh:path dct:source ; sh:datatype xsd:string ; sh:maxCount 1 ; sh:severity sh:Violation ] ;
+ sh:property [ sh:path prov:wasDerivedFrom ; sh:nodeKind sh:IRI ; sh:pattern "^https?://" ; sh:maxCount 1 ; sh:severity sh:Violation ] .

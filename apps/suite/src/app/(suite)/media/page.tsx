@@ -1,9 +1,8 @@
-// AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex (GPT-6.1 Sol)
 import type { Metadata } from "next";
-import { PlannedApp } from "@/apps/planned/planned-app";
-
+import { MediaApp } from "@/apps/media/components/media-app";
+import "@/apps/media/components/media.css";
 export const metadata: Metadata = { title: "Media · Solid Suite" };
-
 export default function Page() {
-  return <PlannedApp app="media" />;
+  return <MediaApp />;
 }
