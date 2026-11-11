@@ -111,7 +111,10 @@ it("completes rides-only Strava imports in Mobility without an empty Health dest
         .filter((subject) => subject.startsWith(DEMO_ROOT) && subject !== url),
     );
     imported += subjects.size;
-    for (const subject of subjects) expect(provenanceOf(dataset, subject, url).demo).toBe(true);
+    for (const subject of subjects)
+      expect(
+        provenanceOf(dataset, subject, url, { storage: DEMO_ROOT, documentUrl: url }).demo,
+      ).toBe(true);
   }
   expect(imported).toBe(1);
 });

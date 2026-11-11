@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 import { NS } from "@jeswr/suite-vocab";
 import { DataFactory, Store } from "n3";
@@ -29,6 +30,7 @@ import { HomePage } from "../src/apps/home/components/home-page";
 const storage = "https://pod.example/alice/";
 beforeEach(() => {
   localStorage.clear();
+  vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(null, { status: 404 }));
   router.push.mockClear();
   Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
     configurable: true,
@@ -129,11 +131,11 @@ const card = (src: string) =>
 
 describe("Home attribution", () => {
   it.each([
-    { metadata: 'a prov:SoftwareAgent; schema:name "MyHealth"', label: "Provided by MyHealth" },
+    { metadata: 'a prov:SoftwareAgent; schema:name "MyHealth"', label: "Added by MyHealth" },
     { metadata: 'a foaf:Person; foaf:name "Bob"', label: "Provided by Bob" },
-    { metadata: 'schema:name " "', label: "Provided by another app" },
-    { metadata: 'schema:name "https://private.example/id"', label: "Provided by another app" },
-    { metadata: "a prov:SoftwareAgent", label: "Provided by another app" },
+    { metadata: 'schema:name " "', label: "Added by foreign.example" },
+    { metadata: 'schema:name "https://private.example/id"', label: "Added by foreign.example" },
+    { metadata: "a prov:SoftwareAgent", label: "Added by foreign.example" },
   ])("uses loaded identity metadata or an unresolved label: $label ($metadata)", async ({
     metadata,
     label,

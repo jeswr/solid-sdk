@@ -5,6 +5,7 @@
 import { adapterContainerUrl } from "@jeswr/pod-connectors";
 import { DEMO_CONNECTOR, NS } from "@jeswr/suite-vocab";
 import type { DatasetCore, Term } from "@rdfjs/types";
+import { isClientIdDocument, resolveClientName } from "../permissions";
 import { httpUrl, inStorage, subjectOf } from "./rdf";
 
 export interface Provenance {
@@ -73,6 +74,8 @@ export interface ProvenanceContext {
   /** Pre-resolved identity metadata: no implicit third-party requests while classifying RDF. */
   identities?: ReadonlyMap<string, { kind: "app" | "person"; label: string }>;
   storage?: string;
+  /** URL of the document Home actually read, independent of its selected RDF subject. */
+  documentUrl?: string;
 }
 
 function providedBy(connector: Connector): Provenance {
@@ -88,13 +91,43 @@ export function identitiesIn(
   const identities = new Map<string, { kind: "app" | "person"; label: string }>();
   for (const predicate of ["wasAttributedTo", "wasGeneratedBy"]) {
     for (const iri of node.iris(NS.PROV + predicate)) {
-      if (iri === DEMO_CONNECTOR.iri) continue;
       const label = subjectOf(dataset, iri).name?.trim();
       if (!label || /http/i.test(label)) continue;
       identities.set(iri, { kind: isPerson(dataset, iri) ? "person" : "app", label });
     }
   }
   return identities;
+}
+
+/** One resolver per Home load: repeated agents share even an in-flight metadata lookup. */
+export function createIdentityResolver(publicFetch: typeof fetch = globalThis.fetch) {
+  const clients = new Map<string, Promise<string>>();
+  return async (dataset: DatasetCore, subject: string | Term, userWebId?: string) => {
+    const identities = new Map(identitiesIn(dataset, subject));
+    const node = subjectOf(dataset, subject);
+    await Promise.all(
+      ["wasAttributedTo", "wasGeneratedBy"].flatMap((predicate) =>
+        node.iris(NS.PROV + predicate).map(async (iri) => {
+          if (iri === userWebId || iri === DEMO_CONNECTOR.iri || identities.has(iri)) return;
+          const url = httpUrl(iri);
+          const typed = typedAgent(dataset, iri);
+          if (!url || typed === "person" || (typed === undefined && url.hash)) return;
+          let name = clients.get(iri);
+          if (!name) {
+            name = isClientIdDocument(iri)
+              ? resolveClientName(iri, publicFetch).then((metadata) => {
+                  const label = metadata.name?.trim();
+                  return label && !/http/i.test(label) ? label : url.hostname;
+                })
+              : Promise.resolve(url.hostname);
+            clients.set(iri, name);
+          }
+          identities.set(iri, { kind: "app", label: await name });
+        }),
+      ),
+    );
+    return identities;
+  };
 }
 
 const PERSON_TYPES = [
@@ -133,19 +166,27 @@ export function provenanceOf(
   containerUrl: string,
   context: ProvenanceContext = {},
 ): Provenance {
-  const source = sourceOf(dataset, subject, containerUrl, context);
   const value = typeof subject === "string" ? subject : subject.value;
-  const url = httpUrl(value);
-  if (!url) return source;
-  const [, prefix = "", id = ""] = /^(.*\/)integrations\/([^/]+)\//.exec(url.pathname) ?? [];
-  if (
-    !id ||
-    (context.storage !== undefined && !inStorage(value, context.storage)) ||
-    !inStorage(value, adapterContainerUrl(context.storage ?? new URL(prefix, url).href, id))
-  )
-    return source;
-  if (!subjectOf(dataset, subject).iris(`${NS.PROV}wasAttributedTo`).includes(DEMO_CONNECTOR.iri))
-    return source;
+  const url =
+    typeof subject === "string" || subject.termType === "NamedNode" ? httpUrl(value) : undefined;
+  const documentUrl = context.documentUrl;
+  const document = documentUrl && httpUrl(documentUrl);
+  const storage = context.storage;
+  const demo = Boolean(
+    url &&
+      documentUrl &&
+      document &&
+      storage &&
+      inStorage(storage, storage) &&
+      inStorage(value, storage) &&
+      url.href.split("#")[0] === document.href.split("#")[0] &&
+      CONNECTORS.some((connector) =>
+        inStorage(documentUrl, adapterContainerUrl(storage, connector.id)),
+      ) &&
+      subjectOf(dataset, subject).iris(`${NS.PROV}wasAttributedTo`).includes(DEMO_CONNECTOR.iri),
+  );
+  const source = sourceOf(dataset, subject, containerUrl, context, demo);
+  if (!demo) return source;
   return source.kind === "you"
     ? { kind: "source", label: DEMO_CONNECTOR.label, demo: true }
     : { ...source, demo: true };
@@ -156,6 +197,7 @@ function sourceOf(
   subject: string | Term,
   containerUrl: string,
   context: ProvenanceContext,
+  demo: boolean,
 ): Provenance {
   const node = subjectOf(dataset, subject);
   let attributedToAnother = false;
@@ -167,7 +209,7 @@ function sourceOf(
   }
   for (const predicate of ["wasAttributedTo", "wasGeneratedBy"]) {
     for (const iri of node.iris(NS.PROV + predicate)) {
-      if (iri === context.userWebId || iri === DEMO_CONNECTOR.iri) continue;
+      if (iri === context.userWebId || (demo && iri === DEMO_CONNECTOR.iri)) continue;
       attributedToAnother = true;
       const identity = context.identities?.get(iri);
       // A person's WebID is labelled with that profile's name, never as an app.
@@ -192,7 +234,9 @@ function sourceOf(
       context.storage === undefined
         ? url.pathname
         : url.pathname.slice(new URL(context.storage).pathname.length);
-    const id = /(?:^|\/)integrations\/([^/]+)\//.exec(relative)?.[1];
+    const segments = relative.split("/");
+    const index = segments.indexOf("integrations");
+    const id = index >= 0 && segments.length > index + 2 ? segments[index + 1] : undefined;
     const connector = CONNECTORS.find((connector) => connector.id === id);
     if (connector) return providedBy(connector);
   }

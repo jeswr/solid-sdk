@@ -25,11 +25,11 @@ import { DEMO_CONNECTOR } from "../../lib/connect/catalogue";
 import { isDemoImport } from "../../lib/connect/demo";
 import { classificationForType } from "../../lib/model/classify";
 import { DOMAINS, UNCATEGORISED } from "../../lib/model/domains";
-import { identitiesIn, provenanceOf } from "../../lib/model/provenance";
 import { inStorage } from "../../lib/model/rdf";
 import { useConnectors } from "../../state/connectors";
 import { asOfTime, itemActions, itemHref, itemTitle, relativeTime } from "../../state/presentation";
 import { domainStore } from "../../state/use-domain-items";
+import { useProvenance } from "../../state/use-provenance";
 import { DemoDataBadge } from "../connect/shared";
 import { useHomeSession } from "../home-app";
 import { domainHref } from "../home-sidebar";
@@ -183,14 +183,7 @@ export function ItemPage({ domain, itemRef }: { domain: string; itemRef: string 
   }, [state.read]);
   const read = state.read;
   const title = read ? itemTitle(read.item) : "Item";
-  const provenance =
-    read &&
-    provenanceOf(read.item.dataset, read.item.subject, read.item.containerUrl, {
-      storage: session.storageUrl,
-      userWebId: session.webId,
-      // The same names the Home card resolves, so the card and this page agree.
-      identities: identitiesIn(read.item.dataset, read.item.subject),
-    });
+  const provenance = useProvenance(read?.item, session);
   const source = actions.find((action) => action.id === "source");
   const demo = provenance?.demo || (read && isDemoImport(read.item.url, connections));
   const onlyDemo =
@@ -232,8 +225,10 @@ export function ItemPage({ domain, itemRef }: { domain: string; itemRef: string 
           <div className="flex flex-wrap items-center gap-2">
             {demo ? <DemoDataBadge /> : null}
             {!onlyDemo &&
-              (provenance?.kind === "you" ? (
-                <p className="hm-you">Added by you</p>
+              (provenance?.kind === "you" || provenance?.kind === "app" ? (
+                <p className="hm-you">
+                  {provenance.kind === "you" ? "Added by you" : `Added by ${provenance.label}`}
+                </p>
               ) : (
                 <ProvenanceBadge source={provenance?.label ?? "source"} />
               ))}

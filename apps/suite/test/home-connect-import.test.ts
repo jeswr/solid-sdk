@@ -217,7 +217,7 @@ describe("Connect uses the real package writer against the suite demo pod", () =
         ds.countQuads(null, DataFactory.namedNode(`${NS.PROV}wasDerivedFrom`), null, null),
       ).toBeGreaterThan(0);
       expect(
-        provenanceOf(ds, url, url, { storage: DEMO_ROOT, userWebId: DEMO_WEBID }),
+        provenanceOf(ds, url, url, { storage: DEMO_ROOT, userWebId: DEMO_WEBID, documentUrl: url }),
       ).toMatchObject({ kind: "source", label: "Spotify" });
       const subjects = new Set(
         [...ds]
@@ -229,7 +229,11 @@ describe("Connect uses the real package writer against the suite demo pod", () =
       expect(subjects.size).toBeGreaterThan(0);
       for (const subject of subjects) {
         expect(
-          provenanceOf(ds, subject, url, { storage: DEMO_ROOT, userWebId: DEMO_WEBID }),
+          provenanceOf(ds, subject, url, {
+            storage: DEMO_ROOT,
+            userWebId: DEMO_WEBID,
+            documentUrl: url,
+          }),
         ).toMatchObject({ demo: true });
       }
     }

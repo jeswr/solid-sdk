@@ -4,16 +4,135 @@
 import { Provenance as ItemProvenance } from "@jeswr/pod-connectors/core/provenance";
 import { MusicRecording, PodThing } from "@jeswr/pod-connectors/core/vocab";
 import { DataFactory, Store } from "n3";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { DEMO_CONNECTOR } from "../../src/apps/home/lib/connect/catalogue";
 import {
   CONNECTORS,
   connectorForUrl,
+  createIdentityResolver,
   identitiesIn,
   type ProvenanceContext,
   provenanceOf,
 } from "../../src/apps/home/lib/model/provenance";
+import * as permissions from "../../src/apps/home/lib/permissions";
 import { rdf, STORAGE, WEB_ID } from "./fixtures";
+
+describe("Home Client ID Document attribution", () => {
+  const subject = `${STORAGE}notes/note.ttl#it`;
+  function attributedTo(iri: string) {
+    const dataset = new Store();
+    new ItemProvenance(subject, dataset, DataFactory).attributedTo.add(iri);
+    return dataset;
+  }
+
+  it("uses the Permissions resolver and its credential-free request for client_name", async () => {
+    const iri = "https://notenest.example/client.jsonld";
+    const dataset = attributedTo(iri);
+    const publicFetch = vi.fn<typeof fetch>(async () => Response.json({ client_name: "NoteNest" }));
+    const identities = await createIdentityResolver(publicFetch)(dataset, subject);
+    expect(provenanceOf(dataset, subject, STORAGE, { identities })).toEqual({
+      kind: "app",
+      label: "NoteNest",
+    });
+    expect(publicFetch).toHaveBeenCalledExactlyOnceWith(iri, {
+      headers: { accept: "application/ld+json, application/json" },
+      credentials: "omit",
+      redirect: "error",
+      signal: expect.any(AbortSignal),
+    });
+  });
+
+  it.each([
+    undefined,
+    "",
+    "  ",
+    "https://identifier.example/client.jsonld",
+  ])("falls back to the host for a missing or unusable name (%s)", async (clientName) => {
+    const iri = `https://nameless-${String(clientName).length}.example/client.jsonld`;
+    const publicFetch = vi.fn<typeof fetch>(async () => Response.json({ client_name: clientName }));
+    const identities = await createIdentityResolver(publicFetch)(attributedTo(iri), subject);
+    expect(identities.get(iri)).toEqual({ kind: "app", label: new URL(iri).hostname });
+  });
+
+  it("falls back to the host when the client document cannot be read", async () => {
+    const iri = "https://unreadable.example/client.jsonld";
+    const publicFetch = vi.fn<typeof fetch>(async () => {
+      throw new Error("Offline");
+    });
+    expect(
+      (await createIdentityResolver(publicFetch)(attributedTo(iri), subject)).get(iri),
+    ).toEqual({ kind: "app", label: "unreadable.example" });
+  });
+
+  it.each([
+    "https://origin-only.example/",
+    "http://insecure.example/client.jsonld",
+  ])("uses the host without fetching an IRI rejected by isClientIdDocument: %s", async (iri) => {
+    const publicFetch = vi.fn<typeof fetch>();
+    expect(permissions.isClientIdDocument(iri)).toBe(false);
+    expect(
+      (await createIdentityResolver(publicFetch)(attributedTo(iri), subject)).get(iri),
+    ).toEqual({ kind: "app", label: new URL(iri).hostname });
+    expect(publicFetch).not.toHaveBeenCalled();
+  });
+
+  it("reuses the per-agent resolver result across concurrent and subsequent items", async () => {
+    const iri = "https://cached-notenest.example/client.jsonld";
+    const publicFetch = vi.fn<typeof fetch>(async () => Response.json({ client_name: "NoteNest" }));
+    const sharedResolver = vi.spyOn(permissions, "resolveClientName");
+    try {
+      const resolve = createIdentityResolver(publicFetch);
+      const dataset = attributedTo(iri);
+      new ItemProvenance(subject, dataset, DataFactory).generatedBy.add(iri);
+      const another = `${STORAGE}notes/another.ttl#it`;
+      new ItemProvenance(another, dataset, DataFactory).attributedTo.add(iri);
+      const results = await Promise.all([resolve(dataset, subject), resolve(dataset, another)]);
+      results.push(await resolve(dataset, another));
+      expect(results.every((identities) => identities.get(iri)?.label === "NoteNest")).toBe(true);
+      expect(sharedResolver).toHaveBeenCalledExactlyOnceWith(iri, publicFetch);
+      expect(publicFetch).toHaveBeenCalledTimes(1);
+    } finally {
+      sharedResolver.mockRestore();
+    }
+  });
+
+  it("preserves loaded names and never resolves self, demo agents, people or opaque identifiers", async () => {
+    const dataset = new Store();
+    const item = new ItemProvenance(subject, dataset, DataFactory);
+    for (const iri of [
+      WEB_ID,
+      DEMO_CONNECTOR.iri,
+      "urn:example:agent",
+      "https://people.example/person",
+      "https://people.example/card#me",
+      "https://named.example/client.jsonld",
+    ])
+      item.attributedTo.add(iri);
+    new PodThing("https://people.example/person", dataset, DataFactory).types.add(
+      "https://schema.org/Person",
+    );
+    new PodThing("https://named.example/client.jsonld", dataset, DataFactory).name = "Named app";
+    const publicFetch = vi.fn<typeof fetch>();
+    const identities = await createIdentityResolver(publicFetch)(dataset, subject, WEB_ID);
+    expect([...identities]).toEqual([
+      ["https://named.example/client.jsonld", { kind: "app", label: "Named app" }],
+    ]);
+    expect(publicFetch).not.toHaveBeenCalled();
+    expect(await createIdentityResolver()(new Store(), subject)).toEqual(new Map());
+  });
+
+  it("keeps a fragment agent typed as software as an app with a host fallback", async () => {
+    const iri = "https://software.example/#app";
+    const dataset = attributedTo(iri);
+    new PodThing(iri, dataset, DataFactory).types.add("http://www.w3.org/ns/prov#SoftwareAgent");
+    const publicFetch = vi.fn<typeof fetch>();
+    expect((await createIdentityResolver(publicFetch)(dataset, subject)).get(iri)).toEqual({
+      kind: "app",
+      label: "software.example",
+    });
+    expect(publicFetch).not.toHaveBeenCalled();
+  });
+});
 
 describe("Home §5.3 provenance", () => {
   const subject = `${STORAGE}item.ttl#it`;
@@ -30,10 +149,10 @@ describe("Home §5.3 provenance", () => {
   };
 
   it("recognises demo attribution without saved connections or an agent description", () => {
-    const subject = `${STORAGE}integrations/custom/item.ttl#it`;
+    const subject = `${STORAGE}integrations/spotify/item.ttl#it`;
     const dataset = new Store();
     new ItemProvenance(subject, dataset, DataFactory).attributedTo.add(DEMO_CONNECTOR.iri);
-    expect(provenanceOf(dataset, subject, STORAGE, context)).toEqual({
+    expect(provenanceOf(dataset, subject, STORAGE, { ...context, documentUrl: subject })).toEqual({
       kind: "source",
       label: DEMO_CONNECTOR.label,
       demo: true,
@@ -45,7 +164,7 @@ describe("Home §5.3 provenance", () => {
     const dataset = new Store();
     new MusicRecording(subject, dataset, DataFactory).mark().sourceUrl =
       "https://open.spotify.com/track/live";
-    expect(provenanceOf(dataset, subject, STORAGE, context)).toEqual({
+    expect(provenanceOf(dataset, subject, STORAGE, { ...context, documentUrl: subject })).toEqual({
       kind: "source",
       label: "Spotify",
       logoId: "spotify",
@@ -53,7 +172,7 @@ describe("Home §5.3 provenance", () => {
   });
 
   it("keeps real source and agent provenance alongside the demo flag", () => {
-    const subject = `${STORAGE}integrations/custom/item.ttl#it`;
+    const subject = `${STORAGE}integrations/spotify/item.ttl#it`;
     for (const [source, expected] of [
       [true, { kind: "source", label: "Spotify", logoId: "spotify" }],
       [false, { kind: "app", label: "MyHealth" }],
@@ -64,8 +183,12 @@ describe("Home §5.3 provenance", () => {
       if (source) item.sourceUrl = "https://open.spotify.com/track/1";
       else item.attributedTo.add(app);
       new PodThing(DEMO_CONNECTOR.iri, dataset, DataFactory).name = DEMO_CONNECTOR.label;
-      expect(provenanceOf(dataset, subject, STORAGE, context)).toEqual({ ...expected, demo: true });
-      expect(identitiesIn(dataset, subject).has(DEMO_CONNECTOR.iri)).toBe(false);
+      expect(provenanceOf(dataset, subject, STORAGE, { ...context, documentUrl: subject })).toEqual(
+        { ...expected, demo: true },
+      );
+      expect(identitiesIn(dataset, subject).get(DEMO_CONNECTOR.iri)?.label).toBe(
+        DEMO_CONNECTOR.label,
+      );
     }
   });
 
@@ -74,7 +197,12 @@ describe("Home §5.3 provenance", () => {
     const dataset = new Store();
     new ItemProvenance(subject, dataset, DataFactory).attributedTo.add(DEMO_CONNECTOR.iri);
     new MusicRecording(`${STORAGE}item.ttl#other`, dataset, DataFactory).mark();
-    expect(provenanceOf(dataset, subject, `${STORAGE}integrations/spotify/`, context)).toEqual({
+    expect(
+      provenanceOf(dataset, subject, `${STORAGE}integrations/spotify/`, {
+        ...context,
+        documentUrl: subject,
+      }),
+    ).toEqual({
       kind: "source",
       label: "Spotify",
       logoId: "spotify",
@@ -86,18 +214,48 @@ describe("Home §5.3 provenance", () => {
     });
   });
 
-  it("recognises an imported named-node subject when no storage context is available", () => {
-    const subject = DataFactory.namedNode(`${STORAGE}integrations/custom/item.ttl#it`);
+  it("requires the loaded document and storage for named-node demo subjects", () => {
+    const documentUrl = `${STORAGE}integrations/spotify/item.ttl`;
+    const subject = DataFactory.namedNode(`${documentUrl}#song`);
     const dataset = new Store();
     new ItemProvenance(subject, dataset, DataFactory).attributedTo.add(DEMO_CONNECTOR.iri);
-    expect(provenanceOf(dataset, subject, STORAGE)).toEqual({
-      kind: "source",
-      label: DEMO_CONNECTOR.label,
-      demo: true,
-    });
+    expect(provenanceOf(dataset, subject, STORAGE, { ...context, documentUrl }).demo).toBe(true);
+    for (const incomplete of [
+      {},
+      { documentUrl },
+      { storage: STORAGE },
+      { documentUrl: "invalid", storage: STORAGE },
+    ])
+      expect(provenanceOf(dataset, subject, STORAGE, incomplete)).toEqual({
+        kind: "other",
+        label: "someone else",
+      });
   });
 
-  it("ignores forged demo markers outside the connector import root", () => {
+  it.each([
+    ["notes/x.ttl", "integrations/spotify/items.ttl", false],
+    ["integrations/spotify/items.ttl", "notes/x.ttl", false],
+    ["integrations/spotify/items.ttl", "integrations/spotify/items.ttl", true],
+    ["integrations/unknown/items.ttl", "integrations/unknown/items.ttl", false],
+    ["integrations/spotify/items.ttl", "integrations/spotify/other.ttl", false],
+    ["integrations/spotify/a/%2e%2e/items.ttl", "integrations/spotify/items.ttl", false],
+    ["integrations/spotify/items.ttl", "integrations/spotify/a/%2e%2e/items.ttl", false],
+    [
+      "integrations/spotify/nested/integrations/unknown/items.ttl",
+      "integrations/spotify/nested/integrations/unknown/items.ttl",
+      true,
+    ],
+  ])("checks document %s and subject %s against known import roots", (path, subjectPath, demo) => {
+    const documentUrl = STORAGE + path;
+    const subject = `${STORAGE}${subjectPath}#song`;
+    const dataset = new Store();
+    new ItemProvenance(subject, dataset, DataFactory).attributedTo.add(DEMO_CONNECTOR.iri);
+    expect(provenanceOf(dataset, subject, STORAGE, { ...context, documentUrl }).demo === true).toBe(
+      demo,
+    );
+  });
+
+  it("treats forged demo markers as foreign attribution outside the connector import root", () => {
     for (const subject of [
       `${STORAGE}notes/mine.ttl#it`,
       `${STORAGE}notes/integrations/spotify/mine.ttl#it`,
@@ -107,17 +265,23 @@ describe("Home §5.3 provenance", () => {
       `${STORAGE}integrations/spotify/mine.ttl?elsewhere`,
       "https://foreign.example/integrations/spotify/mine.ttl#it",
       DataFactory.blankNode("forged-demo"),
+      DataFactory.blankNode(`${STORAGE}integrations/spotify/item.ttl#it`),
     ]) {
       const dataset = new Store();
-      new ItemProvenance(
-        typeof subject === "string" ? DataFactory.namedNode(subject) : subject,
-        dataset,
-        DataFactory,
-      ).attributedTo.add(DEMO_CONNECTOR.iri);
-      expect(provenanceOf(dataset, subject, STORAGE, context)).toEqual({
-        kind: "you",
-        label: "Added by you",
+      const term = typeof subject === "string" ? DataFactory.namedNode(subject) : subject;
+      new ItemProvenance(term, dataset, DataFactory).attributedTo.add(DEMO_CONNECTOR.iri);
+      const scope = { ...context, documentUrl: term.value };
+      expect(provenanceOf(dataset, term, STORAGE, scope)).toEqual({
+        kind: "other",
+        label: "someone else",
       });
+      new PodThing(DEMO_CONNECTOR.iri, dataset, DataFactory).name = "Sample author";
+      expect(
+        provenanceOf(dataset, term, STORAGE, {
+          ...scope,
+          identities: identitiesIn(dataset, term),
+        }),
+      ).toEqual({ kind: "app", label: "Sample author" });
     }
   });
 
@@ -138,7 +302,9 @@ describe("Home §5.3 provenance", () => {
     const subject = `${STORAGE}integrations/spotify/item.ttl#it`;
     const dataset = new Store();
     new ItemProvenance(subject, dataset, DataFactory).attributedTo.add(DEMO_CONNECTOR.iri);
-    expect(provenanceOf(dataset, subject, STORAGE, { storage: "invalid" }).demo).toBeUndefined();
+    expect(
+      provenanceOf(dataset, subject, STORAGE, { storage: "invalid", documentUrl: subject }).demo,
+    ).toBeUndefined();
   });
 
   it("rule 1: recognises connector sources ahead of attributed agents and folders", async () => {
@@ -161,7 +327,12 @@ describe("Home §5.3 provenance", () => {
       [person, "person", "Bob"],
     ]) {
       const dataset = await rdf(`<#it> prov:${predicate} <${iri}> .`);
-      expect(provenanceOf(dataset, subject, `${STORAGE}integrations/spotify/`, context)).toEqual({
+      expect(
+        provenanceOf(dataset, subject, `${STORAGE}integrations/spotify/`, {
+          ...context,
+          documentUrl: subject,
+        }),
+      ).toEqual({
         kind,
         label,
       });

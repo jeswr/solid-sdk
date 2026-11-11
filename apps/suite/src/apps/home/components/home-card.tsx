@@ -25,10 +25,10 @@ import { createPreviewImageResolver } from "../../drive/lib/preview/image-resolv
 import { DEMO_CONNECTOR } from "../lib/connect/catalogue";
 import { isDemoImport } from "../lib/connect/demo";
 import type { DomainItem } from "../lib/model/discovery";
-import { identitiesIn, provenanceOf } from "../lib/model/provenance";
 import { inStorage } from "../lib/model/rdf";
 import { useConnectors } from "../state/connectors";
 import { type ItemAction, itemActions, itemTitle } from "../state/presentation";
+import { useProvenance } from "../state/use-provenance";
 import { DemoDataBadge } from "./connect/shared";
 import { useHomeSession } from "./home-app";
 import { openShare } from "./item/open-share";
@@ -85,11 +85,7 @@ export function HomeCard({
   const actions = itemActions(item, storage, undefined, webId);
   const open = actions[0]?.href as string;
   const title = itemTitle(item);
-  const provenance = provenanceOf(item.dataset, item.subject, item.containerUrl, {
-    storage,
-    userWebId: webId,
-    identities: identitiesIn(item.dataset, item.subject),
-  });
+  const provenance = useProvenance(item, session);
   const demo = provenance.demo || isDemoImport(item.url, connections);
   const onlyDemo =
     provenance.demo && provenance.kind === "source" && provenance.label === DEMO_CONNECTOR.label;
@@ -117,8 +113,10 @@ export function HomeCard({
               <div className="flex min-w-0 flex-wrap items-center gap-2">
                 {demo ? <DemoDataBadge /> : null}
                 {!onlyDemo &&
-                  (provenance.kind === "you" ? (
-                    <span className="hm-you">Added by you</span>
+                  (provenance.kind === "you" || provenance.kind === "app" ? (
+                    <span className="hm-you">
+                      {provenance.kind === "you" ? "Added by you" : `Added by ${provenance.label}`}
+                    </span>
                   ) : (
                     <ProvenanceBadge source={provenance.label} />
                   ))}
