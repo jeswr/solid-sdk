@@ -59,6 +59,8 @@ export default defineConfig({
         "src/apps/mail/lib/model/**/*.ts",
         "src/apps/mail/lib/client/**/*.ts",
         "src/apps/sheets/lib/model/**/*.ts",
+        "src/apps/sheets/lib/comments/**/*.ts",
+        "src/apps/sheets/components/cell-comments.tsx",
         "src/apps/sheets/lib/autosave.ts",
         "src/apps/sheets/lib/pending-saves.ts",
         "src/apps/sheets/lib/sharing.ts",

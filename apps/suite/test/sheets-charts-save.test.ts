@@ -13,7 +13,11 @@ import { harness, snapshot } from "./sheets-workbook-helpers";
 
 const mocks = vi.hoisted(() => ({
   service: null as WorkbookService | null,
+  session: null as { fetch: typeof fetch; storageUrl: string; webId: string; mode: "demo" } | null,
   mount: vi.fn<MountEngine>(),
+}));
+vi.mock("@/lib/session/pod-session", () => ({
+  usePodSessionState: () => ({ status: "ready", session: mocks.session }),
 }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
 vi.mock("next-themes", () => ({ useTheme: () => ({ resolvedTheme: "light" }) }));
@@ -53,6 +57,7 @@ it("autosaves chart insert, source edits and deletion through SheetEditor, then 
   vi.stubGlobal("matchMedia", window.matchMedia);
   const harn = await harness();
   mocks.service = harn.service;
+  mocks.session = { ...harn.options, storageUrl: harn.options.podRoot, mode: "demo" };
   const book = await harn.service.create({
     title: "Chart flow",
     snapshot: snapshot("Month,Value\nJan,10\nFeb,20"),
@@ -90,8 +95,22 @@ it("autosaves chart insert, source edits and deletion through SheetEditor, then 
       dispose: vi.fn(),
     } satisfies SheetEngine;
   });
+  let releaseComments!: () => void;
+  const delayed = new Promise<void>((resolve) => {
+    releaseComments = resolve;
+  });
+  harn.setHook((call) =>
+    call.url === `${book.container}comments/` && call.method === "GET"
+      ? delayed.then(() => new Response("Unavailable", { status: 503 }))
+      : undefined,
+  );
   let ui = await mount(h(SheetEditor, { container: book.container }));
+  await waitForUi(() => expect(button("Insert chart").disabled).toBe(true));
+  await act(() => {
+    releaseComments();
+  });
   await waitForUi(() => expect(button("Insert chart").disabled).toBe(false));
+  harn.setHook(() => undefined);
   await click(button("Insert chart"));
   const title = document.querySelector<HTMLInputElement>(
     '.sht-chart-editor input[maxlength="200"]',
@@ -143,6 +162,7 @@ it("autosaves chart insert, source edits and deletion through SheetEditor, then 
   await waitForUi(() =>
     expect(document.querySelector("svg title")?.textContent).toBe("Monthly revenue"),
   );
+  await waitForUi(() => expect(button("Edit chart").disabled).toBe(false));
   await click(button("Edit chart"));
   await click(button("Delete chart"));
   await flush();

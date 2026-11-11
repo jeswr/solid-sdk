@@ -3,7 +3,11 @@ import { mkdir } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import AxeBuilder from "@axe-core/playwright";
 import { expect, type Page, type TestInfo } from "@playwright/test";
+import { seedDemoSession } from "../demo-session";
+
 export async function openAgent(page: Page, route: string) {
+  // The agent sits behind the shell's session guard, like every other real app route.
+  await seedDemoSession(page);
   await page.goto(`/agent/${route}`);
   await page.waitForFunction(() => !!window.__suiteDemoPod);
   await expect(

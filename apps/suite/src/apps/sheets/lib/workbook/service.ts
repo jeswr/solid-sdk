@@ -1,6 +1,8 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+
 import { RedirectRefusedError } from "@jeswr/guarded-fetch";
+import { validateCommentSnapshot } from "../comments/anchors";
 import type {
   CreateWorkbookInput,
   OpenedWorkbook,
@@ -58,7 +60,7 @@ export function createWorkbookService(options: WorkbookServiceOptions): Workbook
 
   async function create(input: CreateWorkbookInput): Promise<OpenedWorkbook> {
     const { freshSnapshot, project } = await import("./projection");
-    let snapshot = freshSnapshot(input.title, input.snapshot);
+    let snapshot = validateCommentSnapshot(freshSnapshot(input.title, input.snapshot));
     if (snapshot.charts !== undefined)
       snapshot = (await import("../charts/spec")).validateChartSnapshot(snapshot);
     const sheets = project(snapshot);
@@ -207,6 +209,7 @@ export function createWorkbookService(options: WorkbookServiceOptions): Workbook
     saveOptions: { force?: boolean; title?: string } = {},
   ): Promise<SaveResult> {
     container = checked(container);
+    snapshot = validateCommentSnapshot(snapshot);
     if (snapshot.charts !== undefined)
       snapshot = (await import("../charts/spec")).validateChartSnapshot(snapshot);
     const layout = workbookLayout(container);
