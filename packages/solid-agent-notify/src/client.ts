@@ -1,6 +1,11 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { fetchRdf, RdfFetchError } from "@jeswr/fetch-rdf";
-import { DataFactory } from "n3";
+import { httpsIri, inboxDiscovery } from "./client-discovery.js";
+
+export type { InboxNotification } from "./inbox.js";
+export type { InboxReader, InboxReaderOptions } from "./inbox-client.js";
+export { createInboxReader } from "./inbox-client.js";
+export type { ClientTransportOptions } from "./security/clientFetch.js";
+
 import { type ClientTransportOptions, clientFetch } from "./security/clientFetch.js";
 
 /** Activities supported by the suite's notification API. */
@@ -29,19 +34,7 @@ export interface NotifyOptions extends ClientTransportOptions {
 /** Deliver an activity using a caller-owned authenticated transport. */
 export type Notify = (agentWebId: string, activity: NotifyActivity) => Promise<NotifyResult>;
 
-type Discovery = Pick<NotifyResult, "inbox" | "reason">;
-const INBOX_TTL_MS = 10 * 60 * 1_000;
-const LDP_INBOX = DataFactory.namedNode("http://www.w3.org/ns/ldp#inbox");
 const VERBS = new Set(["Announce", "Offer", "Accept", "Reject", "Create"]);
-
-/** Require an absolute HTTPS destination without credentials; preserve RDF identity lexically. */
-function httpsIri(value: string): string {
-  const url = new URL(value);
-  if (url.protocol !== "https:" || url.username || url.password || value.trim() !== value) {
-    throw new TypeError("Expected an HTTPS IRI without credentials");
-  }
-  return value;
-}
 
 /**
  * Create a session-scoped LDN sender. Profile RDF is parsed by fetch-rdf over the supplied
@@ -51,41 +44,7 @@ function httpsIri(value: string): string {
  */
 export function createNotifyClient(options: NotifyOptions): Notify {
   const fetcher = clientFetch(options);
-  const clock = options.clock ?? Date.now;
-  const cache = new Map<string, { expires: number; result: Promise<Discovery> }>();
-
-  async function discover(webId: string): Promise<Discovery> {
-    const profile = new URL(httpsIri(webId));
-    profile.hash = "";
-    let lws = false;
-    try {
-      const { dataset } = await fetchRdf(profile.href, {
-        fetch: async (input, init) => {
-          const response = await fetcher(input, init);
-          lws =
-            response.headers.get("content-type")?.split(";")[0]?.trim().toLowerCase() ===
-            "application/lws+json";
-          return response;
-        },
-      });
-      const inboxes = [...dataset.match(DataFactory.namedNode(webId), LDP_INBOX, null)];
-      if (inboxes.length !== 1 || inboxes[0]?.object.termType !== "NamedNode") {
-        return { inbox: null, reason: "no-inbox" };
-      }
-      const inbox = httpsIri(inboxes[0].object.value);
-      if (new URL(inbox).hash) return { inbox: null, reason: "no-inbox" };
-      return { inbox };
-    } catch (error) {
-      return {
-        inbox: null,
-        reason: lws
-          ? "lws-no-ldn"
-          : error instanceof RdfFetchError && (error.status === 401 || error.status === 403)
-            ? "forbidden"
-            : "network",
-      };
-    }
-  }
+  const discover = inboxDiscovery(options);
 
   return async (agentWebId, activity) => {
     let inbox: string | null = null;
@@ -103,18 +62,8 @@ export function createNotifyClient(options: NotifyOptions): Notify {
         ...(activity.target === undefined ? {} : { target: httpsIri(activity.target) }),
         ...(activity.summary === undefined ? {} : { summary: activity.summary }),
       });
-      let entry = cache.get(agentWebId);
-      if (!entry || entry.expires <= clock()) {
-        // Bound session memory even when sending to many different recipients.
-        if (cache.size >= 256) cache.delete(cache.keys().next().value as string);
-        entry = { expires: clock() + INBOX_TTL_MS, result: discover(agentWebId) };
-        cache.set(agentWebId, entry);
-      }
-      const discovery = await entry.result;
+      const discovery = await discover(agentWebId);
       inbox = discovery.inbox;
-      if (discovery.reason === "network" || discovery.reason === "forbidden") {
-        cache.delete(agentWebId);
-      }
       if (inbox === null) return { delivered: false, ...discovery };
       const response = await fetcher(inbox, {
         method: "POST",

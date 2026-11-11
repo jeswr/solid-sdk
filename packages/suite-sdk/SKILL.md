@@ -1,13 +1,13 @@
 ---
 name: suite-sdk
-description: Use when working on @jeswr/suite-sdk notifications, server/local search, LocalIndex feeders, useSearch, or useNotify integration with PodAuthProvider.
+description: Use when working on @jeswr/suite-sdk notifications, server/local search, LocalIndex feeders, useSearch, useNotify, or useInbox integration with PodAuthProvider.
 ---
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 <!-- AUTHORED-BY Codex GPT-6 -->
 
 # @jeswr/suite-sdk
 
-The root exposes SDK-APP-07's `useNotify()` and notification builders. SDK-APP-09's
+The root exposes SDK-APP-07's `useNotify()`, `useInbox()` and notification builders. SDK-APP-09's
 search facade lives at `@jeswr/suite-sdk/search`; application shell wiring is separate.
 Do not infer that the other planned SDK facade APIs are implemented.
 
@@ -16,6 +16,20 @@ Read `packages/pod-access/SKILL.md` for notification API details. Use `PodAuthPr
 The notifier cache belongs to the current identity and must reset on lifecycle/account changes.
 Recipient protocol hints describe the recipient, independently of the current identity's protocol.
 Preserve the explicit DNS-pinning requirement for Node transports and all redirect refusals.
+
+## Inbox reading
+
+`useInbox({ clock?, maxItems?, pinningFetch? })` returns `{ status, items, error, refresh }`.
+It loads the current WebID automatically; no WebID is idle, missing/LWS inboxes are ready
+and empty. refresh is stable within a session, resolves ordinary failures into error state,
+and rejects retained/stale calls with `Notification session changed`. `InboxNotification`
+and `notificationKind` are re-exported; classification lives in pod-access.
+
+Use the same committed-render fence as useNotify, including the pinned transport. Never
+activate authority during render. Reset items immediately on identity changes (including
+same-account logout/login), abort all reads on replacement/unmount, and discard superseded
+refresh settlements even if transports ignore cancellation. Do not add mark-read/delete.
+Keep lifecycle, error and cancellation tests at 100% coverage.
 
 ## Search (`./search`)
 

@@ -195,7 +195,7 @@ The sharing API uses `AccessGrant` (`agent`, an explicit mode array, optional pu
 The existing `Grant` export remains the neutral translation rule (`who`, a mode Set, scope and provenance).
 These types serve different APIs; translation mode implication does not change the sharing client's explicit modes.
 
-## Notification delivery
+## Notification delivery and reading
 
 Notification delivery lives at `@jeswr/pod-access/notify`:
 
@@ -222,9 +222,9 @@ announces the task with tracker target and summary `{name} assigned you '{title}
 `mentionNotification(annotation, document)` creates an annotation with the document target;
 `roomInvitation(room)` offers a room. These helpers do not modify grants or resource data.
 
-Each notifier caches positive and missing-inbox discovery for ten minutes, sharing concurrent
-profile reads. Transient failures are retried. Caches hold at most 256 exact WebIDs and belong
-to one caller/session: recreate the notifier on account changes. `clock` is injectable for tests.
+Notifiers and readers cache positive and missing-inbox discovery for ten minutes, sharing concurrent
+profile reads when fetch, pinningFetch and clock identities match. Transient failures are retried. Caches hold at most 256 exact WebIDs and belong
+to one caller/session: supply fresh transport wrappers on account changes. `clock` is injectable for tests.
 
 Known LWS recipients should be identified by `recipientProtocol: webId => 'lws'`; this returns
 `lws-no-ldn` without network requests. An `application/lws+json` profile response also returns
@@ -239,6 +239,24 @@ pin DNS and use guarded-fetch's browser policy. Activity IRIs currently require 
 
 React applications can use `useNotify()` from `@jeswr/suite-sdk` under `PodAuthProvider`; it
 supplies the current actor/fetch and resets the cache on identity changes.
+
+`createInboxReader({ fetch, pinningFetch?, clock?, maxItems? })` at the same `./notify` subpath
+is a thin browser-safe reader wrapper. `inbox(webId)` discovers the owner's inbox or returns
+null (including LWS profiles). `list(inboxUrl, { signal? })` returns `InboxNotification[]`,
+newest first with undated items last and URL ties deterministic. Items carry `url`, `type`
+and optional `actor`, `object`, `target`, `summary`, `content`, `published` (ISO string).
+
+Reads use the delivery transport's HTTPS, redirect, byte and deadline guards. At most
+`maxItems` direct children (default 50, non-negative safe integer) are fetched in listing
+order, with concurrency at most six. Foreign, outside-container, nested, query/fragment and
+encoded-slash members are never dereferenced; unreadable members are skipped. Container
+401/403/404 or RDF parse failures return `[]`; other container failures reject. Abort rejects
+with `AbortError` and stops new work. There is no mark-read or delete operation.
+
+`notificationKind(notification)` classifies builder round-trips as `share` (Announce with
+summary starting `Shared with you as `), `assignment` (Announce with target), `mention`
+(Create with target), `invitation` (Offer), or `other`. Share summaries take precedence
+when an Announce also has a target. React consumers use `useInbox()` from suite-sdk.
 
 ## Offline policy translation
 
