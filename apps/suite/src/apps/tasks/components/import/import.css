@@ -19,3 +19,27 @@
   padding-inline-start: var(--space-4);
   list-style: disc;
 }
+.tsk-import-project {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+}
+.tsk-import-check {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 44px;
+}
+.tsk-import-check input {
+  width: 24px;
+  height: 24px;
+  accent-color: var(--app-tasks);
+}
+.tsk-import-check input:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+.tsk-import-links {
+  display: grid;
+  gap: var(--space-2);
+}

@@ -95,6 +95,7 @@ describe("Google Tasks JSON import", () => {
       tasks: [
         {
           id: "task-0-2",
+          sourceId: "parent",
           title: "Shopping",
           description:
             "Bring bags\nUse vouchers\nReceipt: https://mail.example/receipt\nShop: https://shop.example",
@@ -105,6 +106,7 @@ describe("Google Tasks JSON import", () => {
         },
         {
           id: "task-0-3",
+          sourceId: "earlier-child",
           title: "Bread",
           description: "",
           parentId: "task-0-2",
@@ -114,6 +116,7 @@ describe("Google Tasks JSON import", () => {
         },
         {
           id: "task-0-0",
+          sourceId: "child",
           title: "Milk",
           description: "",
           parentId: "task-0-2",
@@ -123,6 +126,7 @@ describe("Google Tasks JSON import", () => {
         },
         {
           id: "task-0-1",
+          sourceId: "later",
           title: "Call plumber",
           description: "",
           parentId: null,
@@ -154,6 +158,7 @@ describe("Google Tasks JSON import", () => {
       tasks: [
         {
           id: "task-1-0",
+          sourceId: "parent",
           title: "Send invoice",
           state: "closed",
           completedAt: "2026-11-01T11:34:56.123Z",

@@ -9,12 +9,24 @@ import UniverPresetSheetsDataValidationEnUS from "@univerjs/preset-sheets-data-v
 import {
   CommandType,
   createUniver,
+  ICommandService,
   type IWorkbookData,
   LocaleType,
   mergeLocales,
 } from "@univerjs/presets";
+import {
+  type IInsertRowMutationParams,
+  InsertColMutation,
+  InsertRowMutation,
+  RemoveColMutation,
+  RemoveRowMutation,
+  SheetInterceptorService,
+} from "@univerjs/sheets";
+import { shiftChartRanges } from "../charts/range";
+import { type ChartSpec, readCharts, withCharts } from "../charts/spec";
 import type { MountEngine, Snapshot } from "../contract";
 import { serializeSnapshot } from "../model/snapshot";
+import type { StructuralEdit } from "../refs/model";
 import { parseCsv } from "../univer-spike/csv";
 import { workbookToCsv } from "../univer-spike/workbook";
 
@@ -34,6 +46,28 @@ const PERSISTED_FORMULA_MUTATIONS = new Set([
 // state. Its params are keyed by unit id, so the unitId check below drops it too; this
 // names it explicitly. CF viewport and style caches update without mutations.
 const RECOMPUTE_MUTATIONS = new Set(["sheet.mutation.data-validation-formula-mark-dirty"]);
+
+const CHART_REFERENCE_MUTATIONS = new Map<string, Pick<StructuralEdit, "axis" | "kind">>([
+  [InsertRowMutation.id, { axis: "row", kind: "insert" }],
+  [InsertColMutation.id, { axis: "column", kind: "insert" }],
+  [RemoveRowMutation.id, { axis: "row", kind: "delete" }],
+  [RemoveColMutation.id, { axis: "column", kind: "delete" }],
+]);
+const CHART_SOURCE_DELETE_COMMANDS = new Set([
+  "sheet.command.remove-row",
+  "sheet.command.remove-col",
+]);
+const RESTORE_CHART_SOURCES = "sheets.mutation.restore-chart-sources";
+const CAPTURE_CHART_SOURCES = "sheets.mutation.capture-chart-sources";
+interface ChartSources {
+  unitId: string;
+  sources: {
+    id: string;
+    sheetId: string;
+    range: ChartSpec["range"];
+    revision: number;
+  }[];
+}
 
 export const mountUniver: MountEngine = async (container, options) => {
   const { univer, univerAPI } = createUniver({
@@ -64,9 +98,13 @@ export const mountUniver: MountEngine = async (container, options) => {
     ],
   });
   let workbook = univerAPI.createWorkbook(options.snapshot as Partial<IWorkbookData>);
+  let charts = options.snapshot.charts;
+  // Only manual source changes (including deletion/recreation) change revisions.
+  const chartRevisions = new Map<string, number>();
   let readOnly = options.readOnly ?? false;
   workbook.setEditable(!readOnly);
   const listeners = new Set<() => void>();
+  const valueListeners = new Set<() => void>();
   let disposed = false;
   let loading = false;
   let queued = false;
@@ -80,8 +118,75 @@ export const mountUniver: MountEngine = async (container, options) => {
       if (disposed || current !== generation) return;
       queued = false;
       for (const listener of listeners) listener();
+      for (const listener of valueListeners) listener();
     });
   };
+  const injector = univer.__getInjector();
+  const chartMutation = injector.get(ICommandService).registerCommand({
+    id: RESTORE_CHART_SOURCES,
+    type: CommandType.MUTATION,
+    handler: (_accessor, params: ChartSources) => {
+      if (readOnly || params.unitId !== workbook.getId() || charts === undefined) return false;
+      const sources = new Map(params.sources.map((source) => [source.id, source]));
+      // Inverse mutations already shifted every chart. Recover lost boundaries only
+      // for charts whose sources have not been manually edited since the latest replay.
+      charts = withCharts(
+        {},
+        readCharts({ charts }).charts.map((chart) => {
+          const source = sources.get(chart.id);
+          return source?.sheetId === chart.sheetId &&
+            source.revision === (chartRevisions.get(chart.id) ?? 0)
+            ? { ...chart, range: source.range }
+            : chart;
+        }),
+      ).charts;
+      return true;
+    },
+  });
+  const chartCapture = injector.get(ICommandService).registerCommand({
+    id: CAPTURE_CHART_SOURCES,
+    type: CommandType.MUTATION,
+    handler: (_accessor, params: ChartSources & { subUnitId: string }) => {
+      if (readOnly || params.unitId !== workbook.getId() || charts === undefined) return false;
+      // The history entry shares this record between capture and restore. Refresh it
+      // before every deletion replay, including redo after a manual source edit.
+      params.sources = readCharts({ charts })
+        .charts.filter((chart) => chart.sheetId === params.subUnitId)
+        .map((chart) => ({
+          id: chart.id,
+          sheetId: chart.sheetId,
+          range: chart.range,
+          revision: chartRevisions.get(chart.id) ?? 0,
+        }));
+      return true;
+    },
+  });
+  // Capture before all deletions (including filtered rows), restore after cells.
+  const chartUndo = injector.get(SheetInterceptorService).interceptCommand({
+    getMutations: (command) => {
+      const params = command.params as IInsertRowMutationParams | undefined;
+      if (
+        readOnly ||
+        !CHART_SOURCE_DELETE_COMMANDS.has(command.id) ||
+        params?.unitId !== workbook.getId() ||
+        charts === undefined
+      )
+        return { undos: [], redos: [] };
+      const record: ChartSources & { subUnitId: string } = {
+        unitId: params.unitId,
+        subUnitId: params.subUnitId,
+        sources: [],
+      };
+      return {
+        preRedos: [{ id: CAPTURE_CHART_SOURCES, params: record }],
+        undos: [{ id: RESTORE_CHART_SOURCES, params: record }],
+        redos: [],
+      };
+    },
+  });
+  const calculation = univerAPI.getFormula().calculationResultApplied(() => {
+    if (!disposed && !loading) for (const listener of valueListeners) listener();
+  });
   const subscription = univerAPI.addEvent(univerAPI.Event.CommandExecuted, (event) => {
     if (
       event.type !== CommandType.MUTATION ||
@@ -95,17 +200,34 @@ export const mountUniver: MountEngine = async (container, options) => {
       return;
     // Initial formula calculation belongs to loading, including its asynchronous results.
     if (event.options?.fromFormula && !editedSinceLoad) return;
+    const edit = CHART_REFERENCE_MUTATIONS.get(event.id);
+    if (edit && charts !== undefined) {
+      const { subUnitId, range } = event.params as IInsertRowMutationParams;
+      const start = edit.axis === "row" ? range.startRow : range.startColumn;
+      const end = edit.axis === "row" ? range.endRow : range.endColumn;
+      charts = withCharts(
+        {},
+        shiftChartRanges(readCharts({ charts }).charts, subUnitId, {
+          ...edit,
+          index: start + 1,
+          count: end - start + 1,
+        }),
+      ).charts;
+    }
     editedSinceLoad = true;
     notify();
   });
   const snapshot = (): Snapshot => {
     const data: Snapshot = JSON.parse(JSON.stringify(workbook.save()));
+    // Univer drops unknown top-level properties when saving its canvas model.
+    if (charts !== undefined) data.charts = JSON.parse(JSON.stringify(charts));
     serializeSnapshot(data);
     return data;
   };
   const load = (data: Snapshot) => {
     serializeSnapshot(data);
     loading = true;
+    charts = data.charts;
     editedSinceLoad = false;
     ++generation;
     queued = false;
@@ -118,6 +240,39 @@ export const mountUniver: MountEngine = async (container, options) => {
     }
   };
   return {
+    setCharts(value) {
+      if (readOnly) return;
+      const previous = new Map(
+        readCharts({ charts } as Snapshot).charts.map((chart) => [
+          chart.id,
+          JSON.stringify([chart.sheetId, chart.range]),
+        ]),
+      );
+      const next = new Map(
+        readCharts({ charts: value }).charts.map((chart) => [
+          chart.id,
+          JSON.stringify([chart.sheetId, chart.range]),
+        ]),
+      );
+      // Keep tombstones so removing and recreating an ID cannot revive its history.
+      for (const id of new Set([...previous.keys(), ...next.keys()])) {
+        if (previous.get(id) !== next.get(id))
+          chartRevisions.set(id, (chartRevisions.get(id) ?? 0) + 1);
+      }
+      charts = JSON.parse(JSON.stringify(value));
+      notify();
+    },
+    selection() {
+      const sheet = workbook.getActiveSheet();
+      return {
+        sheetId: sheet.getSheetId(),
+        range: sheet.getActiveRange()?.getA1Notation() ?? "A1",
+      };
+    },
+    onValuesChange(listener) {
+      valueListeners.add(listener);
+      return () => valueListeners.delete(listener);
+    },
     load,
     snapshot,
     onChange(listener) {
@@ -176,7 +331,12 @@ export const mountUniver: MountEngine = async (container, options) => {
       disposed = true;
       ++generation;
       subscription.dispose();
+      calculation.dispose();
+      chartUndo.dispose();
+      chartCapture.dispose();
+      chartMutation.dispose();
       listeners.clear();
+      valueListeners.clear();
       univer.dispose();
     },
   };

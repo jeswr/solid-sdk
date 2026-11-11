@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { describe, expect, it } from "vitest";
+import { parseGoogleTasksJson } from "../../src/apps/tasks/lib/google-tasks";
 import {
   importProjectDescription,
   importTaskInput,
@@ -119,5 +120,38 @@ describe("Todoist task create inputs", () => {
     const task = parse("TYPE,CONTENT\ntask,Title @missing").tasks[0];
     if (!task) throw new Error("Missing draft");
     expect(() => importTaskInput(task, project, new Map())).toThrow("label has not been saved");
+  });
+  it("maps Google completion state and timestamps without inventing missing values", () => {
+    const { projects } = parseGoogleTasksJson(
+      JSON.stringify({
+        kind: "tasks#tasks",
+        items: [
+          { id: "open", title: "Open", status: "needsAction", position: "01" },
+          {
+            id: "done",
+            title: "Done",
+            status: "completed",
+            position: "02",
+            completed: "2026-11-01T12:00:00Z",
+            hidden: true,
+          },
+          { id: "undated", title: "Undated", status: "completed", position: "03" },
+          { id: "deleted", deleted: true },
+        ],
+      }),
+    );
+    const draft = projects[0];
+    if (!draft) throw new Error("Missing draft");
+    const inputs = draft.tasks.map((task) => importTaskInput(task, project, new Map()));
+    expect(inputs.map((input) => [input.state, input.endedAt, input.priority])).toEqual([
+      ["open", undefined, undefined],
+      ["closed", new Date("2026-11-01T12:00:00Z"), undefined],
+      ["closed", undefined, undefined],
+    ]);
+    expect(importWarnings(draft)).toEqual([
+      { code: "HIDDEN_COMPLETED", list: 1, task: 2 },
+      { code: "DELETED_TASK", list: 1, task: 4 },
+    ]);
+    expect(importProjectDescription(draft)).toBe("");
   });
 });

@@ -7,6 +7,7 @@ import {
   parameters,
   parseProperty,
   requireValue,
+  textList,
   unescapeText,
   unfoldLines,
 } from "./content-lines";
@@ -46,6 +47,11 @@ function readTask(properties: ReadonlyMap<string, Property>): VTodoTask {
       case "DESCRIPTION":
         parameters(property, { VALUE: "TEXT" });
         task.description = unescapeText(value);
+        break;
+      case "CATEGORIES":
+        parameters(property, { VALUE: "TEXT" });
+        // Split only unescaped commas, including when preceded by an escaped backslash.
+        task.categories = textList(value);
         break;
       case "DUE":
       case "DTSTART": {
@@ -170,6 +176,8 @@ function taskLines(task: VTodoTask): string[] {
     `SUMMARY:${escapeText(task.title)}`,
   ];
   if (task.description !== undefined) lines.push(`DESCRIPTION:${escapeText(task.description)}`);
+  if (task.categories?.length)
+    lines.push(`CATEGORIES:${task.categories.map(escapeText).join(",")}`);
   if (task.due !== undefined) lines.push(dateLine("DUE", task.due));
   if (task.start !== undefined) lines.push(dateLine("DTSTART", task.start));
   if (task.endedAt !== undefined) lines.push(`COMPLETED:${formatUtc(task.endedAt)}`);
