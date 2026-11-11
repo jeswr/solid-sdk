@@ -19,6 +19,24 @@ Read this repository's `AGENTS.md` and the package README before edits.
 
 ## Sharing client
 
+<!-- AUTHORED-BY Codex (GPT-6.1 Sol) -->
+Use root `checkOwnerOnly({ storage, url, ownerWebId, acpDialect? })` before storing sensitive
+data. It returns the discriminated `OwnerOnlyResult`: `{ private: true }` or
+`{ private: false, reasons: OwnerOnlyReason[] }`, with subject kind, modes and refusal code,
+never raw policies, identifiers or error text. Never build a privacy assertion on `readGrants`,
+`grantsWithRoles`, or caller-only `effective()`: roles omit odd/partial grants.
+Read raw WAC/ACP through the existing offline readers, validate omitted/unknown modes and
+constructs, and fail closed on every parser/discovery/transport uncertainty. WAC inherits
+defaults only after explicit 404s; ACP adds ancestor member policies through storage.root.
+Revalidate access-document HEADs and bind RDF to matching usable ETags; absent/mismatched
+validators refuse. Only HEAD 404 permits WAC inheritance, never a GET 404 after HEAD 200.
+Containers include their own member defaults, without claiming to inspect existing children.
+Only the exact supplied owner WebID may have any modes; groups, public/authenticated agents,
+other agents and conditional non-owner grants must refuse. Unsupported models report that
+fact. ACP requires a trusted CSS/ESS dialect. Keep unsupported matcher forms, partial ACR
+management, parser complexity and missing/unreadable documents closed. Preserve 100% coverage
+and document read-time races; this check neither locks policies nor proves caller write access.
+
 Use [storage-capabilities](../storage-capabilities/SKILL.md) to inspect access-control models
 and request/grant service features. Availability describes server support, not caller permission.
 `ReadResult.allow === null` means no usable hint; it establishes neither denial nor access.
