@@ -1,4 +1,5 @@
 /* AUTHORED-BY Codex GPT-6.1-Sol */
+/* AUTHORED-BY Codex GPT-6 */
 .sc-chart {
   margin: 0;
   min-width: 0;
@@ -190,9 +191,11 @@
 }
 .sc-tone-neutral .sc-interval {
   fill-opacity: 0.35;
+  stroke-dasharray: 4 3;
 }
 .sc-tone-active .sc-interval {
   fill-opacity: 0.65;
+  stroke-dasharray: none;
 }
 .sc-sparkline {
   display: block;
@@ -241,6 +244,9 @@
   }
 }
 @media (forced-colors: active) {
+  .sc-chart .sc-svg text {
+    fill: CanvasText;
+  }
   .sc-line,
   .sc-mark,
   .sc-trend,

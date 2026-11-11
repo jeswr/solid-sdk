@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 "use client";
 import { Sparkline } from "./sparkline.js";
 import type { StatTileProps } from "./types.js";
@@ -7,7 +8,8 @@ export function StatTile({ label, value, unit, delta, sparkline, footnote }: Sta
   const direction =
     delta?.direction === "up" ? "Up" : delta?.direction === "down" ? "Down" : "No change";
   return (
-    <section className="sc-stat" aria-label={label}>
+    // biome-ignore lint/a11y/useSemanticElements: a stat tile is a named group, not a form fieldset or landmark.
+    <div className="sc-stat" role="group" aria-label={label}>
       <h3>{label}</h3>
       <p className="sc-stat-value">
         {value}
@@ -41,6 +43,6 @@ export function StatTile({ label, value, unit, delta, sparkline, footnote }: Sta
       )}
       {sparkline && <Sparkline values={sparkline} label={`${label} trend`} />}
       {footnote && <p className="sc-footnote">{footnote}</p>}
-    </section>
+    </div>
   );
 }

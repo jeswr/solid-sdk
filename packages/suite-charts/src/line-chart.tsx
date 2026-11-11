@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 "use client";
 import { useId } from "react";
 import { linearScale, toTime } from "./scale.js";
@@ -46,7 +47,7 @@ function prepare({ series, events = [] }: LineChartProps) {
           skipped++;
           return [];
         }
-        return [{ ...p, x, key: `${s.id}:${index}` }];
+        return [{ ...p, x, key: `point:${s.id}:${index}` }];
       })
       .sort((a, b) => a.x - b.x),
   }));
@@ -65,25 +66,51 @@ export function LineChart(props: LineChartProps) {
   const prepared = prepare(props);
   const formatX = props.formatX ?? (prepared.kind === "time" ? timeText : numberText);
   const formatY = props.formatY ?? numberText;
+  const displayX = (value: XValue) => {
+    const x = value instanceof Date ? value.getTime() : toTime(value);
+    return Number.isFinite(x) ? formatX(x) : rawX(value);
+  };
+  const domain = props.yDomain;
+  const outside = domain
+    ? prepared.groups
+        .flatMap((s) => s.points)
+        .filter((p) => p.y < Math.min(...domain) || p.y > Math.max(...domain)).length
+    : 0;
   return (
     <Frame
       {...props}
-      note={skippedNote(prepared.skipped)}
+      note={[
+        skippedNote(prepared.skipped),
+        outside
+          ? `${outside} ${outside === 1 ? "value is" : "values are"} outside the shown range.`
+          : "",
+      ]
+        .filter(Boolean)
+        .join(" ")}
       table={
-        <DataTable
-          title={props.title}
-          headers={["Series", "X", withUnit("Value", props.unit), "Label"]}
-          rows={props.series.flatMap((s) =>
-            s.points.map((p) => [
-              s.label,
-              Number.isFinite(p.x instanceof Date ? p.x.getTime() : toTime(p.x))
-                ? formatX(toTime(p.x))
-                : rawX(p.x),
-              formatY(p.y),
-              p.label ?? "",
-            ]),
+        <>
+          <DataTable
+            title={props.title}
+            headers={["Series", "X", withUnit("Value", props.unit), "Label"]}
+            rows={props.series.flatMap((s) =>
+              s.points.map((p) => [s.label, displayX(p.x), formatY(p.y), p.label ?? ""]),
+            )}
+          />
+          {props.band && (
+            <p>
+              Reference range:{" "}
+              {withUnit(`${formatY(props.band.from)}–${formatY(props.band.to)}`, props.unit)} (
+              {props.band.label})
+            </p>
           )}
-        />
+          {!!props.events?.length && (
+            <DataTable
+              title={`${props.title} events`}
+              headers={["X", "Event"]}
+              rows={props.events.map((event) => [displayX(event.x), event.label])}
+            />
+          )}
+        </>
       }
     >
       {(width, height) => (
@@ -132,13 +159,13 @@ function LinePlot({
     top = 42,
     bottom = height - 48;
   const all = groups.flatMap((s) => s.points);
-  const xd = extent([...all.map((p) => p.x), ...markers.map((e) => e.x)]);
+  const xd = extent([...all.map((p) => p.x), ...markers.map((e) => e.x)], false, kind === "time");
   const bandValid = band && Number.isFinite(band.from) && Number.isFinite(band.to);
   const yd =
     yDomain ?? extent([...all.map((p) => p.y), ...(bandValid ? [band.from, band.to] : [])]);
   const x = linearScale(xd, [left, right]),
     y = linearScale(yd, [bottom, top]);
-  const marks: (Mark & { slot: number })[] = groups.flatMap((s) =>
+  const pointMarks: (Mark & { slot: number })[] = groups.flatMap((s) =>
     s.points
       .filter((p) => p.y >= Math.min(...yd) && p.y <= Math.max(...yd))
       .map((p) => ({
@@ -149,6 +176,13 @@ function LinePlot({
         text: `${s.label}, ${formatX(p.x)}: ${withUnit(formatY(p.y), unit)}${p.label ? `, ${p.label}` : ""}`,
       })),
   );
+  const eventMarks: Mark[] = markers.map((event) => ({
+    key: event.key,
+    px: x(event.x),
+    py: top + 12,
+    text: `${formatX(event.x)}: ${event.label}`,
+  }));
+  const marks = [...pointMarks, ...eventMarks];
   const interaction = usePoints(marks);
   const clip = useId();
   const tickValues = [...new Set(all.map((p) => p.x))].sort((a, b) => a - b);
@@ -236,14 +270,23 @@ function LinePlot({
               </text>
             </g>
           )}
-          {markers.map((e) => (
-            <g key={e.key}>
-              <line className="sc-event" x1={x(e.x)} x2={x(e.x)} y1={top} y2={bottom} />
-              <text className="sc-event-label" x={x(e.x) + 4} y={top + 12}>
-                {e.label}
-              </text>
-            </g>
-          ))}
+          {markers.map((event, i) => {
+            const mark = eventMarks[i];
+            if (!mark) return null;
+            return (
+              <g
+                key={event.key}
+                {...interaction.props(mark, pointMarks.length + i)}
+                className="sc-point sc-event-point"
+              >
+                <line className="sc-event" x1={mark.px} x2={mark.px} y1={top} y2={bottom} />
+                <circle className="sc-hit" cx={mark.px} cy={mark.py} r="12" />
+                <text className="sc-event-label" x={mark.px + 4} y={mark.py}>
+                  {event.label}
+                </text>
+              </g>
+            );
+          })}
           {interaction.active && (
             <line
               className="sc-crosshair"
@@ -262,7 +305,7 @@ function LinePlot({
             />
           ))}
         </g>
-        {marks.map((mark, i) => {
+        {pointMarks.map((mark, i) => {
           const slot = mark.slot;
           return (
             <g
@@ -275,7 +318,7 @@ function LinePlot({
             </g>
           );
         })}
-        {!all.length && <Empty width={width} height={height} />}
+        {!pointMarks.length && <Empty width={width} height={height} />}
       </svg>
       <Tooltip mark={interaction.active} id={interaction.tooltipId} width={width} height={height} />
     </div>

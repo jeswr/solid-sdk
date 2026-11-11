@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import type { XValue } from "./types.js";
 
 export type { XValue } from "./types.js";
@@ -66,12 +67,16 @@ export function niceTicks(min: number, max: number, count = 5): number[] {
   const fraction = raw / power;
   const step = (fraction <= 1 ? 1 : fraction <= 2 ? 2 : fraction <= 5 ? 5 : 10) * power;
   if (!Number.isFinite(step) || step === 0) return [min, max];
-  const first = Math.ceil(min / step),
-    last = Math.floor(max / step);
+  // Allow for floating-point error at step-aligned endpoints (e.g. 0.3 / 0.1).
+  const epsilon = (ratio: number) =>
+    Math.min(1e-7, 8 * Number.EPSILON * Math.max(1, Math.abs(ratio)));
+  const first = Math.ceil(min / step - epsilon(min / step)),
+    last = Math.floor(max / step + epsilon(max / step));
   const ticks: number[] = [];
   for (let i = 0; i <= Math.min(1000, last - first); i++) {
     const value = Number(((first + i) * step).toPrecision(14));
-    ticks.push(Object.is(value, -0) ? 0 : value);
+    const tick = Object.is(value, -0) ? 0 : value;
+    if (ticks.at(-1) !== tick) ticks.push(tick);
   }
   return ticks.length ? ticks : [min, max];
 }

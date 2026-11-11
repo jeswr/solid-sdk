@@ -1,7 +1,8 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { createElement } from "react";
 import { renderToString } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   BarChart,
   LineChart,
@@ -10,6 +11,8 @@ import {
   StatTile,
   TimelineChart,
 } from "../src/index.js";
+
+afterEach(() => vi.restoreAllMocks());
 
 describe("server rendering without browser globals", () => {
   it("renders every export without window, document or ResizeObserver", () => {
@@ -32,5 +35,25 @@ describe("server rendering without browser globals", () => {
       createElement(StatTile, { label: "Stat", value: 1 }),
     ];
     for (const chart of charts) expect(renderToString(chart)).toContain("sc-");
+  });
+  it("renders an ongoing timeline without reading the server clock", () => {
+    const clock = vi.spyOn(Date, "now").mockImplementation(() => {
+      throw new Error("The clock must only be read after mount");
+    });
+    const markup = renderToString(
+      createElement(TimelineChart, {
+        title: "Ongoing",
+        lanes: [
+          {
+            id: "lane",
+            label: "Lane",
+            items: [{ id: "active", label: "Active", start: "2026-01-01", tone: "active" }],
+          },
+        ],
+      }),
+    );
+    expect(clock).not.toHaveBeenCalled();
+    expect(markup).toContain("2026-01-01T00:00:00.000Z");
+    expect(markup).not.toContain('data-open-end="true"');
   });
 });

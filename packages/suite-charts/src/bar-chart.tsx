@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 "use client";
 import { linearScale, niceTicks } from "./scale.js";
 import {
@@ -81,8 +82,16 @@ function BarPlot({
               format={formatY}
               label={unit}
             />
-            {niceTicks(...domain, 5).map((t) => (
-              <line key={t} className="sc-grid" x1={scale(t)} x2={scale(t)} y1={top} y2={bottom} />
+            {niceTicks(...domain, 5).map((t, i) => (
+              <line
+                // biome-ignore lint/suspicious/noArrayIndexKey: stateless grid lines may round to the same tick.
+                key={`${i}:${t}`}
+                className="sc-grid"
+                x1={scale(t)}
+                x2={scale(t)}
+                y1={top}
+                y2={bottom}
+              />
             ))}
           </>
         ) : (

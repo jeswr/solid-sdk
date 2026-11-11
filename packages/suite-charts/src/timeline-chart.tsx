@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { linearScale, toTime } from "./scale.js";
 import {
   DataTable,
@@ -15,17 +16,23 @@ import {
   usePoints,
   XAxis,
 } from "./shared.js";
-import type { TimelineChartProps } from "./types.js";
+import type { TimelineChartProps, XValue } from "./types.js";
+
+function displayTime(value: XValue) {
+  const time = value instanceof Date ? value.getTime() : toTime(value);
+  return Number.isFinite(time) ? timeText(time) : rawX(value);
+}
 
 export function TimelineChart(props: TimelineChartProps) {
-  const [clock] = useState(() => Date.now());
-  const now = toTime(props.now ?? clock);
+  const [clock, setClock] = useState<number>();
+  useEffect(() => setClock(Date.now()), []);
+  const now = props.now === undefined ? clock : toTime(props.now);
   let skipped = 0;
   const lanes = props.lanes.map((lane) => ({
     ...lane,
     items: lane.items.flatMap((item) => {
       const start = item.start instanceof Date ? item.start.getTime() : toTime(item.start);
-      const open = item.end === undefined && item.tone === "active";
+      const open = item.end === undefined && item.tone === "active" && now !== undefined;
       const end =
         item.end !== undefined
           ? item.end instanceof Date
@@ -43,7 +50,11 @@ export function TimelineChart(props: TimelineChartProps) {
   }));
   const domain: [number, number] = props.range
     ? [toTime(props.range[0]), toTime(props.range[1])]
-    : extent(lanes.flatMap((l) => l.items.flatMap((i) => [i.start, i.end])));
+    : extent(
+        lanes.flatMap((l) => l.items.flatMap((i) => [i.start, i.end])),
+        false,
+        true,
+      );
   if (domain[1] < domain[0]) throw new RangeError("Timeline range must run from earlier to later");
   return (
     <Frame
@@ -57,12 +68,14 @@ export function TimelineChart(props: TimelineChartProps) {
             l.items.map((i) => [
               l.label,
               i.label,
-              rawX(i.start),
+              displayTime(i.start),
               i.end === undefined
                 ? i.tone === "active"
-                  ? `Ongoing (through ${rawX(props.now ?? clock)})`
+                  ? now === undefined
+                    ? "Ongoing"
+                    : `Ongoing (through ${displayTime(now)})`
                   : "Point event"
-                : rawX(i.end),
+                : displayTime(i.end),
               i.tone ?? "neutral",
             ]),
           )}

@@ -1,4 +1,5 @@
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 # @jeswr/suite-charts
 
 Shared, accessible SVG charts for Solid Suite: Health, knowledge graphs, Insights,
@@ -78,7 +79,12 @@ and ISO strings may be combined. For timestamp numbers displayed as time, wrap t
 in `Date`. The default time formatting uses UTC. `formatX` receives a numeric x or
 an epoch millisecond value. There is exactly one y axis and one unit. Bands are
 recessive; events have dashed vertical markers. Pointer movement snaps a vertical
-crosshair to the nearest observed x. Points are sorted by x within their series.
+crosshair to the nearest observed x or event. Points are sorted by x within their series.
+Event markers join the chart's keyboard navigation. The table includes formatted events
+and the reference range. Values outside an explicit `yDomain` are counted in the
+caption and retained in the table; when none are visible the plot says “No data yet”.
+Constant or nearly constant value domains are padded; all-zero domains use [0, 1].
+Constant time domains are padded by one day on each side.
 
 ### BarChart
 
@@ -98,6 +104,7 @@ interface BarChartProps extends ChartBase {
 ```
 
 Bars start at zero, with negatives extending below or to the left of the baseline.
+Nonnegative data never produces a negative axis; all-zero data uses [0, 1].
 Categories share the first colour slot. Labels remain available in full through
 point tooltips and the table when axis labels are shortened.
 
@@ -151,9 +158,14 @@ interface TimelineChartProps extends ChartBase {
   ] }]} />
 ```
 
-Intervals use rounded bars. An active item without an end extends to `now` with an
-open right edge; other items without an end are diamonds. Omitted `now` is frozen
-at mount; inject it for deterministic rendering or update the prop to advance it.
+Intervals use rounded bars: active intervals have solid borders and neutral intervals
+have dashed borders, so colour is not the only status cue. An active item without an
+end extends to `now` with an open right edge; other items without an end are diamonds.
+Omitted `now` is captured in an effect at mount. Server and initial client rendering
+show the start marker without an open-ended extension until that effect runs; inject
+`now` to render the extension immediately or update the prop to advance it.
+Table times, including numeric timestamps and offset strings, are formatted in UTC.
+Single-instant domains are padded by one day on each side.
 Labels sit to the left at widths of at least 480px and above each lane below 480px.
 The chart grows vertically when needed for many lanes. `range` limits the visible
 window; the table preserves the full history. Reversed or nonfinite item intervals
@@ -213,6 +225,7 @@ Scales are unclamped; equal domain endpoints map to the range midpoint. Bounds
 must be finite. `niceTicks` defaults to about five ticks, returns `[min]` for a
 constant domain or count of one, and `[]` for a count below one. Counts are bounded
 to keep tick generation finite. Descending domains return descending ticks.
+Ticks are unique after rounding, including for domains separated only by float noise.
 `toTime` reads date-only ISO strings as UTC midnight and date-times without an
 offset as UTC. Invalid strings and invalid Date objects throw `TypeError`; numbers
 pass through so consumers can explicitly filter NaN/Infinity.
@@ -228,7 +241,8 @@ unrepresentable result. Charts filter nonfinite points before calling them.
   heading with `showTitle={false}` preserves the figure's accessible name.
 - Plotted observations have one roving tab stop per chart. Arrow keys wrap between
   observations; Home/End move to the first/last point. Focus, hover or a tap exposes
-  an HTML tooltip over the SVG. Escape dismisses it; Enter/Space reveals it again.
+  an HTML tooltip over the SVG. Escape dismisses focused or hovered tooltips;
+  Enter/Space reveals a focused point's tooltip again.
 - Lines are 2px wide, point marks have at least an 8px diameter, and invisible
   radius-12 hit circles make points easier to target. Axis and legend text uses
   neutral foreground tokens, never series colours.

@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 "use client";
 import { type KeyboardEvent, type ReactNode, useEffect, useId, useRef, useState } from "react";
 import { niceTicks } from "./scale.js";
@@ -12,7 +13,7 @@ export function checkSeries(count: number) {
   if (count > 5)
     throw new RangeError('At most 5 series are supported; fold the rest into "Other".');
 }
-export function extent(values: readonly number[], zero = false): [number, number] {
+export function extent(values: readonly number[], zero = false, time = false): [number, number] {
   let min = zero ? 0 : Infinity,
     max = zero ? 0 : -Infinity;
   for (const value of values)
@@ -21,9 +22,10 @@ export function extent(values: readonly number[], zero = false): [number, number
       max = Math.max(max, value);
     }
   if (!Number.isFinite(min)) return [0, 1];
-  if (min === max) {
-    const pad = Math.abs(min) * 0.05 || 1;
-    return [min - pad, max + pad];
+  if (max - min <= 1e-9 * Math.max(Math.abs(min), Math.abs(max), 1)) {
+    if (!time && min === 0 && max === 0) return [0, 1];
+    const pad = time ? 86_400_000 : Math.max(Math.abs(min), Math.abs(max)) * 0.05 || 1;
+    return [zero && min >= 0 ? 0 : min - pad, zero && max <= 0 ? 0 : max + pad];
   }
   return [min, max];
 }
@@ -77,7 +79,7 @@ export function Frame({
         <button
           type="button"
           aria-controls={`${id}-data`}
-          aria-pressed={showTable}
+          aria-label={`Show ${title} as a ${showTable ? "chart" : "table"}`}
           onClick={() => setShowTable(!showTable)}
         >
           {showTable ? "Show chart" : "Show table"}
@@ -181,6 +183,17 @@ export function usePoints(marks: readonly Mark[]) {
   const tooltipId = useId();
   const active = marks.find((m) => m.key === hovered) ?? marks.find((m) => m.key === focused);
   const tabKey = marks.some((m) => m.key === selected) ? selected : marks[0]?.key;
+  useEffect(() => {
+    if (!active) return;
+    const dismiss = (event: globalThis.KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      setHovered(undefined);
+      setFocused(undefined);
+      event.stopPropagation();
+    };
+    document.addEventListener("keydown", dismiss);
+    return () => document.removeEventListener("keydown", dismiss);
+  }, [active]);
   function onKeyDown(event: KeyboardEvent<SVGGElement>, index: number) {
     const next =
       event.key === "Home"
@@ -197,9 +210,10 @@ export function usePoints(marks: readonly Mark[]) {
       const mark = marks[next];
       if (mark) elements.current.get(mark.key)?.focus();
     }
-    if (event.key === "Escape") {
+    if (event.key === "Escape" && active) {
       setHovered(undefined);
       setFocused(undefined);
+      event.stopPropagation();
     }
     if (event.key === "Enter" || event.key === " ") {
       event.preventDefault();
@@ -218,7 +232,6 @@ export function usePoints(marks: readonly Mark[]) {
       role: "button" as const,
       tabIndex: tabKey === mark.key ? 0 : -1,
       "aria-label": mark.text,
-      "aria-describedby": active?.key === mark.key ? tooltipId : undefined,
       onKeyDown: (event: KeyboardEvent<SVGGElement>) => onKeyDown(event, index),
       onFocus: () => {
         setSelected(mark.key);
@@ -293,8 +306,9 @@ export function YAxis({
       <text x="4" y={top - 12}>
         {label}
       </text>
-      {niceTicks(...domain, 5).map((value) => (
-        <g key={value}>
+      {niceTicks(...domain, 5).map((value, i) => (
+        // biome-ignore lint/suspicious/noArrayIndexKey: stateless ticks may round to the same value.
+        <g key={`${i}:${value}`}>
           <line className="sc-grid" x1={left} x2={right} y1={scale(value)} y2={scale(value)} />
           <text x={left - 8} y={scale(value) + 4} textAnchor="end">
             {format(value)}
@@ -322,7 +336,8 @@ export function XAxis({
     <g className="sc-axis">
       {values.map((v, i) => (
         <text
-          key={v}
+          // biome-ignore lint/suspicious/noArrayIndexKey: stateless ticks may round to the same value.
+          key={`${i}:${v}`}
           x={scale(v)}
           y={bottom + 20}
           textAnchor={i === 0 ? "start" : i === values.length - 1 ? "end" : "middle"}
