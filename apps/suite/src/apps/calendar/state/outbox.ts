@@ -46,7 +46,7 @@ export function createEventOutbox(
   allowed: (write: EventWrite) => void,
   recovery?: SeriesRecovery,
 ) {
-  const intents = recovery && createSeriesIntents(webId, storage, send, allowed, recovery);
+  const intents = recovery && createSeriesIntents(webId, send, allowed, recovery);
   let entries: EventWrite[] = [];
   let offline = false;
   try {
@@ -125,7 +125,7 @@ export function createEventOutbox(
     if (running) return running;
     offline = false;
     const work = async () => {
-      await intents?.recover();
+      if (intents && !(await intents.recoverLocked())) return;
       await drain();
     };
     running = (intents ? intents.lock(work) : drain()).finally(() => {
@@ -139,7 +139,25 @@ export function createEventOutbox(
     compound: intents
       ? async (...args: Parameters<typeof intents.run>) => {
           await flush();
-          return intents.lock(() => intents.run(...args));
+          const task = intents.lock(() => {
+            if (entries.some((entry) => entry.url === args[0].url || entry.url === args[1].url))
+              throw new Error(
+                "Reconnect before finishing this series edit. Your draft is still here.",
+              );
+            return intents.run(...args);
+          });
+          // Our own pod notifications join the active compound operation. They must not
+          // schedule an immediate second recovery after a failed compensation.
+          const settled = task.then(
+            () => undefined,
+            () => undefined,
+          );
+          running = settled;
+          try {
+            return await task;
+          } finally {
+            if (running === settled) running = undefined;
+          }
         }
       : undefined,
     async resolve(url: string, etag: string | null, requireConfirmation = true): Promise<string> {
@@ -157,6 +175,7 @@ export function createEventOutbox(
       return current;
     },
     async save(write: EventWrite, requireConfirmation = false) {
+      intents?.assertAvailable(write.url);
       const dependency = entries.find((entry) => entry.url === write.url);
       if (!dependency) conditional(write);
       allowed(write);

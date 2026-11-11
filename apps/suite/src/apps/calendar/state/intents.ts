@@ -3,14 +3,25 @@ import { fetchRdf, RdfFetchError } from "@jeswr/fetch-rdf";
 import { createPodScopedFetch } from "@jeswr/guarded-fetch";
 import type { DatasetCore } from "@rdfjs/types";
 import { isomorphic } from "rdf-isomorphic";
+import { DurableJournal, type IntentStorage } from "../../../lib/intent-journal";
 import { buildEvent, CalendarHttpError } from "../lib/model";
-import type { SeriesReplacement } from "./editing";
-import { type OutboxStorage, reviveEventWrite } from "./outbox";
+import type { SeriesMode, SeriesReplacement } from "./editing";
+import { reviveEventWrite } from "./outbox";
 import type { EventWrite } from "./repository";
 
 type Create = Extract<EventWrite, { kind: "create" }>;
 type Change = Exclude<EventWrite, { kind: "create" }>;
+export interface SeriesOperation {
+  mode: SeriesMode;
+  action: "edit" | "delete";
+}
 export interface SeriesIntent {
+  v: 1;
+  id: string;
+  startedAt: string;
+  webId: string;
+  storageUrl: string;
+  operation: SeriesOperation;
   created: Create;
   original: Change;
   replacementEtag?: string | null;
@@ -18,84 +29,56 @@ export interface SeriesIntent {
   rollback?: boolean;
   done?: boolean;
 }
-export const intentsKey = (webId: string) => `suite:calendar:intents:${webId}`;
-const queues = new Map<string, Promise<unknown>>();
+export const intentsKey = (webId: string, storageUrl: string) =>
+  `solid-suite:calendar:intent:${encodeURIComponent(webId)}:${encodeURIComponent(new URL(storageUrl).href)}:`;
 
-/** The outbox's storage seam, with an account envelope and model date revival. */
-export class SeriesJournal {
-  private memory: SeriesIntent[] = [];
-  private available = true;
+/** One versioned record per operation, scoped to the authenticated account and pod. */
+export class SeriesJournal extends DurableJournal<SeriesIntent> {
   constructor(
-    readonly webId: string,
-    private storage: OutboxStorage,
-  ) {}
-  list(): SeriesIntent[] {
-    if (!this.available) return this.memory;
-    let raw: string | null;
-    try {
-      raw = this.storage.getItem(intentsKey(this.webId));
-    } catch {
-      this.available = false;
-      return this.memory;
-    }
-    try {
-      if (!raw) return [];
-      const envelope = JSON.parse(raw);
-      if (envelope.v !== 1 || envelope.webId !== this.webId || !Array.isArray(envelope.intents))
-        return [];
-      return envelope.intents.map((intent: SeriesIntent) => {
+    webId: string,
+    storageUrl: string,
+    warn: (message: string) => void,
+    storage?: () => IntentStorage,
+  ) {
+    storageUrl = new URL(storageUrl).href;
+    super(
+      intentsKey(webId, storageUrl),
+      (value) => {
+        const intent = value as SeriesIntent;
+        if (
+          intent.v !== 1 ||
+          intent.webId !== webId ||
+          intent.storageUrl !== storageUrl ||
+          typeof intent.id !== "string" ||
+          !intent.id ||
+          typeof intent.startedAt !== "string" ||
+          !["this", "following", "all"].includes(intent.operation.mode) ||
+          !["edit", "delete"].includes(intent.operation.action)
+        )
+          throw new TypeError("Calendar recovery record is invalid.");
         const created = reviveEventWrite(intent.created);
         const original = reviveEventWrite(intent.original);
         if (created.kind !== "create" || original.kind === "create" || created.url === original.url)
           throw new TypeError("Invalid series intent");
+        for (const field of ["attemptingOriginal", "rollback", "done"] as const)
+          if (intent[field] !== undefined && typeof intent[field] !== "boolean")
+            throw new TypeError("Invalid series checkpoint");
+        if (intent.replacementEtag != null && typeof intent.replacementEtag !== "string")
+          throw new TypeError("Invalid replacement ETag");
         return { ...intent, created, original };
-      });
-    } catch {
-      return []; // Corrupt recovery data must never cause pod writes.
-    }
-  }
-  put(intent: SeriesIntent): boolean {
-    const entries = this.list().filter((entry) => entry.created.url !== intent.created.url);
-    entries.push(intent);
-    return this.store(entries);
-  }
-  remove(intent: SeriesIntent) {
-    this.store(this.list().filter((entry) => entry.created.url !== intent.created.url));
-  }
-  private store(entries: SeriesIntent[]): boolean {
-    this.memory = entries;
-    if (!this.available) return false;
-    try {
-      this.storage.setItem(
-        intentsKey(this.webId),
-        JSON.stringify({ v: 1, webId: this.webId, intents: entries }),
-      );
-      return true;
-    } catch {
-      this.available = false;
-      return false;
-    }
-  }
-  /** Cooperating tabs serialize recovery and foreground compound writes under the same key. */
-  lock<T>(work: () => Promise<T>): Promise<T> {
-    const key = intentsKey(this.webId);
-    const previous = queues.get(key) ?? Promise.resolve();
-    const next = previous
-      .catch(() => undefined)
-      .then(() => {
-        const locks = globalThis.navigator?.locks;
-        return locks ? locks.request(key, work) : work();
-      });
-    queues.set(key, next);
-    return next.finally(() => {
-      if (queues.get(key) === next) queues.delete(key);
-    });
+      },
+      warn,
+      "This browser cannot save Calendar recovery. Keep this tab open until saving finishes; recovery will be lost on reload.",
+      storage,
+    );
   }
 }
 export interface SeriesRecovery {
   fetch: typeof globalThis.fetch;
   storageUrl: string;
   warn(message: string): void;
+  notice(message: string): void;
+  journalStorage?: () => IntentStorage;
 }
 const conflictWarning =
   "An unfinished calendar edit changed elsewhere. Existing events were kept; you may see duplicate occurrences.";
@@ -108,12 +91,16 @@ function strong(etag: string | null | undefined): etag is string {
 /** Compound writes have one owner: they never also enter the single-write offline queue. */
 export function createSeriesIntents(
   webId: string,
-  storage: OutboxStorage,
   send: (write: EventWrite) => Promise<unknown>,
   allowed: (write: EventWrite) => void,
   recovery: SeriesRecovery,
 ) {
-  const journal = new SeriesJournal(webId, storage);
+  const journal = new SeriesJournal(
+    webId,
+    recovery.storageUrl,
+    recovery.warn,
+    recovery.journalStorage,
+  );
   const fetch = createPodScopedFetch(recovery.storageUrl, { fetch: recovery.fetch });
   async function read(url: string) {
     try {
@@ -130,6 +117,7 @@ export function createSeriesIntents(
   function stop(intent: SeriesIntent, warn = false) {
     journal.remove(intent);
     if (warn) recovery.warn(conflictWarning);
+    return !warn;
   }
   async function compensate(intent: SeriesIntent) {
     intent.rollback = true;
@@ -153,9 +141,9 @@ export function createSeriesIntents(
       if (error.status === 412) return stop(intent, true);
       if (error.status !== 404) throw error;
     }
-    stop(intent);
+    return stop(intent);
   }
-  async function replay(intent: SeriesIntent, reconcile = true): Promise<void> {
+  async function replay(intent: SeriesIntent, reconcile = true): Promise<boolean> {
     allowed(intent.created);
     allowed(intent.original);
     if (intent.done) return stop(intent);
@@ -198,20 +186,43 @@ export function createSeriesIntents(
     }
     intent.done = true;
     journal.put(intent);
-    stop(intent);
+    return stop(intent);
+  }
+  async function recover() {
+    let entries: SeriesIntent[];
+    try {
+      entries = journal.list();
+    } catch {
+      recovery.warn(
+        "Calendar recovery data could not be read. Existing events were kept; recovery needs attention.",
+      );
+      return false;
+    }
+    for (const intent of entries) {
+      try {
+        if (await replay(intent)) recovery.notice("An unfinished calendar edit was recovered.");
+      } catch {
+        recovery.warn(pendingWarning);
+      }
+    }
+    return journal.list().length === 0;
   }
   return {
     lock: <T>(work: () => Promise<T>) => journal.lock(work),
-    async recover() {
-      for (const intent of journal.list()) {
-        try {
-          await replay(intent);
-        } catch {
-          recovery.warn(pendingWarning);
-        }
-      }
+    recover: () => journal.lock(recover),
+    recoverLocked: recover,
+    assertAvailable(url: string) {
+      if (journal.list().some((entry) => entry.created.url === url || entry.original.url === url))
+        throw new Error(
+          "Reconnect to recover the unfinished calendar edit before changing this event.",
+        );
     },
-    async run(created: Create, original: Change, replacement: SeriesReplacement): Promise<boolean> {
+    async run(
+      created: Create,
+      original: Change,
+      replacement: SeriesReplacement,
+      operation: SeriesOperation = { mode: "this", action: "edit" },
+    ): Promise<boolean> {
       const pending = journal.list().find((entry) => entry.original.url === original.url);
       if (pending) {
         replacement.current = {
@@ -221,14 +232,24 @@ export function createSeriesIntents(
         };
         throw new Error("Reconnect to retry cleanup before editing this series.");
       }
-      // An unavailable journal leaves the existing in-memory writer in charge.
-      const intent: SeriesIntent = { created, original };
+      const intent: SeriesIntent = {
+        v: 1,
+        id: crypto.randomUUID(),
+        startedAt: new Date().toISOString(),
+        webId,
+        storageUrl: new URL(recovery.storageUrl).href,
+        operation,
+        created,
+        original,
+      };
       allowed(created);
       allowed(original);
-      if (!journal.put(intent)) {
-        journal.remove(intent);
-        return false;
-      }
+      // Flushing recovery may have just completed an earlier edit of this master.
+      // Refuse its stale editor plan before it can create a second replacement.
+      const master = await read(original.url);
+      if (!master || master.etag !== original.etag)
+        throw new Error("Reload this series before saving; it changed while recovery finished.");
+      journal.put(intent);
       try {
         const etag = await send(created);
         intent.replacementEtag = typeof etag === "string" ? etag : null;
@@ -244,6 +265,16 @@ export function createSeriesIntents(
         replacement.current = undefined;
         return true;
       } catch (error) {
+        // A rejected create never owned the occupied destination, even when its RDF
+        // happens to match. Only an uncertain create may be adopted for compensation.
+        if (
+          error instanceof CalendarHttpError &&
+          error.status === 412 &&
+          intent.replacementEtag === undefined
+        ) {
+          stop(intent, true);
+          throw error;
+        }
         try {
           // A lost original response must be reconciled before removing its replacement.
           intent.rollback = true;
