@@ -1,8 +1,17 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { MAX_CSV_COLUMNS, MAX_CSV_HEADER_CHARS, parseCsvRows } from "../core/csv.js";
+// AUTHORED-BY Codex GPT-6
+import { MAX_CSV_COLUMNS, MAX_CSV_HEADER_CHARS, parseCsv, parseCsvRows } from "../core/csv.js";
 import { MAX_FILE_BYTES, MAX_ROWS } from "../core/file-import.js";
 import { MAX_CSV_RECORD_BYTES } from "../core/file-stream.js";
-import { amountKey, bankDate, currencyCode, normaliseAmount, subtractAmount } from "./values.js";
+import { genericBankRowParser } from "./generic-csv.js";
+import {
+  amountKey,
+  bankDate,
+  bankDateFormatter,
+  currencyCode,
+  normaliseAmount,
+  subtractAmount,
+} from "./values.js";
 
 export const MAX_BANK_FIELD_CHARS = 16 * 1024;
 export type BankCsvFormat = "revolut" | "hsbc-uk" | "monzo" | "starling";
@@ -13,6 +22,8 @@ export interface BankStatementOptions {
   readonly accountLabel?: string;
   /** HSBC UK defaults to GBP. Other CSV currencies come from the header/row. */
   readonly currency?: string;
+  /** IANA zone for zone-free Revolut timestamps; defaults to Europe/London. */
+  readonly timeZone?: string;
 }
 export interface Transaction {
   readonly date?: Date;
@@ -27,6 +38,8 @@ export interface Transaction {
   /** Revolut Amount excludes Fee; amount is Amount - Fee and fee is retained. */
   readonly fee?: string;
   readonly balance?: string;
+  /** HSBC has no native ID/balance: distinguish identical rows within this file. */
+  readonly occurrence?: number;
 }
 
 const HEADERS = {
@@ -124,38 +137,65 @@ export function validateBankOptions(options: BankStatementOptions): void {
     throw new TypeError("Currency must be an uppercase ISO 4217 code supported by the runtime");
   if (options.csvFormat === "hsbc-uk" && !options.accountLabel)
     throw new TypeError("Headerless HSBC UK requires a user-provided accountLabel");
+  if (options.timeZone !== undefined) bankDateFormatter(options.timeZone);
 }
 
 /** Detect once, then access indexed cells (no untrusted object property keys). */
 export class BankCsvParser {
-  private format?: BankCsvFormat;
+  private format?: BankCsvFormat | "generic";
   private headers: string[] = [];
   private rows = 0;
+  private genericRow?: ReturnType<typeof genericBankRowParser>;
+  private genericRows = 0;
+  private readonly occurrences = new Map<string, number>();
+  private readonly formatter: Intl.DateTimeFormat;
   constructor(
     private readonly options: BankStatementOptions,
     private readonly maxRows: number,
     private readonly skip: () => void,
+    private readonly synchronous = false,
   ) {
     validateBankOptions(options);
+    this.formatter = bankDateFormatter(options.timeZone);
     if (maxRows !== Number.POSITIVE_INFINITY && (!Number.isSafeInteger(maxRows) || maxRows < 0))
       throw new RangeError("Bank row limit must be a nonnegative safe integer");
   }
   skippedRecord(): void {
-    this.countRow();
+    if (!this.isGeneric) this.countRow();
     this.skip();
+  }
+  get isGeneric(): boolean {
+    return this.format === "generic";
+  }
+  private genericRecord(record: string): Transaction | undefined {
+    if (this.genericRows >= this.maxRows) return undefined;
+    const cells = parseCsvRows(
+      record,
+      ",",
+      this.synchronous ? Number.POSITIVE_INFINITY : this.headers.length,
+      this.skip,
+    )[0];
+    if (!cells) return undefined;
+    const row = Object.fromEntries(
+      this.headers.map((header, i) => [header, (cells[i] ?? "").trim()]),
+    );
+    const txn = this.genericRow?.(row);
+    if (txn) this.genericRows++;
+    return txn;
   }
   private countRow(): void {
     if (++this.rows > Math.min(MAX_ROWS, this.maxRows))
       throw new Error("Bank statement row cap exceeded; split the export");
   }
   record(record: string): Transaction | undefined {
+    if (this.isGeneric) return this.genericRecord(record);
     const first = this.headers.length === 0 && this.format === undefined;
     if (!first) this.countRow();
     if (first && record.length > MAX_CSV_HEADER_CHARS)
       throw new Error("CSV header exceeds the 64 KiB character import limit");
     let cells: string[];
     try {
-      cells = bankCsvCells(record.replace(/^\uFEFF/, ""));
+      cells = first ? [...parseCsv(record).headers] : bankCsvCells(record.replace(/^\uFEFF/, ""));
     } catch (error) {
       if (first) throw error;
       this.skip();
@@ -171,8 +211,19 @@ export class BankCsvParser {
         (!this.options.csvFormat || this.options.csvFormat === format) &&
         new Set(headers.filter(Boolean)).size === headers.filter(Boolean).length
       ) {
+        bankCsvCells(record.replace(/^\uFEFF/, ""));
         this.format = format;
         this.headers = headers;
+        return undefined;
+      }
+      if (!format && !this.options.csvFormat) {
+        // Headerless HSBC is never inferred. Other unmatched headers retain the
+        // original generic parser, aliases, permissive values and row-derived IDs.
+        if (cells.length === 3 && bankDate(cells[0] ?? "", true))
+          throw new UnrecognisedBankCsvError(cells);
+        this.format = "generic";
+        this.headers = cells;
+        this.genericRow = genericBankRowParser(cells);
         return undefined;
       }
       if (
@@ -209,7 +260,7 @@ export class BankCsvParser {
       bank === "hsbc-uk"
         ? bankDate(cells[0] ?? "", true)
         : bank === "revolut"
-          ? bankDate(get("completed date"))
+          ? bankDate(get("completed date"), false, this.formatter)
           : bank === "monzo"
             ? bankDate(get("date"), true)
             : (bankDate(get("date"), true) ?? bankDate(get("date")));
@@ -237,8 +288,7 @@ export class BankCsvParser {
       !currencyCode(currency) ||
       (this.options.currency !== undefined && this.options.currency !== currency) ||
       amount === undefined ||
-      (bank === "revolut" &&
-        (fee === undefined || fee.startsWith("-") || !product || balance === undefined)) ||
+      (bank === "revolut" && (fee === undefined || !product || balance === undefined)) ||
       (bank === "starling" && balance === undefined) ||
       (bank === "monzo" && !sourceId)
     ) {
@@ -248,7 +298,7 @@ export class BankCsvParser {
     const label =
       this.options.accountLabel?.trim() ??
       `${bank === "revolut" ? `Revolut ${product}` : bank === "monzo" ? "Monzo" : "Starling"} ${currency}`;
-    return {
+    const txn: Transaction = {
       bank,
       postingTime,
       date: new Date(postingTime),
@@ -266,18 +316,23 @@ export class BankCsvParser {
       ]),
       accountLabel: label,
     };
+    if (bank !== "hsbc-uk") return txn;
+    const key = transactionKey(txn);
+    const occurrence = this.occurrences.get(key) ?? 0;
+    this.occurrences.set(key, occurrence + 1);
+    return { ...txn, occurrence };
   }
 }
 
 /** Synchronous compatibility helper, using the same record mapper as streaming imports. */
 export function parseBankCsv(
   text: string,
-  limit = MAX_ROWS,
+  limit = Number.POSITIVE_INFINITY,
   options: BankStatementOptions = {},
 ): Transaction[] {
   if (text.length > MAX_FILE_BYTES || new TextEncoder().encode(text).byteLength > MAX_FILE_BYTES)
     throw new Error("Export exceeds the 64 MiB import limit");
-  const parser = new BankCsvParser(options, limit, () => {});
+  const parser = new BankCsvParser(options, limit, () => {}, true);
   const result: Transaction[] = [];
   let start = 0;
   let quoted = false;
@@ -303,11 +358,14 @@ export function transactionKey(txn: Transaction): string {
     txn.sourceId
       ? ["id", txn.sourceId]
       : [
-          txn.postingTime ?? txn.date?.toISOString(),
+          // OFX's source date remains day-granular even though RDF uses dateTime.
+          (txn.bank === "ofx" ? txn.postingTime?.slice(0, 10) : txn.postingTime) ??
+            txn.date?.toISOString(),
           txn.description,
           amountKey(txn.amount),
           txn.currency ?? "",
           txn.balance === undefined ? "" : amountKey(txn.balance),
+          ...(txn.occurrence === undefined ? [] : [txn.occurrence]),
         ],
   ]);
 }

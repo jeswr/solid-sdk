@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { NS } from "@jeswr/suite-vocab";
 import {
   LiteralAs,
@@ -29,9 +30,7 @@ export class BankInvoice extends Invoice {
     return OptionalFrom.subjectPredicate(this, BANK.fee, LiteralAs.string);
   }
   set fee(value: string | undefined) {
-    OptionalAs.object(this, BANK.fee, value, (text, factory) =>
-      LiteralFrom.datatypeTuple([`${NS.XSD}decimal`, text], factory),
-    );
+    OptionalAs.object(this, BANK.fee, value, LiteralFrom.string);
   }
   get postingTime(): string | undefined {
     return OptionalFrom.subjectPredicate(this, BANK.postingTime, LiteralAs.string);

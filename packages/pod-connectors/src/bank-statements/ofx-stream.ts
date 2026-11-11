@@ -1,7 +1,8 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 
 const MAX_TRANSACTION_BYTES = 64 * 1024;
-const DELIMITER_OVERLAP = "<CCSTMTRS>".length - 1;
+const DELIMITER_OVERLAP = "</BANKACCTFROM>".length - 1;
 
 /** Scan only new input plus delimiter overlap; join a bounded transaction once. */
 export async function* ofxTransactions(
@@ -21,6 +22,7 @@ export async function* ofxTransactions(
   let scalarText = "";
   let invalidScalar = false;
   let invalidContext = false;
+  let accountFrom = false;
 
   function append(text: string): void {
     if (scalar !== undefined) {
@@ -56,7 +58,8 @@ export async function* ofxTransactions(
 
   for await (const chunk of chunks) {
     const input = overlap + chunk;
-    const delimiters = /<STMTTRN>|<\/STMTTRN>|<CURDEF>|<ACCTID>|<BANKID>|<STMTRS>|<CCSTMTRS>/gi;
+    const delimiters =
+      /<STMTTRN>|<\/STMTTRN>|<CURDEF>|<ACCTID>|<BANKID>|<STMTRS>|<CCSTMTRS>|<\/?(?:BANK|CC)ACCTFROM>/gi;
     let offset = 0;
     for (let match = delimiters.exec(input); match; match = delimiters.exec(input)) {
       append(input.slice(offset, match.index));
@@ -84,7 +87,16 @@ export async function* ofxTransactions(
         accountId = undefined;
         bankId = undefined;
         invalidContext = false;
-      } else if (delimiter === "<CURDEF>" || delimiter === "<ACCTID>" || delimiter === "<BANKID>") {
+        accountFrom = false;
+      } else if (delimiter === "<BANKACCTFROM>" || delimiter === "<CCACCTFROM>") {
+        if (!active) accountFrom = true;
+      } else if (delimiter === "</BANKACCTFROM>" || delimiter === "</CCACCTFROM>") {
+        if (!active) accountFrom = false;
+      } else if (
+        !active &&
+        (delimiter === "<CURDEF>" ||
+          (accountFrom && (delimiter === "<ACCTID>" || delimiter === "<BANKID>")))
+      ) {
         scalar = delimiter.slice(1, -1) as "CURDEF" | "ACCTID" | "BANKID";
         scalarText = "";
         invalidScalar = false;

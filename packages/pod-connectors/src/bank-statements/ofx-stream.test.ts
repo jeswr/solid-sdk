@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { describe, expect, it, vi } from "vitest";
 import { fileImport } from "../core/testing.js";
 import { bankStatementsFileAdapter } from "./file-adapter.js";
@@ -16,8 +17,22 @@ async function* chunks(text: string, size: number): AsyncGenerator<string> {
 describe("incremental OFX scanner", () => {
   it.each([
     1, 7, 65536,
+  ])("ignores XFER destination accounts and unscoped IDs (%i)", async (size) => {
+    const xfer = `${START}Transfer<TRNTYPE>XFER<BANKACCTTO><BANKID>other-bank<ACCTID>target</BANKACCTTO><CCACCTTO><ACCTID>target-card</CCACCTTO>${END}`;
+    const text = `<OFX><STMTRS><CURDEF>GBP<BANKACCTFROM><BANKID>source-bank<ACCTID>source</BANKACCTFROM><ACCTID>unscoped${xfer}${SMALL}</STMTRS><CCSTMTRS><CURDEF>EUR<CCACCTFROM><ACCTID>source-card</CCACCTFROM>${xfer}${SMALL}</CCSTMTRS></OFX>`;
+    const result = await Array.fromAsync(ofxTransactions(chunks(text, size), vi.fn()));
+    expect(result).toEqual([
+      { block: xfer, currency: "GBP", accountId: "source", bankId: "source-bank" },
+      { block: SMALL, currency: "GBP", accountId: "source", bankId: "source-bank" },
+      { block: xfer, currency: "EUR", accountId: "source-card" },
+      { block: SMALL, currency: "EUR", accountId: "source-card" },
+    ]);
+  });
+
+  it.each([
+    1, 7, 65536,
   ])("retains bounded account/currency context across sections (%i)", async (size) => {
-    const text = `<OFX><STMTRS><CURDEF>GBP<BANKID>synthetic-bank<ACCTID>synthetic-current${SMALL}</STMTRS><CCSTMTRS><CURDEF>EUR<ACCTID>synthetic-card${SMALL}</CCSTMTRS></OFX>`;
+    const text = `<OFX><STMTRS><CURDEF>GBP<BANKACCTFROM><BANKID>synthetic-bank<ACCTID>synthetic-current</BANKACCTFROM>${SMALL}</STMTRS><CCSTMTRS><CURDEF>EUR<CCACCTFROM><ACCTID>synthetic-card</CCACCTFROM>${SMALL}</CCSTMTRS></OFX>`;
     const result = await Array.fromAsync(ofxTransactions(chunks(text, size), vi.fn()));
     expect(result).toEqual([
       { block: SMALL, currency: "GBP", bankId: "synthetic-bank", accountId: "synthetic-current" },
@@ -26,7 +41,7 @@ describe("incremental OFX scanner", () => {
   });
 
   it("marks overlong metadata invalid even if a later currency is valid", async () => {
-    const text = `<STMTRS><ACCTID>${"x".repeat(257)}<CURDEF>GBP${SMALL}`;
+    const text = `<STMTRS><BANKACCTFROM><ACCTID>${"x".repeat(257)}</BANKACCTFROM><CURDEF>GBP${SMALL}`;
     const result = await Array.fromAsync(ofxTransactions(chunks(text, 1), vi.fn()));
     expect(result[0]?.currency).toBe("");
     const { report } = await fileImport(

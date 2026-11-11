@@ -1,6 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
-/** Known bank CSV exports and OFX/QFX share the existing Finance Invoice layout. */
+/** Bank CSV exports and OFX/QFX share the existing Finance Invoice layout. */
 import { DataFactory, Store } from "n3";
 import {
   type FileImportAdapter,
@@ -10,6 +10,8 @@ import {
   MAX_ROWS,
 } from "../core/file-import.js";
 import { csvRecords, fileText } from "../core/file-stream.js";
+import { copyDataset, mergeItems } from "../core/incremental.js";
+import { recordFragment } from "../core/slug.js";
 import type { IntegrationMetadata } from "../core/types.js";
 import { CLASSES } from "../core/vocab.js";
 import {
@@ -21,7 +23,7 @@ import {
   validateBankOptions,
 } from "./csv.js";
 import { ofxTransactions } from "./ofx-stream.js";
-import { bankDate, currencyCode, normaliseAmount } from "./values.js";
+import { amountKey, bankDate, currencyCode, normaliseAmount } from "./values.js";
 import { BankAccount, BankInvoice } from "./vocab.js";
 import { vocabMap } from "./vocab-map.js";
 
@@ -68,23 +70,33 @@ export function createBankStatementsFileAdapter(
       const store = new Store();
       let skipped = 0;
       let records = 0;
+      let generic = false;
       const skip = () => {
         skipped++;
       };
       try {
-        for await (const txn of streamBankTransactions(file, config, ctx, skip)) {
+        for await (const txn of streamBankTransactions(file, config, ctx, skip, () => {
+          generic = true;
+        })) {
           ctx.signal?.throwIfAborted();
           // The scanner counts malformed/pending rows too; this also bounds OFX records.
           if (++records > Math.min(ctx.maxRows, MAX_ROWS))
             throw new Error("Bank statement row cap exceeded; split the export");
-          const identity = await digest(transactionKey(txn));
+          const key = `${records - 1}|${txn.date?.toISOString() ?? ""}|${txn.amount}|${txn.description}`;
+          const identity = generic
+            ? recordFragment(txn.description || "transaction", key)
+            : await digest(transactionKey(txn));
           const inv = new BankInvoice(`${doc}#txn-${identity}`, store, DataFactory).mark();
           inv.name = txn.description;
           inv.totalPaymentDue = txn.amount;
           inv.priceCurrency = txn.currency;
           inv.postingTime = txn.postingTime;
+          if (generic) inv.dateCreated = txn.date;
           inv.identifier = txn.sourceId;
-          inv.fee = txn.fee;
+          inv.fee =
+            txn.fee !== undefined && amountKey(txn.fee) !== "0"
+              ? `${txn.fee} ${txn.currency}`
+              : undefined;
           if (txn.accountKey) {
             const account = new BankAccount(
               `${doc}#account-${await digest(txn.accountKey)}`,
@@ -100,19 +112,47 @@ export function createBankStatementsFileAdapter(
           return { unsupported: [error.message], skipped };
         throw error;
       }
-      if (records) {
+      let removedLegacySubjects = 0;
+      if (records || generic) {
         ctx.signal?.throwIfAborted();
         ctx.progress({ label: "Saving to your pod…", done: 1, total: 1 });
+        // A read retains the document's ETag. Retire legacy IDs and merge their
+        // replacements in one PUT so no intermediate duplicate state is visible.
+        const previous = generic ? undefined : copyDataset(await ctx.read(SLUG));
+        if (previous) {
+          for (const subject of previous.getSubjects(null, CLASSES.Invoice, null)) {
+            if (
+              subject.termType !== "NamedNode" ||
+              !subject.value.startsWith(`${doc}#txn-`) ||
+              !/^(?:[a-z0-9-]{1,48}-)?[0-9a-f]{8}$/.test(
+                subject.value.slice(`${doc}#txn-`.length),
+              ) ||
+              new BankInvoice(subject, previous, DataFactory).account !== undefined
+            )
+              continue;
+            previous.deleteMatches(subject);
+            previous.deleteMatches(DataFactory.namedNode(`${subject.value}-activity`));
+            removedLegacySubjects++;
+          }
+        }
+        const dataset = removedLegacySubjects ? mergeItems(previous, store) : store;
+        const carriedForward = removedLegacySubjects
+          ? dataset
+              .getSubjects(null, null, null)
+              .filter((subject) => store.countQuads(subject, null, null, null) === 0)
+              .map((subject) => subject.value)
+          : undefined;
         await ctx.write({
           slug: SLUG,
           category: "finance",
           forClass: CLASSES.Invoice,
-          dataset: store,
-          writeMode: "merge",
+          dataset,
+          writeMode: generic || removedLegacySubjects ? "replace" : "merge",
+          carriedForward,
         });
       }
       // Return skipped even for pending-only statements (no fabricated empty snapshot).
-      return { skipped };
+      return { skipped, removedLegacySubjects: removedLegacySubjects || undefined };
     },
   };
 }
@@ -129,6 +169,7 @@ async function* streamBankTransactions(
   options: BankStatementOptions,
   ctx: FileImportContext,
   skip: () => void,
+  onGeneric: () => void,
 ): AsyncGenerator<Transaction> {
   const source = fileText(file);
   let prefix = "";
@@ -153,6 +194,7 @@ async function* streamBankTransactions(
       for await (const record of csvRecords(chunks(), () => parser.skippedRecord())) {
         ctx.signal?.throwIfAborted();
         const txn = parser.record(record);
+        if (parser.isGeneric) onGeneric();
         if (txn) yield txn;
       }
       return;
@@ -228,7 +270,7 @@ export function parseOfx(text: string, limit = MAX_ROWS): Transaction[] {
     const name = tag(block, "NAME") ?? tag(block, "MEMO") ?? "Transaction";
     out.push({
       date,
-      postingTime: date.toISOString().slice(0, 10),
+      postingTime: date.toISOString(),
       description: name,
       sourceId: tag(block, "FITID"),
       amount,

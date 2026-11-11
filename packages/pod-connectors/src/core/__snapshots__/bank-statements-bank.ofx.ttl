@@ -6,7 +6,7 @@
     <https://jeswr.org/ns/core#about> <https://pod.test/alice/profile/card#me>;
     <https://jeswr.org/ns/core#subject> <https://pod.test/alice/profile/card#me>;
     <https://jeswr.org/ns/pod-money#account> <https://pod.test/alice/integrations/bank-statements/finance/bank-transactions.ttl#account-f0158935a6699c7835f414c289856d33c91ab4f53d43a5e30e2fe143aaa3865f>;
-    <https://schema.org/dateCreated> "2026-01-20"^^<http://www.w3.org/2001/XMLSchema#date>;
+    <https://schema.org/dateCreated> "2026-01-20T00:00:00.000Z"^^<http://www.w3.org/2001/XMLSchema#dateTime>;
     <https://schema.org/name> "Synthetic groceries";
     <https://schema.org/priceCurrency> "GBP";
     <https://schema.org/totalPaymentDue> "-12.50".
