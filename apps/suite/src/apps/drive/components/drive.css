@@ -462,6 +462,17 @@ tr:focus .drv-star {
 .drv-menu {
   min-width: 220px;
 }
+.drv-menu-label {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.drv-menu-hint {
+  max-width: 240px;
+  font-size: var(--text-xs);
+  color: var(--muted-foreground);
+  white-space: normal;
+}
 .drv-dialog-sm {
   max-width: 420px;
 }
@@ -638,7 +649,19 @@ tr:focus .drv-star {
 }
 .drv-preview-actions {
   display: flex;
+  align-items: center;
   gap: var(--space-1);
+}
+/* Keep the conversion label visible on phones, with actions on their own row. */
+@media (max-width: 479px) {
+  .drv-preview-header {
+    flex-wrap: wrap;
+    padding-block: var(--space-2);
+  }
+  .drv-preview-actions {
+    flex-basis: 100%;
+    justify-content: flex-end;
+  }
 }
 .drv-preview-content {
   display: flex;
@@ -940,34 +963,4 @@ tr:focus .drv-star {
   .drv-cell-menu {
     display: none;
   }
-}
-
-/* AUTHORED-BY Codex */
-.drv-share-dialog {
-  width: min(34rem, calc(100vw - 2rem));
-  max-height: calc(100dvh - 2rem);
-  overflow-y: auto;
-}
-.drv-share-dialog :is(h2, p, strong, select) {
-  overflow-wrap: anywhere;
-  min-width: 0;
-}
-.drv-share-add {
-  border: 0;
-  padding: 0;
-  min-width: 0;
-  display: grid;
-  gap: var(--space-3);
-}
-.drv-share-people {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-}
-.drv-share-person {
-  border-bottom: 1px solid var(--border);
-  padding-block: var(--space-3);
-}
-.drv-share-dialog .su-wrap {
-  align-items: end;
 }

@@ -426,7 +426,7 @@ function EventEditor({
   useEffect(() => {
     titleInput.current?.focus();
   }, []);
-  const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const zone = item.data.timeZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
   const [snapshot] = useState(() => {
     if (!occurrence || !item.data.recurrence) return { data: item.data, error: "" };
     try {
@@ -591,6 +591,7 @@ function EventEditor({
           value={data.inCalendar ?? ""}
           onChange={(inCalendar) => setData({ ...data, inCalendar })}
         />
+        {data.timeZone && <p>Time zone: {data.timeZone}</p>}
         <RecurrenceEditor
           locale="en-GB"
           value={rule}

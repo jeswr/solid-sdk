@@ -2,6 +2,7 @@
 import { isHttpIri, safeHttpIri } from "@jeswr/rdf-serialize";
 import {
   Contact,
+  type ContactAddress,
   ContactBook,
   type ContactData,
   ContactGroup,
@@ -18,6 +19,7 @@ import {
   TermWrapper,
 } from "@rdfjs/wrapper";
 import { DataFactory, Store } from "n3";
+import { MAX_ADDRESS_COMPONENT_LENGTH, MAX_STREET_LINES } from "../postal/types";
 
 export const VCARD = "http://www.w3.org/2006/vcard/ns#";
 export const CONTACT_CLASS = `${VCARD}Individual`;
@@ -82,6 +84,8 @@ export function contactData(contact: Contact): ContactData {
   const phones = contact.phones;
   if (emails.length) data.emails = emails;
   if (phones.length) data.phones = phones;
+  const addresses = contact.addresses;
+  if (addresses.length) data.addresses = addresses;
   if (contact.note !== undefined) data.note = contact.note;
   if (contact.organization !== undefined) data.organization = contact.organization;
   const webId = readWebId(contact);
@@ -253,6 +257,64 @@ function reconcileContactPoints(contact: Contact, desired: Contact): void {
   }
 }
 
+// AUTHORED-BY Claude Opus 5.5
+export const MAX_ADDRESSES = 16;
+const ADDRESS_FIELDS = ["street", "locality", "region", "postalCode", "country"] as const;
+
+/** Mirror the postal library's size limits so a pasted blob cannot bloat the contact document. */
+export function validateAddresses(addresses: readonly ContactAddress[]): void {
+  for (const address of addresses) {
+    if (address.kind !== undefined && address.kind !== "home" && address.kind !== "work")
+      throw new TypeError("Invalid address type.");
+    for (const field of ADDRESS_FIELDS) {
+      const value = address[field];
+      if (value === undefined) continue;
+      const limit =
+        field === "street"
+          ? MAX_ADDRESS_COMPONENT_LENGTH * MAX_STREET_LINES
+          : MAX_ADDRESS_COMPONENT_LENGTH;
+      if (typeof value !== "string" || value.length > limit)
+        throw new TypeError("Invalid address.");
+    }
+  }
+}
+
+/** Compare as the shared reader would see the result: trimmed, empties dropped. */
+export function addressKey(addresses: readonly ContactAddress[]): string {
+  return JSON.stringify(
+    addresses
+      .map((address) => [
+        address.kind ?? "",
+        ...ADDRESS_FIELDS.map((field) => String(address[field] ?? "").trim()),
+      ])
+      .filter((row) => row.slice(1).some(Boolean)),
+  );
+}
+
+/**
+ * Rewrite only the address nodes that changed: an unchanged address keeps its node and any
+ * extra RDF on it, and nodes the reader cannot show are never touched. Limits apply only to
+ * what a save adds, so addresses another app wrote past them never block an edit or merge.
+ */
+function reconcileAddresses(contact: Contact, addresses: readonly ContactAddress[]): void {
+  const entries = contact.addressEntries;
+  if (addressKey(entries.map(({ address }) => address)) === addressKey(addresses)) return;
+  const pending = addresses.filter((address) => addressKey([address]) !== "[]");
+  const removed: Term[] = [];
+  for (const { node, address } of entries) {
+    const key = addressKey([address]);
+    const index = pending.findIndex((wanted) => addressKey([wanted]) === key);
+    if (index === -1) removed.push(node);
+    else pending.splice(index, 1);
+  }
+  validateAddresses(pending);
+  if (pending.length && entries.length - removed.length + pending.length > MAX_ADDRESSES)
+    throw new TypeError("Too many addresses.");
+  const writer = new Contact(contact.id, contact.dataset, contactFactory);
+  for (const node of removed) writer.removeAddress(node);
+  for (const address of pending) writer.addAddress(address);
+}
+
 export function applyContact(contact: Contact, data: ContactData): void {
   validateContact(data);
   const desired = new Contact(contact.id, new Store(), contactFactory);
@@ -260,6 +322,7 @@ export function applyContact(contact: Contact, data: ContactData): void {
   desired.setPhones((data.phones ?? []).map((phone) => phone.replace(/[(). -]/g, "")));
   desired.setWebId(safeHttpIri(data.webId));
   reconcileContactPoints(contact, desired);
+  reconcileAddresses(contact, data.addresses ?? []);
   contact.name = data.name;
   contact.note = data.note;
   contact.organization = data.organization;

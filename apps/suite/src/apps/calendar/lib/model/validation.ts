@@ -71,8 +71,24 @@ export function validateReminder(reminder: Reminder): void {
 export function validateCalendar(calendar: Calendar): void {
   if (!calendar.title.trim()) throw new TypeError("Calendar title is required");
 }
+export function validateTimeZone(timeZone: string): void {
+  if (
+    typeof timeZone !== "string" ||
+    !timeZone ||
+    /^[+-]/.test(timeZone) ||
+    // biome-ignore lint/suspicious/noControlCharactersInRegex: reject control characters in stored zones.
+    /[\x00-\x1f\x7f-\x9f]/.test(timeZone)
+  )
+    throw new TypeError("Invalid IANA time zone");
+  try {
+    new Intl.DateTimeFormat("en", { timeZone });
+  } catch {
+    throw new TypeError("Invalid IANA time zone");
+  }
+}
 export function validateEvent(event: CalendarEvent): void {
   if (!event.name.trim()) throw new TypeError("Event title is required");
+  if (event.timeZone !== undefined) validateTimeZone(event.timeZone);
   asDate(event.start);
   if (
     event.end !== undefined &&

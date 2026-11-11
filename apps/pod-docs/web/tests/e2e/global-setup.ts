@@ -1,17 +1,12 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 //
-// Playwright globalSetup for the task #123 401-budget e2e. Runs once after the
+// Playwright globalSetup for the shared sign-in e2e. Runs once after the
 // webServers (CSS@3000 + vite@5173) are up. It:
 //   1. creates a fresh CSS account + pod (the verified solid-test-infrastructure recipe);
 //   2. seeds the WebID profile (foaf:name + pim:storage — a fresh CSS pod has neither,
 //      so without this the app sees no display name / no storage and looks broken);
-//   3. seeds the DOCUMENTS CONTAINER `pod-docs/` with MANY separate `pd:Document`
-//      RESOURCES (the regression surface): pod-docs' <DocumentBrowser> loads by listing
-//      the container AND THEN reading EACH child document (DocsStore.list → read per
-//      child), and the App ALSO reads the WebID profile — so a container of N documents
-//      drives N+1 distinct pod reads on load. Under the OLD reactive manager EACH of
-//      those reads paid a wasted 401; the proactive patch keeps the count flat. The
-//      document count is the regression surface — the 401 count must NOT scale with it.
+//   3. seeds the DOCUMENTS CONTAINER `pod-docs/` with several private `pd:Document`
+//      resources, which the spec expects the signed-in browser to list.
 // It writes the seeded credentials to a JSON sidecar the spec reads (the spec drives
 // the real OIDC popup login with this account; the seeded data is its pod contents).
 //

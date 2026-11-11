@@ -128,7 +128,9 @@ describe("imports through the real editor schema", () => {
     expect(() => validateImportFile({ name: "plan.docx", size: MAX_IMPORT_BYTES + 1 })).toThrow(
       "50 MB",
     );
-    expect(() => validateImportFile({ name: "plan.pdf", size: 1 })).toThrow("DOCX or Markdown");
+    expect(() => validateImportFile({ name: "plan.pdf", size: 1 })).toThrow(
+      "DOCX, HTML, Markdown or plain text",
+    );
   });
   it("sanitizes embedded Markdown HTML through the schema without corrupting code", async () => {
     const source =

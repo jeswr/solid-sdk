@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { type CalendarDate, type CalendarEvent, validateEvent } from "../lib/model";
+import { createSeriesIntents, type SeriesRecovery } from "./intents";
 import type { EventWrite } from "./repository";
 export interface OutboxStorage {
   getItem(key: string): string | null;
@@ -10,7 +11,7 @@ function date(value: string): CalendarDate {
   return value.length === 10 ? value : new Date(value);
 }
 /** Revive only model date fields; a date-shaped title always stays text. */
-function revive(write: EventWrite): EventWrite {
+export function reviveEventWrite(write: EventWrite): EventWrite {
   if (!["create", "update", "delete"].includes(write.kind) || typeof write.url !== "string")
     throw new TypeError("Invalid outbox");
   if (write.kind !== "create" && (!write.etag || write.etag === "*" || write.etag.startsWith("W/")))
@@ -43,7 +44,9 @@ export function createEventOutbox(
   send: (write: EventWrite) => Promise<unknown>,
   changed: (writes: EventWrite[], offline: boolean) => void,
   allowed: (write: EventWrite) => void,
+  recovery?: SeriesRecovery,
 ) {
+  const intents = recovery && createSeriesIntents(webId, storage, send, allowed, recovery);
   let entries: EventWrite[] = [];
   let offline = false;
   try {
@@ -56,7 +59,7 @@ export function createEventOutbox(
         Array.isArray(envelope.writes) &&
         envelope.writes.length <= 100
       )
-        entries = envelope.writes.map(revive);
+        entries = envelope.writes.map(reviveEventWrite);
     }
   } catch {
     /* Corrupt or unavailable storage does not prevent in-memory saves. */
@@ -121,7 +124,11 @@ export function createEventOutbox(
   function flush(): Promise<void> {
     if (running) return running;
     offline = false;
-    running = drain().finally(() => {
+    const work = async () => {
+      await intents?.recover();
+      await drain();
+    };
+    running = (intents ? intents.lock(work) : drain()).finally(() => {
       running = undefined;
     });
     return running;
@@ -129,6 +136,12 @@ export function createEventOutbox(
   return {
     restore: publish,
     flush,
+    compound: intents
+      ? async (...args: Parameters<typeof intents.run>) => {
+          await flush();
+          return intents.lock(() => intents.run(...args));
+        }
+      : undefined,
     async resolve(url: string, etag: string | null, requireConfirmation = true): Promise<string> {
       const dependencies = entries.filter((entry) => entry.url === url);
       if (dependencies.length) await flush();

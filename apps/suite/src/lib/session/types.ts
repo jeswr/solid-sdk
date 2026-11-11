@@ -23,7 +23,12 @@ export interface ExtensionPodSession extends SessionAccount {
   disconnect(): Promise<void>;
 }
 
-export type PodSession = DemoPodSession | ExtensionPodSession;
+export interface SolidPodSession extends SessionAccount {
+  readonly mode: "solid";
+  readonly publicFetch: typeof globalThis.fetch;
+}
+
+export type PodSession = DemoPodSession | ExtensionPodSession | SolidPodSession;
 
 export type SessionResult =
   | { status: "loading" }

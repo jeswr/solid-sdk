@@ -3,8 +3,20 @@ import type { DatasetCore, Quad, Term } from "@rdfjs/types";
 import { DataFactory, Store } from "n3";
 import { clusterContacts, type DedupeContact, planMerges } from "../lib/dedupe";
 import { normaliseEmail, normalisePhone, validateWebId } from "../lib/dedupe/normalise";
-import { Contact, type ContactData, type ContactGroupData, type Snapshot } from "../lib/model";
-import { applyContact, VCARD } from "../lib/model/data";
+import {
+  Contact,
+  type ContactAddress,
+  type ContactData,
+  type ContactGroupData,
+  type Snapshot,
+} from "../lib/model";
+import {
+  addressKey,
+  applyContact,
+  MAX_ADDRESSES,
+  VCARD,
+  validateAddresses,
+} from "../lib/model/data";
 import type { ContactsData, MergeOutcome } from "./controller";
 import type { StarStorage } from "./data";
 
@@ -198,6 +210,15 @@ function union(values: readonly string[], key: (value: string) => string): strin
   return [...seen.values()];
 }
 
+function validAddress(address: ContactAddress): boolean {
+  try {
+    validateAddresses([address]);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /** The primary keeps its own spelling first; equal normalised contact points appear once. */
 export function mergeContactData(
   primary: ContactData,
@@ -225,6 +246,19 @@ export function mergeContactData(
   }
   if (emails.length) merged.emails = emails;
   if (phones.length) merged.phones = phones;
+  // AUTHORED-BY Claude Opus 5.5
+  // The primary keeps all of its own addresses, even past the limits (another app may have
+  // written them). A copy adds each new, valid address while there is room; the rest stay on
+  // the copy and show up as losses in review.
+  const addresses: ContactAddress[] = [...(primary.addresses ?? [])];
+  const seen = new Set(addresses.map((address) => addressKey([address])));
+  for (const address of others.flatMap((data) => data.addresses ?? [])) {
+    const key = addressKey([address]);
+    if (seen.has(key) || addresses.length >= MAX_ADDRESSES || !validAddress(address)) continue;
+    seen.add(key);
+    addresses.push(address);
+  }
+  if (addresses.length) merged.addresses = addresses;
   return merged;
 }
 
@@ -251,7 +285,6 @@ const POINTS: Record<string, string> = {
   [`${VCARD}url`]: "website",
 };
 const NAMED: Record<string, string> = {
-  [`${VCARD}hasAddress`]: "address",
   [`${VCARD}bday`]: "birthday",
   [`${VCARD}anniversary`]: "anniversary",
   [`${VCARD}hasPhoto`]: "photo",
@@ -310,6 +343,18 @@ export function mergeLosses(merged: DatasetCore, primaryId: string, duplicate: S
     }
   };
   const target = DataFactory.namedNode(primaryId);
+  const keptAddresses = new Map(
+    new Contact(primaryId, merged, DataFactory).addressEntries.map(({ node, address }) => [
+      addressKey([address]),
+      node,
+    ]),
+  );
+  const copyAddresses = new Map(
+    new Contact(subject, source, DataFactory).addressEntries.map(({ node, address }) => [
+      node.value + node.termType,
+      addressKey([address]),
+    ]),
+  );
   for (const quad of source.match(DataFactory.namedNode(subject))) {
     covered.add(key(quad));
     const predicate = quad.predicate.value;
@@ -317,6 +362,33 @@ export function mergeLosses(merged: DatasetCore, primaryId: string, duplicate: S
     if (predicate === RDF_TYPE) {
       if (quad.object.value !== `${VCARD}Individual`)
         losses.add(`type ${local(quad.object.value)}`);
+      continue;
+    }
+    if (predicate === `${VCARD}hasAddress`) {
+      cover(quad.object);
+      const copyKey = copyAddresses.get(quad.object.value + quad.object.termType);
+      const kept = copyKey === undefined ? undefined : keptAddresses.get(copyKey);
+      if (!kept) {
+        losses.add("address");
+        continue;
+      }
+      // A detail survives when the kept node carries it (address text compared trimmed).
+      for (const detail of source.match(quad.object)) {
+        const part = detail.predicate.value;
+        const object =
+          detail.object.termType === "Literal"
+            ? DataFactory.literal(
+                detail.object.value.trim(),
+                detail.object.language || detail.object.datatype,
+              )
+            : detail.object;
+        if (merged.match(kept, detail.predicate, object).size) continue;
+        losses.add(
+          part === RDF_TYPE
+            ? `${local(detail.object.value)} label on address`
+            : `${local(part)} on address`,
+        );
+      }
       continue;
     }
     const kind = POINTS[predicate];

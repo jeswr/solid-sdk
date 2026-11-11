@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { mkdir } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import AxeBuilder from "@axe-core/playwright";
@@ -24,6 +25,11 @@ async function ready(page: Page, component = "global-search") {
   await page.goto(`/dev/components/${component}`);
   await expect(page.getByRole("heading", { level: 1 })).toHaveCount(1);
   await page.evaluate(() => document.fonts.ready);
+}
+async function signInDemo(page: Page) {
+  await page.goto("/signin");
+  await page.getByRole("button", { name: "Try it with a demo pod" }).click();
+  await expect(page).toHaveURL(/\/home$/);
 }
 async function searchInput(page: Page) {
   if ((page.viewportSize()?.width ?? 1280) < 768 && !(await page.getByRole("dialog").count()))
@@ -172,6 +178,7 @@ test("palette filters actions, creates, searches and restores focus", async ({ p
 });
 
 test("palette Enter navigates to Drive", async ({ page }) => {
+  await signInDemo(page);
   await ready(page, "command-palette");
   await page.getByLabel("Typing area").focus();
   await page.keyboard.press("Control+k");
@@ -181,6 +188,7 @@ test("palette Enter navigates to Drive", async ({ page }) => {
   await accessible(page);
   await dialog.getByRole("combobox").press("Enter");
   await expect(page).toHaveURL(/\/drive(?:\/my)?$/);
+  await expect(page.getByRole("heading", { level: 1, name: "Drive", exact: true })).toBeVisible();
 });
 
 test("help groups and filters shortcuts, lists frame keys and restores focus", async ({
@@ -205,6 +213,7 @@ test("help groups and filters shortcuts, lists frame keys and restores focus", a
 });
 
 test("single keys stay in editable controls and g d navigates after blur", async ({ page }) => {
+  await signInDemo(page);
   await ready(page);
   const input = page.getByLabel("Typing area");
   await input.fill("");
@@ -218,6 +227,7 @@ test("single keys stay in editable controls and g d navigates after blur", async
   await page.keyboard.press("g");
   await page.keyboard.press("d");
   await expect(page).toHaveURL(/\/drive(?:\/my)?$/);
+  await expect(page.getByRole("heading", { level: 1, name: "Drive", exact: true })).toBeVisible();
 });
 
 test("slash focuses responsive search and Shift+D toggles theme", async ({ page }) => {

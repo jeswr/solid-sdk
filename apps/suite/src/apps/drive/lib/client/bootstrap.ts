@@ -4,7 +4,7 @@ import { accessControl } from "./access";
 import { DriveError, discoverContentTargets } from "./client";
 import { commitHttp, type ResourceAssertion, unconfirmedIdentityMessage } from "./commit";
 
-class BootstrapIdentityError extends DriveError {
+export class BootstrapIdentityError extends DriveError {
   constructor(url: string) {
     super("missing-validator", 428, url);
     this.message = unconfirmedIdentityMessage;

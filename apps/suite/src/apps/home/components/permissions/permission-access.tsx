@@ -53,21 +53,33 @@ export function DisabledHint({
   children: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
+  const trigger = useRef<HTMLDivElement>(null);
   return (
-    <Tooltip open={!!reason && open} onOpenChange={setOpen}>
+    <Tooltip
+      open={!!reason && open}
+      onOpenChange={(next) => {
+        // Focusing an offscreen control scrolls it into view. Radix closes tooltips
+        // on scroll; keep this explanation open while its trigger has keyboard focus.
+        const focused = document.activeElement?.closest('[data-slot="tooltip-trigger"]');
+        if (next || focused !== trigger.current) setOpen(next);
+      }}
+    >
       <TooltipTrigger asChild>
         {/* Keyboard access to the explanation when its child control is disabled. */}
         {/* biome-ignore lint/a11y/useSemanticElements: This tooltip surrounds an article or link rather than a form field group. */}
         <div
           role="group"
+          ref={trigger}
           className="hm-permission-hint"
           tabIndex={reason && !focusable ? 0 : -1}
           aria-label={reason || undefined}
+          onFocus={(event) => event.stopPropagation()}
+          onBlur={(event) => event.stopPropagation()}
         >
           {children}
         </div>
       </TooltipTrigger>
-      {reason && <TooltipContent>{reason}</TooltipContent>}
+      {reason && <TooltipContent onEscapeKeyDown={() => setOpen(false)}>{reason}</TooltipContent>}
     </Tooltip>
   );
 }

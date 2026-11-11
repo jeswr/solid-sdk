@@ -208,6 +208,7 @@ describe("layout and validation", () => {
       updateLog: "https://pod.example/docs/plan/updates/",
       assets: "https://pod.example/docs/plan/assets/",
       comments: "https://pod.example/docs/plan/comments/",
+      versions: "https://pod.example/docs/plan/versions/",
     });
     expect(docContainerUrls("https://pod.example/pod-docs/plan.ttl").assets).toContain(
       "/pod-docs/",

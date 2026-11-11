@@ -3,6 +3,7 @@
 "use client";
 import { Button, LoadingSkeleton, PodMeter } from "@jeswr/suite-ui";
 import Link from "next/link";
+import { AppHeading } from "@/shell/app-frame";
 import type { DomainItem } from "../lib/model/discovery";
 import { sortItems } from "../lib/model/discovery";
 import { asOfTime, greeting, itemTitle, relativeTime } from "../state/presentation";
@@ -38,7 +39,7 @@ export function HomeHeader({
   const latest = sortItems(items.filter((item) => item.modified))[0];
   return (
     <header className="hm-header">
-      <h1>{greeting(new Date(now), displayName)}</h1>
+      <AppHeading>{greeting(new Date(now), displayName)}</AppHeading>
       <p className="hm-muted">Here's what's in your pod and who can see it.</p>
       {offline && asOf !== undefined ? (
         <p className="hm-muted">You're offline. This is your pod as of {asOfTime(asOf)}.</p>
