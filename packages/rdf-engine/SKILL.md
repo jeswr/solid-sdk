@@ -38,6 +38,10 @@ A failed save rejects but retains the updated memory state. Browser createIndex 
 createIndexedDbPersistence; other entry points persist only when explicitly configured.
 Use distinct databaseName/key settings for independent browser indexes.
 
+The default entry also re-exports n3's `DataFactory` and the RDF/JS `Quad` type for
+index feeders. Use that shared factory to construct synthetic listing metadata;
+importing it does not initialize WASM or create an index.
+
 Before implementation, read SDK core ADR-001 D4 and `ADR-007-sparq-wasm.md` in
 `solid-suite-planning/specs/sdk-core/`, alongside this repository's `AGENTS.md`.
 

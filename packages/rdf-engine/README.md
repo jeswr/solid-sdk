@@ -60,6 +60,10 @@ deduplicates its quads. `remove` deletes a graph, `has` checks membership,
 `list` returns resource IRIs in LRU order, and `size` counts quads. Graph IRIs
 must be absolute. Explicitly stored empty graphs remain present in memory.
 
+The default `@jeswr/rdf-engine` entry re-exports the existing n3 `DataFactory` and
+the RDF/JS `Quad` type for index feeders that construct synthetic metadata.
+Importing the factory does not initialize WASM.
+
 ```ts
 const index = await engine.createIndex({ maxQuads: 2_000_000 });
 await index.put(documentUrl, data);
