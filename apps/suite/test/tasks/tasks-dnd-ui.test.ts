@@ -89,8 +89,11 @@ afterEach(() => {
 });
 
 describe("keyboard drag and drop", () => {
-  it("reorders flat board cards before a child without changing parent links", async () => {
-    pathname = "/tasks/p/inbox/board";
+  it.each([
+    "/tasks/p/inbox/board",
+    "/tasks/p/inbox/board/",
+  ])("reorders flat board cards before a child without changing parent links at %s", async (path) => {
+    pathname = path;
     const result = await frameCache();
     cache = result.cache;
     const root = await cache.createTask(result.inbox, { title: "Root" });

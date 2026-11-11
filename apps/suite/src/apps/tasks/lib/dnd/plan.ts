@@ -265,7 +265,7 @@ export function isPlaced(
   return (
     level.projectUrl === plan.projectUrl &&
     level.sectionId === plan.sectionId &&
-    (flat ? task.parentId : level.parent?.id) === plan.parentId &&
+    (flat || level.parent?.id === plan.parentId) &&
     members(level, views).findIndex((view) => view.url === task.url) + 1 === plan.index
   );
 }

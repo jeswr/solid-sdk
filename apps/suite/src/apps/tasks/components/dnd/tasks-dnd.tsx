@@ -22,7 +22,6 @@ import { sortableKeyboardCoordinates } from "@dnd-kit/sortable";
 import { getEventCoordinates, isKeyboardEvent } from "@dnd-kit/utilities";
 import { toast } from "@jeswr/suite-ui";
 import { GripVertical } from "lucide-react";
-import { usePathname } from "next/navigation";
 import {
   createContext,
   type PointerEvent,
@@ -32,6 +31,7 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
+import { useRoutePathname } from "@/lib/route-params";
 import {
   cancelMessage,
   dropMessage,
@@ -195,7 +195,7 @@ const hintOf = (target: DropTarget | undefined, over: Over | null): Hint =>
 export function TasksDnd({ children }: { children: ReactNode }) {
   const tasks = useTasks();
   const { preferences } = useTasksPreferences();
-  const pathname = usePathname();
+  const pathname = useRoutePathname();
   // A list sorted by due date, priority or name has no manual order to drop into.
   const manual = (preferences.sort[pathname] ?? "manual") === "manual";
   const flat = pathname.endsWith("/board");
