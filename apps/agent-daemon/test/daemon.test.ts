@@ -354,6 +354,12 @@ it("imports ACL first, deterministically triages, proposes, audits, checkpoints,
   expect(h.ledger.entries().map((e) => e.record.type)).toEqual(["ingest", "proposal"]);
   expect(h.state.held()).toBe(false);
   expect([...h.pod.resources.keys()].some((url) => url.includes("agent/proposals/"))).toBe(true);
+  // The agent introduces itself after the owner-only workspace ACL, before any inbox content.
+  const writes = h.pod.requests.filter((r) => r.method === "PUT").map((r) => r.url);
+  const introduction = writes.indexOf(`${ROOT}agent/descriptors/agent.ttl`);
+  expect(introduction).toBeGreaterThan(writes.indexOf(`${ROOT}agent/.acl`));
+  expect(introduction).toBeLessThan(writes.findIndex((url) => url.includes("/inbox/direct/")));
+  expect(h.pod.resources.get(`${ROOT}agent/descriptors/agent.ttl`)?.body).toContain(AGENT_ID);
 });
 it.each([
   "proposal-write",

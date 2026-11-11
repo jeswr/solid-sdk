@@ -104,6 +104,7 @@ function useTasksValue(session: PodSession) {
       ...snapshot,
       cache,
       webId: session.webId,
+      storageUrl: session.storageUrl,
       sharingAvailable: supportsTasksSharing(session),
       shareAdapter: (project: StoredProject) => {
         const key = `${project.url} ${project.tracker.stateStore}`;

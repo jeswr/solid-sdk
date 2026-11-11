@@ -1,11 +1,12 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import type { NewTask } from "../../state/tasks-cache";
+import type { GoogleTasksWarning, ProjectImportDraft, TaskImportDraft } from "../google-tasks";
 import { requireHttp } from "../model/rdf";
 import type { StoredProject } from "../model/store";
-import type { TodoistProjectDraft, TodoistTaskDraft, TodoistWarning } from "../todoist";
+import type { TodoistWarning } from "../todoist";
 import { priorityValue } from "../views/types";
 
-export interface ImportWarning {
+interface MetadataWarning {
   code:
     | TodoistWarning["code"]
     | "UNRESOLVED_AUTHOR"
@@ -16,6 +17,7 @@ export interface ImportWarning {
     | "SECTION_DESCRIPTION";
   line: number;
 }
+export type ImportWarning = GoogleTasksWarning | MetadataWarning;
 
 /** The task writer's own IRI rule, so a value accepted here never fails at creation. */
 function webId(value: string): string | undefined {
@@ -27,11 +29,11 @@ function webId(value: string): string | undefined {
 }
 
 /** Display names cannot be resolved to WebIDs without an identity mapping. Keep them verbatim. */
-function taskMetadata(draft: TodoistTaskDraft) {
+function taskMetadata(draft: TaskImportDraft) {
   const fields: Pick<NewTask, "creator" | "assignee"> = {};
   const description = [draft.description];
   const warnings: ImportWarning[] = [];
-  const keep = (value: string, label: string, code: ImportWarning["code"], line = draft.line) => {
+  const keep = (value: string, label: string, code: MetadataWarning["code"], line = draft.line) => {
     if (!value) return;
     description.push(`${label}: ${value}`);
     warnings.push({ code, line });
@@ -56,15 +58,15 @@ function taskMetadata(draft: TodoistTaskDraft) {
 }
 
 /** Sections have no description field in the model; the project retains even empty sections' text. */
-export function importProjectDescription(draft: TodoistProjectDraft): string {
+export function importProjectDescription(draft: ProjectImportDraft): string {
   return draft.sections
     .filter((section) => section.description !== "")
     .map((section) => `Section "${section.title}" description: ${section.description}`)
     .join("\n\n");
 }
 
-/** Preview warnings contain only codes and line numbers, never metadata copied from the file. */
-export function importWarnings(draft: TodoistProjectDraft): ImportWarning[] {
+/** Preview warnings contain only codes and source positions, never metadata copied from the file. */
+export function importWarnings(draft: ProjectImportDraft): ImportWarning[] {
   return [
     ...draft.warnings,
     ...draft.sections
@@ -76,7 +78,7 @@ export function importWarnings(draft: TodoistProjectDraft): ImportWarning[] {
 
 /** Resolve imported names only against classes saved in the new tracker. */
 export function importTaskInput(
-  draft: TodoistTaskDraft,
+  draft: TaskImportDraft,
   project: StoredProject,
   sections: ReadonlyMap<string, string>,
 ): NewTask {
@@ -85,7 +87,9 @@ export function importTaskInput(
     ...fields,
     title: draft.title,
     description,
-    priority: priorityValue(draft.priority),
+    priority: priorityValue(draft.priority ?? 4),
+    ...(draft.state === undefined ? {} : { state: draft.state }),
+    ...(draft.completedAt === undefined ? {} : { endedAt: new Date(draft.completedAt) }),
     due: draft.due ? new Date(draft.due.dateTime) : undefined,
     allDay: draft.due?.kind === "date" ? draft.due.date : undefined,
     position: draft.orderKey,

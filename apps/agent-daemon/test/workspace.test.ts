@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { digestOf, recordFromTurtle } from "@jeswr/agent-model";
 import { exampleRecords } from "@jeswr/agent-model/testing";
+import { parseRdf } from "@jeswr/fetch-rdf";
 import { expect, it } from "vitest";
 import { createMemoryPod } from "../src/testing.js";
 import { PodWorkspace } from "../src/workspace.js";
@@ -99,4 +100,40 @@ it("stamps local proposal destinations, refuses conflicting rewrites and seriali
     "2026-11-01T12:00:00.000Z",
   );
   await expect(workspace.inbox("../escape", "fixture")).rejects.toThrow();
+});
+it("publishes exactly the agent's introduction at descriptors/agent.ttl and keeps it current", async () => {
+  const pod = createMemoryPod();
+  const workspace = new PodWorkspace({ io: pod.io, root, ownerWebId, privateTypeIndex });
+  await workspace.initialize();
+  const url = `${root}agent/descriptors/agent.ttl`;
+  const triples = async () =>
+    [...(await parseRdf(pod.resources.get(url)?.body ?? "", "text/turtle", { baseIRI: url }))]
+      .map((q) => [q.subject.value, q.predicate.value, q.object.value])
+      .sort();
+  await workspace.introduce(`${root}profile/agent#me`);
+  expect(await triples()).toEqual([
+    [
+      url,
+      "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+      "https://jeswr.org/ns/agent#ImplementationDescription",
+    ],
+    [url, "https://jeswr.org/ns/agent#describes", `${root}profile/agent#me`],
+  ]);
+  await workspace.introduce("https://agent.example/card#agent");
+  expect(await triples()).toEqual([
+    [
+      url,
+      "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+      "https://jeswr.org/ns/agent#ImplementationDescription",
+    ],
+    [url, "https://jeswr.org/ns/agent#describes", "https://agent.example/card#agent"],
+  ]);
+  const writes = pod.requests.filter((r) => r.method === "PUT").length;
+  for (const unsafe of [
+    "urn:agent:me",
+    "https://user:secret@agent.example/#me",
+    "https://agent.example/?q#me",
+  ])
+    await expect(workspace.introduce(unsafe)).rejects.toThrow("Unsafe");
+  expect(pod.requests.filter((r) => r.method === "PUT")).toHaveLength(writes);
 });
