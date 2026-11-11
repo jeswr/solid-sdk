@@ -2,15 +2,14 @@
 
 import type { ProjectImportDraft } from "../lib/google-tasks";
 import { importProjectDescription, importTaskInput } from "../lib/import/mapping";
-import type { StoredProject, StoredTask } from "../lib/model/store";
+import type { StoredProject } from "../lib/model/store";
 import { unionLabels } from "../lib/model/tracker";
 import type { TasksCache } from "./tasks-cache";
 
-/** Owned by one dialog list, so every retry keeps its creation reservation and confirmed writes. */
+/** Owned by one dialog list, so every retry keeps its project creation reservation. */
 export interface ProjectImportState {
   create?: ReturnType<TasksCache["prepareProjectCreate"]>;
   project?: StoredProject | undefined;
-  savedTasks?: Map<string, StoredTask>;
   warning?: string;
 }
 
@@ -81,10 +80,10 @@ export async function importProject(
   if (signal.aborted) return result;
   const entries = draft.tasks.map((task) => ({
     id: task.id,
+    sourceId: task.sourceId ?? task.id,
     parentId: task.parentId,
     data: importTaskInput(task, project, sections),
   }));
-  state.savedTasks ??= new Map();
-  const written = await cache.importTasks(project, entries, signal, onProgress, state.savedTasks);
+  const written = await cache.importTasks(project, entries, signal, onProgress);
   return { ...result, project, ...(written ?? { imported: 0, failed: draft.tasks.length }) };
 }

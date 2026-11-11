@@ -5,6 +5,7 @@ import { act, createElement, useSyncExternalStore } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TasksImportDialog } from "../../src/apps/tasks/components/import/import-dialog";
+import { parseGoogleTasksJson } from "../../src/apps/tasks/lib/google-tasks";
 import { DataFactory, NS, parse, SCHED, SCHEMA } from "../../src/apps/tasks/lib/model/rdf";
 import type { StoredProject } from "../../src/apps/tasks/lib/model/store";
 import { parseTodoistCsv } from "../../src/apps/tasks/lib/todoist";
@@ -54,15 +55,15 @@ async function pick(csv: string, name = "Work.csv", drop = false, type = "text/c
   });
 }
 async function finished() {
-  await act(async () => {
-    await vi.waitFor(() => expect(document.querySelector('[role="dialog"]')).toBeNull());
+  await vi.waitFor(async () => {
+    await act(async () => {});
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
   });
 }
 async function retryable() {
-  await act(async () => {
-    await vi.waitFor(() =>
-      expect(document.querySelector('input[type="file"]:disabled')).toBeNull(),
-    );
+  await vi.waitFor(async () => {
+    await act(async () => {});
+    expect(document.querySelector('input[type="file"]:disabled')).toBeNull();
   });
   expect(query('[role="alert"]').textContent).toContain("Could not finish the import.");
 }
@@ -333,7 +334,9 @@ describe("Todoist import dialog with the real conditional cache/store", () => {
     expect(tasks.find((item) => item.task.title === "Success")?.url).toBe(success?.url);
     const parent = tasks.find((item) => item.task.title === "Failed parent");
     expect(tasks.find((item) => item.task.title === "Child")?.task.parent).toBe(parent?.task.id);
-    expect(writes.mock.calls.filter(([, data]) => data.title === "Success")).toHaveLength(1);
+    const successWrites = writes.mock.calls.filter(([, data]) => data.title === "Success");
+    expect(successWrites).toHaveLength(2);
+    expect(successWrites[1]?.[2]).toBe(successWrites[0]?.[2]);
     expect(toast.success).toHaveBeenCalledWith("Imported 3 tasks into Work", expect.anything());
   });
 
@@ -583,6 +586,123 @@ describe("Todoist import dialog with the real conditional cache/store", () => {
 });
 
 describe("Google Tasks through the shared import dialog", () => {
+  it("uses Google source IDs across reordered drafts and scopes their hashes to the project", async () => {
+    const rows = [
+      { id: "first/source?", title: "First", status: "needsAction", position: "01" },
+      { id: "second", title: "Second", status: "needsAction", position: "02" },
+    ];
+    const importInto = async (project: StoredProject, items: typeof rows) => {
+      const draft = parseGoogleTasksJson(JSON.stringify({ kind: "tasks#tasks", items }))
+        .projects[0];
+      if (!draft) throw new Error("Missing draft");
+      return importProject(cache, draft, "Unused", new AbortController().signal, () => {}, {
+        project,
+      });
+    };
+    await act(async () => {
+      expect(await importInto(inbox, rows)).toMatchObject({ imported: 2, failed: 0 });
+    });
+    const original = await cache.store.listTasks(inbox.tracker.stateStore as string);
+    const first = original.find((item) => item.task.title === "First");
+    if (!first) throw new Error("Missing first task");
+    await cache.store.updateTask(first, (task) => {
+      task.title = "Edited after import";
+    });
+    await act(async () => {
+      // A fresh operation has no task reservations or confirmed-write map to reuse.
+      expect(await importInto(inbox, [...rows].reverse())).toMatchObject({
+        imported: 2,
+        failed: 0,
+      });
+    });
+    const retried = await cache.store.listTasks(inbox.tracker.stateStore as string);
+    expect(retried.map((item) => item.url).sort()).toEqual(original.map((item) => item.url).sort());
+    expect(retried.find((item) => item.url === first.url)?.task.title).toBe("Edited after import");
+    expect(cache.getSnapshot().views.map((task) => task.title)).toContain("Edited after import");
+    for (const task of retried)
+      expect(task.url.split("/").pop()).toMatch(/^import-[a-f0-9]{64}\.ttl$/);
+
+    await act(async () => {
+      const other = await cache.createProject("Other");
+      if (!other) throw new Error("Missing other project");
+      expect(await importInto(other, rows)).toMatchObject({ imported: 2, failed: 0 });
+      const tasks = await cache.store.listTasks(other.tracker.stateStore as string);
+      const names = new Set(original.map((task) => task.url.split("/").pop()));
+      expect(tasks.every((task) => !names.has(task.url.split("/").pop()))).toBe(true);
+    });
+  });
+
+  it.each([
+    {
+      name: "Tasks.json",
+      content: JSON.stringify({
+        kind: "tasks#taskLists",
+        items: [
+          {
+            id: "work",
+            title: "Work",
+            items: [
+              { id: "parent", title: "Parent", status: "needsAction", position: "01" },
+              {
+                id: "child",
+                title: "Child",
+                parent: "parent",
+                status: "needsAction",
+                position: "02",
+              },
+            ],
+          },
+        ],
+      }),
+    },
+    { name: "Work.csv", content: "TYPE,CONTENT,INDENT\ntask,Parent,1\ntask,Child,2" },
+  ])("retries the same task URL after a lost PUT and a failed confirmation GET ($name)", async ({
+    name,
+    content,
+  }) => {
+    await pick(content, name);
+    let committed: RequestRecord | undefined;
+    let confirmationFailed = false;
+    pod.intercept = (request) => {
+      if (taskWrite(request)) {
+        committed = request;
+        pod.seed(request.url, request.body);
+        throw new TypeError("Response lost");
+      }
+      if (request.method === "GET" && request.url === committed?.url) {
+        confirmationFailed = true;
+        return new Response("Confirmation unavailable", { status: 503 });
+      }
+    };
+    await click("Import 2 tasks");
+    await retryable();
+    expect(committed).toBeDefined();
+    expect(confirmationFailed).toBe(true);
+    expect(pod.requests.filter(taskWrite)).toHaveLength(1);
+    expect(toast.error).toHaveBeenCalledWith(
+      "Imported 0 tasks into Work. 2 tasks failed.",
+      expect.anything(),
+    );
+
+    pod.intercept = undefined;
+    await click("Import 2 tasks");
+    await finished();
+    const project = cache.getSnapshot().projects.find((item) => item.tracker.title === "Work");
+    if (!project || !committed) throw new Error("Missing committed task");
+    const tasks = await cache.store.listTasks(project.tracker.stateStore as string);
+    expect(tasks).toHaveLength(2);
+    const parent = tasks.find((item) => item.task.title === "Parent");
+    expect(parent?.url).toBe(committed.url);
+    expect(tasks.find((item) => item.task.title === "Child")?.task.parent).toBe(parent?.task.id);
+    expect(pod.files.get(committed.url)?.body).toBe(committed.body);
+    const writes = pod.requests.filter(taskWrite);
+    expect(writes).toHaveLength(3);
+    expect(writes[1]?.url).toBe(committed.url);
+    expect(writes.every((request) => request.headers.get("If-None-Match") === "*")).toBe(true);
+    expect(cache.getSnapshot().views).toHaveLength(2);
+    expect(toast.success).toHaveBeenCalledWith("Imported 2 tasks into Work", expect.anything());
+  });
+
   it("reuses its tracker reservation when the create response is lost", async () => {
     await pick(
       '{"kind":"tasks#tasks","items":[{"id":"task","title":"Task","position":"01","status":"needsAction"}]}',
@@ -652,7 +772,7 @@ describe("Google Tasks through the shared import dialog", () => {
     expect(tasks.find((task) => task.title === "Finished")?.url).toBe(parent?.url);
     expect(tasks.find((task) => task.title === "Child")?.parentId).toBe(parent?.id);
     expect(tasks.find((task) => task.title === "SECRET other task")?.url).toBe(other?.url);
-    expect(pod.mutations()).toHaveLength(writes + 1);
+    expect(pod.mutations()).toHaveLength(writes + 2);
   });
 
   it("keeps a completed task without a timestamp closed without inventing its completion time", async () => {
@@ -899,11 +1019,7 @@ describe("Google Tasks through the shared import dialog", () => {
         return new Response("SECRET setup failure", { status: 503 });
     };
     await click(`Import ${2 + failedTasks} tasks`);
-    await act(async () => {
-      await vi.waitFor(() =>
-        expect(document.querySelector('input[type="file"]:disabled')).toBeNull(),
-      );
-    });
+    await retryable();
     const projects = cache.getSnapshot().projects.filter((project) => project.url !== inbox.url);
     expect(projects.map((project) => project.tracker.title)).toEqual(["First", "Last"]);
     expect(cache.getSnapshot().views.map((task) => task.title)).toEqual([

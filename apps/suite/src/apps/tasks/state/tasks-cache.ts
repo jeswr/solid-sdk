@@ -534,13 +534,12 @@ export class TasksCache {
     return this.prepareTaskCreate(project, data)();
   }
   /** One queue reservation protects an import while independent task documents write four at a time.
-   * savedTasks retains confirmed task and parent IRIs across import retries. */
+   * Project-scoped source identities make task creation idempotent across retries. */
   importTasks(
     project: StoredProject,
-    entries: readonly { id: string; parentId: string | null; data: NewTask }[],
+    entries: readonly { id: string; sourceId: string; parentId: string | null; data: NewTask }[],
     signal: AbortSignal,
     onProgress: (completed: number) => void,
-    savedTasks = new Map<string, StoredTask>(),
   ) {
     return this.mutate(
       (state) => state,
@@ -556,15 +555,15 @@ export class TasksCache {
             const parent = entry.parentId ? await outcomes.get(entry.parentId) : undefined;
             if (signal.aborted) return;
             try {
-              const saved = savedTasks.get(entry.id);
-              if (saved) {
-                confirmed.push(saved);
-                return saved;
-              }
               // Keep the forest intact when a parent failed; unrelated rows still import.
               if (entry.parentId && !parent) throw new Error("The parent could not be imported");
               const data = entry.data;
-              const id = crypto.randomUUID();
+              const hash = await crypto.subtle.digest(
+                "SHA-256",
+                new TextEncoder().encode(JSON.stringify([current.url, entry.sourceId])),
+              );
+              if (signal.aborted) return;
+              const id = `import-${Array.from(new Uint8Array(hash), (byte) => byte.toString(16).padStart(2, "0")).join("")}`;
               const url = `${current.tracker.stateStore}${id}.ttl`;
               let reserved: StoredTask | undefined;
               let task: StoredTask;
@@ -596,18 +595,18 @@ export class TasksCache {
                   },
                 );
               } catch (error) {
-                // A lost response may have committed. Count only our exact reserved payload.
+                // A 412 means this stable URL was already imported. Never overwrite it.
+                // Reconcile an ambiguous response only against this attempt's exact payload.
                 const existing = await this.optionalTask(url);
                 if (
-                  !reserved ||
                   !existing ||
-                  !isomorphic([...reserved.dataset], [...existing.dataset])
+                  (!(error instanceof ModelError && error.status === 412) &&
+                    (!reserved || !isomorphic([...reserved.dataset], [...existing.dataset])))
                 )
                   throw error;
                 task = existing;
               }
               confirmed.push(task);
-              savedTasks.set(entry.id, task);
               return task;
             } catch {
               failed++;

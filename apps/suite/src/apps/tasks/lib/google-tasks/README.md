@@ -20,7 +20,9 @@ Completed tasks without a completion timestamp remain closed, with no invented
 date. A completion timestamp on an open task fails with `INVALID_DATA`.
 
 Local IDs use zero-based source list/task indices, including skipped records:
-`project-0`, `task-0-2`. Parent IDs resolve within their source list only. Output
+`project-0`, `task-0-2`. Each task also retains its original Google ID as `sourceId`
+for deterministic import resource URLs scoped to the destination project.
+Parent IDs resolve within their source list only. Output
 tasks are parent-first, with siblings sorted by ordinary string comparison of
 Google's zero-padded `position`, without converting to numbers. Ties retain
 source order. Numeric `orderKey` is the zero-based output index; compatible
