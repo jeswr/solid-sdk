@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // @vitest-environment jsdom
 // AUTHORED-BY Codex
 import { File as NodeFile } from "node:buffer";
@@ -209,7 +210,21 @@ it("DOCX round trips generated documents covering every editor node and mark typ
         visitedNodes.add("doc");
         for (const embedded of [true, false]) {
           const imported = await roundTrip(original.toJSON(), embedded);
-          expect(imported.json).toEqual(original.toJSON());
+          // DOCX carries pending text as ordinary text; only the legacy embedded
+          // document payload preserves suggestion metadata.
+          const exported = (node: JSONContent): JSONContent => ({
+            ...node,
+            ...(node.marks
+              ? {
+                  marks: node.marks.filter(
+                    (mark) => !["suggestionInsert", "suggestionDelete"].includes(mark.type),
+                  ),
+                }
+              : {}),
+            ...(node.content ? { content: node.content.map(exported) } : {}),
+          });
+          const expected = embedded ? original : schema.nodeFromJSON(exported(original.toJSON()));
+          expect(imported.json).toEqual(expected.toJSON());
           expect(imported.skipped).toEqual(
             embedded ? [] : [{ label: DOCX_FORMATTING_WARNING, count: 1 }],
           );

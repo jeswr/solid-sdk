@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex
 import sanitizeHtml from "sanitize-html";
 import { normaliseDestination, normaliseImageDestination } from "../editor/destination";
@@ -19,6 +20,8 @@ export function sanitiseImport(html: string, skipped: SkippedItem[] = []): strin
     "u",
     "s",
     "strike",
+    "ins",
+    "del",
     "sub",
     "sup",
     "mark",
@@ -40,6 +43,8 @@ export function sanitiseImport(html: string, skipped: SkippedItem[] = []): strin
     "img",
   ];
   const allowedAttributes: Record<string, string[]> = {
+    ins: ["data-suggestion-id", "data-suggestion-author", "data-suggestion-created"],
+    del: ["data-suggestion-id", "data-suggestion-author", "data-suggestion-created"],
     a: ["href", "title"],
     img: ["src", "alt", "width", "height"],
     th: ["colspan", "rowspan"],

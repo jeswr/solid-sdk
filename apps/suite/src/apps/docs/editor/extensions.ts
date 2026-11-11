@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex
 import Collaboration from "@tiptap/extension-collaboration";
 import Highlight from "@tiptap/extension-highlight";
@@ -16,11 +17,13 @@ import { CommentDecorations } from "../lib/editor/comment-decorations";
 import { normaliseDestination, normaliseImageDestination } from "../lib/editor/destination";
 import { normaliseHtmlLists } from "../lib/editor/html-lists";
 import { editorShortcut, validLink } from "../lib/editor/logic";
+import { Suggestions } from "../lib/editor/suggestions";
 import { normaliseTableSpan } from "../lib/editor/table-spans";
 import { FindDecorations } from "./find-plugin";
 import { clearFormatting } from "./formatting";
 import { protectiveLinkRel } from "./link-rel";
 import { privateImage } from "./private-image";
+import { SuggestionDelete, SuggestionInsert } from "./suggestion-marks";
 import { textStyleExtensions } from "./text-style";
 
 const SafeStarterKit = StarterKit.extend({
@@ -44,24 +47,26 @@ const SafeStarterKit = StarterKit.extend({
               };
             },
           })
-        : extension.name === "link"
-          ? extension.extend({
-              addAttributes(this: { parent: (() => Record<string, Attribute>) | undefined }) {
-                const attrs = this.parent?.() ?? {};
-                return {
-                  ...attrs,
-                  rel: {
-                    ...attrs.rel,
-                    parseHTML: (element: HTMLElement) =>
-                      protectiveLinkRel(element.getAttribute("rel")),
-                    renderHTML: (attrs: Record<string, unknown>) => ({
-                      rel: protectiveLinkRel(attrs.rel),
-                    }),
-                  },
-                };
-              },
-            })
-          : extension,
+        : extension.name === "codeBlock"
+          ? extension.extend({ marks: "suggestionInsert suggestionDelete" })
+          : extension.name === "link"
+            ? extension.extend({
+                addAttributes(this: { parent: (() => Record<string, Attribute>) | undefined }) {
+                  const attrs = this.parent?.() ?? {};
+                  return {
+                    ...attrs,
+                    rel: {
+                      ...attrs.rel,
+                      parseHTML: (element: HTMLElement) =>
+                        protectiveLinkRel(element.getAttribute("rel")),
+                      renderHTML: (attrs: Record<string, unknown>) => ({
+                        rel: protectiveLinkRel(attrs.rel),
+                      }),
+                    },
+                  };
+                },
+              })
+            : extension,
     );
   },
 });
@@ -266,6 +271,9 @@ export function baseExtensions(fetchImpl: typeof fetch) {
     EditorKeys,
     FindDecorations,
     CommentDecorations,
+    SuggestionInsert,
+    SuggestionDelete,
+    Suggestions,
   ];
 }
 export function editorExtensions(doc: Doc, fetchImpl: typeof fetch) {

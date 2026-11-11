@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex
 "use client";
 import {
@@ -89,6 +90,9 @@ export interface EditorMenubarProps extends Partial<VersionMenuProps> {
   print: () => void;
   download: (format: DownloadFormat) => void;
   help: () => void;
+  suggesting?: boolean;
+  setSuggesting?: (value: boolean) => void;
+  resolveSuggestions?: (accept: boolean) => void;
   addComment?: (() => void) | undefined;
   commentReason?: string | undefined;
   share: () => void;
@@ -107,7 +111,7 @@ export function openMenuAfter(current: string | null, label: string, expanded: b
 
 /** Radix owns menu/submenu navigation and typeahead; this adds menubar traversal. */
 export function EditorMenubar(props: EditorMenubarProps) {
-  const { editor, actions, mac, readOnly } = props;
+  const { editor, actions, mac, readOnly, resolveSuggestions: resolveAll } = props;
   const shareReasonId = useId();
   const commentReasonId = useId();
   const shareDisabledReason =
@@ -242,6 +246,14 @@ export function EditorMenubar(props: EditorMenubarProps) {
     ),
     View: (
       <>
+        {!readOnly && props.setSuggesting && (
+          <DropdownMenuCheckboxItem
+            checked={props.suggesting ?? false}
+            onCheckedChange={props.setSuggesting}
+          >
+            Suggesting
+          </DropdownMenuCheckboxItem>
+        )}
         <DropdownMenuCheckboxItem checked={props.outline} onCheckedChange={props.setOutline}>
           Show outline
         </DropdownMenuCheckboxItem>
@@ -332,11 +344,22 @@ export function EditorMenubar(props: EditorMenubarProps) {
         {command("Clear formatting")}
       </>
     ),
-    Tools: item(
-      "Word count",
-      () => actions.find((action) => action.label === "Word count")?.run(),
-      "Mod+Shift+C",
-      false,
+    Tools: (
+      <>
+        {item(
+          "Word count",
+          () => actions.find((action) => action.label === "Word count")?.run(),
+          "Mod+Shift+C",
+          false,
+        )}
+        {!readOnly && resolveAll && (
+          <>
+            <DropdownMenuSeparator />
+            {item("Accept all suggestions", () => resolveAll(true))}
+            {item("Reject all suggestions", () => resolveAll(false))}
+          </>
+        )}
+      </>
     ),
     Help: item("Keyboard shortcuts", props.help, "Mod+/", false),
   };
