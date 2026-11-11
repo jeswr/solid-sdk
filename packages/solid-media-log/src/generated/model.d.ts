@@ -6,34 +6,32 @@ import type { EntityWrapper, ModelManifest } from "@jeswr/model-runtime";
 import type { Store } from "n3";
 
 export interface MediaLogData {
-  "source"?: string;
+  "finished"?: Date;
+  "started"?: Date;
   "origin"?: string;
   "progress"?: number;
   "progressUnit"?: "page" | "episode";
   "repeatCount"?: number;
+  "source"?: string;
   "status": "want" | "in-progress" | "finished" | "abandoned";
-  "finished"?: Date;
-  "rating"?: 0.5 | 1 | 1.5 | 2 | 2.5 | 3 | 3.5 | 4 | 4.5 | 5;
-  "review"?: string;
-  "started"?: Date;
   "creator"?: string;
   "year"?: number;
   "title": string;
-  "workType": "https://schema.org/Movie" | "https://schema.org/TVSeries" | "https://schema.org/TVEpisode" | "https://schema.org/Book" | "https://schema.org/VideoGame";
+  "workType": "http://schema.org/Movie" | "http://schema.org/TVSeries" | "http://schema.org/TVEpisode" | "http://schema.org/Book" | "http://schema.org/VideoGame" | "https://schema.org/Movie" | "https://schema.org/TVSeries" | "https://schema.org/TVEpisode" | "https://schema.org/Book" | "https://schema.org/VideoGame";
   "cover"?: string;
+  "reviewText"?: string;
+  "rating"?: 0.5 | 1 | 1.5 | 2 | 2.5 | 3 | 3.5 | 4 | 4.5 | 5;
 }
 
 export interface MediaLogWrapper extends EntityWrapper {
-  "source"?: string;
+  "finished"?: Date;
+  "started"?: Date;
   "origin"?: string;
   "progress"?: number;
   "progressUnit"?: "page" | "episode";
   "repeatCount"?: number;
+  "source"?: string;
   "status"?: "want" | "in-progress" | "finished" | "abandoned";
-  "finished"?: Date;
-  "rating"?: 0.5 | 1 | 1.5 | 2 | 2.5 | 3 | 3.5 | 4 | 4.5 | 5;
-  "review"?: string;
-  "started"?: Date;
 }
 
 export interface MediaLogEntity {
@@ -70,31 +68,41 @@ export interface CompositeNodeHandle<W extends EntityWrapper> {
 }
 
 export interface MediaLogEntryNodeWrapper extends EntityWrapper {
-  "source"?: string;
+  "finished"?: Date;
+  "review"?: string;
+  "started"?: Date;
   "origin"?: string;
   "about"?: string;
   "progress"?: number;
   "progressUnit"?: "page" | "episode";
   "repeatCount"?: number;
+  "source"?: string;
   "status"?: "want" | "in-progress" | "finished" | "abandoned";
-  "finished"?: Date;
-  "rating"?: 0.5 | 1 | 1.5 | 2 | 2.5 | 3 | 3.5 | 4 | 4.5 | 5;
-  "review"?: string;
-  "started"?: Date;
 }
 
 export interface MediaLogWorkNodeWrapper extends EntityWrapper {
   "creator"?: string;
   "year"?: number;
   "title"?: string;
-  "workType"?: "https://schema.org/Movie" | "https://schema.org/TVSeries" | "https://schema.org/TVEpisode" | "https://schema.org/Book" | "https://schema.org/VideoGame";
+  "workType"?: "http://schema.org/Movie" | "http://schema.org/TVSeries" | "http://schema.org/TVEpisode" | "http://schema.org/Book" | "http://schema.org/VideoGame" | "https://schema.org/Movie" | "https://schema.org/TVSeries" | "https://schema.org/TVEpisode" | "https://schema.org/Book" | "https://schema.org/VideoGame";
   "cover"?: string;
+}
+
+export interface MediaLogReviewNodeWrapper extends EntityWrapper {
+  "reviewText"?: string;
+  "reviewRating"?: string;
+}
+
+export interface MediaLogRatingNodeWrapper extends EntityWrapper {
+  "rating"?: 0.5 | 1 | 1.5 | 2 | 2.5 | 3 | 3.5 | 4 | 4.5 | 5;
 }
 
 export declare const nodes: {
   readonly "MediaLog": {
     readonly "entry": CompositeNodeHandle<MediaLogEntryNodeWrapper>;
     readonly "work": CompositeNodeHandle<MediaLogWorkNodeWrapper>;
+    readonly "review": CompositeNodeHandle<MediaLogReviewNodeWrapper>;
+    readonly "rating": CompositeNodeHandle<MediaLogRatingNodeWrapper>;
   };
 };
 

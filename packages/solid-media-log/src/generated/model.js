@@ -13,7 +13,7 @@ const manifest = {
     "log": "https://jeswr.org/ns/media-log#",
     "media": "https://jeswr.org/ns/sectors/media#",
     "core": "https://jeswr.org/ns/core#",
-    "schema": "https://schema.org/",
+    "schema": "http://schema.org/",
     "dct": "http://purl.org/dc/terms/",
     "xsd": "http://www.w3.org/2001/XMLSchema#",
     "prov": "http://www.w3.org/ns/prov#",
@@ -33,10 +33,24 @@ const manifest = {
           "fragment": "it",
           "fields": [
             {
-              "name": "source",
-              "predicate": "http://purl.org/dc/terms/source",
+              "name": "finished",
+              "predicate": "http://schema.org/endDate",
               "kind": "literal",
-              "datatype": "http://www.w3.org/2001/XMLSchema#string",
+              "datatype": "http://www.w3.org/2001/XMLSchema#date",
+              "maxCount": 1,
+              "guards": {}
+            },
+            {
+              "name": "review",
+              "predicate": "http://schema.org/review",
+              "kind": "nested",
+              "node": "review"
+            },
+            {
+              "name": "started",
+              "predicate": "http://schema.org/startDate",
+              "kind": "literal",
+              "datatype": "http://www.w3.org/2001/XMLSchema#date",
               "maxCount": 1,
               "guards": {}
             },
@@ -57,7 +71,6 @@ const manifest = {
               "node": "work",
               "minCount": 1,
               "hasClass": "https://jeswr.org/ns/sectors/media#CreativeWork",
-              "classOnly": true,
               "guards": {
                 "requiredFailClosed": true
               }
@@ -95,6 +108,14 @@ const manifest = {
               }
             },
             {
+              "name": "source",
+              "predicate": "https://jeswr.org/ns/media-log#sourceLabel",
+              "kind": "literal",
+              "datatype": "http://www.w3.org/2001/XMLSchema#string",
+              "maxCount": 1,
+              "guards": {}
+            },
+            {
               "name": "status",
               "predicate": "https://jeswr.org/ns/media-log#status",
               "kind": "literal",
@@ -110,50 +131,6 @@ const manifest = {
               "guards": {
                 "requiredFailClosed": true
               }
-            },
-            {
-              "name": "finished",
-              "predicate": "https://schema.org/endDate",
-              "kind": "literal",
-              "datatype": "http://www.w3.org/2001/XMLSchema#date",
-              "maxCount": 1,
-              "guards": {}
-            },
-            {
-              "name": "rating",
-              "predicate": "https://schema.org/ratingValue",
-              "kind": "literal",
-              "datatype": "http://www.w3.org/2001/XMLSchema#decimal",
-              "maxCount": 1,
-              "in": [
-                0.5,
-                1,
-                1.5,
-                2,
-                2.5,
-                3,
-                3.5,
-                4,
-                4.5,
-                5
-              ],
-              "guards": {}
-            },
-            {
-              "name": "review",
-              "predicate": "https://schema.org/reviewBody",
-              "kind": "literal",
-              "datatype": "http://www.w3.org/2001/XMLSchema#string",
-              "maxCount": 1,
-              "guards": {}
-            },
-            {
-              "name": "started",
-              "predicate": "https://schema.org/startDate",
-              "kind": "literal",
-              "datatype": "http://www.w3.org/2001/XMLSchema#date",
-              "maxCount": 1,
-              "guards": {}
             }
           ]
         },
@@ -198,11 +175,16 @@ const manifest = {
             },
             {
               "name": "workType",
-              "predicate": "https://schema.org/additionalType",
+              "predicate": "http://schema.org/additionalType",
               "kind": "iri",
               "minCount": 1,
               "maxCount": 1,
               "in": [
+                "http://schema.org/Movie",
+                "http://schema.org/TVSeries",
+                "http://schema.org/TVEpisode",
+                "http://schema.org/Book",
+                "http://schema.org/VideoGame",
                 "https://schema.org/Movie",
                 "https://schema.org/TVSeries",
                 "https://schema.org/TVEpisode",
@@ -215,13 +197,65 @@ const manifest = {
             },
             {
               "name": "cover",
-              "predicate": "https://schema.org/image",
+              "predicate": "http://schema.org/image",
               "kind": "iri",
               "maxCount": 1,
               "guards": {
                 "iriScheme": "http-https",
                 "iriPattern": "http-https"
               }
+            }
+          ]
+        },
+        {
+          "name": "review",
+          "typeIris": [
+            "http://schema.org/Review"
+          ],
+          "fragment": "review",
+          "fields": [
+            {
+              "name": "reviewText",
+              "predicate": "http://schema.org/reviewBody",
+              "kind": "literal",
+              "datatype": "http://www.w3.org/2001/XMLSchema#string",
+              "maxCount": 1,
+              "guards": {}
+            },
+            {
+              "name": "reviewRating",
+              "predicate": "http://schema.org/reviewRating",
+              "kind": "nested",
+              "node": "rating"
+            }
+          ]
+        },
+        {
+          "name": "rating",
+          "typeIris": [
+            "http://schema.org/Rating"
+          ],
+          "fragment": "rating",
+          "fields": [
+            {
+              "name": "rating",
+              "predicate": "http://schema.org/ratingValue",
+              "kind": "literal",
+              "datatype": "http://www.w3.org/2001/XMLSchema#decimal",
+              "maxCount": 1,
+              "in": [
+                0.5,
+                1,
+                1.5,
+                2,
+                2.5,
+                3,
+                3.5,
+                4,
+                4.5,
+                5
+              ],
+              "guards": {}
             }
           ]
         }
@@ -249,7 +283,7 @@ const nodeViewsManifest = {
     "log": "https://jeswr.org/ns/media-log#",
     "media": "https://jeswr.org/ns/sectors/media#",
     "core": "https://jeswr.org/ns/core#",
-    "schema": "https://schema.org/",
+    "schema": "http://schema.org/",
     "dct": "http://purl.org/dc/terms/",
     "xsd": "http://www.w3.org/2001/XMLSchema#",
     "prov": "http://www.w3.org/ns/prov#",
@@ -266,10 +300,24 @@ const nodeViewsManifest = {
       },
       "fields": [
         {
-          "name": "source",
-          "predicate": "http://purl.org/dc/terms/source",
+          "name": "finished",
+          "predicate": "http://schema.org/endDate",
           "kind": "literal",
-          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "datatype": "http://www.w3.org/2001/XMLSchema#date",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "review",
+          "predicate": "http://schema.org/review",
+          "kind": "iri",
+          "guards": {}
+        },
+        {
+          "name": "started",
+          "predicate": "http://schema.org/startDate",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#date",
           "maxCount": 1,
           "guards": {}
         },
@@ -325,6 +373,14 @@ const nodeViewsManifest = {
           }
         },
         {
+          "name": "source",
+          "predicate": "https://jeswr.org/ns/media-log#sourceLabel",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
           "name": "status",
           "predicate": "https://jeswr.org/ns/media-log#status",
           "kind": "literal",
@@ -340,50 +396,6 @@ const nodeViewsManifest = {
           "guards": {
             "requiredFailClosed": true
           }
-        },
-        {
-          "name": "finished",
-          "predicate": "https://schema.org/endDate",
-          "kind": "literal",
-          "datatype": "http://www.w3.org/2001/XMLSchema#date",
-          "maxCount": 1,
-          "guards": {}
-        },
-        {
-          "name": "rating",
-          "predicate": "https://schema.org/ratingValue",
-          "kind": "literal",
-          "datatype": "http://www.w3.org/2001/XMLSchema#decimal",
-          "maxCount": 1,
-          "in": [
-            0.5,
-            1,
-            1.5,
-            2,
-            2.5,
-            3,
-            3.5,
-            4,
-            4.5,
-            5
-          ],
-          "guards": {}
-        },
-        {
-          "name": "review",
-          "predicate": "https://schema.org/reviewBody",
-          "kind": "literal",
-          "datatype": "http://www.w3.org/2001/XMLSchema#string",
-          "maxCount": 1,
-          "guards": {}
-        },
-        {
-          "name": "started",
-          "predicate": "https://schema.org/startDate",
-          "kind": "literal",
-          "datatype": "http://www.w3.org/2001/XMLSchema#date",
-          "maxCount": 1,
-          "guards": {}
         }
       ]
     },
@@ -430,11 +442,16 @@ const nodeViewsManifest = {
         },
         {
           "name": "workType",
-          "predicate": "https://schema.org/additionalType",
+          "predicate": "http://schema.org/additionalType",
           "kind": "iri",
           "minCount": 1,
           "maxCount": 1,
           "in": [
+            "http://schema.org/Movie",
+            "http://schema.org/TVSeries",
+            "http://schema.org/TVEpisode",
+            "http://schema.org/Book",
+            "http://schema.org/VideoGame",
             "https://schema.org/Movie",
             "https://schema.org/TVSeries",
             "https://schema.org/TVEpisode",
@@ -447,13 +464,69 @@ const nodeViewsManifest = {
         },
         {
           "name": "cover",
-          "predicate": "https://schema.org/image",
+          "predicate": "http://schema.org/image",
           "kind": "iri",
           "maxCount": 1,
           "guards": {
             "iriScheme": "http-https",
             "iriPattern": "http-https"
           }
+        }
+      ]
+    },
+    {
+      "name": "MediaLogReviewNode",
+      "typeIris": [
+        "http://schema.org/Review"
+      ],
+      "subject": {
+        "convention": "hash-it"
+      },
+      "fields": [
+        {
+          "name": "reviewText",
+          "predicate": "http://schema.org/reviewBody",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "reviewRating",
+          "predicate": "http://schema.org/reviewRating",
+          "kind": "iri",
+          "guards": {}
+        }
+      ]
+    },
+    {
+      "name": "MediaLogRatingNode",
+      "typeIris": [
+        "http://schema.org/Rating"
+      ],
+      "subject": {
+        "convention": "hash-it"
+      },
+      "fields": [
+        {
+          "name": "rating",
+          "predicate": "http://schema.org/ratingValue",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#decimal",
+          "maxCount": 1,
+          "in": [
+            0.5,
+            1,
+            1.5,
+            2,
+            2.5,
+            3,
+            3.5,
+            4,
+            4.5,
+            5
+          ],
+          "guards": {}
         }
       ]
     }
@@ -471,6 +544,16 @@ const nodeViewIndex = {
       "entity": "MediaLogWorkNode",
       "fragment": "work",
       "typeIri": "https://jeswr.org/ns/sectors/media#CreativeWork"
+    },
+    "review": {
+      "entity": "MediaLogReviewNode",
+      "fragment": "review",
+      "typeIri": "http://schema.org/Review"
+    },
+    "rating": {
+      "entity": "MediaLogRatingNode",
+      "fragment": "rating",
+      "typeIri": "http://schema.org/Rating"
     }
   }
 };

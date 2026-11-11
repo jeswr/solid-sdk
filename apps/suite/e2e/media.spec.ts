@@ -30,7 +30,9 @@ test("demo shelves, add, rate, review, finish, reload, CSV import and year in re
   const library = page.getByRole("list", { name: "Media items" });
   await expect(library.getByRole("listitem")).toHaveCount(1);
   await expect(page.locator(".media-save-status")).toHaveText("", { timeout: 30000 });
-  await page.getByRole("button", { name: "Edit Lanterns over the Estuary", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Edit & review Lanterns over the Estuary", exact: true })
+    .click();
   const edit = page.getByRole("dialog");
   await edit.getByLabel("Shelf", { exact: true }).click();
   await page.getByRole("option", { name: "Finished", exact: true }).click();
@@ -39,7 +41,7 @@ test("demo shelves, add, rate, review, finish, reload, CSV import and year in re
   await expect(page.locator(".media-save-status")).toHaveText("", { timeout: 30000 });
   await page.reload();
   await expect(
-    page.getByRole("button", { name: "Edit Lanterns over the Estuary", exact: true }),
+    page.getByRole("button", { name: "Edit & review Lanterns over the Estuary", exact: true }),
   ).toBeVisible({ timeout: 30000 });
   await page.getByLabel("Search media", { exact: true }).fill("Lanterns over the Estuary");
   await expect(page.getByText("Finished 11 Nov 2026", { exact: true })).toBeVisible();
@@ -58,6 +60,21 @@ test("demo shelves, add, rate, review, finish, reload, CSV import and year in re
   await page.getByLabel("Search media", { exact: true }).fill("Copper Shore");
   await expect(library.getByRole("listitem")).toHaveCount(1);
   await expect(page.locator(".media-save-status")).toHaveText("", { timeout: 30000 });
+  await expect(page.getByText("Imported 1 · skipped 0 · failed 0", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Import CSV", exact: true }).click();
+  const diary = page.getByRole("dialog");
+  await diary.getByLabel("CSV file (up to 4 MiB, 5,000 rows)").setInputFiles({
+    name: "diary.csv",
+    mimeType: "text/csv",
+    buffer: Buffer.from(
+      "Date,Name,Year,Letterboxd URI,Watched Date,Rating\n2026-10-12,The Copper Shore,2025,https://letterboxd.com/aster-fiction/film/the-copper-shore/1/,2026-10-12,4",
+    ),
+  });
+  await expect(
+    diary.getByText("0 ready to import · 0 skipped · 1 already in your library"),
+  ).toBeVisible();
+  await expect(diary.getByRole("button", { name: "Import items", exact: true })).toBeDisabled();
+  await diary.getByRole("button", { name: "Cancel", exact: true }).click();
   await page
     .locator(".media-heading")
     .getByRole("button", { name: "Your year", exact: true })

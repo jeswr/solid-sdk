@@ -231,3 +231,116 @@ it("ignores a late successful write after its account store is disposed", async 
   expect(listener).not.toHaveBeenCalled();
   expect(store.getSnapshot()).toBe(snapshot);
 });
+
+it("imports as one bounded job, checking every existing record and publishing once per batch", async () => {
+  const { repo, store } = await ready();
+  const existing = Array.from({ length: 1201 }, (_, i) => ({
+    ...original,
+    id: String(i),
+    data: { ...entry, title: `Film ${i}` },
+  }));
+  vi.mocked(repo.load).mockResolvedValue({ records: existing, incomplete: false });
+  let active = 0;
+  let maximum = 0;
+  vi.mocked(repo.save).mockImplementation(async (data) => {
+    maximum = Math.max(maximum, ++active);
+    await tick();
+    --active;
+    if (data.title === "New 7") throw new Error("Offline");
+    return { ...original, id: data.title, data };
+  });
+  const listener = vi.fn();
+  store.subscribe(listener);
+  const entries = Array.from({ length: 13 }, (_, i) => ({ ...entry, title: `New ${i}` }));
+  const job = await store.importEntries([...entries, { ...entry, title: "Film 1200" }], 2);
+  expect(repo.load).toHaveBeenLastCalledWith({ complete: true, signal: expect.any(AbortSignal) });
+  expect(maximum).toBe(6);
+  expect(job).toMatchObject({ running: false, imported: 12, failed: 1, skipped: 3, processed: 14 });
+  expect(listener).toHaveBeenCalledTimes(6); // start, optimistic additions, three batches, finish
+  expect(store.getSnapshot().records).toHaveLength(13);
+});
+it("cancels between batches, retaining the completed batch and removing unstarted optimistic entries", async () => {
+  const { repo, store } = await ready();
+  const write = deferred<MediaRecord>();
+  vi.mocked(repo.save).mockReturnValue(write.promise);
+  const task = store.importEntries(
+    Array.from({ length: 20 }, (_, i) => ({ ...entry, title: `Import ${i}` })),
+  );
+  await tick();
+  expect(repo.save).toHaveBeenCalledTimes(6);
+  store.cancelImport();
+  write.resolve(original);
+  const job = await task;
+  expect(job).toMatchObject({ cancelled: true, imported: 6, processed: 6, running: false });
+  expect(repo.save).toHaveBeenCalledTimes(6);
+  expect(store.getSnapshot().records).toHaveLength(7);
+});
+it("refuses duplicates when discovery is partial, and reports one failed job", async () => {
+  const { repo, store } = await ready();
+  vi.mocked(repo.load).mockResolvedValue({ records: [], incomplete: true });
+  expect(await store.importEntries([{ ...entry, title: "A" }])).toMatchObject({
+    failed: 1,
+    imported: 0,
+    running: false,
+  });
+  expect(repo.save).not.toHaveBeenCalled();
+});
+it("fences refresh while importing, refuses a second job and keeps unconfirmed committed items", async () => {
+  const { repo, store } = await ready();
+  const write = deferred<MediaRecord>();
+  vi.mocked(repo.save).mockReturnValueOnce(write.promise);
+  const task = store.importEntries([{ ...entry, title: "A" }]);
+  await tick();
+  const calls = vi.mocked(repo.load).mock.calls.length;
+  await store.load();
+  expect(repo.load).toHaveBeenCalledTimes(calls);
+  await expect(store.importEntries([entry])).rejects.toThrow(/already running/);
+  write.resolve({ ...original, data: { ...entry, title: "A" }, etag: null, unconfirmed: true });
+  await task;
+  expect(store.getSnapshot().records.find((r) => r.data.title === "A")).toMatchObject({
+    unconfirmed: true,
+  });
+});
+it("cancels duplicate checking and drops late import updates after account disposal", async () => {
+  const { repo, store } = await ready();
+  const read = deferred<MediaListing>();
+  vi.mocked(repo.load).mockReturnValueOnce(read.promise);
+  const task = store.importEntries([entry]);
+  await tick();
+  const snapshot = store.getSnapshot();
+  store.dispose();
+  read.resolve({ records: [], incomplete: false });
+  await task;
+  expect(repo.save).not.toHaveBeenCalled();
+  expect(store.getSnapshot()).toBe(snapshot);
+});
+it("shows skipped items from a partial listing", async () => {
+  const { repo, store } = await ready();
+  const skipped = [{ url: "https://pod.example/media/bad", reason: "not-rdf" }];
+  vi.mocked(repo.load).mockResolvedValue({ records: [original], incomplete: true, skipped });
+  await store.load();
+  expect(store.getSnapshot()).toMatchObject({ incomplete: true, skipped });
+});
+it("preserves an unconfirmed committed item when a background refresh cannot read it", async () => {
+  const { repo, store } = await ready();
+  vi.mocked(repo.save).mockResolvedValueOnce({
+    ...original,
+    data: { ...entry, rating: 5 },
+    etag: null,
+    unconfirmed: true,
+  });
+  await store.save({ ...entry, rating: 5 }, original);
+  vi.mocked(repo.load).mockResolvedValueOnce({
+    records: [],
+    incomplete: true,
+    skipped: [{ url: original.url as string, reason: "network" }],
+  });
+  await store.load();
+  expect(store.getSnapshot().records[0]).toMatchObject({ unconfirmed: true, data: { rating: 5 } });
+  vi.mocked(repo.load).mockResolvedValueOnce({
+    records: [{ ...original, data: { ...entry, rating: 5 } }],
+    incomplete: false,
+  });
+  await store.load();
+  expect(store.getSnapshot().records[0]?.unconfirmed).toBeUndefined();
+});

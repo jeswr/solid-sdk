@@ -6,11 +6,11 @@ import { entities, type MediaLogData, nodes } from "./generated/model.js";
 
 export const LOG_ENTRY = "https://jeswr.org/ns/media-log#LogEntry";
 export const WORK_TYPES = {
-  film: "https://schema.org/Movie",
-  tv: "https://schema.org/TVSeries",
-  episode: "https://schema.org/TVEpisode",
-  book: "https://schema.org/Book",
-  game: "https://schema.org/VideoGame",
+  film: "http://schema.org/Movie",
+  tv: "http://schema.org/TVSeries",
+  episode: "http://schema.org/TVEpisode",
+  book: "http://schema.org/Book",
+  game: "http://schema.org/VideoGame",
 } as const;
 export type MediaKind = keyof typeof WORK_TYPES;
 export const STATUSES = ["want", "in-progress", "finished", "abandoned"] as const;
@@ -95,9 +95,10 @@ export function validateEntry(entry: MediaEntry): MediaEntry {
   return { ...entry, title };
 }
 function generated(entry: MediaEntry): MediaLogData {
-  const { kind, started, finished, ...rest } = validateEntry(entry);
+  const { kind, started, finished, review, ...rest } = validateEntry(entry);
   return {
     ...rest,
+    reviewText: review,
     rating: rest.rating as MediaLogData["rating"],
     workType: WORK_TYPES[kind],
     started: started ? new Date(started) : undefined,
@@ -121,13 +122,25 @@ export function parseMediaLog(url: string, dataset: DatasetCore): MediaEntry | u
   const data = entities.MediaLog.parse(url, dataset);
   if (!data) return undefined;
   const kind = (Object.keys(WORK_TYPES) as MediaKind[]).find(
-    (key) => WORK_TYPES[key] === data.workType,
+    (key) => WORK_TYPES[key] === data.workType.replace("https://schema.org/", "http://schema.org/"),
   );
   if (!kind) return undefined;
-  const { workType: _, started, finished, ...rest } = data;
+  // Optional invalid child values are dropped by root parsing. A present rating
+  // link without its guarded rating value is a validation failure, not "unrated".
+  const root = new nodes.MediaLog.entry.Wrapper(
+    entities.MediaLog.subject(url),
+    dataset,
+    DataFactory,
+  );
+  if (root.review) {
+    const review = new nodes.MediaLog.review.Wrapper(root.review, dataset, DataFactory);
+    if (review.reviewRating && data.rating === undefined) return undefined;
+  }
+  const { workType: _, started, finished, reviewText, ...rest } = data;
   try {
     return validateEntry({
       ...rest,
+      review: reviewText,
       kind,
       status: data.status as MediaStatus,
       progressUnit: data.progressUnit as MediaEntry["progressUnit"],

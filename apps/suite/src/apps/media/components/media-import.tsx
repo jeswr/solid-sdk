@@ -1,10 +1,12 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
 "use client";
 import {
+  decodeMediaCsv,
   MAX_IMPORT_CHARS,
   type MediaEntry,
   type MediaImport,
   type MediaRecord,
+  mediaImportIndex,
   mediaImportKey,
   parseGoodreadsCsv,
   parseLetterboxdCsv,
@@ -24,7 +26,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@jeswr/suite-ui";
-import { useId, useRef, useState } from "react";
+import { useId, useMemo, useRef, useState } from "react";
 export function MediaImportDialog({
   records,
   offline,
@@ -34,16 +36,17 @@ export function MediaImportDialog({
   records: MediaRecord[];
   offline: boolean;
   onClose: () => void;
-  onImport: (entries: MediaEntry[]) => void;
+  onImport: (entries: MediaEntry[], skipped: number) => void;
 }) {
   const id = useId();
   const [format, setFormat] = useState("letterboxd");
   const [result, setResult] = useState<MediaImport | null>(null);
   const [error, setError] = useState("");
+  const [legacyEncoding, setLegacyEncoding] = useState(false);
   const [reading, setReading] = useState(false);
   const sequence = useRef(0);
-  const known = new Set(records.map((record) => mediaImportKey(record.data)));
-  const entries = result?.entries.filter((entry) => !known.has(mediaImportKey(entry))) ?? [];
+  const known = useMemo(() => mediaImportIndex(records.map((record) => record.data)), [records]);
+  const entries = result?.entries.filter((entry) => !known.has(entry)) ?? [];
   return (
     <Dialog
       open
@@ -72,6 +75,7 @@ export function MediaImportDialog({
               setFormat(value);
               setResult(null);
               setError("");
+              setLegacyEncoding(false);
             }}
           >
             <SelectTrigger id={`${id}-format`}>
@@ -98,6 +102,7 @@ export function MediaImportDialog({
               const token = ++sequence.current;
               setResult(null);
               setError("");
+              setLegacyEncoding(false);
               if (!file) {
                 setReading(false);
                 return;
@@ -109,9 +114,11 @@ export function MediaImportDialog({
               }
               setReading(true);
               void file
-                .text()
-                .then((text) => {
+                .arrayBuffer()
+                .then((buffer) => {
                   if (token !== sequence.current) return;
+                  const { text, legacyEncoding } = decodeMediaCsv(new Uint8Array(buffer));
+                  setLegacyEncoding(legacyEncoding);
                   setResult(
                     format === "goodreads"
                       ? parseGoodreadsCsv(text)
@@ -133,6 +140,12 @@ export function MediaImportDialog({
           />
         </div>
         {reading && <p role="status">Reading your export…</p>}
+        {legacyEncoding && (
+          <p role="status">
+            This export uses an older text encoding. We decoded it as Windows-1252; check the
+            preview before importing.
+          </p>
+        )}
         {error && (
           <p role="alert" className="media-form-error">
             {error}
@@ -146,7 +159,7 @@ export function MediaImportDialog({
             </p>
             <ul>
               {entries.slice(0, 5).map((entry) => (
-                <li key={mediaImportKey(entry)}>
+                <li key={`${mediaImportKey(entry)}:${entry.finished ?? ""}`}>
                   {entry.title}
                   {entry.year ? ` (${entry.year})` : ""}
                 </li>
@@ -170,8 +183,8 @@ export function MediaImportDialog({
         )}
         <p className="media-muted">
           Netflix, Goodreads and Steam items already imported through Home appear in your shelves
-          automatically. Netflix exports don't identify films versus series, so they appear under TV
-          until you choose a kind.
+          automatically. Netflix episode titles are grouped by series; watching episodes does not
+          mark a whole series finished.
         </p>
         {offline && <p role="status">Reconnect to import. Your preview stays open.</p>}
         <div className="media-dialog-actions">
@@ -180,7 +193,12 @@ export function MediaImportDialog({
           </Button>
           <Button
             disabled={reading || !entries.length || offline}
-            onClick={() => onImport(entries)}
+            onClick={() =>
+              onImport(
+                entries,
+                (result?.issues.length ?? 0) + (result?.entries.length ?? 0) - entries.length,
+              )
+            }
           >
             Import {entries.length || ""} {entries.length === 1 ? "item" : "items"}
           </Button>

@@ -11,7 +11,6 @@ import {
   ErrorState,
   Input,
   LoadingSkeleton,
-  Toaster,
   toast,
 } from "@jeswr/suite-ui";
 import {
@@ -25,11 +24,17 @@ import {
   Upload,
 } from "lucide-react";
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
-import { type PodSession, PodSessionProvider, usePodSessionState } from "@/lib/session/pod-session";
-import { AppFrame, AppHeading, AppSessionGuard } from "@/shell/app-frame";
+import { type PodSession, PodSessionProvider } from "@/lib/session/pod-session";
+import { AppFrame, AppHeading, AppSessionGuard, PodSessionGate } from "@/shell/app-frame";
 import { useConnectionState } from "@/shell/sync/connection-state";
 import { ensureMediaSample } from "../demo/sample";
-import { filterMedia, KIND_LABELS, type MediaFilters, STATUS_LABELS } from "../lib/view";
+import {
+  filterMedia,
+  KIND_LABELS,
+  localMediaDate,
+  type MediaFilters,
+  STATUS_LABELS,
+} from "../lib/view";
 import { MediaStore } from "../state/media-store";
 import { MediaCard } from "./media-card";
 import { MediaEditor } from "./media-editor";
@@ -85,9 +90,13 @@ function Tracker({ session }: { session: PodSession }) {
   const [importing, setImporting] = useState(false);
   useEffect(() => {
     void store.load();
-    return session.subscribe(() => {
+    const unsubscribe = session.subscribe(() => {
       void store.load();
     });
+    return () => {
+      unsubscribe();
+      store.cancelImport();
+    };
   }, [store, session]);
   useEffect(() => {
     if (!offline && state.saving === 0) void store.load();
@@ -100,15 +109,8 @@ function Tracker({ session }: { session: PodSession }) {
   const save = (record: MediaRecord) => {
     try {
       void store
-        .save(
-          { ...record.data, status: "finished", finished: new Date().toISOString().slice(0, 10) },
-          record,
-        )
-        .catch(() =>
-          toast.error(
-            "Couldn't save this item. Your change was rolled back. Try again when connected.",
-          ),
-        );
+        .save({ ...record.data, status: "finished", finished: localMediaDate() }, record)
+        .catch(() => toast.error("Couldn't save this change. Please reconnect and try again."));
     } catch (error) {
       toast.error(
         error instanceof TypeError
@@ -193,7 +195,7 @@ function Tracker({ session }: { session: PodSession }) {
             <Button
               variant="outline"
               onClick={() => setImporting(true)}
-              disabled={state.loading || offline}
+              disabled={state.loading || offline || state.importJob?.running}
             >
               <Upload size={16} aria-hidden="true" />
               Import CSV
@@ -206,10 +208,27 @@ function Tracker({ session }: { session: PodSession }) {
             drafts stay here.
           </p>
         )}
+        {state.skipped.length > 0 && (
+          <p className="media-muted" role="status">
+            {state.skipped.length} {state.skipped.length === 1 ? "item couldn't" : "items couldn't"}{" "}
+            be read. Other items are available.
+          </p>
+        )}
+        {state.importJob?.running && (
+          <div className="media-notice" role="status">
+            <p>
+              {state.importJob.checking
+                ? "Checking your complete library for duplicates…"
+                : `Imported ${state.importJob.imported} of ${state.importJob.total} · ${state.importJob.processed} checked`}
+            </p>
+            <Button variant="ghost" onClick={() => store.cancelImport()}>
+              Cancel import
+            </Button>
+          </div>
+        )}
         {state.incomplete && (
           <p className="media-notice" role="status">
-            This is a partial library. The scan reached its limit; some imported items may be
-            missing.
+            This is a partial library. Some items could not be checked yet. Refresh to try again.
           </p>
         )}
         {state.loading ? (
@@ -218,7 +237,11 @@ function Tracker({ session }: { session: PodSession }) {
           <>
             {state.error && (
               <ErrorState error="unreachable" actions={{ retry }}>
-                <p>We couldn't refresh your media. Items already loaded remain available.</p>
+                <p>
+                  {state.records.length
+                    ? "We couldn't refresh your media. Items already loaded remain available."
+                    : "We couldn't load your media. Check your connection and try again."}
+                </p>
               </ErrorState>
             )}
             {stats ? (
@@ -280,6 +303,7 @@ function Tracker({ session }: { session: PodSession }) {
                   {visible.length} {visible.length === 1 ? "item" : "items"}
                   {filters.kind === "all" ? " in your library" : ` · ${KIND_LABELS[filters.kind]}`}
                 </p>
+                <h2>Your shelves</h2>
                 {visible.length ? (
                   <ul className="media-grid" aria-label="Media items">
                     {visible.map((record) => (
@@ -343,11 +367,7 @@ function Tracker({ session }: { session: PodSession }) {
           onSave={(entry) => {
             const task = store.save(entry, editor === "new" ? undefined : editor);
             setEditor(null);
-            void task.catch(() =>
-              toast.error(
-                "Couldn't save this item. Your change was rolled back. Please try again.",
-              ),
-            );
+            void task.catch(() => toast.error("Couldn't save this change. Please try again."));
           }}
         />
       )}
@@ -356,58 +376,53 @@ function Tracker({ session }: { session: PodSession }) {
           records={state.records}
           offline={offline}
           onClose={() => setImporting(false)}
-          onImport={(entries) => {
+          onImport={(entries, skipped) => {
             setImporting(false);
-            for (const entry of entries)
-              void store
-                .save(entry)
-                .catch(() =>
-                  toast.error(
-                    `Couldn't import ${entry.title}. Other items will continue importing.`,
-                  ),
-                );
+            void store
+              .importEntries(entries, skipped)
+              .then((job) => {
+                const message = `${job.cancelled ? "Import cancelled. " : ""}Imported ${job.imported} · skipped ${job.skipped} · failed ${job.failed}`;
+                if (job.failed) toast.error(message);
+                else toast.success(message);
+              })
+              .catch(() => toast.error("Couldn't start this import. Please try again."));
           }}
         />
       )}
     </AppFrame>
   );
 }
-function SessionGate() {
-  const state = usePodSessionState();
-  if (state.status === "loading")
-    return (
-      <div className="media-page">
-        <AppHeading>Opening Media</AppHeading>
-        <LoadingSkeleton preset="grid" />
-      </div>
-    );
-  if (state.status === "signed-out")
-    return (
-      <div className="media-page">
-        <AppHeading>Media</AppHeading>
-        <p role="status">Sign in to open your media library.</p>
-      </div>
-    );
-  if (state.status === "error")
-    return (
-      <div className="media-page">
-        <AppHeading>Can't open Media</AppHeading>
-        <ErrorState error="unreachable" actions={{ retry: () => location.reload() }} />
-      </div>
-    );
-  return (
-    <Tracker
-      key={`${state.session.mode}:${state.session.webId}:${state.session.storageUrl}`}
-      session={state.session}
-    />
-  );
-}
 export function MediaApp() {
   return (
     <AppSessionGuard>
       <PodSessionProvider>
-        <SessionGate />
-        <Toaster position="bottom-center" />
+        <PodSessionGate
+          loading={
+            <div className="media-page">
+              <AppHeading>Opening Media</AppHeading>
+              <LoadingSkeleton preset="grid" />
+            </div>
+          }
+          signedOut={
+            <div className="media-page">
+              <AppHeading>Media</AppHeading>
+              <p role="status">Sign in to open your media library.</p>
+            </div>
+          }
+          error={() => (
+            <div className="media-page">
+              <AppHeading>Can't open Media</AppHeading>
+              <ErrorState error="unreachable" actions={{ retry: () => location.reload() }} />
+            </div>
+          )}
+        >
+          {(session) => (
+            <Tracker
+              key={`${session.mode}:${session.webId}:${session.storageUrl}`}
+              session={session}
+            />
+          )}
+        </PodSessionGate>
       </PodSessionProvider>
     </AppSessionGuard>
   );

@@ -94,8 +94,18 @@ export function MediaCard({
             ? " · imported"
             : ""}
         </p>
+        {record.unconfirmed && (
+          <p className="media-muted" role="status">
+            Saved · awaiting confirmation. Refresh before editing again.
+          </p>
+        )}
         <div className="media-card-actions">
-          <Button size="sm" variant="outline" onClick={onEdit} aria-label={`Edit ${item.title}`}>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={onEdit}
+            aria-label={`Edit & review ${item.title}`}
+          >
             Edit & review
           </Button>
           {item.status !== "finished" && (
@@ -104,7 +114,7 @@ export function MediaCard({
               variant="ghost"
               onClick={onFinish}
               disabled={offline}
-              aria-label={`Mark ${item.title} finished`}
+              aria-label={`Mark finished: ${item.title}`}
             >
               Mark finished
             </Button>

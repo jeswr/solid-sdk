@@ -3,6 +3,8 @@ import {
   type MediaEntry,
   type MediaRecord,
   type MediaRepository,
+  type MediaSkip,
+  mediaImportIndex,
   validateEntry,
 } from "@jeswr/solid-media-log";
 import { StorageError } from "@jeswr/storage-client";
@@ -14,12 +16,24 @@ interface PendingEdit {
   patch: Partial<MediaEntry>;
   initial?: MediaEntry | undefined;
 }
+export interface MediaImportJob {
+  running: boolean;
+  checking: boolean;
+  total: number;
+  processed: number;
+  imported: number;
+  skipped: number;
+  failed: number;
+  cancelled: boolean;
+}
 export interface MediaSnapshot {
   records: MediaRecord[];
   loading: boolean;
   error: boolean;
   incomplete: boolean;
   saving: number;
+  skipped: MediaSkip[];
+  importJob: MediaImportJob | null;
 }
 /** Media intent queue: writes run in order against the last confirmed version. */
 export class MediaStore {
@@ -32,11 +46,14 @@ export class MediaStore {
     error: false,
     incomplete: false,
     saving: 0,
+    skipped: [],
+    importJob: null,
   };
   private generation = 0;
   private readGeneration = 0;
   private queue = Promise.resolve();
   private active = true;
+  private importController: AbortController | undefined;
   constructor(private readonly repository: Promise<MediaRepository>) {}
   subscribe = (listener: () => void) => {
     this.listeners.add(listener);
@@ -64,12 +81,29 @@ export class MediaStore {
   }
   async load() {
     const generation = ++this.readGeneration;
-    if (this.pending.length) return;
+    if (this.pending.length || this.importController) return;
     try {
       const result = await (await this.repository).load();
-      if (!this.active || generation !== this.readGeneration || this.pending.length) return;
-      this.baseline = new Map(result.records.map((record) => [record.id, record]));
-      this.publish({ loading: false, error: false, incomplete: result.incomplete });
+      if (
+        !this.active ||
+        generation !== this.readGeneration ||
+        this.pending.length ||
+        this.importController
+      )
+        return;
+      const records = new Map(result.records.map((record) => [record.id, record]));
+      const confirmedUrls = new Set(result.records.map((record) => record.url));
+      if (result.incomplete) {
+        for (const record of this.baseline.values())
+          if (record.unconfirmed && !confirmedUrls.has(record.url)) records.set(record.id, record);
+      }
+      this.baseline = records;
+      this.publish({
+        loading: false,
+        error: false,
+        incomplete: result.incomplete,
+        skipped: result.skipped ?? [],
+      });
     } catch (error) {
       if (generation === this.readGeneration) {
         if (
@@ -113,8 +147,99 @@ export class MediaStore {
     this.queue = settled.catch(() => {});
     return settled;
   }
+  /** One session-scoped job; scans all existing records before optimistic batch insertion. */
+  async importEntries(entries: readonly MediaEntry[], skipped = 0): Promise<MediaImportJob> {
+    if (this.importController) throw new Error("An import is already running");
+    const controller = new AbortController();
+    this.importController = controller;
+    ++this.readGeneration;
+    const job: MediaImportJob = {
+      running: true,
+      checking: true,
+      total: entries.length,
+      processed: 0,
+      imported: 0,
+      skipped,
+      failed: 0,
+      cancelled: false,
+    };
+    const publish = () => this.publish({ importJob: { ...job } });
+    publish();
+    const edits: PendingEdit[] = [];
+    try {
+      await this.queue;
+      const repository = await this.repository;
+      const listing = await repository.load({ complete: true, signal: controller.signal });
+      if (controller.signal.aborted || !this.active) return job;
+      if (listing.incomplete)
+        throw new Error("Could not check the complete library for duplicates");
+      const known = mediaImportIndex(
+        [...listing.records, ...this.snapshot.records].map((record) => record.data),
+      );
+      for (const input of entries) {
+        try {
+          const data = validateEntry(input);
+          if (known.has(data)) {
+            job.skipped++;
+            job.processed++;
+            continue;
+          }
+          known.add(data);
+          edits.push({
+            id: `new:${crypto.randomUUID()}`,
+            generation: ++this.generation,
+            patch: data,
+            initial: data,
+          });
+        } catch {
+          job.failed++;
+          job.processed++;
+        }
+      }
+      job.checking = false;
+      this.pending.push(...edits);
+      publish();
+      for (
+        let offset = 0;
+        offset < edits.length && !controller.signal.aborted && this.active;
+        offset += 6
+      ) {
+        const batch = edits.slice(offset, offset + 6);
+        await Promise.all(
+          batch.map(async (edit) => {
+            try {
+              const saved = await repository.save(edit.initial as MediaEntry);
+              if (this.active) this.baseline.set(edit.id, { ...saved, id: edit.id });
+              job.imported++;
+            } catch {
+              job.failed++;
+            }
+            job.processed++;
+          }),
+        );
+        const settled = new Set(batch.map((edit) => edit.generation));
+        this.pending = this.pending.filter((edit) => !settled.has(edit.generation));
+        publish();
+      }
+    } catch {
+      if (!controller.signal.aborted) job.failed += job.total - job.processed;
+    } finally {
+      job.cancelled = controller.signal.aborted;
+      job.running = false;
+      job.checking = false;
+      const remaining = new Set(edits.map((edit) => edit.generation));
+      this.pending = this.pending.filter((edit) => !remaining.has(edit.generation));
+      this.importController = undefined;
+      publish();
+    }
+    return { ...job };
+  }
+  cancelImport() {
+    this.importController?.abort();
+  }
   dispose() {
     this.active = false;
+    this.cancelImport();
     ++this.readGeneration;
     this.listeners.clear();
   }

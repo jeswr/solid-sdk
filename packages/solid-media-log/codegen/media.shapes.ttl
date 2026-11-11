@@ -2,7 +2,7 @@
 @prefix log: <https://jeswr.org/ns/media-log#> .
 @prefix media: <https://jeswr.org/ns/sectors/media#> .
 @prefix core: <https://jeswr.org/ns/core#> .
-@prefix schema: <https://schema.org/> .
+@prefix schema: <http://schema.org/> .
 @prefix dc: <http://purl.org/dc/elements/1.1/> .
 @prefix dct: <http://purl.org/dc/terms/> .
 @prefix prov: <http://www.w3.org/ns/prov#> .
@@ -23,23 +23,38 @@
 # at 20,000 characters. No generated accessor is replaced for this gap.
 # dct:issued is a year-only integer projection (not a fabricated full publication date).
 # Imported origins use prov:wasDerivedFrom; the log is not identical to its source work.
-# Dates are UTC calendar dates; ratings are a closed decimal half-star enum.
+# Dates are timezone-free local calendar dates; ratings are a closed decimal half-star enum.
+# LogEntry is a core:Record, not a consumption Activity. core:about describes its work;
+# media:consumedWork has ListeningActivity domain and would incorrectly classify this shelf record.
+# Absolute page/episode counts have no known denominator, so completionFraction cannot
+# represent them. log:progress stays an absolute count; no fabricated fraction is emitted.
+# The personal shelf enum retains want and abandoned without asserting Action semantics
+# on a Record. IRI enums ARE supported; this is a domain choice, not an admission gap.
+# schema:review / Review / reviewRating / Rating are singleton generated children.
+# log:sourceLabel holds the display label; prov:wasDerivedFrom holds the source resource.
+# xsd:gYear is not supported; dct:issued retains the bounded integer year projection.
+# HTTP schema.org is canonical. Work-kind enums also accept HTTPS IRIs on read;
+# writes normalise kind through the facade. Structural predicate aliases are unsupported.
 # LogEntry and its personal status/progress/repeat predicates are package extensions.
 shapes:Work a sh:NodeShape ; sh:targetClass media:CreativeWork ;
  sh:property [ sh:path dct:title ; sh:datatype xsd:string ; sh:minCount 1 ; sh:minLength 1 ; sh:pattern "\\S" ; sh:maxCount 1 ; sh:severity sh:Violation ] ;
- sh:property [ sh:path schema:additionalType ; sh:nodeKind sh:IRI ; sh:minCount 1 ; sh:in (schema:Movie schema:TVSeries schema:TVEpisode schema:Book schema:VideoGame) ; sh:maxCount 1 ; sh:severity sh:Violation ] ;
+ sh:property [ sh:path schema:additionalType ; sh:nodeKind sh:IRI ; sh:minCount 1 ; sh:in (schema:Movie schema:TVSeries schema:TVEpisode schema:Book schema:VideoGame <https://schema.org/Movie> <https://schema.org/TVSeries> <https://schema.org/TVEpisode> <https://schema.org/Book> <https://schema.org/VideoGame>) ; sh:maxCount 1 ; sh:severity sh:Violation ] ;
  sh:property [ sh:path dc:creator ; sh:datatype xsd:string ; sh:maxCount 1 ; sh:severity sh:Violation ] ;
  sh:property [ sh:path dct:issued ; sh:datatype xsd:integer ; sh:minInclusive 1000 ; sh:maxInclusive 9999 ; sh:maxCount 1 ; sh:severity sh:Violation ] ;
  sh:property [ sh:path schema:image ; sh:nodeKind sh:IRI ; sh:pattern "^https?://" ; sh:maxCount 1 ; sh:severity sh:Violation ] .
 shapes:Entry a sh:NodeShape ; sh:targetClass log:LogEntry ;
- sh:property [ sh:path core:about ; sh:nodeKind sh:IRI ; sh:class media:CreativeWork ; sh:minCount 1 ; sh:maxCount 1 ; sh:severity sh:Violation ] ;
+ sh:property [ sh:path core:about ; sh:nodeKind sh:IRI ; sh:class media:CreativeWork ; sh:node shapes:Work ; sh:minCount 1 ; sh:maxCount 1 ; sh:severity sh:Violation ] ;
  sh:property [ sh:path log:status ; sh:datatype xsd:string ; sh:minCount 1 ; sh:in ("want" "in-progress" "finished" "abandoned") ; sh:maxCount 1 ; sh:severity sh:Violation ] ;
  sh:property [ sh:path schema:startDate ; sh:datatype xsd:date ; sh:maxCount 1 ; sh:severity sh:Violation ] ;
  sh:property [ sh:path schema:endDate ; sh:datatype xsd:date ; sh:maxCount 1 ; sh:severity sh:Violation ] ;
- sh:property [ sh:path schema:ratingValue ; sh:datatype xsd:decimal ; sh:in ("0.5"^^xsd:decimal "1"^^xsd:decimal "1.5"^^xsd:decimal "2"^^xsd:decimal "2.5"^^xsd:decimal "3"^^xsd:decimal "3.5"^^xsd:decimal "4"^^xsd:decimal "4.5"^^xsd:decimal "5"^^xsd:decimal) ; sh:maxCount 1 ; sh:severity sh:Violation ] ;
- sh:property [ sh:path schema:reviewBody ; sh:datatype xsd:string ; sh:maxCount 1 ; sh:severity sh:Violation ] ;
+ sh:property [ sh:path schema:review ; sh:nodeKind sh:IRI ; sh:node shapes:Review ; sh:maxCount 1 ; sh:severity sh:Violation ] ;
  sh:property [ sh:path log:repeatCount ; sh:datatype xsd:integer ; sh:minInclusive 0 ; sh:maxCount 1 ; sh:severity sh:Violation ] ;
  sh:property [ sh:path log:progress ; sh:datatype xsd:integer ; sh:minInclusive 0 ; sh:maxCount 1 ; sh:severity sh:Violation ] ;
  sh:property [ sh:path log:progressUnit ; sh:datatype xsd:string ; sh:in ("page" "episode") ; sh:maxCount 1 ; sh:severity sh:Violation ] ;
- sh:property [ sh:path dct:source ; sh:datatype xsd:string ; sh:maxCount 1 ; sh:severity sh:Violation ] ;
+ sh:property [ sh:path log:sourceLabel ; sh:datatype xsd:string ; sh:maxCount 1 ; sh:severity sh:Violation ] ;
  sh:property [ sh:path prov:wasDerivedFrom ; sh:nodeKind sh:IRI ; sh:pattern "^https?://" ; sh:maxCount 1 ; sh:severity sh:Violation ] .
+shapes:Review a sh:NodeShape ; sh:targetClass schema:Review ;
+ sh:property [ sh:path schema:reviewBody ; sh:datatype xsd:string ; sh:maxCount 1 ; sh:severity sh:Violation ] ;
+ sh:property [ sh:path schema:reviewRating ; sh:nodeKind sh:IRI ; sh:node shapes:Rating ; sh:maxCount 1 ; sh:severity sh:Violation ] .
+shapes:Rating a sh:NodeShape ; sh:targetClass schema:Rating ;
+ sh:property [ sh:path schema:ratingValue ; sh:datatype xsd:decimal ; sh:in ("0.5"^^xsd:decimal "1"^^xsd:decimal "1.5"^^xsd:decimal "2"^^xsd:decimal "2.5"^^xsd:decimal "3"^^xsd:decimal "3.5"^^xsd:decimal "4"^^xsd:decimal "4.5"^^xsd:decimal "5"^^xsd:decimal) ; sh:maxCount 1 ; sh:severity sh:Violation ] .

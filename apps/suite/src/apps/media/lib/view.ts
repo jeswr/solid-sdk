@@ -48,3 +48,8 @@ export function entryPatch(before: MediaEntry, after: MediaEntry): Partial<Media
   }
   return patch;
 }
+
+/** Use the user's calendar day, including near UTC midnight. */
+export function localMediaDate(now = new Date()): string {
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+}

@@ -1,8 +1,11 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
 import { describe, expect, it } from "vitest";
 import {
+  decodeMediaCsv,
   MAX_IMPORT_CHARS,
   MAX_IMPORT_ROWS,
+  mediaImportDuplicate,
+  mediaImportKey,
   parseGoodreadsCsv,
   parseLetterboxdCsv,
 } from "../src/imports.js";
@@ -88,13 +91,10 @@ describe("Goodreads CSV", () => {
     expect(result.entries[0]?.finished).toBeUndefined();
   });
   it.each([
-    "A,,unknown,,,,,,,",
     "A,,read,6,,,,,,",
-    "A,,read,,2026/2/29,,,,,",
     "A,,read,,,1.5,,,,",
     "A,,read,,,,../bad,,,",
     "A,,read,,,,,,2026x,",
-    "A,,want,,2026/1/1,,,,,",
   ])("reports invalid Goodreads row: %s", (row) =>
     expect(parseGoodreadsCsv(gr + row).issues).toHaveLength(1));
 });
@@ -136,4 +136,60 @@ it("imports a Goodreads reread without treating its previous Date Read as this c
     repeatCount: 1,
     finished: undefined,
   });
+});
+
+it("matches realistic watched, ratings and diary exports by normalised title/year, not diary URLs", () => {
+  const watched = parseLetterboxdCsv(
+    "Date,Name,Year,Letterboxd URI\n2026-11-10,The Copper Shore,2025,https://letterboxd.com/film/the-copper-shore/",
+  ).entries;
+  const diary = parseLetterboxdCsv(
+    "Date,Name,Year,Letterboxd URI,Rating,Rewatch,Watched Date\n2026-11-10,The Copper Shore,2025,https://letterboxd.com/aster-fiction/film/the-copper-shore/1/,4.5,No,2026-11-09",
+  ).entries;
+  const ratings = parseLetterboxdCsv(
+    "Date,Name,Year,Letterboxd URI,Rating\n2026-11-10,  THE COPPER SHORE  ,2025,https://letterboxd.com/film/the-copper-shore/,4.5",
+  ).entries;
+  const film = diary[0];
+  const rated = ratings[0];
+  if (!film || !rated) throw new Error("Missing fixture");
+  expect(mediaImportDuplicate(film, watched)).toBe(true);
+  expect(mediaImportDuplicate(rated, diary)).toBe(true);
+  expect(mediaImportKey(film)).toBe(mediaImportKey(rated));
+  expect(mediaImportDuplicate({ ...film, finished: "2026-11-11" }, diary)).toBe(false);
+  expect(mediaImportDuplicate({ ...film, year: 2001 }, watched)).toBe(false);
+  expect(mediaImportDuplicate({ ...film, kind: "book" }, watched)).toBe(false);
+});
+it.each([
+  ["dnf", "abandoned"],
+  ["paused", "in-progress"],
+  ["special-shelf", "want"],
+])("maps custom exclusive shelf %s without dropping the book", (shelf, status) => {
+  const result = parseGoodreadsCsv(`${gr}The Orchard Letters,Aster Vale,${shelf},4,,,,,,`);
+  expect(result.issues).toEqual([]);
+  expect(result.entries[0]?.status).toBe(status);
+});
+it.each([
+  "2026/02/30",
+  "Not a date",
+])("drops only an unreadable Goodreads Date Read: %s", (date) => {
+  const result = parseGoodreadsCsv(
+    `${gr}The Orchard Letters,Aster Vale,read,4,${date},1,42,2024,,A favourite`,
+  );
+  expect(result.issues).toEqual([]);
+  expect(result.entries[0]).toMatchObject({
+    title: "The Orchard Letters",
+    status: "finished",
+    finished: undefined,
+    rating: 4,
+  });
+});
+it("decodes valid UTF-8 and falls back to Windows-1252 for legacy exports with a notice", () => {
+  expect(decodeMediaCsv(new TextEncoder().encode("Café"))).toEqual({
+    text: "Café",
+    legacyEncoding: false,
+  });
+  expect(decodeMediaCsv(new Uint8Array([67, 97, 102, 233]))).toEqual({
+    text: "Café",
+    legacyEncoding: true,
+  });
+  expect(() => decodeMediaCsv(new Uint8Array(MAX_IMPORT_CHARS + 1))).toThrow(/4 MiB/);
 });

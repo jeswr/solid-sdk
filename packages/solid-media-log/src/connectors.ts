@@ -70,20 +70,75 @@ export function connectorEntries(dataset: DatasetCore): ConnectorEntry[] {
         },
       });
     } else if (book.types.has(CLASSES.WatchAction)) {
+      // The generic Action carries neither a typed work nor reliable completion.
+      // Only the known Netflix history adapter guarantees a watched item here.
+      if (!provider("netflix", "www.netflix.com")) continue;
       const watch = new WatchAction(id, dataset, DataFactory);
       const at = watch.startTime;
       entries.push({
         id,
         data: {
           title,
-          kind: "tv",
+          kind: "film",
           status: "finished",
           finished: at && Number.isFinite(at.getTime()) ? at.toISOString().slice(0, 10) : undefined,
-          source: provider("netflix", "www.netflix.com") ? "Netflix" : "Imported",
+          source: "Netflix",
           origin,
         },
       });
     }
   }
-  return entries;
+  return groupNetflixEntries(entries);
+}
+/** Netflix exports encode series/season/episode in their display title, not typed links.
+ * Keep series in progress: watching some episodes does not prove a series is finished.
+ * Group across documents as well as within one export; the stable origin survives edits.
+ */
+export function groupNetflixEntries(entries: readonly ConnectorEntry[]): ConnectorEntry[] {
+  const series = new Map<string, ConnectorEntry>();
+  const result: ConnectorEntry[] = [];
+  for (const entry of entries) {
+    if (entry.data.source !== "Netflix") {
+      result.push(entry);
+      continue;
+    }
+    const separator = entry.data.title.indexOf(": ");
+    const grouped = entry.data.kind === "tv" && entry.data.progressUnit === "episode";
+    const episodic =
+      separator > 0 &&
+      (entry.data.title.indexOf(": ", separator + 2) > 0 ||
+        /^(?:season|series|episode|limited series|volume|part)\b/i.test(
+          entry.data.title.slice(separator + 2),
+        ));
+    if (!episodic && !grouped) {
+      result.push(entry);
+      continue;
+    }
+    const title = grouped ? entry.data.title : entry.data.title.slice(0, separator).trim();
+    const id = new URL(
+      `./#series-${encodeURIComponent(title.toLocaleLowerCase("en-GB"))}`,
+      entry.id,
+    ).href;
+    const previous = series.get(id);
+    if (previous)
+      previous.data.progress = (previous.data.progress ?? 0) + (entry.data.progress ?? 1);
+    else {
+      const record: ConnectorEntry = {
+        id,
+        data: {
+          ...entry.data,
+          title,
+          kind: "tv",
+          status: "in-progress",
+          finished: undefined,
+          progress: entry.data.progress ?? 1,
+          progressUnit: "episode",
+          origin: id,
+        },
+      };
+      series.set(id, record);
+      result.push(record);
+    }
+  }
+  return result;
 }

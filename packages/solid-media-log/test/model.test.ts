@@ -78,8 +78,13 @@ describe("generated media log", () => {
     expect(validateEntry({ ...base, title: "  A title  " }).title).toBe("A title");
     const store = buildMediaLog(url, base);
     const entry = new entities.MediaLog.Wrapper(entities.MediaLog.subject(url), store, DataFactory);
-    entry.rating = 3.25 as 3;
-    expect(entry.rating).toBeUndefined();
+    const rating = new nodes.MediaLog.rating.Wrapper(
+      nodes.MediaLog.rating.subject(url),
+      store,
+      DataFactory,
+    );
+    rating.rating = 3.25 as 3;
+    expect(rating.rating).toBeUndefined();
     entry.status = "bogus" as "want";
     expect(parseMediaLog(url, store)).toBeUndefined();
   });
@@ -165,4 +170,49 @@ describe("input validation", () => {
     ).toMatchObject({ rating: 5 });
     expect(validateEntry({ ...base, status: "finished" }).finished).toBeUndefined();
   });
+});
+
+it("uses generated singleton Review and Rating children, HTTP schema terms and an IRI source", async () => {
+  const dataset = buildMediaLog(url, {
+    ...base,
+    review: "A quiet story",
+    rating: 4.5,
+    source: "Letterboxd",
+    origin: "https://letterboxd.com/film/quiet-story/",
+  });
+  const entry = new nodes.MediaLog.entry.Wrapper(
+    entities.MediaLog.subject(url),
+    dataset,
+    DataFactory,
+  );
+  expect(entry.review).toBe(nodes.MediaLog.review.subject(url));
+  const review = new nodes.MediaLog.review.Wrapper(entry.review as string, dataset, DataFactory);
+  expect(review.reviewText).toBe("A quiet story");
+  expect(review.reviewRating).toBe(nodes.MediaLog.rating.subject(url));
+  const rating = new nodes.MediaLog.rating.Wrapper(
+    review.reviewRating as string,
+    dataset,
+    DataFactory,
+  );
+  expect(rating.rating).toBe(4.5);
+  expect(review.types.has("http://schema.org/Review")).toBe(true);
+  expect(rating.types.has("http://schema.org/Rating")).toBe(true);
+  const ttl = await serializeMediaLog(url, { ...base, source: "Manual" });
+  expect(ttl).not.toContain("dct:source");
+  expect(ttl).not.toContain("https://schema.org/");
+});
+it("accepts HTTPS work-kind values on read and writes HTTP kind values", () => {
+  const store = entities.MediaLog.build(url, {
+    title: "A book",
+    status: "want",
+    workType: "https://schema.org/Book",
+  });
+  const parsed = parseMediaLog(url, store);
+  expect(parsed?.kind).toBe("book");
+  if (!parsed) throw new Error("Missing parsed work");
+  const rebuilt = buildMediaLog(url, parsed);
+  expect(
+    new nodes.MediaLog.work.Wrapper(nodes.MediaLog.work.subject(url), rebuilt, DataFactory)
+      .workType,
+  ).toBe("http://schema.org/Book");
 });

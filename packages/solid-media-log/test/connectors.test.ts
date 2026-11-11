@@ -3,7 +3,7 @@ import { Provenance } from "@jeswr/pod-connectors/core/provenance";
 import { Book, VideoGame, WatchAction } from "@jeswr/pod-connectors/core/vocab";
 import { DataFactory, Store } from "n3";
 import { expect, it } from "vitest";
-import { connectorEntries } from "../src/connectors.js";
+import { connectorEntries, groupNetflixEntries } from "../src/connectors.js";
 
 it("projects the exact typed Goodreads, Netflix and Steam output without mutating it", () => {
   const store = new Store();
@@ -43,7 +43,7 @@ it("projects the exact typed Goodreads, Netflix and Steam output without mutatin
       id: "https://pod.example/netflix#watch",
       data: {
         title: "Harbour Days",
-        kind: "tv",
+        kind: "film",
         status: "finished",
         finished: "2026-02-03",
         source: "Netflix",
@@ -125,10 +125,52 @@ it("keeps generic typed works separate from provider attribution", () => {
   expect(connectorEntries(store).map((entry) => entry.data.source)).toEqual([
     "Imported",
     "Imported",
-    "Imported",
   ]);
   new Provenance(book.value, store, DataFactory).derivedFrom.add(
     "urn:solid:connector:goodreads:export",
   );
   expect(connectorEntries(store)[0]?.data.source).toBe("Goodreads");
+});
+
+it("groups Netflix episodes into one in-progress series across source documents and ignores generic WatchActions", () => {
+  const entries = [1, 2].flatMap((episode) => {
+    const store = new Store();
+    const id = `https://pod.example/netflix/history-${episode}#watch`;
+    const watch = new WatchAction(id, store, DataFactory).mark();
+    watch.name = `Harbour Days: Season 1: Episode ${episode}`;
+    watch.startTime = new Date(`2026-02-0${episode}T00:00:00Z`);
+    new Provenance(id, store, DataFactory).derivedFrom.add("urn:solid:connector:netflix:export");
+    return connectorEntries(store);
+  });
+  expect(groupNetflixEntries(entries)).toEqual([
+    {
+      id: "https://pod.example/netflix/#series-harbour%20days",
+      data: {
+        title: "Harbour Days",
+        kind: "tv",
+        status: "in-progress",
+        progress: 2,
+        progressUnit: "episode",
+        finished: undefined,
+        source: "Netflix",
+        origin: "https://pod.example/netflix/#series-harbour%20days",
+      },
+    },
+  ]);
+  const store = new Store();
+  new WatchAction("https://pod.example/generic", store, DataFactory).mark().name =
+    "Unclassified stream";
+  expect(connectorEntries(store)).toEqual([]);
+});
+it("does not turn a film subtitle into a series", () => {
+  const item = {
+    id: "https://pod.example/netflix#film",
+    data: {
+      title: "Mosslight: The Return",
+      kind: "film" as const,
+      status: "finished" as const,
+      source: "Netflix",
+    },
+  };
+  expect(groupNetflixEntries([item])).toEqual([item]);
 });

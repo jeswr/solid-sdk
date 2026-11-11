@@ -70,7 +70,7 @@ export function MediaStats({ records }: { records: MediaRecord[] }) {
             />
           ) : (
             <>
-              <h3>Finished each month</h3>
+              <h2>Finished each month</h2>
               <div className="media-chart" aria-hidden="true">
                 {stats.months.map((month, index) => (
                   <div key={month.month}>

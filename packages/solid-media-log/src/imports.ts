@@ -13,12 +13,47 @@ export interface MediaImport {
 export const MAX_IMPORT_CHARS = 4 * 1024 * 1024;
 export const MAX_IMPORT_ROWS = 5000;
 
-/** Rewatches with a different date are distinct logs, even with one source work URL. */
+/** Identity ignores provider-specific diary/film URLs and presentation whitespace. */
 export function mediaImportKey(entry: MediaEntry): string {
-  const identity =
-    entry.origin ??
-    `${entry.kind}\u0000${entry.title}\u0000${entry.creator ?? ""}\u0000${entry.year ?? ""}`;
-  return `${identity}\u0000${entry.finished ?? ""}`;
+  return `${entry.kind}\u0000${entry.title.normalize("NFKC").trim().replace(/\s+/g, " ").toLocaleLowerCase("en-GB")}\u0000${entry.year ?? ""}`;
+}
+export interface MediaImportIndex {
+  has(entry: MediaEntry): boolean;
+  add(entry: MediaEntry): void;
+}
+/** Build identity keys once: large CSVs and complete libraries need linear indexing. */
+export function mediaImportIndex(entries: Iterable<MediaEntry> = []): MediaImportIndex {
+  const dates = new Map<string, Set<string>>();
+  const index: MediaImportIndex = {
+    has(entry) {
+      const known = dates.get(mediaImportKey(entry));
+      return !!known && (!entry.finished || known.has("") || known.has(entry.finished));
+    },
+    add(entry) {
+      const key = mediaImportKey(entry);
+      let known = dates.get(key);
+      if (!known) {
+        known = new Set();
+        dates.set(key, known);
+      }
+      known.add(entry.finished ?? "");
+    },
+  };
+  for (const entry of entries) index.add(entry);
+  return index;
+}
+/** Dated rewatches remain distinct; undated watched/ratings rows match any dated log. */
+export function mediaImportDuplicate(entry: MediaEntry, existing: readonly MediaEntry[]): boolean {
+  return mediaImportIndex(existing).has(entry);
+}
+/** Decode legacy exports without silently replacing invalid UTF-8 characters. */
+export function decodeMediaCsv(bytes: Uint8Array): { text: string; legacyEncoding: boolean } {
+  if (bytes.byteLength > MAX_IMPORT_CHARS) throw new TypeError("Choose a CSV smaller than 4 MiB");
+  try {
+    return { text: new TextDecoder("utf-8", { fatal: true }).decode(bytes), legacyEncoding: false };
+  } catch {
+    return { text: new TextDecoder("windows-1252").decode(bytes), legacyEncoding: true };
+  }
 }
 
 function date(raw: string | undefined): string | undefined {
@@ -49,16 +84,16 @@ function parse(
   if (parsed.rows.length > MAX_IMPORT_ROWS)
     throw new TypeError("Import up to 5,000 rows at a time");
   const result: MediaImport = { entries: [], issues: [] };
-  const seen = new Set<string>();
+  const known = mediaImportIndex();
+
   for (const [index, row] of parsed.rows.entries()) {
     try {
       const entry = validateEntry(map(row));
-      const key = mediaImportKey(entry);
-      if (seen.has(key)) {
+      if (known.has(entry)) {
         result.issues.push({ row: index + 2, message: "Duplicate item" });
         continue;
       }
-      seen.add(key);
+      known.add(entry);
       result.entries.push(entry);
     } catch (error) {
       result.issues.push({
@@ -108,10 +143,11 @@ export function parseGoodreadsCsv(text: string): MediaImport {
           ? "in-progress"
           : shelf === "to-read"
             ? "want"
-            : shelf === "did-not-finish"
+            : shelf === "did-not-finish" || shelf === "dnf"
               ? "abandoned"
-              : undefined;
-    if (!status) throw new TypeError("Unknown Goodreads shelf");
+              : shelf === "paused"
+                ? "in-progress"
+                : "want";
     const rating = number(row["My Rating"]);
     const count = number(row["Read Count"]);
     if (count !== undefined && (!Number.isSafeInteger(count) || count < 0))
@@ -120,7 +156,14 @@ export function parseGoodreadsCsv(text: string): MediaImport {
     if (id && !/^\d+$/.test(id)) throw new TypeError("Invalid Goodreads book ID");
     // A reread can retain an earlier Date Read while the current shelf is in progress.
     // This entry's completion date belongs to its current cycle; keep the repeat count.
-    const finished = status === "finished" ? date(row["Date Read"]) : undefined;
+    let finished: string | undefined;
+    if (status === "finished") {
+      try {
+        finished = date(row["Date Read"]);
+      } catch {
+        /* Keep the book when its date is unreadable. */
+      }
+    }
     return {
       title: row.Title ?? "",
       kind: "book",
