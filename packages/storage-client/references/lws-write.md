@@ -65,3 +65,8 @@ Read with [storage-client guidance](../SKILL.md) and the [LWS read side](lws-rea
   and trees above 10,000 nodes fail before deletion. Delete in reverse traversal order, refreshing
   container ETags after child deletion; every DELETE is conditional. Concurrent additions can
   still produce 409 and partial deletion. Errors propagate without a destructive retry.
+
+- `WriteOptions.keepalive` / `CreateOptions.keepalive` reach fetch after the shared 64 KiB
+  encoded-body check; unknown-size streams/Blobs fail bad-request before sending.
+- `MetadataOp.title` adds RFC 9264's title attribute to a new target, or updates it on an
+  existing href while retaining its other attributes. Removal continues to match hrefs.
