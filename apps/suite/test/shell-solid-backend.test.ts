@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 import {
   AmbiguousIssuerError,
   type AuthEvent,
@@ -205,6 +206,7 @@ describe("native Solid shell over pod-auth", () => {
       clientId: CLIENT_ID_URL,
       redirectUri: MOBILE_REDIRECT_URI,
       allowInsecureLoopback: false,
+      nativeRedirect: true,
     });
     expect(CLIENT_ID_URL).toBe(
       "https://solid-suite.vercel.app/.well-known/solid-client-id-mobile.jsonld",
@@ -387,6 +389,7 @@ describe("native Solid shell over pod-auth", () => {
       redirectUri: "https://suite.example/auth/callback.html",
       allowInsecureLoopback: false,
     });
+    expect(h.config()).not.toHaveProperty("nativeRedirect");
     expect(h.openPopup).toHaveBeenCalledExactlyOnceWith("https://suite.example/auth/callback.html");
     expect(h.popup.getCode).toHaveBeenCalledOnce();
     expect(h.popup.close).toHaveBeenCalledOnce();

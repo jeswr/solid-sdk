@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 import { fetchRdf } from "@jeswr/fetch-rdf";
 import {
   AmbiguousIssuerError,
@@ -112,6 +113,8 @@ export class SolidBackend implements SessionBackend {
           : new URL("/.well-known/solid-client-id.jsonld", location.origin).href,
       redirectUri: this.#redirectUri,
       allowInsecureLoopback: this.#insecure,
+      // The scheme callback is accepted only with pod-auth's explicit native opt-in.
+      ...(this.#native ? { nativeRedirect: true as const } : {}),
       ui: {
         getWebId: async () => {
           throw new SignInError("invalid-url");
