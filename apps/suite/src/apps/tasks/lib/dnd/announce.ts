@@ -107,9 +107,29 @@ export function dropMessage(
           : `Moved ${name} to position ${plan.index} under ${parent}.`;
       }
       const section = sectionLabel(projects, plan.projectUrl, plan.sectionId);
-      return manual
+      const message = manual
         ? `Moved ${name} to ${section}, position ${plan.index}.`
         : `Moved ${name} to ${section}.`;
+      const lane = plan.lane;
+      const row = !lane
+        ? ""
+        : lane.group === "priority"
+          ? ` P${lane.value}.`
+          : lane.group === "assignee"
+            ? ` ${lane.value || "Unassigned"}.`
+            : "";
+      const limit = projects
+        .find((project) => project.url === plan.projectUrl)
+        ?.sections.find((section) => section.id === plan.sectionId)?.wipLimit;
+      const count =
+        views.filter(
+          (view) =>
+            view.url !== task.url &&
+            view.projectUrl === plan.projectUrl &&
+            view.sectionId === plan.sectionId &&
+            view.state === "open",
+        ).length + Number(task.state === "open");
+      return `${message}${row}${limit !== undefined && count > limit ? " Over WIP limit" : ""}`;
     }
   }
 }

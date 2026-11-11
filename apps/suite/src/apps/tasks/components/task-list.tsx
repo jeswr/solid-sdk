@@ -10,7 +10,8 @@ import {
   Input,
 } from "@jeswr/suite-ui";
 import { ChevronDown, ChevronRight, Ellipsis, Plus } from "lucide-react";
-import { type ReactNode, useLayoutEffect, useRef, useState } from "react";
+import { type ReactNode, useId, useLayoutEffect, useRef, useState } from "react";
+import type { Swimlane } from "../lib/board/swimlanes";
 import type { DropContainer } from "../lib/dnd/types";
 import type { StoredProject } from "../lib/model/store";
 import type { Category } from "../lib/model/tracker";
@@ -21,6 +22,7 @@ import { TaskListFocus, useTaskListFocus } from "../state/list-focus";
 import { useTasksPreferences } from "../state/preferences";
 import { useTasks } from "../state/tasks-context";
 import { AddTaskRow } from "./add-task-row";
+import { WipLimitDialog } from "./board/wip-limit-dialog";
 import { useDropTarget } from "./dnd/use-task-drag";
 import { TaskRow } from "./task-row";
 import { useCollapsedTasks } from "./tree-controls";
@@ -29,19 +31,25 @@ import { useCollapsedTasks } from "./tree-controls";
 export function SectionEnd({
   project,
   sectionId,
+  lane,
   className,
   children,
 }: {
   project: StoredProject;
   sectionId?: string | undefined;
+  lane?: Swimlane | undefined;
   className?: string;
   children: ReactNode;
 }) {
-  const drop = useDropTarget(`section-end:${project.url}#${sectionId ?? ""}`, {
-    kind: "section-end",
-    projectUrl: project.url,
-    sectionId,
-  });
+  const drop = useDropTarget(
+    `section-end:${project.url}#${sectionId ?? ""}${lane ? `:${lane.group}:${lane.value}` : ""}`,
+    {
+      kind: "section-end",
+      projectUrl: project.url,
+      sectionId,
+      lane,
+    },
+  );
   return (
     <div ref={drop.ref} className={className} data-drop-over={drop.over || undefined}>
       {children}
@@ -67,6 +75,9 @@ export function SectionHeader({
 }) {
   const { preferences, dispatch } = useTasksPreferences();
   const tasks = useTasks();
+  const [wipOpen, setWipOpen] = useState(false);
+  const warningId = useId();
+  const overLimit = section.wipLimit !== undefined && count > section.wipLimit;
   const root = useRef<HTMLDivElement | null>(null);
   const collapsed = !board && preferences.collapsedSections.includes(section.id);
   const drop = useDropTarget(`section-start:${project.url}#${section.id}`, {
@@ -82,6 +93,8 @@ export function SectionHeader({
     <div
       className="tsk-section-header"
       data-drop-over={drop.over || undefined}
+      data-over-wip={overLimit || undefined}
+      aria-describedby={overLimit ? warningId : undefined}
       ref={(node) => {
         root.current = node;
         drop.ref(node);
@@ -109,7 +122,14 @@ export function SectionHeader({
           void tasks.renameSection(project, section.id, value);
         }}
       />
-      <span className="tsk-count">{count}</span>
+      <span className="tsk-count">
+        {section.wipLimit === undefined ? count : `${count} / ${section.wipLimit}`}
+      </span>
+      {overLimit && (
+        <span id={warningId} className="tsk-sr-only">
+          Over WIP limit
+        </span>
+      )}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <IconButton label={`Section actions for ${section.name}`} variant="ghost">
@@ -118,6 +138,18 @@ export function SectionHeader({
         </DropdownMenuTrigger>
         <DropdownMenuContent>
           <DropdownMenuItem onSelect={rename}>Rename</DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => setWipOpen(true)}>Set WIP limit…</DropdownMenuItem>
+          {section.wipLimit !== undefined && (
+            <DropdownMenuItem
+              onSelect={() => {
+                void tasks.cache.updateProject(project, (tracker) =>
+                  tracker.setSectionWipLimit(section.id, undefined),
+                );
+              }}
+            >
+              Remove WIP limit
+            </DropdownMenuItem>
+          )}
           <DropdownMenuItem
             onSelect={() => {
               if (collapsed) dispatch({ type: "collapse", sectionId: section.id });
@@ -151,6 +183,16 @@ export function SectionHeader({
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
+      {wipOpen && (
+        <WipLimitDialog
+          project={project}
+          section={section}
+          close={() => setWipOpen(false)}
+          restoreFocus={() =>
+            root.current?.querySelector<HTMLButtonElement>('[aria-haspopup="menu"]')?.focus()
+          }
+        />
+      )}
     </div>
   );
 }
