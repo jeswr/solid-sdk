@@ -11,7 +11,14 @@ function Consumer() {
 it("exposes the session's question snapshot and fails clearly outside its provider", () => {
   expect(() => renderToStaticMarkup(<Consumer />)).toThrow("active pod session");
   const controller = new AskController(
-    { count: 0, scopes: [], limited: false, retrieve: () => [], dispose: () => {} },
+    {
+      count: 0,
+      scopes: [],
+      limited: false,
+      inboxUnidentified: false,
+      retrieve: () => [],
+      dispose: () => {},
+    },
     { answer: async () => "unused" },
     true,
   );

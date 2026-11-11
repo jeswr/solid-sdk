@@ -43,12 +43,14 @@ function fixture(
   answer: (() => Promise<string>) | null = async () =>
     "In 2028 [1]. Invented claim [99]. <script>alert(1)</script>.",
   demo = false,
+  inboxUnidentified = false,
 ) {
   return new AskController(
     {
       count: passages.length,
       scopes: ["notes", "docs"],
       limited: false,
+      inboxUnidentified,
       retrieve: () => passages,
       dispose: () => {},
     },
@@ -70,6 +72,19 @@ it("renders question controls, truthful coverage and an empty session", () => {
   expect(html).toContain("Answer from my pod only (no AI)");
   expect(html).toContain("Only in this session");
   expect(html).toContain("readable labels and description snippets");
+});
+it("says when the profile inbox couldn't be identified, and only then", async () => {
+  const notice = "Couldn&#x27;t identify your inbox; items in it may appear as sources.";
+  expect(render(fixture())).not.toContain(notice);
+  const unidentified = fixture([passage], null, false, true);
+  expect(render(unidentified)).toContain(notice);
+  await unidentified.ask("passport", undefined, true, true);
+  const html = render(unidentified);
+  expect(html).toContain("Your profile&#x27;s inbox couldn&#x27;t be identified");
+  expect(html).not.toContain("Inbox items are left out");
+  const identified = fixture([passage], null);
+  await identified.ask("passport", undefined, true, true);
+  expect(render(identified)).toContain("Inbox items are left out, because anyone can send them.");
 });
 it("renders inline citation links and visibly flags unsupported sentences, escaping hostile output", async () => {
   const controller = fixture();

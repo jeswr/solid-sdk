@@ -14,6 +14,7 @@ import {
 } from "@rdfjs/wrapper";
 import { DataFactory, Store, Writer } from "n3";
 import type { PodSession } from "@/lib/session/pod-session";
+import { escapeHtml } from "../../notes/lib/ui/capture";
 
 /** The shared demo fixture has no storageDescription Link; seed that known fixture metadata. */
 export async function askSearchCapabilities(session: PodSession, signal: AbortSignal) {
@@ -35,11 +36,7 @@ export async function askSearchCapabilities(session: PodSession, signal: AbortSi
 
 /** Plain sample text as a single HTML paragraph, the body format Notes writes. */
 function paragraph(text: string): string {
-  const escaped = text.replace(
-    /[&<>]/gu,
-    (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[character] as string,
-  );
-  return `<p>${escaped}</p>`;
+  return `<p>${escapeHtml(text)}</p>`;
 }
 
 /** Standard-vocabulary demo notes, compatible with Notes and written only into the demo pod. */

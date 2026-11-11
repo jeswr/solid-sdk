@@ -50,6 +50,7 @@ function retrieval(): AskRetrieval {
     count: 2,
     scopes: ["docs", "notes"],
     limited: false,
+    inboxUnidentified: false,
     retrieve: vi.fn((question: string, scope?: string) =>
       [passport, garden].filter(
         (source) =>
@@ -110,6 +111,31 @@ it("re-runs the shown question when the app filter changes", async () => {
   });
   expect(sources.retrieve).toHaveBeenLastCalledWith("passport", undefined);
   expect(screen.getByRole("region", { name: "Answer" }).textContent).toContain("2028");
+});
+
+it("only filters an edited, unsubmitted question, then applies the filter when it is asked", async () => {
+  const sources = retrieval();
+  mount(new AskController(sources, undefined, false));
+  await askFor("passport");
+  fireEvent.change(question(), { target: { value: "garden" } });
+  await act(async () => {
+    fireEvent.click(screen.getByRole("button", { name: "Docs" }));
+  });
+  expect(sources.retrieve).toHaveBeenCalledTimes(1);
+  expect(screen.getByRole("button", { name: "Docs" }).getAttribute("aria-pressed")).toBe("true");
+  expect((question() as HTMLTextAreaElement).value).toBe("garden");
+  expect(screen.getByRole("region", { name: "Answer" }).textContent).toContain("2028");
+  await act(async () => {
+    fireEvent.keyDown(question(), { key: "Enter" });
+  });
+  expect(sources.retrieve).toHaveBeenLastCalledWith("garden", "docs");
+  // Whitespace around the shown question still counts as the shown question.
+  fireEvent.change(question(), { target: { value: " garden " } });
+  await act(async () => {
+    fireEvent.click(screen.getByRole("button", { name: "All apps" }));
+  });
+  expect(sources.retrieve).toHaveBeenLastCalledWith("garden", undefined);
+  expect(sources.retrieve).toHaveBeenCalledTimes(3);
 });
 
 it("only filters, without asking, before any question", async () => {

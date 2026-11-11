@@ -19,6 +19,7 @@ function retrieval(): AskRetrieval {
     scopes: ["notes"],
     count: 1,
     limited: false,
+    inboxUnidentified: false,
     retrieve: vi.fn((): AskPassage[] => [passage]),
     dispose: vi.fn(),
   };

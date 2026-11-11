@@ -24,8 +24,8 @@ import {
 } from "@jeswr/suite-ui";
 import { ArrowUp, BookOpen, LockKeyhole, MessageCircleQuestionMark } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { type PodSession, PodSessionProvider, usePodSessionState } from "@/lib/session/pod-session";
-import { AppFrame, AppHeading, AppSessionGuard } from "@/shell/app-frame";
+import { type PodSession, PodSessionProvider } from "@/lib/session/pod-session";
+import { AppFrame, AppHeading, AppSessionGuard, PodSessionGate } from "@/shell/app-frame";
 import { useConnectionState } from "@/shell/sync/connection-state";
 import { ensureAskSample } from "../demo/sample";
 import { type AskPassage, openAskRetrieval } from "../lib/retrieval";
@@ -82,7 +82,8 @@ export function AskWorkspace() {
   };
   const rescope = (value: AppSlug | undefined) => {
     setScope(value);
-    void controller.reask(value, noAi, online);
+    // An edited, unsubmitted question waits for Ask; the filter applies to it then.
+    if (question.trim() === state.question) void controller.reask(value, noAi, online);
   };
   const scopes = controller.retrieval.scopes;
   const sidebar = (
@@ -214,6 +215,11 @@ export function AskWorkspace() {
           labels and description snippets within the shared search's limits, rather than every
           file's contents.{controller.retrieval.limited && " The 1,000-resource limit was reached."}
         </p>
+        {controller.retrieval.inboxUnidentified && (
+          <p className="ask-notice" role="status">
+            Couldn't identify your inbox; items in it may appear as sources.
+          </p>
+        )}
         <div aria-live="polite" aria-busy={busy}>
           {state.status === "idle" && (
             <div className="ask-start">
@@ -349,8 +355,10 @@ export function AskWorkspace() {
               <p>
                 Search uses a bounded, session-only index. Refresh this page to load recent pod
                 changes. This first cut searches labels and descriptions; binary files and full
-                collaborative document bodies may not be included. Inbox items are left out, because
-                anyone can send them.
+                collaborative document bodies may not be included.{" "}
+                {controller.retrieval.inboxUnidentified
+                  ? "Containers named inbox are left out, because anyone can send items to them. Your profile's inbox couldn't be identified, so items in it may be included."
+                  : "Inbox items are left out, because anyone can send them."}
               </p>
             </details>
           </section>
@@ -456,29 +464,27 @@ function Connected({ session }: { session: PodSession }) {
     </AskContext>
   );
 }
-function SessionGate() {
-  const state = usePodSessionState();
-  if (state.status === "loading") return <LoadingSkeleton label="Opening your pod…" />;
-  if (state.status === "error") return <ErrorState error="unreachable" />;
-  if (state.status === "signed-out")
-    return (
-      <EmptyState
-        title="Sign in to ask your pod"
-        body="Open your account from the suite to get started."
-      />
-    );
-  return (
-    <Connected
-      key={`${state.session.mode}:${state.session.webId}:${state.session.storageUrl}`}
-      session={state.session}
-    />
-  );
-}
 export function AskApp() {
   return (
     <AppSessionGuard>
       <PodSessionProvider>
-        <SessionGate />
+        <PodSessionGate
+          loading={<LoadingSkeleton label="Opening your pod…" />}
+          signedOut={
+            <EmptyState
+              title="Sign in to ask your pod"
+              body="Open your account from the suite to get started."
+            />
+          }
+          error={() => <ErrorState error="unreachable" />}
+        >
+          {(session) => (
+            <Connected
+              key={`${session.mode}:${session.webId}:${session.storageUrl}`}
+              session={session}
+            />
+          )}
+        </PodSessionGate>
         <Toaster position="bottom-center" />
       </PodSessionProvider>
     </AppSessionGuard>
