@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex
 // AUTHORED-BY Codex GPT-6
 // Conditional apply, inherited ACL copying and lockout guard adapted from Drive
@@ -36,12 +37,16 @@ interface Row {
   agent: AgentRef;
   modes: Set<Mode>;
 }
-function rows(snapshot: Snapshot, documents = snapshot.documents): Map<string, Row> {
+function rows(
+  snapshot: Snapshot,
+  documents = snapshot.documents,
+  members = false,
+): Map<string, Row> {
   const result = new Map<string, Row>();
   for (const document of documents)
     for (const grant of document.policy.grants) {
       if (!grant.modes.size) continue;
-      const scope = document.resource === snapshot.resource ? "resource" : "members";
+      const scope = !members && document.resource === snapshot.resource ? "resource" : "members";
       if (grant.appliesTo !== scope && grant.appliesTo !== "both") continue;
       if (grant.except.length || grant.who.some((clause) => clause.length !== 1))
         throw roleError(
@@ -72,6 +77,7 @@ function role(row: Row, model: Snapshot["model"], options: RolesOptions, comment
   );
 }
 function project(snapshot: Snapshot, options: RolesOptions, comments?: Snapshot): RoleGrant[] {
+  requireFolderScope(snapshot, options);
   const commentRows = comments ? rows(comments) : new Map<string, Row>();
   const effective = rows(snapshot);
   return snapshot.documents.flatMap((document) =>
@@ -142,6 +148,25 @@ export async function readGrants(url: string, options: RolesOptions): Promise<Gr
 function sameModes(a: Set<Mode>, b: Set<Mode>): boolean {
   return a.size === b.size && [...a].every((mode) => b.has(mode));
 }
+function folderScope(snapshot: Snapshot, options: RolesOptions): boolean {
+  return options.kind === "folder" && snapshot.resource.endsWith("/");
+}
+/** A folder role must describe the same permissions on the folder and its members. */
+function requireFolderScope(snapshot: Snapshot, options: RolesOptions): void {
+  if (!folderScope(snapshot, options) || !snapshot.own) return;
+  const direct = rows(snapshot, [snapshot.own]);
+  const members = rows(snapshot, [snapshot.own], true);
+  // ESS own-ACR management is separate from resource/member access.
+  if (snapshot.model === "acp" && options.implementation === "ess")
+    for (const row of [...direct.values(), ...members.values()]) row.modes.delete("control");
+  for (const key of new Set([...direct.keys(), ...members.keys()]))
+    if (!sameModes(direct.get(key)?.modes ?? new Set(), members.get(key)?.modes ?? new Set()))
+      throw roleError(
+        "partial-scope",
+        snapshot.resource,
+        "Folder permissions differ between the folder and its members; use a scope-aware access editor",
+      );
+}
 interface Write {
   resource: string;
   url: string;
@@ -207,26 +232,42 @@ async function plan(
   if (snapshot.model === "wac") {
     for (const key of changes) {
       const row = desired.get(key) ?? (before.get(key) as Row);
-      replaceWac(dataset, snapshot.resource, row.agent, [...(desired.get(key)?.modes ?? [])]);
-    }
-  } else {
-    if (agent)
-      removeAcpAgent(
+      replaceWac(
         dataset,
         snapshot.resource,
-        snapshot.ownUrl,
-        agent,
-        options.implementation ?? "css",
+        row.agent,
+        [...(desired.get(key)?.modes ?? [])],
+        folderScope(snapshot, options),
       );
+    }
+  } else {
+    const selected = agent
+      ? [agent]
+      : folderScope(snapshot, options)
+        ? changes.map((key) => (desired.get(key) ?? (before.get(key) as Row)).agent)
+        : undefined;
+    if (selected)
+      for (const principal of selected)
+        removeAcpAgent(
+          dataset,
+          snapshot.resource,
+          snapshot.ownUrl,
+          principal,
+          options.implementation ?? "css",
+          folderScope(snapshot, options),
+        );
     else detachAcp(dataset, snapshot.resource, snapshot.ownUrl, options.implementation ?? "css");
     appendAcp(
       dataset,
       snapshot.resource,
       snapshot.ownUrl,
-      agent
-        ? [...desired.values()].filter((row) => agentKey(row.agent) === agentKey(agent))
+      selected
+        ? [...desired.values()].filter((row) =>
+            selected.some((principal) => agentKey(row.agent) === agentKey(principal)),
+          )
         : desired.values(),
       options.implementation ?? "css",
+      folderScope(snapshot, options),
     );
   }
   // Re-read generated RDF through the same strict role policy boundary before persistence.
@@ -457,6 +498,7 @@ async function prepareAgent(
   grant?: RoleGrant,
 ): Promise<Write[]> {
   const snapshot = await load(url, options);
+  requireFolderScope(snapshot, options);
   const comments = options.commentsContainer
     ? await load(options.commentsContainer, options)
     : undefined;

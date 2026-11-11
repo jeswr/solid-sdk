@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex
 // AUTHORED-BY Codex GPT-6
 // Adapted from Drive sharing/{rdf,sharing,apply}.ts (Codex GPT-6.1-Sol / Codex),
@@ -339,6 +340,7 @@ export function replaceWac(
   resource: string,
   agent: AgentRef,
   modes: readonly Mode[],
+  members = false,
 ): void {
   const selector =
     agent.type === "webid" ? "agent" : agent.type === "group" ? "agentGroup" : "agentClass";
@@ -350,21 +352,26 @@ export function replaceWac(
         : `${ACL}AuthenticatedAgent`;
   for (const auth of [...new AclResource(dataset, DataFactory).authorizations]) {
     const rule = properties(auth as Term, dataset);
-    if (!rule.values(`${ACL}accessTo`).has(resource) || !rule.values(ACL + selector).has(principal))
-      continue;
+    const scopes = ["accessTo", ...(members ? ["default", "defaultForNew"] : [])].filter((name) =>
+      rule.values(ACL + name).has(resource),
+    );
+    if (!scopes.length || !rule.values(ACL + selector).has(principal)) continue;
     const copy = clone(auth as Term, dataset, dataset, [
       `${ACL}accessTo`,
       `${ACL}default`,
       `${ACL}defaultForNew`,
     ]);
-    rule.values(`${ACL}accessTo`).delete(resource);
-    copy.add(`${ACL}accessTo`, resource);
+    for (const scope of scopes) {
+      rule.values(ACL + scope).delete(resource);
+      copy.add(ACL + scope, resource);
+    }
     copy.values(ACL + selector).delete(principal);
   }
   if (modes.length) {
     const rule = properties(DataFactory.blankNode(), dataset);
     rule.add(`${RDF}type`, `${ACL}Authorization`);
     rule.add(`${ACL}accessTo`, resource);
+    if (members) rule.add(`${ACL}default`, resource);
     rule.add(ACL + selector, principal);
     for (const mode of modes) rule.add(`${ACL}mode`, modeIri(mode));
   }
@@ -391,6 +398,7 @@ export function removeAcpAgent(
   url: string,
   agent: AgentRef,
   implementation: PodImplementation,
+  members = false,
 ): void {
   const key = agentKey(agent);
   function withoutAgent(term: Term): Term {
@@ -428,20 +436,22 @@ export function removeAcpAgent(
     const node = properties(root as Term, dataset);
     const target = node.iris(`${ACP}resource`)[0] ?? resource;
     if (!ownAcpTarget(target, resource, url, implementation)) continue;
-    for (const policy of [...node.nodes(`${ACP}access`)]) {
-      const next = withoutAgent(policy as Term);
-      node.terms(`${ACP}access`).delete(policy as Term);
-      node.terms(`${ACP}access`).add(next);
-    }
-    for (const control of [...node.nodes(`${ACP}accessControl`)]) {
-      const policies = properties(control as Term, dataset).nodes(`${ACP}apply`);
-      const next = policies.map((policy) => withoutAgent(policy as Term));
-      if (next.every((policy, index) => policy === policies[index])) continue;
-      const split = clone(control as Term, dataset, dataset, [`${ACP}apply`]);
-      for (const policy of next) split.terms(`${ACP}apply`).add(policy);
-      node.terms(`${ACP}accessControl`).delete(control as Term);
-      node.terms(`${ACP}accessControl`).add(split as Term);
-    }
+    for (const name of ["access", ...(members ? ["memberAccess"] : [])])
+      for (const policy of [...node.nodes(ACP + name)]) {
+        const next = withoutAgent(policy as Term);
+        node.terms(ACP + name).delete(policy as Term);
+        node.terms(ACP + name).add(next);
+      }
+    for (const name of ["accessControl", ...(members ? ["memberAccessControl"] : [])])
+      for (const control of [...node.nodes(ACP + name)]) {
+        const policies = properties(control as Term, dataset).nodes(`${ACP}apply`);
+        const next = policies.map((policy) => withoutAgent(policy as Term));
+        if (next.every((policy, index) => policy === policies[index])) continue;
+        const split = clone(control as Term, dataset, dataset, [`${ACP}apply`]);
+        for (const policy of next) split.terms(`${ACP}apply`).add(policy);
+        node.terms(ACP + name).delete(control as Term);
+        node.terms(ACP + name).add(split as Term);
+      }
   }
 }
 /**
@@ -486,6 +496,7 @@ export function appendAcp(
   url: string,
   rows: Iterable<{ agent: AgentRef; modes: Set<Mode> }>,
   implementation: PodImplementation,
+  members = false,
 ): void {
   const root = acpResourceRoot(dataset, resource, url, implementation);
   root.add(`${RDF}type`, `${ACP}AccessControlResource`);
@@ -509,9 +520,11 @@ export function appendAcp(
     const control = properties(DataFactory.blankNode(), dataset);
     control.terms(`${ACP}apply`).add(policy as Term);
     root.terms(`${ACP}accessControl`).add(control as Term);
-    for (const mode of row.modes)
-      if (mode !== "control" || implementation !== "ess")
-        policy.add(`${ACP}allow`, modeIri(mode).replace(ACL, vocabulary));
+    if (members) root.terms(`${ACP}memberAccessControl`).add(control as Term);
+    const resourceModes = new Set(row.modes);
+    if (implementation === "ess") resourceModes.delete("control");
+    for (const mode of resourceModes)
+      policy.add(`${ACP}allow`, modeIri(mode).replace(ACL, vocabulary));
     if (row.modes.has("control") && implementation === "ess") {
       const management = properties(DataFactory.blankNode(), dataset);
       management.terms(`${ACP}allOf`).add(matcher as Term);
