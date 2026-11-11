@@ -79,6 +79,25 @@ it("loads a real signed mandate with confirmed-clear signed status and authorita
     await createPodMandateVerifier(options({ profileFetch: opts.fetch })).load(),
   ).toMatchObject({ id: ID, issuer: OWNER, subject: ACTOR });
 });
+it("bypasses HTTP caches for credential, status and profile evidence", async () => {
+  const base = options();
+  const seen: { url: string; cache: RequestCache | undefined }[] = [];
+  const record =
+    (fetch: typeof base.fetch): typeof base.fetch =>
+    async (input, init) => {
+      seen.push({ url: String(input), cache: init?.cache });
+      return fetch(input, init);
+    };
+  expect(
+    await createPodMandateVerifier(
+      options({ fetch: record(base.fetch), profileFetch: record(base.fetch) }),
+    ).load(),
+  ).toBeDefined();
+  expect(seen.some((call) => call.url === ID)).toBe(true);
+  expect(seen.some((call) => call.url === STATUS)).toBe(true);
+  expect(seen.some((call) => call.url !== ID && call.url !== STATUS)).toBe(true);
+  expect(seen.every((call) => call.cache === "no-store")).toBe(true);
+});
 it("refreshes the injected time and status on every load", async () => {
   let expired = false;
   const verifier = createPodMandateVerifier(

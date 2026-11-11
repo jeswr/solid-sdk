@@ -201,9 +201,9 @@ Exports omit owner/agent identities, conversation IRIs and raw event records.
 The hash-chain limits described above also apply to these statistics.
 
 `personal-data-read` is appended to `ENTRY_KINDS`. It requires `tool`, `decision`,
-`reason`, `categories` (at most 64 IRIs) and `resources` (at most 100 IRIs), and
-accepts an optional purpose IRI. Empty category/resource arrays describe refusals
-or empty results. These three metadata fields are forbidden on other record
+`reason`, `categories` (1 to 64 IRIs: the categories requested or evaluated, also
+for refusals) and `resources` (at most 100 IRIs; empty for refusals or empty
+results), and accepts an optional purpose IRI. These three metadata fields are forbidden on other record
 kinds. Unknown fields, arguments, results and personal-data values remain
 forbidden. Its RDF projection uses `dpv:hasPurpose`, `dpv:hasPersonalData` and
 `prov:used` through the existing typed writer. `auditArtifact` and task statistics
@@ -220,7 +220,11 @@ This heals an interrupted entry creation and supports concurrent writers. A
 writer whose entry another writer published returns that entry after verifying
 the published chain. Five attempts bound contention. Corrupt collisions fail with
 `Audit chain integrity failure`; redirects and transport failures use fixed
-messages. Provision the container and owner-private ACL separately.
+messages. Provision the container and owner-private ACL separately. A normal
+append checks the head's structure but does not re-verify the whole published
+prefix (one GET per entry); run `loadChain` to verify it. Appends are
+at-least-once, and entries are hashed but not signed, so integrity holds only
+against parties without write access to the container.
 `loadChain(fetch, baseContainerUrl)` verifies the complete published prefix at an
 explicit base; `loadTrace` uses the same reader at the conventional audit path.
 Hash integrity still requires an independently trusted head to detect rewritten

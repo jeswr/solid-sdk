@@ -39,9 +39,8 @@ importable only by agent-executor and channel tests. Only agent-model-gateway ma
 import OpenAI or Anthropic SDKs; the gateway must never import agent-audit.
 
 `personal-data-read` is appended to `ENTRY_KINDS`. It requires `tool`, `decision`,
-`reason`, `categories` (at most 64 IRIs) and `resources` (at most 100 IRIs), and
-accepts an optional purpose IRI. Empty category/resource arrays describe refusals
-or empty results. These three metadata fields are forbidden on other record
+`reason`, `categories` (1 to 64 IRIs, also for refusals) and `resources` (at most
+100 IRIs; empty for refusals or empty results), and accepts an optional purpose IRI. These three metadata fields are forbidden on other record
 kinds. Unknown fields, arguments, results and personal-data values remain
 forbidden. Its RDF projection uses `dpv:hasPurpose`, `dpv:hasPersonalData` and
 `prov:used` through the existing typed writer. `auditArtifact` and task statistics
@@ -58,6 +57,9 @@ Appends are at-least-once: a rejected append may still have landed its entry, wh
 the next writer folds into the chain, so a caller retry can record an event twice
 (over-recording is the safe direction). Entries are hashed, not signed: chain
 integrity holds only against parties without write access to the container.
+A normal append checks the head's structure and the immediate predecessor link but
+does not re-verify the whole published prefix (that costs one GET per entry); run
+`loadChain` to verify the full chain.
 This heals an interrupted entry creation and supports concurrent writers. A
 writer whose entry another writer published returns that entry after verifying
 the published chain. Five attempts bound contention. Corrupt collisions fail with

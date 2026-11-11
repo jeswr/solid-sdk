@@ -27,8 +27,18 @@ export interface PodMandateOptions {
   readonly now?: () => Date;
 }
 
+type Fetch = PodMandateOptions["fetch"];
+
+/** Revocation and key-control evidence must never come from an HTTP cache. */
+function noStore(fetch: Fetch): Fetch {
+  return ((input: Parameters<Fetch>[0], init?: Parameters<Fetch>[1]) =>
+    fetch(input, { ...init, cache: "no-store" })) as Fetch;
+}
+
 /** Bounded browser-safe transport; parsing alone never establishes authority. */
 export function createPodMandateVerifier(options: PodMandateOptions): MandateVerifier {
+  const fetch = noStore(options.fetch);
+  const profileFetch = noStore(options.profileFetch ?? options.fetch);
   let statusListCredential: string;
   try {
     statusListCredential = new URL("status.ttl", options.credentialUrl).href;
@@ -40,7 +50,7 @@ export function createPodMandateVerifier(options: PodMandateOptions): MandateVer
   return {
     async load() {
       try {
-        const keys = createWebIdKeyResolver({ fetch: options.profileFetch ?? options.fetch });
+        const keys = createWebIdKeyResolver({ fetch: profileFetch });
         const now = (options.now ?? (() => new Date()))();
         return await createVcMandateVerifier({
           ownerWebId: options.ownerWebId,
@@ -49,14 +59,14 @@ export function createPodMandateVerifier(options: PodMandateOptions): MandateVer
           webIdKeyResolver: keys,
           now: () => now,
           resolveStatus: createBitstringStatusResolver({
-            fetch: options.fetch,
+            fetch,
             resolveKey: keys.resolveKey,
             isControlledBy: keys.isControlledBy,
             now,
             trustedStatusIssuers: [options.ownerWebId],
           }),
           read: async () => {
-            const response = await options.fetch(options.credentialUrl, {
+            const response = await fetch(options.credentialUrl, {
               headers: { Accept: "application/trig" },
               redirect: "manual",
             });
