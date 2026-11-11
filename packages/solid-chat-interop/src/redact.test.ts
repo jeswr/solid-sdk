@@ -270,7 +270,9 @@ describe("redaction before persistence", () => {
     ["PASS='a\\'\nx = 1", "PASS='[REDACTED]'\nx = 1"],
     ["PASS='a\\'\r\nx = 1", "PASS='[REDACTED]'\r\nx = 1"],
     ["pw = 'a\\\\' ; const total = a + b", "pw = '[REDACTED]' ; const total = a + b"],
-    ["password: 'a\\'\nx = 1", "password: '[REDACTED]'\nx = 1"],
+    // `name: '...'` may be a JS/Python literal (escape-aware) or YAML (literal backslash).
+    // Erring toward redaction, it scans escape-aware: the value runs on rather than end early.
+    ["password: 'a\\'\nx = 1", "password: '[REDACTED]"],
     ['apiKey = "first\nsecond";\nx = 1', 'apiKey = "[REDACTED]";\nx = 1'],
     ["password=first\\\nsecond;\nx = 1", "password=[REDACTED];\nx = 1"],
     ["postgres://user:abc123@host.test/db", "postgres://user:[REDACTED]@host.test/db"],
@@ -382,6 +384,47 @@ describe("redaction before persistence", () => {
       expect(result).toBe("const token: [REDACTED]");
       expect(redactSecrets(result)).toBe(result);
     }
+  });
+
+  it("treats a type window cut off at the bound as inconclusive, not as a non-type", () => {
+    const longGeneric = `${"T".repeat(300)}<string>`;
+    // A generic head longer than the window still redacts its initializer (conservatively).
+    const generic = redactSecrets(`const token: ${longGeneric} = 'abc'; x = 1`);
+    expect(generic).toBe("const token: [REDACTED]");
+    expect(generic).not.toContain("abc");
+    // Whitespace past the window may hide an initializer on a later line.
+    const blank = redactSecrets(`token:${"\n".repeat(300)}= 'abc'`);
+    expect(blank).toBe("token:[REDACTED]");
+    // A long identifier that is not a type is the value itself; the rest of the line survives.
+    const value = `${"A".repeat(300)}`;
+    expect(redactSecrets(`password: ${value}\nx = 1`)).toBe("password: [REDACTED]\nx = 1");
+    for (const result of [generic, blank]) expect(redactSecrets(result)).toBe(result);
+  });
+
+  // Code string literals keep their escapes: only shell single quotes treat `\` literally.
+  it.each([
+    // JavaScript / TypeScript
+    ["const password = 'abc\\'def'; x = 1", "const password = '[REDACTED]'; x = 1"],
+    ['const token = "abc\\"def"; x = 1', 'const token = "[REDACTED]"; x = 1'],
+    ["const apiKey = 'a\\\\'; x = 1", "const apiKey = '[REDACTED]'; x = 1"],
+    // Python
+    ["password = 'abc\\'def'\nx = 1", "password = '[REDACTED]'\nx = 1"],
+    ["f(secret='abc\\'def', count=1)", "f(secret='[REDACTED]', count=1)"],
+    // JSON
+    ['{"password": "abc\\"def", "name": "Alice"}', '{"password": "[REDACTED]", "name": "Alice"}'],
+    ['{"token": "a\\\\", "x": 1}', '{"token": "[REDACTED]", "x": 1}'],
+  ])("keeps escape-aware code literals intact around the secret: %s", (input, expected) => {
+    const result = redactSecrets(input);
+    expect(result).toBe(expected);
+    expect(result).not.toMatch(/def|abc/);
+    expect(redactSecrets(result)).toBe(result);
+  });
+
+  it("still treats backslash literally inside shell single quotes", () => {
+    expect(redactSecrets("PASS='a\\'\nx = 1")).toBe("PASS='[REDACTED]'\nx = 1");
+    expect(redactSecrets("export API_KEY='a\\' && echo ok")).toBe(
+      "export API_KEY='[REDACTED]' && echo ok",
+    );
   });
 
   it("is a fixpoint for deterministic combinations of code, secrets and markers", () => {

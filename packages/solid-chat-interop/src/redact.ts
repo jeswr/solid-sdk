@@ -69,7 +69,9 @@ function valueSpan(text: string, offset: number, syntax: ValueSyntax) {
       innerQuote = undefined;
     }
     if (syntax === "query" && /[\s&#"'`<>]/.test(char ?? "")) break;
-    if (char === "\\" && innerQuote !== "'" && syntax !== "query") {
+    // Backslash is literal only inside shell single quotes; code string literals
+    // (JS, Python, JSON) stay escape-aware so `'abc\'def'` is scanned to its real end.
+    if (char === "\\" && !(innerQuote === "'" && syntax === "shell") && syntax !== "query") {
       // Include escaped whitespace and LF/CRLF continuations, even at EOF.
       end += text[end + 1] === "\r" && text[end + 2] === "\n" ? 3 : 2;
     } else {
@@ -88,7 +90,24 @@ const TYPE_ANNOTATION_LIMIT = 256;
 
 function typeAnnotationSpan(text: string, offset: number) {
   const limit = Math.min(text.length, offset + TYPE_ANNOTATION_LIMIT);
-  if (!TYPE_ANNOTATION_START.test(text.slice(offset, limit))) return undefined;
+  const window = text.slice(offset, limit);
+  if (!TYPE_ANNOTATION_START.test(window)) {
+    // A window cut off while it could still become a type is inconclusive, not "not a
+    // type". Blank to the limit: the value may be on a later line, so take the conservative
+    // overflow fallback. One identifier run to the limit: finish it with a single forward
+    // scan; only a following `<` (a generic type) is uncertain enough for the fallback,
+    // otherwise the identifier is the value and the caller redacts it as usual.
+    if (limit >= text.length || !/^\s*(?:[A-Za-z_$][A-Za-z0-9_$.]*)?\s*$/.test(window)) {
+      return undefined;
+    }
+    let end = offset;
+    while (/\s/.test(text[end] ?? "")) end += 1;
+    const identifier = end;
+    while (/[A-Za-z0-9_$.]/.test(text[end] ?? "")) end += 1;
+    const blank = end === identifier;
+    while (/\s/.test(text[end] ?? "")) end += 1;
+    return blank || text[end] === "<" ? { end, complete: false, overflow: true } : undefined;
+  }
   let depth = 0;
   let needsType = true;
   let end = offset;

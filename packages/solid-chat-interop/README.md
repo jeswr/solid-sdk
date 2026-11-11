@@ -128,8 +128,9 @@ A bare TypeScript type after `name:` (`token: string`, `password: string | null`
 kept. An initializer after the type still redacts: `const token: string = 'abc'`
 becomes `const token: string = '[REDACTED]'`. Type scanning accepts unions, arrays
 and generics such as `Record<string, string>`, up to 256 characters, including line
-breaks. Recognized types that exceed that bound redact the uncertain remainder of
-the input so an initializer on a later line cannot leak. `==` and `=>` stay code; a quoted
+breaks. Recognized types that exceed that bound, and windows cut off at the bound
+while they could still become a type (a long generic head, or only whitespace), redact
+the uncertain remainder of the input so an initializer on a later line cannot leak. `==` and `=>` stay code; a quoted
 `"string"` value still redacts.
 
 The value rule covers shell assignments/exports, `=`/`:`/`:=` code and object keys
@@ -138,8 +139,11 @@ URL query parameters. Compact env lines starting with an optionally indented/exp
 `UPPER_SNAKE_CASE=` name redact regardless of the name, covering `DATABASE_URL` and
 `STRIPE_LIVE`; lowercase or spaced neutral code assignments stay. URL userinfo
 passwords also redact. Quoted values include embedded newlines and unfinished final
-quotes. Backslashes are literal inside single quotes: the next single quote ends the
-value. Double quotes support backslash escapes. Following code and lines stay.
+quotes. In shell and env assignments, backslashes are literal inside single quotes: the
+next single quote ends the value. Code string literals (JS, Python, JSON, `name: '...'`)
+and double quotes support backslash escapes, so `'abc\'def'` is redacted to its real
+end. Where a `name:` value could be either, it scans escape-aware and errs toward
+redacting more. Following code and lines stay.
 
 Unquoted value boundaries depend on syntax:
 
