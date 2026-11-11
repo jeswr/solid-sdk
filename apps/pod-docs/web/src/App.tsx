@@ -5,6 +5,8 @@
 // → a thin header (the shared app-shell chrome) over the LOCAL @jeswr/pod-docs
 // <DocumentBrowser> pointed at the user's pod. The browser gets pod-auth's
 // `auth.fetch` explicitly; global fetch is never patched.
+
+import { LoginScreen, useSession } from "@jeswr/app-session/react";
 import { AccountMenu, FeedbackButton, ThemeToggle } from "@jeswr/app-shell";
 // SOLID-ELEMENTS (#115 / D-parity rollout #67/#68/#70): the framework-agnostic W3C
 // Web Components consumed through the @lit/react adapter. <Loading> is a Lit custom
@@ -17,9 +19,7 @@ import { AccountMenu, FeedbackButton, ThemeToggle } from "@jeswr/app-shell";
 // not replace the React chrome components above.) Plain Vite/CSR React has no SSR
 // step, so the client-only custom elements need no mount-gating here.
 import { Loading } from "@jeswr/solid-elements/react";
-import { useSession } from "./auth/SessionProvider";
 import { CollectionBrowser } from "./CollectionBrowser";
-import { LoginScreen } from "./LoginScreen";
 
 /**
  * The app-specific identity for the header <FeedbackButton/>, in ONE place so the
@@ -50,7 +50,7 @@ export function App() {
         </main>
       );
     }
-    return <LoginScreen />;
+    return <AppLoginScreen />;
   }
 
   return (
@@ -88,5 +88,17 @@ export function App() {
         />
       </main>
     </div>
+  );
+}
+
+function AppLoginScreen() {
+  return (
+    <LoginScreen
+      appName="Pod Docs"
+      knownProviders={import.meta.env.VITE_KNOWN_PROVIDERS}
+      homeIdp={import.meta.env.VITE_HOME_IDP}
+      homeIdpName={import.meta.env.VITE_HOME_IDP_NAME}
+      dev={import.meta.env.DEV}
+    />
   );
 }

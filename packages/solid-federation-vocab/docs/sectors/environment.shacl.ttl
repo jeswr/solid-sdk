@@ -1,0 +1,60 @@
+# AUTHORED-BY Codex GPT-6.1-Sol
+# AUTHORED-BY Codex GPT-6
+# Room = sosa:FeatureOfInterest: observations describe the air in a room, not
+# a host platform. A separate sosa:Platform can host a sensor; it has an optional
+# label. Numeric fan/filter observations concern the purifier feature of interest;
+# text-valued modes are omitted. Property/unit compatibility is facade policy.
+# Sensor and feature links may refer to other documents: require IRIs, without
+# demanding their remote descriptions locally. hasResult is local and typed.
+@prefix envr: <https://jeswr.org/ns/sectors/environment#> .
+@prefix envsh: <https://jeswr.org/ns/sectors/environment/shapes#> .
+@prefix sosa: <http://www.w3.org/ns/sosa/> .
+@prefix qudt: <http://qudt.org/schema/qudt/> .
+@prefix unit: <http://qudt.org/vocab/unit/> .
+@prefix quantitykind: <http://qudt.org/vocab/quantitykind/> .
+@prefix schema: <https://schema.org/> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix vann: <http://purl.org/vocab/vann/> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+
+@prefix prof: <http://www.w3.org/ns/dx/prof/> .
+@prefix dcterms: <http://purl.org/dc/terms/> .
+
+<https://jeswr.org/ns/sectors/environment/profile> a prof:Profile ;
+    dcterms:title "Indoor environment data-model profile"@en ;
+    dcterms:hasVersion <https://jeswr.org/ns/sectors/environment/profile/0.1.0> .
+<https://jeswr.org/ns/sectors/environment/profile/0.1.0> a prof:Profile ;
+    dcterms:title "Indoor environment data-model profile 0.1.0"@en ;
+    dcterms:isVersionOf <https://jeswr.org/ns/sectors/environment/profile> ;
+    owl:versionInfo "0.1.0" ;
+    prof:isProfileOf <https://jeswr.org/ns/sectors/environment> ;
+    prof:hasToken "environment-0.1.0" ;
+    rdfs:comment "Open shapes; all constraints have SHACL default Violation severity. envr: terms are provisional pending maintainer review."@en .
+
+envsh:SensorShape a sh:NodeShape ; sh:targetClass sosa:Sensor ;
+    sh:property [ sh:path rdfs:label ; sh:datatype xsd:string ; sh:minLength 1 ; sh:pattern "\\S" ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path schema:manufacturer ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
+    sh:property [ sh:path schema:model ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
+    sh:property [ sh:path sosa:isHostedBy ; sh:nodeKind sh:IRI ; sh:class sosa:Platform ; sh:node envsh:PlatformShape ; sh:maxCount 1 ] .
+
+envsh:PlatformShape a sh:NodeShape ; sh:targetClass sosa:Platform ;
+    sh:property [ sh:path rdfs:label ; sh:datatype xsd:string ; sh:maxCount 1 ] .
+
+envsh:RoomShape a sh:NodeShape ; sh:targetClass sosa:FeatureOfInterest ;
+    sh:property [ sh:path rdfs:label ; sh:datatype xsd:string ; sh:minLength 1 ; sh:pattern "\\S" ; sh:minCount 1 ; sh:maxCount 1 ] .
+
+envsh:ObservationShape a sh:NodeShape ; sh:targetClass sosa:Observation ;
+    sh:property [ sh:path sosa:madeBySensor ; sh:nodeKind sh:IRI ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path sosa:observedProperty ; sh:nodeKind sh:IRI ; sh:minCount 1 ; sh:maxCount 1 ;
+        sh:in ( envr:CO2Concentration envr:PM2_5MassConcentration envr:PM10MassConcentration envr:VOCIndex envr:AirQualityIndex envr:AirTemperature envr:RelativeHumidity envr:FanSpeedLevel envr:FilterLifeRemaining ) ] ;
+    sh:property [ sh:path sosa:hasFeatureOfInterest ; sh:nodeKind sh:IRI ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path sosa:resultTime ; sh:datatype xsd:dateTime ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path sosa:hasResult ; sh:nodeKind sh:IRI ; sh:class qudt:QuantityValue ; sh:node envsh:QuantityValueShape ; sh:minCount 1 ; sh:maxCount 1 ] .
+
+envsh:QuantityValueShape a sh:NodeShape ; sh:targetClass qudt:QuantityValue ;
+    sh:property [ sh:path qudt:numericValue ; sh:datatype xsd:decimal ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path qudt:unit ; sh:nodeKind sh:IRI ; sh:minCount 1 ; sh:maxCount 1 ;
+        sh:in ( unit:PPM unit:MicroGM-PER-M3 unit:DEG_C unit:PERCENT unit:UNITLESS ) ] .
