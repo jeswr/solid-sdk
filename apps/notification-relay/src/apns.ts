@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 import { createHash, createPrivateKey, sign } from "node:crypto";
 import {
   type ClientHttp2Session,
@@ -72,12 +73,22 @@ export interface ApnsOptions {
   maxSessions?: number;
   /** Waiting requests, in addition to at most 100 streams per session (default 1,000). */
   maxQueued?: number;
+  /**
+   * After a request misses its deadline, its session must answer an HTTP/2 PING within this
+   * time or be retired (default 2,000 ms). A new session must send SETTINGS within the request
+   * deadline.
+   */
+  healthCheckTimeoutMs?: number;
 }
 
 type Connection = {
   session: ClientHttp2Session;
   capacity: number;
   active: Set<PendingRequest>;
+  /** Pending until peer SETTINGS arrive; a silent handshake retires the session. */
+  connecting?: ReturnType<typeof setTimeout>;
+  /** Outstanding PING after a missed deadline; no new streams start meanwhile. */
+  probing?: ReturnType<typeof setTimeout>;
 };
 type PendingRequest = {
   message: ApnsMessage;
@@ -105,6 +116,7 @@ export function createApnsTransport(options: ApnsOptions): PushTransport<ApnsMes
   const maxSessions = options.maxSessions ?? 1;
   const maxQueued = options.maxQueued ?? 1000;
   const timeout = options.requestTimeoutMs ?? 10_000;
+  const healthTimeout = options.healthCheckTimeoutMs ?? 2_000;
   if (
     !Number.isSafeInteger(maxSessions) ||
     maxSessions < 1 ||
@@ -112,7 +124,9 @@ export function createApnsTransport(options: ApnsOptions): PushTransport<ApnsMes
     !Number.isSafeInteger(maxQueued) ||
     maxQueued < 1 ||
     !Number.isSafeInteger(timeout) ||
-    timeout < 1
+    timeout < 1 ||
+    !Number.isSafeInteger(healthTimeout) ||
+    healthTimeout < 1
   )
     throw new Error("Invalid APNs pool configuration");
   const connections = new Set<Connection>();
@@ -154,6 +168,8 @@ export function createApnsTransport(options: ApnsOptions): PushTransport<ApnsMes
   function retire(connection: Connection) {
     // Remove before completing requests so no new stream can use a dead session.
     if (!connections.delete(connection)) return;
+    clearTimeout(connection.connecting);
+    clearTimeout(connection.probing);
     for (const job of connection.active) finish(job, { status: 503 });
     // If the pool loses its last connection, return waiting work to the delivery sink too.
     // Its backoff prevents a failed handshake from becoming a tight reconnect loop.
@@ -165,8 +181,11 @@ export function createApnsTransport(options: ApnsOptions): PushTransport<ApnsMes
     const session = connect(authority);
     const connection: Connection = { session, capacity: 0, active: new Set() };
     connections.add(connection);
+    // A handshake that never completes must not hold the pool: retire it so work fails over.
+    connection.connecting = setTimeout(() => retire(connection), timeout);
     // Wait for peer SETTINGS before opening any streams. A peer may advertise zero.
     session.on("remoteSettings", (settings) => {
+      clearTimeout(connection.connecting);
       // Node supplies a complete peer-settings snapshot, including the protocol defaults.
       connection.capacity = Math.min(settings.maxConcurrentStreams as number, 100);
       wake();
@@ -174,6 +193,32 @@ export function createApnsTransport(options: ApnsOptions): PushTransport<ApnsMes
     session.on("error", () => retire(connection));
     session.on("close", () => retire(connection));
     session.on("goaway", () => retire(connection));
+  }
+  /** A missed deadline may mean a silently dead socket: PING it, and retire it if unanswered. */
+  function probe(connection: Connection) {
+    if (connection.probing || !connections.has(connection)) return;
+    connection.probing = setTimeout(() => retire(connection), healthTimeout);
+    const answered = (error: Error | null) => {
+      if (error) {
+        retire(connection);
+        return;
+      }
+      clearTimeout(connection.probing);
+      connection.probing = undefined;
+      wake();
+    };
+    let sent = false;
+    try {
+      sent = connection.session.ping(answered);
+    } catch {
+      /* A destroyed or closing session cannot be probed. */
+    }
+    if (!sent) retire(connection);
+  }
+  function expire(job: PendingRequest) {
+    const connection = job.stream ? job.connection : undefined;
+    finish(job, { status: 503 });
+    if (connection) probe(connection);
   }
   function start(connection: Connection, job: PendingRequest) {
     queue.delete(job);
@@ -230,7 +275,7 @@ export function createApnsTransport(options: ApnsOptions): PushTransport<ApnsMes
     if (closed) return;
     for (const job of queue) {
       const available = [...connections].find(
-        (connection) => connection.active.size < connection.capacity,
+        (connection) => !connection.probing && connection.active.size < connection.capacity,
       );
       if (available) start(available, job);
       else {
@@ -254,7 +299,7 @@ export function createApnsTransport(options: ApnsOptions): PushTransport<ApnsMes
         const job: PendingRequest = {
           message,
           resolve,
-          timer: setTimeout(() => finish(job, { status: 503 }), timeout),
+          timer: setTimeout(() => expire(job), timeout),
         };
         pending.add(job);
         queue.add(job);

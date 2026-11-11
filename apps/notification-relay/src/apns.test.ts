@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 import { createHash, generateKeyPairSync } from "node:crypto";
 import {
   connect,
@@ -407,6 +408,105 @@ test("connection construction failures are transient and leave queued work and f
   expect(await sender.send(message)).toEqual({ status: 200 });
 });
 
+test("a session that goes silent after a good exchange fails its PING and is replaced", async () => {
+  const fixture = await local((stream) => {
+    stream.respond({ ":status": 200 });
+    stream.end();
+  });
+  // A real client/server pair whose server end the test keeps, so it can silence it.
+  const [clientSocket, serverSocket] = duplexPair();
+  const server = performServerHandshake(serverSocket);
+  server.on("error", () => {});
+  server.on("stream", (stream) => {
+    stream.on("error", () => {});
+    stream.respond({ ":status": 200 });
+    stream.end();
+  });
+  cleanup.push(async () => {
+    server.destroy();
+  });
+  const first = connect("http://local.test", { createConnection: () => clientSocket });
+  const opened = vi.fn(fixture.connect).mockImplementationOnce(() => first);
+  const sender = transport({ connect: opened, requestTimeoutMs: 50, healthCheckTimeoutMs: 30 });
+  expect(await sender.send(message)).toEqual({ status: 200 });
+  // The peer stops reading: no response, no PING ACK, and the socket never closes.
+  serverSocket.pause();
+  // Two streams miss the deadline together; the session gets one PING, not two.
+  const ping = vi.spyOn(first, "ping");
+  expect(await Promise.all([sender.send(message), sender.send(message)])).toEqual([
+    { status: 503 },
+    { status: 503 },
+  ]);
+  expect(ping).toHaveBeenCalledTimes(1);
+  await vi.waitFor(() => expect(first.destroyed).toBe(true));
+  expect(opened).toHaveBeenCalledTimes(1);
+  expect(await sender.send(message)).toEqual({ status: 200 });
+  expect(opened).toHaveBeenCalledTimes(2);
+});
+
+test("a missed deadline on a healthy session keeps it after its PING is answered", async () => {
+  const arrived = arrivals();
+  const fixture = await local(arrived.handler, { maxConcurrentStreams: 2 });
+  const sender = transport({ connect: fixture.connect, requestTimeoutMs: 40 });
+  const hung = sender.send(message);
+  await arrived.count(1);
+  expect(await hung).toEqual({ status: 503 });
+  const next = sender.send(message);
+  await arrived.count(2);
+  arrived.respond(1);
+  expect(await next).toEqual({ status: 200 });
+  expect(fixture.authorities).toHaveLength(1);
+  expect(fixture.clients[0]?.destroyed).toBe(false);
+});
+
+test("a handshake that never sends SETTINGS is retired at the deadline", async () => {
+  const fixture = await local((stream) => {
+    stream.respond({ ":status": 200 });
+    stream.end();
+  });
+  const [clientSocket] = duplexPair(); // the peer end never speaks HTTP/2
+  const silent = connect("http://local.test", { createConnection: () => clientSocket });
+  silent.on("error", () => {});
+  const opened = vi.fn(fixture.connect).mockImplementationOnce(() => silent);
+  const sender = transport({ connect: opened, requestTimeoutMs: 30 });
+  expect(await sender.send(message)).toEqual({ status: 503 });
+  await vi.waitFor(() => expect(silent.destroyed).toBe(true));
+  expect(await sender.send(message)).toEqual({ status: 200 });
+  expect(opened).toHaveBeenCalledTimes(2);
+});
+
+test.each([
+  [
+    "a PING error",
+    (cb: (error: Error | null) => void) => {
+      cb(new Error("ping failed"));
+      return true;
+    },
+  ],
+  ["a refused PING", () => false],
+  [
+    "a PING that throws",
+    () => {
+      throw new Error("invalid session");
+    },
+  ],
+] as const)("%s after a missed deadline retires the session", async (_, ping) => {
+  const arrived = arrivals();
+  const fixture = await local(arrived.handler, { maxConcurrentStreams: 2 });
+  const sender = transport({ connect: fixture.connect, requestTimeoutMs: 40 });
+  const hung = sender.send(message);
+  await arrived.count(1);
+  const client = fixture.clients[0] as import("node:http2").ClientHttp2Session;
+  vi.spyOn(client, "ping").mockImplementation(ping as never);
+  expect(await hung).toEqual({ status: 503 });
+  await vi.waitFor(() => expect(client.destroyed).toBe(true));
+  const next = sender.send(message);
+  await arrived.count(2);
+  arrived.respond(1);
+  expect(await next).toEqual({ status: 200 });
+  expect(fixture.authorities).toHaveLength(2);
+});
+
 test("validates pool size, queue capacity and finite positive request deadlines", () => {
   for (const override of [
     { maxSessions: 0 },
@@ -416,6 +516,8 @@ test("validates pool size, queue capacity and finite positive request deadlines"
     { maxQueued: Number.POSITIVE_INFINITY },
     { requestTimeoutMs: 0 },
     { requestTimeoutMs: 1.5 },
+    { healthCheckTimeoutMs: 0 },
+    { healthCheckTimeoutMs: 1.5 },
   ])
     expect(() => createApnsTransport({ ...options, ...override })).toThrow("configuration");
 });
