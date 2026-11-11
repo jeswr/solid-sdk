@@ -78,8 +78,10 @@ are narrowed to `xsd:string` only in the codegen profile, with public reads carr
 the facade. `drawing.ttl`, `drawing.shacl.ttl`, their subpath exports and the Node-only
 `/shape` helpers continue to expose the unchanged published package profile.
 
-Generator/runtime limitations handled here include three generator gaps. These are
-tracked as beads (see W2 handover):
+Generator/runtime limitations handled here include three generator gaps, each filed
+as a tracker bead under sst-ild.4 ("union cardinality across canonical and legacy
+alias predicates", "admit sh:nodeKind sh:Literal with no sh:datatype", "lexical-string
+mode for xsd:dateTime fields"):
 
 - Union cardinality across canonical and legacy aliases: the generator cannot select
   the drawing oracle's union policy for runtime singleton projection. The facade
@@ -92,6 +94,9 @@ tracked as beads (see W2 handover):
   validates strings with the runtime's strict XSD validator and uses its writer,
   preserving the public string type. Zoneless strings are interpreted as UTC on both
   read and write, including lexical re-reads that bypass the runtime's local-time Date.
+  This UTC handling is a temporary copy: the same fix in `@jeswr/model-runtime`
+  (reading zoneless `xsd:dateTime` as UTC for every generated model) is in review, and
+  the facade's `date()`/zoneless re-read are removed once it lands.
 
 Runtime `iriScheme` guards normalize URLs, whereas drawing preserves lexical RDF
 identity. The facade keeps the existing write guards; config omits scheme guards.
