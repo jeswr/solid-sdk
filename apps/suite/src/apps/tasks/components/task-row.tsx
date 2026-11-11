@@ -527,7 +527,7 @@ export function TaskRow({
                 >
                   Delete
                 </DropdownMenuItem>
-                {tree && (
+                {tree && menuOpen && (
                   <>
                     <DropdownMenuItem
                       disabled={!depthPlan(false)}

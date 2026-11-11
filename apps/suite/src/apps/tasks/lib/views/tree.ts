@@ -2,7 +2,7 @@
 import { generateNKeysBetween } from "../../../../lib/order";
 import { positionBetween } from "../model/task";
 import { getProgress, indentTask, outdentTask, type TreeTask } from "../tree";
-import { compareTasks, type Row, taskSection } from "./project-groups";
+import { compareTasks, type Row, taskIndex, taskSection } from "./project-groups";
 import type { TaskView } from "./types";
 
 /** Progress uses the library's default: direct children, including completed/hidden ones. */
@@ -25,10 +25,29 @@ export function taskProgress(tasks: readonly TaskView[], id: string) {
   );
 }
 
-/** Keep an unfiltered ordering domain; adapt fractional keys back to schema:position. */
-export function planTreeMove(tasks: readonly TaskView[], active: TaskView, outdent: boolean) {
-  const project = tasks.filter((task) => task.projectUrl === active.projectUrl);
+interface OrderingForest {
+  projectUrl: string;
+  project: TaskView[];
+  section: string | undefined;
+  domain: TaskView[];
+  forest: TreeTask[];
+}
+const forests = new WeakMap<readonly TaskView[], OrderingForest[]>();
+/** Build each complete project/section forest once for an immutable view snapshot. */
+function orderingForest(tasks: readonly TaskView[], active: TaskView): OrderingForest {
+  let snapshot = forests.get(tasks);
+  if (!snapshot) {
+    snapshot = [];
+    forests.set(tasks, snapshot);
+  }
+  const project =
+    snapshot.find((entry) => entry.projectUrl === active.projectUrl)?.project ??
+    tasks.filter((task) => task.projectUrl === active.projectUrl);
   const section = taskSection(active, project, true);
+  const existing = snapshot.find(
+    (entry) => entry.projectUrl === active.projectUrl && entry.section === section,
+  );
+  if (existing) return existing;
   const domain = project
     .filter((task) => taskSection(task, project, true) === section)
     .sort(compareTasks("manual"));
@@ -41,6 +60,14 @@ export function planTreeMove(tasks: readonly TaskView[], active: TaskView, outde
       state: task.state === "closed" ? "completed" : "open",
     }),
   );
+  const entry = { projectUrl: active.projectUrl, project, section, domain, forest };
+  snapshot.push(entry);
+  return entry;
+}
+
+/** Keep an unfiltered ordering domain; adapt fractional keys back to schema:position. */
+export function planTreeMove(tasks: readonly TaskView[], active: TaskView, outdent: boolean) {
+  const { domain, forest } = orderingForest(tasks, active);
   try {
     const moved = (outdent ? outdentTask : indentTask)(forest, active.id);
     const root = moved.find((task) => task.id === active.id) as TreeTask;
@@ -75,7 +102,7 @@ export function expandedRows(rows: readonly Row[], collapsed: ReadonlySet<string
 
 /** True ancestry remains available even when a closed/filtered parent is displayed separately. */
 export function taskLevel(task: TaskView, tasks: readonly TaskView[]): number {
-  const byId = new Map(tasks.map((task) => [task.id, task]));
+  const byId = taskIndex(tasks);
   const seen = new Set([task.id]);
   let parent = task.parentId;
   while (parent && !seen.has(parent)) {

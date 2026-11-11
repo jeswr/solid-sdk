@@ -1,5 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   expandedRows,
   planTreeMove,
@@ -7,6 +7,7 @@ import {
   taskProgress,
 } from "../../src/apps/tasks/lib/views/tree";
 import type { TaskView } from "../../src/apps/tasks/lib/views/types";
+import * as order from "../../src/lib/order";
 
 function view(id: string, position?: number, parentId?: string): TaskView {
   return {
@@ -26,6 +27,27 @@ function view(id: string, position?: number, parentId?: string): TaskView {
 }
 
 describe("tree/model adapter", () => {
+  it("builds one ordering forest per snapshot domain and refreshes it after a change", () => {
+    const a = view("a", 1);
+    const b = view("b", 2);
+    const tasks = [a, b, view("c", 1, "a")];
+    const keys = vi.spyOn(order, "generateNKeysBetween");
+    try {
+      expect(planTreeMove(tasks, b, false)).toEqual({ parentId: "a", position: 2 });
+      expect(planTreeMove(tasks, b, true)).toBeUndefined();
+      expect(planTreeMove(tasks, a, false)).toBeUndefined();
+      expect(keys).toHaveBeenCalledTimes(1);
+      const next = [a, { ...b, parentId: "a" }, tasks[2] as TaskView];
+      expect(planTreeMove(next, next[1] as TaskView, true)).toEqual({
+        parentId: undefined,
+        position: 2,
+      });
+      expect(keys).toHaveBeenCalledTimes(2);
+    } finally {
+      keys.mockRestore();
+    }
+  });
+
   it("counts direct children, excludes the parent and ignores unrelated tasks", () => {
     const root = view("root", 0);
     const child = view("child", 0, "root");

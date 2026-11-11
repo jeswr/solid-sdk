@@ -198,6 +198,7 @@ export function TasksDnd({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   // A list sorted by due date, priority or name has no manual order to drop into.
   const manual = (preferences.sort[pathname] ?? "manual") === "manual";
+  const flat = pathname.endsWith("/board");
   const [store] = useState(hintStore);
   const [active, setActive] = useState<TaskView>();
   /** The drop outcome, announced once its write settles (dnd-kit's region has moved on). */
@@ -213,7 +214,7 @@ export function TasksDnd({ children }: { children: ReactNode }) {
   const showCompleted = preferences.showCompletedInProject;
   /** Reorders count the visible rows of the active task's own project; nesting checks all. */
   const planFor = (task: TaskView, project: readonly TaskView[], drop: DropTarget) =>
-    planDrop(task, drop, visibleTasks(project, showCompleted), { all: project, manual });
+    planDrop(task, drop, visibleTasks(project, showCompleted), { all: project, manual, flat });
   const projectTasks = (task: TaskView) =>
     tasks.views.filter((view) => view.projectUrl === task.projectUrl);
   /** What a sorted list makes of the target: a row stands for its section. */
@@ -295,7 +296,7 @@ export function TasksDnd({ children }: { children: ReactNode }) {
           plan.current = next;
           if (next.kind === "none") return;
           const names = projects();
-          const message = dropMessage(task, next, tasks.views, names, manual);
+          const message = dropMessage(task, next, tasks.views, names, manual, flat);
           const replan = replanner(tasks.cache, task.url, (fresh, project) =>
             planFor(fresh, project, drop),
           );
@@ -304,8 +305,9 @@ export function TasksDnd({ children }: { children: ReactNode }) {
             plan: next,
             message,
             showCompleted,
+            flat,
             describe: (plan) =>
-              dropMessage(task, plan, tasks.cache.getSnapshot().views, names, manual),
+              dropMessage(task, plan, tasks.cache.getSnapshot().views, names, manual, flat),
             announce: setStatus,
           });
           void applyDropPlan(next, tasks, replan, retried).then((written) => {

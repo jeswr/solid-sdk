@@ -36,6 +36,7 @@ import { TaskList } from "../../src/apps/tasks/components/task-list";
 import { ProjectView } from "../../src/apps/tasks/components/views/project-view";
 import { NS, node } from "../../src/apps/tasks/lib/model/rdf";
 import { flatRows } from "../../src/apps/tasks/lib/views/project-groups";
+import * as treePlans from "../../src/apps/tasks/lib/views/tree";
 
 beforeEach(() => {
   localStorage.clear();
@@ -98,6 +99,63 @@ function Detail({ url }: { url: string }) {
 const status = () => document.querySelector('.suite-sr-only[role="status"]')?.textContent;
 
 describe("unlimited task trees", () => {
+  it.each([
+    "menu",
+    "Alt+ArrowDown",
+  ])("reorders siblings with descendants through %s without promoting their root", async (path) => {
+    const { create, pod, store } = await setup();
+    const root = await create("Root");
+    const a = await create("A", root);
+    const b = await create("B", root);
+    const child = await create("A child", a);
+    await mount(h(ProjectView, { inbox: true }));
+    pod.requests.length = 0;
+    if (path === "menu") {
+      await key(row("A"), "F10", true);
+      await click(byText('[role="menuitem"]', "Move down"));
+    } else {
+      await act(() =>
+        row("A").dispatchEvent(
+          new KeyboardEvent("keydown", {
+            key: "ArrowDown",
+            altKey: true,
+            bubbles: true,
+            cancelable: true,
+          }),
+        ),
+      );
+    }
+    await settle();
+    const saved = await store.readTask(a.url);
+    expect(saved.task.parent).toBe(root.task.id);
+    expect(saved.task.rank).toBeGreaterThan(b.task.rank ?? 0);
+    expect((await store.readTask(child.url)).task.parent).toBe(a.task.id);
+    expect(pod.mutations()).toHaveLength(1);
+    expect(pod.mutations()[0]?.headers.get("If-Match")).toBe(a.etag);
+    expect(row("A").getAttribute("aria-level")).toBe("2");
+  });
+
+  it("plans depth availability only for an open row menu", async () => {
+    const { create } = await setup();
+    await create("First");
+    await create("Second");
+    const plan = vi.spyOn(treePlans, "planTreeMove");
+    const { host, render } = await mount(h(ProjectView, { inbox: true }));
+    expect(plan).not.toHaveBeenCalled();
+    await render(h(ProjectView, { inbox: true }));
+    expect(plan).not.toHaveBeenCalled();
+    await key(row("Second"), "F10", true);
+    expect(new Set(plan.mock.calls.map((call) => call[1].title))).toEqual(new Set(["Second"]));
+    expect(new Set(plan.mock.calls.map((call) => call[2]))).toEqual(new Set([false, true]));
+    expect(byText('[role="menuitem"]', "Indent").getAttribute("aria-disabled")).toBeNull();
+    expect(byText('[role="menuitem"]', "Outdent").getAttribute("aria-disabled")).toBe("true");
+    await key(byText('[role="menuitem"]', "Indent"), "Escape");
+    plan.mockClear();
+    await render(h(ProjectView, { inbox: true }));
+    expect(host.querySelectorAll("[data-tsk-row]")).toHaveLength(2);
+    expect(plan).not.toHaveBeenCalled();
+  });
+
   it("keeps true ARIA depth, collapses descendants and keeps direct-child progress visible", async () => {
     const { create } = await setup();
     const root = await create("Root");

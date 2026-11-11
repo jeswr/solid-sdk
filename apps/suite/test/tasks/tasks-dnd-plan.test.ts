@@ -135,6 +135,64 @@ describe("visible tasks and nesting rules", () => {
 });
 
 describe("planDrop", () => {
+  it("plans board drops and anchored moves in flat section order, retaining every parent", () => {
+    const root = view("root", { position: 1 });
+    const child = view("child", { position: 2, parentId: root.id });
+    const other = view("other", { position: 3 });
+    const views = [root, child, other];
+    const flat = { flat: true };
+    const beforeChild = {
+      kind: "task",
+      url: child.url,
+      container: top,
+      placement: "before",
+    } as const;
+    const plan = position(planDrop(other, beforeChild, views, flat));
+    expect(plan).toMatchObject({
+      position: 1.5,
+      parentId: undefined,
+      parentChanged: false,
+      index: 2,
+    });
+    const after = [root, child, { ...other, position: plan.position }];
+    expect(isPlaced(plan, after, flat)).toBe(true);
+    expect(planDrop(after[2] as TaskView, beforeChild, after, flat)).toEqual({ kind: "none" });
+
+    const down = moveTarget(root, 1, views, flat);
+    if (!down) throw new Error("Missing flat move target");
+    // Moving a parent after its own child is a valid flat board reorder.
+    expect(position(planDrop(root, down, views, flat))).toMatchObject({
+      parentChanged: false,
+      parentId: undefined,
+      position: 2.5,
+      index: 2,
+    });
+    const childDown = position(planMove(child, 1, views, flat));
+    expect(childDown).toMatchObject({
+      parentId: root.id,
+      parentChanged: false,
+      position: 4,
+      index: 3,
+    });
+    expect(isPlaced(childDown, [root, { ...child, position: 4 }, other], flat)).toBe(true);
+    expect(dropMessage(child, childDown, views, [], true, true)).toBe(
+      "Moved 'child' to No section, position 3.",
+    );
+    expect(planMove(root, -1, views, flat)).toEqual({ kind: "none" });
+    expect(planToSection(child, undefined, views, { flat: true, manual: false })).toEqual({
+      kind: "none",
+    });
+    expect(position(planToSection(child, S1, views, flat))).toMatchObject({
+      parentId: root.id,
+      parentChanged: false,
+      sectionId: S1,
+      sectionChanged: true,
+    });
+    expect(
+      position(planDrop(root, { ...beforeChild, placement: "child" }, views, flat)).parentChanged,
+    ).toBe(false);
+  });
+
   it("moves to another project, never to its own", () => {
     const { a, views } = fixture();
     expect(planDrop(a, { kind: "project", projectUrl: P }, views)).toEqual({ kind: "none" });

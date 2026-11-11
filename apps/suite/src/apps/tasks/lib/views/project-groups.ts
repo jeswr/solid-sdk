@@ -13,6 +13,16 @@ export interface ProjectGroups {
   unsectioned: Row[];
   sections: { section: Category; rows: Row[]; openCount: number }[];
 }
+const indexes = new WeakMap<readonly TaskView[], ReadonlyMap<string, TaskView>>();
+/** View arrays are immutable cache snapshots; share their ancestry index across rows/plans. */
+export function taskIndex(tasks: readonly TaskView[]): ReadonlyMap<string, TaskView> {
+  let index = indexes.get(tasks);
+  if (!index) {
+    index = new Map(tasks.map((task) => [task.id, task]));
+    indexes.set(tasks, index);
+  }
+  return index;
+}
 const position = (task: TaskView) => task.position ?? Infinity;
 export function compareTasks(mode: SortMode): (a: TaskView, b: TaskView) => number {
   return (a, b) => {
@@ -41,7 +51,7 @@ export function flatRows(tasks: readonly TaskView[], allTasks: readonly TaskView
 
 /** Iterative preorder at unlimited depth; malformed cycles still render each task once. */
 export function treeRows(tasks: readonly TaskView[], allTasks: readonly TaskView[] = tasks): Row[] {
-  const byId = new Map(tasks.map((task) => [task.id, task]));
+  const byId = taskIndex(tasks);
   const children = new Map<string, TaskView[]>();
   for (const task of tasks) {
     if (!task.parentId || byId.get(task.parentId)?.state !== "open") continue;
@@ -74,7 +84,7 @@ export function taskSection(
   tasks: readonly TaskView[],
   includeClosed = false,
 ): string | undefined {
-  const byId = new Map(tasks.map((task) => [task.id, task]));
+  const byId = taskIndex(tasks);
   const seen = new Set([task.id]);
   let current = task;
   while (current.parentId) {
@@ -90,17 +100,19 @@ export function projectGroups(
   sections: readonly Category[],
   sort: SortMode,
   showCompleted = false,
+  flat = false,
 ): ProjectGroups {
   const visible = tasks
     .filter((task) => showCompleted || task.state === "open")
     .sort(compareTasks(sort));
   const sectionIds = new Set(sections.map((section) => section.id));
   const sectionOf = (task: TaskView) => {
-    const id = taskSection(task, visible);
+    const id = flat ? task.sectionId : taskSection(task, visible);
     return id && sectionIds.has(id) ? id : undefined;
   };
+  const rows = flat ? flatRows : treeRows;
   return {
-    unsectioned: treeRows(
+    unsectioned: rows(
       visible.filter((task) => sectionOf(task) === undefined),
       tasks,
     ),
@@ -110,7 +122,7 @@ export function projectGroups(
         const members = visible.filter((task) => sectionOf(task) === section.id);
         return {
           section,
-          rows: treeRows(members, tasks),
+          rows: rows(members, tasks),
           openCount: members.filter((task) => task.state === "open").length,
         };
       }),

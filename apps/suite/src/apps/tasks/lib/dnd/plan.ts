@@ -31,12 +31,17 @@ interface Level {
   projectUrl: string;
   sectionId: string | undefined;
   parent: TaskView | undefined;
+  flat: boolean;
 }
 
 /** Children render in their parent's section, mirroring `projectGroups`. */
-function levelOf(task: TaskView, views: readonly TaskView[]): Level {
-  const parent = effectiveParent(task, views);
-  return { projectUrl: task.projectUrl, sectionId: taskSection(task, views), parent };
+function levelOf(task: TaskView, views: readonly TaskView[], flat = false): Level {
+  return {
+    projectUrl: task.projectUrl,
+    sectionId: flat ? task.sectionId : taskSection(task, views),
+    parent: flat ? undefined : effectiveParent(task, views),
+    flat,
+  };
 }
 
 function sameLevel(a: Level, b: Level): boolean {
@@ -49,7 +54,7 @@ function sameLevel(a: Level, b: Level): boolean {
 
 function members(level: Level, views: readonly TaskView[]): TaskView[] {
   return views
-    .filter((view) => sameLevel(levelOf(view, views), level))
+    .filter((view) => sameLevel(levelOf(view, views, level.flat), level))
     .sort(compareTasks("manual"));
 }
 
@@ -104,7 +109,7 @@ function planAt(
   views: readonly TaskView[],
 ): DropPlan {
   const all = members(level, views);
-  const current = levelOf(active, views);
+  const current = levelOf(active, views, level.flat);
   if (sameLevel(current, level) && all.findIndex((view) => view.url === active.url) === index)
     return NONE;
   const siblings = all.filter((view) => view.url !== active.url);
@@ -114,10 +119,10 @@ function planAt(
     url: active.url,
     projectUrl: level.projectUrl,
     sectionId: level.sectionId,
-    parentId: level.parent?.id,
-    // A child's own section class is left alone; it renders under its parent.
+    parentId: level.flat ? active.parentId : level.parent?.id,
+    // In a tree, a child's own section class is left alone; it renders under its parent.
     sectionChanged: level.parent === undefined && level.sectionId !== active.sectionId,
-    parentChanged: current.parent?.id !== level.parent?.id,
+    parentChanged: !level.flat && current.parent?.id !== level.parent?.id,
     position,
     renumber,
     index: index + 1,
@@ -138,7 +143,7 @@ export function planDrop(
   active: TaskView,
   dropTarget: DropTarget,
   views: readonly TaskView[],
-  { all = views, manual = true }: PlanOptions = {},
+  { all = views, manual = true, flat = false }: PlanOptions = {},
 ): DropPlan {
   const target = manual ? dropTarget : sortedTarget(dropTarget);
   switch (target.kind) {
@@ -151,11 +156,12 @@ export function planDrop(
     case "section": {
       if (target.projectUrl !== active.projectUrl) return NONE;
       // Re-ranking within its own section would change nothing a sorted list shows.
-      if (!manual && levelOf(active, views).sectionId === target.sectionId) return NONE;
+      if (!manual && levelOf(active, views, flat).sectionId === target.sectionId) return NONE;
       const level = {
         projectUrl: target.projectUrl,
         sectionId: target.sectionId,
         parent: undefined,
+        flat,
       };
       const count = members(level, views).filter((view) => view.url !== active.url).length;
       return planAt(active, level, target.at === "start" ? 0 : count, views);
@@ -166,25 +172,30 @@ export function planDrop(
         return target.container.dayKey ? dayPlan(active, target.container.dayKey) : NONE;
       const over = views.find((view) => view.url === target.url);
       if (!over || over.projectUrl !== active.projectUrl) return NONE;
-      // A subtree cannot be dropped among its own descendants at any depth.
+      // A tree move cannot drop a subtree among its own descendants at any depth.
       const seen = new Set<string>();
-      let ancestor: TaskView | undefined = over;
+      let ancestor: TaskView | undefined = flat ? undefined : over;
       while (ancestor && !seen.has(ancestor.id)) {
         if (ancestor.id === active.id) return NONE;
         seen.add(ancestor.id);
         ancestor = all.find((task) => task.id === ancestor?.parentId);
       }
-      if (target.placement === "child" && canNest(active, over, all)) {
-        const level = { projectUrl: over.projectUrl, sectionId: over.sectionId, parent: over };
+      if (!flat && target.placement === "child" && canNest(active, over, all)) {
+        const level = {
+          projectUrl: over.projectUrl,
+          sectionId: over.sectionId,
+          parent: over,
+          flat,
+        };
         const count = members(level, views).filter((view) => view.url !== active.url).length;
         return planAt(active, level, count, views);
       }
       let anchor = over;
       let after = target.placement !== "before";
-      let level = levelOf(over, views);
+      let level = levelOf(over, views, flat);
       if (level.parent) {
-        // Preserve the existing drag policy for tasks that have children.
-        if (hasChildren(active, all)) {
+        // Cross-level drags retain the existing fallback; sibling reorders keep their level.
+        if (!sameLevel(levelOf(active, views), level) && hasChildren(active, all)) {
           anchor = level.parent;
           after = true;
           level = levelOf(anchor, views);
@@ -202,10 +213,10 @@ export function planMove(
   active: TaskView,
   direction: -1 | 1,
   views: readonly TaskView[],
-  { manual = true }: PlanOptions = {},
+  { manual = true, flat = false }: PlanOptions = {},
 ): DropPlan {
   if (!manual) return NONE;
-  const level = levelOf(active, views);
+  const level = levelOf(active, views, flat);
   const all = members(level, views);
   const destination = all.findIndex((view) => view.url === active.url) + direction;
   if (destination < 0 || destination >= all.length) return NONE;
@@ -221,9 +232,9 @@ export function moveTarget(
   active: TaskView,
   direction: -1 | 1,
   views: readonly TaskView[],
-  { manual = true }: PlanOptions = {},
+  { manual = true, flat = false }: PlanOptions = {},
 ): DropTarget | undefined {
-  const level = levelOf(active, views);
+  const level = levelOf(active, views, flat);
   const all = members(level, views);
   const at = all.findIndex((view) => view.url === active.url);
   const neighbour = all[at + direction];
@@ -241,16 +252,20 @@ export function moveTarget(
  * rows `views`: the same rendered level and 1-based slot, or the same day.
  * Project moves change the task's URL, so they never match here.
  */
-export function isPlaced(plan: DropPlan, views: readonly TaskView[]): boolean {
+export function isPlaced(
+  plan: DropPlan,
+  views: readonly TaskView[],
+  { flat = false }: PlanOptions = {},
+): boolean {
   if (plan.kind === "none" || plan.kind === "project") return false;
   const task = views.find((view) => view.url === plan.url);
   if (!task) return false;
   if (plan.kind === "reschedule") return taskDayKey(task) === plan.dayKey;
-  const level = levelOf(task, views);
+  const level = levelOf(task, views, flat);
   return (
     level.projectUrl === plan.projectUrl &&
     level.sectionId === plan.sectionId &&
-    level.parent?.id === plan.parentId &&
+    (flat ? task.parentId : level.parent?.id) === plan.parentId &&
     members(level, views).findIndex((view) => view.url === task.url) + 1 === plan.index
   );
 }

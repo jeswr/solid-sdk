@@ -4,6 +4,7 @@ import {
   compareTasks,
   flatRows,
   projectGroups,
+  taskIndex,
   taskSection,
   treeRows,
 } from "../../src/apps/tasks/lib/views/project-groups";
@@ -26,6 +27,41 @@ function view(id: string, data: Partial<TaskView> = {}): TaskView {
 }
 const names = (rows: { task: TaskView }[]) => rows.map((row) => row.task.id);
 describe("project list projection", () => {
+  it("shares an ancestry index per snapshot and gives boards flat per-section ordering", () => {
+    const tasks = [
+      view("root", { position: 1, sectionId: "doing" }),
+      view("child", { position: 3, parentId: "root", sectionId: "other" }),
+      view("between", { position: 2, sectionId: "doing" }),
+    ];
+    expect(taskIndex(tasks)).toBe(taskIndex(tasks));
+    expect(taskIndex([...tasks])).not.toBe(taskIndex(tasks));
+    const groups = projectGroups(
+      tasks,
+      [
+        { id: "doing", name: "Doing" },
+        { id: "other", name: "Other" },
+      ],
+      "manual",
+      false,
+      true,
+    );
+    expect(
+      groups.sections.map(({ rows }) => rows.map(({ task, depth }) => [task.id, depth])),
+    ).toEqual([
+      [
+        ["root", 0],
+        ["between", 0],
+      ],
+      [["child", 0]],
+    ]);
+    expect(groups.sections[1]?.rows[0]?.orphanParentTitle).toBe("root");
+    expect(names(projectGroups(tasks, [], "manual", false, true).unsectioned)).toEqual([
+      "root",
+      "between",
+      "child",
+    ]);
+  });
+
   it("sorts all-day tasks by their marker across time zones and keeps manual ties", () => {
     const tasks = [
       view("late-marker", { allDay: "2026-11-02", due: new Date("2026-11-01T10:00:00Z") }),

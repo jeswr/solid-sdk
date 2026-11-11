@@ -119,7 +119,7 @@ function BoardCard({
             >
               Delete
             </DropdownMenuItem>
-            <MoveMenuItems task={task} disabled={pending || completing} nesting={false} />
+            <MoveMenuItems task={task} disabled={pending || completing} nesting={false} flat />
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
@@ -276,6 +276,7 @@ export function BoardView({ projectUrl }: { projectUrl: string }) {
     project?.tracker.sections ?? [],
     "manual",
     preferences.showCompletedInProject,
+    true,
   );
   const unsectioned = groups.unsectioned;
   const showNoSection = unsectioned.length > 0 || groups.sections.length === 0;
