@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
@@ -180,6 +181,12 @@ export interface ActiveSheet {
 }
 
 export interface SheetEngine {
+  /** App-owned chart metadata is retained beside the engine snapshot. */
+  setCharts?(charts: import("./model/snapshot").JsonValue): void;
+  /** Current rectangular selection, local to the active sheet. */
+  selection?(): { sheetId: string; range: string };
+  /** Includes background formula results, without scheduling another save. */
+  onValuesChange?(listener: () => void): () => void;
   /** Replace the whole workbook (e.g. "reload theirs" after a conflict). Does not fire `onChange`. */
   load(snapshot: Snapshot): void;
   /** The current workbook as a JSON-safe snapshot (passes `serializeSnapshot`). */

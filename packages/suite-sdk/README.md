@@ -2,7 +2,7 @@
 
 # @jeswr/suite-sdk
 
-> **Experimental — AI-agent-generated.** Private notification, search, preferences and offline facades.
+> **Experimental — AI-agent-generated.** Private registration, notification, search, preferences and offline facades.
 
 Mount `PodAuthProvider` from `@jeswr/pod-auth/react`, then use the provider's authenticated
 fetch and current actor through the hook:
@@ -127,6 +127,37 @@ solid-offline's warmer currently exposes `onVisit` metadata without a dataset. I
 listings; the facade does not change the warmer. The caller owns refresh/invalidation and
 must dispose the engine and purge persisted index data on logout/account switches. Local
 results cover fed cached data only. Application shell wiring is a separate PR.
+
+## Registration (`SDK-APP-05`)
+
+```ts
+import { useRegistration, RegistrationError } from '@jeswr/suite-sdk';
+
+// Inside the existing PodAuthProvider.
+const registration = useRegistration({ accountApi: 'https://provider.example/.account/' });
+const available = await registration.available();
+const preview = registration.previewUrls('alice'); // { pod, webId }
+const checked = await registration.checkUsername('alice', { signal });
+const identity = await registration.register(
+  { username: 'alice', displayName: 'Alice', password },
+  { signal, onStep: (step, created) => renderProgress(step, created) },
+);
+```
+
+The hook delegates [pod-auth's CSS v7 registration API](../pod-auth/README.md#self-registration-registration-sdk-app-05).
+No options defaults to accountApi:null; `available()` is asynchronous. Optional `podHost`, pristine
+`fetch`, and `allowInsecureLoopback` have the same meaning as the core client. `methods` contains
+only password. CSS's username-only login identifier is `<username>@registration.invalid`, not a
+recovery email; show `created.loginId` when manual password sign-in is needed. The existing
+provider owns OIDC UI and the resulting session. RegistrationError and the public registration
+types are re-exported; errors retain their step and confirmed public progress, never credentials.
+
+Handles stay stable within a session/options set. Committed identity and lifecycle changes,
+including logout/login as the same account, replace them. Retained actions and stale probe results
+reject with `Registration session changed`. Option replacement/unmount aborts active registration;
+logout/expiry/restore/unrelated login also cancels it. The run's own matching login is permitted to
+finish its profile write and return Identity while old retained actions are revoked. In-flight
+failures remain typed RegistrationError values. No application shell wiring is included.
 
 ## Preferences (`SDK-APP-11`)
 

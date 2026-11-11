@@ -150,3 +150,12 @@ Current integration limitations:
 
 The move operation in SC-ERR remains a capability-gating witness. NOTIFY/AUTH/ACCESS/SYNC and
 the LWS HTTP target belong to later tasks.
+
+
+`pnpm --filter @jeswr/storage-conformance run test:registration` runs the separate SDK-APP-05
+integration lane after dependency-first builds. It reuses cssTarget.start() and the pinned CSS
+7.2.0 file configuration, creates a fresh username through pod-auth/registration, drives real
+password login/WebID selection/OIDC consent through a local UI driver, checks the RDF names,
+and proves the returned Identity's PodAuth session reads an owner-only pod (anonymous 401/403).
+It has no skips or environment gate and requires permission to open loopback sockets. This lane
+is separate from offline unit tests, as required by ADR-009.

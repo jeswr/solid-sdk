@@ -2460,12 +2460,12 @@ importers:
       '@jeswr/storage-client':
         specifier: workspace:*
         version: link:../../packages/storage-client
-      '@jeswr/suite-sdk':
-        specifier: workspace:*
-        version: link:../../packages/suite-sdk
       '@jeswr/suite-native':
         specifier: workspace:*
         version: link:../../packages/suite-native
+      '@jeswr/suite-sdk':
+        specifier: workspace:*
+        version: link:../../packages/suite-sdk
       '@jeswr/suite-ui':
         specifier: workspace:*
         version: link:../../packages/suite-ui
@@ -3885,6 +3885,9 @@ importers:
 
   packages/pod-auth:
     dependencies:
+      '@jeswr/guarded-fetch':
+        specifier: workspace:*
+        version: link:../guarded-fetch
       '@jeswr/reactive-authentication':
         specifier: workspace:*
         version: link:../reactive-authentication

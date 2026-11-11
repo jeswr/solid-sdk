@@ -7,7 +7,8 @@
 
 Channel contracts, carriage profiles, capability RDF and origin enforcement for DESIGN §3
 (A-005 / sst-31t), plus email MIME and Gmail REST (A-006 / sst-dez), shared metadata carriage
-(A-014 / sst-wxu), Microsoft Graph mail (A-024 / sst-1zu) and Discord (A-030 / sst-r57).
+(A-014 / sst-wxu), Microsoft Graph mail (A-024 / sst-1zu), Graph Teams (A-025 / sst-688)
+and Discord (A-030 / sst-r57).
 The `ChannelBinding` and `CarriageProfile` declarations follow §3.1.
 
 The root exports the shared legacy `BridgeMessage`, email projection helpers,
@@ -79,8 +80,12 @@ conservatively cap at 256 bytes pending their binding tasks. LinkedIn/X have zer
 constant implements sending. The direct descriptor advertises zero owner rate
 limits by default; it is a capability statement, never permission to send.
 
-Gmail, Microsoft Graph mail, GitHub notifications, Mastodon, Discord, Matrix and the
+Gmail, Microsoft Graph mail, Graph Teams, GitHub notifications, Mastodon, Discord, Matrix and the
 optional read-only X binding are implemented; see their sections below.
+
+| Binding | Ingest | Send | Carriage |
+| --- | --- | --- | --- |
+| `graph-teams` | Per-chat messages and joined-team channel messages | Existing pinned chats | `teams-card/0.1` |
 
 Gmail notification triage labels recognised LinkedIn notification senders as
 `linkedin-proxy`, retaining the email provenance and an explicit unverified warning.
@@ -300,6 +305,78 @@ Graph tests use synthetic recorded response shapes and injected transports,
 including 202 responses with empty bodies. No live provider or credentials are used.
 Provider contracts: [delta](https://learn.microsoft.com/en-us/graph/api/message-delta?view=graph-rest-1.0),
 [sendMail](https://learn.microsoft.com/en-us/graph/api/user-sendmail?view=graph-rest-1.0).
+
+`./graph-teams` exports `createGraphTeamsReader({ tokens, transport?, sleep?, now? })`
+and Graph-only `ORIGINS` (A-025 / sst-688). It traverses `/me/chats` →
+`/me/chats/{id}/messages` and `/me/joinedTeams` → `/teams/{id}/channels` →
+`/teams/{id}/channels/{id}/messages` using read grants. Provision delegated
+`Chat.Read`, `Team.ReadBasic.All`, `Channel.ReadBasic.All` and
+`ChannelMessage.Read.All`; channel access can require tenant administrator consent.
+Send grants use `ChatMessage.Send`. OAuth and tenant consent stay with the host.
+
+Account-scoped cursors retain queued collections and pending raw messages across
+restarts. Each call reads at most 32 collection pages, each scan at most 512 pages,
+with at most 512 queued collections or pending items. Pages and cursors cap at
+1 MiB; individual messages, cards and complete local send wires cap at 64 KiB,
+with the shared depth/node/array limits. Caller item/byte bounds never discard a
+pending message. A message that cannot fit alone refuses the call. Completed scans
+restart on the next poll; consumers deduplicate stable IDs. This snapshot poller
+does not provide delta synchronization or fetch channel reply collections.
+
+Continuation links must retain the current collection path on
+`https://graph.microsoft.com/v1.0`; credentials, fragments, unrelated query keys,
+duplicate query keys and immediate repeated links refuse. The scan bound also
+stops longer pagination cycles. Redirects are refused and tokens go only to Graph.
+Read HTTP 429/503 responses with a valid `Retry-After` use at most three retries
+and 30 seconds of cumulative delay and elapsed time per collection request.
+Both seconds and HTTP dates are accepted; excessive or invalid delays stop retries.
+`sleep(milliseconds)` and `now()` are trusted injectable timing seams for tests.
+
+HTML bodies (case-insensitive content type) become plain text through the shared HTML
+projector, including `@Display Name` for `<at>` mentions and entity decoding after
+script/style removal. Text bodies and display names retain literal markup and entities;
+all paths strip control and bidi characters. System/deleted
+messages and malformed individual messages are skipped. Sender claims come from
+`from.user`; dates, stable message IDs, conversation signals and reply thread keys
+remain unverified. Parsing uses bounded raw JSON, ignores `native` and never follows
+attachment URLs. Chat and channel conversation IDs have separate namespaces.
+Adaptive Card attachment detection extracts `data.envelope` through the shared
+JSON-LD decoder; conflicting, malformed or oversized carriers refuse the message.
+Ordinary cards without the envelope remain human observations. Parsing never
+verifies signatures or grants authority.
+
+The descriptor uses the existing capability RDF mapping. Its description states
+chat read/send and channel read support; a 403 during channel discovery or reading
+marks channels unavailable while chat ingestion continues. This observation is
+sticky for the reader instance; construct a reader per account/tenant and recreate
+it after changing consent. Channel sends, delivery receipts and guaranteed history
+are unsupported; owner rate allowances remain zero.
+
+`./graph-teams/send` alone exports `createGraphTeamsSend({ account, recipients,
+verify, verifyApproval, attachmentIdFor?, footer?, now?, transport? })`. Trusted actor-to-chat pins
+are snapshotted. The approved canonical JSON wire binds the account, chat and exact
+request. `POST /chats/{id}/messages` receives an HTML body containing the visible text
+with `& < > " '` escaped, followed by `<attachment id="…"></attachment>`, and an
+`application/vnd.microsoft.card.adaptive` attachment with the same ID and visible text,
+the required footer, and hidden `data: { envelope }` containing the signed JSON-LD.
+Card content is serialized JSON. The attachment ID is derived deterministically from
+the compact JWS; the trusted pure `attachmentIdFor(compactJws)` seam can supply stable
+fixture IDs. Re-rendering checks both the ID and body reference against the approved wire.
+The golden fixture uses an injected ID and normalizes only the test signature.
+
+Real sending requires explicit `dryRun: false`, exact re-rendered bytes, a verified
+current signed message, only the executor's send grant, and current owner approval.
+Expiry and the synchronous authority fence are checked after transport preflight,
+immediately before dispatch. Local pre-dispatch failures retain their cause in
+`SendNotDispatchedError`. Explicit client/rate refusals are `ProviderRejectedError`;
+server/transport failures and invalid acknowledgements remain uncertain. Acknowledgements
+read only the message ID using the Teams JSON parser: its existing 64 KiB body/card
+string and 1 MiB response limits apply, with shared depth/node/array bounds. Malformed
+or oversized responses fail closed. As with
+Graph mail, POST is never retried: there is no provider idempotency key. There is
+no lookup or final-absence claim. Tests use mocked Graph and synthetic signatures.
+Provider contracts: [chat messages](https://learn.microsoft.com/en-us/graph/api/chatmessage-post?view=graph-rest-1.0),
+[throttling](https://learn.microsoft.com/en-us/graph/throttling).
 
 `./mastodon` exports `createMastodonReader({ instance?, accountDomain?, tokens, transport? })`,
 `MASTODON_SCOPES` and default-instance `ORIGINS`. Register the OAuth app on the

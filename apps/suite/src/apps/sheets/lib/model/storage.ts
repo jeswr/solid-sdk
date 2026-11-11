@@ -21,7 +21,7 @@ import {
   type WorkbookMetadata,
   workbookLayout,
 } from "./rdf";
-import { deserializeSnapshot, type Snapshot, serializeSnapshot } from "./snapshot";
+import { type Snapshot, serializeSnapshot } from "./snapshot";
 
 class TypeIndexDataset extends DatasetWrapper {
   get registrations() {
@@ -164,9 +164,22 @@ export function createSheetStorage(fetch: typeof globalThis.fetch, podRoot: stri
     },
     async loadSnapshot(container: string): Promise<Stored<Snapshot>> {
       const result = await read(workbookLayout(container).snapshot, "application/json");
-      return { ...result, value: deserializeSnapshot(result.value) };
+      const snapshot: Snapshot = JSON.parse(result.value);
+      // Optional chart metadata is untrusted independently of the workbook's cells.
+      // Sanitize it before strict JSON validation, which rejects overflowing numbers.
+      const value =
+        snapshot !== null &&
+        typeof snapshot === "object" &&
+        !Array.isArray(snapshot) &&
+        snapshot.charts !== undefined
+          ? (await import("../charts/spec")).validateChartSnapshot(snapshot)
+          : snapshot;
+      serializeSnapshot(value);
+      return { ...result, value };
     },
     async saveSnapshot(container: string, snapshot: Snapshot, condition: Precondition) {
+      if (snapshot.charts !== undefined)
+        snapshot = (await import("../charts/spec")).validateChartSnapshot(snapshot);
       return write(
         workbookLayout(container).snapshot,
         serializeSnapshot(snapshot),

@@ -46,6 +46,7 @@ import { useAccounts } from "../session/accounts-provider";
 import type { SuiteAccount } from "../session/types";
 import { useAllPreferences } from "../settings/preferences";
 import { ConnectionContext, useConnectionState } from "./connection-state";
+import { useOutboxSession } from "./outbox-session";
 import { rememberPage } from "./service-worker";
 
 export { useConnectionState } from "./connection-state";
@@ -78,7 +79,7 @@ const subscribeShell = (onChange: () => void) => connectivity().subscribe(onChan
 const shellState = () => connectivity().getState();
 const shellConnection = { subscribe: subscribeShell, getSnapshot: shellState };
 
-/** The seam for the SDK outbox: maps an account to its outbox. */
+/** Test override. Authenticated sessions use the WebID-scoped SDK adapter. */
 export type OutboxFactory = (accountId: string) => Outbox;
 const outboxes = new Map<string, Outbox>();
 export const localOutboxFactory: OutboxFactory = (accountId) => {
@@ -99,7 +100,7 @@ export const localOutboxFactory: OutboxFactory = (accountId) => {
   outboxes.set(accountId, created);
   return created;
 };
-export const OutboxFactoryContext = createContext<OutboxFactory>(localOutboxFactory);
+export const OutboxFactoryContext = createContext<OutboxFactory | null>(null);
 
 interface OfflineContextValue {
   outbox: Outbox | null;
@@ -193,6 +194,7 @@ function OfflineEffects({ pageTitle, outbox }: { pageTitle?: string; outbox: Out
   const { active, status, isActiveAccount } = useAccounts();
   const { preferences, update, ready } = useAllPreferences();
   const state = useConnectionState();
+  const session = useOutboxSession();
   const pathname = usePathname();
   const hinted = useRef("");
   // The page each account was last seen on, and a page opened under another account.
@@ -203,8 +205,11 @@ function OfflineEffects({ pageTitle, outbox }: { pageTitle?: string; outbox: Out
   }, [active]);
   // Send what is waiting once the storage answers again.
   useEffect(() => {
-    if (state === "online") void outbox?.reconnected();
-  }, [state, outbox]);
+    if (state === "online" && (!session || session.storage))
+      void outbox?.reconnected().catch(() => {
+        // Durable failures remain visible in the sheet; session cancellation is expected.
+      });
+  }, [state, outbox, session]);
   useEffect(() => {
     if (!outbox || !accountId) return;
     const storage = (event: StorageEvent) => {
@@ -318,8 +323,14 @@ export function OfflineProvider({
 }) {
   const { active } = useAccounts();
   const factory = useContext(OutboxFactoryContext);
+  const session = useOutboxSession();
   const accountId = active?.id;
-  const outbox = useMemo(() => (accountId ? factory(accountId) : null), [factory, accountId]);
+  const outbox = useMemo(() => {
+    if (!accountId) return null;
+    if (factory) return factory(accountId);
+    if (active.kind === "demo") return localOutboxFactory(accountId);
+    return session?.adapter ?? null;
+  }, [factory, accountId, active?.kind, session?.adapter]);
   const value = useMemo(() => ({ outbox }), [outbox]);
   const pathname = usePathname();
   const [named, setNamed] = useState<NamedPage | null>(null);
