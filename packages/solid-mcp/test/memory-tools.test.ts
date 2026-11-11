@@ -130,7 +130,8 @@ describe("memory tool contracts", () => {
     const { tools } = await client.listTools();
     for (const name of ["memory_remember", "memory_recall", "memory_forget"]) {
       const tool = tools.find((tool) => tool.name === name);
-      expect(tool?.annotations?.readOnlyHint).toBe(name === "memory_recall");
+      // Recall may append a private audit entry, so no memory tool is advertised as read-only.
+      expect(tool?.annotations?.readOnlyHint).toBe(false);
       expect(tool?.inputSchema.type).toBe("object");
     }
     expect(tools.find((t) => t.name === "memory_recall")?.inputSchema.required).toContain(

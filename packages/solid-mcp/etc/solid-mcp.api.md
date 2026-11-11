@@ -11,6 +11,9 @@ import { Store } from 'n3';
 import type { z } from 'zod';
 
 // @public
+export const AUDITED_READ_HINTS: ToolHints;
+
+// @public
 export interface CliConfig {
     // (undocumented)
     clientId?: string;
@@ -145,6 +148,7 @@ export type PodSource = SolidMcpConfig | PodPort;
 // @public
 export interface PodTool {
     aliases: readonly string[];
+    annotations: ToolHints;
     description: string;
     handler(input: unknown): Promise<CallToolResult>;
     inputSchema: z.ZodObject;
@@ -152,6 +156,9 @@ export interface PodTool {
     readOnly: boolean;
     title: string;
 }
+
+// @public
+export const READ_HINTS: ToolHints;
 
 // @public
 export function readRdf(source: PodSource, url: string): Promise<ReadRdfResult>;
@@ -248,6 +255,17 @@ export type SolidMcpServerConfig = ((SolidMcpConfig & {
     readOnly?: boolean;
 }) & {
     clientInfo?: MemoryClientInfo;
+};
+
+// @public
+export type ToolHints = {
+    readOnlyHint: true;
+    openWorldHint: boolean;
+} | {
+    readOnlyHint: false;
+    destructiveHint: boolean;
+    idempotentHint: boolean;
+    openWorldHint: boolean;
 };
 
 // @public

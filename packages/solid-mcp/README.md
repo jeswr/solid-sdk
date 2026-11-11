@@ -156,7 +156,16 @@ env_vars = ["SOLID_MCP_POD_ROOT", "SOLID_MCP_WEBID", "SOLID_MCP_READONLY", "SOLI
 - Operations: `listContainer`, `readResource`, `readRdf`, `search`, `writeResource`.
 - Scope: `normalizePodRoot`, `requirePodScopedUrl`, `podScopedUrlOrUndefined`.
 - Data seam: `PodPort`, `createStoragePodPort`, `createFetchPodPort`, `PodConditions`.
-- Registry: `createPodToolRegistry`, `registerPodTools`, `PodTool` (Zod schema, handler, readOnly flag).
+- Registry: `createPodToolRegistry`, `registerPodTools`, `PodTool` (Zod schema, handler, readOnly
+  flag, `annotations`), `ToolHints`, `READ_HINTS`, `AUDITED_READ_HINTS`.
+- Tool annotations: every tool declares MCP behaviour hints, so hosts can auto-approve true reads
+  and ask before writes. `readOnlyHint` is true only when a call can never write to the pod.
+  `memory_recall`, `address_get` and `health_query` may append a private audit entry for
+  special-category data, so they advertise `readOnlyHint: false`, `destructiveHint: false`,
+  `idempotentHint: false`. `pod_write` is destructive and idempotent (PUT); `memory_forget` is
+  destructive and not idempotent; `memory_remember` and `chat_save` add data without destroying
+  it (`chat_save` is idempotent: message ids are immutable and the first title wins). All tools
+  set `openWorldHint: true` because pod data can include content written by other parties.
 - MCP tools: `pod_list`, `pod_read`, `search`, `fetch`, `context_read`, and opt-in `pod_write`;
   `memory_remember`, `memory_recall`, `memory_forget`, `profile_get`, `address_get`,
   and `health_query` with trusted client identity.
