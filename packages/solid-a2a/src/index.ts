@@ -92,7 +92,7 @@ export type {
   ValidationReport,
   ValidationResultEntry,
 } from "./types.js";
-export type { IntentInput, ShapeInput } from "./validate.js";
+export type { IntentInput, ShapeInput, ValidationOptions } from "./validate.js";
 export { validateIntent } from "./validate.js";
 export {
   A2A,

@@ -64,8 +64,9 @@ const protocol = await buildProtocolDocument({
   is not absolute. The request shapes do not bound these, so act on the projection, not
   on `validateIntent` alone.
 - `validateIntent` never throws: an Intent the writers refuse, or a shape the validator
-  cannot compile, is `conforms: false`. Shapes using `sh:pattern` are refused, because a
-  peer's pinned Protocol Document is not vetted and a backtracking regex cannot be timed out.
+  cannot compile, is `conforms: false`. Timeouts and worker startup/runtime failures use
+  that same report, with a diagnostic in `results[0].message`. Shapes using `sh:pattern`
+  remain refused: a peer's pinned Protocol Document is not vetted.
   For the same reason a validation is refused before it starts when its cost is not bounded:
   SHACL outside the Core subset (no `sh:pattern`, `sh:qualifiedValueShapesDisjoint` or SPARQL),
   `rdfs:subClassOf` in the shapes or the intent graph, a looping, branching or long RDF list, a
@@ -84,9 +85,25 @@ const protocol = await buildProtocolDocument({
   (`sh:message`, `sh:name`, `sh:description`) over 1024, and typed literals other than strings
   over 128 (their lexical patterns backtrack); `sh:lessThan`-style pairwise comparisons count
   as steps.
+- In Node, validation runs in a fresh `worker_threads` worker with a **2000 ms wall-clock
+  limit**, including worker startup, the existing pre-checks, validation and report
+  projection. `await validateIntent(intent, shape, { timeoutMs: 5000 })` changes the limit;
+  `ValidationOptions.timeoutMs` must be an integer from 1 to 2147483647. At the deadline
+  the worker is terminated and the call returns `conforms: false` with
+  `Validation exceeded <timeoutMs> ms wall-clock limit`. Workers are also terminated after
+  success or failure, before the promise settles. A later call starts with fresh state;
+  Node never falls back to synchronous validation after a worker failure. A worker per
+  call adds startup overhead; bound concurrent calls at the application level if needed.
+  Intent lowering and graph transfer run on the calling thread. The wall-clock bound is
+  **Node-only**: this package builds Node ESM and does not ship a browser Web Worker entry.
+  Browser consumers that bundle the package retain the synchronous metered path, including
+  all three existing protection layers; `timeoutMs` cannot interrupt it. Continue to await
+  `validateIntent` in every environment.
 - The deterministic NL parser reads verbs, ACL modes and recipient markers from the prose
   only, never from inside a URL.
 - Handshake decoders accept only an http(s) `protocolSource` and `xsd:boolean` flags.
+
+The package-local [SKILL.md](SKILL.md) records validation maintenance and build guidance.
 
 ## Vocabulary compatibility
 
