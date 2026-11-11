@@ -1,7 +1,8 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Claude Opus 5.5
 import { marked } from "marked";
 import sanitizeHtml from "sanitize-html";
-import { type Deck, newDeck, newSlide, type Slide } from "./deck.js";
+import { type Deck, newDeck, newSlide, normaliseLineEndings, type Slide } from "./deck.js";
 import { buildDeck, parseDeck } from "./model.js";
 
 /** An inert preview: no images, inline styles or executable URLs. */
@@ -95,7 +96,8 @@ export function deckFromMarkdown(markdown: string, now = new Date()): Deck {
       ...metadata,
       position: index,
       layout: metadata.layout ?? (index === 0 ? "title" : "title-and-body"),
-      title: restore(title),
+      // A heading is one line: an exported multi-line title travels in the metadata.
+      title: exported && typeof metadata.title === "string" ? metadata.title : restore(title),
       body: restore(
         bodyLines
           .join("\n")
@@ -111,14 +113,19 @@ export function deckFromMarkdown(markdown: string, now = new Date()): Deck {
 export function deckToMarkdown(deck: Deck): string {
   if (!deck.slides.length) throw new TypeError("Add a slide before exporting Markdown");
   const protect = (text: string) => text.replace(/^(?=---$|\?\?\?$|Note:|# |\\)/gm, "\\");
-  const { slides, ...fields } = deck;
+  const { slides, ...fields } = normaliseLineEndings(deck);
   return slides
     .map((slide, index) => {
       const { title = "", body = "", notes = "", ...rest } = slide;
+      const multiline = title.includes("\n");
       const metadata = encodeURIComponent(
-        JSON.stringify({ slide: rest, ...(index === 0 ? { deck: fields } : {}) }),
+        JSON.stringify({
+          slide: multiline ? { ...rest, title } : rest,
+          ...(index === 0 ? { deck: fields } : {}),
+        }),
       );
-      return `${META}${metadata} -->\n# ${protect(title)}\n\n${protect(body)}\n\n???\n${protect(notes)}`;
+      const heading = protect(multiline ? title.replaceAll("\n", " ") : title);
+      return `${META}${metadata} -->\n# ${heading}\n\n${protect(body)}\n\n???\n${protect(notes)}`;
     })
     .join("\n---\n");
 }

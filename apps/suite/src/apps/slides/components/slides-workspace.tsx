@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Claude Opus 5.5
 "use client";
 import { safeHttpIri } from "@jeswr/rdf-serialize";
 import {
@@ -17,6 +18,7 @@ import {
 } from "@jeswr/solid-slides";
 import {
   Button,
+  Checkbox,
   Dialog,
   DialogContent,
   DialogDescription,
@@ -27,6 +29,11 @@ import {
   IconButton,
   Input,
   Label,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
   Textarea,
   toast,
 } from "@jeswr/suite-ui";
@@ -41,14 +48,58 @@ import {
   Printer,
   Trash2,
 } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useId, useState } from "react";
 import { AppFrame, AppHeading } from "@/shell/app-frame";
 import { useConnectionState } from "@/shell/sync/connection-state";
 import { useSlides } from "../state/slides-context";
-import { Presenter, PresenterWindow } from "./presenter";
+import { Presenter } from "./presenter";
 import { SlideCanvas } from "./slide-canvas";
 import { SlideSorter } from "./slide-sorter";
 
+const LAYOUT_LABELS: Record<Slide["layout"], string> = {
+  title: "Title",
+  "title-and-body": "Title and body",
+  "two-column": "Two columns",
+  section: "Section",
+  image: "Image",
+  blank: "Blank",
+};
+const THEME_LABELS: Record<Deck["theme"], string> = {
+  light: "Light",
+  dark: "Dark",
+  contrast: "High contrast",
+  warm: "Warm",
+};
+function Choice<T extends string>({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  value: T;
+  options: readonly { value: T; label: string }[];
+  onChange: (value: T) => void;
+}) {
+  const id = useId();
+  return (
+    <div className="sld-choice">
+      <Label htmlFor={id}>{label}</Label>
+      <Select value={value} onValueChange={(next) => onChange(next as T)}>
+        <SelectTrigger id={id} aria-label={label} size="sm">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {options.map((option) => (
+            <SelectItem key={option.value} value={option.value}>
+              {option.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}
 function downloadMarkdown(deck: Deck) {
   try {
     const url = URL.createObjectURL(
@@ -253,32 +304,21 @@ function Editor({ url, onBack }: { url: string; onBack: () => void }) {
         >
           <Trash2 size={16} />
         </IconButton>
-        <label>
-          Theme
-          <select
-            aria-label="Theme"
-            value={deck.theme}
-            onChange={(event) => edit({ theme: event.target.value as Deck["theme"] })}
-          >
-            {THEMES.map((theme) => (
-              <option key={theme} value={theme}>
-                {theme[0]?.toUpperCase()}
-                {theme.slice(1)}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          Aspect ratio
-          <select
-            aria-label="Aspect ratio"
-            value={deck.aspectRatio}
-            onChange={(event) => edit({ aspectRatio: event.target.value as Deck["aspectRatio"] })}
-          >
-            <option>16:9</option>
-            <option>4:3</option>
-          </select>
-        </label>
+        <Choice
+          label="Theme"
+          value={deck.theme}
+          options={THEMES.map((theme) => ({ value: theme, label: THEME_LABELS[theme] }))}
+          onChange={(theme) => edit({ theme })}
+        />
+        <Choice
+          label="Aspect ratio"
+          value={deck.aspectRatio}
+          options={[
+            { value: "16:9", label: "16:9" },
+            { value: "4:3", label: "4:3" },
+          ]}
+          onChange={(aspectRatio) => edit({ aspectRatio })}
+        />
       </div>
       <div className="sld-editor-grid">
         <aside className="sld-slide-rail" aria-label="Slides">
@@ -292,35 +332,28 @@ function Editor({ url, onBack }: { url: string; onBack: () => void }) {
         <div className="sld-edit-area">
           {slide ? (
             <>
-              <div className="sld-preview" role="img" aria-label="Slide preview">
+              <figure className="sld-preview" aria-label="Slide preview">
                 <SlideCanvas slide={slide} deck={deck} />
-              </div>
+              </figure>
               <div className="sld-fields">
                 <div className="sld-toolbar">
-                  <label>
-                    Layout
-                    <select
-                      aria-label="Layout"
-                      value={slide.layout}
-                      onChange={(event) =>
-                        update({ layout: event.target.value as Slide["layout"] })
-                      }
-                    >
-                      {LAYOUTS.map((layout) => (
-                        <option key={layout} value={layout}>
-                          {layout.replaceAll("-", " ")}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className="sld-checkbox">
-                    <input
-                      type="checkbox"
+                  <Choice
+                    label="Layout"
+                    value={slide.layout}
+                    options={LAYOUTS.map((layout) => ({
+                      value: layout,
+                      label: LAYOUT_LABELS[layout],
+                    }))}
+                    onChange={(layout) => update({ layout })}
+                  />
+                  <div className="sld-checkbox">
+                    <Checkbox
+                      id="sld-slide-hidden"
                       checked={slide.hidden ?? false}
-                      onChange={(event) => update({ hidden: event.target.checked })}
+                      onCheckedChange={(checked) => update({ hidden: checked === true })}
                     />
-                    Skip when presenting
-                  </label>
+                    <Label htmlFor="sld-slide-hidden">Skip when presenting</Label>
+                  </div>
                   <Button variant="ghost" onClick={() => setImages(!images)} aria-expanded={images}>
                     <ImagePlus size={16} />
                     Image
@@ -384,17 +417,12 @@ function Editor({ url, onBack }: { url: string; onBack: () => void }) {
   );
 }
 export function SlidesWorkspace() {
-  const { decks, store, pending, error, conflict, session } = useSlides();
+  const { decks, broken, store, pending, error, conflict, conflicts, session } = useSlides();
   const connection = useConnectionState();
   const [selected, setSelected] = useState<string>();
   const [query, setQuery] = useState("");
   const [importing, setImporting] = useState(false);
   const [markdown, setMarkdown] = useState("");
-  const [presenter, setPresenter] = useState<string>();
-  useEffect(() => {
-    const value = new URLSearchParams(location.search).get("presenter");
-    if (value) setPresenter(value);
-  }, []);
   const create = () => setSelected(store.add(newDeck()));
   const remove = (url: string) => {
     store.remove(url);
@@ -408,7 +436,6 @@ export function SlidesWorkspace() {
       .toLocaleLowerCase("en-GB")
       .includes(query.toLocaleLowerCase("en-GB")),
   );
-  if (presenter) return <PresenterWindow channelId={presenter} />;
   return (
     <AppFrame
       app="slides"
@@ -472,6 +499,14 @@ export function SlidesWorkspace() {
                 </Button>
               </div>
             </div>
+            {broken.length > 0 && (
+              <p className="sld-broken" role="status">
+                {broken.length === 1
+                  ? "1 presentation couldn't be opened."
+                  : `${broken.length} presentations couldn't be opened.`}{" "}
+                Check the files in your pod's slides folder, or reconnect and try again.
+              </p>
+            )}
             <Label htmlFor="sld-search" className="sld-visually-hidden">
               Search presentations and slide titles
             </Label>
@@ -603,10 +638,15 @@ export function SlidesWorkspace() {
       <Dialog open={Boolean(conflict)} onOpenChange={() => {}}>
         <DialogContent showCloseButton={false}>
           <DialogHeader>
-            <DialogTitle>This presentation changed elsewhere</DialogTitle>
+            <DialogTitle>
+              {conflict
+                ? `“${conflict.local.name || "Untitled presentation"}” changed elsewhere`
+                : "This presentation changed elsewhere"}
+            </DialogTitle>
             <DialogDescription>
               The latest pod version is loaded. Keep your unsaved changes as a separate
               presentation, or continue with the pod version.
+              {conflicts.length > 1 && ` ${conflicts.length - 1} more to review after this one.`}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

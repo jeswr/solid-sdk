@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Claude Opus 5.5
 import { type DeckRepository, newDeck } from "@jeswr/solid-slides";
 import { afterEach, expect, it, vi } from "vitest";
 import type { PodSession } from "../../src/lib/session/pod-session";
@@ -34,7 +35,7 @@ function repository() {
   return {
     container: "https://pod.example/slides/",
     initialise: vi.fn(async () => {}),
-    list: vi.fn(async () => []),
+    list: vi.fn(async () => ({ decks: [], broken: [] })),
     save: vi.fn(
       async (
         item: import("@jeswr/solid-slides").StoredDeck,
@@ -148,5 +149,52 @@ it("reports a corrupt retained draft through the shared toast", async () => {
   localStorage.setItem(key, "corrupt");
   const view = await mount(node());
   expect(fixtures.error).toHaveBeenCalledWith(expect.stringContaining("saved draft"));
+  await view.unmount();
+});
+it("lists broken files beside the decks, and flushes hidden tabs without a teardown flight", async () => {
+  const repo = repository();
+  const broken = [{ url: "https://pod.example/slides/bad.ttl", reason: "invalid" }];
+  vi.mocked(repo.list).mockResolvedValue({
+    decks: [{ url: "https://pod.example/slides/a.ttl", etag: '"1"', deck: newDeck("Good") }],
+    broken,
+  } as never);
+  fixtures.connect.mockResolvedValue(repo);
+  const view = await mount(node());
+  expect(view.host.textContent).toContain("Good");
+  expect(current.broken).toEqual(broken);
+  const flush = vi.spyOn(current.store, "flush");
+  const visibility = vi.spyOn(document, "visibilityState", "get").mockReturnValue("hidden");
+  await act(async () => document.dispatchEvent(new Event("visibilitychange")));
+  expect(flush).toHaveBeenLastCalledWith(true, false);
+  await act(async () => window.dispatchEvent(new Event("pagehide")));
+  expect(flush).toHaveBeenLastCalledWith(true, true);
+  visibility.mockRestore();
+  await view.unmount();
+});
+it("keeps another window's crash-recovery drafts when this window saves its own", async () => {
+  const repo = repository();
+  fixtures.connect.mockResolvedValue(repo);
+  const elsewhere = {
+    version: 2,
+    windows: {
+      open: {
+        at: Date.now(),
+        value: JSON.stringify({
+          drafts: [
+            { url: "https://pod.example/slides/theirs.ttl", etag: '"1"', deck: newDeck("Theirs") },
+          ],
+        }),
+      },
+    },
+  };
+  localStorage.setItem(key, JSON.stringify(elsewhere));
+  const view = await mount(node());
+  expect(view.host.textContent).not.toContain("Theirs");
+  await act(async () => {
+    current.store.add(newDeck("Mine"));
+  });
+  const saved = JSON.parse(localStorage.getItem(key) as string);
+  expect(saved.windows.open).toEqual(elsewhere.windows.open);
+  expect(Object.keys(saved.windows)).toHaveLength(2);
   await view.unmount();
 });

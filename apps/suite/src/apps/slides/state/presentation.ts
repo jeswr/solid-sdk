@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Claude Opus 5.5
 import type { Slide } from "@jeswr/solid-slides";
 export function presentationStep(
   key: string,
@@ -27,4 +28,19 @@ export function isPresenterCommand(value: unknown): value is { key: string } {
     typeof value.key === "string" &&
     presentationStep(value.key, 0, 1) !== undefined
   );
+}
+const ACTIVATES =
+  "button, a[href], input, select, textarea, summary, [contenteditable=''], [contenteditable='true'], [role='button'], [role='checkbox'], [role='switch'], [role='option'], [role='menuitem'], [role='tab']";
+const EDITS = "input, select, textarea, [contenteditable=''], [contenteditable='true']";
+/**
+ * Whether a presenter shortcut should leave the key to the focused control: Space activates
+ * buttons and links, and text fields keep every key.
+ */
+export function keepsKey(key: string, target: EventTarget | null): boolean {
+  if (typeof Element === "undefined" || !(target instanceof Element)) return false;
+  return Boolean(target.closest(key === " " ? ACTIVATES : EDITS));
+}
+/** The presenter window's channel, from its `?presenter=` query; null in a normal window. */
+export function presenterChannel(search: string): string | null {
+  return new URLSearchParams(search).get("presenter") || null;
 }

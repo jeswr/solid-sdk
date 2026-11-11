@@ -1,8 +1,10 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Claude Opus 5.5
 import {
   type Deck,
   DeckConflictError,
   type DeckRepository,
+  DeckVersionError,
   newDeck,
   type StoredDeck,
 } from "@jeswr/solid-slides";
@@ -21,6 +23,7 @@ function setup(decks = [item()]) {
     create: vi.fn(async (deck: Deck) => ({ url: `${container}created.ttl`, etag: '"2"', deck })),
     save: vi.fn(async (current: StoredDeck, deck: Deck) => ({ ...current, etag: '"2"', deck })),
     remove: vi.fn(async () => {}),
+    removeUploads: vi.fn(async () => {}),
   } as unknown as DeckRepository;
   const report = vi.fn();
   const persist = vi.fn();
@@ -357,4 +360,254 @@ it("honours undo while an expired deletion waits for its in-flight save", async 
   expect(repo.remove).not.toHaveBeenCalled();
   expect(store.getSnapshot().decks).toHaveLength(1);
   store.dispose();
+});
+
+const other = (name = "Other"): StoredDeck => ({ ...item(name), url: `${container}two.ttl` });
+const withImage = (deck: Deck, image: string): Deck => ({
+  ...deck,
+  slides: deck.slides.map((slide) => ({ ...slide, image, layout: "image" as const })),
+});
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (error: unknown) => void;
+  const promise = new Promise<T>((yes, no) => {
+    resolve = yes;
+    reject = no;
+  });
+  return { promise, resolve, reject };
+}
+describe("overlapping saves", () => {
+  it("queues a hidden-tab keepalive save behind the save in flight instead of racing it", async () => {
+    const { store, repo } = setup();
+    const first = deferred<StoredDeck>();
+    vi.mocked(repo.save).mockImplementationOnce(() => first.promise);
+    store.edit(item().url, newDeck("A"));
+    const saving = store.flush();
+    store.edit(item().url, newDeck("B"));
+    const hidden = store.flush(true, false);
+    expect(store.flush(true, false)).toBe(hidden);
+    expect(repo.save).toHaveBeenCalledTimes(1);
+    first.resolve({ ...item("A"), etag: '"2"' });
+    await saving;
+    await hidden;
+    expect(repo.save).toHaveBeenCalledTimes(2);
+    expect(repo.save).toHaveBeenLastCalledWith(
+      expect.objectContaining({ etag: '"2"' }),
+      expect.objectContaining({ name: "B" }),
+      true,
+    );
+    expect(store.getSnapshot()).toMatchObject({ pending: 0, conflict: null });
+    // Nothing left to save: the queued flush finishes without another request.
+    const idle = deferred<StoredDeck>();
+    vi.mocked(repo.save).mockImplementationOnce(() => idle.promise);
+    store.edit(item().url, newDeck("C"));
+    const last = store.flush();
+    const queued = store.flush(true, false);
+    idle.resolve({ ...item("C"), etag: '"3"' });
+    await last;
+    await queued;
+    expect(repo.save).toHaveBeenCalledTimes(3);
+    store.dispose();
+  });
+  it("continues from its own earlier snapshot after a 412 instead of reporting a false conflict", async () => {
+    const { store, repo, report } = setup();
+    const first = deferred<StoredDeck>();
+    const a = newDeck("A");
+    vi.mocked(repo.save)
+      .mockImplementationOnce(() => first.promise)
+      .mockImplementationOnce(async (_current, deck) => {
+        // The page-teardown flight lost the race to the ordinary save of A.
+        throw new DeckConflictError(deck, { ...item("A"), deck: a, etag: '"2"' });
+      });
+    store.edit(item().url, a);
+    const saving = store.flush();
+    store.edit(item().url, newDeck("B"));
+    const exit = store.flush(true);
+    await exit;
+    expect(repo.save).toHaveBeenCalledTimes(3);
+    expect(repo.save).toHaveBeenLastCalledWith(
+      expect.objectContaining({ etag: '"2"' }),
+      expect.objectContaining({ name: "B" }),
+      true,
+    );
+    first.resolve({ ...item("A"), deck: a, etag: '"2"' });
+    await saving;
+    expect(store.getSnapshot().conflict).toBeNull();
+    expect(report).not.toHaveBeenCalled();
+    store.dispose();
+  });
+  it("still reports a conflict when the pod holds someone else's version", async () => {
+    const { store, repo } = setup();
+    vi.mocked(repo.save).mockImplementation(async (_current, deck) => {
+      throw new DeckConflictError(deck, { ...item("Theirs"), etag: '"9"' });
+    });
+    store.edit(item().url, newDeck("Mine"));
+    await store.flush();
+    expect(repo.save).toHaveBeenCalledTimes(1);
+    expect(store.getSnapshot().conflict?.local.name).toBe("Mine");
+    store.dispose();
+  });
+  it("stops retrying its own versions after a bounded number of attempts", async () => {
+    const { store, repo } = setup();
+    let firstSent: Deck | undefined;
+    let edits = 0;
+    vi.mocked(repo.save).mockImplementation(async (current, deck) => {
+      firstSent ??= deck;
+      // Keep editing while the pod keeps answering with the first snapshot this store sent.
+      store.edit(item().url, newDeck(`Mine-${++edits + 1}`));
+      throw new DeckConflictError(deck, { ...current, deck: firstSent, etag: '"5"' });
+    });
+    store.edit(item().url, newDeck("Mine-1"));
+    await store.flush();
+    expect(repo.save).toHaveBeenCalledTimes(3);
+    expect(store.getSnapshot().conflict?.local.name).toBe("Mine-4");
+    store.dispose();
+  });
+  it("explains when the pod gives no strong version to save with", async () => {
+    const { store, repo, report } = setup();
+    vi.mocked(repo.save).mockRejectedValueOnce(new DeckVersionError());
+    store.edit(item().url, newDeck("Weak"));
+    await store.flush();
+    expect(store.getSnapshot()).toMatchObject({ error: true, pending: 1 });
+    expect(report).toHaveBeenCalledWith(expect.stringContaining("can't save over it safely"));
+    store.dispose();
+  });
+});
+describe("several conflicts", () => {
+  it("keeps one conflict per presentation and resolves them one at a time, durably", async () => {
+    const { store, repo, persist } = setup([item(), other()]);
+    vi.mocked(repo.save).mockImplementation(async (current, deck) => {
+      throw new DeckConflictError(deck, {
+        ...current,
+        deck: newDeck(`${current.url.endsWith("one.ttl") ? "One" : "Two"} remote`),
+        etag: '"9"',
+      });
+    });
+    store.edit(item().url, newDeck("One mine"));
+    store.edit(other().url, newDeck("Two mine"));
+    await store.flush();
+    await store.flush();
+    expect(store.getSnapshot().conflicts.map((entry) => entry.local.name)).toEqual([
+      "One mine",
+      "Two mine",
+    ]);
+    expect(store.getSnapshot().conflict?.local.name).toBe("One mine");
+    const saved = persist.mock.calls.at(-1)?.[0] as string;
+    const copy = setup([item(), other()]);
+    copy.store.restore(saved);
+    expect(copy.store.getSnapshot().conflicts).toHaveLength(2);
+    expect(store.resolveConflict(true)).toBeTruthy();
+    expect(store.getSnapshot().conflict?.local.name).toBe("Two mine");
+    expect(store.resolveConflict(false)).toBeUndefined();
+    expect(store.getSnapshot().conflicts).toEqual([]);
+    expect(store.getSnapshot().decks.map((entry) => entry.deck.name)).toContain(
+      "One mine (your copy)",
+    );
+    store.dispose();
+    copy.store.dispose();
+  });
+  it("keeps the first local copy when the same presentation conflicts again", async () => {
+    const { store, persist } = setup();
+    const first = {
+      url: item().url,
+      local: newDeck("First edits"),
+      remote: { ...item("Remote 1"), etag: '"5"' },
+    };
+    const second = {
+      ...first,
+      local: newDeck("Later"),
+      remote: { ...item("Remote 2"), etag: '"6"' },
+    };
+    const elsewhere = {
+      url: other().url,
+      local: newDeck("Elsewhere"),
+      remote: { ...other("Remote 3"), etag: '"7"' },
+    };
+    store.restore(JSON.stringify({ conflicts: [elsewhere, first], conflict: second }));
+    expect(store.getSnapshot().conflicts).toHaveLength(2);
+    expect(store.resolveConflict(false)).toBeUndefined();
+    expect(store.getSnapshot().conflict?.local.name).toBe("First edits");
+    expect(store.getSnapshot().conflict?.remote.deck.name).toBe("Remote 2");
+    expect(JSON.parse(persist.mock.calls.at(-1)?.[0] as string).conflicts).toHaveLength(1);
+    store.dispose();
+  });
+});
+describe("draft recovery", () => {
+  it("restores every valid entry even when one is undecodable", async () => {
+    const { store, report } = setup([item(), other()]);
+    store.restore(
+      JSON.stringify({
+        drafts: [
+          { ...item(), deck: { name: "broken" } },
+          { ...other(), deck: newDeck("Recovered") },
+          "not an entry",
+        ],
+        conflicts: [{ url: item().url, local: {}, remote: item() }],
+        trash: [{ url: item().url, deadline: Date.now() + 6000, item: { url: item().url } }],
+      }),
+    );
+    expect(store.getSnapshot().decks.find((entry) => entry.url === other().url)?.deck.name).toBe(
+      "Recovered",
+    );
+    expect(store.getSnapshot().pending).toBe(1);
+    expect(store.getSnapshot().conflicts).toEqual([]);
+    expect(store.getSnapshot().decks).toHaveLength(2);
+    expect(report).toHaveBeenCalledWith(expect.stringContaining("saved draft"));
+    report.mockClear();
+    store.restore(JSON.stringify(null));
+    expect(report).toHaveBeenCalledTimes(1);
+    store.dispose();
+  });
+  it("exposes presentations the listing could not open", () => {
+    const repo = setup().repo;
+    const broken = [{ url: `${container}bad.ttl`, reason: "invalid" as const }];
+    const store = new SlidesStore(repo, [], vi.fn(), vi.fn(), broken);
+    expect(store.getSnapshot().broken).toEqual(broken);
+    expect(setup().store.getSnapshot().broken).toEqual([]);
+  });
+});
+describe("cleanup", () => {
+  it("carries out a confirmed deletion on dispose instead of dropping it", async () => {
+    const { store, repo } = setup();
+    store.remove(item().url);
+    store.dispose();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(repo.remove).toHaveBeenCalledWith(expect.objectContaining({ url: item().url }));
+    await vi.advanceTimersByTimeAsync(6000);
+    expect(repo.remove).toHaveBeenCalledTimes(1);
+  });
+  it("removes a deleted deck's uploads that no other presentation shows", async () => {
+    const shared = `${container}shared.png`;
+    const own = `${container}own.png`;
+    const first = { ...item(), deck: withImage(newDeck("A"), own) };
+    first.deck.slides.push({ ...first.deck.slides[0], id: "second", image: shared } as never);
+    const second = { ...other(), deck: withImage(newDeck("B"), shared) };
+    const { store, repo } = setup([first, second]);
+    store.remove(first.url);
+    await vi.advanceTimersByTimeAsync(6000);
+    expect(repo.removeUploads).toHaveBeenCalledWith([own]);
+    vi.mocked(repo.removeUploads).mockRejectedValueOnce(new Error("offline"));
+    store.remove(second.url);
+    await vi.advanceTimersByTimeAsync(6000);
+    expect(repo.removeUploads).toHaveBeenLastCalledWith([shared]);
+    expect(store.getSnapshot().decks).toEqual([]);
+    store.dispose();
+  });
+  it("keeps uploads a deck in the undo window or a conflict still uses", async () => {
+    const image = `${container}kept.png`;
+    const first = { ...item(), deck: withImage(newDeck("A"), image) };
+    const second = { ...other(), deck: withImage(newDeck("B"), image) };
+    const { store, repo } = setup([first, second]);
+    store.restore(
+      JSON.stringify({
+        conflicts: [{ url: item().url, local: withImage(newDeck("L"), image), remote: item() }],
+      }),
+    );
+    store.remove(first.url);
+    await vi.advanceTimersByTimeAsync(3000);
+    store.remove(second.url);
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(repo.removeUploads).toHaveBeenLastCalledWith([]);
+    store.dispose();
+  });
 });

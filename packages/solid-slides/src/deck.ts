@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Claude Opus 5.5
 import type { PresentationData, SlideData } from "./generated/model.js";
 
 export const THEMES = ["light", "dark", "contrast", "warm"] as const;
@@ -34,6 +35,24 @@ export function newDeck(name = "Untitled presentation", now = new Date()): Deck 
     created: now,
     modified: now,
     slides: [{ ...newSlide(), layout: "title", title: name }],
+  };
+}
+const LINE_BREAK = /\r\n?/g;
+function lf<T extends object>(value: T, keys: readonly (keyof T)[]): T {
+  const result = { ...value };
+  for (const key of keys) {
+    const text = result[key];
+    if (typeof text === "string") result[key] = text.replace(LINE_BREAK, "\n") as T[keyof T];
+  }
+  return result;
+}
+/** CRLF and CR become LF in every text field, so saved and exported decks round-trip. */
+export function normaliseLineEndings(deck: Deck): Deck {
+  return {
+    ...lf(deck, ["name", "description"]),
+    slides: deck.slides.map((slide) =>
+      lf(slide, ["title", "body", "secondBody", "notes", "imageAlt"]),
+    ),
   };
 }
 export function renumber(slides: readonly Slide[]): Slide[] {

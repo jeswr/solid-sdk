@@ -1,12 +1,16 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Claude Opus 5.5
 import { newSlide } from "@jeswr/solid-slides";
 import { expect, it } from "vitest";
 import {
   elapsedTime,
   isPresenterCommand,
+  keepsKey,
   presentationStep,
+  presenterChannel,
   visibleSlides,
 } from "../../src/apps/slides/state/presentation";
+import "../drive-ui-dom";
 
 it("maps presenter keys and clamps every boundary", () => {
   for (const key of ["ArrowRight", "ArrowDown", " ", "PageDown"]) {
@@ -32,4 +36,23 @@ it("skips hidden slides and formats a non-negative timer", () => {
   ).toEqual(["shown"]);
   expect(elapsedTime(1000, 0)).toBe("0:00");
   expect(elapsedTime(0, 125999)).toBe("2:05");
+});
+it("reads the presenter channel only from a presenter window's query", () => {
+  expect(presenterChannel("?presenter=abc")).toBe("abc");
+  expect(presenterChannel("?presenter=")).toBeNull();
+  expect(presenterChannel("")).toBeNull();
+});
+it("leaves Space to focused controls and typing keys to text fields", () => {
+  document.body.innerHTML =
+    '<button id="b">Go</button><a id="a" href="#x">Link</a><input id="i"><div id="d" tabindex="-1"><span id="s"></span></div><div role="button" id="r"></div><div contenteditable="true" id="c"></div>';
+  const at = (id: string) => document.getElementById(id);
+  for (const id of ["b", "a", "i", "r", "c"]) expect(keepsKey(" ", at(id))).toBe(true);
+  expect(keepsKey(" ", at("s"))).toBe(false);
+  expect(keepsKey(" ", at("d"))).toBe(false);
+  expect(keepsKey("ArrowRight", at("b"))).toBe(false);
+  expect(keepsKey("ArrowRight", at("i"))).toBe(true);
+  expect(keepsKey("Home", at("c"))).toBe(true);
+  expect(keepsKey(" ", null)).toBe(false);
+  expect(keepsKey(" ", window)).toBe(false);
+  document.body.innerHTML = "";
 });

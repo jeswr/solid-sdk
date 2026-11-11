@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Claude Opus 5.5
 "use client";
 import { type Deck, decodeDeck } from "@jeswr/solid-slides";
 import { Button, EmptyState, IconButton, toast } from "@jeswr/suite-ui";
@@ -8,6 +9,7 @@ import { createPortal } from "react-dom";
 import {
   elapsedTime,
   isPresenterCommand,
+  keepsKey,
   presentationStep,
   visibleSlides,
 } from "../state/presentation";
@@ -74,6 +76,7 @@ export function Presenter({
     const keyboard = (event: KeyboardEvent) => {
       const next = presentationStep(event.key, index, slides.length);
       if (next === undefined || event.ctrlKey || event.metaKey || event.altKey) return;
+      if (keepsKey(event.key, event.target)) return;
       event.preventDefault();
       if (next === "exit") onClose();
       else setIndex(next);
@@ -171,7 +174,13 @@ export function PresenterWindow({ channelId }: { channelId: string }) {
     };
     transport.postMessage("ready");
     const keyboard = (event: KeyboardEvent) => {
-      if (event.ctrlKey || event.metaKey || event.altKey || !isPresenterCommand({ key: event.key }))
+      if (
+        event.ctrlKey ||
+        event.metaKey ||
+        event.altKey ||
+        !isPresenterCommand({ key: event.key }) ||
+        keepsKey(event.key, event.target)
+      )
         return;
       event.preventDefault();
       transport.postMessage({ key: event.key });

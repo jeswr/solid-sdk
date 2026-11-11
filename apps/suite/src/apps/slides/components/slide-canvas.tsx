@@ -1,8 +1,13 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Claude Opus 5.5
 "use client";
 import { type Deck, readSlideImage, renderSlideMarkdown, type Slide } from "@jeswr/solid-slides";
-import { useEffect, useMemo, useState } from "react";
-import { useSlides } from "../state/slides-context";
+import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import type { PodSession } from "@/lib/session/pod-session";
+import { slideImageFetch } from "../lib/data/image-transport";
+
+/** The pod session images load through. The presenter window supplies it without the store. */
+export const SlideSessionContext = createContext<PodSession | null>(null);
 
 function Markdown({ text }: { text: string }) {
   const html = useMemo(() => renderSlideMarkdown(text), [text]);
@@ -11,7 +16,7 @@ function Markdown({ text }: { text: string }) {
   return <div className="sld-markdown" dangerouslySetInnerHTML={{ __html: html }} />;
 }
 function SlideImage({ url, alt }: { url: string; alt: string }) {
-  const { session } = useSlides();
+  const session = useContext(SlideSessionContext);
   const [source, setSource] = useState<string>();
   const [failed, setFailed] = useState(false);
   useEffect(() => {
@@ -19,8 +24,9 @@ function SlideImage({ url, alt }: { url: string; alt: string }) {
     let active = true;
     setFailed(false);
     setSource(undefined);
+    if (!session) return;
     const controller = new AbortController();
-    void readSlideImage(session.fetch, url, controller.signal)
+    void readSlideImage(slideImageFetch(session, url), url, controller.signal)
       .then((blob) => {
         if (!active) return;
         objectUrl = URL.createObjectURL(blob);

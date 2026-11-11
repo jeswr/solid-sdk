@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Claude Opus 5.5
 import { describe, expect, it } from "vitest";
 import {
   deckOutline,
@@ -7,6 +8,7 @@ import {
   insertSlide,
   newDeck,
   newSlide,
+  normaliseLineEndings,
   renumber,
   reorderSlides,
 } from "../src/deck.js";
@@ -60,4 +62,13 @@ describe("slide operations", () => {
     expect(() => insertSlide(slides(), 0, newSlide("a"))).toThrow(TypeError);
     expect(() => duplicateSlide(slides(), 0, "b")).toThrow(TypeError);
   });
+});
+it("normalises line endings without adding or mutating fields", () => {
+  const deck = { ...newDeck("A\r\nB"), slides: [{ ...newSlide("s"), body: "1\r2" }] };
+  const result = normaliseLineEndings(deck);
+  expect(result.name).toBe("A\nB");
+  expect(result.slides[0]?.body).toBe("1\n2");
+  expect("description" in result).toBe(false);
+  expect("secondBody" in (result.slides[0] ?? {})).toBe(false);
+  expect(deck.name).toBe("A\r\nB");
 });

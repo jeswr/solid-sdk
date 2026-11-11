@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Claude Opus 5.5
 import { describe, expect, it } from "vitest";
-import { newDeck, newSlide } from "../src/deck.js";
+import { newDeck, newSlide, normaliseLineEndings } from "../src/deck.js";
 import {
   deckFromMarkdown,
   deckToMarkdown,
@@ -53,6 +54,34 @@ describe("Markdown interchange", () => {
     };
     expect(deckFromMarkdown(deckToMarkdown(deck))).toEqual(deck);
     expect(decodeDeck(JSON.stringify(deck))).toEqual(deck);
+  });
+  it("round-trips multi-line titles and normalises CRLF and CR line endings", () => {
+    const deck = {
+      ...newDeck("Two\r\nlines", new Date(0)),
+      description: "Old\rMac",
+      slides: [
+        {
+          ...newSlide("a"),
+          title: "Line one\nLine two",
+          body: "Windows\r\nbody\rend",
+          secondBody: "x\r\ny",
+          notes: "n\r\n",
+          imageAlt: "a\rb",
+        },
+        { ...newSlide("b"), position: 1, title: "Plain\r\ntitle" },
+      ],
+    };
+    const markdown = deckToMarkdown(deck);
+    expect(markdown).not.toContain("\r");
+    expect(markdown).toContain("# Line one Line two\n");
+    const imported = deckFromMarkdown(markdown);
+    expect(imported).toEqual(normaliseLineEndings(deck));
+    expect(imported.slides[0]).toMatchObject({
+      title: "Line one\nLine two",
+      body: "Windows\nbody\nend",
+    });
+    // Hand-written Markdown with a title in the metadata keeps its heading otherwise.
+    expect(deckFromMarkdown("# Only heading").slides[0]?.title).toBe("Only heading");
   });
   it("handles malformed comments as body text and rejects corrupt metadata", () => {
     expect(deckFromMarkdown("<!-- solid-slides %not-json -->\n# A").slides[0]?.body).toContain(

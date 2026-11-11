@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Claude Opus 5.5
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 import { seedDemoSession } from "./demo-session";
@@ -30,9 +31,16 @@ for (const width of [375, 768, 1280]) {
       await page.getByLabel("Speaker notes", { exact: true }).fill("Remember to pause");
       await page.getByRole("button", { name: "Add slide", exact: true }).click();
       await page.getByLabel("Slide title", { exact: true }).fill("Thank you");
-      await page.getByLabel("Layout", { exact: true }).selectOption("section");
-      await page.getByLabel("Theme", { exact: true }).selectOption("warm");
-      await page.getByLabel("Aspect ratio", { exact: true }).selectOption("4:3");
+      for (const [label, option] of [
+        ["Layout", "Section"],
+        ["Theme", "Warm"],
+        ["Aspect ratio", "4:3"],
+      ] as const) {
+        await page.getByRole("combobox", { name: label, exact: true }).click();
+        await page.getByRole("option", { name: option, exact: true }).click();
+      }
+      await page.getByRole("checkbox", { name: "Skip when presenting", exact: true }).click();
+      await page.getByRole("checkbox", { name: "Skip when presenting", exact: true }).click();
       await page.getByRole("button", { name: "Move slide 2 down", exact: true }).click();
       await expect(page.getByRole("list", { name: "Slide sorter" })).toContainText("3. Thank you");
       await expect(page.getByText("All changes saved", { exact: true })).toBeVisible();

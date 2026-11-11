@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Claude Opus 5.5
 "use client";
 import type { DeckRepository } from "@jeswr/solid-slides";
 import { toast } from "@jeswr/suite-ui";
@@ -11,8 +12,10 @@ import {
   useSyncExternalStore,
 } from "react";
 import type { PodSession } from "@/lib/session/pod-session";
+import { SlideSessionContext } from "../components/slide-canvas";
 import { seedSlides } from "../demo/sample";
 import { connectSlides } from "../lib/data/connect";
+import { createDraftStorage, type DraftStorage } from "./draft-storage";
 import { SlidesStore } from "./slides-store";
 export const SlidesContext = createContext<{
   store: SlidesStore;
@@ -49,26 +52,30 @@ export function SlidesProvider({
   useEffect(() => {
     let active = true;
     let store: SlidesStore | undefined;
+    let drafts: DraftStorage | undefined;
     const key = `solid-slides:drafts:${session.mode}:${session.webId}:${session.storageUrl}`;
     setError(false);
     void (async () => {
       const repository = await connectSlides(session);
       await repository.initialise();
       await seedSlides(session, repository);
-      const decks = await repository.list();
-      if (!active) return;
+      const listing = await repository.list();
+      const local = createDraftStorage(key);
+      // Pod access remains usable without browser storage.
+      const saved = await local.load().catch((): string[] => []);
+      if (!active) {
+        local.dispose();
+        return;
+      }
+      drafts = local;
       store = new SlidesStore(
         repository,
-        decks,
+        listing.decks,
         (message) => toast.error(message),
-        (draft) => localStorage.setItem(key, draft),
+        (value) => local.save(value),
+        listing.broken,
       );
-      try {
-        const saved = localStorage.getItem(key);
-        if (saved) store.restore(saved);
-      } catch {
-        /* Pod access remains usable without browser storage. */
-      }
+      for (const value of saved) store.restore(value);
       setConnection({ store, repository, session });
     })().catch(() => {
       if (active) setError(true);
@@ -76,15 +83,18 @@ export function SlidesProvider({
     return () => {
       active = false;
       store?.dispose();
+      drafts?.dispose();
     };
   }, [session, attempt]);
   useEffect(() => {
     if (!connection) return;
+    // Leaving the page may cancel ordinary requests, so teardown sends its own keepalive save.
     const flush = () => {
-      void connection.store.flush(true);
+      void connection.store.flush(true, true);
     };
+    // A hidden tab stays alive: its keepalive save queues behind any save in flight.
     const hidden = () => {
-      if (document.visibilityState === "hidden") flush();
+      if (document.visibilityState === "hidden") void connection.store.flush(true, false);
     };
     const retry = () => {
       void connection.store.flush();
@@ -107,7 +117,9 @@ export function SlidesProvider({
     };
   }, [connection]);
   return connection ? (
-    <SlidesContext value={connection}>{children}</SlidesContext>
+    <SlidesContext value={connection}>
+      <SlideSessionContext value={session}>{children}</SlideSessionContext>
+    </SlidesContext>
   ) : (
     fallback(error, () => setAttempt((value) => value + 1))
   );
