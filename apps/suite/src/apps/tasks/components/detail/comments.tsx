@@ -194,7 +194,7 @@ export function TaskComments({ stored, project }: { stored: StoredTask; project:
             type="button"
             variant="ghost"
             size="sm"
-            disabled={busy}
+            disabled={busy || editing !== undefined}
             onClick={(event) => {
               origin.current = event.currentTarget;
               setReplying(undefined);

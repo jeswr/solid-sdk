@@ -8,7 +8,7 @@ import { TaskItem } from "./task";
 
 export interface ResourceCopy {
   original: Resource;
-  destination: { url: string; dataset: Store };
+  destination: { url: string; dataset: Store; etag?: string | null };
 }
 interface ReferenceMove {
   original: StoredTask;
@@ -34,7 +34,9 @@ export class TaskMove {
     private readonly destination: { url: string; dataset: Store },
     private readonly listReferences: () => Promise<StoredTask[]>,
     private readonly modified: Date,
-    private readonly listCopies: () => Promise<ResourceCopy[]> = async () => [],
+    private readonly listCopies: (
+      previous: ResourceCopy[],
+    ) => Promise<ResourceCopy[]> = async () => [],
   ) {}
 
   /**
@@ -106,15 +108,43 @@ export class TaskMove {
   private async finish(moved: StoredTask): Promise<StoredTask> {
     // The task DELETE committed. Cleanup failures retry forward, never roll back the move.
     this.result = moved;
-    for (const { original } of this.copies ?? []) {
-      if (!(await this.io.optional(original.url))) continue;
-      try {
-        await this.io.remove(original.url, original.etag);
-      } catch (error) {
-        if (await this.io.optional(original.url)) throw error;
+    this.copies ??= [];
+    const copies = this.copies;
+    try {
+      for (let pass = 0; pass < 3; pass++) {
+        // Read the whole listing before any deletion. Keep mappings for removed roots:
+        // a reply can arrive during cleanup and must still reach its copied parent.
+        const latest = await this.listCopies(copies);
+        if (latest.length === 0) return moved;
+        let changed = false;
+        for (const copy of latest) {
+          const previous = copies.find((entry) => entry.original.url === copy.original.url);
+          changed ||= !previous || previous.original.etag !== copy.original.etag;
+          // Reserve new URLs before writing, including when the response or read-back is lost.
+          if (!previous) copies.push(copy);
+          await this.io.container(new URL("./", copy.destination.url).href);
+          const destination = await this.write(
+            copy.destination.url,
+            copy.destination.dataset,
+            previous?.destination.etag,
+          );
+          Object.assign(previous ?? copy, { original: copy.original, destination });
+        }
+        // A stable pass permits deletion. Leave room for another scan afterwards,
+        // so a late reply cannot turn successful cleanup into an invisible orphan.
+        if (changed || pass === 2) continue;
+        for (const { original } of [...latest].reverse()) {
+          try {
+            await this.io.remove(original.url, original.etag);
+          } catch (error) {
+            if (await this.io.optional(original.url)) throw error;
+          }
+        }
       }
+    } catch (cause) {
+      throw new Error("Some comments are still moving. Retry", { cause });
     }
-    return moved;
+    throw new Error("Some comments are still moving. Retry");
   }
 
   async run(): Promise<StoredTask> {
@@ -132,14 +162,14 @@ export class TaskMove {
       task.modified = this.modified;
       return { original, intended };
     });
-    this.copies ??= await this.listCopies();
+    this.copies ??= await this.listCopies([]);
     let moved: StoredTask | undefined;
     let deleting = false;
     try {
       moved = stored(await this.write(this.destination.url, this.destination.dataset));
       for (const copy of this.copies) {
         await this.io.container(new URL("./", copy.destination.url).href);
-        await this.write(copy.destination.url, copy.destination.dataset);
+        copy.destination = await this.write(copy.destination.url, copy.destination.dataset);
       }
       for (const reference of this.plan) {
         const updated = await this.write(

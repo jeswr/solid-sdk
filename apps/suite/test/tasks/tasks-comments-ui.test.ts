@@ -196,6 +196,8 @@ describe("task comment UI", () => {
     await act(() => window.dispatchEvent(new Event("focus")));
     await settle();
     expect(field("Edit comment").value).toBe("My draft");
+    expect(button("Edit").disabled).toBe(true);
+    await click(button("Edit"));
     const before = fixture.pod.mutations().filter((request) => request.method === "PUT").length;
     await click(button("Save"));
     await settle();
@@ -213,6 +215,27 @@ describe("task comment UI", () => {
     expect(host.textContent).toContain("Remote edit");
     await click(button("Edit"));
     expect(field("Edit comment").value).toBe("Remote edit");
+  });
+
+  it("disables every Edit button while an editor is open so a changed draft cannot switch comments", async () => {
+    const fixture = await setup();
+    await fixture.comments.create("First", webId, new Date("2026-11-01T10:00:00Z"));
+    await fixture.comments.create("Second", webId, new Date("2026-11-01T10:01:00Z"));
+    const { host } = await fixture.render();
+    await settle();
+    const edits = [...host.querySelectorAll("button")].filter(
+      (entry) => entry.textContent === "Edit",
+    );
+    expect(edits).toHaveLength(2);
+    await click(edits[0] as HTMLButtonElement);
+    await type("Unsaved draft", "Edit comment");
+    expect(edits.every((entry) => entry.disabled)).toBe(true);
+    await click(edits[1] as HTMLButtonElement);
+    expect(field("Edit comment").value).toBe("Unsaved draft");
+    await click(button("Cancel"));
+    expect(edits.every((entry) => !entry.disabled)).toBe(true);
+    await click(edits[1] as HTMLButtonElement);
+    expect(field("Edit comment").value).toBe("Second");
   });
 
   it("hides empty tombstones while keeping their replies visible", async () => {

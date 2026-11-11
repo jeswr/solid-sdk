@@ -172,17 +172,28 @@ export class TaskCommentStore {
       }));
   }
   /** Capture full RDF revisions, including tombstones, before a recoverable task move. */
-  async prepareMove(container: string, taskId: string): Promise<ResourceCopy[]> {
+  async prepareMove(
+    container: string,
+    taskId: string,
+    previous: ResourceCopy[] = [],
+  ): Promise<ResourceCopy[]> {
     const entries = await this.resources(true);
     const roots = new Set(
       entries.filter(({ comment }) => comment.kind === "root").map(({ comment }) => comment.id),
     );
+    for (const { original } of previous) {
+      const comment = readComment(original);
+      if (comment.kind === "root") roots.add(comment.id);
+    }
     const selected = entries.filter(
       ({ comment }) => comment.kind === "root" || roots.has(comment.target),
     );
     const targets = new Map(
-      selected.map(({ comment }) => [comment.id, `${container}${crypto.randomUUID()}.ttl#it`]),
+      previous.map(({ original, destination }) => [`${original.url}#it`, `${destination.url}#it`]),
     );
+    for (const { comment } of selected)
+      if (!targets.has(comment.id))
+        targets.set(comment.id, `${container}${crypto.randomUUID()}.ttl#it`);
     return selected.map((original) => {
       const id = targets.get(original.comment.id) as string;
       const url = id.slice(0, -3);

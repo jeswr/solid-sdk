@@ -479,7 +479,8 @@ export class TaskStore {
         return [...references.values()];
       },
       now,
-      () => this.comments(source, item).prepareMove(`${container}comments/`, `${url}#it`),
+      (previous) =>
+        this.comments(source, item).prepareMove(`${container}comments/`, `${url}#it`, previous),
     );
   }
   /** Create, remap child/occurrence links, then delete, reconciling before compensation. */
