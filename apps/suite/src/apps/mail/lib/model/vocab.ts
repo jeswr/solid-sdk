@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-/** Shared mail IRIs; local typed wrappers keep their existing public names. */
+// AUTHORED-BY Codex GPT-6
+/** Shared mail IRIs, preserving the app's existing public names. */
 export {
   Classes,
   DCT,
@@ -14,4 +15,4 @@ export {
   SIOC,
   SOLID,
   XSD,
-} from "@jeswr/pod-connectors/mail/constants";
+} from "@jeswr/solid-mail";
