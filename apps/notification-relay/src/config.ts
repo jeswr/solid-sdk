@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 import { createIdTokenVerifier } from "./auth.js";
 import { nodeHandler } from "./node.js";
 import { createRelayOutboundFetch, isTestOutboundFetch } from "./outbound.js";
@@ -40,10 +41,12 @@ export function configuredRelay(
     }),
     allowedOrigins: env.RELAY_ALLOWED_ORIGINS?.split(","),
   });
+  // Dead provider tokens remove the installation only through the routes' version-checked commit.
+  if (deliverySink && !dependencies.onInvalid)
+    deliverySink.options.onInvalid = relay.invalidatePush;
   return {
     ...relay,
     handler: nodeHandler(relay, publicUrl),
-    /** Integrator: set deliverySink.options.onInvalid = push.invalidate when composing routes. */
     deliverySink,
     close() {
       relay.close();

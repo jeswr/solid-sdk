@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 import { generateKeyPairSync } from "node:crypto";
 import { expect, test, vi } from "vitest";
 import { activity, challenge, installation } from "../test/delivery-fixtures.js";
@@ -114,5 +115,10 @@ test("composition returns the real sink for invalidation wiring and closes it wi
     "unavailable",
   );
   const normal = configuredRelay(env);
+  expect((normal.deliverySink as Sink).options.onInvalid).toBe(normal.invalidatePush);
   normal.close();
+  const onInvalid = vi.fn();
+  const custom = configuredRelay(env, { onInvalid });
+  expect((custom.deliverySink as Sink).options.onInvalid).toBe(onInvalid);
+  custom.close();
 });

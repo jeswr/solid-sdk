@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 import { afterEach, expect, test, vi } from "vitest";
 import { activity, challenge, decrypt, installation } from "../test/delivery-fixtures.js";
 import { createFakeSinks } from "../test/fake-sinks.js";
@@ -142,6 +143,21 @@ test("pauses only the platform with auth errors, alerts once, drains queued work
     await sink.send(installation, challenge);
     expect(send).toHaveBeenCalledTimes(2);
   }
+});
+
+test("drops an FCM per-token SENDER_ID_MISMATCH without pausing the platform", async () => {
+  const send = vi.fn(async () => ({ status: 403, reason: "SENDER_ID_MISMATCH" }));
+  const { sink, onAlert, onOutcome } = setup({ fcm: { send } });
+  await sink.send(installation, challenge);
+  await flush();
+  expect(onOutcome).toHaveBeenCalledWith({
+    id: challenge.id,
+    kind: "challenge",
+    outcome: "permanent-error",
+  });
+  expect(onAlert).not.toHaveBeenCalled();
+  await sink.send(installation, { ...challenge, id: "next" });
+  expect(send).toHaveBeenCalledTimes(2);
 });
 
 test("handles simultaneous auth failures once and suppresses retries of other in-flight work after pause", async () => {

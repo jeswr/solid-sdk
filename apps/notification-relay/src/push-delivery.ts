@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 import { type ApnsMessage, buildApnsMessage } from "./apns.js";
 import { buildFcmMessage, type FcmMessage } from "./fcm.js";
 import { encryptPayload } from "./push-crypto.js";
@@ -189,7 +190,12 @@ export function createDeliverySink(options: DeliveryOptions) {
       } catch {
         outcome(job, "invalidation-failed");
       }
-    } else if (result.status === 401 || result.status === 403) {
+    } else if (
+      result.status === 401 ||
+      // FCM's SENDER_ID_MISMATCH is a per-token 403: a device-supplied foreign token must not
+      // pause delivery for everyone, so it falls through to a permanent drop.
+      (result.status === 403 && result.reason !== "SENDER_ID_MISMATCH")
+    ) {
       const first = !paused.has(platform);
       paused.add(platform);
       drop(job, "paused");
