@@ -1,9 +1,5 @@
-// AUTHORED-BY Claude Opus 5.5
-import type { Metadata } from "next";
-import { PlannedApp } from "@/apps/planned/planned-app";
-
-export const metadata: Metadata = { title: "Forms · Solid Suite" };
-
+// AUTHORED-BY Codex (GPT-6.1 Sol)
+import { FormsHome } from "@/apps/forms/components/forms-home";
 export default function Page() {
-  return <PlannedApp app="forms" />;
+  return <FormsHome />;
 }

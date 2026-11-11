@@ -1,0 +1,85 @@
+// AUTHORED-BY Codex (GPT-6.1 Sol)
+import type { FormsStore } from "../lib/data/store";
+import type { FormModel } from "../lib/runtime";
+
+export interface FormsState {
+  status: "loading" | "ready" | "error";
+  forms: FormModel[];
+  pending: number;
+  failed: boolean;
+}
+
+/** Account-scoped optimistic form list; writes settle in their submission order. */
+export class FormsController {
+  private state: FormsState = { status: "loading", forms: [], pending: 0, failed: false };
+  private listeners = new Set<() => void>();
+  private queue = Promise.resolve();
+  private confirmed: FormModel[] = [];
+  private edits: { token: object; form: FormModel }[] = [];
+  private generation = 0;
+  constructor(
+    readonly store: FormsStore,
+    private reportError: () => void,
+  ) {}
+  getSnapshot = (): FormsState => this.state;
+  subscribe = (listener: () => void) => {
+    this.listeners.add(listener);
+    return () => {
+      this.listeners.delete(listener);
+    };
+  };
+  private publish(patch: Partial<FormsState>) {
+    let forms = this.confirmed;
+    for (const edit of this.edits)
+      forms = [...forms.filter((item) => item.shape !== edit.form.shape), edit.form];
+    this.state = { ...this.state, ...patch, forms, pending: this.edits.length };
+    for (const listener of this.listeners) listener();
+  }
+  async load() {
+    const generation = ++this.generation;
+    this.publish({ status: "loading" });
+    try {
+      const forms = await this.store.listForms();
+      if (generation !== this.generation) return;
+      this.confirmed = forms;
+      this.publish({ status: "ready" });
+    } catch {
+      if (generation === this.generation) this.publish({ status: "error" });
+    }
+  }
+  save(form: FormModel): Promise<FormModel> {
+    ++this.generation; // An older list read cannot overwrite local intent.
+    const edit = { token: {}, form: structuredClone(form) };
+    this.edits.push(edit);
+    this.publish({ failed: false, status: "ready" });
+    const task = this.queue.then(async () => {
+      try {
+        const saved = await this.store.saveForm(edit.form);
+        this.confirmed = [
+          ...this.confirmed.filter(
+            (item) => item.shape !== form.shape && item.shape !== saved.shape,
+          ),
+          saved,
+        ];
+        for (const waiting of this.edits) {
+          if (waiting !== edit && waiting.form.shape === form.shape)
+            waiting.form = { ...waiting.form, shape: saved.shape };
+        }
+        this.publish({ failed: false });
+        return saved;
+      } catch (error) {
+        this.publish({ failed: true });
+        this.reportError();
+        throw error;
+      } finally {
+        this.edits = this.edits.filter((item) => item !== edit);
+        this.publish({});
+      }
+    });
+    this.queue = task.then(
+      () => {},
+      () => {},
+    );
+    return task;
+  }
+}
