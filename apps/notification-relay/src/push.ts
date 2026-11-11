@@ -2,6 +2,8 @@
 // AUTHORED-BY Claude Opus 5.5
 import { randomBytes } from "node:crypto";
 import { matchesHash, sha256, verifyDeviceProof } from "./device-proof.js";
+import { createPushInbox } from "./push-inbox.js";
+import type { PushInvalidation, PushSink } from "./push-payload.js";
 import {
   expireRegistrations,
   expireUnattached,
@@ -20,19 +22,11 @@ import {
   requirePush,
 } from "./push-validation.js";
 import type { ResourceIdentity } from "./resource-auth.js";
+import type { createWebhookVerifier } from "./signatures.js";
 import type { RelayStore } from "./store.js";
 
-export interface ChallengePayload {
-  v: 1;
-  id: string;
-  kind: "challenge";
-  nonce: string;
-  sentAt: number;
-}
-/** P2b encrypts payloads and supplies FCM/APNs transports. No webhook delivery here. */
-export interface PushSink {
-  send(installation: Installation, payload: ChallengePayload): Promise<void>;
-}
+export type { PushSink } from "./push-payload.js";
+
 const lifetime = 30 * 86_400_000;
 const randomId = () => randomBytes(16).toString("hex");
 const keyId = (installation: Installation) =>
@@ -43,6 +37,8 @@ export function createPushApi(options: {
   store: RelayStore;
   now: () => number;
   authorize: (request: Request) => Promise<ResourceIdentity>;
+  verifyResourceToken: (request: Request) => Promise<ResourceIdentity>;
+  verifyWebhook: ReturnType<typeof createWebhookVerifier>;
   pushSink?: PushSink;
   allowLoopback?: boolean;
   /**
@@ -93,7 +89,6 @@ export function createPushApi(options: {
   }
   async function challenge(installation: Installation, nonce: string): Promise<boolean> {
     try {
-      // The only sink call in this part is a challenge, including while inactive.
       await (options.pushSink as PushSink).send(installation, {
         v: 1,
         id: randomId(),
@@ -107,8 +102,27 @@ export function createPushApi(options: {
     }
   }
   const inbox = (id: string, secret: string) => `${publicOrigin}/inbox/${id}/${secret}`;
+  const receive = createPushInbox({ ...options, transaction });
 
   return {
+    async invalidate(invalidation: PushInvalidation): Promise<void> {
+      await store.transaction((state) => {
+        const installation = state.installations.get(invalidation.installationId);
+        if (
+          !installation ||
+          installation.tokenVersion !== invalidation.tokenVersion ||
+          (invalidation.providerTimestamp !== undefined &&
+            !(installation.tokenUpdatedAt < invalidation.providerTimestamp))
+        )
+          return;
+        for (const [id, registration] of state.registrations) {
+          if (registration.installationId === installation.installationId) {
+            state.registrations.delete(id);
+          }
+        }
+        state.installations.delete(installation.installationId);
+      });
+    },
     /** Periodic sweep as well as request-time expiry; deletion always shares the transaction. */
     async expire(): Promise<void> {
       await transaction(() => undefined);
@@ -121,6 +135,7 @@ export function createPushApi(options: {
       };
       try {
         const url = new URL(request.url);
+        if (url.pathname.startsWith("/inbox/")) return respond(await receive(request));
         const route =
           /^\/push\/(installations|registrations)(?:\/([\w-]{1,128})(?:\/(activate|rotate-inbox))?)?$/u.exec(
             url.pathname,
@@ -168,6 +183,7 @@ export function createPushApi(options: {
             ...input,
             installationId: randomId(),
             tokenVersion: 1,
+            tokenUpdatedAt: now(),
             activated: false,
             challengeHash: sha256(nonce),
             challengeAttempts: [now()],
@@ -242,6 +258,8 @@ export function createPushApi(options: {
             requirePush(options.pushSink, 503);
             const attempts = live.challengeAttempts.filter((time) => time > at - 3_600_000);
             requirePush(attempts.length < 3, 429);
+            if (changes.pushToken !== undefined && changes.pushToken !== live.pushToken)
+              live.tokenUpdatedAt = at;
             Object.assign(live, changes);
             if (changed) live.tokenVersion++;
             live.activated = false;

@@ -4,7 +4,8 @@
 // AUTHORED-BY Codex GPT-6
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import type { Identity } from "./auth.js";
-import { createPushApi, type PushSink } from "./push.js";
+import { createPushApi } from "./push.js";
+import type { PushSink } from "./push-payload.js";
 import { createResourceTokenVerifier, mobileClientPolicy } from "./resource-auth.js";
 import { createWebhookVerifier, safeUrl } from "./signatures.js";
 import { InMemoryRelayStore, type RelayStore } from "./store.js";
@@ -80,6 +81,11 @@ export function createRelay(options: {
   const pushPolicy = options.mobileClientId
     ? mobileClientPolicy(options.mobileClientId)
     : undefined;
+  const verify = createWebhookVerifier({
+    fetch: options.fetch,
+    now,
+    allowLoopback: options.allowInsecureLoopback,
+  });
   const push = createPushApi({
     publicOrigin: base.origin,
     store,
@@ -88,6 +94,8 @@ export function createRelay(options: {
     allowLoopback: options.allowInsecureLoopback,
     maxInstallations: options.maxPushInstallations,
     unattachedLifetimeMs: options.unattachedPushLifetimeMs,
+    verifyResourceToken,
+    verifyWebhook: verify,
     authorize: async (request) => {
       if (!pushPolicy) throw new Error("Push is not configured");
       const identity = await verifyResourceToken(request);
@@ -99,11 +107,6 @@ export function createRelay(options: {
     void push.expire().catch(() => {});
   }, 60_000);
   sweep.unref();
-  const verify = createWebhookVerifier({
-    fetch: options.fetch,
-    now,
-    allowLoopback: options.allowInsecureLoopback,
-  });
   const registrations = new Map<string, Registration>();
   let stopped = false;
   function drop(id: string, registration: Registration) {
@@ -149,7 +152,8 @@ export function createRelay(options: {
         );
         return respond(204);
       }
-      if (url.pathname.startsWith("/push/")) return push.handle(request, headers);
+      if (url.pathname.startsWith("/push/") || /^\/inbox\/[^/]+\/[^/]+$/u.test(url.pathname))
+        return push.handle(request, headers);
       if (url.pathname === "/register" && request.method === "POST" && !url.search) {
         const bearer = /^Bearer (\S+)$/u.exec(request.headers.get("authorization") ?? "");
         if (!bearer) return respond(401);
@@ -291,6 +295,7 @@ export function createRelay(options: {
   };
   return {
     handle,
+    invalidatePush: push.invalidate,
     close() {
       stopped = true;
       clearInterval(sweep);
