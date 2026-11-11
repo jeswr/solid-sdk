@@ -1,6 +1,6 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
 "use client";
-import { EmptyState, ErrorState, LoadingSkeleton, Toaster } from "@jeswr/suite-ui";
+import { EmptyState, ErrorState, LoadingSkeleton } from "@jeswr/suite-ui";
 import type { ReactNode } from "react";
 import { PodSessionProvider, usePodSessionState } from "@/lib/session/pod-session";
 import { AppFrame, AppSessionGuard } from "@/shell/app-frame";
@@ -64,7 +64,6 @@ export function FormsApp({ children }: { children: ReactNode }) {
     <AppSessionGuard>
       <PodSessionProvider>
         <SessionGate>{children}</SessionGate>
-        <Toaster position="bottom-center" />
       </PodSessionProvider>
     </AppSessionGuard>
   );
