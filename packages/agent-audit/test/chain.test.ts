@@ -204,9 +204,9 @@ it("rejects missing/weak ETags, failed writes, exhausted ranges and invalid cont
     `${BASE}#frag`,
   ])
     expect(() => new PodChain(pod.fetch, base)).toThrow("Invalid audit storage root");
-  expect(() =>
+  await expect(
     new PodChain(pod.fetch, BASE).append({ ...record(), body: "private" } as AuditRecord, AT),
-  ).toThrow("Invalid audit record");
+  ).rejects.toThrow("Invalid audit record");
 });
 it.each([
   "replaced-history",

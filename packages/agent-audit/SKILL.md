@@ -54,6 +54,10 @@ the existing canonical hash, creates `<seq>.ttl` with `If-None-Match: *`, then
 publishes its head with `If-Match` and a strong ETag (or `If-None-Match: *` for
 genesis). A colliding immutable entry is checked for schema, exact RDF projection,
 predecessor and hash before helping publish it and retrying the caller's append.
+Appends are at-least-once: a rejected append may still have landed its entry, which
+the next writer folds into the chain, so a caller retry can record an event twice
+(over-recording is the safe direction). Entries are hashed, not signed: chain
+integrity holds only against parties without write access to the container.
 This heals an interrupted entry creation and supports concurrent writers. A
 writer whose entry another writer published returns that entry after verifying
 the published chain. Five attempts bound contention. Corrupt collisions fail with

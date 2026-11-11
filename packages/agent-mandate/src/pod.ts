@@ -9,10 +9,20 @@ import { createVcMandateVerifier } from "./mandate.js";
 import type { MandateVerifier } from "./types.js";
 
 export interface PodMandateOptions {
+  /**
+   * Owner-trusted location of the mandate credential (host configuration, never model or
+   * remote input). Must be https and on the owner's storage: the status list is derived
+   * from it, so an attacker-chosen location could replay an older status list.
+   */
   readonly credentialUrl: string;
   readonly ownerWebId: string;
   readonly agentId: string;
   readonly fetch: NonNullable<ResolveWebIdKeyOptions["fetch"]>;
+  /**
+   * Fetch used for WebID profiles and verification methods. Pass an unauthenticated fetch
+   * when profiles may live outside the pod; omitting it reuses `fetch`, which then may reach
+   * the origin hosting a WebID.
+   */
   readonly profileFetch?: NonNullable<ResolveWebIdKeyOptions["fetch"]>;
   readonly now?: () => Date;
 }
@@ -22,6 +32,7 @@ export function createPodMandateVerifier(options: PodMandateOptions): MandateVer
   let statusListCredential: string;
   try {
     statusListCredential = new URL("status.ttl", options.credentialUrl).href;
+    if (new URL(options.credentialUrl).protocol !== "https:") throw new Error();
     if (!statusListCredential.endsWith("/agent/mandates/status.ttl")) throw new Error();
   } catch {
     throw new TypeError("Invalid mandate status location");

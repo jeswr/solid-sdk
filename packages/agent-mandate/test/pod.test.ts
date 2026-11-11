@@ -218,6 +218,7 @@ it("rejects every failed response, redirects, oversized bytes and thrown I/O", a
 it.each([
   "invalid",
   "https://pod.example/wrong/default.trig",
+  "http://pod.example/agent/mandates/default.trig",
   "https://pod.example/agent/mandates/nested/default.trig",
 ])("refuses wrong status location %s", (credentialUrl) => {
   expect(() => createPodMandateVerifier(options({ credentialUrl }))).toThrow(

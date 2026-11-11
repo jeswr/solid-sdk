@@ -37,7 +37,14 @@ it("appends the new kind without changing historical ordering", () => {
   ]);
   expect(checkedRecord(record)).toEqual(record);
   const { purpose: _purpose, ...withoutPurpose } = record;
-  expect(checkedRecord({ ...withoutPurpose, categories: [], resources: [] })).toBeDefined();
+  expect(
+    checkedRecord({
+      ...withoutPurpose,
+      categories: ["https://w3id.org/dpv/pd#Preference"],
+      resources: [],
+    }),
+  ).toBeDefined();
+  expect(() => checkedRecord({ ...withoutPurpose, categories: [], resources: [] })).toThrow();
 });
 it.each([
   "tool",
@@ -104,7 +111,11 @@ it("projects only reference metadata through the typed RDF writer", () => {
       .every((q) => q.object.termType === "NamedNode"),
   ).toBe(true);
   const { purpose: _purpose, ...withoutPurpose } = record;
-  const minimal = { ...withoutPurpose, categories: [], resources: [] };
+  const minimal = {
+    ...withoutPurpose,
+    categories: ["https://w3id.org/dpv/pd#Preference"],
+    resources: [],
+  };
   expect(
     node(entryGraph(url, seal(1, AT, GENESIS, minimal)), url).values(
       "https://w3id.org/dpv#hasPurpose",

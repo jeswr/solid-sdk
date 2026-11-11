@@ -46,7 +46,7 @@ it("accepts every specified kind, snapshots input/output and uses the pilot hash
               tool: "memory_recall",
               decision: "permit" as const,
               reason: "autonomous",
-              categories: [],
+              categories: ["https://w3id.org/dpv/pd#Preference"],
               resources: [],
             }
           : {}),

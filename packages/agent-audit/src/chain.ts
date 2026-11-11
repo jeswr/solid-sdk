@@ -37,7 +37,7 @@ export class PodChain {
     try {
       snapshot = checkedRecord(record);
     } catch {
-      throw new Error("Invalid audit record");
+      return Promise.reject(new Error("Invalid audit record"));
     }
     const next = this.pending.then(() => this.write(snapshot, at));
     this.pending = next.catch(() => {});

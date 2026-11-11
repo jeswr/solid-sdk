@@ -69,7 +69,7 @@ const recordSchema = z
     status: z.enum(["attempting", "sent", "not-sent", "uncertain", "refused"]).optional(),
     reason: label.optional(),
     purpose: iri.optional(),
-    categories: z.array(iri).max(64).optional(),
+    categories: z.array(iri).min(1).max(64).optional(),
     resources: z.array(iri).max(100).optional(),
     accountId: label.optional(),
     recipientHashes: z.array(recipientHashSchema).max(100).optional(),

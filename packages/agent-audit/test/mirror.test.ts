@@ -79,7 +79,7 @@ it.each([
                 tool: "memory_recall",
                 decision: "permit" as const,
                 reason: "autonomous",
-                categories: [],
+                categories: ["https://w3id.org/dpv/pd#Preference"],
                 resources: [],
               }
             : {}),
