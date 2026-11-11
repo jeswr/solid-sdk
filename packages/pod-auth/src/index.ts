@@ -67,6 +67,8 @@ export function createPodAuth(options: PodAuthOptions): PodAuth {
     lifetime.signal.throwIfAborted();
     if (loggingOut !== undefined) throw new Error("Logout is in progress");
     const started = epoch;
+    if (await checkExpiry(started)) throw new Error("Session expired");
+    if (started !== epoch) throw new Error("Session changed during authentication");
     if (
       (expected.webId !== undefined && expected.webId !== claims.webId) ||
       (expected.issuer !== undefined && !sameIssuer(expected.issuer, claims.issuer)) ||
@@ -112,10 +114,14 @@ export function createPodAuth(options: PodAuthOptions): PodAuth {
     };
     if (first) emit(mode);
   };
-  const providers = createProviders(options, {
-    challenge: (url) => emit("challenge", url),
-    session,
-  });
+  const providers = createProviders(
+    options,
+    {
+      challenge: (url) => emit("challenge", url),
+      session,
+    },
+    lifetime.signal,
+  );
   let observedFence = providers.fence.signal;
   /**
    * Ends a session an abandoned login may hold. A logout since the attempt began already superseded the
@@ -135,28 +141,45 @@ export function createPodAuth(options: PodAuthOptions): PodAuth {
     }
     return started === epoch ? snapshot() : null;
   };
-  const checkExpiry = async () => {
-    if (current === null || !durableSession) return;
+  const checkExpiry = async (started: number) => {
+    const identity = current;
+    const unchanged = () =>
+      started === epoch && current === identity && !pending && !restoring && !loggingOut;
+    if (identity === null || !durableSession || !unchanged()) return false;
     const account = await providers.persistence.active();
-    if (account !== null && !(await providers.persistence.present(account))) {
+    const present =
+      account !== null &&
+      (await providers.persistence.present({
+        ...account,
+        webId: identity.webId!,
+        issuer: identity.issuer,
+      }));
+    if (!unchanged()) return false;
+    if (!present) {
       current = null;
+      durableSession = false;
       providers.boundary.clear();
       emit("expired");
+      return true;
     }
+    return false;
   };
   const api: PodAuth = {
     fetch: async (input, init) => {
       lifetime.signal.throwIfAborted();
+      const started = epoch;
+      if (await checkExpiry(started)) throw new Error("Session expired");
+      if (started !== epoch) throw new Error("Session changed during authentication");
       const signal = init?.signal ?? (input instanceof Request ? input.signal : undefined);
       try {
         const response = await providers.manager.fetch(input, {
           ...init,
           signal: AbortSignal.any([lifetime.signal, ...(signal == null ? [] : [signal])]),
         });
-        if (response.status === 401) await checkExpiry();
+        if (response.status === 401) await checkExpiry(started);
         return response;
       } catch (error) {
-        await checkExpiry();
+        await checkExpiry(started);
         throw error;
       }
     },
@@ -169,7 +192,7 @@ export function createPodAuth(options: PodAuthOptions): PodAuth {
       if (lifetime.signal.aborted) return Promise.reject(lifetime.signal.reason);
       if (loggingOut || pending) return Promise.reject(new Error("Authentication is in progress"));
       if (restoring) return restoring;
-      const started = epoch;
+      const started = ++epoch;
       let failure: unknown;
       const promise = (async () => {
         mode = "restore";
@@ -211,6 +234,7 @@ export function createPodAuth(options: PodAuthOptions): PodAuth {
       return promise;
     },
     logout: (logoutOptions) => {
+      if (lifetime.signal.aborted) return Promise.reject(lifetime.signal.reason);
       if (logoutOptions?.scope === "session" && options.sessionScope === undefined)
         return Promise.reject(new Error("Session-only logout requires sessionScope"));
       if (loggingOut) return loggingOut;
@@ -250,7 +274,7 @@ export function createPodAuth(options: PodAuthOptions): PodAuth {
         return pending.key === key && abort === undefined && !pending.cancellable
           ? pending.promise
           : Promise.reject(new Error("Another login is in progress"));
-      const started = epoch;
+      const started = ++epoch;
       const promise = (async () => {
         const existing = await readIdentity();
         if (started !== epoch) throw new Error("Session changed during authentication");

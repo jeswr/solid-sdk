@@ -307,6 +307,12 @@ Manager removal uses scoped logout; replacement retires only the old scope. Repl
 cleanup attempt revocation and local purge even if the OP fails. Cache stores can be shared; storage
 capability caches remain partitioned by storage ID. No credentials move when switching.
 
+Removal matches both WebID and scope, preserving a newer replacement's pointer in other managers.
+Restore adopts the currently remembered scope. Durable sessions are checked before cached credentials
+leave the core; a missing pointer or credential emits expiry, with checks fenced against newer lifecycle
+operations. Disposal also closes pending and retiring cores and cancels revocation deadlines; it keeps
+remembered sessions available for restoration.
+
 For React, use `AccountsProvider` and `useAccounts` from `@jeswr/suite-sdk`; existing `usePodAuth`
 consumers follow the active core. A single account is a manager with one account, so a separate
 single-session fallback is unnecessary. Existing `PodAuthProvider` usage keeps working.

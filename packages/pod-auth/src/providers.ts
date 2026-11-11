@@ -269,6 +269,7 @@ export function createProviders(
       selected: LoginHint,
     ): Promise<void>;
   },
+  lifetime: AbortSignal,
 ) {
   const transport = nonReactiveFetch();
   const insecure = options.allowInsecureLoopback === true;
@@ -477,6 +478,7 @@ export function createProviders(
     silentAfterRefreshFailure: true,
     silentFirst: false,
     sessionLock: persistence.lock,
+    revocationSignal: lifetime,
   };
   const solidProvider = new DPoPTokenProvider(
     redirectUri,
@@ -688,6 +690,7 @@ export function createProviders(
       return claims;
     },
     logout: async () => {
+      lifetime.throwIfAborted();
       boundary.clear();
       const failures: unknown[] = [];
       // Load the catalog without redeeming a token, so a fresh instance can revoke and purge too.
@@ -696,6 +699,7 @@ export function createProviders(
       } catch (error) {
         failures.push(error);
       }
+      lifetime.throwIfAborted();
       try {
         await manager.logout();
       } catch (error) {

@@ -124,6 +124,8 @@ export interface OidcSessionOptions {
 
   /** Revoke known or explicitly cataloged refresh tokens on {@link OidcSession.forget} when supported. @defaultValue true */
   readonly revokeOnForget?: boolean;
+  /** Cancel pending revocation requests and their deadlines when the owning instance is disposed. */
+  readonly revocationSignal?: AbortSignal;
 
   /** Keep durable refresh credentials on transient failures; clear on invalid_grant and persist rotations. */
   readonly preserveRefreshOnFailure?: boolean;
@@ -570,13 +572,22 @@ export class OidcSession {
   async #revoke(record: RefreshSessionRecord): Promise<void> {
     const as = record.authorizationServer;
     if (as.revocation_endpoint === undefined) return;
+    this.#options.revocationSignal?.throwIfAborted();
     const controller = new AbortController();
-    const { promise: timeout, reject } = Promise.withResolvers<never>();
+    const signal = AbortSignal.any([
+      controller.signal,
+      ...(this.#options.revocationSignal === undefined ? [] : [this.#options.revocationSignal]),
+    ]);
+    const { promise: cancelled, reject } = Promise.withResolvers<never>();
     const timer = setTimeout(() => {
       const error = new DOMException("Token revocation timed out", "TimeoutError");
       controller.abort(error);
-      reject(error);
     }, revocationTimeoutMs);
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(signal.reason);
+    };
+    signal.addEventListener("abort", onAbort, { once: true });
     try {
       // Race the whole operation: injected transports and stalled response bodies may ignore abort.
       await Promise.race([
@@ -587,15 +598,16 @@ export class OidcSession {
             clientAuthFor(as.issuer, record.client, this.#options.serverQuirks ?? true),
             record.refreshToken,
             {
-              ...oauthOptions(this.#options.http, controller.signal),
+              ...oauthOptions(this.#options.http, signal),
               additionalParameters: { token_type_hint: "refresh_token" },
             },
           )
           .then(oauth.processRevocationResponse),
-        timeout,
+        cancelled,
       ]);
     } finally {
       clearTimeout(timer);
+      signal.removeEventListener("abort", onAbort);
     }
   }
 

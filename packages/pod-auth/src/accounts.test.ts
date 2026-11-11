@@ -725,3 +725,399 @@ test.each([
   });
   expect(await f.load().restoreAll()).toEqual([]);
 });
+
+// Delete credentials and their core pointer, without superseding the stored fence.
+function loseSession(f: ReturnType<typeof fixture>, webId: string) {
+  for (const [key, value] of f.values) {
+    if (typeof value !== "object") continue;
+    if (
+      ("refreshToken" in value && (value as RefreshSessionRecord).identity?.webId === webId) ||
+      (JSON.parse(key)[1] === "active" && "webId" in value && value.webId === webId)
+    )
+      f.values.delete(key);
+  }
+}
+
+test("stale removal preserves a replacement's scope, active pointer and reload credentials", async () => {
+  const f = fixture();
+  const replacing = f.load();
+  await replacing.add();
+  const stale = f.load();
+  await stale.restoreAll();
+  await replacing.add();
+  const [key, replacement] = f.records()[0]!;
+  await stale.remove(f.alice.webId!);
+  expect(f.values.get(key)).toEqual(replacement);
+  expect(stale.accounts()).toEqual([]);
+  const fresh = f.load();
+  expect(await fresh.restoreAll()).toHaveLength(1);
+  expect(fresh.active()?.webId).toBe(f.alice.webId);
+  expect((await fresh.fetch(f.alice.root + "private")).status).toBe(200);
+});
+
+test("restoreAll replaces a stale local core when the remembered scope changed", async () => {
+  const f = fixture();
+  const first = f.load();
+  await first.add();
+  const stale = f.load();
+  await stale.restoreAll();
+  const old = stale.authFor(f.alice.webId!);
+  await first.add();
+  await stale.restoreAll();
+  expect(stale.authFor(f.alice.webId!)).not.toBe(old);
+  expect((await stale.fetch(f.alice.root + "private")).status).toBe(200);
+  await expect(old.fetch(f.alice.root)).rejects.toThrow("disposed");
+});
+
+test("similar scope names in two managers never alias their keys or logout fences", async () => {
+  const f = fixture();
+  const a = f.load(),
+    b = f.load();
+  const uuid = vi.spyOn(crypto, "randomUUID");
+  uuid.mockReturnValueOnce("scope");
+  await a.add({ webId: f.alice.webId });
+  uuid.mockReturnValueOnce("scope-sessions");
+  await b.add({ webId: f.bob.webId });
+  expect(new Set(f.records().map(([key]) => JSON.parse(key)[0])).size).toBe(2);
+  const [key, bob] = f.records().find(([, record]) => record.identity?.webId === f.bob.webId)!;
+  await a.remove(f.alice.webId!);
+  expect(f.values.get(key)).toEqual(bob);
+  expect((await b.fetch(f.bobRoot + "private")).status).toBe(200);
+  expect((await f.load().restoreAll()).map((i) => i.webId)).toEqual([f.bob.webId]);
+});
+
+test.each([
+  "401",
+  "error",
+])("missing pointer and credential emit expiry after a %s response", async (outcome) => {
+  const f = fixture();
+  const transport = globalThis.fetch;
+  vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+    const request = new Request(input, init);
+    if (request.url === "https://foreign.example/lost") {
+      loseSession(f, f.alice.webId!);
+      if (outcome === "error") throw Error("transport failed");
+      return new Response(null, { status: 401 });
+    }
+    return transport(request);
+  });
+  const manager = f.load();
+  await manager.add({ webId: f.alice.webId });
+  await manager.add({ webId: f.bob.webId });
+  await manager.switchTo(f.alice.webId!);
+  const expired = vi.fn();
+  manager.on("expired", expired);
+  const request = manager.fetch("https://foreign.example/lost");
+  if (outcome === "error") await expect(request).rejects.toThrow("transport failed");
+  else expect((await request).status).toBe(401);
+  await manager.switchTo(f.bob.webId!);
+  expect(expired.mock.calls).toEqual([[f.alice.webId]]);
+  expect(manager.accounts().map((i) => i.webId)).toEqual([f.bob.webId]);
+  expect((await manager.fetch(f.bobRoot + "private")).status).toBe(200);
+});
+
+test("a lost durable session is refused before a cached token can be sent", async () => {
+  const f = fixture();
+  const manager = f.load();
+  await manager.add();
+  const auth = manager.authFor(f.alice.webId!);
+  loseSession(f, f.alice.webId!);
+  const before = f.alice.requests.length;
+  await expect(auth.fetch(f.alice.root + "private")).rejects.toThrow("Session expired");
+  expect(f.alice.requests.length).toBe(before);
+});
+
+test("credential loss during the public challenge cannot reuse a cached token", async () => {
+  const f = fixture();
+  const transport = globalThis.fetch;
+  vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+    const request = new Request(input, init);
+    if (request.url === f.alice.root + "lost") loseSession(f, f.alice.webId!);
+    return transport(request);
+  });
+  const manager = f.load();
+  await manager.add();
+  const before = f.alice.requests.length;
+  await expect(manager.fetch(f.alice.root + "lost")).rejects.toThrow("Session expired");
+  expect(
+    f.alice.requests
+      .slice(before)
+      .filter((r) => r.url.startsWith(f.alice.root))
+      .every((r) => !r.headers.has("authorization") && !r.headers.has("dpop")),
+  ).toBe(true);
+});
+
+test.each([
+  "logout",
+  "login",
+  "restore",
+])("a paused expiry check cannot expire a newer %s lifecycle", async (operation) => {
+  const f = fixture();
+  const auth = createPodAuth(f.options);
+  await auth.login();
+  const expired = vi.fn();
+  auth.on("expired", expired);
+  const get = f.storage.sessions.getItem.getMockImplementation()!;
+  const ready = Promise.withResolvers<void>(),
+    release = Promise.withResolvers<void>();
+  let pause = true;
+  f.storage.sessions.getItem.mockImplementation(async (key) => {
+    const value = await get(key);
+    if (pause && JSON.parse(key)[1] === "active") {
+      pause = false;
+      ready.resolve();
+      await release.promise;
+      return null;
+    }
+    return value;
+  });
+  const request = auth.fetch("https://foreign.example/private");
+  const rejected = expect(request).rejects.toThrow("Session changed");
+  await ready.promise;
+  if (operation === "logout") await auth.logout();
+  else if (operation === "login") await auth.login();
+  else await auth.restore();
+  release.resolve();
+  await rejected;
+  expect(expired).not.toHaveBeenCalled();
+  if (operation !== "logout") expect((await auth.fetch(f.alice.root + "private")).status).toBe(200);
+  auth.dispose?.();
+});
+
+test("dispose immediately closes a core whose add UI ignores cancellation", async () => {
+  const f = fixture();
+  const manager = f.load();
+  await manager.add();
+  const close = vi.spyOn(SessionFence.prototype, "close");
+  const ready = Promise.withResolvers<void>(),
+    release = Promise.withResolvers<void>();
+  const getCode = f.options.ui.getCode;
+  f.options.ui.getCode = async (...args) => {
+    ready.resolve();
+    await release.promise;
+    return getCode(...args);
+  };
+  const pending = manager.add({ webId: f.bob.webId });
+  const rejected = expect(pending).rejects.toThrow();
+  await ready.promise;
+  const retained = f.records().find(([, record]) => record.identity?.webId === f.alice.webId)!;
+  manager.dispose();
+  expect(close).toHaveBeenCalledTimes(2);
+  expect(f.values.get(retained[0])).toEqual(retained[1]);
+  release.resolve();
+  await rejected;
+  expect(close).toHaveBeenCalledTimes(2);
+});
+
+test.each([
+  "replace",
+  "remove",
+  "failed-add",
+])("dispose cancels retiring %s cores and revocation timers", async (operation) => {
+  const f = fixture();
+  const ready = Promise.withResolvers<void>();
+  const transport = globalThis.fetch;
+  let revokeSignal: AbortSignal | undefined;
+  vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+    const request = new Request(input, init);
+    if (request.url.endsWith("/revoke")) {
+      revokeSignal = request.signal;
+      ready.resolve();
+      return new Promise<Response>(() => {});
+    }
+    return transport(request);
+  });
+  const manager = f.load();
+  await manager.add({ webId: f.alice.webId });
+  const old = manager.authFor(f.alice.webId!);
+  const disposed = vi.spyOn(old, "dispose");
+  const controller = new AbortController();
+  if (operation === "failed-add") {
+    const write = f.storage.sessions.setItem.getMockImplementation()!;
+    f.storage.sessions.setItem.mockImplementation(async (key, value) => {
+      await write(key, value);
+      if (JSON.parse(key)[1] === "remembered") controller.abort(Error("cancelled"));
+    });
+  }
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  try {
+    const pending =
+      operation === "remove"
+        ? manager.remove(f.alice.webId!)
+        : manager.add(
+            { webId: operation === "replace" ? f.alice.webId : f.bob.webId },
+            { signal: controller.signal },
+          );
+    const rejected = expect(pending).rejects.toThrow(
+      operation === "failed-add" ? "cancelled" : "disposed",
+    );
+    await ready.promise;
+    expect(vi.getTimerCount()).toBe(1);
+    manager.dispose();
+    expect(vi.getTimerCount()).toBe(0);
+    expect(disposed).toHaveBeenCalledOnce();
+    await rejected;
+    expect(revokeSignal?.aborted).toBe(true);
+    expect(vi.getTimerCount()).toBe(0);
+    if (operation !== "remove") {
+      const fresh = f.load();
+      expect((await fresh.restoreAll()).map((i) => i.webId)).toEqual([f.alice.webId]);
+      expect((await fresh.fetch(f.alice.root + "private")).status).toBe(200);
+    }
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test("a stale manager retires both its local scope and the remembered replacement when adding again", async () => {
+  const f = fixture();
+  const first = f.load();
+  await first.add();
+  const stale = f.load();
+  await stale.restoreAll();
+  await first.add();
+  await stale.add();
+  expect(f.records()).toHaveLength(1);
+  expect((await stale.fetch(f.alice.root + "private")).status).toBe(200);
+  expect(await f.load().restoreAll()).toHaveLength(1);
+});
+
+test("an earlier failed request cannot expire a new login after logout", async () => {
+  const f = fixture();
+  const ready = Promise.withResolvers<void>(),
+    release = Promise.withResolvers<void>();
+  const transport = globalThis.fetch;
+  vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+    const request = new Request(input, init);
+    if (request.url === "https://foreign.example/delayed") {
+      ready.resolve();
+      await release.promise;
+      throw Error("old transport error");
+    }
+    return transport(request);
+  });
+  const auth = createPodAuth(f.options);
+  await auth.login();
+  const expired = vi.fn();
+  auth.on("expired", expired);
+  const rejected = expect(auth.fetch("https://foreign.example/delayed")).rejects.toThrow(
+    "old transport error",
+  );
+  await ready.promise;
+  await auth.logout();
+  await auth.login();
+  release.resolve();
+  await rejected;
+  expect(expired).not.toHaveBeenCalled();
+  expect((await auth.fetch(f.alice.root + "private")).status).toBe(200);
+  auth.dispose?.();
+});
+
+test("a credential upgrade paused in expiry validation cannot publish across logout and re-login", async () => {
+  const f = fixture();
+  const auth = createPodAuth(f.options);
+  await auth.login();
+  const get = f.storage.sessions.getItem.getMockImplementation()!;
+  const ready = Promise.withResolvers<void>(),
+    release = Promise.withResolvers<void>();
+  let reads = 0;
+  f.storage.sessions.getItem.mockImplementation(async (key) => {
+    const value = await get(key);
+    if (JSON.parse(key)[1] === "active" && ++reads === 2) {
+      ready.resolve();
+      await release.promise;
+      return null;
+    }
+    return value;
+  });
+  const expired = vi.fn();
+  auth.on("expired", expired);
+  const before = f.alice.stats.accepted;
+  const rejected = expect(auth.fetch(f.alice.root + "private")).rejects.toThrow("Session changed");
+  await ready.promise;
+  await auth.logout();
+  await auth.login();
+  release.resolve();
+  await rejected;
+  expect(expired).not.toHaveBeenCalled();
+  expect(f.alice.stats.accepted).toBe(before);
+  const retained = structuredClone([...f.values]);
+  auth.dispose?.();
+  await expect(auth.logout()).rejects.toThrow("disposed");
+  expect([...f.values]).toEqual(retained);
+  const fresh = createPodAuth(f.options);
+  expect((await fresh.restore())?.webId).toBe(f.alice.webId);
+  fresh.dispose?.();
+});
+
+test.each(["login", "logout"])("expiry validation ignores an in-flight %s", async (operation) => {
+  const f = fixture();
+  const auth = createPodAuth(f.options);
+  await auth.login();
+  const get = f.storage.sessions.getItem.getMockImplementation()!;
+  const ready = Promise.withResolvers<void>(),
+    release = Promise.withResolvers<void>();
+  let pause = true;
+  f.storage.sessions.getItem.mockImplementation(async (key) => {
+    const value = await get(key);
+    if (pause && JSON.parse(key)[1] === "active") {
+      pause = false;
+      ready.resolve();
+      await release.promise;
+      return null;
+    }
+    return value;
+  });
+  const expired = vi.fn();
+  auth.on("expired", expired);
+  const rejected = expect(auth.fetch("https://foreign.example/check")).rejects.toThrow(
+    "Session changed",
+  );
+  await ready.promise;
+  const underway = Promise.withResolvers<void>(),
+    finish = Promise.withResolvers<void>();
+  let action: Promise<unknown>;
+  if (operation === "login") {
+    await auth.logout();
+    const getCode = f.options.ui.getCode;
+    f.options.ui.getCode = async (...args) => {
+      underway.resolve();
+      await finish.promise;
+      return getCode(...args);
+    };
+    action = auth.login();
+  } else {
+    const remove = f.storage.sessions.removeItem.getMockImplementation()!;
+    f.storage.sessions.removeItem.mockImplementation(async (key) => {
+      if (JSON.parse(key)[1] === "active") {
+        underway.resolve();
+        await finish.promise;
+      }
+      await remove(key);
+    });
+    action = auth.logout();
+  }
+  await underway.promise;
+  release.resolve();
+  await rejected;
+  expect(expired).not.toHaveBeenCalled();
+  finish.resolve();
+  await action;
+  auth.dispose?.();
+});
+
+test("durable checks validate this identity when another core changed the shared active pointer", async () => {
+  const f = fixture();
+  const alice = createPodAuth(f.options),
+    bob = createPodAuth(f.options);
+  await alice.login({ webId: f.alice.webId });
+  await bob.login({ webId: f.bob.webId });
+  loseSession(f, f.alice.webId!);
+  const expired = vi.fn();
+  alice.on("expired", expired);
+  await expect(alice.fetch(f.alice.root + "private")).rejects.toThrow("Session expired");
+  expect(expired).toHaveBeenCalledOnce();
+  expect((await bob.fetch(f.bobRoot + "private")).status).toBe(200);
+  alice.dispose?.();
+  bob.dispose?.();
+});

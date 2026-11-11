@@ -76,7 +76,7 @@ export function createAccountManager(options: PodAuthOptions): AccountManager {
   let entries = new Map<string, Entry>();
   let active: string | null = null;
   let tail: Promise<unknown> = Promise.resolve();
-  const restoringAuths = new Set<PodAuth>();
+  const ownedAuths = new Set<PodAuth>();
   const listeners = new Map<keyof Events, Set<(value: never) => void>>();
   const assertOpen = () => lifetime.signal.throwIfAborted();
   const emit = <E extends keyof Events>(event: E, value: Events[E]) => {
@@ -137,9 +137,12 @@ export function createAccountManager(options: PodAuthOptions): AccountManager {
       throw error;
     }
   };
+  const disposeCore = (auth: PodAuth) => {
+    if (ownedAuths.delete(auth)) auth.dispose?.();
+  };
   const release = (entry: Entry) => {
     for (const stop of entry.stops) stop();
-    entry.auth.dispose?.();
+    disposeCore(entry.auth);
   };
   const requireEntry = (webId: string) => {
     assertOpen();
@@ -152,10 +155,13 @@ export function createAccountManager(options: PodAuthOptions): AccountManager {
     remaining.delete(entry.webId);
     const selected = active === entry.webId ? (remaining.keys().next().value ?? null) : active;
     const remembered = await read();
-    await persist(
-      remembered.entries.filter((pointer) => pointer.webId !== entry.webId),
-      selected,
+    const pointers = remembered.entries.filter(
+      (pointer) => pointer.webId !== entry.webId || pointer.scope !== entry.scope,
     );
+    const rememberedActive = pointers.some((pointer) => pointer.webId === remembered.active)
+      ? remembered.active
+      : selected;
+    await persist(pointers, rememberedActive);
     entries = remaining;
     active = selected;
     for (const stop of entry.stops) stop();
@@ -183,7 +189,11 @@ export function createAccountManager(options: PodAuthOptions): AccountManager {
     );
     return entry;
   };
-  const create = (scope: string) => createPodAuth({ ...options, storage, sessionScope: scope });
+  const create = (scope: string) => {
+    const auth = createPodAuth({ ...options, storage, sessionScope: scope });
+    ownedAuths.add(auth);
+    return auth;
+  };
   const anonymous: PodAuth = {
     fetch: transport,
     identity: async () => null,
@@ -232,21 +242,28 @@ export function createAccountManager(options: PodAuthOptions): AccountManager {
           pointers.set(webId, { webId, scope });
           await persist([...pointers.values()], webId, signal);
           const previous = entries.get(webId);
-          const retired = previous?.auth ?? (previousPointer && create(previousPointer.scope));
+          const retired = new Set<PodAuth>();
+          if (previous !== undefined) {
+            for (const stop of previous.stops) stop();
+            retired.add(previous.auth);
+          }
+          if (previousPointer !== undefined && previousPointer.scope !== previous?.scope)
+            retired.add(create(previousPointer.scope));
           entries.set(webId, attach({ webId, scope }, auth, identity));
           active = webId;
-          if (previous !== undefined) for (const stop of previous.stops) stop();
-          if (retired !== undefined) {
+          for (const core of retired) {
             // The new scope owns different keys. A failed OP revocation cannot undo the new login.
-            await retired.logout({ scope: "session" }).catch(() => undefined);
-            retired.dispose?.();
+            await core.logout({ scope: "session" }).catch(() => undefined);
+            disposeCore(core);
           }
+          assertOpen();
           emit("change", undefined);
           return snapshot(identity);
         });
       } catch (error) {
-        await auth.logout({ scope: "session" }).catch(() => undefined);
-        auth.dispose?.();
+        if (!lifetime.signal.aborted)
+          await auth.logout({ scope: "session" }).catch(() => undefined);
+        disposeCore(auth);
         throw error;
       }
     },
@@ -256,9 +273,9 @@ export function createAccountManager(options: PodAuthOptions): AccountManager {
         const remembered = await read();
         const restored = await Promise.all(
           remembered.entries.map(async (pointer) => {
-            const existing = entries.get(pointer.webId);
+            const candidate = entries.get(pointer.webId);
+            const existing = candidate?.scope === pointer.scope ? candidate : undefined;
             const auth = existing?.auth ?? create(pointer.scope);
-            restoringAuths.add(auth);
             // Observe expiry during restore too, before the entry has a verified identity.
             let accepted = false;
             const stop = auth.on("expired", () => {
@@ -273,9 +290,8 @@ export function createAccountManager(options: PodAuthOptions): AccountManager {
             } catch {
               return null;
             } finally {
-              restoringAuths.delete(auth);
               stop();
-              if (!accepted && existing === undefined) auth.dispose?.();
+              if (!accepted && existing === undefined) disposeCore(auth);
             }
           }),
         );
@@ -308,9 +324,8 @@ export function createAccountManager(options: PodAuthOptions): AccountManager {
     },
     dispose: () => {
       lifetime.abort(new Error("Account manager disposed"));
-      for (const auth of restoringAuths) auth.dispose?.();
-      restoringAuths.clear();
       for (const entry of entries.values()) release(entry);
+      for (const auth of ownedAuths) disposeCore(auth);
       entries.clear();
       active = null;
       listeners.clear();

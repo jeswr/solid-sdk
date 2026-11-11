@@ -166,6 +166,11 @@ isolates failures, and chooses the persisted active account or first restored. T
 not credential authority. `on('change', handler)` observes manager changes; `on('expired', webId => …)`
 identifies the expired account. `authFor(webId)` exposes the real core; null supplies the anonymous
 adapter. `dispose()` cancels work/releases cores without removing persisted credentials.
+Match remembered pointers by WebID **and scope**, including stale removal and restore. Check durable
+presence before cached credentials leave the core; missing pointers count as expiry for established
+durable sessions. Fence asynchronous expiry checks against current identity and lifecycle generations.
+Track every owned core through pending add, retirement and restore. Disposal closes their listeners
+and cancels revocation deadlines immediately, preserving remembered credentials.
 
 Use suite-sdk's `AccountsProvider` / `useAccounts` for React consumers to follow the active core
 through the existing PodAuthProvider. One account is simply a manager with one account; no

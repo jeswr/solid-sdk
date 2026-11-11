@@ -16,6 +16,8 @@ The public entry points remain `.`, `./elements`, `./registerElements`, and `./s
 - Inject transport, credential boundaries, providers and stores. Preserve the pristine fetch seam.
 - Keep credentials within verified storage boundaries; reject stale operations after logout or account changes.
 - Preserve non-extractable DPoP keys, refresh rotation, session fences and cross-tab locking.
+- `OidcSessionOptions.revocationSignal` cancels pending revocations and deadlines on owner disposal.
+  Remove its listeners on settlement; cancellation alone never purges retained session stores.
 - RFC 9728 LWS discovery is supported; legacy `as_uri`/`realm` challenges are behind
   `legacyLwsChallenge` (default true). Validate PRM origin/resource, StorageRoot and AS metadata before
   obtaining any subject credential. Reuse this package's StorageContext discovery; add no workspace dependencies.
