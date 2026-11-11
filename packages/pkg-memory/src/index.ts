@@ -45,4 +45,4 @@ export { NanopubStore } from "./store.js";
 export type { Fact, PaymentCardBrand, TemporalValue } from "./templates.js";
 export { createFactAssertion, PAYMENT_CARD_BRANDS } from "./templates.js";
 export type { WacDiscoveryOptions } from "./wac.js";
-export { discoverWacAcl, validateDedicatedWacAcl } from "./wac.js";
+export { discoverWacAcl, ensureOwnerOnlyContainer, validateDedicatedWacAcl } from "./wac.js";

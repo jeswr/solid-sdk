@@ -11,7 +11,7 @@ Node runtime. The prepared rewrite preserves all routes; automatic deployment re
 
 OAuth mode composes `@jeswr/mcp-oauth`, its AES-GCM vault, and
 `@jeswr/solid-mcp/http`. Every authenticated MCP POST builds a new server and scoped
-storage-client PodPort (Solid or LWS) from the verified grant's pod session, including chat tools.
+storage-client PodPort from the verified grant's pod session, including chat tools.
 Opaque DCR client IDs map to stable `/clients/<id>` IRIs for memory provenance;
 Client ID Metadata Document URLs retain their identity. Caller headers never reach the pod. Upstream OIDC and single-user client credentials use
 `@jeswr/pod-auth/node`; storage descriptions outside the pod use guarded anonymous discovery.
@@ -45,7 +45,7 @@ forwarding to the Node listener on `:3200`, or use the disposable TLS integratio
 below. Use the public HTTPS origin behind a proxy that preserves Host. URL generation uses only
 `MCP_PUBLIC_ORIGIN`, never forwarded headers. `MCP_ALLOWED_ORIGINS` is a comma-separated
 list of exact browser origins; the default permits no cross-origin browser MCP calls.
-A pod session exchanges its ID token for LWS access only with an authorization server on the
+The broker can exchange its ID token for LWS access only with an authorization server on the
 issuer's origin or a storage root's origin. `MCP_LWS_AUTHORIZATION_SERVERS` is a
 comma-separated list of further HTTPS LWS authorization servers to trust; a server that a
 resource names in its metadata is never trusted on that basis alone.
@@ -93,3 +93,21 @@ No external service or real account is used. `pnpm run gate` runs the affected w
 gate. No publish or deploy is needed.
 
 Run only the local CSS scenario with `pnpm --filter @jeswr/app-mcp-server test:e2e`.
+
+
+OAuth consent now persists an owner-only connection record in private/pkg/clients/ before issuing
+an authorization code. A failed or timed-out system write/readback returns server_error and
+retires the bound grant/session. These system writes and daily last-used metadata are allowed
+on read-only tool servers. LWS connections without WAC are currently refused at consent.
+Every authenticated /mcp request freshly reads the record through the scoped broker session,
+refusing redirects with a three-second deadline and a 64 KiB cap. Missing, malformed, revoked or
+resource/client-mismatched records retire the verified grant and return generic 401, including
+when revocation cleanup fails. Pod/network/timeout/401/403/redirect/5xx failures return 503 with
+Retry-After: 5 without retiring the grant. Restoring a record cannot revive a retired session.
+No migration exists for older grants without records. Last-used updates use a strong If-Match
+validator, a separate two-second deadline and a UTC day; conflicts/failures are best effort.
+The consent completion hook runs only after the browser's explicit approval, never at callback.
+Until F1-B consent choices land, records describe OwnerPolicy with ServiceProvision and
+Personalisation; authority remains with the grant and current pod purpose policy.
+You can disconnect it any time in your suite under Settings › Assistants.
+Single-user mode writes no records; revoke it by rotating MCP_ACCESS_TOKEN.

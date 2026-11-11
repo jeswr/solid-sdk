@@ -4,8 +4,8 @@ description: Use when locating MCP connections or audit containers, implementing
 ---
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 
-Read README.md for the S1 contract. Keep this private securityCritical package browser-safe,
-with injected reads, no network I/O, no writes, no cache and no third-party additions.
+Read README.md for the record and audit contracts. Keep this private securityCritical package browser-safe,
+with injected reads, no network I/O, no cache and no third-party additions.
 Use the three layout helpers only with a trusted canonical storage root ending in `/`.
 Keep all locations below the protected `private/pkg/` personal-data root.
 
@@ -18,6 +18,13 @@ Accept the newest three direct monthly files, at most 256 KiB / 10,000 quads eac
 500 activities in total. Drop invalid date/client rows. Return only PersonalDataRead's whitelist,
 never values from unknown predicates or resource URLs. Keep newest-first ordering and row limits.
 
-Connection records, generated record models and revoke are later S2 slices. Do not add them to
-S1. PodChain implementation is MCP-A1c. Single-user revoke means rotating MCP_ACCESS_TOKEN.
+For S2b, regenerate records from codegen/ + codegen.config.json, never edit src/generated.
+Use buildConnectionRecord/parseConnectionRecord/revokeConnectionRecord/touchLastUsed; RDF fields
+come from the generated wrapper. Strictly reject invalid optional fields, wrong subjects, missing
+type, ambiguous cardinalities and over 64 KiB. Enforce title <=256 in the facade: sh:maxLength
+is not admitted by this generator, explicitly documented in the profile and README. Preserve
+unknown metadata during edits and keep the earliest revokedAt. Use only trusted inputs to mint
+the hashed record URL. classifyConnection never grants authority: only a parsed matching 200
+without revokedAt is live. Only verified token/grant identities may select irreversible vault
+revocation; transport failures are unavailable, never proof of revocation. PodChain implementation is MCP-A1c. Single-user revoke means rotating MCP_ACCESS_TOKEN.
 Update this skill and README for public changes and maintain exhaustive 100% coverage.

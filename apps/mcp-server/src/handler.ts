@@ -2,6 +2,7 @@
 import { randomBytes } from "node:crypto";
 import { createNodeGuardedFetch, refuseRedirects } from "@jeswr/guarded-fetch/node";
 import {
+  type AuthorizationServerOptions,
   type ConsentContext,
   createAuthorizationServer,
   createPodSessionProvider,
@@ -11,7 +12,8 @@ import {
   type SigningKey,
 } from "@jeswr/mcp-oauth";
 import { createSolidMcpServer, createStoragePodPort } from "@jeswr/solid-mcp";
-import { createMcpHttpHandler } from "@jeswr/solid-mcp/http";
+import { createMcpHttpHandler, TemporarilyUnavailable } from "@jeswr/solid-mcp/http";
+import { createConnectionGate, provenanceId } from "./connections.js";
 import { createVaultOAuthStores, decode, digest, encode, vaultSigningKey } from "./persistence.js";
 import { podLoginFor, podRootFor, withCssCompatibility } from "./pod.js";
 import { equalSecret, escapeHtml, form, page, publicOrigin, secureResponse } from "./security.js";
@@ -78,7 +80,18 @@ export async function createApp(
   const flowKey = (id: string) => `browser:${digest(issuer)}:${digest(id)}`;
   const csrfInput = (flow: BrowserFlow) =>
     `<input type="hidden" name="csrf" value="${escapeHtml(flow.csrf)}">`;
-  const as = (consent: (context: ConsentContext) => Promise<boolean>, provider = sessions) =>
+  const connections = createConnectionGate({
+    resource,
+    origin: origin.origin,
+    sessions,
+    now,
+    upstreamFetch: options.upstreamFetch,
+  });
+  const as = (
+    consent: (context: ConsentContext) => Promise<boolean>,
+    provider = sessions,
+    grantCreated?: AuthorizationServerOptions["grantCreated"],
+  ) =>
     createAuthorizationServer({
       issuer,
       resource,
@@ -87,6 +100,7 @@ export async function createApp(
       signingKey,
       scopes: ["mcp"],
       consent,
+      grantCreated,
       metadataFetch: options.metadataFetch,
       now,
     });
@@ -108,11 +122,30 @@ export async function createApp(
       const token = request.headers
         .get("authorization")
         ?.match(/^Bearer ([A-Za-z0-9._~-]+)$/i)?.[1];
-      return token ? oauth.verifyAccessToken(token, resource) : null;
+      if (!token) return null;
+      const principal = await oauth.verifyAccessToken(token, resource);
+      let podRoot: string;
+      try {
+        podRoot = await podRootFor(principal.webId, options.upstreamFetch);
+      } catch {
+        throw new TemporarilyUnavailable();
+      }
+      const state = await connections.check(principal, podRoot);
+      if (state === "unavailable") throw new TemporarilyUnavailable();
+      if (state === "revoked") {
+        // Only a verified token selects this ID. Cleanup failure retains the same 401.
+        try {
+          await oauth.revokeGrant(principal.grantId);
+        } catch {
+          /* Retry on next verified request. */
+        }
+        return null;
+      }
+      return { ...principal, podRoot };
     },
     server: async (principal) => {
       const fetcher = withCssCompatibility(await sessions.fetchFor(principal.sessionId));
-      const podRoot = await podRootFor(principal.webId, options.upstreamFetch);
+      const podRoot = principal.podRoot;
       // This constructor creates a storage-client PodPort and the chat tools.
       // No MCP headers or caller-selected identity enter the pod capability.
       return createSolidMcpServer({
@@ -292,19 +325,21 @@ export async function createApp(
       await transition(key, bytes, { ...flow, phase: "consumed", session: undefined });
       const allowed = fields.get("decision") === "allow";
       try {
-        const response = await as(async () => allowed).authorize(
-          new Request(flow.authorizationUrl),
-          flow.session,
-        );
+        const response = await as(
+          async () => allowed,
+          sessions,
+          (event) =>
+            connections.record(event, options.readOnly !== false ? "ReadOnly" : "ReadWrite"),
+        ).authorize(new Request(flow.authorizationUrl), flow.session);
         if (
           !allowed ||
           !new URL(response.headers.get("location") as string).searchParams.has("code")
         )
-          await sessions.revoke(flow.session.id);
+          await sessions.revoke(flow.session.id).catch(() => {});
         response.headers.set("set-cookie", cookie("", 0));
         return response;
       } catch {
-        await sessions.revoke(flow.session.id);
+        await sessions.revoke(flow.session.id).catch(() => {});
         throw new Error("Consent completion failed");
       } finally {
         await vault.delete(key);
@@ -354,7 +389,7 @@ export async function createApp(
       }
       return page(
         "Allow pod access?",
-        `<p>Client: ${escapeHtml(consent.clientName ?? consent.clientId ?? "")}</p><p>Client ID: ${escapeHtml(consent.clientId ?? "")}</p><p>Pod owner: ${escapeHtml(validated.session.webId)}</p><p>Access: ${options.readOnly !== false ? "read only" : "read and write"}. Scope: ${escapeHtml(consent.scope ?? "")}. Personal data remains subject to your pod policy.</p><form method="post" action="/auth/consent">${csrfInput(consent)}<button name="decision" value="allow">Allow</button><button name="decision" value="deny">Deny</button></form>`,
+        `<p>Client: ${escapeHtml(consent.clientName ?? consent.clientId ?? "")}</p><p>Client ID: ${escapeHtml(consent.clientId ?? "")}</p><p>Pod owner: ${escapeHtml(validated.session.webId)}</p><p>Access: ${options.readOnly !== false ? "read only" : "read and write"}. Scope: ${escapeHtml(consent.scope ?? "")}. Personal data remains subject to your pod policy.</p><p>You can disconnect it any time in your suite under Settings › Assistants.</p><form method="post" action="/auth/consent">${csrfInput(consent)}<button name="decision" value="allow">Allow</button><button name="decision" value="deny">Deny</button></form>`,
       );
     }
     if (
@@ -392,14 +427,6 @@ export async function createApp(
       return secureResponse(failure());
     }
   };
-}
-
-function provenanceId(clientId: string, origin: string): string {
-  try {
-    return new URL(clientId).href;
-  } catch {
-    return `${origin}/clients/${encodeURIComponent(clientId)}`;
-  }
 }
 
 let configured: Promise<(request: Request) => Promise<Response>> | undefined;

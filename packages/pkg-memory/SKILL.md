@@ -70,3 +70,14 @@ New templates write canonical `https://jeswr.org/ns/sectors/health#` and
 reference parser's implicit legacy prefixes unchanged: they are hash inputs.
 For new Turtle bodies, declare canonical prefixes explicitly. Read legacy and
 mixed graphs without rewriting the terms or their content-derived identifiers.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+`ensureOwnerOnlyContainer(pod, containerUrl, options?)` is the shared WAC provisioning helper.
+It validates the canonical pod root, owner and descendant container, preserves existing shared
+ancestors and their ACLs, protects new ancestors before creation, and establishes a dedicated
+owner-only Read/Write/Control ACL with an inheritable default on the target. Only discovered
+WAC ACL URLs are used; missing WAC/ACP, non-dedicated ACLs or unsafe discovery fail closed.
+Existing ACL replacement requires a strong ETag and If-Match; absent ACLs use If-None-Match: *.
+The optional allowAclUrl predicate constrains every discovered ACL before access. Transport and
+conditional-write failures propagate. NanopubStore uses this same helper without changing its
+existing Memory protection unavailable or storage-error contracts.

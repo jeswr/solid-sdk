@@ -5,7 +5,7 @@ The Next.js application is `@jeswr/app-suite`. Use Node 24 and the root pnpm wor
 
 ## Assistants
 
-Settings > Assistants offers Claude/ChatGPT OAuth setup and a read-only personal-data audit view.
+Settings > Assistants offers Claude/ChatGPT OAuth setup and connected-assistant management and a read-only personal-data audit view.
 Set `NEXT_PUBLIC_SUITE_MCP_URL` to the canonical HTTPS assistant endpoint with path exactly `/mcp`
 and no userinfo, query or fragment; unset/invalid runtime values show setup fallback text.
 The page reads the owner's monthly `private/pkg/audit/YYYY-MM.ttl` files through
@@ -13,7 +13,11 @@ The page reads the owner's monthly `private/pkg/audit/YYYY-MM.ttl` files through
 Personal values and resource URLs are never displayed. Unreadable/malformed or oversized data
 shows an error with Retry; a missing audit container is empty. Offline views ask to reconnect,
 and account changes discard the previous account's rows. Demo pods include metadata examples.
-S1 includes no connection records or revoke actions. For a single-user server, revoke access by
+The page lists at most 100 direct 32-hex connection records with six concurrent bounded reads,
+reports unreadable records, and separates active assistants from previously connected ones.
+Disconnect requires confirmation, reads a fresh strong ETag, preserves the earliest revocation
+and retries once on 412; it is unavailable offline. Failures show a generic retry message.
+Connection names also label matching audit rows. Demo pods include list/disconnect fixtures. For a single-user server, revoke access by
 rotating `MCP_ACCESS_TOKEN`; such servers write no connection records.
 See `src/shell/settings/assistants/SKILL.md` for maintenance and test rules.
 

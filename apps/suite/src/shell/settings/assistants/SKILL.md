@@ -17,4 +17,11 @@ unknown RDF fields. Reconnect reloads, and errors offer Retry. Container 404 is 
 
 Demo fixtures use typed accessors and n3.Writer, with a literal-value privacy regression fixture.
 Test copy, tabs, configuration and all audit states; run the six viewport/theme functional and
-visual specs. Record/revoke UI is outside S1. Mention token rotation for single-user servers.
+visual specs. ConnectedAssistants lists <=100 direct 32-hex TTL records with concurrency 6 through the
+owner session and generated parser. Report unreadable counts, sort active rows by last used,
+and keep disconnected/expired entries under Previously connected. Label unverified app names
+for opaque DCR client IDs. Disconnect uses AlertDialog, fresh GET + strong ETag and If-Match,
+refetching/reapplying once on 412. Already revoked succeeds; all other failures show only
+"Couldn't disconnect. Try again." Abort on account/offline transitions and ignore late replies.
+Show matched connection names in audit rows without expanding its field whitelist. Browser,
+shell-css and six-project visual specs include connected/disconnect states; never cache authority. Mention token rotation for single-user servers.

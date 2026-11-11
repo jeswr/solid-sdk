@@ -2,7 +2,13 @@
 
 import { randomBytes, randomUUID } from "node:crypto";
 import { createServer, type Server } from "node:https";
+import {
+  connectionRecordUrl,
+  parseConnectionRecord,
+  revokeConnectionRecord,
+} from "@jeswr/mcp-connections";
 import { createSessionVault, MemoryVaultStore } from "@jeswr/mcp-oauth";
+import { forClientCredentials } from "@jeswr/pod-auth/node";
 import { auth, type OAuthClientProvider } from "@modelcontextprotocol/sdk/client/auth.js";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
@@ -317,4 +323,96 @@ it("reads private local CSS through single-user client credentials and a separat
   });
   expect(result.isError).not.toBe(true);
   expect((result.content as { text: string }[])[0]?.text).toBe("local CSS private fixture");
+});
+
+it("keeps consent records owner-only and irreversibly retires a disconnected connection", async () => {
+  const owner = await cssAccount();
+  const other = await cssAccount();
+  const { client, tokens, information } = await login(owner);
+  // This fixture received the token from the local server's completed SDK flow.
+  const { sid } = JSON.parse(
+    Buffer.from(tokens.access_token.split(".")[1] as string, "base64url").toString(),
+  ) as { sid: string };
+  const url = await connectionRecordUrl(owner.podRoot, `${MCP}/mcp`, sid);
+  const stored = await owner.fetcher(url, { headers: { accept: "text/turtle" } });
+  expect(stored.status).toBe(200);
+  const original = await stored.text();
+  expect((await parseConnectionRecord(original, "text/turtle", url)).resource).toBe(`${MCP}/mcp`);
+  expect((await fetch(url)).status).toBe(401);
+  const otherReader = await forClientCredentials({
+    issuer: CSS,
+    clientId: other.credentials.id,
+    clientSecret: other.credentials.secret,
+    boundary: [owner.podRoot],
+    fetch: (input, init) => fetch(input, { ...init, redirect: "manual" }),
+  });
+  try {
+    expect((await otherReader.fetch(url)).status).toBe(403);
+  } finally {
+    await otherReader.logout();
+  }
+  expect(
+    (await client.callTool({ name: "pod_read", arguments: { url: owner.privateUrl } })).isError,
+  ).not.toBe(true);
+  // A tool call may have touched lastUsed; revoke against the current bytes/validator.
+  const current = await owner.fetcher(url);
+  const etag = current.headers.get("etag");
+  expect(etag).toMatch(/^"/);
+  const revoked = await revokeConnectionRecord(
+    await current.text(),
+    "text/turtle",
+    url,
+    new Date(),
+  );
+  expect(
+    (
+      await owner.fetcher(url, {
+        method: "PUT",
+        headers: { "content-type": "text/turtle", "if-match": etag as string },
+        body: revoked,
+      })
+    ).ok,
+  ).toBe(true);
+  const call = () =>
+    fetch(`${MCP}/mcp`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${tokens.access_token}`,
+        "content-type": "application/json",
+        accept: "application/json, text/event-stream",
+      },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "tools/call",
+        params: { name: "pod_read", arguments: { url: owner.privateUrl } },
+      }),
+    });
+  expect((await call()).status).toBe(401);
+  const latest = await owner.fetcher(url);
+  expect(
+    (
+      await owner.fetcher(url, {
+        method: "PUT",
+        headers: {
+          "content-type": "text/turtle",
+          "if-match": latest.headers.get("etag") as string,
+        },
+        body: original,
+      })
+    ).ok,
+  ).toBe(true);
+  expect((await call()).status).toBe(401);
+  const refresh = await fetch(`${MCP}/auth/token`, {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      grant_type: "refresh_token",
+      client_id: information.client_id,
+      resource: `${MCP}/mcp`,
+      refresh_token: tokens.refresh_token as string,
+    }),
+  });
+  expect(refresh.status).toBe(400);
+  expect(await refresh.json()).toMatchObject({ error: "invalid_grant" });
 });

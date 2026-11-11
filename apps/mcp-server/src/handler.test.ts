@@ -1,7 +1,10 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+
 import { createHash } from "node:crypto";
+import { revokeConnectionRecord } from "@jeswr/mcp-connections";
 import { createSessionVault, MemoryVaultStore, type PodSessionProvider } from "@jeswr/mcp-oauth";
 import { describe, expect, it, vi } from "vitest";
+import { connectionPod } from "../test/connection-pod.js";
 import { navigation } from "../test/navigation.js";
 import { createApp } from "./handler.js";
 
@@ -31,6 +34,7 @@ const post = (path: string, cookie: string, fields: Record<string, string>, orig
 
 async function fixture(upstreamFetch?: typeof fetch, allowedOrigins: readonly string[] = []) {
   let now = Math.floor(Date.now() / 1000);
+  const pod = connectionPod();
   const vault = createSessionVault({
     key: Buffer.alloc(32, 8).toString("base64"),
     store: new MemoryVaultStore(),
@@ -45,9 +49,7 @@ async function fixture(upstreamFetch?: typeof fetch, allowedOrigins: readonly st
       active.add("pod-session");
       return { id: "pod-session", webId: "https://pod.example/profile/card#me" };
     }),
-    fetchFor: vi.fn(async () => {
-      throw new Error("Unexpected pod read");
-    }),
+    fetchFor: vi.fn(async () => pod.fetch),
     revoke: vi.fn(async (id) => {
       active.delete(id);
     }),
@@ -58,7 +60,7 @@ async function fixture(upstreamFetch?: typeof fetch, allowedOrigins: readonly st
     vault,
     podSessions: sessions,
     now: () => now,
-    upstreamFetch,
+    upstreamFetch: upstreamFetch ?? pod.fetch,
     allowedOrigins,
   };
   const app = await createApp(options);
@@ -133,6 +135,7 @@ async function fixture(upstreamFetch?: typeof fetch, allowedOrigins: readonly st
     sessions,
     options,
     clientId,
+    pod,
     advance: () => {
       now += 601;
     },
@@ -354,7 +357,7 @@ describe("OAuth composition", () => {
           }),
         )
       ).status,
-    ).toBe(500);
+    ).toBe(406);
     expect(f.sessions.fetchFor).toHaveBeenCalledWith("pod-session");
     expect(
       (
@@ -552,4 +555,97 @@ describe("OAuth composition", () => {
     );
     expect(f.sessions.begin).not.toHaveBeenCalled();
   });
+});
+
+async function connectedFixture() {
+  const f = await fixture();
+  const consent = await f.consent();
+  const approved = await f.app(
+    post("/auth/consent", consent.cookie, { csrf: consent.csrf, decision: "allow" }),
+  );
+  const code = (await navigation(approved)).searchParams.get("code") as string;
+  const response = await f.token(code);
+  expect(response.status).toBe(200);
+  const tokens = await response.json();
+  const url = f.pod
+    .snapshot()
+    .resources.map(([url]) => url)
+    .find((url) => /\/clients\/[a-f0-9]{32}\.ttl$/.test(url));
+  if (!url) throw new Error("Missing persisted connection");
+  const mcp = () =>
+    f.app(request("/mcp", { headers: { authorization: `Bearer ${tokens.access_token}` } }));
+  return { ...f, tokens, url, mcp };
+}
+it("retires a verified grant irreversibly after owner revocation even if the record is recreated", async () => {
+  const f = await connectedFixture();
+  expect((await f.mcp()).status).toBe(405);
+  const original = await (await f.pod.fetch(f.url)).text();
+  const body = await revokeConnectionRecord(original, "text/turtle", f.url, new Date());
+  await f.pod.fetch(f.url, { method: "PUT", headers: { "content-type": "text/turtle" }, body });
+  expect((await f.mcp()).status).toBe(401);
+  expect(f.sessions.revoke).toHaveBeenCalledWith("pod-session");
+  await f.pod.fetch(f.url, { method: "DELETE" });
+  await f.pod.fetch(f.url, {
+    method: "PUT",
+    headers: { "content-type": "text/turtle" },
+    body: original,
+  });
+  expect((await f.mcp()).status).toBe(401);
+  const refresh = await f.app(
+    post("/auth/token", "", {
+      grant_type: "refresh_token",
+      client_id: f.clientId,
+      resource: `${ORIGIN}/mcp`,
+      refresh_token: f.tokens.refresh_token,
+    }),
+  );
+  expect(refresh.status).toBe(400);
+  expect(await refresh.json()).toMatchObject({ error: "invalid_grant" });
+});
+it("returns retryable 503 without revoking the grant on pod outages", async () => {
+  const f = await connectedFixture();
+  vi.mocked(f.sessions.fetchFor).mockResolvedValue(async () => new Response(null, { status: 503 }));
+  const unavailable = await f.mcp();
+  expect(unavailable.status).toBe(503);
+  expect(unavailable.headers.get("retry-after")).toBe("5");
+  expect(f.sessions.revoke).not.toHaveBeenCalled();
+  vi.mocked(f.sessions.fetchFor).mockResolvedValue(f.pod.fetch);
+  expect((await f.mcp()).status).toBe(405);
+});
+it("denies missing records with the same generic 401 even when revocation cleanup fails", async () => {
+  const f = await connectedFixture();
+  await f.pod.fetch(f.url, { method: "DELETE" });
+  vi.mocked(f.sessions.revoke).mockRejectedValue(new Error("private cleanup failure"));
+  const response = await f.mcp();
+  expect(response.status).toBe(401);
+  expect(await response.text()).not.toContain("cleanup");
+  expect((await f.mcp()).status).toBe(401);
+});
+it.each([
+  false,
+  true,
+])("failed consent record persistence issues server_error even if cleanup fails (%s)", async (cleanupFails) => {
+  const f = await fixture();
+  const consent = await f.consent();
+  if (cleanupFails)
+    vi.mocked(f.sessions.revoke).mockRejectedValue(new Error("private cleanup failed"));
+  const failedWrites: string[] = [];
+  vi.mocked(f.sessions.fetchFor).mockResolvedValue(async (input, init) => {
+    const request = new Request(input, init);
+    if (request.method === "PUT" && /\/clients\/[a-f0-9]{32}\.ttl$/.test(request.url)) {
+      failedWrites.push(request.url);
+      return new Response(null, { status: 503 });
+    }
+    return f.pod.fetch(request);
+  });
+  const approval = await f.app(
+    post("/auth/consent", consent.cookie, { csrf: consent.csrf, decision: "allow" }),
+  );
+  const destination = await navigation(approval);
+  expect(destination.searchParams.get("error")).toBe("server_error");
+  expect(destination.searchParams.has("code")).toBe(false);
+  expect(destination.searchParams.get("state")).toBe("mcp-state");
+  expect(f.sessions.revoke).toHaveBeenCalledWith("pod-session");
+  if (!cleanupFails) expect(await f.sessions.isActive?.("pod-session")).toBe(false);
+  expect(failedWrites).toHaveLength(1);
 });

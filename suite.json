@@ -169,7 +169,8 @@
     {
       "slug": "mcp-server",
       "name": "@jeswr/app-mcp-server",
-      "kind": "application"
+      "kind": "application",
+      "description": "MCP OAuth with owner-only pod connection records and immediate suite-managed disconnect."
     },
     {
       "slug": "agent-daemon",

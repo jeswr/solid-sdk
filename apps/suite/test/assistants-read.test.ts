@@ -62,6 +62,7 @@ describe("assistant audit transport and demo fixture", () => {
       auditContainer(DEMO_ROOT),
       expect.objectContaining({
         method: "GET",
+        cache: "no-store",
         redirect: "error",
         signal: expect.any(AbortSignal),
       }),

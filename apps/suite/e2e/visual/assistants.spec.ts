@@ -24,3 +24,21 @@ test("assistant setup and personal-data reads", async ({ page }) => {
     report.violations.filter((v) => v.impact === "serious" || v.impact === "critical"),
   ).toEqual([]);
 });
+
+test("connected assistants and disconnect confirmation", async ({ page }) => {
+  await page.goto("/settings/assistants");
+  await expect(
+    page.getByRole("list", { name: "Active assistants", exact: true }).getByRole("listitem"),
+  ).toHaveCount(2);
+  await page.evaluate(() => document.fonts.ready);
+  await expect(page).toHaveScreenshot("settings-assistants-connected.png", { fullPage: true });
+  await page.getByRole("button", { name: "Disconnect Demo assistant", exact: true }).click();
+  await expect(page.getByRole("alertdialog")).toBeVisible();
+  await expect(page).toHaveScreenshot("settings-assistants-disconnect-dialog.png", {
+    fullPage: true,
+  });
+  const report = await new AxeBuilder({ page }).analyze();
+  expect(
+    report.violations.filter((v) => v.impact === "serious" || v.impact === "critical"),
+  ).toEqual([]);
+});

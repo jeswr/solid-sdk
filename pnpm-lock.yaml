@@ -678,6 +678,12 @@ importers:
       '@jeswr/guarded-fetch':
         specifier: workspace:*
         version: link:../../packages/guarded-fetch
+      '@jeswr/mcp-connections':
+        specifier: workspace:*
+        version: link:../../packages/mcp-connections
+      '@jeswr/pkg-memory':
+        specifier: workspace:*
+        version: link:../../packages/pkg-memory
       '@jeswr/mcp-oauth':
         specifier: workspace:*
         version: link:../../packages/mcp-oauth
@@ -3521,10 +3527,13 @@ importers:
     dependencies:
       '@jeswr/fetch-rdf':
         specifier: workspace:*
-        version: link:../../packages/fetch-rdf
+        version: link:../fetch-rdf
       '@jeswr/ldp-container':
         specifier: workspace:*
-        version: link:../../packages/ldp-container
+        version: link:../ldp-container
+      '@jeswr/model-runtime':
+        specifier: workspace:*
+        version: link:../model-runtime
       '@rdfjs/wrapper':
         specifier: 0.34.0
         version: 0.34.0
@@ -3532,6 +3541,9 @@ importers:
         specifier: 2.0.3
         version: 2.0.3
     devDependencies:
+      '@jeswr/federation-codegen':
+        specifier: workspace:*
+        version: link:../federation-codegen
       '@biomejs/biome':
         specifier: ^2.5.1
         version: 2.5.3

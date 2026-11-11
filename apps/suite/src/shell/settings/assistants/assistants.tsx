@@ -24,6 +24,7 @@ import { usePodSessionState } from "@/lib/session/shell-pod-session";
 import type { PodSession } from "@/lib/session/types";
 import { CopyButton } from "@/shell/account/account-card";
 import { useSuiteEnvironment } from "@/shell/environment";
+import { ConnectedAssistants } from "./connected";
 import { assistantCopy } from "./copy";
 import { auditRead } from "./read";
 import "./assistants.css";
@@ -107,9 +108,11 @@ type AuditState =
 export function PersonalDataReads({
   session,
   source = monthlyAuditSource,
+  names = {},
 }: {
   session: PodSession;
   source?: AuditSource;
+  names?: Record<string, string>;
 }) {
   const online = useOnline();
   const [attempt, setAttempt] = useState(0);
@@ -172,7 +175,7 @@ export function PersonalDataReads({
                 })}{" "}
                 UTC
               </time>
-              <strong>{clientLabel(row.client)}</strong>
+              <strong>{names[row.client] ?? clientLabel(row.client)}</strong>
               {row.tool && <span>Tool: {row.tool}</span>}
               {row.purpose && (
                 <span>Purpose: {dpvPurposeLabel(row.purpose) ?? "Other purpose"}</span>
@@ -199,11 +202,22 @@ export function AssistantSettings() {
 function AssistantSettingsContent() {
   const env = useSuiteEnvironment();
   const state = usePodSessionState();
+  const [named, setNamed] = useState<{ session: PodSession; names: Record<string, string> }>();
   return (
     <>
       <ConnectAssistant url={env.NEXT_PUBLIC_SUITE_MCP_URL} />
       {state.status === "ready" ? (
-        <PersonalDataReads session={state.session} />
+        <>
+          <ConnectedAssistants
+            key={state.session.webId}
+            session={state.session}
+            onNames={setNamed}
+          />
+          <PersonalDataReads
+            session={state.session}
+            names={named?.session === state.session ? named.names : {}}
+          />
+        </>
       ) : state.status === "loading" ? (
         <LoadingSkeleton preset="list" label="Opening your pod" />
       ) : state.status === "signed-out" ? (

@@ -35,25 +35,28 @@
     "SKILL.md"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
-    "lint": "biome check src test vitest.config.ts",
+    "build": "tsc -p tsconfig.build.json && node scripts/copy-generated.mjs",
+    "lint": "biome check src test scripts codegen.config.json package.json vitest.config.ts",
     "lint:fix": "biome check --write src test vitest.config.ts",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.test.json",
     "test": "vitest run --coverage",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "codegen": "node node_modules/@jeswr/federation-codegen/dist/cli.js gen --ontology codegen/connections.ttl --shapes codegen/connections.shacl.ttl --config codegen.config.json --out src/generated"
   },
   "dependencies": {
     "@jeswr/fetch-rdf": "workspace:*",
     "@jeswr/ldp-container": "workspace:*",
     "@rdfjs/wrapper": "0.34.0",
-    "n3": "2.0.3"
+    "n3": "2.0.3",
+    "@jeswr/model-runtime": "workspace:*"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.1",
     "@types/n3": "^1.26.1",
     "typescript": "^6.0.3",
     "vitest": "^4.1.9",
-    "@vitest/coverage-v8": "4.1.10"
+    "@vitest/coverage-v8": "4.1.10",
+    "@jeswr/federation-codegen": "workspace:*"
   },
   "engines": {
     "node": ">=24"
