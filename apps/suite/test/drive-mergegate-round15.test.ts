@@ -16,7 +16,8 @@ it("a file placeholder without its PUT validator retains empty recovery without 
   const f = await wacPod();
   const to = `${PUBLIC}copy.txt`;
   f.after(async (url, method, response) => {
-    if (url === to && method === "PUT") response.headers.delete("etag");
+    // No validator from the PUT or from reading the placeholder back (sst-2vvz).
+    if (url === to && (method === "PUT" || method === "GET")) response.headers.delete("etag");
     return response;
   });
   const client = createSolidDriveClient({ storageUrl: ROOT, fetch: f.fetch });

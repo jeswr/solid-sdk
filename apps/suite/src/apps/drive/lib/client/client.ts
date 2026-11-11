@@ -906,6 +906,36 @@ export function createSolidDriveClient(options: {
     return retained;
   };
 
+  // Some servers (Community Solid Server 7) answer a successful PUT with 201 or
+  // 205 and no ETag. Read the file back and adopt its strong validator as this
+  // PUT's receipt only while it still holds exactly the bytes we sent; any other
+  // representation is a concurrent write and keeps the missing-receipt path.
+  // (sst-2vvz; containers are excluded, their listings are not our bytes.)
+  const readBackReceipt = async (
+    url: string,
+    response: Response,
+    sent: Blob | string,
+  ): Promise<Response> => {
+    const etag = response.headers.get("etag");
+    if (url.endsWith("/") || (etag && !etag.startsWith("W/"))) return response;
+    const current = await http(url, { cache: "no-store" });
+    const receipt = current.headers.get("etag");
+    if (!current.ok || !receipt || receipt.startsWith("W/")) return response;
+    const [stored, expected] = await Promise.all([
+      current.arrayBuffer().then((buffer) => new Uint8Array(buffer)),
+      new Response(sent).arrayBuffer().then((buffer) => new Uint8Array(buffer)),
+    ]);
+    if (stored.length !== expected.length || stored.some((byte, index) => byte !== expected[index]))
+      return response;
+    const headers = new Headers(response.headers);
+    headers.set("etag", receipt);
+    return new Response(null, {
+      status: response.status,
+      statusText: response.statusText,
+      headers,
+    });
+  };
+
   // The payload/container PUT seam; quarantine clears a privately retained PUT
   // directly through commitHttp without editing a concurrently changed ACL.
   // A provisioner skips only its own unfinished ACL while creating an empty
@@ -1111,8 +1141,9 @@ export function createSolidDriveClient(options: {
       url,
       init: { ...init, headers },
       error: (status, url) => errorFor(status === 404 || status === 410 ? 412 : status, url),
-      response: async (response) => {
-        await ensureOk(response, url);
+      response: async (written) => {
+        await ensureOk(written, url);
+        const response = await readBackReceipt(url, written, init.body);
         if (headers.get("if-none-match") === "*") access.recordCreation(url, response.headers);
         effects.onWritten?.(response);
         return response;

@@ -1040,9 +1040,19 @@ describe("Drive data-safety regressions", () => {
     "ignored-condition",
   ])("keeps the source when the destination copy cannot be verified (%s)", async (failure) => {
     const destination = `${TO}a`;
+    let readBack = false;
     const { pod, client, fetch } = setup(async (url, init) => {
+      // sst-2vvz: the read-back of the written copy offers no strong validator either.
+      if (readBack && url === destination && (init?.method ?? "GET") === "GET") {
+        readBack = false;
+        const response = await pod.fetch(url, init);
+        if (failure === "no-etag") response.headers.delete("etag");
+        else response.headers.set("etag", 'W/"copy"');
+        return response;
+      }
       if (url === destination && init?.method === "PUT") {
         const response = await pod.fetch(url, init);
+        readBack = failure === "no-etag" || failure === "weak-etag";
         if (failure === "no-etag") response.headers.delete("etag");
         else if (failure === "weak-etag") response.headers.set("etag", 'W/"copy"');
         else if (failure === "missing") await pod.fetch(url, { method: "DELETE" });

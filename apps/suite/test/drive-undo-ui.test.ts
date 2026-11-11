@@ -37,7 +37,7 @@ function transport(
       return current
         ? new Response(method === "HEAD" ? null : current.body, {
             headers: {
-              etag: current.etag,
+              ...(current.etag ? { etag: current.etag } : {}),
               "content-type": "text/plain",
               "x-solid-demo-access-control": "none",
             },
@@ -48,7 +48,11 @@ function transport(
         return new Response(null, { status: 412 });
       const body = init?.body;
       expect(body).toBeInstanceOf(Blob);
-      files.set(url, { etag: '"created"', body: await (body as Blob).text() });
+      // sst-2vvz: without a created validator, reading the copy back offers none either.
+      files.set(url, {
+        etag: options.omitCreatedEtag ? "" : '"created"',
+        body: await (body as Blob).text(),
+      });
       return new Response(null, {
         status: 201,
         headers: options.omitCreatedEtag ? {} : { etag: '"created"' },
