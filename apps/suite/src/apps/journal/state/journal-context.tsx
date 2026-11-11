@@ -27,18 +27,25 @@ export function JournalProvider({
 }: {
   session: PodSession;
   children: ReactNode;
-  fallback: (error: boolean, retry: () => void, makePrivate?: () => void) => ReactNode;
+  fallback: (
+    error: boolean,
+    retry: () => void,
+    makePrivate?: () => void,
+    message?: string,
+  ) => ReactNode;
 }) {
   const [value, setValue] = useState<JournalContextValue | null>(null);
   const [error, setError] = useState(false);
   const [attempt, setAttempt] = useState(0);
   const [repair, setRepair] = useState<JournalStore | null>(null);
+  const [privacyMessage, setPrivacyMessage] = useState<string>();
   // biome-ignore lint/correctness/useExhaustiveDependencies: attempt retries setup
   useEffect(() => {
     let live = true;
     setValue(null);
     setError(false);
     setRepair(null);
+    setPrivacyMessage(undefined);
     let stop: (() => void) | undefined;
     let opening: JournalStore | undefined;
     void (async () => {
@@ -60,6 +67,7 @@ export function JournalProvider({
     })().catch((cause) => {
       if (live) {
         setError(true);
+        if (cause instanceof JournalPrivacyError) setPrivacyMessage(cause.message);
         if (cause instanceof JournalPrivacyError && cause.canMakePrivate && opening)
           setRepair(opening);
       }
@@ -80,13 +88,15 @@ export function JournalProvider({
             setError(false);
             void repair.makePrivate().then(
               () => setAttempt((n) => n + 1),
-              () => {
+              (cause) => {
                 setError(true);
+                if (cause instanceof JournalPrivacyError) setPrivacyMessage(cause.message);
                 toast.error("Couldn't make your journal private. Reconnect and try again.");
               },
             );
           }
         : undefined,
+      privacyMessage,
     )
   );
 }

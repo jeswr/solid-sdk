@@ -18,6 +18,10 @@ interfaces. Entries are individual Turtle documents with a `#it` subject. Preser
 server-returned URLs and use the ETag the user edited from for save/delete. A tab may
 advance that validator only through its own confirmed write chain. Surface 412 conflicts
 and keep drafts until the user explicitly overwrites or discards them.
+`read(url)` verifies privacy and returns one entry with its ETag, independently of other
+entries. Use it for explicit overwrite and missing-validator recovery; a normal retry
+with an observed ETag must retain that validator. A conflicted create may be explicitly
+replaced with a fresh create by supplying a new input object.
 
 Privacy is fail-closed and WAC-only. `protectJournal` checks the complete policy as well
 as projected roles, because partial grants can disappear from role projections. Setup
@@ -25,6 +29,9 @@ seals absent own ACLs automatically only when effective inherited defaults are o
 new folders and the explicit `makePrivate` action may seal broader inheritance. Every
 seal uses `setGrants` with `ownOnly` and the observed snapshot, then verifies it. Do not
 edit ancestor ACLs or widen permissions. Unsupported/unreadable policies remain errors.
+Revoked WAC authorisations with no principals are inert and may remain in the ACL;
+privacy checks still require active owner-only grants. Differing folder/member scopes
+are refused with a message directing the user to review both scopes in Drive.
 
 Listing verifies the folder once and loads at most six entries concurrently. Per-entry
 HEAD/advertised ACL checks catch overrides before reading bodies. `onPrivacySkip` reports

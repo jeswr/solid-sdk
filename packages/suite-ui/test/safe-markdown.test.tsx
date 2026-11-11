@@ -28,6 +28,26 @@ it("renders formatting with headings below the page heading and no active HTML o
     expect(html).not.toContain(value);
 });
 
+it.each([
+  undefined,
+  "_self",
+  "_blank",
+] as const)("honours linkTarget %s without bypassing URL sanitisation", (linkTarget) => {
+  const html = renderToStaticMarkup(
+    <SafeMarkdown {...(linkTarget ? { linkTarget } : {})}>
+      {'[Notes](https://example.org/ "My notes") [Local](/notes) [Unsafe](javascript:alert%281%29)'}
+    </SafeMarkdown>,
+  );
+  expect(html).toContain('href="https://example.org/"');
+  expect(html).toContain('href="/notes"');
+  expect(html).toContain('title="My notes"');
+  if (linkTarget) expect(html).toContain(`target="${linkTarget}"`);
+  else expect(html).not.toContain("target=");
+  if (linkTarget === "_blank") expect(html).toContain('rel="noopener noreferrer"');
+  else expect(html).not.toContain("rel=");
+  expect(html).not.toContain("javascript:");
+});
+
 it("keeps safe links and removes executable URL schemes", () => {
   const html = renderToStaticMarkup(
     <SafeMarkdown>

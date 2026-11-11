@@ -32,10 +32,20 @@ import { useJournal } from "../state/journal-context";
 import { JournalCalendar } from "./calendar";
 import { Editor } from "./editor";
 import { Photo } from "./photo";
+import { PrivacyRepair } from "./privacy-repair";
 
 export function JournalPage() {
-  const { entries, loading, error, saving, failed, skipped, needsPrivacy, controller } =
-    useJournal();
+  const {
+    entries,
+    loading,
+    error,
+    saving,
+    failed,
+    skipped,
+    needsPrivacy,
+    privacyMessage,
+    controller,
+  } = useJournal();
   const connection = useConnectionState();
   const [now, setNow] = useState(() => new Date());
   const newDraftStarted = useRef(false);
@@ -62,6 +72,8 @@ export function JournalPage() {
   const streak = calculateStreak(entries, now, timeZone);
   const memories = onThisDay(entries, now, timeZone);
   const selected = entries.find((entry) => entry.url === reading);
+  const linkTarget =
+    saving > 0 || failed.length > 0 || newDraftStarted.current || editing ? "_blank" : "_self";
   const filtered = useMemo(() => {
     const search = query.trim().toLocaleLowerCase("en-GB");
     return entries.filter(
@@ -157,22 +169,30 @@ export function JournalPage() {
           {failed.some((edit) => !edit.conflict) && (
             <Button onClick={() => controller.retryFailed()}>Retry unsaved changes</Button>
           )}
-          {failed
-            .filter((edit) => edit.conflict)
-            .map((edit) => (
-              <section
-                key={edit.id}
-                aria-label={`Conflict: ${edit.data?.title || "Untitled entry"}`}
-              >
-                <p>This entry changed on another device. Your version is kept below.</p>
-                {edit.data && <SafeMarkdown className="jn-prose">{edit.data.text}</SafeMarkdown>}
-                {!edit.data && <p>Your change: delete this entry.</p>}
+          {failed.map((edit) => (
+            <section
+              key={edit.id}
+              aria-label={`${edit.conflict ? "Conflict" : "Unsaved change"}: ${edit.data?.title || "Untitled entry"}`}
+            >
+              <p>
+                {edit.conflict
+                  ? "This entry changed on another device. Your version is kept below."
+                  : "This change couldn't be saved. You can retry or discard it."}
+              </p>
+              {edit.data && (
+                <SafeMarkdown className="jn-prose" linkTarget="_blank">
+                  {edit.data.text}
+                </SafeMarkdown>
+              )}
+              {!edit.data && <p>Your change: delete this entry.</p>}
+              {edit.conflict && (
                 <Button onClick={() => controller.overwriteFailed(edit.id)}>Overwrite</Button>
-                <Button variant="outline" onClick={() => controller.discardFailed(edit.id)}>
-                  Discard mine
-                </Button>
-              </section>
-            ))}
+              )}
+              <Button variant="outline" onClick={() => controller.discardFailed(edit.id)}>
+                Discard mine
+              </Button>
+            </section>
+          ))}
           <Button
             variant="outline"
             onClick={() => {
@@ -289,14 +309,13 @@ export function JournalPage() {
             We couldn't refresh your journal. Reconnect and try again. Export is paused until all
             entries are available.
           </p>
+          {privacyMessage && <p>{privacyMessage}</p>}
           {needsPrivacy && (
-            <Button
-              onClick={() => {
+            <PrivacyRepair
+              makePrivate={() => {
                 void controller.makePrivate();
               }}
-            >
-              Make my journal private
-            </Button>
+            />
           )}
         </ErrorState>
       ) : view === "calendar" ? (
@@ -436,7 +455,9 @@ export function JournalPage() {
                   {[selected.location, selected.weather].filter(Boolean).join(" · ")}
                 </span>
               </div>
-              <SafeMarkdown className="jn-prose">{selected.text}</SafeMarkdown>
+              <SafeMarkdown className="jn-prose" linkTarget={linkTarget}>
+                {selected.text}
+              </SafeMarkdown>
               {selected.images?.map((url, index) => (
                 <Photo key={url} url={url} number={index + 1} />
               ))}

@@ -23,9 +23,10 @@ export interface JournalSnapshot {
   failed: FailedEdit[];
   skipped: number;
   needsPrivacy: boolean;
+  privacyMessage: string | null;
 }
 
-/** Refreshes update display data; only this tab's successful writes advance an edit's ETag. */
+/** Keep observed validators; resolve missing ones only after this tab's pending write. */
 export class JournalController {
   private baseline = new Map<string, JournalEntry>();
   private confirmed = new Map<string, Map<string, JournalEntry>>();
@@ -42,6 +43,7 @@ export class JournalController {
     failed: [],
     skipped: 0,
     needsPrivacy: false,
+    privacyMessage: null,
   };
   constructor(
     private store: JournalStore,
@@ -77,7 +79,13 @@ export class JournalController {
       if (generation !== this.readGeneration || writes !== this.generation || this.edits.length)
         return;
       this.baseline = new Map(entries.map((entry) => [entry.url, entry]));
-      this.publish({ loading: false, error: false, skipped, needsPrivacy: false });
+      this.publish({
+        loading: false,
+        error: false,
+        skipped,
+        needsPrivacy: false,
+        privacyMessage: null,
+      });
     } catch (error) {
       if (generation !== this.readGeneration) return;
       if (
@@ -92,6 +100,7 @@ export class JournalController {
         loading: false,
         error: true,
         needsPrivacy: error instanceof JournalPrivacyError && error.canMakePrivate,
+        privacyMessage: error instanceof JournalPrivacyError ? error.message : null,
       });
     }
   }
@@ -116,12 +125,9 @@ export class JournalController {
       try {
         if (edit.overwrite) {
           // Explicit user choice only. Even Overwrite uses a fresh conditional validator.
-          const entries = await this.store.list();
-          const latest = entries.find((entry) => entry.url === edit.key);
-          if (!latest)
-            throw new Error("The entry is no longer available. Your words are kept here.");
-          current = latest;
+          current = edit.key.startsWith("draft:") ? undefined : await this.store.read(edit.key);
         } else {
+          if (current?.url.startsWith("draft:")) current = undefined;
           const seen = new Set<string>();
           while (current?.etag && !seen.has(current.etag)) {
             seen.add(current.etag);
@@ -133,12 +139,15 @@ export class JournalController {
             throw Object.assign(new Error("Resolve the conflicting entry before saving."), {
               code: "precondition-failed",
             });
+          if (current && !current.etag) current = await this.store.read(current.url);
         }
         if (edit.data) {
+          const uploaded: string[] = [];
           edit.photos ??= [];
           while (edit.photos.length) {
             const photo = edit.photos[0] as Blob;
             const image = await this.store.attach(photo);
+            uploaded.push(image);
             edit.data = { ...edit.data, images: [...(edit.data.images ?? []), image] };
             edit.photos = edit.photos.slice(1);
           }
@@ -158,11 +167,18 @@ export class JournalController {
                 (failed) => failed.conflict || failed.existing?.url !== currentUrl,
               ),
             };
-          // Later edits to a just-created record follow the server-assigned URL.
+          // Optimistic entries have no validator (and new ones have a draft URL).
+          // They follow our completed write, including its server-assigned URL.
           for (const later of this.edits)
             if (later.id > edit.id && later.key === edit.key) {
               later.key = result.url;
-              if (!later.existing) later.existing = result;
+              if (!later.existing?.etag || later.existing.url.startsWith("draft:"))
+                later.existing = result;
+              if (later.data && uploaded.length)
+                later.data = {
+                  ...later.data,
+                  images: [...new Set([...(later.data.images ?? []), ...uploaded])],
+                };
             }
         } else if (current) {
           await this.store.remove(current);
@@ -201,15 +217,17 @@ export class JournalController {
     const failed = this.snapshot.failed.filter((edit) => !edit.conflict);
     this.publish({ failed: this.snapshot.failed.filter((edit) => edit.conflict) });
     for (const edit of failed) {
-      if (edit.data) this.save(edit.data, edit.existing, edit.photos);
-      else if (edit.existing) this.remove(edit.existing);
+      this.enqueue({ ...edit, id: ++this.generation });
     }
   }
   overwriteFailed(id: number): void {
     const edit = this.snapshot.failed.find((edit) => edit.id === id && edit.conflict);
     if (!edit) return;
     this.discardFailed(id);
-    this.enqueue({ ...edit, id: ++this.generation, overwrite: true });
+    // A conflicted create has no observed resource to overwrite. A new input identity
+    // explicitly starts a fresh create instead of resuming its interrupted URL.
+    const data = edit.key.startsWith("draft:") && edit.data ? { ...edit.data } : edit.data;
+    this.enqueue({ ...edit, data, id: ++this.generation, overwrite: true });
   }
   discardFailed(id: number): void {
     this.publish({ failed: this.snapshot.failed.filter((edit) => edit.id !== id) });
@@ -218,7 +236,8 @@ export class JournalController {
     try {
       await this.store.makePrivate();
       await this.load();
-    } catch {
+    } catch (error) {
+      if (error instanceof JournalPrivacyError) this.publish({ privacyMessage: error.message });
       this.onFailure();
     }
   }

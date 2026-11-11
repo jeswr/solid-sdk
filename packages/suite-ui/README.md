@@ -297,6 +297,10 @@ removed, and remote image requests are suppressed. Object URLs are revoked on re
 and unmount. Supply blobs already read through the SDK; this package makes no network reads.
 The host owns preview navigation, metadata retrieval, headings and the enclosing dialog.
 
+`SafeMarkdown` provides the same safe rendering for app content. Its optional
+`linkTarget="_blank"` opens links with `rel="noopener noreferrer"` to protect unsaved work.
+Omitting `linkTarget` keeps ordinary link navigation, including in `PreviewPane`.
+
 All three accept `state` (`ready`, `loading`, `empty`, `filtered-empty` with `query`,
 `error` with a classified `SurfaceError`) and an `onAction` recovery callback. They do not
 classify SDK errors themselves. Error feedback keeps that callback available as Sign in

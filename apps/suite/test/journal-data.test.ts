@@ -4,6 +4,7 @@ import { ENTRY_CLASS, type EntryData, type JournalStore } from "@jeswr/solid-jou
 import { expect, it, vi } from "vitest";
 import { ensureSample, sampleEntries } from "../src/apps/journal/demo/sample";
 import { openJournalData } from "../src/apps/journal/lib/data/store";
+import { JournalController } from "../src/apps/journal/state/journal-controller";
 import { createDemoPod } from "../src/lib/demo-pod/pod";
 import { buildDemoSeed, DEMO_ROOT, DEMO_WEBID } from "../src/lib/demo-pod/seed";
 import type { PodSession } from "../src/lib/session/pod-session";
@@ -82,4 +83,38 @@ it("permits demo seeding to retry after a failed attempt", async () => {
   await expect(ensureSample(session, store, NOW)).rejects.toThrow("offline");
   await ensureSample(session, store, NOW);
   expect(list).toHaveBeenCalledTimes(2);
+});
+
+it("recovers a real create 412 through an explicitly chosen fresh create", async () => {
+  const { session } = await fixture();
+  let conflicted = false;
+  const fetch: typeof globalThis.fetch = async (input, init) => {
+    if (
+      !conflicted &&
+      init?.method === "PUT" &&
+      String(input).startsWith(`${DEMO_ROOT}journal/`) &&
+      String(input).endsWith(".ttl") &&
+      typeof init.body === "string" &&
+      init.body.length > 0
+    ) {
+      conflicted = true;
+      return new Response(null, { status: 412 });
+    }
+    return session.fetch(input, init);
+  };
+  const store = await openJournalData({ ...session, fetch });
+  await store.initialize();
+  const controller = new JournalController(store, vi.fn());
+  controller.save(draft, undefined, [new Blob(["photo"], { type: "image/png" })]);
+  await controller.settled();
+  expect(conflicted).toBe(true);
+  const conflict = controller.getSnapshot().failed[0];
+  expect(conflict).toMatchObject({ conflict: true, key: expect.stringMatching(/^draft:/) });
+  controller.overwriteFailed(conflict?.id ?? -1);
+  await controller.settled();
+  expect(controller.getSnapshot().failed).toEqual([]);
+  const entries = await store.list();
+  expect(entries).toHaveLength(1);
+  expect(entries[0]?.text).toBe(draft.text);
+  expect(entries[0]?.images).toHaveLength(1);
 });

@@ -1,6 +1,6 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
 import { type EffectivePolicy, readWac } from "@jeswr/pod-access";
-import { type RoleGrant, readGrants, setGrants } from "@jeswr/pod-access/roles";
+import { isRoleError, type RoleGrant, readGrants, setGrants } from "@jeswr/pod-access/roles";
 import { type StorageClient, StorageError } from "@jeswr/storage-client";
 
 export class JournalPrivacyError extends Error {
@@ -11,6 +11,14 @@ export class JournalPrivacyError extends Error {
   ) {
     super(message, options);
   }
+}
+function explainPartialScope(error: unknown): never {
+  if (isRoleError(error) && error.code === "partial-scope")
+    throw new JournalPrivacyError(
+      "The journal folder and its entries have different permissions. Review both in Drive before making your journal private.",
+      { cause: error },
+    );
+  throw error;
 }
 
 export function isOwnerOnly(grants: readonly RoleGrant[], owner: string): boolean {
@@ -24,13 +32,15 @@ export function isOwnerOnly(grants: readonly RoleGrant[], owner: string): boolea
 }
 /** Role projections omit partial grants. Inspect the complete SDK policy before claiming privacy. */
 export function isOwnerOnlyPolicy(policy: EffectivePolicy, owner: string): boolean {
+  // WAC replacement can retain targeted authorisations with no principals. Their
+  // empty disjunction grants nobody access; require a nonempty owner grant as well.
+  const active = policy.grants.filter((grant) => grant.who.length > 0);
   return (
-    policy.grants.length > 0 &&
+    active.length > 0 &&
     policy.denials.length === 0 &&
-    policy.grants.every(
+    active.every(
       (grant) =>
         grant.except.length === 0 &&
-        grant.who.length > 0 &&
         grant.who.every(
           (clause) =>
             clause.length === 1 && clause[0]?.kind === "agent" && clause[0].webId === owner,
@@ -89,7 +99,7 @@ export async function protectJournal(
     webId: owner,
     model: "wac" as const,
   };
-  const snapshot = await readGrants(container, options);
+  const snapshot = await readGrants(container, options).catch(explainPartialScope);
   if (!seal) {
     const own = await ownPolicy(storage, container);
     const policy = own ?? (await inheritedPolicy(storage, container));
@@ -106,11 +116,14 @@ export async function protectJournal(
     [{ agent: { type: "webid", id: owner }, role: "manager", inherited: false, source: "" }],
     { ...options, expected: snapshot, ownOnly: true },
   );
-  if (result.failed.length)
+  if (result.failed.length) {
+    if (isRoleError(result.failed[0]?.error) && result.failed[0].error.code === "partial-scope")
+      explainPartialScope(result.failed[0].error);
     throw new JournalPrivacyError("Couldn't make your journal private", {
       cause: result.failed[0]?.error,
     });
-  const verified = await readGrants(container, options);
+  }
+  const verified = await readGrants(container, options).catch(explainPartialScope);
   if (!isOwnerOnly(verified.grants, owner))
     throw new JournalPrivacyError("Couldn't verify private journal access");
   const policy = await ownPolicy(storage, container);

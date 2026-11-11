@@ -37,6 +37,7 @@ beforeEach(() => {
     initialize: vi.fn(async () => {}),
     makePrivate: vi.fn(async () => {}),
     list: vi.fn(async () => []),
+    read: vi.fn(),
     save: vi.fn(),
     remove: vi.fn(),
     attach: vi.fn(),
@@ -126,4 +127,23 @@ it("retains the repair action when making private fails", async () => {
   await act(async () => host.querySelector("button")?.click());
   expect(host.textContent).toBe("Make my journal private");
   expect(ensureSample).not.toHaveBeenCalled();
+});
+
+it("passes the actionable privacy explanation to the boot screen", async () => {
+  const message =
+    "The journal folder and its entries have different permissions. Review both in Drive.";
+  vi.mocked(store.initialize).mockRejectedValueOnce(new JournalPrivacyError(message));
+  await act(async () =>
+    root.render(
+      <JournalProvider
+        session={session}
+        fallback={(error, _retry, _repair, explanation) => <p>{error ? explanation : "Opening"}</p>}
+      >
+        <Probe />
+      </JournalProvider>,
+    ),
+  );
+  expect(host.textContent).toBe(message);
+  expect(store.makePrivate).not.toHaveBeenCalled();
+  expect(store.list).not.toHaveBeenCalled();
 });

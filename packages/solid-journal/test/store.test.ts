@@ -5,7 +5,7 @@ import { createPodClient, type PodClient, StorageError } from "@jeswr/storage-cl
 import { createMemoryStorage } from "@jeswr/storage-client/memory";
 import { beforeEach, expect, it, vi } from "vitest";
 import { entryEntity } from "../src/model.js";
-import { protectJournal } from "../src/privacy.js";
+import { JournalPrivacyError, protectJournal, verifyJournalResource } from "../src/privacy.js";
 import { createJournalStore, openJournal, validatePhoto } from "../src/store.js";
 
 vi.mock("../src/privacy.js", async (original) => ({
@@ -173,4 +173,37 @@ it("retries a lost write response without creating a second entry", async () => 
   const recovered = await store.save(data);
   expect(recovered.text).toBe(data.text);
   expect(await store.list()).toHaveLength(1);
+});
+
+it("reads one private entry with its ETag without listing unrelated shared entries", async () => {
+  const { storage, store } = fixture();
+  await store.initialize();
+  const saved = await store.save(data);
+  const other = await store.save({ ...data, text: "Other" });
+  vi.mocked(verifyJournalResource).mockImplementation(async (_, url) => {
+    if (url === other.url) throw new JournalPrivacyError("shared");
+  });
+  const listing = vi.spyOn(storage, "listAll");
+  const reads = vi.spyOn(storage, "readRdf");
+  expect(await store.read(saved.url)).toEqual(saved);
+  expect(listing).not.toHaveBeenCalled();
+  expect(reads).toHaveBeenCalledExactlyOnceWith(saved.url);
+  await expect(store.read(other.url)).rejects.toThrow("shared");
+  expect(reads).toHaveBeenCalledOnce();
+  await expect(store.read("https://foreign.example/one.ttl")).rejects.toThrow("escapes");
+  await expect(store.read(`${store.container}nested/one.ttl`)).rejects.toThrow("outside");
+  await expect(store.read(`${store.container}missing.ttl`)).rejects.toMatchObject({
+    code: "not-found",
+  });
+  const empty = await storage.create(store.container, "", {
+    name: "empty.ttl",
+    contentType: "text/turtle",
+  });
+  await expect(store.read(empty.url)).rejects.toThrow("no longer available");
+  const invalid = await storage.create(
+    store.container,
+    await entryEntity.serialize(`${store.container}invalid.ttl`, { ...data, text: "" }),
+    { name: "invalid.ttl", contentType: "text/turtle" },
+  );
+  await expect(store.read(invalid.url)).rejects.toThrow("couldn't be read");
 });

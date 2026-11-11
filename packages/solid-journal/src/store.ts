@@ -21,6 +21,7 @@ export interface JournalStore {
   initialize(): Promise<void>;
   makePrivate(): Promise<void>;
   list(options?: { onPrivacySkip?: (url: string) => void }): Promise<JournalEntry[]>;
+  read(url: string): Promise<JournalEntry>;
   save(data: EntryData, existing?: JournalEntry): Promise<JournalEntry>;
   remove(entry: JournalEntry): Promise<void>;
   attach(file: Blob): Promise<string>;
@@ -51,6 +52,15 @@ export function createJournalStore(
       new URL(".", url).href !== container
     )
       throw new TypeError("Resource is outside your journal");
+  };
+  const readEntry = async (url: string): Promise<JournalEntry | null> => {
+    owned(url);
+    await verifyJournalResource(storage, url, owner, fetch);
+    const read = await storage.readRdf(url);
+    if (read.dataset.size === 0) return null;
+    const data = entryEntity.parse(url, read.dataset);
+    if (!data) throw new Error("A journal entry couldn't be read. Your data has not been changed.");
+    return { ...data, url, etag: read.etag };
   };
   return {
     get container() {
@@ -83,20 +93,14 @@ export function createJournalStore(
       const entries: JournalEntry[] = [];
       const load = async (url: string) => {
         try {
-          await verifyJournalResource(storage, url, owner, fetch);
+          const entry = await readEntry(url);
+          if (entry) entries.push(entry);
         } catch (error) {
           if (!(error instanceof JournalPrivacyError)) throw error;
           // Without a reporting consumer, refuse an incomplete export/list entirely.
           if (!options?.onPrivacySkip) throw error;
           options.onPrivacySkip(url);
-          return;
         }
-        const read = await storage.readRdf(url);
-        if (read.dataset.size === 0) return; // An interrupted creation has no journal content.
-        const data = entryEntity.parse(url, read.dataset);
-        if (!data)
-          throw new Error("A journal entry couldn't be read. Your data has not been changed.");
-        entries.push({ ...data, url, etag: read.etag });
       };
       let batch: string[] = [];
       for await (const item of storage.listAll(container, { maxBytes: 4 * 1024 * 1024 })) {
@@ -112,6 +116,13 @@ export function createJournalStore(
       return entries.sort(
         (a, b) => b.created.getTime() - a.created.getTime() || a.url.localeCompare(b.url),
       );
+    },
+    async read(url) {
+      owned(url);
+      await privacy();
+      const entry = await readEntry(url);
+      if (!entry) throw new Error("The entry is no longer available. Your words are kept here.");
+      return entry;
     },
     async save(data, existing) {
       const clean = validateEntry(data);

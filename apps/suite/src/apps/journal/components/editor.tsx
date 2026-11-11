@@ -146,7 +146,7 @@ export function Editor({
           </div>
           {preview ? (
             <section className="jn-preview" aria-label="Markdown preview">
-              <SafeMarkdown className="jn-prose">
+              <SafeMarkdown className="jn-prose" linkTarget="_blank">
                 {text || "Your preview will appear here."}
               </SafeMarkdown>
             </section>

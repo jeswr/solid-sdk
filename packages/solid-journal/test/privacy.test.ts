@@ -15,7 +15,11 @@ import {
 } from "../src/privacy.js";
 import { createJournalStore } from "../src/store.js";
 
-vi.mock("@jeswr/pod-access/roles", () => ({ readGrants: vi.fn(), setGrants: vi.fn() }));
+vi.mock("@jeswr/pod-access/roles", async (original) => ({
+  ...(await original<typeof import("@jeswr/pod-access/roles")>()),
+  readGrants: vi.fn(),
+  setGrants: vi.fn(),
+}));
 const owner = "https://pod.example/profile/card#me";
 const root = "https://pod.example/";
 const container = `${root}journal/`;
@@ -62,6 +66,10 @@ it("requires the owner to be the only principal, including partial-mode policies
   expect(isOwnerOnlyPolicy({ grants: [], denials: [] }, owner)).toBe(false);
   expect(isOwnerOnlyPolicy({ ...policy, denials: policy.grants }, owner)).toBe(false);
   const base = policy.grants[0] as EffectivePolicy["grants"][number];
+  expect(isOwnerOnlyPolicy({ grants: [base, { ...base, who: [] }], denials: [] }, owner)).toBe(
+    true,
+  );
+  expect(isOwnerOnlyPolicy({ grants: [{ ...base, who: [[]] }], denials: [] }, owner)).toBe(false);
   for (const item of [
     { ...base, except: [{ kind: "public" as const }] },
     { ...base, who: [] },
@@ -126,6 +134,14 @@ it("seals only a new folder through conditional owner-only SDK grants and verifi
   );
   await protectJournal(storage, container, owner, vi.fn());
   expect(setGrants).toHaveBeenCalledTimes(1);
+});
+
+it("preserves an unexpected grants-read failure without changing access", async () => {
+  const storage = await fixture();
+  const error = new Error("offline");
+  vi.mocked(readGrants).mockRejectedValueOnce(error);
+  await expect(protectJournal(storage, container, owner, vi.fn(), true)).rejects.toBe(error);
+  expect(setGrants).not.toHaveBeenCalled();
 });
 it("refuses shared, incomplete, absent or unreadable folder privacy instead of writing journal content", async () => {
   const storage = await fixture();
