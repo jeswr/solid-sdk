@@ -11,6 +11,7 @@ import {
   type SuiteNotification,
   unreadCount,
 } from "../lib/notifications-model";
+import type { NotificationReadState } from "./read-state";
 
 export interface NotificationsSnapshot {
   items: SuiteNotification[];
@@ -23,9 +24,10 @@ export function createNotificationsController(
   sources: readonly NotificationSource[],
   decider?: AccessDecider,
   onNew: (notification: SuiteNotification) => void = () => {},
+  readState?: NotificationReadState,
 ) {
   let snapshot: NotificationsSnapshot = { items: [], unread: 0, loading: true, error: null };
-  let overlay: NotificationOverlay = { read: new Set(), dismissed: new Set() };
+  let overlay: NotificationOverlay = { read: readState?.load() ?? new Set(), dismissed: new Set() };
   const outcomes = new Map<string, string>();
   const results = new Map<string, SuiteNotification[]>();
   const listeners = new Set<() => void>();
@@ -69,6 +71,9 @@ export function createNotificationsController(
   };
   const markRead = async (ids: string[]) => {
     overlay = markNotificationsRead(overlay, ids);
+    // Save before publishing or awaiting a source: opening an item can navigate immediately.
+    // Keep these receipts even after a source confirms the in-memory overlay.
+    readState?.save(overlay.read);
     publish(snapshot.loading, snapshot.error);
     const responses = await Promise.allSettled(
       sources.map((source) => {
