@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { mkdir } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import AxeBuilder from "@axe-core/playwright";
@@ -215,4 +216,153 @@ test("DataTable: sort, hide and resize with keyboard alternatives", async ({ pag
   await collection.getByRole("checkbox", { name: "Owner", exact: true }).uncheck();
   await expect(collection.getByRole("grid")).toHaveAttribute("aria-colcount", "4");
   await screenshot(page, "data-table-column-options", info);
+});
+
+test("DataTable: listing sorting, responsive columns, keyboard and menu actions", async ({
+  page,
+}, info) => {
+  await page.goto("/dev/components/data-table");
+  await page.getByRole("checkbox", { name: "Use listing options" }).check();
+  const collection = page.getByTestId("interactive-collection");
+  const row = (name: string) => collection.getByRole("row", { name, exact: true });
+  await expect(collection.locator("th[aria-sort]")).toHaveCount(0);
+  await expect(collection.getByRole("checkbox", { name: /Select/ })).toHaveCount(0);
+  await expect(collection.getByRole("button", { name: /Resize/ })).toHaveCount(0);
+  await expect(collection.locator("summary")).toHaveCount(0);
+  const width = await collection
+    .locator(".suite-table-viewport")
+    .evaluate((element) => element.clientWidth);
+  await expect(collection.getByRole("button", { name: "Owner", exact: true })).toHaveCount(
+    width >= 1024 ? 1 : 0,
+  );
+  await expect(collection.getByRole("button", { name: "Modified", exact: true })).toHaveCount(
+    width >= 768 ? 1 : 0,
+  );
+  await page.getByRole("combobox", { name: "Listing sort" }).selectOption("name:desc");
+  await expect(
+    collection.getByRole("button", { name: "Name", exact: true }).locator(".."),
+  ).toHaveAttribute("aria-sort", "descending");
+  await expect(collection.locator("th[aria-sort]")).toHaveCount(1);
+  await expect(
+    collection.getByRole("button", { name: "Actions", exact: true }).locator(".."),
+  ).not.toHaveAttribute("aria-sort");
+  await expect(collection.locator("[data-collection-item]").first()).toHaveAttribute(
+    "aria-label",
+    "Reading list.pdf",
+  );
+  await collection.getByRole("button", { name: "Name", exact: true }).click();
+  await expect(page.getByRole("combobox", { name: "Listing sort" })).toHaveValue("");
+  await expect(collection.locator("th[aria-sort]")).toHaveCount(0);
+  await expect(collection.locator("[data-collection-item]").first()).toHaveAttribute(
+    "aria-label",
+    "Projects",
+  );
+  await page.getByRole("combobox", { name: "Listing sort" }).selectOption("name:desc");
+  await page.getByRole("checkbox", { name: "Keep input order" }).check();
+  await expect(collection.locator("[data-collection-item]").first()).toHaveAttribute(
+    "aria-label",
+    "Projects",
+  );
+  // Header state still reports the externally selected sort, without reordering input.
+  await expect(
+    collection.getByRole("button", { name: "Name", exact: true }).locator(".."),
+  ).toHaveAttribute("aria-sort", "descending");
+  await row("Projects").click();
+  await row("Q3 budget.xlsx").click({ modifiers: ["Shift"] });
+  await expect(page.getByTestId("selected-keys")).toHaveText(
+    "Projects, Holiday photos, Q3 budget.xlsx",
+  );
+  await row("Holiday photos").click({ modifiers: ["ControlOrMeta"] });
+  await expect(page.getByTestId("selected-keys")).toHaveText("Projects, Q3 budget.xlsx");
+  await collection.getByRole("button", { name: "Inspect Q3 budget.xlsx", exact: true }).click();
+  await expect(page.getByTestId("open-result")).toHaveText("Inspecting Q3 budget.xlsx");
+  await expect(page.getByTestId("selected-keys")).toHaveText("Projects, Q3 budget.xlsx");
+  await row("Holiday photos").click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Inspect Holiday photos", exact: true }).click();
+  await expect(page.getByTestId("open-result")).toHaveText("Inspecting Holiday photos");
+  await expect(page.getByTestId("selected-keys")).toHaveText("Projects, Q3 budget.xlsx");
+  await row("Projects").dblclick();
+  await expect(page.getByTestId("open-result")).toHaveText("Opened Projects");
+  await page.getByRole("checkbox", { name: "Selection follows focus" }).check();
+  await row("Projects").focus();
+  await page.keyboard.press("ArrowDown");
+  await expect(row("Holiday photos")).toBeFocused();
+  await expect(page.getByTestId("selected-keys")).toHaveText("Holiday photos");
+  await page.keyboard.press("Shift+ArrowDown");
+  await expect(page.getByTestId("selected-keys")).toHaveText("Holiday photos, Q3 budget.xlsx");
+  await page.keyboard.press("Space");
+  await expect(page.getByTestId("selected-keys")).toHaveText("Holiday photos");
+  await page.keyboard.press("Enter");
+  await expect(page.getByTestId("open-result")).toHaveText("Opened Q3 budget.xlsx");
+  await page.keyboard.press("Tab");
+  await expect(
+    collection.getByRole("button", { name: "Inspect Q3 budget.xlsx", exact: true }),
+  ).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(page.getByTestId("open-result")).toHaveText("Inspecting Q3 budget.xlsx");
+  await expect(page.getByTestId("selected-keys")).toHaveText("Holiday photos");
+  await row("Q3 budget.xlsx").focus();
+  await page.keyboard.press("ControlOrMeta+ArrowDown");
+  await expect(row("Product brief")).toBeFocused();
+  await expect(page.getByTestId("selected-keys")).toHaveText("Holiday photos");
+  await page.keyboard.press("Space");
+  await expect(page.getByTestId("selected-keys")).toHaveText("Holiday photos, Product brief");
+  await expect(collection.locator('[data-collection-item][tabindex="0"]')).toHaveCount(1);
+  await screenshot(page, "data-table-listing-options", info);
+  await page.setViewportSize({ width: 320, height: 900 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(320);
+  await expect(collection.getByRole("button", { name: "Owner", exact: true })).toHaveCount(0);
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await expect(collection.getByRole("button", { name: "Owner", exact: true })).toBeVisible();
+  await accessible(page);
+});
+
+test("DataTable: density, sticky header and generic drag targets", async ({ page }, info) => {
+  await page.goto("/dev/components/data-table");
+  await page.getByRole("checkbox", { name: "Use listing options" }).check();
+  const collection = page.getByTestId("interactive-collection");
+  const row = (name: string) => collection.getByRole("row", { name, exact: true });
+  await page.getByRole("combobox", { name: "Density" }).selectOption("compact");
+  await expect
+    .poll(async () => Math.round((await row("Projects").boundingBox())?.height ?? 0))
+    .toBe(32);
+  const viewport = collection.locator(".suite-table-viewport");
+  await viewport.evaluate((element) => {
+    element.scrollTop = 600;
+  });
+  await expect.poll(() => viewport.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+  await expect
+    .poll(async () => {
+      const header = await collection.locator("thead").boundingBox();
+      const container = await viewport.boundingBox();
+      return Math.abs((header?.y ?? 0) - (container?.y ?? 0));
+    })
+    .toBeLessThan(3);
+  await page.getByRole("checkbox", { name: "Sticky header" }).uncheck();
+  await expect(collection.locator("thead")).toHaveCSS("position", "static");
+  expect((await collection.locator("thead").boundingBox())?.y).toBeLessThan(
+    (await viewport.boundingBox())?.y ?? 0,
+  );
+  await viewport.evaluate((element) => {
+    element.scrollTop = 0;
+  });
+  await expect(row("Projects")).toBeVisible();
+  await row("Projects").dragTo(row("Holiday photos"));
+  await expect(page.getByTestId("open-result")).toHaveText("Dropped Projects on Holiday photos");
+  // Also exercise an accepted drag while the pointer rests on a target, before drop.
+  const data = await page.evaluateHandle(() => {
+    const transfer = new DataTransfer();
+    transfer.setData("text/plain", "External item");
+    return transfer;
+  });
+  await row("Q3 budget.xlsx").dispatchEvent("dragover", { dataTransfer: data });
+  await expect(row("Q3 budget.xlsx")).toHaveAttribute("data-drop", "true");
+  await expect(row("Q3 budget.xlsx")).toHaveCSS("outline-width", "2px");
+  await row("Q3 budget.xlsx").dispatchEvent("drop", { dataTransfer: data });
+  await expect(page.getByTestId("open-result")).toHaveText(
+    "Dropped External item on Q3 budget.xlsx",
+  );
+  await expect(row("Q3 budget.xlsx")).toHaveAttribute("data-drop", "false");
+  await data.dispose();
+  await screenshot(page, "data-table-listing-drop", info);
 });

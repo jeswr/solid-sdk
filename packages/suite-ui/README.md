@@ -212,7 +212,8 @@ removes just those keys when all are selected. Plain row/card click replaces sel
 checkbox/Space toggles; Shift extends a range in displayed order. Arrow keys and j/k move
 focus, Shift extends selection, Home/End jump, Cmd/Ctrl+A selects visible items, Escape clears,
 Enter calls `onOpen`, and Alt+Enter calls `onDetails`. FileGrid's vertical arrows follow its
-responsive column count. One item per collection is in the Tab sequence. Table headers expose
+responsive column count. One row/card per collection is in the Tab sequence; a custom
+DataTable renderer may also include the active row's action controls (see below). Table headers expose
 sorting, draggable resize handles (also Left/Right keys) and a Columns visibility disclosure.
 Wide table columns scroll inside the table region without widening the page.
 
@@ -222,6 +223,48 @@ Loading uses skeletons, refreshing retains content, offline without cached items
 and zero items use first-use or `filterQuery` empty states (`emptyAction` / `onClearFilters`).
 Hosts render their refresh progress in TopBar and can supply session/conflict dialogs as error actions.
 Fixtures: `/dev/components/data-table` and `/dev/components/file-grid` in `apps/suite`.
+
+### Drive adoption
+
+The existing API and defaults remain supported. All additions below are optional;
+import `DataTableSorting`, `DataTableRowContext` and `DataTableRowProps` from the package root.
+The DataTable fixture's **Use listing options** switch demonstrates the integration.
+
+| DataTable API | Drive code it replaces in `components/file-browser.tsx` / `components/drive.css` |
+| --- | --- |
+| `sorting`, `onSortingChange` | Bind `prefs.sort` to `[{ id: key, desc: dir === "desc" }]`, and map callback values back to preferences; replaces separate header sort state and provides `aria-sort` only on the currently sorted sortable header. Sorting uses a single key (`enableMultiSort: false`), including Shift-click; pass at most one entry. An empty array means input order. Omit both for local sorting. Controlled sorting without a callback displays read-only headers. |
+| `manualSorting` | Retains the order from `viewItems` (folders first), Recent or Shared. Headers still report/emit controlled sorting. Use nonsortable columns for fixed-order listings. Filtering and storage reads stay in Drive. |
+| `selection={useSelection(...)}` | Replaces listing click/range/toggle branches and the generic selection-reducer UI binding. Supports controlled `selectedKeys` / `onSelectionChange`. IDs survive filtering; explicitly clear on folder navigation and prune removed IDs according to app policy. |
+| `selectionFollowsFocus` | Replaces `step`'s plain-arrow selection update. Default arrows move focus only; opt in for Drive's selection-following arrows and Home/End. Cmd/Ctrl+(Up, Down, Home, End) moves focus without replacing selection, so Space can build a non-contiguous selection. Cmd/Ctrl+Left/Right stays with the browser. Shift extends in displayed order; Enter opens; Alt+Enter shows details. |
+| `showSelectionCheckboxes={false}` | Removes the checkbox column for Drive's row-only selection; keyboard and Cmd/Ctrl/Shift gestures remain available. Default is `true`. |
+| `openOnDoubleClick` | Replaces row `onDoubleClick` opening. Default is `false` (the default name button opens on click). When enabled, an uncustomised first cell becomes text, so clicking the name selects and double-clicking opens. `getRowProps().onClick` can handle mobile activation and prevent default selection. Custom interactive descendants own their actions. |
+| `DataColumn.visibleFrom` | Replaces `.drv-col-owner`, `.drv-col-modified`, `.drv-col-size` and `.drv-col-location` hiding rules using **collection viewport** pixels. Drive's browser-width breakpoints `1024`/`768` map to smaller collection widths; compute them from the surrounding layout as described below. User visibility choices survive resizing; the first user-enabled column is a fallback if every column would be hidden. Width-hidden choices have an accessible description. Keep the primary name column always visible. |
+| `DataColumn.render(item, context?)` | Replaces `isActive` / `isSelected` cell plumbing. The table always supplies `{ active, selected }`; the parameter is optional for source compatibility. Render native links and action buttons with `tabIndex={context?.active ? 0 : -1}` so only the active row's controls join the Tab sequence. Existing one-argument renderers work unchanged. |
+| `getRowProps(item, context)` | Replaces generic row drag handlers, drop attributes/classes and app shortcut handlers. Return native `draggable`, `onDragStart/End/Over/Leave`, `onDrop`, `onContextMenu`, etc. `data-drop={true}` gets the shared target outline. The app validates drag payloads, permissions and operations, accepts drags with `preventDefault()`, and supplies a keyboard alternative. Row click/double-click/keydown callbacks skip interactive descendants; callbacks run before built-in behavior and may prevent it. Key handlers can consume app shortcuts. Every row handler ignores portalled targets outside the row's DOM. Table focus and virtual layout stay table-owned. |
+| `renderRow(item, row)` | Replaces `ItemShell`'s wrapping of table rows. Wrap the supplied row in a Radix `ContextMenu` / `ContextMenuTrigger asChild` and retain that row. Put the overflow menu in a nonsortable custom column. Portalled menu events do not select or open rows. |
+| `showColumnOptions={false}`, `resizableColumns={false}` | Removes the built-in Columns disclosure and resize handles when Drive owns that toolbar. Defaults remain `true`. |
+| `stickyHeader` | Shared sticky header is enabled by default; `false` lets it scroll away. Row height already follows inherited `--row-h` and density changes, replacing hard-coded `.drv-table td` heights. |
+| `state`, `filterQuery`, `emptyAction`, `onClearFilters`, `onRetry` | Existing shared loading/empty/filtered/error/offline surfaces replace `LoadingList` and generic state branches. Refreshing retains rows. Drive still supplies its copy, recovery actions and permission-specific banners. |
+
+Compute a collection threshold as `browser width - rail - persistent sidebar - persistent
+details - horizontal shell padding - horizontal app padding` (and subtract any other
+insets). For example, with the current ShellFrame and `.drv-page` at 1024px, a 56px rail,
+264px sidebar, closed details and two layers of 24px inline padding give
+`1024 - 56 - 264 - 2*24 - 2*24 = 608px`. At 768px the sidebar is a sheet, giving
+`768 - 56 - 0 - 2*24 - 2*24 = 616px`. Opening details or changing chrome changes these
+numbers, so fixed collection thresholds cannot reproduce browser-width rules across
+every layout. The fixture's 1024/768 values demonstrate collection thresholds, not
+Drive's browser breakpoints. Hiding `thead` below a width is not provided; Drive must
+retain its own header-hiding rule if it needs that behavior.
+
+`getRowProps` supports row attributes and CSS; `style` must not set `display` or
+`position`. The type omits `onClickCapture`, `onKeyDownCapture`, `onFocusCapture`,
+`onContextMenuCapture` and `onPointerDownCapture`. The table reserves the virtual row's height,
+transform, grid tracks, key, accessible label, selection and roving tab stop. A wrapper
+must preserve the supplied native row and forward its ref/events through `asChild`;
+avoid extra DOM between `tbody` and `tr`. App-specific shortcuts, starred controls,
+Drive drag-token validation, upload planning, focus after dialogs and account/folder
+selection policy remain with the consumer. No Drive source is changed here.
 
 ## DS-07 editing and navigation
 
