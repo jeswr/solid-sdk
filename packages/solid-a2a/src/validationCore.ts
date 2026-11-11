@@ -6,13 +6,12 @@
 // (conforms + projected results) and NEVER throws on non-conformance — a
 // malformed intent is `conforms: false` with a populated `results`, not an error.
 
-import type { DatasetCore, Quad, Term } from "@rdfjs/types";
+import type { Quad, Term } from "@rdfjs/types";
 import { Store } from "n3";
 import SHACLValidator from "rdf-validate-shacl";
-import { intentToRdf } from "./intent.js";
-import type { Intent, ProtocolDocument, ValidationReport, ValidationResultEntry } from "./types.js";
-import type { IntentInput, ShapeInput } from "./validate.js";
+import type { ValidationReport, ValidationResultEntry } from "./types.js";
 import { validationDataset } from "./validationDataset.js";
+import { checkedQuads, UNBOUNDED } from "./validationLimits.js";
 
 /**
  * `sh:pattern` runs a shape-supplied regular expression over the data. A peer's
@@ -146,51 +145,9 @@ const SHAPE_LISTS = ["and", "or", "xone"].map((p) => SH_NS + p);
  * dozen.
  */
 const MAX_VALIDATION_STEPS = 5_000;
-/** An intent graph is a handful of triples; pairwise constraints are quadratic in it. */
-const MAX_DATA_QUADS = 1_000;
-const MAX_SHAPE_QUADS = 10_000;
 /** The validator walks lists with no cycle check and paths without memoising. */
 const MAX_LIST_LENGTH = 256;
 const MAX_PATH_SIZE = 64;
-
-const UNBOUNDED = "are not evaluated (unbounded cost)";
-
-/**
- * Term length caps. The validator keys, copies and pattern-matches whole term
- * values outside any dataset operation: it serialises the focus term on every
- * shape evaluation, copies each message into every result, and checks typed
- * literals against backtracking lexical patterns. An intent is short text.
- */
-const MAX_TERM_LENGTH = 4_096;
-const MAX_LABEL_LENGTH = 1_024;
-const MAX_TYPED_LITERAL_LENGTH = 128;
-/** BCP 47 tags in practice; a long tag is copied with its literal everywhere. */
-const MAX_LANGUAGE_TAG_LENGTH = 35;
-const LABELS = new Set(["message", "name", "description"].map((p) => SH_NS + p));
-/** Datatypes whose lexical form is a plain string, checked without a pattern. */
-const PLAIN_DATATYPES = new Set(["http://www.w3.org/2001/XMLSchema#string", `${RDF_NS}langString`]);
-
-/** Why a term is too long to evaluate, or undefined. */
-function oversizedTerm(term: Term, predicate?: string): string | undefined {
-  if (term.termType === "Quad") return "Quoted triples";
-  // A literal's serialised id carries its language tag and datatype IRI too.
-  const length =
-    term.termType === "Literal"
-      ? term.value.length + term.language.length + term.datatype.value.length
-      : term.value.length;
-  if (length > MAX_TERM_LENGTH) return `Terms over ${MAX_TERM_LENGTH} characters`;
-  if (term.termType !== "Literal") return undefined;
-  if (term.language.length > MAX_LANGUAGE_TAG_LENGTH) {
-    return `Language tags over ${MAX_LANGUAGE_TAG_LENGTH} characters`;
-  }
-  if (predicate !== undefined && LABELS.has(predicate) && length > MAX_LABEL_LENGTH) {
-    return `Shape labels over ${MAX_LABEL_LENGTH} characters`;
-  }
-  if (!PLAIN_DATATYPES.has(term.datatype.value) && length > MAX_TYPED_LITERAL_LENGTH) {
-    return `Typed literals over ${MAX_TYPED_LITERAL_LENGTH} characters`;
-  }
-  return undefined;
-}
 
 /**
  * Why a validation is refused before it starts, or undefined when its cost is
@@ -201,21 +158,6 @@ function oversizedTerm(term: Term, predicate?: string): string | undefined {
  * this data, computed exactly (with memoisation) from the shapes and the data.
  */
 function unboundedValidation(shapes: Store, data: Store): string | undefined {
-  if (shapes.size > MAX_SHAPE_QUADS) return `Shapes over ${MAX_SHAPE_QUADS} triples ${UNBOUNDED}`;
-  if (data.size > MAX_DATA_QUADS)
-    return `Intent graphs over ${MAX_DATA_QUADS} triples ${UNBOUNDED}`;
-  for (const [graph, q] of [
-    ...shapes.getQuads(null, null, null, null).map((q) => [shapes, q] as const),
-    ...data.getQuads(null, null, null, null).map((q) => [data, q] as const),
-  ]) {
-    for (const term of [q.subject, q.predicate, q.object, q.graph]) {
-      const why = oversizedTerm(
-        term,
-        graph === shapes && term === q.object ? q.predicate.value : undefined,
-      );
-      if (why !== undefined) return `${why} ${UNBOUNDED}`;
-    }
-  }
   const seen = new Set<string>();
   for (const q of shapes.getQuads(null, null, null, null)) {
     const p = q.predicate.value;
@@ -237,7 +179,13 @@ function unboundedValidation(shapes: Store, data: Store): string | undefined {
   const key = (t: Term): string =>
     JSON.stringify(
       t.termType === "Literal"
-        ? [t.termType, t.value, t.language, t.datatype.value]
+        ? [
+            t.termType,
+            t.value,
+            t.language,
+            (t as typeof t & { direction?: string }).direction ?? "",
+            t.datatype.value,
+          ]
         : [t.termType, t.value],
     );
   const objects = (graph: Store, subject: Term, predicate: string) =>
@@ -600,19 +548,19 @@ function meteredFactory(budget: Budget): ValidatorFactory {
 }
 
 export async function validateGraphs(
-  intent: IntentInput,
-  shape: ShapeInput,
+  intent: readonly Quad[],
+  shape: readonly Quad[],
 ): Promise<ValidationReport> {
   // Alias matching is confined to disposable validation views. The original
   // graphs must retain their IRIs so existing protocol hashes still verify.
-  const shapes = shapeQuads(shape);
+  const shapes = checkedQuads(shape, true);
   if (shapes.some((q) => q.predicate.value === SH_PATTERN)) {
     return {
       conforms: false,
       results: [{ message: "Shapes using sh:pattern are not evaluated (unbounded regex)" }],
     };
   }
-  const data = toDataset(intentQuads(intent));
+  const data = toDataset(checkedQuads(intent, false));
   const dataGraph = validationDataset(data);
   if (dataGraph === undefined) {
     return {
@@ -650,31 +598,6 @@ export async function validateGraphs(
   }
 }
 
-/** Lower an {@link IntentInput} to quads. */
-export function intentQuads(intent: IntentInput): readonly Quad[] {
-  if (isIntent(intent)) {
-    return intentToRdf(intent);
-  }
-  if (Array.isArray(intent)) {
-    return intent;
-  }
-  return [...(intent as DatasetCore)] as Quad[];
-}
-
-/** Lower a {@link ShapeInput} to quads. */
-export function shapeQuads(shape: ShapeInput): readonly Quad[] {
-  if (isProtocolDocument(shape)) {
-    // Validate against ONLY the request shape — never the whole PD graph (which
-    // includes the response shape). A response shape that targets a class also
-    // present in the request graph must not make a valid request fail.
-    return shape.requestShapeQuads;
-  }
-  if (Array.isArray(shape)) {
-    return shape;
-  }
-  return [...(shape as DatasetCore)] as Quad[];
-}
-
 /** Build an n3.Store (a DatasetCore the validator accepts) from quads. */
 function toDataset(quads: readonly Quad[]): Store {
   const store = new Store();
@@ -702,24 +625,4 @@ function projectResult(result: {
     ...(result.value?.value !== undefined && { value: result.value.value }),
     ...(result.severity?.value !== undefined && { severity: result.severity.value }),
   };
-}
-
-function isIntent(x: IntentInput): x is Intent {
-  return (
-    typeof x === "object" &&
-    x !== null &&
-    !Array.isArray(x) &&
-    typeof (x as Intent).action === "string" &&
-    typeof (x as Intent).id === "string"
-  );
-}
-
-function isProtocolDocument(x: ShapeInput): x is ProtocolDocument {
-  return (
-    typeof x === "object" &&
-    x !== null &&
-    !Array.isArray(x) &&
-    typeof (x as ProtocolDocument).hash === "string" &&
-    Array.isArray((x as ProtocolDocument).quads)
-  );
 }

@@ -85,20 +85,49 @@ const protocol = await buildProtocolDocument({
   (`sh:message`, `sh:name`, `sh:description`) over 1024, and typed literals other than strings
   over 128 (their lexical patterns backtrack); `sh:lessThan`-style pairwise comparisons count
   as steps.
-- In Node, validation runs in a fresh `worker_threads` worker with a **2000 ms wall-clock
-  limit**, including worker startup, the existing pre-checks, validation and report
-  projection. `await validateIntent(intent, shape, { timeoutMs: 5000 })` changes the limit;
-  `ValidationOptions.timeoutMs` must be an integer from 1 to 2147483647. At the deadline
-  the worker is terminated and the call returns `conforms: false` with
-  `Validation exceeded <timeoutMs> ms wall-clock limit`. Workers are also terminated after
-  success or failure, before the promise settles. A later call starts with fresh state;
-  Node never falls back to synchronous validation after a worker failure. A worker per
-  call adds startup overhead; bound concurrent calls at the application level if needed.
-  Intent lowering and graph transfer run on the calling thread. The wall-clock bound is
-  **Node-only**: this package builds Node ESM and does not ship a browser Web Worker entry.
-  Browser consumers that bundle the package retain the synchronous metered path, including
-  all three existing protection layers; `timeoutMs` cannot interrupt it. Continue to await
-  `validateIntent` in every environment.
+- In Node, validation uses a shared, lazily pre-warmed `worker_threads` pool, with
+  **min(2, availableParallelism()) workers** and at most **64 waiting calls**. A full
+  queue fails closed with `Validation worker queue is full`. Workers have V8 limits of
+  64 MiB old generation, 16 MiB young generation and a 4 MiB stack (these are heap/stack
+  limits, not a total process RSS limit). Idle workers are unref'd.
+  Each call has a **2000 ms wall-clock deadline**, including input preflight, queue wait,
+  worker startup, validation and report projection. Set `{ timeoutMs: 5000 }` to change
+  it; `timeoutMs` must be an integer from 1 to 2147483647. Expiry returns
+  `conforms: false` with `Validation exceeded <timeoutMs> ms wall-clock limit`. Active
+  workers are terminated before the refusal settles, and replaced when more work is
+  pending; terminated workers are never reused. Crashes, missing worker files and
+  message deserialization failures also fail closed. Successful workers are reused.
+  The calling thread checks raw graph counts (1000 intent / 10000 shape quads) and the
+  shared term caps before conversion or serialization; dataset iteration and structured
+  intent lowering are bounded too. Duplicate input quads count toward the raw limits.
+  Transfer preserves blank nodes, named graphs, datatypes, languages and RDF 1.2 direction.
+- Use `new ValidationWorkerPool({ size: 2, maxQueueSize: 32 })` and pass it as
+  `{ workerPool }` to configure concurrency and queue capacity. `size` accepts 1–32;
+  `maxQueueSize` accepts 0–65536. Call `await workerPool.close()` for graceful shutdown:
+  it refuses pending calls and awaits termination. Closed instances cannot be reused.
+  `await closeValidationPool()` closes the default shared pool; the next call creates
+  another lazily. Pool construction rejects invalid pool configuration; `validateIntent`
+  always returns a report.
+- **Bundlers:** this package ships Node ESM with `dist/validationWorker.js` beside
+  `dist/index.js`. esbuild/webpack may omit that relative worker file when bundling the
+  main entry. Copy/emit the shipped worker as a separate Node ESM asset, retaining access
+  to its external npm dependencies, and supply its absolute URL as
+  `new ValidationWorkerPool({ workerUrl: new URL("file:///app/assets/validationWorker.js") })`.
+  Alternatively supply `workerFactory: (url, options) => new Worker(url, options)` to
+  integrate your bundler's worker creation. The factory must return a fresh Node-compatible
+  Worker per invocation, apply the supplied `resourceLimits`, and run the shipped worker
+  protocol: `{ ready: true }` once loaded, then `{ id, report }` for each
+  `{ id, data, shapes }` request. Factories are trusted application configuration.
+  Node builtins are loaded lazily. Runtimes with `nodejs_compat` but no usable
+  `node:worker_threads` return a clear configuration diagnostic; there is no automatic
+  fallback after a worker failure.
+- **Weaker in-process option:** `{ execution: "in-process" }` explicitly opts into
+  synchronous validation, retaining the step pre-check, term caps and 20,000-operation
+  budget. It cannot interrupt unmetered synchronous work and has **no wall-clock bound**;
+  `timeoutMs` cannot stop it. Browser environments use this metered path by default;
+  `{ execution: "worker" }` requires a worker even outside detected Node environments.
+  The package does not ship a browser Web Worker entry. Continue to await `validateIntent`
+  in every environment.
 - The deterministic NL parser reads verbs, ACL modes and recipient markers from the prose
   only, never from inside a URL.
 - Handshake decoders accept only an http(s) `protocolSource` and `xsd:boolean` flags.

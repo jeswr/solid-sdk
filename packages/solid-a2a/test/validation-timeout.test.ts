@@ -3,24 +3,36 @@ import { execFile } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { buildShapeForIntent, type Intent, validateIntent } from "../src/index.js";
+import {
+  buildShapeForIntent,
+  type Intent,
+  validateIntent as publicValidateIntent,
+  type ValidationOptions,
+  ValidationWorkerPool,
+} from "../src/index.js";
 import { workerTest } from "./validationWorkerSetup.js";
 
 const intent: Intent = { id: "urn:timeout-test", action: "read", target: "https://a/x" };
 const shape = buildShapeForIntent("read");
+let workerPool: ValidationWorkerPool;
+const validateIntent = (input: Intent, shapes: typeof shape, options: ValidationOptions = {}) =>
+  publicValidateIntent(input, shapes, { ...options, workerPool });
 
 describe("SHACL wall-clock bound", () => {
   beforeEach(() => {
+    workerPool = new ValidationWorkerPool({ size: 1 });
     workerTest.workers.length = 0;
     workerTest.delayMs = 0;
     workerTest.started = new SharedArrayBuffer(4);
     workerTest.crash = false;
     workerTest.exitEarly = false;
     workerTest.failConstruction = false;
+    workerTest.messageError = false;
+    workerTest.missingThreads = false;
   });
 
   afterEach(async () => {
-    await Promise.all(workerTest.workers.map((worker) => worker.terminate()));
+    await workerPool.close();
   });
 
   it("terminates a synchronous validator at the configured limit and keeps the event loop responsive", async () => {
@@ -56,15 +68,19 @@ describe("SHACL wall-clock bound", () => {
 
   it("honors a smaller timeout, then accepts normal validation with a larger timeout", async () => {
     expect((await validateIntent(intent, shape, { timeoutMs: 1 })).conforms).toBe(false);
+    // Caller-side preflight can spend the entire 1 ms before a worker starts.
+    const expiredWorkers = [...workerTest.workers];
+    for (const worker of expiredWorkers) {
+      expect(worker.threadId).toBe(-1);
+      expect(worker.terminate).toHaveBeenCalledOnce();
+    }
     expect(await validateIntent(intent, shape, { timeoutMs: 5_000 })).toEqual({
       conforms: true,
       results: [],
     });
-    expect(workerTest.workers).toHaveLength(2);
-    for (const worker of workerTest.workers) {
-      expect(worker.threadId).toBe(-1);
-      expect(worker.terminate).toHaveBeenCalledOnce();
-    }
+    expect(workerTest.workers).toHaveLength(expiredWorkers.length + 1);
+    expect(workerTest.workers.at(-1)?.threadId).toBeGreaterThan(0);
+    expect(workerTest.workers.at(-1)?.terminate).not.toHaveBeenCalled();
   });
 
   it.each([
