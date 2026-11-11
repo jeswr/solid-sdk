@@ -16,7 +16,15 @@ import {
   EditableText,
   IconButton,
 } from "@jeswr/suite-ui";
-import { Bell, CalendarDays, Ellipsis, GripVertical, Pencil, Repeat2 } from "lucide-react";
+import {
+  Bell,
+  CalendarDays,
+  Ellipsis,
+  GripVertical,
+  Paperclip,
+  Pencil,
+  Repeat2,
+} from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
@@ -30,6 +38,7 @@ import {
 import { encodeRef } from "@/lib/refs";
 import type { DropContainer } from "../lib/dnd/types";
 import { formatDue, isOverdue } from "../lib/format/due";
+import { attachmentCount } from "../lib/views/attachments";
 import { addDays, localDayKey } from "../lib/views/days";
 import { labelColour } from "../lib/views/label-colours";
 import type { Row } from "../lib/views/project-groups";
@@ -145,11 +154,15 @@ export function TaskRow({
   );
   const selecting = (focus?.selection.size ?? 0) > 0;
   const selected = focus?.selection.has(task.url) ?? false;
+  const attachments = attachmentCount(
+    tasks.tasks[task.projectUrl]?.items.find((item) => item.url === task.url),
+  );
   const hasMeta = Boolean(
     task.due ||
       task.allDay ||
       task.recurring ||
       task.hasReminders ||
+      attachments ||
       progress.total ||
       orphanParentTitle ||
       labels.length ||
@@ -402,6 +415,16 @@ export function TaskRow({
               </span>
             )}
             <TaskProgress tasks={tasks.views} id={task.id} />
+            {attachments > 0 && (
+              <span
+                className="tsk-attachment-count"
+                role="img"
+                aria-label={`${attachments} attachments`}
+              >
+                <Paperclip size={14} aria-hidden="true" />
+                <span aria-hidden="true">{attachments}</span>
+              </span>
+            )}
             {orphanParentTitle && <span>↳ {orphanParentTitle}</span>}
             {labels.slice(0, 3).map((label) => (
               <LabelChip
