@@ -86,6 +86,27 @@ test("sub-task progress, properties, exact RDF and focus return", async ({ page 
   await row.getByRole("link", { name: "Water plants", exact: true }).click();
   const detail = page.getByRole("region", { name: "Task details: Water plants", exact: true });
   await expect(detail.getByRole("textbox", { name: "Task title", exact: true })).toBeFocused();
+  // A desktop pane is narrower than a tablet sheet: layout follows the pane, not the viewport.
+  const stacked =
+    (page.viewportSize()?.width ?? 1280) < 768 || (page.viewportSize()?.width ?? 1280) >= 1024;
+  await expect
+    .poll(() =>
+      detail.locator(".tsk-detail-property").evaluateAll(
+        (rows, stacked) =>
+          rows.length > 0 &&
+          rows.every((row) => {
+            const label = row.firstElementChild?.getBoundingClientRect();
+            const control = row.lastElementChild?.getBoundingClientRect();
+            return Boolean(
+              label &&
+                control &&
+                (stacked ? control.top >= label.bottom : control.left >= label.right),
+            );
+          }),
+        stacked,
+      ),
+    )
+    .toBe(true);
   await detail.getByRole("button", { name: "Add sub-task", exact: true }).click();
   const subtask = detail.getByRole("textbox", { name: "Sub-task title", exact: true });
   await subtask.fill("Buy soil");
