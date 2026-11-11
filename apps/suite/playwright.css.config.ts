@@ -2,6 +2,7 @@
 // AUTHORED-BY Codex GPT-6
 // Opt-in local CSS harness. Loopback HTTP auth requires a development build:
 //   SUITE_TEST_CAPS='{}' pnpm test:e2e:css
+//   MATRIX=1 SUITE_TEST_CAPS='{}' pnpm test:e2e:css  # all six scenario 13 projects
 // This suite is not wired into CI.
 import { createServer } from "node:net";
 import { defineConfig } from "@playwright/test";
@@ -34,6 +35,15 @@ export default defineConfig({
   testIgnore: [],
   globalSetup: "./e2e/shell-css/global-setup.ts",
   outputDir: "../../artifacts/playwright/SH-11",
+  // Next dev plus concurrent OIDC/axe pages exceeds shared lane memory limits.
+  workers: 1,
+  // Live DPoP reads and conditional ACL writes can span several server round trips.
+  expect: { ...base.expect, timeout: 30_000 },
+  // Keep the normal local run small; opt into the complete responsive/theme matrix.
+  projects: (base.projects ?? []).filter(
+    (project) =>
+      process.env.MATRIX === "1" || ["375-light", "1280-dark"].includes(project.name ?? ""),
+  ),
   use: { ...base.use, baseURL },
   webServer: [
     {
@@ -50,12 +60,15 @@ export default defineConfig({
       command: `next dev --webpack --hostname 127.0.0.1 -p ${port}`,
       env: {
         NEXT_PUBLIC_DEV_FIXTURES: "",
+        // Leave room for CSS and Chromium on shared 16 GB lane hosts.
+        NODE_OPTIONS: process.env.NODE_OPTIONS ?? "--max-old-space-size=3072",
         SUITE_E2E: "1",
         SUITE_TEST_CAPS: process.env.SUITE_TEST_CAPS ?? "{}",
       },
       url: `${baseURL}/signin`,
       reuseExistingServer: false,
-      timeout: 120000,
+      // Cold webpack compilation can exceed two minutes on a shared lane host.
+      timeout: 300000,
       gracefulShutdown: { signal: "SIGTERM", timeout: 10000 },
     },
   ],
