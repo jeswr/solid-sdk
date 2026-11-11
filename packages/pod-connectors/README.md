@@ -738,3 +738,48 @@ types where the current sectors have no equivalent (root `QUESTIONS.md` Q2); fol
 not playback events, accounts are not people, and workouts are not clinical observations.
 Recorded fixture tests cover sorted Turtle mappings, re-imports, pagination, provenance,
 checkpoint retention on source errors, and Dropbox deletions without production API calls.
+
+## Activity files (CON-A6)
+
+`./adapters/activity-files` exports `activityFilesAdapter` and
+`createActivityFilesAdapter(limits?)`. The Tier C `activity-files` catalog entry accepts
+GPX 1.0/1.1, TCX and FIT, individually or inside a ZIP. Detection uses the FIT `.FIT`
+header signature or XML root, regardless of filename. Select activity exports from
+Strava, Garmin, Wahoo, Coros or Apple Health; no provider API or export URL is accessed.
+Native File/Blob `stream()` and `slice()` support archives; text-only ports support XML.
+
+Each activity has a document under `activities/<sha256>.ttl`, with the existing
+ExerciseAction (Health) or TravelAction (Mobility) model. It includes available sport,
+start/end, elapsed duration, distance, calories, creator/device and typed
+additionalProperty metrics for elevation gain and average/maximum heart rate. The
+health document uses the existing HealthRecord sector bridge; the current federation
+has no sports workout equivalent, so no new sector terms are invented.
+
+A document-local GeoShape track stores a sampled `schema:line` and compact JSON in
+`schema:text`. Sample tuples are `[latitude, longitude, epochMilliseconds, altitudeMetres,
+heartRateBpm, cadence, temperatureCelsius, distanceMetres, speedMetresPerSecond, powerWatts,
+segment]`, with null for absent values. Sampling retains endpoints and at most 2,000
+points. Segment boundaries prevent distance/elevation calculations across GPX gaps.
+Original bytes are create-only `activities/<file-sha256>.<format>` resources (25 MiB
+binary cap). The source name/hash and run activity appear in PROV derivations.
+
+IDs hash start time, normalized sport and device serial (file hash when unavailable).
+A bounded per-second index deduplicates later exports of the same sport when both
+start time and elapsed duration differ by at most two seconds, including across second
+boundaries. Moving time is not substituted for elapsed time. Complete imports retain
+prior original links and optional metrics; truncated imports never become fuzzy-match
+candidates. Unknown/missing sport is kept conservative; no fuzzy match occurs without
+start and duration. Imports add/update activities, never delete absent workouts, and
+file imports have no incremental cursor. The shared runner retains state on failure.
+
+Hard caps: 64 MiB per file, 512 MiB compressed archive size and total inflation, 1,000 activities, 100,000
+records per activity, 1,000,000 points and 2,000,000 parser events/FIT messages per run.
+XML tokens cap at 64 Ki characters and nesting at 64; DTDs and CDATA are refused.
+The Takeout ZIP reader also enforces its structural, CRC, entry-count and path bounds.
+Files are byte-capped and validated before their activities are written; FIT verifies
+header/file CRCs and message boundaries. Original bytes are retained within the cap for
+hashing and binary storage; XML parsing itself uses bounded streamed tokens, without a DOM.
+Byte-overflow files are skipped; record/message/activity overflows import only a bounded
+prefix. Diagnostics surface in `report.warnings`, alongside malformed-file `skipped` counts.
+Dedup buckets and original-file histories cap at 32 entries each. Host limits may only
+lower the hard caps. The original file remains the source for full-resolution telemetry.

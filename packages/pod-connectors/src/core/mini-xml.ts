@@ -32,7 +32,12 @@ export function decodeXmlEntities(s: string): string {
         body[1] === "x" || body[1] === "X"
           ? Number.parseInt(body.slice(2), 16)
           : Number.parseInt(body.slice(1), 10);
-      return Number.isFinite(code) ? String.fromCodePoint(code) : whole;
+      return Number.isInteger(code) &&
+        code > 0 &&
+        code <= 0x10ffff &&
+        !(code >= 0xd800 && code <= 0xdfff)
+        ? String.fromCodePoint(code)
+        : whole;
     }
     return DECODE[body] ?? whole;
   });
@@ -137,4 +142,141 @@ export function parseAttrs(chunk: string): XmlAttrs {
 
 function escapeTag(tag: string): string {
   return tag.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/** Bounded nested XML for activity exports. No DTDs, entities, external I/O or DOM.
+ * Tokens retain at most 64 Ki characters, nesting at most 64 elements. Callers
+ * bound event counts separately. QNames are balanced before exposing local names.
+ */
+export type XmlEvent =
+  | { kind: "start"; name: string; attrs: XmlAttrs }
+  | { kind: "end"; name: string }
+  | { kind: "text"; text: string };
+
+export async function* xmlEvents(chunks: AsyncIterable<string>): AsyncGenerator<XmlEvent> {
+  const stack: string[] = [];
+  let token: string[] = [];
+  let markup = false;
+  let quote = "";
+  let prefix = "";
+  let ending = "";
+  let special = "";
+  let root = false;
+  const textEvent = (): XmlEvent => {
+    const text = decodeXmlEntities(token.join(""));
+    token = [];
+    if (!stack.length && text.trim()) throw new Error("Text outside XML root.");
+    return { kind: "text", text };
+  };
+  for await (const chunk of chunks) {
+    for (const char of chunk) {
+      if (!markup) {
+        if (char !== "<") {
+          token.push(char);
+          if (token.length > 65536) throw new Error("XML text limit exceeded.");
+          continue;
+        }
+        if (token.length) yield textEvent();
+        markup = true;
+        prefix = "<";
+        token = ["<"];
+        continue;
+      }
+      if (prefix.length < 9) prefix += char;
+      ending = (ending + char).slice(-3);
+      if (special) {
+        if (ending === special) {
+          special = "";
+          markup = false;
+          token = [];
+          prefix = "";
+          ending = "";
+        }
+        continue;
+      }
+      token.push(char);
+      if (token.length > 65536) throw new Error("XML tag limit exceeded.");
+      if (prefix === "<!--") {
+        special = "-->";
+        token = [];
+        continue;
+      }
+      // Activity values never require CDATA; reject declarations fail closed.
+      if (prefix.length >= 4 && prefix.startsWith("<!"))
+        throw new Error("XML declarations are unsupported.");
+      if (quote) {
+        if (char === quote) quote = "";
+        continue;
+      }
+      if (char === '"' || char === "'") {
+        quote = char;
+        continue;
+      }
+      if (char !== ">") continue;
+      const raw = token.join("");
+      token = [];
+      markup = false;
+      prefix = "";
+      ending = "";
+      if (raw.startsWith("<?")) {
+        if (root || !/^<\?xml\s[^<>]*\?>$/.test(raw)) throw new Error("Invalid XML instruction.");
+        continue;
+      }
+      const match = /^<(\/)?([A-Za-z_][\w.:-]*)([\s\S]*?)(\/?)>$/.exec(raw);
+      if (!match) throw new Error("Invalid XML element.");
+      const [, close, qname, attributes = "", self] = match;
+      const name = (qname as string).split(":").at(-1) as string;
+      if (close) {
+        if (attributes.trim() || self || stack.pop() !== qname)
+          throw new Error("Mismatched XML element.");
+        yield { kind: "end", name };
+      } else {
+        if (!stack.length) {
+          if (root) throw new Error("Multiple XML roots.");
+          root = true;
+        }
+        if (stack.length >= 64) throw new Error("XML depth limit exceeded.");
+        const attrs = strictAttrs(attributes);
+        stack.push(qname as string);
+        yield { kind: "start", name, attrs };
+        if (self) {
+          stack.pop();
+          yield { kind: "end", name };
+        }
+      }
+    }
+  }
+  if (markup || stack.length || !root) throw new Error("Incomplete XML document.");
+  if (token.length) yield textEvent();
+}
+
+/** Linear, strict attribute scanning for nested XML. The older flat reader's
+ * permissive regex is deliberately not used on activity-file markup.
+ */
+function strictAttrs(raw: string): XmlAttrs {
+  const attrs: Record<string, string> = Object.create(null);
+  let i = 0;
+  while (i < raw.length) {
+    if (!/\s/.test(raw[i] as string)) throw new Error("Invalid XML attribute boundary.");
+    while (i < raw.length && /\s/.test(raw[i] as string)) i++;
+    if (i === raw.length) break;
+    const start = i;
+    if (!/[A-Za-z_:]/.test(raw[i] as string)) throw new Error("Invalid XML attribute name.");
+    while (i < raw.length && /[\w:.-]/.test(raw[i] as string)) i++;
+    const name = raw.slice(start, i);
+    while (i < raw.length && /\s/.test(raw[i] as string)) i++;
+    if (raw[i++] !== "=") throw new Error("Invalid XML attribute assignment.");
+    while (i < raw.length && /\s/.test(raw[i] as string)) i++;
+    const quote = raw[i++];
+    if (quote !== '"' && quote !== "'") throw new Error("Invalid XML attribute quote.");
+    const valueStart = i;
+    while (i < raw.length && raw[i] !== quote) {
+      if (raw[i] === "<") throw new Error("Invalid XML attribute content.");
+      i++;
+    }
+    if (i === raw.length || Object.hasOwn(attrs, name))
+      throw new Error("Invalid or duplicate XML attribute.");
+    attrs[name] = decodeXmlEntities(raw.slice(valueStart, i++));
+  }
+  return attrs;
 }

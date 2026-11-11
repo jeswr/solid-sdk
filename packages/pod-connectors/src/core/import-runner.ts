@@ -74,6 +74,8 @@ export interface ImportReport {
   skipped?: number;
   /** Unsupported export products or formats, grouped by product folder. */
   unsupported?: readonly string[];
+  /** Fixed diagnostics for bounded or partial file imports. */
+  warnings?: readonly string[];
   /** The type-index document used/created. */
   indexUrl: string;
 }

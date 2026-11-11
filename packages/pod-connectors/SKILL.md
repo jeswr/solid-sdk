@@ -251,3 +251,22 @@ placeVisit values (including missing/invalid location or duration) and all other
 shapes count as skips and make location incomplete. Contacts use an independent
 run-level row counter, including duplicate cards, across retained and capped paths;
 manifest release never resets the counter. Excess rows skip before any Pod writes.
+
+CON-A6 adds Tier C `activity-files` (`./adapters/activity-files`): content-detected
+GPX/TCX/FIT and mixed ZIPs through the existing Takeout reader. Read
+`src/activity-files/{file-adapter,model,xml,fit,mapping,vocab}.ts` before changing it.
+Keep the independent synthetic FIT encoder in `test/activity-fixtures.ts` test-only.
+Never add provider calls or dependencies. XML uses bounded `mini-xml.xmlEvents`,
+not the legacy whole-string block extractor; reject DTDs and structural errors.
+FIT checks header/file CRC and every definition/data boundary, handles compressed
+32-second rollover and skips developer fields by declared size. Unknown fields/messages
+must preserve alignment. File bytes, archive inflation, activities, parser messages,
+records and total points all have hard caps; factory options can only lower them.
+Return fixed diagnostic codes through FileImportOutcome/ImportReport `warnings`.
+Keep tracks at most 2,000 samples, preserve the capped original, and never match a
+truncated activity against a complete one. Use elapsed duration and normalized sport
+for the two-second cross-export dedup check; retain the original anchor to avoid drift.
+Dedup lookup is five bounded second buckets, at most 32 entries each, with confined
+activity targets. Source histories also cap at 32. Files are add/update imports with
+no deletion snapshot or cursor. Conditional writes, cancellation, run provenance and
+failed-state retention remain shared runner responsibilities.

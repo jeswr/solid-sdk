@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 import { createRegistry, IntegrationError } from "@jeswr/pod-connectors";
 import { describe, expect, it } from "vitest";
@@ -69,6 +70,10 @@ describe("connector catalogue", () => {
       "body-health",
       "mobility",
     ]);
+    expect(entries.find((entry) => entry.id === "activity-files")).toMatchObject({
+      status: "import",
+      domains: ["body-health", "mobility"],
+    });
     expect(entries.find((entry) => entry.id === "bank-statements")?.domains).toEqual(["financial"]);
     expect(destinationsFor("netflix")).toEqual([{ domain: "media", label: "Media › Streaming" }]);
     expect(destinationsFor("future-adapter")).toEqual([{ domain: "other", label: "Other" }]);
