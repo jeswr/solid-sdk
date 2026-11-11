@@ -26,14 +26,10 @@ Labels and reminders remain in the note's RDF. On a shared note, collaborators
 can see and edit its labels and reminders. Pin and colour remain local preferences.
 All note fields use the note's original ETag in a single conditional write.
 
-Archive, unarchive, Trash, restore and permanent deletion refuse notes with an own
-ACL, including owner-only ACLs. They also refuse when access discovery fails or
-the ACL state is unknown. Notes shows “Stop sharing this note before archiving or
-deleting it.” with a Share action. Only a fresh 404 from the discovered conventional
-own ACL permits the operation; Notes never copies ACLs during a move. Removing
-collaborators or restricting a link may leave an own ACL, which must be removed in
-the pod before the note can move. Unshared notes retain the existing conditional
-move and rollback behaviour.
+Opening Share still conditionally creates an owner-only ACL, even if the dialog is
+cancelled. Archive, unarchive, Trash, restore and permanent deletion remove that ACL
+with its ETag only after verifying owner-only grants and private inherited access;
+shared or unknown access and failed conditional deletion still block the operation.
 
 Batch archive/Trash actions, Keep import, empty Trash and automatic Trash expiry
 check each note separately. Other notes continue, and refused notes are reported

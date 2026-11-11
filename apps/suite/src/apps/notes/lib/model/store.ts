@@ -1,8 +1,9 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
-import { RdfFetchError } from "@jeswr/fetch-rdf";
+import { parseRdf, RdfFetchError } from "@jeswr/fetch-rdf";
 import { normalizePodBase, refuseRedirects } from "@jeswr/guarded-fetch";
-import { Container, ContainerDataset } from "@solid/object";
+import { NamedNodeAs, NamedNodeFrom, SetFrom } from "@rdfjs/wrapper";
+import { AclResource, Container, ContainerDataset } from "@solid/object";
 import { DataFactory, Store } from "n3";
 import { wacOnlyFetch } from "../../../../shell/share/verified-wac-adapter";
 import { uploadPodImage } from "../../../docs/lib/editor/image-upload";
@@ -20,7 +21,9 @@ import {
   discoverRegistrations,
   ensureTypeRegistrations,
 } from "../../../docs/lib/model/type-index";
+import { verifyPrivateIndexAccess } from "../../../docs/lib/model/type-index-access";
 import { DOCUMENT_CLASS, NS, PREFIXES } from "../../../docs/lib/model/vocab";
+import { readSharing } from "../../../drive/lib/sharing";
 import { notesMediaContainer } from "../images";
 import { deleteLabel, mergeLabels } from "../organise/labels";
 import { createBrowserFiredStore, type FiredReminderStore } from "../reminders/fired-store";
@@ -430,7 +433,7 @@ export class NotesStore {
     await this.remove(url, etag);
   }
 
-  /** Only a fresh, discovered own-ACL 404 permits moving or deleting a note. */
+  /** Remove only a verified owner-only own ACL before returning to private inheritance. */
   private async assertUnshared(url: string): Promise<void> {
     try {
       const http = wacOnlyFetch(this.fetchImpl);
@@ -439,6 +442,54 @@ export class NotesStore {
       if (head.ok && links.length === 1 && links[0]?.[1] === `${url}.acl`) {
         const acl = await http(`${url}.acl`, { cache: "no-store" });
         if (acl.status === 404) return;
+        if (acl.ok) {
+          const etag = acl.headers.get("etag");
+          this.validator(`${url}.acl`, etag);
+          const dataset = await parseRdf(await acl.text(), acl.headers.get("content-type"), {
+            baseIRI: `${url}.acl`,
+          });
+          // Use the sharing adapter's projection to reject unsupported/malformed WAC.
+          const state = readSharing({
+            access: {
+              resource: url,
+              documents: [
+                {
+                  model: "wac",
+                  source: `${url}.acl`,
+                  governingResource: url,
+                  inherited: false,
+                  dataset,
+                },
+              ],
+            },
+          });
+          const ownerOnly = [...new AclResource(dataset, DataFactory).authorizations].every(
+            (auth) =>
+              [...auth.agent].every((agent) => agent === this.webId) &&
+              !auth.agentClass.size &&
+              !auth.origin.size &&
+              !SetFrom.subjectPredicate(
+                auth,
+                "http://www.w3.org/ns/auth/acl#agentGroup",
+                NamedNodeAs.string,
+                NamedNodeFrom.string,
+              ).size,
+          );
+          if (ownerOnly && state.people.some((person) => person.webId === this.webId)) {
+            // Verify the policy that would apply AFTER deletion, skipping only this
+            // own ACL so the existing verifier checks the nearest container defaults.
+            await verifyPrivateIndexAccess(url, this.webId, this.podRoot, (input, init) =>
+              String(input) === `${url}.acl`
+                ? Promise.resolve(new Response(null, { status: 404 }))
+                : http(input, { ...init, cache: "no-store" }),
+            );
+            const removed = await http(`${url}.acl`, {
+              method: "DELETE",
+              headers: { "if-match": etag as string },
+            });
+            if (removed.ok) return;
+          }
+        }
       }
     } catch (cause) {
       throw new NoteMoveBlockedError(url, { cause });

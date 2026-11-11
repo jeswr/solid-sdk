@@ -1,5 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { DataFactory } from "n3";
+import { DataFactory, Store } from "n3";
 import { assert, expect, it } from "vitest";
 import { documentSubject } from "../src/apps/docs/lib/model/document";
 import { writeRdf } from "../src/apps/docs/lib/model/rdf-io";
@@ -7,11 +7,184 @@ import { privateAcl } from "../src/apps/drive/lib/client/access";
 import { NoteConflictError, NoteMoveBlockedError } from "../src/apps/notes/lib/model/errors";
 import { buildNote } from "../src/apps/notes/lib/model/note";
 import { createNotesStore } from "../src/apps/notes/lib/model/store";
+import { NoteSharingAdapter } from "../src/apps/notes/lib/sharing";
 import { SheetResource } from "../src/apps/sheets/lib/model";
 import { harness, POD, WEBID } from "./sheets-workbook-helpers";
 
 const ACL = "http://www.w3.org/ns/auth/acl#";
 const BOB = "https://pod.example/bob/#me";
+const signal = () => new AbortController().signal;
+async function privateFixture() {
+  const f = await harness();
+  const store = createNotesStore(f.options);
+  const note = await store.create({ title: "Private" });
+  await writeRdf(`${POD}.acl`, privateAcl(POD, WEBID), {
+    createOnly: true,
+    fetchImpl: f.fetch,
+  });
+  const adapter = new NoteSharingAdapter(note, { ...f.options, storageUrl: POD, mode: "solid" });
+  await adapter.load(note.url, signal());
+  return { ...f, store, note, adapter };
+}
+
+it("archives after revoking Bob and public access, conditionally removing the own ACL", async () => {
+  const f = await privateFixture();
+  await f.adapter.setPerson(f.note.url, BOB, "editor");
+  await f.adapter.setGeneral(f.note.url, { mode: "link", role: "viewer" });
+  f.calls.length = 0;
+  await expect(f.store.archive(f.note)).rejects.toBeInstanceOf(NoteMoveBlockedError);
+  expect(f.calls.some((call) => call.method === "PUT" || call.method === "DELETE")).toBe(false);
+  await f.adapter.setPerson(f.note.url, BOB, null);
+  await f.adapter.setGeneral(f.note.url, { mode: "restricted" });
+  const etag = (await f.pod.fetch(`${f.note.url}.acl`)).headers.get("etag");
+  f.calls.length = 0;
+  const moved = await f.store.archive(f.note);
+  expect(moved.location).toBe("archived");
+  expect(f.pod.has(`${f.note.url}.acl`)).toBe(false);
+  expect(f.pod.has(`${moved.url}.acl`)).toBe(false);
+  const deletion = f.calls.find((call) => call.method === "DELETE");
+  expect(deletion?.url).toBe(`${f.note.url}.acl`);
+  expect(deletion?.headers.get("if-match")).toBe(etag);
+});
+
+it("trashes after opening Share and cancelling, and can permanently delete after reopening Share", async () => {
+  const f = await privateFixture();
+  expect(f.pod.has(`${f.note.url}.acl`)).toBe(true);
+  const trashed = await f.store.trash(f.note);
+  expect(trashed.location).toBe("trashed");
+  expect(f.pod.has(`${f.note.url}.acl`)).toBe(false);
+  await new NoteSharingAdapter(trashed, { ...f.options, storageUrl: POD, mode: "solid" }).load(
+    trashed.url,
+    signal(),
+  );
+  await f.store.deleteForever(trashed.url, trashed.etag);
+  expect(f.pod.has(trashed.url)).toBe(false);
+  expect(f.pod.has(`${trashed.url}.acl`)).toBe(false);
+});
+
+it.each([
+  "default",
+  "defaultForNew",
+  "unknown",
+])("keeps an owner-only own ACL when inheritance is broad or unknown (%s)", async (predicate) => {
+  const f = await privateFixture();
+  // Access to the container itself remains private; its child defaults differ.
+  const container = f.store.containers.active;
+  const policy = privateAcl(container, WEBID);
+  const reader = new SheetResource(`${container}.acl#reader`, policy, DataFactory);
+  reader.types.add(`${ACL}Authorization`);
+  reader.links(ACL + predicate).add(container);
+  reader.links(`${ACL}agent`).add(BOB);
+  reader.links(`${ACL}mode`).add(`${ACL}Read`);
+  if (predicate === "unknown") {
+    f.setHook((call) =>
+      call.url === `${container}.acl` ? new Response(null, { status: 403 }) : undefined,
+    );
+  } else {
+    await writeRdf(`${container}.acl`, policy, { createOnly: true, fetchImpl: f.fetch });
+  }
+  f.calls.length = 0;
+  await expect(f.store.archive(f.note)).rejects.toBeInstanceOf(NoteMoveBlockedError);
+  expect(f.pod.has(f.note.url)).toBe(true);
+  expect(f.pod.has(`${f.note.url}.acl`)).toBe(true);
+  expect(f.calls.some((call) => call.method === "PUT" || call.method === "DELETE")).toBe(false);
+});
+
+it.each([
+  412,
+  500,
+  "network",
+] as const)("refuses a failed own ACL deletion (%s)", async (failure) => {
+  const f = await privateFixture();
+  const etag = (await f.pod.fetch(`${f.note.url}.acl`)).headers.get("etag");
+  f.setHook((call) => {
+    if (call.url === `${f.note.url}.acl` && call.method === "DELETE") {
+      expect(call.headers.get("if-match")).toBe(etag);
+      if (failure === "network") throw new TypeError("Offline");
+      return new Response(null, { status: failure });
+    }
+  });
+  f.calls.length = 0;
+  await expect(f.store.archive(f.note)).rejects.toBeInstanceOf(NoteMoveBlockedError);
+  expect(f.pod.has(f.note.url)).toBe(true);
+  expect(f.pod.has(`${f.note.url}.acl`)).toBe(true);
+  expect(
+    f.calls.some(
+      (call) => call.method === "PUT" || (call.url === f.note.url && call.method === "DELETE"),
+    ),
+  ).toBe(false);
+});
+
+it.each([
+  ["agent", BOB],
+  ["agentClass", "http://xmlns.com/foaf/0.1/Agent"],
+  ["agentClass", `${ACL}AuthenticatedAgent`],
+  ["agentClass", "https://pod.example/unknown-class"],
+  ["agentGroup", "https://pod.example/group#members"],
+  ["origin", "https://app.example/"],
+])("refuses every non-owner selector, including unrelated authorizations (%s %s)", async (predicate, value) => {
+  const f = await privateFixture();
+  const policy = privateAcl(f.note.url, WEBID);
+  const other = new SheetResource(`${f.note.url}.acl#other`, policy, DataFactory);
+  other.types.add(`${ACL}Authorization`);
+  other.links(`${ACL}accessTo`).add(`${POD}unrelated.ttl`);
+  other.links(`${ACL}${predicate}`).add(value);
+  other.links(`${ACL}mode`).add(`${ACL}Read`);
+  const current = await f.pod.fetch(`${f.note.url}.acl`);
+  await writeRdf(`${f.note.url}.acl`, policy, {
+    etag: current.headers.get("etag"),
+    fetchImpl: f.fetch,
+  });
+  f.calls.length = 0;
+  await expect(f.store.archive(f.note)).rejects.toBeInstanceOf(NoteMoveBlockedError);
+  expect(f.pod.has(`${f.note.url}.acl`)).toBe(true);
+  expect(f.calls.some((call) => call.method === "PUT" || call.method === "DELETE")).toBe(false);
+});
+
+it.each([
+  "empty",
+  "unknown-mode",
+  "malformed-agent",
+])("refuses unknown own policy RDF (%s)", async (failure) => {
+  const f = await privateFixture();
+  const policy = failure === "empty" ? new Store() : privateAcl(f.note.url, WEBID);
+  if (failure !== "empty") {
+    const other = new SheetResource(`${f.note.url}.acl#other`, policy, DataFactory);
+    other.types.add(`${ACL}Authorization`);
+    other.links(`${ACL}accessTo`).add(f.note.url);
+    other.links(`${ACL}agent`).add(WEBID);
+    if (failure === "unknown-mode") other.links(`${ACL}mode`).add(`${ACL}Unknown`);
+    else other.setText(`${ACL}agent`, "Not an IRI");
+  }
+  const current = await f.pod.fetch(`${f.note.url}.acl`);
+  await writeRdf(`${f.note.url}.acl`, policy, {
+    etag: current.headers.get("etag"),
+    fetchImpl: f.fetch,
+  });
+  f.calls.length = 0;
+  await expect(f.store.archive(f.note)).rejects.toBeInstanceOf(NoteMoveBlockedError);
+  expect(f.calls.some((call) => call.method === "PUT" || call.method === "DELETE")).toBe(false);
+});
+
+it.each([
+  null,
+  'W/"weak"',
+  "invalid",
+])("refuses an own ACL without a strong ETag (%s)", async (etag) => {
+  const f = await privateFixture();
+  f.setHook(async (call) => {
+    if (call.url !== `${f.note.url}.acl` || call.method !== "GET") return;
+    const response = await f.pod.fetch(call.url);
+    const headers = new Headers(response.headers);
+    if (etag === null) headers.delete("etag");
+    else headers.set("etag", etag);
+    return new Response(await response.text(), { headers });
+  });
+  f.calls.length = 0;
+  await expect(f.store.archive(f.note)).rejects.toBeInstanceOf(NoteMoveBlockedError);
+  expect(f.calls.some((call) => call.method === "PUT" || call.method === "DELETE")).toBe(false);
+});
+
 async function fixture() {
   const f = await harness();
   const store = createNotesStore(f.options);
@@ -50,7 +223,13 @@ it.each([
   let note = await store.create({ title: "Shared", body: "Private body" });
   if (action === "unarchive") note = await store.archive(note);
   if (action === "restore" || action === "deleteForever") note = await store.trash(note);
-  await writeRdf(`${note.url}.acl`, privateAcl(note.url, WEBID), {
+  const policy = privateAcl(note.url, WEBID);
+  const reader = new SheetResource(`${note.url}.acl#reader`, policy, DataFactory);
+  reader.types.add(`${ACL}Authorization`);
+  reader.links(`${ACL}agent`).add(BOB);
+  reader.links(`${ACL}accessTo`).add(note.url);
+  reader.links(`${ACL}mode`).add(`${ACL}Read`);
+  await writeRdf(`${note.url}.acl`, policy, {
     createOnly: true,
     fetchImpl: f.fetch,
   });
