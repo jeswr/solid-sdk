@@ -45,10 +45,21 @@ test("Forms demo: design, reorder by keyboard, preview, fill, responses, CSV and
       .getByLabel("Question title", { exact: true }),
   ).toBeFocused();
   const grip = page.getByRole("button", { name: "Reorder question 2", exact: true });
+  const dragLive = page.locator('[id^="DndLiveRegion"]');
   await grip.focus();
   await page.keyboard.press("Space");
-  await page.keyboard.press("ArrowUp");
+  // Picking up announces the pick-up, then immediately that the question is over its own place.
+  await expect(dragLive).toContainText(
+    /Picked up Your favourite tree, position 2 of 2\.|Your favourite tree is over position 2 of 2\./,
+  );
+  // dnd-kit measures rects after pick-up, so a step can land before the layout settles (tasks-board does the same).
+  for (let step = 0; step < 6; step++) {
+    await page.keyboard.press("ArrowUp");
+    if ((await dragLive.textContent())?.includes("is over position 1 of 2.")) break;
+  }
+  await expect(dragLive).toContainText("Your favourite tree is over position 1 of 2.");
   await page.keyboard.press("Space");
+  await expect(dragLive).toContainText("Your favourite tree was dropped at position 1 of 2.");
   await expect(
     page
       .getByRole("article", { name: "Question 1", exact: true })
@@ -70,9 +81,13 @@ test("Forms demo: design, reorder by keyboard, preview, fill, responses, CSV and
   await page.keyboard.press("Escape");
   await card.getByRole("link", { name: "Fill in form", exact: true }).click();
   await page.getByRole("button", { name: "Save response to my pod", exact: true }).click();
-  await expect(page.getByRole("alert")).toContainText("Review the highlighted answers");
+  await expect(
+    page.getByRole("alert").filter({ hasText: "Review the highlighted answers" }),
+  ).toBeVisible();
   await page.getByLabel("Your favourite tree (required)", { exact: true }).fill("Rowan");
-  await expect(page.getByRole("alert")).toContainText("Review the highlighted answers");
+  await expect(
+    page.getByRole("alert").filter({ hasText: "Review the highlighted answers" }),
+  ).toBeVisible();
   await expect(
     page.getByLabel("Your favourite flower (required)", { exact: true }),
   ).toHaveAttribute("aria-invalid", "true");
@@ -87,7 +102,9 @@ test("Forms demo: design, reorder by keyboard, preview, fill, responses, CSV and
   await expect(page.getByRole("table")).toContainText("Cornflower");
   await page.getByRole("button", { name: "Response 1", exact: true }).click();
   await expect(page.getByRole("dialog")).toContainText("Rowan");
-  await page.keyboard.press("Escape");
+  // The dialog focuses its Close button, whose tooltip takes the first Escape; close it directly.
+  await page.getByRole("dialog").getByRole("button", { name: "Close", exact: true }).click();
+  await expect(page.getByRole("dialog")).toBeHidden();
   const downloaded = page.waitForEvent("download");
   await page.getByRole("button", { name: "Export CSV", exact: true }).click();
   expect((await downloaded).suggestedFilename()).toBe("form-responses.csv");

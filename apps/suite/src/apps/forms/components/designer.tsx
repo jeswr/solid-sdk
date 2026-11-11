@@ -426,6 +426,7 @@ export function Designer({
           <DndContext
             sensors={sensors}
             collisionDetection={closestCenter}
+            accessibility={{ announcements: dragAnnouncements(draft) }}
             onDragEnd={({ active, over }) => {
               if (over)
                 change(
@@ -499,4 +500,45 @@ export function Designer({
       </div>
     </>
   );
+}
+
+/** Screen-reader announcements name questions by title and position, never by internal key. */
+function dragAnnouncements(form: { fields: readonly { key: string; label?: string }[] }) {
+  const describe = (id: string | number) => {
+    const index = form.fields.findIndex((field) => field.key === id);
+    const label = form.fields[index]?.label || "Question";
+    return { label, position: index + 1, total: form.fields.length };
+  };
+  return {
+    onDragStart: ({ active }: { active: { id: string | number } }) => {
+      const { label, position, total } = describe(active.id);
+      return `Picked up ${label}, position ${position} of ${total}.`;
+    },
+    onDragOver: ({
+      active,
+      over,
+    }: {
+      active: { id: string | number };
+      over: { id: string | number } | null;
+    }) => {
+      const { label } = describe(active.id);
+      if (!over) return `${label} is no longer over a position.`;
+      const target = describe(over.id);
+      return `${label} is over position ${target.position} of ${target.total}.`;
+    },
+    onDragEnd: ({
+      active,
+      over,
+    }: {
+      active: { id: string | number };
+      over: { id: string | number } | null;
+    }) => {
+      const { label } = describe(active.id);
+      if (!over) return `${label} was dropped and kept its place.`;
+      const target = describe(over.id);
+      return `${label} was dropped at position ${target.position} of ${target.total}.`;
+    },
+    onDragCancel: ({ active }: { active: { id: string | number } }) =>
+      `Moving ${describe(active.id).label} was cancelled.`,
+  };
 }
