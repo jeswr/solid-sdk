@@ -2,6 +2,8 @@
 // AUTHORED-BY Codex GPT-6
 import type { InboundMessage } from "@jeswr/agent-model";
 import { parseRdf } from "@jeswr/fetch-rdf";
+import { isLoaded, type Row } from "./client";
+import { isComplete } from "./collections";
 import { PROV } from "./paths";
 import type { DisplayControl } from "./readers";
 
@@ -117,4 +119,29 @@ export function archivedMessages(
       )
       .map((c) => c.target as string),
   );
+}
+
+/**
+ * The archive as the Inbox may present it. A partial or failed read must never look like an
+ * empty archive, or archived messages would quietly come back.
+ */
+export type ArchiveView =
+  | { status: "loading" }
+  | { status: "error" }
+  | { status: "ready" | "partial"; targets: Set<string> };
+export function archiveView(
+  query: { status: "loading" | "error" } | { status: "ready"; data: Row<DisplayControl>[] },
+  owner: string,
+  now: number,
+): ArchiveView {
+  if (query.status !== "ready") return { status: query.status };
+  const rows = query.data;
+  const targets = archivedMessages(
+    rows.filter(isLoaded<DisplayControl>).map((row) => row.record),
+    owner,
+    now,
+  );
+  // Truncated listings and unreadable archive documents both leave archives unchecked.
+  const partial = !isComplete(rows) || rows.some((row) => !isLoaded(row));
+  return { status: partial ? "partial" : "ready", targets };
 }
