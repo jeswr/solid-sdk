@@ -2,8 +2,10 @@
 import { expect, test, vi } from "vitest";
 import {
   assignmentAnnounce,
+  createInboxReader,
   createNotify,
   mentionNotification,
+  notificationKind,
   roomInvitation,
   shareNotification,
 } from "./notify.js";
@@ -66,4 +68,85 @@ test("wraps the real sender and delivers the byte-stable assignment with the cal
   expect(fetch.mock.calls[1]?.[1]?.body).toMatchInlineSnapshot(
     `"{"@context":"https://www.w3.org/ns/activitystreams","type":"Announce","actor":"https://alice.example/profile#me","object":"https://pod.example/task#it","target":"https://pod.example/tracker#this","summary":"Alice assigned you 'Pay rent'"}"`,
   );
+});
+
+test("wraps inbox discovery and reading, and classifies each real builder round-trip", async () => {
+  const webId = "https://8.8.8.8/profile#me";
+  const inbox = "https://8.8.4.4/inbox/";
+  const drafts = [
+    shareNotification("https://pod.example/doc", "editor"),
+    assignmentAnnounce(
+      "https://pod.example/task",
+      "https://pod.example/tracker",
+      "Alice",
+      "Pay rent",
+    ),
+    mentionNotification("https://pod.example/comment", "https://pod.example/doc"),
+    roomInvitation("https://pod.example/room/"),
+  ];
+  const bodies: string[] = [];
+  const fetch = vi.fn<typeof globalThis.fetch>().mockImplementation(async (url, init) => {
+    if (init?.method === "POST") {
+      bodies.push(init.body as string);
+      return new Response(null, { status: 201 });
+    }
+    if (url === "https://8.8.8.8/profile") {
+      return new Response(`<${webId}> <http://www.w3.org/ns/ldp#inbox> <${inbox}>.`, {
+        headers: { "content-type": "text/turtle" },
+      });
+    }
+    if (url === inbox) {
+      return new Response(
+        `<${inbox}> <http://www.w3.org/ns/ldp#contains> ${drafts.map((_, i) => `<${inbox}${i}`).join(">, ")}>.`,
+        { headers: { "content-type": "text/turtle" } },
+      );
+    }
+    // Model the pod's RDF representation: a stored subject and a local AS context.
+    const activity = JSON.parse(bodies[Number(String(url).slice(inbox.length))] as string);
+    return new Response(
+      JSON.stringify({
+        ...activity,
+        "@id": `${url}#it`,
+        "@context": {
+          "@vocab": "https://www.w3.org/ns/activitystreams#",
+          type: "@type",
+          actor: { "@type": "@id" },
+          object: { "@type": "@id" },
+          target: { "@type": "@id" },
+        },
+      }),
+      {
+        headers: { "content-type": "application/ld+json" },
+      },
+    );
+  });
+  const notify = createNotify({ fetch });
+  for (const draft of drafts) await notify(webId, { ...draft, actor: webId });
+  const reader = createInboxReader({ fetch });
+  expect(await reader.inbox(webId)).toBe(inbox);
+  const notifications = await reader.list(inbox);
+  expect(notifications.map(notificationKind)).toEqual([
+    "share",
+    "assignment",
+    "mention",
+    "invitation",
+  ]);
+  expect(fetch.mock.calls.filter(([url]) => url === "https://8.8.8.8/profile")).toHaveLength(1);
+});
+
+test("classifies unfamiliar activities conservatively and prioritizes share summaries", () => {
+  for (const notification of [
+    { type: "Announce" },
+    { type: "Announce", summary: "Something else" },
+    { type: "Create" },
+    { type: "Accept", target: "https://pod.example/" },
+  ])
+    expect(notificationKind({ url: "https://pod.example/inbox/n", ...notification })).toBe("other");
+  expect(
+    notificationKind({
+      url: "https://pod.example/inbox/n",
+      ...shareNotification("https://pod.example/doc", "reader"),
+      target: "https://pod.example/",
+    }),
+  ).toBe("share");
 });

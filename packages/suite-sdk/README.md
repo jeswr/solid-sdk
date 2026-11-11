@@ -21,6 +21,20 @@ Without a sender WebID or explicit activity actor it returns a `network` failure
 recipient protocol from the sender's identity. See [pod-access](../pod-access/README.md) for
 the result shape, builders, cache behavior, and Node DNS-pinning requirements.
 
+`useInbox({ clock?, maxItems?, pinningFetch? })` reads the current WebID's LDN inbox using
+`usePodAuth()` and returns `{ status, items, error, refresh }`. It loads automatically;
+`refresh(): Promise<void>` reloads now. Status is `idle` without a WebID, `loading` while
+reading, then `ready` or `error`. Items are `InboxNotification[]`, newest first; ordinary
+read failures populate `error` and clear items. Missing/LWS inboxes resolve ready and empty.
+`notificationKind(item)` is also re-exported to classify the four builder shapes.
+
+The reader and stable refresh function are recreated on identity/fetch/options changes,
+including logout and same-account login. Account changes clear items immediately, and
+replacement/unmount aborts profile, listing and member reads. Only committed sessions may
+fetch; retained refreshes reject with `Notification session changed`. Refresh replacement
+cancels prior listing work and ignores late settlements. Discovery/body/scope/concurrency
+limits match [pod-access](../pod-access/README.md). No read-state writes are performed.
+
 `./testing` re-exports `createNotify` for fixture-fetch tests. Run this package's `lint`, `build`,
 `typecheck` and `test` scripts; tests enforce 100% coverage.
 

@@ -14,6 +14,8 @@ export default defineConfig({
       exclude: ["src/**/*.test.ts", "src/index.ts"],
       thresholds: {
         "src/client.ts": { branches: 100, functions: 100, lines: 100, statements: 100 },
+        "src/client-discovery.ts": { branches: 100, functions: 100, lines: 100, statements: 100 },
+        "src/inbox-client.ts": { branches: 100, functions: 100, lines: 100, statements: 100 },
         "src/security/clientFetch.ts": {
           branches: 100,
           functions: 100,

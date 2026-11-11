@@ -21,7 +21,7 @@ import {
   TermWrapper,
 } from "@rdfjs/wrapper";
 import { DataFactory, Store } from "n3";
-import { AS, RDF_TYPE } from "./config.js";
+import { AS, RDF_TYPE } from "./vocabulary.js";
 
 /** AS2.0 activity verbs this package emits. (Reads accept any `as:*` type.) */
 export type ActivityType = "Announce" | "Invite" | "Offer" | "Create" | "Update" | "Add" | "Remove";

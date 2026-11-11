@@ -75,7 +75,7 @@ test("shares concurrent discovery, caches for exactly ten minutes, and retries e
   });
 });
 
-test("caches missing inboxes, expires them, and isolates notifier instances and exact WebID subjects", async () => {
+test("caches missing inboxes, expires them, and isolates clocks and exact WebID subjects", async () => {
   let now = 0;
   const fetch = vi.fn<typeof globalThis.fetch>().mockImplementation(async () => profile(""));
   const notify = createNotifyClient({ fetch, clock: () => now });
@@ -194,7 +194,10 @@ test("short-circuits known LWS recipients and handles LWS profile responses", as
     reason: "lws-no-ldn",
   });
   await expect(
-    createNotifyClient({ fetch, recipientProtocol: async () => "solid" as const })(webId, activity),
+    createNotifyClient({ fetch, clock: () => 0, recipientProtocol: async () => "solid" as const })(
+      webId,
+      activity,
+    ),
   ).resolves.toEqual({ delivered: true, inbox });
 });
 
