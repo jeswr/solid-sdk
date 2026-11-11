@@ -1,6 +1,6 @@
 // AUTHORED-BY Claude Opus 5.5
 import { positionForDrop } from "../views/positions";
-import { compareTasks } from "../views/project-groups";
+import { compareTasks, taskSection } from "../views/project-groups";
 import { taskDayKey } from "../views/today";
 import type { TaskView } from "../views/types";
 import type { DropPlan, DropTarget, PlanOptions, PositionPatch } from "./types";
@@ -15,7 +15,7 @@ export function visibleTasks(views: readonly TaskView[], showCompleted: boolean)
   return views.filter((task) => showCompleted || task.state === "open");
 }
 
-/** The rendered parent (06-tasks §4.6): an open top-level task of the same project. */
+/** The rendered direct parent: open and in the same project, at any depth. */
 export function effectiveParent(task: TaskView, views: readonly TaskView[]): TaskView | undefined {
   if (!task.parentId) return undefined;
   return views.find(
@@ -23,7 +23,7 @@ export function effectiveParent(task: TaskView, views: readonly TaskView[]): Tas
       view.id === task.parentId &&
       view.projectUrl === task.projectUrl &&
       view.state === "open" &&
-      !view.parentId,
+      view.id !== task.id,
   );
 }
 
@@ -36,7 +36,7 @@ interface Level {
 /** Children render in their parent's section, mirroring `projectGroups`. */
 function levelOf(task: TaskView, views: readonly TaskView[]): Level {
   const parent = effectiveParent(task, views);
-  return { projectUrl: task.projectUrl, sectionId: (parent ?? task).sectionId, parent };
+  return { projectUrl: task.projectUrl, sectionId: taskSection(task, views), parent };
 }
 
 function sameLevel(a: Level, b: Level): boolean {
@@ -166,6 +166,14 @@ export function planDrop(
         return target.container.dayKey ? dayPlan(active, target.container.dayKey) : NONE;
       const over = views.find((view) => view.url === target.url);
       if (!over || over.projectUrl !== active.projectUrl) return NONE;
+      // A subtree cannot be dropped among its own descendants at any depth.
+      const seen = new Set<string>();
+      let ancestor: TaskView | undefined = over;
+      while (ancestor && !seen.has(ancestor.id)) {
+        if (ancestor.id === active.id) return NONE;
+        seen.add(ancestor.id);
+        ancestor = all.find((task) => task.id === ancestor?.parentId);
+      }
       if (target.placement === "child" && canNest(active, over, all)) {
         const level = { projectUrl: over.projectUrl, sectionId: over.sectionId, parent: over };
         const count = members(level, views).filter((view) => view.url !== active.url).length;
@@ -175,8 +183,7 @@ export function planDrop(
       let after = target.placement !== "before";
       let level = levelOf(over, views);
       if (level.parent) {
-        // A row cannot land among its own children; a parent stays top-level.
-        if (level.parent.id === active.id) return NONE;
+        // Preserve the existing drag policy for tasks that have children.
         if (hasChildren(active, all)) {
           anchor = level.parent;
           after = true;

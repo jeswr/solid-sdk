@@ -6,7 +6,7 @@ import type { TaskView } from "./types";
 export type SortMode = "manual" | "due" | "priority" | "name";
 export interface Row {
   task: TaskView;
-  depth: 0 | 1;
+  depth: number;
   orphanParentTitle?: string;
 }
 export interface ProjectGroups {
@@ -29,25 +29,61 @@ function manual(a: TaskView, b: TaskView): number {
     a.url.localeCompare(b.url)
   );
 }
-/** One visible nesting level. Closed/filtered parents leave a breadcrumb on their children. */
+/** Flat date/label views retain the parent breadcrumb at every depth. */
 export function flatRows(tasks: readonly TaskView[], allTasks: readonly TaskView[] = tasks): Row[] {
-  const parents = new Map(
-    tasks.filter((task) => task.state === "open" && !task.parentId).map((task) => [task.id, task]),
-  );
   const titles = new Map(allTasks.map((task) => [task.id, task.title]));
-  const result: Row[] = [];
+  return tasks.map((task) => ({
+    task,
+    depth: 0,
+    ...(task.parentId ? { orphanParentTitle: titles.get(task.parentId) ?? "Parent task" } : {}),
+  }));
+}
+
+/** Iterative preorder at unlimited depth; malformed cycles still render each task once. */
+export function treeRows(tasks: readonly TaskView[], allTasks: readonly TaskView[] = tasks): Row[] {
+  const byId = new Map(tasks.map((task) => [task.id, task]));
+  const children = new Map<string, TaskView[]>();
   for (const task of tasks) {
-    if (task.parentId && parents.has(task.parentId)) continue;
-    result.push({
-      task,
-      depth: 0,
-      ...(task.parentId ? { orphanParentTitle: titles.get(task.parentId) ?? "Parent task" } : {}),
-    });
-    if (parents.has(task.id))
-      for (const child of tasks.filter((item) => item.parentId === task.id))
-        result.push({ task: child, depth: 1 });
+    if (!task.parentId || byId.get(task.parentId)?.state !== "open") continue;
+    const group = children.get(task.parentId) ?? [];
+    group.push(task);
+    children.set(task.parentId, group);
   }
+  const result: Row[] = [];
+  const seen = new Set<string>();
+  const visit = (root: Row) => {
+    const pending = [root];
+    while (pending.length) {
+      const row = pending.pop() as Row;
+      if (seen.has(row.task.id)) continue;
+      seen.add(row.task.id);
+      result.push(row);
+      for (const task of [...(children.get(row.task.id) ?? [])].reverse())
+        pending.push({ task, depth: row.depth + 1 });
+    }
+  };
+  for (const row of flatRows(tasks, allTasks))
+    if (!row.task.parentId || byId.get(row.task.parentId)?.state !== "open") visit(row);
+  for (const row of flatRows(tasks, allTasks)) if (!seen.has(row.task.id)) visit(row);
   return result;
+}
+
+/** Descendants inherit the highest visible open ancestor's section. */
+export function taskSection(
+  task: TaskView,
+  tasks: readonly TaskView[],
+  includeClosed = false,
+): string | undefined {
+  const byId = new Map(tasks.map((task) => [task.id, task]));
+  const seen = new Set([task.id]);
+  let current = task;
+  while (current.parentId) {
+    const parent = byId.get(current.parentId);
+    if (!parent || (!includeClosed && parent.state !== "open") || seen.has(parent.id)) break;
+    seen.add(parent.id);
+    current = parent;
+  }
+  return current.sectionId;
 }
 export function projectGroups(
   tasks: readonly TaskView[],
@@ -58,18 +94,13 @@ export function projectGroups(
   const visible = tasks
     .filter((task) => showCompleted || task.state === "open")
     .sort(compareTasks(sort));
-  const byId = new Map(
-    visible
-      .filter((task) => task.state === "open" && !task.parentId)
-      .map((task) => [task.id, task]),
-  );
   const sectionIds = new Set(sections.map((section) => section.id));
   const sectionOf = (task: TaskView) => {
-    const id = (task.parentId ? (byId.get(task.parentId) ?? task) : task).sectionId;
+    const id = taskSection(task, visible);
     return id && sectionIds.has(id) ? id : undefined;
   };
   return {
-    unsectioned: flatRows(
+    unsectioned: treeRows(
       visible.filter((task) => sectionOf(task) === undefined),
       tasks,
     ),
@@ -79,7 +110,7 @@ export function projectGroups(
         const members = visible.filter((task) => sectionOf(task) === section.id);
         return {
           section,
-          rows: flatRows(members, tasks),
+          rows: treeRows(members, tasks),
           openCount: members.filter((task) => task.state === "open").length,
         };
       }),

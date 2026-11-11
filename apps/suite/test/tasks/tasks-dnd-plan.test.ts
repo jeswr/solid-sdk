@@ -65,15 +65,35 @@ describe("visible tasks and nesting rules", () => {
     expect(visibleTasks([a, closed], true)).toEqual([a, closed]);
   });
 
-  it("resolves the rendered parent: open, top-level and in the same project", () => {
+  it("resolves the rendered parent at any depth: open and in the same project", () => {
     const { a, parent, k1, views } = fixture();
     expect(effectiveParent(a, views)).toBeUndefined();
     expect(effectiveParent(k1, views)).toBe(parent);
     expect(effectiveParent(k1, [k1, { ...parent, state: "closed" }])).toBeUndefined();
     expect(effectiveParent(k1, [k1, { ...parent, projectUrl: OTHER }])).toBeUndefined();
-    expect(effectiveParent(k1, [k1, { ...parent, parentId: "x" }])).toBeUndefined();
+    expect(effectiveParent(k1, [k1, { ...parent, parentId: "x" }])?.id).toBe(parent.id);
+    expect(effectiveParent({ ...k1, parentId: k1.id }, [k1])).toBeUndefined();
   });
 
+  it("keeps deep moves at their own level and rejects a drop into any descendant", () => {
+    const { parent, k1, k2, views } = fixture();
+    const deep = view("deep", { parentId: k1.id, position: 1 });
+    const deeper = view("deeper", { parentId: deep.id, position: 1 });
+    const all = [...views, deep, deeper];
+    expect(effectiveParent(deeper, all)).toBe(deep);
+    expect(
+      planDrop(parent, { kind: "task", url: deeper.url, container: top, placement: "before" }, all),
+    ).toEqual({ kind: "none" });
+    expect(
+      planDrop(k1, { kind: "task", url: deeper.url, container: top, placement: "after" }, all),
+    ).toEqual({ kind: "none" });
+    const next = view("next", { parentId: k1.id, position: 2 });
+    expect(position(planMove(deep, 1, [...all, next])).parentId).toBe(k1.id);
+    expect(position(planMove(deep, 1, [...all, next])).sectionId).toBe(parent.sectionId);
+    expect(position(planMove(k1, 1, all)).parentId).toBe(parent.id);
+    expect(position(planMove(k1, 1, all)).index).toBe(2);
+    expect(k2.parentId).toBe(parent.id);
+  });
   it("allows one nesting level only", () => {
     const { a, b, parent, k1, views } = fixture();
     expect(canNest(a, b, views)).toBe(true);

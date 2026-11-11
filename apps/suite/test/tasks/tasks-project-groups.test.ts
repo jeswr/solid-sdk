@@ -4,6 +4,8 @@ import {
   compareTasks,
   flatRows,
   projectGroups,
+  taskSection,
+  treeRows,
 } from "../../src/apps/tasks/lib/views/project-groups";
 import type { TaskView } from "../../src/apps/tasks/lib/views/types";
 
@@ -116,7 +118,7 @@ describe("project list projection", () => {
     ]);
     expect(compareTasks("manual")(view("a"), view("a"))).toBe(0);
   });
-  it("does not nest under a closed parent even with completed visible, or under another child", () => {
+  it("keeps flat views flat, including closed parents and deep children", () => {
     const closed = view("closed", { state: "closed" });
     const child = view("child", { parentId: closed.id });
     expect(flatRows([closed, child]).map((row) => row.depth)).toEqual([0, 0]);
@@ -127,7 +129,31 @@ describe("project list projection", () => {
         view("child", { parentId: "parent" }),
         view("deep", { parentId: "child" }),
       ]).map((row) => row.depth),
-    ).toEqual([0, 1, 0]);
+    ).toEqual([0, 0, 0]);
+  });
+  it("nests at every depth and safely displays malformed cycles once", () => {
+    const tasks = [
+      view("root", { sectionId: "doing" }),
+      view("child", { parentId: "root" }),
+      view("deep", { parentId: "child" }),
+    ];
+    expect(treeRows(tasks).map((row) => row.depth)).toEqual([0, 1, 2]);
+    expect(taskSection(tasks[2] as TaskView, tasks)).toBe("doing");
+    const cycle = [view("a", { parentId: "b" }), view("b", { parentId: "a" })];
+    expect(treeRows(cycle).map((row) => row.task.id)).toEqual(["a", "b"]);
+    expect(taskSection(cycle[0] as TaskView, cycle)).toBeUndefined();
+    const closedParent = view("closed", { state: "closed", sectionId: "doing" });
+    const child = view("child", { parentId: closedParent.id });
+    expect(taskSection(child, [closedParent, child], true)).toBe("doing");
+    expect(taskSection(child, [closedParent, child])).toBeUndefined();
+    const missing = view("missing", { parentId: "absent" });
+    expect(taskSection(missing, [missing])).toBeUndefined();
+    expect(treeRows([missing])[0]?.orphanParentTitle).toBe("Parent task");
+    expect(
+      treeRows([view("closed", { state: "closed" }), view("child", { parentId: "closed" })]).map(
+        (row) => row.depth,
+      ),
+    ).toEqual([0, 0]);
   });
   it("handles empty projects and section ordering without positions", () => {
     expect(projectGroups([], [], "manual")).toEqual({ unsectioned: [], sections: [] });

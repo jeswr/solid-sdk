@@ -16,13 +16,16 @@ import {
 import { ArrowLeft, Ellipsis, Plus, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
-import { useEffect, useId, useRef, useState } from "react";
+import { type CSSProperties, useEffect, useId, useRef, useState } from "react";
 import { encodeRef } from "@/lib/refs";
 import { duplicateTaskData } from "../../lib/detail/task-data";
 import type { StoredProject, StoredTask } from "../../lib/model/store";
+import { compareTasks, treeRows } from "../../lib/views/project-groups";
+import { expandedRows, taskLevel, taskProgress } from "../../lib/views/tree";
 import { toTaskView } from "../../lib/views/types";
 import { completeTask, deleteTask } from "../../state/actions";
 import { useTasks } from "../../state/tasks-context";
+import { TaskProgress, TreeToggle, useCollapsedTasks } from "../tree-controls";
 import { ProjectFields, TaskProperties } from "./fields";
 
 function descriptionNodes(text: string) {
@@ -119,9 +122,24 @@ export function TaskDetail({
     setMoveOpen(false);
     await tasks.moveTaskToProject(stored, target);
   };
-  const children = tasks.views.filter((task) => task.parentId === view.id);
-  const completed = children.filter((task) => task.state === "closed").length;
-  const open = children.length - completed;
+  const { open } = taskProgress(tasks.views, view.id);
+  const tree = useCollapsedTasks();
+  const descendants = new Set<string>();
+  const pending = [view.id];
+  while (pending.length) {
+    const id = pending.pop() as string;
+    if (descendants.has(id)) continue;
+    descendants.add(id);
+    for (const child of tasks.views) if (child.parentId === id) pending.push(child.id);
+  }
+  const rows = treeRows(
+    tasks.views
+      .filter((task) => task.id !== view.id && descendants.has(task.id))
+      .sort(compareTasks("manual")),
+    tasks.views,
+  );
+  const visibleRows = expandedRows(rows, tree.collapsed);
+  const [activeChild, setActiveChild] = useState<string>();
   const parent = tasks.views.find((task) => task.id === view.parentId);
   const section = project.tracker.sections.find((section) => section.id === view.sectionId);
   const commitTitle = () => {
@@ -300,29 +318,76 @@ export function TaskDetail({
           </>
         )}
       </div>
-      {view.parentId ? (
+      {view.parentId && (
         <p className="tsk-detail-muted">
           Part of{" "}
           <Link href={href(parent?.url ?? (view.parentId.split("#")[0] as string))}>
             {parent?.title ?? "parent task"}
           </Link>
         </p>
-      ) : (
-        <section className="tsk-detail-subtasks" aria-labelledby={`${id}-subtasks`}>
-          <h3 id={`${id}-subtasks`}>
-            Sub-tasks{" "}
-            <span role="img" aria-label={`${completed} of ${children.length} sub-tasks complete`}>
-              {completed}/{children.length}
-            </span>
-          </h3>
-          {view.state === "closed" && open > 0 && (
-            <p role="status" className="tsk-detail-muted">
-              {open} {open === 1 ? "sub-task" : "sub-tasks"} still open
-            </p>
-          )}
-          <ul>
-            {children.map((child) => (
-              <li key={child.url}>
+      )}
+      <section className="tsk-detail-subtasks" aria-labelledby={`${id}-subtasks`}>
+        <h3 id={`${id}-subtasks`}>
+          Sub-tasks <TaskProgress tasks={tasks.views} id={view.id} />
+        </h3>
+        {view.state === "closed" && open > 0 && (
+          <p role="status" className="tsk-detail-muted">
+            {open} {open === 1 ? "sub-task" : "sub-tasks"} still open
+          </p>
+        )}
+        {/* biome-ignore lint/a11y/noNoninteractiveElementToInteractiveRole: the list implements a tree with roving focus and arrow-key navigation. */}
+        <ul role="tree" aria-label="Sub-tasks">
+          {visibleRows.map(({ task: child, depth }, index) => {
+            const hasChildren = rows.some(
+              (row) => row.task.parentId === child.id && row.depth > depth,
+            );
+            const expanded = !tree.collapsed.has(child.id);
+            return (
+              <li
+                key={child.url}
+                role="treeitem"
+                className="tsk-detail-tree-row"
+                style={{ "--tsk-depth": depth } as CSSProperties}
+                aria-label={child.title}
+                aria-level={taskLevel(child, tasks.views)}
+                aria-expanded={hasChildren ? expanded : undefined}
+                tabIndex={
+                  activeChild === child.id ||
+                  (!visibleRows.some((row) => row.task.id === activeChild) && index === 0)
+                    ? 0
+                    : -1
+                }
+                onFocus={() => setActiveChild(child.id)}
+                onKeyDown={(event) => {
+                  if (event.target !== event.currentTarget) return;
+                  let target: string | undefined;
+                  if (event.key === "ArrowDown") target = visibleRows[index + 1]?.task.id;
+                  else if (event.key === "ArrowUp") target = visibleRows[index - 1]?.task.id;
+                  else if (event.key === "Home") target = visibleRows[0]?.task.id;
+                  else if (event.key === "End") target = visibleRows.at(-1)?.task.id;
+                  else if (event.key === "ArrowRight" && hasChildren) {
+                    if (!expanded) tree.setExpanded(child.id, true);
+                    else target = visibleRows[index + 1]?.task.id;
+                  } else if (event.key === "ArrowLeft") {
+                    if (hasChildren && expanded) tree.setExpanded(child.id, false);
+                    else target = child.parentId;
+                  } else return;
+                  event.preventDefault();
+                  const items =
+                    event.currentTarget.parentElement?.querySelectorAll<HTMLElement>(
+                      '[role="treeitem"]',
+                    );
+                  const at = visibleRows.findIndex((row) => row.task.id === target);
+                  if (at >= 0) items?.[at]?.focus();
+                }}
+              >
+                {hasChildren && (
+                  <TreeToggle
+                    title={child.title}
+                    expanded={expanded}
+                    onToggle={() => tree.setExpanded(child.id, !expanded)}
+                  />
+                )}
                 <label className="tsk-check-target">
                   <input
                     className="tsk-check"
@@ -338,56 +403,57 @@ export function TaskDetail({
                   />
                 </label>
                 <Link href={href(child.url)}>{child.title}</Link>
+                <TaskProgress tasks={tasks.views} id={child.id} />
               </li>
-            ))}
-          </ul>
-          {addingChild ? (
-            <form
-              className="tsk-detail-inline"
-              onSubmit={(event) => {
-                event.preventDefault();
-                if (!childTitle.trim()) return;
-                void tasks.createTask(project, {
-                  title: childTitle.trim(),
-                  parent: view.id,
-                  sectionId: view.sectionId,
-                });
-                setChildTitle("");
+            );
+          })}
+        </ul>
+        {addingChild ? (
+          <form
+            className="tsk-detail-inline"
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (!childTitle.trim()) return;
+              void tasks.createTask(project, {
+                title: childTitle.trim(),
+                parent: view.id,
+                sectionId: view.sectionId,
+              });
+              setChildTitle("");
+            }}
+          >
+            <input
+              ref={childField}
+              aria-label="Sub-task title"
+              placeholder="+ Add sub-task"
+              value={childTitle}
+              onChange={(event) => setChildTitle(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Escape" && !event.nativeEvent.isComposing) {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  setAddingChild(false);
+                  setChildTitle("");
+                  requestAnimationFrame(() => childTrigger.current?.focus());
+                }
               }}
-            >
-              <input
-                ref={childField}
-                aria-label="Sub-task title"
-                placeholder="+ Add sub-task"
-                value={childTitle}
-                onChange={(event) => setChildTitle(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Escape" && !event.nativeEvent.isComposing) {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    setAddingChild(false);
-                    setChildTitle("");
-                    requestAnimationFrame(() => childTrigger.current?.focus());
-                  }
-                }}
-              />
-            </form>
-          ) : (
-            <button
-              ref={childTrigger}
-              type="button"
-              className="tsk-ghost"
-              onClick={() => {
-                setAddingChild(true);
-                requestAnimationFrame(() => childField.current?.focus());
-              }}
-            >
-              <Plus size={16} aria-hidden="true" />
-              Add sub-task
-            </button>
-          )}
-        </section>
-      )}
+            />
+          </form>
+        ) : (
+          <button
+            ref={childTrigger}
+            type="button"
+            className="tsk-ghost"
+            onClick={() => {
+              setAddingChild(true);
+              requestAnimationFrame(() => childField.current?.focus());
+            }}
+          >
+            <Plus size={16} aria-hidden="true" />
+            Add sub-task
+          </button>
+        )}
+      </section>
       <TaskProperties
         stored={stored}
         project={project}
