@@ -197,7 +197,7 @@ async function readStatus(client: AgentClient, session: Session, now: Date) {
     !doc.etag
   )
     throw new Error("Your permission status could not be verified.");
-  return { vc, etag: doc.etag };
+  return { vc, etag: doc.etag, text: doc.text, contentType: doc.contentType };
 }
 export async function previewMandate(m: Mandate, client: AgentClient): Promise<string> {
   return credentialToTurtle(
@@ -379,36 +379,52 @@ async function revokeStatus(
  * Before an approval key is revoked: re-sign the permission status list with this device's key
  * when `from` signed it, keeping every revocation bit and the validity window. Without this the
  * list stops verifying once `from` leaves the profile, and new permissions can't be granted.
+ *
+ * Returns a repair step for when the profile edit then fails. Another device may have removed
+ * this device's key meanwhile (two devices revoking each other), leaving the copy signed by a key
+ * that's gone. Repair puts the previous list back, conditionally and only while it is still this
+ * device's copy, when this device's key is gone and `from` is still listed. In every other case
+ * the copy is signed by a listed key and is kept.
  */
 export async function migrateStatusList(
   client: AgentClient,
   session: Session,
   from: string,
   now = new Date(),
-): Promise<boolean> {
+): Promise<(() => Promise<void>) | undefined> {
   const list = await readStatus(client, session, now);
   if (!list || ![list.vc.proof].flat().some((proof) => proof?.verificationMethod === from))
-    return false;
+    return undefined;
   const { proof: _proof, ...unsigned } = list.vc;
-  await withApprovalKey(session, async (key) => {
+  const written = await withApprovalKey(session, async (key) => {
     const signed = await issue({
       credential: unsigned,
       key,
       suite: new DataIntegritySuite("ecdsa-rdfc-2019"),
       options: { created: now },
     });
-    await client.replace(
-      client.paths.mandatesStatus,
-      await statusListCredentialToTurtle(signed),
-      list.etag,
-      "application/trig",
-    );
+    const body = await statusListCredentialToTurtle(signed);
+    await client.replace(client.paths.mandatesStatus, body, list.etag, "application/trig");
+    return { body, signer: key.verificationMethod };
   });
+  const repair = async () => {
+    const keys = createWebIdKeyResolver({ fetch: profileReader(session) });
+    if (
+      (await keys.isControlledBy(written.signer, session.webId)) ||
+      !(await keys.isControlledBy(from, session.webId))
+    )
+      return;
+    const current = await client.statusDocument(client.paths.mandatesStatus);
+    if (current.text !== written.body || !current.etag) return;
+    await client.replace(client.paths.mandatesStatus, list.text, current.etag, list.contentType);
+  };
   // The copy must verify under the current profile before the old key goes.
-  const copy = await readStatus(client, session, now);
-  if (!copy || [copy.vc.proof].flat().some((proof) => proof?.verificationMethod === from))
+  const copy = await readStatus(client, session, now).catch(() => undefined);
+  if (!copy || [copy.vc.proof].flat().some((proof) => proof?.verificationMethod === from)) {
+    await repair().catch(() => undefined);
     throw new Error("Couldn't re-sign your permission status, so the key was kept. Try again.");
-  return true;
+  }
+  return repair;
 }
 export async function revokeMandate(client: AgentClient, session: Session, now = new Date()) {
   const current = await currentCredential(client);
