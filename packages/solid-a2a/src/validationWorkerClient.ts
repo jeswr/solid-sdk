@@ -18,6 +18,8 @@ export interface ValidationWorkerPoolOptions {
   readonly size?: number;
   /** Waiting calls beyond occupied workers, 0–65536 (default 64). */
   readonly maxQueueSize?: number;
+  /** Independent ready-handshake limit, integer 1–2147483647 ms (default 10000). */
+  readonly startupTimeoutMs?: number;
   /** Copy the shipped validationWorker.js here when bundling the main entry. */
   readonly workerUrl?: URL;
   readonly workerFactory?: ValidationWorkerFactory;
@@ -29,6 +31,7 @@ type Job = {
   shapes: readonly Quad[];
   deadline: number;
   timeoutMs: number;
+  posted: boolean;
   timer: ReturnType<typeof setTimeout>;
   resolve: (report: ValidationReport) => void;
   reject: (error: Error) => void;
@@ -39,15 +42,25 @@ type Slot = {
   dead: boolean;
   job?: Job;
   startup: ReturnType<typeof setTimeout>;
+  retirement?: Promise<void>;
+  finishRetirement?: () => void;
 };
+const TERMINATION_GRACE_MS = 100;
+type Runner = (
+  data: readonly Quad[],
+  shapes: readonly Quad[],
+  deadline: number,
+  timeoutMs: number,
+) => Promise<ValidationReport>;
+// Only the capped validateIntent adapter can submit work. No public pool.run bypass.
+const runners = new WeakMap<ValidationWorkerPool, Runner>();
 const timeoutError = (ms: number) => new Error(`Validation exceeded ${ms} ms wall-clock limit`);
 
-/** Lazily pre-warmed, bounded workers. A busy or failed worker is terminated before refusal settles. */
+/** Lazily warmed, bounded workers. Retired slots count until termination or exit. */
 export class ValidationWorkerPool {
   private readonly options: ValidationWorkerPoolOptions;
   private readonly queue: Job[] = [];
   private readonly slots = new Set<Slot>();
-  private readonly retiring = new Set<Promise<void>>();
   private initialization?: Promise<void>;
   private factory?: ValidationWorkerFactory;
   private size = 2;
@@ -59,6 +72,7 @@ export class ValidationWorkerPool {
     for (const [name, value, min, max] of [
       ["size", options.size, 1, 32],
       ["maxQueueSize", options.maxQueueSize, 0, 65_536],
+      ["startupTimeoutMs", options.startupTimeoutMs, 1, 2_147_483_647],
     ] as const) {
       if (value !== undefined && (!Number.isInteger(value) || value < min || value > max)) {
         throw new TypeError(`${name} must be an integer between ${min} and ${max}`);
@@ -66,6 +80,9 @@ export class ValidationWorkerPool {
     }
     this.options = { ...options };
     this.size = options.size ?? 2;
+    runners.set(this, (data, shapes, deadline, timeoutMs) =>
+      this.#run(data, shapes, deadline, timeoutMs),
+    );
   }
 
   private initialize(): Promise<void> {
@@ -94,16 +111,15 @@ export class ValidationWorkerPool {
     return this.initialization;
   }
 
-  /** @internal Input is already capped by intentQuads/shapeQuads on the calling thread. */
-  async run(
+  /** Input is already capped by intentQuads/shapeQuads on the calling thread. */
+  async #run(
     data: readonly Quad[],
     shapes: readonly Quad[],
     deadline: number,
     timeoutMs: number,
   ): Promise<ValidationReport> {
     if (this.closed) throw new Error("Validation worker pool is closed");
-    const reserved =
-      [...this.slots].filter((slot) => slot.job !== undefined).length + this.retiring.size;
+    const reserved = [...this.slots].filter((slot) => slot.dead || slot.job !== undefined).length;
     // Admission includes callers awaiting lazy module loading, before they reach queue.
     if (
       this.entering + this.queue.length + reserved >=
@@ -119,11 +135,8 @@ export class ValidationWorkerPool {
     }
     if (this.closed) throw new Error("Validation worker pool is closed");
     if (performance.now() >= deadline) throw timeoutError(timeoutMs);
-    const occupied = [...this.slots].filter((slot) => slot.job !== undefined).length;
-    if (
-      occupied + this.retiring.size >= this.size &&
-      this.queue.length >= (this.options.maxQueueSize ?? 64)
-    ) {
+    const occupied = [...this.slots].filter((slot) => slot.dead || slot.job !== undefined).length;
+    if (occupied + this.queue.length >= this.size + (this.options.maxQueueSize ?? 64)) {
       throw new Error("Validation worker queue is full");
     }
     return new Promise((resolve, reject) => {
@@ -133,6 +146,7 @@ export class ValidationWorkerPool {
         shapes,
         deadline,
         timeoutMs,
+        posted: false,
         resolve,
         reject,
         timer: setTimeout(() => this.expire(job), Math.max(0, deadline - performance.now())),
@@ -146,7 +160,7 @@ export class ValidationWorkerPool {
     if (this.closed || this.queue.length === 0) return;
     // Warm all slots together only on demand. There is never more than size workers,
     // including workers whose termination has not yet completed.
-    while (this.slots.size + this.retiring.size < this.size) {
+    while (this.slots.size < this.size) {
       try {
         this.startSlot();
       } catch (error) {
@@ -162,12 +176,12 @@ export class ValidationWorkerPool {
       }
     }
     for (const slot of this.slots) {
-      if (slot.dead || slot.job) continue;
+      if (slot.dead || slot.job || !slot.ready) continue;
       const job = this.queue.shift();
       if (!job) break;
       slot.job = job;
       slot.worker.ref();
-      if (slot.ready) this.dispatch(slot);
+      this.dispatch(slot);
     }
   }
 
@@ -176,7 +190,10 @@ export class ValidationWorkerPool {
       this.options.workerUrl ?? new URL("./validationWorker.js", import.meta.url),
       {
         resourceLimits: {
-          maxOldGenerationSizeMb: 64,
+          // At most 5 Mi source characters across both graphs: even sixfold
+          // N-Quads escaping as two-byte strings is < 64 MiB. Leave >= 8x
+          // headroom for parsing, validator datasets and temporary term copies.
+          maxOldGenerationSizeMb: 512,
           maxYoungGenerationSizeMb: 16,
           stackSizeMb: 4,
         },
@@ -187,13 +204,13 @@ export class ValidationWorkerPool {
       ready: false,
       dead: false,
       startup: setTimeout(() => {
-        // Assigned jobs have their own deadline, including a caller's longer timeout.
-        if (!slot.job)
-          void this.retire(
-            slot,
-            new Error("Validation worker startup exceeded 2000 ms; check workerUrl/workerFactory"),
-          );
-      }, 2_000),
+        void this.retire(
+          slot,
+          new Error(
+            `Validation worker startup exceeded ${this.options.startupTimeoutMs ?? 10_000} ms; check workerUrl/workerFactory`,
+          ),
+        );
+      }, this.options.startupTimeoutMs ?? 10_000),
     };
     slot.startup.unref();
     this.slots.add(slot);
@@ -202,7 +219,7 @@ export class ValidationWorkerPool {
       if (message?.ready === true && !slot.ready) {
         slot.ready = true;
         clearTimeout(slot.startup);
-        if (slot.job) this.dispatch(slot);
+        this.pump();
         return;
       }
       const job = slot.job;
@@ -237,6 +254,8 @@ export class ValidationWorkerPool {
     });
     worker.on("exit", (code: number) => {
       void this.retire(slot, new Error(`Validation worker exited without a report (code ${code})`));
+      this.release(slot);
+      slot.finishRetirement?.();
     });
     // Registering message handlers refs the port: unref only after all listeners exist.
     worker.unref();
@@ -259,6 +278,7 @@ export class ValidationWorkerPool {
         this.expire(job);
         return;
       }
+      job.posted = true;
       slot.worker.postMessage(request);
     } catch (error) {
       void this.retire(slot, new Error(`Validation worker transfer failed: ${String(error)}`));
@@ -268,7 +288,18 @@ export class ValidationWorkerPool {
   private expire(job: Job): void {
     const slot = [...this.slots].find((candidate) => candidate.job === job);
     if (slot) {
-      void this.retire(slot, timeoutError(job.timeoutMs));
+      if (job.posted) {
+        void this.retire(slot, timeoutError(job.timeoutMs));
+      } else {
+        // The caller's budget can expire during encoding, before any worker work.
+        slot.job = undefined;
+        slot.worker.unref();
+        clearTimeout(job.timer);
+        job.reject(timeoutError(job.timeoutMs));
+        // Many queued deadlines can pass together while the parent timer is
+        // delayed. Continue without recursively dispatching an entire queue.
+        queueMicrotask(() => this.pump());
+      }
       return;
     }
     const index = this.queue.indexOf(job);
@@ -278,33 +309,55 @@ export class ValidationWorkerPool {
     job.reject(timeoutError(job.timeoutMs));
   }
 
+  /** Release capacity only after terminate succeeds or an exit is observed. */
+  private release(slot: Slot): void {
+    if (!this.slots.delete(slot)) return;
+    slot.worker.removeAllListeners();
+    this.pump();
+  }
+
   private retire(slot: Slot, error: Error): Promise<void> {
-    if (slot.dead) return Promise.resolve();
+    if (slot.retirement) return slot.retirement;
     slot.dead = true;
     clearTimeout(slot.startup);
     const job = slot.job;
     slot.job = undefined;
     if (job) clearTimeout(job.timer);
-    this.slots.delete(slot);
-    const termination = (async () => {
-      try {
-        await slot.worker.terminate();
-      } catch (failure) {
-        error = new Error(`Validation worker termination failed: ${String(failure)}`);
-      } finally {
-        slot.worker.removeAllListeners();
+    // A failed handshake has no assigned job: refuse waiting callers, rather
+    // than endlessly rebuilding cold workers until their individual deadlines.
+    const waiting = slot.ready ? [] : this.queue.splice(0);
+    for (const queued of waiting) clearTimeout(queued.timer);
+    slot.retirement = new Promise((resolve) => {
+      let settled = false;
+      const finish = () => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(grace);
         job?.reject(error);
-      }
-    })();
-    this.retiring.add(termination);
-    void termination.then(() => {
-      this.retiring.delete(termination);
-      this.pump();
+        for (const queued of waiting) queued.reject(error);
+        resolve();
+      };
+      const grace = setTimeout(finish, TERMINATION_GRACE_MS);
+      slot.finishRetirement = finish;
+      // Defer invocation until retirement is registered, even for synchronous
+      // factories. A rejected/hung terminate keeps this dead slot against size.
+      void Promise.resolve()
+        .then(() => slot.worker.terminate())
+        .then(
+          () => {
+            this.release(slot);
+            finish();
+          },
+          (failure) => {
+            error = new Error(`Validation worker termination failed: ${String(failure)}`);
+            finish();
+          },
+        );
     });
-    return termination;
+    return slot.retirement;
   }
 
-  /** Reject queued/active calls and await termination. Closed instances cannot be reused. */
+  /** Refuse pending calls and await termination with bounded grace. Instances stay closed. */
   async close(): Promise<void> {
     this.closed = true;
     const error = new Error("Validation worker pool is closed");
@@ -312,8 +365,7 @@ export class ValidationWorkerPool {
       clearTimeout(job.timer);
       job.reject(error);
     }
-    for (const slot of this.slots) void this.retire(slot, error);
-    await Promise.all(this.retiring);
+    await Promise.all([...this.slots].map((slot) => this.retire(slot, error)));
   }
 }
 
@@ -325,9 +377,9 @@ export function runValidationWorker(
   timeoutMs: number,
   pool?: ValidationWorkerPool,
 ): Promise<ValidationReport> {
-  if (pool) return pool.run(data, shapes, deadline, timeoutMs);
-  defaultPool ??= new ValidationWorkerPool();
-  return defaultPool.run(data, shapes, deadline, timeoutMs);
+  if (!pool) defaultPool ??= new ValidationWorkerPool();
+  const selected = pool ?? (defaultPool as ValidationWorkerPool);
+  return (runners.get(selected) as Runner)(data, shapes, deadline, timeoutMs);
 }
 
 /** Shut down the shared pool; a later validateIntent call lazily creates a new one. */

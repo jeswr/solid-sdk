@@ -5,6 +5,10 @@ const SH_NS = "http://www.w3.org/ns/shacl#";
 const RDF_NS = "http://www.w3.org/1999/02/22-rdf-syntax-ns#";
 export const MAX_DATA_QUADS = 1_000;
 const MAX_SHAPE_QUADS = 10_000;
+// Count every occurrence, including datatype, language, direction and graph names.
+// These caps bound caller encoding as well as worker parsing and term copies.
+export const MAX_DATA_CHARACTERS = 1_048_576;
+export const MAX_SHAPE_CHARACTERS = 4_194_304;
 
 export const UNBOUNDED = "are not evaluated (unbounded cost)";
 
@@ -27,16 +31,23 @@ const PLAIN_DATATYPES = new Set([
   `${RDF_NS}dirLangString`,
 ]);
 
+function termCharacters(term: Term): number {
+  return term.termType === "Literal"
+    ? term.value.length +
+        term.language.length +
+        term.datatype.value.length +
+        ((term as typeof term & { direction?: string }).direction?.length ?? 0)
+    : term.value.length;
+}
+
 /** Why a term is too long to evaluate, or undefined. */
 function oversizedTerm(term: Term, predicate?: string): string | undefined {
   if (term.termType === "Quad") return "Quoted triples";
   // A literal's serialised id carries its language tag and datatype IRI too.
-  const length =
-    term.termType === "Literal"
-      ? term.value.length + term.language.length + term.datatype.value.length
-      : term.value.length;
-  if (length > MAX_TERM_LENGTH) return `Terms over ${MAX_TERM_LENGTH} characters`;
-  if (term.termType !== "Literal") return undefined;
+  const length = termCharacters(term);
+  if (term.termType !== "Literal") {
+    return length > MAX_TERM_LENGTH ? `Terms over ${MAX_TERM_LENGTH} characters` : undefined;
+  }
   const direction = (term as typeof term & { direction?: string }).direction ?? "";
   if (
     (direction !== "" && direction !== "ltr" && direction !== "rtl") ||
@@ -44,6 +55,7 @@ function oversizedTerm(term: Term, predicate?: string): string | undefined {
   ) {
     return "Literals with an invalid direction";
   }
+  if (length > MAX_TERM_LENGTH) return `Terms over ${MAX_TERM_LENGTH} characters`;
   if (term.language.length > MAX_LANGUAGE_TAG_LENGTH) {
     return `Language tags over ${MAX_LANGUAGE_TAG_LENGTH} characters`;
   }
@@ -66,12 +78,20 @@ export function checkedQuads(
   const tooMany = () =>
     new Error(`${shapes ? "Shapes" : "Intent graphs"} over ${limit} triples ${UNBOUNDED}`);
   if (count > limit) throw tooMany();
+  const characterLimit = shapes ? MAX_SHAPE_CHARACTERS : MAX_DATA_CHARACTERS;
+  let characters = 0;
   const quads: Quad[] = [];
   for (const q of input) {
     if (quads.length === limit) throw tooMany();
     for (const term of [q.subject, q.predicate, q.object, q.graph]) {
       const why = oversizedTerm(term, shapes && term === q.object ? q.predicate.value : undefined);
       if (why !== undefined) throw new Error(`${why} ${UNBOUNDED}`);
+      characters += termCharacters(term);
+      if (characters > characterLimit) {
+        throw new Error(
+          `${shapes ? "Shapes" : "Intent graphs"} over ${characterLimit} total characters ${UNBOUNDED}`,
+        );
+      }
     }
     quads.push(q);
   }

@@ -52,10 +52,18 @@ export async function validateIntent(
     ) {
       throw new TypeError('execution must be "worker" or "in-process"');
     }
-    if (
-      options.execution !== "in-process" &&
-      (options.execution === "worker" || (typeof process !== "undefined" && process.versions?.node))
-    ) {
+    const node = typeof process !== "undefined" && Boolean(process.versions?.node);
+    const browser =
+      typeof window !== "undefined" &&
+      typeof document !== "undefined" &&
+      document.nodeType === 9 &&
+      window.document === document;
+    if (options.execution === undefined && !node && !browser) {
+      throw new TypeError(
+        'SHACL validation requires execution: "worker" with a configured pool, or explicit execution: "in-process" (weaker, no wall-clock bound) outside Node and browsers',
+      );
+    }
+    if (options.execution === "worker" || (options.execution !== "in-process" && node)) {
       // A Node worker failure must never fall back to blocking this thread.
       return await runValidationWorker(
         intentQuads(intent),

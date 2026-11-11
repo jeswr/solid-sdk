@@ -24,7 +24,10 @@ describe("validation graph transfer", () => {
       quad(blankNode("subject"), namedNode(`urn:p:${index}`), value, namedNode("urn:graph")),
     );
     original.push(quad(namedNode("urn:s"), namedNode("urn:p"), blankNode("object")));
-    const decoded = decodeValidationQuads(encodeValidationQuads(original));
+    const encoded = encodeValidationQuads(original);
+    expect(encoded).toContain('"text"@en--rtl');
+    expect(encoded).toContain("_:subject");
+    const decoded = decodeValidationQuads(encoded);
     expect(decoded).toHaveLength(original.length);
     for (let index = 0; index < original.length; index += 1) {
       expect(decoded[index]?.equals(original[index])).toBe(true);

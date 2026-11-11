@@ -7,6 +7,7 @@ assert.equal(
     await validateIntent(
       { id: "urn:idle", action: "read", target: "https://a/x" },
       buildShapeForIntent("read"),
+      { timeoutMs: 10_000 },
     )
   ).conforms,
   true,

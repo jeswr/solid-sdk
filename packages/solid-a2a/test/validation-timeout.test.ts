@@ -51,7 +51,7 @@ describe("SHACL wall-clock bound", () => {
       expect(ticks).toBeGreaterThan(1);
       expect(workerTest.workers).toHaveLength(1);
       expect(workerTest.workers[0]?.terminate).toHaveBeenCalledOnce();
-      expect(workerTest.workers[0]?.threadId).toBe(-1);
+      await vi.waitFor(() => expect(workerTest.workers[0]?.threadId).toBe(-1));
     } finally {
       clearInterval(heartbeat);
     }
@@ -63,7 +63,9 @@ describe("SHACL wall-clock bound", () => {
       conforms: false,
       results: [{ message: "Validation exceeded 2000 ms wall-clock limit" }],
     });
-    expect(workerTest.workers[0]?.threadId).toBe(-1);
+    expect(workerTest.workers[0]?.terminate).toHaveBeenCalledOnce();
+    // Refusal has bounded grace; the OS may deliver exit a little later under load.
+    await vi.waitFor(() => expect(workerTest.workers[0]?.threadId).toBe(-1));
   });
 
   it("honors a smaller timeout, then accepts normal validation with a larger timeout", async () => {
@@ -71,14 +73,14 @@ describe("SHACL wall-clock bound", () => {
     // Caller-side preflight can spend the entire 1 ms before a worker starts.
     const expiredWorkers = [...workerTest.workers];
     for (const worker of expiredWorkers) {
-      expect(worker.threadId).toBe(-1);
-      expect(worker.terminate).toHaveBeenCalledOnce();
+      expect(worker.threadId).toBeGreaterThan(0);
+      expect(worker.terminate).not.toHaveBeenCalled();
     }
     expect(await validateIntent(intent, shape, { timeoutMs: 5_000 })).toEqual({
       conforms: true,
       results: [],
     });
-    expect(workerTest.workers).toHaveLength(expiredWorkers.length + 1);
+    expect(workerTest.workers).toHaveLength(Math.max(expiredWorkers.length, 1));
     expect(workerTest.workers.at(-1)?.threadId).toBeGreaterThan(0);
     expect(workerTest.workers.at(-1)?.terminate).not.toHaveBeenCalled();
   });
@@ -107,12 +109,17 @@ describe("SHACL wall-clock bound", () => {
     const report = await validateIntent(intent, shape);
     expect(report.conforms).toBe(false);
     expect(report.results[0]?.message).toMatch(/worker/i);
-    for (const worker of workerTest.workers) expect(worker.threadId).toBe(-1);
+    await vi.waitFor(() => {
+      for (const worker of workerTest.workers) expect(worker.threadId).toBe(-1);
+    });
   });
 
-  it("retains the synchronous metered path outside Node", async () => {
+  it("retains the synchronous metered path in a browser", async () => {
     let pending: ReturnType<typeof validateIntent>;
     vi.stubGlobal("process", undefined);
+    const document = { nodeType: 9 };
+    vi.stubGlobal("document", document);
+    vi.stubGlobal("window", { document });
     try {
       pending = validateIntent(intent, shape);
     } finally {
@@ -120,6 +127,49 @@ describe("SHACL wall-clock bound", () => {
     }
     expect(await pending).toEqual({ conforms: true, results: [] });
     expect(workerTest.workers).toHaveLength(0);
+  });
+
+  it.each([
+    undefined,
+    { versions: {} },
+  ])("fails closed by default in a non-browser runtime %j", async (runtime) => {
+    vi.stubGlobal("process", runtime);
+    try {
+      expect(await validateIntent(intent, shape)).toMatchObject({
+        conforms: false,
+        results: [{ message: expect.stringMatching(/execution.*in-process/) }],
+      });
+      expect(await validateIntent(intent, shape, { execution: "in-process" })).toEqual({
+        conforms: true,
+        results: [],
+      });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+    expect(workerTest.workers).toHaveLength(0);
+  });
+
+  it("fails closed for an invalid execution option", async () => {
+    expect(await validateIntent(intent, shape, { execution: "invalid" as "worker" })).toMatchObject(
+      {
+        conforms: false,
+        results: [{ message: 'execution must be "worker" or "in-process"' }],
+      },
+    );
+    expect(workerTest.workers).toHaveLength(0);
+  });
+
+  it("fails closed on explicit worker execution outside Node when threads are unavailable", async () => {
+    workerTest.missingThreads = true;
+    vi.stubGlobal("process", undefined);
+    try {
+      expect(await validateIntent(intent, shape, { execution: "worker" })).toMatchObject({
+        conforms: false,
+        results: [{ message: expect.stringContaining("worker_threads") }],
+      });
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it("runs the shipped entrypoint and worker without Vitest mocks", async () => {
