@@ -60,9 +60,8 @@ npm run gate  # lint + typecheck + coverage (100% lines/stmts/funcs) + build
 ```ts
 import { createChatStore } from "@jeswr/pod-chat";
 
-// In production pass NO fetchImpl — @solid/reactive-authentication patches the
-// global fetch, so auth is automatic. Tests inject a fetch.
-const store = createChatStore({ podRoot: "https://alice.pod/", webId });
+// Pass the host session's bounded pod-auth fetch explicitly.
+const store = createChatStore({ podRoot: "https://alice.pod/", webId, fetchImpl: auth.fetch });
 
 // Create a room (registers pc:ChatRoom in the Type Index on first use).
 const { url: room } = await store.createRoom({ name: "General", creator: webId });

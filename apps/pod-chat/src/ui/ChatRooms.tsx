@@ -11,7 +11,7 @@
 // immediately, the pod write runs async with a Saving→Saved cue, and on failure
 // the optimistic message is reverted (removed) and the error surfaced. The auth
 // for the write rides the same injected `fetch` seam as the reads (no hard-wired
-// login flow — #18-gated; see useChat.ts).
+// login flow; see useChat.ts).
 //
 // This component is FRAMEWORK-AGNOSTIC React (no Next.js import, no "use client"
 // pragma): it drops straight into the create-solid-app Next.js shell's
@@ -48,9 +48,8 @@ export interface ChatRoomsProps {
   /** The WebID of the active user — used by the data layer's type-index reads. */
   webId: string;
   /**
-   * The authenticated fetch for pod reads. Omit to use the ambient global fetch
-   * (patched by @solid/reactive-authentication in a real session). The
-   * injectable auth seam — unit tests pass a stub here.
+   * Pass pod-auth's `auth.fetch` for authenticated pod reads and writes.
+   * Omit to use the public global fetch; unit tests may inject a stub.
    */
   fetch?: typeof fetch;
   /** Optional heading rendered above the view. */

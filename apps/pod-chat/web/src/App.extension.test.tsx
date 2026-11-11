@@ -8,39 +8,30 @@
 //     kept so a logged-in user (the app still owns its OWN session until it consumes the
 //     extension's identity) is NEVER stranded without a logout affordance.
 //
-// This is the ONLY App-render test, so it opts into jsdom per-file (the suite default
-// is `node` — see vitest.config.ts). The pragma MUST be the first line.
+// Session startup is covered in App.session.test.tsx; these tests supply a signed-in fixture.
+import type { SignedInSession } from "@jeswr/app-session/react";
 import { ThemeProvider } from "@jeswr/app-shell";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-// A mutable toggle the mocked hook returns, flipped per test.
-let extensionPresent = false;
 const logout = vi.fn();
-
-// The extension-presence hook lives in @jeswr/app-shell (useSolidExtensionPresent).
-// Keep the real app-shell chrome components; override only the presence hook per test.
-vi.mock("@jeswr/app-shell", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@jeswr/app-shell")>()),
-  useSolidExtensionPresent: () => extensionPresent,
-}));
-
-// pod-chat's App reads `restoring` (not `restoringSession`) off the session — mirror the
-// real useSession shape so App renders its authenticated header.
-vi.mock("./auth/SessionProvider", () => ({
-  useSession: () => ({
+const signedIn: SignedInSession = {
+  webId: "https://alice.example/profile/card#me",
+  session: {
     webId: "https://alice.example/profile/card#me",
-    session: {
-      webId: "https://alice.example/profile/card#me",
-      podRoot: "https://alice.example/",
-      podRootIsFallback: false,
-      displayName: "Alice Chat",
-      avatarUrl: undefined,
-    },
-    logout,
-    autologinPending: false,
-    restoring: false,
-  }),
+    podRoot: "https://alice.example/",
+    podRootIsFallback: false,
+    displayName: "Alice Chat",
+    avatarUrl: undefined,
+  },
+};
+
+vi.mock("@jeswr/app-session/react", async (original) => ({
+  ...(await original<typeof import("@jeswr/app-session/react")>()),
+  SessionGate: ({ children }: { children: (identity: SignedInSession) => ReactNode }) =>
+    children(signedIn),
+  useSession: () => ({ ...signedIn, logout, fetch: globalThis.fetch }),
 }));
 
 // Stub the pod-chat rooms view so the header test doesn't drive a live pod fetch.
@@ -59,26 +50,34 @@ function renderApp() {
 }
 
 afterEach(() => {
-  extensionPresent = false;
+  cleanup();
+  document.documentElement.removeAttribute("data-solid-extension");
   logout.mockReset();
 });
 
 describe("App header — extension duplicate-chrome fix", () => {
-  it("extension ABSENT: renders the full AccountMenu, no lone Sign-out button", () => {
-    extensionPresent = false;
+  it("extension ABSENT: renders the full AccountMenu with working sign-out", async () => {
     renderApp();
     expect(screen.getByRole("button", { name: "Account menu" })).toBeInTheDocument();
     // Sign-out lives inside the AccountMenu dropdown, not as a lone header button.
     expect(screen.queryByRole("button", { name: /^sign out$/i })).not.toBeInTheDocument();
+    fireEvent(
+      screen.getByRole("button", { name: "Account menu" }),
+      new MouseEvent("pointerdown", { bubbles: true }),
+    );
+    expect(await screen.findByText(signedIn.webId)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("menuitem", { name: /sign out/i }));
+    expect(logout).toHaveBeenCalledTimes(1);
   });
 
   it("extension PRESENT: hides the AccountMenu but keeps a working Sign-out (no stranded logout)", () => {
-    extensionPresent = true;
+    document.documentElement.setAttribute("data-solid-extension", "1");
     renderApp();
     // The duplicated profile menu is gone…
     expect(screen.queryByRole("button", { name: "Account menu" })).not.toBeInTheDocument();
     // …but a Sign-out control remains and calls this app's own logout.
     const signOut = screen.getByRole("button", { name: /^sign out$/i });
+    expect(signOut).toHaveAttribute("data-app-shell-control");
     fireEvent.click(signOut);
     expect(logout).toHaveBeenCalledTimes(1);
     // The rest of the header chrome (not duplicated by the extension) stays.

@@ -129,8 +129,8 @@ function mintUrl(container: string, slugHint?: string): string {
 
 /**
  * A typed CRUD handle for Pod-Chat rooms + messages, bound to a pod root +
- * WebID. Construct via {@link createChatStore}. Production callers pass NO
- * `fetchImpl` (the auth-patched global runs); tests inject one.
+ * WebID. Construct via {@link createChatStore}. Pass pod-auth's `auth.fetch`
+ * as `fetchImpl` for authenticated access; omission uses public global fetch.
  */
 export class ChatStore {
   private readonly chatRoot: string;
