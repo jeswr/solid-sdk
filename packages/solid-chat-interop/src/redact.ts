@@ -21,7 +21,7 @@ function markerLength(text: string, offset: number): number {
 function secretName(name: string): boolean {
   // Most credential words deliberately match substrings (e.g. authentication). "auth" skips
   // author/authority (package metadata, prose) but still matches authorization/authorisation.
-  // "key" needs a word part, so monkey/keyboard survive but apiKey/API_KEY do not.
+  // "key"/"pw" need a word part, so monkey/keyboard/pwned survive but apiKey do not.
   const parts = name
     .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
     .replace(/([A-Z])([A-Z][a-z])/g, "$1_$2")
@@ -32,29 +32,44 @@ function secretName(name: string): boolean {
       name,
     ) ||
     /connectionstring|connstr/i.test(parts.join("")) ||
-    parts.includes("key")
+    parts.includes("key") ||
+    parts.includes("pw")
   );
 }
 
+type ValueSyntax = "code" | "shell" | "query";
+
 /** Find one value without backtracking; retain its surrounding quotes, if any. */
-function valueSpan(text: string, offset: number, query: boolean) {
+function valueSpan(text: string, offset: number, syntax: ValueSyntax) {
   const quote = text[offset];
   const quoted = quote === '"' || quote === "'";
   const start = quoted ? offset + 1 : offset;
+  let innerQuote = quoted ? quote : undefined;
   let end = start;
   while (end < text.length) {
     const char = text[end];
     if (quoted && char === quote) return { start, end, next: end + 1 };
-    if (!quoted) {
+    if (!innerQuote) {
       // Token rules run first; their markers contain spaces and must stay atomic.
       const length = markerLength(text, end);
       if (length) {
         end += length;
         continue;
       }
-      if (/[\s;,)}\]]/.test(char ?? "") || (query && /[&#"'`<>]/.test(char ?? ""))) break;
+      if (/\s/.test(char ?? "")) break;
+      if (syntax === "code" && /[;,)}\]]/.test(char ?? "")) break;
+      // Shell operators end words even without spaces; escaped/quoted operators do not.
+      if (
+        syntax === "shell" &&
+        (char === ";" || char === "|" || (char === "&" && text[end + 1] === "&"))
+      )
+        break;
+      if (syntax === "shell" && (char === '"' || char === "'")) innerQuote = char;
+    } else if (!quoted && char === innerQuote) {
+      innerQuote = undefined;
     }
-    if (char === "\\") {
+    if (syntax === "query" && /[\s&#"'`<>]/.test(char ?? "")) break;
+    if (char === "\\" && innerQuote !== "'" && syntax !== "query") {
       // Include escaped whitespace and LF/CRLF continuations, even at EOF.
       end += text[end + 1] === "\r" && text[end + 2] === "\n" ? 3 : 2;
     } else {
@@ -65,9 +80,47 @@ function valueSpan(text: string, offset: number, query: boolean) {
   return { start, end, next: end };
 }
 
-// A bare TypeScript type after `name:` (e.g. `token: string`) is code, not a value.
-const TYPE_ANNOTATION =
-  /^(?:string|number|boolean|bigint|symbol|object|unknown|any|never|void|null|undefined)(?![A-Za-z0-9_$])/;
+// Bounded recognition preserves annotations while still finding credential initializers.
+// Generic heads are admitted too (Record<string, string>, Array<string | null>, etc.).
+const TYPE_ANNOTATION_START =
+  /^\s*(?:(?:string|number|boolean|bigint|symbol|object|unknown|any|never|void|null|undefined)(?![A-Za-z0-9_$])|[A-Za-z_$][A-Za-z0-9_$.]*\s*<)/;
+const TYPE_ANNOTATION_LIMIT = 256;
+
+function typeAnnotationSpan(text: string, offset: number) {
+  const limit = Math.min(text.length, offset + TYPE_ANNOTATION_LIMIT);
+  if (!TYPE_ANNOTATION_START.test(text.slice(offset, limit))) return undefined;
+  let depth = 0;
+  let needsType = true;
+  let end = offset;
+  while (end < limit) {
+    const char = text[end] ?? "";
+    if (/\s/.test(char)) {
+      end += 1;
+      continue;
+    }
+    if (needsType) {
+      if (!/[A-Za-z_$]/.test(char)) break;
+      do {
+        end += 1;
+      } while (end < limit && /[A-Za-z0-9_$.]/.test(text[end] ?? ""));
+      needsType = false;
+      continue;
+    }
+    if (char === "<") {
+      depth += 1;
+      needsType = true;
+    } else if (char === ">" && depth > 0) depth -= 1;
+    else if (char === "|" || char === "&" || (char === "," && depth > 0)) needsType = true;
+    else if (char === "[" && text[end + 1] === "]") end += 1;
+    else break;
+    end += 1;
+  }
+  return {
+    end,
+    complete: !needsType && depth === 0,
+    overflow: end >= limit && limit < text.length,
+  };
+}
 
 function redactValues(text: string): string {
   // Match name runs once, then inspect their operator and value with forward scans.
@@ -76,13 +129,26 @@ function redactValues(text: string): string {
     /(?<scheme>(?<![A-Za-z0-9+.-])[A-Za-z][A-Za-z0-9+.-]*:\/\/)|(?<env>^[ \t]*(?:export[ \t]+)?[A-Z][A-Z0-9_]*=)|(?<flag>--)?(?<quote>["']?)(?<name>[A-Za-z_$][A-Za-z0-9_$.-]*)\k<quote>/gm;
   const chunks: string[] = [];
   let copied = 0;
+  let previousName = "";
+  let previousEnd = 0;
   const replace = (start: number, end: number) => {
     chunks.push(text.slice(copied, start), VALUE_MARKER);
     copied = end;
   };
   for (let match = candidates.exec(text); match; match = candidates.exec(text)) {
-    const { scheme, env, flag, name = "" } = match.groups as Record<string, string | undefined>;
+    const {
+      scheme,
+      env,
+      flag,
+      quote,
+      name = "",
+    } = match.groups as Record<string, string | undefined>;
     let offset = match.index + match[0].length;
+    const preceding = text.slice(previousEnd, match.index);
+    const declaration = /^(?:const|let|var)$/.test(previousName) && /^\s*$/.test(preceding);
+    const codeContext = /[({[,]\s*$/.test(preceding);
+    previousName = name;
+    previousEnd = offset;
     if (scheme) {
       let colon = -1;
       let at = -1;
@@ -99,29 +165,60 @@ function redactValues(text: string): string {
       }
       if (colon >= 0 && colon < at) replace(colon + 1, at);
       candidates.lastIndex = offset;
+      previousEnd = offset;
       continue;
     }
     if (!env && !secretName(name)) continue;
     const nameEnd = offset;
     while (text[offset] === " " || text[offset] === "\t") offset += 1;
     const query = /[?&]/.test(text[match.index - 1] ?? "");
+    let syntax: ValueSyntax = query ? "query" : env ? "shell" : "code";
     if (!env) {
       if (text.startsWith(":=", offset)) offset += 2;
       else if (
         text[offset] === "=" &&
         (flag || query || (text[offset + 1] !== "=" && text[offset + 1] !== ">"))
-      )
+      ) {
+        if (
+          !flag &&
+          !query &&
+          !quote &&
+          !declaration &&
+          !codeContext &&
+          offset === nameEnd &&
+          (match.index === 0 || /[\s;|&]/.test(text[match.index - 1] ?? "")) &&
+          /^[A-Za-z_][A-Za-z0-9_]*$/.test(name)
+        )
+          syntax = "shell";
         offset += 1;
-      else if (text[offset] === ":" && text[offset + 1] !== ":") {
+      } else if (text[offset] === ":" && text[offset + 1] !== ":") {
         offset += 1;
         while (text[offset] === " " || text[offset] === "\t") offset += 1;
-        if (TYPE_ANNOTATION.test(text.slice(offset, offset + 10))) continue;
+        const annotation = typeAnnotationSpan(text, offset);
+        if (annotation) {
+          const { end, complete, overflow } = annotation;
+          if (overflow) {
+            // Past the bounded grammar, an initializer may be on a later line.
+            // Treat the remainder as uncertain rather than leave any secret suffix.
+            replace(offset, text.length);
+            candidates.lastIndex = text.length;
+            previousEnd = text.length;
+            continue;
+          }
+          if (text[end] === "=" && text[end + 1] !== "=" && text[end + 1] !== ">") {
+            offset = end + 1;
+            while (/\s/.test(text[offset] ?? "")) offset += 1;
+          } else if (complete) {
+            continue;
+          }
+        }
       } else if (!flag || offset === nameEnd) continue;
       while (text[offset] === " " || text[offset] === "\t") offset += 1;
     }
-    const span = valueSpan(text, offset, query);
+    const span = valueSpan(text, offset, syntax);
     replace(span.start, span.end);
     candidates.lastIndex = span.next;
+    previousEnd = span.next;
   }
   chunks.push(text.slice(copied));
   return chunks.join("");
@@ -132,7 +229,7 @@ function redactValues(text: string): string {
  * Token rules run first. Assignments, object keys, CLI flags and query parameters with
  * secret-looking names, plus compact UPPER_SNAKE_CASE env lines and URL passwords,
  * replace only their value with [REDACTED], retaining quotes and surrounding code.
- * Credential words match substrings, except "key" which requires an underscore,
+ * Credential words match substrings, except "key"/"pw" which require an underscore,
  * hyphen, dot or camelCase word boundary: key_count/apiKey redact; monkey/keyboard stay.
  * Multiline, continued and unfinished values err toward redaction. Value scanning is linear.
  *

@@ -142,6 +142,7 @@ describe("redaction before persistence", () => {
     "== Heading ==\nA heading\n=========",
     "monkey = 1",
     "keyboard = 2",
+    "pwned = 2",
     "const keyboard = { name: 'Alice' };",
     "password == previous",
     "token => token.length",
@@ -152,6 +153,12 @@ describe("redaction before persistence", () => {
     "authority = 'example.test'",
     "function login(token: string, session?: Session): void {}",
     "interface Creds { password: string; apiKey: string | null }",
+    "function f(token: string)",
+    "interface Creds { token: string[]; password: Record<string, string> }",
+    "function f(token: Record<string, Array<string | null>>, count: number) {}",
+    "password: string == previous",
+    "token: string => token.length",
+    "token: string\nconst total = a + b;",
   ];
   it.each(safeCode)("preserves ordinary code byte-for-byte: %s", (input) => {
     const result = redactSecrets(input);
@@ -164,8 +171,48 @@ describe("redaction before persistence", () => {
     ["authorization_code=abc123", "authorization_code=[REDACTED]"],
     ["authorisationCode: abc123", "authorisationCode: [REDACTED]"],
     ["authToken: stringly", "authToken: [REDACTED]"],
+    [
+      "authToken: stringly<https://host.test/>let mut total: i32 = 0;",
+      "authToken: [REDACTED] mut total: i32 = 0;",
+    ],
+    ['password: string = "hunter2"', 'password: string = "[REDACTED]"'],
+    ["const token: string = 'abc'", "const token: string = '[REDACTED]'"],
+    [
+      'const password: string | null = "hunter2"; const total = a + b;',
+      'const password: string | null = "[REDACTED]"; const total = a + b;',
+    ],
+    ['const token: string[] = "abc";', 'const token: string[] = "[REDACTED]";'],
+    [
+      "const token: Record<string, string> = 'abc'; x = 1",
+      "const token: Record<string, string> = '[REDACTED]'; x = 1",
+    ],
+    [
+      "const token: Record<string, Array<string | null>>='abc'; x = 1",
+      "const token: Record<string, Array<string | null>>='[REDACTED]'; x = 1",
+    ],
+    ["password: string=abc123; x = 1", "password: string=[REDACTED]; x = 1"],
+    [
+      "const token:\nRecord<string,\nstring>\n=\n'abc'; x = 1",
+      "const token:\nRecord<string,\nstring>\n=\n'[REDACTED]'; x = 1",
+    ],
     ['password: "string"', 'password: "[REDACTED]"'],
     ["export API_KEY=abc123", "export API_KEY=[REDACTED]"],
+    ["API_KEY=ab,cd)ef}gh]", "API_KEY=[REDACTED]"],
+    ["password=ab,cd)ef}gh]", "password=[REDACTED]"],
+    ["echo apiKey=ab,cd)ef}gh] Safe", "echo apiKey=[REDACTED] Safe"],
+    ["export apiKey=ab,cd)ef}gh]", "export apiKey=[REDACTED]"],
+    // An unquoted semicolon is a shell operator, so b is a command, not a value suffix.
+    ["export PASS=a;b", "export PASS=[REDACTED];b"],
+    ["export PASS=a\\;b", "export PASS=[REDACTED]"],
+    ["export PASS='a;b'", "export PASS='[REDACTED]'"],
+    ['export PASS="a;b"', 'export PASS="[REDACTED]"'],
+    ["export PASS=a&&echo safe", "export PASS=[REDACTED]&&echo safe"],
+    ["export PASS=a||echo safe", "export PASS=[REDACTED]||echo safe"],
+    ["export PASS=a|echo safe", "export PASS=[REDACTED]|echo safe"],
+    ["export PASS=a\\&\\&b\\|c", "export PASS=[REDACTED]"],
+    ["export PASS=a'b c;d&&e|f',g)h}i] Safe", "export PASS=[REDACTED] Safe"],
+    ['export PASS=a"b c;d&&e|f",g)h}i] Safe', "export PASS=[REDACTED] Safe"],
+    ["export PASS=a'b\\' Safe", "export PASS=[REDACTED] Safe"],
     ['export API_KEY="abc123"', 'export API_KEY="[REDACTED]"'],
     ["password='abc123'", "password='[REDACTED]'"],
     ['password = "abc123"', 'password = "[REDACTED]"'],
@@ -176,6 +223,13 @@ describe("redaction before persistence", () => {
     ["password: abc123}", "password: [REDACTED]}"],
     ["f(password=abc123, x=1)", "f(password=[REDACTED], x=1)"],
     ["f(password=abc123)", "f(password=[REDACTED])"],
+    ["f( password=abc123, x=1)", "f( password=[REDACTED], x=1)"],
+    ["f(x=1, password=abc123)", "f(x=1, password=[REDACTED])"],
+    ["const token=abc123; const total = a + b;", "const token=[REDACTED]; const total = a + b;"],
+    ["let token=abc123, total=1;", "let token=[REDACTED], total=1;"],
+    ["var token=abc123, total=1;", "var token=[REDACTED], total=1;"],
+    ["password = abc123, total = 1;", "password = [REDACTED], total = 1;"],
+    ["password: abc123, total: 1", "password: [REDACTED], total: 1"],
     ["password=abc123; echo safe", "password=[REDACTED]; echo safe"],
     ["password=abc123 Safe", "password=[REDACTED] Safe"],
     ["tool --password abc123 --count 3", "tool --password [REDACTED] --count 3"],
@@ -184,6 +238,15 @@ describe("redaction before persistence", () => {
     ["tool --api-key abc123 --count 3", "tool --api-key [REDACTED] --count 3"],
     ["tool --token==abc123", "tool --token=[REDACTED]"],
     ["?token=abc123&x=1", "?token=[REDACTED]&x=1"],
+    ["?token=ab;cd,ef)", "?token=[REDACTED]"],
+    ["?token=ab;cd,ef)gh}ij]&x=1", "?token=[REDACTED]&x=1"],
+    ["?token=ab;cd,ef)gh}ij]#safe", "?token=[REDACTED]#safe"],
+    ["?token=ab;cd,ef)gh}ij] Safe", "?token=[REDACTED] Safe"],
+    ["<https://host.test/?token=ab;cd,ef)gh}ij]>", "<https://host.test/?token=[REDACTED]>"],
+    ['"?token=ab;cd,ef)gh}ij]"', '"?token=[REDACTED]"'],
+    ["'?token=ab;cd,ef)gh}ij]'", "'?token=[REDACTED]'"],
+    ["`?token=ab;cd,ef)gh}ij]`", "`?token=[REDACTED]`"],
+    ["tool --token=abc123, --count 3", "tool --token=[REDACTED], --count 3"],
     ["&api_key=abc123#section", "&api_key=[REDACTED]#section"],
     ["?token==abc123&x=1", "?token=[REDACTED]&x=1"],
     [
@@ -195,13 +258,19 @@ describe("redaction before persistence", () => {
       'const apiKey = "[REDACTED]"; const total = a + b;',
     ],
     ["password=abc123 token=other456", "password=[REDACTED] token=[REDACTED]"],
+    ["API_KEY=( password=ab,cd)ef", "API_KEY=[REDACTED] password=[REDACTED]"],
     ["password=", "password=[REDACTED]"],
     ['password=""', 'password="[REDACTED]"'],
     ['password="abc123', 'password="[REDACTED]'],
     ['password="abc123\\', 'password="[REDACTED]'],
     ["password='abc123", "password='[REDACTED]"],
     ['password="abc\\"123"; x = 1', 'password="[REDACTED]"; x = 1'],
-    ["password='abc\\'123'; x = 1", "password='[REDACTED]'; x = 1"],
+    // Single quotes now close even after a backslash; the following text stays verbatim.
+    ["password='abc\\'123'; x = 1", "password='[REDACTED]'123'; x = 1"],
+    ["PASS='a\\'\nx = 1", "PASS='[REDACTED]'\nx = 1"],
+    ["PASS='a\\'\r\nx = 1", "PASS='[REDACTED]'\r\nx = 1"],
+    ["pw = 'a\\\\' ; const total = a + b", "pw = '[REDACTED]' ; const total = a + b"],
+    ["password: 'a\\'\nx = 1", "password: '[REDACTED]'\nx = 1"],
     ['apiKey = "first\nsecond";\nx = 1', 'apiKey = "[REDACTED]";\nx = 1'],
     ["password=first\\\nsecond;\nx = 1", "password=[REDACTED];\nx = 1"],
     ["postgres://user:abc123@host.test/db", "postgres://user:[REDACTED]@host.test/db"],
@@ -239,6 +308,8 @@ describe("redaction before persistence", () => {
     "password",
     "passwd",
     "pwd",
+    "pw",
+    "servicePw",
     "pass",
     "passphrase",
     "credential",
@@ -296,6 +367,21 @@ describe("redaction before persistence", () => {
     ].join(newline);
     expect(redactSecrets(input)).toBe(expected);
     expect(redactSecrets(expected)).toBe(expected);
+  });
+
+  it("bounds type recognition and redacts oversized types conservatively", () => {
+    const acceptedType = `Record<string, ${"T".repeat(200)}>`;
+    const accepted = `const token: ${acceptedType} = 'abc'; x = 1`;
+    expect(redactSecrets(accepted)).toBe(`const token: ${acceptedType} = '[REDACTED]'; x = 1`);
+    for (const type of [
+      `Record<string, ${"T".repeat(300)}>`,
+      `Record<string,\n${"T".repeat(300)}>`,
+    ]) {
+      const result = redactSecrets(`const token: ${type} = 'abc'; const total = a + b;\nx = 1`);
+      // Outside the supported bound, the uncertain remainder (including later lines) redacts.
+      expect(result).toBe("const token: [REDACTED]");
+      expect(redactSecrets(result)).toBe(result);
+    }
   });
 
   it("is a fixpoint for deterministic combinations of code, secrets and markers", () => {
