@@ -352,5 +352,5 @@ export function demoFixtures(): Record<string, string> {
  */
 export function createDemoSession(): { session: Session; pod: DemoPod } {
   const pod = createDemoPod(demoFixtures());
-  return { session: { webId: ADA, fetch: pod.fetch }, pod };
+  return { session: { webId: ADA, fetch: pod.fetch, publicFetch: pod.fetch }, pod };
 }

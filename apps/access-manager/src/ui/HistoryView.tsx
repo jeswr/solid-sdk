@@ -91,6 +91,11 @@ export function HistoryView({
         <SavingIndicator state={state} error={error} />
       </div>
 
+      <p>
+        Approvals made with the older version are listed under Dashboard access only. Use Dashboard
+        to remove that access.
+      </p>
+
       <h3>Active grants</h3>
       {grants.filter((g) => g.revokedAt === undefined).length === 0 ? (
         <p className="empty">No active grants made through this app.</p>

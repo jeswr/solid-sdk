@@ -73,7 +73,7 @@ describe("DemoApp — the four ?demo views render the Ada & Bex fixtures", () =>
 
     await screen.findByText("Pending", undefined, FIND);
     expect((await screen.findAllByText("Clinic App", undefined, FIND)).length).toBeGreaterThan(0);
-    expect(screen.getByText(/your Health data/)).toBeInTheDocument();
+    expect(screen.getByText("Health data: Can view")).toBeInTheDocument();
     expect(screen.getByText("Care Coordination")).toBeInTheDocument();
     expect(screen.getByText("2026-08-09T00:00:00Z")).toBeInTheDocument();
 

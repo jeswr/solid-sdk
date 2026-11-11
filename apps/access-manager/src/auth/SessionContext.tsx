@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Fable 5
 //
 // The React session seam. A Session is just `{ webId, fetch }` — the
@@ -7,12 +8,26 @@
 
 import type { ReactNode } from "react";
 import { createContext, useContext } from "react";
-import type { SolidFetch } from "../lib/http.js";
+import { credentialFreeFetch, type SolidFetch } from "../lib/http.js";
 
 export interface Session {
   webId: string;
   /** The authenticated (DPoP-bound) fetch — the injectable seam. */
   fetch: SolidFetch;
+  /** Optional public transport seam for the offline demo and tests. */
+  publicFetch?: SolidFetch;
+}
+
+const publicTransports = new WeakMap<Session, SolidFetch>();
+
+/** A stable, credential-free transport for the lifetime of this session. */
+export function publicFetchFor(session: Session): SolidFetch {
+  let transport = publicTransports.get(session);
+  if (!transport) {
+    transport = credentialFreeFetch(session.publicFetch ?? ((input, init) => fetch(input, init)));
+    publicTransports.set(session, transport);
+  }
+  return transport;
 }
 
 const SessionContext = createContext<Session | null>(null);

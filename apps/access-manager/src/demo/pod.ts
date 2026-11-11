@@ -1,6 +1,5 @@
-// AUTHORED-BY Codex GPT-6.1-Sol
-import { DataFactory, Writer } from "n3";
 // AUTHORED-BY Claude Fable 5
+// AUTHORED-BY Codex GPT-6.1-Sol
 //
 // The DEMO pod: a strictly READ-ONLY in-memory `fetch` over a fixed map of
 // Turtle documents. It exists so the real views can render inert sample data
@@ -17,6 +16,8 @@ import { DataFactory, Writer } from "n3";
 //
 // This module performs NO real fetch, imports NO auth code, and is only ever
 // loaded behind the ?demo gate in main.tsx.
+
+import { DataFactory, Writer } from "n3";
 
 /** Thrown for any non-read request in demo mode (surfaces in the saving UI). */
 export class DemoReadOnlyError extends Error {

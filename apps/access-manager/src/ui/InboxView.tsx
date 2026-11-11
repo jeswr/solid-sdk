@@ -6,15 +6,24 @@ import {
   decide,
   listRequests,
   RequestConflictError,
+  type RequestMode,
   UnsupportedAccessModelError,
 } from "@jeswr/pod-access/requests-solid";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useSession } from "../auth/SessionContext.js";
+import { publicFetchFor, useSession } from "../auth/SessionContext.js";
 import { classLabel } from "../lib/type-index.js";
-import { SavingIndicator, useOptimistic } from "./bits.jsx";
+import { AgentLabel, SavingIndicator, useOptimistic } from "./bits.jsx";
 
 type ReadableRequest = Exclude<AccessRequestEntry, { status: "unreadable" }>;
 const UNAVAILABLE = "Approving requests isn't available on this storage yet.";
+
+// Match requests-solid's Viewer/Editor mapping; append alone has no sharing role.
+function grantLabel(modes: readonly RequestMode[]): string {
+  if (modes.includes("write")) return "Can edit (view, add and change)";
+  if (modes.includes("read")) return "Can view";
+  if (modes.includes("append")) return "Cannot approve add-only access";
+  return "No access will be granted";
+}
 
 export function InboxView({
   inboxUrl,
@@ -26,6 +35,7 @@ export function InboxView({
   onChanged: () => void;
 }) {
   const session = useSession();
+  const publicFetch = publicFetchFor(session);
   const [requests, setRequests] = useState<AccessRequestEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [confirming, setConfirming] = useState<string | null>(null);
@@ -93,6 +103,7 @@ export function InboxView({
               fetch: session.fetch,
               webId: session.webId,
               storage: storageRoot,
+              publicFetch,
             },
           );
         } catch (error) {
@@ -153,9 +164,7 @@ export function InboxView({
               ) : (
                 <>
                   <div className="request-head">
-                    <span className="agent" title={request.requester}>
-                      {request.requesterName ?? request.requester}
-                    </span>
+                    <AgentLabel agent={request.requester} fetchFn={publicFetch} showHost />
                     <span className={`status-badge ${request.status}`}>
                       {request.status[0]?.toUpperCase()}
                       {request.status.slice(1)}
@@ -164,8 +173,11 @@ export function InboxView({
                   <dl className="request-fields">
                     <dt>Requests</dt>
                     <dd>
-                      {request.modes.join(", ")} — your{" "}
-                      {request.dataTypes.map(classLabel).join(", ")} data
+                      {request.dataTypes.map((type) => (
+                        <div key={type}>
+                          {classLabel(type)} data: {grantLabel(request.modesByType[type] ?? [])}
+                        </div>
+                      ))}
                     </dd>
                     {request.purpose ? (
                       <>
@@ -226,7 +238,7 @@ export function InboxView({
                         </button>
                         <button
                           type="button"
-                          disabled={state === "saving"}
+                          disabled={!canApprove || state === "saving"}
                           className="danger"
                           onClick={() => makeDecision(request, false)}
                         >
@@ -247,14 +259,6 @@ export function InboxView({
                         onClick={() => makeDecision(request, true)}
                       >
                         Finish saved approval
-                      </button>
-                      <button
-                        type="button"
-                        disabled={state === "saving"}
-                        className="danger"
-                        onClick={() => makeDecision(request, false)}
-                      >
-                        Deny
                       </button>
                     </div>
                   ) : null}

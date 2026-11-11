@@ -3,8 +3,8 @@
 //
 // Requester-profile resolution for the inbox + dashboard: WebID → display name
 // + storage root. SSRF-conscious: only http(s) IRIs are ever dereferenced, the
-// fetch goes through the INJECTED seam (the app's session fetch — never an
-// ambient global), and every typed read of the FOREIGN profile is guarded (a
+// fetch goes through the INJECTED seam (credential-free for inbox names),
+// and every typed read of the FOREIGN profile is guarded (a
 // malformed profile degrades to the WebID string, never throws into the view).
 
 import { Agent } from "@solid/object";
@@ -20,21 +20,26 @@ export interface AgentDisplay {
   resolved: boolean;
 }
 
-const cache = new Map<string, Promise<AgentDisplay>>();
+let cache = new WeakMap<SolidFetch, Map<string, Promise<AgentDisplay>>>();
 
 /** Resolve (and memoise) a display name for an agent WebID. */
 export function resolveAgentDisplay(webId: string, fetchFn: SolidFetch): Promise<AgentDisplay> {
-  let hit = cache.get(webId);
+  let names = cache.get(fetchFn);
+  if (!names) {
+    names = new Map();
+    cache.set(fetchFn, names);
+  }
+  let hit = names.get(webId);
   if (!hit) {
     hit = doResolve(webId, fetchFn);
-    cache.set(webId, hit);
+    names.set(webId, hit);
   }
   return hit;
 }
 
 /** Test hook: drop the memo (module-level cache would leak across tests). */
 export function clearAgentDisplayCache(): void {
-  cache.clear();
+  cache = new WeakMap();
 }
 
 async function doResolve(webId: string, fetchFn: SolidFetch): Promise<AgentDisplay> {

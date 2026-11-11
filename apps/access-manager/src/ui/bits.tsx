@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Fable 5
 //
 // Small shared UI bits: the optimistic-mutation saving indicator (suite UX
@@ -78,13 +79,26 @@ export function useOptimistic(): {
 }
 
 /** A human label for an agent line (public/authenticated sentinels + WebIDs). */
-export function AgentLabel({ agent, fetchFn }: { agent: string; fetchFn: SolidFetch }) {
-  const [name, setName] = useState<string | null>(null);
+export function AgentLabel({
+  agent,
+  fetchFn,
+  showHost = false,
+}: {
+  agent: string;
+  fetchFn: SolidFetch;
+  showHost?: boolean;
+}) {
+  const [display, setDisplay] = useState<{
+    agent: string;
+    fetchFn: SolidFetch;
+    name: string;
+  } | null>(null);
+  const name = display?.agent === agent && display.fetchFn === fetchFn ? display.name : null;
   useEffect(() => {
     if (agent === PUBLIC_AGENT || agent === AUTHENTICATED_AGENT) return;
     let cancelled = false;
     resolveAgentDisplay(agent, fetchFn).then((d) => {
-      if (!cancelled && d.name !== agent) setName(d.name);
+      if (!cancelled && d.name !== agent) setDisplay({ agent, fetchFn, name: d.name });
     });
     return () => {
       cancelled = true;
@@ -103,7 +117,8 @@ export function AgentLabel({ agent, fetchFn }: { agent: string; fetchFn: SolidFe
   }
   return (
     <span className="agent" title={agent}>
-      {name ?? shortenWebId(agent)}
+      {name ? <span>{name}</span> : shortenWebId(agent)}
+      {showHost && name ? <span className="agent-host"> ({new URL(agent).host})</span> : null}
     </span>
   );
 }

@@ -19,6 +19,18 @@ import type { DatasetCore } from "@rdfjs/types";
 /** The injectable authenticated-fetch seam. */
 export type SolidFetch = typeof fetch;
 
+/** Public profile/notification transport, separate from the authenticated session fetch. */
+export function credentialFreeFetch(fetchFn: SolidFetch): SolidFetch {
+  return (input, init) => {
+    const headers = new Headers(
+      init?.headers ?? (input instanceof Request ? input.headers : undefined),
+    );
+    headers.delete("authorization");
+    headers.delete("dpop");
+    return fetchFn(input, { ...init, headers, credentials: "omit", redirect: "error" });
+  };
+}
+
 /** A read RDF resource + the validator needed for a conditional write. */
 export interface ReadRdf {
   url: string;
@@ -93,8 +105,7 @@ export async function readRdf(url: string, fetchFn: SolidFetch): Promise<ReadRdf
 
 /**
  * Conditional update: PUT Turtle guarded by the ETag captured at read time.
- * When `etag` is null (a server that sends no validator) the write degrades to
- * an unconditional PUT — the degraded legacy path, kept explicit here.
+ * Refuse missing, weak or malformed validators before sending any write.
  */
 export async function putIfMatch(
   url: string,
@@ -102,8 +113,11 @@ export async function putIfMatch(
   etag: string | null,
   fetchFn: SolidFetch,
 ): Promise<void> {
-  const headers: Record<string, string> = { "content-type": "text/turtle" };
-  if (etag !== null) headers["if-match"] = etag;
+  // requests-solid's requireStrongEtag is private; keep the same validator rule here.
+  if (etag === null || !/^"[^"\r\n]*"$/.test(etag)) {
+    throw new Error("This edit cannot be saved safely: the server did not provide a strong ETag.");
+  }
+  const headers = { "content-type": "text/turtle", "if-match": etag };
   const res = await fetchFn(url, { method: "PUT", headers, body: turtle });
   if (res.status === 412) throw new PreconditionFailedError(url);
   if (!res.ok) throw new WriteFailedError(url, res.status);

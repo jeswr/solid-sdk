@@ -4,11 +4,13 @@
 // DataClassView (grouping + per-class access summary) and HistoryView
 // (receipts audit trail + revoke through the UI).
 import "@testing-library/jest-dom/vitest";
-import { decide, listRequests } from "@jeswr/pod-access/requests-solid";
+import { DPV, decide, listRequests, ODRL, RDF } from "@jeswr/pod-access/requests-solid";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { DataFactory, Store } from "n3";
 import { describe, expect, it } from "vitest";
 import { SessionProvider } from "../../src/auth/SessionContext.js";
 import { readEffectiveAcl } from "../../src/lib/acl.js";
+import { toTurtle } from "../../src/lib/rdf.js";
 import type { WalkedNode } from "../../src/lib/storage-walk.js";
 import { walkStorage } from "../../src/lib/storage-walk.js";
 import { readTypeRegistrations } from "../../src/lib/type-index.js";
@@ -92,5 +94,30 @@ describe("HistoryView", () => {
     withSession(pod, <HistoryView storageRoot={POD} onChanged={() => {}} />);
     await screen.findByText("No active grants made through this app.");
     expect(screen.getByText(/No consent receipts yet/)).toBeInTheDocument();
+  });
+
+  it("explains where older approvals can be managed without offering exact revocation", async () => {
+    const pod = buildPod();
+    const { namedNode, quad } = DataFactory;
+    for (const [path, type] of [
+      ["grants/grant-old.ttl", ODRL.Agreement],
+      ["receipts/receipt-old.ttl", DPV.ConsentRecord],
+    ]) {
+      if (!path || !type) throw new Error("missing legacy fixture");
+      const url = `${POD}access-manager/${path}`;
+      pod.seed(
+        url,
+        await toTurtle(new Store([quad(namedNode(url), namedNode(RDF.type), namedNode(type))])),
+      );
+    }
+    withSession(pod, <HistoryView storageRoot={POD} onChanged={() => {}} />);
+    expect(
+      screen.getByText(
+        /Approvals made with the older version are listed under Dashboard access only/,
+      ),
+    ).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByText("Reading records…")).not.toBeInTheDocument());
+    expect(screen.queryByTestId("revoke-grant")).not.toBeInTheDocument();
+    expect(pod.log.some((call) => call.method === "PUT")).toBe(false);
   });
 });
