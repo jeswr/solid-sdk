@@ -26,6 +26,8 @@ through the current PodPort. Only an absent pointer/registration permits the con
 SHARED_CONTEXT_PATH fallback. Require one HTTP(S), pod-scoped instance without a fragment
 or container identity. Duplicate registrations, unsafe instances and unreadable or
 malformed linked documents return `{status:"error",reason}` without registration URLs.
+Classify registrations with suite-vocab's `canonicalize`, as pod-type-index does; legacy
+SharedContext aliases count toward ambiguity and receive every canonical validation.
 Public indexes never select context. Reject redirects and aliases for every discovery/ACL/
 context read without requesting their targets. Redact with pkg-memory's shared Unicode
 card detector; retain original UTF-16 spans and the exported CARD_REDACTION marker.
@@ -34,8 +36,13 @@ advertised effective WAC ACL using pkg-memory's validators. Follow absent own AC
 ancestor default/defaultForNew rules. Other agents, public/authenticated classes, groups,
 origin rules, malformed ACLs and unreadable evidence yield `{status:"untrusted",url,reason}`
 with no text. `aclVerified:true` means owner-only mutation authority was proven. A port
-without an exposed ACL capability may return text with `aclVerified:false`; header evidence
+with neither private pointers nor an exposed ACL capability may return conventional-path text
+with `aclVerified:false`; header evidence
 of public mutation still denies. Missing owner identity cannot verify an advertised ACL.
+Private index/preferences pointers require `verifyContextAcl` to return true, including
+inherited default/defaultForNew evidence. Untrusted or unavailable pointer ACL evidence
+returns `{status:"error",reason:"pointer_acl_untrusted"}` with no context text. Keep the
+public-profile exception. Reuse storage-capabilities' `parseWacAllow` for header checks.
 `setupSharedContext(pod,{webId,initialText?})` and `solid-mcp context-init
 [--initial-text TEXT]` are owner-facing setup only, never MCP tools. Create private ACLs
 before content, use only advertised WAC URLs, preserve dedicated ACLs with strong ETags,
@@ -43,6 +50,9 @@ and write the document with If-None-Match:*. Never replace an existing document 
 different registration. Register through pod-type-index, provisioning private bootstrap
 destinations before mutation; index bootstrap requires observed root Write+Control.
 Preserve public profile pointers and unrelated RDF. A successful rerun performs no writes.
+Never modify ACLs of existing private indexes/preferences; verify them during discovery
+and again before conditional updates. Refuse unsafe evidence with `pointer_acl_untrusted`
+and tell the owner to fix the effective pointer ACLs. Provision ACLs only for new resources.
 The explicit CLI subcommand enables setup writes; ordinary stdio retains its read-only default.
 
 The server and fetch adapter default to read-only independently. Scope-check tool
@@ -130,6 +140,10 @@ registered context, its ancestors and advertised ACL, and private index/preferen
 pointers and their advertised ACLs. Unprovable discovery with a configured owner blocks
 generic mutations with the fixed personal-data diagnostic. Setup uses its separate
 owner-facing capability; it is never registered as an MCP tool.
+Governing ancestor ACL mutation protection for pointer/profile documents is deferred to
+PR #447's advertised-link guard; do not add an ACL-suffix guard. Pointer trust checks
+deny unsafe effective ACLs meanwhile. ChatWriter keeps `contextGuard` off for its scoped,
+create-only agent/account identifiers. Read/ACL-check races remain a documented limitation.
 
 `PodHeadResult.aclError` distinguishes malformed, ambiguous or unsupported ACL-link
 evidence from absent ACL capability. Trust checks deny this evidence rather than

@@ -233,23 +233,35 @@ describe("shared context", () => {
     }
   });
 
+  it.each([
+    "Call 07700 900123, 07700 900456 or 07700 900789.",
+    "Meetings: 2026-11-11, 2026-11-12, 2026-11-13",
+    "versions 1.2.3, 4.5.6, 7.8.9",
+  ])("preserves ordinary context prose: %s", async (text) => {
+    const pod = portablePod(async () => ({
+      body: new TextEncoder().encode(text),
+      contentType: "text/markdown",
+    }));
+    expect(await readSharedContext(pod)).toMatchObject({
+      status: "ok",
+      text,
+      redactedCardNumbers: 0,
+    });
+  });
+
   it("finds card numbers in every documented format and at every offset", () => {
     const found = (text: string) => findCardNumbers(text).length > 0;
     for (const formatted of [
       "4111111111111111",
+      "4111-1111-1111-1111",
       "4111 1111 1111 1111 12/27",
       "4111111111111111 2024",
       "ref 99 4111111111111111",
-      "4111.1111.1111.1111",
       "4111\u00a01111\u00a01111\u00a01111",
       "4111  1111  1111  1111",
-      "4111   -   1111 / 1111 , 1111",
-      "4111\n1111\t1111\r\n1111",
       "378282246310005",
       "41111111111111112024",
       "acct 004111111111111111",
-      "4111,1111,1111,1111",
-      "4111_1111_1111_1111",
       "3530111333300000",
       "6011111111111117",
       "30569309025904",
@@ -272,14 +284,15 @@ describe("shared context", () => {
       text: `a ${CARD_REDACTION} b ${CARD_REDACTION} c`,
       count: 2,
     });
-    // A 19-digit card whose 12-digit prefix also passes Luhn is still fully covered.
+    // A 19-digit card whose shorter prefix also passes Luhn is still fully covered.
     const { text } = redactCardNumbers("6011000990139424123");
     expect(text).not.toMatch(/\d/);
     expect(redactCardNumbers("no digits")).toEqual({ text: "no digits", count: 0 });
-    // A chance-valid match earlier in the same run must not hide the card that follows it.
+    // Punctuation ends a run, so the phone number before a card stays intact.
     expect(redactCardNumbers("Contact 07524 455523, 4111 1111 1111 1111 exp 09/28").text).toBe(
-      `Contact 0${CARD_REDACTION} exp 09/28`,
+      `Contact 07524 455523, ${CARD_REDACTION} exp 09/28`,
     );
+    // A chance-valid match earlier in a run must not hide a later card.
     let seed = 7;
     const random = () => {
       seed = (seed * 1103515245 + 12345) % 2147483648;
@@ -386,6 +399,8 @@ async function contextFixture(withIndex = true) {
   if (withIndex) link(profile, OWNER, `${SOLID}privateTypeIndex`, INDEX);
   await seedRdf(pod, PROFILE, profile);
   if (withIndex) await seedRdf(pod, INDEX, registration());
+  for (const target of [INDEX, `${ROOT}settings/prefs.ttl`])
+    await seedRdf(pod, `${target}.acl`, ownerOnlyWacAcl(target, OWNER, `${target}.acl`));
   for (const target of [CONTEXT, OTHER_CONTEXT]) {
     await pod.write(target, encode(MARKDOWN), "text/markdown", {});
     await seedRdf(pod, `${target}.acl`, ownerOnlyWacAcl(target, OWNER, `${target}.acl`));
@@ -393,7 +408,75 @@ async function contextFixture(withIndex = true) {
   return pod;
 }
 
+async function linkPreferences(pod: PodPort) {
+  const prefs = `${ROOT}settings/prefs.ttl`;
+  const profile = new Store();
+  link(profile, OWNER, "http://www.w3.org/ns/pim/space#preferencesFile", prefs);
+  await seedRdf(pod, PROFILE, profile);
+  const store = new Store();
+  link(store, OWNER, `${SOLID}privateTypeIndex`, INDEX);
+  await seedRdf(pod, prefs, store);
+  return prefs;
+}
+
 describe("private context discovery", () => {
+  it("counts canonical and legacy registrations together, including duplicate locations", async () => {
+    for (const target of [OTHER_CONTEXT, CONTEXT]) {
+      const pod = await contextFixture();
+      const store = registration();
+      link(store, `${INDEX}#legacy`, RDF_TYPE, `${SOLID}TypeRegistration`);
+      link(
+        store,
+        `${INDEX}#legacy`,
+        `${SOLID}forClass`,
+        "https://w3id.org/jeswr/agent#SharedContext",
+      );
+      link(store, `${INDEX}#legacy`, `${SOLID}instance`, target);
+      await seedRdf(pod, INDEX, store);
+      const read = vi.spyOn(pod, "read");
+      expect(await readSharedContext(pod)).toEqual({
+        status: "error",
+        reason: "ambiguous_registration",
+      });
+      expect(read.mock.calls.some(([url]) => [CONTEXT, OTHER_CONTEXT].includes(url))).toBe(false);
+    }
+  });
+  it.each([
+    ["valid", undefined],
+    ["container", "registration_container"],
+    ["fragment", "malformed_registration"],
+    ["outside", "registration_outside_pod"],
+    ["literal", "malformed_registration"],
+    ["untyped", "malformed_registration"],
+    ["missing", "malformed_registration"],
+  ])("validates legacy class registrations: %s", async (kind, reason) => {
+    const pod = await contextFixture();
+    const store = registration();
+    const node = new MemoryNode(`${INDEX}#context`, store, df);
+    node.terms(`${SOLID}forClass`).clear();
+    link(
+      store,
+      `${INDEX}#context`,
+      `${SOLID}forClass`,
+      "https://w3id.org/jeswr/agent#SharedContext",
+    );
+    if (kind !== "valid") node.terms(`${SOLID}instance`).clear();
+    if (kind === "container")
+      link(store, `${INDEX}#context`, `${SOLID}instanceContainer`, `${ROOT}notes/`);
+    if (kind === "fragment")
+      link(store, `${INDEX}#context`, `${SOLID}instance`, `${OTHER_CONTEXT}#SECRET`);
+    if (kind === "outside")
+      link(store, `${INDEX}#context`, `${SOLID}instance`, "https://outside.example/SECRET");
+    if (kind === "literal") node.terms(`${SOLID}instance`).add(df.literal("SECRET"));
+    if (kind === "untyped") node.terms(RDF_TYPE).clear();
+    await seedRdf(pod, INDEX, store);
+    const read = vi.spyOn(pod, "read");
+    const result = await readSharedContext(pod);
+    if (reason) {
+      expect(result).toEqual({ status: "error", reason });
+      expect(read.mock.calls.some(([url]) => [CONTEXT, OTHER_CONTEXT].includes(url))).toBe(false);
+    } else expect(result).toMatchObject({ status: "ok", url: OTHER_CONTEXT });
+  });
   it("uses only the private index and ignores public registrations", async () => {
     const pod = await contextFixture();
     const profile = new Store();
@@ -531,7 +614,206 @@ describe("private context discovery", () => {
   });
 });
 
+describe("private discovery pointer trust", () => {
+  it.each([
+    "index",
+    "preferences",
+  ])("setup refuses an unlinked existing %s without changing its ACL", async (kind) => {
+    const pod = await contextFixture(false);
+    const target = kind === "index" ? INDEX : `${ROOT}settings/prefs.ttl`;
+    const store = new Store();
+    if (kind === "index") link(store, INDEX, RDF_TYPE, `${SOLID}TypeIndex`);
+    await seedRdf(pod, target, store);
+    const acl = `${target}.acl`;
+    const rules = ownerOnlyWacAcl(target, OWNER, acl);
+    link(rules, `${acl}#owner`, `${ACL}agentClass`, "http://xmlns.com/foaf/0.1/Agent");
+    await seedRdf(pod, acl, rules);
+    const before = await pod.read(acl);
+    const write = vi.spyOn(pod, "write");
+    expect(await setupSharedContext(pod, { webId: OWNER })).toMatchObject({
+      status: "error",
+      reason: "pointer_acl_untrusted",
+      setup: expect.stringContaining("owner must fix"),
+    });
+    expect(write).not.toHaveBeenCalled();
+    expect(await pod.read(acl)).toEqual(before);
+  });
+
+  it("setup rechecks an existing index ACL immediately before updating it", async () => {
+    const pod = await contextFixture();
+    const store = new Store();
+    link(store, INDEX, RDF_TYPE, `${SOLID}TypeIndex`);
+    await seedRdf(pod, INDEX, store);
+    const read = pod.read;
+    let indexReads = 0;
+    pod.read = async (url, opts) => {
+      if (url === INDEX && ++indexReads === 3) {
+        const rules = ownerOnlyWacAcl(INDEX, OWNER, `${INDEX}.acl`);
+        link(rules, `${INDEX}.acl#owner`, `${ACL}agentClass`, "http://xmlns.com/foaf/0.1/Agent");
+        await seedRdf(pod, `${INDEX}.acl`, rules);
+      }
+      return read(url, opts);
+    };
+    const write = vi.spyOn(pod, "write");
+    expect(await setupSharedContext(pod, { webId: OWNER })).toMatchObject({
+      status: "error",
+      reason: "pointer_acl_untrusted",
+    });
+    expect(write.mock.calls.some(([url]) => url === INDEX)).toBe(false);
+  });
+  for (const pointer of ["index", "preferences"])
+    for (const inherited of [false, true])
+      it.each([
+        "Write",
+        "Append",
+        "Control",
+      ])(`withholds context for ${pointer} ${inherited ? "inherited" : "own"} public %s`, async (mode) => {
+        const pod = await contextFixture();
+        const prefs = await linkPreferences(pod);
+        const target = pointer === "index" ? INDEX : prefs;
+        const governing = inherited ? `${ROOT}settings/` : target;
+        const acl = `${governing}.acl`;
+        if (inherited) await pod.delete(`${target}.acl`);
+        const store = ownerOnlyWacAcl(governing, OWNER, acl, inherited);
+        const rule = `${acl}#public`;
+        link(store, rule, RDF_TYPE, `${ACL}Authorization`);
+        link(store, rule, `${ACL}${inherited ? "default" : "accessTo"}`, governing);
+        link(store, rule, `${ACL}agentClass`, "http://xmlns.com/foaf/0.1/Agent");
+        link(store, rule, `${ACL}mode`, `${ACL}${mode}`);
+        await seedRdf(pod, acl, store);
+        const before = await pod.read(acl);
+        const read = vi.spyOn(pod, "read");
+        const write = vi.spyOn(pod, "write");
+        expect(await readSharedContext(pod)).toEqual({
+          status: "error",
+          reason: "pointer_acl_untrusted",
+        });
+        expect(await setupSharedContext(pod, { webId: OWNER })).toMatchObject({
+          status: "error",
+          reason: "pointer_acl_untrusted",
+        });
+        expect(read.mock.calls.some(([url]) => [CONTEXT, OTHER_CONTEXT].includes(url))).toBe(false);
+        expect(write).not.toHaveBeenCalled();
+        expect(await pod.read(acl)).toEqual(before);
+      });
+
+  it.each([
+    "no HEAD",
+    "no link",
+    "ACP",
+    "unreadable",
+    "malformed",
+    "other agent",
+    "group",
+    "origin",
+    "header",
+    "inherited header",
+  ])("fails closed on unprovable pointer ACLs: %s", async (kind) => {
+    const pod = await contextFixture();
+    const head = pod.head as NonNullable<PodPort["head"]>;
+    if (kind === "no HEAD") delete pod.head;
+    if (["no link", "ACP", "header", "inherited header"].includes(kind))
+      pod.head = async (target) =>
+        target === (kind === "inherited header" ? `${ROOT}settings/` : INDEX)
+          ? kind === "no link"
+            ? {}
+            : kind === "ACP"
+              ? { aclError: true }
+              : { wacAllow: 'user="read",public="write"' }
+          : head(target);
+    if (kind === "inherited header") await pod.delete(`${INDEX}.acl`);
+    if (kind === "unreadable") {
+      const read = pod.read;
+      pod.read = async (url, opts) => {
+        if (url === `${INDEX}.acl`) throw new Error("SECRET");
+        return read(url, opts);
+      };
+    }
+    if (kind === "malformed")
+      await pod.write(`${INDEX}.acl`, encode("SECRET invalid"), "text/turtle", {});
+    if (["other agent", "group", "origin"].includes(kind)) {
+      const store = ownerOnlyWacAcl(INDEX, OWNER, `${INDEX}.acl`);
+      link(
+        store,
+        `${INDEX}.acl#owner`,
+        `${ACL}${kind === "other agent" ? "agent" : kind === "group" ? "agentGroup" : "origin"}`,
+        "https://outside.example/SECRET",
+      );
+      await seedRdf(pod, `${INDEX}.acl`, store);
+    }
+    const result = await readSharedContext(pod);
+    expect(result).toEqual({ status: "error", reason: "pointer_acl_untrusted" });
+    expect(result).not.toHaveProperty("text");
+    expect(JSON.stringify(result)).not.toContain("SECRET");
+  });
+
+  it("accepts inherited owner-only pointer mutation authority and a public profile", async () => {
+    const pod = await contextFixture();
+    const prefs = await linkPreferences(pod);
+    for (const target of [INDEX, prefs]) await pod.delete(`${target}.acl`);
+    const parent = `${ROOT}settings/`;
+    const acl = `${parent}.acl`;
+    const store = ownerOnlyWacAcl(parent, OWNER, acl, true);
+    const node = new MemoryNode(`${acl}#owner`, store, df);
+    node.terms(`${ACL}default`).clear();
+    link(store, `${acl}#owner`, `${ACL}defaultForNew`, parent);
+    await seedRdf(pod, acl, store);
+    const head = pod.head as NonNullable<PodPort["head"]>;
+    pod.head = async (target) =>
+      target === PROFILE ? { wacAllow: 'public="read"' } : head(target);
+    expect(await readSharedContext(pod)).toMatchObject({
+      status: "ok",
+      url: OTHER_CONTEXT,
+      text: MARKDOWN,
+    });
+  });
+
+  it.each([
+    "index",
+    "preferences",
+  ])("setup preserves existing %s ACLs when adding pointers or registrations", async (kind) => {
+    const pod = await contextFixture(kind === "index");
+    if (kind === "index") {
+      const store = new Store();
+      link(store, INDEX, RDF_TYPE, `${SOLID}TypeIndex`);
+      await seedRdf(pod, INDEX, store);
+    } else {
+      await linkPreferences(pod);
+      // An existing preferences document with no index exercises bootstrap updates.
+      await seedRdf(pod, `${ROOT}settings/prefs.ttl`, new Store());
+    }
+    const target = kind === "index" ? INDEX : `${ROOT}settings/prefs.ttl`;
+    const acl = `${target}.acl`;
+    const store = ownerOnlyWacAcl(target, OWNER, acl);
+    link(store, `${acl}#reader`, RDF_TYPE, `${ACL}Authorization`);
+    link(store, `${acl}#reader`, `${ACL}accessTo`, target);
+    link(store, `${acl}#reader`, `${ACL}agentClass`, "http://xmlns.com/foaf/0.1/Agent");
+    link(store, `${acl}#reader`, `${ACL}mode`, `${ACL}Read`);
+    await seedRdf(pod, acl, store);
+    const before = await pod.read(acl);
+    const write = vi.spyOn(pod, "write");
+    expect(await setupSharedContext(pod, { webId: OWNER })).toMatchObject({
+      status: "already_exists",
+      registered: true,
+    });
+    expect(write.mock.calls.some(([url]) => url === acl)).toBe(false);
+    expect(await pod.read(acl)).toEqual(before);
+  });
+});
+
 describe("context write-authority verification", () => {
+  it.each([
+    ['extension="future-mode",public="read",user="write control"', "ok"],
+    ['public="read",public="APPEND",extension="value"', "untrusted"],
+    ['public="read",public="CONTROL"', "untrusted"],
+    ['public="read",broken', "untrusted"],
+    ["", "untrusted"],
+  ])("uses shared WAC-Allow parsing for context headers: %s", async (header, status) => {
+    const pod = markdownPod();
+    const read = pod.read;
+    pod.read = vi.fn(async (url, opts) => ({ ...(await read(url, opts)), wacAllow: header }));
+    expect(await readSharedContext(pod)).toMatchObject({ status });
+  });
   it.each([
     "public write",
     "public append",
@@ -547,11 +829,15 @@ describe("context write-authority verification", () => {
     "unsafe link",
   ])("withholds text for %s", async (kind) => {
     const pod = await contextFixture();
+    const head = pod.head as NonNullable<PodPort["head"]>;
     const store = ownerOnlyWacAcl(OTHER_CONTEXT, OWNER, `${OTHER_CONTEXT}.acl`);
     const node = new MemoryNode(`${OTHER_CONTEXT}.acl#owner`, store, df);
     if (["public write", "public append", "public control"].includes(kind)) {
       const mode = kind.split(" ")[1];
-      pod.head = async () => ({ wacAllow: `user="read write control",public="${mode}"` });
+      pod.head = async (target) =>
+        target === OTHER_CONTEXT
+          ? { wacAllow: `user="read write control",public="${mode}"` }
+          : head(target);
     }
     if (kind === "authenticated") {
       node.terms(`${ACL}agentClass`).add(df.namedNode(`${ACL}AuthenticatedAgent`));
@@ -576,7 +862,9 @@ describe("context write-authority verification", () => {
         return read(url, opts);
       };
     }
-    if (kind === "unsafe link") pod.head = async () => ({ acl: "https://outside.example/SECRET" });
+    if (kind === "unsafe link")
+      pod.head = async (target) =>
+        target === OTHER_CONTEXT ? { acl: "https://outside.example/SECRET" } : head(target);
     const result = await readSharedContext(pod);
     expect(result.status).toBe("untrusted");
     expect(result).not.toHaveProperty("text");
@@ -612,8 +900,8 @@ describe("context write-authority verification", () => {
         );
       }
   });
-  it("marks portable ports with no ACL capability as unverified", async () => {
-    const pod = await contextFixture();
+  it("marks portable ports with no private pointers or ACL capability as unverified", async () => {
+    const pod = await contextFixture(false);
     delete pod.head;
     expect(await readSharedContext(pod)).toMatchObject({ status: "ok", aclVerified: false });
   });
@@ -633,6 +921,20 @@ describe("context write-authority verification", () => {
 });
 
 describe("owner-only shared-context setup", () => {
+  it.each([
+    ['user="write",user="CONTROL",extension="value"', "already_exists"],
+    ['user="write control",broken', "error"],
+    ['user="write"', "error"],
+    ['public="write control"', "error"],
+  ])("uses shared WAC-Allow parsing for bootstrap authority: %s", async (header, status) => {
+    const pod = await contextFixture(false);
+    const head = pod.head as NonNullable<PodPort["head"]>;
+    pod.head = async (target) => ({
+      ...(await head(target)),
+      ...(target === ROOT ? { wacAllow: header } : {}),
+    });
+    expect(await setupSharedContext(pod, { webId: OWNER })).toMatchObject({ status });
+  });
   it("creates the document after its ACL, registers once, and reruns without writes", async () => {
     const pod = await contextFixture(false);
     await pod.delete(CONTEXT);
@@ -691,14 +993,20 @@ describe("owner-only shared-context setup", () => {
     }
   });
   it("parses only the explicit owner-facing CLI command and optional initial text", () => {
-    expect(parseCliArguments([])).toEqual({ command: "serve" });
+    for (const args of [
+      [],
+      ["unknown"],
+      ["--stdio"],
+      ["--initial-text", "ignored"],
+      ["unknown", "context-init"],
+    ])
+      expect(parseCliArguments(args)).toEqual({ command: "serve" });
     expect(parseCliArguments(["context-init"])).toEqual({ command: "context-init" });
     expect(parseCliArguments(["context-init", "--initial-text", MARKDOWN])).toEqual({
       command: "context-init",
       initialText: MARKDOWN,
     });
     for (const args of [
-      ["unknown"],
       ["context-init", "--url", "https://outside.example/SECRET"],
       ["context-init", "--initial-text"],
       ["context-init", "extra"],
@@ -731,18 +1039,13 @@ describe("shared Unicode card redaction", () => {
     }
   });
   it.each([
+    " ",
+    "-",
+    "\u00a0",
     "\u2009",
     "\u202f",
-    "\u3000",
-    "\u2011",
     "\u2013",
-    "\u00b7",
-    "\u2027",
-    "\t\n",
-    ".",
-    ",",
-    "_",
-    "/",
+    "\u2014",
   ])("redacts Unicode grouping %j", (separator) => {
     const grouped = ["４１１１", "١١١١", "११११", "𝟏𝟏𝟏𝟏"].join(separator);
     expect(redactCardNumbers(`😀 ${grouped} done`)).toEqual({
@@ -784,6 +1087,10 @@ it("refuses a redirect from a discovered URL at the fetch transport", async () =
     [PROFILE]: { body: serializeBoundedTurtle(profile), contentType: "text/turtle" },
     [OWNER]: { body: serializeBoundedTurtle(profile), contentType: "text/turtle" },
     [INDEX]: { body: serializeBoundedTurtle(registration()), contentType: "text/turtle" },
+    [`${INDEX}.acl`]: {
+      body: serializeBoundedTurtle(ownerOnlyWacAcl(INDEX, OWNER, `${INDEX}.acl`)),
+      contentType: "text/turtle",
+    },
     [OTHER_CONTEXT]: {
       body: "",
       contentType: "text/markdown",
@@ -797,7 +1104,10 @@ it("refuses a redirect from a discovered URL at the fetch transport", async () =
     webId: OWNER,
     fetch: async (input, init) => {
       requests.push(input instanceof Request ? input.url : input.toString());
-      return fake.fetch(input, init);
+      const response = await fake.fetch(input, init);
+      if (init?.method === "HEAD" && input.toString() === INDEX)
+        response.headers.set("link", `<${INDEX}.acl>; rel="acl"`);
+      return response;
     },
   });
   const result = await client.callTool({ name: "context_read", arguments: {} });
@@ -821,7 +1131,8 @@ it("reads only the configured off-pod owner profile for private discovery", asyn
         : read(url, opts),
     ),
   };
-  // The resource ACL must agree with the configured owner too.
+  // Pointer and context ACLs must agree with the configured owner too.
+  await seedRdf(pod, `${INDEX}.acl`, ownerOnlyWacAcl(INDEX, externalOwner, `${INDEX}.acl`));
   await seedRdf(
     pod,
     `${OTHER_CONTEXT}.acl`,
@@ -848,14 +1159,18 @@ it.each([
 ])("withholds context for %s evidence", async (kind) => {
   const pod = await contextFixture();
   const read = pod.read;
-  if (kind === "malformed header") pod.head = async () => ({ wacAllow: "unparseable SECRET" });
+  const head = pod.head as NonNullable<PodPort["head"]>;
+  if (kind === "malformed header")
+    pod.head = async (target) =>
+      target === OTHER_CONTEXT ? { wacAllow: "unparseable SECRET" } : head(target);
   if (kind === "HEAD error")
-    pod.head = async () => {
-      throw new Error("SECRET");
+    pod.head = async (target) => {
+      if (target === OTHER_CONTEXT) throw new Error("SECRET");
+      return head(target);
     };
   if (kind === "missing ancestor ACL") {
     await pod.delete(`${OTHER_CONTEXT}.acl`);
-    pod.head = async (target) => (target === OTHER_CONTEXT ? { acl: `${target}.acl` } : {});
+    pod.head = async (target) => (target === `${ROOT}notes/` ? {} : head(target));
   }
   if (kind.startsWith("ACL "))
     pod.read = async (url, opts) => {
@@ -954,6 +1269,8 @@ it.each([
   '<one>; rel="acl"; anchor="other"',
   "malformed",
   '<one>; rel="http://www.w3.org/ns/solid/acp#accessControl"',
+  '<permissions/context.acr>; rel="acl"',
+  '<permissions/context?ext=acr>; rel="acl"',
 ])("does not downgrade invalid ACL links to an unknown capability: %s", async (header) => {
   const pod = createFetchPodPort({
     podRoot: ROOT,

@@ -5,6 +5,7 @@ import {
   validateDedicatedWacAcl,
   validateOwnerOnlyWacAcl,
 } from "@jeswr/pkg-memory";
+import { parseWacAllow } from "@jeswr/storage-capabilities";
 import { DataFactory as df, type Store } from "n3";
 import { requirePodScopedUrl } from "./auth.js";
 import { parseBoundedRdf, serializeBoundedTurtle } from "./bounded-rdf.js";
@@ -15,14 +16,9 @@ import type { PodPort, PodReadResult } from "./pod-port.js";
 /** Retain the raw header because the caller's permissions cannot prove public permissions. */
 function publicMutation(header?: string): boolean {
   if (header === undefined) return false;
-  const groups = header.split(",");
-  for (const group of groups) {
-    const match = /^\s*(user|public)\s*=\s*"([\w\s]*)"\s*$/i.exec(group);
-    if (!match) throw new Error("acl_unverifiable");
-    if (match[1]?.toLowerCase() === "public" && /\b(write|append|control)\b/i.test(match[2] ?? ""))
-      return true;
-  }
-  return false;
+  const permissions = parseWacAllow(header);
+  if (!permissions) throw new Error("acl_unverifiable");
+  return permissions.public.some((mode) => ["write", "append", "control"].includes(mode));
 }
 async function aclDataset(pod: PodPort, url: string) {
   const raw = await pod.read(url, { accept: "text/turtle", redirect: "error" });

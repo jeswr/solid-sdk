@@ -1,11 +1,14 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { createTypeIndex } from "@jeswr/pod-type-index";
+import { parseWacAllow } from "@jeswr/storage-capabilities";
 import { type StorageClient, StorageError } from "@jeswr/storage-client";
+import { canonicalize } from "@jeswr/suite-vocab";
 import type { DatasetCore } from "@rdfjs/types";
 import { DataFactory as df, Store } from "n3";
 import { podScopedUrlOrUndefined, requirePodScopedUrl } from "./auth.js";
 import { parseBoundedRdf, serializeBoundedTurtle } from "./bounded-rdf.js";
 import { MAX_CONTENT_BYTES } from "./content.js";
+import { verifyContextAcl } from "./context-access.js";
 import { MemoryNode, status } from "./memory-context.js";
 import { withPodDataAccess } from "./pod-operation.js";
 import type { PodPort, PodReadResult } from "./pod-port.js";
@@ -23,6 +26,7 @@ export type ContextDiscoveryReason =
   | "registration_outside_pod"
   | "registration_container"
   | "malformed_registration"
+  | "pointer_acl_untrusted"
   | "type_index_unreadable";
 
 /** Fixed diagnostics: never expose a value from an untrusted registration. */
@@ -94,7 +98,10 @@ export function contextTypeIndex(
         fail("type_index_unreadable");
       for (const subject of dataset.getSubjects(null, null, null)) {
         const reg = new MemoryNode(subject, dataset, df);
-        if (!iris(reg, `${SOLID}forClass`).includes(SHARED_CONTEXT_CLASS)) continue;
+        if (
+          !iris(reg, `${SOLID}forClass`).some((iri) => canonicalize(iri) === SHARED_CONTEXT_CLASS)
+        )
+          continue;
         if (!reg.terms(TYPE).has(df.namedNode(`${SOLID}TypeRegistration`)))
           fail("malformed_registration");
         if (iris(reg, `${SOLID}forClass`).length !== 1) fail("malformed_registration");
@@ -144,6 +151,18 @@ export function contextTypeIndex(
   };
   const missing = (url: string) =>
     new StorageError("not-found", { url, method: "GET", status: 404 });
+  async function verifyPointer(url: string, raw: PodReadResult) {
+    try {
+      if (
+        raw.isContainer ||
+        (raw.url && raw.url !== url) ||
+        !(await verifyContextAcl(pod, url, raw))
+      )
+        fail("pointer_acl_untrusted");
+    } catch {
+      fail("pointer_acl_untrusted");
+    }
+  }
   async function write(
     url: string,
     dataset: DatasetCore | Iterable<import("@rdfjs/types").Quad>,
@@ -153,7 +172,15 @@ export function contextTypeIndex(
     // Register re-reads on conflicts. A foreign concurrent registration must stop setup.
     if (discovered && discovered !== new URL(SHARED_CONTEXT_PATH, pod.root).href)
       fail("ambiguous_registration");
-    if (url !== profileUrl) await protect(url, false);
+    // Existing pointer documents belong to the owner. Verify their effective ACLs;
+    // setup must never tighten or replace ACLs on resources it did not create.
+    if (url !== profileUrl) {
+      try {
+        await verifyPointer(url, await pod.read(pointer(url), { redirect: "error" }));
+      } catch {
+        fail("pointer_acl_untrusted");
+      }
+    }
     const saved = new Store([...dataset]);
     for (const term of publicPointers.get(url) ?? [])
       new MemoryNode(pod.webId, saved, df).terms(`${SOLID}publicTypeIndex`).add(term);
@@ -219,6 +246,9 @@ export function contextTypeIndex(
         discovered = undefined;
       }
       inspect(dataset, url);
+      // Profiles are expected to be public; private discovery pointers need proven
+      // owner-only mutation authority even when the eventual context ACL is safe.
+      if (!profile) await verifyPointer(url, raw);
       return { url, etag: raw.etag ?? null, contentType: "text/turtle", dataset };
     },
     writeRdf: (url, dataset, opts) => write(url, dataset, opts.ifMatch),
@@ -247,8 +277,7 @@ export function contextTypeIndex(
       if (url === pod.root) {
         const metadata = await pod.head?.(url);
         // Bootstrap must retain the Type Index client's root Write+Control precondition.
-        const user =
-          /(?:^|,)\s*user\s*=\s*"([^"]*)"/i.exec(metadata?.wacAllow ?? "")?.[1]?.split(/\s+/) ?? [];
+        const user = parseWacAllow(metadata?.wacAllow ?? "")?.user ?? [];
         return {
           allow: { write: user.includes("write"), control: user.includes("control") },
         } as Awaited<ReturnType<StorageClient["head"]>>;

@@ -7,21 +7,11 @@
  */
 
 /**
- * Leading digits a card number may start with. Every issuer range except 0 (unassigned) is
- * covered, including UATP (1), Maestro (50, 56-69), RuPay (60, 65, 81, 82) and
- * petroleum cards (7).
+ * Design A grouping: ASCII space/hyphen, NBSP, thin/narrow no-break spaces, en/em dash.
+ * Other punctuation and whitespace end a run. Percent-decode IRIs before scanning them.
+ * Ideographic numerals are not covered.
  */
-// After decimal normalization, every nonzero digit is a possible issuer prefix.
-
-/**
- * Characters that may sit between digit groups without ending a run: whitespace, any
- * punctuation (dashes, dots, quotes, brackets, slashes, middle dots), invisible format
- * characters (zero-width space, soft hyphen), any combining mark, and `+ = ~ |`. Callers
- * should percent-decode IRIs before scanning them. Ideographic numerals are not covered.
- */
-// U+00B7 and U+2027 are punctuation used as visual digit-group delimiters.
-// Retain the broader existing separator set to avoid weakening template refusal.
-const SEPARATOR = /^[\s\p{Z}\p{P}\p{Cf}\p{M}+=~|]$/u;
+const SEPARATOR = /^[ \-\u00a0\u2009\u202f\u2013\u2014]$/u;
 const DECIMAL = /^\p{Nd}$/u;
 const NUMBER = /^\p{N}$/u;
 const PUNCTUATION = /\p{P}/gu;
@@ -53,7 +43,7 @@ function digitValue(char: string): number | undefined {
 
 /**
  * Spans of `text` (UTF-16 start inclusive, end exclusive) holding what looks like a payment
- * card number: a Luhn-valid window of 12-19 digits not starting with 0, at any offset
+ * card number: a Luhn-valid window of 13-19 digits starting with 2-6, at any offset
  * in a run of Unicode digits whose groups are split by separators. Every start is
  * checked with incremental Luhn sums (linear), up to 19 digits from each match start are
  * covered so a chance-valid shorter prefix leaves no card digits behind, and overlapping
@@ -106,10 +96,10 @@ function scanRun(
     odd[i + 1] = oddSum;
   }
   let coveredEnd = -2;
-  for (let start = 0; start + 12 <= digits.length; start += 1) {
-    if (digits[start] === 0) continue;
+  for (let start = 0; start + 13 <= digits.length; start += 1) {
+    if ((digits[start] as number) < 2 || (digits[start] as number) > 6) continue;
     const limit = Math.min(start + 19, digits.length);
-    for (let end = start + 12; end <= limit; end += 1) {
+    for (let end = start + 13; end <= limit; end += 1) {
       const sums = end % 2 === 0 ? even : odd;
       if (sums[end] !== sums[start]) continue;
       // Keep checking every later start, even inside an already covered range.

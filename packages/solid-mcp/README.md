@@ -162,6 +162,8 @@ env_vars = ["SOLID_MCP_POD_ROOT", "SOLID_MCP_WEBID", "SOLID_MCP_READONLY", "SOLI
   and `health_query` with trusted client identity.
 - Shared context: `context_read` takes no arguments and discovers the configured owner's
   private Type Index registration for `https://jeswr.org/ns/agent#SharedContext`.
+  Legacy class aliases are canonicalized through suite-vocab and receive the same
+  validation and ambiguity checks, including duplicate entries naming the same document.
   It accepts exactly one pod-scoped HTTP(S) document instance, without a fragment.
   Only no private pointer or no registration falls back to `SHARED_CONTEXT_PATH`
   (`agent/context/shared-context.md` below the configured root). Unsafe, duplicate,
@@ -169,15 +171,24 @@ env_vars = ["SOLID_MCP_POD_ROOT", "SOLID_MCP_WEBID", "SOLID_MCP_READONLY", "SOLI
   registration URLs are withheld. Public indexes are ignored. A missing context returns
   `{status:"not_found",url,setup}`. Redirects and aliases are refused at every read.
   Text has Unicode-aware card redaction (`CARD_REDACTION`, `redactedCardNumbers`) using
-  pkg-memory's single detector. All decimal scripts, astral digits and Unicode separators
-  are covered; the existing broader NFKC forms and punctuation remain covered too.
-  As in pkg-memory, all nonzero issuer prefixes count, so chance-valid account/phone
-  windows can also be removed. Overlapping/adjacent matches merge and cover up to 19 digits.
+  pkg-memory's single detector. It checks Luhn-valid 13–19 digit windows starting with
+  2–6, folding Unicode decimal scripts and NFKC digit forms while preserving UTF-16 spans.
+  Only ASCII space, hyphen, NBSP, thin/narrow no-break spaces and en/em dashes separate
+  digit groups; dots, commas and other punctuation end a run. Overlapping/adjacent
+  matches merge and cover up to 19 digits. Ordinary phone lists, dates and versions stay intact.
   The effective WAC ACL must grant Write/Append/Control only to the owner. Public mutation
   headers, other agents, public/authenticated classes, groups, origins and unprovable ACL
   evidence return `{status:"untrusted",url,reason}` with no text. An owner-only ACL yields
-  `aclVerified:true`; a portable/LWS port without exposed ACL support returns text with
-  `aclVerified:false`. WAC-Allow public mutation evidence still denies on those ports.
+  `aclVerified:true`; a portable/LWS port with no private discovery pointers and no exposed
+  ACL support returns conventional-path text with `aclVerified:false`. WAC-Allow public
+  mutation evidence still denies on those ports.
+  Every existing private index and preferences document must also have verifiable
+  owner-only mutation authority through its own or inherited WAC ACL. Unsafe or
+  unavailable pointer ACL evidence returns `{status:"error",reason:"pointer_acl_untrusted"}`
+  without reading or returning context text. The public profile remains exempt.
+  ACP-only pods advertising `rel="acl"` to `.acr` or `?ext=acr` fail closed as untrusted
+  context (`context_untrusted`): the API returns `{status:"untrusted",url,reason:"acl_unverifiable"}`,
+  or `pointer_acl_untrusted` when discovery pointers use ACP. ACP is unsupported.
   Helpers: `readSharedContext`, `sharedContextUrl`, `createContextToolRegistry`,
   `setupSharedContext`. See decision 0004.
 - One-release aliases in v0.2: `solid_list`, `solid_read`, `solid_search`, `solid_write`.
@@ -202,6 +213,18 @@ document bytes are preserved; a different registration stops setup without mutat
 A successful rerun performs no writes. Strong ETags protect existing ACL/index updates;
 unsafe or shared ACLs refuse replacement. The CLI subcommand explicitly enables setup
 writes and reports to stderr; regular stdio remains read-only by default.
+Setup preserves ACLs on existing private indexes and preferences documents, including
+inherited permissions and public Read grants. If mutation authority is not verifiably
+owner-only, setup returns `pointer_acl_untrusted` with a fixed `setup` instruction; the
+owner must fix the effective index/preferences ACLs before rerunning setup. Only newly
+created resources have their ACLs provisioned by setup. Unknown CLI launch arguments are
+ignored unless the first argument is `context-init`, whose options are validated strictly.
+
+Trust reads and ACL checks are separate requests. A concurrent owner or ACL controller
+can change content, pointers or permissions between them; these checks do not provide an
+atomic read/ACL snapshot. Generic mutation protection for governing ancestor ACLs of
+pointer/profile documents is deferred to PR #447's server-advertised ACL discovery;
+this branch adds no ACL-suffix restriction.
 
 ## Portable pod access
 
@@ -504,6 +527,9 @@ aliases when using the fetch-based server configuration. The chat adapter retain
 its ACL discovery and write safeguards. The portable `PodPort` configuration
 registers pod and memory tools; chat tools currently require the fetch-based
 configuration for their ACL discovery.
+Chat writes keep `contextGuard` off: ChatWriter's create-only resources use agent/account
+identifiers and do not accept arbitrary context or pointer mutation targets. Its own
+ACL-before-content and conditional-write checks remain active.
 
 ## Streamable HTTP
 

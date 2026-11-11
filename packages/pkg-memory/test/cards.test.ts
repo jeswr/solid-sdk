@@ -51,8 +51,9 @@ function luhn(window: string): boolean {
 
 function naive(digits: string): boolean {
   for (let start = 0; start < digits.length; start += 1)
-    for (let length = 12; length <= 19 && start + length <= digits.length; length += 1)
-      if (digits[start] !== "0" && luhn(digits.slice(start, start + length))) return true;
+    for (let length = 13; length <= 19 && start + length <= digits.length; length += 1)
+      if (/^[2-6]$/.test(digits[start] ?? "") && luhn(digits.slice(start, start + length)))
+        return true;
   return false;
 }
 
@@ -292,12 +293,12 @@ describe("payment-card nanopublications", () => {
 });
 
 describe("card number detection", () => {
-  it("finds cards in ASCII, Unicode digits and any separator", () => {
+  it("finds cards in ASCII, Unicode digits and design A separators", () => {
     for (const text of [
       "4111111111111111",
       "4111 1111 1111 1111 exp 09/28",
+      "4111-1111-1111-1111",
       "Contact 07524 455523, 4111 1111 1111 1111",
-      "4111.1111.1111.1111",
       "4111 1111 1111—1111",
       "４１１１１１１１１１１１１１１１",
       "٤١١١١١١١١١١١١١١١",
@@ -305,22 +306,10 @@ describe("card number detection", () => {
       "378282246310005",
       "5018000000000009",
       "5600000000000003",
-      "8100000000000002",
-      "100000000000009",
-      "4111+1111+1111+1111",
-      "urn:card:4111:1111:1111:1111",
-      "4111\u200b1111\u00ad1111\u200b1111",
       "④①①①①①①①①①①①①①①①",
       "⁴¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹",
       "⒋⒈⒈⒈⒈⒈⒈⒈⒈⒈⒈⒈⒈⒈⒈⒈",
       "⑷⑴⑴⑴⑴⑴⑴⑴⑴⑴⑴⑴⑴⑴⑴⑴",
-      "4111·1111·1111·1111",
-      "4111|1111|1111|1111",
-      "(4111)1111-1111-1111",
-      '"4111","1111","1111","1111"',
-      "4111'1111'1111'1111",
-      "4111\u09031111\u09031111\u09031111",
-      "4111\\1111\\1111\\1111",
       `${"0".repeat(70)}4111111111111111`,
     ])
       expect(containsCardNumber(text), text).toBe(true);
@@ -329,6 +318,20 @@ describe("card number detection", () => {
       "12345678901",
       "ⅣⅠⅠⅠ ⅣⅠⅠⅠ ⅣⅠⅠⅠ ⅣⅠⅠⅠ",
       "phone 07700 900123",
+      '"4111","1111","1111","1111"',
+      "4111.1111.1111.1111",
+      "8100000000000002",
+      "100000000000009",
+      "4111+1111+1111+1111",
+      "urn:card:4111:1111:1111:1111",
+      "4111\u200b1111\u00ad1111\u200b1111",
+      "4111·1111·1111·1111",
+      "4111|1111|1111|1111",
+      "(4111)1111-1111-1111",
+      "4111'1111'1111'1111",
+      "4111\u09031111\u09031111\u09031111",
+      "4111\\1111\\1111\\1111",
+
       "",
       "4111 1111 x 1111 1111",
     ])
@@ -344,16 +347,16 @@ describe("card number detection", () => {
     for (let n = 0; n < 1500; n += 1) {
       let text = "";
       const at: number[] = [];
-      for (let i = 0, length = 12 + Math.floor(random() * 30); i < length; i += 1) {
-        if (random() < 0.2) text += [" ", "-", "·", "\u200b"][Math.floor(random() * 4)];
+      for (let i = 0, length = 13 + Math.floor(random() * 30); i < length; i += 1) {
+        if (random() < 0.2) text += [" ", "-", "\u00a0", "\u2009"][Math.floor(random() * 4)];
         at.push(text.length);
         text += String(Math.floor(random() * 10));
       }
       const digits = at.map((index) => text[index]).join("");
       const spans = findCardNumbers(text);
       for (let start = 0; start < digits.length; start += 1)
-        for (let length = 12; length <= 19 && start + length <= digits.length; length += 1)
-          if (digits[start] !== "0" && luhn(digits.slice(start, start + length))) {
+        for (let length = 13; length <= 19 && start + length <= digits.length; length += 1)
+          if (/^[2-6]$/.test(digits[start] ?? "") && luhn(digits.slice(start, start + length))) {
             const from = at[start] as number;
             const to = (at[start + length - 1] as number) + 1;
             expect(
@@ -383,6 +386,49 @@ describe("card number detection", () => {
       ).join("");
       expect(containsCardNumber(digits), digits).toBe(naive(digits));
     }
+  });
+
+  it.each([
+    "Call 07700 900123, 07700 900456 or 07700 900789.",
+    "Meetings: 2026-11-11, 2026-11-12, 2026-11-13",
+    "versions 1.2.3, 4.5.6, 7.8.9",
+  ])("preserves ordinary prose: %s", (text) => {
+    expect(redactCardNumbers(text)).toEqual({ text, count: 0 });
+  });
+
+  it("requires 13-19 digits and a leading digit in 2-6", () => {
+    for (const first of "0123456789")
+      for (const length of [12, 13, 14, 15, 16, 17, 18, 19]) {
+        const body = first + "0".repeat(length - 2);
+        const pan = Array.from({ length: 10 }, (_, digit) => body + digit).find(luhn) as string;
+        expect(containsCardNumber(pan), pan).toBe(length >= 13 && /^[2-6]$/.test(first));
+      }
+  });
+
+  it.each([
+    "\t",
+    "\n",
+    "\r",
+    "\u3000",
+    "\u2011",
+    "\u200b",
+    "\u00ad",
+    ".",
+    ",",
+    "_",
+    "/",
+    "·",
+    "\u2027",
+    "+",
+    "=",
+    "~",
+    "|",
+    "'",
+    "\\",
+    "\u0903",
+  ])("ends digit runs at unsupported separator %j", (separator) => {
+    const text = ["4111", "1111", "1111", "1111"].join(separator);
+    expect(redactCardNumbers(text)).toEqual({ text, count: 0 });
   });
 
   it("scans a large document in linear time", () => {
@@ -420,18 +466,13 @@ describe("shared Unicode card redaction", () => {
     }
   });
   it.each([
+    " ",
+    "-",
+    "\u00a0",
     "\u2009",
     "\u202f",
-    "\u3000",
-    "\u2011",
     "\u2013",
-    "\u00b7",
-    "\u2027",
-    "\t\n",
-    ".",
-    ",",
-    "_",
-    "/",
+    "\u2014",
   ])("redacts Unicode grouping %j", (separator) => {
     const grouped = ["４１１１", "١١١١", "११११", "𝟏𝟏𝟏𝟏"].join(separator);
     expect(redactCardNumbers(`😀 ${grouped} done`)).toEqual({

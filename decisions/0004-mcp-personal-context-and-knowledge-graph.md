@@ -1,4 +1,5 @@
 <!-- AUTHORED-BY Claude Opus 5.5 -->
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 # 0004. MCP shared context and personal knowledge graph
 
 - Status: proposed (2 Nov 2026)
@@ -23,7 +24,8 @@ Both live in his pod and are reached over MCP. Nothing is held in an assistant's
 
 - **One owner-authored Markdown document**, by default at `<pod>/agent/context/shared-context.md`.
   It is registered in the owner's private Type Index for `https://jeswr.org/ns/agent#SharedContext`
-  (planned for slice 2; slice 1 uses the conventional path). Markdown is used because it is what
+  (implemented in slice 2, with the conventional path used only when no private pointer or
+  registration exists). Markdown is used because it is what
   the owner edits and what a model reads best. The meaning lives in prose, not in triples. Facts
   that agents act on belong in the knowledge graph instead.
 - **Owner-only ACL**, as for everything below `agent/`. The MCP server already authenticates as
@@ -32,17 +34,23 @@ Both live in his pod and are reached over MCP. Nothing is held in an assistant's
 - **No category data in shared context.** Addresses, health details, contacts and card data
   belong in the knowledge graph, where reads need a mandate and are audited. `context_read`
   redacts anything that looks like a card number before it reaches a model: every Luhn-valid
-  12–19 digit window with a card-network prefix, at any offset in a run of digits split by any
-  amount of whitespace, `.`, `,`, `_`, `-` or `/`. Every start is checked, and up to 19 digits
+  13–19 digit window starting with 2–6, at any offset in a run of digits split only by ASCII
+  space, hyphen, NBSP (U+00A0), thin space (U+2009), narrow no-break space (U+202F),
+  en dash (U+2013) or em dash (U+2014). Dots and other punctuation/whitespace end a run.
+  Unicode decimal and NFKC digit folding preserve original UTF-16 offsets.
+  Every start is checked, and up to 19 digits
   from each match start are covered; overlapping covered ranges merge into one
   `[card number removed]`, and the result reports how many were redacted. A
   Luhn-valid account number with a card prefix is redacted too; that costs one number, not
   the whole document.
-- The text is owner-authored data. Slice 2's setup helper and discovery must also check that
+- The text is owner-authored data. Slice 2's setup helper and discovery check that
   nobody except the owner can write or append to it (`WAC-Allow`, or the ACL itself), so the
   document cannot carry someone else's injected instructions.
-- Slice 1 reads below the MCP server's configured root. A server scoped to a sub-container
-  therefore looks under that sub-container until Type Index discovery (slice 2) lands.
+- Type Index discovery uses the configured owner's private index, including preferences
+  links and legacy class aliases. Existing index/preferences documents need verifiable
+  owner-only mutation authority through their effective WAC ACLs; setup never changes
+  their ACLs. The public profile stays exempt. A conventional-path fallback remains below
+  the configured root, including when the server is scoped to a sub-container.
 - A redirect or alias from the fixed path is refused at the transport (`redirect: "error"`,
   no request to the target) or, for portable ports, from the reported URL before any re-read,
   so the returned text and ETag always describe that one document (slice 3's `If-Match`
@@ -104,7 +112,7 @@ owner to approve in one batch.
 - A card fact stores only the **brand, the last four digits, the expiry month and year, and a
   billing-address reference**. The schema has no field for a full card number (PAN) or a CVV.
 - The template validator requires the last-four field to match `^\d{4}$`. A Luhn-valid
-  12–19 digit sequence anywhere in the claim, with any of the separators above, is refused
+  13–19 digit sequence starting with 2–6 anywhere in the claim, with any of the separators above, is refused
   before anything is written, and the refusal never echoes the digits.
 - Form filling that needs a full card asks the owner every time. A vault design is a separate
   decision for Jesse (bead sst-b8c.20.7, `needs:jesse`).
@@ -122,8 +130,9 @@ owner to approve in one batch.
 ## Slices
 
 1. `context_read` MCP tool (this PR).
-2. Type Index registration and discovery for `SharedContext`, plus a setup helper that creates
-   the document with an owner-only ACL.
+2. Implemented: private Type Index registration and discovery for `SharedContext`, plus an
+   owner-facing setup helper that creates the document with an owner-only ACL. Governing
+   ancestor ACL mutation protection for pointer/profile documents follows PR #447.
 3. `context_propose_edit` with owner approval and an `If-Match` write.
 4. `pkg-memory` payment-card template with the PAN/CVV refusal rules above.
 5. `pkg-memory` health observation templates (measurement, lab result, vaccination, encounter),

@@ -170,7 +170,11 @@ export function createContextToolRegistry(pod: PodPort): readonly PodTool[] {
 /** Owner-facing setup outcome; no model tool can invoke setup. */
 export type SharedContextSetupResult =
   | { status: "created" | "already_exists"; url: string; registered: boolean }
-  | { status: "error"; reason: ContextDiscoveryReason | "foreign_registration" | "setup_failed" };
+  | {
+      status: "error";
+      reason: ContextDiscoveryReason | "foreign_registration" | "setup_failed";
+      setup?: string;
+    };
 
 /** Create-only owner setup. Existing document bytes and existing registrations are preserved. */
 export async function setupSharedContext(
@@ -261,6 +265,12 @@ export async function setupSharedContext(
       return {
         status: "error",
         reason: error instanceof ContextDiscoveryError ? error.reason : "setup_failed",
+        ...(error instanceof ContextDiscoveryError && error.reason === "pointer_acl_untrusted"
+          ? {
+              setup:
+                "The owner must fix the effective private type index/preferences ACLs to allow only owner mutations, then rerun context-init.",
+            }
+          : {}),
       };
     }
   }).catch(() => ({ status: "error" as const, reason: "setup_failed" as const }));

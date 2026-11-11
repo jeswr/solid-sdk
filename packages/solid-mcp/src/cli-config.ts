@@ -110,8 +110,7 @@ export function parseCliArguments(args: readonly string[]): {
   command: "serve" | "context-init";
   initialText?: string;
 } {
-  if (!args.length) return { command: "serve" };
-  if (args[0] !== "context-init") throw new Error("Unknown solid-mcp command");
+  if (args[0] !== "context-init") return { command: "serve" };
   if (args.length === 1) return { command: "context-init" };
   if (args.length === 3 && args[1] === "--initial-text")
     return { command: "context-init", initialText: args[2] };
