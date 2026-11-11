@@ -138,6 +138,16 @@ There is no mark-read/delete API. `notificationKind(n)` maps Announce share summ
 Announce targets, then Create targets, then Offer to share/assignment/mention/invitation;
 every other shape is other. Keep wrapper and builder round-trip coverage at 100%.
 
+`readInvitations<T>({ reader, webId, kind?, normalise, exclude?, limit?, signal? })` owns
+shared inbox discovery/filter/projection/de-duplication/capping. A projection returns `{ key,
+value }` or null; validation exceptions and empty keys are skipped. Reader order decides the
+newest duplicate; excluded keys are omitted. Omit kind for a mixed notification tray. Limits
+are non-negative safe integers, default 50; zero performs no I/O. Missing inboxes are empty,
+reader errors propagate, and abort checks fence every await and projection. Reuse the reader.
+`withAbortSignal(fetch, signalOrGetter)` preserves both request deadlines and caller lifetimes,
+checks before I/O and after responses, and supports dynamic committed-session signal getters.
+Use it for discovery cancellation instead of copying transport wrappers into consumers.
+
 For `./requests-solid`, preserve resolve-once target pinning before the Approving CAS, deterministic
 grant IDs, create-only records/receipts, ACL writes after the CAS, and forward-only snapshot recovery.
 On 412 re-read and observe the winner. Require strong ETags for request updates; grant through

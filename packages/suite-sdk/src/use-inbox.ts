@@ -5,6 +5,7 @@ import {
   createInboxReader,
   type InboxNotification,
   type InboxReaderOptions,
+  withAbortSignal,
 } from "@jeswr/pod-access/notify";
 import { usePodAuth } from "@jeswr/pod-auth/react";
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -34,17 +35,8 @@ export function useInbox(options: Omit<InboxReaderOptions, "fetch"> = {}): UseIn
       if (current?.session !== session) throw new Error("Notification session changed");
       return current;
     }
-    const scoped =
-      (transport: typeof fetch): typeof fetch =>
-      async (input, init) => {
-        const { signal } = assertActive();
-        // clientFetch always supplies its own deadline/cancellation signal to this transport.
-        const requestSignal = (init as RequestInit & { signal: AbortSignal }).signal;
-        return transport(input, {
-          ...init,
-          signal: AbortSignal.any([signal, requestSignal]),
-        });
-      };
+    const scoped = (transport: typeof fetch) =>
+      withAbortSignal(transport, () => assertActive().signal);
     const reader = createInboxReader({
       fetch: scoped(fetch),
       clock,

@@ -258,6 +258,20 @@ summary starting `Shared with you as `), `assignment` (Announce with target), `m
 (Create with target), `invitation` (Offer), or `other`. Share summaries take precedence
 when an Announce also has a target. React consumers use `useInbox()` from suite-sdk.
 
+`readInvitations<T>({ reader, webId, kind?, normalise, exclude?, limit?, signal? })` shares
+inbox discovery, kind filtering, projection and newest-first de-duplication. `normalise(item)`
+returns `{ key, value }`, where the key identifies the offered resource; null, empty keys and
+validation exceptions discard malformed items. `exclude` contains accepted resource keys.
+Omit `kind` for a mixed tray. The reader's ordering decides duplicate winners. `limit` defaults
+to 50 and must be a non-negative safe integer; zero performs no I/O. Missing inboxes return
+empty; discovery/listing failures propagate. Cancellation is checked before/after each await
+and projection, including transports that ignore abort. Reuse one reader per client/session.
+
+`withAbortSignal(fetch, signalOrGetter)` combines the caller's lifetime with each request's
+signal (including the guarded transport's deadline), checks cancellation before I/O and fences
+late responses. A getter supports committed session fences and superseding refreshes without
+replacing the reader's cached transport. Supply this wrapper to readers to cancel discovery too.
+
 ## Offline policy translation
 
 ```ts
