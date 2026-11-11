@@ -203,6 +203,13 @@ export function SuiteFrame({
         <SheetContent
           side="left"
           className="ish-drawer"
+          // A link to the current path with a different query changes no pathname, so close on any
+          // followed link. Next's Link prevents the native default for client navigation, so that
+          // flag cannot tell us whether the link was followed; modified clicks open a new tab instead.
+          onClick={(event) => {
+            const link = (event.target as Element).closest("a[href]");
+            if (link && !event.metaKey && !event.ctrlKey && !event.shiftKey) setDrawer(false);
+          }}
           onCloseAutoFocus={(event) => {
             event.preventDefault();
             navigationTrigger.current?.focus();

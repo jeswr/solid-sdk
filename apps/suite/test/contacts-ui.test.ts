@@ -203,6 +203,29 @@ function button(host: ParentNode, text: string) {
 }
 
 describe("Contacts rendered behavior with the existing Drive DOM harness", () => {
+  it("recovers a failed pod load through the error state's Retry action", async () => {
+    const view = await setup();
+    // ContactRoute captures the provider's refresh action when a child route is mounted.
+    await act(async () => env.push("/contacts/import"));
+    await act(async () => env.push("/contacts"));
+    const workingFetch = view.fetch.getMockImplementation();
+    if (!workingFetch) throw new Error("Missing pod transport");
+    view.fetch.mockRejectedValue(new TypeError("private transport details"));
+    await act(async () => env.refresh());
+    const alert = view.host.querySelector('.con-list [role="alert"]') as HTMLElement;
+    expect(alert.textContent).toContain("Can't reach your storage");
+    expect(alert.textContent).toContain("Check your connection and try again.");
+    expect(alert.textContent).not.toContain("private transport details");
+    expect(view.host.textContent).not.toContain("No contacts yet");
+    expect(view.host.textContent).not.toContain("Create your address book");
+    view.fetch.mockImplementation(workingFetch);
+    await click(button(alert, "Retry"));
+    await settle(() => expect(findRow(view.host, "Ada Fern")).not.toBeNull());
+    expect(view.host.querySelector('.con-list [role="alert"]')).toBeNull();
+    expect(view.host.querySelector(".con-list-heading")?.textContent).toContain("40 contacts");
+    await view.unmount();
+  });
+
   it("keeps Contacts usable and shows a persistent recovery warning when the localStorage getter throws", async () => {
     const descriptor = Object.getOwnPropertyDescriptor(
       globalThis,
@@ -401,6 +424,8 @@ describe("Contacts rendered behavior with the existing Drive DOM harness", () =>
   it("previews vCards, excludes the existing email, and imports only selected rows", async () => {
     const view = await setup();
     await act(async () => env.push("/contacts/import"));
+    expect(button(view.host, "vCard files").getAttribute("aria-pressed")).toBe("true");
+    expect(button(view.host, "From a CardDAV server").getAttribute("aria-pressed")).toBe("false");
     const picker = view.host.querySelector('[aria-label="Choose files"]') as HTMLInputElement;
     const file = new File(
       [
@@ -419,6 +444,12 @@ describe("Contacts rendered behavior with the existing Drive DOM harness", () =>
       view.host.querySelector('[aria-label="Include Copy"]')?.getAttribute("aria-checked"),
     ).toBe("false");
     expect(view.host.querySelector(".con-wizard")?.textContent).toContain(
+      "Possible duplicate: Mira Quill",
+    );
+    const warningId = view.host
+      .querySelector('[aria-label="Include Copy"]')
+      ?.getAttribute("aria-describedby");
+    expect(document.getElementById(warningId ?? "")?.textContent).toContain(
       "Possible duplicate: Mira Quill",
     );
     await click(button(view.host, "Import 1 contacts"));
