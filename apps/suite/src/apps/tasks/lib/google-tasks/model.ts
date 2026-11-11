@@ -34,6 +34,8 @@ export interface GoogleTasksWarning {
 
 /** Shared consumer shape: Todoist drafts are assignable without changing that parser. */
 export interface TaskImportDraft extends Omit<TodoistTaskDraft, "priority"> {
+  /** Original Google task identity, retained separately from local hierarchy IDs. */
+  readonly sourceId?: string;
   readonly priority?: TodoistTaskDraft["priority"];
   readonly state?: "open" | "closed";
   readonly completedAt?: string;
@@ -47,6 +49,7 @@ export interface ProjectImportDraft<Warning = TodoistWarning | GoogleTasksWarnin
 }
 
 export interface GoogleTasksTaskDraft extends TaskImportDraft {
+  readonly sourceId: string;
   readonly priority?: never;
   readonly state: "open" | "closed";
 }

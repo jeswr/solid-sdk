@@ -157,6 +157,7 @@ function TasksChrome({ children }: { children: ReactNode }) {
     if (document.querySelector('.tsk-detail input[role="combobox"][aria-expanded="true"]')) return;
     // The sub-task composer consumes Escape to collapse its own row first.
     if (document.activeElement?.matches('.tsk-detail input[aria-label="Sub-task title"]')) return;
+    if (document.activeElement?.closest(".tsk-detail [data-tsk-attachment-form]")) return;
     const query = new URLSearchParams(params.toString());
     query.delete("task");
     // A shared link's pane must close after a hard load too (see replaceQuery).

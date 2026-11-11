@@ -143,5 +143,5 @@ Solid write side (ADR-003 §6, T-022; implementation isolated in `src/solid-writ
   encoded-body check; unknown-size streams/Blobs fail bad-request before sending.
 - `MetadataOp.title` sets `dct:title` on the anchor for add, and removes the exact literal for
   remove, using wrapper accessors and the existing N3 Patch builder. Titles accept quotes,
-  newlines and Unicode as literal data. Emulated moves drop ACLs; pod-access SDK-APP-04 owns
-  the preserving variant.
+  newlines and Unicode as literal data. Emulated moves drop ACLs; `@jeswr/pod-access/roles` exports
+  `movePreservingAccess` for the preserving variant (SDK-APP-04).

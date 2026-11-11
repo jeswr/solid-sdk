@@ -3,6 +3,7 @@ import { mkdir } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
+import { seedDemoSession } from "../demo-session";
 
 const routes = [
   ["", "Chat", "Plan my week"],
@@ -26,6 +27,7 @@ const routes = [
 
 for (const [route, heading, item] of routes) {
   test(`${route || "root"} reads seeded records and is accessible`, async ({ page }, info) => {
+    await seedDemoSession(page);
     await page.goto(`/agent/${route}`);
     await expect(page.getByRole("heading", { level: 1, name: heading, exact: true })).toBeVisible();
     await expect(page.getByText(item).filter({ visible: true }).first()).toBeVisible();

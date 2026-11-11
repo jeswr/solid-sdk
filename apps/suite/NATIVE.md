@@ -67,3 +67,13 @@ Tests cover cold deep links, Link navigation, router.push, prefetch, parameter c
 page state, and back/forward. CI installs Chromium; local runs use an existing installation.
 The fixture export never replaces `www/`. The web build also checks its emitted chunks for
 native calendar component exports.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+## Feedback
+
+Native staging excludes all `src/app/api/` route handlers, including feedback POST routes.
+The adaptation is recorded in `route-manifest.json`; `check-native.mjs` rejects API artifacts.
+`/feedback` calls `NEXT_PUBLIC_PUBLIC_SUITE_URL` (the existing deployed suite base URL),
+which must allow the native Origin through `FEEDBACK_ALLOWED_ORIGINS`. When that service
+cannot be reached, the guide works locally and Download my feedback preserves JSON,
+Markdown and audio together. See [README.md](README.md#pilot-feedback) for server setup.

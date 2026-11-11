@@ -6,7 +6,7 @@ import type { StoredProject } from "../../src/apps/tasks/lib/model/store";
 import type { TasksCache } from "../../src/apps/tasks/state/tasks-cache";
 import type { TasksContextValue } from "../../src/apps/tasks/state/tasks-context";
 import { act, click, h, key, mount } from "../drive-ui-dom";
-import type { Pod } from "./pod";
+import { type Pod, storage } from "./pod";
 import { frameCache } from "./tasks-frame-fixtures";
 
 const now = new Date("2026-11-02T10:00:00Z");
@@ -31,6 +31,7 @@ function api(snapshot = cache.getSnapshot()): TasksContextValue {
     inboxUrl: cache.inboxUrl,
     sharingAvailable: false,
     webId: "https://alice.example/#me",
+    storageUrl: storage,
     shareAdapter: () => {
       throw new Error("Sharing is not used in this fixture");
     },
@@ -812,8 +813,8 @@ describe("Label view", () => {
     const { host } = await mount(
       h("main", null, h(TasksSidebar), h(LabelView, { label: "bills" })),
     );
-    expect(host.querySelectorAll('a[href="/tasks/l/bills"]')).toHaveLength(1);
-    expect(host.querySelector('a[href="/tasks/l/bills"]')?.textContent).toContain("2");
+    expect(host.querySelectorAll('.tsk-sidebar a[href="/tasks/l/bills"]')).toHaveLength(1);
+    expect(host.querySelector('.tsk-sidebar a[href="/tasks/l/bills"]')?.textContent).toContain("2");
     expect(titles(region(host, "Inbox"))).toEqual(["Inbox rent"]);
     expect(titles(region(host, "Home"))).toEqual(["Home rent"]);
     await click(button("Home", region(host, "Home")));

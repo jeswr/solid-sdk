@@ -16,6 +16,10 @@ the public Solid Client ID Document, and HTTP composition.
 - Use pod-auth/node createNodeOidcClient for upstream PKCE/state/nonce/DPoP/refresh; retain
   the original sealed private JWK with rotating refresh credentials. The protocol engine
   imports signing keys as non-extractable; only server vault envelopes contain private JWKs.
+- Never let a resource choose where the ID token goes: LWS exchanges go only to the issuer's
+  origin, a stored root's origin, or a configured `lwsAuthorizationServers` entry. A realm is
+  a stored-root container, or a same-origin storage description whose advertised root lies
+  inside a stored root and contains the resource; a description never widens the audience.
 - Keep MCP_VAULT_KEY canonical base64 of exactly 32 bytes. Default to Upstash/Vercel KV;
   memory is explicit and single-process; files use a private local directory and atomic writes.
 - Never weaken vault CAS or deletion tombstones. Consume callbacks once and claim refresh

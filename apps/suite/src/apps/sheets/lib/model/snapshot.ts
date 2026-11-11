@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+import { commentAnchorsSchema } from "../comments/anchors";
 export type JsonValue =
   | null
   | boolean
@@ -35,6 +36,7 @@ export function serializeSnapshot(snapshot: Snapshot): string {
     throw new TypeError("Snapshot must be a JSON object");
   }
   visit(snapshot);
+  if (snapshot.commentAnchors !== undefined) commentAnchorsSchema.parse(snapshot.commentAnchors);
   return JSON.stringify(snapshot);
 }
 

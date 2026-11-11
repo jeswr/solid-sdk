@@ -16,6 +16,49 @@ import type { PodAuthOptions } from "./types.js";
 const PIM = "http://www.w3.org/ns/pim/space#";
 const RDF_TYPE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
 
+/**
+ * The storage roots a storage description advertises, read without credentials or redirects:
+ * an LWS (`application/lws+cid`) description's `StorageRoot` services, or a Turtle description's
+ * `pim:Storage` subjects. Any failure yields no roots. Advertised roots are claims only; callers
+ * must still require each root to lie inside an existing grant.
+ */
+export async function storageDescriptionRoots(
+  storage: string,
+  http: Pick<HttpOptions, "fetch">,
+  options: { allowInsecureLoopback?: boolean; signal: AbortSignal },
+): Promise<string[]> {
+  try {
+    const url = secureUrl(storage, options.allowInsecureLoopback === true, "storage description");
+    const response = await http.fetch!(url, {
+      headers: { accept: "application/lws+cid, text/turtle;q=0.9" },
+      credentials: "omit",
+      redirect: "error",
+      signal: options.signal,
+    });
+    if (!response.ok || !describes(response, url.href)) return [];
+    if (
+      response.headers.get("content-type")?.includes("json") ||
+      response.headers.get("content-type")?.includes("application/lws+cid")
+    ) {
+      const document = await response.json();
+      const includes = (value: unknown, type: string) =>
+        value === type || (Array.isArray(value) && value.includes(type));
+      if (document?.id !== storage || !includes(document.type, "Storage")) return [];
+      return (Array.isArray(document.service) ? document.service : [])
+        .filter((service: { type?: unknown } | null) => includes(service?.type, "StorageRoot"))
+        .map((service: { serviceEndpoint?: unknown }) => service.serviceEndpoint)
+        .filter((root: unknown): root is string => typeof root === "string");
+    }
+    const dataset = new Store(new Parser({ baseIRI: storage }).parse(await response.text()));
+    return dataset
+      .getSubjects(DataFactory.namedNode(RDF_TYPE), DataFactory.namedNode(`${PIM}Storage`), null)
+      .filter((subject) => subject.termType === "NamedNode")
+      .map((subject) => subject.value);
+  } catch {
+    return [];
+  }
+}
+
 /** Identity assertions authorize roots. Resource responses can only narrow that authority. */
 export function createBoundary(
   options: Pick<PodAuthOptions, "boundary" | "allowInsecureLoopback">,
@@ -60,38 +103,8 @@ export function createBoundary(
       // Invalid identity assertions never become credential destinations.
     }
   };
-  const descriptionRoots = async (storage: string, signal: AbortSignal): Promise<string[]> => {
-    try {
-      const url = secureUrl(storage, insecure, "storage description");
-      const response = await http.fetch!(url, {
-        headers: { accept: "application/lws+cid, text/turtle;q=0.9" },
-        credentials: "omit",
-        redirect: "error",
-        signal,
-      });
-      if (!response.ok || !describes(response, url.href)) return [];
-      if (
-        response.headers.get("content-type")?.includes("json") ||
-        response.headers.get("content-type")?.includes("application/lws+cid")
-      ) {
-        const document = await response.json();
-        const includes = (value: unknown, type: string) =>
-          value === type || (Array.isArray(value) && value.includes(type));
-        if (document?.id !== storage || !includes(document.type, "Storage")) return [];
-        return (Array.isArray(document.service) ? document.service : [])
-          .filter((service: { type?: unknown } | null) => includes(service?.type, "StorageRoot"))
-          .map((service: { serviceEndpoint?: unknown }) => service.serviceEndpoint)
-          .filter((root: unknown): root is string => typeof root === "string");
-      }
-      const dataset = new Store(new Parser({ baseIRI: storage }).parse(await response.text()));
-      return dataset
-        .getSubjects(DataFactory.namedNode(RDF_TYPE), DataFactory.namedNode(`${PIM}Storage`), null)
-        .filter((subject) => subject.termType === "NamedNode")
-        .map((subject) => subject.value);
-    } catch {
-      return [];
-    }
-  };
+  const descriptionRoots = (storage: string, signal: AbortSignal) =>
+    storageDescriptionRoots(storage, http, { allowInsecureLoopback: insecure, signal });
   const trustAuthorizationServer = ({
     authorizationServer,
     resource,

@@ -775,7 +775,7 @@ export function createMemoryStorage(options: MemoryStorageOptions = {}): MemoryS
         node.etag = nextEtag();
         node.modified = clock();
         recordVersion(node);
-        return { url, etag: node.etag, created: false };
+        return { url, etag: node.etag, created: false, etagSource: "response" };
       }
       if (nodes.has(`${url}/`))
         throw fail("conflict", "PUT", url, 409, { message: `${url}/ is a container` });
@@ -796,7 +796,7 @@ export function createMemoryStorage(options: MemoryStorageOptions = {}): MemoryS
       nodes.set(url, created);
       touch(created.parent);
       recordVersion(created);
-      return { url, etag: created.etag, created: true };
+      return { url, etag: created.etag, created: true, etagSource: "response" };
     }),
 
     async writeRdf(url, dataset, opts) {
@@ -893,7 +893,7 @@ export function createMemoryStorage(options: MemoryStorageOptions = {}): MemoryS
       nodes.set(target, created);
       touch(parent.url);
       recordVersion(created);
-      return { url: target, etag: created.etag, created: true };
+      return { url: target, etag: created.etag, created: true, etagSource: "response" };
     }),
 
     patch: serial("PATCH", async (url, patch: Patch, opts) => {

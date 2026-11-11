@@ -87,4 +87,5 @@ export {
   type ServerAuthorizationState,
   type ServerOidcClient,
 } from "@jeswr/reactive-authentication";
+export { storageDescriptionRoots } from "./boundary.js";
 export type { Identity, PodAuth } from "./types.js";
