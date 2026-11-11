@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 
 Sheets uses `WorkbookService` for pod storage and a lazy Univer 1.2.0 adapter for the editor.
 The demo session uses the same service against the browser's persistent demo pod.
@@ -89,8 +90,13 @@ The version and every address are Zod-validated on snapshot save/open. Readers u
 this map when present and otherwise use the annotation's creation selector.
 The adapter observes Univer row/column insert/delete mutations and transforms the
 whole map synchronously with workbook state. Native command interceptors include
-anchor checkpoints in the same undo/redo entries as the cells: undo restores a
-removed anchor, while an unrelated insertion leaves it deleted. These anchors
+deletion history in the same undo/redo entries as the cells. Undo and redo shift
+all anchors and open drafts, including those created after the command. Only
+reversing the command that deleted a cell revives its anchors; an unrelated
+insertion leaves them deleted. Editing stays locked from engine mount until the
+initial comment list has loaded and missing anchors are registered. Refreshes
+also hold editing until registration completes; a failed load keeps the lock
+until a successful retry. This lock cannot override view-only access. These anchors
 commit atomically with the guarded workbook snapshot; reloading a winning revision
 discards the losing client's transformations. Moving anchors never writes comment RDF.
 Deleted anchors and missing sheets display “Cell deleted”. Open drafts follow the

@@ -419,6 +419,38 @@ it("enforces view-only access at mount, after reload and after losing write acce
   engine.dispose();
 });
 
+it("holds editing from mount through comment loading without overriding access or dropping registered anchors", async () => {
+  const engine = await (await loadEngine())({} as HTMLElement, {
+    snapshot: initial(),
+    dark: false,
+    compact: true,
+    commentsLoading: true,
+  });
+  expect(mock.workbook.setEditable).toHaveBeenLastCalledWith(false);
+  engine.setReadOnly(false);
+  expect(mock.workbook.setEditable).toHaveBeenLastCalledWith(false);
+  engine.load(initial());
+  engine.importCsv("Blocked", { mode: "replace-active" });
+  expect(engine.snapshot()).toEqual(initial());
+  expect(mock.workbook.setEditable).toHaveBeenLastCalledWith(false);
+  const change = vi.fn();
+  engine.onChange(change);
+  engine.registerCommentAnchors?.({ root: { sheetId: "data", cell: "B3", deleted: false } });
+  engine.setCommentsLoading?.(false);
+  expect(mock.workbook.setEditable).toHaveBeenLastCalledWith(true);
+  await Promise.resolve();
+  expect(change).toHaveBeenCalledOnce();
+  expect(engine.snapshot().commentAnchors).toEqual({
+    version: 1,
+    anchors: { root: { sheetId: "data", cell: "B3" } },
+  });
+  engine.setCommentsLoading?.(true);
+  engine.setReadOnly(true);
+  engine.setCommentsLoading?.(false);
+  expect(mock.workbook.setEditable).toHaveBeenLastCalledWith(false);
+  engine.dispose();
+});
+
 it("bridges cell selections and structural events without the comments preset", async () => {
   const engine = await mount();
   const select = vi.fn();

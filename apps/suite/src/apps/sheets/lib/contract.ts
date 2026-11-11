@@ -183,6 +183,8 @@ export interface ActiveSheet {
 }
 
 export interface SheetEngine {
+  /** Hold editing independently of access permissions while missing anchors load. */
+  setCommentsLoading?(loading: boolean): void;
   registerCommentAnchors?(anchors: Record<string, CellAnchor>): void;
   trackCommentDraft?(anchor: CellAnchor): DraftAnchor;
   selectedCell?(): CellAnchor | undefined;
@@ -206,6 +208,7 @@ export interface SheetEngine {
 }
 
 export interface MountEngineOptions {
+  readonly commentsLoading?: boolean;
   readonly readOnly?: boolean;
   readonly snapshot: Snapshot;
   readonly dark: boolean;

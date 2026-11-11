@@ -16,7 +16,7 @@ import {
   mergeLocales,
 } from "@univerjs/presets";
 import { SheetInterceptorService, SheetsSelectionsService } from "@univerjs/sheets";
-import { type AnchorCheckpoint, WorkbookCommentAnchors } from "../comments/anchors";
+import { type AnchorDeletions, WorkbookCommentAnchors } from "../comments/anchors";
 import { type CellAnchor, commentStructuralEdit } from "../comments/selector";
 import type { MountEngine, Snapshot } from "../contract";
 import { serializeSnapshot } from "../model/snapshot";
@@ -41,6 +41,17 @@ const PERSISTED_FORMULA_MUTATIONS = new Set([
 // state. Its params are keyed by unit id, so the unitId check below drops it too; this
 // names it explicitly. CF viewport and style caches update without mutations.
 const RECOMPUTE_MUTATIONS = new Set(["sheet.mutation.data-validation-formula-mark-dirty"]);
+
+interface AnchorOperation {
+  redo: AnchorDeletions[];
+  undo: AnchorDeletions[];
+}
+interface AnchorMutation {
+  unitId: string;
+  operation: AnchorOperation;
+  direction: "undo" | "redo";
+  phase: "begin" | "end";
+}
 
 export const mountUniver: MountEngine = async (container, options) => {
   const { univer, univerAPI } = createUniver({
@@ -72,7 +83,9 @@ export const mountUniver: MountEngine = async (container, options) => {
   });
   let workbook = univerAPI.createWorkbook(options.snapshot as Partial<IWorkbookData>);
   let readOnly = options.readOnly ?? false;
-  workbook.setEditable(!readOnly);
+  let commentsLoading = options.commentsLoading ?? false;
+  const setEditable = () => workbook.setEditable(!readOnly && !commentsLoading);
+  setEditable();
   const selections = new Set<(anchor: CellAnchor | undefined) => void>();
   const structures = new Set<(edit: StructuralEdit) => void>();
   const selectedCell = (): CellAnchor | undefined => {
@@ -115,37 +128,53 @@ export const mountUniver: MountEngine = async (container, options) => {
   const commands = injector.get(ICommandService);
   const interceptors = injector.get(SheetInterceptorService);
   const anchorMutation = "sheets.mutation.comment-anchors";
+  let activeOperation: AnchorMutation | undefined;
   const anchorCommand = commands.registerCommand({
     id: anchorMutation,
     type: CommandType.MUTATION,
-    handler: (_accessor, params: { unitId: string; checkpoint: AnchorCheckpoint }) => {
-      anchors.restore(params.checkpoint);
+    handler: (_accessor, params: AnchorMutation) => {
+      if (params.phase === "begin") {
+        params.operation[params.direction] = [];
+        activeOperation = params;
+      } else activeOperation = undefined;
       return true;
     },
   });
-  // Capture by command identity, never infer undo from a later insertion's coordinates.
-  let beforeAnchors: AnchorCheckpoint | undefined;
+  const mutation = (
+    operation: AnchorOperation,
+    direction: "undo" | "redo",
+    phase: "begin" | "end",
+  ) => ({
+    id: anchorMutation,
+    params: { unitId: workbook.getId(), operation, direction, phase },
+  });
+  // Native undo/redo carries each command's deletion history, including deletions
+  // caused by undo itself. Unrelated insertions never get that history.
   const beforeStructure = interceptors.interceptCommand({
     getMutations(command) {
-      if (/^sheet\.command\.(insert-row|insert-col|remove-row|remove-col)$/.test(command.id))
-        beforeAnchors = anchors.checkpoint();
-      return { redos: [], undos: [] };
+      if (!/^sheet\.command\.(insert-row|insert-col|remove-row|remove-col)$/.test(command.id))
+        return { redos: [], undos: [] };
+      const operation: AnchorOperation = { redo: [], undo: [] };
+      return {
+        preRedos: [mutation(operation, "redo", "begin")],
+        preUndos: [mutation(operation, "undo", "begin")],
+        redos: [],
+        undos: [],
+      };
     },
   });
   const afterStructure = interceptors.interceptAfterCommand({
     getMutations(command) {
       if (
         !/^sheet\.command\.(insert-row|insert-col|remove-row|remove-col)$/.test(command.id) ||
-        !beforeAnchors
+        !activeOperation
       )
         return { redos: [], undos: [] };
-      const undo = beforeAnchors;
-      beforeAnchors = undefined;
-      const mutation = (checkpoint: AnchorCheckpoint) => ({
-        id: anchorMutation,
-        params: { unitId: workbook.getId(), checkpoint },
-      });
-      return { redos: [mutation(anchors.checkpoint())], undos: [mutation(undo)] };
+      const { operation } = activeOperation;
+      return {
+        redos: [mutation(operation, "redo", "end")],
+        undos: [mutation(operation, "undo", "end")],
+      };
     },
   });
   const subscription = univerAPI.addEvent(univerAPI.Event.CommandExecuted, (event) => {
@@ -163,7 +192,13 @@ export const mountUniver: MountEngine = async (container, options) => {
     if (event.options?.fromFormula && !editedSinceLoad) return;
     const edit = commentStructuralEdit(event.id, event.params);
     if (edit) {
-      anchors.shift(edit);
+      const deleted = anchors.shift(edit);
+      if (activeOperation) {
+        const { operation, direction } = activeOperation;
+        operation[direction].push(deleted);
+        const inverse = operation[direction === "undo" ? "redo" : "undo"].pop();
+        if (inverse) anchors.revive(inverse);
+      }
       for (const listener of structures) listener(edit);
     }
     editedSinceLoad = true;
@@ -185,15 +220,19 @@ export const mountUniver: MountEngine = async (container, options) => {
     try {
       univerAPI.disposeUnit(workbook.getId());
       workbook = univerAPI.createWorkbook(data as Partial<IWorkbookData>);
-      workbook.setEditable(!readOnly);
+      setEditable();
       anchors.load(data);
-      beforeAnchors = undefined;
+      activeOperation = undefined;
       selectionChanged();
     } finally {
       loading = false;
     }
   };
   return {
+    setCommentsLoading(value) {
+      commentsLoading = value;
+      setEditable();
+    },
     registerCommentAnchors(values) {
       if (anchors.register(values) && !readOnly) notify();
     },
@@ -241,7 +280,7 @@ export const mountUniver: MountEngine = async (container, options) => {
       );
     },
     importCsv(csv, config) {
-      if (readOnly) return;
+      if (readOnly || commentsLoading) return;
       const rows = parseCsv(csv);
       const data = snapshot() as unknown as IWorkbookData;
       const active = workbook.getActiveSheet().getSheetId();
@@ -276,7 +315,7 @@ export const mountUniver: MountEngine = async (container, options) => {
       readOnly = value;
       ++generation;
       queued = false;
-      workbook.setEditable(!readOnly);
+      setEditable();
     },
     dispose() {
       disposed = true;

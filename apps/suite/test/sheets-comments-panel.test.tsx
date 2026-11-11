@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 // @vitest-environment jsdom
 import { Store } from "n3";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
@@ -51,12 +52,17 @@ beforeEach(async () => {
   unselect = vi.fn();
   unstructure = vi.fn();
   const anchors = new WorkbookCommentAnchors({});
+  let commentsLoading = false;
   let changed: () => void = () => {};
   structure = (edit) => {
+    if (commentsLoading) return;
     anchors.shift(edit);
     changed();
   };
   engine = {
+    setCommentsLoading: vi.fn((value: boolean) => {
+      commentsLoading = value;
+    }),
     registerCommentAnchors: (values: Record<string, CellAnchor>) => anchors.register(values),
     trackCommentDraft: (anchor: CellAnchor) => anchors.track(anchor),
     onChange: (listener: () => void) => {
@@ -167,6 +173,44 @@ it("shifts through row and column mutations, retains deleted cells and counts by
   await act(async () => select({ ...anchor, sheetId: "other" }));
   expect(button("Comments (0 on this sheet)")).toBeTruthy();
 });
+
+it.each([
+  "mount",
+  "refresh",
+])("holds structural edits until a delayed %s registers a collaborator's missing anchor", async (when) => {
+  const setCommentsLoading = engine.setCommentsLoading;
+  if (when === "refresh") await mount();
+  root = await store.create("Collaborator comment", "https://collaborator.example/#me", anchor);
+  const list = store.list.bind(store);
+  let finish: () => Promise<void> = async () => {};
+  vi.spyOn(store, "list").mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        finish = async () => resolve(await list());
+      }),
+  );
+  if (when === "mount") render(<CellComments store={store} engine={engine} webId={webId} local />);
+  else fireEvent.focus(window);
+  expect(setCommentsLoading).toHaveBeenLastCalledWith(true);
+  expect(engine.snapshot().commentAnchors).toBeUndefined();
+  const insert = { sheet: "stable", axis: "row", kind: "insert", index: 2, count: 1 } as const;
+  await act(async () => structure(insert));
+  await act(async () => finish());
+  await waitFor(() => expect(setCommentsLoading).toHaveBeenLastCalledWith(false));
+  expect(engine.snapshot().commentAnchors).toEqual({
+    version: 1,
+    anchors: { [root.url]: { sheetId: "stable", cell: "B3" } },
+  });
+  fireEvent.click(button("Comments (1 on this sheet)"));
+  expect(button("Renamed sheet!B3")).toBeTruthy();
+  await act(async () => structure(insert));
+  expect(button("Renamed sheet!B4")).toBeTruthy();
+  expect(engine.snapshot().commentAnchors).toEqual({
+    version: 1,
+    anchors: { [root.url]: { sheetId: "stable", cell: "B4" } },
+  });
+  expect((await store.list())[0]?.root.anchor).toEqual(anchor);
+});
 it("allows append-only comments on view-only grids while disabling changes to existing comments", async () => {
   await seed();
   store = new CellCommentStore(container, async (url, init) => {
@@ -258,8 +302,10 @@ it("reports load failures and permits retrying a failed load", async () => {
   const view = render(<CellComments store={store} engine={engine} webId={webId} local />);
   fireEvent.click(button("Comments (0 on this sheet)"));
   await screen.findByText("Can't load");
+  expect(engine.setCommentsLoading).toHaveBeenLastCalledWith(true);
   fireEvent.click(button("Refresh comments"));
   await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
+  expect(engine.setCommentsLoading).toHaveBeenLastCalledWith(false);
   let finish: (rows: []) => void = () => {};
   list.mockImplementationOnce(
     () =>
@@ -415,6 +461,36 @@ it("isolates late loads and errors across WebID changes even when the store is r
   );
   await act(async () => reject(new Error("Old account load")));
   expect(screen.queryByRole("alert")).toBeNull();
+});
+
+it("keeps editing locked when a superseded list finishes before the current list", async () => {
+  await seed();
+  const list = vi.spyOn(store, "list");
+  let first: () => void = () => {};
+  let second: () => void = () => {};
+  list.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        first = () => resolve([{ root, replies: [] }]);
+      }),
+  );
+  render(<CellComments store={store} engine={engine} webId={webId} local />);
+  list.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        second = () => resolve([{ root, replies: [] }]);
+      }),
+  );
+  fireEvent.focus(window);
+  await act(async () => first());
+  expect(engine.setCommentsLoading).toHaveBeenLastCalledWith(true);
+  expect(engine.snapshot().commentAnchors).toBeUndefined();
+  await act(async () => second());
+  expect(engine.setCommentsLoading).toHaveBeenLastCalledWith(false);
+  expect(engine.snapshot().commentAnchors).toEqual({
+    version: 1,
+    anchors: { [root.url]: { sheetId: "stable", cell: "B3" } },
+  });
 });
 
 it("falls back to credential-free global fetch for shared reads and refuses every mutation", async () => {

@@ -123,6 +123,7 @@ function Grid({
         dark: dark.current,
         compact: matchMedia("(max-width: 639px)").matches,
         readOnly: viewOnly.current,
+        commentsLoading: true,
       });
       if (!live) {
         engine.dispose();

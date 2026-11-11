@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 "use client";
 import { assertWithinPodScope } from "@jeswr/guarded-fetch";
 import { Button, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@jeswr/suite-ui";
@@ -113,11 +114,13 @@ export function CellComments({
   const toggle = useRef<HTMLButtonElement>(null);
   const refresh = async () => {
     const revision = ++lifetime.revision;
+    engine?.setCommentsLoading?.(true);
     const [rows, access] = await Promise.all([store.list(), store.permissions()]);
     if (isCurrent() && revision === lifetime.revision) {
       engine?.registerCommentAnchors?.(
         Object.fromEntries(rows.map(({ root }) => [root.url, root.anchor as CellAnchor])),
       );
+      engine?.setCommentsLoading?.(false);
       setThreads(rows);
       setPermissions(local ? access : { append: false, write: false });
     }

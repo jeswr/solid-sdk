@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import type { ISheetDataValidationRule, IWorkbookData } from "@univerjs/core";
 import { describe, expect, it, vi } from "vitest";
 import type { Snapshot } from "../src/apps/sheets/lib/contract";
@@ -412,6 +413,74 @@ it("undoes deletion for a comment whose creation completes after its cell was de
       true,
     );
   } finally {
+    engine.dispose();
+  }
+});
+
+it.each([
+  "row",
+  "column",
+])("revives comments and drafts created in an inserted %s only when redoing that insertion", async (axis) => {
+  const { currentCommentAnchor } = await import("../src/apps/sheets/lib/comments/anchors");
+  const anchor = { sheetId: "data", cell: "B3", deleted: false };
+  const below = { ...anchor, cell: "D5" };
+  const engine = await mountUniver({} as HTMLElement, {
+    snapshot: {
+      id: "late-anchors",
+      name: "Late anchors",
+      sheetOrder: ["data"],
+      sheets: { data: { id: "data", name: "Data", rowCount: 10, columnCount: 6 } },
+    },
+    dark: false,
+    compact: true,
+  });
+  const injector = headless.current?.univer.__getInjector();
+  injector?.get(headless.core.IUniverInstanceService).focusUnit("late-anchors");
+  const commands = injector?.get(headless.core.ICommandService);
+  const insert = () =>
+    commands?.executeCommand(`sheet.command.insert-${axis === "row" ? "row" : "col"}`, {
+      unitId: "late-anchors",
+      subUnitId: "data",
+      direction: axis === "row" ? headless.core.Direction.UP : headless.core.Direction.LEFT,
+      range:
+        axis === "row"
+          ? { startRow: 2, endRow: 2, startColumn: 0, endColumn: 5 }
+          : { startRow: 0, endRow: 9, startColumn: 1, endColumn: 1 },
+    });
+  const current = (id: string) => currentCommentAnchor(engine.snapshot(), id, anchor);
+  let draft: ReturnType<NonNullable<typeof engine.trackCommentDraft>> | undefined;
+  try {
+    expect(await insert()).toBe(true);
+    engine.registerCommentAnchors?.({ late: anchor, below });
+    draft = engine.trackCommentDraft?.(anchor);
+    const pending = engine.trackCommentDraft?.(anchor);
+    expect(draft?.current()).toEqual(anchor);
+    for (let cycle = 0; cycle < 2; cycle++) {
+      expect(await commands?.executeCommand("univer.command.undo")).toBe(true);
+      expect(current("late").deleted).toBe(true);
+      expect(draft?.current().deleted).toBe(true);
+      expect(current("below").cell).toBe(axis === "row" ? "D4" : "C5");
+      if (cycle === 0) {
+        pending?.commit("published-after-undo");
+        pending?.dispose();
+      }
+      expect(current("published-after-undo").deleted).toBe(true);
+      expect(await commands?.executeCommand("univer.command.redo")).toBe(true);
+      expect(current("late")).toEqual(anchor);
+      expect(draft?.current()).toEqual(anchor);
+      expect(current("published-after-undo")).toEqual(anchor);
+      expect(current("below")).toEqual(below);
+    }
+    expect(await commands?.executeCommand("univer.command.undo")).toBe(true);
+    expect(await insert()).toBe(true);
+    expect(current("late").deleted).toBe(true);
+    expect(draft?.current().deleted).toBe(true);
+    expect(current("published-after-undo").deleted).toBe(true);
+    expect(await commands?.executeCommand("univer.command.undo")).toBe(true);
+    expect(current("late").deleted).toBe(true);
+    expect(draft?.current().deleted).toBe(true);
+  } finally {
+    draft?.dispose();
     engine.dispose();
   }
 });

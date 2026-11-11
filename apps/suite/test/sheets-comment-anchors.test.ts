@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { expect, it } from "vitest";
 import {
   currentCommentAnchor,
@@ -47,10 +48,8 @@ it("tracks each root synchronously, isolates snapshots and keeps draft history o
   expect(state.register({ root: { ...anchor, cell: "Z9" } })).toBe(false);
   const draft = state.track(anchor);
   const expired = state.track(anchor);
-  const before = state.checkpoint();
+  const deletion = state.shift(edit);
   expired.dispose();
-  state.shift(edit);
-  const after = state.checkpoint();
   expect(draft.current().deleted).toBe(true);
   expect(state.snapshot().commentAnchors?.anchors).toEqual({
     root: "deleted",
@@ -59,9 +58,12 @@ it("tracks each root synchronously, isolates snapshots and keeps draft history o
   });
   state.shift({ ...edit, kind: "insert" });
   expect(draft.current().deleted).toBe(true);
-  state.restore(before);
+  state.revive(deletion);
   expect(draft.current()).toEqual(anchor);
-  state.restore(after);
+  state.revive(deletion);
+  expect(deletion.anchors).toEqual({ root: { sheetId: "stable", cell: "B3" } });
+  expect(draft.current()).toEqual(anchor);
+  state.shift(edit);
   expect(draft.current().deleted).toBe(true);
   state.load({
     commentAnchors: { version: 1, anchors: { root: { sheetId: "stable", cell: "C4" } } },
@@ -78,17 +80,16 @@ it("tracks each root synchronously, isolates snapshots and keeps draft history o
 it("carries draft deletion history into a thread persisted after the structural edit", () => {
   const state = new WorkbookCommentAnchors({});
   const draft = state.track(anchor);
-  const before = state.checkpoint();
-  state.shift(edit);
-  const after = state.checkpoint();
+  const deletion = state.shift(edit);
   draft.commit("published");
   draft.dispose();
   expect(state.snapshot().commentAnchors?.anchors.published).toBe("deleted");
-  state.restore(before);
+  state.revive(deletion);
   expect(currentCommentAnchor(state.snapshot(), "published", anchor)).toEqual(anchor);
-  state.restore(after);
+  state.revive(deletion);
+  state.shift(edit);
   expect(state.snapshot().commentAnchors?.anchors.published).toBe("deleted");
   state.load({});
-  state.restore(before);
+  state.revive(deletion);
   expect(state.snapshot()).toEqual({});
 });

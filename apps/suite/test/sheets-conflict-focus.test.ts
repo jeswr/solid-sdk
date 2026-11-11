@@ -100,6 +100,7 @@ it("loads the remote snapshot into a mounted engine and returns conflict focus t
   const { book, remote, entry } = await conflict();
   const editor = await mount(h(SheetEditor, { container: book.container }));
   const engine = await mocks.mount.mock.results[0]?.value;
+  expect(mocks.mount.mock.calls[0]?.[1].commentsLoading).toBe(true);
   expect(document.activeElement?.textContent).toBe("Load their version");
   await click(button(document, "Load their version"));
   expect(engine.load).toHaveBeenCalledWith(remote);

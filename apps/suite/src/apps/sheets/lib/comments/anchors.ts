@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { z } from "zod";
 import type { Snapshot } from "../model/snapshot";
 import type { StructuralEdit } from "../refs/model";
@@ -22,8 +23,9 @@ export interface DraftAnchor {
   commit(annotationId: string): void;
   dispose(): void;
 }
-export interface AnchorCheckpoint {
-  anchors: Anchors;
+export interface AnchorDeletions {
+  revision: number;
+  anchors: Record<string, { sheetId: string; cell: string }>;
   drafts: Record<string, CellAnchor>;
 }
 
@@ -42,15 +44,17 @@ export function currentCommentAnchor(
       : selector;
 }
 
-/** Changes are synchronous engine state. Checkpoints become native undo/redo mutations. */
+/** Changes are synchronous engine state; only cell deletions need undo history. */
 export class WorkbookCommentAnchors {
   private anchors: Anchors = {};
   private drafts = new Map<string, CellAnchor>();
   private publishedDrafts = new Map<string, string>();
+  private revision = 0;
   constructor(snapshot: Snapshot) {
     this.load(snapshot);
   }
   load(snapshot: Snapshot) {
+    ++this.revision;
     this.publishedDrafts.clear();
     this.anchors =
       snapshot.commentAnchors === undefined
@@ -91,26 +95,31 @@ export class WorkbookCommentAnchors {
       },
     };
   }
-  shift(edit: StructuralEdit) {
+  shift(edit: StructuralEdit): AnchorDeletions {
+    const deleted: AnchorDeletions = { revision: this.revision, anchors: {}, drafts: {} };
     for (const [id, anchor] of Object.entries(this.anchors)) {
       if (anchor === "deleted") continue;
       const next = shiftCellAnchor({ ...anchor, deleted: false }, edit);
+      if (next.deleted) deleted.anchors[id] = anchor;
       this.anchors[id] = next.deleted ? "deleted" : { sheetId: next.sheetId, cell: next.cell };
     }
-    for (const [id, anchor] of this.drafts) this.drafts.set(id, shiftCellAnchor(anchor, edit));
+    for (const [id, anchor] of this.drafts) {
+      const next = shiftCellAnchor(anchor, edit);
+      if (!anchor.deleted && next.deleted) deleted.drafts[id] = anchor;
+      this.drafts.set(id, next);
+    }
+    return deleted;
   }
-  checkpoint(): AnchorCheckpoint {
-    return { anchors: structuredClone(this.anchors), drafts: Object.fromEntries(this.drafts) };
-  }
-  restore(checkpoint: AnchorCheckpoint) {
-    Object.assign(this.anchors, checkpoint.anchors);
-    for (const [id, anchor] of Object.entries(checkpoint.drafts)) {
-      if (this.drafts.has(id)) this.drafts.set(id, anchor);
+  revive(deleted: AnchorDeletions) {
+    if (deleted.revision !== this.revision) return;
+    for (const [id, anchor] of Object.entries(deleted.anchors)) {
+      if (this.anchors[id] === "deleted") this.anchors[id] = anchor;
+    }
+    for (const [id, anchor] of Object.entries(deleted.drafts)) {
+      if (this.drafts.get(id)?.deleted) this.drafts.set(id, anchor);
       const annotationId = this.publishedDrafts.get(id);
-      if (annotationId)
-        this.anchors[annotationId] = anchor.deleted
-          ? "deleted"
-          : { sheetId: anchor.sheetId, cell: anchor.cell };
+      if (annotationId && this.anchors[annotationId] === "deleted")
+        this.anchors[annotationId] = { sheetId: anchor.sheetId, cell: anchor.cell };
     }
   }
 }
